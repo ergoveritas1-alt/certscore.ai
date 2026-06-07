@@ -1544,6 +1544,54 @@ test("California CIPA-sensitive retained evidence flows through normalized conce
   assert.doesNotMatch(`${interactionConcern.title} ${interactionConcern.description}`, /violation|illegal/i);
 });
 
+test("California CIPA negative retained evidence does not create normalized concerns", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        cipaCommunicationInterceptionEvidence: {
+          cipaConsentTiming: "unknown",
+          cipaDisclosureObserved: false,
+          cipaEvidenceConfidence: "high",
+          cipaSensitive: false,
+          cipaSensitiveSurfaceObserved: false,
+          cipaSignalTypes: [],
+          cipaThirdPartyReceiptObserved: false,
+          directEvidenceObserved: false,
+          legalConclusion: false,
+          pageUrls: [],
+          requestUrls: [],
+          vendors: []
+        },
+        cipaInteractionRecordingEvidence: {
+          cipaConsentTiming: "unknown",
+          cipaDisclosureObserved: false,
+          cipaEvidenceConfidence: "high",
+          cipaSensitive: false,
+          cipaSensitiveSurfaceObserved: false,
+          cipaSignalTypes: [],
+          cipaThirdPartyReceiptObserved: false,
+          directEvidenceObserved: false,
+          legalConclusion: false,
+          pageUrls: [],
+          requestUrls: [],
+          vendors: []
+        }
+      }
+    },
+    validationFindings: []
+  });
+
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "cipa_sensitive_interaction_recording_signal"),
+    false
+  );
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "cipa_sensitive_communication_interception_signal"),
+    false
+  );
+});
+
 test("California rights request evidence creates a positive rights-path finding without absence logic", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [],

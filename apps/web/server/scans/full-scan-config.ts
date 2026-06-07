@@ -2,6 +2,7 @@ import {
   buildSharedFullScanConfig,
   getScanFromDefinition,
   normalizeScanFrom,
+  type SharedCaliforniaPrivacyScanConfig,
   type SharedCrawlSeedHint,
   type SharedPriorScanAccelerationConfig,
   type SharedScanConfig,
@@ -20,6 +21,7 @@ export const QUEUED_FULL_SCAN_POST_403_POLICY = {
 };
 
 export type BuildQueuedFullScanConfigInput = {
+  californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   hostname: string;
   maxPages: number;
   normalizedUrl: string;
@@ -29,15 +31,39 @@ export type BuildQueuedFullScanConfigInput = {
   source: string;
 };
 
+export type QueuedFullScanCaliforniaPrivacyConfig = SharedCaliforniaPrivacyScanConfig;
+
 export type QueuedFullScanPriorScanAcceleration = {
   crawlSeedHints: SharedCrawlSeedHint[];
   priorScan: SharedPriorScanAccelerationConfig;
 };
 
+function normalizeQueuedCaliforniaPrivacyConfig(
+  config: QueuedFullScanCaliforniaPrivacyConfig | null | undefined
+): QueuedFullScanCaliforniaPrivacyConfig | undefined {
+  if (!config) {
+    return undefined;
+  }
+
+  const normalized: QueuedFullScanCaliforniaPrivacyConfig = {};
+
+  if (config.exercisePrivacyChoicePath === true) {
+    normalized.exercisePrivacyChoicePath = true;
+  }
+
+  if (config.forceGpcVerification === true) {
+    normalized.forceGpcVerification = true;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput): SharedScanConfig {
   const scanFrom = normalizeScanFrom(input.scanFrom);
   const scanFromDefinition = getScanFromDefinition(scanFrom);
+  const californiaPrivacy = normalizeQueuedCaliforniaPrivacyConfig(input.californiaPrivacy);
   return buildSharedFullScanConfig({
+    ...(californiaPrivacy ? { californiaPrivacy } : {}),
     ...(input.priorScanAcceleration
       ? {
           execution: {

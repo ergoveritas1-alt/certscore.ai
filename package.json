@@ -46,6 +46,8 @@
     "ops:preconsent:diagnose": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/preconsent-cookie-evidence-ops.ts diagnose",
     "ops:preconsent:backfill-cookies": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/preconsent-cookie-evidence-ops.ts backfill",
     "ops:preconsent:queue-reruns": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/preconsent-cookie-evidence-ops.ts queue-reruns",
+    "ops:california:queue-cohort-reruns": "pnpm --filter @website-signal-risk-scanner/web california:queue-cohort-reruns",
+    "ops:gdpr-eprivacy:queue-cohort-reruns": "pnpm --filter @website-signal-risk-scanner/web gdpr-eprivacy:queue-cohort-reruns",
     "audit:production-evidence-loss": "pnpm --filter @website-signal-risk-scanner/web audit:production-evidence-loss",
     "audit:production-evidence-lineage": "pnpm --filter @website-signal-risk-scanner/web audit:production-evidence-lineage",
     "check:production-finding-calibration": "pnpm --filter @website-signal-risk-scanner/web test:production-finding-calibration",

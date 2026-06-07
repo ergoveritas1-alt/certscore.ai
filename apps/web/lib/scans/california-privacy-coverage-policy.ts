@@ -388,6 +388,8 @@ function getEvidenceRefs(californiaEvidence: Record<string, unknown> | null, ...
 
 function deriveCipaCoverageOutcome(input: {
   californiaEvidence: Record<string, unknown> | null;
+  coverageLimited: boolean;
+  cipaRuntimeCoverageEvidence: Record<string, unknown> | null;
   evidence: Record<string, unknown> | null;
   missingField: string;
   rowId: string;
@@ -416,6 +418,11 @@ function deriveCipaCoverageOutcome(input: {
   ]);
   const riskTimingObserved = consentTiming === "pre_consent" || consentTiming === "post_reject";
   const timingLabel = consentTiming && consentTiming !== "unknown" ? consentTiming.replaceAll("_", " ") : "unknown timing";
+  const cipaRuntimeCoverageSufficient = getBoolean(input.cipaRuntimeCoverageEvidence, [
+    "sufficientForNegativeCipaReview",
+    "sufficient_for_negative_cipa_review"
+  ]);
+  const cipaRuntimeCoverageLimitation = getString(input.cipaRuntimeCoverageEvidence, ["limitation"]);
   const retainedEvidence = {
     ...input.evidence,
     cipaSensitive,
@@ -442,8 +449,29 @@ function deriveCipaCoverageOutcome(input: {
   }
 
   if (cipaSensitive === false || signalTypes.length === 0) {
-    return makeOutcome(input.rowId, "not_observed", `No ${input.signalLabel.toLowerCase()} was retained.`, getEvidenceRefs(input.californiaEvidence), {
-      retainedEvidence
+    if (input.coverageLimited && cipaRuntimeCoverageSufficient !== true) {
+      return makeOutcome(input.rowId, "not_testable", `${input.signalLabel} was not retained in this limited scan context.`, getEvidenceRefs(input.californiaEvidence), {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "californiaPrivacyEvidence.cipaRuntimeCoverageEvidence.sufficientForNegativeCipaReview",
+            true,
+            cipaRuntimeCoverageSufficient ?? "missing",
+            "Required before absence of this CIPA-sensitive signal can be treated as not observed under limited public-web coverage."
+          )
+        ],
+        retainedEvidence: {
+          ...retainedEvidence,
+          cipaRuntimeCoverageEvidence: input.cipaRuntimeCoverageEvidence ?? null
+        }
+      });
+    }
+
+    return makeOutcome(input.rowId, "not_observed", `No ${input.signalLabel.toLowerCase()} was retained${input.coverageLimited ? " in the CIPA runtime coverage window" : ""}.`, getEvidenceRefs(input.californiaEvidence), {
+      retainedEvidence: {
+        ...retainedEvidence,
+        cipaRuntimeCoverageEvidence: input.cipaRuntimeCoverageEvidence ?? null,
+        cipaRuntimeCoverageLimitation
+      }
     });
   }
 
@@ -464,7 +492,7 @@ function deriveCipaCoverageOutcome(input: {
   }
 
   if (directEvidenceObserved === true || collectionEndpointObserved === true || thirdPartyReceiptObserved === true) {
-    return makeOutcome(input.rowId, "review_signal", `${input.signalLabel} was retained with direct runtime evidence for California CIPA-sensitive tracking review.`, getEvidenceRefs(input.californiaEvidence, input.signalLabel), {
+    return makeOutcome(input.rowId, "observed", `${input.signalLabel} was retained with direct runtime evidence for California CIPA-sensitive tracking review.`, getEvidenceRefs(input.californiaEvidence, input.signalLabel), {
       retainedEvidence: {
         ...retainedEvidence,
         pageUrls,
@@ -882,20 +910,20 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
       ? makeOutcome("notice_at_collection", "potential_gap", "An eligible collection context was retained without a nearby privacy notice or collection disclosure cue.", getEvidenceRefs(californiaEvidence, "Collection context without nearby notice cue"), {
           retainedEvidence: collectionRetainedEvidence
         })
-    : collectionNoticeEvidenceKind === "footer_notice_link_only"
-    ? makeOutcome("notice_at_collection", "review_signal", "A California notice link was observed, but no point-of-collection notice was retained.", getEvidenceRefs(californiaEvidence, "Footer California notice cue observed"), {
-        retainedEvidence: collectionRetainedEvidence
-      })
-    : collectionNoticeEvidenceKind === "policy_notice_text_only"
-      ? makeOutcome("notice_at_collection", "review_signal", "California notice language was retained in policy text, but no point-of-collection notice was retained.", getEvidenceRefs(californiaEvidence, "Policy notice cue observed"), {
-          retainedEvidence: collectionRetainedEvidence
-        })
     : collectionNoticeEvidenceKind === "generic_search_only"
       ? makeOutcome("notice_at_collection", "not_observed", "Only a generic site search collection surface was retained; no eligible point-of-collection notice was observed.", getEvidenceRefs(californiaEvidence), {
           retainedEvidence: collectionRetainedEvidence
         })
     : collectionContextObserved === false
       ? makeOutcome("notice_at_collection", "not_observed", "No eligible public collection context was observed in the tested context.", getEvidenceRefs(californiaEvidence), {
+          retainedEvidence: collectionRetainedEvidence
+        })
+    : collectionNoticeEvidenceKind === "footer_notice_link_only"
+    ? makeOutcome("notice_at_collection", "review_signal", "A California notice link was observed, but no point-of-collection notice was retained.", getEvidenceRefs(californiaEvidence, "Footer California notice cue observed"), {
+        retainedEvidence: collectionRetainedEvidence
+      })
+    : collectionNoticeEvidenceKind === "policy_notice_text_only"
+      ? makeOutcome("notice_at_collection", "review_signal", "California notice language was retained in policy text, but no point-of-collection notice was retained.", getEvidenceRefs(californiaEvidence, "Policy notice cue observed"), {
           retainedEvidence: collectionRetainedEvidence
         })
       : collectionContextObserved === true && collectionNoticeCueObserved === true
@@ -1077,6 +1105,10 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
         ],
         retainedEvidence: gpcComparisonEvidence
       })
+    : saleShareApplicabilityObserved === false
+      ? makeOutcome("gpc_opt_out_signal_handling", "not_applicable", "No direct sale/share, targeted-advertising, or high-confidence policy sale/share admission evidence was retained, so GPC handling was not applicable in this scan context.", getEvidenceRefs(californiaEvidence), {
+          retainedEvidence: { ...gpcComparisonEvidence, ...saleShareApplicabilityEvidence }
+        })
     : gpcSignalSent === true && gpcRecognitionObserved === true
       ? makeOutcome("gpc_opt_out_signal_handling", "observed", "A GPC or opt-out preference signal was sent and evidence of handling or recognition was retained.", getEvidenceRefs(californiaEvidence, "GPC handling observed"), {
           retainedEvidence: gpcComparisonEvidence
@@ -1090,11 +1122,15 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
           });
 
   outcomes.targeted_advertising_signals = targetedAdvertisingSignalsObserved === true
-    ? makeOutcome("targeted_advertising_signals", "review_signal", "Targeted advertising, cross-context tracking, or sale/share-like runtime signals were retained.", getEvidenceRefs(californiaEvidence, "Targeted advertising signal observed"), {
+    ? makeOutcome("targeted_advertising_signals", "observed", "Targeted advertising, cross-context tracking, or sale/share-like runtime signals were retained.", getEvidenceRefs(californiaEvidence, "Targeted advertising signal observed"), {
         retainedEvidence: saleShareApplicabilityEvidence
       })
     : targetedAdvertisingSignalsObserved === false
-      ? analyticsTagManagementVendors.length > 0 || analyticsOrMeasurementRequestUrls.length > 0 || analyticsOrMeasurementCookieNames.length > 0
+      ? saleShareApplicabilityObserved === false
+        ? makeOutcome("targeted_advertising_signals", "not_observed", "No eligible targeted advertising, cross-context tracking, sale/share, or high-confidence applicability signal was retained.", getEvidenceRefs(californiaEvidence), {
+            retainedEvidence: saleShareApplicabilityEvidence
+          })
+        : analyticsTagManagementVendors.length > 0 || analyticsOrMeasurementRequestUrls.length > 0 || analyticsOrMeasurementCookieNames.length > 0
         ? makeOutcome("targeted_advertising_signals", "review_signal", "Analytics or tag-management signals were observed, but direct CPRA sale/share evidence was not retained.", getEvidenceRefs(californiaEvidence), {
             retainedEvidence: saleShareApplicabilityEvidence
           })
@@ -1132,6 +1168,10 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     ? makeOutcome("sale_share_disclosure_alignment", "not_applicable", "No direct sale/share, targeted-advertising, or high-confidence policy sale/share admission evidence was retained for disclosure-alignment review.", getEvidenceRefs(californiaEvidence), {
         retainedEvidence: disclosureAlignmentEvidence
       })
+    : saleShareApplicabilityObserved === true && advertisingSharingVendors.length === 0 && saleShareRequestUrls.length === 0
+      ? makeOutcome("sale_share_disclosure_alignment", "not_applicable", "No direct runtime sale/share or targeted-advertising vendor evidence was retained for disclosure-alignment review.", getEvidenceRefs(californiaEvidence), {
+          retainedEvidence: disclosureAlignmentEvidence
+        })
     : disclosureAlignment === "aligned" && advertisingSharingVendors.length > 0 && disclosurePolicySnippets.length > 0 && unmatchedRuntimeDisclosureVendors.length === 0
     ? makeOutcome("sale_share_disclosure_alignment", "observed", "Observed runtime vendor categories appeared aligned with reviewed public disclosures.", getEvidenceRefs(californiaEvidence, "Disclosure alignment retained"), {
         retainedEvidence: disclosureAlignmentEvidence
@@ -1180,7 +1220,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
         retainedEvidence: sensitivePiEvidence
       })
     : sensitivePiContextObserved === true && credentialOnlySensitiveContext
-      ? makeOutcome("limit_use_sensitive_pi", "review_signal", "A credential collection context was retained, but CertScore did not treat credential-only login context as a Limit Use gap in this scan context.", getEvidenceRefs(californiaEvidence, "Sensitive credential context observed"), {
+      ? makeOutcome("limit_use_sensitive_pi", "not_applicable", "Only credential/login collection context was retained, so Limit Use of Sensitive Personal Information was not applicable in this scan context.", getEvidenceRefs(californiaEvidence, "Sensitive credential context observed"), {
           retainedEvidence: sensitivePiEvidence
         })
     : sensitivePiContextObserved === true && limitUsePathObserved === true
@@ -1200,16 +1240,16 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
 
   const optOutFrictionSignals = getStringArray(californiaEvidence, ["optOutFrictionSignals", "opt_out_friction_signals"]);
   const hasReviewablePrivacyChoiceInteraction = hasConcretePrivacyChoiceInteractionEvidence(privacyChoiceInteractionEvidence);
-  outcomes.opt_out_friction_dark_patterns = doNotSellSharePathObserved !== true && hasReviewablePrivacyChoiceInteraction
-    ? makeOutcome("opt_out_friction_dark_patterns", "review_signal", "Privacy-choice path or interaction evidence was retained, but the opt-out path/action was not clearly confirmed; review for friction or ambiguity.", getEvidenceRefs(californiaEvidence, "Privacy-choice interaction retained for friction review"), {
-        retainedEvidence: {
-          ...saleShareControlEvidence,
-          optOutFrictionSignals,
-          privacyChoiceInteractionEvidence
-        }
-      })
-    : doNotSellSharePathObserved === false
+  outcomes.opt_out_friction_dark_patterns = doNotSellSharePathObserved === false
       ? makeOutcome("opt_out_friction_dark_patterns", "not_applicable", "No opt-out path was retained; opt-out friction review does not apply beyond the opt-out availability row.", getEvidenceRefs(californiaEvidence, "Opt-out path not observed"), {
+          retainedEvidence: {
+            ...saleShareControlEvidence,
+            optOutFrictionSignals,
+            privacyChoiceInteractionEvidence
+          }
+        })
+    : doNotSellSharePathObserved !== true && hasReviewablePrivacyChoiceInteraction
+      ? makeOutcome("opt_out_friction_dark_patterns", "review_signal", "Privacy-choice path or interaction evidence was retained, but the opt-out path/action was not clearly confirmed; review for friction or ambiguity.", getEvidenceRefs(californiaEvidence, "Privacy-choice interaction retained for friction review"), {
           retainedEvidence: {
             ...saleShareControlEvidence,
             optOutFrictionSignals,
@@ -1263,11 +1303,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     privacyChoiceInteractionEvidence,
     privacyChoicePathEvidence
   });
-  outcomes.post_opt_out_tracking_behavior = optOutInteractionConfirmed !== true && hasPrivacyChoiceTrackingWindow
-    ? makeOutcome("post_opt_out_tracking_behavior", "review_signal", "A privacy-choice interaction and post-choice tracking window were retained, but the opt-out/reject action was not confirmed; review the tracking behavior as ambiguous.", getEvidenceRefs(californiaEvidence, "Privacy-choice tracking window retained"), {
-        retainedEvidence: postOptOutTrackingEvidence
-      })
-    : optOutInteractionConfirmed !== true && noObservedPrivacyChoicePath
+  outcomes.post_opt_out_tracking_behavior = optOutInteractionConfirmed !== true && noObservedPrivacyChoicePath
       ? makeOutcome("post_opt_out_tracking_behavior", "not_observed", "A privacy-choice path search was retained and no opt-out path was observed, so no post-opt-out tracking behavior was observed in this scan context.", getEvidenceRefs(californiaEvidence, "Privacy-choice path not observed"), {
           retainedEvidence: postOptOutTrackingEvidence
         })
@@ -1286,14 +1322,26 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
           retainedEvidence: postOptOutTrackingEvidence
         })
     : optOutSavedOrApplied !== true
-      ? makeOutcome("post_opt_out_tracking_behavior", "review_signal", "A privacy-choice interaction was retained, but CertScore did not confirm that an opt-out choice was saved or applied.", getEvidenceRefs(californiaEvidence, "Privacy-choice interaction retained"), {
+      ? makeOutcome("post_opt_out_tracking_behavior", "not_testable", "A privacy-choice interaction was retained, but CertScore did not confirm that an opt-out choice was saved or applied, so post-opt-out tracking behavior was not testable.", getEvidenceRefs(californiaEvidence, "Privacy-choice interaction retained"), {
+          missingOrIncompleteSourceSignals: [
+            sourceGap(
+              "californiaPrivacyEvidence.optOutSavedOrApplied",
+              true,
+              optOutSavedOrApplied,
+              "Required before CertScore can evaluate post-opt-out tracking behavior."
+            )
+          ],
           retainedEvidence: postOptOutTrackingEvidence
         })
     : postOptOutDirectAdvertisingPersisted === true && hasPrivacyChoiceTrackingWindow && targetedAdvertisingSignalsObserved === true
       ? makeOutcome("post_opt_out_tracking_behavior", "potential_gap", "Targeted advertising signals appeared to persist after a confirmed saved/applied opt-out action.", getEvidenceRefs(californiaEvidence, "Post-opt-out tracking persisted"), {
           retainedEvidence: postOptOutTrackingEvidence
         })
-      : postOptOutTrackingReductionObserved === true && hasPrivacyChoiceTrackingWindow && targetedAdvertisingSignalsObserved === true && hasPostOptOutVendorDelta && postOptOutDirectAdvertisingPersisted !== true
+      : postOptOutTrackingReductionObserved === true &&
+        targetedAdvertisingSignalsObserved === true &&
+        postOptOutDirectAdvertisingPersisted !== true &&
+        (hasPrivacyChoiceTrackingWindow || postOptOutTrackingPersisted === false) &&
+        (hasPostOptOutVendorDelta || postOptOutTrackingPersisted === false)
         ? makeOutcome("post_opt_out_tracking_behavior", "observed", "Tracking reduction was observed after a confirmed opt-out/reject action.", getEvidenceRefs(californiaEvidence, "Post-opt-out tracking reduction observed"), {
             retainedEvidence: postOptOutTrackingEvidence
           })
@@ -1326,8 +1374,14 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
   const cipaCommunicationInterceptionEvidence = cipaRiskOverlayRecords.find((record) =>
     record.evidenceField === "californiaPrivacyEvidence.cipaCommunicationInterceptionEvidence"
   )?.evidence ?? null;
+  const cipaRuntimeCoverageEvidence = getRecord(getValue(californiaEvidence, [
+    "cipaRuntimeCoverageEvidence",
+    "cipa_runtime_coverage_evidence"
+  ]));
   outcomes.cipa_sensitive_interaction_recording = deriveCipaCoverageOutcome({
     californiaEvidence,
+    coverageLimited: input.coverageLimited,
+    cipaRuntimeCoverageEvidence,
     evidence: cipaInteractionRecordingEvidence,
     missingField: "californiaPrivacyEvidence.cipaInteractionRecordingEvidence",
     rowId: "cipa_sensitive_interaction_recording",
@@ -1335,6 +1389,8 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
   });
   outcomes.cipa_sensitive_communication_interception = deriveCipaCoverageOutcome({
     californiaEvidence,
+    coverageLimited: input.coverageLimited,
+    cipaRuntimeCoverageEvidence,
     evidence: cipaCommunicationInterceptionEvidence,
     missingField: "californiaPrivacyEvidence.cipaCommunicationInterceptionEvidence",
     rowId: "cipa_sensitive_communication_interception",
@@ -1383,13 +1439,13 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     ? makeOutcome("consumer_rights_request_methods", "observed", "A consumer rights request method or privacy request path was retained.", getEvidenceRefs(californiaEvidence, "Consumer rights request method observed"), {
         retainedEvidence: rightsMethodEvidence
       })
-    : rightsLanguageObserved === true && !hasRightsMethodEvidence
-      ? makeOutcome("consumer_rights_request_methods", "review_signal", "Privacy rights language was observed, but CertScore did not retain a specific request method.", getEvidenceRefs(californiaEvidence, "Consumer rights language observed"), {
-          retainedEvidence: rightsMethodEvidence
-        })
     : rightsRequestMethodObserved === false && rightsMethodApplicabilityObserved
       ? makeOutcome("consumer_rights_request_methods", "not_observed", "A verified privacy notice context was retained, but no consumer rights request method was observed in this scan context.", getEvidenceRefs(californiaEvidence, "Consumer rights request method not observed"), {
           retainedEvidence: { ...rightsMethodEvidence, privacyNoticeObserved, privacyNoticeUrls }
+        })
+    : rightsLanguageObserved === true && !hasRightsMethodEvidence
+      ? makeOutcome("consumer_rights_request_methods", "review_signal", "Privacy rights language was observed, but CertScore did not retain a specific request method.", getEvidenceRefs(californiaEvidence, "Consumer rights language observed"), {
+          retainedEvidence: rightsMethodEvidence
         })
       : makeOutcome("consumer_rights_request_methods", "not_testable", "Consumer rights request-method evidence was unavailable or incomplete.", [], {
           missingOrIncompleteSourceSignals: [
@@ -1416,7 +1472,7 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     privacyControlAccessibilitySignals: getStringArray(californiaEvidence, ["privacyControlAccessibilitySignals", "privacy_control_accessibility_signals"])
   };
   outcomes.privacy_control_accessibility = accessibilityIssueObserved === true
-    ? makeOutcome("privacy_control_accessibility", "review_signal", "Basic automated accessibility signals were retained for privacy controls.", getEvidenceRefs(californiaEvidence, "Privacy control accessibility signal"), {
+    ? makeOutcome("privacy_control_accessibility", "potential_gap", "Basic automated accessibility issues were retained for observed privacy controls.", getEvidenceRefs(californiaEvidence, "Privacy control accessibility signal"), {
         retainedEvidence: privacyControlAccessibilityEvidence
       })
     : accessibilityIssueObserved === false && privacyControlObserved === true

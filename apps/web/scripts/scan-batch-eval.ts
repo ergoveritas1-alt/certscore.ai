@@ -2,6 +2,11 @@ import { closePools, query, queryOne } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { buildScanCalibrationSummary } from "../lib/scans/calibration-summary";
 import { deriveCaliforniaPrivacyCoveragePolicyOutcomes } from "../lib/scans/california-privacy-coverage-policy";
+import { deriveGdprEprivacyCoverageChecklist } from "../lib/scans/gdpr-eprivacy-coverage-checklist";
+import {
+  deriveGdprEprivacyCoveragePolicyOutcomes,
+  type GdprEprivacyCoveragePolicyEvent
+} from "../lib/scans/gdpr-eprivacy-coverage-policy";
 import {
   dedupeHeadlineFindings,
   deriveConsentAuditFindings
@@ -9,10 +14,12 @@ import {
 import { deriveCertScoreFindings } from "../lib/scans/derive-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../lib/scans/executive-findings-projection";
 import { deriveHighRiskTrackingContext } from "../lib/scans/high-risk-tracking-context";
-import { withHybridRuntimeArtifactFallbacks } from "../lib/scans/hybrid-runtime-evidence";
+import { getHybridDerivedTrackerVendors, withHybridRuntimeArtifactFallbacks } from "../lib/scans/hybrid-runtime-evidence";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
 import { buildNormalizedConcerns } from "../lib/scans/normalized-concerns";
+import { deriveRuntimeVendorDisclosureEvidenceFromRetainedSources } from "../lib/scans/runtime-vendor-disclosure";
 import { buildScanReportUnifiedFindingState } from "../lib/scans/scan-report-unified-findings";
+import type { UnifiedFindingDisplayPacket } from "../lib/scans/unified-findings";
 import { repairFindingFamilyPacketEvents } from "../server/scans/family-packet-event-repair";
 import { loadMergedSignalsByScanId } from "../server/scans/merged-signal-summary";
 import { deriveSignalEnrichmentWorkflowState } from "../../../packages/shared/src/utils/scan-signal-workflow";
@@ -39,6 +46,18 @@ type ScanSignalRow = {
   signal_key: string;
 };
 
+type ScanTrackerVendorRecord = {
+  beforeConsent: boolean | null;
+  collectionEndpointType: string;
+  confidence: number;
+  detectionSource: string;
+  firstPartyOrThirdParty: string;
+  matchedSignatureId: string | null;
+  scriptHost: string | null;
+  vendorCategory: string;
+  vendorName: string;
+};
+
 type CaliforniaCohortSummaryRow = {
   cipaCommunication: string;
   cipaRecording: string;
@@ -50,9 +69,24 @@ type CaliforniaCohortSummaryRow = {
   notes: string[];
   optOut: string;
   privacyNotice: string;
+  rows: Record<string, {
+    status: string;
+  }>;
   saleShare: string;
   scanId: string;
   sensitiveContext: string;
+};
+
+type GdprEprivacyCohortSummaryRow = {
+  domain: string;
+  insufficientEvidenceCount: number;
+  notTestableCount: number;
+  rows: Record<string, {
+    assessmentStatus: string;
+    evidenceState: string;
+    status: string;
+  }>;
+  scanId: string;
 };
 
 function getDocumentSourceStatusCount(rows: Array<Record<string, unknown>>, status: string) {
@@ -220,6 +254,54 @@ function stripDbRecord(record: Record<string, unknown> | null | undefined) {
   return next;
 }
 
+function normalizeTrackerVendorRows(
+  rows: Array<Record<string, unknown>>,
+  runtimeArtifacts: Record<string, unknown> | null
+): ScanTrackerVendorRecord[] {
+  const persistedTrackerVendors = rows.map(
+    (tracker) =>
+      ({
+        beforeConsent: typeof tracker.before_consent === "boolean" ? tracker.before_consent : null,
+        collectionEndpointType: String(tracker.collection_endpoint_type ?? "unknown"),
+        confidence: Number(tracker.confidence ?? 0),
+        detectionSource: String(tracker.detection_source ?? "unknown"),
+        firstPartyOrThirdParty: String(tracker.first_party_or_third_party ?? "unknown"),
+        matchedSignatureId: typeof tracker.matched_signature_id === "string" ? tracker.matched_signature_id : null,
+        scriptHost: typeof tracker.script_host === "string" ? tracker.script_host : null,
+        vendorCategory: String(tracker.vendor_category ?? "unknown"),
+        vendorName: String(tracker.vendor_name ?? "unknown")
+      }) satisfies ScanTrackerVendorRecord
+  );
+  const runtimeDerivedTrackerVendors = getHybridDerivedTrackerVendors(runtimeArtifacts).map(
+    (tracker) =>
+      ({
+        beforeConsent: tracker.beforeConsent,
+        collectionEndpointType: tracker.collectionEndpointType,
+        confidence: tracker.confidence,
+        detectionSource: tracker.detectionSource,
+        firstPartyOrThirdParty: tracker.firstPartyOrThirdParty,
+        matchedSignatureId: tracker.matchedSignatureId,
+        scriptHost: tracker.scriptHost,
+        vendorCategory: tracker.vendorCategory,
+        vendorName: tracker.vendorName
+      }) satisfies ScanTrackerVendorRecord
+  );
+
+  return [
+    ...new Map(
+      [...persistedTrackerVendors, ...runtimeDerivedTrackerVendors].map((tracker) => [
+        `${tracker.vendorName}|${tracker.detectionSource}|${tracker.scriptHost ?? ""}`,
+        tracker
+      ])
+    ).values()
+  ].sort(
+    (left, right) =>
+      left.vendorCategory.localeCompare(right.vendorCategory) ||
+      left.vendorName.localeCompare(right.vendorName) ||
+      (left.scriptHost ?? "").localeCompare(right.scriptHost ?? "")
+  );
+}
+
 function getStringArrayFromRecord(record: Record<string, unknown> | null | undefined, keys: string[]) {
   const values: string[] = [];
   for (const key of keys) {
@@ -319,6 +401,14 @@ function buildCaliforniaCohortSummaryRow(input: {
     directAdtech.length > 0 ? `direct: ${compactNames(directAdtech)}` : null,
     analyticsContext.length > 0 ? `analytics/context: ${compactNames(analyticsContext)}` : null
   ].filter((note): note is string => typeof note === "string");
+  const rows = Object.fromEntries(
+    Object.entries(outcomes).map(([rowId, outcome]) => [
+      rowId,
+      {
+        status: outcome.status
+      }
+    ])
+  );
 
   return {
     cipaCommunication: getOutcomeStatus(outcomes, "cipa_sensitive_communication_interception"),
@@ -331,9 +421,63 @@ function buildCaliforniaCohortSummaryRow(input: {
     notes,
     optOut: getOutcomeStatus(outcomes, "do_not_sell_share_availability"),
     privacyNotice: getOutcomeStatus(outcomes, "privacy_notice_availability"),
+    rows,
     saleShare: getOutcomeStatus(outcomes, "targeted_advertising_signals"),
     scanId: input.scanId,
     sensitiveContext: getOutcomeStatus(outcomes, "limit_use_sensitive_pi")
+  };
+}
+
+function normalizeGdprStatusKey(status: string) {
+  return status.toLowerCase().replaceAll(" ", "_");
+}
+
+function buildGdprEprivacyCohortSummaryRow(input: {
+  domain: string;
+  events: GdprEprivacyCoveragePolicyEvent[];
+  projectedFindings: ReturnType<typeof projectExecutiveFindingsFromUnifiedPackets>["findings"];
+  runtimeArtifacts: Record<string, unknown> | null;
+  scanCompleted: boolean;
+  scanId: string;
+  snapshot: Record<string, unknown> | null;
+  unifiedFindings: UnifiedFindingDisplayPacket[];
+}): GdprEprivacyCohortSummaryRow {
+  const coverageLimited =
+    input.snapshot?.coverage_level === "limited" ||
+    input.snapshot?.coverage_level === "limited_partial" ||
+    input.snapshot?.partial_scan === true ||
+    input.snapshot?.blocked_flag === true;
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited,
+    events: input.events,
+    runtimeArtifacts: input.runtimeArtifacts,
+    scanCompleted: input.scanCompleted,
+    snapshot: input.snapshot
+  });
+  const checklist = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited,
+    coverageOutcomes: outcomes,
+    projectedFindings: input.projectedFindings,
+    scanCompleted: input.scanCompleted,
+    unifiedFindings: input.unifiedFindings
+  });
+  const rows = Object.fromEntries(
+    checklist.map((item) => [
+      item.id,
+      {
+        assessmentStatus: item.assessmentStatus,
+        evidenceState: item.evidenceState,
+        status: normalizeGdprStatusKey(item.status)
+      }
+    ])
+  );
+
+  return {
+    domain: input.domain,
+    insufficientEvidenceCount: checklist.filter((item) => item.status === "Insufficient evidence").length,
+    notTestableCount: checklist.filter((item) => item.status === "Not testable").length,
+    rows,
+    scanId: input.scanId
   };
 }
 
@@ -623,6 +767,7 @@ async function summarizeScan(input: {
     events,
     policyEnrichment,
     runtimeArtifactsRow,
+    trackerVendorsResult,
     signalResult,
     findingsResult,
     scanRow
@@ -635,6 +780,9 @@ async function summarizeScan(input: {
     ).then((result) => result.rows),
     query<Record<string, unknown>>(`select * from policy_enrichment where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true }).then((result) => result.rows),
     queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [input.scanId], { readOnly: true }),
+    query<Record<string, unknown>>(`select * from scan_tracker_vendors where scan_id = $1 order by created_at asc`, [input.scanId], { readOnly: true })
+      .then((result) => ({ data: result.rows, error: null as { code?: string | null; message?: string | null } | null }))
+      .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: error instanceof Error ? error.message : String(error) } })),
     query<ScanSignalRow>(
       `select signal_key, population_source from scan_signals where scan_id = $1 order by signal_key asc`,
       [input.scanId],
@@ -685,6 +833,27 @@ async function summarizeScan(input: {
     ? withHybridRuntimeArtifactFallbacks(stripDbRecord(runtimeArtifactsRow) ?? runtimeArtifactsRow) ??
       stripDbRecord(runtimeArtifactsRow)
     : null;
+  const trackerVendorsError = trackerVendorsResult.error;
+  if (trackerVendorsError && !isMissingOptionalTableError(trackerVendorsError)) {
+    throw new Error(`Failed to load tracker vendors for ${input.hostname}: ${trackerVendorsError.message}`);
+  }
+  const normalizedTrackerVendors = normalizeTrackerVendorRows(
+    trackerVendorsError ? [] : trackerVendorsResult.data,
+    normalizedRuntimeArtifacts
+  );
+  const runtimeVendorDisclosureEvidence = deriveRuntimeVendorDisclosureEvidenceFromRetainedSources({
+    documentSources: normalizedDocumentSources,
+    runtimeArtifacts: normalizedRuntimeArtifacts,
+    trackerVendors: normalizedTrackerVendors
+  });
+  const reportRuntimeArtifacts =
+    normalizedRuntimeArtifacts && runtimeVendorDisclosureEvidence.length > 0
+      ? {
+          ...normalizedRuntimeArtifacts,
+          runtime_vendor_disclosure_evidence: runtimeVendorDisclosureEvidence,
+          runtimeVendorDisclosureEvidence: runtimeVendorDisclosureEvidence
+        }
+      : normalizedRuntimeArtifacts;
   const readyDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "ready");
   const rejectedDocumentSourceCount = getDocumentSourceStatusCount(normalizedDocumentSources, "rejected");
   const signalRows = (signals ?? []) as ScanSignalRow[];
@@ -731,7 +900,7 @@ async function summarizeScan(input: {
     policyReviewQueue: [],
     preconsentViolations: [],
     primaryPolicyEnrichment: normalizedPolicyRows[0] ?? null,
-    runtimeArtifacts: normalizedRuntimeArtifacts,
+    runtimeArtifacts: reportRuntimeArtifacts,
     scan: {
       completedAt: toIsoString(scanRow?.completed_at),
       createdAt: toIsoString(scanRow?.created_at) ?? new Date().toISOString(),
@@ -750,7 +919,7 @@ async function summarizeScan(input: {
     signalHits: [],
     signals: [],
     snapshot,
-    trackerVendors: [],
+    trackerVendors: normalizedTrackerVendors,
     validationFindings: []
   } as unknown as Parameters<typeof buildScanReportUnifiedFindingState>[0], {
     deriveAccessibilityIssueRows: () => [],
@@ -777,7 +946,7 @@ async function summarizeScan(input: {
       eventType: event.eventType,
       metadataJson: event.metadataJson
     })),
-    runtimeArtifacts: normalizedRuntimeArtifacts,
+    runtimeArtifacts: reportRuntimeArtifacts,
     snapshot,
     scan: {
       completedAt: typeof scanRow?.completed_at === "string" ? scanRow.completed_at : null,
@@ -786,6 +955,19 @@ async function summarizeScan(input: {
     }
   });
   const executiveProjection = projectExecutiveFindingsFromUnifiedPackets(displayPackets);
+  const gdprEprivacyCohortSummary = buildGdprEprivacyCohortSummaryRow({
+    domain: input.hostname,
+    events: repairedEvents.map((event) => ({
+      eventType: event.eventType,
+      metadataJson: event.metadataJson
+    })),
+    projectedFindings: executiveProjection.findings,
+    runtimeArtifacts: reportRuntimeArtifacts,
+    scanCompleted: scanRow.status === "completed",
+    scanId: input.scanId,
+    snapshot,
+    unifiedFindings: displayPackets
+  });
   const calibrationSummary = buildScanCalibrationSummary({
     coverageLevel: typeof snapshot?.coverage_level === "string" ? snapshot.coverage_level : null,
     domain: input.hostname,
@@ -804,7 +986,7 @@ async function summarizeScan(input: {
   });
   const californiaCohortSummary = buildCaliforniaCohortSummaryRow({
     domain: input.hostname,
-    runtimeArtifacts: normalizedRuntimeArtifacts,
+    runtimeArtifacts: reportRuntimeArtifacts,
     scanCompleted: scanRow.status === "completed",
     scanId: input.scanId,
     snapshot
@@ -845,6 +1027,7 @@ async function summarizeScan(input: {
     },
     snapshot,
     californiaCohortSummary,
+    gdprEprivacyCohortSummary,
     calibrationSummary,
     surfaced,
     workflow
@@ -870,6 +1053,12 @@ async function loadScanIdentity(scanId: string) {
 function getCaliforniaCohortSummary(row: Record<string, unknown>) {
   return row.californiaCohortSummary && typeof row.californiaCohortSummary === "object"
     ? row.californiaCohortSummary as CaliforniaCohortSummaryRow
+    : null;
+}
+
+function getGdprEprivacyCohortSummary(row: Record<string, unknown>) {
+  return row.gdprEprivacyCohortSummary && typeof row.gdprEprivacyCohortSummary === "object"
+    ? row.gdprEprivacyCohortSummary as GdprEprivacyCohortSummaryRow
     : null;
 }
 
@@ -904,6 +1093,76 @@ function printCaliforniaCohortMarkdownTable(results: Array<Record<string, unknow
   }
 }
 
+function collectCaliforniaStatusCounts(results: Array<Record<string, unknown>>) {
+  const counts = new Map<string, Record<string, number>>();
+
+  for (const result of results) {
+    const summary = getCaliforniaCohortSummary(result);
+    if (!summary) {
+      continue;
+    }
+    for (const [rowId, row] of Object.entries(summary.rows ?? {})) {
+      const bucket = counts.get(rowId) ?? {};
+      bucket[row.status] = (bucket[row.status] ?? 0) + 1;
+      counts.set(rowId, bucket);
+    }
+  }
+
+  return [...counts.entries()]
+    .map(([rowId, rowCounts]) => ({
+      rowId,
+      review_signal: rowCounts.review_signal ?? 0,
+      statuses: rowCounts
+    }))
+    .sort((a, b) => b.review_signal - a.review_signal || a.rowId.localeCompare(b.rowId));
+}
+
+function collectGdprEprivacyStatusCounts(results: Array<Record<string, unknown>>) {
+  const counts = new Map<string, Record<string, number>>();
+
+  for (const result of results) {
+    const summary = getGdprEprivacyCohortSummary(result);
+    if (!summary) {
+      continue;
+    }
+    for (const [rowId, row] of Object.entries(summary.rows)) {
+      const bucket = counts.get(rowId) ?? {};
+      bucket[row.status] = (bucket[row.status] ?? 0) + 1;
+      counts.set(rowId, bucket);
+    }
+  }
+
+  return [...counts.entries()]
+    .map(([rowId, rowCounts]) => ({
+      rowId,
+      insufficient_evidence: rowCounts.insufficient_evidence ?? 0,
+      not_testable: rowCounts.not_testable ?? 0,
+      statuses: rowCounts
+    }))
+    .sort((a, b) =>
+      (b.not_testable + b.insufficient_evidence) - (a.not_testable + a.insufficient_evidence) ||
+      a.rowId.localeCompare(b.rowId)
+    );
+}
+
+function printGdprEprivacyMarkdownTable(results: Array<Record<string, unknown>>) {
+  const rowIds = [...new Set(results.flatMap((row) => Object.keys(getGdprEprivacyCohortSummary(row)?.rows ?? {})))];
+  console.log(["domain", "not_testable", "insufficient_evidence", ...rowIds].map(escapeMarkdownCell).join(" | ").replace(/^/, "| ").replace(/$/, " |"));
+  console.log(["---", "---", "---", ...rowIds.map(() => "---")].join("|").replace(/^/, "|").replace(/$/, "|"));
+  for (const row of results) {
+    const summary = getGdprEprivacyCohortSummary(row);
+    if (!summary) {
+      continue;
+    }
+    console.log([
+      summary.domain,
+      summary.notTestableCount,
+      summary.insufficientEvidenceCount,
+      ...rowIds.map((rowId) => summary.rows[rowId]?.status ?? "missing")
+    ].map(escapeMarkdownCell).join(" | ").replace(/^/, "| ").replace(/$/, " |"));
+  }
+}
+
 async function main() {
   const orgId = getArgValue("--org") ?? DEFAULT_ORG_ID;
   const timeoutMs = Number(getArgValue("--timeout-ms") ?? DEFAULT_TIMEOUT_MS);
@@ -917,6 +1176,9 @@ async function main() {
   const queueOnly = hasFlag("--queue-only");
   const aggregateTimings = hasFlag("--aggregate-timings");
   const californiaCohortSummary = hasFlag("--california-cohort-summary");
+  const californiaCounts = hasFlag("--california-counts");
+  const gdprEprivacySummary = hasFlag("--gdpr-eprivacy-summary");
+  const gdprEprivacyCounts = hasFlag("--gdpr-eprivacy-counts");
   const markdownTable = hasFlag("--markdown-table");
   const explicitScanIds = getListArg("--scan-ids");
   const argv = process.argv.slice(2);
@@ -1009,11 +1271,28 @@ async function main() {
         timings: summary.workflow.timings
       },
       californiaCohortSummary: summary.californiaCohortSummary,
+      gdprEprivacyCohortSummary: summary.gdprEprivacyCohortSummary,
       surfaced: summary.surfaced
     });
   }
 
   if (explicitScanIds.length > 0) {
+    if (californiaCounts) {
+      console.log(JSON.stringify(collectCaliforniaStatusCounts(results), null, 2));
+      return;
+    }
+    if (gdprEprivacyCounts) {
+      console.log(JSON.stringify(collectGdprEprivacyStatusCounts(results), null, 2));
+      return;
+    }
+    if (gdprEprivacySummary && markdownTable) {
+      printGdprEprivacyMarkdownTable(results);
+      return;
+    }
+    if (gdprEprivacySummary) {
+      console.log(JSON.stringify(results.map((row) => row.gdprEprivacyCohortSummary), null, 2));
+      return;
+    }
     if (californiaCohortSummary && markdownTable) {
       printCaliforniaCohortMarkdownTable(results);
       return;
@@ -1200,6 +1479,10 @@ async function main() {
 
   if (californiaCohortSummary && markdownTable) {
     printCaliforniaCohortMarkdownTable(results);
+    return;
+  }
+  if (californiaCounts) {
+    console.log(JSON.stringify(collectCaliforniaStatusCounts(results), null, 2));
     return;
   }
   if (californiaCohortSummary) {

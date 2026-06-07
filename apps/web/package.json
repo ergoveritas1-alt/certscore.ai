@@ -24,6 +24,8 @@
     "audit:cookie-evidence-debug": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-cookie-evidence-debug.ts",
     "audit:fingerprinting-evidence-coverage": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-fingerprinting-evidence-coverage.ts",
     "california:replay": "node --enable-source-maps --import tsx ./scripts/california-phase2-replay.ts",
+    "california:queue-cohort-reruns": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/queue-california-cohort-reruns.ts",
+    "gdpr-eprivacy:queue-cohort-reruns": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/queue-gdpr-eprivacy-cohort-reruns.ts",
     "review:cookie-disclosure-gap-urls": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/review-cookie-disclosure-gap-urls.ts",
     "audit:urlscan-supplements": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-urlscan-supplements.ts",
     "review:production-finding-surfacing": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/review-production-finding-surfacing.ts",

@@ -34,7 +34,7 @@ import {
   upsertUsageCounter,
   updateDomainLatestScan
 } from "./repository";
-import { buildQueuedFullScanConfig } from "./full-scan-config";
+import { buildQueuedFullScanConfig, type QueuedFullScanCaliforniaPrivacyConfig } from "./full-scan-config";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
 
@@ -47,6 +47,7 @@ const initialState: CreateFullScanActionState = {
 };
 
 type QueueFullScanInput = {
+  californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   domainContext?: {
     activeScanExists: boolean;
     domain: {
@@ -128,6 +129,11 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     };
   }
 
+  const bypassRecentScanReuse =
+    Boolean(input.bypassRecentScanReuse) ||
+    input.californiaPrivacy?.exercisePrivacyChoicePath === true ||
+    input.californiaPrivacy?.forceGpcVerification === true;
+
   const logRequest = (details: {
     errorCode?: string | null;
     errorMessage?: string | null;
@@ -152,7 +158,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       },
       requestedUrl: domainRecord.domain.normalizedUrl,
       requestContext: {
-        bypassRecentScanReuse: Boolean(input.bypassRecentScanReuse),
+        bypassRecentScanReuse,
+        californiaPrivacy: input.californiaPrivacy ?? null,
         enforceCooldown: Boolean(input.enforceCooldown),
         enforceMonthlyUsageLimit: Boolean(input.enforceMonthlyUsageLimit),
         planCode: input.planCode,
@@ -176,7 +183,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     return request.catch((error) => logScanRequestFailure("workspace_full_scan_request", error));
   };
 
-  if (!input.bypassRecentScanReuse) {
+  if (!bypassRecentScanReuse) {
     const recentScan = await findRecentCompletedScanForDomain({
       allowCrossWorkspace: true,
       normalizedDomain: domainRecord.domain.hostname,
@@ -386,6 +393,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     return null;
   });
   const scanConfig = buildQueuedFullScanConfig({
+    californiaPrivacy: input.californiaPrivacy,
     hostname: domainRecord.domain.hostname,
     maxPages: pagesRequested,
     normalizedUrl: domainRecord.domain.normalizedUrl,
@@ -470,7 +478,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         originIp: input.provenance?.originIp ?? null,
         githubRunId: input.provenance?.githubRunId ?? null,
         githubWorkflow: input.provenance?.githubWorkflow ?? null,
-        provenance: input.provenance ?? null
+        provenance: input.provenance ?? null,
+        californiaPrivacy: scanConfig.californiaPrivacy ?? null
       },
       organizationId: input.organizationId,
       scanId: scan.id

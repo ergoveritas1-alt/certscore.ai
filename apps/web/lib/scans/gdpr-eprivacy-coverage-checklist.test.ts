@@ -139,7 +139,7 @@ test("deriveGdprEprivacyCoverageChecklist maps canonical unified findings withou
   assert.equal(items.some((item) => ["Pass", "Fail"].includes(String(item.status))), false);
 });
 
-test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session replay as an observed review signal", () => {
+test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session replay as observed", () => {
   const outcome = makeCoverageOutcome({
     evidenceRefs: [
       "Session replay signal observed; pre-consent replay not retained",
@@ -177,9 +177,9 @@ test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session r
   });
 
   const row = byId(items, "session_replay_fingerprinting_review");
-  assert.equal(row.status, "Review signal");
+  assert.equal(row.status, "Observed");
   assert.equal(row.evidenceState, "observed");
-  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(row.assessmentStatus, "checked");
   assert.equal(row.label, "Session replay / behavioral analytics observed");
   assert.match(row.explanation, /not observed pre-consent in retained evidence/i);
   assert.match(row.explanation, /Microsoft Clarity, Hotjar, and Contentsquare/);

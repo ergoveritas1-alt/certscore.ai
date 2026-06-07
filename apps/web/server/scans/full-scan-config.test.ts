@@ -94,3 +94,34 @@ test("queued full-scan config carries prior scan acceleration only as execution 
   assert.equal(Object.hasOwn(config, "findings"), false);
   assert.equal(Object.hasOwn(config, "signals"), false);
 });
+
+test("queued full-scan config carries explicit California privacy runtime flags without evidence shortcuts", () => {
+  const defaultConfig = buildQueuedFullScanConfig({
+    hostname: "example.com",
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "california-cohort-validation"
+  });
+
+  assert.equal(Object.hasOwn(defaultConfig, "californiaPrivacy"), false);
+
+  const config = buildQueuedFullScanConfig({
+    californiaPrivacy: {
+      exercisePrivacyChoicePath: true,
+      forceGpcVerification: true
+    },
+    hostname: "example.com",
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "california-cohort-validation"
+  });
+
+  assert.deepEqual(config.californiaPrivacy, {
+    exercisePrivacyChoicePath: true,
+    forceGpcVerification: true
+  });
+  assert.equal(Object.hasOwn(config, "findings"), false);
+  assert.equal(Object.hasOwn(config, "signals"), false);
+});

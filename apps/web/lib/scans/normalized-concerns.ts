@@ -3124,7 +3124,11 @@ function buildCaliforniaPrivacyEvidenceConcerns(
     "cipaInteractionRecordingEvidence",
     "cipa_interaction_recording_evidence"
   ]);
-  if (cipaInteractionRecordingEvidence) {
+  if (
+    cipaInteractionRecordingEvidence &&
+    getCaliforniaRuntimeBoolean(cipaInteractionRecordingEvidence, ["cipaSensitive", "cipa_sensitive"]) === true &&
+    getCaliforniaRuntimeStringArray(cipaInteractionRecordingEvidence, ["cipaSignalTypes", "cipa_signal_types"]).length > 0
+  ) {
     concerns.push(buildCaliforniaCipaConcern({
       domainContext,
       evidence: cipaInteractionRecordingEvidence,
@@ -3140,7 +3144,11 @@ function buildCaliforniaPrivacyEvidenceConcerns(
     "cipaCommunicationInterceptionEvidence",
     "cipa_communication_interception_evidence"
   ]);
-  if (cipaCommunicationInterceptionEvidence) {
+  if (
+    cipaCommunicationInterceptionEvidence &&
+    getCaliforniaRuntimeBoolean(cipaCommunicationInterceptionEvidence, ["cipaSensitive", "cipa_sensitive"]) === true &&
+    getCaliforniaRuntimeStringArray(cipaCommunicationInterceptionEvidence, ["cipaSignalTypes", "cipa_signal_types"]).length > 0
+  ) {
     concerns.push(buildCaliforniaCipaConcern({
       domainContext,
       evidence: cipaCommunicationInterceptionEvidence,

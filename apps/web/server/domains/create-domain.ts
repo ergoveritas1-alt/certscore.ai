@@ -14,6 +14,7 @@ import { getPlanLimits } from "../plans/get-plan-limits";
 import { queueFullScanForDomain } from "../scans/create-full-scan";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { getAdminScanThrottleMs } from "../../lib/scan-access";
+import type { QueuedFullScanCaliforniaPrivacyConfig } from "../scans/full-scan-config";
 
 export type CreateDomainActionState = {
   error: string | null;
@@ -28,6 +29,7 @@ const initialState: CreateDomainActionState = {
 export async function createOrQueueDomainScan(input: {
   allowExistingDomainRescan?: boolean;
   bypassRecentScanReuse?: boolean;
+  californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   domain: string;
   provenance?: {
     githubActor?: string | null;
@@ -157,6 +159,7 @@ export async function createOrQueueDomainScan(input: {
     submittedByUserId: dashboardContext.user.id,
     enforceMonthlyUsageLimit: true,
     bypassRecentScanReuse: input.bypassRecentScanReuse,
+    californiaPrivacy: input.californiaPrivacy,
     provenance: input.provenance,
     scanFrom: input.scanFrom,
     scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,

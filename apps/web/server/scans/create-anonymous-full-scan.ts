@@ -7,7 +7,7 @@ import { ensureValidationRunForManualScan } from "../validation/repository";
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
 import { setPreviewDomainLatestScan } from "../preview-scan/db";
 import { createQueuedFullScan, insertQueuedFullScanEvent, loadPriorScanAccelerationCandidate } from "./repository";
-import { buildQueuedFullScanConfig } from "./full-scan-config";
+import { buildQueuedFullScanConfig, type QueuedFullScanCaliforniaPrivacyConfig } from "./full-scan-config";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
 
@@ -24,6 +24,7 @@ type ScanQueueProvenance = {
 
 export async function createAnonymousFullScan(input: {
   bypassRecentScanReuse?: boolean;
+  californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   hostname: string;
   normalizedUrl: string;
   provenance?: ScanQueueProvenance;
@@ -31,7 +32,12 @@ export async function createAnonymousFullScan(input: {
 }) {
   const scanFrom = normalizeScanFrom(input.scanFrom);
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
-  if (!input.bypassRecentScanReuse) {
+  const bypassRecentScanReuse =
+    Boolean(input.bypassRecentScanReuse) ||
+    input.californiaPrivacy?.exercisePrivacyChoicePath === true ||
+    input.californiaPrivacy?.forceGpcVerification === true;
+
+  if (!bypassRecentScanReuse) {
     const recentScan = await findRecentCompletedScanForDomain({
       normalizedDomain: input.hostname,
       normalizedUrl: input.normalizedUrl,
@@ -55,7 +61,7 @@ export async function createAnonymousFullScan(input: {
         requestedBy: { anonymous: true },
         requestedUrl: input.normalizedUrl,
         requestContext: {
-          bypassRecentScanReuse: Boolean(input.bypassRecentScanReuse),
+          bypassRecentScanReuse,
           provenance: input.provenance ?? null,
           scanFrom
         },
@@ -88,7 +94,7 @@ export async function createAnonymousFullScan(input: {
       requestedBy: { anonymous: true },
       requestedUrl: input.normalizedUrl,
       requestContext: {
-        bypassRecentScanReuse: Boolean(input.bypassRecentScanReuse),
+        bypassRecentScanReuse,
         provenance: input.provenance ?? null,
         scanFrom
       },
@@ -115,6 +121,7 @@ export async function createAnonymousFullScan(input: {
     return null;
   });
   const scanConfig = buildQueuedFullScanConfig({
+    californiaPrivacy: input.californiaPrivacy,
     hostname: input.hostname,
     maxPages: pagesRequested,
     normalizedUrl: input.normalizedUrl,
@@ -147,7 +154,8 @@ export async function createAnonymousFullScan(input: {
     requestedBy: { anonymous: true },
     requestedUrl: input.normalizedUrl,
     requestContext: {
-      bypassRecentScanReuse: Boolean(input.bypassRecentScanReuse),
+      bypassRecentScanReuse,
+      californiaPrivacy: scanConfig.californiaPrivacy ?? null,
       pagesRequested,
       provenance: input.provenance ?? null,
       queueOrigin: queueMetadata.queueOrigin,

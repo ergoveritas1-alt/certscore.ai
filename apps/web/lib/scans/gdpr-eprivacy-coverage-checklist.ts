@@ -1241,6 +1241,18 @@ function specializeSessionReplayChecklistRow(input: {
     };
   }
 
+  if (input.coverageOutcome?.status === "Observed" && postConsentOrNotPreConsent) {
+    const timingPhrase = sessionReplayEvidenceHasPostConsentSignal(outcomeEvidence)
+      ? "observed after the pre-consent phase"
+      : "not observed pre-consent in retained evidence";
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: `CertScore observed session replay or behavioral analytics vendors ${timingPhrase}${vendorPhrase ? `, including ${vendorPhrase}` : ""}.`,
+      label: "Session replay / behavioral analytics observed",
+      status: "Observed" as const
+    };
+  }
+
   if (input.status === "Observed" || input.status === "Review signal" || postConsentOrNotPreConsent) {
     const timingPhrase = sessionReplayEvidenceHasPostConsentSignal(outcomeEvidence)
       ? "observed after the pre-consent phase"

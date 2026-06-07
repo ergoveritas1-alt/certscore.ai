@@ -900,6 +900,30 @@ export type CaliforniaCipaSensitiveTrackingEvidence = {
   vendors?: string[];
 };
 
+export type CaliforniaCipaRuntimeCoverageEvidence = {
+  attempted: boolean;
+  sufficientForNegativeCipaReview: boolean;
+  limitation:
+    | "runtime_surface_inspected"
+    | "blocked_or_challenge"
+    | "origin_not_confirmed"
+    | "timeout"
+    | "classifier_inputs_unavailable"
+    | "no_runtime_surface";
+  inspectedSurfaceTypes: string[];
+  requestPurposeClassificationRowCount: number;
+  thirdPartyRequestCount: number | null;
+  scriptTagCount: number | null;
+  trackerVendorCount: number;
+  collectionFieldContextCount: number;
+  communicationPageCount: number;
+  preSubmitProbeAttempted: boolean;
+  chatSupportVendorObserved: boolean;
+  scanNoGoDecision?: "go" | "continue_with_diagnostics" | "no_go" | null;
+  scanNoGoReasonCodes?: string[];
+  sourceSignals: string[];
+};
+
 export type CaliforniaPrivacyEvidence = {
   privacyNoticeObserved: boolean | null;
   privacyNoticeUrls: string[];
@@ -1092,6 +1116,7 @@ export type CaliforniaPrivacyEvidence = {
   sensitiveThirdPartyTrackingObserved?: boolean | null;
   sensitiveThirdPartyTrackingVendors?: string[];
   sensitiveThirdPartyTrackingRequestUrls?: string[];
+  cipaRuntimeCoverageEvidence?: CaliforniaCipaRuntimeCoverageEvidence | null;
   cipaInteractionRecordingEvidence?: CaliforniaCipaSensitiveTrackingEvidence | null;
   cipaCommunicationInterceptionEvidence?: CaliforniaCipaSensitiveTrackingEvidence | null;
   limitUseSensitivePiPathObserved: boolean | null;

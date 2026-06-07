@@ -318,7 +318,7 @@ test("California cohort generic search/footer/contact signals stay negative thro
 
   const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
   assert.equal(coverageOutcomes.notice_at_collection?.status, "not_observed");
-  assert.equal(coverageOutcomes.consumer_rights_request_methods?.status, "review_signal");
+  assert.equal(coverageOutcomes.consumer_rights_request_methods?.status, "not_observed");
 
   const collectionRow = getChecklistRow(checklist, "notice_at_collection");
   assert.equal(collectionRow.status, "not_observed");
@@ -328,11 +328,10 @@ test("California cohort generic search/footer/contact signals stay negative thro
   assert.doesNotMatch(collectionRow.note, /point-of-collection notice was retained/i);
 
   const rightsRow = getChecklistRow(checklist, "consumer_rights_request_methods");
-  assert.equal(rightsRow.status, "review_signal");
+  assert.equal(rightsRow.status, "not_observed");
   assert.equal(rightsRow.criticalEvidence.retainedEvidence.consumerRightsRequestMethodObserved, false);
   assert.deepEqual(rightsRow.criticalEvidence.retainedEvidence.consumerRightsRequestMethodUrls ?? [], []);
-  assert.match(rightsRow.note, /rights language was observed/i);
-  assert.match(rightsRow.note, /specific request method/i);
+  assert.match(rightsRow.note, /no consumer rights request method was observed/i);
 });
 
 test("California cohort CMP infrastructure remains attribution context, not direct adtech evidence", () => {
@@ -392,17 +391,16 @@ test("California cohort CMP infrastructure remains attribution context, not dire
   );
 
   const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
-  assert.equal(coverageOutcomes.targeted_advertising_signals?.status, "review_signal");
+  assert.equal(coverageOutcomes.targeted_advertising_signals?.status, "not_observed");
   assert.equal(coverageOutcomes.do_not_sell_share_availability?.status, "not_applicable");
 
   const targetedRow = getChecklistRow(checklist, "targeted_advertising_signals");
-  assert.equal(targetedRow.status, "review_signal");
+  assert.equal(targetedRow.status, "not_observed");
   assert.deepEqual(targetedRow.criticalEvidence.retainedEvidence.advertisingSharingVendors ?? [], []);
   assert.deepEqual(targetedRow.criticalEvidence.retainedEvidence.analyticsTagManagementVendors, [
     "Google Tag Manager"
   ]);
-  assert.match(targetedRow.note, /Analytics or tag-management signals were observed/i);
-  assert.match(targetedRow.note, /direct CPRA sale\/share evidence was not retained/i);
+  assert.match(targetedRow.note, /No eligible targeted advertising/i);
 
   const optOutRow = getChecklistRow(checklist, "do_not_sell_share_availability");
   assert.equal(optOutRow.status, "not_applicable");

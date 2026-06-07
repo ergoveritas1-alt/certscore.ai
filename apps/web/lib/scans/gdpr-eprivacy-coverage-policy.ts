@@ -952,10 +952,12 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
 function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const trackerVendors = getStringArray(input.runtimeArtifacts, [
     "preconsent_tracker_vendors",
+    "consent_baseline_tracker_vendor_names",
     "tracker_vendors"
   ]);
   const trackerEvidenceUrls = getStringArray(input.runtimeArtifacts, [
     "preconsent_tracker_evidence_urls",
+    "consent_baseline_tracker_evidence_urls",
     "tracker_evidence_urls"
   ]);
   const preconsentTrackingDetected =
@@ -966,27 +968,33 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
     trackerVendors.length ||
     getNumber(input.snapshot, ["tracker_vendor_count", "tracker_count_total"]) ||
     0;
+  const concreteTrackerEvidenceRetained = trackerVendors.length > 0 || trackerEvidenceUrls.length > 0;
 
   if (preconsentTrackingDetected) {
     return makeOutcome(
       "pre_consent_third_party_tracking",
-      "Insufficient evidence",
-      "Pre-consent third-party tracking evidence was retained, but no eligible unified tracking finding was projected for this row.",
+      concreteTrackerEvidenceRetained ? "Review signal" : "Insufficient evidence",
+      concreteTrackerEvidenceRetained
+        ? "Concrete pre-consent tracker vendor or request evidence was retained, but no eligible unified tracking finding was projected for this row. Manual review should confirm whether the retained request sequence supports a GDPR/ePrivacy tracking gap."
+        : "Pre-consent third-party tracking evidence was retained, but no eligible unified tracking finding was projected for this row.",
       [
         "Evidence: pre-consent tracking runtime signal",
         trackerVendorCount > 0 ? `Pre-consent tracker vendors: ${trackerVendorCount}` : null
       ].filter((value): value is string => Boolean(value)),
       {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "CertScore.unifiedFindings.preConsentTrackingFinding",
-            "eligible projected unified finding when retained pre-consent tracking evidence satisfies policy gates",
-            "missing",
-            "Required to classify retained pre-consent tracker observations as a canonical gap.",
-            "CertScore"
-          )
-        ],
+        missingOrIncompleteSourceSignals: concreteTrackerEvidenceRetained
+          ? []
+          : [
+              sourceGap(
+                "CertScore.unifiedFindings.preConsentTrackingFinding",
+                "eligible projected unified finding when retained pre-consent tracking evidence satisfies policy gates",
+                "missing",
+                "Required to classify retained pre-consent tracker observations as a canonical gap.",
+                "CertScore"
+              )
+            ],
         retainedEvidence: {
+          concreteTrackerEvidenceRetained,
           preconsentTrackingDetected,
           trackerEvidenceUrls: compactArray(trackerEvidenceUrls, 3),
           trackerVendorCount,
@@ -1082,8 +1090,8 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   if (firstLayerGdprBannerConfirmed === false) {
     return makeOutcome(
       "reject_all_path_availability",
-      "Not testable",
-      "Reject-path availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. Footer privacy/ad-choice controls were observed, but they do not establish an accept/reject consent surface.",
+      "Not confirmed",
+      "A first-layer GDPR/ePrivacy cookie consent banner was not confirmed, so CertScore did not confirm an accept/reject consent surface for reject-path review. Footer privacy/ad-choice controls may still be relevant review context, but they do not establish a same-layer GDPR/ePrivacy reject path.",
       [
         "Evidence: consent surface demotion",
         "Reason: no_confirmed_first_layer_cookie_consent_banner"
@@ -1154,6 +1162,35 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     attempted &&
     (rejectButtonCount === 0 || skipNegativeReasons.includes("complete_reject_choice_controls_not_detected"))
   ) {
+    if (firstLayerGdprBannerConfirmed === true) {
+      return makeOutcome(
+        "reject_all_path_availability",
+        "Gap observed",
+        "A first-layer GDPR/ePrivacy cookie consent surface was confirmed, and retained consent-audit evidence did not confirm a complete reject-all or equivalent refusal path.",
+        [
+          "Evidence: consent audit attempted",
+          "Evidence: confirmed first-layer GDPR/ePrivacy consent surface",
+          rejectButtonCount !== null ? `Reject controls observed: ${rejectButtonCount}` : null,
+          preferenceButtonCount !== null ? `Preference controls observed: ${preferenceButtonCount}` : null,
+          interactionModel ? `Consent interaction model: ${interactionModel}` : null,
+          ...skipNegativeReasons,
+          ...diagnosticNegativeReasons
+        ].filter((value): value is string => Boolean(value)),
+        {
+          retainedEvidence: {
+            attempted,
+            diagnosticNegativeReasons: compactArray(diagnosticNegativeReasons, 5),
+            firstLayerCookieConsentBannerObserved: true,
+            gdprEprivacyConsentSurfaceObserved: "confirmed",
+            interactionModel,
+            preferenceButtonCount,
+            rejectButtonCount,
+            skipNegativeReasons: compactArray(skipNegativeReasons, 5)
+          }
+        }
+      );
+    }
+
     return makeOutcome(
       "reject_all_path_availability",
       "Insufficient evidence",
@@ -1428,8 +1465,8 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
   if (evidence.firstLayerCookieConsentBannerObserved === false) {
     return makeOutcome(
       "consent_choice_quality",
-      "Not testable",
-      "Consent choice quality could not be evaluated because no first-layer GDPR/ePrivacy cookie consent surface was confirmed.",
+      "Not confirmed",
+      "Consent choice quality was not confirmed because no first-layer GDPR/ePrivacy cookie consent surface was confirmed in retained evidence.",
       evidenceRefs,
       {
         missingOrIncompleteSourceSignals: [
@@ -1801,12 +1838,12 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
   if (reductionStatus === "not_testable") {
     return makeOutcome(
       "post_reject_tracking_reduction",
-      "Not testable",
+      "Not confirmed",
       firstLayerGdprBannerConfirmed === false
-        ? "Post-reject tracking could not be tested because no first-layer GDPR/ePrivacy consent banner and no valid reject action were confirmed. Footer privacy/ad-choice controls were observed, but they do not establish a reject state for comparison."
+        ? "Post-reject tracking reduction was not confirmed because no first-layer GDPR/ePrivacy consent banner and no valid reject action were confirmed. Footer privacy/ad-choice controls were observed, but they do not establish a reject state for comparison."
         : rejectInteractionFailureReason
-        ? `${rejectInteractionFailureReason} Because no valid after-reject state was retained, post-reject tracking reduction could not be evaluated.`
-        : "Reject-path audit did not retain a confirmed reject action, so post-reject tracking reduction could not be evaluated.",
+        ? `${rejectInteractionFailureReason} Because no valid after-reject state was retained, post-reject tracking reduction was not confirmed.`
+        : "Reject-path audit did not retain a confirmed reject action, so post-reject tracking reduction was not confirmed.",
       reductionEvidenceRefs,
       {
         missingOrIncompleteSourceSignals: firstLayerGdprBannerConfirmed === false
@@ -1903,8 +1940,8 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
   if (attempted && !rejectInteractionSucceeded) {
     return makeOutcome(
       "post_reject_tracking_reduction",
-      "Not testable",
-      "Reject-path audit ran, but no reject action was confirmed, so post-reject tracking reduction cannot be evaluated for this scan.",
+      "Not confirmed",
+      "Reject-path audit ran, but no reject action was confirmed, so post-reject tracking reduction was not confirmed for this scan.",
       [
         "Evidence: reject persistence diagnostic",
         ...getStringArray(rejectDiagnostic, ["negativeReasonCodes"])
@@ -1949,6 +1986,42 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const lifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
   if (!lifecycle) {
+    const consentAuditCompleted = getBoolean(input.runtimeArtifacts, ["consentAuditCompleted", "consent_audit_completed"]);
+    const consentSurfaceObserved = getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]);
+    if (
+      (consentLifecycleLimitation?.consentAuditCompleted === true || consentAuditCompleted === true) &&
+      (consentLifecycleLimitation?.consentSurfaceObserved === true || consentSurfaceObserved === true)
+    ) {
+      return makeOutcome(
+        "preference_withdrawal_control",
+        "Not confirmed",
+        "A consent interaction audit completed and observed a consent surface, but retained evidence did not confirm a post-choice cookie preference or consent-withdrawal control.",
+        [
+          "Evidence: consent audit completed",
+          "Evidence: consent surface observed",
+          consentLifecycleLimitation?.reason ? `Limitation reason: ${consentLifecycleLimitation.reason}` : null
+        ].filter((value): value is string => Boolean(value)),
+        {
+          missingOrIncompleteSourceSignals: [
+            sourceGap(
+              "scan_runtime_artifacts.hybrid_runtime_evidence.consentControlLifecycleEvidence",
+              "retained post-choice consent control lifecycle evidence",
+              "missing",
+              "Required before CertScore can confirm whether a post-choice GDPR/ePrivacy consent withdrawal control was available."
+            )
+          ],
+          retainedEvidence: {
+            consentActionableChoiceObserved:
+              consentLifecycleLimitation?.actionableChoiceObserved ??
+              getBoolean(input.runtimeArtifacts, ["consentActionableChoiceObserved", "consent_actionable_choice_observed"]),
+            consentAuditCompleted: consentLifecycleLimitation?.consentAuditCompleted ?? consentAuditCompleted,
+            consentLifecycleLimitationReason: consentLifecycleLimitation?.reason ?? null,
+            consentSurfaceObserved: consentLifecycleLimitation?.consentSurfaceObserved ?? consentSurfaceObserved
+          }
+        }
+      );
+    }
+
     return makeConsentLifecycleLimitedOutcome(
       "preference_withdrawal_control",
       consentLifecycleLimitation
@@ -2115,21 +2188,26 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
       );
     }
   
-    if (!initialLayerObserved) {
+  if (!initialLayerObserved) {
+    const lifecycleUsable = coverageStatus === "usable";
     return makeOutcome(
       "preference_withdrawal_control",
-      "Not testable",
-      "Post-choice consent controls were not testable because no initial consent surface was observed in the retained scan context.",
+      lifecycleUsable ? "Not confirmed" : "Not testable",
+      lifecycleUsable
+        ? "A first-layer GDPR/ePrivacy cookie consent surface was not confirmed in the retained scan context, so CertScore did not confirm whether a post-choice cookie preference or consent-withdrawal control was available."
+        : "Post-choice consent controls were not testable because no initial consent surface was observed in the retained scan context.",
       evidenceRefs,
       {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "consentControlLifecycleEvidence.initialConsentLayerObserved",
-            true,
-            initialLayerObserved,
-            "Required before CertScore can evaluate whether post-choice consent controls were available."
-          )
-        ],
+        missingOrIncompleteSourceSignals: lifecycleUsable
+          ? []
+          : [
+              sourceGap(
+                "consentControlLifecycleEvidence.initialConsentLayerObserved",
+                true,
+                initialLayerObserved,
+                "Required before CertScore can evaluate whether post-choice consent controls were available."
+              )
+            ],
         retainedEvidence: lifecycleRetainedEvidence
       }
     );

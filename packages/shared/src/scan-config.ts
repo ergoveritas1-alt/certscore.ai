@@ -34,12 +34,18 @@ export type SharedPriorScanAccelerationConfig = {
   sourceScanId: string;
 };
 
+export type SharedCaliforniaPrivacyScanConfig = {
+  exercisePrivacyChoicePath?: boolean;
+  forceGpcVerification?: boolean;
+};
+
 export type SharedScanExecutionConfig = {
   crawlSeedHints?: SharedCrawlSeedHint[];
   priorScanAcceleration?: SharedPriorScanAccelerationConfig;
 } & Record<string, unknown>;
 
 export type SharedScanConfig = {
+  californiaPrivacy?: SharedCaliforniaPrivacyScanConfig;
   crawlerIdentity?: SharedCrawlerIdentityConfig;
   execution?: SharedScanExecutionConfig;
   freshBrowserRequired?: boolean;
@@ -57,6 +63,7 @@ export type SharedScanConfig = {
 };
 
 type BuildSharedFullScanConfigInput = {
+  californiaPrivacy?: SharedCaliforniaPrivacyScanConfig;
   crawlerIdentity?: SharedCrawlerIdentityConfig;
   execution?: SharedScanExecutionConfig;
   freshBrowserRequired?: boolean;
@@ -75,6 +82,7 @@ type BuildSharedFullScanConfigInput = {
 
 export function buildSharedFullScanConfig(input: BuildSharedFullScanConfigInput): SharedScanConfig {
   return {
+    ...(input.californiaPrivacy ? { californiaPrivacy: input.californiaPrivacy } : {}),
     ...(input.crawlerIdentity ? { crawlerIdentity: input.crawlerIdentity } : {}),
     ...(input.execution ? { execution: input.execution } : {}),
     ...(typeof input.freshBrowserRequired === "boolean" ? { freshBrowserRequired: input.freshBrowserRequired } : {}),
