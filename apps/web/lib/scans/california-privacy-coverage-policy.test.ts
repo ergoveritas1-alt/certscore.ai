@@ -507,6 +507,120 @@ test("California calibration keeps Caltech-like partial evidence in review or no
   assert.equal(outcomes.consumer_rights_request_methods?.status, "not_testable");
 });
 
+test("California cohort regression keeps analytics-only privacy-choice scans out of direct sale/share gaps", () => {
+  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited: true,
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        privacyNoticeObserved: true,
+        privacyNoticeUrls: ["https://example.test/privacy"],
+        verifiedPrivacyNoticeUrls: ["https://example.test/privacy"],
+        collectionContextObserved: false,
+        californiaNoticeCueObserved: true,
+        footerNoticeCueObserved: true,
+        collectionNoticeEvidenceKind: "footer_notice_link_only",
+        targetedAdvertisingSignalsObserved: false,
+        directAdvertisingSharingVendors: [],
+        directSaleShareOrTargetedAdvertisingVendors: [],
+        analyticsTagManagementVendors: ["Datadog RUM", "Google Tag Manager", "Segment"],
+        analyticsOrMeasurementVendors: ["Datadog RUM", "Google Tag Manager", "Segment"],
+        doNotSellSharePathObserved: true,
+        doNotSellSharePathUrl: "https://privacyportal.onetrust.com/webform/example",
+        privacyChoiceUrls: ["https://privacyportal.onetrust.com/webform/example"],
+        privacyChoicePathEvidence: {
+          attempted: true,
+          observed: true,
+          selectedUrl: "https://privacyportal.onetrust.com/webform/example",
+          selectedLabel: "Your Privacy Choices",
+          selectionBasis: "privacy_choice_link",
+          limitation: "discovery_only",
+          interactionAttempted: false,
+          interactionConfirmed: null
+        },
+        optOutInteractionConfirmed: null,
+        postOptOutTrackingReductionObserved: null,
+        postOptOutTrackingPersisted: null,
+        gpcTestRan: false,
+        sensitivePiContextObserved: false
+      }
+    },
+    scanCompleted: true
+  });
+
+  assert.equal(outcomes.targeted_advertising_signals?.status, "review_signal");
+  assert.match(outcomes.targeted_advertising_signals?.limitation ?? "", /Analytics or tag-management/i);
+  assert.equal(outcomes.do_not_sell_share_availability?.status, "not_applicable");
+  assert.notEqual(outcomes.do_not_sell_share_availability?.status, "potential_gap");
+  assert.equal(outcomes.post_opt_out_tracking_behavior?.status, "not_testable");
+  assert.equal(outcomes.gpc_opt_out_signal_handling?.status, "not_testable");
+  assert.deepEqual(
+    outcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.advertisingSharingVendors ?? [],
+    []
+  );
+});
+
+test("California cohort regression keeps limited guessed-only legal recovery as upstream evidence gap", () => {
+  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited: true,
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        privacyNoticeObserved: false,
+        privacyNoticeUrls: [],
+        verifiedPrivacyNoticeUrls: [],
+        privacyNoticeAttemptedUrls: [
+          "https://example-retail.test/privacy",
+          "https://example-retail.test/legal/privacy-policy"
+        ],
+        privacyNoticeDiscoveryEvidence: {
+          attempted: true,
+          attemptedPrivacyNoticeUrls: [
+            "https://example-retail.test/privacy",
+            "https://example-retail.test/legal/privacy-policy"
+          ],
+          failedUrls: [
+            "https://example-retail.test/privacy",
+            "https://example-retail.test/legal/privacy-policy"
+          ],
+          blockedUrls: [],
+          homepageCandidateCount: 0,
+          legalHubCandidateCount: 0,
+          privacyTargetAttempted: true,
+          privacyTargetVerified: false,
+          usedUrlscanBackfill: true,
+          verifiedPrivacyNoticeUrls: []
+        },
+        collectionContextObserved: false,
+        targetedAdvertisingSignalsObserved: false,
+        directAdvertisingSharingVendors: [],
+        analyticsTagManagementVendors: [],
+        doNotSellSharePathObserved: false,
+        privacyChoicePathEvidence: {
+          attempted: true,
+          observed: false,
+          candidateCount: 0,
+          selectionBasis: "none",
+          limitation: "discovery_only"
+        },
+        gpcTestRan: false,
+        sensitivePiContextObserved: false,
+        consumerRightsRequestMethodObserved: false,
+        rightsLanguageObserved: false
+      }
+    },
+    scanCompleted: true
+  });
+
+  assert.equal(outcomes.privacy_notice_availability?.status, "potential_gap");
+  assert.equal(outcomes.notice_at_collection?.status, "not_observed");
+  assert.equal(outcomes.targeted_advertising_signals?.status, "not_observed");
+  assert.equal(outcomes.do_not_sell_share_availability?.status, "not_applicable");
+  assert.equal(outcomes.gpc_opt_out_signal_handling?.status, "not_testable");
+  assert.equal(
+    outcomes.privacy_notice_availability?.criticalEvidence.retainedEvidence.privacyTargetVerified,
+    false
+  );
+});
+
 test("California rights methods reject generic footer contact context", () => {
   const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
     coverageLimited: false,

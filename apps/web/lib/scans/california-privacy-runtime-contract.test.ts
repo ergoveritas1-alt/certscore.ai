@@ -7,6 +7,7 @@ import {
 } from "../../../../packages/shared/src/regulatory-review/california-privacy-runtime-fixtures";
 import { deriveCaliforniaPrivacyCoverageChecklist } from "./california-privacy-coverage-checklist";
 import { deriveCaliforniaPrivacyCoveragePolicyOutcomes } from "./california-privacy-coverage-policy";
+import { deriveHighRiskTrackingContext } from "./high-risk-tracking-context";
 import { buildNormalizedConcerns } from "./normalized-concerns";
 import {
   buildUnifiedFindingDisplayPackets,
@@ -24,6 +25,36 @@ function getChecklistRow(items: ReturnType<typeof deriveCaliforniaPrivacyCoverag
   const row = items.find((candidate) => candidate.id === rowId);
   assert.ok(row, `Expected California checklist row ${rowId}`);
   return row;
+}
+
+function deriveChecklistFromRuntimeArtifacts(runtimeArtifacts: Record<string, unknown>, coverageLimited = false) {
+  const unifiedFindings = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+  const coverageOutcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited,
+    normalizedConcerns: buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts,
+      validationFindings: []
+    }),
+    runtimeArtifacts,
+    scanCompleted: true
+  });
+
+  return {
+    checklist: deriveCaliforniaPrivacyCoverageChecklist({
+      coverageLimited,
+      coverageOutcomes,
+      scanCompleted: true,
+      unifiedFindings
+    }),
+    coverageOutcomes,
+    unifiedFindings
+  };
 }
 
 test("California runtime contract fixtures expose the expected top-level WS01 packet keys", () => {
@@ -229,4 +260,153 @@ test("WS01-shaped California runtime artifact remains self-sufficient through ch
   assert.deepEqual(rightsRow.criticalEvidence.retainedEvidence.consumerRightsRequestMethodSnippets, [
     "Submit a privacy request to access, delete, or correct your personal information."
   ]);
+});
+
+test("California cohort generic search/footer/contact signals stay negative through canonical rows", () => {
+  const runtimeArtifacts = {
+    californiaPrivacyEvidence: {
+      collectionContextObserved: false,
+      collectionContextTypes: ["generic_site_search"],
+      collectionContextUrls: ["https://example.edu/search?q=privacy"],
+      collectionEvidenceSources: ["site_search_input"],
+      collectionFieldContexts: [{ fieldName: "q", inputType: "search", surfaceType: "generic_site_search" }],
+      collectionNoticeCueObserved: false,
+      collectionNoticeEvidenceKind: "generic_search_only",
+      consumerRightsRequestMethodObserved: false,
+      consumerRightsRequestMethodSnippets: [],
+      consumerRightsRequestMethodTypes: [],
+      consumerRightsRequestMethodUrls: [],
+      evidenceRefs: ["Generic site search input q", "Footer Contact Us link"],
+      footerNoticeCueObserved: true,
+      footerNoticeCueText: "California Notice",
+      privacyNoticeObserved: true,
+      privacyNoticeUrls: ["https://example.edu/privacy"],
+      rightsLanguageObserved: true,
+      targetedAdvertisingSignalsObserved: false,
+      verifiedPrivacyNoticeUrls: ["https://example.edu/privacy"]
+    }
+  };
+
+  assert.equal(
+    (runtimeArtifacts.californiaPrivacyEvidence.collectionFieldContexts[0] as Record<string, unknown>).surfaceType,
+    "generic_site_search"
+  );
+  assert.equal(runtimeArtifacts.californiaPrivacyEvidence.footerNoticeCueObserved, true);
+  assert.equal(runtimeArtifacts.californiaPrivacyEvidence.consumerRightsRequestMethodObserved, false);
+
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  assert.equal(
+    concerns.some((concern) => concern.originKey === "california_privacy.collection_notice.potential_gap"),
+    false
+  );
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "policy_clarity_risk"),
+    false
+  );
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "privacy_rights_path_present"),
+    false
+  );
+  assert.equal(
+    concerns.some((concern) => concern.originKey === "california_privacy.rights_methods.observed"),
+    false
+  );
+
+  const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
+  assert.equal(coverageOutcomes.notice_at_collection?.status, "not_observed");
+  assert.equal(coverageOutcomes.consumer_rights_request_methods?.status, "review_signal");
+
+  const collectionRow = getChecklistRow(checklist, "notice_at_collection");
+  assert.equal(collectionRow.status, "not_observed");
+  assert.equal(collectionRow.criticalEvidence.pipeline.projectionStage, "coverage_policy");
+  assert.equal(collectionRow.criticalEvidence.retainedEvidence.collectionNoticeEvidenceKind, "generic_search_only");
+  assert.match(collectionRow.note, /generic site search/i);
+  assert.doesNotMatch(collectionRow.note, /point-of-collection notice was retained/i);
+
+  const rightsRow = getChecklistRow(checklist, "consumer_rights_request_methods");
+  assert.equal(rightsRow.status, "review_signal");
+  assert.equal(rightsRow.criticalEvidence.retainedEvidence.consumerRightsRequestMethodObserved, false);
+  assert.deepEqual(rightsRow.criticalEvidence.retainedEvidence.consumerRightsRequestMethodUrls ?? [], []);
+  assert.match(rightsRow.note, /rights language was observed/i);
+  assert.match(rightsRow.note, /specific request method/i);
+});
+
+test("California cohort CMP infrastructure remains attribution context, not direct adtech evidence", () => {
+  const runtimeArtifacts = {
+    californiaPrivacyEvidence: {
+      analyticsOrMeasurementRequestUrls: ["https://www.googletagmanager.com/gtm.js?id=GTM-TEST"],
+      analyticsOrMeasurementVendors: ["Google Tag Manager"],
+      analyticsTagManagementVendors: ["Google Tag Manager"],
+      directAdvertisingSharingVendors: [],
+      directSaleShareOrTargetedAdvertisingRequestUrls: [],
+      directSaleShareOrTargetedAdvertisingVendors: [],
+      doNotSellSharePathObserved: false,
+      evidenceRefs: ["OneTrust CMP script", "Google Tag Manager script"],
+      privacyNoticeObserved: true,
+      privacyNoticeUrls: ["https://example.test/privacy"],
+      saleShareRequestUrls: [],
+      targetedAdvertisingSignalsObserved: false,
+      utilityOrInfrastructureRequestUrls: ["https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"],
+      verifiedPrivacyNoticeUrls: ["https://example.test/privacy"]
+    },
+    thirdPartyRequestDomains: ["cdn.cookielaw.org", "www.googletagmanager.com"],
+    thirdPartyRequestUrls: [
+      "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+      "https://www.googletagmanager.com/gtm.js?id=GTM-TEST"
+    ]
+  };
+
+  const highRiskContext = deriveHighRiskTrackingContext({
+    evidenceUrls: runtimeArtifacts.thirdPartyRequestUrls,
+    hostname: "example.test",
+    runtimeArtifacts,
+    thirdPartyDomains: runtimeArtifacts.thirdPartyRequestDomains
+  });
+  assert.ok(highRiskContext.cmpVendors.some((vendor) => vendor.name === "OneTrust"));
+  assert.equal(highRiskContext.highRiskVendors.some((vendor) => vendor.name === "OneTrust"), false);
+  assert.deepEqual(runtimeArtifacts.californiaPrivacyEvidence.directAdvertisingSharingVendors, []);
+  assert.deepEqual(runtimeArtifacts.californiaPrivacyEvidence.utilityOrInfrastructureRequestUrls, [
+    "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"
+  ]);
+
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  assert.equal(
+    concerns.some((concern) => concern.originKey === "california_privacy.sale_share_control.potential_gap"),
+    false
+  );
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "sale_sharing_controls_missing"),
+    false
+  );
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing"),
+    false
+  );
+
+  const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
+  assert.equal(coverageOutcomes.targeted_advertising_signals?.status, "review_signal");
+  assert.equal(coverageOutcomes.do_not_sell_share_availability?.status, "not_applicable");
+
+  const targetedRow = getChecklistRow(checklist, "targeted_advertising_signals");
+  assert.equal(targetedRow.status, "review_signal");
+  assert.deepEqual(targetedRow.criticalEvidence.retainedEvidence.advertisingSharingVendors ?? [], []);
+  assert.deepEqual(targetedRow.criticalEvidence.retainedEvidence.analyticsTagManagementVendors, [
+    "Google Tag Manager"
+  ]);
+  assert.match(targetedRow.note, /Analytics or tag-management signals were observed/i);
+  assert.match(targetedRow.note, /direct CPRA sale\/share evidence was not retained/i);
+
+  const optOutRow = getChecklistRow(checklist, "do_not_sell_share_availability");
+  assert.equal(optOutRow.status, "not_applicable");
+  assert.equal(optOutRow.criticalEvidence.retainedEvidence.saleShareApplicabilityObserved, false);
+  assert.deepEqual(optOutRow.criticalEvidence.retainedEvidence.advertisingSharingVendors ?? [], []);
+  assert.match(optOutRow.note, /No direct sale\/share, targeted-advertising, or high-confidence policy sale\/share admission evidence/i);
 });
