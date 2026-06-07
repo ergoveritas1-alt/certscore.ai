@@ -16,6 +16,69 @@ CertScore is a risk-signal and monitoring product, not a legal certification pla
 - **`WC01` (this repo)** — product web flows, scan creation, reporting, validation, and control-plane workflows.
 - **`WS01` (external repo)** — standalone scanner runtime, crawler identity, scheduled scans, heartbeat behavior, and scanner deploy flow. Do not add scanner runtime logic here.
 
+### Canonical scan-to-report flow
+
+All new scan-to-report logic must preserve the canonical CertScore pipeline:
+
+```text
+WS01 observed evidence
+→ WC01 normalized concern
+→ WC01 concern policy
+→ WC01 unified finding / checklist projection
+→ executive/regulatory display
+```
+
+WC01 must consume scanner evidence through normalized concern construction, concern policy, and unified finding/checklist projection. Do not add synthetic evidence, display-layer promotion, repair-based findings, raw signal shortcuts, or one-off surfacing paths.
+
+Agents have access to both WS01 and WC01. Keep their responsibilities separate:
+
+- WS01 is responsible for observed runtime signal identification, evidence capture, and logging.
+- WC01 must consume that evidence only through normalized concern -> concern policy -> unified finding/checklist projection -> executive/regulatory display.
+
+Executive-summary and top-finding selection may rank, allowlist, suppress, or group already-projected findings, but must not create, upgrade, or infer findings from raw signals or display-only context.
+
+If a valid signal is missing, add or fix the upstream WS01 observed evidence and the WC01 concern/policy mapping. Do not patch around missing evidence in display code. If a deviation from this flow seems necessary, stop and call it out before implementing.
+
+### WC01 responsibility boundary
+
+WC01 owns:
+
+- scan creation, product web flows, reporting, validation, and control-plane workflows
+- normalized concern construction
+- concern policy
+- unified findings and checklist/regulatory projection
+- executive summary and report display for already-projected findings
+
+WC01 does not own scanner runtime observation, crawler identity, or raw evidence capture. Those belong in WS01.
+
+Agents may inspect WS01 for scanner evidence contract, runtime signal, and retained evidence context. Only edit WS01 when the user request explicitly spans both repos or when a WC01 concern/policy change exposes a missing or incorrect upstream WS01 signal.
+
+### Evidence contract discipline
+
+WC01 should not consume loose, ad hoc, or display-only scanner fields. New scanner evidence consumed by WC01 should be structured, typed, bounded, and covered by focused fixtures/tests. Prefer shared runtime contract fixtures when adding or changing WS01 -> WC01 evidence shapes.
+
+If WC01 starts consuming a new WS01 field, add or update a runtime contract fixture and the relevant normalized concern/policy test in the same change.
+
+### Canonical classification registries
+
+Use canonical tracker, vendor, CMP, and domain classification registries for classification logic. Do not create feature-specific, regulation-specific, or display-specific vendor/domain registries unless the user explicitly approves a new canonical registry.
+
+If a module needs different thresholds, severity, or status treatment, express that as WC01 policy over canonical classifications, not duplicated domain/vendor lists.
+
+### Display and summary rules
+
+Display copy may explain retained evidence and the already-determined policy/checklist status. Display copy must not create, upgrade, suppress, or infer findings, and must not change status, severity, eligibility, or regulatory posture.
+
+Executive summaries and top findings may rank, allowlist, suppress, or group already-projected findings only. Top findings should be traceable to unified finding IDs or checklist/regulatory projection rows. Do not create executive-only findings from raw signals or display context.
+
+DB repair and backfill scripts may repair records, but must not create findings that bypass normalized concern construction, concern policy, and unified finding/checklist projection.
+
+### Legal conclusion language
+
+CertScore reports risk signals, not legal determinations. User-facing copy must not state or imply definitive legal violations unless explicitly supported by product policy and retained evidence.
+
+Prefer evidence-scoped language such as "signal observed", "review recommended", "not evaluated", or "insufficient evidence".
+
 ### Monorepo structure
 
 ```text
@@ -265,6 +328,18 @@ pnpm test:scan-pipeline
 - Migrations live in `packages/db/migrations/` and must be applied in order.
 - There is no ORM; queries are handwritten parameterized SQL.
 
+### Production DB inspection
+
+For production DB inspection, use the ECS psql one-off task instead of local DB connections or direct secret access:
+
+- task definition: `certscore-prod-psql-oneoff:1`
+- `PGSSLMODE=require`
+- same network as `certscore-validation-worker`
+- SQL passed via `QUERY_B64`
+- output read from CloudWatch logs
+
+Do not use local production DB tunnels, ECS Exec, or copied secrets for routine inspection. Prefer `SELECT`-only queries with tight predicates and `LIMIT`. Avoid broad scans, writes, repairs, or migrations unless the user explicitly approves them.
+
 ### Storage
 
 - Report artifacts and PDFs are stored in an S3-compatible bucket.
@@ -293,6 +368,22 @@ pnpm test:scan-pipeline
 - Push the branch to GitHub instead of deploying an uncommitted working tree directly to any production host.
 - Prefer Git-based deploy promotion through the connected AWS ECS deployment workflows, but verify which runtime is actually serving `certscore.ai` before claiming production is updated.
 
+## Runtime and deployment topology
+
+Do not assume Docker Compose or local container orchestration is the development or deployment path.
+
+Production deploys run on AWS ECS/Fargate through the repo's deployment scripts and GitHub Actions workflows. Dockerfiles may be used to build ECS images, but do not deploy ad hoc local containers or alternate hosts unless the user explicitly requests it.
+
+WC01 web production is `certscore.ai` on AWS ECS/Fargate. Do not deploy WC01 web changes to Vercel, `consentcheck.site`, or other alternate hosts.
+
+## Local scan stack
+
+To get the local scan stack running for WC01 workflows, use:
+
+```bash
+bash /Users/benmasek/WC01/scripts/ensure-local-scan-stack.sh
+```
+
 ## Production expectation
 
 - Treat the AWS ECS/Fargate service for `certscore.ai` as the preferred target web topology.
@@ -308,6 +399,10 @@ pnpm test:scan-pipeline
 
 - These instructions apply to the web app deployment path.
 - Worker deployments in `WC01` should follow the AWS validation deployment path and helper scripts.
+
+## Agent Notes Maintenance
+
+Keep `AGENTS.md` focused on durable repo-wide guidance. Do not add one-off task instructions, temporary prompts, or scan-specific notes. When guidance conflicts with current code/tests, inspect the code/tests and call out the mismatch before acting.
 
 ## Finding flow note
 
