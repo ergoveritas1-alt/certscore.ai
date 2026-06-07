@@ -8,6 +8,7 @@ import {
   hasConcreteSanitizedNetworkEvidence
 } from "./sanitized-network-evidence";
 import { isPromotionGradePreconsentRequestRow } from "./preconsent-public-evidence";
+import { evaluateCaliforniaSaleShareRuntimeCoherence } from "./california-sale-share-runtime-coherence";
 
 type ContractDecision = {
   allowedNarrativeTier: "weak" | "moderate" | "strong";
@@ -1943,19 +1944,49 @@ export function hasStrongSaleSharingControlsMissingEvidence(rawEvidence: Record<
       "tracking_technologies_disclosure_present"
     ]) === true;
   const policyTextSupportsBehavior = getEvidenceSnippets(rawEvidence).some((value) =>
-    /do not sell|do not share|sale or sharing|sell or share|targeted advertising|cross-context behavioral|personalized ads?|advertising partners/i.test(
+    /do not sell|do not share|sale or sharing|sell or share|targeted advertising|cross-context behavioral|advertising partners/i.test(
       value
     )
   );
+  const runtimeVendors = getStringArrayValues(rawEvidence, [
+    "retargetingVendors",
+    "runtimeVendors",
+    "runtime_vendors",
+    "vendorCategories",
+    "vendor_categories",
+    "directAdvertisingSharingVendors",
+    "direct_advertising_sharing_vendors",
+    "advertisingSharingVendors",
+    "advertising_sharing_vendors"
+  ]);
+  const saleShareRequestUrls = getStringArrayValues(rawEvidence, [
+    "runtimeRequestUrls",
+    "runtime_request_urls",
+    "saleShareRequestUrls",
+    "sale_share_request_urls",
+    "directSaleShareOrTargetedAdvertisingRequestUrls",
+    "direct_sale_share_or_targeted_advertising_request_urls"
+  ]);
+  const runtimeCoherence = evaluateCaliforniaSaleShareRuntimeCoherence({
+    advertisingSharingVendors: runtimeVendors,
+    policySaleShareAdmissionObserved: getBooleanValue(rawEvidence, [
+      "policySaleShareAdmissionObserved",
+      "policy_sale_share_admission_observed"
+    ]),
+    policySaleShareAdmissionConfidence: getStringArrayValues(rawEvidence, [
+      "policySaleShareAdmissionConfidence",
+      "policy_sale_share_admission_confidence"
+    ])[0] ?? null,
+    policySnippets: getEvidenceSnippets(rawEvidence),
+    saleShareRequestUrls,
+    targetedAdvertisingSignalsObserved: getBooleanValue(rawEvidence, [
+      "targetedAdvertisingSignalsObserved",
+      "targeted_advertising_signals_observed"
+    ])
+  });
   const runtimeSupportsBehavior =
     hasConcreteRetargetingArtifact(rawEvidence) ||
-    getStringArrayValues(rawEvidence, [
-      "retargetingVendors",
-      "runtimeVendors",
-      "runtime_vendors",
-      "vendorCategories",
-      "vendor_categories"
-    ]).some((value) => /advertis|retarget|marketing|adtech|social/i.test(value));
+    runtimeCoherence.runtimeThirdPartyAdtechObserved;
   const reviewerVisibleAnchor =
     policyAnchorSupportsBehavior ||
     getUrlAssessment(rawEvidence) === "supports_promotion" ||
@@ -1986,6 +2017,36 @@ export function hasStrongCpraCbaOptOutMissingEvidence(rawEvidence: Record<string
     "advertisingSharingVendors",
     "advertising_sharing_vendors"
   ]);
+  const saleShareRequestUrls = [
+    ...getStringArrayValues(rawEvidence, [
+      "runtimeRequestUrls",
+      "runtime_request_urls",
+      "saleShareRequestUrls",
+      "sale_share_request_urls",
+      "directSaleShareOrTargetedAdvertisingRequestUrls",
+      "direct_sale_share_or_targeted_advertising_request_urls"
+    ]),
+    ...getStringArrayValues(cpraEvidence, [
+      "runtimeRequestUrls",
+      "runtime_request_urls",
+      "saleShareRequestUrls",
+      "sale_share_request_urls",
+      "directSaleShareOrTargetedAdvertisingRequestUrls",
+      "direct_sale_share_or_targeted_advertising_request_urls"
+    ])
+  ];
+  const runtimeCoherence = evaluateCaliforniaSaleShareRuntimeCoherence({
+    advertisingSharingVendors: [...directAdvertisingVendors, ...nestedDirectAdvertisingVendors],
+    policySnippets: getStringArrayValues(cpraEvidence, [
+      "policyCbaLanguage",
+      "policy_cba_language"
+    ]),
+    saleShareRequestUrls,
+    targetedAdvertisingSignalsObserved: getBooleanValue(rawEvidence, [
+      "targetedAdvertisingSignalsObserved",
+      "targeted_advertising_signals_observed"
+    ])
+  });
   const optOutUiResult =
     getStringArrayValues(cpraEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ??
     getStringArrayValues(rawEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ??
@@ -2022,7 +2083,14 @@ export function hasStrongCpraCbaOptOutMissingEvidence(rawEvidence: Record<string
     /\b(?:ca|california)\b/i.test(scanOriginGeo ?? "") ||
     getStringArrayValues(rawEvidence, ["privacyChoiceSearchUrls", "privacy_choice_search_urls", "gpcOptOutDiscoveryAttemptUrls", "gpc_opt_out_discovery_attempt_urls"]).length > 0;
 
-  return vendorThresholdMet && choiceControlsInspected && missingOrPartialControl && cpraRelevantContext && !suppressorApplied;
+  return (
+    vendorThresholdMet &&
+    runtimeCoherence.runtimeThirdPartyAdtechObserved &&
+    choiceControlsInspected &&
+    missingOrPartialControl &&
+    cpraRelevantContext &&
+    !suppressorApplied
+  );
 }
 
 export function hasVerifiedConsentUiEvidence(rawEvidence: Record<string, unknown> | null | undefined) {

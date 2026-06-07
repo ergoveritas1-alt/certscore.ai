@@ -15,6 +15,7 @@ import {
   deriveGdprEprivacyReviewSummary,
   getGdprEprivacyCustomerLabel
 } from "../../lib/scans/gdpr-eprivacy-review-summary";
+import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
 
 type GdprEprivacyCoverageChecklistCardProps = {
   defaultOpen?: boolean;
@@ -483,6 +484,7 @@ function getGdprSectionSummary(input: {
   items: GdprEprivacyCoverageChecklistItem[];
   lensSummary?: string;
   reviewSummary: ReturnType<typeof deriveGdprEprivacyReviewSummary>;
+  scoreSummary?: string;
 }) {
   const primary = input.lensSummary ?? input.fallbackSummary;
   const consentAccessibilityNeedsReview = input.items.some((item) =>
@@ -492,7 +494,8 @@ function getGdprSectionSummary(input: {
   const reviewAreas = consentAccessibilityNeedsReview
     ? "consent timing, refusal behavior, post-choice controls, runtime vendor disclosure alignment, cross-border analytics/tracking endpoint context, and consent-control accessibility"
     : "consent timing, refusal behavior, post-choice controls, runtime vendor disclosure alignment, and cross-border analytics/tracking endpoint context";
-  return `${primary} ${input.reviewSummary.coverageText} ${input.reviewSummary.priorityReviewText} Review retained evidence for ${reviewAreas}.`;
+  const scorePrefix = input.scoreSummary ? `${input.scoreSummary} ` : "";
+  return `${scorePrefix}${primary} ${input.reviewSummary.coverageText} ${input.reviewSummary.priorityReviewText} Review retained evidence for ${reviewAreas}.`;
 }
 
 export function GdprEprivacyCoverageChecklistCard({
@@ -501,15 +504,17 @@ export function GdprEprivacyCoverageChecklistCard({
   items
 }: GdprEprivacyCoverageChecklistCardProps) {
   const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
-  const gdprScore = typeof gdprEprivacyLens?.score === "number" ? gdprEprivacyLens.score : null;
-  const gdprRatingLabel = gdprEprivacyLens?.ratingLabel ?? "Not scored";
+  const checklistScore = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: items });
+  const gdprScore = checklistScore.score;
+  const gdprRatingLabel = checklistScore.ratingLabel;
   const reviewSummary = deriveGdprEprivacyReviewSummary(items);
   const gdprSectionSummary =
     getGdprSectionSummary({
       fallbackSummary: `${reviewSummary.coverageText} ${reviewSummary.priorityReviewText}`,
       items,
       lensSummary: gdprEprivacyLens?.summary,
-      reviewSummary
+      reviewSummary,
+      scoreSummary: checklistScore.summary
     });
 
   return (
@@ -519,7 +524,7 @@ export function GdprEprivacyCoverageChecklistCard({
         items,
         ratingLabel: gdprRatingLabel,
         score: gdprScore,
-        toneClass: gdprEprivacyLens?.toneClass
+        toneClass: checklistScore.toneClass
       })}
       contentClassName="space-y-4"
     >
@@ -574,7 +579,7 @@ export function GdprEprivacyCoverageChecklistCard({
                 {item.limitation ? <p className="text-xs leading-5 text-slate-500">{item.limitation}</p> : null}
                 <details className="mt-2 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
                   <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Advanced evidence
+                    Evidence packet
                   </summary>
                   <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />
                 </details>
@@ -583,9 +588,6 @@ export function GdprEprivacyCoverageChecklistCard({
           ))}
         </div>
       </div>
-      <p className="text-xs leading-5 text-slate-500">
-        Public-web signals CertScore checked during this scan. Lack of a finding does not necessarily mean compliance; some areas may be not observed, not testable, or out of scope.
-      </p>
     </CollapsibleSectionCard>
   );
 }

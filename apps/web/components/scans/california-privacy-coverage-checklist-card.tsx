@@ -10,6 +10,7 @@ import type {
   CaliforniaPrivacyCoverageEvidenceState,
   CaliforniaPrivacyCoverageChecklistItem,
 } from "../../lib/scans/california-privacy-coverage-checklist";
+import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
 
 type CaliforniaPrivacyCoverageChecklistCardProps = {
   californiaLens?: {
@@ -212,36 +213,10 @@ function getDisplayEvidenceRefs(item: CaliforniaPrivacyCoverageChecklistItem) {
     .slice(0, 6);
 }
 
-function getRecord(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function getStringArray(value: unknown) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
-}
-
-function getCipaRiskOverlaySummary(item: CaliforniaPrivacyCoverageChecklistItem) {
-  const overlay = getRecord(item.criticalEvidence.retainedEvidence.cipaRiskOverlay);
-  if (!overlay) {
-    return null;
-  }
-  const tags = getStringArray(overlay.overlayTags).map((tag) => tag.replaceAll("_", " "));
-  const confidence = typeof overlay.confidence === "string" ? overlay.confidence : null;
-  const directEvidenceObserved = overlay.directEvidenceObserved === true;
-  const receiptObserved = overlay.thirdPartyReceiptObserved === true;
-  const evidenceBasis = directEvidenceObserved || receiptObserved ? "direct retained evidence" : "retained review context";
-  const tagText = tags.length > 0 ? tags.slice(0, 3).join(", ") : "California CIPA-sensitive tracking context";
-  return `CIPA overlay: ${tagText}; ${evidenceBasis}${confidence ? `; ${confidence} confidence` : ""}. CertScore does not make legal conclusions.`;
-}
-
 function getCaliforniaSummary(input: {
   items: CaliforniaPrivacyCoverageChecklistItem[];
   lensSummary?: string;
+  scoreSummary?: string;
 }) {
   const allRowsNotTestable = input.items.length > 0 && input.items.every((item) => item.evidenceState === "not_testable");
   if (allRowsNotTestable) {
@@ -249,12 +224,13 @@ function getCaliforniaSummary(input: {
   }
 
   const hasIssues = input.items.some((item) => item.assessmentStatus === "gap_observed" || item.assessmentStatus === "review_signal");
+  const scorePrefix = input.scoreSummary ? `${input.scoreSummary} ` : "";
   if (input.lensSummary) {
-    return `${input.lensSummary} CertScore reviewed sale/share, targeted advertising, opt-out availability, GPC handling, sensitive personal information controls, notice alignment, and CIPA-sensitive tracking signals using retained public-web evidence.`;
+    return `${scorePrefix}${input.lensSummary} CertScore reviewed sale/share, targeted advertising, opt-out availability, GPC handling, sensitive personal information controls, notice alignment, and CIPA-sensitive tracking signals using retained public-web evidence.`;
   }
   return hasIssues
-    ? "California privacy review signals are centered on sale/share, targeted advertising, opt-out availability, GPC handling, sensitive personal information controls, notice alignment, and CIPA-sensitive tracking signals."
-    : "No major California CCPA / CPRA + CIPA issue surfaced in the top findings. CertScore reviewed public privacy notice availability, opt-out paths, targeted advertising signals, GPC handling, sensitive personal information controls, runtime vendor disclosure alignment, and CIPA-sensitive tracking context using retained automated evidence.";
+    ? `${scorePrefix}California privacy review signals are centered on sale/share, targeted advertising, opt-out availability, GPC handling, sensitive personal information controls, notice alignment, and CIPA-sensitive tracking signals.`
+    : `${scorePrefix}No major California CCPA / CPRA + CIPA issue surfaced in the top findings. CertScore reviewed public privacy notice availability, opt-out paths, targeted advertising signals, GPC handling, sensitive personal information controls, runtime vendor disclosure alignment, and CIPA-sensitive tracking context using retained automated evidence.`;
 }
 
 function getSummaryTitle(input: {
@@ -332,12 +308,14 @@ export function CaliforniaPrivacyCoverageChecklistCard({
 }: CaliforniaPrivacyCoverageChecklistCardProps) {
   const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
   const hasTestableCaliforniaEvidence = items.some((item) => item.evidenceState !== "not_testable");
-  const score = hasTestableCaliforniaEvidence && typeof californiaLens?.score === "number" ? californiaLens.score : null;
-  const ratingLabel = hasTestableCaliforniaEvidence ? californiaLens?.ratingLabel ?? "Not scored" : "Not testable";
-  const toneClass = hasTestableCaliforniaEvidence ? californiaLens?.toneClass : "border-slate-300 bg-slate-100 text-slate-700";
+  const checklistScore = deriveRegulatoryCoverageScore({ framework: "california", rows: items });
+  const score = hasTestableCaliforniaEvidence ? checklistScore.score : null;
+  const ratingLabel = hasTestableCaliforniaEvidence ? checklistScore.ratingLabel : "Not testable";
+  const toneClass = hasTestableCaliforniaEvidence ? checklistScore.toneClass : "border-slate-300 bg-slate-100 text-slate-700";
   const summary = getCaliforniaSummary({
     items,
-    lensSummary: hasTestableCaliforniaEvidence ? californiaLens?.summary : undefined
+    lensSummary: hasTestableCaliforniaEvidence ? californiaLens?.summary : undefined,
+    scoreSummary: hasTestableCaliforniaEvidence ? checklistScore.summary : undefined
   });
 
   return (
@@ -356,9 +334,7 @@ export function CaliforniaPrivacyCoverageChecklistCard({
           <span className="hidden md:block">Scan-context note</span>
         </div>
         <div className="divide-y divide-slate-200">
-          {items.map((item) => {
-            const cipaRiskOverlaySummary = getCipaRiskOverlaySummary(item);
-            return (
+          {items.map((item) => (
             <div key={item.id} className="grid grid-cols-1 gap-3 px-4 py-3 text-sm md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.5fr)]">
               <div className="min-w-0 space-y-2">
                 <div className="flex items-start gap-3">
@@ -386,34 +362,20 @@ export function CaliforniaPrivacyCoverageChecklistCard({
                   </div>
                 </div>
                 <p className="text-xs leading-5 text-slate-500 md:hidden">{item.note}</p>
-                {cipaRiskOverlaySummary ? (
-                  <p className="rounded-md border border-indigo-100 bg-indigo-50 px-2 py-1.5 text-xs leading-5 text-indigo-900 md:hidden">
-                    {cipaRiskOverlaySummary}
-                  </p>
-                ) : null}
               </div>
               <div className="min-w-0 space-y-1">
                 <p className="hidden text-sm leading-6 text-slate-600 md:block">{item.note}</p>
-                {cipaRiskOverlaySummary ? (
-                  <p className="hidden rounded-md border border-indigo-100 bg-indigo-50 px-2 py-1.5 text-xs leading-5 text-indigo-900 md:block">
-                    {cipaRiskOverlaySummary}
-                  </p>
-                ) : null}
                 <details className="mt-2 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
                   <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Advanced evidence
+                    Evidence packet
                   </summary>
                   <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />
                 </details>
               </div>
             </div>
-            );
-          })}
+          ))}
         </div>
       </div>
-      <p className="text-xs leading-5 text-slate-500">
-        Public-web signals CertScore checked during this scan. Results are review aids, not legal advice, certification, or a compliance determination.
-      </p>
     </CollapsibleSectionCard>
   );
 }

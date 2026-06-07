@@ -69,6 +69,7 @@ export type CaliforniaPrivacyCoverageChecklistInput = {
   }>;
   scanCompleted: boolean;
   unifiedFindings: UnifiedFindingDisplayPacket[];
+  withholdDeepCheckOnlyRows?: boolean;
   withholdForNonRepresentativeScan?: boolean;
 };
 
@@ -187,6 +188,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   }
 ];
 
+const DEEP_CHECK_ONLY_ROW_IDS = new Set(["gpc_opt_out_signal_handling", "post_opt_out_tracking_behavior"]);
+
 function getChecklistTone(status: CaliforniaPrivacyCoverageChecklistStatus): CaliforniaPrivacyCoverageChecklistTone {
   switch (status) {
     case "potential_gap":
@@ -301,6 +304,8 @@ function getEvidenceState(input: {
   rowId: string;
   status: CaliforniaPrivacyCoverageChecklistStatus;
 }): CaliforniaPrivacyCoverageEvidenceState {
+  const retainedEvidence = input.criticalEvidence.retainedEvidence;
+
   switch (input.status) {
     case "not_testable":
       return "not_testable";
@@ -309,8 +314,24 @@ function getEvidenceState(input: {
       return "not_observed";
     case "potential_gap":
       return getPotentialGapEvidenceState(input.rowId, input.criticalEvidence);
-    case "observed":
     case "review_signal":
+      if (
+        input.rowId === "do_not_sell_share_availability" &&
+        retainedEvidence.doNotSellSharePathObserved === false &&
+        retainedEvidence.runtimeThirdPartyAdtechObserved === false &&
+        retainedEvidence.runtimeVendorRequestUrlCoherence === "mismatch"
+      ) {
+        return "not_observed";
+      }
+      if (
+        input.rowId === "targeted_advertising_signals" &&
+        retainedEvidence.runtimeThirdPartyAdtechObserved === false &&
+        retainedEvidence.runtimeVendorRequestUrlCoherence === "mismatch"
+      ) {
+        return "not_observed";
+      }
+      return "observed";
+    case "observed":
     default:
       return "observed";
   }
@@ -473,8 +494,11 @@ export function deriveCaliforniaPrivacyCoverageChecklist(
   const findingsById = new Map(input.unifiedFindings.map((finding) => [finding.unifiedFindingId, finding]));
   const projectedFindingsById = new Map((input.projectedFindings ?? []).map((finding) => [finding.id, finding]));
   const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
+  const checklistRows = input.withholdDeepCheckOnlyRows
+    ? CHECKLIST_ROWS.filter((definition) => !DEEP_CHECK_ONLY_ROW_IDS.has(definition.id))
+    : CHECKLIST_ROWS;
 
-  return CHECKLIST_ROWS.map((definition) => {
+  return checklistRows.map((definition) => {
     const matchingFindings = definition.findingIds.flatMap((id) => {
       const finding = findingsById.get(id);
       return finding ? [finding] : [];

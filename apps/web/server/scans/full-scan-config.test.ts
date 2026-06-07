@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildQueuedFullScanConfig } from "./full-scan-config";
+import { buildQueuedFullScanConfig, requiresFreshScanForCaliforniaRuntime } from "./full-scan-config";
 
 test("queued full-scan config keeps anonymous and organization-owned scanner contract aligned", () => {
   const baseInput = {
@@ -106,6 +106,32 @@ test("queued full-scan config carries explicit California privacy runtime flags 
 
   assert.equal(Object.hasOwn(defaultConfig, "californiaPrivacy"), false);
 
+  const californiaGeoConfig = buildQueuedFullScanConfig({
+    hostname: "example.com",
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    scanFrom: "california",
+    source: "manual-dashboard"
+  });
+
+  assert.deepEqual(californiaGeoConfig.californiaPrivacy, {
+    exercisePrivacyChoicePath: true,
+    forceGpcVerification: true
+  });
+  assert.equal(
+    requiresFreshScanForCaliforniaRuntime({
+      scanFrom: "california"
+    }),
+    true
+  );
+  assert.equal(
+    requiresFreshScanForCaliforniaRuntime({
+      scanFrom: "default"
+    }),
+    false
+  );
+
   const config = buildQueuedFullScanConfig({
     californiaPrivacy: {
       exercisePrivacyChoicePath: true,
@@ -124,4 +150,60 @@ test("queued full-scan config carries explicit California privacy runtime flags 
   });
   assert.equal(Object.hasOwn(config, "findings"), false);
   assert.equal(Object.hasOwn(config, "signals"), false);
+});
+
+test("queued full-scan config keeps post-opt-out interaction explicit", () => {
+  const config = buildQueuedFullScanConfig({
+    californiaPrivacy: {
+      forceGpcVerification: true
+    },
+    hostname: "example.com",
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "california-cohort-validation"
+  });
+
+  assert.deepEqual(config.californiaPrivacy, {
+    forceGpcVerification: true
+  });
+});
+
+test("queued full-scan config keeps default scans out of California deep-check runtime", () => {
+  const config = buildQueuedFullScanConfig({
+    hostname: "example.com",
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "manual-dashboard"
+  });
+
+  assert.equal(config.californiaPrivacy, undefined);
+});
+
+test("queued full-scan config honors explicit California runtime suppression flags", () => {
+  const config = buildQueuedFullScanConfig({
+    californiaPrivacy: {
+      exercisePrivacyChoicePath: false,
+      forceGpcVerification: false
+    },
+    hostname: "example.com",
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    scanFrom: "california",
+    source: "operator"
+  });
+
+  assert.equal(config.californiaPrivacy, undefined);
+  assert.equal(
+    requiresFreshScanForCaliforniaRuntime({
+      californiaPrivacy: {
+        exercisePrivacyChoicePath: false,
+        forceGpcVerification: false
+      },
+      scanFrom: "california"
+    }),
+    false
+  );
 });

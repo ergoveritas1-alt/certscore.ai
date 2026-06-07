@@ -47,9 +47,34 @@ function parseForceNewScan(value: unknown) {
   return value === true || value === "true" || value === "1";
 }
 
+function parseCaliforniaPrivacyConfig(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const config = value as Record<string, unknown>;
+  const exercisePrivacyChoicePath =
+    config.exercisePrivacyChoicePath === true ||
+    config.exercisePrivacyChoicePath === "true" ||
+    config.exercisePrivacyChoicePath === "1";
+  const forceGpcVerification =
+    config.forceGpcVerification === true ||
+    config.forceGpcVerification === "true" ||
+    config.forceGpcVerification === "1" ||
+    exercisePrivacyChoicePath;
+
+  return exercisePrivacyChoicePath || forceGpcVerification
+    ? {
+        ...(exercisePrivacyChoicePath ? { exercisePrivacyChoicePath: true } : {}),
+        ...(forceGpcVerification ? { forceGpcVerification: true } : {})
+      }
+    : null;
+}
+
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    const californiaPrivacy = parseCaliforniaPrivacyConfig(payload?.californiaPrivacy);
     const forceNewScan = parseForceNewScan(payload?.forceNewScan);
     const scanFrom = normalizeScanFrom(payload?.scanFrom ?? payload?.geo);
     const provenance = getScanRequestProvenance(request);
@@ -124,6 +149,7 @@ export async function POST(request: Request) {
 
       const anonymousScan = await createAnonymousFullScan({
         bypassRecentScanReuse: forceNewScan,
+        californiaPrivacy,
         hostname: firstDomain.hostname,
         normalizedUrl: firstDomain.normalizedUrl,
         provenance,
@@ -178,6 +204,7 @@ export async function POST(request: Request) {
         createOrQueueDomainScan({
           allowExistingDomainRescan: true,
           bypassRecentScanReuse: forceNewScan,
+          californiaPrivacy,
           domain: item.normalizedUrl,
           provenance,
           scanFrom

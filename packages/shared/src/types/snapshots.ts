@@ -834,6 +834,24 @@ export type GpcVerification = {
   thirdPartyCookieCountDelta: number | null;
   gpcSignalSent?: boolean | null;
   gpcRecognitionObserved?: boolean | null;
+  gpcScanStateSent?: boolean;
+  gpcHandlingObserved?: "honored" | "ignored" | "inconclusive" | "not_determined";
+  gpcHandlingBasis?: string[];
+  gpcClientSignalObserved?: boolean | null;
+  gpcRequestHeadersApplied?: boolean | null;
+  baselineEvidenceUrls?: string[];
+  baselineTrackerVendors?: string[];
+  baselineThirdPartyCookieNames?: string[];
+  baselinePrivacyChoiceUiResult?: CpraCbaOptOutUiResult | null;
+  baselinePrivacyChoiceHref?: string | null;
+  baselinePrivacyChoiceText?: string | null;
+  gpcEvidenceUrls?: string[];
+  gpcEvidenceTrackerVendors?: string[];
+  gpcThirdPartyCookieNames?: string[];
+  gpcPrivacyChoiceUiResult?: CpraCbaOptOutUiResult | null;
+  gpcPrivacyChoiceHref?: string | null;
+  gpcPrivacyChoiceText?: string | null;
+  gpcPrivacyChoiceSurfaceChanged?: boolean | null;
   policyMentions?: string[];
   evidenceUrls: string[];
 };
@@ -898,6 +916,14 @@ export type CaliforniaCipaSensitiveTrackingEvidence = {
   requestUrls?: string[];
   statusBasis?: string;
   vendors?: string[];
+  cipaVendorLabel?: string | null;
+  cipaVendorDetectionBasis?: string | null;
+  cipaMatchedRequestUrls?: string[];
+  cipaCollectionEndpointObserved?: boolean | null;
+  cipaThirdPartyReceiptBasis?: string | null;
+  cipaFirstPartyEndpointOnly?: boolean | null;
+  cipaEventPayloadIndicators?: string[];
+  cipaMaskingOrExclusionObserved?: boolean | null;
 };
 
 export type CaliforniaCipaRuntimeCoverageEvidence = {
@@ -917,8 +943,12 @@ export type CaliforniaCipaRuntimeCoverageEvidence = {
   trackerVendorCount: number;
   collectionFieldContextCount: number;
   communicationPageCount: number;
+  originReachedConfirmed?: boolean | null;
+  communicationSurfaceSearchAttempted?: boolean | null;
+  chatWidgetSearchAttempted?: boolean | null;
   preSubmitProbeAttempted: boolean;
   chatSupportVendorObserved: boolean;
+  negativeReviewBasis?: string | null;
   scanNoGoDecision?: "go" | "continue_with_diagnostics" | "no_go" | null;
   scanNoGoReasonCodes?: string[];
   sourceSignals: string[];
@@ -959,6 +989,21 @@ export type CaliforniaPrivacyEvidence = {
   collectionContextUrls: string[];
   collectionContextTypes?: string[];
   collectionEvidenceSources?: string[];
+  collectionSurfaceSearchAttempted?: boolean | null;
+  collectionSurfaceCandidateUrls?: string[];
+  collectionSurfaceVisitedUrls?: string[];
+  collectionSurfaceBlockedUrls?: string[];
+  pointOfCollectionContextTested?: boolean | null;
+  collectionContextNegativeReviewSufficient?: boolean | null;
+  collectionContextCoverageLimitation?:
+    | "bounded_sweep_no_collection_context"
+    | "collection_context_tested"
+    | "blocked_or_interstitial"
+    | "candidate_not_fetched"
+    | "no_candidate_surface"
+    | "not_attempted"
+    | "unknown"
+    | null;
   collectionNoticeEvidenceKind?:
     | "generic_search_only"
     | "footer_notice_link_only"
@@ -981,6 +1026,22 @@ export type CaliforniaPrivacyEvidence = {
   advertisingSharingVendors: string[];
   directAdvertisingSharingVendors?: string[];
   analyticsTagManagementVendors?: string[];
+  vendorAttributionEvidence?: Array<{
+    detectedVendorLabel: string;
+    vendorDetectionBasis: "script_url" | "request_url" | "cookie_name" | "html_snippet" | "heuristic" | "policy_text";
+    mappedVendorDomains: string[];
+    matchedRequestUrls: string[];
+    unmatchedRequestUrls: string[];
+    vendorRequestUrlCoherence: "pass" | "fail" | "partial";
+    vendorAttributionConfidence: "high" | "medium" | "low";
+  }>;
+  detectedVendorLabel?: string | null;
+  vendorDetectionBasis?: "script_url" | "request_url" | "cookie_name" | "html_snippet" | "heuristic" | "policy_text" | null;
+  mappedVendorDomains?: string[];
+  matchedRequestUrls?: string[];
+  unmatchedRequestUrls?: string[];
+  vendorRequestUrlCoherence?: "pass" | "fail" | "partial" | null;
+  vendorAttributionConfidence?: "high" | "medium" | "low" | null;
   directSaleShareOrTargetedAdvertisingRequestUrls?: string[];
   directSaleShareOrTargetedAdvertisingCookieNames?: string[];
   directSaleShareOrTargetedAdvertisingVendors?: string[];
@@ -1015,6 +1076,7 @@ export type CaliforniaPrivacyEvidence = {
     observed: boolean;
     searchScope:
       | "homepage_footer_privacy_surfaces"
+      | "privacy_policy_cookie_policy_terms_cmp_surfaces"
       | "discovered_links"
       | "consent_lifecycle_controls"
       | "policy_links";
@@ -1036,6 +1098,13 @@ export type CaliforniaPrivacyEvidence = {
     interactionOutcome: string | null;
     limitation: "discovery_only" | "interaction_attempted" | "not_tested";
   };
+  cpraOptOutSearchSurfaces?: string[];
+  cpraOptOutCandidateLinks?: Array<{ href: string; label: string | null; basis: string; surface?: string | null }>;
+  cpraOptOutRejectedCandidates?: Array<{ href: string | null; label: string | null; reason: string; surface?: string | null }>;
+  cpraOptOutSelectedCandidate?: { href: string | null; label: string | null; basis: string | null } | null;
+  cpraOptOutVerificationBasis?: string | null;
+  cpraOptOutInteractionAttempted?: boolean | null;
+  cpraOptOutInteractionResult?: string | null;
   privacyChoiceInteractionEvidence?: {
     attempted: boolean;
     pathObserved: boolean;
@@ -1104,9 +1173,16 @@ export type CaliforniaPrivacyEvidence = {
     afterTrackerCount: number | null;
     beforeThirdPartyCookieCount: number | null;
     afterThirdPartyCookieCount: number | null;
+    beforeSaleShareRequestUrls?: string[];
+    afterSaleShareRequestUrls?: string[];
+    beforeThirdPartyCookieNames?: string[];
+    afterThirdPartyCookieNames?: string[];
     persistedTrackerVendors: string[];
     newTrackerVendors: string[];
     removedTrackerVendors: string[];
+    persistedSaleShareRequestUrls?: string[];
+    removedSaleShareRequestUrls?: string[];
+    newSaleShareRequestUrls?: string[];
     evidenceUrls: string[];
     evidenceRefs: string[];
     limitation:
@@ -1118,6 +1194,15 @@ export type CaliforniaPrivacyEvidence = {
   };
   gpcTestRan: boolean;
   gpcSignalSent: boolean | null;
+  gpcSignalSentHeader?: boolean | null;
+  gpcSignalSentNavigator?: boolean | null;
+  gpcBeforeAfterRequestDiff?: Record<string, unknown> | null;
+  gpcBeforeAfterCookieDiff?: Record<string, unknown> | null;
+  gpcBeforeAfterPrivacyChoiceDiff?: Record<string, unknown> | null;
+  gpcPreferenceUiChanged?: boolean | null;
+  gpcHandlingObserved?: string | null;
+  gpcHandlingBasis?: string[];
+  gpcLimitations?: string[];
   gpcRecognitionObserved: boolean | null;
   gpcTrackingReductionObserved: boolean | null;
   sensitivePiContextObserved: boolean | null;
@@ -1132,8 +1217,12 @@ export type CaliforniaPrivacyEvidence = {
   limitUseSensitivePiPathObserved: boolean | null;
   limitUseSensitivePiPathUrl: string | null;
   limitUseSensitivePiPathLabel?: string | null;
+  optOutInteractionAttempted?: boolean | null;
   optOutInteractionConfirmed: boolean | null;
   optOutSavedOrApplied?: boolean | null;
+  optOutAppliedEvidence?: string[];
+  preOptOutSaleShareRequests?: string[];
+  postOptOutSaleShareRequests?: string[];
   optOutFrictionSignals?: string[];
   optOutInteractionSteps?: ConsentInteractionEvidenceStep[];
   postOptOutTrackingReductionObserved: boolean | null;
@@ -1143,6 +1232,7 @@ export type CaliforniaPrivacyEvidence = {
   postOptOutRequestUrls?: string[];
   postOptOutDirectAdvertisingRequestUrls?: string[];
   postOptOutDirectAdvertisingPersisted?: boolean | null;
+  postOptOutComparisonBasis?: string | null;
   consumerRightsRequestMethodObserved?: boolean | null;
   consumerRightsRequestMethodUrls?: string[];
   consumerRightsRequestMethodSourceUrls?: string[];
@@ -1150,6 +1240,16 @@ export type CaliforniaPrivacyEvidence = {
   consumerRightsRequestMethodSnippets?: string[];
   consumerRightsRequestMethodConfidence?: "high" | "moderate" | "low" | null;
   rightsLanguageObserved?: boolean | null;
+  rightsRequestMethodObserved?: boolean | null;
+  rightsRequestMethodTypes?: string[];
+  rightsRequestMethodUrls?: string[];
+  rightsRequestMethodSnippets?: string[];
+  rightsMethodExtractionSurfaces?: string[];
+  rightsMethodExtractionLimitations?: string[];
+  rightsRequestMethodDeepSearchConfirmed?: boolean | null;
+  consumerRightsRequestMethodDeepSearchConfirmed?: boolean | null;
+  rightsRequestMethodSearchEvidence?: Record<string, unknown> | null;
+  consumerRightsRequestMethodSearchEvidence?: Record<string, unknown> | null;
   policyRuntimeDisclosureSnippets?: string[];
   unmatchedRuntimeDisclosureVendors?: string[];
   affectedControlLabels?: string[];

@@ -102,6 +102,25 @@ function getNumber(record: Record<string, unknown> | null | undefined, keys: str
   return null;
 }
 
+const MAX_RUNTIME_ELAPSED_MS = 10 * 60 * 1000;
+
+function normalizeRuntimeElapsedMs(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return value >= 0 && value <= MAX_RUNTIME_ELAPSED_MS ? value : null;
+}
+
+function getRuntimeElapsedMs(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const normalized = normalizeRuntimeElapsedMs(getNumber(record, [key]));
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
 function getString(record: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {
     const value = record?.[key];
@@ -2909,7 +2928,8 @@ function isSessionReplayEvidenceRow(row: Record<string, unknown>) {
 
 function getSessionReplayTiming(row: Record<string, unknown>) {
   return (
-    getNumber(row, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "timestampMs", "timestamp_ms", "tsMs", "ts_ms"]) ??
+    getRuntimeElapsedMs(row, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms", "tsMs", "ts_ms"]) ??
+    getRuntimeElapsedMs(row, ["timestampMs", "timestamp_ms"]) ??
     null
   );
 }
@@ -2952,7 +2972,7 @@ function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInpu
     "session_replay_runtime_artifacts",
     "sessionReplayRuntimeArtifacts"
   ]);
-  const summaryFirstSeenMs = getNumber(summary, ["firstSeenMs", "first_seen_ms"]);
+  const summaryFirstSeenMs = getRuntimeElapsedMs(summary, ["firstSeenMs", "first_seen_ms"]);
   const firstSeenMsValues = [
     ...classificationRows.map(getSessionReplayTiming),
     summaryFirstSeenMs

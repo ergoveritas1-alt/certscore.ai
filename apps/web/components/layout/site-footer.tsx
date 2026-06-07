@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import { AnalyticsPreferencesButton } from "../analytics/analytics-consent-banner";
+import { FOOTER_COPYRIGHT_COPY, FOOTER_DISCLAIMER_COPY } from "./footer-copy";
 
 const footerSections = [
   {
@@ -70,9 +71,12 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-8 text-sm text-slate-500">
-        <div className="max-w-md space-y-2">
+        <div className="space-y-2">
           <p className="font-medium text-slate-700">CertScore.ai</p>
           <p className="text-sm leading-6 text-slate-500">Evidence-led scanning for public website signals.</p>
+          <p className="max-w-none text-xs leading-5 text-slate-500 lg:whitespace-nowrap">
+            {FOOTER_DISCLAIMER_COPY}
+          </p>
         </div>
         <div className="grid gap-7 border-t border-slate-100 pt-6 sm:grid-cols-2 lg:grid-cols-4">
           {sections.map((section) => (
@@ -123,11 +127,10 @@ export function SiteFooter() {
           </nav>
         </div>
         <div className="space-y-2 border-t border-slate-100 pt-5 text-xs leading-5 text-slate-400">
-          <p>CertScore.ai surfaces automated public-web observations for review. It does not provide legal advice, certification, or compliance determinations.</p>
           <p>
             Privacy rights requests can be submitted at <Link href="/privacy-request" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">certscore.ai/privacy-request</Link> or by emailing <a href="mailto:privacy@certscore.ai" className="underline decoration-slate-300 underline-offset-2 hover:text-slate-600">privacy@certscore.ai</a>.
           </p>
-          <p>© 2026 ErgoVeritas, LLC. CertScore.ai is operated by ErgoVeritas, LLC. All rights reserved.</p>
+          <p>{FOOTER_COPYRIGHT_COPY}</p>
         </div>
       </div>
     </footer>

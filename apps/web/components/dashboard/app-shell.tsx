@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode, type SVGProps } from "react";
+import { FOOTER_COPYRIGHT_COPY, FOOTER_DISCLAIMER_COPY } from "../layout/footer-copy";
 
 type NavIconProps = SVGProps<SVGSVGElement>;
 
@@ -412,8 +413,11 @@ export function AppShell({
               {children}
             </main>
             <footer className="border-t border-slate-200 px-6 py-4 text-xs text-slate-400">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p>Copyright © 2026 CertScore.ai. All rights reserved.</p>
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <p>{FOOTER_DISCLAIMER_COPY}</p>
+                  <p>{FOOTER_COPYRIGHT_COPY}</p>
+                </div>
                 <div className="flex flex-wrap items-center gap-4">
                   <Link href="/privacy" className="hover:text-slate-600">
                     Privacy Policy

@@ -4088,6 +4088,7 @@ test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
           pageUrl: "https://example.com/",
           policyCbaLanguage: "full_cba_language",
           policyUiCongruent: false,
+          saleShareRequestUrls: ["https://pixel.adsrvr.org/track"],
           scanOriginGeo: null,
           signalKey: "privacy.cpra_cba_opt_out_missing",
           signalValue: true,

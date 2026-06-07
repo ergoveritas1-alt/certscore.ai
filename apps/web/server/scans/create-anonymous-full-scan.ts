@@ -7,7 +7,11 @@ import { ensureValidationRunForManualScan } from "../validation/repository";
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
 import { setPreviewDomainLatestScan } from "../preview-scan/db";
 import { createQueuedFullScan, insertQueuedFullScanEvent, loadPriorScanAccelerationCandidate } from "./repository";
-import { buildQueuedFullScanConfig, type QueuedFullScanCaliforniaPrivacyConfig } from "./full-scan-config";
+import {
+  buildQueuedFullScanConfig,
+  requiresFreshScanForCaliforniaRuntime,
+  type QueuedFullScanCaliforniaPrivacyConfig
+} from "./full-scan-config";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
 
@@ -34,8 +38,10 @@ export async function createAnonymousFullScan(input: {
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const bypassRecentScanReuse =
     Boolean(input.bypassRecentScanReuse) ||
-    input.californiaPrivacy?.exercisePrivacyChoicePath === true ||
-    input.californiaPrivacy?.forceGpcVerification === true;
+    requiresFreshScanForCaliforniaRuntime({
+      californiaPrivacy: input.californiaPrivacy,
+      scanFrom
+    });
 
   if (!bypassRecentScanReuse) {
     const recentScan = await findRecentCompletedScanForDomain({

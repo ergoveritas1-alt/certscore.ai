@@ -77,6 +77,19 @@ test("deriveCaliforniaPrivacyCoverageChecklist withholds rows for non-representa
   assert.deepEqual(items, []);
 });
 
+test("deriveCaliforniaPrivacyCoverageChecklist withholds deep-check-only rows when California runtime was not requested", () => {
+  const items = deriveCaliforniaPrivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [],
+    withholdDeepCheckOnlyRows: true
+  });
+
+  assert.equal(items.some((item) => item.id === "gpc_opt_out_signal_handling"), false);
+  assert.equal(items.some((item) => item.id === "post_opt_out_tracking_behavior"), false);
+  assert.equal(items.length, 12);
+});
+
 test("deriveCaliforniaPrivacyCoverageChecklist uses explicit policy outcomes over unified fallback rows", () => {
   const items = deriveCaliforniaPrivacyCoverageChecklist({
     coverageLimited: false,
@@ -150,6 +163,87 @@ test("deriveCaliforniaPrivacyCoverageChecklist maps missing controls to gap obse
   assert.equal(optOutRow?.assessmentStatus, "gap_observed");
   assert.equal(optOutRow?.evidenceState, "not_observed");
   assert.match(optOutRow?.note ?? "", /no opt-out path/i);
+});
+
+test("deriveCaliforniaPrivacyCoverageChecklist maps sale-share vendor mismatch review to not observed evidence state", () => {
+  const items = deriveCaliforniaPrivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      do_not_sell_share_availability: {
+        criticalEvidence: {
+          evidenceFamily: "sale_share_control",
+          missingOrIncompleteSourceSignals: [],
+          pipeline: {
+            concernPolicyKey: "california_privacy_coverage.do_not_sell_share_availability.review_signal",
+            projectionStage: "coverage_policy",
+            regulatoryReviewArea: "california_ccpa_cpra",
+            wc01NormalizedConcernKey: "california_privacy.coverage.do_not_sell_share_availability",
+            ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+          },
+          projectedFindings: [],
+          retainedEvidence: {
+            advertisingSharingVendorLabelsRetained: ["Meta Pixel"],
+            doNotSellSharePathObserved: false,
+            runtimeThirdPartyAdtechObserved: false,
+            runtimeVendorRequestUrlCoherence: "mismatch",
+            unmatchedAdvertisingSharingVendorLabels: ["Meta Pixel"]
+          },
+          statusBasis: "A possible advertising-sharing vendor label was retained, but CertScore did not verify matching third-party sale/share request URLs or a CPRA opt-out path in the tested web context."
+        },
+        evidenceRefs: ["Do Not Sell/Share path requires review"],
+        limitation: "A possible advertising-sharing vendor label was retained, but CertScore did not verify matching third-party sale/share request URLs or a CPRA opt-out path in the tested web context.",
+        rowId: "do_not_sell_share_availability",
+        status: "review_signal"
+      }
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const optOutRow = items.find((item) => item.id === "do_not_sell_share_availability");
+  assert.equal(optOutRow?.status, "review_signal");
+  assert.equal(optOutRow?.assessmentStatus, "review_signal");
+  assert.equal(optOutRow?.evidenceState, "not_observed");
+});
+
+test("deriveCaliforniaPrivacyCoverageChecklist maps targeted advertising vendor mismatch review to not observed evidence state", () => {
+  const items = deriveCaliforniaPrivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      targeted_advertising_signals: {
+        criticalEvidence: {
+          evidenceFamily: "adtech_sharing_runtime",
+          missingOrIncompleteSourceSignals: [],
+          pipeline: {
+            concernPolicyKey: "california_privacy_coverage.targeted_advertising_signals.review_signal",
+            projectionStage: "coverage_policy",
+            regulatoryReviewArea: "california_ccpa_cpra",
+            wc01NormalizedConcernKey: "california_privacy.coverage.targeted_advertising_signals",
+            ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+          },
+          projectedFindings: [],
+          retainedEvidence: {
+            advertisingSharingVendorLabelsRetained: ["Meta Pixel"],
+            runtimeThirdPartyAdtechObserved: false,
+            runtimeVendorRequestUrlCoherence: "mismatch",
+            unmatchedAdvertisingSharingVendorLabels: ["Meta Pixel"]
+          },
+          statusBasis: "A possible advertising-sharing vendor label was retained, but request URLs did not verify qualifying third-party targeted-advertising runtime evidence."
+        },
+        evidenceRefs: ["Targeted advertising signal requires review"],
+        limitation: "A possible advertising-sharing vendor label was retained, but request URLs did not verify qualifying third-party targeted-advertising runtime evidence.",
+        rowId: "targeted_advertising_signals",
+        status: "review_signal"
+      }
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const targetedAdvertisingRow = items.find((item) => item.id === "targeted_advertising_signals");
+  assert.equal(targetedAdvertisingRow?.status, "review_signal");
+  assert.equal(targetedAdvertisingRow?.assessmentStatus, "review_signal");
+  assert.equal(targetedAdvertisingRow?.evidenceState, "not_observed");
 });
 
 test("deriveCaliforniaPrivacyCoverageChecklist maps not applicable away from CCPA UI posture", () => {

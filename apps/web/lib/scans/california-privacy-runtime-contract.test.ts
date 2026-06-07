@@ -318,20 +318,52 @@ test("California cohort generic search/footer/contact signals stay negative thro
 
   const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
   assert.equal(coverageOutcomes.notice_at_collection?.status, "not_observed");
-  assert.equal(coverageOutcomes.consumer_rights_request_methods?.status, "not_testable");
+  assert.equal(coverageOutcomes.consumer_rights_request_methods?.status, "review_signal");
 
   const collectionRow = getChecklistRow(checklist, "notice_at_collection");
   assert.equal(collectionRow.status, "not_observed");
   assert.equal(collectionRow.criticalEvidence.pipeline.projectionStage, "coverage_policy");
   assert.equal(collectionRow.criticalEvidence.retainedEvidence.collectionNoticeEvidenceKind, "generic_search_only");
-  assert.match(collectionRow.note, /generic site search/i);
+  assert.equal(collectionRow.note, "Only a generic site search collection surface was retained; no eligible point-of-collection context was observed.");
   assert.doesNotMatch(collectionRow.note, /point-of-collection notice was retained/i);
 
   const rightsRow = getChecklistRow(checklist, "consumer_rights_request_methods");
-  assert.equal(rightsRow.status, "not_testable");
+  assert.equal(rightsRow.status, "review_signal");
   assert.equal(rightsRow.criticalEvidence.retainedEvidence.consumerRightsRequestMethodObserved, false);
   assert.deepEqual(rightsRow.criticalEvidence.retainedEvidence.consumerRightsRequestMethodUrls ?? [], []);
-  assert.match(rightsRow.note, /did not verify a usable consumer rights request method/i);
+  assert.equal(rightsRow.note, "A privacy notice was retained, but CertScore did not verify a consumer rights request method in this scan context.");
+});
+
+test("California collection sweep contract projects completed no-context sweep without review signal", () => {
+  const runtimeArtifacts = {
+    californiaPrivacyEvidence: {
+      collectionContextObserved: false,
+      collectionContextUrls: [],
+      collectionNoticeCueObserved: null,
+      collectionNoticeEvidenceKind: "policy_notice_text_only",
+      collectionSurfaceSearchAttempted: true,
+      collectionSurfaceCandidateUrls: ["https://tv.apple.com/contact"],
+      collectionSurfaceVisitedUrls: ["https://tv.apple.com/contact"],
+      collectionSurfaceBlockedUrls: [],
+      pointOfCollectionContextTested: true,
+      collectionContextNegativeReviewSufficient: true,
+      collectionContextCoverageLimitation: "bounded_sweep_no_collection_context",
+      consumerRightsRequestMethodObserved: false,
+      privacyNoticeObserved: true,
+      privacyNoticeUrls: ["https://tv.apple.com/legal/privacy"],
+      rightsLanguageObserved: false,
+      targetedAdvertisingSignalsObserved: false,
+      verifiedPrivacyNoticeUrls: ["https://tv.apple.com/legal/privacy"]
+    }
+  };
+
+  const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
+
+  assert.equal(coverageOutcomes.notice_at_collection?.status, "not_applicable");
+  const collectionRow = getChecklistRow(checklist, "notice_at_collection");
+  assert.equal(collectionRow.status, "not_applicable");
+  assert.equal(collectionRow.note, "Bounded collection-surface sweep did not retain an eligible point-of-collection context.");
+  assert.equal(collectionRow.criticalEvidence.retainedEvidence.collectionContextNegativeReviewSufficient, true);
 });
 
 test("California cohort CMP infrastructure remains attribution context, not direct adtech evidence", () => {
@@ -407,4 +439,406 @@ test("California cohort CMP infrastructure remains attribution context, not dire
   assert.equal(optOutRow.criticalEvidence.retainedEvidence.saleShareApplicabilityObserved, false);
   assert.deepEqual(optOutRow.criticalEvidence.retainedEvidence.advertisingSharingVendors ?? [], []);
   assert.match(optOutRow.note, /No direct sale\/share, targeted-advertising, or high-confidence policy sale\/share admission evidence/i);
+});
+
+test("California sale/share gap requires vendor request URL coherence for Apple-style personalized ads context", () => {
+  const runtimeArtifacts = {
+    californiaPrivacyEvidence: {
+      advertisingSharingVendors: ["Meta Pixel"],
+      directAdvertisingSharingVendors: ["Meta Pixel"],
+      doNotSellSharePathObserved: false,
+      evidenceRefs: ["Policy personalized ads language", "Apple translation asset request"],
+      policySaleShareAdmissionConfidence: "high",
+      policySaleShareAdmissionObserved: true,
+      policySaleShareAdmissionSnippet:
+        "Apple-delivered advertising helps people discover apps, products, and services while respecting user privacy. Personalized Ads may appear in Apple apps.",
+      privacyNoticeObserved: true,
+      privacyNoticeUrls: ["https://www.apple.com/legal/privacy/"],
+      saleShareRequestUrls: [
+        "https://tv.apple.com/assets/translation/en-US.json",
+        "https://tv.apple.com/assets/musickit/musickit.js"
+      ],
+      targetedAdvertisingSignalsObserved: true
+    },
+    cpraCbaOptOutEvidence: {
+      advertisingSharingVendors: ["Meta Pixel"],
+      choiceControlsInspected: true,
+      optOutControlFound: false,
+      optOutUiResult: "absent",
+      policyCbaLanguage: "personalized_ads_context",
+      privacyChoiceSearchUrls: ["https://tv.apple.com/"]
+    }
+  };
+
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "sale_sharing_controls_missing"),
+    false
+  );
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing"),
+    false
+  );
+
+  const unifiedFindings = buildUnifiedFindingPackets({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  assert.equal(
+    unifiedFindings.some((packet) => packet.unifiedFindingId === "sale_sharing_controls_missing"),
+    false
+  );
+  assert.equal(
+    unifiedFindings.some((packet) => packet.unifiedFindingId === "cpra_cba_opt_out_missing"),
+    false
+  );
+
+  const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
+  assert.equal(coverageOutcomes.targeted_advertising_signals?.status, "review_signal");
+  assert.equal(coverageOutcomes.do_not_sell_share_availability?.status, "review_signal");
+  assert.match(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.statusBasis ?? "",
+    /Personalized advertising policy context was retained/
+  );
+  assert.deepEqual(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.advertisingSharingVendors ?? [],
+    []
+  );
+  assert.deepEqual(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.advertisingSharingVendorLabelsRetained ?? [],
+    ["Meta Pixel"]
+  );
+  assert.deepEqual(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.unmatchedAdvertisingSharingVendorLabels ?? [],
+    ["Meta Pixel"]
+  );
+  assert.equal(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.policyPersonalizedAdsLanguageObserved,
+    true
+  );
+  assert.match(
+    String(coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.policyPersonalizedAdsSnippet ?? ""),
+    /Personalized Ads may appear in Apple apps/
+  );
+  assert.deepEqual(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.saleShareRequestUrls ?? [],
+    []
+  );
+
+  const optOutRow = getChecklistRow(checklist, "do_not_sell_share_availability");
+  assert.equal(optOutRow.status, "review_signal");
+  assert.match(optOutRow.note, /Personalized advertising policy context was retained/);
+});
+
+test("California sale/share vendor mismatch without policy context is checked not observed", () => {
+  const runtimeArtifacts = {
+    californiaPrivacyEvidence: {
+      advertisingSharingVendors: ["Meta Pixel"],
+      directAdvertisingSharingVendors: ["Meta Pixel"],
+      doNotSellSharePathObserved: false,
+      evidenceRefs: ["Meta Pixel vendor label", "Apple translation asset request"],
+      policySaleShareAdmissionConfidence: "high",
+      policySaleShareAdmissionObserved: false,
+      privacyNoticeObserved: true,
+      privacyNoticeUrls: ["https://www.apple.com/legal/privacy/"],
+      saleShareRequestUrls: [
+        "https://tv.apple.com/assets/translation/en-US.json",
+        "https://tv.apple.com/assets/musickit/musickit.js"
+      ],
+      targetedAdvertisingSignalsObserved: true
+    },
+    cpraCbaOptOutEvidence: {
+      advertisingSharingVendors: ["Meta Pixel"],
+      choiceControlsInspected: true,
+      optOutControlFound: false,
+      optOutUiResult: "absent",
+      privacyChoiceSearchUrls: ["https://tv.apple.com/"]
+    }
+  };
+
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "sale_sharing_controls_missing"),
+    false
+  );
+
+  const unifiedFindings = buildUnifiedFindingPackets({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  assert.equal(
+    unifiedFindings.some((packet) => packet.unifiedFindingId === "sale_sharing_controls_missing"),
+    false
+  );
+
+  const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
+  const basis = coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.statusBasis ?? "";
+
+  assert.equal(coverageOutcomes.do_not_sell_share_availability?.status, "not_observed");
+  assert.match(
+    basis,
+    /A possible advertising-sharing vendor label was retained, but CertScore did not verify qualifying third-party sale\/share runtime evidence or a CPRA opt-out path in the tested web context\./
+  );
+  assert.doesNotMatch(basis, /Personalized advertising policy context/);
+  assert.equal(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.policyPersonalizedAdsLanguageObserved,
+    false
+  );
+  assert.equal(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.policySaleShareAdmissionObserved,
+    false
+  );
+  assert.equal(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.policyPersonalizedAdsSnippet ?? null,
+    null
+  );
+  assert.deepEqual(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.advertisingSharingVendors ?? [],
+    []
+  );
+  assert.deepEqual(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.advertisingSharingVendorLabelsRetained ?? [],
+    ["Meta Pixel"]
+  );
+  assert.deepEqual(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.unmatchedAdvertisingSharingVendorLabels ?? [],
+    ["Meta Pixel"]
+  );
+  assert.equal(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.runtimeVendorRequestUrlCoherence,
+    "mismatch"
+  );
+  assert.deepEqual(
+    coverageOutcomes.do_not_sell_share_availability?.criticalEvidence.retainedEvidence.saleShareRequestUrls ?? [],
+    []
+  );
+
+  const optOutRow = getChecklistRow(checklist, "do_not_sell_share_availability");
+  assert.equal(optOutRow.status, "not_observed");
+  assert.equal(optOutRow.assessmentStatus, "checked");
+  assert.equal(optOutRow.evidenceState, "not_observed");
+  assert.doesNotMatch(optOutRow.note, /Personalized advertising policy context/);
+  assert.match(optOutRow.note, /possible advertising-sharing vendor label/i);
+});
+
+test("CIPA interaction recording requires session replay vendor/request URL coherence for third-party receipt", () => {
+  const runtimeArtifacts = {
+    californiaPrivacyEvidence: {
+      cipaInteractionRecordingEvidence: {
+        cipaConsentTiming: "pre_consent",
+        cipaDisclosureObserved: false,
+        cipaEvidenceConfidence: "high",
+        cipaSensitive: true,
+        cipaSignalTypes: ["session_replay"],
+        cipaThirdPartyReceiptObserved: true,
+        collectionEndpointObserved: true,
+        directEvidenceObserved: true,
+        pageUrls: ["https://tv.apple.com/"],
+        requestUrls: ["https://tv.apple.com/assets/fullstory-bridge.js"],
+        vendors: ["FullStory"]
+      },
+      cipaRuntimeCoverageEvidence: {
+        requestPurposeClassificationRowCount: 1,
+        sufficientForNegativeCipaReview: true
+      },
+      privacyNoticeObserved: true,
+      verifiedPrivacyNoticeUrls: ["https://www.apple.com/legal/privacy/"]
+    }
+  };
+
+  const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
+  const row = getChecklistRow(checklist, "cipa_sensitive_interaction_recording");
+
+  assert.equal(coverageOutcomes.cipa_sensitive_interaction_recording?.status, "not_observed");
+  assert.equal(row.status, "not_observed");
+  assert.equal(row.assessmentStatus, "checked");
+  assert.equal(row.evidenceState, "not_observed");
+  assert.match(row.note, /not verified/i);
+  assert.equal(
+    coverageOutcomes.cipa_sensitive_interaction_recording?.criticalEvidence.retainedEvidence.thirdPartyReceiptObserved,
+    false
+  );
+  assert.equal(
+    coverageOutcomes.cipa_sensitive_interaction_recording?.criticalEvidence.retainedEvidence.rawCipaThirdPartyReceiptObserved,
+    true
+  );
+  assert.equal(
+    (coverageOutcomes.cipa_sensitive_interaction_recording?.criticalEvidence.retainedEvidence.evidenceCoherence as Record<string, unknown> | undefined)
+      ?.vendorRequestUrlCoherence &&
+      ((coverageOutcomes.cipa_sensitive_interaction_recording?.criticalEvidence.retainedEvidence.evidenceCoherence as Record<string, unknown>)
+        .vendorRequestUrlCoherence as Record<string, unknown>).status,
+    "fail"
+  );
+});
+
+test("blocked page owner text does not create an observed consumer rights method", () => {
+  const runtimeArtifacts = {
+    californiaPrivacyEvidence: {
+      consumerRightsRequestMethodObserved: true,
+      consumerRightsRequestMethodSnippets: [
+        "Access denied. Please email the site owner if you believe this is a mistake."
+      ],
+      consumerRightsRequestMethodTypes: ["email site owner"],
+      consumerRightsRequestMethodUrls: ["https://example.com/cdn-cgi/challenge-platform/h/b/captcha"],
+      privacyNoticeObserved: true,
+      verifiedPrivacyNoticeUrls: ["https://example.com/privacy"]
+    }
+  };
+
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "privacy_rights_path_present"),
+    false
+  );
+
+  const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
+  const row = getChecklistRow(checklist, "consumer_rights_request_methods");
+
+  assert.equal(coverageOutcomes.consumer_rights_request_methods?.status, "review_signal");
+  assert.equal(row.status, "review_signal");
+  assert.match(row.note, /not coherent enough/i);
+});
+
+test("post-opt-out tracking is not testable without confirmed saved opt-out action", () => {
+  const runtimeArtifacts = {
+    californiaPrivacyEvidence: {
+      cpraSaleShareOptOutPathObserved: true,
+      optOutInteractionConfirmed: false,
+      optOutSavedOrApplied: false,
+      postOptOutDirectAdvertisingPersisted: true,
+      postOptOutDirectAdvertisingRequestUrls: ["https://connect.facebook.net/en_US/fbevents.js"],
+      postOptOutPersistedDirectAdvertisingVendors: ["Meta Pixel"],
+      postOptOutTrackingPersisted: true,
+      targetedAdvertisingSignalsObserved: true
+    }
+  };
+
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  assert.equal(
+    concerns.some((concern) => concern.suggestedUnifiedFindingId === "reject_did_not_reduce_tracking"),
+    false
+  );
+
+  const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
+  const row = getChecklistRow(checklist, "post_opt_out_tracking_behavior");
+
+  assert.equal(coverageOutcomes.post_opt_out_tracking_behavior?.status, "not_testable");
+  assert.equal(row.status, "not_testable");
+  assert.match(row.note, /No confirmed opt-out or reject action/i);
+});
+
+test("CIPA communication negative row is review signal when origin/runtime coverage is incomplete but meaningful", () => {
+  const runtimeArtifacts = {
+    californiaPrivacyEvidence: {
+      cipaCommunicationInterceptionEvidence: {
+        cipaConsentTiming: "unknown",
+        cipaDisclosureObserved: false,
+        cipaEvidenceConfidence: "high",
+        cipaSensitive: false,
+        cipaSensitiveSurfaceObserved: false,
+        cipaSignalTypes: [],
+        cipaThirdPartyReceiptObserved: false,
+        directEvidenceObserved: false,
+        legalConclusion: false,
+        pageUrls: [],
+        requestUrls: [],
+        vendors: []
+      },
+      cipaRuntimeCoverageEvidence: {
+        attempted: true,
+        limitation: "origin_not_confirmed",
+        requestPurposeClassificationRowCount: 50,
+        sufficientForNegativeCipaReview: false
+      }
+    }
+  };
+
+  const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
+  const row = getChecklistRow(checklist, "cipa_sensitive_communication_interception");
+
+  assert.equal(coverageOutcomes.cipa_sensitive_communication_interception?.status, "review_signal");
+  assert.equal(
+    coverageOutcomes.cipa_sensitive_communication_interception?.criticalEvidence.statusBasis,
+    "No direct chat or pre-submit interception evidence was retained, but runtime coverage was limited; treat this as an incomplete negative review."
+  );
+  assert.equal(
+    coverageOutcomes.cipa_sensitive_communication_interception?.limitation,
+    "No direct chat or pre-submit interception evidence was retained, but runtime coverage was limited; treat this as an incomplete negative review."
+  );
+  assert.doesNotMatch(
+    JSON.stringify(coverageOutcomes.cipa_sensitive_communication_interception?.criticalEvidence ?? {}),
+    /No chat widget|third-party pre-submit text receipt|communication interception endpoint/
+  );
+  assert.equal(
+    coverageOutcomes.cipa_sensitive_communication_interception?.criticalEvidence.missingOrIncompleteSourceSignals.some(
+      (gap) => gap.field === "californiaPrivacyEvidence.cipaRuntimeCoverageEvidence.requestPurposeClassificationRowCount"
+    ),
+    false
+  );
+  assert.equal(
+    coverageOutcomes.cipa_sensitive_communication_interception?.criticalEvidence.missingOrIncompleteSourceSignals.some(
+      (gap) => gap.field === "californiaPrivacyEvidence.cipaRuntimeCoverageEvidence.sufficientForNegativeCipaReview"
+    ),
+    true
+  );
+  assert.equal(
+    coverageOutcomes.cipa_sensitive_communication_interception?.criticalEvidence.missingOrIncompleteSourceSignals.some(
+      (gap) => gap.field === "californiaPrivacyEvidence.cipaRuntimeCoverageEvidence.limitation"
+    ),
+    true
+  );
+  assert.equal(row.status, "review_signal");
+  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(row.statusLabel, "Review signal");
+  assert.equal(row.evidenceState, "observed");
+});
+
+test("sale-share disclosure alignment does not retain internal gap state after vendor URL mismatch", () => {
+  const runtimeArtifacts = {
+    californiaPrivacyEvidence: {
+      advertisingSharingVendors: ["Meta Pixel"],
+      directAdvertisingSharingVendors: ["Meta Pixel"],
+      doNotSellSharePathObserved: false,
+      policyRuntimeDisclosureAlignment: "gap_observed",
+      policyRuntimeDisclosureAlignmentBasis: "potential_gap_no_category_disclosure",
+      policyRuntimeDisclosureSnippets: ["We disclose advertising partners in our privacy notice."],
+      saleShareRequestUrls: [
+        "https://tv.apple.com/assets/translation/en-US.json",
+        "https://tv.apple.com/assets/musickit/musickit.js"
+      ],
+      targetedAdvertisingSignalsObserved: true,
+      unmatchedRuntimeDisclosureVendors: ["Meta Pixel"]
+    }
+  };
+
+  const { checklist, coverageOutcomes } = deriveChecklistFromRuntimeArtifacts(runtimeArtifacts);
+  const row = getChecklistRow(checklist, "sale_share_disclosure_alignment");
+  const retainedEvidence = coverageOutcomes.sale_share_disclosure_alignment?.criticalEvidence.retainedEvidence;
+
+  assert.equal(coverageOutcomes.sale_share_disclosure_alignment?.status, "not_observed");
+  assert.equal(row.status, "not_observed");
+  assert.equal(row.assessmentStatus, "checked");
+  assert.equal(row.evidenceState, "not_observed");
+  assert.equal(retainedEvidence?.disclosureAlignment, "review_signal");
+  assert.equal(retainedEvidence?.disclosureAlignmentBasis, "vendor_request_url_mismatch");
+  assert.equal(retainedEvidence?.rawDisclosureAlignment, "gap_observed");
+  assert.equal(retainedEvidence?.runtimeVendorRequestUrlCoherence, "mismatch");
 });

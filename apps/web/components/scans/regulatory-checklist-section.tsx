@@ -66,10 +66,10 @@ export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false,
                   type="button"
                   aria-pressed={expandAllAdvancedEvidence}
                   className={cn(
-                    "rounded-full px-2.5 py-1.5 text-[11px] font-semibold transition",
+                    "rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition",
                     expandAllAdvancedEvidence
-                      ? "bg-sky-600 text-white shadow-[0_12px_24px_-14px_rgba(2,132,199,0.9)] ring-1 ring-sky-700"
-                      : "text-sky-700 hover:bg-white hover:text-sky-900"
+                      ? "border-sky-700 bg-sky-600 text-white shadow-[0_12px_24px_-14px_rgba(2,132,199,0.9)] ring-1 ring-sky-700"
+                      : "border-sky-200 bg-sky-50 text-sky-700 shadow-sm hover:border-sky-300 hover:bg-white hover:text-sky-900"
                   )}
                   onClick={() => setExpandAllAdvancedEvidence((value) => !value)}
                 >
@@ -84,10 +84,10 @@ export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false,
               type="button"
               aria-pressed={selected}
               className={cn(
-                "rounded-full px-3 py-1.5 text-xs font-semibold transition",
+                "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
                 selected
-                  ? "bg-slate-950 text-white shadow-[0_12px_24px_-14px_rgba(15,23,42,0.9)] ring-1 ring-slate-950"
-                  : "text-slate-500 hover:bg-white hover:text-slate-900"
+                  ? "border-slate-950 bg-slate-950 text-white shadow-[0_12px_24px_-14px_rgba(15,23,42,0.9)] ring-1 ring-slate-950"
+                  : "border-transparent text-slate-500 hover:bg-white hover:text-slate-900"
               )}
               onClick={() => setActiveTabId(tab.id)}
             >

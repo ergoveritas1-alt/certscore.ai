@@ -26,6 +26,15 @@ const initialState: CreateDomainActionState = {
   queuedCount: null
 };
 
+function getCaliforniaDeepCheckConfig(enabled: boolean): QueuedFullScanCaliforniaPrivacyConfig | null {
+  return enabled
+    ? {
+        exercisePrivacyChoicePath: true,
+        forceGpcVerification: true
+      }
+    : null;
+}
+
 export async function createOrQueueDomainScan(input: {
   allowExistingDomainRescan?: boolean;
   bypassRecentScanReuse?: boolean;
@@ -92,9 +101,10 @@ export async function createOrQueueDomainScan(input: {
       submittedByUserId: dashboardContext.user.id,
       enforceCooldown: true,
       enforceMonthlyUsageLimit: true,
-      provenance: input.provenance,
-      bypassRecentScanReuse: input.bypassRecentScanReuse,
-      scanFrom: input.scanFrom,
+	      provenance: input.provenance,
+	      bypassRecentScanReuse: input.bypassRecentScanReuse,
+	      californiaPrivacy: input.californiaPrivacy,
+	      scanFrom: input.scanFrom,
       scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
       source: "marketing-full-scan"
     });
@@ -178,6 +188,7 @@ export async function createDomainAction(
   formData: FormData
 ): Promise<CreateDomainActionState> {
   const domainInput = String(formData.get("domain") ?? "");
+  const californiaPrivacy = getCaliforniaDeepCheckConfig(formData.get("californiaDeepCheck") === "true");
   const forceNewScan = formData.get("forceNewScan") === "true";
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
   const parsedBatch = parseDomainBatchInput(domainInput);
@@ -197,6 +208,7 @@ export async function createDomainAction(
         domain: item.domain,
         allowExistingDomainRescan: true,
         bypassRecentScanReuse: forceNewScan,
+        californiaPrivacy,
         scanFrom
       })
     )

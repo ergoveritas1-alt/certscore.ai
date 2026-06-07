@@ -1038,12 +1038,66 @@ test("deriveGdprEprivacyCoverageChecklist marks audit-only projected context as 
     ]
   });
 
-  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Insufficient evidence");
-  assert.deepEqual(byId(items, "runtime_vendor_disclosure_alignment").evidenceRefs, [
+  const row = byId(items, "runtime_vendor_disclosure_alignment");
+  assert.equal(row.status, "Insufficient evidence");
+  assert.equal(row.assessmentStatus, "coverage_limitation");
+  assert.equal(row.evidenceState, "observed");
+  assert.match(row.criticalEvidence.statusBasis, /No usable direct vendor-disclosure mismatch row was retained/i);
+  assert.doesNotMatch(row.criticalEvidence.statusBasis, /Canonical unified finding/i);
+  assert.deepEqual(row.evidenceRefs, [
     "Technical disclosure missing",
     "Evidence flag: direct_runtime",
     "Evidence strength: direct runtime"
   ]);
+});
+
+test("deriveGdprEprivacyCoverageChecklist explains limited runtime vendor disclosure evidence without gap projection", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("cookie_disclosure_gap", "Cookie disclosure gap", "audit_only", [], {
+        entities: {
+          findingSubtype: ["runtime_vendor_not_disclosed"],
+          runtimeVendorDisclosureEvidence: [
+            JSON.stringify({
+              coverageStatus: "unknown",
+              directVsInferred: "inferred",
+              evidenceConfidence: "limited",
+              matchedVendorDisclosureCount: 0,
+              mismatchRationale:
+                "Runtime cookies were observed, but one or more non-essential runtime cookies could not be matched to retained cookie-policy disclosure rows or category disclosures.",
+              observedRuntimeDomains: [],
+              observedRuntimeVendors: [],
+              policySurfacesSearched: [],
+              unmatchedRuntimeDomains: [],
+              unmatchedRuntimeVendors: [],
+              unmatchedVendorDisclosureCount: 0
+            })
+          ],
+          unmatched_cookie_names: ["_cs_c", "_cs_id", "_cs_s"]
+        },
+        flags: [
+          "explicit_policy_snippet_retained",
+          "contradiction_runtime_artifact_retained",
+          "disclosureMismatchExplained"
+        ]
+      })
+    ]
+  });
+
+  const row = byId(items, "runtime_vendor_disclosure_alignment");
+  assert.equal(row.status, "Insufficient evidence");
+  assert.equal(row.assessmentStatus, "coverage_limitation");
+  assert.equal(row.evidenceState, "observed");
+  assert.equal(row.criticalEvidence.retainedEvidence.selectedEvidenceArtifactId, "runtimeVendorDisclosureEvidence.limited");
+  assert.equal(row.criticalEvidence.retainedEvidence.selectedEvidenceStrength, "limited");
+  assert.match(
+    row.criticalEvidence.statusBasis,
+    /Runtime vendor disclosure evidence was retained, but no usable direct vendor comparison row was retained/i
+  );
+  assert.doesNotMatch(row.criticalEvidence.statusBasis, /Missing or incomplete evidence|searched policy surfaces/i);
+  assert.doesNotMatch(row.criticalEvidence.statusBasis, /Canonical unified finding/i);
 });
 
 test("deriveGdprEprivacyCoverageChecklist treats support-only sensitive surface context as a review signal", () => {
@@ -1537,10 +1591,164 @@ test("deriveGdprEprivacyCoverageChecklist keeps pre-consent tracking highlights 
 
   const highlights = byId(items, "pre_consent_third_party_tracking").criticalEvidence.retainedEvidence.evidenceHighlights;
   assert.deepEqual(highlights, [
-    "Tracking requests observed before consent: Google Analytics; firstSeenMs 311.",
+    "Tracking requests observed before consent: Google Analytics; first seen 311ms after scan start.",
     "\"Google Analytics\", \"preConsent\": true, \"firstSeenMs\": 311, \"category\": \"analytics\""
   ]);
   assert.doesNotMatch(JSON.stringify(highlights), /runtime_vendor_not_disclosed|consent_governance_disclosure_gap/i);
+});
+
+test("deriveGdprEprivacyCoverageChecklist keeps pre-consent tracking entity preview focused on runtime timing evidence", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    projectedFindings: [
+      {
+        evidenceDetails: {
+          vendors: [
+            {
+              category: "tag_manager",
+              firstSeenMs: 787,
+              name: "Google Tag Manager",
+              preConsent: true,
+              representativeUrl: "https://www.googletagmanager.com/gtag/js?id=G-123"
+            }
+          ]
+        },
+        id: "preconsent_tracking",
+        label: "Pre-consent tracking"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("preconsent_tracking", "Pre-consent tracking", "surface", [], {
+        entities: {
+          consentGovernanceDisclosureEvidence: ["{\"concernId\":\"consent_governance_disclosure_gap\"}"],
+          findingSubtype: ["runtime_vendor_not_disclosed"],
+          runtimeVendors: ["Google Tag Manager"]
+        },
+        flags: [
+          "direct_runtime",
+          "contradiction_runtime_artifact_retained",
+          "privacy.preconsent_tracking_detected"
+        ]
+      })
+    ]
+  });
+
+  const row = byId(items, "pre_consent_third_party_tracking");
+  assert.match(row.criticalEvidence.statusBasis, /Google Tag Manager/i);
+  assert.match(row.criticalEvidence.statusBasis, /not recorded before these requests/i);
+  const packet = JSON.stringify(row.criticalEvidence.retainedEvidence.findingEntities);
+  assert.match(packet, /Google Tag Manager/);
+  assert.doesNotMatch(packet, /runtime_vendor_not_disclosed|consent_governance_disclosure_gap|consentGovernanceDisclosureEvidence/i);
+});
+
+test("deriveGdprEprivacyCoverageChecklist does not display epoch timestamps as firstSeenMs", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    projectedFindings: [
+      {
+        evidenceDetails: {
+          vendors: [
+            {
+              category: "tag_manager",
+              firstSeenMs: null,
+              name: "Google Tag Manager",
+              preConsent: true,
+              representativeUrl: "https://www.googletagmanager.com/gtag/js?id=G-123",
+              timestampMs: 1780863330295
+            } as { name: string; category: string | null; preConsent: boolean; representativeUrl: string | null; firstSeenMs: number | null } & Record<string, unknown>,
+            {
+              category: "session_replay",
+              firstSeenMs: null,
+              name: "Contentsquare",
+              preConsent: true,
+              representativeUrl: "https://t.contentsquare.net/uxa/site.js",
+              timestampMs: 1780863330295
+            } as { name: string; category: string | null; preConsent: boolean; representativeUrl: string | null; firstSeenMs: number | null } & Record<string, unknown>
+          ]
+        },
+        id: "preconsent_tracking",
+        label: "Pre-consent tracking"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("preconsent_tracking", "Pre-consent tracking")
+    ]
+  });
+
+  const highlights = byId(items, "pre_consent_third_party_tracking").criticalEvidence.retainedEvidence.evidenceHighlights;
+  assert.deepEqual(highlights, [
+    "Tracking requests observed before consent: Google Tag Manager and Contentsquare.",
+    "\"Google Tag Manager\", \"preConsent\": true, \"category\": \"tag_manager\"",
+    "\"Contentsquare\", \"preConsent\": true, \"category\": \"session_replay\""
+  ]);
+  assert.doesNotMatch(JSON.stringify(highlights), /1780863330295/);
+});
+
+test("deriveGdprEprivacyCoverageChecklist keeps session replay packet focused on runtime vendor evidence", () => {
+  const outcome = makeCoverageOutcome({
+    evidenceRefs: ["Session replay before consent observed"],
+    limitation: "Session replay or behavioral analytics runtime evidence was retained before a recorded consent action.",
+    rowId: "session_replay_fingerprinting_review",
+    status: "Gap observed"
+  });
+  outcome.criticalEvidence.retainedEvidence = {
+    ...outcome.criticalEvidence.retainedEvidence,
+    sessionReplayEvidence: {
+      preConsentObserved: true,
+      vendors: ["Contentsquare"]
+    }
+  };
+
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      session_replay_fingerprinting_review: outcome
+    },
+    projectedFindings: [
+      {
+        evidenceDetails: {
+          vendors: [
+            {
+              category: "session_replay",
+              firstSeenMs: 787,
+              name: "Contentsquare",
+              preConsent: true,
+              representativeUrl: "https://t.contentsquare.net/uxa/site.js"
+            }
+          ]
+        },
+        id: "session_replay_observed",
+        label: "Session replay observed"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("session_replay_observed", "Session replay observed", "surface", [], {
+        entities: {
+          consentGovernanceDisclosureEvidence: ["{\"concernId\":\"consent_governance_disclosure_gap\"}"],
+          findingSubtype: ["consent_governance_disclosure_gap"],
+          observedTrackingVendors: ["Contentsquare"],
+          runtimeVendors: ["Contentsquare"],
+          session_replay_runtime_vendors: ["Contentsquare"]
+        },
+        flags: [
+          "contradiction_runtime_artifact_retained",
+          "commerce.session_replay_tool_detected",
+          "privacy.session_replay_runtime_detected"
+        ]
+      })
+    ]
+  });
+
+  const row = byId(items, "session_replay_fingerprinting_review");
+  assert.equal(row.status, "Gap observed");
+  assert.match(row.criticalEvidence.statusBasis, /Session replay or behavioral analytics runtime evidence was retained/i);
+  assert.match(row.criticalEvidence.statusBasis, /Contentsquare/i);
+  const packet = JSON.stringify(row.criticalEvidence.retainedEvidence.findingEntities);
+  assert.match(packet, /Contentsquare/);
+  assert.doesNotMatch(packet, /contradiction_runtime_artifact_retained|consent_governance_disclosure_gap|consentGovernanceDisclosureEvidence|findingSubtype/i);
 });
 
 test("deriveGdprEprivacyCoverageChecklist normalizes pre-consent tracking vendor categories", () => {
@@ -1585,7 +1793,7 @@ test("deriveGdprEprivacyCoverageChecklist normalizes pre-consent tracking vendor
 
   const highlights = byId(items, "pre_consent_third_party_tracking").criticalEvidence.retainedEvidence.evidenceHighlights;
   assert.deepEqual(highlights, [
-    "Tracking requests observed before consent: Microsoft Clarity, Google Analytics, and Google Tag Manager; firstSeenMs 906.",
+    "Tracking requests observed before consent: Microsoft Clarity, Google Analytics, and Google Tag Manager; first seen 906ms after scan start.",
     "\"Microsoft Clarity\", \"preConsent\": true, \"firstSeenMs\": 906, \"category\": \"session_replay\"",
     "\"Google Analytics\", \"preConsent\": true, \"firstSeenMs\": 120, \"category\": \"analytics\""
   ]);
@@ -1638,6 +1846,40 @@ test("deriveGdprEprivacyCoverageChecklist prefers pre-consent cookie evidence fo
     "\"Google Analytics\", \"preConsent\": true, \"firstSeenMs\": 412, \"category\": \"analytics\", \"domain\": \".grammarly.com\""
   ]);
   assert.doesNotMatch(JSON.stringify(highlights), /preConsent": false|_ga_after/);
+});
+
+test("deriveGdprEprivacyCoverageChecklist shows setAtMs timing for pre-consent cookie storage evidence", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    projectedFindings: [
+      {
+        evidenceDetails: {
+          cookieEvidence: {
+            cookieWriteEvidence: [
+              {
+                category: "analytics",
+                cookieName: "_ga",
+                domain: ".caltech.edu",
+                preConsent: true,
+                setAtMs: 928,
+                vendor: "Google Analytics"
+              }
+            ]
+          }
+        },
+        id: "analytics_cookie_pre_consent",
+        label: "Analytics cookies before consent"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const highlights = byId(items, "pre_consent_cookies_storage").criticalEvidence.retainedEvidence.evidenceHighlights;
+  assert.deepEqual(highlights, [
+    "Storage observed before consent: Google Analytics on .caltech.edu.",
+    "\"Google Analytics\", \"preConsent\": true, \"firstSeenMs\": 928, \"category\": \"analytics\", \"domain\": \".caltech.edu\""
+  ]);
 });
 
 test("deriveGdprEprivacyCoverageChecklist keeps adtech vendor categories out of analytics and tag-manager buckets", () => {

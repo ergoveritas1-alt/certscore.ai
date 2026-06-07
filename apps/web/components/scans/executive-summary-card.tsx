@@ -438,6 +438,31 @@ function getFirstNumberValue(row: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
+const MAX_RUNTIME_ELAPSED_MS = 10 * 60 * 1000;
+
+function normalizeRuntimeElapsedMs(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return value >= 0 && value <= MAX_RUNTIME_ELAPSED_MS ? value : null;
+}
+
+function getFirstRuntimeElapsedMs(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = getRecordValue(row, [key]);
+    const parsed = typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim().length > 0
+        ? Number(value)
+        : null;
+    const normalized = normalizeRuntimeElapsedMs(parsed);
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
 function getFirstStringArrayValue(row: Record<string, unknown>, keys: string[]) {
   const value = getRecordValue(row, keys);
   if (Array.isArray(value)) {
@@ -2841,20 +2866,6 @@ function ExecutiveMetricCard(input: {
   );
 }
 
-function BenchmarkScoreNote({ message }: { message: string }) {
-  return (
-    <details className="group rounded-[1rem] border border-slate-200 bg-white/85 px-4 py-3 text-sm leading-6 text-slate-700">
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
-        <span className="line-clamp-2 min-w-0 group-open:line-clamp-none">
-          <span className="font-semibold text-slate-950">Score note:</span>{" "}
-          {message}
-        </span>
-        <ScanReportDisclosureIcon />
-      </summary>
-    </details>
-  );
-}
-
 function NotScoredMetricCard(input: {
   helper: string;
   label: string;
@@ -3181,7 +3192,6 @@ function getFindingCardTone(
       card: "border-slate-200 bg-[linear-gradient(180deg,rgba(252,252,252,0.94),rgba(255,255,255,1))]",
       band: "bg-rose-200",
       severityBadge: "border-rose-200 bg-rose-50 text-rose-800",
-      confidenceBadge: "border-slate-200 bg-white text-slate-700",
       summary: "border-slate-200 bg-white text-slate-900"
     };
   }
@@ -3191,7 +3201,6 @@ function getFindingCardTone(
       card: "border-slate-200 bg-[linear-gradient(180deg,rgba(252,252,251,0.82),rgba(255,255,255,1))]",
       band: "bg-slate-200",
       severityBadge: "border-slate-200 bg-slate-50 text-slate-800",
-      confidenceBadge: "border-slate-200 bg-white text-slate-700",
       summary: "border-slate-200 bg-slate-50/65 text-slate-900"
     };
   }
@@ -3200,7 +3209,6 @@ function getFindingCardTone(
     card: "border-slate-200 bg-white",
     band: "bg-slate-200",
     severityBadge: "border-slate-200 bg-slate-50 text-slate-700",
-    confidenceBadge: "border-slate-200 bg-white text-slate-700",
     summary: "border-slate-200 bg-slate-50/85 text-slate-800"
   };
 }
@@ -3632,14 +3640,16 @@ function buildFindingEvidenceHighlights(finding: CertScoreFinding) {
       ...asRecordRows(details?.trackingEvidence?.vendors)
     ];
     const timing = details?.timing as Record<string, unknown> | undefined;
-    const fallbackFirstSeenMs = typeof timing?.firstThirdPartyTrackingRequestMs === "number" ? timing.firstThirdPartyTrackingRequestMs : null;
+    const fallbackFirstSeenMs = normalizeRuntimeElapsedMs(
+      typeof timing?.firstThirdPartyTrackingRequestMs === "number" ? timing.firstThirdPartyTrackingRequestMs : null
+    );
 
     for (const row of vendorRows) {
       const name = getFirstStringValue(row, ["name", "vendor", "label"]);
       if (!name) {
         continue;
       }
-      const firstSeenMs = getFirstNumberValue(row, ["firstSeenMs", "first_seen_ms", "firstRequestMs", "first_request_ms"]) ?? fallbackFirstSeenMs;
+      const firstSeenMs = getFirstRuntimeElapsedMs(row, ["firstSeenMs", "first_seen_ms", "firstRequestMs", "first_request_ms"]) ?? fallbackFirstSeenMs;
       highlightRows.push(`"${name}", "preConsent": true${typeof firstSeenMs === "number" ? `, "firstSeenMs": ${Math.round(firstSeenMs)}` : ""}`);
       if (highlightRows.length >= 3) {
         break;
@@ -4510,7 +4520,14 @@ export function ExecutiveSummaryCard(input: {
     };
   });
   const allNamedVendors = uniqueStrings(input.resolvedVendorNames);
-  const namedVendors = allNamedVendors.slice(0, 8);
+  const topObservedEntityLabels = uniqueStrings(input.topObservedEntities.map((entity) => entity.label));
+  const topObservedEntityByLabel = new Map(input.topObservedEntities.map((entity) => [entity.label, entity]));
+  const allObservedVendorNames = uniqueStrings([
+    ...allNamedVendors,
+    ...input.topObservedEntities
+      .filter((entity) => !/^(?:unknown|domain|host)$/i.test(entity.category))
+      .map((entity) => entity.label)
+  ]);
   const thirdPartyDomains = input.thirdPartyDomains;
   const recognizedCmpBrand = getRecognizedCmpBrand(input.cmpVendorName);
   const cmpDisplayName =
@@ -4521,28 +4538,32 @@ export function ExecutiveSummaryCard(input: {
   const hasProbableFingerprintingFinding = regulatoryFindingInput.some((finding) => finding.id === "probable_fingerprinting");
   const shouldShowFingerprintSnapshot =
     fingerprintEvidence.length > 0 || input.fingerprintLabel !== "None detected";
-  const vendorEvidence = uniqueStrings([...allNamedVendors, ...input.unresolvedVendorHosts]);
+  const vendorEvidence = uniqueStrings([...allObservedVendorNames, ...input.unresolvedVendorHosts]);
   const trackerFootprintExpandLabel = formatTrackerFootprintExpandLabel({
     thirdPartyDomainCount: input.thirdPartyDomains.length,
-    vendorCount: namedVendors.length
+    vendorCount: allObservedVendorNames.length
   });
   const trackerFootprintAllDetails = trackerFootprintExpandLabel
-    ? uniqueStrings([...vendorEvidence, ...thirdPartyDomains])
+    ? uniqueStrings([...vendorEvidence, ...topObservedEntityLabels, ...thirdPartyDomains])
     : [];
   const trackerFootprintCountLabel = formatTrackerFootprintCountLabel({
     domainCount: input.thirdPartyDomains.length,
-    vendorCount: allNamedVendors.length
+    vendorCount: allObservedVendorNames.length
   });
-  const trackerFootprintRichDetails = trackerFootprintAllDetails.map((label) => ({
-        key: label,
-        node: (
-          <VendorBrandChip
-            category={allNamedVendors.includes(label) ? "vendor" : "domain"}
-            label={label}
-            suffix={allNamedVendors.includes(label) ? "vendor" : "domain"}
-          />
-        )
-      }));
+  const trackerFootprintRichDetails = trackerFootprintAllDetails.map((label) => {
+    const observedEntity = topObservedEntityByLabel.get(label);
+    const isVendor = allObservedVendorNames.includes(label);
+    return {
+      key: label,
+      node: (
+        <VendorBrandChip
+          category={isVendor ? observedEntity?.category ?? "vendor" : "domain"}
+          label={label}
+          suffix={isVendor ? "vendor" : "domain"}
+        />
+      )
+    };
+  });
   const domainTruncationNote =
     thirdPartyDomains.length < input.thirdPartyDomains.length
         ? `Showing ${thirdPartyDomains.length} of ${input.thirdPartyDomains.length} observed domains.`
@@ -4631,21 +4652,6 @@ export function ExecutiveSummaryCard(input: {
   const regulatoryLenses = input.unifiedFindings
     ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
     : buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
-  const benchmarkScoreExplanation = isScanNotRepresentative || input.accessLimitationNotice
-    ? null
-    : deriveBenchmarkScoreExplanation({
-        benchmark: input.domainBenchmark,
-        cookieBannerPresent: input.cookieBannerPresent,
-        findings: regulatoryFindingInput,
-        score: input.score,
-        vendorNames: uniqueStrings([
-          ...getRepresentativeVendorsFromFindings(displayedTopFindings),
-          ...input.preConsentVendorNames,
-          ...input.sessionReplayVendorNames,
-          ...input.resolvedVendorNames
-        ])
-      });
-
   return (
     <section className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
       <details className="group/executive-summary" data-testid="executive-summary-details" open>
@@ -4685,9 +4691,6 @@ export function ExecutiveSummaryCard(input: {
                   <p className="max-w-3xl text-sm leading-6 text-slate-600">
                     CertScore captured a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page instead of the normal public site. Scores, regulatory projections, and substantive findings are withheld for this scan.
                   </p>
-                ) : null}
-                {benchmarkScoreExplanation ? (
-                  <BenchmarkScoreNote message={benchmarkScoreExplanation} />
                 ) : null}
               </div>
               {input.accessLimitationNotice ? null : isScanNotRepresentative ? (
@@ -4780,19 +4783,21 @@ export function ExecutiveSummaryCard(input: {
                     <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
                       {getFindingTypeLabel(finding)}
                     </span>
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${cardTone.severityBadge}`}>
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${cardTone.severityBadge}`}>
                       {criticalityBadge}
-                    </span>
-                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${cardTone.confidenceBadge}`}>
-                      {getEvidenceConfidenceLabel(finding.confidence)}
                       <InfoTip
                         align="start"
                         placement="bottom"
-                        text={getPublicReportConfidenceDefinition({
-                          confidence: finding.confidence,
-                          findingId: finding.id,
-                          section: finding.section
-                        })}
+                        text={
+                          <>
+                            Evidence quality: {getEvidenceConfidenceLabel(finding.confidence)}.{" "}
+                            {getPublicReportConfidenceDefinition({
+                              confidence: finding.confidence,
+                              findingId: finding.id,
+                              section: finding.section
+                            })}
+                          </>
+                        }
                       />
                     </span>
                     {densityBenchmark ? (
@@ -4942,30 +4947,12 @@ export function ExecutiveSummaryCard(input: {
                         {cmpStatusAvailable
                           ? recognizedCmpBrand
                             ? "CMP recognized from scan evidence."
-                            : "Consent banner observed; CMP vendor not recognized."
+                            : "Unknown CMP / consent banner"
                           : "No working consent banner was retained for this scan."}
                       </p>
                     </div>
                   </div>
                 </div>
-                {uniqueStrings([...input.topObservedEntities.map((entity) => entity.label), ...namedVendors]).length > 0 ? (
-                  <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Vendor mix</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {uniqueStrings([...input.topObservedEntities.map((entity) => entity.label), ...namedVendors]).slice(0, 10).map((label) => {
-                        const entity = input.topObservedEntities.find((candidate) => candidate.label === label);
-                        return (
-                          <VendorBrandChip
-                            key={label}
-                            category={entity?.category ?? "vendor"}
-                            label={label}
-                            suffix={entity ? `${entity.category} · ${entity.requestCount} req` : "vendor"}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                   <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     Tracker footprint

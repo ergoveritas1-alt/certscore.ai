@@ -595,6 +595,7 @@ test("projects third-party cookie pre-consent when preconsent packet retains coo
         domain: "facebook.com",
         category: "advertising",
         setAtMs: 3831,
+        firstSeenMs: 3831,
         expiresDays: 90,
         sourceVendor: "Meta Pixel",
         initiatorUrl: null,

@@ -41,6 +41,8 @@ export type ScanFrom = (typeof SCAN_FROM_OPTIONS)[number]["value"];
 export type ServerScanFrom = Exclude<ScanFrom, "local_extension">;
 
 type ScanFromSelectProps = {
+  californiaDeepCheckName?: string;
+  californiaDeepCheckValue?: boolean;
   compact?: boolean;
   freshRescanName?: string;
   freshRescanValue?: boolean;
@@ -48,6 +50,7 @@ type ScanFromSelectProps = {
   name?: string;
   includeLocalExtension?: boolean;
   includeFreshRescanOption?: boolean;
+  onCaliforniaDeepCheckChange?: (value: boolean) => void;
   onChange?: (value: ScanFrom) => void;
   onFreshRescanChange?: (value: boolean) => void;
   variant?: "field" | "icon";
@@ -72,6 +75,8 @@ function SelectedScanFromMarker({ option }: { option: (typeof SCAN_FROM_OPTIONS)
 }
 
 export function ScanFromSelect({
+  californiaDeepCheckName = "californiaDeepCheck",
+  californiaDeepCheckValue,
   compact = false,
   freshRescanName = "forceNewScan",
   freshRescanValue,
@@ -79,6 +84,7 @@ export function ScanFromSelect({
   includeFreshRescanOption = false,
   includeLocalExtension = false,
   name = "scanFrom",
+  onCaliforniaDeepCheckChange,
   onChange,
   onFreshRescanChange,
   variant = "field",
@@ -87,12 +93,14 @@ export function ScanFromSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [uncontrolledCaliforniaDeepCheck, setUncontrolledCaliforniaDeepCheck] = useState(false);
   const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const options = includeLocalExtension ? SCAN_FROM_OPTIONS : SCAN_FROM_OPTIONS.filter((option) => option.value !== "local_extension");
   const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? SCAN_FROM_OPTIONS[0];
+  const californiaDeepCheck = californiaDeepCheckValue ?? uncontrolledCaliforniaDeepCheck;
   const freshRescan = freshRescanValue ?? uncontrolledFreshRescan;
 
   useEffect(() => {
@@ -134,7 +142,7 @@ export function ScanFromSelect({
       const desiredLeft = variant === "icon" ? buttonRect.right - width + 96 : buttonRect.left;
       const left = Math.min(Math.max(viewportPadding, desiredLeft), Math.max(viewportPadding, viewportWidth - width - viewportPadding));
       const measuredHeight = menuRef.current?.offsetHeight;
-      const targetHeight = measuredHeight && measuredHeight > 0 ? measuredHeight : includeFreshRescanOption ? 390 : 260;
+      const targetHeight = measuredHeight && measuredHeight > 0 ? measuredHeight : includeFreshRescanOption ? 440 : 260;
       const spaceBelow = viewportHeight - anchorBottom - gap - viewportPadding;
       const spaceAbove = anchorTop - gap - viewportPadding;
       const opensAbove = spaceBelow < Math.min(targetHeight, 300) && spaceAbove > spaceBelow;
@@ -171,6 +179,13 @@ export function ScanFromSelect({
     onFreshRescanChange?.(nextValue);
   }
 
+  function setCaliforniaDeepCheck(nextValue: boolean) {
+    if (californiaDeepCheckValue === undefined) {
+      setUncontrolledCaliforniaDeepCheck(nextValue);
+    }
+    onCaliforniaDeepCheckChange?.(nextValue);
+  }
+
   const menuOptions = options;
 
   const buttonClassName =
@@ -183,6 +198,7 @@ export function ScanFromSelect({
   return (
     <div ref={wrapperRef} className={variant === "icon" ? "relative" : compact ? "relative inline-flex items-center gap-2 text-xs font-medium text-slate-600" : "relative block space-y-1.5"}>
       <input id={id} name={name} type="hidden" value={value} />
+      {californiaDeepCheck ? <input name={californiaDeepCheckName} type="hidden" value="true" /> : null}
       {includeFreshRescanOption && freshRescan ? <input name={freshRescanName} type="hidden" value="true" /> : null}
       {variant === "field" ? (
         <span className={compact ? "shrink-0" : "block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"}>
@@ -245,6 +261,35 @@ export function ScanFromSelect({
                       <span
                         className={
                           freshRescan
+                            ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
+                            : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
+                        }
+                      />
+                    </span>
+                  </label>
+                  <label
+                    className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                    title="Run GPC and privacy-choice interaction checks for California review."
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-slate-700">California deep check</span>
+                    </span>
+                    <input
+                      checked={californiaDeepCheck}
+                      className="sr-only"
+                      onChange={(event) => setCaliforniaDeepCheck(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span
+                      className={
+                        californiaDeepCheck
+                          ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
+                          : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
+                      }
+                    >
+                      <span
+                        className={
+                          californiaDeepCheck
                             ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
                             : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
                         }

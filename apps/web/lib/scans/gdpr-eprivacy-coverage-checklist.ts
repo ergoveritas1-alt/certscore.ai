@@ -265,7 +265,10 @@ function getEvidenceState(input: {
   status: GdprEprivacyCoverageChecklistStatus;
   assessmentStatus: RegulatoryAssessmentStatus;
 }): RegulatoryEvidenceState {
-  if (input.status === "Not testable" || input.status === "Insufficient evidence" || input.assessmentStatus === "coverage_limitation") {
+  if (input.status === "Insufficient evidence") {
+    return "observed";
+  }
+  if (input.status === "Not testable" || input.assessmentStatus === "coverage_limitation") {
     return "not_testable";
   }
   if (input.status === "Out of scope" || input.assessmentStatus === "not_applicable") {
@@ -382,6 +385,7 @@ function selectChecklistEvidenceArtifact(input: {
   });
 
   if (input.rowId === "runtime_vendor_disclosure_alignment") {
+    const retainedVendorDisclosureRows = getRetainedVendorDisclosureRows(input.retained);
     if (hasUsableVendorDisclosureMismatchEvidence({
       assessmentStatus: "checked",
       criticalEvidence: input.criticalEvidence,
@@ -405,9 +409,11 @@ function selectChecklistEvidenceArtifact(input: {
       );
     }
     return selection(
-      hasRetainedEvidenceKey(input.retained, ["runtimeVendorDisclosureEvidence"]) ? "runtimeVendorDisclosureEvidence" : "runtimeVendorDisclosureEvidence.missing",
-      input.status === "Insufficient evidence" || input.status === "Review signal" ? "limited" : "missing",
-      "No usable direct vendor-disclosure mismatch row was retained for gap-level projection."
+      retainedVendorDisclosureRows.length > 0 ? "runtimeVendorDisclosureEvidence.limited" : "runtimeVendorDisclosureEvidence.missing",
+      retainedVendorDisclosureRows.length > 0 || input.status === "Insufficient evidence" || input.status === "Review signal" ? "limited" : "missing",
+      retainedVendorDisclosureRows.length > 0
+        ? "Runtime vendor disclosure evidence was retained, but no usable direct vendor comparison row was retained."
+        : "No usable direct vendor-disclosure mismatch row was retained for gap-level projection."
     );
   }
 
@@ -604,6 +610,25 @@ function selectChecklistEvidenceArtifact(input: {
   );
 }
 
+function getSelectionAwareStatusBasis(input: {
+  currentStatusBasis: string;
+  rowId: string;
+  selection: ChecklistEvidenceSelection;
+  status: GdprEprivacyCoverageChecklistStatus;
+}) {
+  const genericBasis = /canonical unified finding(?:s)? projected for this row/i.test(input.currentStatusBasis);
+  const weakSelection =
+    input.selection.selectedEvidenceStrength === "limited" ||
+    input.selection.selectedEvidenceStrength === "missing" ||
+    input.status === "Insufficient evidence";
+
+  if (!weakSelection || (!genericBasis && input.status !== "Insufficient evidence")) {
+    return input.currentStatusBasis;
+  }
+
+  return input.selection.selectedEvidenceReason;
+}
+
 function enrichCriticalEvidenceWithSelection(input: {
   criticalEvidence: GdprEprivacyCoverageCriticalEvidence;
   rowId: string;
@@ -621,7 +646,13 @@ function enrichCriticalEvidenceWithSelection(input: {
     retainedEvidence: {
       ...retained,
       ...selection
-    }
+    },
+    statusBasis: getSelectionAwareStatusBasis({
+      currentStatusBasis: input.criticalEvidence.statusBasis,
+      rowId: input.rowId,
+      selection,
+      status: input.status
+    })
   };
 }
 
@@ -1637,14 +1668,80 @@ function makeSourceSignalGap(
   return { actual, expected, field, source, whyNeeded };
 }
 
-function getFindingEntityPreview(finding: UnifiedFindingDisplayPacket) {
+const RUNTIME_TIMING_ROW_ENTITY_DENYLIST = new Set([
+  "consentGovernanceCookiePolicyUrls",
+  "consentGovernanceDisclosureEvidence",
+  "consentGovernancePolicyUrls",
+  "consentGovernancePreferenceCenterUrls",
+  "consentGovernanceTextAnchors",
+  "findingSubtype",
+  "runtimeVendorDisclosureEvidence"
+]);
+
+const RUNTIME_TIMING_ROW_FLAG_ALLOWLIST = [
+  /direct_runtime/i,
+  /pre[_ -]?consent/i,
+  /privacy\.session_replay/i,
+  /session_replay/i,
+  /tracking/i
+];
+
+function isRuntimeTimingRow(rowId: string) {
+  return rowId === "pre_consent_third_party_tracking" || rowId === "session_replay_fingerprinting_review";
+}
+
+function getFindingEntityPreview(rowId: string, finding: UnifiedFindingDisplayPacket) {
   const entities = finding.evidence?.entities ?? {};
   return Object.fromEntries(
     Object.entries(entities)
-      .filter(([, values]) => Array.isArray(values) && values.length > 0)
+      .filter(([key, values]) =>
+        Array.isArray(values) &&
+        values.length > 0 &&
+        (!isRuntimeTimingRow(rowId) || !RUNTIME_TIMING_ROW_ENTITY_DENYLIST.has(key))
+      )
       .slice(0, 5)
       .map(([key, values]) => [key, values.slice(0, 5)])
   );
+}
+
+function getFindingEvidenceFlagPreview(rowId: string, finding: UnifiedFindingDisplayPacket) {
+  const flags = finding.evidence?.flags ?? [];
+  if (!isRuntimeTimingRow(rowId)) {
+    return flags.slice(0, 5);
+  }
+
+  return flags
+    .filter((flag) => RUNTIME_TIMING_ROW_FLAG_ALLOWLIST.some((pattern) => pattern.test(flag)))
+    .slice(0, 5);
+}
+
+function getUnifiedFindingStatusBasis(input: {
+  fallbackStatusBasis: string;
+  findings: UnifiedFindingDisplayPacket[];
+  projectedFindings: NonNullable<GdprEprivacyCoverageChecklistInput["projectedFindings"]>;
+  rowId: string;
+  status: GdprEprivacyCoverageChecklistStatus;
+}) {
+  const highlights = getRowEvidenceHighlights({
+    findings: input.findings,
+    projectedFindings: input.projectedFindings,
+    rowId: input.rowId
+  });
+  const firstHighlight = highlights[0];
+
+  if (input.rowId === "pre_consent_third_party_tracking" && input.status === "Gap observed") {
+    return firstHighlight
+      ? `${firstHighlight} Consent action was not recorded before these requests.`
+      : "Third-party tracking request timing evidence was retained before a recorded consent action.";
+  }
+
+  if (input.rowId === "session_replay_fingerprinting_review" && input.status === "Gap observed") {
+    return firstHighlight
+      ? `Session replay or behavioral analytics runtime evidence was retained before a recorded consent action: ${firstHighlight}.`
+      : "Session replay or behavioral analytics runtime evidence was retained before a recorded consent action.";
+  }
+
+  return input.fallbackStatusBasis;
 }
 
 function getUnifiedFindingCriticalEvidence(
@@ -1685,8 +1782,8 @@ function getUnifiedFindingCriticalEvidence(
       evidenceRefs: getEvidenceRefs(findings),
       findingEntities: findings.map((finding) => ({
         id: finding.unifiedFindingId,
-        entities: getFindingEntityPreview(finding),
-        evidenceFlags: (finding.evidence?.flags ?? []).slice(0, 5),
+        entities: getFindingEntityPreview(rowId, finding),
+        evidenceFlags: getFindingEvidenceFlagPreview(rowId, finding),
         sourceRefs: (finding.sourceRefs ?? []).flatMap((sourceRef) => {
           const formatted = formatSourceRef(sourceRef);
           return formatted ? [formatted] : [];
@@ -1694,7 +1791,13 @@ function getUnifiedFindingCriticalEvidence(
       })),
       status
     },
-    statusBasis
+    statusBasis: getUnifiedFindingStatusBasis({
+      fallbackStatusBasis: statusBasis,
+      findings,
+      projectedFindings,
+      rowId,
+      status
+    })
   };
 }
 
@@ -1911,9 +2014,8 @@ function hasDirectSameContextSensitiveTrackingEvidence(record: Record<string, un
   );
 }
 
-function hasUsableVendorDisclosureMismatchEvidence(item: GdprEprivacyCoverageChecklistItem) {
-  const retained = getRetainedEvidenceRecord(item);
-  const retainedRows = [
+function getRetainedVendorDisclosureRows(retained: Record<string, unknown>) {
+  return [
     ...(
       Array.isArray(retained.runtimeVendorDisclosureEvidence)
         ? retained.runtimeVendorDisclosureEvidence
@@ -1939,6 +2041,11 @@ function hasUsableVendorDisclosureMismatchEvidence(item: GdprEprivacyCoverageChe
     }
     return [];
   });
+}
+
+function hasUsableVendorDisclosureMismatchEvidence(item: GdprEprivacyCoverageChecklistItem) {
+  const retained = getRetainedEvidenceRecord(item);
+  const retainedRows = getRetainedVendorDisclosureRows(retained);
   const retainedRowHasUsableMismatch = retainedRows.some((row) => {
     const coverageStatus = readRetainedString(row, ["coverageStatus", "coverage_status"]);
     const directVsInferred = readRetainedString(row, ["directVsInferred", "direct_vs_inferred"]);

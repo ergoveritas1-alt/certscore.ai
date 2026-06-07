@@ -259,6 +259,7 @@ export function DomainScanForm({
   const [localExtensionStatus, setLocalExtensionStatus] = useState<Bx01Status | null>(null);
   const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [californiaDeepCheck, setCaliforniaDeepCheck] = useState(false);
   const [freshRescan, setFreshRescan] = useState(false);
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
   const isSubmittingRef = useRef(false);
@@ -401,6 +402,13 @@ export function DomainScanForm({
 
       const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
         body: JSON.stringify({
+          californiaPrivacy:
+            mode === "full" && californiaDeepCheck
+              ? {
+                  exercisePrivacyChoicePath: true,
+                  forceGpcVerification: true
+                }
+              : undefined,
           domain: submittedDomain,
           forceNewScan: mode === "full" ? freshRescan : false,
           scanFrom: scanFrom as ServerScanFrom
@@ -509,10 +517,12 @@ export function DomainScanForm({
           {mode === "full" ? (
             <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
               <ScanFromSelect
+                californiaDeepCheckValue={californiaDeepCheck}
                 compact={compact}
                 freshRescanValue={freshRescan}
                 includeFreshRescanOption
                 includeLocalExtension={allowLocalExtensionScan}
+                onCaliforniaDeepCheckChange={setCaliforniaDeepCheck}
                 onChange={setScanFrom}
                 onFreshRescanChange={setFreshRescan}
                 value={scanFrom}

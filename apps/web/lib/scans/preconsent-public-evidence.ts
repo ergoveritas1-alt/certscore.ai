@@ -89,6 +89,31 @@ function getNumber(row: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
+const MAX_RUNTIME_ELAPSED_MS = 10 * 60 * 1000;
+
+function normalizeRuntimeElapsedMs(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return value >= 0 && value <= MAX_RUNTIME_ELAPSED_MS ? value : null;
+}
+
+function getRuntimeElapsedMs(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    const parsed = typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim().length > 0
+        ? Number(value)
+        : null;
+    const normalized = normalizeRuntimeElapsedMs(parsed);
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
 function getBoolean(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = row[key];
@@ -282,7 +307,8 @@ export function buildPromotionGradePreconsentRequests(input: {
       collectionEndpointType: getString(row, ["collectionEndpointType", "collection_endpoint_type"]),
       firstPartyOrThirdParty: getString(row, ["firstPartyOrThirdParty", "first_party_or_third_party", "party"]),
       matchedSignatureId: getString(row, ["matchedSignatureId", "matched_signature_id"]),
-      firstSeenMs: getNumber(row, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms", "ms"]),
+      firstSeenMs: getRuntimeElapsedMs(row, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "ms"]) ??
+        getRuntimeElapsedMs(row, ["timestampMs", "timestamp_ms"]),
       consentActionMs,
       noConsentActionObserved: consentActionMs === null,
       consentSurfaceObserved,

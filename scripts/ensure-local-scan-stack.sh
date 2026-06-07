@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WEB_ENV_FILE="${ROOT_DIR}/apps/web/.env.local"
+WEB_APP_DIR="${ROOT_DIR}/apps/web"
+WEB_NEXT_CACHE_DIR="${WEB_APP_DIR}/.next"
 LOG_DIR="${ROOT_DIR}/tmp/local-dev"
 WEB_PORT="${WEB_PORT:-3000}"
 STORAGE_PORT="${STORAGE_PORT:-9000}"
@@ -492,11 +494,38 @@ ensure_storage() {
   }
 }
 
+clear_web_dev_cache() {
+  if [[ -d "${WEB_NEXT_CACHE_DIR}" ]]; then
+    log "clearing stale Next dev cache: ${WEB_NEXT_CACHE_DIR}"
+    rm -rf "${WEB_NEXT_CACHE_DIR}"
+  fi
+}
+
+web_http_check() {
+  local route="$1"
+  local timeout="${2:-30}"
+
+  curl -fsS --max-time "${timeout}" "http://localhost:${WEB_PORT}${route}" >/dev/null 2>&1
+}
+
+web_is_healthy() {
+  web_http_check "/api/health" 20 && web_http_check "/" 45
+}
+
+restart_web_with_clean_cache() {
+  local pattern="$1"
+
+  kill_processes "web app" "${pattern}"
+  clear_web_dev_cache
+  start_background "web app" "${LOG_DIR}/web.log" certscore-web pnpm --filter @website-signal-risk-scanner/web dev
+}
+
 ensure_web() {
   local pattern="next-server \\(v[0-9.]+\\)|next dev --turbo --port ${WEB_PORT}|next dev --port ${WEB_PORT}"
 
   if [[ "${FORCE_RESTART}" == "1" ]]; then
     kill_processes "web app" "${pattern}"
+    clear_web_dev_cache
   fi
 
   if ! is_port_listening "${WEB_PORT}"; then
@@ -507,6 +536,23 @@ ensure_web() {
     tail -120 "${LOG_DIR}/web.log" >&2 || true
     fail "web app failed to start"
   }
+
+  if ! web_is_healthy; then
+    log "web app is listening on ${WEB_PORT} but failed HTTP checks; restarting with a clean Next cache"
+    tail -120 "${LOG_DIR}/web.log" >&2 || true
+    restart_web_with_clean_cache "${pattern}"
+    wait_for_port "web app" "${WEB_PORT}" 60 || {
+      tail -120 "${LOG_DIR}/web.log" >&2 || true
+      fail "web app failed to restart"
+    }
+  fi
+
+  web_is_healthy || {
+    tail -160 "${LOG_DIR}/web.log" >&2 || true
+    fail "web app failed HTTP checks after restart"
+  }
+
+  log "web app HTTP checks passed"
 }
 
 ensure_validation_worker() {

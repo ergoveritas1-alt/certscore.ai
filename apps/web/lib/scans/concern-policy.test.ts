@@ -2126,6 +2126,7 @@ test("CPRA CBA opt-out concern policy requires CPRA-relevant context", () => {
       choiceControlsInspected: true,
       optOutUiResult: "absent",
       policyCbaLanguage: "full_cba_language",
+      saleShareRequestUrls: ["https://pixel.adsrvr.org/track"],
       suppressorApplied: null
     }
   });
@@ -3379,7 +3380,8 @@ test("deriveConcernPolicy promotes CPRA opt-out gaps with CBA evidence and inspe
         choice_controls_inspected: true,
         opt_out_control_found: false,
         opt_out_ui_result: "absent",
-        policy_cba_language: "full_cba_language"
+        policy_cba_language: "full_cba_language",
+        sale_share_request_urls: ["https://connect.facebook.net/en_US/fbevents.js"]
       }
     }
   });
@@ -3404,7 +3406,8 @@ test("deriveConcernPolicy promotes partial CPRA opt-out controls as incomplete C
         choice_controls_inspected: true,
         opt_out_control_found: true,
         opt_out_ui_result: "partial_no_icon",
-        policy_cba_language: "full_cba_language"
+        policy_cba_language: "full_cba_language",
+        sale_share_request_urls: ["https://connect.facebook.net/en_US/fbevents.js"]
       }
     }
   });

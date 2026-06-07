@@ -40,6 +40,31 @@ function getFirstNumberValue(record: Record<string, unknown> | null | undefined,
   return null;
 }
 
+const MAX_RUNTIME_ELAPSED_MS = 10 * 60 * 1000;
+
+function normalizeRuntimeElapsedMs(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return value >= 0 && value <= MAX_RUNTIME_ELAPSED_MS ? value : null;
+}
+
+function getFirstRuntimeElapsedMs(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    const value = record?.[key];
+    const parsed = typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim().length > 0
+        ? Number(value)
+        : null;
+    const normalized = normalizeRuntimeElapsedMs(parsed);
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
 function getFirstBooleanValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {
     const value = record?.[key];
@@ -168,7 +193,7 @@ function buildPreConsentTrackingHighlights(finding: ExecutiveEvidenceFinding) {
   const details = finding.evidenceDetails;
   const trackingEvidence = getRecord(details?.trackingEvidence);
   const timing = getRecord(details?.timingAnalysis) ?? getRecord((details as Record<string, unknown> | undefined)?.timing);
-  const fallbackFirstSeenMs = getFirstNumberValue(timing, [
+  const fallbackFirstSeenMs = getFirstRuntimeElapsedMs(timing, [
     "firstThirdPartyTrackingRequestMs",
     "firstThirdPartyRequestMs",
     "firstSeenMs",
@@ -194,10 +219,10 @@ function buildPreConsentTrackingHighlights(finding: ExecutiveEvidenceFinding) {
   })).slice(0, 7);
   if (summaryVendors.length > 0) {
     const firstSeenMs = rows
-      .map((row) => getFirstNumberValue(row, ["firstSeenMs", "first_seen_ms", "firstRequestMs", "first_request_ms", "timestampMs", "timestamp_ms"]) ?? fallbackFirstSeenMs)
+      .map((row) => getFirstRuntimeElapsedMs(row, ["firstSeenMs", "first_seen_ms", "firstRequestMs", "first_request_ms"]) ?? fallbackFirstSeenMs)
       .find((value): value is number => typeof value === "number");
     highlights.push(
-      `Tracking requests observed before consent: ${formatList(summaryVendors)}${typeof firstSeenMs === "number" ? `; firstSeenMs ${Math.round(firstSeenMs)}` : ""}.`
+      `Tracking requests observed before consent: ${formatList(summaryVendors)}${typeof firstSeenMs === "number" ? `; first seen ${Math.round(firstSeenMs)}ms after scan start` : ""}.`
     );
   }
 
@@ -207,7 +232,7 @@ function buildPreConsentTrackingHighlights(finding: ExecutiveEvidenceFinding) {
       continue;
     }
     const preConsent = getFirstBooleanValue(row, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]) ?? true;
-    const firstSeenMs = getFirstNumberValue(row, ["firstSeenMs", "first_seen_ms", "firstRequestMs", "first_request_ms", "timestampMs", "timestamp_ms"]) ?? fallbackFirstSeenMs;
+    const firstSeenMs = getFirstRuntimeElapsedMs(row, ["firstSeenMs", "first_seen_ms", "firstRequestMs", "first_request_ms"]) ?? fallbackFirstSeenMs;
     const retainedCategory = getFirstStringValue(row, ["category", "vendorCategory", "vendor_category", "requestCategory", "request_category"]);
     const url = getFirstStringValue(row, ["representativeUrl", "representative_url", "requestUrl", "request_url", "url"]);
     const category = normalizeVendorCategory({ category: retainedCategory, name, url });
@@ -272,7 +297,16 @@ function buildPreConsentCookieStorageHighlights(finding: ExecutiveEvidenceFindin
     if (!name) {
       continue;
     }
-    const firstSeenMs = getFirstNumberValue(row, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms"]);
+    const firstSeenMs = getFirstRuntimeElapsedMs(row, [
+      "firstSeenMs",
+      "first_seen_ms",
+      "firstObservedMs",
+      "first_observed_ms",
+      "setAtMs",
+      "set_at_ms",
+      "sourceRequestFirstSeenMs",
+      "source_request_first_seen_ms"
+    ]);
     const retainedCategory = getFirstStringValue(row, ["category", "vendorCategory", "vendor_category", "cookieCategory", "cookie_category"]);
     const domain = getFirstStringValue(row, ["domain", "hostname", "host"]);
     const url = getFirstStringValue(row, ["representativeUrl", "representative_url", "requestUrl", "request_url", "url"]);

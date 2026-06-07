@@ -46,6 +46,15 @@ import {
   isRuntimeRequestEvidenceUrl,
   stripReportUrlAnnotation
 } from "./report-facing-page-url";
+import { evaluateCaliforniaSaleShareRuntimeCoherence } from "./california-sale-share-runtime-coherence";
+import {
+  evaluateChatVendorRequestUrlCoherence,
+  evaluateControlPathVerificationCoherence,
+  evaluatePolicySnippetContextCoherence,
+  evaluateSessionReplayVendorRequestUrlCoherence,
+  evaluateSurfaceNotBlockedOrInterstitial,
+  evaluateThirdPartyReceiptCoherence
+} from "./evidence-coherence";
 
 import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
@@ -2389,9 +2398,28 @@ function buildCaliforniaCipaConcern(input: {
     "cipaDisclosureObserved",
     "cipa_disclosure_observed"
   ]);
+  const firstPartyHosts = pageUrls.map((url) => {
+    try {
+      return new URL(url).hostname.toLowerCase();
+    } catch {
+      return null;
+    }
+  }).filter((value): value is string => Boolean(value));
+  const thirdPartyReceiptCoherence = evaluateThirdPartyReceiptCoherence({
+    explicitThirdPartyReceiptObserved: thirdPartyReceiptObserved,
+    firstPartyHosts,
+    requestUrls
+  });
+  const vendorRequestUrlCoherence = input.evidenceFamily === "cipa_communication_interception"
+    ? evaluateChatVendorRequestUrlCoherence({ requestUrls, vendorLabels: vendors })
+    : evaluateSessionReplayVendorRequestUrlCoherence({ requestUrls, vendorLabels: vendors });
+  const effectiveThirdPartyReceiptObserved =
+    thirdPartyReceiptObserved === true &&
+    thirdPartyReceiptCoherence.status === "pass" &&
+    vendorRequestUrlCoherence.status !== "fail";
   const severity: ReviewFindingSeverity =
     directEvidenceObserved === true &&
-    thirdPartyReceiptObserved === true &&
+    effectiveThirdPartyReceiptObserved === true &&
     (consentTiming === "pre_consent" || consentTiming === "post_reject" || sensitiveSurfaceObserved === true)
       ? "high"
       : directEvidenceObserved === true
@@ -2415,11 +2443,16 @@ function buildCaliforniaCipaConcern(input: {
         cipaDisclosureObserved: disclosureObserved,
         cipaEvidenceConfidence: confidence,
         cipaSignalTypes: signalTypes,
-        cipaThirdPartyReceiptObserved: thirdPartyReceiptObserved,
+        cipaThirdPartyReceiptObserved: effectiveThirdPartyReceiptObserved,
         directEvidenceObserved,
+        evidenceCoherence: {
+          thirdPartyReceiptCoherence,
+          vendorRequestUrlCoherence
+        },
         legalConclusion: false,
         pageUrls,
         requestUrls,
+        rawCipaThirdPartyReceiptObserved: thirdPartyReceiptObserved,
         runtimeRequestUrls: requestUrls,
         runtimeVendors: vendors,
         sourceUrls: pageUrls
@@ -2435,7 +2468,11 @@ function buildCaliforniaCipaConcern(input: {
   });
 }
 
-function hasCaliforniaCpraOptOutGapBasis(cpraEvidence: Record<string, unknown> | null) {
+function hasCaliforniaCpraOptOutGapBasis(input: {
+  cpraEvidence: Record<string, unknown> | null;
+  runtimeThirdPartyAdtechObserved: boolean;
+}) {
+  const cpraEvidence = input.cpraEvidence;
   if (!cpraEvidence) {
     return false;
   }
@@ -2481,7 +2518,14 @@ function hasCaliforniaCpraOptOutGapBasis(cpraEvidence: Record<string, unknown> |
     /\b(?:ca|california)\b/i.test(scanOriginGeo ?? "") ||
     searchUrls.length > 0;
 
-  return vendorThresholdMet && choiceControlsInspected === true && missingOrPartialControl && cpraRelevantContext && !suppressorApplied;
+  return (
+    vendorThresholdMet &&
+    input.runtimeThirdPartyAdtechObserved &&
+    choiceControlsInspected === true &&
+    missingOrPartialControl &&
+    cpraRelevantContext &&
+    !suppressorApplied
+  );
 }
 
 function buildCaliforniaPrivacyEvidenceConcerns(
@@ -2548,7 +2592,11 @@ function buildCaliforniaPrivacyEvidenceConcerns(
     ]) === true || privacyNoticeDiscoveryUrls.length > 0;
   const privacyNoticeCleanlyVerified =
     privacyNoticeObserved === true &&
-    verifiedPrivacyNoticeUrls.length > 0;
+    verifiedPrivacyNoticeUrls.length > 0 &&
+    evaluateSurfaceNotBlockedOrInterstitial({
+      snippets: privacyNoticeSnippets,
+      urls: [...verifiedPrivacyNoticeUrls, ...privacyNoticeUrls]
+    }).status !== "fail";
   if (privacyNoticeCleanlyVerified) {
     concerns.push(buildConcernFromSharedInput({
       categoryId: "privacy_notice_disclosures",
@@ -2633,6 +2681,18 @@ function buildCaliforniaPrivacyEvidenceConcerns(
       "collectionContextTypes",
       "collection_context_types"
     ]);
+    const collectionSurfaceCandidateUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "collectionSurfaceCandidateUrls",
+      "collection_surface_candidate_urls"
+    ]);
+    const collectionSurfaceVisitedUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "collectionSurfaceVisitedUrls",
+      "collection_surface_visited_urls"
+    ]);
+    const collectionSurfaceBlockedUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+      "collectionSurfaceBlockedUrls",
+      "collection_surface_blocked_urls"
+    ]);
     concerns.push(buildConcernFromSharedInput({
       categoryId: "privacy_notice_disclosures",
       description: "A public collection context was retained for California notice-at-collection review without a nearby privacy notice cue.",
@@ -2647,6 +2707,25 @@ function buildCaliforniaPrivacyEvidenceConcerns(
           collectionContextObserved,
           collectionContextTypes,
           collectionContextUrls,
+          collectionSurfaceSearchAttempted: getCaliforniaRuntimeBoolean(californiaEvidence, [
+            "collectionSurfaceSearchAttempted",
+            "collection_surface_search_attempted"
+          ]),
+          collectionSurfaceCandidateUrls,
+          collectionSurfaceVisitedUrls,
+          collectionSurfaceBlockedUrls,
+          pointOfCollectionContextTested: getCaliforniaRuntimeBoolean(californiaEvidence, [
+            "pointOfCollectionContextTested",
+            "point_of_collection_context_tested"
+          ]),
+          collectionContextNegativeReviewSufficient: getCaliforniaRuntimeBoolean(californiaEvidence, [
+            "collectionContextNegativeReviewSufficient",
+            "collection_context_negative_review_sufficient"
+          ]),
+          collectionContextCoverageLimitation: getCaliforniaRuntimeString(californiaEvidence, [
+            "collectionContextCoverageLimitation",
+            "collection_context_coverage_limitation"
+          ]),
           collectionNoticeEvidenceKind,
           collectionNoticeCueObserved,
           pageUrls: collectionContextUrls,
@@ -2708,21 +2787,40 @@ function buildCaliforniaPrivacyEvidenceConcerns(
         contextualText: [cpraPolicyCbaLanguageForCpraGap].filter((value): value is string => Boolean(value))
       })
     );
+  const cpraGapSaleShareRequestUrls = getCaliforniaRuntimeStringArray(californiaEvidence, [
+    "directSaleShareOrTargetedAdvertisingRequestUrls",
+    "direct_sale_share_or_targeted_advertising_request_urls",
+    "saleShareRequestUrls",
+    "sale_share_request_urls"
+  ]);
+  const cpraGapAdvertisingSharingVendors = uniqueStrings([
+    ...getCaliforniaRuntimeStringArray(cpraEvidence, ["directAdvertisingSharingVendors", "direct_advertising_sharing_vendors"]),
+    ...getCaliforniaRuntimeStringArray(cpraEvidence, ["advertisingSharingVendors", "advertising_sharing_vendors"])
+  ]);
+  const cpraGapRuntimeCoherence = evaluateCaliforniaSaleShareRuntimeCoherence({
+    advertisingSharingVendors: cpraGapAdvertisingSharingVendors,
+    policySaleShareAdmissionObserved: false,
+    policySnippets: [cpraPolicyCbaLanguageForCpraGap].filter((value): value is string => Boolean(value)),
+    saleShareRequestUrls: cpraGapSaleShareRequestUrls,
+    targetedAdvertisingSignalsObserved: getCaliforniaRuntimeBoolean(californiaEvidence, [
+      "targetedAdvertisingSignalsObserved",
+      "targeted_advertising_signals_observed"
+    ])
+  });
 
   if (
-    hasCaliforniaCpraOptOutGapBasis(cpraEvidence) &&
+    hasCaliforniaCpraOptOutGapBasis({
+      cpraEvidence,
+      runtimeThirdPartyAdtechObserved: cpraGapRuntimeCoherence.runtimeThirdPartyAdtechObserved
+    }) &&
     cpraSaleSharePathConfirmedForCpraGap !== true
   ) {
-    const vendors = uniqueStrings([
-      ...getCaliforniaRuntimeStringArray(cpraEvidence, ["directAdvertisingSharingVendors", "direct_advertising_sharing_vendors"]),
-      ...getCaliforniaRuntimeStringArray(cpraEvidence, ["advertisingSharingVendors", "advertising_sharing_vendors"])
-    ]);
     concerns.push(buildConcernFromSharedInput({
       categoryId: "rights_request_mechanisms",
       description:
         "Cross-context advertising or sharing vendors were retained, and the inspected privacy-choice surfaces did not confirm a complete opt-out control.",
       domainContext,
-      evidence: vendors,
+      evidence: uniqueStrings([...cpraGapRuntimeCoherence.coherentRequestUrls, ...cpraGapAdvertisingSharingVendors]),
       observedValue: getCaliforniaRuntimeString(cpraEvidence, ["optOutUiResult", "opt_out_ui_result"]) ?? "privacy choice gap observed",
       originKey: "california_privacy.sale_share_control.potential_gap",
       originType: "runtime_artifact",
@@ -2730,8 +2828,14 @@ function buildCaliforniaPrivacyEvidenceConcerns(
         evidenceFamily: "sale_share_control",
         retainedEvidence: {
           ...cpraEvidence,
+          ...cpraGapRuntimeCoherence,
           cpraCbaOptOutEvidence: cpraEvidence,
           cpra_cba_opt_out_evidence: cpraEvidence,
+          advertisingSharingVendors: cpraGapAdvertisingSharingVendors,
+          runtimeRequestUrls: cpraGapRuntimeCoherence.coherentRequestUrls,
+          runtimeVendors: cpraGapAdvertisingSharingVendors,
+          saleShareRequestUrls: cpraGapRuntimeCoherence.coherentRequestUrls,
+          sourceUrls: cpraGapRuntimeCoherence.coherentRequestUrls,
           supportingSignals: ["privacy.cpra_cba_opt_out_missing"]
         },
         unifiedFindingId: "cpra_cba_opt_out_missing"
@@ -2804,6 +2908,20 @@ function buildCaliforniaPrivacyEvidenceConcerns(
       "advertising_sharing_vendors"
     ])
   ]);
+  const saleShareRuntimeCoherence = evaluateCaliforniaSaleShareRuntimeCoherence({
+    advertisingSharingVendors,
+    policySaleShareAdmissionObserved,
+    policySaleShareAdmissionConfidence,
+    policySnippets: uniqueStrings([
+      policySaleShareAdmissionSnippet,
+      getCaliforniaRuntimeString(cpraEvidence, ["policyCbaLanguage", "policy_cba_language"])
+    ]),
+    saleShareRequestUrls,
+    targetedAdvertisingSignalsObserved
+  });
+  const effectiveTargetedAdvertisingSignalsObserved = saleShareRuntimeCoherence.targetedAdvertisingSignalsObserved;
+  const effectivePolicySaleShareAdmissionObserved = saleShareRuntimeCoherence.policySaleShareAdmissionObserved;
+  const effectiveSaleShareApplicabilityObserved = saleShareRuntimeCoherence.saleShareApplicabilityObserved;
   const cpraSaleSharePathLabel =
     getCaliforniaRuntimeString(californiaEvidence, ["cpraSaleShareOptOutPathLabel", "cpra_sale_share_opt_out_path_label"]) ??
     getCaliforniaRuntimeString(californiaEvidence, ["doNotSellSharePathLabel", "do_not_sell_share_path_label"]) ??
@@ -2897,8 +3015,7 @@ function buildCaliforniaPrivacyEvidenceConcerns(
     }));
   }
   if (
-    (targetedAdvertisingSignalsObserved === true ||
-      (policySaleShareAdmissionObserved === true && policySaleShareAdmissionConfidence === "high")) &&
+    effectiveSaleShareApplicabilityObserved === true &&
     cpraSaleSharePathConfirmed !== true
   ) {
     const privacyChoiceSearchUrls = getCaliforniaRuntimeStringArray(cpraEvidence, [
@@ -2909,11 +3026,11 @@ function buildCaliforniaPrivacyEvidenceConcerns(
     ]);
     concerns.push(buildConcernFromSharedInput({
       categoryId: "rights_request_mechanisms",
-      description: policySaleShareAdmissionObserved === true && targetedAdvertisingSignalsObserved !== true
+      description: effectivePolicySaleShareAdmissionObserved === true && effectiveTargetedAdvertisingSignalsObserved !== true
         ? "A verified policy sale/share or targeted-advertising admission was retained, and the California privacy-choice search did not retain a clear control path."
         : "Targeted-advertising or sale/share-like runtime signals were retained, and the California privacy-choice search did not retain a clear control path.",
       domainContext,
-      evidence: uniqueStrings([...saleShareRequestUrls, ...privacyChoiceSearchUrls]),
+      evidence: uniqueStrings([...saleShareRuntimeCoherence.coherentRequestUrls, ...privacyChoiceSearchUrls]),
       observedValue: "privacy choice path not observed",
       originKey: "california_privacy.sale_share_control.potential_gap",
       originType: "runtime_artifact",
@@ -2922,21 +3039,23 @@ function buildCaliforniaPrivacyEvidenceConcerns(
         retainedEvidence: {
           advertisingSharingVendors,
           doNotSellLinkPresent: false,
+          ...saleShareRuntimeCoherence,
           policySaleShareAdmissionConfidence,
-          policySaleShareAdmissionObserved,
+          policyPersonalizedAdsLanguageObserved: saleShareRuntimeCoherence.policyPersonalizedAdsLanguageObserved,
+          policySaleShareAdmissionObserved: effectivePolicySaleShareAdmissionObserved,
           policySaleShareAdmissionSnippet,
-          pageUrls: uniqueStrings([...saleShareRequestUrls, ...privacyChoiceSearchUrls]),
+          pageUrls: uniqueStrings([...saleShareRuntimeCoherence.coherentRequestUrls, ...privacyChoiceSearchUrls]),
           privacyChoiceInteractionEvidence,
           privacyChoicePathEvidence,
           privacyChoiceSearchUrls,
           runtimeVendors: advertisingSharingVendors,
           saleShareCookieNames,
-          saleShareRequestUrls,
+          saleShareRequestUrls: saleShareRuntimeCoherence.coherentRequestUrls,
           saleSharingControlsMissing: true,
           policySnippets: uniqueStrings([policySaleShareAdmissionSnippet]),
-          sourceUrls: uniqueStrings([...saleShareRequestUrls, ...privacyChoiceSearchUrls]),
+          sourceUrls: uniqueStrings([...saleShareRuntimeCoherence.coherentRequestUrls, ...privacyChoiceSearchUrls]),
           targetedAdvertisingChoicesPresent: false,
-          targetedAdvertisingSignalsObserved,
+          targetedAdvertisingSignalsObserved: effectiveTargetedAdvertisingSignalsObserved,
           vendorCategories: advertisingSharingVendors
         },
         unifiedFindingId: "sale_sharing_controls_missing"
@@ -3004,8 +3123,7 @@ function buildCaliforniaPrivacyEvidenceConcerns(
   if (
     gpcSignalSent === true &&
     gpcRecognized === false &&
-    (targetedAdvertisingSignalsObserved === true ||
-      (policySaleShareAdmissionObserved === true && policySaleShareAdmissionConfidence === "high"))
+    effectiveSaleShareApplicabilityObserved === true
   ) {
     concerns.push(buildConcernFromSharedInput({
       categoryId: "rights_request_mechanisms",
@@ -3019,17 +3137,18 @@ function buildCaliforniaPrivacyEvidenceConcerns(
         evidenceFamily: "gpc_handling",
         retainedEvidence: {
           ...gpcEvidence,
+          ...saleShareRuntimeCoherence,
           advertisingSharingVendors,
           gpcVerification: gpcEvidence,
           gpc_verification: gpcEvidence,
           policyMentions: gpcPolicyMentions,
           policySnippets: gpcPolicyMentions,
           policySaleShareAdmissionConfidence,
-          policySaleShareAdmissionObserved,
+          policySaleShareAdmissionObserved: effectivePolicySaleShareAdmissionObserved,
           policySaleShareAdmissionSnippet,
           saleShareCookieNames,
-          saleShareRequestUrls,
-          targetedAdvertisingSignalsObserved
+          saleShareRequestUrls: saleShareRuntimeCoherence.coherentRequestUrls,
+          targetedAdvertisingSignalsObserved: effectiveTargetedAdvertisingSignalsObserved
         },
         unifiedFindingId: "gpc_signal_not_honored"
       }),
@@ -3051,8 +3170,7 @@ function buildCaliforniaPrivacyEvidenceConcerns(
     "policy_runtime_disclosure_alignment_basis"
   ]);
   if (
-    (targetedAdvertisingSignalsObserved === true ||
-      (policySaleShareAdmissionObserved === true && policySaleShareAdmissionConfidence === "high")) &&
+    effectiveSaleShareApplicabilityObserved === true &&
     disclosureAlignment === "gap_observed" &&
     (disclosureAlignmentBasis === "potential_gap_no_category_disclosure" ||
       disclosureAlignmentBasis === "contradiction_gap")
@@ -3077,15 +3195,16 @@ function buildCaliforniaPrivacyEvidenceConcerns(
         evidenceFamily: "disclosure_alignment",
         retainedEvidence: {
           advertisingSharingVendors,
-          pageUrls: saleShareRequestUrls,
+          ...saleShareRuntimeCoherence,
+          pageUrls: saleShareRuntimeCoherence.coherentRequestUrls,
           policyRuntimeDisclosureAlignment: disclosureAlignment,
           policyRuntimeDisclosureAlignmentBasis: disclosureAlignmentBasis,
           policyRuntimeDisclosureSnippets,
           policySnippets: policyRuntimeDisclosureSnippets,
-          runtimeRequestUrls: saleShareRequestUrls,
+          runtimeRequestUrls: saleShareRuntimeCoherence.coherentRequestUrls,
           runtimeVendors: advertisingSharingVendors,
-          saleShareRequestUrls,
-          sourceUrls: saleShareRequestUrls,
+          saleShareRequestUrls: saleShareRuntimeCoherence.coherentRequestUrls,
+          sourceUrls: saleShareRuntimeCoherence.coherentRequestUrls,
           unmatchedRuntimeDisclosureVendors
         },
         unifiedFindingId: "third_party_recipient_disclosure_missing"
@@ -3344,7 +3463,13 @@ function buildCaliforniaPrivacyEvidenceConcerns(
     "rightsRequestSnippets",
     "rights_request_snippets"
   ]);
-  const hasRightsMethodEvidence = rightsUrls.length > 0 || rightsSignals.length > 0 || rightsSnippets.length > 0;
+  const rightsSnippetCoherence = evaluatePolicySnippetContextCoherence(rightsSnippets);
+  const rightsControlPathCoherence = evaluateControlPathVerificationCoherence({
+    snippets: rightsSnippets,
+    types: rightsSignals,
+    urls: rightsUrls
+  });
+  const hasRightsMethodEvidence = rightsControlPathCoherence.status === "pass" && rightsSnippetCoherence.status === "pass";
   if (rightsMethodObserved === true && hasRightsMethodEvidence) {
     concerns.push(buildConcernFromSharedInput({
       categoryId: "rights_request_mechanisms",

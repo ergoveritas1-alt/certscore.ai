@@ -342,6 +342,31 @@ function getRecordNumber(row: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
+const MAX_RUNTIME_ELAPSED_MS = 10 * 60 * 1000;
+
+function normalizeRuntimeElapsedMs(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return value >= 0 && value <= MAX_RUNTIME_ELAPSED_MS ? value : null;
+}
+
+function getRecordRuntimeElapsedMs(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    const parsed = typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim().length > 0
+        ? Number(value)
+        : null;
+    const normalized = normalizeRuntimeElapsedMs(parsed);
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
 function getRecordBoolean(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = row[key];
@@ -1967,7 +1992,8 @@ function getRepresentativeRequestDetails(urls: string[], vendors: string[], requ
       resourceType:
         getRecordString(requestPurposeRow ?? {}, ["resourceType", "resource_type", "type"]) ??
         (/\.js(?:[?#]|$)|\/gtm\.js|script/i.test(url) ? "script" : null),
-      firstSeenMs: getRecordNumber(requestPurposeRow ?? {}, ["firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms", "tsMs", "ts_ms"]),
+      firstSeenMs: getRecordRuntimeElapsedMs(requestPurposeRow ?? {}, ["firstObservedMs", "first_observed_ms", "tsMs", "ts_ms"]) ??
+        getRecordRuntimeElapsedMs(requestPurposeRow ?? {}, ["timestampMs", "timestamp_ms"]),
       thirdParty: true,
       preConsent: timingStatus === "pre_consent",
       identifierLike: isLikelyIdentifierRequest(requestUrl),
@@ -2108,7 +2134,16 @@ function getPreconsentCookieExamples(cookieRows: Record<string, unknown>[], cons
     .map((row) => {
       const cookieName = getRecordString(row, ["cookieName", "cookie_name", "name"]);
       const timingEvidence = getRecordString(row, ["timingEvidence", "timing_evidence"]);
-      const setAtMs = getRecordNumber(row, ["setAtMs", "set_at_ms", "firstObservedAtMs", "first_observed_at_ms"]);
+      const setAtMs = getRecordRuntimeElapsedMs(row, [
+        "setAtMs",
+        "set_at_ms",
+        "firstObservedAtMs",
+        "first_observed_at_ms",
+        "firstObservedMs",
+        "first_observed_ms",
+        "firstSeenMs",
+        "first_seen_ms"
+      ]);
       const rawExpiresDays = getRecordNumber(row, ["expiresDays", "expires_days", "durationDays", "duration_days", "maxAgeDays", "max_age_days"]);
       const sourceRequestUrl = getCookieEvidenceSourceRequestUrl(row);
       const setBeforeConsent =
@@ -2125,6 +2160,7 @@ function getPreconsentCookieExamples(cookieRows: Record<string, unknown>[], cons
         domain: getRecordString(row, ["domain", "cookieDomain", "cookie_domain"]),
         category: getRecordString(row, ["category", "cookieCategory", "cookie_category", "vendorCategory", "vendor_category"]),
         setAtMs,
+        firstSeenMs: setAtMs,
         ...(rawExpiresDays !== null ? { expiresDays: rawExpiresDays } : {}),
         sourceVendor: getRecordString(row, [
           "sourceVendor",
@@ -2368,20 +2404,20 @@ function buildPreConsentTrackingEvidenceDetails(
     ...cookieRows.flatMap((row) => getRecordString(row, ["vendor", "vendorName", "cookieInitiatorVendor", "cookie_initiator_vendor"]))
   ]).filter(isDisplayVendorName);
 
-  const firstRequestMs = getCountValue(packet, ["firstRequestMs"]);
+  const firstRequestMs = normalizeRuntimeElapsedMs(getCountValue(packet, ["firstRequestMs"]));
   const firstThirdPartyRequestMs =
-    getCountValue(packet, ["firstThirdPartyTrackingRequestMs", "firstThirdPartyRequestMs"]) ??
-    getRecordNumber(consentTimeline ?? {}, ["firstNonEssentialRequestMs", "first_non_essential_request_ms"]);
+    normalizeRuntimeElapsedMs(getCountValue(packet, ["firstThirdPartyTrackingRequestMs", "firstThirdPartyRequestMs"])) ??
+    getRecordRuntimeElapsedMs(consentTimeline ?? {}, ["firstNonEssentialRequestMs", "first_non_essential_request_ms"]);
   const cmpVisibleMs =
-    getCountValue(packet, ["cmpVisibleMs", "consentBannerDetectedMs"]) ??
-    getRecordNumber(consentTimeline ?? {}, ["firstCmpVisibleMs", "first_cmp_visible_ms"]);
+    normalizeRuntimeElapsedMs(getCountValue(packet, ["cmpVisibleMs", "consentBannerDetectedMs"])) ??
+    getRecordRuntimeElapsedMs(consentTimeline ?? {}, ["firstCmpVisibleMs", "first_cmp_visible_ms"]);
   const consentSurfaceObserved =
     getEntityBooleanValue(packet, /^(?:consentSurfaceObserved|consent_surface_observed)$/i) ??
     getRecordBoolean(consentTimeline ?? {}, ["consentSurfaceObserved", "consent_surface_observed"]) ??
     (cmpVisibleMs !== null ? true : null);
   const consentChoiceAtMs =
-    getCountValue(packet, ["consentChoiceAtMs", "consentAcceptedAtMs", "consentRejectedAtMs"]) ??
-    getRecordNumber(consentTimeline ?? {}, ["firstConsentActionMs", "first_consent_action_ms"]);
+    normalizeRuntimeElapsedMs(getCountValue(packet, ["consentChoiceAtMs", "consentAcceptedAtMs", "consentRejectedAtMs"])) ??
+    getRecordRuntimeElapsedMs(consentTimeline ?? {}, ["firstConsentActionMs", "first_consent_action_ms"]);
   const userConsentActionObserved = consentChoiceAtMs !== null;
   const consentActionType =
     getEntityValues(packet, /consentActionType|consent_action_type/i)[0] ??
@@ -2491,7 +2527,9 @@ function buildPreConsentTrackingEvidenceDetails(
       initiatingVendor: endpointVendor && rowVendor && endpointVendor !== rowVendor ? rowVendor : null,
       category,
       resourceType: getRecordString(matchedRow ?? {}, ["resourceType", "type"]) ?? (/\.js(?:[?#]|$)|\/gtm\.js/i.test(url) ? "script" : null),
-      firstSeenMs: getRecordNumber(matchedRow ?? {}, ["firstSeenMs", "first_seen_ms", "ms", "timestampMs"]) ?? firstThirdPartyRequestMs,
+      firstSeenMs: getRecordRuntimeElapsedMs(matchedRow ?? {}, ["firstSeenMs", "first_seen_ms", "ms"]) ??
+        getRecordRuntimeElapsedMs(matchedRow ?? {}, ["timestampMs"]) ??
+        firstThirdPartyRequestMs,
       thirdParty: true,
       preConsent: true,
       identifierLike: isLikelyIdentifierRequest(url),
@@ -2790,7 +2828,8 @@ function buildRejectTrackingEvidenceDetails(packet: UnifiedFindingDisplayPacket)
           vendor,
           category: getRecordString(row, ["category", "vendorCategory", "classification"]) ?? classifyTrackingCategory(`${vendor ?? ""} ${hostname ?? ""} ${url}`),
           resourceType: getRecordString(row, ["resourceType", "resource_type", "type"]),
-          firstSeenMs: getRecordNumber(row, ["ts_ms", "firstSeenMs", "timestampMs"]),
+          firstSeenMs: getRecordRuntimeElapsedMs(row, ["ts_ms", "firstSeenMs"]) ??
+            getRecordRuntimeElapsedMs(row, ["timestampMs"]),
           thirdParty: true,
           preConsent: false,
           identifierLike: isLikelyIdentifierRequest(url),
@@ -3084,7 +3123,8 @@ function buildRtbCookieSyncEvidenceDetails(packet: UnifiedFindingDisplayPacket):
           getRecordString(row, ["category", "vendorCategory", "classification"])
         ),
         resourceType: getRecordString(row, ["resourceType", "resource_type"]),
-        firstSeenMs: getRecordNumber(row, ["tsMs", "ts_ms", "firstSeenMs", "timestampMs"]),
+        firstSeenMs: getRecordRuntimeElapsedMs(row, ["tsMs", "ts_ms", "firstSeenMs"]) ??
+          getRecordRuntimeElapsedMs(row, ["timestampMs"]),
         thirdParty: true,
         preConsent: getRecordString(row, ["runtimePhase", "runtime_phase"]) === "pre_consent",
         identifierLike: queryKeysSample.some((key) => IDENTIFIER_QUERY_KEY_PATTERN.test(key)) || isLikelyIdentifierRequest(url),
@@ -3468,7 +3508,16 @@ function buildGenericCanonicalEvidenceDetails(
       const sourceRequestUrl = getCookieEvidenceSourceRequestUrl(row);
       const timingStatus = getCookieEvidenceTimingStatus(row);
       const vendor = getRecordString(row, ["vendor", "vendorName", "cookieInitiatorVendor", "cookie_initiator_vendor", "initiatorVendor", "initiator_vendor"]);
-      const setAtMs = getRecordNumber(row, ["setAtMs", "set_at_ms", "firstObservedAtMs", "first_observed_at_ms"]);
+      const setAtMs = getRecordRuntimeElapsedMs(row, [
+        "setAtMs",
+        "set_at_ms",
+        "firstObservedAtMs",
+        "first_observed_at_ms",
+        "firstObservedMs",
+        "first_observed_ms",
+        "firstSeenMs",
+        "first_seen_ms"
+      ]);
       return compactEvidenceObject({
         cookieName: getRecordString(row, ["cookieName", "cookie_name", "name"]),
         domain: getRecordString(row, ["domain", "cookieDomain", "cookie_domain"]),
@@ -3480,6 +3529,7 @@ function buildGenericCanonicalEvidenceDetails(
           getRecordString(row, ["category", "vendorCategory", "classification"])
         ),
         setAtMs,
+        firstSeenMs: setAtMs,
         consentActionMs,
         noConsentActionObserved: consentActionMs === null,
         initiatorDomain: getRecordString(row, ["initiatorDomain", "initiator_domain", "cookieInitiatorDomain", "cookie_initiator_domain"]),

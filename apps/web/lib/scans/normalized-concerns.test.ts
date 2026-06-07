@@ -1360,6 +1360,7 @@ test("California CPRA opt-out gaps require applicability and inspected choice-co
     runtimeArtifacts: {
       californiaPrivacyEvidence: {
         directAdvertisingSharingVendors: ["The Trade Desk"],
+        saleShareRequestUrls: ["https://pixel.adsrvr.org/track"],
         targetedAdvertisingSignalsObserved: true
       },
       cpraCbaOptOutEvidence: {
@@ -1380,6 +1381,7 @@ test("California CPRA opt-out gaps require applicability and inspected choice-co
     runtimeArtifacts: {
       californiaPrivacyEvidence: {
         directAdvertisingSharingVendors: ["The Trade Desk"],
+        saleShareRequestUrls: ["https://pixel.adsrvr.org/track"],
         targetedAdvertisingSignalsObserved: true
       },
       cpraCbaOptOutEvidence: {
@@ -1429,6 +1431,50 @@ test("California CPRA opt-out gap is suppressed when a retained privacy-choice p
     concerns.some((concern) => concern.suggestedUnifiedFindingId === "targeted_advertising_choices_present"),
     true
   );
+});
+
+test("California collection notice potential gap retains bounded sweep evidence in normalized concern", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        collectionContextObserved: true,
+        collectionContextTypes: ["email"],
+        collectionContextUrls: ["https://example.test/newsletter"],
+        collectionNoticeCueObserved: false,
+        collectionNoticeEvidenceKind: "collection_form_without_notice",
+        collectionSurfaceSearchAttempted: true,
+        collectionSurfaceCandidateUrls: [
+          "https://example.test/contact",
+          "https://example.test/newsletter"
+        ],
+        collectionSurfaceVisitedUrls: [
+          "https://example.test/contact",
+          "https://example.test/newsletter"
+        ],
+        collectionSurfaceBlockedUrls: [],
+        pointOfCollectionContextTested: true,
+        collectionContextNegativeReviewSufficient: false,
+        collectionContextCoverageLimitation: "collection_context_tested"
+      }
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find((candidate) => candidate.originKey === "california_privacy.collection_notice.potential_gap");
+
+  assert.ok(concern);
+  assert.equal(concern.suggestedUnifiedFindingId, "policy_clarity_risk");
+  assert.equal(concern.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "collection_notice");
+  assert.deepEqual(concern.evidenceBundle.rawEvidence?.collectionSurfaceCandidateUrls, [
+    "https://example.test/contact",
+    "https://example.test/newsletter"
+  ]);
+  assert.deepEqual(concern.evidenceBundle.rawEvidence?.collectionSurfaceVisitedUrls, [
+    "https://example.test/contact",
+    "https://example.test/newsletter"
+  ]);
+  assert.equal(concern.evidenceBundle.rawEvidence?.pointOfCollectionContextTested, true);
+  assert.equal(concern.evidenceBundle.rawEvidence?.collectionContextCoverageLimitation, "collection_context_tested");
 });
 
 test("California GPC runtime evidence flows through unified findings when retained support is concrete", () => {

@@ -263,7 +263,7 @@ export function BetaRegulatoryChecklistCard({ area, defaultOpen = true }: BetaRe
                 <p className="text-xs leading-5 text-slate-500">Evidence capability: {getCapabilityLabel(row.evidenceCapability)}.</p>
                 <details className="mt-2 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
                   <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                    Advanced evidence
+                    Evidence packet
                   </summary>
                   <RegulatoryChecklistEvidenceDetails evidenceRefs={row.evidenceRefs} jsonPayload={stringifyEvidenceJson(area, row)} />
                 </details>

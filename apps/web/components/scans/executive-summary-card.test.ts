@@ -1333,7 +1333,9 @@ test("ExecutiveSummaryCard renders real vendor logo lookups in vendor badges", (
     vendorCategoryCounts: { ads: 1, cmp: 1 }
   }));
 
-  assert.match(html, /Vendor mix/);
+  assert.doesNotMatch(html, /Vendor mix/);
+  assert.match(html, /Tracker footprint/);
+  assert.match(html, /View observed vendors and domains/);
   assert.match(html, /OneTrust/);
   assert.match(html, /Google Ads/);
   assert.match(html, /\/vendor-logos\/onetrust\.png/);
@@ -1341,7 +1343,7 @@ test("ExecutiveSummaryCard renders real vendor logo lookups in vendor badges", (
   assert.match(html, /\/vendor-logos\/doubleverify\.png/);
   assert.match(html, /\/vendor-logos\/magnite\.png/);
   assert.match(html, /\/vendor-logos\/hotjar\.png/);
-  assert.match(html, /cmp · 2 req/);
+  assert.doesNotMatch(html, /cmp · 2 req/);
 });
 
 test("ExecutiveSummaryCard renders logo badges for observed tracker vendors and domains", () => {
@@ -2052,8 +2054,7 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
 
   assert.match(html, /Action Needed/);
   assert.match(html, /Benchmark: Web portal \/ News &amp; Media \/ Internet services/);
-  assert.match(html, /Score note:<\/span>/);
-  assert.match(html, /line-clamp-2/);
+  assert.doesNotMatch(html, /Score note:/);
   assert.match(html, /132 3rd-party requests/);
   assert.match(html, /\+124 above expected for Web portal \/ News &amp; Media \/ Internet services/);
   assert.match(html, /20 cookies before consent/);
@@ -2452,7 +2453,8 @@ test("ExecutiveSummaryCard renders directional finding-density context for surfa
 
   assert.match(html, /critical/);
   assert.match(html, /Consent timing/);
-  assert.match(html, /Good evidence/);
+  assert.match(html, /Evidence quality: Good evidence/);
+  assert.doesNotMatch(html, /<span[^>]*>\s*Good evidence\s*<\/span>/);
   assert.match(html, /Manual review is still needed for purpose, consent state, exemptions, and configuration/);
   assert.match(html, /Seen on ~18% of scanned top sites/);
   assert.match(html, /Seen on ~9% of scanned top sites/);
@@ -3363,7 +3365,7 @@ test("ExecutiveSummaryCard summarizes recognized and unknown consent platforms f
   assert.match(recognizedHtml, /CMP recognized from scan evidence/);
   assert.doesNotMatch(recognizedHtml, /recognized CMP/);
   assert.match(unknownHtml, /Unknown CMP \/ consent banner/);
-  assert.match(unknownHtml, /Consent banner observed; CMP vendor not recognized/);
+  assert.doesNotMatch(unknownHtml, /Consent banner observed; CMP vendor not recognized/);
 });
 
 test("ExecutiveSummaryCard labels truncated observed domain lists", () => {
@@ -3633,7 +3635,7 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
     (html.match(/1 third-party domain observed; no classified tracker vendors identified\./g) ?? []).length,
     0
   );
-  assert.match(
+  assert.doesNotMatch(
     html,
     /This score is near the SaaS \/ web application benchmark expectation, with retained review context concentrated in accessibility\./
   );

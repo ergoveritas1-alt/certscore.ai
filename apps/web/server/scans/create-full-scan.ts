@@ -34,7 +34,11 @@ import {
   upsertUsageCounter,
   updateDomainLatestScan
 } from "./repository";
-import { buildQueuedFullScanConfig, type QueuedFullScanCaliforniaPrivacyConfig } from "./full-scan-config";
+import {
+  buildQueuedFullScanConfig,
+  requiresFreshScanForCaliforniaRuntime,
+  type QueuedFullScanCaliforniaPrivacyConfig
+} from "./full-scan-config";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
 
@@ -45,6 +49,15 @@ export type CreateFullScanActionState = {
 const initialState: CreateFullScanActionState = {
   error: null
 };
+
+function getCaliforniaDeepCheckConfig(enabled: boolean): QueuedFullScanCaliforniaPrivacyConfig | null {
+  return enabled
+    ? {
+        exercisePrivacyChoicePath: true,
+        forceGpcVerification: true
+      }
+    : null;
+}
 
 type QueueFullScanInput = {
   californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
@@ -131,8 +144,10 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
 
   const bypassRecentScanReuse =
     Boolean(input.bypassRecentScanReuse) ||
-    input.californiaPrivacy?.exercisePrivacyChoicePath === true ||
-    input.californiaPrivacy?.forceGpcVerification === true;
+    requiresFreshScanForCaliforniaRuntime({
+      californiaPrivacy: input.californiaPrivacy,
+      scanFrom
+    });
 
   const logRequest = (details: {
     errorCode?: string | null;
@@ -537,6 +552,7 @@ export async function createFullScanAction(
 ): Promise<CreateFullScanActionState> {
   const dashboardContext = await getDashboardContext();
   const domainId = String(formData.get("domainId") ?? "").trim();
+  const californiaPrivacy = getCaliforniaDeepCheckConfig(formData.get("californiaDeepCheck") === "true");
   const forceNewScan = formData.get("forceNewScan") === "true";
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
 
@@ -560,6 +576,7 @@ export async function createFullScanAction(
     planCode: dashboardContext.organization.plan,
     submittedByUserId: dashboardContext.user.id,
     bypassRecentScanReuse: forceNewScan,
+    californiaPrivacy,
     enforceMonthlyUsageLimit: true,
     scanFrom,
     scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,

@@ -95,7 +95,7 @@ test("California checklist does not show a harsh score when every row is not tes
   assert.doesNotMatch(html, /46.*\/100/s);
 });
 
-test("California checklist keeps lens score when retained row evidence is testable", () => {
+test("California checklist uses row-derived score when retained row evidence is testable", () => {
   const html = renderToStaticMarkup(
     createElement(CaliforniaPrivacyCoverageChecklistCard, {
       californiaLens: {
@@ -111,7 +111,8 @@ test("California checklist keeps lens score when retained row evidence is testab
     })
   );
 
-  assert.match(html, /Score:.*46.*\/100/s);
+  assert.match(html, /Score:.*30.*\/100/s);
+  assert.match(html, /California score is weighted from evidence-gated checklist rows/);
   assert.match(html, /Needs work/);
   assertSummaryCount(html, 1, "review");
   assertSummaryCount(html, 1, "needs evidence");
@@ -158,7 +159,7 @@ test("California checklist avoids visible not-applicable posture badges", () => 
   assert.doesNotMatch(html, />Not applicable</);
 });
 
-test("California checklist renders CIPA overlays only from policy-retained evidence", () => {
+test("California checklist keeps CIPA overlay internals out of visible row copy", () => {
   const item = makeChecklistItem("targeted_advertising_signals", "review_signal");
   item.criticalEvidence.retainedEvidence.cipaRiskOverlay = {
     confidence: "high",
@@ -174,7 +175,9 @@ test("California checklist renders CIPA overlays only from policy-retained evide
     })
   );
 
-  assert.match(html, /CIPA overlay: pre consent tracking, cross domain or interaction event sharing; direct retained evidence; high confidence/);
-  assert.match(html, /CertScore does not make legal conclusions/);
+  assert.doesNotMatch(html, /CIPA overlay:/);
+  assert.doesNotMatch(html, /cross domain or interaction event sharing/);
+  assert.doesNotMatch(html, /direct retained evidence/);
+  assert.doesNotMatch(html, /CertScore does not make legal conclusions/);
   assert.doesNotMatch(html, new RegExp(`CIPA ${"viol"}ation|illegal ${"wire"}tapping`, "i"));
 });

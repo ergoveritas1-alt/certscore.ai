@@ -6194,6 +6194,16 @@ export function SharedScanDetailView({
     runtimeArtifacts,
     validationFindings: []
   });
+  const retainedCaliforniaPrivacyConfig =
+    scanRecord.scan.scanConfigJson?.californiaPrivacy &&
+    typeof scanRecord.scan.scanConfigJson.californiaPrivacy === "object" &&
+    !Array.isArray(scanRecord.scan.scanConfigJson.californiaPrivacy)
+      ? scanRecord.scan.scanConfigJson.californiaPrivacy as Record<string, unknown>
+      : null;
+  const californiaDeepCheckRequested =
+    scanRecord.scan.scanFromValue === "california" ||
+    retainedCaliforniaPrivacyConfig?.exercisePrivacyChoicePath === true ||
+    retainedCaliforniaPrivacyConfig?.forceGpcVerification === true;
   const californiaPrivacyCoverageChecklist = deriveCaliforniaPrivacyCoverageChecklist({
     coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
     coverageOutcomes: deriveCaliforniaPrivacyCoveragePolicyOutcomes({
@@ -6205,6 +6215,7 @@ export function SharedScanDetailView({
     projectedFindings: allExecutiveFindings,
     scanCompleted: scanRecord.scan.status === "completed",
     unifiedFindings: findingEvidenceDiagnostics,
+    withholdDeepCheckOnlyRows: !californiaDeepCheckRequested,
     withholdForNonRepresentativeScan: executiveAccessLimitationNotice?.finding.id === "scan_quality_visual_no_go"
   });
   const regulatoryLensCounts = {
@@ -6363,6 +6374,18 @@ export function SharedScanDetailView({
             tabs={[
               {
                 content: (
+                  <CaliforniaPrivacyCoverageChecklistCard
+                    californiaLens={californiaPrivacyExecutiveLens}
+                    defaultOpen
+                    items={californiaPrivacyCoverageChecklist}
+                  />
+                ),
+                id: "california-privacy",
+                label: "CCPA/CPRA+CIPA",
+                shortLabel: "CCPA/CPRA+CIPA"
+              },
+              {
+                content: (
                   <GdprEprivacyCoverageChecklistCard
                     defaultOpen
                     gdprEprivacyLens={gdprEprivacyExecutiveLens}
@@ -6371,19 +6394,7 @@ export function SharedScanDetailView({
                 ),
                 id: "gdpr-eprivacy",
                 label: "GDPR / ePrivacy",
-                shortLabel: "GDPR / ePrivacy"
-              },
-              {
-                content: (
-                  <CaliforniaPrivacyCoverageChecklistCard
-                    californiaLens={californiaPrivacyExecutiveLens}
-                    defaultOpen
-                    items={californiaPrivacyCoverageChecklist}
-                  />
-                ),
-                id: "california-privacy",
-                label: "CCPA/CPRA",
-                shortLabel: "CCPA/CPRA"
+                shortLabel: "GDPR/ePrivacy"
               },
               {
                 content: betaRegulatoryChecklistAreaById.get("ftc-dark-patterns") ? (
