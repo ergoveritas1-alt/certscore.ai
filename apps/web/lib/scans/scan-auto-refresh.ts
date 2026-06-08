@@ -9,6 +9,10 @@ export function hasPendingPostCompletionFindingWork(input: {
   signalEnrichmentWorkflow: SignalEnrichmentWorkflowState;
   status: string;
 }) {
+  if (input.status === "completed" && !input.signalEnrichmentWorkflow.mergedSignalsReady) {
+    return true;
+  }
+
   if (input.reportFindingsDerived) {
     return false;
   }

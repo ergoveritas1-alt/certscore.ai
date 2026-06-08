@@ -81,6 +81,15 @@ test("hasPendingPostCompletionFindingWork follows the enrichment workflow state"
 
   assert.equal(
     hasPendingPostCompletionFindingWork({
+      reportFindingsDerived: true,
+      signalEnrichmentWorkflow: makeWorkflow({ mergedSignalsReady: false }),
+      status: "completed"
+    }),
+    true
+  );
+
+  assert.equal(
+    hasPendingPostCompletionFindingWork({
       signalEnrichmentWorkflow: makeWorkflow({ findingsReady: true }),
       status: "completed"
     }),
