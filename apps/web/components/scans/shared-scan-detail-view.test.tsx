@@ -1715,7 +1715,7 @@ test("selectExecutiveAccessLimitationNotice lets retained visual no-go limit sub
   );
 });
 
-test("shouldShowRegulatoryChecklistSection hides regulatory review for visual no-go scans", async () => {
+test("shouldShowRegulatoryChecklistSection hides regulatory review for report-withheld access limitations", async () => {
   const shouldShowRegulatoryChecklistSection = await loadShouldShowRegulatoryChecklistSection();
 
   assert.equal(
@@ -1732,7 +1732,7 @@ test("shouldShowRegulatoryChecklistSection hides regulatory review for visual no
         finding: { id: "access_limited_no_reliable_findings" }
       }
     }),
-    true
+    false
   );
   assert.equal(
     shouldShowRegulatoryChecklistSection({

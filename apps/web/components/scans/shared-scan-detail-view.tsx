@@ -3017,7 +3017,7 @@ export function selectExecutiveAccessLimitationNotice(input: {
 export function shouldShowRegulatoryChecklistSection(input: {
   executiveAccessLimitationNotice: Pick<ExecutiveAccessLimitationNotice, "finding"> | null;
 }) {
-  return input.executiveAccessLimitationNotice?.finding.id !== "scan_quality_visual_no_go";
+  return !input.executiveAccessLimitationNotice;
 }
 
 function LimitedSurfaceReview(input: { review: UnverifiedHomepageReview }) {
