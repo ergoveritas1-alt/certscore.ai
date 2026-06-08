@@ -65,6 +65,16 @@ function getFirstRuntimeElapsedMs(record: Record<string, unknown> | null | undef
   return null;
 }
 
+function getFirstRuntimeElapsedMsFromRecords(records: Array<Record<string, unknown> | null>, keys: string[]) {
+  for (const record of records) {
+    const value = getFirstRuntimeElapsedMs(record, keys);
+    if (value !== null) {
+      return value;
+    }
+  }
+  return null;
+}
+
 function getFirstBooleanValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
   for (const key of keys) {
     const value = record?.[key];
@@ -259,6 +269,31 @@ function buildPreConsentTrackingHighlights(finding: ExecutiveEvidenceFinding) {
 function buildPreConsentCookieStorageHighlights(finding: ExecutiveEvidenceFinding) {
   const details = finding.evidenceDetails;
   const cookieEvidence = getRecord(details?.cookieEvidence);
+  const timingCandidates = [
+    getRecord((details as Record<string, unknown> | undefined)?.timing),
+    getRecord(details?.timingAnalysis),
+    getRecord((details as Record<string, unknown> | undefined)?.consentTimeline),
+    getRecord(cookieEvidence?.consentTimeline),
+    getRecord(cookieEvidence?.consent_timeline)
+  ];
+  const firstStorageMs = getFirstRuntimeElapsedMsFromRecords(timingCandidates, [
+    "firstTrackingCookieSeenMs",
+    "first_tracking_cookie_seen_ms",
+    "firstTrackingCookieSetMs",
+    "first_tracking_cookie_set_ms",
+    "firstCookieSeenMs",
+    "first_cookie_seen_ms",
+    "firstCookieSetMs",
+    "first_cookie_set_ms"
+  ]);
+  const firstNonEssentialRequestMs = getFirstRuntimeElapsedMsFromRecords(timingCandidates, [
+    "firstNonEssentialRequestMs",
+    "first_non_essential_request_ms",
+    "firstThirdPartyTrackingRequestMs",
+    "first_third_party_tracking_request_ms",
+    "firstThirdPartyRequestMs",
+    "first_third_party_request_ms"
+  ]);
   const rows = [
     ...asRecordRows(details?.preConsentCookieExamples),
     ...asRecordRows(cookieEvidence?.cookieWriteEvidence),
@@ -281,8 +316,13 @@ function buildPreConsentCookieStorageHighlights(finding: ExecutiveEvidenceFindin
     return domain ? [domain] : [];
   })).slice(0, 3);
   if (storageVendors.length > 0 || domains.length > 0) {
+    const timingSuffix = firstStorageMs !== null
+      ? ` First storage signal at ~${Math.round(firstStorageMs)}ms.`
+      : firstNonEssentialRequestMs !== null
+        ? ` First non-essential request at ~${Math.round(firstNonEssentialRequestMs)}ms.`
+        : "";
     highlights.push(
-      `Storage observed before consent${storageVendors.length > 0 ? `: ${formatList(storageVendors)}` : ""}${domains.length > 0 ? ` on ${formatList(domains)}` : ""}.`
+      `Storage observed before consent${storageVendors.length > 0 ? `: ${formatList(storageVendors)}` : ""}${domains.length > 0 ? ` on ${formatList(domains)}` : ""}.${timingSuffix}`
     );
   }
 

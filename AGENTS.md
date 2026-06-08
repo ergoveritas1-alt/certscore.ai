@@ -184,6 +184,8 @@ pnpm check-env
 pnpm --filter @website-signal-risk-scanner/web check-runtime
 ```
 
+For local browser review, always use `http://localhost:3000`. If port 3000 is already occupied, inspect the existing listener before starting another server; do not switch to an alternate port for WC01 review unless the user explicitly asks.
+
 ### Validation worker (`apps/validation-worker`)
 
 ```bash

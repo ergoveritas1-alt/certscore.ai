@@ -1259,10 +1259,11 @@ test("ExecutiveSummaryCard explains interruption-backed limited coverage only wh
   }));
   const withoutInterruption = renderToStaticMarkup(createElement(ExecutiveSummaryCard, baseProps));
 
-  assert.match(withInterruption, /Coverage was limited by site protections/);
-  assert.match(withInterruption, /Findings shown here are based on retained observable evidence/);
+  assert.doesNotMatch(withInterruption, /Coverage was limited by site protections/);
+  assert.doesNotMatch(withInterruption, /Findings shown here are based on retained observable evidence/);
   assert.doesNotMatch(withInterruption, /1 interruption event retained/);
   assert.match(withInterruption, /Captcha\/security challenge/);
+  assert.match(withInterruption, /Observed footprint may be incomplete because site protections interrupted runtime collection/);
   assert.doesNotMatch(withoutInterruption, /Coverage was limited by site protections/);
 });
 
@@ -1301,6 +1302,8 @@ test("ExecutiveSummaryCard hides review lenses when viewer access disallows them
   assert.match(html, /Signal snapshot/);
   assert.doesNotMatch(html, /Review lenses/);
   assert.match(html, /Consent platform/);
+  assert.match(html, /h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700/);
+  assert.doesNotMatch(html, /h-10 w-10 shrink-0 items-center justify-center rounded-xl/);
 });
 
 test("ExecutiveSummaryCard hides scan interruption and fingerprinting snapshot cards when disabled", () => {
@@ -3403,10 +3406,11 @@ test("ExecutiveSummaryCard summarizes recognized and unknown consent platforms f
   assert.match(recognizedHtml, /Consent platform/);
   assert.match(recognizedHtml, /OneTrust/);
   assert.match(recognizedHtml, /\/vendor-logos\/onetrust\.png/);
-  assert.match(recognizedHtml, /CMP recognized from scan evidence/);
+  assert.doesNotMatch(recognizedHtml, /CMP recognized from scan evidence/);
   assert.doesNotMatch(recognizedHtml, /recognized CMP/);
   assert.match(unknownHtml, /Unknown CMP \/ consent banner/);
   assert.doesNotMatch(unknownHtml, /Consent banner observed; CMP vendor not recognized/);
+  assert.doesNotMatch(unknownHtml, /No working consent banner was retained for this scan/);
 });
 
 test("ExecutiveSummaryCard labels truncated observed domain lists", () => {

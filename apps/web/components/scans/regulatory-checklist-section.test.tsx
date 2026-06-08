@@ -38,15 +38,21 @@ function renderTabs(includeAdminOnlyTabs: boolean) {
   }));
 }
 
+function indexOfTabButton(html: string, label: string) {
+  return html.indexOf(`>${label}</button>`);
+}
+
 test("RegulatoryChecklistSection can render baseline privacy options for non-admin viewers", () => {
   const html = renderTabs(false);
 
   assert.match(html, /GDPR\/ePrivacy/);
   assert.match(html, /Regulatory Review/);
+  assert.match(html, /Privacy-law applicability context/);
+  assert.match(html, /Applicability can depend on business facts or visitor geography CertScore has not verified/);
   assert.match(html, /Expand all/);
   assert.match(html, /CCPA\/CPRA\+CIPA/);
-  assert.ok(html.indexOf("Expand all") < html.indexOf("CCPA/CPRA+CIPA"));
-  assert.ok(html.indexOf("CCPA/CPRA+CIPA") < html.indexOf("GDPR/ePrivacy"));
+  assert.ok(html.indexOf("Expand all") < indexOfTabButton(html, "CCPA/CPRA+CIPA"));
+  assert.ok(indexOfTabButton(html, "CCPA/CPRA+CIPA") < indexOfTabButton(html, "GDPR/ePrivacy"));
   assert.doesNotMatch(html, /FTC/);
   assert.doesNotMatch(html, /UK GDPR \/ PECR/);
   assert.doesNotMatch(html, />More</);
@@ -57,10 +63,12 @@ test("RegulatoryChecklistSection can render all checklist options for admin view
 
   assert.match(html, /GDPR\/ePrivacy/);
   assert.match(html, /Regulatory Review/);
+  assert.match(html, /Privacy-law applicability context/);
+  assert.match(html, /Applicability can depend on business facts or visitor geography CertScore has not verified/);
   assert.match(html, /Expand all/);
   assert.match(html, /CCPA\/CPRA\+CIPA/);
-  assert.ok(html.indexOf("Expand all") < html.indexOf("CCPA/CPRA+CIPA"));
-  assert.ok(html.indexOf("CCPA/CPRA+CIPA") < html.indexOf("GDPR/ePrivacy"));
+  assert.ok(html.indexOf("Expand all") < indexOfTabButton(html, "CCPA/CPRA+CIPA"));
+  assert.ok(indexOfTabButton(html, "CCPA/CPRA+CIPA") < indexOfTabButton(html, "GDPR/ePrivacy"));
   assert.match(html, /FTC/);
   assert.match(html, /UK GDPR \/ PECR/);
   assert.match(html, />More</);

@@ -557,3 +557,33 @@ test("builds a calibration summary that preserves same-site alias posture withou
   assert.equal(summary.landedOnDifferentHost, false);
   assert.equal(summary.executive.summaryLabel, "Primary concerns:");
 });
+
+test("classifies platform roots in calibration coverage context", () => {
+  const summary = buildScanCalibrationSummary({
+    domain: "run.app",
+    finalHost: "run.app",
+    posture: "Clear",
+    requestedHost: "run.app",
+    scanId: "scan-platform",
+    status: "completed",
+    topFindings: []
+  });
+
+  assert.equal(summary.coverage.domainCalibrationContext.hostKind, "platform_or_hosting_root");
+  assert.match(summary.coverage.domainCalibrationContext.reasons.join(" "), /platform or hosting root/i);
+});
+
+test("classifies suspicious typo candidates in calibration coverage context", () => {
+  const summary = buildScanCalibrationSummary({
+    domain: "mvidia.com",
+    finalHost: "mvidia.com",
+    posture: "Clear",
+    requestedHost: "mvidia.com",
+    scanId: "scan-typo",
+    status: "completed",
+    topFindings: []
+  });
+
+  assert.equal(summary.coverage.domainCalibrationContext.hostKind, "suspicious_or_typo_candidate");
+  assert.match(summary.coverage.domainCalibrationContext.reasons.join(" "), /nvidia/i);
+});

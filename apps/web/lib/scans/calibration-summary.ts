@@ -1,4 +1,5 @@
 import type { CertScoreFinding } from "./finding-registry";
+import { deriveDomainCalibrationContext, type DomainCalibrationContext } from "./domain-calibration-context";
 
 export type ExecutivePosture = "Clear" | "Watch" | "Action Needed";
 export type ExecutiveDisplayState = ExecutivePosture | "Limited review" | "Evidence review" | "Scan not representative";
@@ -43,6 +44,7 @@ export type ScanCalibrationSummary = {
   coverage: {
     coverageLevel: string | null;
     diagnosticIndicators: CoverageDiagnosticIndicator[];
+    domainCalibrationContext: DomainCalibrationContext;
     legalCoverageScore: number | null;
     pagesScanned: number | null;
     policyEnrichmentCount: number | null;
@@ -688,6 +690,7 @@ export function buildScanCalibrationSummary(input: {
     coverage: {
       coverageLevel: input.coverageLevel ?? null,
       diagnosticIndicators,
+      domainCalibrationContext: deriveDomainCalibrationContext(input.domain ?? input.requestedHost),
       legalCoverageScore: input.legalCoverageScore ?? null,
       pagesScanned: input.pagesScanned ?? null,
       policyEnrichmentCount: input.policyEnrichmentCount ?? null,

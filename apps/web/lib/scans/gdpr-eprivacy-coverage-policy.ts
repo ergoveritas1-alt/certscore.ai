@@ -2,6 +2,7 @@ import {
   getRuntimeVendorDisclosureEvidence,
   runtimeVendorDisclosureRowHasPromotionCategory
 } from "./runtime-vendor-disclosure";
+import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
 
 export type GdprEprivacyCoverageOutcomeStatus =
   | "Gap observed"
@@ -46,6 +47,7 @@ export type GdprEprivacyCoverageOutcome = {
 };
 
 export type GdprEprivacyCoveragePolicyEvent = {
+  createdAt?: string;
   eventType: string;
   metadataJson: unknown;
 };
@@ -53,6 +55,7 @@ export type GdprEprivacyCoveragePolicyEvent = {
 export type GdprEprivacyCoveragePolicyInput = {
   coverageLimited: boolean;
   events?: GdprEprivacyCoveragePolicyEvent[];
+  policyEnrichmentCount?: number | null;
   runtimeArtifacts?: Record<string, unknown> | null;
   scanCompleted: boolean;
   snapshot?: Record<string, unknown> | null;
@@ -3641,6 +3644,10 @@ function evaluateConsentControlAccessibility(input: {
 }
 
 export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCoveragePolicyInput) {
+  const policyCoverageContext = derivePolicyCoverageContext({
+    events: input.events,
+    policyEnrichmentCount: input.policyEnrichmentCount
+  });
   const outcomes = [
     deriveConsentSurfaceOutcome(input),
     derivePreConsentCookieStorageOutcome(input),
@@ -3656,9 +3663,38 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveAccessibilityConsentControlsOutcome(input)
   ];
 
-  return Object.fromEntries(
+  const byRow = Object.fromEntries(
     outcomes
       .filter((outcome): outcome is GdprEprivacyCoverageOutcome => Boolean(outcome))
       .map((outcome) => [outcome.rowId, outcome])
   );
+  const weakPolicyLimitation = getWeakPolicyEvidenceLimitation(policyCoverageContext);
+  if (!weakPolicyLimitation || !input.coverageLimited) {
+    return byRow;
+  }
+
+  for (const rowId of [
+    "runtime_vendor_disclosure_alignment",
+    "cross_border_endpoint_review"
+  ]) {
+    const existing = byRow[rowId];
+    if (existing && (existing.status === "Gap observed" || existing.status === "Observed")) {
+      continue;
+    }
+    byRow[rowId] = makeOutcome(rowId, "Not testable", weakPolicyLimitation, [], {
+      missingOrIncompleteSourceSignals: [
+        sourceGap(
+          "scan_document_sources.policyDocumentCount",
+          "usable retained policy document evidence",
+          policyCoverageContext.policyDocumentCount ?? "missing",
+          "Required to evaluate policy-dependent GDPR/ePrivacy disclosure rows."
+        )
+      ],
+      retainedEvidence: {
+        policyCoverageContext
+      }
+    });
+  }
+
+  return byRow;
 }

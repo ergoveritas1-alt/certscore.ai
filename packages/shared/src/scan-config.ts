@@ -16,10 +16,22 @@ export type SharedPost403PolicyConfig = {
 export type SharedCrawlSeedHint = {
   confidence?: number | null;
   hintType: string;
-  source: "prior_scan_hint";
+  source: "prior_scan_hint" | "canonical_legal_surface_hint";
   sourceCompletedAt: string;
   sourceScanId: string;
   url: string;
+};
+
+export type SharedPriorDocumentSource = {
+  canonicalUrl: string;
+  documentText: string;
+  documentType: "privacy_policy" | "terms_of_service" | "cookie_policy";
+  metadata?: Record<string, unknown>;
+  semanticConfidence?: number | null;
+  sourceCompletedAt: string;
+  sourceScanId: string;
+  sourceUrl?: string | null;
+  title?: string | null;
 };
 
 export type SharedPriorScanAccelerationConfig = {
@@ -41,6 +53,7 @@ export type SharedCaliforniaPrivacyScanConfig = {
 
 export type SharedScanExecutionConfig = {
   crawlSeedHints?: SharedCrawlSeedHint[];
+  priorDocumentSources?: SharedPriorDocumentSource[];
   priorScanAcceleration?: SharedPriorScanAccelerationConfig;
 } & Record<string, unknown>;
 

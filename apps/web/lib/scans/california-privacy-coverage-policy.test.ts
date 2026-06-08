@@ -4,6 +4,33 @@ import test from "node:test";
 import { CALIFORNIA_PRIVACY_RUNTIME_ARTIFACT_FIXTURES } from "../../../../packages/shared/src/regulatory-review/california-privacy-runtime-fixtures";
 import { deriveCaliforniaPrivacyCoveragePolicyOutcomes } from "./california-privacy-coverage-policy";
 
+test("deriveCaliforniaPrivacyCoveragePolicyOutcomes marks policy-dependent rows not testable when retained policy evidence is missing under limited coverage", () => {
+  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited: true,
+    events: [
+      {
+        eventType: "signals.nano_doc_enrichment_completed",
+        metadataJson: {
+          documentSourceCount: 0,
+          freshExtractionCharacterCount: 0,
+          policyDocumentCount: 0,
+          policyEnrichmentCount: 0
+        }
+      }
+    ],
+    runtimeArtifacts: {},
+    scanCompleted: true
+  });
+
+  assert.equal(outcomes.privacy_notice_availability?.status, "not_testable");
+  assert.equal(outcomes.consumer_rights_request_methods?.status, "not_testable");
+  assert.equal(outcomes.sale_share_disclosure_alignment?.status, "not_testable");
+  assert.match(
+    outcomes.privacy_notice_availability?.criticalEvidence.statusBasis ?? "",
+    /No usable privacy, cookie, or legal policy document/
+  );
+});
+
 test("deriveCaliforniaPrivacyCoveragePolicyOutcomes emits machine statuses for California rows", () => {
   const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
     coverageLimited: false,
@@ -1204,6 +1231,39 @@ test("California consumer rights methods become a gap signal when rights languag
   assert.equal(
     outcomes.consumer_rights_request_methods?.criticalEvidence.retainedEvidence.rightsLanguageObserved,
     true
+  );
+});
+
+test("California consumer rights method absence stays reviewable when better privacy notice candidates were not searched", () => {
+  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    runtimeArtifacts: {
+      californiaPrivacyEvidence: {
+        privacyNoticeObserved: true,
+        privacyNoticeUrls: ["https://example.edu/privacy-policy"],
+        privacyNoticeCandidateUrls: ["https://www.example.edu/home/privacy-notice/"],
+        verifiedPrivacyNoticeUrls: ["https://example.edu/privacy-policy"],
+        consumerRightsRequestMethodObserved: false,
+        consumerRightsRequestMethodUrls: [],
+        consumerRightsRequestMethodTypes: [],
+        consumerRightsRequestMethodSnippets: [],
+        consumerRightsRequestMethodDeepSearchConfirmed: true,
+        rightsRequestMethodDeepSearchConfirmed: true,
+        rightsLanguageObserved: true,
+        rightsMethodExtractionSurfaces: ["https://example.edu/privacy-policy", "privacy_notice_text"]
+      }
+    },
+    scanCompleted: true
+  });
+
+  assert.equal(outcomes.consumer_rights_request_methods?.status, "review_signal");
+  assert.equal(
+    outcomes.consumer_rights_request_methods?.criticalEvidence.statusBasis,
+    "A privacy notice was retained, but CertScore did not verify a consumer rights request method in this scan context."
+  );
+  assert.deepEqual(
+    outcomes.consumer_rights_request_methods?.criticalEvidence.missingOrIncompleteSourceSignals[0]?.actual,
+    ["https://www.example.edu/home/privacy-notice/"]
   );
 });
 

@@ -37,6 +37,7 @@ import { ExecutiveTopFindingsCarousel } from "./executive-top-findings-carousel"
 import type { RegulatoryMappingFilterId } from "./executive-regulatory-mapping-filter";
 import { FindingHashFocus } from "./finding-hash-focus";
 import { InfoTip } from "./info-tip";
+import { ApplicabilityChip, type PrivacyLawApplicabilityKind } from "./privacy-law-applicability-context";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { getVendorBrandMark, VendorBrandChip } from "./vendor-brand-chip";
 type DomainBenchmarkCardData = {
@@ -2504,6 +2505,7 @@ function RegulatoryLensFindingCard(input: {
   lens: Pick<RegulatoryLens, "acronym" | "detailTitle" | "ratingLabel" | "score" | "summary">;
 }) {
   const hiddenChipCount = Math.max(0, (input.finding.reviewContextChips?.length ?? 0) - 3);
+  const applicabilityChipKinds = getRegulatoryLensApplicabilityChipKinds(input.lens.acronym);
   const evidencePayload = JSON.stringify(
     {
       evidence: compactEvidenceJsonForDisplay(input.finding.evidence),
@@ -2544,6 +2546,13 @@ function RegulatoryLensFindingCard(input: {
                 ) : null}
               </span>
             ) : null}
+            {applicabilityChipKinds.length > 0 ? (
+              <span className="flex flex-wrap gap-1.5">
+                {applicabilityChipKinds.map((kind) => (
+                  <ApplicabilityChip key={kind} kind={kind} />
+                ))}
+              </span>
+            ) : null}
           </span>
           <ScanReportDisclosureIcon className="h-5 w-5 group-open/json:rotate-90" />
         </summary>
@@ -2578,6 +2587,18 @@ function RegulatoryLensFindingCard(input: {
       </details>
     </div>
   );
+}
+
+function getRegulatoryLensApplicabilityChipKinds(acronym: string): PrivacyLawApplicabilityKind[] {
+  if (/gdpr|eprivacy/i.test(acronym)) {
+    return ["gdpr_eprivacy"];
+  }
+
+  if (/ccpa|cpra|cipa/i.test(acronym)) {
+    return ["ccpa_cpra", "cipa"];
+  }
+
+  return [];
 }
 
 function BenchmarkMetricCard(input: {
@@ -4593,6 +4614,14 @@ export function ExecutiveSummaryCard(input: {
         vendorCount: vendorEvidence.length
       });
   const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
+  const trackerFootprintTipText = uniqueStrings([
+    hasMeaningfulInterruption
+      ? "Observed footprint may be incomplete because site protections interrupted runtime collection."
+      : null,
+    input.externalCoverageContextAvailable
+      ? "External public scans may show broader page activity. This is supporting coverage context, not a CertScore-confirmed finding."
+      : null
+  ]).join(" ");
   const pagesScanned = typeof input.pagesScanned === "number" ? input.pagesScanned : 0;
   const retainedFindingCount = Math.max(input.topFindings.length, input.allFindings?.length ?? 0);
   const policyEnrichmentCount = input.policyEnrichmentCount ?? 0;
@@ -4940,38 +4969,35 @@ export function ExecutiveSummaryCard(input: {
                         showMeta={false}
                       />
                     ) : (
-                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-xs font-bold text-rose-700" aria-hidden="true">
-                        !
+                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700" aria-hidden="true">
+                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none">
+                          <path
+                            d="M10 3.4 18 16H2L10 3.4Z"
+                            stroke="currentColor"
+                            strokeLinejoin="round"
+                            strokeWidth="1.8"
+                          />
+                          <path d="M10 7.2v4.2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+                          <path d="M10 14.2h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" />
+                        </svg>
                       </span>
                     )}
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-slate-900">{cmpDisplayName}</p>
-                      <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                        {cmpStatusAvailable
-                          ? recognizedCmpBrand
-                            ? "CMP recognized from scan evidence."
-                            : "Unknown CMP / consent banner"
-                          : "No working consent banner was retained for this scan."}
-                      </p>
                     </div>
                   </div>
                 </div>
                 <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                   <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     Tracker footprint
-                    {input.externalCoverageContextAvailable ? (
+                    {trackerFootprintTipText ? (
                       <InfoTip
                         align="end"
                         placement="bottom"
-                        text="External public scans may show broader page activity. This is supporting coverage context, not a CertScore-confirmed finding."
+                        text={trackerFootprintTipText}
                       />
                     ) : null}
                   </p>
-                  {hasMeaningfulInterruption ? (
-                    <p className="mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
-                      Observed footprint may be incomplete because site protections interrupted runtime collection.
-                    </p>
-                  ) : null}
                   <DetailDisclosure
                     defaultOpen={false}
                     summary={trackerFootprintExpandLabel}
@@ -5022,10 +5048,6 @@ export function ExecutiveSummaryCard(input: {
                 {input.showScanInterruptionSnapshot !== false && visibleScanInterruptions.length > 0 ? (
                   <div id="fingerprinting" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Scan Interruption</p>
-                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
-                      <p className="font-semibold text-amber-950">Coverage was limited by site protections.</p>
-                      <p>Findings shown here are based on retained observable evidence.</p>
-                    </div>
                     <div className="mt-3 space-y-2">
                       {visibleScanInterruptions.map((event) => (
                         <details key={`${event.label}:${event.details.join("|")}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">

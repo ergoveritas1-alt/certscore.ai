@@ -275,9 +275,12 @@ export async function getAnonymousOpsScanStatus(input: { includeFindings?: boole
   const executiveProjection = projectExecutiveFindingsFromUnifiedPackets(reportPackets);
   const findingCounts = buildEmptyFindingCounts();
 
-  for (const finding of executiveProjection.findings) {
-    if (OPS_SCAN_STATUS_FINDING_IDS.includes(finding.id as OpsScanStatusFindingId)) {
-      findingCounts[finding.id as OpsScanStatusFindingId] += 1;
+  for (const packet of reportPackets) {
+    if (
+      packet.presentationDecision.status !== "suppress" &&
+      OPS_SCAN_STATUS_FINDING_IDS.includes(packet.unifiedFindingId as OpsScanStatusFindingId)
+    ) {
+      findingCounts[packet.unifiedFindingId as OpsScanStatusFindingId] += 1;
     }
   }
 

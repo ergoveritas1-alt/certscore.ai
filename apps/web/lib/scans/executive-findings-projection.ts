@@ -3583,6 +3583,7 @@ function buildGenericCanonicalEvidenceDetails(
       totalUniqueCookiesObserved: getCountValue(packet, ["total_cookie_count", "totalCookieCount"]),
       basis: evidenceSnippets[0] ?? "Cookie or storage evidence was retained for this finding.",
       preConsentContext: /pre_consent|preconsent/i.test(findingId),
+      ...(consentTimeline ? { consentTimeline } : {}),
       ...(cookieNames.length > 0 ? { cookieNames: cookieNames.slice(0, 12) } : {}),
       ...(cookieWriteEvidence.length > 0 ? { cookieWriteEvidence, storageEvidence: cookieWriteEvidence } : {}),
       ...(relatedRuntimeRequests.length > 0 ? { relatedRuntimeRequests } : {}),

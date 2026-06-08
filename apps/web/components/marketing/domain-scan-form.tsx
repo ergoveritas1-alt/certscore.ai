@@ -80,6 +80,10 @@ function getSampleScanAccent(domain: string) {
   return SAMPLE_SCAN_ACCENTS[domain.toLowerCase()] ?? { accent: "bg-slate-400", label: "Sample", tone: "from-slate-500/20 to-slate-400/5" };
 }
 
+function getSampleDomainLogoUrl(domain: string) {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+}
+
 type Bx01WindowMessage = {
   error?: string;
   requestId?: string;
@@ -588,6 +592,17 @@ export function DomainScanForm({
                   <span className="absolute left-0 top-0 h-full w-1 bg-slate-600" aria-hidden="true" />
                   <span className="flex items-center justify-between gap-3">
                     <span className="flex min-w-0 items-center gap-2.5">
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-slate-700/80 bg-slate-900/80 opacity-70 shadow-sm ring-1 ring-white/5 transition group-hover:opacity-85">
+                        <img
+                          alt=""
+                          className="h-3.5 w-3.5 rounded-sm grayscale-[35%] saturate-75"
+                          decoding="async"
+                          draggable={false}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          src={getSampleDomainLogoUrl(sampleDomain)}
+                        />
+                      </span>
                       <span className="truncate font-mono text-[0.95rem] font-semibold tracking-wide text-slate-50 transition group-hover:text-sky-300">{sampleDomain}</span>
                       <span className="inline-flex shrink-0 rounded-full border border-slate-700 bg-slate-900/80 px-2 py-0.5 font-mono text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-slate-400">
                         {accent.label}

@@ -347,6 +347,7 @@ function getOutcomeStatus(
 
 function buildCaliforniaCohortSummaryRow(input: {
   domain: string;
+  events: GdprEprivacyCoveragePolicyEvent[];
   runtimeArtifacts: Record<string, unknown> | null;
   scanCompleted: boolean;
   scanId: string;
@@ -363,6 +364,7 @@ function buildCaliforniaCohortSummaryRow(input: {
       input.snapshot?.coverage_level === "limited_partial" ||
       input.snapshot?.partial_scan === true ||
       input.snapshot?.blocked_flag === true,
+    events: input.events,
     normalizedConcerns,
     runtimeArtifacts: input.runtimeArtifacts,
     scanCompleted: input.scanCompleted
@@ -450,6 +452,7 @@ function buildGdprEprivacyCohortSummaryRow(input: {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     coverageLimited,
     events: input.events,
+    policyEnrichmentCount: null,
     runtimeArtifacts: input.runtimeArtifacts,
     scanCompleted: input.scanCompleted,
     snapshot: input.snapshot
@@ -986,6 +989,11 @@ async function summarizeScan(input: {
   });
   const californiaCohortSummary = buildCaliforniaCohortSummaryRow({
     domain: input.hostname,
+    events: repairedEvents.map((event) => ({
+      createdAt: event.createdAt,
+      eventType: event.eventType,
+      metadataJson: event.metadataJson
+    })),
     runtimeArtifacts: reportRuntimeArtifacts,
     scanCompleted: scanRow.status === "completed",
     scanId: input.scanId,

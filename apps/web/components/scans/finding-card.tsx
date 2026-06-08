@@ -6,6 +6,7 @@ import {
 } from "../../lib/scans/public-report-finding-display";
 import { EvidencePreview } from "./evidence-preview";
 import { InfoTip } from "./info-tip";
+import { ApplicabilityChip, type PrivacyLawApplicabilityKind } from "./privacy-law-applicability-context";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 
 function getSeverityClasses(severity: CertScoreFinding["severity"]) {
@@ -39,10 +40,39 @@ function getBadgeCopy(finding: CertScoreFinding) {
   return { directness, confidence };
 }
 
+function getApplicabilityChipKinds(finding: CertScoreFinding): PrivacyLawApplicabilityKind[] {
+  const kinds: PrivacyLawApplicabilityKind[] = [];
+  const legalRelevance = finding.evidenceDetails?.legalRelevance;
+
+  if (finding.id === "cpra_cba_opt_out_missing" || legalRelevance?.cpraSharingSupport === "possible") {
+    kinds.push("ccpa_cpra");
+  }
+
+  if (
+    legalRelevance?.gdprEprivacyConsentSupport === "possible" ||
+    legalRelevance?.gdprEprivacyConsentSupport === "strong_consent_timing_signal" ||
+    finding.section === "Consent Experience" ||
+    finding.section === "Cookies & Storage" ||
+    finding.section === "Fingerprinting"
+  ) {
+    kinds.push("gdpr_eprivacy");
+  }
+
+  if (
+    legalRelevance?.cipaPenRegisterTheorySupport === "possible" ||
+    legalRelevance?.cipaPenRegisterTheorySupport === "supportive_runtime_signal"
+  ) {
+    kinds.push("cipa");
+  }
+
+  return [...new Set(kinds)];
+}
+
 export function FindingCard({ finding }: { finding: CertScoreFinding }) {
   const badgeCopy = getBadgeCopy(finding);
   const display = getPublicReportFindingDisplayForCertFinding(finding);
   const observedSummary = display.observedSummary ?? finding.shortSummary;
+  const applicabilityChipKinds = getApplicabilityChipKinds(finding);
 
   return (
     <details className="group rounded-[1.55rem] border border-slate-200/80 bg-white/92 p-5 shadow-[0_16px_44px_-26px_rgba(15,23,42,0.24)] transition-[box-shadow,border-color] hover:border-slate-300/80 hover:shadow-[0_20px_50px_-30px_rgba(15,23,42,0.28)]">
@@ -67,6 +97,9 @@ export function FindingCard({ finding }: { finding: CertScoreFinding }) {
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
               {badgeCopy.directness}
             </span>
+            {applicabilityChipKinds.map((kind) => (
+              <ApplicabilityChip key={kind} kind={kind} />
+            ))}
           </div>
           <div className="space-y-1.5">
             <h3 className="text-lg font-semibold tracking-tight text-slate-950">{display.title}</h3>

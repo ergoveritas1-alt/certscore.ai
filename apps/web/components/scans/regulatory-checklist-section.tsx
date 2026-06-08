@@ -4,6 +4,7 @@ import React from "react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
+import { ApplicabilityAssumptionsNote } from "./privacy-law-applicability-context";
 import { RegulatoryChecklistAdvancedEvidenceProvider } from "./regulatory-checklist-advanced-evidence-context";
 
 type RegulatoryChecklistTab = {
@@ -49,7 +50,7 @@ export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false,
 
   return (
     <section className="space-y-0">
-      <div className="relative overflow-hidden rounded-t-3xl border border-b-0 border-slate-200 bg-white px-4 py-4 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.45)]">
+      <div className="relative overflow-visible rounded-t-3xl border border-b-0 border-slate-200 bg-white px-4 py-4 shadow-[0_16px_40px_-34px_rgba(15,23,42,0.45)]">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -57,6 +58,7 @@ export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false,
               <span className="inline-flex shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
                 Beta
               </span>
+              <ApplicabilityAssumptionsNote />
             </div>
           </div>
           <div className="flex max-w-full flex-wrap items-center gap-2 pb-1 lg:justify-end lg:pb-0">

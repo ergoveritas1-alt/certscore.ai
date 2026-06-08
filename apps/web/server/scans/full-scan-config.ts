@@ -4,6 +4,7 @@ import {
   normalizeScanFrom,
   type SharedCaliforniaPrivacyScanConfig,
   type SharedCrawlSeedHint,
+  type SharedPriorDocumentSource,
   type SharedPriorScanAccelerationConfig,
   type SharedScanConfig,
   type ScanFrom
@@ -35,8 +36,40 @@ export type QueuedFullScanCaliforniaPrivacyConfig = SharedCaliforniaPrivacyScanC
 
 export type QueuedFullScanPriorScanAcceleration = {
   crawlSeedHints: SharedCrawlSeedHint[];
+  priorDocumentSources?: SharedPriorDocumentSource[];
   priorScan: SharedPriorScanAccelerationConfig;
 };
+
+const CANONICAL_LEGAL_SURFACE_HINT_SOURCE_ID = "canonical-legal-surface-hints-v1";
+const CANONICAL_LEGAL_SURFACE_HINT_SOURCE_COMPLETED_AT = "1970-01-01T00:00:00.000Z";
+const CANONICAL_LEGAL_SURFACE_PATHS: Array<{ hintType: string; path: string; confidence: number }> = [
+  { hintType: "privacy_policy", path: "/privacy", confidence: 0.62 },
+  { hintType: "privacy_policy", path: "/privacy-policy", confidence: 0.68 },
+  { hintType: "privacy_policy", path: "/privacy-notice", confidence: 0.66 },
+  { hintType: "privacy_policy", path: "/legal/privacy", confidence: 0.58 },
+  { hintType: "cookie_policy", path: "/cookies", confidence: 0.62 },
+  { hintType: "cookie_policy", path: "/cookie-policy", confidence: 0.66 },
+  { hintType: "privacy_choice", path: "/privacy/choices", confidence: 0.54 },
+  { hintType: "privacy_choice", path: "/privacy-rights", confidence: 0.54 }
+];
+
+function buildCanonicalLegalSurfaceHints(input: { normalizedUrl: string }): SharedCrawlSeedHint[] {
+  let origin: string;
+  try {
+    origin = new URL(input.normalizedUrl).origin;
+  } catch {
+    return [];
+  }
+
+  return CANONICAL_LEGAL_SURFACE_PATHS.map((candidate) => ({
+    confidence: candidate.confidence,
+    hintType: candidate.hintType,
+    source: "canonical_legal_surface_hint",
+    sourceCompletedAt: CANONICAL_LEGAL_SURFACE_HINT_SOURCE_COMPLETED_AT,
+    sourceScanId: CANONICAL_LEGAL_SURFACE_HINT_SOURCE_ID,
+    url: `${origin}${candidate.path}`
+  }));
+}
 
 function normalizeQueuedCaliforniaPrivacyConfig(
   config: QueuedFullScanCaliforniaPrivacyConfig | null | undefined,
@@ -82,13 +115,20 @@ export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput)
   const scanFrom = normalizeScanFrom(input.scanFrom);
   const scanFromDefinition = getScanFromDefinition(scanFrom);
   const californiaPrivacy = normalizeQueuedCaliforniaPrivacyConfig(input.californiaPrivacy, { scanFrom });
+  const crawlSeedHints = [
+    ...(input.priorScanAcceleration?.crawlSeedHints ?? []),
+    ...buildCanonicalLegalSurfaceHints({ normalizedUrl: input.normalizedUrl })
+  ];
   return buildSharedFullScanConfig({
     ...(californiaPrivacy ? { californiaPrivacy } : {}),
-    ...(input.priorScanAcceleration
+    ...(crawlSeedHints.length > 0 || input.priorScanAcceleration
       ? {
           execution: {
-            crawlSeedHints: input.priorScanAcceleration.crawlSeedHints,
-            priorScanAcceleration: input.priorScanAcceleration.priorScan
+            ...(crawlSeedHints.length > 0 ? { crawlSeedHints } : {}),
+            ...(input.priorScanAcceleration?.priorDocumentSources?.length
+              ? { priorDocumentSources: input.priorScanAcceleration.priorDocumentSources }
+              : {}),
+            ...(input.priorScanAcceleration ? { priorScanAcceleration: input.priorScanAcceleration.priorScan } : {})
           }
         }
       : {}),

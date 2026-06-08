@@ -559,6 +559,13 @@ test("projects third-party cookie pre-consent when preconsent packet retains coo
           preconsentViolationCount: 2
         },
         entities: {
+          consentTimeline: [
+            JSON.stringify({
+              firstCmpVisibleMs: 0,
+              firstConsentActionMs: null,
+              firstNonEssentialRequestMs: 1052
+            })
+          ],
           preconsent_cookie_evidence: [
             JSON.stringify({
               category: "advertising",
@@ -609,6 +616,14 @@ test("projects third-party cookie pre-consent when preconsent packet retains coo
   assert.equal(
     projection.findings.find((finding) => finding.id === "third_party_cookie_pre_consent")?.evidenceDetails?.cookieEvidence?.observed,
     true
+  );
+  assert.deepEqual(
+    projection.findings.find((finding) => finding.id === "third_party_cookie_pre_consent")?.evidenceDetails?.cookieEvidence?.consentTimeline,
+    {
+      firstCmpVisibleMs: 0,
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: 1052
+    }
   );
 });
 

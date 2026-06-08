@@ -26,6 +26,11 @@ test("queued full-scan config keeps anonymous and organization-owned scanner con
   assert.equal(anonymousConfig.processor, "queued-full-scan-v1");
   assert.equal(anonymousConfig.maxRequestedTier, "tier5_full_scan");
   assert.equal(anonymousConfig.freshBrowserRequired, true);
+  assert.ok(anonymousConfig.execution?.crawlSeedHints?.some((hint) =>
+    hint.source === "canonical_legal_surface_hint" &&
+    hint.hintType === "privacy_policy" &&
+    hint.url === "https://example.com/privacy-policy"
+  ));
 });
 
 test("queued full-scan config carries prior scan acceleration only as execution metadata", () => {
@@ -59,7 +64,18 @@ test("queued full-scan config carries prior scan acceleration only as execution 
         selectedHighYieldPageCount: 1,
         sourceCompletedAt: "2026-05-01T00:00:00.000Z",
         sourceScanId: "scan-prior"
-      }
+      },
+      priorDocumentSources: [
+        {
+          canonicalUrl: "https://example.com/privacy",
+          documentText: "Privacy Policy. We describe personal information rights.",
+          documentType: "privacy_policy",
+          sourceCompletedAt: "2026-05-01T00:00:00.000Z",
+          sourceScanId: "scan-prior",
+          sourceUrl: "https://example.com/privacy",
+          title: "Privacy Policy"
+        }
+      ]
     },
     profile: "homepage",
     source: "manual-dashboard"
@@ -73,24 +89,39 @@ test("queued full-scan config carries prior scan acceleration only as execution 
     sourceCompletedAt: "2026-05-01T00:00:00.000Z",
     sourceScanId: "scan-prior"
   });
-  assert.deepEqual(config.execution?.crawlSeedHints, [
+  assert.deepEqual(config.execution?.priorDocumentSources, [
     {
-      confidence: 0.91,
-      hintType: "privacy_policy",
-      source: "prior_scan_hint",
+      canonicalUrl: "https://example.com/privacy",
+      documentText: "Privacy Policy. We describe personal information rights.",
+      documentType: "privacy_policy",
       sourceCompletedAt: "2026-05-01T00:00:00.000Z",
       sourceScanId: "scan-prior",
-      url: "https://example.com/privacy"
-    },
-    {
-      confidence: 0.65,
-      hintType: "homepage_final_url",
-      source: "prior_scan_hint",
-      sourceCompletedAt: "2026-05-01T00:00:00.000Z",
-      sourceScanId: "scan-prior",
-      url: "https://www.example.com/"
+      sourceUrl: "https://example.com/privacy",
+      title: "Privacy Policy"
     }
   ]);
+  assert.deepEqual(config.execution?.crawlSeedHints?.slice(0, 2), [
+      {
+        confidence: 0.91,
+        hintType: "privacy_policy",
+        source: "prior_scan_hint",
+        sourceCompletedAt: "2026-05-01T00:00:00.000Z",
+        sourceScanId: "scan-prior",
+        url: "https://example.com/privacy"
+      },
+      {
+        confidence: 0.65,
+        hintType: "homepage_final_url",
+        source: "prior_scan_hint",
+        sourceCompletedAt: "2026-05-01T00:00:00.000Z",
+        sourceScanId: "scan-prior",
+        url: "https://www.example.com/"
+      }
+    ]);
+  assert.ok(config.execution?.crawlSeedHints?.some((hint) =>
+    hint.source === "canonical_legal_surface_hint" &&
+    hint.url === "https://example.com/privacy-notice"
+  ));
   assert.equal(Object.hasOwn(config, "findings"), false);
   assert.equal(Object.hasOwn(config, "signals"), false);
 });

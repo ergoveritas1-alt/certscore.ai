@@ -5,6 +5,7 @@ import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { useRegulatoryChecklistAdvancedEvidence } from "./regulatory-checklist-advanced-evidence-context";
 import { RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
+import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import type {
   GdprEprivacyCoverageChecklistItem,
   GdprEprivacyCoverageChecklistStatus,
@@ -528,14 +529,22 @@ export function GdprEprivacyCoverageChecklistCard({
       })}
       contentClassName="space-y-4"
     >
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">GDPR / ePrivacy review summary</p>
-            <p className="mt-1 max-w-4xl text-sm leading-6 text-slate-600">{gdprSectionSummary}</p>
-          </div>
+      <details className="group/gdpr-summary rounded-lg border border-slate-200 bg-white">
+        <summary className="flex cursor-pointer list-none items-start gap-3 px-4 pb-3 pt-4 marker:hidden group-open/gdpr-summary:pb-0 [&::-webkit-details-marker]:hidden">
+          <ScanReportDisclosureIcon className="mt-0.5 group-open/gdpr-summary:rotate-90" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+              GDPR / ePrivacy review summary
+            </span>
+            <span className="mt-1 block max-w-4xl truncate text-sm leading-6 text-slate-600 group-open/gdpr-summary:hidden">
+              {gdprSectionSummary}
+            </span>
+          </span>
+        </summary>
+        <div className="px-4 pb-4 pl-12 pt-1">
+          <p className="max-w-4xl text-sm leading-6 text-slate-600">{gdprSectionSummary}</p>
         </div>
-      </section>
+      </details>
       <div className="overflow-hidden rounded-lg border border-slate-200">
         <div className="grid grid-cols-1 gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.5fr)]">
           <span>Coverage area</span>

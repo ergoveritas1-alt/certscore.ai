@@ -15,6 +15,11 @@ import {
   evaluateSurfaceNotBlockedOrInterstitial,
   evaluateThirdPartyReceiptCoherence
 } from "./evidence-coherence";
+import {
+  derivePolicyCoverageContext,
+  getWeakPolicyEvidenceLimitation,
+  type PolicyCoverageEvent
+} from "./policy-coverage-context";
 
 const CALIFORNIA_PRIVACY_REGULATORY_REVIEW_AREA: CaliforniaPrivacyRegulatoryReviewArea = "california_ccpa_cpra";
 
@@ -57,6 +62,7 @@ export type CaliforniaPrivacyCoverageOutcome = {
 
 export type CaliforniaPrivacyCoveragePolicyInput = {
   coverageLimited: boolean;
+  events?: PolicyCoverageEvent[];
   normalizedConcerns?: Pick<
     NormalizedConcern,
     "canonicalConcernKey" | "originKey" | "promotionEligibility" | "suggestedUnifiedFindingId" | "title"
@@ -438,6 +444,47 @@ function addCoverageLimitationContext(
       }];
     })
   );
+}
+
+function applyWeakPolicyEvidenceLimitations(
+  outcomes: Record<string, CaliforniaPrivacyCoverageOutcome>,
+  input: CaliforniaPrivacyCoveragePolicyInput
+) {
+  const policyCoverageContext = derivePolicyCoverageContext({
+    events: input.events
+  });
+  const weakPolicyLimitation = getWeakPolicyEvidenceLimitation(policyCoverageContext);
+  if (!weakPolicyLimitation || !input.coverageLimited) {
+    return outcomes;
+  }
+
+  for (const rowId of [
+    "privacy_notice_availability",
+    "notice_at_collection",
+    "do_not_sell_share_availability",
+    "sale_share_disclosure_alignment",
+    "consumer_rights_request_methods"
+  ]) {
+    const existing = outcomes[rowId];
+    if (existing && (existing.status === "observed" || existing.status === "potential_gap")) {
+      continue;
+    }
+    outcomes[rowId] = makeOutcome(rowId, "not_testable", weakPolicyLimitation, [], {
+      missingOrIncompleteSourceSignals: [
+        sourceGap(
+          "scan_document_sources.policyDocumentCount",
+          "usable retained privacy, notice, rights, or disclosure policy evidence",
+          policyCoverageContext.policyDocumentCount ?? "missing",
+          "Required to evaluate this policy-dependent California privacy row."
+        )
+      ],
+      retainedEvidence: {
+        policyCoverageContext
+      }
+    });
+  }
+
+  return outcomes;
 }
 
 function getCaliforniaEvidence(input: CaliforniaPrivacyCoveragePolicyInput) {
@@ -928,7 +975,10 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
       });
     }
     return addCoverageLimitationContext(
-      enrichOutcomesWithNormalizedConcerns(outcomes, input.normalizedConcerns),
+      applyWeakPolicyEvidenceLimitations(
+        enrichOutcomesWithNormalizedConcerns(outcomes, input.normalizedConcerns),
+        input
+      ),
       input
     );
   }
@@ -1992,6 +2042,9 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
       surfaceNotBlockedOrInterstitial: rightsControlPathCoherence.surfaceNotBlockedOrInterstitial
     }
   };
+  const rightsMethodSearchIncompleteDueToUnsearchedNoticeCandidates =
+    rightsRequestMethodObserved === false &&
+    unattemptedPrivacyNoticeCandidateUrls.length > 0;
   const rightsMethodApplicabilityObserved = privacyNoticeCleanlyVerified;
   const rightsNegativeReviewSufficient =
     rightsRequestMethodObserved === false &&
@@ -2003,7 +2056,8 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
   const rightsNoMethodDeepSearchConfirmed =
     rightsRequestMethodObserved === false &&
     rightsMethodApplicabilityObserved &&
-    rightsMethodDeepSearchConfirmed === true;
+    rightsMethodDeepSearchConfirmed === true &&
+    !rightsMethodSearchIncompleteDueToUnsearchedNoticeCandidates;
   outcomes.consumer_rights_request_methods =
     rightsRequestMethodObserved === true &&
     hasRightsMethodEvidence &&
@@ -2053,6 +2107,14 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
     : privacyNoticeCleanlyVerified && rightsRequestMethodObserved !== true
       ? makeOutcome("consumer_rights_request_methods", "review_signal", "A privacy notice was retained, but CertScore did not verify a consumer rights request method in this scan context.", getEvidenceRefs(californiaEvidence, "Consumer rights request method not verified"), {
           missingOrIncompleteSourceSignals: [
+            ...(rightsMethodSearchIncompleteDueToUnsearchedNoticeCandidates
+              ? [sourceGap(
+                  "californiaPrivacyEvidence.privacyNoticeCandidateUrls",
+                  "candidate privacy notice URLs searched before a missing rights-method gap",
+                  unattemptedPrivacyNoticeCandidateUrls.slice(0, 6),
+                  "Required before a retained rights-language/no-method result can be treated as a clean gap."
+                )]
+              : []),
             sourceGap(
               "californiaPrivacyEvidence.consumerRightsRequestMethodUrls or consumerRightsRequestMethodTypes",
               "usable request form, email, toll-free number, request portal, or authenticated request flow",
@@ -2117,9 +2179,12 @@ export function deriveCaliforniaPrivacyCoveragePolicyOutcomes(
         });
 
   return addCoverageLimitationContext(
-    enrichOutcomesWithNormalizedConcerns(
-      outcomes,
-      input.normalizedConcerns
+    applyWeakPolicyEvidenceLimitations(
+      enrichOutcomesWithNormalizedConcerns(
+        outcomes,
+        input.normalizedConcerns
+      ),
+      input
     ),
     input
   );

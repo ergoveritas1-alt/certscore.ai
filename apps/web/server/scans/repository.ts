@@ -7,6 +7,7 @@ import type {
   ScanType,
   ScanExecutionTier,
   SharedCrawlSeedHint,
+  SharedPriorDocumentSource,
   SharedPriorScanAccelerationConfig
 } from "@website-signal-risk-scanner/shared";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
@@ -335,6 +336,7 @@ export type QueuedFullScanInsert = {
 export type PriorScanAccelerationCandidate = {
   crawlSeedHints: SharedCrawlSeedHint[];
   priorScan: SharedPriorScanAccelerationConfig;
+  priorDocumentSources: SharedPriorDocumentSource[];
   selectedDocumentSources: Array<{
     canonicalUrl: string;
     confidence: number | null;
@@ -363,6 +365,7 @@ const CHANGE_EVENT_BATCH_SIZE = 50;
 const PRIOR_SCAN_ACCELERATION_MAX_AGE_DAYS = 30;
 const PRIOR_SCAN_ACCELERATION_MAX_CRAWL_SEEDS = 20;
 const PRIOR_SCAN_ACCELERATION_MAX_CANDIDATES = 10;
+const PRIOR_SCAN_ACCELERATION_MAX_DOCUMENT_TEXT_CHARS = 25_000;
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Unknown database error.";
@@ -742,13 +745,23 @@ export async function loadPriorScanAccelerationCandidate(input: {
     title: string | null;
   }>(
     `
-      select scan_id, canonical_url, source_url, document_type, source_status, extraction_status, extracted_fields_json, metadata_json, semantic_confidence, title, left(coalesce(document_text, ''), 500) as document_text
+      select scan_id,
+             canonical_url,
+             source_url,
+             document_type,
+             source_status,
+             extraction_status,
+             extracted_fields_json,
+             metadata_json,
+             semantic_confidence,
+             title,
+             left(coalesce(document_text, ''), $2) as document_text
         from scan_document_sources
        where scan_id = any($1::uuid[])
          and canonical_url is not null
        order by scan_id, semantic_confidence desc nulls last, updated_at desc
     `,
-    [candidateScanIds],
+    [candidateScanIds, PRIOR_SCAN_ACCELERATION_MAX_DOCUMENT_TEXT_CHARS],
     { readOnly: true }
   ).catch((error) => {
     if (isMissingOptionalTableError(error)) {
@@ -862,6 +875,7 @@ export async function loadPriorScanAccelerationCandidate(input: {
   }
 
   const selectedDocumentSources = [];
+  const priorDocumentSources: SharedPriorDocumentSource[] = [];
   const selectedHighYieldPages = [];
   const crawlSeedHints: SharedCrawlSeedHint[] = [];
   const seenUrls = new Set<string>();
@@ -907,6 +921,29 @@ export async function loadPriorScanAccelerationCandidate(input: {
       documentType,
       sourceUrl: getString(row.source_url)
     });
+    if (
+      (documentType === "privacy_policy" || documentType === "terms_of_service" || documentType === "cookie_policy") &&
+      row.source_status === "ready" &&
+      row.extraction_status === "ready"
+    ) {
+      const documentText = getString(row.document_text);
+      if (documentText) {
+        priorDocumentSources.push({
+          canonicalUrl,
+          documentText,
+          documentType,
+          metadata: {
+            ...(row.metadata_json ?? {}),
+            prior_reuse_source: "selected_prior_scan_document_source"
+          },
+          semanticConfidence: typeof row.semantic_confidence === "number" ? row.semantic_confidence : null,
+          sourceCompletedAt: selectedCandidate.row.completed_at,
+          sourceScanId: selectedCandidate.row.id,
+          sourceUrl: getString(row.source_url),
+          title: getString(row.title)
+        });
+      }
+    }
     crawlSeedHints.push({
       confidence: typeof row.semantic_confidence === "number" ? row.semantic_confidence : null,
       hintType,
@@ -969,6 +1006,7 @@ export async function loadPriorScanAccelerationCandidate(input: {
       sourceCompletedAt: selectedCandidate.row.completed_at,
       sourceScanId: selectedCandidate.row.id
     },
+    priorDocumentSources,
     selectedDocumentSources,
     selectedHighYieldPages
   };

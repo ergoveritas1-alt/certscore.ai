@@ -6184,6 +6184,7 @@ export function SharedScanDetailView({
     coverageOutcomes: deriveGdprEprivacyCoveragePolicyOutcomes({
       coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
       events: scanRecord.events,
+      policyEnrichmentCount: scanRecord.policyEnrichment.length,
       runtimeArtifacts,
       scanCompleted: scanRecord.scan.status === "completed",
       snapshot
@@ -6211,6 +6212,7 @@ export function SharedScanDetailView({
     coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
     coverageOutcomes: deriveCaliforniaPrivacyCoveragePolicyOutcomes({
       coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
+      events: scanRecord.events,
       normalizedConcerns: californiaPrivacyCoverageConcerns,
       runtimeArtifacts,
       scanCompleted: scanRecord.scan.status === "completed"

@@ -93,9 +93,14 @@ test("GdprEprivacyCoverageChecklistCard renders specific session replay timing c
   );
 
   assert.match(html, /not observed pre-consent in retained evidence/i);
+  assert.match(html, /<details class="group\/gdpr-summary rounded-lg border border-slate-200 bg-white">/);
+  assert.match(html, /GDPR \/ ePrivacy review summary/);
+  assert.match(html, /max-w-4xl truncate text-sm/);
   assert.match(html, /Microsoft Clarity, Hotjar, and Contentsquare/);
   assert.match(html, />Observed</);
   assert.match(html, />Review signal</);
+  assert.doesNotMatch(html, /aria-label="Jurisdiction unverified"/);
+  assert.doesNotMatch(html, /GDPR\/ePrivacy can depend on EU\/EEA presence, targeting, or monitoring/);
   assert.doesNotMatch(html, /signals require review from the retained runtime evidence/i);
 });
 

@@ -7,6 +7,40 @@ const completedInputBase = {
   scanCompleted: true
 };
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes marks policy-dependent rows not testable when policy evidence is missing under limited coverage", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "signals.nano_doc_enrichment_completed",
+        metadataJson: {
+          documentSourceCount: 0,
+          freshExtractionCharacterCount: 0,
+          policyDocumentCount: 0,
+          policyEnrichmentCount: 0
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        networkSummary: {
+          thirdPartyDomainCount: 12
+        }
+      }
+    },
+    snapshot: {
+      third_party_script_domain_count: 12
+    }
+  });
+
+  assert.equal(outcomes.runtime_vendor_disclosure_alignment?.status, "Not testable");
+  assert.equal(outcomes.cross_border_endpoint_review?.status, "Not testable");
+  assert.match(
+    outcomes.runtime_vendor_disclosure_alignment?.criticalEvidence.statusBasis ?? "",
+    /No usable privacy, cookie, or legal policy document/
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained consent and runtime observations as row-specific coverage", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

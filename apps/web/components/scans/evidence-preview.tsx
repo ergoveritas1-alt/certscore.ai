@@ -1,3 +1,4 @@
+import React from "react";
 import { sanitizePublicReportEvidenceText } from "../../lib/scans/compact-evidence-json";
 
 type EvidencePreviewProps = {
