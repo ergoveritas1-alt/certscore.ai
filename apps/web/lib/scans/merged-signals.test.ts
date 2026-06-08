@@ -126,8 +126,10 @@ test("cookie disclosure gap merged-signal candidates retain runtime comparison e
       [
         "privacy.cookie_runtime_disclosure_gap_detected",
         {
+          disclosureMismatchExplained: true,
           disclosureSearchScopeRetained: true,
           mismatchExplanation: "Runtime cookie _fbp was not found in the retained cookie disclosure.",
+          negativeDisclosureSearchPerformed: true,
           observedBehavior: "Runtime set _fbp.",
           policyExtractionStatus: "fetched",
           policySnippet: "Cookie policy text.",
@@ -182,7 +184,10 @@ test("fingerprinting merged-signal candidates retain tier and attribute evidence
     scannerSignals: [
       {
         confidence: 0.88,
-        evidenceRefs: ["scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary"],
+        evidenceRefs: [
+          "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary",
+          "https://fpjs.example.test/collect"
+        ],
         key: "privacy.fingerprinting_detected",
         label: "Fingerprinting runtime detected",
         reportSignalSource: "snapshot_signal",
@@ -196,7 +201,7 @@ test("fingerprinting merged-signal candidates retain tier and attribute evidence
         label: "Fingerprinting runtime tier",
         reportSignalSource: "snapshot_signal",
         source: "scanner",
-        value: 2,
+        value: 3,
         valueType: "number"
       },
       {
@@ -205,7 +210,16 @@ test("fingerprinting merged-signal candidates retain tier and attribute evidence
         label: "Fingerprinting attribute categories",
         reportSignalSource: "snapshot_signal",
         source: "scanner",
-        value: ["canvas", "webgl"],
+        value: ["canvas_webgl", "audio"],
+        valueType: "string_array"
+      },
+      {
+        confidence: 0.88,
+        key: "privacy.fingerprinting_runtime_vendors",
+        label: "Fingerprinting runtime vendors",
+        reportSignalSource: "snapshot_signal",
+        source: "scanner",
+        value: ["FingerprintJS"],
         valueType: "string_array"
       }
     ]
@@ -215,8 +229,9 @@ test("fingerprinting merged-signal candidates retain tier and attribute evidence
     mergedSignals
   }).find((row) => row.signalKey === "privacy.fingerprinting_detected");
 
-  assert.equal(candidate?.fallbackEvidence?.fingerprintTier, 2);
-  assert.deepEqual(candidate?.fallbackEvidence?.fingerprintAttributeCategories, ["canvas", "webgl"]);
+  assert.equal(candidate?.fallbackEvidence?.fingerprintTier, 3);
+  assert.deepEqual(candidate?.fallbackEvidence?.fingerprintAttributeCategories, ["canvas_webgl", "audio"]);
+  assert.deepEqual(candidate?.fallbackEvidence?.runtimeVendors, ["FingerprintJS"]);
   assert.equal(candidate?.fallbackEvidence?.fingerprintRuntimeEvidenceRetained, true);
 });
 
@@ -275,4 +290,37 @@ test("financial merged signal candidates on non-finance domain are suppressed vi
   });
 
   assert.equal(candidates.length, 0);
+});
+
+test("AI surface tracking runtime signal creates a signal-backed finding candidate", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    scannerSignals: [
+      {
+        confidence: 0.74,
+        evidenceRefs: [
+          "https://example.com/ai-assistant",
+          "https://www.google-analytics.com/g/collect?v=2"
+        ],
+        key: "ai.flow_tracking_review_signal",
+        label: "AI surface tracking review signal",
+        provenance: [
+          {
+            detail: "hybrid_runtime_evidence.ai_surface_runtime_evidence",
+            kind: "document"
+          }
+        ],
+        reportSignalSource: "runtime_artifact_signal",
+        source: "scanner",
+        value: true,
+        valueType: "boolean"
+      }
+    ]
+  });
+
+  const candidate = buildReviewFindingCandidatesFromMergedSignals({
+    mergedSignals
+  }).find((row) => row.signalKey === "ai.flow_tracking_review_signal");
+
+  assert.equal(candidate?.signalKey, "ai.flow_tracking_review_signal");
+  assert.equal(candidate?.signalSource, "runtime_artifact_signal");
 });

@@ -656,6 +656,101 @@ function enrichCriticalEvidenceWithSelection(input: {
   };
 }
 
+function getCoverageOutcomePreconsentTimingRetainedEvidence(
+  rowId: string,
+  coverageOutcome?: GdprEprivacyCoverageOutcome
+) {
+  if (rowId !== "pre_consent_cookies_storage" && rowId !== "pre_consent_third_party_tracking") {
+    return {};
+  }
+
+  const retained = getRecordValue(coverageOutcome?.criticalEvidence.retainedEvidence) ?? {};
+  const preconsentTimingEvidence = getRecordValue(retained.preconsentTimingEvidence);
+  if (rowId === "pre_consent_cookies_storage") {
+    return {
+      firstPreconsentCookieOrStorageObservedMs: retained.firstPreconsentCookieOrStorageObservedMs,
+      firstPreconsentCookieOrStorageObservationBasis: retained.firstPreconsentCookieOrStorageObservationBasis,
+      preconsentCookieOrStorageExactTimingRetained: retained.preconsentCookieOrStorageExactTimingRetained,
+      preconsentCookieOrStorageInitialInventoryObserved: retained.preconsentCookieOrStorageInitialInventoryObserved,
+      preconsentCookieOrStorageObservedMs: retained.preconsentCookieOrStorageObservedMs,
+      preconsentCookieOrStorageTimedObservationCount: retained.preconsentCookieOrStorageTimedObservationCount,
+      preconsentCookieOrStorageUntimedObservationCount: retained.preconsentCookieOrStorageUntimedObservationCount,
+      preconsentTimingEvidence: preconsentTimingEvidence
+        ? { cookieOrStorage: getRecordValue(preconsentTimingEvidence.cookieOrStorage) ?? {} }
+        : undefined
+    };
+  }
+
+  return {
+    firstPreconsentThirdPartyTrackingObservedMs: retained.firstPreconsentThirdPartyTrackingObservedMs,
+    firstPreconsentThirdPartyTrackingObservationBasis: retained.firstPreconsentThirdPartyTrackingObservationBasis,
+    preconsentThirdPartyTrackingObservedMs: retained.preconsentThirdPartyTrackingObservedMs,
+    preconsentThirdPartyTrackingTimedObservationCount: retained.preconsentThirdPartyTrackingTimedObservationCount,
+    preconsentTimingEvidence: preconsentTimingEvidence
+      ? { thirdPartyTracking: getRecordValue(preconsentTimingEvidence.thirdPartyTracking) ?? {} }
+      : undefined
+  };
+}
+
+function mergeCoverageOutcomePreconsentTimingEvidence(input: {
+  coverageOutcome?: GdprEprivacyCoverageOutcome;
+  criticalEvidence: GdprEprivacyCoverageCriticalEvidence;
+  rowId: string;
+}) {
+  const retainedTiming = getCoverageOutcomePreconsentTimingRetainedEvidence(input.rowId, input.coverageOutcome);
+  const retainedTimingEntries = Object.entries(retainedTiming).filter(([, value]) => {
+    if (value === null || value === undefined) {
+      return false;
+    }
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+    if (typeof value === "object") {
+      return Object.keys(value).length > 0;
+    }
+    return true;
+  });
+  const timingRefs = (input.coverageOutcome?.evidenceRefs ?? []).filter((ref) =>
+    /ms after scan start|exact observation\/write time not retained/i.test(ref)
+  );
+  if (retainedTimingEntries.length === 0 && timingRefs.length === 0) {
+    return input.criticalEvidence;
+  }
+
+  const evidenceRefs = [
+    ...timingRefs,
+    ...retainedStringArray(input.criticalEvidence.retainedEvidence, ["evidenceRefs", "evidence_refs"])
+  ];
+  const evidenceHighlights = [
+    ...timingRefs,
+    ...retainedStringArray(input.criticalEvidence.retainedEvidence, ["evidenceHighlights", "evidence_highlights"])
+  ].slice(0, 3);
+  return {
+    ...input.criticalEvidence,
+    retainedEvidence: {
+      ...input.criticalEvidence.retainedEvidence,
+      ...Object.fromEntries(retainedTimingEntries),
+      ...(timingRefs.length > 0 ? { evidenceHighlights } : {}),
+      evidenceRefs: [...new Set(evidenceRefs)].slice(0, 6)
+    }
+  };
+}
+
+function mergeCoverageOutcomePreconsentTimingEvidenceRefs(
+  rowId: string,
+  evidenceRefs: string[],
+  coverageOutcome?: GdprEprivacyCoverageOutcome
+) {
+  if (rowId !== "pre_consent_cookies_storage" && rowId !== "pre_consent_third_party_tracking") {
+    return evidenceRefs;
+  }
+
+  const timingRefs = (coverageOutcome?.evidenceRefs ?? []).filter((ref) =>
+    /ms after scan start|exact observation\/write time not retained/i.test(ref)
+  );
+  return [...new Set([...evidenceRefs, ...timingRefs])].slice(0, 6);
+}
+
 function buildChecklistItem(input: {
   criticalEvidence: GdprEprivacyCoverageCriticalEvidence;
   evidenceRefs: string[];
@@ -2285,7 +2380,11 @@ export function deriveGdprEprivacyCoverageChecklist(
 
     if (matchingFindings.length > 0) {
       const status = normalizeFindingStatus(definition, matchingFindings);
-      const evidenceRefs = getEvidenceRefs(matchingFindings);
+      const evidenceRefs = mergeCoverageOutcomePreconsentTimingEvidenceRefs(
+        definition.id,
+        getEvidenceRefs(matchingFindings),
+        coverageOutcome
+      );
       const specialized = specializeChecklistRow({
         coverageOutcome,
         definition,
@@ -2294,13 +2393,17 @@ export function deriveGdprEprivacyCoverageChecklist(
         status
       });
       return buildChecklistItem({
-        criticalEvidence: getUnifiedFindingCriticalEvidence(
-          specialized.status,
-          `Canonical unified finding${matchingFindings.length === 1 ? "" : "s"} projected for this row.`,
-          definition.id,
-          matchingFindings,
-          matchingProjectedFindings
-        ),
+        criticalEvidence: mergeCoverageOutcomePreconsentTimingEvidence({
+          coverageOutcome,
+          criticalEvidence: getUnifiedFindingCriticalEvidence(
+            specialized.status,
+            `Canonical unified finding${matchingFindings.length === 1 ? "" : "s"} projected for this row.`,
+            definition.id,
+            matchingFindings,
+            matchingProjectedFindings
+          ),
+          rowId: definition.id
+        }),
         evidenceRefs: specialized.evidenceRefs,
         explanation: specialized.explanation,
         id: definition.id,
@@ -2311,7 +2414,11 @@ export function deriveGdprEprivacyCoverageChecklist(
 
     if (matchingProjectedFindings.length > 0) {
       const status = definition.defaultFindingStatus;
-      const evidenceRefs = getProjectedEvidenceRefs(matchingProjectedFindings);
+      const evidenceRefs = mergeCoverageOutcomePreconsentTimingEvidenceRefs(
+        definition.id,
+        getProjectedEvidenceRefs(matchingProjectedFindings),
+        coverageOutcome
+      );
       const specialized = specializeChecklistRow({
         coverageOutcome,
         definition,
@@ -2320,12 +2427,16 @@ export function deriveGdprEprivacyCoverageChecklist(
         status
       });
       return buildChecklistItem({
-        criticalEvidence: getProjectedFindingCriticalEvidence(
-          specialized.status,
-          `Executive/regulatory projection already retained finding evidence for this row.`,
-          definition.id,
-          matchingProjectedFindings
-        ),
+        criticalEvidence: mergeCoverageOutcomePreconsentTimingEvidence({
+          coverageOutcome,
+          criticalEvidence: getProjectedFindingCriticalEvidence(
+            specialized.status,
+            `Executive/regulatory projection already retained finding evidence for this row.`,
+            definition.id,
+            matchingProjectedFindings
+          ),
+          rowId: definition.id
+        }),
         evidenceRefs: specialized.evidenceRefs,
         explanation: specialized.explanation,
         id: definition.id,

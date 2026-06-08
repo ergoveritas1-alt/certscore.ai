@@ -58,6 +58,66 @@ test("only emits low-confidence policy semantic confidence when extraction is we
   assert.deepEqual(actionableFlagsRow?.value, ["low_confidence"]);
 });
 
+test("builds AI transparency nano signal rows from document semantics", () => {
+  const rows = buildNanoPolicySignalRows({
+    policyEnrichments: [
+      {
+        page_type: "ai_notice",
+        page_url: "https://example.com/responsible-ai",
+        ai_automated_decision_disclosure_present: true,
+        ai_feature_claims: ["ai_powered_feature", "automated_recommendation"],
+        ai_generated_content_label_present: true,
+        ai_human_review_path_present: true,
+        ai_interaction_disclosure_present: true,
+        ai_sensitive_contexts: ["insurance"],
+        ai_transparency_notice_present: true,
+        policy_semantic_confidence: 0.86
+      }
+    ]
+  });
+
+  assert.deepEqual(rows.find((row) => row.key === "ai.feature_claim_present")?.value, [
+    "ai_powered_feature",
+    "automated_recommendation"
+  ]);
+  assert.equal(rows.find((row) => row.key === "ai.marketing_disclosure_alignment_review")?.value, true);
+  assert.equal(rows.find((row) => row.key === "ai.interaction_disclosure_present")?.value, true);
+  assert.equal(rows.find((row) => row.key === "ai.transparency_notice_present")?.value, true);
+  assert.equal(rows.find((row) => row.key === "ai.generated_content_label_present")?.value, true);
+  assert.equal(rows.find((row) => row.key === "ai.automated_decision_disclosure_present")?.value, true);
+  assert.equal(rows.find((row) => row.key === "ai.human_review_path_present")?.value, true);
+  assert.deepEqual(rows.find((row) => row.key === "ai.sensitive_context_review_signal")?.value, ["insurance"]);
+  assert.deepEqual(rows.find((row) => row.key === "ai.transparency_notice_present")?.evidence_refs, [
+    "https://example.com/responsible-ai"
+  ]);
+});
+
+test("builds missing AI disclosure nano signal rows from explicit false document semantics", () => {
+  const rows = buildNanoPolicySignalRows({
+    policyEnrichments: [
+      {
+        page_type: "ai_notice",
+        page_url: "https://example.com/responsible-ai",
+        ai_automated_decision_disclosure_present: false,
+        ai_generated_content_label_present: false,
+        ai_human_review_path_present: false,
+        policy_semantic_confidence: 0.82
+      }
+    ]
+  });
+
+  const generatedLabel = rows.find((row) => row.key === "ai.generated_content_label_present");
+  const automatedDecision = rows.find((row) => row.key === "ai.automated_decision_disclosure_present");
+  const humanReview = rows.find((row) => row.key === "ai.human_review_path_present");
+
+  assert.equal(generatedLabel?.population_status, "missing");
+  assert.equal(generatedLabel?.value, false);
+  assert.equal(automatedDecision?.population_status, "missing");
+  assert.equal(automatedDecision?.value, false);
+  assert.equal(humanReview?.population_status, "missing");
+  assert.equal(humanReview?.value, false);
+});
+
 test("builds policy-runtime bridge signal rows from review reasons and runtime context", () => {
   const rows = buildNanoPolicySignalRows({
     policyEnrichments: [

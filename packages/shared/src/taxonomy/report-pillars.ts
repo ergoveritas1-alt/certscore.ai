@@ -24,6 +24,7 @@ export type ReportSectionId =
   | "eu_privacy_consent_gdpr_eprivacy_edpb"
   | "ca_privacy_rights_controls_ccpa_cpra_cppa"
   | "us_accessibility_enforcement_ada_doj"
+  | "eu_ai_act_transparency_review"
   | "international_privacy_comparators";
 
 export type ReportEvidenceCategoryId =
@@ -93,6 +94,11 @@ export type ReportEvidenceCategoryId =
   | "navigation_interaction_form_barriers"
   | "accessibility_commitments_support_paths"
   | "conformance_posture_litigation_indicators"
+  | "ai_system_transparency_notice"
+  | "ai_direct_interaction_disclosure"
+  | "ai_generated_content_labeling"
+  | "ai_automated_decision_human_review"
+  | "ai_sensitive_context_triage"
   | "notice_rights_baseline"
   | "privacy_governance_contactability"
   | "sensitive_data_vulnerable_user_protections"
@@ -638,6 +644,7 @@ export const REPORT_PRIMARY_PILLARS: ReportPrimaryPillarDefinition[] = [
       "eu_privacy_consent_gdpr_eprivacy_edpb",
       "ca_privacy_rights_controls_ccpa_cpra_cppa",
       "us_accessibility_enforcement_ada_doj",
+      "eu_ai_act_transparency_review",
       "international_privacy_comparators"
     ]
   }
@@ -798,6 +805,18 @@ export const REPORT_SECTIONS: ReportSectionDefinition[] = [
       "navigation_interaction_form_barriers",
       "accessibility_commitments_support_paths",
       "conformance_posture_litigation_indicators"
+    ]
+  },
+  {
+    id: "eu_ai_act_transparency_review",
+    pillarId: "regulatory_enforcement_overlay",
+    label: "EU AI Act transparency review",
+    evidenceCategoryIds: [
+      "ai_system_transparency_notice",
+      "ai_direct_interaction_disclosure",
+      "ai_generated_content_labeling",
+      "ai_automated_decision_human_review",
+      "ai_sensitive_context_triage"
     ]
   },
   {
@@ -1099,6 +1118,31 @@ export const REPORT_EVIDENCE_CATEGORIES: ReportEvidenceCategoryDefinition[] = [
     id: "conformance_posture_litigation_indicators",
     sectionId: "us_accessibility_enforcement_ada_doj",
     label: "conformance posture and litigation indicators"
+  },
+  {
+    id: "ai_system_transparency_notice",
+    sectionId: "eu_ai_act_transparency_review",
+    label: "AI transparency notices and public AI claims"
+  },
+  {
+    id: "ai_direct_interaction_disclosure",
+    sectionId: "eu_ai_act_transparency_review",
+    label: "direct AI interaction disclosures"
+  },
+  {
+    id: "ai_generated_content_labeling",
+    sectionId: "eu_ai_act_transparency_review",
+    label: "AI-generated content labeling"
+  },
+  {
+    id: "ai_automated_decision_human_review",
+    sectionId: "eu_ai_act_transparency_review",
+    label: "automated decision disclosures and human review paths"
+  },
+  {
+    id: "ai_sensitive_context_triage",
+    sectionId: "eu_ai_act_transparency_review",
+    label: "sensitive-context AI triage"
   },
   {
     id: "notice_rights_baseline",
@@ -2302,6 +2346,78 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["commercial_claims_disclosure_adequacy"],
     ["disclosures_claim_substantiation"]
   ),
+  defineReportSignal(
+    "document_semantic_signal",
+    "ai.feature_claim_present",
+    "Public AI feature claim present",
+    "ai_system_transparency_notice",
+    ["commercial_claims_disclosure_adequacy"],
+    ["disclosures_claim_substantiation"]
+  ),
+  defineReportSignal(
+    "document_semantic_signal",
+    "ai.marketing_disclosure_alignment_review",
+    "AI marketing / disclosure alignment review",
+    "ai_system_transparency_notice",
+    ["commercial_claims_disclosure_adequacy"],
+    ["disclosures_claim_substantiation"]
+  ),
+  defineReportSignal(
+    "document_semantic_signal",
+    "ai.interaction_disclosure_present",
+    "AI interaction disclosure present",
+    "ai_direct_interaction_disclosure",
+    [],
+    ["transparency_notice_data_subject_rights"]
+  ),
+  defineReportSignal(
+    "document_semantic_signal",
+    "ai.transparency_notice_present",
+    "AI transparency notice present",
+    "ai_system_transparency_notice",
+    [],
+    ["transparency_notice_data_subject_rights"]
+  ),
+  defineReportSignal(
+    "document_semantic_signal",
+    "ai.generated_content_label_present",
+    "AI-generated content label present",
+    "ai_generated_content_labeling",
+    [],
+    ["disclosures_claim_substantiation"]
+  ),
+  defineReportSignal(
+    "document_semantic_signal",
+    "ai.automated_decision_disclosure_present",
+    "Automated decision disclosure present",
+    "ai_automated_decision_human_review",
+    ["profiling_high_risk_data_use_signals"],
+    ["transparency_notice_data_subject_rights"]
+  ),
+  defineReportSignal(
+    "document_semantic_signal",
+    "ai.human_review_path_present",
+    "AI human review or escalation path present",
+    "ai_automated_decision_human_review",
+    [],
+    []
+  ),
+  defineReportSignal(
+    "document_semantic_signal",
+    "ai.sensitive_context_review_signal",
+    "Sensitive-context AI review signal",
+    "ai_sensitive_context_triage",
+    ["collection_surface_entry_points_and_handling_context"],
+    ["sensitive_data_vulnerable_user_protections", "profiling_high_risk_data_use_signals"]
+  ),
+  defineReportSignal(
+    "runtime_artifact_signal",
+    "ai.flow_tracking_review_signal",
+    "AI surface tracking review signal",
+    "ai_sensitive_context_triage",
+    ["adtech_analytics_replay_footprint"],
+    ["tracking_profiling_sensitive_data_risk"]
+  ),
   ...FINANCIAL_REPORT_SIGNALS
 ];
 
@@ -2541,6 +2657,73 @@ export const REPORT_UNIFIED_FINDINGS = [
     label: "Rule-only policy row present",
     owner: "manual_review_triggers",
     validationRuleKeys: ["section_review.rule_only_row_present"]
+  }),
+  defineReportUnifiedFinding({
+    id: "ai_feature_claim_present",
+    label: "Public AI feature claim present",
+    owner: "ai_system_transparency_notice",
+    mirrors: ["commercial_claims_disclosure_adequacy"],
+    overlays: ["disclosures_claim_substantiation"],
+    signalMappings: [{ source: "document_semantic_signal", key: "ai.feature_claim_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "ai_marketing_disclosure_alignment_review",
+    label: "AI marketing / disclosure alignment review",
+    owner: "ai_system_transparency_notice",
+    mirrors: ["commercial_claims_disclosure_adequacy"],
+    overlays: ["disclosures_claim_substantiation"],
+    signalMappings: [{ source: "document_semantic_signal", key: "ai.marketing_disclosure_alignment_review" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "ai_interaction_disclosure_present",
+    label: "AI interaction disclosure present",
+    owner: "ai_direct_interaction_disclosure",
+    overlays: ["transparency_notice_data_subject_rights"],
+    signalMappings: [{ source: "document_semantic_signal", key: "ai.interaction_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "ai_transparency_notice_present",
+    label: "AI transparency notice present",
+    owner: "ai_system_transparency_notice",
+    overlays: ["transparency_notice_data_subject_rights"],
+    signalMappings: [{ source: "document_semantic_signal", key: "ai.transparency_notice_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "ai_generated_content_label_present",
+    label: "AI-generated content label present",
+    owner: "ai_generated_content_labeling",
+    overlays: ["disclosures_claim_substantiation"],
+    signalMappings: [{ source: "document_semantic_signal", key: "ai.generated_content_label_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "ai_automated_decision_disclosure_present",
+    label: "Automated decision disclosure present",
+    owner: "ai_automated_decision_human_review",
+    mirrors: ["profiling_high_risk_data_use_signals"],
+    overlays: ["transparency_notice_data_subject_rights"],
+    signalMappings: [{ source: "document_semantic_signal", key: "ai.automated_decision_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "ai_human_review_path_present",
+    label: "AI human review or escalation path present",
+    owner: "ai_automated_decision_human_review",
+    signalMappings: [{ source: "document_semantic_signal", key: "ai.human_review_path_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "ai_sensitive_context_review_signal",
+    label: "Sensitive-context AI review signal",
+    owner: "ai_sensitive_context_triage",
+    mirrors: ["collection_surface_entry_points_and_handling_context"],
+    overlays: ["sensitive_data_vulnerable_user_protections", "profiling_high_risk_data_use_signals"],
+    signalMappings: [{ source: "document_semantic_signal", key: "ai.sensitive_context_review_signal" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "ai_surface_tracking_review_signal",
+    label: "AI surface tracking review signal",
+    owner: "ai_sensitive_context_triage",
+    mirrors: ["adtech_analytics_replay_footprint"],
+    overlays: ["tracking_profiling_sensitive_data_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "ai.flow_tracking_review_signal" }]
   }),
 
   defineReportUnifiedFinding({

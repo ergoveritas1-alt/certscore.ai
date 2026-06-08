@@ -142,6 +142,70 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps concrete pre-consent tracke
   assert.deepEqual(outcomes.pre_consent_third_party_tracking?.criticalEvidence.missingOrIncompleteSourceSignals, []);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes retains elapsed ms for pre-consent cookie and tracking observations", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consent_baseline_tracker_evidence_urls: ["https://analytics.example.test/collect"],
+      consent_baseline_tracker_vendor_names: ["Example Analytics"],
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [
+          {
+            beforeConsent: true,
+            cookieName: "_ga",
+            domain: ".example.test",
+            setAtMs: -1,
+            timingEvidence: "before_consent_cookie_write"
+          }
+        ],
+        networkSummary: {
+          preConsentThirdPartyRequestCount: 1
+        },
+        requestObservations: [
+          {
+            domain: "analytics.example.test",
+            thirdParty: true,
+            tsMs: 1_000_478
+          }
+        ],
+        storageSummary: {
+          cookiesBeforeConsentCount: 1,
+          cookiesSeenCount: 1
+        },
+        timelineMarkers: {
+          firstCookieSeenMs: 1_000_006,
+          firstThirdPartyRequestMs: 1_000_478,
+          navigationStartMs: 1_000_000
+        }
+      }
+    },
+    snapshot: {
+      preconsent_tracking_detected: true
+    }
+  });
+
+  assert.equal(
+    outcomes.pre_consent_cookies_storage?.criticalEvidence.retainedEvidence.firstPreconsentCookieOrStorageObservedMs,
+    6
+  );
+  assert.equal(
+    outcomes.pre_consent_cookies_storage?.criticalEvidence.retainedEvidence.preconsentCookieOrStorageExactTimingRetained,
+    true
+  );
+  assert.match(
+    outcomes.pre_consent_cookies_storage?.evidenceRefs.join(" ") ?? "",
+    /6ms after scan start/
+  );
+  assert.equal(
+    outcomes.pre_consent_third_party_tracking?.criticalEvidence.retainedEvidence.firstPreconsentThirdPartyTrackingObservedMs,
+    478
+  );
+  assert.match(
+    outcomes.pre_consent_third_party_tracking?.evidenceRefs.join(" ") ?? "",
+    /478ms after scan start/
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps weak pre-consent tracking signals as insufficient evidence", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -850,6 +914,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats unclassified before-consen
   const outcome = outcomes.pre_consent_cookies_storage;
   assert.equal(outcome?.status, "Not observed");
   assert.deepEqual(outcome?.evidenceRefs, [
+    "Pre-consent cookie/storage observed in initial inventory; exact observation/write time not retained",
     "Observed before-consent cookie/storage count: 3",
     "Evidence: hybrid runtime storage summary"
   ]);

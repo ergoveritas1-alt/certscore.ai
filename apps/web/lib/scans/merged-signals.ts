@@ -197,6 +197,8 @@ function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedS
       ...signal.evidenceRefs,
       "scan_runtime_artifacts.hybrid_runtime_evidence.fingerprintSummary"
     ]);
+    const fingerprintRuntimeRequestUrls = uniqueStrings(signal.evidenceRefs.filter((ref) => /^https?:\/\//i.test(ref)));
+    const fingerprintRuntimeVendors = uniqueStrings(getMergedSignalStringArray(mergedSignals, "privacy.fingerprinting_runtime_vendors"));
 
     return {
       fingerprintArtifactRefs,
@@ -204,9 +206,13 @@ function buildSiblingEvidenceForMergedSignal(signal: MergedSignalRecord, mergedS
       fingerprintRuntimeEvidence: fingerprintArtifactRefs.map((ref) => ({
         artifactRef: ref,
         attributeCategories: fingerprintAttributeCategories,
-        tier: fingerprintTier
+        requestUrl: /^https?:\/\//i.test(ref) ? ref : fingerprintRuntimeRequestUrls[0] ?? undefined,
+        tier: fingerprintTier,
+        vendor: fingerprintRuntimeVendors[0] ?? undefined
       })),
       fingerprintRuntimeEvidenceRetained: true,
+      requestUrls: fingerprintRuntimeRequestUrls,
+      runtimeVendors: fingerprintRuntimeVendors,
       fingerprintSignals: fingerprintAttributeCategories,
       fingerprintSummary: {
         attributeCategories: fingerprintAttributeCategories,

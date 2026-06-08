@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { useRegulatoryChecklistAdvancedEvidence } from "./regulatory-checklist-advanced-evidence-context";
@@ -39,6 +40,7 @@ export type BetaRegulatoryChecklistArea = {
     review: number;
   };
   id: string;
+  maturityLabel?: "Alpha" | "Beta";
   navLabel: string;
   rows: BetaRegulatoryChecklistRow[];
   score?: number | null;
@@ -177,13 +179,59 @@ function stringifyEvidenceJson(area: BetaRegulatoryChecklistArea, row: BetaRegul
   );
 }
 
+type SummaryStatusIconName = "alert" | "check" | "dash" | "flag" | "slash";
+
+function SummaryStatusIcon({ icon }: { icon: SummaryStatusIconName }) {
+  if (icon === "check") {
+    return (
+      <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 20 20">
+        <path d="M5 10.4 8.3 13.7 15 6.8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+      </svg>
+    );
+  }
+
+  if (icon === "alert") {
+    return (
+      <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 20 20">
+        <path d="M10 4.2 17 16H3L10 4.2Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
+        <path d="M10 8.2v3.8M10 14.8h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      </svg>
+    );
+  }
+
+  if (icon === "flag") {
+    return (
+      <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 20 20">
+        <path d="M6 16V4.8M6 5.2h8.5l-1.4 3 1.4 3H6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+
+  if (icon === "dash") {
+    return (
+      <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 20 20">
+        <path d="M5.5 10h9" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 20 20">
+      <circle cx="10" cy="10" r="6.8" stroke="currentColor" strokeWidth="1.8" />
+      <path d="m5.2 14.8 9.6-9.6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 function getSummaryTitle(area: BetaRegulatoryChecklistArea) {
+  const maturityLabel = area.maturityLabel ?? "Beta";
   const ratingBucket = typeof area.score === "number" ? Math.max(0, Math.min(5, area.score / 20)) : 0;
   const statusItems = [
-    { className: "border-rose-200 bg-rose-50 text-rose-700", count: area.counters.gaps, label: "gaps" },
-    { className: "border-indigo-200 bg-indigo-50 text-indigo-700", count: area.counters.review, label: "review" },
-    { className: "border-emerald-200 bg-emerald-50 text-emerald-700", count: area.counters.checked, label: "checked" },
-    { className: "border-slate-300 bg-slate-100 text-slate-600", count: area.counters.notTestable, label: "not testable" }
+    { className: "border-rose-200 bg-rose-50 text-rose-700", count: area.counters.gaps, icon: "alert" as const, label: "gaps" },
+    { className: "border-indigo-200 bg-indigo-50 text-indigo-700", count: area.counters.review, icon: "flag" as const, label: "review" },
+    { className: "border-emerald-200 bg-emerald-50 text-emerald-700", count: area.counters.checked, icon: "check" as const, label: "checked" },
+    { className: "border-slate-200 bg-white text-slate-500", count: area.counters.notObserved, icon: "dash" as const, label: "not observed" },
+    { className: "border-slate-300 bg-slate-100 text-slate-600", count: area.counters.notTestable, icon: "slash" as const, label: "not testable" }
   ].filter((item) => item.count > 0);
 
   return (
@@ -206,7 +254,7 @@ function getSummaryTitle(area: BetaRegulatoryChecklistArea) {
             {getStatusLabel(area.status)}
           </span>
           <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
-            Beta
+            {maturityLabel}
           </span>
         </div>
         <div className="mt-2 flex w-full max-w-[11rem] items-center gap-1.5">
@@ -220,11 +268,16 @@ function getSummaryTitle(area: BetaRegulatoryChecklistArea) {
           })}
         </div>
       </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-2.5 self-center rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-3 self-center rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2">
         {statusItems.map((item) => (
-          <span key={item.label} className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-1 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.55)]">
-            <span className={cn("inline-flex h-2.5 w-2.5 rounded-full border", item.className)} />
-            <span className="whitespace-nowrap text-xs font-medium text-slate-600">
+          <span key={item.label} className="inline-flex min-h-11 items-center gap-2.5 rounded-full bg-white py-1 pl-1 pr-4 shadow-[0_8px_24px_-20px_rgba(15,23,42,0.65)]">
+            <span
+              aria-hidden="true"
+              className={cn("inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border", item.className)}
+            >
+              <SummaryStatusIcon icon={item.icon} />
+            </span>
+            <span className="whitespace-nowrap text-sm font-medium text-slate-600">
               <span className="font-semibold text-slate-950">{item.count}</span> {item.label}
             </span>
           </span>
@@ -236,6 +289,7 @@ function getSummaryTitle(area: BetaRegulatoryChecklistArea) {
 
 export function BetaRegulatoryChecklistCard({ area, defaultOpen = true }: BetaRegulatoryChecklistCardProps) {
   const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
+  const maturityLabel = area.maturityLabel ?? "Beta";
 
   return (
     <CollapsibleSectionCard defaultOpen={defaultOpen} title={getSummaryTitle(area)} contentClassName="space-y-4">
@@ -273,7 +327,7 @@ export function BetaRegulatoryChecklistCard({ area, defaultOpen = true }: BetaRe
         </div>
       </div>
       <p className="text-xs leading-5 text-slate-500">
-        Beta checklist rows are limited to public-web scan evidence, policy-page review, runtime request/cookie/vendor observations, consent-flow observations, form/sensitive-field detection, opt-out/GPC testing where available, and basic accessibility checks.
+        {maturityLabel} checklist rows are limited to public-web scan evidence, policy-page review, runtime request/cookie/vendor observations, consent-flow observations, form/sensitive-field detection, opt-out/GPC testing where available, and basic accessibility checks.
       </p>
     </CollapsibleSectionCard>
   );

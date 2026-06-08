@@ -24,6 +24,7 @@ import {
 import { deriveRetryPolicy } from "../../../../packages/shared/src/access-limitations";
 import { getPrimaryCategoryDescription, getPrimaryCategoryLabel, mapSignalKeyToTaxonomy } from "../../../web/lib/scans/signal-taxonomy";
 import { buildMergedSignalRecords } from "../../../web/lib/scans/merged-signals";
+import { getHybridNanoSignalPopulations } from "../../../web/lib/scans/hybrid-runtime-evidence";
 import {
   buildNanoPolicyInputsFromDocumentSources,
   mergeNanoPolicyInputsWithFallback,
@@ -1591,6 +1592,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
         scannedHostname
       })
     : fallbackPolicyRows;
+  const hybridRuntimeSignalPopulations = getHybridNanoSignalPopulations(runtimeArtifactsRecord);
   const mergedSignals = buildMergedSignalRecords({
     browserExtensionSignals: buildStoredSignalPopulationRecords({
       observedAt: typeof scan?.completed_at === "string" ? scan.completed_at : null,
@@ -1602,33 +1604,42 @@ export async function loadCompletedScanArtifacts(scanId: string) {
       rows: storedNanoSignalRows,
       source: "nano"
     }),
-    scannerSignals: scannerSignalRows.map((signal) => ({
-      confidence: typeof signal.confidence === "number" ? signal.confidence : null,
-      evidenceRefs: Array.isArray(signal.evidence_refs) ? signal.evidence_refs.filter((value): value is string => typeof value === "string") : [],
-      key: signal.signal_key,
-      label: signal.signal_label,
-      observedAt: signal.observed_at ?? (typeof scan?.completed_at === "string" ? scan.completed_at : null),
-      populationStatus:
-        signal.population_status === "present" ||
-        signal.population_status === "missing" ||
-        signal.population_status === "conflicting" ||
-        signal.population_status === "insufficient"
-          ? signal.population_status
-          : "present",
-      provenance: [],
-      reportSignalSource: null,
-      source: "scanner",
-      value: signal.signal_value_json,
-      valueType: signal.value_type === "boolean" || signal.value_type === "number" || signal.value_type === "text" || signal.value_type === "string_array"
-        ? signal.value_type
-        : Array.isArray(signal.signal_value_json)
-          ? "string_array"
-          : typeof signal.signal_value_json === "number"
-            ? "number"
-            : typeof signal.signal_value_json === "boolean"
-              ? "boolean"
-              : "text"
-    })),
+    scannerSignals: [
+      ...scannerSignalRows.map((signal) => ({
+        confidence: typeof signal.confidence === "number" ? signal.confidence : null,
+        evidenceRefs: Array.isArray(signal.evidence_refs) ? signal.evidence_refs.filter((value): value is string => typeof value === "string") : [],
+        key: signal.signal_key,
+        label: signal.signal_label,
+        observedAt: signal.observed_at ?? (typeof scan?.completed_at === "string" ? scan.completed_at : null),
+        populationStatus:
+          signal.population_status === "present" ||
+          signal.population_status === "missing" ||
+          signal.population_status === "conflicting" ||
+          signal.population_status === "insufficient"
+            ? signal.population_status
+            : "present" as SignalPopulationStatus,
+        provenance: [],
+        reportSignalSource: null,
+        source: "scanner" as const,
+        value: signal.signal_value_json,
+        valueType: (
+          signal.value_type === "boolean" || signal.value_type === "number" || signal.value_type === "text" || signal.value_type === "string_array"
+            ? signal.value_type
+            : Array.isArray(signal.signal_value_json)
+              ? "string_array"
+              : typeof signal.signal_value_json === "number"
+                ? "number"
+                : typeof signal.signal_value_json === "boolean"
+                  ? "boolean"
+                  : "text"
+        ) as PopulatedSignalRecord["valueType"]
+      })),
+      ...hybridRuntimeSignalPopulations.map((signal) => ({
+        ...signal,
+        observedAt: signal.observedAt ?? (typeof scan?.completed_at === "string" ? scan.completed_at : null),
+        source: "scanner" as const
+      }))
+    ],
     validationSignals: buildStoredSignalPopulationRecords({
       observedAt: typeof scan?.completed_at === "string" ? scan.completed_at : null,
       rows: storedValidationSignalRows,

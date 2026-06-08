@@ -20,7 +20,11 @@ import { deriveSignalEnrichmentWorkflowState } from "@website-signal-risk-scanne
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
-import { withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
+import {
+  getHybridDerivedTrackerVendors,
+  getHybridNanoSignalPopulations,
+  withHybridRuntimeArtifactFallbacks
+} from "../../lib/scans/hybrid-runtime-evidence";
 import type { ScanValidationFinding } from "../../lib/scans/validation-review-linking";
 import { buildAgencyMappingSource } from "../../lib/scans/agency-mapping-source";
 import { buildRegulatoryRiskSource } from "../../lib/scans/regulatory-risk-source";
@@ -32,9 +36,13 @@ import {
   mergeNanoPolicyInputsWithFallback,
   shouldPreferNanoDocumentSources
 } from "../../lib/scans/nano-document-sources";
+import {
+  buildNanoPolicySignalRows,
+  MANAGED_NANO_POLICY_SIGNAL_KEYS,
+  type PersistedNanoSignalRow
+} from "../../lib/scans/nano-policy-signals";
 import { deriveRuntimeVendorDisclosureEvidenceFromRetainedSources } from "../../lib/scans/runtime-vendor-disclosure";
 import { getPrimaryPolicyEnrichmentRow, getPolicyPageType } from "../../lib/scans/policy-enrichment-row";
-import { getHybridDerivedTrackerVendors } from "../../lib/scans/hybrid-runtime-evidence";
 import { buildMergedSignalRecords } from "../../lib/scans/merged-signals";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { loadSupplementalValidationFindingsForScan } from "../validation/repository";
@@ -416,6 +424,38 @@ function buildStoredSignalPopulationRecords(input: {
       } satisfies PopulatedSignalRecord
     ];
   });
+}
+
+function getNanoSignalValueType(value: PersistedNanoSignalRow["value"]): PopulatedSignalRecord["valueType"] {
+  if (Array.isArray(value)) {
+    return "string_array";
+  }
+  if (typeof value === "boolean") {
+    return "boolean";
+  }
+  if (typeof value === "number") {
+    return "number";
+  }
+  return "text";
+}
+
+function buildManagedNanoSignalPopulationRecords(input: {
+  observedAt: string | null;
+  rows: PersistedNanoSignalRow[];
+}) {
+  return input.rows.map((row): PopulatedSignalRecord => ({
+    confidence: row.confidence,
+    evidenceRefs: row.evidence_refs,
+    key: row.key,
+    label: row.label,
+    observedAt: input.observedAt,
+    populationStatus: row.population_status,
+    provenance: [{ detail: row.provenance_detail, kind: "document" }],
+    reportSignalSource: row.report_signal_source,
+    source: "nano",
+    value: row.value,
+    valueType: getNanoSignalValueType(row.value)
+  }));
 }
 
 function deriveHostnameFromScanConfig(value: Record<string, unknown> | null | undefined) {
@@ -1173,18 +1213,41 @@ async function loadScanDetailRecord(input: {
           runtimeVendorDisclosureEvidence: runtimeVendorDisclosureEvidence
         }
       : normalizedRuntimeArtifacts;
+  const hybridRuntimeSignalPopulations = getHybridNanoSignalPopulations(reportRuntimeArtifacts).map((signal) => ({
+    ...signal,
+    observedAt: signal.observedAt ?? scanObservedAt,
+    source: "scanner" as const
+  }));
+  const unmanagedStoredNanoSignalRows = storedNanoSignalRows.filter(
+    (row) => !MANAGED_NANO_POLICY_SIGNAL_KEYS.has(row.signal_key)
+  );
+  const managedNanoPolicySignalPopulations = buildManagedNanoSignalPopulationRecords({
+    observedAt: scanObservedAt,
+    rows: buildNanoPolicySignalRows({
+      policyEnrichments: displayPolicyEnrichment,
+      policyReviewQueue: normalizedPolicyReviewQueue,
+      runtimeArtifacts: reportRuntimeArtifacts,
+      snapshot: normalizedSnapshot
+    })
+  });
   const mergedSignals = buildMergedSignalRecords({
     browserExtensionSignals: buildStoredSignalPopulationRecords({
       observedAt: scanObservedAt,
       rows: storedBrowserExtensionSignalRows,
       source: "browser_extension_bx01"
     }),
-    nanoSignals: buildStoredSignalPopulationRecords({
-      observedAt: scanObservedAt,
-      rows: storedNanoSignalRows,
-      source: "nano"
-    }),
-    scannerSignals: scannerSignalPopulations,
+    nanoSignals: [
+      ...buildStoredSignalPopulationRecords({
+        observedAt: scanObservedAt,
+        rows: unmanagedStoredNanoSignalRows,
+        source: "nano"
+      }),
+      ...managedNanoPolicySignalPopulations
+    ],
+    scannerSignals: [
+      ...scannerSignalPopulations,
+      ...hybridRuntimeSignalPopulations
+    ],
     validationSignals: buildStoredSignalPopulationRecords({
       observedAt: scanObservedAt,
       rows: storedValidationSignalRows,
@@ -1265,7 +1328,7 @@ async function loadScanDetailRecord(input: {
     skippedExtractionReasons,
     scanCompletedAt: displayState.completedAt,
     scanStatus: displayState.status,
-    scannerSignalCount: scannerSignalPopulations.length
+    scannerSignalCount: scannerSignalPopulations.length + hybridRuntimeSignalPopulations.length
   });
   const domainBenchmark = await resolveDomainBenchmarkEstimate({
     currentEvents: normalizedEvents,

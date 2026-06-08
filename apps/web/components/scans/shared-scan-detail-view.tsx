@@ -30,10 +30,11 @@ import {
 import { FindingsSection } from "./findings-section";
 import { FullScanProgressCard } from "./full-scan-progress-card";
 import { FingerprintingPanel } from "./fingerprinting-panel";
-import type {
-  BetaRegulatoryChecklistArea,
-  BetaRegulatoryChecklistRow,
-  BetaRegulatoryChecklistStatus
+import {
+  BetaRegulatoryChecklistCard,
+  type BetaRegulatoryChecklistArea,
+  type BetaRegulatoryChecklistRow,
+  type BetaRegulatoryChecklistStatus
 } from "./beta-regulatory-checklist-card";
 import { CaliforniaPrivacyCoverageChecklistCard } from "./california-privacy-coverage-checklist-card";
 import { GdprEprivacyCoverageChecklistCard } from "./gdpr-eprivacy-coverage-checklist-card";
@@ -67,6 +68,10 @@ import {
 } from "../../lib/scans/consent-audit-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { getHybridRuntimeEvidence } from "../../lib/scans/hybrid-runtime-evidence";
+import {
+  buildBetaRegulatoryFindingSources,
+  buildEuAiActRegulatoryChecklistArea
+} from "../../lib/scans/eu-ai-act-regulatory-checklist-area";
 import { buildPromotionGradePreconsentRequests } from "../../lib/scans/preconsent-public-evidence";
 import {
   getReportFacingScannedPageUrl,
@@ -5596,15 +5601,23 @@ type BetaRegulatoryLens = {
   summary: string;
 };
 
+type BetaRegulatoryFindingSource = {
+  id: string;
+  label: string;
+};
+
 type BetaRowSeed = Omit<BetaRegulatoryChecklistRow, "evidenceRefs" | "status"> & {
   evidenceRefs?: string[];
   evidenceRefScope?: "lens" | "none";
+  findingIds?: string[];
+  matchedStatus?: BetaRegulatoryChecklistStatus;
   status?: BetaRegulatoryChecklistStatus;
 };
 
 type BetaAreaSeed = {
   id: string;
   lensAcronym?: string;
+  maturityLabel?: BetaRegulatoryChecklistArea["maturityLabel"];
   navLabel: string;
   rows: BetaRowSeed[];
   subtitle: string;
@@ -5627,12 +5640,23 @@ function buildBetaCounters(rows: BetaRegulatoryChecklistRow[]): BetaRegulatoryCh
   };
 }
 
-function buildBetaArea(seed: BetaAreaSeed, lenses: BetaRegulatoryLens[]): BetaRegulatoryChecklistArea {
+function buildBetaArea(
+  seed: BetaAreaSeed,
+  lenses: BetaRegulatoryLens[],
+  findingSources: BetaRegulatoryFindingSource[] = []
+): BetaRegulatoryChecklistArea {
   const lens = seed.lensAcronym ? lenses.find((item) => item.acronym === seed.lensAcronym) ?? null : null;
   const lensEvidenceRefs = lens?.findings.map((finding) => finding.label).slice(0, 6) ?? [];
   const rows = seed.rows.map((row, index): BetaRegulatoryChecklistRow => {
+    const matchedFindingRefs = findingSources
+      .filter((finding) => row.findingIds?.includes(finding.id))
+      .map((finding) => finding.label)
+      .slice(0, 6);
     const status =
       row.status ??
+      (matchedFindingRefs.length > 0
+        ? row.matchedStatus ?? "review_signal"
+        : null) ??
       (index === 0 && seed.id === "california-cipa" && lens?.findings.length
         ? "litigation_risk_signal"
         : index === 0
@@ -5640,7 +5664,12 @@ function buildBetaArea(seed: BetaAreaSeed, lenses: BetaRegulatoryLens[]): BetaRe
           : "not_testable");
     return {
       ...row,
-      evidenceRefs: row.evidenceRefScope === "lens" || (index === 0 && lensEvidenceRefs.length > 0) ? lensEvidenceRefs : row.evidenceRefs,
+      evidenceRefs:
+        matchedFindingRefs.length > 0
+          ? matchedFindingRefs
+          : row.evidenceRefScope === "lens" || (index === 0 && lensEvidenceRefs.length > 0)
+            ? lensEvidenceRefs
+            : row.evidenceRefs,
       status
     };
   });
@@ -5659,6 +5688,7 @@ function buildBetaArea(seed: BetaAreaSeed, lenses: BetaRegulatoryLens[]): BetaRe
   return {
     counters: buildBetaCounters(rows),
     id: seed.id,
+    maturityLabel: seed.maturityLabel,
     navLabel: seed.navLabel,
     rows,
     score,
@@ -5680,7 +5710,11 @@ function betaRows(input: Array<[string, string, string, BetaRegulatoryChecklistR
   }));
 }
 
-function buildBetaRegulatoryChecklistAreas(lenses: BetaRegulatoryLens[]) {
+function buildBetaRegulatoryChecklistAreas(
+  lenses: BetaRegulatoryLens[],
+  findingSources: BetaRegulatoryFindingSource[] = [],
+  mergedSignals: NonNullable<Parameters<typeof buildEuAiActRegulatoryChecklistArea>[1]>["mergedSignals"] = []
+) {
   const seeds: BetaAreaSeed[] = [
     {
       id: "ftc-dark-patterns",
@@ -5792,6 +5826,82 @@ function buildBetaRegulatoryChecklistAreas(lenses: BetaRegulatoryLens[]) {
         ["cross_border", "Cross-border endpoint review", "Endpoint geography or transfer-review evidence requires retained endpoint jurisdiction signals.", "near_term_supported"],
         ["control_accessibility", "Consent/privacy control accessibility", "Basic automated accessibility signals on privacy controls are eligible when retained.", "currently_supported"]
       ])
+    },
+    {
+      id: "eu-ai-act",
+      maturityLabel: "Alpha",
+      navLabel: "EU AI Act",
+      title: "EU AI Act",
+      subtitle: "Article 50-oriented transparency, disclosure, labeling, and sensitive-context AI review signals.",
+      summary: "EU AI Act alpha review is limited to public-web AI transparency signals. CertScore does not determine AI Act scope, high-risk classification, or compliance status.",
+      rows: betaRows([
+        ["ai_feature_disclosure", "AI feature / direct interaction disclosure", "AI interaction disclosure requires retained evidence of an AI-facing user interaction and nearby user-facing AI disclosure language.", "near_term_supported"],
+        ["ai_transparency_notice", "AI transparency notice availability", "AI transparency notice review requires retained public AI, responsible-use, trust, legal, help, privacy, or terms surfaces.", "near_term_supported"],
+        ["marketing_legal_alignment", "AI marketing / disclosure alignment", "Marketing AI claims must be compared with retained legal, help, privacy, or transparency disclosures through normalized concerns before a gap can be projected.", "near_term_supported"],
+        ["generated_content_labeling", "AI-generated content labeling", "Generated-content labeling requires a retained generated-content surface, explicit origin context, or public claim; CertScore must not infer AI generation from appearance alone.", "near_term_supported"],
+        ["automated_decision_disclosure", "Automated decision-making / profiling disclosure", "Automated decisioning or profiling disclosure review requires retained policy text or public flow evidence tied to decisions, scoring, ranking, eligibility, recommendations, or personalization.", "near_term_supported"],
+        ["human_review_path", "Human review or escalation path", "Human review, appeal, complaint, or escalation path review is relevant only when retained AI or automated-decision context suggests user-impacting outcomes.", "near_term_supported"],
+        ["sensitive_context_ai", "Sensitive-context AI surface", "Sensitive-context AI review is a triage signal for employment, education, credit, insurance, healthcare, housing, identity, biometric, minors, or similar contexts; it does not confirm high-risk AI status.", "near_term_supported"],
+        ["ai_flow_tracking", "AI flow tracking / replay / adtech", "AI-flow tracking review requires retained runtime evidence on the same AI surface or exercised AI interaction, not generic site-wide tracking alone.", "near_term_supported"]
+      ]).map((row) => {
+        if (row.id === "ai_feature_disclosure") {
+          return {
+            ...row,
+            findingIds: ["ai_feature_claim_present", "ai_interaction_disclosure_present"],
+            matchedStatus: "review_signal" as const
+          };
+        }
+        if (row.id === "ai_transparency_notice") {
+          return {
+            ...row,
+            findingIds: ["ai_transparency_notice_present"],
+            matchedStatus: "checked" as const
+          };
+        }
+        if (row.id === "marketing_legal_alignment") {
+          return {
+            ...row,
+            findingIds: ["ai_marketing_disclosure_alignment_review"],
+            matchedStatus: "review_signal" as const
+          };
+        }
+        if (row.id === "generated_content_labeling") {
+          return {
+            ...row,
+            findingIds: ["ai_generated_content_label_present"],
+            matchedStatus: "checked" as const
+          };
+        }
+        if (row.id === "automated_decision_disclosure") {
+          return {
+            ...row,
+            findingIds: ["ai_automated_decision_disclosure_present"],
+            matchedStatus: "checked" as const
+          };
+        }
+        if (row.id === "human_review_path") {
+          return {
+            ...row,
+            findingIds: ["ai_human_review_path_present"],
+            matchedStatus: "checked" as const
+          };
+        }
+        if (row.id === "sensitive_context_ai") {
+          return {
+            ...row,
+            findingIds: ["ai_sensitive_context_review_signal"],
+            matchedStatus: "review_signal" as const
+          };
+        }
+        if (row.id === "ai_flow_tracking") {
+          return {
+            ...row,
+            findingIds: ["ai_surface_tracking_review_signal"],
+            matchedStatus: "review_signal" as const
+          };
+        }
+        return row;
+      })
     }
   ];
 
@@ -5822,7 +5932,9 @@ function buildBetaRegulatoryChecklistAreas(lenses: BetaRegulatoryLens[]) {
     });
   });
 
-  return seeds.map((seed) => buildBetaArea(seed, lenses));
+  return seeds
+    .map((seed) => buildBetaArea(seed, lenses, findingSources))
+    .map((area) => area.id === "eu-ai-act" ? buildEuAiActRegulatoryChecklistArea(findingSources, { mergedSignals }) : area);
 }
 
 type ScanReportAccessRole = "admin" | "advanced" | "user";
@@ -6238,6 +6350,20 @@ export function SharedScanDetailView({
     regulatoryLensCounts,
     regulatoryLensOptions
   );
+  const regulatoryChecklistUnifiedFindings = filterContradictoryPositiveSurfaceFindings(mergeUnifiedFindingPacketsById([
+    ...scanReportUnifiedFindingState.globalUnifiedFindings,
+    ...findingEvidenceDiagnostics
+  ]));
+  const betaRegulatoryFindingSources = buildBetaRegulatoryFindingSources({
+    executiveFindings: allExecutiveFindings,
+    unifiedFindings: regulatoryChecklistUnifiedFindings
+  });
+  const betaRegulatoryChecklistAreas = buildBetaRegulatoryChecklistAreas(
+    executiveRegulatoryLenses,
+    betaRegulatoryFindingSources,
+    scanRecord.mergedSignals
+  );
+  const euAiActChecklistArea = betaRegulatoryChecklistAreas.find((area) => area.id === "eu-ai-act") ?? null;
   const gdprEprivacyExecutiveLens =
     executiveRegulatoryLenses.find((lens) => lens.acronym === "GDPR / ePrivacy") ?? null;
   const californiaPrivacyExecutiveLens =
@@ -6398,7 +6524,23 @@ export function SharedScanDetailView({
                 id: "gdpr-eprivacy",
                 label: "GDPR / ePrivacy",
                 shortLabel: "GDPR/ePrivacy"
-              }
+              },
+              ...(euAiActChecklistArea
+                ? [
+                    {
+                      badgeLabel: "Alpha",
+                      content: (
+                        <BetaRegulatoryChecklistCard
+                          area={euAiActChecklistArea}
+                          defaultOpen
+                        />
+                      ),
+                      id: "eu-ai-act",
+                      label: "EU AI Act",
+                      shortLabel: "EU AI Act"
+                    }
+                  ]
+                : [])
             ]}
           />
           ) : null}

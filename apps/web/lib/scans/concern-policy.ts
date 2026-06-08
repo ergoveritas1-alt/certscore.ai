@@ -733,6 +733,42 @@ function hasVideoPayloadFieldHints(evidence: Record<string, unknown> | null | un
   ]).some((value) => /content|video|title|page|dl|rl|ev/i.test(value));
 }
 
+function hasAiSurfaceTrackingRuntimeEvidence(evidence: Record<string, unknown> | null | undefined) {
+  const evidenceRefs = getStringArrayValues(evidence, ["evidenceRefs", "evidence_refs"]);
+  const provenanceRows = getObjectArrayEvidence(evidence, ["provenance"]);
+  const hasHybridProvenance = provenanceRows.some((row) => {
+    const detail = getFirstString(row, ["detail", "source_ref", "sourceRef"]);
+    return detail === "hybrid_runtime_evidence.ai_surface_runtime_evidence";
+  });
+  const explicitPageUrls = getStringArrayValues(evidence, ["pageUrls", "page_urls"]);
+  const urlEvidenceRefs = evidenceRefs.filter((value) => /^https?:\/\//i.test(value));
+  const inferredPageUrls = explicitPageUrls.length > 0
+    ? []
+    : urlEvidenceRefs.filter((value) => !isRuntimeRequestEvidenceUrl(value)).slice(0, 1);
+  const pageUrls = uniqueStrings([
+    ...explicitPageUrls,
+    ...inferredPageUrls
+  ]);
+  const requestUrls = uniqueStrings([
+    ...getStringArrayValues(evidence, [
+      "requestUrls",
+      "request_urls",
+      "runtimeRequestUrls",
+      "runtime_request_urls",
+      "runtimeEvidenceUrls",
+      "runtime_evidence_urls"
+    ]),
+    ...evidenceRefs.filter(isRuntimeRequestEvidenceUrl)
+  ]);
+  const aiSurfaceScopedRequestRefs = hasHybridProvenance
+    ? uniqueStrings(
+        urlEvidenceRefs.filter((value) => !pageUrls.includes(value))
+      )
+    : [];
+
+  return hasHybridProvenance && pageUrls.length > 0 && (requestUrls.length > 0 || aiSurfaceScopedRequestRefs.length > 0);
+}
+
 export function hasConcreteDsarEvidence(evidence: Record<string, unknown> | null | undefined) {
   if (!evidence) {
     return false;
@@ -1415,6 +1451,12 @@ function isVideoContentTrackingConcern(
   return /video_content_tracking_exposure|video content tracking|video privacy/.test(haystack);
 }
 
+function isAiSurfaceTrackingReviewConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "ai_surface_tracking_review_signal";
+}
+
 function isFingerprintingConcern(
   concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
 ) {
@@ -1885,6 +1927,12 @@ function isNegativeFinancialPromotionConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   return NEGATIVE_FINANCIAL_PROMOTION_FINDING_IDS.has(concern.suggestedUnifiedFindingId ?? "");
+}
+
+function isUnmappedFinancialSignalConcern(
+  concern: Pick<NormalizedConcern, "originKey" | "suggestedUnifiedFindingId">
+) {
+  return !concern.suggestedUnifiedFindingId && /^financial\./.test(concern.originKey);
 }
 
 const EXPLICIT_FINANCIAL_OFFER_PATTERN =
@@ -2387,6 +2435,15 @@ export function deriveConcernPolicy(input: {
     }
   }
 
+  if (isUnmappedFinancialSignalConcern(input.concern)) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_behavior_side_evidence"],
+      promotionEligibility: "internal_only"
+    };
+  }
+
   const consentSurfaceObserved = getBooleanEvidence(input.rawEvidence, [
     "consentSurfaceObserved",
     "consent_surface_observed",
@@ -2875,6 +2932,24 @@ export function deriveConcernPolicy(input: {
 
     return {
       allowedNarrativeTier: hasVideoPayloadFieldHints(input.rawEvidence) ? "strong" : "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "eligible"
+    };
+  }
+
+  if (isAiSurfaceTrackingReviewConcern(input.concern)) {
+    if (!hasAiSurfaceTrackingRuntimeEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "weak",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_specific_runtime_anchor"],
+        promotionEligibility: "internal_only"
+      };
+    }
+
+    return {
+      allowedNarrativeTier: "moderate",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"

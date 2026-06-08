@@ -8,6 +8,7 @@ import { ApplicabilityAssumptionsNote } from "./privacy-law-applicability-contex
 import { RegulatoryChecklistAdvancedEvidenceProvider } from "./regulatory-checklist-advanced-evidence-context";
 
 type RegulatoryChecklistTab = {
+  badgeLabel?: string;
   content: ReactNode;
   group?: "visible" | "united_states" | "europe_uk" | "international";
   id: string;
@@ -19,6 +20,19 @@ type RegulatoryChecklistSectionProps = {
   showAdvancedEvidenceToggle?: boolean;
   tabs: RegulatoryChecklistTab[];
 };
+
+function TabLabel({ tab, useShortLabel = false }: { tab: RegulatoryChecklistTab; useShortLabel?: boolean }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <span className="truncate">{useShortLabel ? tab.shortLabel ?? tab.label : tab.label}</span>
+      {tab.badgeLabel ? (
+        <span className="inline-flex shrink-0 rounded-full border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-sky-700">
+          {tab.badgeLabel}
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false, tabs }: RegulatoryChecklistSectionProps) {
   const [activeTabId, setActiveTabId] = useState(tabs[0]?.id ?? "");
@@ -79,23 +93,23 @@ export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false,
                 </button>
               ) : null}
               {visibleTabs.map((tab) => {
-          const selected = tab.id === activeTab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              aria-pressed={selected}
-              className={cn(
-                "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-                selected
-                  ? "border-slate-950 bg-slate-950 text-white shadow-[0_12px_24px_-14px_rgba(15,23,42,0.9)] ring-1 ring-slate-950"
-                  : "border-transparent text-slate-500 hover:bg-white hover:text-slate-900"
-              )}
-              onClick={() => setActiveTabId(tab.id)}
-            >
-                    {tab.shortLabel ?? tab.label}
-            </button>
-          );
+                const selected = tab.id === activeTab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    aria-pressed={selected}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                      selected
+                        ? "border-slate-950 bg-slate-950 text-white shadow-[0_12px_24px_-14px_rgba(15,23,42,0.9)] ring-1 ring-slate-950"
+                        : "border-transparent text-slate-500 hover:bg-white hover:text-slate-900"
+                    )}
+                    onClick={() => setActiveTabId(tab.id)}
+                  >
+                    <TabLabel tab={tab} useShortLabel />
+                  </button>
+                );
               })}
               {menuGroups.length > 0 ? (
                 <details className="group relative">
@@ -107,7 +121,12 @@ export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false,
                         : "text-slate-500 hover:bg-white hover:text-slate-900"
                     )}
                   >
-                    {activeInMenu ? `More: ${activeTab.shortLabel ?? activeTab.label}` : "More"}
+                    {activeInMenu ? (
+                      <span className="inline-flex min-w-0 items-center gap-1.5">
+                        <span>More:</span>
+                        <TabLabel tab={activeTab} useShortLabel />
+                      </span>
+                    ) : "More"}
                   </summary>
                   <div className="absolute right-0 z-20 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_24px_70px_-34px_rgba(15,23,42,0.65)]">
                     {menuGroups.map((group) => (
@@ -131,7 +150,7 @@ export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false,
                                   event.currentTarget.closest("details")?.removeAttribute("open");
                                 }}
                               >
-                                <span>{tab.label}</span>
+                                <TabLabel tab={tab} />
                                 {selected ? <span aria-hidden>✓</span> : null}
                               </button>
                             );

@@ -256,6 +256,187 @@ function getHybridConsentOutcomeSummary(runtimeArtifacts: Record<string, unknown
   return getObject(getHybridRuntimeEvidence(runtimeArtifacts), ["consentOutcomeSummary", "consent_outcome_summary"]);
 }
 
+function getHybridTimelineMarkers(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return getObject(getHybridRuntimeEvidence(runtimeArtifacts), ["timelineMarkers", "timeline_markers"]);
+}
+
+function normalizeRuntimeObservedMs(value: number | null | undefined, navigationStartMs: number | null) {
+  const elapsed = normalizeRuntimeElapsedMs(value);
+  if (elapsed !== null) {
+    return elapsed;
+  }
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    typeof navigationStartMs === "number" &&
+    Number.isFinite(navigationStartMs)
+  ) {
+    return normalizeRuntimeElapsedMs(value - navigationStartMs);
+  }
+  return null;
+}
+
+function getRuntimeObservedMs(
+  record: Record<string, unknown> | null | undefined,
+  keys: string[],
+  navigationStartMs: number | null
+) {
+  for (const key of keys) {
+    const normalized = normalizeRuntimeObservedMs(getNumber(record, [key]), navigationStartMs);
+    if (normalized !== null) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
+function getSortedUniqueMs(values: Array<number | null | undefined>) {
+  return [...new Set(values.filter((value): value is number => typeof value === "number" && Number.isFinite(value)))]
+    .sort((left, right) => left - right);
+}
+
+function rowHasPreconsentTimingEvidence(row: Record<string, unknown>) {
+  return (
+    getBoolean(row, ["beforeConsent", "before_consent", "preConsent", "pre_consent"]) === true ||
+    /before[_ -]?consent|pre[_ -]?consent/i.test(getString(row, ["timingEvidence", "timing_evidence", "runtimePhase", "runtime_phase"]) ?? "")
+  );
+}
+
+function getPreconsentCookieStorageTimingSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
+  const timelineMarkers = getHybridTimelineMarkers(runtimeArtifacts);
+  const storageSummary = getHybridStorageSummary(runtimeArtifacts);
+  const navigationStartMs = getNumber(timelineMarkers, ["navigationStartMs", "navigation_start_ms"]);
+  const beforeConsentCookieRows = [
+    ...getObjectArray(hybridRuntimeEvidence, ["cookieWriteObservations", "cookie_write_observations"]),
+    ...getObjectArray(hybridRuntimeEvidence, ["preconsentCookieEvidence", "preconsent_cookie_evidence"])
+  ].filter(rowHasPreconsentTimingEvidence);
+  const observedMs = getSortedUniqueMs([
+    ...beforeConsentCookieRows.map((row) =>
+      getRuntimeObservedMs(row, [
+        "setAtMs",
+        "set_at_ms",
+        "firstObservedAtMs",
+        "first_observed_at_ms",
+        "firstObservedMs",
+        "first_observed_ms",
+        "firstSeenMs",
+        "first_seen_ms",
+        "tsMs",
+        "ts_ms",
+        "timestampMs",
+        "timestamp_ms"
+      ], navigationStartMs)
+    ),
+    getRuntimeObservedMs(timelineMarkers, ["firstCookieSeenMs", "first_cookie_seen_ms"], navigationStartMs),
+    getRuntimeObservedMs(timelineMarkers, ["firstStorageWriteMs", "first_storage_write_ms"], navigationStartMs),
+    getRuntimeObservedMs(storageSummary, ["firstCookieSeenMs", "first_cookie_seen_ms"], navigationStartMs),
+    getRuntimeObservedMs(storageSummary, ["firstStorageWriteMs", "first_storage_write_ms"], navigationStartMs)
+  ]);
+  const cookiesBeforeConsentCount = getNumber(storageSummary, ["cookiesBeforeConsentCount", "cookies_before_consent_count"]) ?? 0;
+  const initialInventoryObserved = observedMs.length === 0 && (beforeConsentCookieRows.length > 0 || cookiesBeforeConsentCount > 0);
+
+  return compactRecord({
+    firstPreconsentCookieOrStorageObservedMs: observedMs[0] ?? null,
+    firstPreconsentCookieOrStorageObservationBasis: initialInventoryObserved
+      ? "initial_preconsent_cookie_inventory"
+      : observedMs.length > 0
+        ? "runtime_cookie_or_storage_timing"
+        : null,
+    preconsentCookieOrStorageExactTimingRetained: observedMs.length > 0,
+    preconsentCookieOrStorageInitialInventoryObserved: initialInventoryObserved,
+    preconsentCookieOrStorageObservedMs: compactArray(observedMs, 6),
+    preconsentCookieOrStorageTimedObservationCount: observedMs.length,
+    preconsentCookieOrStorageUntimedObservationCount: Math.max(beforeConsentCookieRows.length - observedMs.length, 0)
+  });
+}
+
+function getPreconsentThirdPartyTrackingTimingSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
+  const timelineMarkers = getHybridTimelineMarkers(runtimeArtifacts);
+  const networkSummary = getHybridNetworkSummary(runtimeArtifacts);
+  const navigationStartMs = getNumber(timelineMarkers, ["navigationStartMs", "navigation_start_ms"]);
+  const state0Rows = getObjectArray(hybridRuntimeEvidence, [
+    "preconsentState0RequestObservations",
+    "preconsent_state0_request_observations"
+  ]);
+  const classifiedRows = getObjectArray(hybridRuntimeEvidence, [
+    "requestPurposeClassificationConfidence",
+    "request_purpose_classification_confidence"
+  ]);
+  const requestRows = getObjectArray(hybridRuntimeEvidence, ["requestObservations", "request_observations"]);
+  const preconsentThirdPartyCount =
+    getNumber(networkSummary, ["preConsentThirdPartyRequestCount", "pre_consent_third_party_request_count"]) ?? 0;
+  const rows = [
+    ...state0Rows,
+    ...classifiedRows.filter(rowHasPreconsentTimingEvidence),
+    ...requestRows.filter((row) =>
+      getBoolean(row, ["thirdParty", "third_party"]) === true &&
+      (rowHasPreconsentTimingEvidence(row) || preconsentThirdPartyCount > 0)
+    )
+  ];
+  const observedMs = getSortedUniqueMs([
+    ...rows.map((row) =>
+      getRuntimeObservedMs(row, [
+        "firstSeenMs",
+        "first_seen_ms",
+        "firstRequestMs",
+        "first_request_ms",
+        "firstObservedMs",
+        "first_observed_ms",
+        "tsMs",
+        "ts_ms",
+        "timestampMs",
+        "timestamp_ms"
+      ], navigationStartMs)
+    ),
+    getRuntimeObservedMs(timelineMarkers, [
+      "firstThirdPartyTrackingRequestMs",
+      "first_third_party_tracking_request_ms",
+      "firstThirdPartyRequestMs",
+      "first_third_party_request_ms"
+    ], navigationStartMs),
+    getRuntimeObservedMs(networkSummary, [
+      "firstThirdPartyTrackingRequestMs",
+      "first_third_party_tracking_request_ms",
+      "firstThirdPartyRequestMs",
+      "first_third_party_request_ms"
+    ], navigationStartMs)
+  ]);
+
+  return compactRecord({
+    firstPreconsentThirdPartyTrackingObservedMs: observedMs[0] ?? null,
+    firstPreconsentThirdPartyTrackingObservationBasis: observedMs.length > 0
+      ? "runtime_third_party_request_timing"
+      : null,
+    preconsentThirdPartyTrackingObservedMs: compactArray(observedMs, 6),
+    preconsentThirdPartyTrackingTimedObservationCount: observedMs.length
+  });
+}
+
+function getPreconsentTimingRetainedEvidence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const cookieOrStorage = getPreconsentCookieStorageTimingSummary(runtimeArtifacts);
+  const thirdPartyTracking = getPreconsentThirdPartyTrackingTimingSummary(runtimeArtifacts);
+  return compactRecord({
+    ...cookieOrStorage,
+    ...thirdPartyTracking,
+    preconsentTimingEvidence: compactRecord({
+      cookieOrStorage,
+      thirdPartyTracking
+    })
+  });
+}
+
+function formatPreconsentObservedMsRef(label: string, observedMs: unknown, basis: unknown) {
+  if (basis === "initial_preconsent_cookie_inventory") {
+    return "Pre-consent cookie/storage observed in initial inventory; exact observation/write time not retained";
+  }
+  if (typeof observedMs !== "number" || !Number.isFinite(observedMs)) {
+    return null;
+  }
+  return `${label}: ${Math.round(observedMs)}ms after scan start`;
+}
+
 function getPostRejectTrackingReductionEvidence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return getObject(runtimeArtifacts, [
     "postRejectTrackingReductionEvidence",
@@ -922,6 +1103,12 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
 
 function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const storageSummary = getHybridStorageSummary(input.runtimeArtifacts);
+  const preconsentTimingEvidence = getPreconsentTimingRetainedEvidence(input.runtimeArtifacts);
+  const firstObservedMsRef = formatPreconsentObservedMsRef(
+    "First pre-consent cookie/storage observation",
+    preconsentTimingEvidence.firstPreconsentCookieOrStorageObservedMs,
+    preconsentTimingEvidence.firstPreconsentCookieOrStorageObservationBasis
+  );
   const cookiesBeforeConsentCount =
     getNumber(storageSummary, ["cookiesBeforeConsentCount", "cookies_before_consent_count"]) ??
     (getBoolean(input.snapshot, ["first_party_cookie_set_before_consent", "third_party_cookie_set_before_consent"]) === true
@@ -937,14 +1124,16 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
       "Not observed",
       "Cookie/storage inventory retained before-consent observations, but scanner did not classify the retained examples as eligible non-essential cookie/storage evidence for this row.",
       [
+        firstObservedMsRef,
         `Observed before-consent cookie/storage count: ${cookiesBeforeConsentCount}`,
         "Evidence: hybrid runtime storage summary"
-      ],
+      ].filter((value): value is string => Boolean(value)),
       {
         retainedEvidence: {
           cookiesBeforeConsentCount,
           cookiesSeenCount,
           eligibleNonEssentialCookieStorageFindingProjected: false,
+          ...preconsentTimingEvidence,
           storageSummaryRetained: Boolean(storageSummary)
         }
       }
@@ -956,11 +1145,15 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
       "pre_consent_cookies_storage",
       "Not observed",
       "Cookie/storage inventory was retained for the tested context, and no eligible pre-consent cookie/storage finding was projected.",
-      ["Evidence: hybrid runtime storage summary"],
+      [
+        firstObservedMsRef,
+        "Evidence: hybrid runtime storage summary"
+      ].filter((value): value is string => Boolean(value)),
       {
         retainedEvidence: {
           cookiesBeforeConsentCount: cookiesBeforeConsentCount ?? 0,
           cookiesSeenCount,
+          ...preconsentTimingEvidence,
           runtimeCaptureCompleted: hasRuntimeCapture(input),
           storageSummaryRetained: Boolean(storageSummary)
         }
@@ -972,6 +1165,12 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
 }
 
 function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const preconsentTimingEvidence = getPreconsentTimingRetainedEvidence(input.runtimeArtifacts);
+  const firstObservedMsRef = formatPreconsentObservedMsRef(
+    "First pre-consent third-party tracking request observation",
+    preconsentTimingEvidence.firstPreconsentThirdPartyTrackingObservedMs,
+    preconsentTimingEvidence.firstPreconsentThirdPartyTrackingObservationBasis
+  );
   const trackerVendors = getStringArray(input.runtimeArtifacts, [
     "preconsent_tracker_vendors",
     "consent_baseline_tracker_vendor_names",
@@ -1000,6 +1199,7 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
         ? "Concrete pre-consent tracker vendor or request evidence was retained, but no eligible unified tracking finding was projected for this row. Manual review should confirm whether the retained request sequence supports a GDPR/ePrivacy tracking gap."
         : "Pre-consent third-party tracking evidence was retained, but no eligible unified tracking finding was projected for this row.",
       [
+        firstObservedMsRef,
         "Evidence: pre-consent tracking runtime signal",
         trackerVendorCount > 0 ? `Pre-consent tracker vendors: ${trackerVendorCount}` : null
       ].filter((value): value is string => Boolean(value)),
@@ -1017,6 +1217,7 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
             ],
         retainedEvidence: {
           concreteTrackerEvidenceRetained,
+          ...preconsentTimingEvidence,
           preconsentTrackingDetected,
           trackerEvidenceUrls: compactArray(trackerEvidenceUrls, 3),
           trackerVendorCount,
@@ -1031,9 +1232,13 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
       "pre_consent_third_party_tracking",
       "Not observed",
       "Runtime tracking checks completed for the tested context, and no eligible pre-consent third-party tracking finding was projected.",
-      ["Evidence: runtime capture completed"],
+      [
+        firstObservedMsRef,
+        "Evidence: runtime capture completed"
+      ].filter((value): value is string => Boolean(value)),
       {
         retainedEvidence: {
+          ...preconsentTimingEvidence,
           preconsentTrackingDetected: false,
           runtimeCaptureCompleted: true,
           trackerVendorCount

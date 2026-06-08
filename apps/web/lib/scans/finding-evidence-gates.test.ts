@@ -64,3 +64,58 @@ test("policy-backed positive infrastructure findings can reach the surfacing eng
     true
   );
 });
+
+test("AI surface tracking review signal is allowed with retained hybrid runtime evidence", () => {
+  assert.equal(
+    shouldSurfacePrimarySignalFinding({
+      fallbackEvidence: {
+        evidenceRefs: [
+          "https://example.com/ai-assistant",
+          "https://www.google-analytics.com/g/collect?v=2&cid=[redacted]"
+        ],
+        provenance: [
+          {
+            detail: "hybrid_runtime_evidence.ai_surface_runtime_evidence",
+            kind: "document"
+          }
+        ],
+        signalKey: "ai.flow_tracking_review_signal",
+        signalLabel: "AI surface tracking review signal",
+        signalValue: true
+      },
+      key: "ai.flow_tracking_review_signal",
+      linkedValidationEvidence: null,
+      signalSource: "runtime_artifact_signal"
+    }),
+    true
+  );
+});
+
+test("AI surface tracking review signal accepts retained messenger runtime endpoints", () => {
+  assert.equal(
+    shouldSurfacePrimarySignalFinding({
+      fallbackEvidence: {
+        evidenceRefs: [
+          "https://www.intercom.com/",
+          "https://api-iam.intercom.io/messenger/web/ping",
+          "https://api-iam.intercom.io/messenger/web/events",
+          "https://api-iam.intercom.io/messenger/web/rulesets/58118832/match",
+          "https://api-iam.intercom.io/messenger/web/metrics"
+        ],
+        provenance: [
+          {
+            detail: "hybrid_runtime_evidence.ai_surface_runtime_evidence",
+            kind: "document"
+          }
+        ],
+        signalKey: "ai.flow_tracking_review_signal",
+        signalLabel: "AI surface tracking review signal",
+        signalValue: true
+      },
+      key: "ai.flow_tracking_review_signal",
+      linkedValidationEvidence: null,
+      signalSource: "runtime_artifact_signal"
+    }),
+    true
+  );
+});

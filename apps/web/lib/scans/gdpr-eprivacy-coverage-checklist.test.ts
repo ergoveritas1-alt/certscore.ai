@@ -1029,6 +1029,66 @@ test("deriveGdprEprivacyCoverageChecklist maps already-projected executive findi
   ]);
 });
 
+test("deriveGdprEprivacyCoverageChecklist carries pre-consent timing from coverage outcomes into projected rows", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      pre_consent_cookies_storage: makeCoverageOutcome({
+        evidenceRefs: [
+          "Pre-consent cookie/storage observed in initial inventory; exact observation/write time not retained",
+          "Evidence: hybrid runtime storage summary"
+        ],
+        limitation: "Cookie/storage inventory retained before-consent observations.",
+        retainedEvidence: {
+          firstPreconsentCookieOrStorageObservationBasis: "initial_preconsent_cookie_inventory",
+          preconsentCookieOrStorageExactTimingRetained: false,
+          preconsentCookieOrStorageInitialInventoryObserved: true,
+          preconsentTimingEvidence: {
+            cookieOrStorage: {
+              preconsentCookieOrStorageInitialInventoryObserved: true
+            }
+          }
+        },
+        rowId: "pre_consent_cookies_storage",
+        status: "Not observed"
+      }),
+      pre_consent_third_party_tracking: makeCoverageOutcome({
+        evidenceRefs: [
+          "First pre-consent third-party tracking request observation: 478ms after scan start",
+          "Evidence: pre-consent tracking runtime signal"
+        ],
+        limitation: "Pre-consent third-party tracking evidence was retained.",
+        retainedEvidence: {
+          firstPreconsentThirdPartyTrackingObservationBasis: "runtime_third_party_request_timing",
+          firstPreconsentThirdPartyTrackingObservedMs: 478,
+          preconsentThirdPartyTrackingObservedMs: [478],
+          preconsentTimingEvidence: {
+            thirdPartyTracking: {
+              firstPreconsentThirdPartyTrackingObservedMs: 478
+            }
+          }
+        },
+        rowId: "pre_consent_third_party_tracking",
+        status: "Review signal"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("analytics_cookie_pre_consent", "Analytics cookie observed before consent"),
+      makeFinding("preconsent_tracking", "Pre-consent tracking detected")
+    ]
+  });
+
+  const cookieRow = byId(items, "pre_consent_cookies_storage");
+  const trackingRow = byId(items, "pre_consent_third_party_tracking");
+  assert.equal(cookieRow.status, "Gap observed");
+  assert.equal(cookieRow.criticalEvidence.retainedEvidence.preconsentCookieOrStorageInitialInventoryObserved, true);
+  assert.match(cookieRow.evidenceRefs.join(" "), /exact observation\/write time not retained/);
+  assert.equal(trackingRow.status, "Gap observed");
+  assert.equal(trackingRow.criticalEvidence.retainedEvidence.firstPreconsentThirdPartyTrackingObservedMs, 478);
+  assert.match(trackingRow.evidenceRefs.join(" "), /478ms after scan start/);
+});
+
 test("deriveGdprEprivacyCoverageChecklist marks audit-only projected context as insufficient evidence", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,

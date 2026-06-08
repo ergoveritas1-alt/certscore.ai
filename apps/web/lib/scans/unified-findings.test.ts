@@ -6982,6 +6982,55 @@ test("document semantic contact channel does not surface missing-contact finding
   assert.equal(packets.some((packet) => packet.unifiedFindingId === "privacy_contact_path_present"), true);
 });
 
+test("document semantic AI transparency signals surface as unified findings", () => {
+  const mergedSignals = buildMergedSignalRecords({
+    nanoSignals: [
+      {
+        confidence: 0.91,
+        evidenceRefs: ["https://example.com/responsible-ai"],
+        key: "ai.transparency_notice_present",
+        label: "AI transparency notice present",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.88,
+        evidenceRefs: ["https://example.com/responsible-ai"],
+        key: "ai.interaction_disclosure_present",
+        label: "AI interaction disclosure present",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: true,
+        valueType: "boolean"
+      },
+      {
+        confidence: 0.86,
+        evidenceRefs: ["https://example.com/responsible-ai"],
+        key: "ai.sensitive_context_review_signal",
+        label: "Sensitive-context AI review signal",
+        reportSignalSource: "document_semantic_signal",
+        source: "nano",
+        value: ["insurance"],
+        valueType: "string_array"
+      }
+    ]
+  });
+
+  const packets = buildUnifiedFindingDisplayPackets({
+    mergedSignals,
+    reviewFindingCandidates: [],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+  const packetIds = new Set(packets.map((packet) => packet.unifiedFindingId));
+
+  assert.equal(packetIds.has("ai_transparency_notice_present"), true);
+  assert.equal(packetIds.has("ai_interaction_disclosure_present"), true);
+  assert.equal(packetIds.has("ai_sensitive_context_review_signal"), true);
+});
+
 test("insufficient major merged signals surface as bounded discovery unresolved review findings", () => {
   const mergedSignals = buildMergedSignalRecords({
     nanoSignals: [

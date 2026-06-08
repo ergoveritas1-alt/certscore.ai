@@ -310,9 +310,39 @@ function getHybridNanoSignalRows(hybrid: Record<string, unknown> | null) {
   return [];
 }
 
+function getAiSurfaceRuntimeEvidence(hybrid: Record<string, unknown> | null) {
+  return getRecord(hybrid?.aiSurfaceRuntimeEvidence ?? hybrid?.ai_surface_runtime_evidence);
+}
+
+function buildHybridDerivedNanoSignalRows(hybrid: Record<string, unknown> | null): Record<string, unknown>[] {
+  const aiSurface = getAiSurfaceRuntimeEvidence(hybrid);
+  if (aiSurface?.observed !== true || aiSurface.trackingObserved !== true) {
+    return [];
+  }
+
+  return [
+    {
+      confidence: 0.78,
+      evidence_refs: uniqueStrings([
+        ...getStringArray(aiSurface.pageUrls ?? aiSurface.page_urls),
+        ...getStringArray(aiSurface.requestUrls ?? aiSurface.request_urls)
+      ]),
+      key: "ai.flow_tracking_review_signal",
+      label: "AI surface tracking review signal",
+      population_status: "present",
+      provenance_detail: "hybrid_runtime_evidence.ai_surface_runtime_evidence",
+      report_signal_source: "runtime_artifact_signal",
+      value: true
+    }
+  ];
+}
+
 export function getHybridNanoSignalPopulations(runtimeArtifacts: Record<string, unknown> | null | undefined): PopulatedSignalRecord[] {
   const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
-  const rows = getHybridNanoSignalRows(hybrid);
+  const rows: Record<string, unknown>[] = [
+    ...getHybridNanoSignalRows(hybrid),
+    ...buildHybridDerivedNanoSignalRows(hybrid)
+  ];
 
   return rows.flatMap((row) => {
     const key = getString(row.key);
