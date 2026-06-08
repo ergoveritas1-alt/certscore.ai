@@ -1176,27 +1176,3 @@ test("hydrates nano signal populations from hybrid runtime evidence", () => {
   assert.equal(rows[0]?.key, "privacy.gpc_disclosure_present");
   assert.equal(rows[0]?.reportSignalSource, "policy_enrichment_signal");
 });
-
-test("derives AI surface tracking runtime signal populations from hybrid evidence", () => {
-  const runtimeArtifacts = {
-    hybrid_runtime_evidence: {
-      aiSurfaceRuntimeEvidence: {
-        observed: true,
-        pageUrls: ["https://example.com/ai-assistant"],
-        requestUrls: ["https://www.google-analytics.com/g/collect?v=2&cid=[redacted]"],
-        trackingObserved: true
-      }
-    }
-  } satisfies Record<string, unknown>;
-
-  const rows = getHybridNanoSignalPopulations(runtimeArtifacts);
-
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.source, "nano");
-  assert.equal(rows[0]?.key, "ai.flow_tracking_review_signal");
-  assert.equal(rows[0]?.reportSignalSource, "runtime_artifact_signal");
-  assert.deepEqual(rows[0]?.evidenceRefs, [
-    "https://example.com/ai-assistant",
-    "https://www.google-analytics.com/g/collect?v=2&cid=[redacted]"
-  ]);
-});

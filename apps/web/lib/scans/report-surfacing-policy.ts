@@ -350,18 +350,6 @@ const CONTEXT_IDS = [
   "autoplay_media_observed"
 ] as const satisfies ReportUnifiedFindingId[];
 
-const AI_REVIEW_IDS = [
-  "ai_feature_claim_present",
-  "ai_marketing_disclosure_alignment_review",
-  "ai_interaction_disclosure_present",
-  "ai_transparency_notice_present",
-  "ai_generated_content_label_present",
-  "ai_automated_decision_disclosure_present",
-  "ai_human_review_path_present",
-  "ai_sensitive_context_review_signal",
-  "ai_surface_tracking_review_signal"
-] as const satisfies ReportUnifiedFindingId[];
-
 const FINANCIAL_PROMOTION_IDS = [
   "legal_entity_name_present",
   "operator_contact_path_present",
@@ -385,8 +373,7 @@ const FINANCIAL_PROMOTION_IDS = [
   "material_terms_hard_to_locate",
   "promo_to_terms_conflict",
   "yield_or_return_claims_high_risk",
-  "high_risk_product_risk_disclosure_missing",
-  "ai_financial_advice_or_trading_claims_without_disclosure"
+  "high_risk_product_risk_disclosure_missing"
 ] as const satisfies ReportUnifiedFindingId[];
 
 const CONFIRMED_RIGHTS_GAP_IDS = [
@@ -431,7 +418,6 @@ const NEGATIVE_FINANCIAL_RISK_IDS = [
   "promo_to_terms_conflict",
   "yield_or_return_claims_high_risk",
   "high_risk_product_risk_disclosure_missing",
-  "ai_financial_advice_or_trading_claims_without_disclosure",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -585,13 +571,6 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialTier: "secondary",
     initialLane: "confidence_and_coverage"
   }),
-  ...createPolicyEntries(AI_REVIEW_IDS, {
-    family: "context",
-    initialState: "review",
-    initialTier: "support",
-    initialLane: "confidence_and_coverage",
-    orphanedSupportFallback: "review"
-  }),
   ...createPolicyEntries(FINANCIAL_PROMOTION_IDS, {
     family: "financial_promotion",
     initialState: "review",
@@ -672,14 +651,6 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     initialState: "review",
     initialTier: "section",
     initialLane: "main"
-  },
-  ai_surface_tracking_review_signal: {
-    findingId: "ai_surface_tracking_review_signal",
-    family: "context",
-    initialState: "review",
-    initialTier: "support",
-    initialLane: "confidence_and_coverage",
-    orphanedSupportFallback: "review"
   },
   cross_border_vendor_disclosure_gap: {
     findingId: "cross_border_vendor_disclosure_gap",

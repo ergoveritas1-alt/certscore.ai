@@ -13,23 +13,23 @@ function makeArea(overrides: Partial<BetaRegulatoryChecklistArea> = {}): BetaReg
       notTestable: 1,
       review: 0
     },
-    id: "eu-ai-act",
+    id: "international-alpha",
     maturityLabel: "Alpha",
-    navLabel: "EU AI Act",
+    navLabel: "International privacy",
     rows: [
       {
         evidenceCapability: "near_term_supported",
-        id: "ai_feature_disclosure",
-        label: "AI feature / direct interaction disclosure",
-        note: "AI interaction disclosure requires retained evidence before stronger status is projected.",
+        id: "privacy_contact_review",
+        label: "Privacy contact review",
+        note: "Privacy contact review requires retained evidence before stronger status is projected.",
         status: "not_testable"
       }
     ],
     score: null,
     status: "not_testable",
-    subtitle: "Article 50-oriented transparency review signals.",
-    summary: "EU AI Act alpha review is limited to public-web AI transparency signals.",
-    title: "EU AI Act",
+    subtitle: "Public-web privacy review signals.",
+    summary: "International alpha review is limited to retained public-web privacy signals.",
+    title: "International privacy",
     ...overrides
   };
 }
@@ -37,7 +37,7 @@ function makeArea(overrides: Partial<BetaRegulatoryChecklistArea> = {}): BetaReg
 test("BetaRegulatoryChecklistCard can render an Alpha maturity label", () => {
   const html = renderToStaticMarkup(createElement(BetaRegulatoryChecklistCard, { area: makeArea() }));
 
-  assert.match(html, /EU AI Act/);
+  assert.match(html, /International privacy/);
   assert.match(html, /Alpha/);
   assert.match(html, /Alpha checklist rows are limited/);
   assert.doesNotMatch(html, /Beta checklist rows are limited/);

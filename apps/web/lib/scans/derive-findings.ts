@@ -550,9 +550,7 @@ export function deriveCertScoreFindings(scanRecord: MinimalScanRecord): DerivedP
     getBoolean(scanRecord.snapshot?.stakingApyLanguagePresent),
     getBoolean(scanRecord.snapshot?.staking_apy_language_present),
     getBoolean(scanRecord.snapshot?.copyTradingLanguagePresent),
-    getBoolean(scanRecord.snapshot?.copy_trading_language_present),
-    getBoolean(scanRecord.snapshot?.aiTradingLanguagePresent),
-    getBoolean(scanRecord.snapshot?.ai_trading_or_automated_trading_language_present)
+    getBoolean(scanRecord.snapshot?.copy_trading_language_present)
   ].some((value) => value === true);
   const sessionReplayDetected =
     sessionReplayVendorCount > 0 ||

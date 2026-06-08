@@ -189,91 +189,12 @@ function getPolicyInputStrengthScore(row: Record<string, unknown>) {
   return score;
 }
 
-const AI_DOCUMENT_SEMANTIC_ARRAY_KEYS = [
-  "ai_feature_claims",
-  "aiFeatureClaims",
-  "ai_sensitive_contexts",
-  "aiSensitiveContexts"
-] as const;
-
-const AI_DOCUMENT_SEMANTIC_BOOLEAN_KEYS = [
-  "ai_automated_decision_disclosure_present",
-  "aiAutomatedDecisionDisclosurePresent",
-  "ai_generated_content_label_present",
-  "aiGeneratedContentLabelPresent",
-  "ai_human_review_path_present",
-  "aiHumanReviewPathPresent",
-  "ai_interaction_disclosure_present",
-  "aiInteractionDisclosurePresent",
-  "ai_transparency_notice_present",
-  "aiTransparencyNoticePresent"
-] as const;
-
-function mergeStringArrayField(
-  base: Record<string, unknown>,
-  supplement: Record<string, unknown>,
-  key: string
-) {
-  const merged = [...new Set([
-    ...getStringArray(base[key]),
-    ...getStringArray(supplement[key])
-  ])];
-  if (merged.length > 0) {
-    base[key] = merged;
-  }
-}
-
-function mergeBooleanField(
-  base: Record<string, unknown>,
-  supplement: Record<string, unknown>,
-  key: string
-) {
-  const baseValue = base[key];
-  const supplementValue = supplement[key];
-  if (supplementValue === true || baseValue === true) {
-    base[key] = true;
-  } else if (baseValue === undefined && supplementValue === false) {
-    base[key] = false;
-  }
-}
-
-function mergeAiDocumentSemanticFields(
-  base: Record<string, unknown>,
-  supplement: Record<string, unknown>
-) {
-  const merged = { ...base };
-
-  for (const key of AI_DOCUMENT_SEMANTIC_ARRAY_KEYS) {
-    mergeStringArrayField(merged, supplement, key);
-  }
-
-  for (const key of AI_DOCUMENT_SEMANTIC_BOOLEAN_KEYS) {
-    mergeBooleanField(merged, supplement, key);
-  }
-
-  return merged;
-}
-
 export function buildNanoPolicyInputsFromDocumentSources(
   documentSources: Array<Record<string, unknown>>,
   options: { scannedHostname?: string | null } = {}
 ): Array<Record<string, unknown>> {
   function hasSemanticPayload(extracted: Record<string, unknown>) {
     return [
-      "ai_automated_decision_disclosure_present",
-      "aiAutomatedDecisionDisclosurePresent",
-      "ai_feature_claims",
-      "aiFeatureClaims",
-      "ai_generated_content_label_present",
-      "aiGeneratedContentLabelPresent",
-      "ai_human_review_path_present",
-      "aiHumanReviewPathPresent",
-      "ai_interaction_disclosure_present",
-      "aiInteractionDisclosurePresent",
-      "ai_sensitive_contexts",
-      "aiSensitiveContexts",
-      "ai_transparency_notice_present",
-      "aiTransparencyNoticePresent",
       "policy_actionable_flags",
       "policyActionableFlags",
       "policy_dsar_mechanism",
@@ -353,9 +274,9 @@ export function mergeNanoPolicyInputsWithFallback(input: {
 
     const existing = strongestByPageType.get(pageType);
     if (!existing || getPolicyInputStrengthScore(row) > getPolicyInputStrengthScore(existing)) {
-      strongestByPageType.set(pageType, existing ? mergeAiDocumentSemanticFields(row, existing) : row);
+      strongestByPageType.set(pageType, row);
     } else {
-      strongestByPageType.set(pageType, mergeAiDocumentSemanticFields(existing, row));
+      strongestByPageType.set(pageType, existing);
     }
   }
 

@@ -423,12 +423,6 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
   );
   pushBoolean(
     "disclosure",
-    "financial.ai_trading_or_automated_trading_language_present",
-    "AI trading or automated trading language present",
-    snapshot.aiTradingLanguagePresent
-  );
-  pushBoolean(
-    "disclosure",
     "financial.loss_risk_disclosure_text_present",
     "Loss-risk disclosure text present",
     snapshot.lossRiskDisclosureTextPresent
@@ -636,43 +630,6 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
   pushBoolean("commerce", "commerce.ad_network_meta_ads", "Meta Ads detected", snapshot.adNetworkMetaAds);
   pushBoolean("commerce", "commerce.retargeting_pixel_detected", "Retargeting pixel detected", snapshot.retargetingPixelDetected);
   pushBoolean("commerce", "commerce.session_replay_tool_detected", "Session replay tool detected", snapshot.sessionReplayToolDetected);
-  pushBoolean("commerce", "commerce.ai_chatbot_present", "AI chatbot detected", snapshot.aiChatbotPresent === true);
-  pushBoolean(
-    "commerce",
-    "commerce.ai_assistant_widget_detected",
-    "AI assistant widget detected",
-    snapshot.aiAssistantWidgetDetected === true
-  );
-  pushBoolean(
-    "commerce",
-    "commerce.ai_disclosure_text_present",
-    "AI disclosure text detected",
-    snapshot.aiDisclosureTextPresent === true
-  );
-  pushBoolean(
-    "commerce",
-    "commerce.ai_terms_or_policy_ai_reference",
-    "AI policy or terms reference detected",
-    snapshot.aiTermsOrPolicyAiReference === true
-  );
-  pushBoolean(
-    "commerce",
-    "commerce.ai_help_center_ai_reference",
-    "AI help-center reference detected",
-    snapshot.aiHelpCenterAiReference === true
-  );
-  pushBoolean(
-    "commerce",
-    "commerce.ai_search_or_answer_experience_detected",
-    "AI search or answer experience detected",
-    snapshot.aiSearchOrAnswerExperienceDetected === true
-  );
-  pushBoolean(
-    "commerce",
-    "commerce.ai_hiring_automation_signal_detected",
-    "AI hiring automation disclosure detected",
-    snapshot.aiHiringAutomationSignalDetected === true
-  );
   pushNumber(
     "commerce",
     "commerce.form_data_sensitivity_score",

@@ -156,8 +156,6 @@ const SNAPSHOT_SECTIONS = [
       "mentions_cross_border_transfer",
       "cross_border_transfer_mechanism_detected",
       "mentions_subprocessors_or_vendors",
-      "mentions_automated_decisioning",
-      "mentions_ai_usage",
       "double_opt_in_reference_present",
       "third_party_disclosure_specificity"
     ]

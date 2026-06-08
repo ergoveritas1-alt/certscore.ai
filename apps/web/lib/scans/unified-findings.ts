@@ -1069,7 +1069,6 @@ const CONTRADICTORY_SURFACE_FINDING_PAIRS: ReadonlyMap<string, string> = new Map
 ]);
 
 const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
-  "ai_financial_advice_or_trading_claims_without_disclosure",
   "apr_or_interest_rate_disclosure_present",
   "fee_disclosure_missing_or_opaque",
   "fee_disclosure_present",
@@ -1098,7 +1097,6 @@ const FINANCIAL_PROMOTION_FINDING_IDS = new Set([
 ]);
 
 const DECEPTIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
-  "ai_financial_advice_or_trading_claims_without_disclosure",
   "financial_urgency_pressure_tactic_detected",
   "guaranteed_or_high_return_claims_present",
   "high_risk_product_risk_disclosure_missing",
