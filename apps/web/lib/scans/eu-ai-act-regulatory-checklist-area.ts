@@ -72,6 +72,7 @@ const EU_AI_ACT_ROW_SEEDS: EuAiActRowSeed[] = [
     id: "ai_transparency_notice",
     label: "AI transparency notice availability",
     matchedStatus: "checked",
+    notObservedSignalKeys: ["ai.transparency_notice_present"],
     note: "AI transparency notice review requires retained public AI, responsible-use, trust, legal, help, privacy, or terms surfaces.",
     regulatoryMapping: []
   },

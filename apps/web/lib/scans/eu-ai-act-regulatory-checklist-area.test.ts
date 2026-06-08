@@ -223,3 +223,24 @@ test("EU AI Act checklist projects explicit missing AI disclosure signals as not
   assert.equal(byId.get("automated_decision_disclosure")?.status, "not_observed");
   assert.equal(byId.get("human_review_path")?.status, "not_observed");
 });
+
+test("EU AI Act checklist projects missing transparency notice as not observed", () => {
+  const euAiActArea = buildEuAiActRegulatoryChecklistArea([], {
+    mergedSignals: [
+      {
+        evidenceRefs: ["https://example.com/privacy"],
+        key: "ai.transparency_notice_present",
+        label: "AI transparency notice present",
+        populationStatus: "missing",
+        selectedPopulation: { value: false },
+        value: false
+      }
+    ]
+  });
+  const byId = new Map(euAiActArea.rows.map((row) => [row.id, row]));
+
+  assert.equal(byId.get("ai_transparency_notice")?.status, "not_observed");
+  assert.deepEqual(byId.get("ai_transparency_notice")?.evidenceRefs, ["https://example.com/privacy"]);
+  assert.equal(euAiActArea.counters.notObserved, 1);
+  assert.equal(euAiActArea.score, 6);
+});
