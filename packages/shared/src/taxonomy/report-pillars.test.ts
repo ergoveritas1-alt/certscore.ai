@@ -38,7 +38,7 @@ test("defines the v1 pillar order", () => {
 });
 
 test("keeps each section attached to exactly one pillar", () => {
-  assert.equal(REPORT_SECTIONS.length, 20);
+  assert.equal(REPORT_SECTIONS.length, 19);
   assert.ok(
     REPORT_SECTIONS.every((section) =>
       REPORT_PRIMARY_PILLARS.some((pillar) => pillar.id === section.pillarId && pillar.sectionIds.includes(section.id))
@@ -47,7 +47,7 @@ test("keeps each section attached to exactly one pillar", () => {
 });
 
 test("keeps each evidence category attached to exactly one section", () => {
-  assert.equal(REPORT_EVIDENCE_CATEGORIES.length, 75);
+  assert.equal(REPORT_EVIDENCE_CATEGORIES.length, 70);
   assert.ok(
     REPORT_EVIDENCE_CATEGORIES.every((category) =>
       REPORT_SECTIONS.some(
@@ -65,40 +65,11 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 155);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 145);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
     )
-  );
-});
-
-test("maps EU AI Act alpha document semantics through signal and finding registries", () => {
-  const signal = getReportSignalBySourceAndKey(
-    "document_semantic_signal",
-    "ai.transparency_notice_present"
-  );
-  const finding = getReportUnifiedFindingForSignal(
-    "document_semantic_signal",
-    "ai.transparency_notice_present"
-  );
-
-  assert.equal(getReportSection("eu_ai_act_transparency_review")?.pillarId, "regulatory_enforcement_overlay");
-  assert.equal(signal?.primaryEvidenceCategoryId, "ai_system_transparency_notice");
-  assert.equal(finding?.id, "ai_transparency_notice_present");
-  assert.equal(
-    getReportUnifiedFindingForSignal("runtime_artifact_signal", "ai.flow_tracking_review_signal")?.id,
-    "ai_surface_tracking_review_signal"
-  );
-  assert.deepEqual(
-    getReportEvidenceCategoriesForSection("eu_ai_act_transparency_review").map((category) => category.id),
-    [
-      "ai_system_transparency_notice",
-      "ai_direct_interaction_disclosure",
-      "ai_generated_content_labeling",
-      "ai_automated_decision_human_review",
-      "ai_sensitive_context_triage"
-    ]
   );
 });
 

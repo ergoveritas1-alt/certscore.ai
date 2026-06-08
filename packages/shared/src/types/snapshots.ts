@@ -307,8 +307,6 @@ export type ScanSnapshot = {
   mentionsCrossBorderTransfer: boolean;
   crossBorderTransferMechanismDetected: boolean | null;
   mentionsSubprocessorsOrVendors: boolean;
-  mentionsAutomatedDecisioning: boolean;
-  mentionsAiUsage: boolean;
   doubleOptInReferencePresent: boolean | null;
   thirdPartyDisclosureSpecificity: ThirdPartyDisclosureSpecificity | null;
   cookieBannerPresent: boolean;
@@ -449,14 +447,6 @@ export type ScanSnapshot = {
   adNetworkMetaAds: boolean;
   retargetingPixelDetected: boolean;
   sessionReplayToolDetected: boolean;
-  aiChatbotPresent: boolean | null;
-  aiChatbotVendor: string | null;
-  aiAssistantWidgetDetected: boolean | null;
-  aiDisclosureTextPresent: boolean | null;
-  aiTermsOrPolicyAiReference: boolean | null;
-  aiHelpCenterAiReference: boolean | null;
-  aiSearchOrAnswerExperienceDetected: boolean | null;
-  aiHiringAutomationSignalDetected: boolean | null;
   securityTxtPresent: boolean;
   vulnerabilityDisclosurePagePresent: boolean;
   trustCenterPresent: boolean;
@@ -544,7 +534,6 @@ export type ScanSnapshot = {
   perpetualsOrDerivativesLanguagePresent: boolean;
   stakingApyLanguagePresent: boolean;
   copyTradingLanguagePresent: boolean;
-  aiTradingLanguagePresent: boolean;
   lossRiskDisclosureTextPresent: boolean;
   highRiskProductExplainerPagePresent: boolean;
   highRiskProductSignalCount: number;

@@ -9,8 +9,7 @@ export type PrimaryScanCategoryId =
   | "data_collection_third_party_ecosystem"
   | "sensitive_data_identity_signals"
   | "accessibility"
-  | "security_trust_governance"
-  | "ai_automation_emerging_practices";
+  | "security_trust_governance";
 
 export type RegulatoryTag =
   | "ftc_consumer_protection"
@@ -38,8 +37,7 @@ export const PRIMARY_SCAN_CATEGORY_ORDER: PrimaryScanCategoryId[] = [
   "data_collection_third_party_ecosystem",
   "sensitive_data_identity_signals",
   "accessibility",
-  "security_trust_governance",
-  "ai_automation_emerging_practices"
+  "security_trust_governance"
 ];
 
 export const PRIMARY_SCAN_CATEGORY_META: Record<
@@ -72,10 +70,6 @@ export const PRIMARY_SCAN_CATEGORY_META: Record<
   security_trust_governance: {
     label: "Security, Trust & Governance",
     description: "Technical security posture plus public trust, governance, and transparency signals."
-  },
-  ai_automation_emerging_practices: {
-    label: "AI, Automation & Emerging Practices",
-    description: "Visible AI and automation-related experiences, disclosures, and documentation surfaced on the website."
   }
 };
 
@@ -411,30 +405,6 @@ export const SNAPSHOT_FIELD_TAXONOMY = buildSnapshotFieldMap([
     subcategory: "Incident / Vulnerability Transparency",
     regulatoryTags: ["ftc_consumer_protection"],
     fields: ["incident_status_page_present", "infrastructure_change_detected", "security_header_posture_changed"]
-  },
-  {
-    primaryCategory: "ai_automation_emerging_practices",
-    subcategory: "Visible AI Assistants",
-    regulatoryTags: ["ftc_consumer_protection"],
-    fields: ["ai_chatbot_present", "ai_chatbot_vendor", "ai_assistant_widget_detected"]
-  },
-  {
-    primaryCategory: "ai_automation_emerging_practices",
-    subcategory: "AI Documentation & Disclosures",
-    regulatoryTags: ["ftc_consumer_protection", "gdpr_eu_privacy"],
-    fields: ["ai_disclosure_text_present", "ai_terms_or_policy_ai_reference", "ai_help_center_ai_reference"]
-  },
-  {
-    primaryCategory: "ai_automation_emerging_practices",
-    subcategory: "AI Search / Answer Experiences",
-    regulatoryTags: ["ftc_consumer_protection"],
-    fields: ["ai_search_or_answer_experience_detected"]
-  },
-  {
-    primaryCategory: "ai_automation_emerging_practices",
-    subcategory: "Hiring / Automated Decision Signals",
-    regulatoryTags: ["ftc_consumer_protection", "state_privacy"],
-    fields: ["ai_hiring_automation_signal_detected"]
   }
 ]);
 
@@ -519,34 +489,6 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
     "disclosure.session_replay_disclosure_pages": {
       primaryCategory: "consumer_transparency_disclosures",
       subcategory: "Privacy & Cookie Disclosures"
-    },
-    "commerce.ai_chatbot_present": {
-      primaryCategory: "ai_automation_emerging_practices",
-      subcategory: "Visible AI Assistants"
-    },
-    "commerce.ai_assistant_widget_detected": {
-      primaryCategory: "ai_automation_emerging_practices",
-      subcategory: "Visible AI Assistants"
-    },
-    "commerce.ai_disclosure_text_present": {
-      primaryCategory: "ai_automation_emerging_practices",
-      subcategory: "AI Documentation & Disclosures"
-    },
-    "commerce.ai_terms_or_policy_ai_reference": {
-      primaryCategory: "ai_automation_emerging_practices",
-      subcategory: "AI Documentation & Disclosures"
-    },
-    "commerce.ai_help_center_ai_reference": {
-      primaryCategory: "ai_automation_emerging_practices",
-      subcategory: "AI Documentation & Disclosures"
-    },
-    "commerce.ai_search_or_answer_experience_detected": {
-      primaryCategory: "ai_automation_emerging_practices",
-      subcategory: "AI Search / Answer Experiences"
-    },
-    "commerce.ai_hiring_automation_signal_detected": {
-      primaryCategory: "ai_automation_emerging_practices",
-      subcategory: "Hiring / Automated Decision Signals"
     },
     "privacy.consent_reject_persisted_tracker_vendors": {
       primaryCategory: "privacy_consent_user_choice",

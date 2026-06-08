@@ -40,14 +40,6 @@ export type PersistedNanoSignalRow = {
 
 export const MANAGED_NANO_POLICY_SIGNAL_KEYS = new Set([
   ...POLICY_POSITIVE_SIGNAL_SPECS.map((spec) => spec.canonicalSignalKey),
-  "ai.automated_decision_disclosure_present",
-  "ai.feature_claim_present",
-  "ai.generated_content_label_present",
-  "ai.human_review_path_present",
-  "ai.interaction_disclosure_present",
-  "ai.marketing_disclosure_alignment_review",
-  "ai.sensitive_context_review_signal",
-  "ai.transparency_notice_present",
   "policyActionableFlags",
   "policySemanticConfidence",
   "policyAmbiguityScore",
@@ -124,22 +116,6 @@ function uniqueNonEmptyStrings(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter((value) => value.length > 0))];
 }
 
-function getRowsWithBooleanTrue(rows: Array<Record<string, unknown>>, keys: string[]) {
-  return rows.filter((row) => keys.some((key) => row[key] === true));
-}
-
-function getRowsWithBooleanFalse(rows: Array<Record<string, unknown>>, keys: string[]) {
-  return rows.filter((row) => keys.some((key) => row[key] === false));
-}
-
-function getRowsWithStringArray(rows: Array<Record<string, unknown>>, keys: string[]) {
-  return rows.filter((row) => keys.some((key) => getStringArray(row[key]).length > 0));
-}
-
-function getStringArrayFromRows(rows: Array<Record<string, unknown>>, keys: string[]) {
-  return uniqueNonEmptyStrings(rows.flatMap((row) => keys.flatMap((key) => getStringArray(row[key]))));
-}
-
 function pushNanoSignalRow(
   rows: PersistedNanoSignalRow[],
   input: {
@@ -180,105 +156,6 @@ export function buildNanoPolicySignalRows(input: {
     primaryPolicyEnrichment: primaryPolicyRow
   });
   const rows: PersistedNanoSignalRow[] = [];
-  const aiFeatureClaimRows = getRowsWithStringArray(input.policyEnrichments, ["ai_feature_claims", "aiFeatureClaims"]);
-  const aiFeatureClaims = getStringArrayFromRows(aiFeatureClaimRows, ["ai_feature_claims", "aiFeatureClaims"]);
-  const aiSensitiveContextRows = getRowsWithStringArray(input.policyEnrichments, ["ai_sensitive_contexts", "aiSensitiveContexts"]);
-  const aiSensitiveContexts = getStringArrayFromRows(aiSensitiveContextRows, ["ai_sensitive_contexts", "aiSensitiveContexts"]);
-  const aiSignalSpecs = [
-    {
-      fieldKeys: ["ai_interaction_disclosure_present", "aiInteractionDisclosurePresent"],
-      key: "ai.interaction_disclosure_present",
-      label: "AI interaction disclosure present",
-      provenanceDetail: "policy_enrichment.ai_interaction_disclosure"
-    },
-    {
-      fieldKeys: ["ai_transparency_notice_present", "aiTransparencyNoticePresent"],
-      key: "ai.transparency_notice_present",
-      label: "AI transparency notice present",
-      provenanceDetail: "policy_enrichment.ai_transparency_notice"
-    },
-    {
-      fieldKeys: ["ai_generated_content_label_present", "aiGeneratedContentLabelPresent"],
-      key: "ai.generated_content_label_present",
-      label: "AI-generated content label present",
-      provenanceDetail: "policy_enrichment.ai_generated_content_label"
-    },
-    {
-      fieldKeys: ["ai_automated_decision_disclosure_present", "aiAutomatedDecisionDisclosurePresent"],
-      key: "ai.automated_decision_disclosure_present",
-      label: "Automated decision disclosure present",
-      provenanceDetail: "policy_enrichment.ai_automated_decision_disclosure"
-    },
-    {
-      fieldKeys: ["ai_human_review_path_present", "aiHumanReviewPathPresent"],
-      key: "ai.human_review_path_present",
-      label: "AI human review or escalation path present",
-      provenanceDetail: "policy_enrichment.ai_human_review_path"
-    }
-  ];
-
-  if (aiFeatureClaims.length > 0) {
-    pushNanoSignalRow(rows, {
-      confidence: buildPolicyRowConfidence(aiFeatureClaimRows),
-      evidenceRefs: getPolicyRowEvidenceRefs(aiFeatureClaimRows),
-      key: "ai.feature_claim_present",
-      label: "Public AI feature claim present",
-      provenanceDetail: "policy_enrichment.ai_feature_claims",
-      value: aiFeatureClaims
-    });
-    pushNanoSignalRow(rows, {
-      confidence: buildPolicyRowConfidence(aiFeatureClaimRows),
-      evidenceRefs: getPolicyRowEvidenceRefs(aiFeatureClaimRows),
-      key: "ai.marketing_disclosure_alignment_review",
-      label: "AI marketing / disclosure alignment review",
-      provenanceDetail: "policy_enrichment.ai_feature_claims",
-      value: true
-    });
-  }
-
-  for (const spec of aiSignalSpecs) {
-    const sourceRows = getRowsWithBooleanTrue(input.policyEnrichments, spec.fieldKeys);
-    if (sourceRows.length === 0) {
-      continue;
-    }
-
-    pushNanoSignalRow(rows, {
-      confidence: buildPolicyRowConfidence(sourceRows),
-      evidenceRefs: getPolicyRowEvidenceRefs(sourceRows),
-      key: spec.key,
-      label: spec.label,
-      provenanceDetail: spec.provenanceDetail,
-      value: true
-    });
-  }
-
-  for (const spec of aiSignalSpecs) {
-    const sourceRows = getRowsWithBooleanFalse(input.policyEnrichments, spec.fieldKeys);
-    if (sourceRows.length === 0) {
-      continue;
-    }
-
-    pushNanoSignalRow(rows, {
-      confidence: buildPolicyRowConfidence(sourceRows),
-      evidenceRefs: getPolicyRowEvidenceRefs(sourceRows),
-      key: spec.key,
-      label: spec.label,
-      populationStatus: "missing",
-      provenanceDetail: spec.provenanceDetail,
-      value: false
-    });
-  }
-
-  if (aiSensitiveContexts.length > 0) {
-    pushNanoSignalRow(rows, {
-      confidence: buildPolicyRowConfidence(aiSensitiveContextRows),
-      evidenceRefs: getPolicyRowEvidenceRefs(aiSensitiveContextRows),
-      key: "ai.sensitive_context_review_signal",
-      label: "Sensitive-context AI review signal",
-      provenanceDetail: "policy_enrichment.ai_sensitive_contexts",
-      value: aiSensitiveContexts
-    });
-  }
 
   for (const spec of POLICY_POSITIVE_SIGNAL_SPECS) {
     if (positiveSignalMap.get(spec.canonicalSignalKey) !== true) {

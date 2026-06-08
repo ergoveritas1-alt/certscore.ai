@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 
-function renderTabs(includeAdminOnlyTabs: boolean, includeEuAiAct = false) {
+function renderTabs(includeAdminOnlyTabs: boolean) {
   const tabs = [
     {
       content: createElement("div", null, "California checklist"),
@@ -17,13 +17,6 @@ function renderTabs(includeAdminOnlyTabs: boolean, includeEuAiAct = false) {
       id: "gdpr-eprivacy",
       label: "GDPR / ePrivacy",
       shortLabel: "GDPR/ePrivacy"
-    },
-    {
-      badgeLabel: "Alpha",
-      content: createElement("div", null, "EU AI Act checklist"),
-      id: "eu-ai-act",
-      label: "EU AI Act",
-      shortLabel: "EU AI Act"
     },
     {
       content: createElement("div", null, "FTC checklist"),
@@ -40,7 +33,6 @@ function renderTabs(includeAdminOnlyTabs: boolean, includeEuAiAct = false) {
   ].filter(
     (tab) =>
       includeAdminOnlyTabs ||
-      (includeEuAiAct && tab.id === "eu-ai-act") ||
       tab.id === "gdpr-eprivacy" ||
       tab.id === "california-privacy"
   );
@@ -88,25 +80,16 @@ test("RegulatoryChecklistSection can render all checklist options for admin view
   assert.match(html, />More</);
 });
 
-test("RegulatoryChecklistSection renders an Alpha pill for the EU AI Act tab", () => {
-  const html = renderTabs(false, true);
-
-  assert.match(html, /EU AI Act/);
-  assert.match(html, /Alpha/);
-  assert.ok(indexOfTabLabel(html, "CCPA/CPRA+CIPA") < indexOfTabLabel(html, "GDPR/ePrivacy"));
-  assert.ok(indexOfTabLabel(html, "GDPR/ePrivacy") < indexOfTabLabel(html, "EU AI Act"));
-});
-
 test("RegulatoryChecklistSection renders tab badges inside the More menu", () => {
   const html = renderToStaticMarkup(createElement(RegulatoryChecklistSection, {
     tabs: [
       {
         badgeLabel: "Alpha",
-        content: createElement("div", null, "EU AI Act checklist"),
+        content: createElement("div", null, "International privacy checklist"),
         group: "europe_uk" as const,
-        id: "eu-ai-act",
-        label: "EU AI Act",
-        shortLabel: "EU AI Act"
+        id: "international-alpha",
+        label: "International privacy",
+        shortLabel: "International"
       },
       {
         content: createElement("div", null, "California checklist"),
@@ -118,6 +101,6 @@ test("RegulatoryChecklistSection renders tab badges inside the More menu", () =>
   }));
 
   assert.match(html, /More:/);
-  assert.match(html, /EU AI Act/);
+  assert.match(html, /International privacy/);
   assert.match(html, /Alpha/);
 });

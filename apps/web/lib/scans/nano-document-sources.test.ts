@@ -208,52 +208,6 @@ test("mergeNanoPolicyInputsWithFallback keeps stronger fallback privacy rows ove
   assert.equal(rows[0]?.policy_summary_short, "Primary privacy statement explains rights, cookies, and retention.");
 });
 
-test("mergeNanoPolicyInputsWithFallback preserves retained AI document semantics when fallback row is stronger", () => {
-  const rows = mergeNanoPolicyInputsWithFallback({
-    documentSources: [
-      {
-        canonical_url: "https://www.example.com/privacy",
-        document_type: "privacy_policy",
-        extracted_fields_json: {
-          ai_feature_claims: ["ai_agent", "generative_ai"],
-          ai_interaction_disclosure_present: true,
-          ai_sensitive_contexts: ["employment", "housing"],
-          ai_transparency_notice_present: true,
-          policy_summary_short: "Thin privacy page.",
-          policy_semantic_confidence: 0.45,
-          policy_structurally_weak: true
-        },
-        extraction_status: "ready",
-        id: "doc-ai-privacy",
-        source_status: "ready"
-      }
-    ],
-    fallbackRows: [
-      {
-        ai_feature_claims: ["ai_powered_feature"],
-        id: "policy-privacy",
-        page_type: "privacy_policy",
-        policy_field_coverage: {
-          retention: {
-            found: true
-          }
-        },
-        policy_retention_disclosure: "vague",
-        policy_rights_signals: ["access_request"],
-        policy_semantic_confidence: 0.72,
-        policy_summary_short: "Primary privacy statement explains rights, cookies, and retention."
-      }
-    ]
-  });
-
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0]?.policy_summary_short, "Primary privacy statement explains rights, cookies, and retention.");
-  assert.deepEqual(rows[0]?.ai_feature_claims, ["ai_powered_feature", "ai_agent", "generative_ai"]);
-  assert.deepEqual(rows[0]?.ai_sensitive_contexts, ["employment", "housing"]);
-  assert.equal(rows[0]?.ai_interaction_disclosure_present, true);
-  assert.equal(rows[0]?.ai_transparency_notice_present, true);
-});
-
 test("mergeNanoPolicyInputsWithFallback prefers substantive privacy statements over privacy-preferences pages", () => {
   const rows = mergeNanoPolicyInputsWithFallback({
     documentSources: [

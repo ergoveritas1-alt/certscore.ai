@@ -40,34 +40,6 @@ test("normalizeNanoDocumentExtraction maps parsed nano output into policy-style 
   assert.equal(result.semanticConfidence, 0.81);
 });
 
-test("normalizeNanoDocumentExtraction maps public AI disclosure semantics", () => {
-  const result = normalizeNanoDocumentExtraction({
-    documentText:
-      "Responsible AI Notice. Our AI-powered assistant helps users compare insurance options. Users are interacting with an automated assistant. Some summaries may be AI-generated. We use automated decision-making for recommendations, and you may request human review or appeal a decision.",
-    parsed: {
-      policySummaryShort: "Responsible AI notice."
-    },
-    row: {
-      canonical_url: "https://example.com/responsible-ai",
-      document_type: "ai_notice",
-      title: "Responsible AI Notice"
-    }
-  });
-
-  assert.equal(result.extractionStatus, "ready");
-  assert.deepEqual(result.extractedFields.ai_feature_claims, [
-    "ai_powered_feature",
-    "chatbot_or_virtual_assistant",
-    "generative_ai"
-  ]);
-  assert.equal(result.extractedFields.ai_interaction_disclosure_present, true);
-  assert.equal(result.extractedFields.ai_transparency_notice_present, true);
-  assert.equal(result.extractedFields.ai_generated_content_label_present, true);
-  assert.equal(result.extractedFields.ai_automated_decision_disclosure_present, true);
-  assert.equal(result.extractedFields.ai_human_review_path_present, true);
-  assert.deepEqual(result.extractedFields.ai_sensitive_contexts, ["insurance"]);
-});
-
 test("normalizeNanoDocumentExtraction backfills strong mention topics and email contact from document text", () => {
   const result = normalizeNanoDocumentExtraction({
     documentText:

@@ -21,17 +21,6 @@ test("maps sensitive collection fields into sensitive data and identity signals"
   assert.equal(entry?.subcategory, "Health Inputs");
 });
 
-test("maps AI compatibility signals into the AI taxonomy", () => {
-  const entry = mapSignalKeyToTaxonomy({
-    category: "commerce",
-    key: "commerce.ai_help_center_ai_reference",
-    label: "AI help-center reference detected"
-  });
-
-  assert.equal(entry.primaryCategory, "ai_automation_emerging_practices");
-  assert.equal(entry.subcategory, "AI Documentation & Disclosures");
-});
-
 test("maps ad and replay compatibility signals into the data ecosystem taxonomy", () => {
   const replayEntry = mapSignalKeyToTaxonomy({
     category: "commerce",
@@ -52,17 +41,17 @@ test("maps ad and replay compatibility signals into the data ecosystem taxonomy"
 
 test("groups snapshot fields into the new primary category order", () => {
   const groups = groupSnapshotFieldsByPrimaryCategory([
-    "ai_chatbot_present",
     "dark_pattern_reject_button_missing",
     "form_collects_ssn",
+    "wcag_link_name_error_count",
     "security_txt_present"
   ]);
 
   assert.deepEqual(groups.map((group) => getPrimaryCategoryLabel(group.categoryId)), [
     "Privacy, Consent & User Choice",
     "Sensitive Data & Identity Signals",
-    "Security, Trust & Governance",
-    "AI, Automation & Emerging Practices"
+    "Accessibility",
+    "Security, Trust & Governance"
   ]);
 });
 

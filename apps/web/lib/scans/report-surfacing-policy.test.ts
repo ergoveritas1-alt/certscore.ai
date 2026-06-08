@@ -1633,25 +1633,6 @@ test("direct session replay observation surfaces as standalone review finding", 
   assert.ok(decision?.appliedRules.includes("evidence.consent_behavior.review_runtime_without_effect_evidence"));
 });
 
-test("AI surface tracking review signal stays reportable in confidence and coverage", () => {
-  const evaluation = evaluateUnifiedFindingSurfacing({
-    packets: [
-      makePacket("ai_surface_tracking_review_signal", {
-        confidenceInputs: {
-          ...makePacket("ai_surface_tracking_review_signal").confidenceInputs,
-          hasDirectRuntimeEvidence: true,
-          hasPageAttribution: true
-        }
-      })
-    ]
-  });
-
-  const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "review");
-  assert.equal(decision?.reportLane, "confidence_and_coverage");
-  assert.equal(decision?.surfaceTier, "secondary");
-});
-
 test("consent interface findings stay review-level even when related evidence exists", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

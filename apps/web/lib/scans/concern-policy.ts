@@ -733,42 +733,6 @@ function hasVideoPayloadFieldHints(evidence: Record<string, unknown> | null | un
   ]).some((value) => /content|video|title|page|dl|rl|ev/i.test(value));
 }
 
-function hasAiSurfaceTrackingRuntimeEvidence(evidence: Record<string, unknown> | null | undefined) {
-  const evidenceRefs = getStringArrayValues(evidence, ["evidenceRefs", "evidence_refs"]);
-  const provenanceRows = getObjectArrayEvidence(evidence, ["provenance"]);
-  const hasHybridProvenance = provenanceRows.some((row) => {
-    const detail = getFirstString(row, ["detail", "source_ref", "sourceRef"]);
-    return detail === "hybrid_runtime_evidence.ai_surface_runtime_evidence";
-  });
-  const explicitPageUrls = getStringArrayValues(evidence, ["pageUrls", "page_urls"]);
-  const urlEvidenceRefs = evidenceRefs.filter((value) => /^https?:\/\//i.test(value));
-  const inferredPageUrls = explicitPageUrls.length > 0
-    ? []
-    : urlEvidenceRefs.filter((value) => !isRuntimeRequestEvidenceUrl(value)).slice(0, 1);
-  const pageUrls = uniqueStrings([
-    ...explicitPageUrls,
-    ...inferredPageUrls
-  ]);
-  const requestUrls = uniqueStrings([
-    ...getStringArrayValues(evidence, [
-      "requestUrls",
-      "request_urls",
-      "runtimeRequestUrls",
-      "runtime_request_urls",
-      "runtimeEvidenceUrls",
-      "runtime_evidence_urls"
-    ]),
-    ...evidenceRefs.filter(isRuntimeRequestEvidenceUrl)
-  ]);
-  const aiSurfaceScopedRequestRefs = hasHybridProvenance
-    ? uniqueStrings(
-        urlEvidenceRefs.filter((value) => !pageUrls.includes(value))
-      )
-    : [];
-
-  return hasHybridProvenance && pageUrls.length > 0 && (requestUrls.length > 0 || aiSurfaceScopedRequestRefs.length > 0);
-}
-
 export function hasConcreteDsarEvidence(evidence: Record<string, unknown> | null | undefined) {
   if (!evidence) {
     return false;
@@ -1451,12 +1415,6 @@ function isVideoContentTrackingConcern(
   return /video_content_tracking_exposure|video content tracking|video privacy/.test(haystack);
 }
 
-function isAiSurfaceTrackingReviewConcern(
-  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
-) {
-  return concern.suggestedUnifiedFindingId === "ai_surface_tracking_review_signal";
-}
-
 function isFingerprintingConcern(
   concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
 ) {
@@ -1918,7 +1876,6 @@ const NEGATIVE_FINANCIAL_PROMOTION_FINDING_IDS = new Set([
   "promo_to_terms_conflict",
   "yield_or_return_claims_high_risk",
   "high_risk_product_risk_disclosure_missing",
-  "ai_financial_advice_or_trading_claims_without_disclosure",
   "simulated_performance_without_disclosure",
   "unqualified_superlative_claim_detected"
 ]);
@@ -2932,24 +2889,6 @@ export function deriveConcernPolicy(input: {
 
     return {
       allowedNarrativeTier: hasVideoPayloadFieldHints(input.rawEvidence) ? "strong" : "moderate",
-      externalSurfacingEligibility: "eligible",
-      negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "eligible"
-    };
-  }
-
-  if (isAiSurfaceTrackingReviewConcern(input.concern)) {
-    if (!hasAiSurfaceTrackingRuntimeEvidence(input.rawEvidence)) {
-      return {
-        allowedNarrativeTier: "weak",
-        externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_specific_runtime_anchor"],
-        promotionEligibility: "internal_only"
-      };
-    }
-
-    return {
-      allowedNarrativeTier: "moderate",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"

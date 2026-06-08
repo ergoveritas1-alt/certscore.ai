@@ -291,36 +291,3 @@ test("financial merged signal candidates on non-finance domain are suppressed vi
 
   assert.equal(candidates.length, 0);
 });
-
-test("AI surface tracking runtime signal creates a signal-backed finding candidate", () => {
-  const mergedSignals = buildMergedSignalRecords({
-    scannerSignals: [
-      {
-        confidence: 0.74,
-        evidenceRefs: [
-          "https://example.com/ai-assistant",
-          "https://www.google-analytics.com/g/collect?v=2"
-        ],
-        key: "ai.flow_tracking_review_signal",
-        label: "AI surface tracking review signal",
-        provenance: [
-          {
-            detail: "hybrid_runtime_evidence.ai_surface_runtime_evidence",
-            kind: "document"
-          }
-        ],
-        reportSignalSource: "runtime_artifact_signal",
-        source: "scanner",
-        value: true,
-        valueType: "boolean"
-      }
-    ]
-  });
-
-  const candidate = buildReviewFindingCandidatesFromMergedSignals({
-    mergedSignals
-  }).find((row) => row.signalKey === "ai.flow_tracking_review_signal");
-
-  assert.equal(candidate?.signalKey, "ai.flow_tracking_review_signal");
-  assert.equal(candidate?.signalSource, "runtime_artifact_signal");
-});
