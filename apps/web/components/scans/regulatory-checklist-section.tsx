@@ -17,6 +17,7 @@ type RegulatoryChecklistTab = {
 };
 
 type RegulatoryChecklistSectionProps = {
+  headingLabel?: string;
   showAdvancedEvidenceToggle?: boolean;
   tabs: RegulatoryChecklistTab[];
 };
@@ -34,7 +35,7 @@ function TabLabel({ tab, useShortLabel = false }: { tab: RegulatoryChecklistTab;
   );
 }
 
-export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false, tabs }: RegulatoryChecklistSectionProps) {
+export function RegulatoryChecklistSection({ headingLabel = "Regulatory Review", showAdvancedEvidenceToggle = false, tabs }: RegulatoryChecklistSectionProps) {
   const [activeTabId, setActiveTabId] = useState(tabs[0]?.id ?? "");
   const [expandAllAdvancedEvidence, setExpandAllAdvancedEvidence] = useState(false);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null;
@@ -68,7 +69,7 @@ export function RegulatoryChecklistSection({ showAdvancedEvidenceToggle = false,
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Regulatory Review</p>
+              <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">{headingLabel}</p>
               <span className="inline-flex shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
                 Beta
               </span>

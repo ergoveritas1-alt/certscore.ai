@@ -1,0 +1,135 @@
+{
+  "inputVersion": "wc01.v2_normalized_concern_draft_mapping_input.1",
+  "sourceArtifactPath": "artifacts/example/Wc01V2ProductionReadinessGateDraft.json",
+  "sourceArtifactKind": "production_readiness_gate_draft",
+  "candidates": [
+    {
+      "sourceFamily": "pre_consent_tracking",
+      "evidenceRefs": [
+        "source_ref_tracking_request"
+      ],
+      "displaySafeExcerptRefs": [
+        "excerpt_tracking_request"
+      ],
+      "consentStateContext": {
+        "phase": "pre_consent",
+        "observedBeforeConsentAction": true,
+        "sourceRefIds": [
+          "source_ref_tracking_request"
+        ]
+      },
+      "confidence": "high",
+      "directness": "direct",
+      "vendorOrEndpointAttribution": {
+        "kind": "vendor",
+        "name": "Example Analytics",
+        "confidence": "high",
+        "sourceRefIds": [
+          "source_ref_tracking_request"
+        ]
+      },
+      "purposeBasis": {
+        "supportingPurposes": [
+          "analytics"
+        ],
+        "diagnosticPurposes": []
+      },
+      "exclusionsApplied": [
+        "tag_management_only_excluded",
+        "consent_management_only_excluded",
+        "diagnostic_only_purposes_excluded",
+        "inventory_only_excluded",
+        "policy_runtime_alignment_only_excluded",
+        "consent_flow_delta_only_excluded",
+        "library_only_evidence_excluded"
+      ],
+      "sensitiveContextCategories": [],
+      "unresolvedRefDisposition": {
+        "unresolvedRefCount": 0,
+        "affectsEvidenceSufficiency": false,
+        "notes": [
+          "No unresolved refs affect this fixture."
+        ]
+      },
+      "rollbackSuppressionHints": [
+        "suppress_by_family_or_vendor"
+      ],
+      "blockedSurfaces": [
+        "executive_summary",
+        "top_findings",
+        "scoring",
+        "regulatory_lens_output",
+        "api_mcp_export"
+      ]
+    },
+    {
+      "sourceFamily": "pre_consent_cookie_storage",
+      "evidenceRefs": [
+        "source_ref_cookie_write"
+      ],
+      "displaySafeExcerptRefs": [
+        "excerpt_cookie_write"
+      ],
+      "consentStateContext": {
+        "phase": "pre_consent",
+        "observedBeforeConsentAction": true,
+        "sourceRefIds": [
+          "source_ref_cookie_write"
+        ]
+      },
+      "cookieStorageContext": {
+        "party": "third_party",
+        "storageType": "cookie",
+        "observedWriteBeforeConsentAction": true,
+        "unsafeStorageContentPresent": false,
+        "sourceRefIds": [
+          "source_ref_cookie_write"
+        ]
+      },
+      "confidence": "high",
+      "directness": "direct",
+      "vendorOrEndpointAttribution": {
+        "kind": "endpoint",
+        "name": "example-ad-measurement.test",
+        "confidence": "high",
+        "sourceRefIds": [
+          "source_ref_cookie_write"
+        ]
+      },
+      "purposeBasis": {
+        "supportingPurposes": [
+          "advertising_measurement"
+        ],
+        "diagnosticPurposes": []
+      },
+      "exclusionsApplied": [
+        "tag_management_only_excluded",
+        "consent_management_only_excluded",
+        "diagnostic_only_purposes_excluded",
+        "inventory_only_excluded",
+        "policy_runtime_alignment_only_excluded",
+        "consent_flow_delta_only_excluded",
+        "raw_cookie_values_excluded",
+        "unsafe_storage_content_excluded"
+      ],
+      "sensitiveContextCategories": [],
+      "unresolvedRefDisposition": {
+        "unresolvedRefCount": 0,
+        "affectsEvidenceSufficiency": false,
+        "notes": [
+          "No unresolved refs affect this fixture."
+        ]
+      },
+      "rollbackSuppressionHints": [
+        "suppress_by_family_or_vendor"
+      ],
+      "blockedSurfaces": [
+        "executive_summary",
+        "top_findings",
+        "scoring",
+        "regulatory_lens_output",
+        "api_mcp_export"
+      ]
+    }
+  ]
+}

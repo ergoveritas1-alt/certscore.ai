@@ -1,0 +1,86 @@
+{
+  "inputVersion": "wc01.v2_product_surface_proposal_input.1",
+  "proposedSurfaceClass": "internal_product_proposal_artifact",
+  "proposedSurfaceAudience": "product, policy, copy, and engineering owners",
+  "proposedSurfacePurpose": "Document a future internal-only product surface proposal before implementation.",
+  "sourceProductionReadinessGateDraft": "artifacts/v2-internal-artifact-chain-example/Wc01V2ProductionReadinessGateDraft.json",
+  "sourcePolicyCopyReviewArtifact": "artifacts/v2-internal-artifact-chain-example/Wc01V2PolicyCopyReviewArtifact.json",
+  "sourceReviewerWorkflowDocs": [
+    "docs/certscore-v2/wc01-v2-internal-reviewer-workflow-stability-checkpoint.md",
+    "docs/certscore-v2/wc01-v2-sensitive-context-policy-copy-review-design.md",
+    "docs/certscore-v2/wc01-v2-production-readiness-gate-design.md",
+    "docs/certscore-v2/wc01-v2-production-surface-taxonomy-design.md"
+  ],
+  "allowedFamilies": [
+    "pre_consent_tracking",
+    "pre_consent_cookie_storage",
+    "session_replay_behavioral_analytics"
+  ],
+  "blockedFamilies": [
+    "third_party_vendors_observed",
+    "tag_management",
+    "consent_management",
+    "security",
+    "performance_monitoring",
+    "customer_support"
+  ],
+  "sensitiveContextHandling": {
+    "required": true,
+    "categories": ["health"],
+    "defaultCustomerFacingBlocked": true,
+    "notes": [
+      "Sensitive context remains routing metadata only.",
+      "No product-surface wording is approved by this draft."
+    ]
+  },
+  "copyPosture": "policy_copy_review_required",
+  "evidenceRequirements": [
+    "source refs",
+    "display-safe excerpt refs",
+    "confidence/directness",
+    "family evidence context",
+    "policy/copy review artifact",
+    "production-readiness gate draft"
+  ],
+  "userVisibleWordingStatus": "no_user_visible_wording",
+  "guardrailRequirements": [
+    "raw-field scan",
+    "forbidden wording scan",
+    "sanitizer check",
+    "import-boundary check"
+  ],
+  "approvalRequirements": [
+    {
+      "owner": "evidence_owner",
+      "required": true,
+      "status": "approved_for_proposal"
+    },
+    {
+      "owner": "policy_owner",
+      "required": true,
+      "status": "approved_for_proposal"
+    },
+    {
+      "owner": "copy_owner",
+      "required": true,
+      "status": "approved_for_proposal"
+    },
+    {
+      "owner": "product_owner",
+      "required": true,
+      "status": "approved_for_proposal"
+    },
+    {
+      "owner": "engineering_owner",
+      "required": true,
+      "status": "approved_for_proposal"
+    }
+  ],
+  "rollbackSuppressionPlan": {
+    "suppressionReason": "hold if any guardrail fails",
+    "holdState": "hold_internal_only",
+    "rollbackOwner": "engineering_owner",
+    "regressionGuardrailCheck": "rerun guardrail scan before any next step",
+    "emergencyDisablePlan": "remove generated artifact from next-stage review set"
+  }
+}

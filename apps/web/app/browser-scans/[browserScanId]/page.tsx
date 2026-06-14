@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { ScanStatusAutoRefresh } from "../../../components/scans/scan-status-auto-refresh";
+import { isPublicAccountCreationEnabled } from "../../../server/access-control";
 import { getBrowserScanSessionById } from "../../../server/browser-scans/repository";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +56,7 @@ export default async function BrowserScanPublicPage({ params }: BrowserScanPubli
   }
 
   const summary = scan.summary_json ?? {};
+  const accountCreationEnabled = isPublicAccountCreationEnabled();
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-950 sm:px-6">
@@ -121,13 +123,13 @@ export default async function BrowserScanPublicPage({ params }: BrowserScanPubli
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-6 text-slate-700">
             <p>
-              This browser-observed summary is a lightweight BX01 evidence capture. Create a CertScore account to connect this evidence with fuller tracker classification, report history, monitoring, and server-side scan comparison.
+              This browser-observed summary is a lightweight BX01 evidence capture. Sign in to connect this evidence with fuller tracker classification, report history, monitoring, and server-side scan comparison.
             </p>
             <Link
-              href="/login?mode=create_account"
+              href={accountCreationEnabled ? "/login?mode=create_account" : "/login"}
               className="inline-flex items-center justify-center rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
-              Sign up to see fuller analysis
+              {accountCreationEnabled ? "Sign up to see fuller analysis" : "Sign in to see fuller analysis"}
             </Link>
           </CardContent>
         </Card>

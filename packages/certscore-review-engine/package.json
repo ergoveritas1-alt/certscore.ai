@@ -1,0 +1,22 @@
+{
+  "name": "@certscore/review-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CertScore v2 evidence review engine.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm --filter @certscore/contracts build && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "review": "node --import tsx ./src/cli/review.ts",
+    "test": "tsx --tsconfig ../../tsconfig.base.json --test 'src/*.test.ts'",
+    "test:saved-bundles": "tsx --tsconfig ../../tsconfig.base.json --test src/saved-bundle-expectations.test.ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@certscore/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0"
+  }
+}

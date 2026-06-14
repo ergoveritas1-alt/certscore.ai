@@ -1,0 +1,46 @@
+# CMP-family reject reliability cohort.
+# Internal diagnostic only. Artifact-only. Non-persistent. Not customer-facing report scope.
+# Sites are candidates for CMP-supported reject calibration; the verifier decides no-go,
+# unsupported, not observed, attempted failed, attempted succeeded, and comparable-window status.
+
+# OneTrust candidates
+https://www.netlify.com/
+https://www.nvidia.com/en-us/
+https://www.salesforce.com/
+https://www.ibm.com/
+https://www.adobe.com/
+https://www.oracle.com/
+https://www.cisco.com/
+https://www.intel.com/
+https://www.nike.com/
+https://www.target.com/
+
+# TrustArc candidates
+https://www.costco.com/
+https://www.homedepot.com/
+https://www.lowes.com/
+https://www.bestbuy.com/
+https://www.bankofamerica.com/
+
+# Cookiebot candidates
+https://www.bbc.com/
+https://www.spotify.com/
+https://www.ikea.com/
+https://www.unilever.com/
+https://www.reuters.com/
+
+# Didomi candidates
+https://www.theguardian.com/
+https://www.lemonde.fr/
+https://www.decathlon.com/
+https://www.airfrance.com/
+
+# Sourcepoint candidates
+https://www.cnn.com/
+https://www.weather.com/
+https://www.forbes.com/
+https://www.washingtonpost.com/
+
+# Ketch / privacy-center-only candidates
+https://www.segment.com/
+https://www.databricks.com/

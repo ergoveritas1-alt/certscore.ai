@@ -1,0 +1,51 @@
+# Edge internal real-site calibration cohort.
+# This is diagnostic only and does not define production behavior.
+# URLs are intentionally selected for edge coverage, not random volume.
+
+# Heavy publisher/adtech
+https://nytimes.com
+https://washingtonpost.com
+https://forbes.com
+https://theguardian.com
+
+# Ecommerce with dense adtech
+https://walmart.com
+https://macys.com
+https://wayfair.com
+https://etsy.com
+
+# SaaS with relatively minimal or product-led tracking
+https://linear.app
+https://vercel.com
+https://supabase.com
+https://notion.so
+
+# Healthcare or sensitive-context surfaces
+https://healthline.com
+https://plannedparenthood.org
+https://nih.gov
+
+# Finance and insurance
+https://fidelity.com
+https://progressive.com
+https://geico.com
+
+# Government and public-sector
+https://ftc.gov
+https://usa.gov
+
+# Privacy-mature / CMP-heavy / EU-global consent variation
+https://bbc.com
+https://unilever.com
+https://spotify.com
+https://booking.com
+
+# Likely session replay or behavioral analytics
+https://segment.com
+https://hotjar.com
+https://fullstory.com
+
+# No obvious consent banner or likely headless/blocking/failure cases
+https://mozilla.org
+https://cloudflare.com
+https://openai.com

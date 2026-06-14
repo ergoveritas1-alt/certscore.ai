@@ -1,0 +1,217 @@
+{
+  "scanId": "fixture_generic_cdn_noise",
+  "url": "https://example.com",
+  "normalizedUrl": "https://example.com/",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "completedAt": "2026-01-01T00:00:02.000Z",
+  "region": "fixture",
+  "scanProfile": {
+    "profileId": "quick",
+    "label": "Saved-bundle fixture",
+    "targetDurationMs": 12000,
+    "internalBudgetMs": 15000,
+    "enabledModules": [
+      "preConsentRuntimeScanner"
+    ]
+  },
+  "modulesRun": [
+    {
+      "moduleName": "preConsentRuntimeScanner",
+      "status": "completed",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "completedAt": "2026-01-01T00:00:02.000Z",
+      "durationMs": 2000,
+      "evidenceRefs": [],
+      "errors": []
+    }
+  ],
+  "runtimeTimeline": [
+    {
+      "eventId": "net_generic_cdn_noise",
+      "eventType": "network_request",
+      "requestId": "req_generic_cdn_noise",
+      "timestampMs": 500,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://static.examplecdn.com/app.css",
+      "hostname": "static.examplecdn.com",
+      "registrableDomain": "examplecdn.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.95,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "stylesheet",
+      "requestUrl": "https://static.examplecdn.com/app.css",
+      "normalizedUrl": "https://static.examplecdn.com/app.css",
+      "requestHostname": "static.examplecdn.com",
+      "path": "/app.css",
+      "queryParamNames": [],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": false,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": false,
+      "endpointCategory": "static_asset",
+      "attributionStatus": "ignored_noise",
+      "attributionReason": "static_asset_without_runtime_collection_signal",
+      "resolverBasis": [
+        "ignored_noise:static_asset"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    }
+  ],
+  "networkEvents": [
+    {
+      "eventId": "net_generic_cdn_noise",
+      "eventType": "network_request",
+      "requestId": "req_generic_cdn_noise",
+      "timestampMs": 500,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://static.examplecdn.com/app.css",
+      "hostname": "static.examplecdn.com",
+      "registrableDomain": "examplecdn.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.95,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "stylesheet",
+      "requestUrl": "https://static.examplecdn.com/app.css",
+      "normalizedUrl": "https://static.examplecdn.com/app.css",
+      "requestHostname": "static.examplecdn.com",
+      "path": "/app.css",
+      "queryParamNames": [],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": false,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": false,
+      "endpointCategory": "static_asset",
+      "attributionStatus": "ignored_noise",
+      "attributionReason": "static_asset_without_runtime_collection_signal",
+      "resolverBasis": [
+        "ignored_noise:static_asset"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    }
+  ],
+  "networkResponseEvents": [
+    {
+      "eventId": "resp_net_generic_cdn_noise",
+      "eventType": "network_response",
+      "requestId": "req_generic_cdn_noise",
+      "timestampMs": 520,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://static.examplecdn.com/app.css",
+      "hostname": "static.examplecdn.com",
+      "registrableDomain": "examplecdn.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.92,
+      "directVsInferred": "direct",
+      "responseUrl": "https://static.examplecdn.com/app.css",
+      "normalizedUrl": "https://static.examplecdn.com/app.css",
+      "status": 200,
+      "contentType": "text/css",
+      "setCookieHeaders": [],
+      "setCookieMetadata": [],
+      "cookieNamesSet": [],
+      "cacheHeaders": {},
+      "accessControlHeaders": {}
+    }
+  ],
+  "cookieEvents": [],
+  "cookieSnapshots": [],
+  "storageSnapshots": [],
+  "scriptEvents": [],
+  "iframeEvents": [],
+  "consentUiObservations": [
+    {
+      "observationId": "consent_none",
+      "observedAtMs": 1000,
+      "likelyPresent": false,
+      "basis": [
+        "no_banner_keywords_detected"
+      ],
+      "evidenceRefs": [],
+      "confidence": 0.55
+    }
+  ],
+  "consentInteractionEvents": [],
+  "policySurfaceObservations": [],
+  "screenshots": [],
+  "domSnapshots": [],
+  "normalizedVendorObservations": [],
+  "observedJourneys": [],
+  "derivedRuntimeSignals": {
+    "thirdPartyVendorsObserved": false,
+    "preConsentTrackingObserved": false,
+    "thirdPartyCookiesPreConsentObserved": false,
+    "consentBannerLikelyPresent": false,
+    "sessionReplayOrBehavioralAnalyticsObserved": false,
+    "journeySummary": {
+      "journeyCount": 0,
+      "vendorJourneyCount": 0,
+      "productJourneyCount": 0,
+      "trackerJourneyCount": 0,
+      "cookieJourneyCount": 0,
+      "scriptJourneyCount": 0,
+      "endpointJourneyCount": 0,
+      "activeCollectionJourneyCount": 0,
+      "consentManagementJourneyCount": 0,
+      "notes": []
+    },
+    "notes": []
+  },
+  "artifactRefs": [],
+  "scannerVersion": "saved-bundle-fixture",
+  "schemaVersion": "certscore.v2.alpha.1"
+}

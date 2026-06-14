@@ -4,6 +4,11 @@ import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { getWritePool } from "@website-signal-risk-scanner/db";
 import { createGmailTransport, getGmailConfig } from "../email/gmail";
+import {
+  isAllowedAuthEmail,
+  isPublicAccountCreationEnabled
+} from "../access-control";
+import { findBetterAuthUserById } from "../users/repository";
 import { BETTER_AUTH_COOKIE_PREFIX, BETTER_AUTH_SESSION_COOKIE_NAME } from "./constants";
 import { getBetterAuthBaseURLConfig, getBetterAuthEnv } from "./env";
 
@@ -14,8 +19,28 @@ function getGoogleProviderConfig(env: ReturnType<typeof getBetterAuthEnv>) {
 
   return {
     clientId: env.GOOGLE_CLIENT_ID,
-    clientSecret: env.GOOGLE_CLIENT_SECRET
+    clientSecret: env.GOOGLE_CLIENT_SECRET,
+    disableSignUp: !isPublicAccountCreationEnabled()
   };
+}
+
+async function canCreateAuthUser(email: string | null | undefined) {
+  return isPublicAccountCreationEnabled() && isAllowedAuthEmail(email);
+}
+
+async function canCreateAuthSession(userId: string | null | undefined) {
+  if (!userId) {
+    return false;
+  }
+
+  try {
+    const user = await findBetterAuthUserById(userId);
+    return isAllowedAuthEmail(user?.email ?? null);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Better Auth session access check failed", { error: message, userId });
+    return false;
+  }
 }
 
 function createAuth() {
@@ -51,7 +76,24 @@ function createAuth() {
     },
     baseURL: getBetterAuthBaseURLConfig(env),
     database: getWritePool(),
+    databaseHooks: {
+      session: {
+        create: {
+          before: async (session) => {
+            return canCreateAuthSession(typeof session.userId === "string" ? session.userId : null);
+          }
+        }
+      },
+      user: {
+        create: {
+          before: async (user) => {
+            return canCreateAuthUser(typeof user.email === "string" ? user.email : null);
+          }
+        }
+      }
+    },
     emailAndPassword: {
+      disableSignUp: !isPublicAccountCreationEnabled(),
       enabled: true,
       requireEmailVerification: false,
       revokeSessionsOnPasswordReset: true,

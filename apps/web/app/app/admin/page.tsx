@@ -103,6 +103,18 @@ export default async function AdminOverviewPage() {
       <div className="grid gap-6 xl:grid-cols-4">
         <Card className="border-slate-200 bg-white">
           <CardHeader>
+            <CardTitle>WC01 v2 Scan Lab</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Internal artifact-backed scan/results lab for visualizing saved v2 reviewer packets and evidence previews by URL.
+            </p>
+            <PendingButtonLink href="/app/admin/v2-scan-lab" idleContent="Open v2 scan lab" pendingContent="Opening..." variant="secondary" />
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 bg-white">
+          <CardHeader>
             <CardTitle>Recent Users</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -127,7 +139,7 @@ export default async function AdminOverviewPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {scans.slice(0, 8).map((scan) => (
-              <div key={scan.scanId} className="rounded-2xl border border-slate-200 p-4">
+              <div key={scan.activityId} className="rounded-2xl border border-slate-200 p-4">
                 <p className="font-medium text-slate-900">{scan.domainHostname ?? "Unknown domain"}</p>
                 <p className="text-sm text-slate-500">
                   {scan.organizationName ?? "Unknown workspace"} · {scan.scanType} · {scan.status} · Scan from {scan.scanFromLabel}
@@ -136,7 +148,7 @@ export default async function AdminOverviewPage() {
                   Signals {scan.totalSignals ?? 0} · CertScore.ai {scan.certscoreOverall ?? "n/a"} · Completed {formatAdminDateTime(scan.completedAt)}
                 </p>
                 <div className="mt-3">
-                  <PendingButtonLink href={`/app/admin/scans/${scan.scanId}`} idleContent="Inspect snapshot" pendingContent="Opening..." size="sm" variant="secondary" />
+                  <PendingButtonLink href={scan.scanViewHref} idleContent="Inspect snapshot" pendingContent="Opening..." size="sm" variant="secondary" />
                 </div>
               </div>
             ))}

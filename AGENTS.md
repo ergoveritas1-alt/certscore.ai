@@ -39,6 +39,24 @@ Executive-summary and top-finding selection may rank, allowlist, suppress, or gr
 
 If a valid signal is missing, add or fix the upstream WS01 observed evidence and the WC01 concern/policy mapping. Do not patch around missing evidence in display code. If a deviation from this flow seems necessary, stop and call it out before implementing.
 
+### CertScore v2 internal diagnostic architecture
+
+CertScore v2 exists in this repo as a clean scanner/review architecture and internal diagnostic pipeline. Its current operating principle is:
+
+```text
+scan-core observes
+Nano assists
+review-engine interprets
+report-adapter projects internal artifacts
+web app presents only after separate approval
+```
+
+The v2 packages and artifacts are not production report integration by default. V2 shadow, allowlist dry-run, concern-input dry-run, policy simulation, normalized-concern candidate, comparison, reviewer-packet, and evidence-preview outputs must remain artifact-only, internal-only, and non-persistent unless the user explicitly approves a separate production integration proposal.
+
+Do not wire v2 outputs into production report cards, checklist builders, executive summaries, top findings, scoring, regulatory lenses, persisted normalized concerns, unified findings, or customer-facing copy without explicit approval. Do not map v2 dry-run rows directly to `gap_observed`.
+
+Sensitive-context labels in v2 are review routing metadata only. They must not create stronger findings, customer-facing language, legal conclusions, or production eligibility.
+
 ### WC01 responsibility boundary
 
 WC01 owns:
@@ -59,11 +77,15 @@ WC01 should not consume loose, ad hoc, or display-only scanner fields. New scann
 
 If WC01 starts consuming a new WS01 field, add or update a runtime contract fixture and the relevant normalized concern/policy test in the same change.
 
+For CertScore v2, artifact contracts must stay typed, bounded, display-safe where projected, and covered by focused fixtures/tests. Do not carry raw cookies, raw request/response bodies, sensitive query values, unbounded DOM/policy text, or raw Nano reasoning into reviewer, report-adapter, or web-facing artifacts.
+
 ### Canonical classification registries
 
 Use canonical tracker, vendor, CMP, and domain classification registries for classification logic. Do not create feature-specific, regulation-specific, or display-specific vendor/domain registries unless the user explicitly approves a new canonical registry.
 
 If a module needs different thresholds, severity, or status treatment, express that as WC01 policy over canonical classifications, not duplicated domain/vendor lists.
+
+For CertScore v2 endpoint/vendor attribution, use `packages/certscore-vendor-resolver` as the canonical resolver home. Do not add local endpoint or vendor lists inside scan modules, report adapters, dry-run bridges, or docs when the classification belongs in the resolver.
 
 ### Display and summary rules
 
@@ -79,6 +101,8 @@ CertScore reports risk signals, not legal determinations. User-facing copy must 
 
 Prefer evidence-scoped language such as "signal observed", "review recommended", "not evaluated", or "insufficient evidence".
 
+Internal v2 docs and artifacts should follow the same posture: no legal-conclusion language, no raw evidence leakage, no production eligibility claims, and no customer-facing copy unless separately approved.
+
 ### Monorepo structure
 
 ```text
@@ -89,6 +113,13 @@ WC01/
 │  ├─ validation-worker/    # Background validation worker (TypeScript/Node)
 │  └─ runtime-harness/      # Runtime harness (minimal scaffolding)
 ├─ packages/
+│  ├─ certscore-contracts/   # CertScore v2 typed scanner/review/report contracts
+│  ├─ certscore-scan-core/   # CertScore v2 browser evidence capture core
+│  ├─ certscore-review-engine/ # CertScore v2 evidence interpretation engine
+│  ├─ certscore-report-adapter/ # CertScore v2 internal projection, shadow, and dry-run adapters
+│  ├─ certscore-vendor-resolver/ # CertScore v2 canonical vendor/product resolver
+│  ├─ certscore-sdk/         # CertScore Pulse TypeScript SDK
+│  ├─ certscore-mcp/         # CertScore Pulse MCP server
 │  ├─ shared/               # Shared constants, types, validators, scoring config, scheduling helpers
 │  ├─ db/                   # PostgreSQL query helpers, migrations, seed SQL, env helpers
 │  ├─ ui/                   # Reusable UI primitives (React, Tailwind)
@@ -116,6 +147,13 @@ WC01/
 | `@website-signal-risk-scanner/ui` | `packages/ui` | Reusable UI primitives (Button, Card, Badge, etc.) built with React and Tailwind CSS. |
 | `@website-signal-risk-scanner/validation-shared` | `packages/validation-shared` | Validation-specific types, financial-claims drafts, privacy-runtime findings, and promotion coverage reports. |
 | `@website-signal-risk-scanner/web-bot-auth` | `packages/web-bot-auth` | Server-only HTTP Message Signatures signing and key-directory helpers for crawler authentication. |
+| `@certscore/contracts` | `packages/certscore-contracts` | CertScore v2 scanner, review, and projection contracts. |
+| `@certscore/scan-core` | `packages/certscore-scan-core` | CertScore v2 browser evidence capture core. |
+| `@certscore/review-engine` | `packages/certscore-review-engine` | CertScore v2 evidence review engine. |
+| `@certscore/report-adapter` | `packages/certscore-report-adapter` | CertScore v2 internal report projection, WC01 shadow, dry-run, reviewer-packet, and evidence-preview adapters. |
+| `@certscore/vendor-resolver` | `packages/certscore-vendor-resolver` | High-confidence CertScore v2 vendor and product resolver. |
+| `@certscore/sdk` | `packages/certscore-sdk` | TypeScript SDK for the CertScore Pulse API. |
+| `@certscore/mcp` | `packages/certscore-mcp` | MCP server for CertScore Pulse. |
 
 ### Technology stack
 
@@ -221,6 +259,33 @@ pnpm --filter @website-signal-risk-scanner/validation-shared build
 pnpm --filter @website-signal-risk-scanner/web-bot-auth build
 ```
 
+### CertScore v2 commands
+
+V2 commands are internal diagnostic commands unless a task explicitly says otherwise. See `docs/certscore-v2/README.md` for full command sequences and artifact expectations.
+
+Common root scripts:
+
+```bash
+pnpm v2:scan
+pnpm v2:review
+pnpm v2:calibrate
+pnpm v2:shadow-project
+pnpm v2:wc01-shadow
+pnpm v2:wc01-allowlist-dry-run
+pnpm v2:wc01-concern-input-dry-run
+pnpm v2:wc01-concern-policy-simulate
+pnpm v2:wc01-normalized-concern-adapter
+pnpm v2:wc01-concern-policy-compare
+pnpm v2:wc01-reviewer-packet
+pnpm v2:wc01-evidence-preview
+pnpm v2:wc01-policy-copy-review
+pnpm v2:wc01-production-readiness-gate
+pnpm v2:wc01-product-surface-proposal
+pnpm v2:wc01-artifact-chain-smoke
+```
+
+V2 commands that perform live browser scans typically require `apps/web/.env.local` and, for Nano-assisted paths, `OPENAI_API_KEY`.
+
 ---
 
 ## Code style guidelines
@@ -264,6 +329,8 @@ Key pipeline files:
 - `apps/web/lib/scans/unified-findings.ts`
 - `apps/web/lib/scans/finding-evidence-gates.ts`
 
+V2 dry-run adapters may produce internal candidate artifacts for comparison and reviewer workflow, but they must not call production concern policy, persist normalized concerns, or create unified findings unless a production integration proposal is explicitly approved.
+
 ---
 
 ## Testing instructions
@@ -284,6 +351,28 @@ pnpm test:web-bot-auth
 # Individual test files (example)
 node --import tsx --test apps/web/server/preview-scan/create-preview-scan.test.ts
 node --import tsx --test packages/shared/src/regulatory-review/regulatory-review.test.ts
+```
+
+### CertScore v2 package tests
+
+Run focused v2 tests for v2 package changes:
+
+```bash
+pnpm --filter @certscore/contracts test
+pnpm --filter @certscore/vendor-resolver test
+pnpm --filter @certscore/scan-core test
+pnpm --filter @certscore/review-engine test
+pnpm --filter @certscore/report-adapter test
+```
+
+Run focused v2 typechecks for v2 package changes:
+
+```bash
+pnpm --filter @certscore/contracts typecheck
+pnpm --filter @certscore/vendor-resolver typecheck
+pnpm --filter @certscore/scan-core typecheck
+pnpm --filter @certscore/review-engine typecheck
+pnpm --filter @certscore/report-adapter typecheck
 ```
 
 ### CI pipelines

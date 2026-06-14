@@ -3,6 +3,7 @@ import "server-only";
 import { headers } from "next/headers";
 import type { AuthenticatedAppUser } from "../auth-flows/types";
 import { normalizeEmail } from "../auth-flows/user";
+import { isAllowedAuthEmail } from "../access-control";
 import { findAppUserByEmailRecord, listBetterAuthAccountsByUserId } from "../users/repository";
 import { getAuth } from "./auth";
 
@@ -29,6 +30,10 @@ export async function getBetterAuthSessionUser(): Promise<AuthenticatedAppUser |
   });
 
   if (!session?.user) {
+    return null;
+  }
+
+  if (!isAllowedAuthEmail(session.user.email)) {
     return null;
   }
 

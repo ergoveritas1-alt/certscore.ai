@@ -1,0 +1,520 @@
+{
+  "scanId": "fixture_policy_surface_positive",
+  "url": "https://example.com",
+  "schemaVersion": "certscore.v2.alpha.1",
+  "endpointAttribution": {
+    "countByAttributionStatus": {
+      "ignored_noise": 0,
+      "resolved": 0,
+      "site_owned_infrastructure": 0,
+      "unresolved_meaningful": 0
+    },
+    "countByEndpointSubtype": {
+      "google_ads_or_measurement": 0,
+      "google_analytics_collection": 0,
+      "google_consent_or_tag_support": 0,
+      "google_owned_infrastructure": 0,
+      "google_owned_unresolved_meaningful": 0,
+      "google_recaptcha_or_security": 0
+    },
+    "unresolvedMeaningfulEndpoints": [],
+    "siteOwnedInfrastructureEndpoints": [],
+    "ignoredNoiseExamples": []
+  },
+  "vendorResolution": {
+    "resolvedVendors": [],
+    "purposeCounts": {},
+    "confidenceDistribution": {
+      "high": 0,
+      "low": 0,
+      "medium": 0
+    },
+    "resolverBasisCounts": {}
+  },
+  "journeySummary": {
+    "countByJourneyType": {},
+    "countByObservedBehavior": {},
+    "activeCollectionJourneys": [],
+    "libraryOnlyJourneys": [],
+    "unresolvedEndpointJourneys": [],
+    "cmpSecurityPerformanceJourneys": [],
+    "trackerEligibleJourneys": [],
+    "nonTrackerJourneyCount": 0
+  },
+  "cookieClassification": {
+    "firstPartyCookies": [],
+    "thirdPartyCookies": [],
+    "firstPartyVendorAssociatedCookies": [],
+    "cmpCookies": [],
+    "securityInfrastructureCookies": [],
+    "unknownCookies": [],
+    "cookiesLinkedToJourneys": []
+  },
+  "consentFlowSummary": {
+    "scenariosObserved": {},
+    "controlsObservedByType": {},
+    "bannerLikelyPresentByScenario": {},
+    "actionAttempts": [],
+    "comparisons": [],
+    "journeyPhaseDeltaCount": 0,
+    "preferenceCenterTraversalCount": 0,
+    "preferenceCenterOpenedCount": 0,
+    "preferenceCenterSecondLayerObservedCount": 0,
+    "rejectViaPreferenceCenterAttemptedCount": 0,
+    "rejectViaPreferenceCenterSucceededCount": 0,
+    "saveChoicesAttemptedCount": 0,
+    "saveChoicesSucceededCount": 0,
+    "preferenceCenterLimitations": [],
+    "nanoAssistCount": 0,
+    "nanoUncertaintyCount": 0
+  },
+  "policySurfaceSummary": {
+    "policySurfacesObserved": 2,
+    "policySurfaceAttempts": 2,
+    "policySurfaceStatusCounts": {
+      "fetched": 2
+    },
+    "policySurfaceFailedCount": 0,
+    "surfaceTypes": {
+      "privacy_policy": 1,
+      "your_privacy_choices": 1
+    },
+    "failedSurfaceTypes": {},
+    "discoveryMethods": {
+      "footer_link": 1,
+      "nano_assisted_link_classification": 1
+    },
+    "nanoAssistedCandidates": 1,
+    "observedTopics": {
+      "advertising": 1,
+      "analytics": 1,
+      "cookies": 1,
+      "do_not_sell_or_share": 1,
+      "global_privacy_control": 1,
+      "sale_or_share": 1,
+      "targeted_advertising": 1,
+      "third_party_disclosures": 1
+    },
+    "vendorMentions": [
+      "Google Analytics",
+      "Meta",
+      "Microsoft Clarity"
+    ],
+    "privacyChoicesLinks": [
+      "https://example.com/privacy-choices"
+    ],
+    "preferenceControlLinks": [],
+    "gpcDisclosureObserved": true,
+    "doNotSellOrShareLinkObserved": true,
+    "noticeAtCollectionObserved": false,
+    "aiDisclosureObserved": false,
+    "policyExcerptCount": 2,
+    "nanoAssistCount": 1,
+    "nanoUncertaintyCount": 1,
+    "policyRuntimeAlignmentCandidateStatus": "deferred",
+    "policyRuntimeAlignmentMatchedCriteria": [
+      "bounded_policy_vendor_excerpt_retained",
+      "policy_vendor_mentions_present"
+    ]
+  },
+  "googleEndpointSubtypeSummary": {
+    "google_ads_or_measurement": 0,
+    "google_analytics_collection": 0,
+    "google_consent_or_tag_support": 0,
+    "google_owned_infrastructure": 0,
+    "google_owned_unresolved_meaningful": 0,
+    "google_recaptcha_or_security": 0
+  },
+  "findingCandidateSummary": [
+    {
+      "findingKey": "accept_action_succeeded_or_not_testable",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "consent_flow_not_run"
+      ]
+    },
+    {
+      "findingKey": "accept_control_observed_or_not_observed",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "consent_flow_not_run"
+      ]
+    },
+    {
+      "findingKey": "accept_reject_runtime_delta_observed",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "consent_flow_not_run"
+      ]
+    },
+    {
+      "findingKey": "ai_disclosure_observed_or_not_observed",
+      "eligibility": "not_eligible",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "consent_banner_observed_or_not_observed",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "pre_consent_runtime_not_run"
+      ]
+    },
+    {
+      "findingKey": "cookie_policy_observed_or_not_observed",
+      "eligibility": "not_eligible",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "cookies_persist_after_reject_review_signal",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "consent_flow_not_run"
+      ]
+    },
+    {
+      "findingKey": "do_not_sell_or_share_link_observed",
+      "eligibility": "eligible",
+      "confidence": 0.84,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 1,
+      "evidenceExcerptIds": [
+        "excerpt_policy_excerpt_choices"
+      ],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "endpoint_transfer_review_signal",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "gpc_disclosure_observed",
+      "eligibility": "eligible",
+      "confidence": 0.84,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 1,
+      "evidenceExcerptIds": [
+        "excerpt_policy_excerpt_choices"
+      ],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "gpc_runtime_probe_with_disclosure_observed",
+      "eligibility": "deferred",
+      "confidence": 0.62,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 1,
+      "evidenceExcerptIds": [
+        "excerpt_policy_excerpt_choices"
+      ],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "non_essential_storage_pre_consent",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "notice_at_collection_observed",
+      "eligibility": "not_eligible",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "policy_runtime_vendor_alignment_review_signal",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 1,
+      "evidenceExcerptIds": [
+        "excerpt_policy_excerpt_privacy"
+      ],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "policy_vendor_mentions_observed",
+      "eligibility": "eligible",
+      "confidence": 0.86,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 1,
+      "evidenceExcerptIds": [
+        "excerpt_policy_excerpt_privacy"
+      ],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "post_choice_consent_control_observed",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "post_opt_out_targeted_advertising_behavior_signal",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "pre_consent_tracking_detected",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "pre_consent_runtime_not_run"
+      ]
+    },
+    {
+      "findingKey": "privacy_choices_link_observed",
+      "eligibility": "eligible",
+      "confidence": 0.84,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 1,
+      "evidenceExcerptIds": [
+        "excerpt_policy_excerpt_choices"
+      ],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "privacy_notice_observed_or_not_observed",
+      "eligibility": "eligible",
+      "confidence": 0.86,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 5,
+      "evidenceExcerptIds": [
+        "excerpt_policy_excerpt_privacy"
+      ],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "reject_action_succeeded_or_not_testable",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "consent_flow_not_run"
+      ]
+    },
+    {
+      "findingKey": "reject_control_observed_or_not_observed",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "consent_flow_not_run"
+      ]
+    },
+    {
+      "findingKey": "reject_did_not_reduce_tracking_review_signal",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "consent_flow_not_run"
+      ]
+    },
+    {
+      "findingKey": "session_replay_or_behavioral_analytics_observed",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "targeted_advertising_runtime_signal",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "third_party_cookie_pre_consent",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "pre_consent_runtime_not_run"
+      ]
+    },
+    {
+      "findingKey": "third_party_vendors_observed",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "tracking_after_refusal_review_signal",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "consent_flow_not_run"
+      ]
+    },
+    {
+      "findingKey": "unresolved_collection_endpoint_review_signal",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "vendor_associated_cookie_pre_consent",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": []
+    },
+    {
+      "findingKey": "vendors_appear_only_after_accept_review_signal",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "consent_flow_not_run"
+      ]
+    },
+    {
+      "findingKey": "vendors_persist_after_reject_review_signal",
+      "eligibility": "deferred",
+      "confidence": 0.2,
+      "relatedVendors": [],
+      "sourceJourneyIds": [],
+      "sourceEvidenceRefCount": 0,
+      "evidenceExcerptIds": [],
+      "coverageLimitations": [
+        "consent_flow_not_run"
+      ]
+    }
+  ],
+  "traceabilitySummary": {
+    "vendorObservationsWithEvidenceRefs": 0,
+    "vendorObservationsMissingEvidenceRefs": 0,
+    "vendorObservationsWithMatchSources": 0,
+    "vendorObservationsMissingMatchSources": 0,
+    "journeysWithRawEventRefs": 0,
+    "journeysMissingRawEventRefs": 0,
+    "findingCandidatesWithSourceEvidenceRefs": 7,
+    "findingCandidatesMissingSourceEvidenceRefs": 25,
+    "eligibleFindingCandidatesWithSourceEvidenceRefs": 5,
+    "eligibleFindingCandidatesMissingSourceEvidenceRefs": 0
+  },
+  "evidenceExcerptSummary": {
+    "evidenceExcerptsTotal": 2,
+    "evidenceExcerptsByKind": {
+      "policy_surface_placeholder": 2
+    },
+    "excerptsWithArtifactRefs": 2,
+    "excerptsMissingSourceEvent": 2,
+    "excerptsInternalOnly": 0,
+    "excerptsRedacted": 2,
+    "findingCandidatesWithExcerpts": 7,
+    "findingCandidatesMissingExcerpts": 25,
+    "eligibleFindingCandidatesWithExcerpts": 5,
+    "eligibleFindingCandidatesMissingExcerpts": 0
+  },
+  "coverageLimitations": [
+    "consent_flow_not_run",
+    "pre_consent_runtime_not_run"
+  ]
+}

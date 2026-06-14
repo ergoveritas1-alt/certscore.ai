@@ -34,9 +34,15 @@ export type RegulatoryAssessmentStatus =
   | "coverage_limitation"
   | "not_applicable";
 
+export type RegulatoryChecklistDebugConfidence = {
+  improveConfidence: string[];
+  score: number;
+};
+
 export type GdprEprivacyCoverageChecklistItem = {
   assessmentStatus: RegulatoryAssessmentStatus;
   criticalEvidence: GdprEprivacyCoverageCriticalEvidence;
+  debugConfidence?: RegulatoryChecklistDebugConfidence;
   evidenceState: RegulatoryEvidenceState;
   id: string;
   label: string;

@@ -2,6 +2,10 @@ import "server-only";
 
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import type Stripe from "stripe";
+import {
+  getSelfServePurchasingPausedMessage,
+  isSelfServePurchasingEnabled
+} from "../access-control";
 import type { BootstrapResult } from "../bootstrap-user";
 import { getCheckoutCancelPath, getPublicCheckoutPlanCode, normalizeCheckoutPlan, parseSelfServeCheckoutPlan } from "./plan-mapping";
 import { getBillingReturnUrl, getStripePriceIdForPlan } from "./stripe-config";
@@ -28,6 +32,10 @@ export async function createStripeCheckoutForDashboardContext(input: {
   context: BootstrapResult;
   plan: PlanCode;
 }): Promise<CheckoutResult> {
+  if (!isSelfServePurchasingEnabled()) {
+    throw new Error(getSelfServePurchasingPausedMessage());
+  }
+
   const plan = parseSelfServeCheckoutPlan(input.plan);
   const priceId = getStripePriceIdForPlan(plan);
   if (!priceId) {

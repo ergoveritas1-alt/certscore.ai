@@ -1,0 +1,15 @@
+# Stress internal real-site calibration cohort.
+# This is diagnostic only and does not define production behavior.
+
+https://homedepot.com
+https://lowes.com
+https://costco.com
+https://nike.com
+https://sephora.com
+https://booking.com
+https://airbnb.com
+https://expedia.com
+https://webmd.com
+https://bankofamerica.com
+https://statefarm.com
+https://reuters.com

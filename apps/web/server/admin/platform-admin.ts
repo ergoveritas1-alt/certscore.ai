@@ -3,20 +3,9 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { getDashboardContext } from "../auth";
+import { parsePlatformAdminEmails } from "./platform-admin-core";
 
-const DEFAULT_PLATFORM_ADMIN_EMAILS = new Set(["bmasek@gmail.com", "ben@certscore.ai"]);
-
-function parseAdminEmails(value: string | undefined) {
-  return new Set([
-    ...DEFAULT_PLATFORM_ADMIN_EMAILS,
-    (value ?? "")
-      .split(",")
-      .map((entry) => entry.trim().toLowerCase())
-      .filter(Boolean)
-  ]);
-}
-
-export const getPlatformAdminEmails = cache(() => parseAdminEmails(process.env.CERTSCORE_ADMIN_EMAILS));
+export const getPlatformAdminEmails = cache(() => parsePlatformAdminEmails(process.env.CERTSCORE_ADMIN_EMAILS));
 
 export function isPlatformAdminEmail(email: string | null | undefined) {
   if (!email) {

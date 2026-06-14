@@ -1,0 +1,9 @@
+# Internal CertScore v2 real-site calibration set.
+# This list is diagnostic only and does not define product behavior.
+https://certscore.ai
+https://caltech.edu
+https://nvidia.com
+https://nbcnews.com
+https://fandango.com
+https://sony.com
+https://gatech.edu

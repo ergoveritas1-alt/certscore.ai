@@ -1,0 +1,8 @@
+# Focused v2 full-profile post-reject follow-up cohort.
+# Internal diagnostic only. Artifact-only; not customer-facing report output.
+
+https://www.netlify.com/
+https://www.nvidia.com/en-us/
+https://www.gatech.edu/
+https://www.webmd.com/
+https://www.ford.com/

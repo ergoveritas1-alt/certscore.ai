@@ -89,6 +89,95 @@ function getEvidenceStateLabel(state: RegulatoryEvidenceState) {
   }
 }
 
+function DebugConfidenceSummary({ item }: { item: GdprEprivacyCoverageChecklistItem }) {
+  if (!item.debugConfidence) {
+    return null;
+  }
+  const improvements = item.debugConfidence.improveConfidence.slice(0, 3);
+  const coverageMissing = hasScannerCoverageGap(item);
+  const pillLabel = coverageMissing ? "Coverage missing" : `Confidence: ${item.debugConfidence.score}`;
+  const actionLabel = coverageMissing ? "Next coverage step" : "Improve confidence";
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs leading-5 text-slate-500">
+      <span
+        className={cn(
+          "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
+          coverageMissing
+            ? "border-violet-200 bg-violet-50 text-violet-700"
+            : "border-slate-300 bg-white text-slate-700"
+        )}
+      >
+        {pillLabel}
+      </span>
+      {improvements.length > 0 ? (
+        <span className="min-w-0">
+          {actionLabel}: {improvements.join(" · ")}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function hasScannerCoverageGap(item: GdprEprivacyCoverageChecklistItem) {
+  if (item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation") {
+    return false;
+  }
+  return item.criticalEvidence.missingOrIncompleteSourceSignals.some((gap) =>
+    /policysurfacescanner|consentflowruntimescanner|preconsentruntimescanner|scanner did not run|required_source_module_not_run/i.test(String(gap.whyNeeded))
+  );
+}
+
+function getChecklistRowSummary(items: GdprEprivacyCoverageChecklistItem[]) {
+  const coverageMissing = items.filter(hasScannerCoverageGap).length;
+  return {
+    coverageMissing,
+    evaluated: items.filter((item) =>
+      item.evidenceState !== "not_testable" &&
+      item.evidenceState !== "not_applicable" &&
+      !hasScannerCoverageGap(item)
+    ).length,
+    gaps: items.filter((item) => item.assessmentStatus === "gap_observed").length,
+    reviewSignals: items.filter((item) => item.assessmentStatus === "review_signal").length,
+  };
+}
+
+function ChecklistRowSummaryStrip({ items }: { items: GdprEprivacyCoverageChecklistItem[] }) {
+  const summary = getChecklistRowSummary(items);
+  const entries = [
+    {
+      className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      count: summary.evaluated,
+      label: "Evaluated rows",
+    },
+    {
+      className: "border-violet-200 bg-violet-50 text-violet-800",
+      count: summary.coverageMissing,
+      label: "Coverage missing",
+    },
+    {
+      className: "border-indigo-200 bg-indigo-50 text-indigo-800",
+      count: summary.reviewSignals,
+      label: "Review signals",
+    },
+    {
+      className: "border-rose-200 bg-rose-50 text-rose-800",
+      count: summary.gaps,
+      label: "Gap rows",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:grid-cols-4">
+      {entries.map((entry) => (
+        <div key={entry.label} className={cn("rounded-md border px-3 py-2", entry.className)}>
+          <div className="text-lg font-semibold leading-none text-slate-950">{entry.count}</div>
+          <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em]">{entry.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function getCoverageIconMeta(status: GdprEprivacyCoverageChecklistStatus) {
   switch (status) {
     case "Observed":
@@ -488,15 +577,28 @@ function getGdprSectionSummary(input: {
   scoreSummary?: string;
 }) {
   const primary = input.lensSummary ?? input.fallbackSummary;
-  const consentAccessibilityNeedsReview = input.items.some((item) =>
-    item.id === "accessibility_consent_controls" &&
-    (item.assessmentStatus === "gap_observed" || item.assessmentStatus === "review_signal")
-  );
-  const reviewAreas = consentAccessibilityNeedsReview
-    ? "consent timing, refusal behavior, post-choice controls, runtime vendor disclosure alignment, cross-border analytics/tracking endpoint context, and consent-control accessibility"
-    : "consent timing, refusal behavior, post-choice controls, runtime vendor disclosure alignment, and cross-border analytics/tracking endpoint context";
   const scorePrefix = input.scoreSummary ? `${input.scoreSummary} ` : "";
-  return `${scorePrefix}${primary} ${input.reviewSummary.coverageText} ${input.reviewSummary.priorityReviewText} Review retained evidence for ${reviewAreas}.`;
+  return `${scorePrefix}${primary} ${input.reviewSummary.coverageText} ${input.reviewSummary.priorityReviewText} Review retained evidence for ${getGdprReviewedAreas(input.items)}.`;
+}
+
+function getGdprReviewedAreas(items: GdprEprivacyCoverageChecklistItem[]) {
+  const rowIds = new Set(items.map((item) => item.id));
+  const areas = [
+    rowIds.has("pre_consent_cookies_storage") || rowIds.has("pre_consent_third_party_tracking")
+      ? "pre-consent storage and tracking"
+      : null,
+    rowIds.has("consent_surface_observed") ? "consent surface evidence" : null,
+    rowIds.has("reject_all_path_availability") ? "refusal path availability" : null,
+    rowIds.has("post_reject_tracking_reduction") ? "post-reject tracking behavior" : null,
+    rowIds.has("preference_withdrawal_control") ? "post-choice controls" : null,
+    rowIds.has("runtime_vendor_disclosure_alignment") ? "runtime vendor disclosure alignment" : null,
+    rowIds.has("sensitive_surfaces_third_party_tracking") ? "sensitive-surface tracking context" : null,
+    rowIds.has("session_replay_fingerprinting_review") ? "session replay and fingerprinting context" : null,
+    rowIds.has("cross_border_endpoint_review") ? "cross-border analytics/tracking endpoint context" : null,
+    rowIds.has("accessibility_consent_controls") ? "consent-control accessibility" : null,
+  ].filter((area): area is string => Boolean(area));
+
+  return areas.length > 0 ? areas.join(", ") : "the available GDPR/ePrivacy checklist rows";
 }
 
 export function GdprEprivacyCoverageChecklistCard({
@@ -545,6 +647,7 @@ export function GdprEprivacyCoverageChecklistCard({
           <p className="max-w-4xl text-sm leading-6 text-slate-600">{gdprSectionSummary}</p>
         </div>
       </details>
+      <ChecklistRowSummaryStrip items={items} />
       <div className="overflow-hidden rounded-lg border border-slate-200">
         <div className="grid grid-cols-1 gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.5fr)]">
           <span>Coverage area</span>
@@ -579,6 +682,7 @@ export function GdprEprivacyCoverageChecklistCard({
                         {getAssessmentStatusLabel(item.assessmentStatus)}
                       </span>
                     </div>
+                    <DebugConfidenceSummary item={item} />
                   </div>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-slate-500 md:hidden">{getScanContextNote(item)}</p>

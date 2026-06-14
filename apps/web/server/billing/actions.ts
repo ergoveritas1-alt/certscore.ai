@@ -3,6 +3,7 @@
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { isSelfServePurchasingEnabled } from "../access-control";
 import { getDashboardContext } from "../auth";
 import { createStripeCheckoutForDashboardContext } from "./checkout";
 import { getBillingReturnUrl, getStripeBillingEnv, getStripeBillingMode } from "./stripe-config";
@@ -33,6 +34,10 @@ function getBillingPortalConfigurationId() {
 }
 
 export async function startStripeCheckoutFormAction(formData: FormData): Promise<void> {
+  if (!isSelfServePurchasingEnabled()) {
+    redirect("/app/modify-plan?billing=purchases-paused");
+  }
+
   requireStripeBillingEnabled();
 
   const context = await getDashboardContext();

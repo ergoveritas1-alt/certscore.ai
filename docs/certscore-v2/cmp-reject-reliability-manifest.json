@@ -1,0 +1,313 @@
+{
+  "manifestVersion": "wc01.v2_post_reject_calibration.1",
+  "generatedAt": "2026-06-11T00:00:00.000Z",
+  "internalOnlyBanner": "Internal CMP reject reliability calibration diagnostic only. Not customer-facing report output.",
+  "cohortName": "cmp-reject-reliability-30",
+  "notes": [
+    "This manifest calibrates v2 CMP-supported reject-action proof only and does not define production report behavior.",
+    "All sites are candidate CMP-supported flows; no-go, unsupported, candidate-not-observed, and not-testable outcomes are expected calibration outputs.",
+    "Promotable remains false unless separately approved through the production integration process."
+  ],
+  "sites": [
+    {
+      "siteKey": "netlify.com",
+      "url": "https://www.netlify.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "onetrust_candidate", "saas"]
+    },
+    {
+      "siteKey": "nvidia.com",
+      "url": "https://www.nvidia.com/en-us/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "onetrust_candidate", "commerce"]
+    },
+    {
+      "siteKey": "salesforce.com",
+      "url": "https://www.salesforce.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "onetrust_candidate", "saas"]
+    },
+    {
+      "siteKey": "ibm.com",
+      "url": "https://www.ibm.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "onetrust_candidate", "enterprise"]
+    },
+    {
+      "siteKey": "adobe.com",
+      "url": "https://www.adobe.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "onetrust_candidate", "saas"]
+    },
+    {
+      "siteKey": "oracle.com",
+      "url": "https://www.oracle.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "onetrust_candidate", "enterprise"]
+    },
+    {
+      "siteKey": "cisco.com",
+      "url": "https://www.cisco.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "onetrust_candidate", "enterprise"]
+    },
+    {
+      "siteKey": "intel.com",
+      "url": "https://www.intel.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "onetrust_candidate", "enterprise"]
+    },
+    {
+      "siteKey": "nike.com",
+      "url": "https://www.nike.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "onetrust_candidate", "commerce"]
+    },
+    {
+      "siteKey": "target.com",
+      "url": "https://www.target.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "onetrust_candidate", "commerce"]
+    },
+    {
+      "siteKey": "costco.com",
+      "url": "https://www.costco.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "trustarc_candidate", "commerce"]
+    },
+    {
+      "siteKey": "homedepot.com",
+      "url": "https://www.homedepot.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "trustarc_candidate", "commerce"]
+    },
+    {
+      "siteKey": "lowes.com",
+      "url": "https://www.lowes.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "trustarc_candidate", "commerce"]
+    },
+    {
+      "siteKey": "bestbuy.com",
+      "url": "https://www.bestbuy.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "trustarc_candidate", "commerce"]
+    },
+    {
+      "siteKey": "bankofamerica.com",
+      "url": "https://www.bankofamerica.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "trustarc_candidate", "finance"]
+    },
+    {
+      "siteKey": "bbc.com",
+      "url": "https://www.bbc.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "cookiebot_candidate", "publisher"]
+    },
+    {
+      "siteKey": "spotify.com",
+      "url": "https://www.spotify.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "cookiebot_candidate", "consumer_saas"]
+    },
+    {
+      "siteKey": "ikea.com",
+      "url": "https://www.ikea.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "cookiebot_candidate", "commerce"]
+    },
+    {
+      "siteKey": "unilever.com",
+      "url": "https://www.unilever.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "cookiebot_candidate", "global_brand"]
+    },
+    {
+      "siteKey": "reuters.com",
+      "url": "https://www.reuters.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "cookiebot_candidate", "publisher"]
+    },
+    {
+      "siteKey": "theguardian.com",
+      "url": "https://www.theguardian.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "didomi_candidate", "publisher"]
+    },
+    {
+      "siteKey": "lemonde.fr",
+      "url": "https://www.lemonde.fr/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "didomi_candidate", "publisher"]
+    },
+    {
+      "siteKey": "decathlon.com",
+      "url": "https://www.decathlon.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "didomi_candidate", "commerce"]
+    },
+    {
+      "siteKey": "airfrance.com",
+      "url": "https://www.airfrance.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "didomi_candidate", "travel"]
+    },
+    {
+      "siteKey": "cnn.com",
+      "url": "https://www.cnn.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "sourcepoint_candidate", "publisher"]
+    },
+    {
+      "siteKey": "weather.com",
+      "url": "https://www.weather.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "sourcepoint_candidate", "publisher"]
+    },
+    {
+      "siteKey": "forbes.com",
+      "url": "https://www.forbes.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "sourcepoint_candidate", "publisher"]
+    },
+    {
+      "siteKey": "washingtonpost.com",
+      "url": "https://www.washingtonpost.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "sourcepoint_candidate", "publisher"]
+    },
+    {
+      "siteKey": "segment.com",
+      "url": "https://www.segment.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "ketch_or_privacy_center_candidate", "saas"]
+    },
+    {
+      "siteKey": "databricks.com",
+      "url": "https://www.databricks.com/",
+      "preferredProfile": "full",
+      "expectedOutcome": "unknown",
+      "expectedRejectAction": "unknown",
+      "expectedPromotable": false,
+      "expectedVendors": [],
+      "tags": ["cmp_reliability", "ketch_or_privacy_center_candidate", "saas"]
+    }
+  ]
+}

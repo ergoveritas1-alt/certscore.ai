@@ -10,8 +10,10 @@
     "check-env:validation-cutover": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-validation-cutover-env.ts",
     "check-runtime": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-runtime.ts",
     "check-runtime:build": "node --enable-source-maps --import tsx ./scripts/check-runtime.ts --allow-missing-env",
-    "indexnow:submit": "node --enable-source-maps --import tsx ./scripts/submit-indexnow.ts",
-    "monitoring:sweep": "node --env-file-if-exists=.env.local --enable-source-maps --import tsx ./scripts/run-scheduled-monitoring.ts",
+  "indexnow:submit": "node --enable-source-maps --import tsx ./scripts/submit-indexnow.ts",
+  "import:wc01-v2-evidence-preview": "node --env-file-if-exists=.env.local --enable-source-maps --import tsx ./scripts/import-wc01-v2-evidence-preview.ts",
+  "smoke:wc01-v2-reviewer-decisions": "node --env-file-if-exists=.env.local --enable-source-maps --import tsx ./scripts/smoke-wc01-v2-reviewer-decisions.ts",
+  "monitoring:sweep": "node --env-file-if-exists=.env.local --enable-source-maps --import tsx ./scripts/run-scheduled-monitoring.ts",
     "scanner-quality:aggregate": "node --env-file-if-exists=.env.local --enable-source-maps --import tsx ./scripts/aggregate-scanner-quality-history.ts",
     "check:production-finding-calibration": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-production-finding-calibration.ts",
     "audit:production-finding-demotions": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/audit-production-finding-demotions.ts",
@@ -49,6 +51,9 @@
     "clean": "rm -rf .next"
   },
   "dependencies": {
+    "@certscore/contracts": "workspace:*",
+    "@certscore/report-adapter": "workspace:*",
+    "@certscore/review-engine": "workspace:*",
     "@aws-sdk/client-s3": "^3.1031.0",
     "@aws-sdk/s3-request-presigner": "^3.1031.0",
     "@website-signal-risk-scanner/db": "workspace:*",

@@ -1,0 +1,259 @@
+{
+  "scanId": "fixture_akamai_security_cookie",
+  "url": "https://example.com",
+  "normalizedUrl": "https://example.com/",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "completedAt": "2026-01-01T00:00:02.000Z",
+  "region": "fixture",
+  "scanProfile": {
+    "profileId": "quick",
+    "label": "Saved-bundle fixture",
+    "targetDurationMs": 12000,
+    "internalBudgetMs": 15000,
+    "enabledModules": [
+      "preConsentRuntimeScanner"
+    ]
+  },
+  "modulesRun": [
+    {
+      "moduleName": "preConsentRuntimeScanner",
+      "status": "completed",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "completedAt": "2026-01-01T00:00:02.000Z",
+      "durationMs": 2000,
+      "evidenceRefs": [],
+      "errors": []
+    }
+  ],
+  "runtimeTimeline": [
+    {
+      "eventId": "cookie_akamai_security",
+      "eventType": "cookie",
+      "timestampMs": 700,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://example.com",
+      "hostname": "example.com",
+      "registrableDomain": "example.com",
+      "firstParty": true,
+      "thirdParty": false,
+      "evidenceRefs": [],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "cookieName": "_abck",
+      "cookieDomain": "example.com",
+      "cookiePath": "/",
+      "secure": true,
+      "httpOnly": false,
+      "cookieParty": "first_party",
+      "vendorAssociated": true,
+      "associatedVendorRef": "vendor_akamai",
+      "cookiePurpose": "security",
+      "cookieClassificationBasis": [
+        "first_party",
+        "vendor:Akamai",
+        "purpose:security"
+      ],
+      "operation": "set_cookie_header",
+      "valueRedacted": true
+    }
+  ],
+  "networkEvents": [],
+  "networkResponseEvents": [],
+  "cookieEvents": [
+    {
+      "eventId": "cookie_akamai_security",
+      "eventType": "cookie",
+      "timestampMs": 700,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://example.com",
+      "hostname": "example.com",
+      "registrableDomain": "example.com",
+      "firstParty": true,
+      "thirdParty": false,
+      "evidenceRefs": [],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "cookieName": "_abck",
+      "cookieDomain": "example.com",
+      "cookiePath": "/",
+      "secure": true,
+      "httpOnly": false,
+      "cookieParty": "first_party",
+      "vendorAssociated": true,
+      "associatedVendorRef": "vendor_akamai",
+      "cookiePurpose": "security",
+      "cookieClassificationBasis": [
+        "first_party",
+        "vendor:Akamai",
+        "purpose:security"
+      ],
+      "operation": "set_cookie_header",
+      "valueRedacted": true
+    }
+  ],
+  "cookieSnapshots": [],
+  "storageSnapshots": [],
+  "scriptEvents": [],
+  "iframeEvents": [],
+  "consentUiObservations": [
+    {
+      "observationId": "consent_none",
+      "observedAtMs": 1000,
+      "likelyPresent": false,
+      "basis": [
+        "no_banner_keywords_detected"
+      ],
+      "evidenceRefs": [],
+      "confidence": 0.55
+    }
+  ],
+  "consentInteractionEvents": [],
+  "policySurfaceObservations": [],
+  "screenshots": [],
+  "domSnapshots": [],
+  "normalizedVendorObservations": [
+    {
+      "observationId": "vendor_akamai",
+      "entity": "Akamai Technologies, Inc.",
+      "vendor": "Akamai",
+      "product": "Akamai Bot Manager / Edge",
+      "purpose": "security",
+      "confidence": 0.9,
+      "basis": [
+        "akamai_security_cookie"
+      ],
+      "regulatoryRelevance": [
+        "security",
+        "infrastructure"
+      ],
+      "matchedEvidenceIds": [
+        "cookie_akamai_security"
+      ],
+      "matchedHostnames": [
+        "example.com"
+      ],
+      "matchedUrls": [],
+      "matchedCookieNames": [
+        "_abck"
+      ],
+      "matchedEvidenceRefs": [
+        {
+          "refId": "ref_cookie_akamai_security",
+          "eventId": "cookie_akamai_security",
+          "eventType": "cookie",
+          "label": "_abck",
+          "url": "https://example.com"
+        }
+      ],
+      "matchSources": [
+        {
+          "source": "set_cookie",
+          "sourceEventId": "cookie_akamai_security",
+          "sourceEventType": "cookie",
+          "sourceScanner": "pre_consent_runtime",
+          "scenario": "fresh_pre_consent",
+          "consentStateAtTime": "pre_consent",
+          "matchedField": "cookie_name",
+          "matchedValueRedacted": "_abck",
+          "resolverBasis": [
+            "akamai_security_cookie"
+          ],
+          "confidence": 0.9
+        }
+      ]
+    }
+  ],
+  "observedJourneys": [
+    {
+      "journeyId": "journey_akamai_security_cookie",
+      "journeyType": "cookie",
+      "key": "cookie:_abck",
+      "displayName": "_abck",
+      "entity": "Akamai Technologies, Inc.",
+      "vendor": "Akamai",
+      "product": "Akamai Bot Manager / Edge",
+      "purpose": "security",
+      "sourceScanner": "pre_consent_runtime",
+      "scenariosObserved": [
+        "fresh_pre_consent"
+      ],
+      "firstObservedAtMs": 700,
+      "lastObservedAtMs": 700,
+      "firstObservedConsentState": "pre_consent",
+      "consentStatesObserved": [
+        "pre_consent"
+      ],
+      "firstPartyOrThirdParty": "first_party",
+      "entryPoint": "https://example.com",
+      "relatedCookies": [
+        "_abck"
+      ],
+      "relatedScripts": [],
+      "relatedEndpoints": [],
+      "relatedVendors": [
+        "Akamai"
+      ],
+      "observedBehaviors": [
+        "cookie_set"
+      ],
+      "resolverBasis": [],
+      "relatedEvidenceRefs": [],
+      "eventRefs": [
+        {
+          "eventId": "cookie_akamai_security",
+          "eventType": "cookie",
+          "timestampMs": 700,
+          "url": "https://example.com",
+          "label": "_abck",
+          "behavior": "cookie_set",
+          "firstParty": true,
+          "thirdParty": false
+        }
+      ],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "evidenceRefs": [
+        {
+          "refId": "ref_cookie_akamai_security",
+          "eventId": "cookie_akamai_security",
+          "eventType": "cookie",
+          "label": "_abck",
+          "url": "https://example.com"
+        }
+      ],
+      "relatedVendorObservationIds": [
+        "vendor_akamai"
+      ],
+      "entryPointSourceEventId": "cookie_akamai_security"
+    }
+  ],
+  "derivedRuntimeSignals": {
+    "thirdPartyVendorsObserved": false,
+    "preConsentTrackingObserved": false,
+    "thirdPartyCookiesPreConsentObserved": false,
+    "consentBannerLikelyPresent": false,
+    "sessionReplayOrBehavioralAnalyticsObserved": false,
+    "journeySummary": {
+      "journeyCount": 1,
+      "vendorJourneyCount": 0,
+      "productJourneyCount": 0,
+      "trackerJourneyCount": 0,
+      "cookieJourneyCount": 1,
+      "scriptJourneyCount": 0,
+      "endpointJourneyCount": 0,
+      "activeCollectionJourneyCount": 0,
+      "consentManagementJourneyCount": 0,
+      "notes": []
+    },
+    "notes": []
+  },
+  "artifactRefs": [],
+  "scannerVersion": "saved-bundle-fixture",
+  "schemaVersion": "certscore.v2.alpha.1"
+}

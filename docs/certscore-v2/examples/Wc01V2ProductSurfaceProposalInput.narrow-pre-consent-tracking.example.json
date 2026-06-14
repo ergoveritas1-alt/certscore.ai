@@ -1,0 +1,120 @@
+{
+  "inputVersion": "wc01.v2_product_surface_proposal_input.1",
+  "proposedSurfaceClass": "limited_admin_internal_preview",
+  "proposedSurfaceAudience": "authorized internal product, policy, evidence, and engineering reviewers",
+  "proposedSurfacePurpose": "Design a future internal-only diagnostic preview for non-sensitive pre-consent tracking evidence shape review before any implementation is approved.",
+  "sourceProductionReadinessGateDraft": "artifacts/v2-internal-artifact-chain-example/Wc01V2ProductionReadinessGateDraft.json",
+  "sourcePolicyCopyReviewArtifact": "artifacts/v2-internal-artifact-chain-example/Wc01V2PolicyCopyReviewArtifact.json",
+  "sourceReviewerWorkflowDocs": [
+    "docs/certscore-v2/wc01-v2-narrow-production-proposal-design.md",
+    "docs/certscore-v2/wc01-v2-calibration-expansion-followup.md",
+    "docs/certscore-v2/wc01-v2-production-surface-taxonomy-design.md",
+    "docs/certscore-v2/wc01-v2-production-readiness-gate-design.md",
+    "docs/certscore-v2/wc01-v2-internal-artifact-pipeline-checkpoint.md"
+  ],
+  "allowedFamilies": [
+    "pre_consent_tracking"
+  ],
+  "blockedFamilies": [
+    "pre_consent_cookie_storage",
+    "session_replay_behavioral_analytics",
+    "third_party_vendors_observed",
+    "consent_banner_observed_or_not_observed",
+    "unresolved_endpoint_review",
+    "policy_runtime_alignment",
+    "consent_flow_delta_or_persistence",
+    "tag_management",
+    "consent_management",
+    "security",
+    "performance_monitoring",
+    "customer_support",
+    "infrastructure",
+    "fraud_bot",
+    "rum",
+    "live_chat",
+    "sensitive_context"
+  ],
+  "sensitiveContextHandling": {
+    "required": false,
+    "categories": [],
+    "defaultCustomerFacingBlocked": true,
+    "notes": [
+      "Sensitive-context items are excluded from this first narrow proposal.",
+      "Sensitive-context labels remain routing metadata only.",
+      "Any later sensitive-context movement requires separate policy and copy review."
+    ]
+  },
+  "copyPosture": "draft_internal_only",
+  "evidenceRequirements": [
+    "closed-default product surface proposal draft",
+    "production-readiness gate draft reference",
+    "manual reviewer workflow reference",
+    "source refs present",
+    "display-safe excerpt refs present",
+    "bounded evidence preview available",
+    "confidence and directness present",
+    "pre-consent consent-state context present",
+    "no unresolved evidence refs",
+    "no sanitizer warnings",
+    "non-sensitive context only"
+  ],
+  "userVisibleWordingStatus": "no_user_visible_wording",
+  "guardrailRequirements": [
+    "productionEligible false",
+    "customerFacingEligible false",
+    "implementationStatus not_approved",
+    "explicitApprovalRequired true",
+    "raw-field scan clean",
+    "forbidden wording scan clean",
+    "sanitizer warning count zero",
+    "import-boundary check clean",
+    "no app UI",
+    "no persistence",
+    "no production integration",
+    "no production concern policy call",
+    "no persisted normalized concerns",
+    "no unified findings",
+    "no report checklist executive scoring regulatory output",
+    "no API MCP export output",
+    "no customer-facing copy"
+  ],
+  "approvalRequirements": [
+    {
+      "owner": "evidence_owner",
+      "required": true,
+      "status": "pending",
+      "notes": "Confirm non-sensitive pre-consent tracking evidence shape is mature enough for an internal preview proposal."
+    },
+    {
+      "owner": "policy_owner",
+      "required": true,
+      "status": "pending",
+      "notes": "Confirm the proposed internal-only scope excludes sensitive context and does not create product output."
+    },
+    {
+      "owner": "copy_owner",
+      "required": true,
+      "status": "pending",
+      "notes": "Confirm internal diagnostic wording posture before any implementation proposal."
+    },
+    {
+      "owner": "product_owner",
+      "required": true,
+      "status": "pending",
+      "notes": "Confirm whether a limited internal/admin diagnostic preview is the right next surface to consider."
+    },
+    {
+      "owner": "engineering_owner",
+      "required": true,
+      "status": "pending",
+      "notes": "Confirm implementation remains blocked until a separate proposal is approved."
+    }
+  ],
+  "rollbackSuppressionPlan": {
+    "suppressionReason": "hold if any guardrail, sanitizer, evidence, policy, copy, product, or engineering approval is missing",
+    "holdState": "not_approved_internal_only",
+    "rollbackOwner": "engineering_owner",
+    "regressionGuardrailCheck": "rerun report-adapter tests, typecheck, artifact-chain smoke, and wording/raw-field guardrail scan before any next step",
+    "emergencyDisablePlan": "remove this proposal draft from the review set and keep all v2 product surfaces blocked"
+  }
+}

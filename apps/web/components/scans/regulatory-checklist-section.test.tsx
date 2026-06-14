@@ -104,3 +104,20 @@ test("RegulatoryChecklistSection renders tab badges inside the More menu", () =>
   assert.match(html, /International privacy/);
   assert.match(html, /Alpha/);
 });
+
+test("RegulatoryChecklistSection can override the heading label", () => {
+  const html = renderToStaticMarkup(createElement(RegulatoryChecklistSection, {
+    headingLabel: "Regulatory Diagnostics",
+    tabs: [
+      {
+        content: createElement("div", null, "GDPR checklist"),
+        id: "gdpr-eprivacy",
+        label: "GDPR / ePrivacy",
+        shortLabel: "GDPR/ePrivacy"
+      }
+    ]
+  }));
+
+  assert.match(html, /Regulatory Diagnostics/);
+  assert.doesNotMatch(html, /Regulatory Review/);
+});

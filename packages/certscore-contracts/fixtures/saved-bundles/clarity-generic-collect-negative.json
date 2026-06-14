@@ -1,0 +1,279 @@
+{
+  "scanId": "fixture_clarity_generic_collect_negative",
+  "url": "https://example.com",
+  "normalizedUrl": "https://example.com/",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "completedAt": "2026-01-01T00:00:02.000Z",
+  "region": "fixture",
+  "scanProfile": {
+    "profileId": "quick",
+    "label": "Saved-bundle fixture",
+    "targetDurationMs": 12000,
+    "internalBudgetMs": 15000,
+    "enabledModules": [
+      "preConsentRuntimeScanner"
+    ]
+  },
+  "modulesRun": [
+    {
+      "moduleName": "preConsentRuntimeScanner",
+      "status": "completed",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "completedAt": "2026-01-01T00:00:02.000Z",
+      "durationMs": 2000,
+      "evidenceRefs": [],
+      "errors": []
+    }
+  ],
+  "runtimeTimeline": [
+    {
+      "eventId": "net_generic_collect_negative",
+      "eventType": "network_request",
+      "requestId": "req_generic_collect_negative",
+      "timestampMs": 500,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://collector.example.net/collect",
+      "hostname": "collector.example.net",
+      "registrableDomain": "example.net",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.95,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "fetch",
+      "requestUrl": "https://collector.example.net/collect",
+      "normalizedUrl": "https://collector.example.net/collect",
+      "requestHostname": "collector.example.net",
+      "path": "/collect",
+      "queryParamNames": [
+        "event"
+      ],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": false,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": true,
+      "endpointCategory": "collection_like",
+      "attributionStatus": "unresolved_meaningful",
+      "attributionReason": "collection_like_endpoint_without_confident_vendor_mapping",
+      "resolverBasis": [
+        "endpoint_category:collection_like"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    }
+  ],
+  "networkEvents": [
+    {
+      "eventId": "net_generic_collect_negative",
+      "eventType": "network_request",
+      "requestId": "req_generic_collect_negative",
+      "timestampMs": 500,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://collector.example.net/collect",
+      "hostname": "collector.example.net",
+      "registrableDomain": "example.net",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.95,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "fetch",
+      "requestUrl": "https://collector.example.net/collect",
+      "normalizedUrl": "https://collector.example.net/collect",
+      "requestHostname": "collector.example.net",
+      "path": "/collect",
+      "queryParamNames": [
+        "event"
+      ],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": false,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": true,
+      "endpointCategory": "collection_like",
+      "attributionStatus": "unresolved_meaningful",
+      "attributionReason": "collection_like_endpoint_without_confident_vendor_mapping",
+      "resolverBasis": [
+        "endpoint_category:collection_like"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    }
+  ],
+  "networkResponseEvents": [
+    {
+      "eventId": "resp_net_generic_collect_negative",
+      "eventType": "network_response",
+      "requestId": "req_generic_collect_negative",
+      "timestampMs": 520,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://collector.example.net/collect",
+      "hostname": "collector.example.net",
+      "registrableDomain": "example.net",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.92,
+      "directVsInferred": "direct",
+      "responseUrl": "https://collector.example.net/collect",
+      "normalizedUrl": "https://collector.example.net/collect",
+      "status": 200,
+      "contentType": "application/javascript",
+      "setCookieHeaders": [],
+      "setCookieMetadata": [],
+      "cookieNamesSet": [],
+      "cacheHeaders": {},
+      "accessControlHeaders": {}
+    }
+  ],
+  "cookieEvents": [],
+  "cookieSnapshots": [],
+  "storageSnapshots": [],
+  "scriptEvents": [],
+  "iframeEvents": [],
+  "consentUiObservations": [
+    {
+      "observationId": "consent_none",
+      "observedAtMs": 1000,
+      "likelyPresent": false,
+      "basis": [
+        "no_banner_keywords_detected"
+      ],
+      "evidenceRefs": [],
+      "confidence": 0.55
+    }
+  ],
+  "consentInteractionEvents": [],
+  "policySurfaceObservations": [],
+  "screenshots": [],
+  "domSnapshots": [],
+  "normalizedVendorObservations": [],
+  "observedJourneys": [
+    {
+      "journeyId": "journey_generic_collect_negative",
+      "journeyType": "endpoint",
+      "key": "endpoint:generic_collect_negative",
+      "displayName": "collector.example.net",
+      "sourceScanner": "pre_consent_runtime",
+      "scenariosObserved": [
+        "fresh_pre_consent"
+      ],
+      "firstObservedAtMs": 500,
+      "lastObservedAtMs": 500,
+      "firstObservedConsentState": "pre_consent",
+      "consentStatesObserved": [
+        "pre_consent"
+      ],
+      "firstPartyOrThirdParty": "third_party",
+      "entryPoint": "https://collector.example.net/collect",
+      "relatedCookies": [],
+      "relatedScripts": [],
+      "relatedEndpoints": [
+        "https://collector.example.net/collect"
+      ],
+      "relatedVendors": [],
+      "observedBehaviors": [
+        "third_party_request_observed",
+        "collection_endpoint_observed"
+      ],
+      "attributionStatus": "unresolved_meaningful",
+      "attributionReason": "collection_like_endpoint_without_confident_vendor_mapping",
+      "resolverBasis": [
+        "endpoint_category:collection_like"
+      ],
+      "relatedEvidenceRefs": [],
+      "eventRefs": [
+        {
+          "eventId": "net_generic_collect_negative",
+          "eventType": "network_request",
+          "timestampMs": 500,
+          "url": "https://collector.example.net/collect",
+          "behavior": "third_party_request_observed",
+          "firstParty": false,
+          "thirdParty": true
+        }
+      ],
+      "confidence": 0.58,
+      "directVsInferred": "inferred",
+      "evidenceRefs": [
+        {
+          "refId": "ref_net_generic_collect_negative",
+          "eventId": "net_generic_collect_negative",
+          "eventType": "network_request",
+          "url": "https://collector.example.net/collect"
+        }
+      ],
+      "relatedVendorObservationIds": [],
+      "entryPointSourceEventId": "net_generic_collect_negative"
+    }
+  ],
+  "derivedRuntimeSignals": {
+    "thirdPartyVendorsObserved": false,
+    "preConsentTrackingObserved": false,
+    "thirdPartyCookiesPreConsentObserved": false,
+    "consentBannerLikelyPresent": false,
+    "sessionReplayOrBehavioralAnalyticsObserved": false,
+    "journeySummary": {
+      "journeyCount": 1,
+      "vendorJourneyCount": 0,
+      "productJourneyCount": 0,
+      "trackerJourneyCount": 0,
+      "cookieJourneyCount": 0,
+      "scriptJourneyCount": 0,
+      "endpointJourneyCount": 1,
+      "activeCollectionJourneyCount": 1,
+      "consentManagementJourneyCount": 0,
+      "notes": []
+    },
+    "notes": []
+  },
+  "artifactRefs": [],
+  "scannerVersion": "saved-bundle-fixture",
+  "schemaVersion": "certscore.v2.alpha.1"
+}

@@ -2391,6 +2391,14 @@ export function deriveConcernPolicy(input: {
       };
     }
   }
+  if (input.concern.originKey.startsWith("scan_quality.runtime_coverage.")) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: ["runtime_tracking_review_incomplete"],
+      promotionEligibility: "internal_only"
+    };
+  }
 
   if (isUnmappedFinancialSignalConcern(input.concern)) {
     return {

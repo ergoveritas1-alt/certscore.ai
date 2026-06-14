@@ -1,0 +1,202 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import test from "node:test";
+import path from "node:path";
+import {
+  buildV2ScanLabRunPlan,
+  getV2ScanLabRunProfiles,
+  isV2ScanLabRunProfile,
+  runV2ScanLabArtifactChain,
+} from "./v2-scan-lab-runner";
+
+test("v2 scan lab runner exposes only supported launch profiles", () => {
+  assert.deepEqual(getV2ScanLabRunProfiles(), ["tiny", "standard", "policy", "consent", "full"]);
+  assert.equal(isV2ScanLabRunProfile("tiny"), true);
+  assert.equal(isV2ScanLabRunProfile("standard"), true);
+  assert.equal(isV2ScanLabRunProfile("policy"), true);
+  assert.equal(isV2ScanLabRunProfile("consent"), true);
+  assert.equal(isV2ScanLabRunProfile("full"), true);
+});
+
+test("builds a fresh artifact chain plan with stable run roots", () => {
+  const workspaceRoot = path.join("/tmp", "wc01");
+  const plan = buildV2ScanLabRunPlan({
+    now: new Date("2026-06-10T17:11:12.000Z"),
+    profile: "standard",
+    url: "cnn.com",
+    workspaceRoot,
+  });
+
+  assert.equal(plan.chainKey, "lab-cnn-com-standard-20260610T171112:cnn.com");
+  assert.equal(plan.domain, "cnn.com");
+  assert.equal(plan.normalizedUrl, "https://cnn.com/");
+  assert.equal(plan.profile, "standard");
+  assert.equal(plan.timingPath, path.join(workspaceRoot, "artifacts", "v2-calibration-lab-cnn-com-standard-20260610T171112", "cnn.com", "V2ScanLabTiming.json"));
+  assert.deepEqual(plan.steps.map((step) => step.script), [
+    "v2:scan",
+    "v2:review",
+    "v2:project",
+    "v2:wc01-shadow",
+    "v2:wc01-allowlist-dry-run",
+    "v2:wc01-concern-input-dry-run",
+    "v2:wc01-concern-policy-simulate",
+    "v2:wc01-normalized-concern-adapter",
+    "v2:wc01-concern-policy-compare",
+    "v2:wc01-reviewer-packet",
+    "v2:wc01-evidence-preview",
+  ]);
+  assert.deepEqual(plan.steps.map((step) => [step.label, step.dependsOn ?? []]), [
+    ["scan", []],
+    ["review", ["scan"]],
+    ["project", ["review"]],
+    ["shadow", ["project"]],
+    ["allowlist", ["shadow"]],
+    ["concern input", ["allowlist"]],
+    ["policy simulation", ["concern input"]],
+    ["normalized concern adapter", ["policy simulation"]],
+    ["policy comparison", ["normalized concern adapter"]],
+    ["reviewer packet", ["policy comparison"]],
+    ["evidence preview", ["reviewer packet"]],
+  ]);
+  assert.ok(plan.steps[0]?.args.includes(path.join(workspaceRoot, "artifacts", "v2-calibration-lab-cnn-com-standard-20260610T171112", "cnn.com")));
+  assert.ok(plan.steps.at(-1)?.args.includes(path.join(workspaceRoot, "artifacts", "v2-wc01-evidence-preview-lab-cnn-com-standard-20260610T171112", "cnn.com", "Wc01V2EvidencePreviewPacket.json")));
+  const projectStep = plan.steps.find((step) => step.label === "project");
+  assert.ok(projectStep?.args.includes("--shadow-out"));
+  assert.ok(projectStep?.args.includes("--policy-comparison-out"));
+  assert.ok(projectStep?.args.includes("--reviewer-packet-out"));
+  assert.ok(projectStep?.args.includes("--evidence-preview-out"));
+  const reviewerPacketStep = plan.steps.find((step) => step.label === "reviewer packet");
+  assert.ok(reviewerPacketStep?.args.includes("--evidence-preview-out"));
+  assert.ok(reviewerPacketStep?.args.includes(path.join(workspaceRoot, "artifacts", "v2-wc01-evidence-preview-lab-cnn-com-standard-20260610T171112", "cnn.com", "Wc01V2EvidencePreviewPacket.json")));
+});
+
+test("builds full scan lab plans with the full scan-core profile", () => {
+  const workspaceRoot = path.join("/tmp", "wc01");
+  const plan = buildV2ScanLabRunPlan({
+    now: new Date("2026-06-10T17:11:12.000Z"),
+    profile: "full",
+    url: "example.com",
+    workspaceRoot,
+  });
+
+  assert.equal(plan.chainKey, "lab-example-com-full-20260610T171112:example.com");
+  assert.equal(plan.profile, "full");
+  assert.deepEqual(plan.steps[0]?.args.slice(0, 4), ["--url", "https://example.com/", "--profile", "full"]);
+  assert.ok(plan.steps[0]?.args.includes(path.join(workspaceRoot, "artifacts", "v2-calibration-lab-example-com-full-20260610T171112", "example.com")));
+});
+
+test("builds scan lab plans with optional replay capture", () => {
+  const workspaceRoot = path.join("/tmp", "wc01");
+  const plan = buildV2ScanLabRunPlan({
+    captureReplay: true,
+    captureReplayAuxiliaryProbes: "none",
+    now: new Date("2026-06-10T17:11:12.000Z"),
+    profile: "full",
+    url: "example.com",
+    workspaceRoot,
+  });
+
+  assert.ok(plan.steps[0]?.args.includes("--capture-replay"));
+  assert.deepEqual(plan.steps[0]?.args.slice(
+    plan.steps[0].args.indexOf("--capture-replay-aux-probes"),
+    plan.steps[0].args.indexOf("--capture-replay-aux-probes") + 2,
+  ), ["--capture-replay-aux-probes", "none"]);
+});
+
+test("builds scan lab plans with optional planned consent DAG flags", () => {
+  const workspaceRoot = path.join("/tmp", "wc01");
+  const plan = buildV2ScanLabRunPlan({
+    consentScenarioDag: true,
+    now: new Date("2026-06-10T17:11:12.000Z"),
+    profile: "consent",
+    url: "example.com",
+    workspaceRoot,
+  });
+  const scanArgs = plan.steps[0]?.args ?? [];
+
+  assert.deepEqual(scanArgs.slice(scanArgs.indexOf("--scenario-planning-mode"), scanArgs.indexOf("--scenario-planning-mode") + 2), [
+    "--scenario-planning-mode",
+    "planned_parallel",
+  ]);
+  assert.deepEqual(scanArgs.slice(scanArgs.indexOf("--scenario-resource-mode"), scanArgs.indexOf("--scenario-resource-mode") + 2), [
+    "--scenario-resource-mode",
+    "lean",
+  ]);
+  assert.deepEqual(scanArgs.slice(scanArgs.indexOf("--consent-flow-deadline-ms"), scanArgs.indexOf("--consent-flow-deadline-ms") + 2), [
+    "--consent-flow-deadline-ms",
+    "20000",
+  ]);
+});
+
+test("builds auxiliary replay plans with a larger consent-flow deadline", () => {
+  const plan = buildV2ScanLabRunPlan({
+    captureReplay: true,
+    captureReplayAuxiliaryProbes: "form",
+    consentScenarioDag: true,
+    now: new Date("2026-06-10T17:11:12.000Z"),
+    profile: "full",
+    url: "example.com",
+    workspaceRoot: path.join("/tmp", "wc01"),
+  });
+  const scanArgs = plan.steps[0]?.args ?? [];
+
+  assert.deepEqual(scanArgs.slice(scanArgs.indexOf("--capture-replay-aux-probes"), scanArgs.indexOf("--capture-replay-aux-probes") + 2), [
+    "--capture-replay-aux-probes",
+    "form",
+  ]);
+  assert.deepEqual(scanArgs.slice(scanArgs.indexOf("--consent-flow-deadline-ms"), scanArgs.indexOf("--consent-flow-deadline-ms") + 2), [
+    "--consent-flow-deadline-ms",
+    "45000",
+  ]);
+});
+
+test("builds scan lab plans with seeded privacy control URLs", () => {
+  const workspaceRoot = path.join("/tmp", "wc01");
+  const plan = buildV2ScanLabRunPlan({
+    captureReplay: true,
+    now: new Date("2026-06-10T17:11:12.000Z"),
+    privacyControlUrls: [
+      "https://example.com/privacy/your-privacy-choices#section",
+      "not-a-url",
+    ],
+    profile: "full",
+    url: "example.com",
+    workspaceRoot,
+  });
+
+  assert.deepEqual(plan.privacyControlUrls, ["https://example.com/privacy/your-privacy-choices"]);
+  assert.ok(plan.steps[0]?.args.includes("--privacy-control-url"));
+  assert.ok(plan.steps[0]?.args.includes("https://example.com/privacy/your-privacy-choices"));
+});
+
+test("runs planned steps in order through injected command runner", async () => {
+  const calls: string[] = [];
+  const plan = await runV2ScanLabArtifactChain(
+    {
+      now: new Date("2026-06-10T17:11:12.000Z"),
+      profile: "tiny",
+      url: "https://example.com/privacy",
+      workspaceRoot: path.join("/tmp", "wc01"),
+    },
+    {
+      runCommand: async (step) => {
+        calls.push(step.label);
+      },
+    },
+  );
+
+  assert.equal(plan.chainKey, "lab-example-com-tiny-20260610T171112:example.com");
+  assert.deepEqual(calls, plan.steps.map((step) => step.label));
+  const timing = JSON.parse(await readFile(plan.timingPath, "utf8"));
+  assert.equal(timing.timingVersion, "wc01.v2_scan_lab_timing.1");
+  assert.equal(timing.chainKey, plan.chainKey);
+  assert.equal(timing.stepTimings.length, plan.steps.length);
+  assert.deepEqual(timing.stepTimings.map((step: { label: string }) => step.label), plan.steps.map((step) => step.label));
+});
+
+test("rejects invalid URLs before building scan commands", () => {
+  assert.throws(
+    () => buildV2ScanLabRunPlan({ profile: "tiny", url: "https://", workspaceRoot: "/tmp/wc01" }),
+    /valid URL or domain/,
+  );
+});

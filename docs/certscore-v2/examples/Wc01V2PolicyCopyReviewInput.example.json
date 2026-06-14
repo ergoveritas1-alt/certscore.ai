@@ -1,0 +1,54 @@
+{
+  "inputVersion": "wc01.v2_policy_copy_review_input.1",
+  "sourcePreviewPacketPath": "artifacts/example/Wc01V2EvidencePreviewPacket.json",
+  "sourceReviewerLogPath": "docs/certscore-v2/wc01-v2-internal-reviewer-run-002.md",
+  "siteDomain": "example.com",
+  "queueItemId": "queue_example_001",
+  "candidateFamily": "pre_consent_tracking",
+  "reviewerAction": "sensitive_context_escalated",
+  "sensitiveContextCategories": ["health"],
+  "evidenceRefs": ["source-ref-example-1"],
+  "excerptRefs": ["excerpt-example-1"],
+  "confidenceBand": "high",
+  "directness": "direct",
+  "familyEvidenceContext": [
+    "pre-consent runtime evidence with consent-state context"
+  ],
+  "allowedInternalPhrasing": [
+    "Sensitive-context review route.",
+    "Evidence shape is reviewable internally.",
+    "Do not convert to customer-facing language without approval."
+  ],
+  "blockedPhrasingPatterns": [
+    "[blocked: definitive compliance conclusion]",
+    "[blocked: unsupported sensitive-data sharing claim]",
+    "[blocked: unsupported individual-identification claim]"
+  ],
+  "policyCopyDecisions": [
+    {
+      "owner": "policy_owner",
+      "decision": "approved_for_internal_review",
+      "scope": "sensitive-context routing metadata only"
+    },
+    {
+      "owner": "copy_owner",
+      "decision": "approved_for_internal_review",
+      "scope": "internal phrasing only"
+    }
+  ],
+  "unresolvedRefsDisposition": {
+    "unresolvedRefCount": 0,
+    "blocksReview": false,
+    "notes": []
+  },
+  "redactionSanitization": {
+    "passed": true,
+    "warningCount": 0,
+    "notes": []
+  },
+  "caveats": [
+    "No customer-facing wording is approved.",
+    "Sensitive context remains routing metadata only."
+  ],
+  "coverageLimitations": []
+}

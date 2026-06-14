@@ -1,0 +1,39 @@
+# Policy-stress internal real-site calibration cohort.
+# This is diagnostic only and does not define production behavior.
+# URLs are selected for sensitive/high-stakes policy contexts, not broad vendor discovery.
+
+# Health / medical information
+https://healthline.com
+https://webmd.com
+https://mayoclinic.org
+
+# Reproductive health
+https://plannedparenthood.org
+https://bedsider.org
+
+# Finance / insurance
+https://bankofamerica.com
+https://fidelity.com
+https://statefarm.com
+
+# Government / public benefits
+https://benefits.gov
+https://ssa.gov
+https://healthcare.gov
+
+# Children / education
+https://khanacademy.org
+https://pbskids.org
+
+# Employment / HR / applicant-flow-adjacent
+https://indeed.com
+https://greenhouse.com
+https://workday.com
+
+# Privacy-mature SaaS
+https://cloudflare.com
+https://proton.me
+
+# CMP-heavy EU/global and behavioral analytics reference sites
+https://bbc.com
+https://hotjar.com

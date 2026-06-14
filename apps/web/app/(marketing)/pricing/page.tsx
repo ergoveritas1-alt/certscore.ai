@@ -7,6 +7,10 @@ import { SiteHeader } from "../../../components/layout/site-header";
 import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { SCAN_ACCESS, formatScanThrottleIntervalLabel } from "../../../lib/scan-access";
 import { createPageMetadata } from "../../../lib/seo";
+import {
+  isPublicAccountCreationEnabled,
+  isSelfServePurchasingEnabled
+} from "../../../server/access-control";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Pricing",
@@ -35,6 +39,11 @@ function getPlanSignupHref(plan: string) {
 }
 
 export default function PricingPage() {
+  const publicAccountCreationEnabled = isPublicAccountCreationEnabled();
+  const selfServePurchasingEnabled = isSelfServePurchasingEnabled();
+  const canStartTrial = publicAccountCreationEnabled;
+  const canStartPaidPlan = publicAccountCreationEnabled && selfServePurchasingEnabled;
+
   return (
     <main className="min-h-screen bg-slate-50">
       <SiteHeader />
@@ -89,13 +98,13 @@ export default function PricingPage() {
                 </div>
                 <PendingButtonLink
                   className="w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]"
-                  data-analytics-cta-type="sign_in"
+                  data-analytics-cta-type={canStartTrial ? "sign_in" : "contact_sales"}
                   data-analytics-event="pricing_cta_clicked"
                   data-analytics-plan={trialPlan.code}
-                  href="/login?mode=create_account"
+                  href={canStartTrial ? "/login?mode=create_account" : "/contact-sales?source=pricing-paused&plan=trial"}
                   idleContent={
                     <span className="inline-flex items-center gap-2">
-                      Start trial
+                      {canStartTrial ? "Start trial" : "Contact us"}
                       <span aria-hidden="true">›</span>
                     </span>
                   }
@@ -167,13 +176,13 @@ export default function PricingPage() {
 
                 <PendingButtonLink
                   className="w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]"
-                  data-analytics-cta-type="sign_in"
+                  data-analytics-cta-type={canStartPaidPlan ? "sign_in" : "contact_sales"}
                   data-analytics-event="pricing_cta_clicked"
                   data-analytics-plan={plan.code}
-                  href={getPlanSignupHref(plan.code)}
+                  href={canStartPaidPlan ? getPlanSignupHref(plan.code) : `/contact-sales?source=pricing-paused&plan=${plan.code}`}
                   idleContent={
                     <span className="inline-flex items-center gap-2">
-                      {plan.code === "pro" ? "Start Pro" : "Start Starter"}
+                      {canStartPaidPlan ? (plan.code === "pro" ? "Start Pro" : "Start Starter") : "Contact us"}
                       <span aria-hidden="true">›</span>
                     </span>
                   }

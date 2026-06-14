@@ -1,0 +1,42 @@
+{
+  "name": "@certscore/report-adapter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Internal CertScore v2 review-result report projection adapter.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm --filter @certscore/contracts build && pnpm --filter @certscore/review-engine build && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "project": "node --import tsx ./src/cli/project.ts",
+    "shadow-project": "node --import tsx ./src/cli/shadow-project.ts",
+    "wc01-shadow": "node --import tsx ./src/cli/wc01-shadow.ts",
+    "wc01-allowlist-dry-run": "node --import tsx ./src/cli/wc01-v2-allowlist-dry-run.ts",
+    "wc01-concern-input-dry-run": "node --import tsx ./src/cli/wc01-v2-concern-policy-input-dry-run.ts",
+    "wc01-concern-policy-simulate": "node --import tsx ./src/cli/wc01-v2-concern-policy-simulation-dry-run.ts",
+    "wc01-normalized-concern-adapter": "node --import tsx ./src/cli/wc01-v2-normalized-concern-adapter-dry-run.ts",
+    "wc01-concern-policy-compare": "node --import tsx ./src/cli/wc01-v2-concern-policy-comparison-dry-run.ts",
+    "wc01-reviewer-packet": "node --import tsx ./src/cli/wc01-v2-manual-reviewer-packet.ts",
+    "wc01-evidence-preview": "node --import tsx ./src/cli/wc01-v2-evidence-preview.ts",
+    "wc01-product-surface-proposal": "node --import tsx ./src/cli/wc01-v2-product-surface-proposal-draft.ts",
+    "wc01-production-readiness-gate": "node --import tsx ./src/cli/wc01-v2-production-readiness-gate-draft.ts",
+    "wc01-policy-copy-review": "node --import tsx ./src/cli/wc01-v2-policy-copy-review-artifact.ts",
+    "wc01-normalized-concern-draft-map": "node --import tsx ./src/cli/wc01-v2-normalized-concern-draft-mapping.ts",
+    "wc01-production-integration-candidate": "node --import tsx ./src/cli/wc01-v2-production-integration-candidate.ts",
+    "wc01-normalized-concern-schema-compare": "node --import tsx ./src/cli/wc01-v2-normalized-concern-schema-comparison.ts",
+    "wc01-concern-policy-shape-compare": "node --import tsx ./src/cli/wc01-v2-concern-policy-shape-comparison.ts",
+    "wc01-projection-shape-compare": "node --import tsx ./src/cli/wc01-v2-projection-shape-comparison.ts",
+    "wc01-limited-admin-preview-approval-metadata": "node --import tsx ./src/cli/wc01-v2-limited-admin-preview-approval-metadata.ts",
+    "wc01-limited-admin-preview-implementation-proposal": "node --import tsx ./src/cli/wc01-v2-limited-admin-preview-implementation-proposal.ts",
+    "wc01-post-reject-calibration": "node --import tsx ./src/cli/wc01-v2-post-reject-calibration.ts",
+    "test": "tsx --tsconfig ../../tsconfig.base.json --test 'src/*.test.ts'",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@certscore/contracts": "workspace:*",
+    "@certscore/review-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0"
+  }
+}

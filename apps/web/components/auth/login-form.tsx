@@ -21,6 +21,36 @@ function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
+function getInitialFlowError(initialError: string | null) {
+  if (initialError === "invalid_verification_link") {
+    return "That verification link is invalid or expired.";
+  }
+
+  if (initialError === "magic_link_disabled" || initialError === "auth_callback_disabled") {
+    return "This sign-in method is no longer available.";
+  }
+
+  if (initialError === "signup_disabled" || initialError === "signup-disabled" || initialError === "signup disabled") {
+    return "New account creation is temporarily paused.";
+  }
+
+  if (initialError === "access_denied" || initialError === "account_access_limited") {
+    return "CertScore account access is temporarily limited. Contact support if you need access.";
+  }
+
+  if (
+    initialError === "google_sign_in_failed" ||
+    initialError === "oauth_provider_not_found" ||
+    initialError === "invalid_code" ||
+    initialError === "no_callback_url" ||
+    initialError === "unable_to_get_user_info"
+  ) {
+    return "Google sign-in could not be completed. Try again.";
+  }
+
+  return initialError;
+}
+
 function GoogleMark() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24">
@@ -70,19 +100,7 @@ export function LoginForm(input?: {
         ? "Password updated. Sign in with your new password."
         : null
   );
-  const [flowError, setFlowError] = useState<string | null>(
-    initialError === "invalid_verification_link"
-      ? "That verification link is invalid or expired."
-      : initialError === "magic_link_disabled" || initialError === "auth_callback_disabled"
-        ? "This sign-in method is no longer available."
-        : initialError === "google_sign_in_failed" ||
-            initialError === "oauth_provider_not_found" ||
-            initialError === "invalid_code" ||
-            initialError === "no_callback_url" ||
-            initialError === "unable_to_get_user_info"
-          ? "Google sign-in could not be completed. Try again."
-        : initialError
-  );
+  const [flowError, setFlowError] = useState<string | null>(getInitialFlowError(initialError));
   const [showPassword, setShowPassword] = useState(false);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const passwordInputRef = useRef<HTMLInputElement | null>(null);

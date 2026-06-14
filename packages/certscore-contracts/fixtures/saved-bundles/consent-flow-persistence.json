@@ -1,0 +1,730 @@
+{
+  "scanId": "saved_consent_flow_persistence",
+  "url": "https://example.com",
+  "normalizedUrl": "https://example.com/",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "completedAt": "2026-01-01T00:00:04.000Z",
+  "region": "fixture",
+  "scanProfile": {
+    "profileId": "consent",
+    "label": "Consent-flow runtime scan",
+    "targetDurationMs": 18000,
+    "internalBudgetMs": 22000,
+    "enabledModules": [
+      "preConsentRuntimeScanner",
+      "consentFlowRuntimeScanner"
+    ]
+  },
+  "modulesRun": [
+    {
+      "moduleName": "preConsentRuntimeScanner",
+      "status": "completed",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "completedAt": "2026-01-01T00:00:01.000Z",
+      "durationMs": 1000,
+      "evidenceRefs": [],
+      "errors": []
+    },
+    {
+      "moduleName": "consentFlowRuntimeScanner",
+      "status": "completed",
+      "startedAt": "2026-01-01T00:00:01.000Z",
+      "completedAt": "2026-01-01T00:00:04.000Z",
+      "durationMs": 3000,
+      "evidenceRefs": [],
+      "errors": []
+    }
+  ],
+  "runtimeTimeline": [],
+  "networkEvents": [
+    {
+      "eventId": "net_ga_pre_consent",
+      "eventType": "network_request",
+      "requestId": "req_ga_pre_consent",
+      "timestampMs": 700,
+      "sourceScanner": "consent_flow_runtime",
+      "scenario": "baseline_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://www.google-analytics.com/g/collect?v=2",
+      "hostname": "www.google-analytics.com",
+      "registrableDomain": "google-analytics.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.92,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "image",
+      "requestUrl": "https://www.google-analytics.com/g/collect?v=2",
+      "normalizedUrl": "https://www.google-analytics.com/g/collect?v=2",
+      "requestHostname": "www.google-analytics.com",
+      "path": "/g/collect",
+      "queryParamNames": [
+        "v"
+      ],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": false,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": true,
+      "endpointCategory": "collection",
+      "attributionStatus": "unresolved_meaningful",
+      "attributionReason": "collection_like_endpoint_in_consent_flow",
+      "resolverBasis": [
+        "hostname:www.google-analytics.com"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    },
+    {
+      "eventId": "net_ga_after_reject",
+      "eventType": "network_request",
+      "requestId": "req_ga_after_reject",
+      "timestampMs": 1800,
+      "sourceScanner": "consent_flow_runtime",
+      "scenario": "reject_all_flow",
+      "consentStateAtTime": "post_reject",
+      "pagePhase": "post_interaction",
+      "url": "https://www.google-analytics.com/g/collect?v=2",
+      "hostname": "www.google-analytics.com",
+      "registrableDomain": "google-analytics.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.92,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "image",
+      "requestUrl": "https://www.google-analytics.com/g/collect?v=2",
+      "normalizedUrl": "https://www.google-analytics.com/g/collect?v=2",
+      "requestHostname": "www.google-analytics.com",
+      "path": "/g/collect",
+      "queryParamNames": [
+        "v"
+      ],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": false,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": true,
+      "endpointCategory": "collection",
+      "attributionStatus": "unresolved_meaningful",
+      "attributionReason": "collection_like_endpoint_in_consent_flow",
+      "resolverBasis": [
+        "hostname:www.google-analytics.com"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    },
+    {
+      "eventId": "net_ga_after_accept",
+      "eventType": "network_request",
+      "requestId": "req_ga_after_accept",
+      "timestampMs": 3000,
+      "sourceScanner": "consent_flow_runtime",
+      "scenario": "accept_all_flow",
+      "consentStateAtTime": "post_accept",
+      "pagePhase": "post_interaction",
+      "url": "https://www.google-analytics.com/g/collect?v=2",
+      "hostname": "www.google-analytics.com",
+      "registrableDomain": "google-analytics.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.92,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "image",
+      "requestUrl": "https://www.google-analytics.com/g/collect?v=2",
+      "normalizedUrl": "https://www.google-analytics.com/g/collect?v=2",
+      "requestHostname": "www.google-analytics.com",
+      "path": "/g/collect",
+      "queryParamNames": [
+        "v"
+      ],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": false,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": true,
+      "endpointCategory": "collection",
+      "attributionStatus": "unresolved_meaningful",
+      "attributionReason": "collection_like_endpoint_in_consent_flow",
+      "resolverBasis": [
+        "hostname:www.google-analytics.com"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    }
+  ],
+  "networkResponseEvents": [],
+  "cookieEvents": [],
+  "cookieSnapshots": [],
+  "storageSnapshots": [],
+  "scriptEvents": [],
+  "iframeEvents": [],
+  "consentUiObservations": [
+    {
+      "observationId": "consent_ui_baseline",
+      "observedAtMs": 500,
+      "likelyPresent": true,
+      "basis": [
+        "consent_flow_action_candidates"
+      ],
+      "textExcerpt": "We use cookies. Accept All Reject All",
+      "evidenceRefs": [
+        {
+          "refId": "ref_dom_baseline",
+          "artifactId": "dom_baseline",
+          "eventType": "dom_snapshot",
+          "excerpt": "We use cookies. Accept All Reject All"
+        }
+      ],
+      "confidence": 0.76
+    }
+  ],
+  "consentInteractionEvents": [
+    {
+      "eventId": "consent_reject_click",
+      "eventType": "consent_interaction",
+      "timestampMs": 1600,
+      "sourceScanner": "consent_flow_runtime",
+      "scenario": "reject_all_flow",
+      "consentStateAtTime": "post_reject",
+      "pagePhase": "post_interaction",
+      "url": "https://example.com/",
+      "evidenceRefs": [
+        {
+          "refId": "ref_dom_reject_after",
+          "artifactId": "dom_reject_after",
+          "eventType": "dom_snapshot"
+        }
+      ],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "action": "reject",
+      "selector": "controlIndex:1",
+      "text": "Reject All"
+    },
+    {
+      "eventId": "consent_accept_click",
+      "eventType": "consent_interaction",
+      "timestampMs": 2800,
+      "sourceScanner": "consent_flow_runtime",
+      "scenario": "accept_all_flow",
+      "consentStateAtTime": "post_accept",
+      "pagePhase": "post_interaction",
+      "url": "https://example.com/",
+      "evidenceRefs": [
+        {
+          "refId": "ref_dom_accept_after",
+          "artifactId": "dom_accept_after",
+          "eventType": "dom_snapshot"
+        }
+      ],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "action": "accept",
+      "selector": "controlIndex:0",
+      "text": "Accept All"
+    }
+  ],
+  "consentFlowObservations": [
+    {
+      "observationId": "consent_flow_baseline",
+      "sourceScanner": "consent_flow_runtime",
+      "scenario": "baseline_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "bannerLikelyPresent": true,
+      "textExcerpt": "We use cookies. Accept All Reject All",
+      "evidenceRefs": [
+        {
+          "refId": "ref_dom_baseline",
+          "artifactId": "dom_baseline",
+          "eventType": "dom_snapshot",
+          "excerpt": "We use cookies. Accept All Reject All"
+        }
+      ],
+      "artifactRefs": [],
+      "confidence": 0.76,
+      "directVsInferred": "direct"
+    },
+    {
+      "observationId": "consent_flow_reject",
+      "sourceScanner": "consent_flow_runtime",
+      "scenario": "reject_all_flow",
+      "consentStateAtTime": "post_reject",
+      "bannerLikelyPresent": true,
+      "textExcerpt": "We use cookies. Accept All Reject All",
+      "evidenceRefs": [
+        {
+          "refId": "ref_dom_reject_before",
+          "artifactId": "dom_reject_before",
+          "eventType": "dom_snapshot",
+          "excerpt": "We use cookies. Accept All Reject All"
+        }
+      ],
+      "artifactRefs": [],
+      "confidence": 0.76,
+      "directVsInferred": "direct"
+    },
+    {
+      "observationId": "consent_flow_accept",
+      "sourceScanner": "consent_flow_runtime",
+      "scenario": "accept_all_flow",
+      "consentStateAtTime": "post_accept",
+      "bannerLikelyPresent": true,
+      "textExcerpt": "We use cookies. Accept All Reject All",
+      "evidenceRefs": [
+        {
+          "refId": "ref_dom_accept_before",
+          "artifactId": "dom_accept_before",
+          "eventType": "dom_snapshot",
+          "excerpt": "We use cookies. Accept All Reject All"
+        }
+      ],
+      "artifactRefs": [],
+      "confidence": 0.76,
+      "directVsInferred": "direct"
+    }
+  ],
+  "consentActionCandidates": [
+    {
+      "actionId": "reject_all_flow_consent_control_1",
+      "actionType": "reject_all",
+      "labelText": "Reject All",
+      "normalizedLabel": "reject all",
+      "selectorSummary": "controlIndex:1",
+      "domLocation": "div>body>html",
+      "visible": true,
+      "enabled": true,
+      "confidence": 0.91,
+      "detectionMethod": "deterministic_text",
+      "shouldClick": true,
+      "evidenceRefs": [
+        {
+          "refId": "ref_dom_reject_before_1",
+          "artifactId": "dom_reject_before",
+          "eventType": "dom_snapshot",
+          "label": "Reject All",
+          "excerpt": "Reject All"
+        }
+      ],
+      "screenshotArtifactRefs": [],
+      "assistMetadata": []
+    },
+    {
+      "actionId": "accept_all_flow_consent_control_0",
+      "actionType": "accept_all",
+      "labelText": "Accept All",
+      "normalizedLabel": "accept all",
+      "selectorSummary": "controlIndex:0",
+      "domLocation": "div>body>html",
+      "visible": true,
+      "enabled": true,
+      "confidence": 0.91,
+      "detectionMethod": "deterministic_text",
+      "shouldClick": true,
+      "evidenceRefs": [
+        {
+          "refId": "ref_dom_accept_before_0",
+          "artifactId": "dom_accept_before",
+          "eventType": "dom_snapshot",
+          "label": "Accept All",
+          "excerpt": "Accept All"
+        }
+      ],
+      "screenshotArtifactRefs": [],
+      "assistMetadata": []
+    }
+  ],
+  "consentActionAttempts": [
+    {
+      "attemptId": "consent_attempt_reject_all_flow_reject_all",
+      "actionType": "reject_all",
+      "attempted": true,
+      "succeeded": true,
+      "bannerPresentBefore": true,
+      "bannerPresentAfter": false,
+      "actionProof": {
+        "proofVersion": "consent_action_proof.v1",
+        "candidateObserved": true,
+        "candidateActionId": "reject_all_flow_consent_control_1",
+        "candidateLabelText": "Reject All",
+        "candidateSelectorSummary": "controlIndex:1",
+        "candidateConfidence": 0.91,
+        "attemptedStatus": "attempted_succeeded",
+        "actionTimestampMs": 1600,
+        "postClickSettleMs": 1200,
+        "evidenceRefs": [
+          {
+            "refId": "ref_dom_reject_after",
+            "artifactId": "dom_reject_after",
+            "eventType": "dom_snapshot"
+          }
+        ]
+      },
+      "timestampMs": 1600,
+      "scenario": "reject_all_flow",
+      "evidenceRefs": [
+        {
+          "refId": "ref_dom_reject_after",
+          "artifactId": "dom_reject_after",
+          "eventType": "dom_snapshot"
+        }
+      ]
+    },
+    {
+      "attemptId": "consent_attempt_accept_all_flow_accept_all",
+      "actionType": "accept_all",
+      "attempted": true,
+      "succeeded": true,
+      "bannerPresentBefore": true,
+      "bannerPresentAfter": false,
+      "actionProof": {
+        "proofVersion": "consent_action_proof.v1",
+        "candidateObserved": true,
+        "candidateActionId": "accept_all_flow_consent_control_0",
+        "candidateLabelText": "Accept All",
+        "candidateSelectorSummary": "controlIndex:0",
+        "candidateConfidence": 0.91,
+        "attemptedStatus": "attempted_succeeded",
+        "actionTimestampMs": 2800,
+        "postClickSettleMs": 1200,
+        "evidenceRefs": [
+          {
+            "refId": "ref_dom_accept_after",
+            "artifactId": "dom_accept_after",
+            "eventType": "dom_snapshot"
+          }
+        ]
+      },
+      "timestampMs": 2800,
+      "scenario": "accept_all_flow",
+      "evidenceRefs": [
+        {
+          "refId": "ref_dom_accept_after",
+          "artifactId": "dom_accept_after",
+          "eventType": "dom_snapshot"
+        }
+      ]
+    }
+  ],
+  "consentFlowComparisons": [
+    {
+      "comparisonId": "consent_comparison_fresh_pre_consent_vs_after_reject",
+      "comparedScenarios": "fresh_pre_consent_vs_after_reject",
+      "vendorsPersistingAfterReject": [],
+      "vendorsSuppressedAfterReject": [],
+      "vendorsAppearingOnlyAfterAccept": [],
+      "cookiesPersistingAfterReject": [],
+      "cookiesSetAfterAccept": [],
+      "collectionEndpointsPersistingAfterReject": [
+        "www.google-analytics.com"
+      ],
+      "collectionEndpointsSuppressedAfterReject": [],
+      "collectionEndpointsAppearingOnlyAfterAccept": [],
+    "requestCountDeltaByVendor": {},
+    "cookieCountDeltaByVendor": {},
+    "journeyPhaseDeltas": [
+        {
+          "journeyKey": "endpoint:www.google-analytics.com",
+          "displayName": "www.google-analytics.com",
+          "endpointHostname": "www.google-analytics.com",
+          "observedPreConsent": true,
+          "observedAfterReject": true,
+          "observedAfterAccept": false,
+          "persistedAfterReject": true,
+          "suppressedAfterReject": false,
+          "appearedOnlyAfterAccept": false,
+          "expandedAfterAccept": false,
+          "evidenceRefs": [
+            {
+              "refId": "ref_net_ga_after_reject",
+              "eventId": "net_ga_after_reject",
+              "eventType": "network_request",
+              "url": "https://www.google-analytics.com/g/collect?v=2"
+            }
+          ]
+        }
+    ],
+    "comparableMeasurement": {
+      "comparable": true,
+      "preActionWindow": {
+        "scenario": "baseline_pre_consent",
+        "consentStateAtEnd": "pre_consent",
+        "startedAtMs": 900,
+        "completedAtMs": 1200,
+        "networkEventCount": 1,
+        "cookieEventCount": 0
+      },
+      "postActionWindow": {
+        "scenario": "reject_all_flow",
+        "consentStateAtEnd": "post_reject",
+        "startedAtMs": 1600,
+        "completedAtMs": 2400,
+        "networkEventCount": 1,
+        "cookieEventCount": 0
+      },
+      "rejectActionEvent": {
+        "attemptId": "consent_attempt_reject_all_flow_reject_all",
+        "attempted": true,
+        "succeeded": true,
+        "actionTimestampMs": 1600,
+        "postClickSettleMs": 1200,
+        "proofAvailable": true
+      }
+    },
+    "confidence": 0.78,
+      "coverageLimitations": [],
+      "evidenceRefs": [
+        {
+          "refId": "ref_net_ga_pre_consent",
+          "eventId": "net_ga_pre_consent",
+          "eventType": "network_request",
+          "url": "https://www.google-analytics.com/g/collect?v=2"
+        },
+        {
+          "refId": "ref_net_ga_after_reject",
+          "eventId": "net_ga_after_reject",
+          "eventType": "network_request",
+          "url": "https://www.google-analytics.com/g/collect?v=2"
+        }
+      ]
+    },
+    {
+      "comparisonId": "consent_comparison_fresh_pre_consent_vs_after_accept",
+      "comparedScenarios": "fresh_pre_consent_vs_after_accept",
+      "vendorsPersistingAfterReject": [],
+      "vendorsSuppressedAfterReject": [],
+      "vendorsAppearingOnlyAfterAccept": [],
+      "cookiesPersistingAfterReject": [],
+      "cookiesSetAfterAccept": [],
+      "collectionEndpointsPersistingAfterReject": [],
+      "collectionEndpointsSuppressedAfterReject": [],
+      "collectionEndpointsAppearingOnlyAfterAccept": [],
+    "requestCountDeltaByVendor": {},
+    "cookieCountDeltaByVendor": {},
+    "journeyPhaseDeltas": [],
+    "comparableMeasurement": {
+      "comparable": true,
+      "preActionWindow": {
+        "scenario": "baseline_pre_consent",
+        "consentStateAtEnd": "pre_consent",
+        "startedAtMs": 900,
+        "completedAtMs": 1200,
+        "networkEventCount": 1,
+        "cookieEventCount": 0
+      },
+      "postActionWindow": {
+        "scenario": "accept_all_flow",
+        "consentStateAtEnd": "post_accept",
+        "startedAtMs": 2800,
+        "completedAtMs": 3600,
+        "networkEventCount": 0,
+        "cookieEventCount": 0
+      }
+    },
+    "confidence": 0.78,
+      "coverageLimitations": [],
+      "evidenceRefs": []
+    }
+  ],
+  "policySurfaceObservations": [],
+  "screenshots": [],
+  "domSnapshots": [],
+  "normalizedVendorObservations": [],
+  "observedJourneys": [
+    {
+      "journeyId": "journey_consent_flow_ga_endpoint",
+      "journeyType": "endpoint",
+      "key": "endpoint:www.google-analytics.com",
+      "displayName": "www.google-analytics.com",
+      "sourceScanner": "consent_flow_runtime",
+      "scenariosObserved": [
+        "baseline_pre_consent",
+        "reject_all_flow",
+        "accept_all_flow"
+      ],
+      "firstObservedAtMs": 700,
+      "lastObservedAtMs": 3000,
+      "firstObservedConsentState": "pre_consent",
+      "consentStatesObserved": [
+        "pre_consent",
+        "post_reject",
+        "post_accept"
+      ],
+      "firstPartyOrThirdParty": "third_party",
+      "entryPoint": "https://www.google-analytics.com/g/collect?v=2",
+      "entryPointSourceEventId": "net_ga_pre_consent",
+      "relatedCookies": [],
+      "relatedScripts": [],
+      "relatedEndpoints": [
+        "https://www.google-analytics.com/g/collect?v=2"
+      ],
+      "relatedVendors": [],
+      "relatedVendorObservationIds": [],
+      "observedBehaviors": [
+        "third_party_request_observed",
+        "collection_endpoint_observed"
+      ],
+      "attributionStatus": "unresolved_meaningful",
+      "attributionReason": "collection_like_endpoint_in_consent_flow",
+      "resolverBasis": [
+        "hostname:www.google-analytics.com"
+      ],
+      "relatedEvidenceRefs": [],
+      "eventRefs": [
+        {
+          "eventId": "net_ga_pre_consent",
+          "eventType": "network_request",
+          "timestampMs": 700,
+          "url": "https://www.google-analytics.com/g/collect?v=2",
+          "behavior": "collection_endpoint_observed",
+          "scenario": "baseline_pre_consent",
+          "consentStateAtTime": "pre_consent",
+          "thirdParty": true
+        },
+        {
+          "eventId": "net_ga_after_reject",
+          "eventType": "network_request",
+          "timestampMs": 1800,
+          "url": "https://www.google-analytics.com/g/collect?v=2",
+          "behavior": "collection_endpoint_observed",
+          "scenario": "reject_all_flow",
+          "consentStateAtTime": "post_reject",
+          "thirdParty": true
+        },
+        {
+          "eventId": "net_ga_after_accept",
+          "eventType": "network_request",
+          "timestampMs": 3000,
+          "url": "https://www.google-analytics.com/g/collect?v=2",
+          "behavior": "collection_endpoint_observed",
+          "scenario": "accept_all_flow",
+          "consentStateAtTime": "post_accept",
+          "thirdParty": true
+        }
+      ],
+      "phaseDeltas": [
+        {
+          "journeyKey": "endpoint:www.google-analytics.com",
+          "displayName": "www.google-analytics.com",
+          "endpointHostname": "www.google-analytics.com",
+          "observedPreConsent": true,
+          "observedAfterReject": true,
+          "observedAfterAccept": true,
+          "persistedAfterReject": true,
+          "suppressedAfterReject": false,
+          "appearedOnlyAfterAccept": false,
+          "expandedAfterAccept": false,
+          "evidenceRefs": [
+            {
+              "refId": "ref_net_ga_after_reject",
+              "eventId": "net_ga_after_reject",
+              "eventType": "network_request",
+              "url": "https://www.google-analytics.com/g/collect?v=2"
+            }
+          ]
+        }
+      ],
+      "confidence": 0.78,
+      "directVsInferred": "direct",
+      "evidenceRefs": [
+        {
+          "refId": "ref_net_ga_pre_consent",
+          "eventId": "net_ga_pre_consent",
+          "eventType": "network_request",
+          "url": "https://www.google-analytics.com/g/collect?v=2"
+        },
+        {
+          "refId": "ref_net_ga_after_reject",
+          "eventId": "net_ga_after_reject",
+          "eventType": "network_request",
+          "url": "https://www.google-analytics.com/g/collect?v=2"
+        },
+        {
+          "refId": "ref_net_ga_after_accept",
+          "eventId": "net_ga_after_accept",
+          "eventType": "network_request",
+          "url": "https://www.google-analytics.com/g/collect?v=2"
+        }
+      ]
+    }
+  ],
+  "derivedRuntimeSignals": {
+    "thirdPartyVendorsObserved": false,
+    "preConsentTrackingObserved": false,
+    "thirdPartyCookiesPreConsentObserved": false,
+    "consentBannerLikelyPresent": true,
+    "sessionReplayOrBehavioralAnalyticsObserved": false,
+    "journeySummary": {
+      "journeyCount": 1,
+      "vendorJourneyCount": 0,
+      "productJourneyCount": 0,
+      "trackerJourneyCount": 0,
+      "cookieJourneyCount": 0,
+      "scriptJourneyCount": 0,
+      "endpointJourneyCount": 1,
+      "activeCollectionJourneyCount": 1,
+      "consentManagementJourneyCount": 0,
+      "notes": []
+    },
+    "notes": []
+  },
+  "artifactRefs": [],
+  "scannerVersion": "certscore-scan-core-v2-fixture",
+  "schemaVersion": "certscore.v2.0"
+}

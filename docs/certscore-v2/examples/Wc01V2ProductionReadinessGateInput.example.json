@@ -1,0 +1,110 @@
+{
+  "inputVersion": "wc01.v2_production_readiness_gate_input.1",
+  "sourcePreviewPacketPath": "artifacts/example/Wc01V2EvidencePreviewPacket.json",
+  "sourceReviewerLogPath": "docs/certscore-v2/wc01-v2-internal-reviewer-run-002.md",
+  "sourcePolicyCopyReviewArtifact": "artifacts/v2-internal-artifact-chain-example/Wc01V2PolicyCopyReviewArtifact.json",
+  "siteDomain": "example.com",
+  "queueItemId": "queue_example_001",
+  "candidateFamily": "pre_consent_tracking",
+  "reviewerAction": "evidence_shape_confirmed",
+  "sensitiveContextCategories": ["health"],
+  "evidenceRefs": ["source-ref-example-1"],
+  "excerptRefs": ["excerpt-example-1"],
+  "unresolvedRefCount": 0,
+  "redactionWarningCount": 0,
+  "guardrailScanResult": {
+    "passed": true,
+    "notes": []
+  },
+  "gateResults": [
+    {
+      "gate": "evidence_sufficiency",
+      "decision": "passed",
+      "owner": "reviewer",
+      "notes": ["Safe refs, excerpt refs, confidence, directness, and family context are present."],
+      "requiredInputs": ["grouped evidence preview", "manual reviewer log"]
+    },
+    {
+      "gate": "reviewer_confirmation",
+      "decision": "passed",
+      "owner": "reviewer",
+      "notes": ["Reviewer action is recorded for internal routing."],
+      "requiredInputs": ["manual reviewer log"]
+    },
+    {
+      "gate": "unresolved_ref",
+      "decision": "passed",
+      "owner": "reviewer",
+      "notes": ["No unresolved refs block review."],
+      "requiredInputs": ["grouped evidence preview"]
+    },
+    {
+      "gate": "sensitive_context",
+      "decision": "passed",
+      "owner": "policy_owner",
+      "notes": ["Sensitive-context category is routing metadata only."],
+      "requiredInputs": ["policy/copy review artifact"]
+    },
+    {
+      "gate": "policy_copy",
+      "decision": "passed",
+      "owner": "copy_owner",
+      "notes": ["Internal phrasing posture is recorded."],
+      "requiredInputs": ["policy/copy review artifact"]
+    },
+    {
+      "gate": "guardrail_sanitization",
+      "decision": "passed",
+      "owner": "engineering_owner",
+      "notes": ["Guardrail scan passed for the example input."],
+      "requiredInputs": ["guardrail scan"]
+    },
+    {
+      "gate": "consistency_regression",
+      "decision": "passed",
+      "owner": "engineering_owner",
+      "notes": ["Example command smoke passed."],
+      "requiredInputs": ["generator tests"]
+    },
+    {
+      "gate": "product_surface_mapping",
+      "decision": "passed",
+      "owner": "product_owner",
+      "notes": ["Only internal product proposal artifact is in scope."],
+      "requiredInputs": ["production surface taxonomy"]
+    },
+    {
+      "gate": "approval_record",
+      "decision": "passed",
+      "owner": "product_owner",
+      "notes": ["Internal approval record is present."],
+      "requiredInputs": ["approval record"]
+    },
+    {
+      "gate": "rollback_suppression",
+      "decision": "passed",
+      "owner": "engineering_owner",
+      "notes": ["Hold and suppression plan is recorded."],
+      "requiredInputs": ["rollback/suppression plan"]
+    }
+  ],
+  "approvalRecord": [
+    {
+      "owner": "reviewer",
+      "decision": "approved_for_internal_gate",
+      "scope": "evidence shape only"
+    },
+    {
+      "owner": "policy_owner",
+      "decision": "approved_for_internal_gate",
+      "scope": "internal review routing only"
+    }
+  ],
+  "rollbackSuppressionPlan": {
+    "suppressionReason": "hold internally if any guardrail changes",
+    "holdState": "hold_internal_only",
+    "rollbackOwner": "engineering_owner",
+    "regressionGuardrailCheck": "rerun readiness guardrail scan",
+    "emergencyDisablePlan": "remove draft from downstream proposal input set"
+  }
+}

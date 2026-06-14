@@ -1,0 +1,935 @@
+{
+  "commands": {
+    "combinedDryRun": "pnpm v2:wc01-scan-lab-cohort --urls docs/certscore-v2/gold-corpus-expansion-50/all.urls.txt --profile full --dry-run",
+    "wave1FullCapture": "pnpm v2:wc01-scan-lab-cohort --urls docs/certscore-v2/gold-corpus-expansion-50/wave-1.urls.txt --profile full --capture-replay --consent-dag --resume --out-dir artifacts/v2-gold-expansion-wave-1-full",
+    "wave1QuickQualification": "pnpm v2:wc01-scan-lab-cohort --urls docs/certscore-v2/gold-corpus-expansion-50/wave-1.urls.txt --profile standard --resume --out-dir artifacts/v2-gold-expansion-wave-1-qualify",
+    "wave2FullCapture": "pnpm v2:wc01-scan-lab-cohort --urls docs/certscore-v2/gold-corpus-expansion-50/wave-2.urls.txt --profile full --capture-replay --consent-dag --resume --out-dir artifacts/v2-gold-expansion-wave-2-full",
+    "wave2QuickQualification": "pnpm v2:wc01-scan-lab-cohort --urls docs/certscore-v2/gold-corpus-expansion-50/wave-2.urls.txt --profile standard --resume --out-dir artifacts/v2-gold-expansion-wave-2-qualify"
+  },
+  "generatedAt": "2026-06-14T03:46:36.059Z",
+  "inputPath": "docs/certscore-v2/gold-corpus-expansion-50.jsonl",
+  "outputPaths": {
+    "combinedUrls": "docs/certscore-v2/gold-corpus-expansion-50/all.urls.txt",
+    "manifestJson": "docs/certscore-v2/gold-corpus-expansion-50/manifest.json",
+    "readme": "docs/certscore-v2/gold-corpus-expansion-50/README.md",
+    "wave1Urls": "docs/certscore-v2/gold-corpus-expansion-50/wave-1.urls.txt",
+    "wave2Urls": "docs/certscore-v2/gold-corpus-expansion-50/wave-2.urls.txt"
+  },
+  "summary": {
+    "bucketCounts": {
+      "privacy_opt_out_dnsmpi": 15,
+      "sensitive_context_privacy": 10,
+      "complex_reject_flow": 13,
+      "gpc_behavior": 6,
+      "no_banner_control": 6
+    },
+    "sectorCounts": {
+      "retail_ecommerce": 11,
+      "health_retail": 2,
+      "finance_saas": 1,
+      "media_news": 9,
+      "media_weather": 1,
+      "technology": 2,
+      "technology_saas": 2,
+      "technology_nonprofit": 1,
+      "nonprofit_reference": 2,
+      "standards_nonprofit": 1,
+      "nonprofit_advocacy": 1,
+      "finance": 3,
+      "payments": 1,
+      "marketplace_ecommerce": 2,
+      "healthcare": 3,
+      "government_health": 1,
+      "health_media": 1,
+      "media_news_international": 2,
+      "sports_media": 1,
+      "technology_privacy": 1,
+      "government": 2
+    },
+    "total": 50,
+    "waveCounts": {
+      "1": 25,
+      "2": 25
+    }
+  },
+  "waves": {
+    "1": [
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Retail opt-out and sale/share disclosure candidate; qualify before promotion.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.target.com/c/privacy-policy/-/N-4sr7p"
+          ]
+        },
+        "url": "https://www.target.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Retail privacy-rights and policy-surface candidate.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.bestbuy.com/site/help-topics/privacy-policy/pcmcat204400050062.c?id=pcmcat204400050062"
+          ]
+        },
+        "url": "https://www.bestbuy.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Sale/share opt-out candidate with likely policy/control surface.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.homedepot.com/privacy/CaliforniaPrivacyRights"
+          ]
+        },
+        "url": "https://www.homedepot.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Retail privacy-control and policy-surface candidate.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.lowes.com/l/privacy-and-security-statement"
+          ]
+        },
+        "url": "https://www.lowes.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Retail privacy-rights candidate; useful if policy page links onward to opt-out.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.costco.com/privacy-policy.html"
+          ]
+        },
+        "url": "https://www.costco.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Retail sale/share and targeted advertising disclosure candidate.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.macys.com/s/privacy-policy"
+          ]
+        },
+        "url": "https://www.macys.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Retail privacy-center candidate with expected adtech surface.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.kohls.com/feature/privacy-policy.jsp"
+          ]
+        },
+        "url": "https://www.kohls.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface",
+          "form_collection_probe"
+        ],
+        "notes": "Health-adjacent retail and account/form surface candidate.",
+        "primaryBucket": "sensitive_context_privacy",
+        "sector": "health_retail",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.cvs.com/help/privacy_policy.jsp"
+          ]
+        },
+        "url": "https://www.cvs.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface",
+          "form_collection_probe"
+        ],
+        "notes": "Health-adjacent retail candidate for sensitive context plus privacy controls.",
+        "primaryBucket": "sensitive_context_privacy",
+        "sector": "health_retail",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.walgreens.com/topic/help/generalhelp/privacyandsecurity.jsp"
+          ]
+        },
+        "url": "https://www.walgreens.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Financial/SaaS privacy-choice and policy disclosure candidate.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "finance_saas",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.intuit.com/privacy/statement/"
+          ]
+        },
+        "url": "https://www.intuit.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "Media CMP candidate with likely nested preference/reject behavior.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.cnn.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "Condé Nast style CMP candidate for reject-flow hardening.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.wired.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "Ad-heavy media consent candidate; no-go outcome is acceptable if blocked.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.forbes.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "Condé Nast CMP/reject-flow diversity candidate.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.vogue.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "Condé Nast CMP/reject-flow diversity candidate.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.vanityfair.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "Condé Nast CMP/reject-flow diversity candidate.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.cntraveler.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "Ad-heavy media CMP and form/adtech candidate.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.rollingstone.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "High-adtech weather/media candidate for consent and opt-out coverage.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_weather",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://weather.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface"
+        ],
+        "notes": "Large tech privacy-disclosure and GPC context candidate.",
+        "primaryBucket": "gpc_behavior",
+        "sector": "technology",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://privacy.microsoft.com/en-us/privacystatement"
+          ]
+        },
+        "url": "https://www.microsoft.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "SaaS privacy choices and adtech disclosure candidate.",
+        "primaryBucket": "gpc_behavior",
+        "sector": "technology_saas",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.adobe.com/privacy.html"
+          ]
+        },
+        "url": "https://www.adobe.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "B2B SaaS privacy disclosure and opt-out candidate.",
+        "primaryBucket": "gpc_behavior",
+        "sector": "technology_saas",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.salesforce.com/company/privacy/"
+          ]
+        },
+        "url": "https://www.salesforce.com/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface"
+        ],
+        "notes": "Useful privacy-positive GPC/policy control candidate.",
+        "primaryBucket": "gpc_behavior",
+        "sector": "technology_nonprofit",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.mozilla.org/privacy/"
+          ]
+        },
+        "url": "https://www.mozilla.org/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled"
+        ],
+        "notes": "Likely low/no-banner control for planner pruning.",
+        "primaryBucket": "no_banner_control",
+        "sector": "nonprofit_reference",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.wikipedia.org/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface"
+        ],
+        "notes": "Low-adtech control candidate.",
+        "primaryBucket": "no_banner_control",
+        "sector": "standards_nonprofit",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.w3.org/",
+        "wave": 1
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface"
+        ],
+        "notes": "Privacy-oriented no/low-banner control candidate.",
+        "primaryBucket": "no_banner_control",
+        "sector": "nonprofit_advocacy",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.eff.org/",
+        "wave": 1
+      }
+    ],
+    "2": [
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface",
+          "form_collection_probe"
+        ],
+        "notes": "Financial sensitive-context and privacy-rights candidate.",
+        "primaryBucket": "sensitive_context_privacy",
+        "sector": "finance",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.capitalone.com/privacy/"
+          ]
+        },
+        "url": "https://www.capitalone.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface",
+          "form_collection_probe"
+        ],
+        "notes": "Financial privacy and sensitive flow candidate.",
+        "primaryBucket": "sensitive_context_privacy",
+        "sector": "finance",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.chase.com/digital/resources/privacy-security"
+          ]
+        },
+        "url": "https://www.chase.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface",
+          "form_collection_probe"
+        ],
+        "notes": "Financial privacy-control and policy candidate.",
+        "primaryBucket": "sensitive_context_privacy",
+        "sector": "finance",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.bankofamerica.com/privacy/"
+          ]
+        },
+        "url": "https://www.bankofamerica.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Payments privacy-rights candidate.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "payments",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.paypal.com/us/legalhub/privacy-full"
+          ]
+        },
+        "url": "https://www.paypal.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "reject_all_flow",
+          "policy_surface"
+        ],
+        "notes": "Marketplace privacy-choice candidate; no-go/blocked outcome is acceptable.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "marketplace_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.ebay.com/help/policies/member-behaviour-policies/user-privacy-notice-privacy-policy?id=4260"
+          ]
+        },
+        "url": "https://www.ebay.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Marketplace privacy policy/control candidate.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "marketplace_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.etsy.com/legal/privacy"
+          ]
+        },
+        "url": "https://www.etsy.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "reject_all_flow",
+          "policy_surface"
+        ],
+        "notes": "International retail CMP and privacy-control candidate.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.ikea.com/us/en/customer-service/privacy-policy/"
+          ]
+        },
+        "url": "https://www.ikea.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "reject_all_flow",
+          "policy_surface"
+        ],
+        "notes": "Retail adtech and privacy-control candidate.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.wayfair.com/customerservice/general_info.php"
+          ]
+        },
+        "url": "https://www.wayfair.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Retail privacy-choice and targeted advertising candidate.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.sephora.com/beauty/privacy-policy"
+          ]
+        },
+        "url": "https://www.sephora.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Retail privacy and sale/share disclosure candidate.",
+        "primaryBucket": "privacy_opt_out_dnsmpi",
+        "sector": "retail_ecommerce",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.ulta.com/company/privacy"
+          ]
+        },
+        "url": "https://www.ulta.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface",
+          "form_collection_probe"
+        ],
+        "notes": "Healthcare sensitive-context candidate.",
+        "primaryBucket": "sensitive_context_privacy",
+        "sector": "healthcare",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://healthy.kaiserpermanente.org/privacy"
+          ]
+        },
+        "url": "https://healthy.kaiserpermanente.org/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface",
+          "form_collection_probe"
+        ],
+        "notes": "Healthcare policy/form collection candidate.",
+        "primaryBucket": "sensitive_context_privacy",
+        "sector": "healthcare",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://my.clevelandclinic.org/about/website/privacy-security"
+          ]
+        },
+        "url": "https://www.clevelandclinic.org/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface",
+          "form_collection_probe"
+        ],
+        "notes": "Healthcare sensitive-context and policy candidate.",
+        "primaryBucket": "sensitive_context_privacy",
+        "sector": "healthcare",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.hopkinsmedicine.org/patient_care/patients-visitors/privacy-security/"
+          ]
+        },
+        "url": "https://www.hopkinsmedicine.org/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface"
+        ],
+        "notes": "Government health low/no-commercial-control candidate.",
+        "primaryBucket": "sensitive_context_privacy",
+        "sector": "government_health",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.nih.gov/web-policies-notices"
+          ]
+        },
+        "url": "https://www.nih.gov/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "privacy_opt_out_flow",
+          "reject_all_flow",
+          "policy_surface"
+        ],
+        "notes": "Health-media adtech and privacy-control candidate.",
+        "primaryBucket": "sensitive_context_privacy",
+        "sector": "health_media",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.healthline.com/privacy-policy"
+          ]
+        },
+        "url": "https://www.healthline.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "International media consent-flow candidate.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news_international",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.bbc.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "International media CMP candidate.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news_international",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.theguardian.com/us",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "News CMP and policy-surface candidate.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.reuters.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "policy_surface"
+        ],
+        "notes": "US news CMP and adtech candidate.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "media_news",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.politico.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "reject_all_flow",
+          "accept_all_flow",
+          "privacy_opt_out_flow",
+          "policy_surface"
+        ],
+        "notes": "Ad-heavy sports media consent and privacy-control candidate.",
+        "primaryBucket": "complex_reject_flow",
+        "sector": "sports_media",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.espn.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface"
+        ],
+        "notes": "Large tech privacy-policy and GPC context candidate.",
+        "primaryBucket": "gpc_behavior",
+        "sector": "technology",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://www.apple.com/legal/privacy/"
+          ]
+        },
+        "url": "https://www.apple.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface"
+        ],
+        "notes": "Privacy-forward control candidate.",
+        "primaryBucket": "gpc_behavior",
+        "sector": "technology_privacy",
+        "seedUrls": {
+          "privacyOptOut": [
+            "https://duckduckgo.com/privacy"
+          ]
+        },
+        "url": "https://duckduckgo.com/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface"
+        ],
+        "notes": "Low/no-banner nonprofit control candidate.",
+        "primaryBucket": "no_banner_control",
+        "sector": "nonprofit_reference",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://archive.org/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface"
+        ],
+        "notes": "Government low/no-commercial-control candidate.",
+        "primaryBucket": "no_banner_control",
+        "sector": "government",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://digital.gov/",
+        "wave": 2
+      },
+      {
+        "expectedLanes": [
+          "baseline_pre_consent",
+          "gpc_enabled",
+          "policy_surface"
+        ],
+        "notes": "Government low/no-commercial-control candidate.",
+        "primaryBucket": "no_banner_control",
+        "sector": "government",
+        "seedUrls": {
+          "privacyOptOut": []
+        },
+        "url": "https://www.usa.gov/",
+        "wave": 2
+      }
+    ]
+  }
+}

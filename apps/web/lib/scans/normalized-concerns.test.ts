@@ -1638,6 +1638,44 @@ test("California CIPA negative retained evidence does not create normalized conc
   );
 });
 
+test("runtime coverage limitation artifacts create audit-only normalized concerns", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      runtimeCoverage: {
+        coverageStatus: "limited_none",
+        fallbackModesUsed: [],
+        limitationKeys: ["silent_empty_runtime_completed"],
+        notes: ["completed without usable runtime observations"],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 0,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 0
+        },
+        silentEmpty: true
+      }
+    },
+    validationFindings: []
+  });
+
+  const concern = concerns.find((item) => item.originKey === "scan_quality.runtime_coverage.limited_none");
+
+  assert.ok(concern);
+  assert.equal(concern.signalKey, "scan_quality.runtime_coverage_limited");
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.equal(concern.allowedNarrativeTier, "weak");
+  assert.deepEqual(concern.negativeEvidenceFlags, ["runtime_tracking_review_incomplete"]);
+  assert.equal(concern.evidenceBundle.rawEvidence?.runtimeCoverageStatus, "limited_none");
+  assert.deepEqual(
+    concern.evidenceBundle.rawEvidence?.runtimeCoverageLimitationKeys,
+    ["silent_empty_runtime_completed"]
+  );
+});
+
 test("California rights request evidence creates a positive rights-path finding without absence logic", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [],

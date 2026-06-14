@@ -1,0 +1,17 @@
+{
+  "name": "@certscore/vendor-resolver",
+  "version": "0.1.0",
+  "private": true,
+  "description": "High-confidence CertScore v2 vendor and product resolver.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm --filter @certscore/contracts build && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "test": "tsx --tsconfig ../../tsconfig.base.json --test 'src/*.test.ts'",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@certscore/contracts": "workspace:*"
+  }
+}

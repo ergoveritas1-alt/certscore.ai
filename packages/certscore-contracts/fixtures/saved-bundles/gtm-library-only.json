@@ -1,0 +1,398 @@
+{
+  "scanId": "fixture_gtm_library_only",
+  "url": "https://example.com",
+  "normalizedUrl": "https://example.com/",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "completedAt": "2026-01-01T00:00:02.000Z",
+  "region": "fixture",
+  "scanProfile": {
+    "profileId": "quick",
+    "label": "Saved-bundle fixture",
+    "targetDurationMs": 12000,
+    "internalBudgetMs": 15000,
+    "enabledModules": [
+      "preConsentRuntimeScanner"
+    ]
+  },
+  "modulesRun": [
+    {
+      "moduleName": "preConsentRuntimeScanner",
+      "status": "completed",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "completedAt": "2026-01-01T00:00:02.000Z",
+      "durationMs": 2000,
+      "evidenceRefs": [],
+      "errors": []
+    }
+  ],
+  "runtimeTimeline": [
+    {
+      "eventId": "net_gtm_library",
+      "eventType": "network_request",
+      "requestId": "req_gtm_library",
+      "timestampMs": 500,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "hostname": "www.googletagmanager.com",
+      "registrableDomain": "googletagmanager.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.95,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "script",
+      "requestUrl": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "normalizedUrl": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "requestHostname": "www.googletagmanager.com",
+      "path": "/gtm.js",
+      "queryParamNames": [
+        "id"
+      ],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [
+        "id"
+      ],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": true,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": false,
+      "endpointCategory": "tag_manager_library",
+      "attributionStatus": "ignored_noise",
+      "attributionReason": "tag_manager_library_without_collection_signal",
+      "resolverBasis": [
+        "gtm_host_or_container"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    },
+    {
+      "eventId": "script_gtm_library",
+      "eventType": "script",
+      "timestampMs": 600,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "dom_content_loaded",
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "hostname": "www.googletagmanager.com",
+      "registrableDomain": "googletagmanager.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.92,
+      "directVsInferred": "direct",
+      "scriptUrl": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "inline": false
+    }
+  ],
+  "networkEvents": [
+    {
+      "eventId": "net_gtm_library",
+      "eventType": "network_request",
+      "requestId": "req_gtm_library",
+      "timestampMs": 500,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "hostname": "www.googletagmanager.com",
+      "registrableDomain": "googletagmanager.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.95,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "script",
+      "requestUrl": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "normalizedUrl": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "requestHostname": "www.googletagmanager.com",
+      "path": "/gtm.js",
+      "queryParamNames": [
+        "id"
+      ],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [
+        "id"
+      ],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": true,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": false,
+      "endpointCategory": "tag_manager_library",
+      "attributionStatus": "ignored_noise",
+      "attributionReason": "tag_manager_library_without_collection_signal",
+      "resolverBasis": [
+        "gtm_host_or_container"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    }
+  ],
+  "networkResponseEvents": [
+    {
+      "eventId": "resp_net_gtm_library",
+      "eventType": "network_response",
+      "requestId": "req_gtm_library",
+      "timestampMs": 520,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "hostname": "www.googletagmanager.com",
+      "registrableDomain": "googletagmanager.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.92,
+      "directVsInferred": "direct",
+      "responseUrl": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "normalizedUrl": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "status": 200,
+      "contentType": "application/javascript",
+      "setCookieHeaders": [],
+      "setCookieMetadata": [],
+      "cookieNamesSet": [],
+      "cacheHeaders": {},
+      "accessControlHeaders": {}
+    }
+  ],
+  "cookieEvents": [],
+  "cookieSnapshots": [],
+  "storageSnapshots": [],
+  "scriptEvents": [
+    {
+      "eventId": "script_gtm_library",
+      "eventType": "script",
+      "timestampMs": 600,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "dom_content_loaded",
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "hostname": "www.googletagmanager.com",
+      "registrableDomain": "googletagmanager.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.92,
+      "directVsInferred": "direct",
+      "scriptUrl": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "inline": false
+    }
+  ],
+  "iframeEvents": [],
+  "consentUiObservations": [
+    {
+      "observationId": "consent_none",
+      "observedAtMs": 1000,
+      "likelyPresent": false,
+      "basis": [
+        "no_banner_keywords_detected"
+      ],
+      "evidenceRefs": [],
+      "confidence": 0.55
+    }
+  ],
+  "consentInteractionEvents": [],
+  "policySurfaceObservations": [],
+  "screenshots": [],
+  "domSnapshots": [],
+  "normalizedVendorObservations": [
+    {
+      "observationId": "vendor_google_tag_manager",
+      "entity": "Google LLC",
+      "vendor": "Google",
+      "product": "Google Tag Manager",
+      "purpose": "tag_management",
+      "confidence": 0.96,
+      "basis": [
+        "gtm_host_or_container"
+      ],
+      "regulatoryRelevance": [
+        "tag_management",
+        "third_party_runtime"
+      ],
+      "matchedEvidenceIds": [
+        "net_gtm_library",
+        "script_gtm_library"
+      ],
+      "matchedHostnames": [
+        "www.googletagmanager.com"
+      ],
+      "matchedUrls": [
+        "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX"
+      ],
+      "matchedCookieNames": [],
+      "matchedEvidenceRefs": [
+        {
+          "refId": "ref_net_gtm_library",
+          "eventId": "net_gtm_library",
+          "eventType": "network_request",
+          "url": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX"
+        },
+        {
+          "refId": "ref_script_gtm_library",
+          "eventId": "script_gtm_library",
+          "eventType": "script",
+          "url": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX"
+        }
+      ],
+      "matchSources": [
+        {
+          "source": "network_request",
+          "sourceEventId": "net_gtm_library",
+          "sourceEventType": "network_request",
+          "sourceScanner": "pre_consent_runtime",
+          "scenario": "fresh_pre_consent",
+          "consentStateAtTime": "pre_consent",
+          "matchedField": "url_pattern",
+          "matchedValueRedacted": "https://www.googletagmanager.com/gtm.js?[redacted_query]",
+          "resolverBasis": [
+            "gtm_host_or_container"
+          ],
+          "confidence": 0.96
+        },
+        {
+          "source": "script_url",
+          "sourceEventId": "script_gtm_library",
+          "sourceEventType": "script",
+          "sourceScanner": "pre_consent_runtime",
+          "scenario": "fresh_pre_consent",
+          "consentStateAtTime": "pre_consent",
+          "matchedField": "url_pattern",
+          "matchedValueRedacted": "https://www.googletagmanager.com/gtm.js?[redacted_query]",
+          "resolverBasis": [
+            "gtm_host_or_container"
+          ],
+          "confidence": 0.96
+        }
+      ]
+    }
+  ],
+  "observedJourneys": [
+    {
+      "journeyId": "journey_gtm_library",
+      "journeyType": "script",
+      "key": "script:gtm",
+      "displayName": "Google Tag Manager",
+      "entity": "Google LLC",
+      "vendor": "Google",
+      "product": "Google Tag Manager",
+      "purpose": "tag_management",
+      "sourceScanner": "pre_consent_runtime",
+      "scenariosObserved": [
+        "fresh_pre_consent"
+      ],
+      "firstObservedAtMs": 600,
+      "lastObservedAtMs": 600,
+      "firstObservedConsentState": "pre_consent",
+      "consentStatesObserved": [
+        "pre_consent"
+      ],
+      "firstPartyOrThirdParty": "third_party",
+      "entryPoint": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+      "relatedCookies": [],
+      "relatedScripts": [
+        "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX"
+      ],
+      "relatedEndpoints": [],
+      "relatedVendors": [
+        "Google"
+      ],
+      "observedBehaviors": [
+        "script_loaded",
+        "library_loaded_only",
+        "tag_manager_observed"
+      ],
+      "resolverBasis": [],
+      "relatedEvidenceRefs": [],
+      "eventRefs": [
+        {
+          "eventId": "script_gtm_library",
+          "eventType": "script",
+          "timestampMs": 600,
+          "url": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX",
+          "behavior": "script_loaded",
+          "firstParty": false,
+          "thirdParty": true
+        }
+      ],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "evidenceRefs": [
+        {
+          "refId": "ref_script_gtm_library",
+          "eventId": "script_gtm_library",
+          "eventType": "script",
+          "url": "https://www.googletagmanager.com/gtm.js?id=GTM-XXXX"
+        }
+      ],
+      "relatedVendorObservationIds": [
+        "vendor_google_tag_manager"
+      ],
+      "entryPointSourceEventId": "script_gtm_library"
+    }
+  ],
+  "derivedRuntimeSignals": {
+    "thirdPartyVendorsObserved": true,
+    "preConsentTrackingObserved": false,
+    "thirdPartyCookiesPreConsentObserved": false,
+    "consentBannerLikelyPresent": false,
+    "sessionReplayOrBehavioralAnalyticsObserved": false,
+    "journeySummary": {
+      "journeyCount": 1,
+      "vendorJourneyCount": 0,
+      "productJourneyCount": 0,
+      "trackerJourneyCount": 0,
+      "cookieJourneyCount": 0,
+      "scriptJourneyCount": 1,
+      "endpointJourneyCount": 0,
+      "activeCollectionJourneyCount": 0,
+      "consentManagementJourneyCount": 0,
+      "notes": []
+    },
+    "notes": []
+  },
+  "artifactRefs": [],
+  "scannerVersion": "saved-bundle-fixture",
+  "schemaVersion": "certscore.v2.alpha.1"
+}

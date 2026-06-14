@@ -1,0 +1,31 @@
+{
+  "name": "@certscore/scan-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CertScore v2 browser evidence capture core.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm --filter @certscore/contracts build && pnpm --filter @certscore/vendor-resolver build && pnpm --filter @certscore/review-engine build && tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "scan": "node --import tsx ./src/cli/scan.ts",
+    "demo": "node --import tsx ./src/cli/demo.ts",
+    "inspect": "node --import tsx ./src/cli/inspect.ts",
+    "replay": "node --import tsx ./src/cli/replay.ts",
+    "calibrate": "node --import tsx ./src/cli/calibrate.ts",
+    "test": "tsx --tsconfig ../../tsconfig.base.json --test --test-concurrency=1 'src/*.test.ts'",
+    "test:integration-fixtures": "tsx --tsconfig ../../tsconfig.base.json --test src/integration-fixtures.test.ts",
+    "test:inspect-snapshots": "tsx --tsconfig ../../tsconfig.base.json --test src/inspect-snapshots.test.ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@certscore/contracts": "workspace:*",
+    "@certscore/review-engine": "workspace:*",
+    "@certscore/vendor-resolver": "workspace:*",
+    "playwright": "^1.51.1",
+    "tldts": "^7.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0"
+  }
+}

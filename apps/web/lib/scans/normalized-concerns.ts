@@ -2275,6 +2275,15 @@ function getScanNoGoAssessment(runtimeArtifacts: Record<string, unknown> | null 
   return getRuntimeRecord(runtimeArtifacts, ["scanNoGoAssessment", "scan_no_go_assessment"]);
 }
 
+function getRuntimeCoverageSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return getRuntimeRecord(runtimeArtifacts, [
+    "runtimeCoverage",
+    "runtime_coverage",
+    "runtimeCoverageSummary",
+    "runtime_coverage_summary"
+  ]);
+}
+
 function getScanNoGoSignalKey(pageState: string | null) {
   return pageState === "captcha_or_challenge"
     ? "scan_quality.visual_access_challenge"
@@ -2349,6 +2358,64 @@ function buildScanNoGoAssessmentConcerns(
       signalSource: "runtime_artifact_signal",
       sourceType: "signal",
       title: "Scan-level no-go assessment"
+    })
+  ];
+}
+
+function buildRuntimeCoverageLimitationConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const runtimeCoverage = getRuntimeCoverageSummary(runtimeArtifacts);
+  const coverageStatus = getCaliforniaRuntimeString(runtimeCoverage, ["coverageStatus", "coverage_status"]);
+  if (coverageStatus !== "limited_none" && coverageStatus !== "limited_partial") {
+    return [];
+  }
+
+  const observationCounts = getRuntimeRecord(runtimeCoverage, ["observationCounts", "observation_counts"]) ?? {};
+  const limitationKeys = getCaliforniaRuntimeStringArray(runtimeCoverage, ["limitationKeys", "limitation_keys"]);
+  const fallbackModesUsed = getCaliforniaRuntimeStringArray(runtimeCoverage, ["fallbackModesUsed", "fallback_modes_used"]);
+  const notes = getCaliforniaRuntimeStringArray(runtimeCoverage, ["notes"]);
+  const silentEmpty = getCaliforniaRuntimeBoolean(runtimeCoverage, ["silentEmpty", "silent_empty"]) === true;
+  const evidence = uniqueStrings([
+    ...limitationKeys.map((key) => `runtime coverage limitation: ${key}`),
+    ...fallbackModesUsed.map((mode) => `runtime fallback used: ${mode}`),
+    ...notes
+  ]);
+  const description =
+    coverageStatus === "limited_none"
+      ? "Scanner runtime coverage retained no usable runtime observation; absence of runtime tracking signals should not be treated as a clean result."
+      : "Scanner runtime coverage retained only partial runtime observation; absence of runtime tracking signals requires review.";
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "manual_review_triggers",
+      description,
+      domainContext,
+      evidence,
+      observedValue: coverageStatus,
+      originKey: `scan_quality.runtime_coverage.${coverageStatus}`,
+      originType: "runtime_artifact",
+      rawEvidence: {
+        runtimeCoverage,
+        runtimeCoverageStatus: coverageStatus,
+        runtimeCoverageLimitationKeys: limitationKeys,
+        runtimeCoverageFallbackModesUsed: fallbackModesUsed,
+        runtimeCoverageObservationCounts: observationCounts,
+        runtimeCoverageSilentEmpty: silentEmpty,
+        runtimeEvidenceArtifacts: evidence.length > 0
+          ? evidence
+          : ["scan_runtime_artifacts.runtime_coverage"],
+        signalKey: "scan_quality.runtime_coverage_limited"
+      },
+      severity: coverageStatus === "limited_none" ? "medium" : "low",
+      signalKey: "scan_quality.runtime_coverage_limited",
+      signalLabel: "Runtime coverage limited",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: coverageStatus === "limited_none"
+        ? "Runtime coverage retained no usable observation"
+        : "Runtime coverage was partial"
     })
   ];
 }
@@ -3520,6 +3587,7 @@ export function buildNormalizedConcerns(input: {
       return normalizedFinding ? [normalizeConcernFromValidationFinding(normalizedFinding, input.domainContext)] : [];
     }),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCaliforniaPrivacyEvidenceConcerns(input.runtimeArtifacts, input.domainContext)
   ];
 

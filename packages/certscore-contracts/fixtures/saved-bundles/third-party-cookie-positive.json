@@ -1,0 +1,260 @@
+{
+  "scanId": "fixture_third_party_cookie_positive",
+  "url": "https://example.com",
+  "normalizedUrl": "https://example.com/",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "completedAt": "2026-01-01T00:00:02.000Z",
+  "region": "fixture",
+  "scanProfile": {
+    "profileId": "quick",
+    "label": "Saved-bundle fixture",
+    "targetDurationMs": 12000,
+    "internalBudgetMs": 15000,
+    "enabledModules": [
+      "preConsentRuntimeScanner"
+    ]
+  },
+  "modulesRun": [
+    {
+      "moduleName": "preConsentRuntimeScanner",
+      "status": "completed",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "completedAt": "2026-01-01T00:00:02.000Z",
+      "durationMs": 2000,
+      "evidenceRefs": [],
+      "errors": []
+    }
+  ],
+  "runtimeTimeline": [
+    {
+      "eventId": "cookie_ide_third_party",
+      "eventType": "cookie",
+      "timestampMs": 700,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://example.com",
+      "hostname": "googleads.g.doubleclick.net",
+      "registrableDomain": "doubleclick.net",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "cookieName": "IDE",
+      "cookieDomain": ".doubleclick.net",
+      "cookiePath": "/",
+      "secure": true,
+      "httpOnly": false,
+      "cookieParty": "third_party",
+      "vendorAssociated": true,
+      "associatedVendorRef": "vendor_google_ads",
+      "cookiePurpose": "advertising",
+      "cookieClassificationBasis": [
+        "third_party",
+        "vendor:Google",
+        "purpose:advertising"
+      ],
+      "operation": "set_cookie_header",
+      "valueRedacted": true
+    }
+  ],
+  "networkEvents": [],
+  "networkResponseEvents": [],
+  "cookieEvents": [
+    {
+      "eventId": "cookie_ide_third_party",
+      "eventType": "cookie",
+      "timestampMs": 700,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://example.com",
+      "hostname": "googleads.g.doubleclick.net",
+      "registrableDomain": "doubleclick.net",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "cookieName": "IDE",
+      "cookieDomain": ".doubleclick.net",
+      "cookiePath": "/",
+      "secure": true,
+      "httpOnly": false,
+      "cookieParty": "third_party",
+      "vendorAssociated": true,
+      "associatedVendorRef": "vendor_google_ads",
+      "cookiePurpose": "advertising",
+      "cookieClassificationBasis": [
+        "third_party",
+        "vendor:Google",
+        "purpose:advertising"
+      ],
+      "operation": "set_cookie_header",
+      "valueRedacted": true
+    }
+  ],
+  "cookieSnapshots": [],
+  "storageSnapshots": [],
+  "scriptEvents": [],
+  "iframeEvents": [],
+  "consentUiObservations": [
+    {
+      "observationId": "consent_none",
+      "observedAtMs": 1000,
+      "likelyPresent": false,
+      "basis": [
+        "no_banner_keywords_detected"
+      ],
+      "evidenceRefs": [],
+      "confidence": 0.55
+    }
+  ],
+  "consentInteractionEvents": [],
+  "policySurfaceObservations": [],
+  "screenshots": [],
+  "domSnapshots": [],
+  "normalizedVendorObservations": [
+    {
+      "observationId": "vendor_google_ads",
+      "entity": "Google LLC",
+      "vendor": "Google",
+      "product": "Google Ads / DoubleClick",
+      "purpose": "advertising",
+      "confidence": 0.96,
+      "basis": [
+        "doubleclick_ad_endpoint_or_cookie"
+      ],
+      "regulatoryRelevance": [
+        "consent",
+        "advertising",
+        "cross_site_tracking"
+      ],
+      "matchedEvidenceIds": [
+        "cookie_ide_third_party"
+      ],
+      "matchedHostnames": [
+        "googleads.g.doubleclick.net"
+      ],
+      "matchedUrls": [],
+      "matchedCookieNames": [
+        "IDE"
+      ],
+      "matchedEvidenceRefs": [
+        {
+          "refId": "ref_cookie_ide_third_party",
+          "eventId": "cookie_ide_third_party",
+          "eventType": "cookie",
+          "label": "IDE",
+          "url": "https://example.com"
+        }
+      ],
+      "matchSources": [
+        {
+          "source": "set_cookie",
+          "sourceEventId": "cookie_ide_third_party",
+          "sourceEventType": "cookie",
+          "sourceScanner": "pre_consent_runtime",
+          "scenario": "fresh_pre_consent",
+          "consentStateAtTime": "pre_consent",
+          "matchedField": "cookie_name",
+          "matchedValueRedacted": "IDE",
+          "resolverBasis": [
+            "doubleclick_ad_endpoint_or_cookie"
+          ],
+          "confidence": 0.96
+        }
+      ]
+    }
+  ],
+  "observedJourneys": [
+    {
+      "journeyId": "journey_ide_third_party_cookie",
+      "journeyType": "cookie",
+      "key": "cookie:ide",
+      "displayName": "IDE",
+      "entity": "Google LLC",
+      "vendor": "Google",
+      "product": "Google Ads / DoubleClick",
+      "purpose": "advertising",
+      "sourceScanner": "pre_consent_runtime",
+      "scenariosObserved": [
+        "fresh_pre_consent"
+      ],
+      "firstObservedAtMs": 700,
+      "lastObservedAtMs": 700,
+      "firstObservedConsentState": "pre_consent",
+      "consentStatesObserved": [
+        "pre_consent"
+      ],
+      "firstPartyOrThirdParty": "third_party",
+      "entryPoint": "https://example.com",
+      "relatedCookies": [
+        "IDE"
+      ],
+      "relatedScripts": [],
+      "relatedEndpoints": [],
+      "relatedVendors": [
+        "Google"
+      ],
+      "observedBehaviors": [
+        "cookie_set"
+      ],
+      "resolverBasis": [],
+      "relatedEvidenceRefs": [],
+      "eventRefs": [
+        {
+          "eventId": "cookie_ide_third_party",
+          "eventType": "cookie",
+          "timestampMs": 700,
+          "url": "https://example.com",
+          "label": "IDE",
+          "behavior": "cookie_set",
+          "firstParty": false,
+          "thirdParty": true
+        }
+      ],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "evidenceRefs": [
+        {
+          "refId": "ref_cookie_ide_third_party",
+          "eventId": "cookie_ide_third_party",
+          "eventType": "cookie",
+          "label": "IDE",
+          "url": "https://example.com"
+        }
+      ],
+      "relatedVendorObservationIds": [
+        "vendor_google_ads"
+      ],
+      "entryPointSourceEventId": "cookie_ide_third_party"
+    }
+  ],
+  "derivedRuntimeSignals": {
+    "thirdPartyVendorsObserved": true,
+    "preConsentTrackingObserved": true,
+    "thirdPartyCookiesPreConsentObserved": true,
+    "consentBannerLikelyPresent": false,
+    "sessionReplayOrBehavioralAnalyticsObserved": false,
+    "journeySummary": {
+      "journeyCount": 1,
+      "vendorJourneyCount": 0,
+      "productJourneyCount": 0,
+      "trackerJourneyCount": 0,
+      "cookieJourneyCount": 1,
+      "scriptJourneyCount": 0,
+      "endpointJourneyCount": 0,
+      "activeCollectionJourneyCount": 0,
+      "consentManagementJourneyCount": 0,
+      "notes": []
+    },
+    "notes": []
+  },
+  "artifactRefs": [],
+  "scannerVersion": "saved-bundle-fixture",
+  "schemaVersion": "certscore.v2.alpha.1"
+}

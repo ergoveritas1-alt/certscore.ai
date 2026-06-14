@@ -4,6 +4,10 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { getAuth } from "../better-auth/auth";
+import {
+  getAccountCreationPausedMessage,
+  isPublicAccountCreationEnabled
+} from "../access-control";
 import { bootstrapAppUserSession } from "../bootstrap-user";
 import { initialCredentialsActionState, type CredentialsActionState } from "./action-state";
 import { findAppUserByEmail, normalizeEmail } from "./user";
@@ -85,6 +89,15 @@ export async function submitCredentialsAction(
     const headerStore = await headers();
 
     if (mode === "create_account") {
+      if (!isPublicAccountCreationEnabled()) {
+        return {
+          accountRecovery: null,
+          error: getAccountCreationPausedMessage(),
+          fieldErrors: {},
+          mode
+        };
+      }
+
       const existingAppUser = await findAppUserByEmail(normalizedEmail);
 
       if (existingAppUser) {

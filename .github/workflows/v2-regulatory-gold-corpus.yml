@@ -1,0 +1,74 @@
+name: v2 Regulatory Gold Corpus
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/v2-regulatory-gold-corpus.yml"
+      - "artifacts/gold-corpus/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "scripts/build-v2-regulatory-gold-corpus-stage1.ts"
+      - "scripts/build-v2-regulatory-gold-corpus-stage2.ts"
+      - "scripts/build-v2-regulatory-gold-corpus-stage3-fixtures.ts"
+      - "scripts/analyze-v2-regulatory-confidence.ts"
+      - "scripts/verify-v2-regulatory-gold-corpus-stage2.ts"
+      - "scripts/verify-v2-regulatory-lane-quality.ts"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/v2-regulatory-gold-corpus.yml"
+      - "artifacts/gold-corpus/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "scripts/build-v2-regulatory-gold-corpus-stage1.ts"
+      - "scripts/build-v2-regulatory-gold-corpus-stage2.ts"
+      - "scripts/build-v2-regulatory-gold-corpus-stage3-fixtures.ts"
+      - "scripts/analyze-v2-regulatory-confidence.ts"
+      - "scripts/verify-v2-regulatory-gold-corpus-stage2.ts"
+      - "scripts/verify-v2-regulatory-lane-quality.ts"
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Rebuild and verify corpus indexes
+        run: pnpm v2:regulatory-gold-corpus-refresh
+
+      - name: Build and verify synthetic fixtures
+        run: pnpm v2:regulatory-gold-corpus-fixtures
+
+      - name: Calibrate confidence and verify lane quality
+        run: |
+          pnpm v2:regulatory-confidence-calibration
+          pnpm v2:regulatory-lane-quality
+
+      - name: Typecheck corpus tooling
+        run: |
+          pnpm exec tsc --noEmit --pretty false --module NodeNext --moduleResolution NodeNext --target ES2022 --types node --skipLibCheck \
+            scripts/build-v2-regulatory-gold-corpus-stage1.ts \
+            scripts/build-v2-regulatory-gold-corpus-stage2.ts \
+            scripts/build-v2-regulatory-gold-corpus-stage3-fixtures.ts \
+            scripts/analyze-v2-regulatory-confidence.ts \
+            scripts/verify-v2-regulatory-gold-corpus-stage2.ts \
+            scripts/verify-v2-regulatory-lane-quality.ts

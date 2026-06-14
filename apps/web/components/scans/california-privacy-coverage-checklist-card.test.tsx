@@ -124,6 +124,116 @@ test("California checklist uses row-derived score when retained row evidence is 
   assert.match(html, />Review signal</);
 });
 
+test("California checklist renders debug confidence metadata", () => {
+  const item = makeChecklistItem("Targeted advertising signals", "review_signal");
+  item.debugConfidence = {
+    score: 7,
+    improveConfidence: [
+      "Resolve adtech vendor purpose and third-party request evidence",
+      "Retain display-safe source evidence for this row"
+    ]
+  };
+  const html = renderToStaticMarkup(
+    createElement(CaliforniaPrivacyCoverageChecklistCard, {
+      items: [item]
+    })
+  );
+
+  assert.match(html, /Confidence: 7/);
+  assert.match(html, /Improve confidence: Resolve adtech vendor purpose and third-party request evidence/);
+  assert.match(html, /Retain display-safe source evidence for this row/);
+});
+
+test("California checklist labels scanner module gaps as coverage missing", () => {
+  const item = makeChecklistItem("Do Not Sell or Share availability", "not_testable");
+  item.debugConfidence = {
+    score: 1,
+    improveConfidence: [
+      "Run policy-surface coverage for sale/share opt-out evidence",
+      "Retain an explicit Do Not Sell/Share or privacy choices path"
+    ]
+  };
+  item.criticalEvidence.missingOrIncompleteSourceSignals = [
+    {
+      actual: "not retained in this v2 artifact",
+      expected: "bounded source evidence sufficient for this checklist row",
+      field: "do_not_sell_share_availability",
+      source: "scanner",
+      whyNeeded: "Missing or incomplete policySurfaceScanner coverage."
+    },
+    {
+      actual: "not retained in this v2 artifact",
+      expected: "bounded source evidence sufficient for this checklist row",
+      field: "do_not_sell_share_availability",
+      source: "scanner",
+      whyNeeded: "required_source_module_not_run"
+    }
+  ];
+
+  const html = renderToStaticMarkup(
+    createElement(CaliforniaPrivacyCoverageChecklistCard, {
+      items: [item]
+    })
+  );
+
+  assert.match(html, /Coverage missing/);
+  assert.match(html, /Next coverage step: Run policy-surface coverage for sale\/share opt-out evidence/);
+  assert.doesNotMatch(html, /Confidence: 1/);
+});
+
+test("California checklist summarizes evaluated and coverage-missing rows", () => {
+  const coverageGapItem = makeChecklistItem("Do Not Sell or Share availability", "not_testable");
+  coverageGapItem.criticalEvidence.missingOrIncompleteSourceSignals = [
+    {
+      actual: "not retained in this v2 artifact",
+      expected: "bounded source evidence sufficient for this checklist row",
+      field: "do_not_sell_share_availability",
+      source: "scanner",
+      whyNeeded: "Missing or incomplete policySurfaceScanner coverage."
+    }
+  ];
+
+  const html = renderToStaticMarkup(
+    createElement(CaliforniaPrivacyCoverageChecklistCard, {
+      items: [
+        makeChecklistItem("Do Not Sell or Share availability", "potential_gap"),
+        makeChecklistItem("Targeted advertising signals", "review_signal"),
+        coverageGapItem
+      ]
+    })
+  );
+
+  assert.match(html, /Evaluated rows/);
+  assert.match(html, /Coverage missing/);
+  assert.match(html, /Review signals/);
+  assert.match(html, /Gap rows/);
+  assert.match(html, /<div class="text-lg font-semibold leading-none text-slate-950">2<\/div><div class="mt-1 text-\[10px\] font-semibold uppercase tracking-\[0\.12em\]">Evaluated rows<\/div>/);
+  assert.match(html, /<div class="text-lg font-semibold leading-none text-slate-950">1<\/div><div class="mt-1 text-\[10px\] font-semibold uppercase tracking-\[0\.12em\]">Coverage missing<\/div>/);
+});
+
+test("California checklist does not render suggested follow-up capture guidance", () => {
+  const coverageGapItem = makeChecklistItem("Do Not Sell or Share availability", "not_testable");
+  coverageGapItem.criticalEvidence.missingOrIncompleteSourceSignals = [
+    {
+      actual: "not retained in this v2 artifact",
+      expected: "bounded source evidence sufficient for this checklist row",
+      field: "do_not_sell_share_availability",
+      source: "scanner",
+      whyNeeded: "Missing or incomplete policySurfaceScanner coverage."
+    }
+  ];
+
+  const html = renderToStaticMarkup(
+    createElement(CaliforniaPrivacyCoverageChecklistCard, {
+      items: [coverageGapItem]
+    })
+  );
+
+  assert.doesNotMatch(html, /Suggested follow-up capture/);
+  assert.doesNotMatch(html, /policy or full/);
+  assert.doesNotMatch(html, /1 row: Do Not Sell or Share availability/);
+});
+
 test("California checklist renders GDPR-style gaps, review, checked, and evidence badges", () => {
   const html = renderToStaticMarkup(
     createElement(CaliforniaPrivacyCoverageChecklistCard, {

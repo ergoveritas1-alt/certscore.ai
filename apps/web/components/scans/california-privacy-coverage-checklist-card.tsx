@@ -80,6 +80,94 @@ function getEvidenceStateLabel(state: CaliforniaPrivacyCoverageEvidenceState) {
   }
 }
 
+function DebugConfidenceSummary({ item }: { item: CaliforniaPrivacyCoverageChecklistItem }) {
+  if (!item.debugConfidence) {
+    return null;
+  }
+  const improvements = item.debugConfidence.improveConfidence.slice(0, 3);
+  const coverageMissing = hasScannerCoverageGap(item);
+  const pillLabel = coverageMissing ? "Coverage missing" : `Confidence: ${item.debugConfidence.score}`;
+  const actionLabel = coverageMissing ? "Next coverage step" : "Improve confidence";
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs leading-5 text-slate-500">
+      <span
+        className={cn(
+          "inline-flex shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
+          coverageMissing
+            ? "border-violet-200 bg-violet-50 text-violet-700"
+            : "border-slate-300 bg-white text-slate-700"
+        )}
+      >
+        {pillLabel}
+      </span>
+      {improvements.length > 0 ? (
+        <span className="min-w-0">
+          {actionLabel}: {improvements.join(" · ")}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function hasScannerCoverageGap(item: CaliforniaPrivacyCoverageChecklistItem) {
+  if (item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation" && item.assessmentStatus !== "needs_evidence") {
+    return false;
+  }
+  return item.criticalEvidence.missingOrIncompleteSourceSignals.some((gap) =>
+    /policysurfacescanner|consentflowruntimescanner|preconsentruntimescanner|scanner did not run|required_source_module_not_run/i.test(String(gap.whyNeeded))
+  );
+}
+
+function getChecklistRowSummary(items: CaliforniaPrivacyCoverageChecklistItem[]) {
+  const coverageMissing = items.filter(hasScannerCoverageGap).length;
+  return {
+    coverageMissing,
+    evaluated: items.filter((item) =>
+      item.evidenceState !== "not_testable" &&
+      !hasScannerCoverageGap(item)
+    ).length,
+    gaps: items.filter((item) => item.assessmentStatus === "gap_observed").length,
+    reviewSignals: items.filter((item) => item.assessmentStatus === "review_signal").length,
+  };
+}
+
+function ChecklistRowSummaryStrip({ items }: { items: CaliforniaPrivacyCoverageChecklistItem[] }) {
+  const summary = getChecklistRowSummary(items);
+  const entries = [
+    {
+      className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      count: summary.evaluated,
+      label: "Evaluated rows",
+    },
+    {
+      className: "border-violet-200 bg-violet-50 text-violet-800",
+      count: summary.coverageMissing,
+      label: "Coverage missing",
+    },
+    {
+      className: "border-indigo-200 bg-indigo-50 text-indigo-800",
+      count: summary.reviewSignals,
+      label: "Review signals",
+    },
+    {
+      className: "border-rose-200 bg-rose-50 text-rose-800",
+      count: summary.gaps,
+      label: "Gap rows",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:grid-cols-4">
+      {entries.map((entry) => (
+        <div key={entry.label} className={cn("rounded-md border px-3 py-2", entry.className)}>
+          <div className="text-lg font-semibold leading-none text-slate-950">{entry.count}</div>
+          <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em]">{entry.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function getCoverageIconMeta(item: CaliforniaPrivacyCoverageChecklistItem) {
   if (item.evidenceState === "not_testable" || item.assessmentStatus === "needs_evidence") {
     return {
@@ -219,6 +307,7 @@ function getCaliforniaSummary(input: {
   lensSummary?: string;
   scoreSummary?: string;
 }) {
+  const reviewedAreas = getCaliforniaReviewedAreas(input.items);
   const allRowsNotTestable = input.items.length > 0 && input.items.every((item) => item.evidenceState === "not_testable");
   if (allRowsNotTestable) {
     return "California privacy review was not scored because retained scanner evidence was not complete enough to evaluate the CCPA / CPRA + CIPA checklist areas. The rows below preserve the missing source-signal reasons for follow-up.";
@@ -227,11 +316,33 @@ function getCaliforniaSummary(input: {
   const hasIssues = input.items.some((item) => item.assessmentStatus === "gap_observed" || item.assessmentStatus === "review_signal");
   const scorePrefix = input.scoreSummary ? `${input.scoreSummary} ` : "";
   if (input.lensSummary) {
-    return `${scorePrefix}${input.lensSummary} CertScore reviewed sale/share, targeted advertising, opt-out availability, GPC handling, sensitive personal information controls, notice alignment, and CIPA-sensitive tracking signals using retained public-web evidence.`;
+    return `${scorePrefix}${input.lensSummary} CertScore reviewed ${reviewedAreas} using retained public-web evidence.`;
   }
   return hasIssues
-    ? `${scorePrefix}California privacy review signals are centered on sale/share, targeted advertising, opt-out availability, GPC handling, sensitive personal information controls, notice alignment, and CIPA-sensitive tracking signals.`
-    : `${scorePrefix}No major California CCPA / CPRA + CIPA issue surfaced in the top findings. CertScore reviewed public privacy notice availability, opt-out paths, targeted advertising signals, GPC handling, sensitive personal information controls, runtime vendor disclosure alignment, and CIPA-sensitive tracking context using retained automated evidence.`;
+    ? `${scorePrefix}California privacy review signals are centered on ${reviewedAreas}.`
+    : `${scorePrefix}No major California CCPA / CPRA + CIPA issue surfaced in the top findings. CertScore reviewed ${reviewedAreas} using retained automated evidence.`;
+}
+
+function getCaliforniaReviewedAreas(items: CaliforniaPrivacyCoverageChecklistItem[]) {
+  const rowIds = new Set(items.map((item) => item.id));
+  const areas = [
+    rowIds.has("privacy_notice_availability") ? "public privacy notice availability" : null,
+    rowIds.has("notice_at_collection") ? "notice-at-collection cues" : null,
+    rowIds.has("do_not_sell_share_availability") ? "Do Not Sell or Share path availability" : null,
+    rowIds.has("gpc_opt_out_signal_handling") ? "GPC handling" : null,
+    rowIds.has("targeted_advertising_signals") ? "targeted advertising signals" : null,
+    rowIds.has("sale_share_disclosure_alignment") ? "sale/share disclosure alignment" : null,
+    rowIds.has("limit_use_sensitive_pi") ? "sensitive personal information controls" : null,
+    rowIds.has("opt_out_friction_dark_patterns") ? "opt-out friction and choice balance" : null,
+    rowIds.has("post_opt_out_tracking_behavior") ? "post-opt-out tracking behavior" : null,
+    rowIds.has("sensitive_forms_third_party_tracking") ? "sensitive-form tracking context" : null,
+    rowIds.has("cipa_sensitive_interaction_recording") ? "CIPA-sensitive interaction recording" : null,
+    rowIds.has("cipa_sensitive_communication_interception") ? "CIPA-sensitive communication interception" : null,
+    rowIds.has("consumer_rights_request_methods") ? "consumer rights request methods" : null,
+    rowIds.has("privacy_control_accessibility") ? "privacy-control accessibility" : null,
+  ].filter((area): area is string => Boolean(area));
+
+  return areas.length > 0 ? areas.join(", ") : "the available California privacy checklist rows";
 }
 
 function getSummaryTitle(input: {
@@ -341,6 +452,7 @@ export function CaliforniaPrivacyCoverageChecklistCard({
           <p className="max-w-4xl text-sm leading-6 text-slate-600">{summary}</p>
         </div>
       </details>
+      <ChecklistRowSummaryStrip items={items} />
       <div className="overflow-hidden rounded-lg border border-slate-200">
         <div className="grid grid-cols-1 gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.5fr)]">
           <span>Coverage area</span>
@@ -372,6 +484,7 @@ export function CaliforniaPrivacyCoverageChecklistCard({
                         {getAssessmentStatusLabel(item.assessmentStatus)}
                       </span>
                     </div>
+                    <DebugConfidenceSummary item={item} />
                   </div>
                 </div>
                 <p className="text-xs leading-5 text-slate-500 md:hidden">{item.note}</p>

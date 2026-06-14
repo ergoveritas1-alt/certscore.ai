@@ -1,0 +1,227 @@
+{
+  "scanId": "fixture_policy_surface_positive",
+  "url": "https://example.com",
+  "normalizedUrl": "https://example.com/",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "completedAt": "2026-01-01T00:00:01.000Z",
+  "region": "fixture",
+  "scanProfile": {
+    "profileId": "policy",
+    "label": "Saved-bundle policy fixture",
+    "targetDurationMs": 12000,
+    "internalBudgetMs": 15000,
+    "enabledModules": [
+      "policySurfaceScanner"
+    ]
+  },
+  "modulesRun": [
+    {
+      "moduleName": "policySurfaceScanner",
+      "status": "completed",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "completedAt": "2026-01-01T00:00:01.000Z",
+      "durationMs": 1000,
+      "evidenceRefs": [],
+      "errors": []
+    }
+  ],
+  "runtimeTimeline": [],
+  "networkEvents": [],
+  "networkResponseEvents": [],
+  "cookieEvents": [],
+  "cookieSnapshots": [],
+  "storageSnapshots": [],
+  "scriptEvents": [],
+  "iframeEvents": [],
+  "consentUiObservations": [],
+  "consentInteractionEvents": [],
+  "policySurfaceObservations": [
+    {
+      "observationId": "policy_surface_privacy",
+      "sourceScanner": "policy_surface",
+      "scenario": "policy_surface_review",
+      "consentStateAtTime": "not_applicable",
+      "surfaceType": "privacy_policy",
+      "url": "/privacy",
+      "normalizedUrl": "https://example.com/privacy",
+      "linkText": "Privacy Policy",
+      "surroundingTextExcerpt": "Footer links include Privacy Policy and Your Privacy Choices.",
+      "discoveryMethod": "footer_link",
+      "status": "fetched",
+      "httpStatus": 200,
+      "title": "Privacy Policy",
+      "textExcerpt": "Privacy Policy. We use cookies for analytics and advertising. Service providers include Google Analytics, Meta, and Microsoft Clarity.",
+      "boundedTextExcerptIds": [
+        "policy_excerpt_privacy"
+      ],
+      "observedTopics": [
+        "cookies",
+        "analytics",
+        "advertising",
+        "third_party_disclosures"
+      ],
+      "mentionedVendors": [
+        "Google Analytics",
+        "Meta",
+        "Microsoft Clarity"
+      ],
+      "mentionedPurposes": [
+        "analytics",
+        "advertising"
+      ],
+      "mentionedRights": [],
+      "mentionedControls": [],
+      "lastUpdatedText": "Last updated: May 1, 2026",
+      "evidenceRefs": [
+        {
+          "refId": "ref_policy_excerpt_privacy",
+          "artifactId": "policy_excerpt_privacy",
+          "eventType": "policy_surface",
+          "url": "https://example.com/privacy",
+          "excerpt": "Privacy Policy. We use cookies for analytics and advertising. Service providers include Google Analytics, Meta, and Microsoft Clarity."
+        }
+      ],
+      "artifactRefs": [
+        {
+          "artifactId": "policy_excerpt_privacy",
+          "artifactType": "other",
+          "path": "policy_excerpt_privacy.txt",
+          "sourceScanner": "policy_surface",
+          "scenario": "policy_surface_review",
+          "sensitivity": "redacted",
+          "redactionStatus": "redacted",
+          "relatedEventIds": [],
+          "label": "privacy_policy excerpt"
+        }
+      ],
+      "assistMetadata": [],
+      "confidence": 0.86,
+      "directVsInferred": "direct"
+    },
+    {
+      "observationId": "policy_surface_choices",
+      "sourceScanner": "policy_surface",
+      "scenario": "policy_surface_review",
+      "consentStateAtTime": "not_applicable",
+      "surfaceType": "your_privacy_choices",
+      "url": "/privacy-choices",
+      "normalizedUrl": "https://example.com/privacy-choices",
+      "linkText": "Your Choices",
+      "surroundingTextExcerpt": "Footer links include Privacy Policy and Your Choices.",
+      "discoveryMethod": "nano_assisted_link_classification",
+      "status": "fetched",
+      "httpStatus": 200,
+      "title": "Your Privacy Choices",
+      "textExcerpt": "Your Privacy Choices. Global Privacy Control signals are honored as requests to opt out of sale or share and targeted advertising.",
+      "boundedTextExcerptIds": [
+        "policy_excerpt_choices"
+      ],
+      "observedTopics": [
+        "global_privacy_control",
+        "sale_or_share",
+        "targeted_advertising",
+        "do_not_sell_or_share"
+      ],
+      "mentionedVendors": [],
+      "mentionedPurposes": [
+        "targeted_advertising"
+      ],
+      "mentionedRights": [
+        "do_not_sell_or_share"
+      ],
+      "mentionedControls": [
+        "global_privacy_control"
+      ],
+      "evidenceRefs": [
+        {
+          "refId": "ref_policy_excerpt_choices",
+          "artifactId": "policy_excerpt_choices",
+          "eventType": "policy_surface",
+          "url": "https://example.com/privacy-choices",
+          "excerpt": "Your Privacy Choices. Global Privacy Control signals are honored as requests to opt out of sale or share and targeted advertising."
+        }
+      ],
+      "artifactRefs": [
+        {
+          "artifactId": "policy_excerpt_choices",
+          "artifactType": "other",
+          "path": "policy_excerpt_choices.txt",
+          "sourceScanner": "policy_surface",
+          "scenario": "policy_surface_review",
+          "sensitivity": "redacted",
+          "redactionStatus": "redacted",
+          "relatedEventIds": [],
+          "label": "your_privacy_choices excerpt"
+        }
+      ],
+      "assistMetadata": [
+        {
+          "assistId": "nano_policy_links_fixture",
+          "modelAssistProvider": "nano",
+          "assistType": "link_classification",
+          "inputEvidenceRefs": [],
+          "inputExcerptIds": [],
+          "outputSchemaVersion": "policy-assist.v1",
+          "confidence": 0.9,
+          "uncertaintyNotes": [
+            "Ambiguous choices text."
+          ],
+          "evidenceRefs": [],
+          "usedForFinalFinding": false
+        }
+      ],
+      "confidence": 0.84,
+      "directVsInferred": "mixed"
+    }
+  ],
+  "screenshots": [],
+  "domSnapshots": [],
+  "normalizedVendorObservations": [],
+  "observedJourneys": [],
+  "derivedRuntimeSignals": {
+    "thirdPartyVendorsObserved": false,
+    "preConsentTrackingObserved": false,
+    "thirdPartyCookiesPreConsentObserved": false,
+    "consentBannerLikelyPresent": false,
+    "sessionReplayOrBehavioralAnalyticsObserved": false,
+    "journeySummary": {
+      "journeyCount": 0,
+      "vendorJourneyCount": 0,
+      "productJourneyCount": 0,
+      "trackerJourneyCount": 0,
+      "cookieJourneyCount": 0,
+      "scriptJourneyCount": 0,
+      "endpointJourneyCount": 0,
+      "activeCollectionJourneyCount": 0,
+      "consentManagementJourneyCount": 0,
+      "notes": []
+    },
+    "notes": []
+  },
+  "artifactRefs": [
+    {
+      "artifactId": "policy_excerpt_privacy",
+      "artifactType": "other",
+      "path": "policy_excerpt_privacy.txt",
+      "sourceScanner": "policy_surface",
+      "scenario": "policy_surface_review",
+      "sensitivity": "redacted",
+      "redactionStatus": "redacted",
+      "relatedEventIds": [],
+      "label": "privacy_policy excerpt"
+    },
+    {
+      "artifactId": "policy_excerpt_choices",
+      "artifactType": "other",
+      "path": "policy_excerpt_choices.txt",
+      "sourceScanner": "policy_surface",
+      "scenario": "policy_surface_review",
+      "sensitivity": "redacted",
+      "redactionStatus": "redacted",
+      "relatedEventIds": [],
+      "label": "your_privacy_choices excerpt"
+    }
+  ],
+  "scannerVersion": "certscore-scan-core-v2-fixture",
+  "schemaVersion": "certscore.v2.alpha.1"
+}

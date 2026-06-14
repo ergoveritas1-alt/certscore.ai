@@ -19,7 +19,12 @@
       "@website-signal-risk-scanner/web-bot-auth": ["packages/web-bot-auth/src"],
       "@website-signal-risk-scanner/validation-shared": ["packages/validation-shared/src"],
       "@website-signal-risk-scanner/db": ["packages/db/src"],
-      "@website-signal-risk-scanner/ui": ["packages/ui/src"]
+      "@website-signal-risk-scanner/ui": ["packages/ui/src"],
+      "@certscore/contracts": ["packages/certscore-contracts/src"],
+      "@certscore/vendor-resolver": ["packages/certscore-vendor-resolver/src"],
+      "@certscore/scan-core": ["packages/certscore-scan-core/src"],
+      "@certscore/review-engine": ["packages/certscore-review-engine/src"],
+      "@certscore/report-adapter": ["packages/certscore-report-adapter/src"]
     }
   }
 }

@@ -34,9 +34,15 @@ export type CaliforniaPrivacyCoverageAssessmentStatus =
 export type CaliforniaPrivacyCoverageEvidenceState = "not_observed" | "not_testable" | "observed";
 export type CaliforniaPrivacyCoverageChecklistTone = "neutral" | "review" | "warning" | "muted";
 
+export type CaliforniaPrivacyChecklistDebugConfidence = {
+  improveConfidence: string[];
+  score: number;
+};
+
 export type CaliforniaPrivacyCoverageChecklistItem = {
   assessmentStatus: CaliforniaPrivacyCoverageAssessmentStatus;
   criticalEvidence: CaliforniaPrivacyCoverageCriticalEvidence;
+  debugConfidence?: CaliforniaPrivacyChecklistDebugConfidence;
   evidenceState: CaliforniaPrivacyCoverageEvidenceState;
   id: string;
   label: string;

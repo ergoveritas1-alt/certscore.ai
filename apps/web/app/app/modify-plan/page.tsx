@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CancelSubscriptionForm } from "../../../components/plans/cancel-subscription-form";
 import { ModifyPlanSelectForm } from "../../../components/plans/modify-plan-select-form";
 import { SCAN_ACCESS, formatScanThrottleIntervalLabel } from "../../../lib/scan-access";
+import { isSelfServePurchasingEnabled } from "../../../server/access-control";
 import { getDashboardContext } from "../../../server/auth";
 import {
   openStripeBillingPortalFormAction,
@@ -35,6 +36,8 @@ function getBillingNotice(code: string | undefined) {
       return "That subscription is already cancelled.";
     case "no-active-subscription":
       return "There is no active Stripe subscription to cancel for this account.";
+    case "purchases-paused":
+      return "Self-serve checkout is temporarily paused.";
     default:
       return null;
   }
@@ -55,6 +58,7 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
   const { organization } = await getDashboardContext();
   const resolvedSearchParams = await searchParams;
   const billingMode = getStripeBillingMode();
+  const selfServePurchasingEnabled = isSelfServePurchasingEnabled();
   const billingAccount = await loadBillingAccountForOrganization(organization.id);
   const billingNotice = getBillingNotice(resolvedSearchParams?.billing);
   const hasActiveStripeSubscription = Boolean(
@@ -84,6 +88,12 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
       {!billingMode.enabled ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
           Stripe billing is not configured yet. Missing: {billingMode.missing.join(", ")}.
+        </div>
+      ) : null}
+
+      {!selfServePurchasingEnabled ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
+          Self-serve checkout is temporarily paused. Contact sales for plan changes.
         </div>
       ) : null}
 
@@ -156,7 +166,15 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
                 ) : null}
                 <p>Scan history: {plan.code === "pro" || plan.scanHistoryEnabled ? "Included" : "Not included"}</p>
                 <div className="pt-2">
-                  {billingIntent === "contact_sales" ? (
+                  {billingIntent === "checkout" && !selfServePurchasingEnabled ? (
+                    <button
+                      className="inline-flex h-9 cursor-not-allowed items-center justify-center rounded-md bg-slate-200 px-3 text-sm font-medium text-slate-500"
+                      disabled
+                      type="button"
+                    >
+                      Checkout paused
+                    </button>
+                  ) : billingIntent === "contact_sales" ? (
                     <Link
                       className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
                       href="/contact-sales?source=modify-plan&plan=custom"

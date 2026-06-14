@@ -1,0 +1,11 @@
+# Focused CMP reject reliability follow-up cohort.
+# Internal diagnostic only. Artifact-only. Non-persistent. Not customer-facing report scope.
+
+https://www.netlify.com/
+https://www.ikea.com/
+https://www.unilever.com/
+https://www.ibm.com/
+https://www.theguardian.com/
+https://www.segment.com/
+https://www.forbes.com/
+https://www.bbc.com/

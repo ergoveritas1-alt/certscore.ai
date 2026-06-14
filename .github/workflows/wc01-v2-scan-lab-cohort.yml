@@ -1,0 +1,119 @@
+name: WC01 v2 Scan Lab Cohort
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Number of cohort sites to scan"
+        required: false
+        default: "50"
+      start_at:
+        description: "1-based index in docs/certscore-v2/calibration-urls-lab-50.txt"
+        required: false
+        default: "1"
+      profile:
+        description: "Scan Lab profile"
+        required: false
+        default: "standard"
+  schedule:
+    - cron: "0 9 * * 1"
+
+jobs:
+  cohort:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+
+    steps:
+      - name: Check cohort secret availability
+        id: preflight
+        run: |
+          if [ -n "${OPENAI_API_KEY}" ]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+            echo "Skipping v2 Scan Lab cohort because OPENAI_API_KEY is not configured."
+          fi
+
+      - name: Checkout
+        if: steps.preflight.outputs.enabled == 'true'
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        if: steps.preflight.outputs.enabled == 'true'
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        if: steps.preflight.outputs.enabled == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.preflight.outputs.enabled == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        if: steps.preflight.outputs.enabled == 'true'
+        run: pnpm --filter @certscore/scan-core exec playwright install chromium
+
+      - name: Prepare local env file
+        if: steps.preflight.outputs.enabled == 'true'
+        run: |
+          mkdir -p apps/web
+          {
+            echo "OPENAI_API_KEY=${OPENAI_API_KEY}"
+            echo "NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}"
+          } > apps/web/.env.local
+
+      - name: Build v2 packages
+        if: steps.preflight.outputs.enabled == 'true'
+        run: |
+          pnpm --filter @certscore/contracts build
+          pnpm --filter @certscore/vendor-resolver build
+          pnpm --filter @certscore/review-engine build
+          pnpm --filter @certscore/report-adapter build
+
+      - name: Run Scan Lab cohort
+        if: steps.preflight.outputs.enabled == 'true'
+        env:
+          LIMIT: ${{ github.event.inputs.limit || '50' }}
+          PROFILE: ${{ github.event.inputs.profile || 'standard' }}
+          START_AT: ${{ github.event.inputs.start_at || '1' }}
+        run: |
+          pnpm v2:wc01-scan-lab-cohort \
+            --profile "${PROFILE}" \
+            --start-at "${START_AT}" \
+            --limit "${LIMIT}" \
+            --out-dir artifacts/v2-scan-lab-cohort-ci
+
+      - name: Verify Scan Lab cohort
+        if: steps.preflight.outputs.enabled == 'true'
+        env:
+          LIMIT: ${{ github.event.inputs.limit || '50' }}
+        run: |
+          pnpm v2:wc01-verify-scan-lab-cohort \
+            --summary artifacts/v2-scan-lab-cohort-ci/Wc01V2ScanLabCohort.summary.json \
+            --min-sites "${LIMIT}"
+
+      - name: Capture fixture candidates
+        if: steps.preflight.outputs.enabled == 'true'
+        run: |
+          pnpm v2:wc01-capture-cohort-fixtures \
+            --summary artifacts/v2-scan-lab-cohort-ci/Wc01V2ScanLabCohort.summary.json \
+            --out-dir artifacts/v2-scan-lab-cohort-fixture-candidates-ci
+
+      - name: Upload cohort artifacts
+        if: steps.preflight.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v5
+        with:
+          name: wc01-v2-scan-lab-cohort
+          path: |
+            artifacts/v2-scan-lab-cohort-ci
+            artifacts/v2-scan-lab-cohort-fixture-candidates-ci
+          if-no-files-found: error

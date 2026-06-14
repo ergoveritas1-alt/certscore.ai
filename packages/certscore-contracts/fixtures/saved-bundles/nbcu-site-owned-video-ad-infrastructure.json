@@ -1,0 +1,275 @@
+{
+  "scanId": "fixture_nbcu_site_owned_video_ad_infrastructure",
+  "url": "https://example.com",
+  "normalizedUrl": "https://example.com/",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "completedAt": "2026-01-01T00:00:02.000Z",
+  "region": "fixture",
+  "scanProfile": {
+    "profileId": "quick",
+    "label": "Saved-bundle fixture",
+    "targetDurationMs": 12000,
+    "internalBudgetMs": 15000,
+    "enabledModules": [
+      "preConsentRuntimeScanner"
+    ]
+  },
+  "modulesRun": [
+    {
+      "moduleName": "preConsentRuntimeScanner",
+      "status": "completed",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "completedAt": "2026-01-01T00:00:02.000Z",
+      "durationMs": 2000,
+      "evidenceRefs": [],
+      "errors": []
+    }
+  ],
+  "runtimeTimeline": [
+    {
+      "eventId": "net_nbcu_site_owned",
+      "eventType": "network_request",
+      "requestId": "req_nbcu_site_owned",
+      "timestampMs": 500,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+      "hostname": "video-ads-module.ad-tech.nbcuni.com",
+      "registrableDomain": "nbcuni.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.95,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "fetch",
+      "requestUrl": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+      "normalizedUrl": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+      "requestHostname": "video-ads-module.ad-tech.nbcuni.com",
+      "path": "/v1/freewheel-params",
+      "queryParamNames": [],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": false,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": true,
+      "endpointCategory": "site_owned_ad_module",
+      "attributionStatus": "site_owned_infrastructure",
+      "attributionReason": "site_owned_video_ad_module",
+      "resolverBasis": [
+        "site_owned_infrastructure:nbcuni_video_ad_module"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    }
+  ],
+  "networkEvents": [
+    {
+      "eventId": "net_nbcu_site_owned",
+      "eventType": "network_request",
+      "requestId": "req_nbcu_site_owned",
+      "timestampMs": 500,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+      "hostname": "video-ads-module.ad-tech.nbcuni.com",
+      "registrableDomain": "nbcuni.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.95,
+      "directVsInferred": "direct",
+      "method": "GET",
+      "resourceType": "fetch",
+      "requestUrl": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+      "normalizedUrl": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+      "requestHostname": "video-ads-module.ad-tech.nbcuni.com",
+      "path": "/v1/freewheel-params",
+      "queryParamNames": [],
+      "identifierParamNames": [],
+      "advertisingClickIdParamNames": [],
+      "tagContainerParamNames": [],
+      "hasIdentifierLikeParameters": false,
+      "hasAdvertisingClickIdParameters": false,
+      "hasTagContainerParameters": false,
+      "isMainFrame": false,
+      "isSubFrame": false,
+      "isThirdParty": true,
+      "redirectChainRequestIds": [],
+      "requestHeaders": {
+        "cookieHeaderPresent": false,
+        "cookieNames": [],
+        "authorizationHeaderPresent": false
+      },
+      "cookieHeaderPresent": false,
+      "cookieNamesSent": [],
+      "authorizationHeaderPresent": false,
+      "collectionEndpointObserved": true,
+      "endpointCategory": "site_owned_ad_module",
+      "attributionStatus": "site_owned_infrastructure",
+      "attributionReason": "site_owned_video_ad_module",
+      "resolverBasis": [
+        "site_owned_infrastructure:nbcuni_video_ad_module"
+      ],
+      "relatedEvidenceRefs": [],
+      "requestPayloadSignals": {
+        "bodyPresent": false,
+        "bodyFieldNames": []
+      }
+    }
+  ],
+  "networkResponseEvents": [
+    {
+      "eventId": "resp_net_nbcu_site_owned",
+      "eventType": "network_response",
+      "requestId": "req_nbcu_site_owned",
+      "timestampMs": 520,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+      "hostname": "video-ads-module.ad-tech.nbcuni.com",
+      "registrableDomain": "nbcuni.com",
+      "firstParty": false,
+      "thirdParty": true,
+      "evidenceRefs": [],
+      "confidence": 0.92,
+      "directVsInferred": "direct",
+      "responseUrl": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+      "normalizedUrl": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+      "status": 200,
+      "contentType": "application/javascript",
+      "setCookieHeaders": [],
+      "setCookieMetadata": [],
+      "cookieNamesSet": [],
+      "cacheHeaders": {},
+      "accessControlHeaders": {}
+    }
+  ],
+  "cookieEvents": [],
+  "cookieSnapshots": [],
+  "storageSnapshots": [],
+  "scriptEvents": [],
+  "iframeEvents": [],
+  "consentUiObservations": [
+    {
+      "observationId": "consent_none",
+      "observedAtMs": 1000,
+      "likelyPresent": false,
+      "basis": [
+        "no_banner_keywords_detected"
+      ],
+      "evidenceRefs": [],
+      "confidence": 0.55
+    }
+  ],
+  "consentInteractionEvents": [],
+  "policySurfaceObservations": [],
+  "screenshots": [],
+  "domSnapshots": [],
+  "normalizedVendorObservations": [],
+  "observedJourneys": [
+    {
+      "journeyId": "journey_nbcu_site_owned",
+      "journeyType": "endpoint",
+      "key": "endpoint:nbcu_site_owned",
+      "displayName": "video-ads-module.ad-tech.nbcuni.com",
+      "sourceScanner": "pre_consent_runtime",
+      "scenariosObserved": [
+        "fresh_pre_consent"
+      ],
+      "firstObservedAtMs": 500,
+      "lastObservedAtMs": 500,
+      "firstObservedConsentState": "pre_consent",
+      "consentStatesObserved": [
+        "pre_consent"
+      ],
+      "firstPartyOrThirdParty": "third_party",
+      "entryPoint": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+      "relatedCookies": [],
+      "relatedScripts": [],
+      "relatedEndpoints": [
+        "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params"
+      ],
+      "relatedVendors": [],
+      "observedBehaviors": [
+        "third_party_request_observed",
+        "collection_endpoint_observed"
+      ],
+      "attributionStatus": "site_owned_infrastructure",
+      "attributionReason": "site_owned_video_ad_module",
+      "resolverBasis": [
+        "site_owned_infrastructure:nbcuni_video_ad_module"
+      ],
+      "relatedEvidenceRefs": [],
+      "eventRefs": [
+        {
+          "eventId": "net_nbcu_site_owned",
+          "eventType": "network_request",
+          "timestampMs": 500,
+          "url": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params",
+          "behavior": "third_party_request_observed",
+          "firstParty": false,
+          "thirdParty": true
+        }
+      ],
+      "confidence": 0.52,
+      "directVsInferred": "inferred",
+      "evidenceRefs": [
+        {
+          "refId": "ref_net_nbcu_site_owned",
+          "eventId": "net_nbcu_site_owned",
+          "eventType": "network_request",
+          "url": "https://video-ads-module.ad-tech.nbcuni.com/v1/freewheel-params"
+        }
+      ],
+      "relatedVendorObservationIds": [],
+      "entryPointSourceEventId": "net_nbcu_site_owned"
+    }
+  ],
+  "derivedRuntimeSignals": {
+    "thirdPartyVendorsObserved": false,
+    "preConsentTrackingObserved": false,
+    "thirdPartyCookiesPreConsentObserved": false,
+    "consentBannerLikelyPresent": false,
+    "sessionReplayOrBehavioralAnalyticsObserved": false,
+    "journeySummary": {
+      "journeyCount": 1,
+      "vendorJourneyCount": 0,
+      "productJourneyCount": 0,
+      "trackerJourneyCount": 0,
+      "cookieJourneyCount": 0,
+      "scriptJourneyCount": 0,
+      "endpointJourneyCount": 1,
+      "activeCollectionJourneyCount": 1,
+      "consentManagementJourneyCount": 0,
+      "notes": []
+    },
+    "notes": []
+  },
+  "artifactRefs": [],
+  "scannerVersion": "saved-bundle-fixture",
+  "schemaVersion": "certscore.v2.alpha.1"
+}

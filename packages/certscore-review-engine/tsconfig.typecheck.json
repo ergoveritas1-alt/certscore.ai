@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../",
+    "paths": {
+      "@certscore/contracts": ["packages/certscore-contracts/src"],
+      "@certscore/vendor-resolver": ["packages/certscore-vendor-resolver/src"]
+    }
+  }
+}

@@ -1,0 +1,259 @@
+{
+  "scanId": "fixture_cmp_cookie",
+  "url": "https://example.com",
+  "normalizedUrl": "https://example.com/",
+  "startedAt": "2026-01-01T00:00:00.000Z",
+  "completedAt": "2026-01-01T00:00:02.000Z",
+  "region": "fixture",
+  "scanProfile": {
+    "profileId": "quick",
+    "label": "Saved-bundle fixture",
+    "targetDurationMs": 12000,
+    "internalBudgetMs": 15000,
+    "enabledModules": [
+      "preConsentRuntimeScanner"
+    ]
+  },
+  "modulesRun": [
+    {
+      "moduleName": "preConsentRuntimeScanner",
+      "status": "completed",
+      "startedAt": "2026-01-01T00:00:00.000Z",
+      "completedAt": "2026-01-01T00:00:02.000Z",
+      "durationMs": 2000,
+      "evidenceRefs": [],
+      "errors": []
+    }
+  ],
+  "runtimeTimeline": [
+    {
+      "eventId": "cookie_optanon",
+      "eventType": "cookie",
+      "timestampMs": 700,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://example.com",
+      "hostname": "example.com",
+      "registrableDomain": "example.com",
+      "firstParty": true,
+      "thirdParty": false,
+      "evidenceRefs": [],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "cookieName": "OptanonConsent",
+      "cookieDomain": "example.com",
+      "cookiePath": "/",
+      "secure": true,
+      "httpOnly": false,
+      "cookieParty": "first_party",
+      "vendorAssociated": true,
+      "associatedVendorRef": "vendor_onetrust",
+      "cookiePurpose": "consent_management",
+      "cookieClassificationBasis": [
+        "first_party",
+        "vendor:OneTrust",
+        "purpose:consent_management"
+      ],
+      "operation": "set_cookie_header",
+      "valueRedacted": true
+    }
+  ],
+  "networkEvents": [],
+  "networkResponseEvents": [],
+  "cookieEvents": [
+    {
+      "eventId": "cookie_optanon",
+      "eventType": "cookie",
+      "timestampMs": 700,
+      "sourceScanner": "pre_consent_runtime",
+      "scenario": "fresh_pre_consent",
+      "consentStateAtTime": "pre_consent",
+      "pagePhase": "initial_navigation",
+      "url": "https://example.com",
+      "hostname": "example.com",
+      "registrableDomain": "example.com",
+      "firstParty": true,
+      "thirdParty": false,
+      "evidenceRefs": [],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "cookieName": "OptanonConsent",
+      "cookieDomain": "example.com",
+      "cookiePath": "/",
+      "secure": true,
+      "httpOnly": false,
+      "cookieParty": "first_party",
+      "vendorAssociated": true,
+      "associatedVendorRef": "vendor_onetrust",
+      "cookiePurpose": "consent_management",
+      "cookieClassificationBasis": [
+        "first_party",
+        "vendor:OneTrust",
+        "purpose:consent_management"
+      ],
+      "operation": "set_cookie_header",
+      "valueRedacted": true
+    }
+  ],
+  "cookieSnapshots": [],
+  "storageSnapshots": [],
+  "scriptEvents": [],
+  "iframeEvents": [],
+  "consentUiObservations": [
+    {
+      "observationId": "consent_none",
+      "observedAtMs": 1000,
+      "likelyPresent": false,
+      "basis": [
+        "no_banner_keywords_detected"
+      ],
+      "evidenceRefs": [],
+      "confidence": 0.55
+    }
+  ],
+  "consentInteractionEvents": [],
+  "policySurfaceObservations": [],
+  "screenshots": [],
+  "domSnapshots": [],
+  "normalizedVendorObservations": [
+    {
+      "observationId": "vendor_onetrust",
+      "entity": "OneTrust, LLC",
+      "vendor": "OneTrust",
+      "product": "OneTrust CMP",
+      "purpose": "consent_management",
+      "confidence": 0.95,
+      "basis": [
+        "onetrust_cmp_script_or_cookie"
+      ],
+      "regulatoryRelevance": [
+        "consent_management"
+      ],
+      "matchedEvidenceIds": [
+        "cookie_optanon"
+      ],
+      "matchedHostnames": [
+        "example.com"
+      ],
+      "matchedUrls": [],
+      "matchedCookieNames": [
+        "OptanonConsent"
+      ],
+      "matchedEvidenceRefs": [
+        {
+          "refId": "ref_cookie_optanon",
+          "eventId": "cookie_optanon",
+          "eventType": "cookie",
+          "label": "OptanonConsent",
+          "url": "https://example.com"
+        }
+      ],
+      "matchSources": [
+        {
+          "source": "set_cookie",
+          "sourceEventId": "cookie_optanon",
+          "sourceEventType": "cookie",
+          "sourceScanner": "pre_consent_runtime",
+          "scenario": "fresh_pre_consent",
+          "consentStateAtTime": "pre_consent",
+          "matchedField": "cookie_name",
+          "matchedValueRedacted": "OptanonConsent",
+          "resolverBasis": [
+            "onetrust_cmp_script_or_cookie"
+          ],
+          "confidence": 0.95
+        }
+      ]
+    }
+  ],
+  "observedJourneys": [
+    {
+      "journeyId": "journey_cmp_cookie",
+      "journeyType": "cookie",
+      "key": "cookie:optanonconsent",
+      "displayName": "OptanonConsent",
+      "entity": "OneTrust, LLC",
+      "vendor": "OneTrust",
+      "product": "OneTrust CMP",
+      "purpose": "consent_management",
+      "sourceScanner": "pre_consent_runtime",
+      "scenariosObserved": [
+        "fresh_pre_consent"
+      ],
+      "firstObservedAtMs": 700,
+      "lastObservedAtMs": 700,
+      "firstObservedConsentState": "pre_consent",
+      "consentStatesObserved": [
+        "pre_consent"
+      ],
+      "firstPartyOrThirdParty": "first_party",
+      "entryPoint": "https://example.com",
+      "relatedCookies": [
+        "OptanonConsent"
+      ],
+      "relatedScripts": [],
+      "relatedEndpoints": [],
+      "relatedVendors": [
+        "OneTrust"
+      ],
+      "observedBehaviors": [
+        "cookie_set",
+        "consent_management_observed"
+      ],
+      "resolverBasis": [],
+      "relatedEvidenceRefs": [],
+      "eventRefs": [
+        {
+          "eventId": "cookie_optanon",
+          "eventType": "cookie",
+          "timestampMs": 700,
+          "url": "https://example.com",
+          "label": "OptanonConsent",
+          "behavior": "cookie_set",
+          "firstParty": true,
+          "thirdParty": false
+        }
+      ],
+      "confidence": 0.9,
+      "directVsInferred": "direct",
+      "evidenceRefs": [
+        {
+          "refId": "ref_cookie_optanon",
+          "eventId": "cookie_optanon",
+          "eventType": "cookie",
+          "label": "OptanonConsent",
+          "url": "https://example.com"
+        }
+      ],
+      "relatedVendorObservationIds": [
+        "vendor_onetrust"
+      ],
+      "entryPointSourceEventId": "cookie_optanon"
+    }
+  ],
+  "derivedRuntimeSignals": {
+    "thirdPartyVendorsObserved": false,
+    "preConsentTrackingObserved": false,
+    "thirdPartyCookiesPreConsentObserved": false,
+    "consentBannerLikelyPresent": false,
+    "sessionReplayOrBehavioralAnalyticsObserved": false,
+    "journeySummary": {
+      "journeyCount": 1,
+      "vendorJourneyCount": 0,
+      "productJourneyCount": 0,
+      "trackerJourneyCount": 0,
+      "cookieJourneyCount": 1,
+      "scriptJourneyCount": 0,
+      "endpointJourneyCount": 0,
+      "activeCollectionJourneyCount": 0,
+      "consentManagementJourneyCount": 1,
+      "notes": []
+    },
+    "notes": []
+  },
+  "artifactRefs": [],
+  "scannerVersion": "saved-bundle-fixture",
+  "schemaVersion": "certscore.v2.alpha.1"
+}
