@@ -119,6 +119,35 @@ async function loadShouldShowRegulatoryChecklistSection() {
   }).shouldShowRegulatoryChecklistSection;
 }
 
+async function loadHomepagePreviewGateIdleLabel() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule = (
+    sharedScanDetailViewImport as unknown as {
+      default?: Record<string, unknown>;
+      "module.exports"?: Record<string, unknown>;
+      getHomepagePreviewGateIdleLabel?: unknown;
+    }
+  ).getHomepagePreviewGateIdleLabel
+    ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+    : (
+        sharedScanDetailViewImport as unknown as {
+          default?: Record<string, unknown>;
+          "module.exports"?: Record<string, unknown>;
+        }
+      ).default ??
+      (
+        sharedScanDetailViewImport as unknown as {
+          default?: Record<string, unknown>;
+          "module.exports"?: Record<string, unknown>;
+        }
+      )["module.exports"] ??
+      (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    getHomepagePreviewGateIdleLabel: (href: string) => string;
+  }).getHomepagePreviewGateIdleLabel;
+}
+
 async function loadExecutiveSummaryScanCondition() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -1771,6 +1800,19 @@ test("buildPreviewExecutiveAccessLimitationNotice preserves limited homepage pre
   assert.equal(notice.review.coverageLabel, "Partial public verification available");
   assert.deepEqual(notice.review.verifiedSurfaces, ["Privacy policy", "Terms of service"]);
   assert.match(notice.finding.shortSummary, /site limited automated access/i);
+});
+
+test("getHomepagePreviewGateIdleLabel distinguishes create-account and sign-in links", async () => {
+  const getHomepagePreviewGateIdleLabel = await loadHomepagePreviewGateIdleLabel();
+
+  assert.equal(
+    getHomepagePreviewGateIdleLabel("/login?mode=create_account&next=%2Fscan%2Fscan-1"),
+    "Create account to view"
+  );
+  assert.equal(
+    getHomepagePreviewGateIdleLabel("/login?next=%2Fscan%2Fscan-1"),
+    "Sign in to view"
+  );
 });
 
 test("deriveExecutiveDisplayedScore clamps homepage preview overall score to the weaker consent subscore when runtime findings are consent-driven", async () => {

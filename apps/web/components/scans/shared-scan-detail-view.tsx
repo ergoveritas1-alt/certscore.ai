@@ -4703,12 +4703,16 @@ function HomepagePreviewGate(input: {
     >
       <PendingButtonLink
         href={input.href}
-        idleContent="Create account to view"
+        idleContent={getHomepagePreviewGateIdleLabel(input.href)}
         pendingContent="Opening..."
         className="pointer-events-auto border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
       />
     </div>
   );
+}
+
+export function getHomepagePreviewGateIdleLabel(href: string) {
+  return href.includes("mode=create_account") ? "Create account to view" : "Sign in to view";
 }
 
 export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailResponse): ScanReportUnifiedFindingState {
