@@ -82,10 +82,29 @@ jobs:
 
       - name: Typecheck corpus tooling
         run: |
-          pnpm exec tsc --noEmit --pretty false --module NodeNext --moduleResolution NodeNext --target ES2022 --types node --skipLibCheck \
-            scripts/build-v2-regulatory-gold-corpus-stage1.ts \
-            scripts/build-v2-regulatory-gold-corpus-stage2.ts \
-            scripts/build-v2-regulatory-gold-corpus-stage3-fixtures.ts \
-            scripts/analyze-v2-regulatory-confidence.ts \
-            scripts/verify-v2-regulatory-gold-corpus-stage2.ts \
-            scripts/verify-v2-regulatory-lane-quality.ts
+          cat > tsconfig.v2-regulatory-ci.tmp.json <<'JSON'
+          {
+            "extends": "./tsconfig.base.json",
+            "compilerOptions": {
+              "noEmit": true,
+              "pretty": false,
+              "module": "NodeNext",
+              "moduleResolution": "NodeNext",
+              "target": "ES2022",
+              "types": ["node"],
+              "skipLibCheck": true,
+              "strict": false,
+              "noImplicitAny": false,
+              "noUncheckedIndexedAccess": false
+            },
+            "include": [
+              "scripts/build-v2-regulatory-gold-corpus-stage1.ts",
+              "scripts/build-v2-regulatory-gold-corpus-stage2.ts",
+              "scripts/build-v2-regulatory-gold-corpus-stage3-fixtures.ts",
+              "scripts/analyze-v2-regulatory-confidence.ts",
+              "scripts/verify-v2-regulatory-gold-corpus-stage2.ts",
+              "scripts/verify-v2-regulatory-lane-quality.ts"
+            ]
+          }
+          JSON
+          pnpm exec tsc -p tsconfig.v2-regulatory-ci.tmp.json
