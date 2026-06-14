@@ -296,6 +296,9 @@ function getEvidenceConfidenceLabel(confidence: CertScoreFinding["confidence"]) 
 function getFindingTypeLabel(finding: CertScoreFinding) {
   const label = `${finding.id} ${finding.label} ${finding.section}`.toLowerCase();
 
+  if (isRegulatoryGapTopFinding(finding)) {
+    return "Regulatory gap";
+  }
   if (label.includes("session_recording") || label.includes("session replay")) {
     return "Session replay";
   }
@@ -322,6 +325,10 @@ function getFindingTypeLabel(finding: CertScoreFinding) {
   }
 
   return "Review signal";
+}
+
+function isRegulatoryGapTopFinding(finding: CertScoreFinding) {
+  return finding.id.startsWith("regulatory_gap__");
 }
 
 function getRecommendedNextStep(finding: CertScoreFinding) {
@@ -4803,6 +4810,7 @@ export function ExecutiveSummaryCard(input: {
                 const criticalityBadge = display.criticality;
                 const cardTone = getFindingCardTone(finding, index === 0, criticalityBadge);
                 const regulatoryMappingIds = getFindingRegulatoryFilterIds(finding);
+                const isRegulatoryGap = isRegulatoryGapTopFinding(finding);
                 return (
                 <div
                   key={finding.id}
@@ -4815,6 +4823,11 @@ export function ExecutiveSummaryCard(input: {
                     <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
                       {getFindingTypeLabel(finding)}
                     </span>
+                    {isRegulatoryGap ? (
+                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-800">
+                        Regulatory checklist gap
+                      </span>
+                    ) : null}
                     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${cardTone.severityBadge}`}>
                       {criticalityBadge}
                       <InfoTip

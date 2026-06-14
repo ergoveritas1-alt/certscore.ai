@@ -11,6 +11,7 @@ import {
 } from "./executive-summary-card";
 import { ADA_ACCESSIBILITY_FIXTURES } from "../../lib/scans/ada-accessibility.fixtures";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
+import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../../lib/scans/rank-findings";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 
@@ -2449,6 +2450,92 @@ test("ExecutiveSummaryCard keeps four or more top findings in an expandable top-
   assert.match(html, /Non-essential tracking continued after reject/);
   assert.match(html, /Session replay service signal observed/);
   assert.match(html, /Automated accessibility issues observed/);
+});
+
+test("ExecutiveSummaryCard renders GDPR and CCPA gap-observed checklist rows as top findings", () => {
+  const regulatoryGapFindings = buildRegulatoryGapTopFindings({
+    californiaPrivacyArea: {
+      id: "california_ccpa_cpra",
+      title: "California privacy",
+      rows: [
+        {
+          assessmentStatus: "gap_observed",
+          evidenceRefs: ["ccpa-row-ref"],
+          id: "do_not_sell_share_availability",
+          label: "Do Not Sell or Share availability",
+          note: "No retained privacy choice path was confirmed."
+        },
+        {
+          assessmentStatus: "checked",
+          id: "privacy_notice_availability",
+          label: "Privacy notice availability",
+          note: "Observed privacy notice."
+        }
+      ]
+    },
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [
+        {
+          assessmentStatus: "gap_observed",
+          evidenceRefs: ["gdpr-row-ref"],
+          id: "pre_consent_third_party_tracking",
+          label: "Pre-consent third-party tracking",
+          note: "Advertising and analytics requests were observed before consent."
+        },
+        {
+          assessmentStatus: "review_signal",
+          id: "runtime_vendor_disclosure_alignment",
+          label: "Runtime vendor disclosure mismatch",
+          note: "Review signal only."
+        }
+      ]
+    }
+  });
+  const html = renderToStaticMarkup(
+    createElement(ExecutiveSummaryCard, {
+      accessLimitationNotice: null,
+      allFindings: regulatoryGapFindings,
+      beforeConsentCookieCount: 1,
+      domainBenchmark: null,
+      finalHost: "example.com",
+      fingerprintReasons: [],
+      fingerprintLabel: "None detected",
+      fingerprintNarrative: "No fingerprinting evidence detected.",
+      landedOnDifferentHost: false,
+      lastScannedAt: "2026-04-21T17:07:47.000Z",
+      posture: "Action Needed",
+      preConsentVendorNames: [],
+      requestedHost: "example.com",
+      resolvedVendorNames: [],
+      score: 72,
+      sessionReplayVendorNames: [],
+      thirdPartyRequestCount: 2,
+      thirdPartyDomains: ["analytics.example"],
+      topFindings: regulatoryGapFindings,
+      accessibilitySignals: {
+        accessibilityStatementPresent: true,
+        wcagErrorCountTotal: 0
+      },
+      agencyMappings: [],
+      regulatoryRisk: makeRegulatoryRisk(),
+      topObservedEntities: [],
+      trackerSummary: "1 third-party domain",
+      unresolvedVendorHosts: [],
+      vendorCategoryCounts: {}
+    })
+  );
+
+  assert.match(html, /Top findings/);
+  assert.match(html, /Regulatory gap/);
+  assert.equal(html.match(/Regulatory checklist gap/g)?.length, 2);
+  assert.match(html, /CCPA\/CPRA gap observed: Do Not Sell or Share availability/);
+  assert.match(html, /GDPR\/ePrivacy gap observed: Pre-consent third-party tracking/);
+  assert.match(html, /No retained privacy choice path was confirmed/);
+  assert.match(html, /not a legal conclusion/);
+  assert.doesNotMatch(html, /Privacy notice availability/);
+  assert.doesNotMatch(html, /Runtime vendor disclosure mismatch/);
 });
 
 test("ExecutiveSummaryCard renders directional finding-density context for surfaced top findings", () => {

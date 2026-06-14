@@ -147,6 +147,7 @@ import { deriveCaliforniaPrivacyCoveragePolicyOutcomes } from "../../lib/scans/c
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
+import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import {
   formatCollectionEndpointType,
 } from "../../lib/scans/tracker-risk";
@@ -6113,28 +6114,6 @@ export function SharedScanDetailView({
     snapshot,
     storedScore: certScoreSummary.score
   });
-  const presentedCertScoreFindings = executiveAccessLimitationNotice
-    ? [executiveAccessLimitationNotice.finding]
-    : allExecutiveFindings;
-  const topExecutiveFindings = executiveAccessLimitationNotice
-    ? [executiveAccessLimitationNotice.finding]
-    : executiveFindingsProjection.topFindings;
-  const publicTopExecutiveFindings = topExecutiveFindings.map((finding) => {
-    const display = getPublicReportFindingDisplay({
-      confidence: finding.confidence,
-      findingId: finding.id,
-      label: finding.label,
-      remediation: finding.remediation,
-      section: finding.section,
-      severity: finding.severity,
-      title: finding.label
-    });
-    return {
-      ...finding,
-      label: display.title,
-      severity: display.criticality
-    };
-  });
   const scanExecutionSummary = deriveScanExecutionSummary({
     accessibilityRuleCountTotal: scanRecord.accessibilityRuleCounts.length,
     authWallDetected: snapshot?.auth_wall_detected === true,
@@ -6210,30 +6189,6 @@ export function SharedScanDetailView({
       severity: example.severity
     }))
   };
-  const scanCalibrationSummary = buildScanCalibrationSummary({
-    accessLimitationNotice: executiveAccessNoticeCardProps,
-    beforeConsentCookieCount: cookiesBeforeConsentCount,
-    coverageLevel: executiveCoverageLevel,
-    domain: scanRecord.scan.domainHostname,
-    domainBenchmark: scanRecord.domainBenchmark,
-    finalHost: certScoreSummary.finalHost,
-    legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
-    pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned) ?? scanRecord.scan.pagesScanned,
-    policySurfaces: executivePolicySurfaces,
-    policyEnrichmentCount: scanRecord.policyEnrichment.length,
-    posture: executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture,
-    requestedHost: certScoreSummary.requestedHost,
-    scanId: scanRecord.scan.id,
-    scanInterruptions: executiveScanInterruptions,
-    scanOutcome: typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null,
-    status: scanRecord.scan.status,
-    thirdPartyDomains: executiveThirdPartyDomains,
-    thirdPartyRequestCount: executiveThirdPartyRequestCount,
-    topFindings: executiveFindingsProjection.topFindings,
-    coverageStatusCards: executiveAccessLimitationNotice ? [executiveAccessLimitationNotice.finding] : [],
-    vendorCount: executiveResolvedVendorNames.length + executiveUnresolvedVendorHosts.length,
-    verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
-  });
   const gdprEprivacyCoverageChecklist = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
     coverageOutcomes: deriveGdprEprivacyCoveragePolicyOutcomes({
@@ -6277,6 +6232,57 @@ export function SharedScanDetailView({
     unifiedFindings: findingEvidenceDiagnostics,
     withholdDeepCheckOnlyRows: !californiaDeepCheckRequested,
     withholdForNonRepresentativeScan: executiveAccessLimitationNotice?.finding.id === "scan_quality_visual_no_go"
+  });
+  const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
+    californiaPrivacyArea: {
+      id: "california_ccpa_cpra",
+      rows: californiaPrivacyCoverageChecklist,
+      title: "California privacy"
+    },
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      rows: gdprEprivacyCoverageChecklist,
+      title: "GDPR / ePrivacy"
+    }
+  });
+  const regulatoryGapTopFindingIds = new Set(regulatoryGapTopFindings.map((finding) => finding.id));
+  const allExecutiveFindingsWithRegulatoryGaps = executiveAccessLimitationNotice
+    ? allExecutiveFindings
+    : [
+        ...regulatoryGapTopFindings,
+        ...allExecutiveFindings.filter((finding) => !regulatoryGapTopFindingIds.has(finding.id))
+      ];
+  const topExecutiveFindings = executiveAccessLimitationNotice
+    ? [executiveAccessLimitationNotice.finding]
+    : [
+        ...regulatoryGapTopFindings,
+        ...executiveFindingsProjection.topFindings.filter(
+          (finding) => !regulatoryGapTopFindingIds.has(finding.id)
+        )
+      ];
+  const scanCalibrationSummary = buildScanCalibrationSummary({
+    accessLimitationNotice: executiveAccessNoticeCardProps,
+    beforeConsentCookieCount: cookiesBeforeConsentCount,
+    coverageLevel: executiveCoverageLevel,
+    domain: scanRecord.scan.domainHostname,
+    domainBenchmark: scanRecord.domainBenchmark,
+    finalHost: certScoreSummary.finalHost,
+    legalCoverageScore: getFiniteNumber(scanRecord.snapshot?.legal_coverage_score),
+    pagesScanned: getFiniteNumber(scanRecord.snapshot?.pages_scanned) ?? scanRecord.scan.pagesScanned,
+    policySurfaces: executivePolicySurfaces,
+    policyEnrichmentCount: scanRecord.policyEnrichment.length,
+    posture: executiveAccessLimitationNotice ? "Watch" : executiveFindingsProjection.posture,
+    requestedHost: certScoreSummary.requestedHost,
+    scanId: scanRecord.scan.id,
+    scanInterruptions: executiveScanInterruptions,
+    scanOutcome: typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null,
+    status: scanRecord.scan.status,
+    thirdPartyDomains: executiveThirdPartyDomains,
+    thirdPartyRequestCount: executiveThirdPartyRequestCount,
+    topFindings: topExecutiveFindings,
+    coverageStatusCards: executiveAccessLimitationNotice ? [executiveAccessLimitationNotice.finding] : [],
+    vendorCount: executiveResolvedVendorNames.length + executiveUnresolvedVendorHosts.length,
+    verifiedPublicSurfacesCount: getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)
   });
   const regulatoryLensCounts = {
     beforeConsentCookieCount: cookiesBeforeConsentCount,
@@ -6393,7 +6399,7 @@ export function SharedScanDetailView({
             <>
               <ExecutiveSummaryCard
                 accessLimitationNotice={executiveAccessNoticeCardProps}
-                allFindings={allExecutiveFindings}
+                allFindings={allExecutiveFindingsWithRegulatoryGaps}
                 accessibilitySignals={executiveAccessibilitySignals}
             agencyMappings={scanRecord.agencyMappings}
             beforeConsentCookieCount={cookiesBeforeConsentCount}
