@@ -19,6 +19,11 @@ COPY packages/shared ./packages/shared
 COPY packages/ui ./packages/ui
 COPY packages/db ./packages/db
 COPY packages/validation-shared ./packages/validation-shared
+COPY packages/certscore-contracts ./packages/certscore-contracts
+COPY packages/certscore-vendor-resolver ./packages/certscore-vendor-resolver
+COPY packages/certscore-review-engine ./packages/certscore-review-engine
+COPY packages/certscore-report-adapter ./packages/certscore-report-adapter
+COPY packages/certscore-scan-core ./packages/certscore-scan-core
 COPY scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
 COPY scripts/insert-integration-api-key.mjs ./scripts/insert-integration-api-key.mjs
 
@@ -33,13 +38,23 @@ RUN rm -rf \
   ./packages/shared/dist \
   ./packages/ui/dist \
   ./packages/db/dist \
-  ./packages/validation-shared/dist
+  ./packages/validation-shared/dist \
+  ./packages/certscore-contracts/dist \
+  ./packages/certscore-vendor-resolver/dist \
+  ./packages/certscore-review-engine/dist \
+  ./packages/certscore-report-adapter/dist \
+  ./packages/certscore-scan-core/dist
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @website-signal-risk-scanner/shared build
 RUN pnpm --filter @website-signal-risk-scanner/ui build
 RUN pnpm --filter @website-signal-risk-scanner/db build
 RUN pnpm --filter @website-signal-risk-scanner/validation-shared build
+RUN pnpm --filter @certscore/contracts build
+RUN pnpm --filter @certscore/vendor-resolver build
+RUN pnpm --filter @certscore/review-engine build
+RUN pnpm --filter @certscore/report-adapter build
+RUN pnpm --filter @certscore/scan-core build
 RUN pnpm --filter @website-signal-risk-scanner/web build
 
 FROM node:22-bookworm-slim AS runner
