@@ -1,8 +1,19 @@
 "use client";
 
 import { Button } from "@website-signal-risk-scanner/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import {
+  ScanSubmitProgressBar,
+  estimateScanProgressForOptions,
+  type ScanProgressEstimate
+} from "../../../../components/scans/scan-submit-progress";
+
+export {
+  calculateDisplayedScanProgress,
+  describeScanProgressPhase,
+  estimateScanProgressForOptions
+} from "../../../../components/scans/scan-submit-progress";
 
 type V2ScanLabSubmitButtonProps = {
   className?: string;
@@ -11,12 +22,20 @@ type V2ScanLabSubmitButtonProps = {
 };
 
 const SUBMIT_RECOVERY_TIMEOUT_MS = 12 * 60 * 1_000;
-const SUBMIT_IDLE_RECOVERY_TIMEOUT_MS = 3_000;
 const DEFAULT_SCAN_ESTIMATE_MS = 28_000;
+const SUBMITTING_DATA_ATTRIBUTE = "v2ScanLabSubmitting";
 
-type ScanProgressEstimate = {
+type V2ScanLabSubmitEventDetail = {
   estimatedDurationMs: number;
   modeLabel: string;
+  submittedAtMs: number;
+  url: string;
+};
+
+type V2ScanLabPendingOverlayProps = {
+  artifactStatus?: string;
+  scanStatus?: string;
+  selectedChainKey?: string;
 };
 
 export function V2ScanLabSubmitControl({
@@ -45,6 +64,8 @@ export function V2ScanLabSubmitControl({
 
     const handleSubmit = () => {
       const submittedAtMs = Date.now();
+      const estimate = estimateScanProgress(form);
+      const submittedUrl = getSubmittedUrl(form);
       if (scanStartedInputRef.current) {
         scanStartedInputRef.current.value = String(submittedAtMs);
       }
@@ -52,7 +73,16 @@ export function V2ScanLabSubmitControl({
         details.removeAttribute("open");
       });
       form.dataset.submitted = "true";
-      setProgressEstimate(estimateScanProgress(form));
+      document.documentElement.dataset[SUBMITTING_DATA_ATTRIBUTE] = "true";
+      window.dispatchEvent(new CustomEvent<V2ScanLabSubmitEventDetail>("v2-scan-lab-submit", {
+        detail: {
+          estimatedDurationMs: estimate.estimatedDurationMs,
+          modeLabel: estimate.modeLabel,
+          submittedAtMs,
+          url: submittedUrl,
+        },
+      }));
+      setProgressEstimate(estimate);
       setSubmitted(true);
       setStartedAtMs((current) => current ?? submittedAtMs);
     };
@@ -90,6 +120,7 @@ export function V2ScanLabSubmitControl({
       if (form) {
         delete form.dataset.submitted;
       }
+      delete document.documentElement.dataset[SUBMITTING_DATA_ATTRIBUTE];
       setSubmitted(false);
       setStartedAtMs(null);
     }, SUBMIT_RECOVERY_TIMEOUT_MS);
@@ -99,40 +130,6 @@ export function V2ScanLabSubmitControl({
     };
   }, [submitted]);
 
-  useEffect(() => {
-    if (!submitted || pending) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      const form = rootRef.current?.closest("form");
-      if (form) {
-        delete form.dataset.submitted;
-      }
-      setSubmitted(false);
-      setStartedAtMs(null);
-    }, SUBMIT_IDLE_RECOVERY_TIMEOUT_MS);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [pending, submitted]);
-
-  const elapsedSeconds = startedAtMs ? Math.max(0, Math.floor((nowMs - startedAtMs) / 1_000)) : 0;
-  const progressValue = useMemo(() => {
-    return calculateDisplayedScanProgress({
-      active,
-      elapsedMs: elapsedSeconds * 1_000,
-      estimatedDurationMs: progressEstimate.estimatedDurationMs,
-    });
-  }, [active, elapsedSeconds, progressEstimate.estimatedDurationMs]);
-  const progressPhase = active
-    ? describeScanProgressPhase({
-        elapsedMs: elapsedSeconds * 1_000,
-        estimatedDurationMs: progressEstimate.estimatedDurationMs,
-      })
-    : "";
-
   return (
     <span ref={rootRef} className="contents">
       <input ref={scanStartedInputRef} name="scanStartedAtMs" type="hidden" />
@@ -140,99 +137,139 @@ export function V2ScanLabSubmitControl({
         {active ? pendingContent : idleContent}
       </Button>
       {active ? (
-        <div className="absolute left-3 right-3 top-full z-20 mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-          <div className="flex items-center justify-between gap-3 text-xs font-medium text-slate-600">
-            <span className="min-w-0 truncate">v2 {progressEstimate.modeLabel}: {progressPhase}</span>
-            <span>{progressValue}% complete | {elapsedSeconds}s elapsed</span>
-          </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
-            <div
-              className="h-full rounded-full bg-sky-500 transition-[width] duration-700"
-              style={{ width: `${progressValue}%` }}
-            />
-          </div>
+        <div className="absolute left-3 right-3 top-full z-20 mt-2">
+          <ScanSubmitProgressBar
+            active={active}
+            compact
+            nowMs={nowMs}
+            progressEstimate={progressEstimate}
+            startedAtMs={startedAtMs}
+          />
         </div>
       ) : null}
     </span>
   );
 }
 
-export function calculateDisplayedScanProgress(input: {
-  active: boolean;
-  elapsedMs: number;
-  estimatedDurationMs: number;
-}) {
-  if (!input.active) {
-    return 0;
+export function V2ScanLabPendingOverlay({
+  artifactStatus = "",
+  scanStatus = "",
+  selectedChainKey = "",
+}: V2ScanLabPendingOverlayProps) {
+  const [pendingScan, setPendingScan] = useState<V2ScanLabSubmitEventDetail | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  const clearPendingScan = () => {
+    delete document.documentElement.dataset[SUBMITTING_DATA_ATTRIBUTE];
+    setPendingScan(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      delete document.documentElement.dataset[SUBMITTING_DATA_ATTRIBUTE];
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pendingScan || !shouldResetV2ScanLabPendingOverlay({ artifactStatus, scanStatus, selectedChainKey })) {
+      return;
+    }
+    clearPendingScan();
+  }, [artifactStatus, pendingScan, scanStatus, selectedChainKey]);
+
+  useEffect(() => {
+    const handleSubmit = (event: Event) => {
+      const detail = (event as CustomEvent<V2ScanLabSubmitEventDetail>).detail;
+      setPendingScan(detail);
+      setNowMs(Date.now());
+    };
+    window.addEventListener("v2-scan-lab-submit", handleSubmit);
+    return () => {
+      window.removeEventListener("v2-scan-lab-submit", handleSubmit);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pendingScan) {
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1_000);
+    const timeoutId = window.setTimeout(() => {
+      clearPendingScan();
+    }, SUBMIT_RECOVERY_TIMEOUT_MS);
+    return () => {
+      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [pendingScan]);
+
+  if (!pendingScan) {
+    return (
+      <style>{`
+        html[data-v2-scan-lab-submitting="true"] [data-v2-scan-lab-current-artifact] {
+          display: none !important;
+        }
+      `}</style>
+    );
   }
 
-  const estimatedDurationMs = Math.max(6_000, input.estimatedDurationMs);
-  const ratio = Math.max(0, input.elapsedMs) / estimatedDurationMs;
-  const progress = ratio <= 0.18
-    ? interpolate(ratio, 0, 0.18, 4, 22)
-    : ratio <= 0.55
-      ? interpolate(ratio, 0.18, 0.55, 22, 63)
-      : ratio <= 0.88
-        ? interpolate(ratio, 0.55, 0.88, 63, 84)
-        : ratio <= 1.35
-          ? interpolate(ratio, 0.88, 1.35, 84, 93)
-          : 93 + (1 - Math.exp(-(ratio - 1.35) / 1.6)) * 3;
-
-  return Math.max(4, Math.min(96, Math.round(progress)));
-}
-
-export function describeScanProgressPhase(input: {
-  elapsedMs: number;
-  estimatedDurationMs: number;
-}) {
-  const ratio = Math.max(0, input.elapsedMs) / Math.max(6_000, input.estimatedDurationMs);
-  if (ratio < 0.16) {
-    return "starting browser";
-  }
-  if (ratio < 0.48) {
-    return "capturing page evidence";
-  }
-  if (ratio < 0.74) {
-    return "running consent paths";
-  }
-  if (ratio < 1.05) {
-    return "reviewing signals";
-  }
-  return "finalizing artifacts";
+  return (
+    <>
+      <style>{`
+        html[data-v2-scan-lab-submitting="true"] [data-v2-scan-lab-current-artifact] {
+          display: none !important;
+        }
+      `}</style>
+      <section
+        aria-live="polite"
+        className="rounded-3xl border border-sky-200 bg-white p-6 shadow-[0_18px_60px_-32px_rgba(14,165,233,0.5)]"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-600">Scan in progress</p>
+            <h2 className="mt-2 min-w-0 break-words text-3xl font-semibold tracking-tight text-slate-950">
+              Scan: {pendingScan.url || "requested site"}
+            </h2>
+          </div>
+          <span className="rounded-full border border-sky-200 bg-sky-50 px-4 py-1.5 text-sm font-semibold text-sky-800">
+            Scanning
+          </span>
+        </div>
+        <ScanSubmitProgressBar
+          active
+          nowMs={nowMs}
+          progressEstimate={pendingScan}
+          startedAtMs={pendingScan.submittedAtMs}
+        />
+      </section>
+    </>
+  );
 }
 
 function estimateScanProgress(form: HTMLFormElement): ScanProgressEstimate {
   const formData = new FormData(form);
   const profileValue = String(formData.get("profile") ?? "full");
   const consentDag = formData.get("consentDag") === "yes";
-  const profileEstimateMs = profileValue === "tiny"
-    ? 9_000
-    : profileValue === "standard"
-      ? 18_000
-      : profileValue === "policy"
-        ? 20_000
-        : profileValue === "consent"
-          ? 24_000
-          : 32_000;
-  const estimatedDurationMs = consentDag && (profileValue === "consent" || profileValue === "full")
-    ? Math.max(18_000, profileEstimateMs - 6_000)
-    : profileEstimateMs;
-  const modeLabel = consentDag && (profileValue === "consent" || profileValue === "full")
-    ? "planned DAG scan"
-    : `${profileValue} scan`;
-  return { estimatedDurationMs, modeLabel };
+  return estimateScanProgressForOptions({ consentDag, profileValue });
 }
 
-function interpolate(
-  value: number,
-  inputMin: number,
-  inputMax: number,
-  outputMin: number,
-  outputMax: number,
-) {
-  if (inputMax <= inputMin) {
-    return outputMax;
+function getSubmittedUrl(form: HTMLFormElement) {
+  const formData = new FormData(form);
+  return String(formData.get("url") ?? "").trim();
+}
+
+export function shouldResetV2ScanLabPendingOverlay(input: {
+  artifactStatus?: string;
+  scanStatus?: string;
+  selectedChainKey?: string;
+}) {
+  if (input.artifactStatus === "ready") {
+    return true;
   }
-  const clampedRatio = Math.max(0, Math.min(1, (value - inputMin) / (inputMax - inputMin)));
-  return outputMin + (outputMax - outputMin) * clampedRatio;
+  if (input.scanStatus === "complete" || input.scanStatus === "failed" || input.scanStatus === "invalid") {
+    return true;
+  }
+  return Boolean(input.selectedChainKey?.trim());
 }
