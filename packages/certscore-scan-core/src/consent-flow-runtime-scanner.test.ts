@@ -690,6 +690,101 @@ test("consentFlowRuntimeScanner planned_parallel reuses no-banner pre-consent ba
   });
 });
 
+test("consentFlowRuntimeScanner planned_parallel reuses CMP-bearing pre-consent baseline", async () => {
+  await withConsentFlowScan("consent-simple-accept-reject", async ({ result }) => {
+    const planRef = result.artifactRefs.find((ref) => ref.artifactId === "consent_scenario_plan");
+    const executionRef = result.artifactRefs.find((ref) => ref.artifactId === "consent_scenario_execution");
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.ok(planRef?.path);
+    assert.ok(executionRef?.path);
+
+    const plan = JSON.parse(await readFile(planRef.path, "utf8"));
+    const execution = JSON.parse(await readFile(executionRef.path, "utf8"));
+    const baselineEntry = execution.scenarios.find((entry: { scenario: string }) =>
+      entry.scenario === "baseline_pre_consent"
+    );
+
+    assert.equal(plan.plannerInputs.baselineCmpEvidenceObserved, true);
+    assert.ok(plan.plannedScenarios.some((item: { scenario: string }) => item.scenario === "reject_all_flow"));
+    assert.ok(plan.plannedScenarios.some((item: { scenario: string }) => item.scenario === "accept_all_flow"));
+    assert.equal(baselineEntry?.status, "completed");
+    assert.equal(baselineEntry?.phaseTimings?.some((phase: { label: string }) =>
+      phase.label === "external_pre_consent_baseline_reuse"
+    ), true);
+    assert.equal(result.domSnapshots.some((snapshot) => snapshot.artifactId === "dom_text_pre_consent"), false);
+    assert.ok(result.consentActionAttempts.some((attempt) =>
+      attempt.scenario === "reject_all_flow" && attempt.actionType === "reject_all"
+    ));
+  }, {
+    scenarioPlanningMode: "planned_parallel",
+    scenarioConcurrency: 2,
+    consentFlowDeadlineMs: 20_000,
+    preConsentBaseline: {
+      moduleRun: {
+        moduleName: "preConsentRuntimeScanner",
+        status: "partial",
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: 21_495,
+        evidenceRefs: [],
+        errors: ["Screenshot fallback used: page.screenshot timeout"],
+      },
+      runtimeTimeline: [],
+      networkEvents: [],
+      networkResponseEvents: [],
+      cookieEvents: [],
+      cookieSnapshots: [],
+      storageSnapshots: [],
+      scriptEvents: [],
+      iframeEvents: [],
+      consentUiObservations: [{
+        observationId: "consent_ui_pre_consent_fixture",
+        observedAtMs: 0,
+        likelyPresent: false,
+        basis: ["insufficient_banner_keywords"],
+        textExcerpt: "",
+        evidenceRefs: [{ refId: "ref_dom_text_pre_consent", artifactId: "dom_text_pre_consent" }],
+        confidence: 0.45,
+      }],
+      cmpRuntimeObservations: [{
+        observationId: "cmp_runtime_onetrust_fixture",
+        observedAtMs: 1_200,
+        sourceScanner: "pre_consent_runtime",
+        scenario: "fresh_pre_consent",
+        consentStateAtTime: "pre_consent",
+        vendorObservationId: "vendor_onetrust_fixture",
+        entity: "OneTrust, LLC",
+        vendor: "OneTrust",
+        product: "OneTrust CMP",
+        signals: [{
+          signalType: "script_url",
+          matchedField: "hostname",
+          matchedValueRedacted: "cdn.cookielaw.org",
+          sourceEventId: "net_onetrust_fixture",
+          sourceEventType: "network_request",
+          url: "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+          resolverBasis: ["onetrust_cmp_script_or_cookie"],
+          confidence: 0.95,
+        }],
+        evidenceRefs: [],
+        confidence: 0.95,
+      }],
+      screenshots: [],
+      domSnapshots: [{
+        artifactId: "dom_text_pre_consent",
+        capturedAtMs: 0,
+        path: "synthetic-dom-text-pre-consent.txt",
+        url: "https://example.test/",
+        textExcerpt: "",
+        pagePhase: "network_idle",
+        consentStateAtTime: "pre_consent",
+      }],
+      vendorResolverInputs: [],
+    },
+  });
+});
+
 test("consentFlowRuntimeScanner planned_parallel lean resources preserve action proof", async () => {
   await withConsentFlowScan("consent-simple-accept-reject", async ({ result }) => {
     const rejectAttempt = result.consentActionAttempts.find((attempt) =>

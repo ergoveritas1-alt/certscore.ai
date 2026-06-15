@@ -1668,12 +1668,6 @@ function preConsentBaselineCapture(
   if (preConsent.moduleRun.status === "failed") {
     return undefined;
   }
-  if (preConsent.consentUiObservations.some((observation) => observation.likelyPresent)) {
-    return undefined;
-  }
-  if (preConsent.cmpRuntimeObservations.length > 0) {
-    return undefined;
-  }
   const dom = preConsent.domSnapshots[0];
   if (!dom) {
     return undefined;
@@ -1718,7 +1712,7 @@ function preConsentBaselineCapture(
       textExcerpt: dom.textExcerpt,
       evidenceRefs: [{ refId: `ref_${dom.artifactId}`, artifactId: dom.artifactId, excerpt: dom.textExcerpt }],
       artifactRefs: artifacts,
-      confidence: 0.45,
+      confidence: consentUiObservation.likelyPresent || preConsent.cmpRuntimeObservations.length > 0 ? 0.76 : 0.45,
       directVsInferred: "direct",
     },
     artifactRefs: artifacts,
@@ -1726,7 +1720,7 @@ function preConsentBaselineCapture(
     recipeResearchCandidates: [],
     phaseTimings: [{
       label: "external_pre_consent_baseline_reuse",
-      detail: "Reused completed preConsentRuntimeScanner output as planned-DAG baseline because no consent UI was likely present.",
+      detail: "Reused preConsentRuntimeScanner output as planned-DAG baseline to preserve consent-flow budget for scenario lanes.",
       durationMs: 0,
     }],
   };
