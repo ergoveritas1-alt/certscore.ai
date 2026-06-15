@@ -785,6 +785,35 @@ test("consentFlowRuntimeScanner planned_parallel reuses CMP-bearing pre-consent 
   });
 });
 
+test("consentFlowRuntimeScanner planned_parallel treats non-baseline navigation timeout as lane evidence", async () => {
+  await withConsentFlowScan("consent-navigation-timeout", async ({ result }) => {
+    const executionRef = result.artifactRefs.find((ref) => ref.artifactId === "consent_scenario_execution");
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.deepEqual(result.moduleRun.errors, []);
+    assert.ok(executionRef?.path);
+
+    const execution = JSON.parse(await readFile(executionRef.path, "utf8"));
+    const scenarioEntries = execution.scenarios.filter((entry: { scenario: string }) =>
+      entry.scenario === "reject_all_flow" ||
+      entry.scenario === "accept_all_flow" ||
+      entry.scenario === "gpc_enabled"
+    );
+    assert.equal(scenarioEntries.length >= 2, true);
+    assert.ok(scenarioEntries.some((entry: { phaseTimings?: Array<{ label: string }> }) =>
+      entry.phaseTimings?.some((phase) => phase.label === "navigation_timeout_non_fatal")
+    ));
+    assert.equal(execution.scenarios.some((entry: { scenario: string; status: string }) =>
+      entry.scenario === "baseline_pre_consent" && entry.status === "completed"
+    ), true);
+  }, {
+    scenarioPlanningMode: "planned_parallel",
+    scenarioConcurrency: 2,
+    consentFlowDeadlineMs: 14_000,
+    preConsentBaseline: cmpBearingPreConsentBaseline(),
+  });
+});
+
 test("consentFlowRuntimeScanner planned_parallel lean resources preserve action proof", async () => {
   await withConsentFlowScan("consent-simple-accept-reject", async ({ result }) => {
     const rejectAttempt = result.consentActionAttempts.find((attempt) =>
@@ -919,6 +948,67 @@ test("consentFlowRuntimeScanner accepts changed consent state markers when banne
     assert.equal(rejectComparison?.comparableMeasurement?.comparable, true);
   });
 });
+
+function cmpBearingPreConsentBaseline() {
+  const now = new Date().toISOString();
+  return {
+    moduleRun: {
+      moduleName: "preConsentRuntimeScanner",
+      status: "partial",
+      startedAt: now,
+      completedAt: now,
+      durationMs: 18_000,
+      evidenceRefs: [],
+      errors: ["Screenshot fallback used: page.screenshot timeout"],
+    },
+    runtimeTimeline: [],
+    networkEvents: [],
+    networkResponseEvents: [],
+    cookieEvents: [],
+    cookieSnapshots: [],
+    storageSnapshots: [],
+    scriptEvents: [],
+    iframeEvents: [],
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent_fixture",
+      observedAtMs: 0,
+      likelyPresent: true,
+      basis: ["consent_banner_text"],
+      textExcerpt: "We use cookies. Accept All Cookies. Reject All Cookies. Manage Preferences.",
+      evidenceRefs: [{ refId: "ref_dom_text_pre_consent", artifactId: "dom_text_pre_consent" }],
+      confidence: 0.82,
+    }],
+    cmpRuntimeObservations: [{
+      observationId: "cmp_runtime_onetrust_fixture",
+      observedAtMs: 1_200,
+      sourceScanner: "pre_consent_runtime",
+      scenario: "fresh_pre_consent",
+      consentStateAtTime: "pre_consent",
+      vendorObservationId: "vendor_onetrust_fixture",
+      entity: "OneTrust, LLC",
+      vendor: "OneTrust",
+      product: "OneTrust CMP",
+      signals: [{
+        signalType: "global",
+        name: "OneTrust",
+        valueRedacted: true,
+      }],
+      confidence: 0.94,
+      evidenceRefs: [],
+    }],
+    screenshots: [],
+    domSnapshots: [{
+      artifactId: "dom_text_pre_consent",
+      capturedAtMs: 0,
+      path: "synthetic-dom-text-pre-consent.txt",
+      url: "https://example.test/",
+      textExcerpt: "We use cookies. Accept All Cookies. Reject All Cookies. Manage Preferences.",
+      pagePhase: "network_idle",
+      consentStateAtTime: "pre_consent",
+    }],
+    vendorResolverInputs: [],
+  } as NonNullable<Parameters<typeof consentFlowRuntimeScanner>[0]["preConsentBaseline"]>;
+}
 
 async function withConsentFlowScan(
   page: StaticFixturePage,

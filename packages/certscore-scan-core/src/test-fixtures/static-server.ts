@@ -16,6 +16,7 @@ export type StaticFixturePage =
   | "consent-deny-non-essential"
   | "consent-iframe-reject"
   | "consent-lean-guarded-image-cookie"
+  | "consent-navigation-timeout"
   | "consent-focused-privacy-opt-out"
   | "consent-manage-preferences"
   | "consent-no-reject"
@@ -88,6 +89,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-deny-non-essential": "consent-deny-non-essential",
   "consent-iframe-reject": "consent-iframe-reject",
   "consent-lean-guarded-image-cookie": "consent-lean-guarded-image-cookie",
+  "consent-navigation-timeout": "consent-navigation-timeout",
   "consent-focused-privacy-opt-out": "consent-focused-privacy-opt-out",
   "consent-manage-preferences": "consent-manage-preferences",
   "consent-no-reject": "consent-no-reject",
@@ -244,6 +246,17 @@ function serveCase(caseName: StaticFixturePage, response: ServerResponse): void 
     response.setHeader("Set-Cookie", cookieHeader);
   }
   response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  if (caseName === "consent-navigation-timeout") {
+    response.write(`<!doctype html><html><head><title>slow consent</title></head><body>
+      <main>CertScore v2 fixture: consent-navigation-timeout</main>
+      <section id="onetrust-banner-sdk">
+        <p>We use cookies and similar technologies.</p>
+        <button>Accept All Cookies</button>
+        <button>Reject All Cookies</button>
+        <button>Manage Preferences</button>
+      </section>`);
+    return;
+  }
   response.end(pageHtml(caseName));
 }
 
@@ -363,6 +376,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     iframeReject: caseName === "consent-iframe-reject",
     privacyChoiceSurfaceRejectSuccess: caseName === "consent-privacy-choice-surface-reject-success",
     leanGuardedImageCookie: caseName === "consent-lean-guarded-image-cookie",
+    navigationTimeout: caseName === "consent-navigation-timeout",
   };
   if (options.privacyOptOutAdComparison || options.privacyOptOutRadioFormAdComparison || options.focusedPrivacyOptOut) {
     const radioForm = options.privacyOptOutRadioFormAdComparison || options.focusedPrivacyOptOut

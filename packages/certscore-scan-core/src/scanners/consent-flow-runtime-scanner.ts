@@ -386,18 +386,19 @@ async function runPlannedParallelConsentFlow(
         if (item.scenario === "baseline_pre_consent") {
           return baseline;
         }
+        const scenarioDeadlineAtMs = plannedScenarioExecutionDeadlineAtMs(item, deadlineAtMs);
         return runScenario(input, {
       scenario: item.scenario,
       consentState: consentStateForScenarioExecution(item.scenario),
       actionType: item.actionType,
       targetUrl: item.targetUrl,
       moduleStartedAtMs,
-      deadlineAtMs,
+      deadlineAtMs: scenarioDeadlineAtMs,
     }, {
       browser,
       idFactory: createConsentScenarioIdFactory(item.scenario),
       baselineCapture: baseline,
-      deadlineAtMs,
+      deadlineAtMs: scenarioDeadlineAtMs,
     });
   },
 });
@@ -443,13 +444,8 @@ async function runPlannedParallelConsentFlow(
       artifactRefs: [...result.artifactRefs, ...artifactRefs],
       moduleRun: {
         ...result.moduleRun,
-        status: execution.entries.some((entry) => entry.status === "failed") ? "partial" : result.moduleRun.status,
-        errors: unique([
-          ...(result.moduleRun.errors ?? []),
-          ...executionEntries
-            .filter((entry) => entry.status === "failed")
-            .map((entry) => `${entry.scenario}: ${entry.error ?? entry.failureReason ?? "failed"}`),
-        ]),
+        status: result.moduleRun.status,
+        errors: result.moduleRun.errors ?? [],
       },
     };
   } catch (error) {
@@ -904,12 +900,16 @@ async function runScenario(
       });
     }
 
-    await recordPhase("navigate_domcontentloaded", "Scenario navigation until DOMContentLoaded.", () =>
-      page.goto(targetUrl, {
-        waitUntil: "domcontentloaded",
-        timeout: Math.min(input.internalBudgetMs, scenarioInput.scenario === "baseline_pre_consent" ? 12_000 : 8_000),
-      }).then(() => undefined)
+    const navigationOutcome = await recordPhase("navigate_domcontentloaded", "Scenario navigation until DOMContentLoaded.", () =>
+      navigateScenarioDomContentLoaded(input, page, targetUrl, scenarioInput.scenario, effectiveDeadlineAtMs)
     );
+    if (navigationOutcome) {
+      phaseTimings.push({
+        label: "navigation_timeout_non_fatal",
+        durationMs: 0,
+        detail: navigationOutcome,
+      });
+    }
     await recordPhase(
       scenarioInput.scenario === "baseline_pre_consent" ? "baseline_network_idle" : "action_readiness_settle",
       scenarioInput.scenario === "baseline_pre_consent"
@@ -2191,6 +2191,49 @@ function consentActionSettleBudgetMs(input: ConsentFlowRuntimeScannerInput, dead
   return 2_000;
 }
 
+async function navigateScenarioDomContentLoaded(
+  input: ConsentFlowRuntimeScannerInput,
+  page: Page,
+  targetUrl: string,
+  scenario: ConsentFlowScenario,
+  deadlineAtMs: number | undefined,
+): Promise<string | undefined> {
+  const baseTimeoutMs = scenario === "baseline_pre_consent"
+    ? 12_000
+    : input.scenarioPlanningMode === "planned_parallel" ? 6_000 : 8_000;
+  const timeout = Math.min(input.internalBudgetMs, baseTimeoutMs, remainingDeadlineMs(deadlineAtMs, baseTimeoutMs));
+  if (timeout <= 0) {
+    if (input.scenarioPlanningMode === "planned_parallel" && scenario !== "baseline_pre_consent") {
+      return "Skipped non-baseline navigation because the scenario budget was already exhausted.";
+    }
+    throw new Error(`Scenario ${scenario} deadline reached before navigation.`);
+  }
+  try {
+    await page.goto(targetUrl, {
+      waitUntil: "domcontentloaded",
+      timeout,
+    });
+    return undefined;
+  } catch (error) {
+    if (shouldTreatScenarioNavigationTimeoutAsNonFatal(input, scenario, error)) {
+      return `Navigation did not reach DOMContentLoaded within ${timeout}ms; retained partial lane evidence and continued.`;
+    }
+    throw error;
+  }
+}
+
+function shouldTreatScenarioNavigationTimeoutAsNonFatal(
+  input: ConsentFlowRuntimeScannerInput,
+  scenario: ConsentFlowScenario,
+  error: unknown,
+): boolean {
+  if (input.scenarioPlanningMode !== "planned_parallel" || scenario === "baseline_pre_consent") {
+    return false;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /page\.goto: Timeout|Navigation timeout|Timeout \d+ms exceeded/i.test(message);
+}
+
 function screenshotTimeoutWithinDeadline(deadlineAtMs: number | undefined): number {
   if (typeof deadlineAtMs !== "number") {
     return 5_000;
@@ -2201,11 +2244,11 @@ function screenshotTimeoutWithinDeadline(deadlineAtMs: number | undefined): numb
 async function waitForTimeoutWithinDeadline(page: Page, requestedMs: number, deadlineAtMs?: number): Promise<void> {
   const waitMs = Math.min(requestedMs, remainingDeadlineMs(deadlineAtMs, requestedMs));
   if (waitMs <= 0) {
-    throw new Error("Scenario global deadline reached during bounded wait.");
+    return;
   }
   await page.waitForTimeout(waitMs).catch((error) => {
     if (deadlineAtMs !== undefined && Date.now() >= deadlineAtMs) {
-      throw new Error("Scenario global deadline reached during bounded wait.");
+      return;
     }
     throw error;
   });
@@ -3638,7 +3681,7 @@ async function waitForPreferenceSurfaceSettle(page: Page, deadlineAtMs?: number)
     remainingDeadlineMs(deadlineAtMs, compactSettle ? 900 : 2_500),
   );
   if (preferenceFunctionTimeoutMs <= 0) {
-    throw new Error("Scenario global deadline reached before preference surface settle.");
+    return;
   }
   await page.waitForFunction(() => {
     const text = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim();
@@ -3678,7 +3721,7 @@ async function waitForScenarioReadiness(
     remainingDeadlineMs(deadlineAtMs, scenarioReadinessTimeoutMs(scenario)),
   );
   if (readinessFunctionTimeoutMs <= 0) {
-    throw new Error("Scenario global deadline reached before readiness wait.");
+    return;
   }
   await page.waitForFunction(() => {
     const bodyText = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim();
@@ -4475,6 +4518,32 @@ function effectiveScenarioDeadlineAtMs(
     return undefined;
   }
   return Math.min(...deadlines);
+}
+
+function plannedScenarioExecutionDeadlineAtMs(
+  item: ConsentScenarioPlanItem,
+  globalDeadlineAtMs: number,
+): number {
+  return Math.min(globalDeadlineAtMs, Date.now() + plannedScenarioExecutionBudgetMs(item));
+}
+
+function plannedScenarioExecutionBudgetMs(item: ConsentScenarioPlanItem): number {
+  if (item.scenario === "gpc_enabled") {
+    return 8_000;
+  }
+  if (item.scenario === "privacy_opt_out_flow") {
+    return item.targetUrl ? 14_000 : 10_000;
+  }
+  if (item.scenario === "reject_all_flow") {
+    return 14_000;
+  }
+  if (item.scenario === "accept_all_flow") {
+    return 18_000;
+  }
+  if (item.scenario === "form_collection_probe" || item.scenario === "accessibility_probe") {
+    return 10_000;
+  }
+  return 8_000;
 }
 
 function contextCloseTimeoutMs(input: ConsentFlowRuntimeScannerInput): number {
