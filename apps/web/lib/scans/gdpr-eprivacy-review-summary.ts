@@ -44,7 +44,11 @@ const CUSTOMER_LABELS: Record<string, string> = {
   reject_all_path_availability: "Decline / reject option availability",
   runtime_vendor_disclosure_alignment: "Runtime vendor disclosure mismatch",
   sensitive_surfaces_third_party_tracking: "Sensitive forms with third-party tracking",
-  session_replay_fingerprinting_review: "Session replay / behavioral analytics"
+  session_replay_after_refusal: "Session replay after refusal / opt-out",
+  session_replay_before_consent: "Session replay before consent",
+  session_replay_disclosure_alignment: "Session replay disclosure alignment",
+  session_replay_fingerprinting_review: "Session replay / behavioral analytics",
+  session_replay_sensitive_surface: "Session replay on sensitive surfaces"
 };
 
 const LIMITS_COPY =
@@ -440,6 +444,10 @@ export function deriveGdprEprivacyReviewSummary(
   const vendorDisclosure = getRow(items, "runtime_vendor_disclosure_alignment");
   const sensitiveSurface = getRow(items, "sensitive_surfaces_third_party_tracking");
   const sessionReplay = getRow(items, "session_replay_fingerprinting_review");
+  const sessionReplayBeforeConsent = getRow(items, "session_replay_before_consent");
+  const sessionReplayDisclosure = getRow(items, "session_replay_disclosure_alignment");
+  const sessionReplaySensitiveSurface = getRow(items, "session_replay_sensitive_surface");
+  const sessionReplayAfterRefusal = getRow(items, "session_replay_after_refusal");
   const bullets: GdprEprivacyReviewSummaryBullet[] = [];
 
   const rejectEvidence = getRetainedEvidence(rejectPath);
@@ -477,11 +485,47 @@ export function deriveGdprEprivacyReviewSummary(
   }
 
   const sessionReplayVendors = getSessionReplayVendors(sessionReplay);
-  if (rowIs(sessionReplay, "Review signal") && sessionReplayVendors.length > 0) {
+  if ((rowIs(sessionReplay, "Review signal") || rowIs(sessionReplay, "Observed")) && sessionReplayVendors.length > 0) {
     addBullet(bullets, {
       copy: `CertScore observed ${sessionReplayVendors.join(", ")} in the tested runtime context.`,
       headline: "Session replay / behavioral analytics vendor observed",
       id: "session_replay_behavioral_analytics_observed"
+    });
+  }
+
+  if (rowIs(sessionReplayBeforeConsent, "Gap observed") && sessionReplayVendors.length > 0) {
+    addBullet(bullets, {
+      copy: `CertScore observed session replay or behavioral analytics before a recorded consent action for ${sessionReplayVendors.join(", ")}.`,
+      headline: "Session replay observed before recorded consent",
+      id: "session_replay_before_consent_gap"
+    });
+  }
+
+  if (rowIs(sessionReplayDisclosure, "Gap observed") && sessionReplayVendors.length > 0) {
+    addBullet(bullets, {
+      copy: `Observed session replay vendors were not clearly matched in reviewed disclosures: ${sessionReplayVendors.join(", ")}.`,
+      headline: "Session replay disclosure mismatch observed",
+      id: "session_replay_disclosure_gap"
+    });
+  }
+
+  if (rowIs(sessionReplaySensitiveSurface, "Gap observed")) {
+    addBullet(bullets, {
+      copy: sessionReplayVendors.length > 0
+        ? `CertScore observed session replay on a sensitive surface for ${sessionReplayVendors.join(", ")}.`
+        : "CertScore observed session replay on a sensitive surface in the tested context.",
+      headline: "Session replay observed on a sensitive surface",
+      id: "session_replay_sensitive_surface_gap"
+    });
+  }
+
+  if (rowIs(sessionReplayAfterRefusal, "Gap observed")) {
+    addBullet(bullets, {
+      copy: sessionReplayVendors.length > 0
+        ? `CertScore observed session replay persistence after a confirmed refusal or opt-out action for ${sessionReplayVendors.join(", ")}.`
+        : "CertScore observed session replay persistence after a confirmed refusal or opt-out action.",
+      headline: "Session replay persisted after refusal",
+      id: "session_replay_after_refusal_gap"
     });
   }
 

@@ -209,6 +209,42 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
+    id: "session_replay_before_consent",
+    label: "Session replay before consent",
+    explanation: "Whether session replay or behavioral recording collection was observed before a recorded consent action.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No pre-consent session replay collection signal was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "session_replay_disclosure_alignment",
+    label: "Session replay disclosure alignment",
+    explanation: "Whether observed session replay or behavioral analytics vendors were clearly disclosed in reviewed privacy/cookie surfaces.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No session replay disclosure mismatch was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "session_replay_sensitive_surface",
+    label: "Session replay on sensitive surfaces",
+    explanation: "Whether session replay or behavioral analytics was observed on the same page or flow as a sensitive collection surface.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No same-context sensitive-surface session replay signal was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "session_replay_after_refusal",
+    label: "Session replay after refusal / opt-out",
+    explanation: "Whether session replay or behavioral analytics persisted after a successful reject or opt-out action proof.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No action-proof-gated post-refusal session replay persistence signal was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
     id: "cross_border_endpoint_review",
     label: "Cross-border analytics / tracking endpoint review",
     explanation: "Whether transfer-relevant analytics, behavioral tracking, adtech, or identifier-bearing third-party endpoints were observed.",

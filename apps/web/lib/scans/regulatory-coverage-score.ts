@@ -52,7 +52,11 @@ const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   reject_all_path_availability: { weight: 10 },
   runtime_vendor_disclosure_alignment: { weight: 10 },
   sensitive_surfaces_third_party_tracking: { weight: 8 },
-  session_replay_fingerprinting_review: { weight: 6 }
+  session_replay_after_refusal: { weight: 5 },
+  session_replay_before_consent: { weight: 5 },
+  session_replay_disclosure_alignment: { weight: 4 },
+  session_replay_fingerprinting_review: { weight: 3 },
+  session_replay_sensitive_surface: { weight: 4 }
 };
 
 function clampScore(value: number) {

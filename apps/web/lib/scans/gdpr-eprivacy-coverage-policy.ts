@@ -3197,6 +3197,11 @@ function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInpu
     [...row.observedRuntimeVendors, ...row.unmatchedRuntimeVendors].some((vendor) => SESSION_REPLAY_VENDOR_PATTERN.test(vendor)) ||
     [...row.observedRuntimeDomains, ...row.unmatchedRuntimeDomains].some((domain) => SESSION_REPLAY_URL_PATTERN.test(domain))
   );
+  const policySurfacesSearched = uniqueStrings(disclosureRows.flatMap((row) =>
+    row.policySurfacesSearched.map((surface) => surface.url ?? null)
+  ));
+  const matchedDisclosureCount = disclosureRows.reduce((sum, row) => sum + row.matchedVendorDisclosureCount, 0);
+  const unmatchedDisclosureCount = disclosureRows.reduce((sum, row) => sum + row.unmatchedVendorDisclosureCount, 0);
   const postChoiceControls = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
   const artifactCount = getNumber(summary, ["artifactCount", "artifact_count"]);
 
@@ -3242,9 +3247,82 @@ function buildSessionReplayRuntimeEvidence(input: GdprEprivacyCoveragePolicyInpu
     requestUrls: compactArray(requestUrls, 5),
     runtimeArtifacts: compactArray(snapshotRuntimeArtifacts, 5),
     sensitiveSurfaceOverlap: getBoolean(summary, ["sensitiveSurfaceOverlap", "sensitive_surface_overlap"]),
-    vendorDisclosed: disclosureRows.some((row) => row.matchedVendorDisclosureCount > 0 && row.unmatchedVendorDisclosureCount === 0),
-    vendorDisclosureGap: disclosureRows.some((row) => row.unmatchedVendorDisclosureCount > 0),
+    vendorDisclosed: matchedDisclosureCount > 0 && unmatchedDisclosureCount === 0,
+    vendorDisclosureComparisonObserved: disclosureRows.length > 0,
+    vendorDisclosureGap: unmatchedDisclosureCount > 0,
+    vendorDisclosureMatchedCount: matchedDisclosureCount,
+    vendorDisclosureUnmatchedCount: unmatchedDisclosureCount,
+    policySurfacesSearched: compactArray(policySurfacesSearched, 5),
     vendors: compactArray(vendors, 5)
+  });
+}
+
+function sessionReplayObservedFromEvidence(sessionReplayEvidence: Record<string, unknown> | null) {
+  return (
+    getStringArray(sessionReplayEvidence, ["vendors"]).length > 0 ||
+    getStringArray(sessionReplayEvidence, ["requestUrls", "request_urls"]).length > 0 ||
+    getStringArray(sessionReplayEvidence, ["runtimeArtifacts", "runtime_artifacts"]).length > 0 ||
+    getBoolean(sessionReplayEvidence, ["collectionEndpointObserved", "collection_endpoint_observed"]) === true ||
+    getBoolean(sessionReplayEvidence, ["libraryLoadObserved", "library_load_observed"]) === true
+  );
+}
+
+function sessionReplayEvidenceRefs(sessionReplayEvidence: Record<string, unknown> | null, lead: string) {
+  const firstSeenMs = getNumber(sessionReplayEvidence, ["firstSeenMs", "first_seen_ms"]);
+  return [
+    lead,
+    typeof firstSeenMs === "number" ? `First session replay signal: ${Math.round(firstSeenMs)}ms after scan start` : null,
+    ...getStringArray(sessionReplayEvidence, ["vendors"]).map((vendor) => `Runtime vendor: ${vendor}`),
+    ...getStringArray(sessionReplayEvidence, ["requestUrls", "request_urls"]).slice(0, 2).map((url) => `Runtime endpoint: ${url}`),
+    ...getStringArray(sessionReplayEvidence, ["consentStates", "consent_states"]).map((state) => `Consent state: ${state}`)
+  ].filter((value): value is string => Boolean(value));
+}
+
+function sessionReplayMissingEvidence(field: string, whyNeeded: string, actual: unknown = "missing") {
+  return sourceGap(field, true, actual, whyNeeded);
+}
+
+function getPostRejectSessionReplayEvidence(input: GdprEprivacyCoveragePolicyInput, sessionReplayEvidence: Record<string, unknown> | null) {
+  const reductionEvidence = getPostRejectTrackingReductionEvidence(input.runtimeArtifacts);
+  const consentOutcomeSummary = getHybridConsentOutcomeSummary(input.runtimeArtifacts);
+  const rejectInteractionConfirmed =
+    getBoolean(reductionEvidence, ["rejectInteractionConfirmed", "reject_interaction_confirmed"]) === true ||
+    getBoolean(input.runtimeArtifacts, ["consent_reject_interaction_succeeded"]) === true ||
+    getBoolean(consentOutcomeSummary, ["rejectInteractionSucceeded", "reject_interaction_succeeded"]) === true;
+  const postRejectWindowAvailable = getBoolean(reductionEvidence, ["postRejectWindowAvailable", "post_reject_window_available"]);
+  const reductionStatus = getString(reductionEvidence, ["reductionEvaluationStatus", "reduction_evaluation_status"]);
+  const rows = getPostRejectNonEssentialRows(reductionEvidence).filter((row) => {
+    if (isSessionReplayEvidenceRow(row)) {
+      return true;
+    }
+    const vendor = getString(row, ["vendor", "vendorName", "vendor_name", "postRejectVendor", "post_reject_vendor"]);
+    const url = getString(row, ["url", "requestUrl", "request_url", "responseUrl", "response_url", "domain", "host", "hostname"]);
+    return SESSION_REPLAY_VENDOR_PATTERN.test(vendor ?? "") || SESSION_REPLAY_URL_PATTERN.test(url ?? "");
+  });
+  const sessionReplayVendors = uniqueStrings([
+    ...rows.map((row) => getString(row, ["vendor", "vendorName", "vendor_name", "postRejectVendor", "post_reject_vendor"])),
+    ...getStringArray(reductionEvidence, ["persistedVendors", "persisted_vendors", "postRejectVendors", "post_reject_vendors"])
+      .filter((vendor) => SESSION_REPLAY_VENDOR_PATTERN.test(vendor)),
+    ...getStringArray(sessionReplayEvidence, ["vendors"]).filter((vendor) =>
+      rows.length > 0 || reductionStatus === "not_reduced"
+        ? SESSION_REPLAY_VENDOR_PATTERN.test(vendor)
+        : false
+    )
+  ]);
+  const sessionReplayRequestUrls = uniqueStrings([
+    ...rows.map((row) => getString(row, ["url", "requestUrl", "request_url", "responseUrl", "response_url"])),
+  ]).filter((url) => SESSION_REPLAY_URL_PATTERN.test(url) || isCollectionEndpointUrl(url));
+  const postRejectObserved = rows.length > 0 || sessionReplayVendors.length > 0 || sessionReplayRequestUrls.length > 0;
+
+  return compactRecord({
+    postRejectObserved,
+    postRejectRequestCount: rows.length,
+    postRejectRequestUrls: compactArray(sessionReplayRequestUrls, 5),
+    postRejectSessionReplayRows: compactArray(rows, 5),
+    postRejectWindowAvailable,
+    reductionEvaluationStatus: reductionStatus,
+    rejectInteractionConfirmed,
+    vendors: compactArray(sessionReplayVendors, 5)
   });
 }
 
@@ -3324,7 +3402,6 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
   const browserDeviceEntropyEvidence = buildBrowserDeviceEntropyReviewEvidence(input);
   const sessionReplayVendors = getStringArray(sessionReplayEvidence, ["vendors"]);
   const sessionReplayConsentStates = getStringArray(sessionReplayEvidence, ["consentStates"]);
-  const sessionReplayPreConsentObserved = getBoolean(sessionReplayEvidence, ["preConsentObserved"]) === true;
   const sessionReplayPostAcceptObserved = getBoolean(sessionReplayEvidence, ["postAcceptObserved"]) === true;
   const sessionReplayCount =
     getNumber(input.snapshot, ["session_replay_tracker_count"]) ??
@@ -3337,25 +3414,7 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
     getBoolean(input.snapshot, ["fingerprinting_or_identity_vendor_detected", "fingerprinting_detected"]) === true ||
     Boolean(browserDeviceEntropyEvidence);
 
-  if (sessionReplayPreConsentObserved) {
-    return makeOutcome(
-      "session_replay_fingerprinting_review",
-      "Gap observed",
-      "Session replay or behavioral recording evidence was retained before a recorded consent action.",
-      [
-        "Session replay signal observed before consent",
-        ...sessionReplayVendors.map((vendor) => `Runtime vendor: ${vendor}`),
-        ...sessionReplayConsentStates.map((state) => `Consent state: ${state}`)
-      ],
-      {
-        retainedEvidence: {
-          sessionReplayEvidence
-        }
-      }
-    );
-  }
-
-  if (sessionReplayPostAcceptObserved || (sessionReplayObserved && sessionReplayEvidence && !sessionReplayPreConsentObserved)) {
+  if (sessionReplayPostAcceptObserved || (sessionReplayObserved && sessionReplayEvidence)) {
     return makeOutcome(
       "session_replay_fingerprinting_review",
       "Observed",
@@ -3375,6 +3434,12 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
       ],
       {
         retainedEvidence: {
+          gapCapableRows: [
+            "session_replay_before_consent",
+            "session_replay_disclosure_alignment",
+            "session_replay_sensitive_surface",
+            "session_replay_after_refusal"
+          ],
           sessionReplayEvidence
         }
       }
@@ -3442,6 +3507,251 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
           runtimeCaptureCompleted: hasRuntimeCapture(input),
           sessionReplayCount: sessionReplayCount ?? 0,
           sessionReplayObserved: false
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveSessionReplayBeforeConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const sessionReplayEvidence = buildSessionReplayRuntimeEvidence(input);
+  const observed = sessionReplayObservedFromEvidence(sessionReplayEvidence);
+  const preConsentObserved = getBoolean(sessionReplayEvidence, ["preConsentObserved", "pre_consent_observed"]) === true;
+
+  if (preConsentObserved) {
+    return makeOutcome(
+      "session_replay_before_consent",
+      "Gap observed",
+      "Session replay or behavioral recording collection was retained before a recorded consent action.",
+      sessionReplayEvidenceRefs(sessionReplayEvidence, "Session replay signal observed before consent"),
+      {
+        retainedEvidence: {
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
+
+  if (observed) {
+    return makeOutcome(
+      "session_replay_before_consent",
+      "Not observed",
+      "Session replay was observed, but retained evidence did not show session replay collection before a recorded consent action.",
+      sessionReplayEvidenceRefs(sessionReplayEvidence, "No pre-consent session replay collection retained"),
+      {
+        retainedEvidence: {
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "session_replay_before_consent",
+      "Not observed",
+      "Runtime capture completed for the tested context, and no pre-consent session replay collection signal was retained.",
+      ["Evidence: runtime capture completed"],
+      {
+        retainedEvidence: {
+          sessionReplayObserved: false
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveSessionReplayDisclosureAlignmentOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const sessionReplayEvidence = buildSessionReplayRuntimeEvidence(input);
+  const observed = sessionReplayObservedFromEvidence(sessionReplayEvidence);
+  const comparisonObserved = getBoolean(sessionReplayEvidence, [
+    "vendorDisclosureComparisonObserved",
+    "vendor_disclosure_comparison_observed"
+  ]) === true;
+  const vendorDisclosureGap = getBoolean(sessionReplayEvidence, ["vendorDisclosureGap", "vendor_disclosure_gap"]) === true;
+  const vendorDisclosed = getBoolean(sessionReplayEvidence, ["vendorDisclosed", "vendor_disclosed"]) === true;
+
+  if (!observed) {
+    return hasRuntimeCapture(input)
+      ? makeOutcome(
+          "session_replay_disclosure_alignment",
+          "Not observed",
+          "No session replay runtime signal was retained, so no session replay disclosure mismatch was observed.",
+          ["Evidence: runtime capture completed"],
+          { retainedEvidence: { sessionReplayObserved: false } }
+        )
+      : null;
+  }
+
+  if (vendorDisclosureGap) {
+    return makeOutcome(
+      "session_replay_disclosure_alignment",
+      "Gap observed",
+      "Session replay or behavioral analytics runtime evidence was retained, but reviewed privacy/cookie surfaces did not clearly disclose the observed replay vendor or domain.",
+      sessionReplayEvidenceRefs(sessionReplayEvidence, "Session replay vendor disclosure mismatch observed"),
+      {
+        retainedEvidence: {
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
+
+  if (vendorDisclosed) {
+    return makeOutcome(
+      "session_replay_disclosure_alignment",
+      "Observed",
+      "Session replay or behavioral analytics runtime evidence was retained and matched to reviewed disclosure evidence.",
+      sessionReplayEvidenceRefs(sessionReplayEvidence, "Session replay vendor disclosure matched"),
+      {
+        retainedEvidence: {
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
+
+  return makeOutcome(
+    "session_replay_disclosure_alignment",
+    "Not testable",
+    "Session replay was observed, but retained policy/cookie disclosure comparison evidence was not available for this scan context.",
+    sessionReplayEvidenceRefs(sessionReplayEvidence, "Session replay observed; disclosure comparison unavailable"),
+    {
+      missingOrIncompleteSourceSignals: [
+        sessionReplayMissingEvidence(
+          "sessionReplayEvidence.vendorDisclosureComparisonObserved",
+          "Required to decide whether observed session replay vendors were disclosed.",
+          comparisonObserved
+        )
+      ],
+      retainedEvidence: {
+        sessionReplayEvidence
+      }
+    }
+  );
+}
+
+function deriveSessionReplaySensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const sessionReplayEvidence = buildSessionReplayRuntimeEvidence(input);
+  const observed = sessionReplayObservedFromEvidence(sessionReplayEvidence);
+  const sensitiveSurfaceOverlap = getBoolean(sessionReplayEvidence, [
+    "sensitiveSurfaceOverlap",
+    "sensitive_surface_overlap"
+  ]) === true;
+
+  if (observed && sensitiveSurfaceOverlap) {
+    return makeOutcome(
+      "session_replay_sensitive_surface",
+      "Gap observed",
+      "Session replay or behavioral analytics was observed in the same retained page or flow as a sensitive collection surface.",
+      sessionReplayEvidenceRefs(sessionReplayEvidence, "Session replay observed on sensitive surface"),
+      {
+        retainedEvidence: {
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
+
+  if (observed) {
+    return makeOutcome(
+      "session_replay_sensitive_surface",
+      "Not observed",
+      "Session replay was observed, but retained evidence did not show same-context sensitive-surface overlap.",
+      sessionReplayEvidenceRefs(sessionReplayEvidence, "No same-context sensitive-surface session replay retained"),
+      {
+        retainedEvidence: {
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "session_replay_sensitive_surface",
+      "Not observed",
+      "Runtime capture completed for the tested context, and no sensitive-surface session replay signal was retained.",
+      ["Evidence: runtime capture completed"],
+      {
+        retainedEvidence: {
+          sessionReplayObserved: false
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveSessionReplayAfterRefusalOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const sessionReplayEvidence = buildSessionReplayRuntimeEvidence(input);
+  const observed = sessionReplayObservedFromEvidence(sessionReplayEvidence);
+  const postRejectEvidence = getPostRejectSessionReplayEvidence(input, sessionReplayEvidence);
+  const rejectInteractionConfirmed = getBoolean(postRejectEvidence, [
+    "rejectInteractionConfirmed",
+    "reject_interaction_confirmed"
+  ]) === true;
+  const postRejectObserved = getBoolean(postRejectEvidence, ["postRejectObserved", "post_reject_observed"]) === true;
+  const postRejectWindowAvailable = getBoolean(postRejectEvidence, [
+    "postRejectWindowAvailable",
+    "post_reject_window_available"
+  ]);
+
+  if (rejectInteractionConfirmed && postRejectObserved) {
+    return makeOutcome(
+      "session_replay_after_refusal",
+      "Gap observed",
+      "A reject or opt-out action was confirmed, and session replay or behavioral analytics evidence persisted in the retained post-choice comparison window.",
+      [
+        "Reject/opt-out action proof succeeded",
+        ...sessionReplayEvidenceRefs(postRejectEvidence, "Session replay observed after refusal / opt-out")
+      ],
+      {
+        retainedEvidence: {
+          postRejectEvidence,
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
+
+  if (rejectInteractionConfirmed) {
+    return makeOutcome(
+      "session_replay_after_refusal",
+      "Not observed",
+      "A reject or opt-out action was confirmed, and no post-choice session replay persistence signal was retained.",
+      ["Reject/opt-out action proof succeeded"],
+      {
+        retainedEvidence: {
+          postRejectEvidence,
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
+
+  if (observed || postRejectWindowAvailable !== null) {
+    return makeOutcome(
+      "session_replay_after_refusal",
+      "Not testable",
+      "Session replay after refusal was not testable because no successful reject or opt-out action proof was retained for comparison.",
+      sessionReplayEvidenceRefs(sessionReplayEvidence, "Session replay observed; post-refusal comparison not action-proofed"),
+      {
+        missingOrIncompleteSourceSignals: [
+          sessionReplayMissingEvidence(
+            "postRejectTrackingReductionEvidence.rejectInteractionConfirmed",
+            "Required before CertScore can compare session replay behavior after refusal or opt-out.",
+            rejectInteractionConfirmed
+          )
+        ],
+        retainedEvidence: {
+          postRejectEvidence,
+          sessionReplayEvidence
         }
       }
     );
@@ -3864,6 +4174,10 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveVendorDisclosureOutcome(input),
     deriveSensitiveSurfaceOutcome(input),
     deriveSessionReplayFingerprintingOutcome(input),
+    deriveSessionReplayBeforeConsentOutcome(input),
+    deriveSessionReplayDisclosureAlignmentOutcome(input),
+    deriveSessionReplaySensitiveSurfaceOutcome(input),
+    deriveSessionReplayAfterRefusalOutcome(input),
     deriveCrossBorderOutcome(input),
     deriveAccessibilityConsentControlsOutcome(input)
   ];

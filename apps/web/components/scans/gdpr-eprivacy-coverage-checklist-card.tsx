@@ -64,7 +64,7 @@ function getEvidenceStateBadgeClasses(state: RegulatoryEvidenceState) {
 function getAssessmentStatusLabel(item: GdprEprivacyCoverageChecklistItem) {
   if (
     item.id === "session_replay_fingerprinting_review" &&
-    item.assessmentStatus === "review_signal" &&
+    (item.assessmentStatus === "review_signal" || item.status === "Observed") &&
     item.evidenceState === "observed"
   ) {
     return "Observed session replay";
@@ -521,6 +521,38 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
     );
   }
 
+  if (item.id === "session_replay_before_consent") {
+    return item.status === "Gap observed"
+      ? "Session replay or behavioral analytics was observed before a recorded consent action."
+      : item.status === "Not testable"
+        ? "Pre-consent session replay timing could not be evaluated from the retained runtime evidence."
+        : "No pre-consent session replay collection signal was retained in the tested context.";
+  }
+
+  if (item.id === "session_replay_disclosure_alignment") {
+    return item.status === "Gap observed"
+      ? "Session replay or behavioral analytics was observed, but the reviewed disclosures did not clearly match the replay vendor or domain."
+      : item.status === "Observed"
+        ? "Observed session replay or behavioral analytics was matched to retained disclosure evidence."
+        : item.status === "Not testable"
+          ? "Session replay was observed, but disclosure-comparison evidence was not available for this scan context."
+          : "No session replay disclosure mismatch was observed in the tested context.";
+  }
+
+  if (item.id === "session_replay_sensitive_surface") {
+    return item.status === "Gap observed"
+      ? "Session replay or behavioral analytics was observed on the same retained page or flow as a sensitive collection surface."
+      : "No same-context sensitive-surface session replay signal was retained in the tested context.";
+  }
+
+  if (item.id === "session_replay_after_refusal") {
+    return item.status === "Gap observed"
+      ? "Session replay or behavioral analytics persisted after a confirmed reject or opt-out action."
+      : item.status === "Not testable"
+        ? "Post-refusal session replay behavior could not be compared because reject/opt-out action proof was not retained."
+        : "No post-refusal session replay persistence signal was retained after a confirmed reject or opt-out action.";
+  }
+
   if (item.id === "cross_border_endpoint_review") {
     if (item.status === "Gap observed") {
       return getStringArrayFromRetainedEvidence(item, "evidenceHighlights")[0] ??
@@ -610,7 +642,13 @@ function getGdprReviewedAreas(items: GdprEprivacyCoverageChecklistItem[]) {
     rowIds.has("preference_withdrawal_control") ? "post-choice controls" : null,
     rowIds.has("runtime_vendor_disclosure_alignment") ? "runtime vendor disclosure alignment" : null,
     rowIds.has("sensitive_surfaces_third_party_tracking") ? "sensitive-surface tracking context" : null,
-    rowIds.has("session_replay_fingerprinting_review") ? "session replay and fingerprinting context" : null,
+    rowIds.has("session_replay_fingerprinting_review") ||
+      rowIds.has("session_replay_before_consent") ||
+      rowIds.has("session_replay_disclosure_alignment") ||
+      rowIds.has("session_replay_sensitive_surface") ||
+      rowIds.has("session_replay_after_refusal")
+      ? "session replay and fingerprinting context"
+      : null,
     rowIds.has("cross_border_endpoint_review") ? "cross-border analytics/tracking endpoint context" : null,
     rowIds.has("accessibility_consent_controls") ? "consent-control accessibility" : null,
   ].filter((area): area is string => Boolean(area));

@@ -1550,10 +1550,15 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes surfaces post-accept session repl
       ],
       sensitiveSurfaceOverlap: false,
       vendorDisclosed: false,
+      vendorDisclosureComparisonObserved: true,
       vendorDisclosureGap: true,
+      vendorDisclosureMatchedCount: 0,
+      vendorDisclosureUnmatchedCount: 1,
       vendors: ["Microsoft Clarity"]
     }
   );
+  assert.equal(outcomes.session_replay_disclosure_alignment?.status, "Gap observed");
+  assert.match(outcomes.session_replay_disclosure_alignment?.limitation ?? "", /did not clearly disclose/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes declares retained session replay vendor without pre-consent replay as observed", () => {
@@ -1595,7 +1600,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes declares retained session replay 
         "vendor:Microsoft Clarity|signature:clarity|host:www.clarity.ms|source:script_signature"
       ],
       vendorDisclosed: false,
+      vendorDisclosureComparisonObserved: false,
       vendorDisclosureGap: false,
+      vendorDisclosureMatchedCount: 0,
+      vendorDisclosureUnmatchedCount: 0,
       vendors: ["Microsoft Clarity"]
     }
   );
@@ -1676,15 +1684,19 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 session replay summ
   });
 
   const outcome = outcomes.session_replay_fingerprinting_review;
-  assert.equal(outcome?.status, "Gap observed");
-  assert.match(outcome?.limitation ?? "", /before a recorded consent action/i);
-  assert.deepEqual(outcome?.evidenceRefs, [
+  const beforeConsentOutcome = outcomes.session_replay_before_consent;
+  assert.equal(outcome?.status, "Observed");
+  assert.equal(beforeConsentOutcome?.status, "Gap observed");
+  assert.match(beforeConsentOutcome?.limitation ?? "", /before a recorded consent action/i);
+  assert.deepEqual(beforeConsentOutcome?.evidenceRefs, [
     "Session replay signal observed before consent",
+    "First session replay signal: 250ms after scan start",
     "Runtime vendor: Hotjar",
+    "Runtime endpoint: https://static.hotjar.com/c/hotjar-123.js",
     "Consent state: pre_consent"
   ]);
   assert.deepEqual(
-    outcome?.criticalEvidence.retainedEvidence.sessionReplayEvidence,
+    beforeConsentOutcome?.criticalEvidence.retainedEvidence.sessionReplayEvidence,
     {
       collectionEndpointObserved: true,
       consentStates: ["pre_consent"],
@@ -1697,10 +1709,37 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 session replay summ
       requestUrls: ["https://static.hotjar.com/c/hotjar-123.js"],
       sensitiveSurfaceOverlap: false,
       vendorDisclosed: false,
+      vendorDisclosureComparisonObserved: false,
       vendorDisclosureGap: false,
+      vendorDisclosureMatchedCount: 0,
+      vendorDisclosureUnmatchedCount: 0,
       vendors: ["Hotjar"]
     }
   );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes gaps session replay on sensitive surfaces", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        sessionReplayEvidenceSummary: {
+          collectionEndpointObserved: true,
+          consentStates: ["pre_consent"],
+          firstSeenMs: 400,
+          libraryOnly: false,
+          preConsentObserved: true,
+          requestUrls: ["https://c.clarity.ms/collect"],
+          sensitiveSurfaceOverlap: true,
+          vendors: ["Microsoft Clarity"]
+        }
+      }
+    }
+  });
+
+  assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Observed");
+  assert.equal(outcomes.session_replay_sensitive_surface?.status, "Gap observed");
+  assert.match(outcomes.session_replay_sensitive_surface?.limitation ?? "", /sensitive collection surface/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat mislabeled Google Analytics as session replay", () => {
@@ -1754,8 +1793,9 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes still treats Microsoft Clarity as
     }
   });
 
-  assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Gap observed");
-  assert.match(outcomes.session_replay_fingerprinting_review?.limitation ?? "", /before a recorded consent action/i);
+  assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Observed");
+  assert.equal(outcomes.session_replay_before_consent?.status, "Gap observed");
+  assert.match(outcomes.session_replay_before_consent?.limitation ?? "", /before a recorded consent action/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes nested reject interaction evidence", () => {
@@ -1996,6 +2036,40 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
     retainedConcretePersistence.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.concretePostRejectNonEssentialDetailsRetained,
     true
   );
+
+  const retainedSessionReplayPersistence = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      postRejectTrackingReductionEvidence: {
+        evidenceSource: "consent_interaction_audit",
+        postRejectNonEssentialRequests: [
+          {
+            category: "session_replay",
+            consentState: "after_reject",
+            domain: "c.clarity.ms",
+            msAfterReject: 842,
+            nonEssential: true,
+            reason: "classified session replay request after reject",
+            requestUrl: "https://c.clarity.ms/collect",
+            vendor: "Microsoft Clarity"
+          }
+        ],
+        postRejectNonEssentialRequestsRetained: true,
+        postRejectRequestRecordsObserved: true,
+        postRejectWindowAvailable: true,
+        reasonCodes: [
+          "reject_interaction_succeeded",
+          "post_reject_timing_window_available",
+          "post_reject_request_records_observed",
+          "post_reject_non_essential_requests_retained"
+        ],
+        reductionEvaluationStatus: "not_reduced",
+        rejectInteractionConfirmed: true
+      }
+    }
+  });
+  assert.equal(retainedSessionReplayPersistence.session_replay_after_refusal?.status, "Gap observed");
+  assert.match(retainedSessionReplayPersistence.session_replay_after_refusal?.limitation ?? "", /persisted/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps general page accessibility issues as consent-control review", () => {
