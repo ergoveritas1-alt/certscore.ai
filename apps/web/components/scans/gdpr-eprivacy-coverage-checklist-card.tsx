@@ -61,7 +61,16 @@ function getEvidenceStateBadgeClasses(state: RegulatoryEvidenceState) {
   }
 }
 
-function getAssessmentStatusLabel(status: RegulatoryAssessmentStatus) {
+function getAssessmentStatusLabel(item: GdprEprivacyCoverageChecklistItem) {
+  if (
+    item.id === "session_replay_fingerprinting_review" &&
+    item.assessmentStatus === "review_signal" &&
+    item.evidenceState === "observed"
+  ) {
+    return "Observed session replay";
+  }
+
+  const status = item.assessmentStatus;
   switch (status) {
     case "gap_observed":
       return "Gap observed";
@@ -689,7 +698,7 @@ export function GdprEprivacyCoverageChecklistCard({
                           getAssessmentBadgeClasses(item.assessmentStatus)
                         )}
                       >
-                        {getAssessmentStatusLabel(item.assessmentStatus)}
+                        {getAssessmentStatusLabel(item)}
                       </span>
                     </div>
                     <DebugConfidenceSummary item={item} showImprovements={showDebugConfidenceImprovements} />

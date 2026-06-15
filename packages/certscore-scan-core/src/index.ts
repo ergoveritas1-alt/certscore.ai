@@ -585,7 +585,7 @@ export function deriveRuntimeCoverageSummary(input: {
   } else {
     if (preConsentRun.status === "failed") {
       limitationKeys.push("pre_consent_runtime_failed");
-    } else if (preConsentRun.status === "partial") {
+    } else if (preConsentRun.status === "partial" && !preConsentPartialIsScreenshotOnly(preConsentRun.errors)) {
       limitationKeys.push("pre_consent_runtime_partial");
     } else if (preConsentRun.status === "skipped_budget" || preConsentRun.status === "not_testable") {
       limitationKeys.push("pre_consent_runtime_not_testable");
@@ -619,6 +619,12 @@ export function deriveRuntimeCoverageSummary(input: {
     silentEmpty,
     notes,
   };
+}
+
+function preConsentPartialIsScreenshotOnly(errors: string[]) {
+  return errors.length > 0 && errors.every((error) =>
+    /screenshot fallback used|page\.screenshot/i.test(error)
+  );
 }
 
 function isThirdPartyNetworkEvent(event: NetworkEvent) {

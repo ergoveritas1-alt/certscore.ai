@@ -130,7 +130,7 @@ export default async function MarketingHomePage() {
               See how websites handle consent, privacy and accessibility.
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
-              Evidence based analysis of pre-consent tracking, 3rd-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies. Mapped to GDPR/CCPA/CIPA and more.
+              Evidence based analysis of pre-consent tracking, 3rd-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies. Mapped to GDPR and CCPA.
             </p>
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
               <PendingButtonLink

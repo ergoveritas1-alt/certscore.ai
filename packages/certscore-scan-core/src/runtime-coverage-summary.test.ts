@@ -67,6 +67,44 @@ test("runtime coverage remains usable when headed fallback retains evidence", ()
   assert.equal(summary.observationCounts.cookiesBeforeConsent, 1);
 });
 
+test("runtime coverage remains usable when only screenshot fallback failed", () => {
+  const summary = deriveRuntimeCoverageSummary({
+    cookieEvents: [],
+    cookieSnapshots: [],
+    enabledModules: ["preConsentRuntimeScanner"],
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "partial",
+      startedAt,
+      completedAt: "2026-01-01T00:00:01.000Z",
+      durationMs: 1000,
+      evidenceRefs: [],
+      errors: ["Screenshot fallback used: page.screenshot: Timeout 5000ms exceeded."],
+    }],
+    networkEvents: [{
+      eventId: "net_1",
+      eventType: "network_request",
+      timestampMs: 100,
+      sourceScanner: "pre_consent_runtime",
+      consentStateAtTime: "pre_consent",
+      pagePhase: "initial_navigation",
+      url: "https://cdn.example/analytics.js",
+      hostname: "cdn.example",
+      firstParty: false,
+      thirdParty: true,
+      evidenceRefs: [],
+      confidence: 0.9,
+      directVsInferred: "direct",
+    }],
+    normalizedVendorObservations: [],
+    observedJourneys: [],
+  });
+
+  assert.equal(summary.coverageStatus, "usable");
+  assert.deepEqual(summary.limitationKeys, []);
+  assert.equal(summary.observationCounts.networkEvents, 1);
+});
+
 test("runtime coverage is not applicable when pre-consent runtime is out of profile", () => {
   const summary = deriveRuntimeCoverageSummary({
     cookieEvents: [],

@@ -589,6 +589,10 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isContextClosedError(error: unknown): boolean {
+  return /target page, context or browser has been closed|browser has been closed|context has been closed/i.test(errorMessage(error));
+}
+
 async function runScenario(
   input: ConsentFlowRuntimeScannerInput,
   scenarioInput: {
@@ -1475,7 +1479,21 @@ async function runScenario(
     await recordPhase("response_capture_flush", "Flush bounded async response metadata capture.", async () => {
       await Promise.all(responseCapturePromises.splice(0)).catch(() => undefined);
     });
-    const cookies = await recordPhase("cookie_snapshot", "Browser context cookie snapshot.", () => context.cookies());
+    const cookies = await recordPhase("cookie_snapshot", "Browser context cookie snapshot.", async () => {
+      try {
+        return await context.cookies();
+      } catch (error) {
+        if (!isContextClosedError(error)) {
+          throw error;
+        }
+        phaseTimings.push({
+          label: "cookie_snapshot_context_closed_non_fatal",
+          detail: "Cookie snapshot was unavailable because the scenario context had already closed after DOM/action evidence capture.",
+          durationMs: 0,
+        });
+        return [];
+      }
+    });
     const cookieSnapshot = cookieSnapshotForScenario(cookies, input, scenarioInput.scenario, actionApplied ? scenarioInput.consentState : "pre_consent");
     const snapshotCookieEvents = cookies.map((cookie) => {
       const hostname = cookie.domain.replace(/^\./, "");

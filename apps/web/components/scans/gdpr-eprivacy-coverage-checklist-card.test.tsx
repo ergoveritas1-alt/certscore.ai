@@ -98,7 +98,7 @@ test("GdprEprivacyCoverageChecklistCard renders specific session replay timing c
   assert.match(html, /max-w-4xl truncate text-sm/);
   assert.match(html, /Microsoft Clarity, Hotjar, and Contentsquare/);
   assert.match(html, />Observed</);
-  assert.match(html, />Review signal</);
+  assert.match(html, />Observed session replay</);
   assert.doesNotMatch(html, /aria-label="Jurisdiction unverified"/);
   assert.doesNotMatch(html, /GDPR\/ePrivacy can depend on EU\/EEA presence, targeting, or monitoring/);
   assert.doesNotMatch(html, /signals require review from the retained runtime evidence/i);
