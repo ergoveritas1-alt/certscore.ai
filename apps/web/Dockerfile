@@ -71,6 +71,7 @@ ENV BUILD_GIT_REF="${BUILD_GIT_REF}"
 ENV BUILD_GIT_SHA="${BUILD_GIT_SHA}"
 ENV BUILD_IMAGE_TAG="${BUILD_IMAGE_TAG}"
 ENV BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET}"
+ENV NODE_PATH="/app/runtime-node_modules/node_modules"
 
 WORKDIR /app
 
@@ -93,12 +94,15 @@ COPY --from=builder /app/scripts/apply-db-migrations.mjs ./scripts/apply-db-migr
 COPY --from=builder /app/scripts/apply-db-migrations.mjs ./apps/web/scripts/apply-db-migrations.mjs
 COPY --from=builder /app/scripts/insert-integration-api-key.mjs ./apps/web/scripts/insert-integration-api-key.mjs
 
-RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --no-audit --no-fund \
+RUN mkdir -p /app/runtime-node_modules \
+  && cd /app/runtime-node_modules \
+  && npm init -y \
+  && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --no-audit --no-fund \
     pg@8.20.0 \
     playwright@1.51.1 \
     tldts@7.4.2 \
     zod@3.24.2 \
-  && PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install --with-deps chromium
+  && PLAYWRIGHT_BROWSERS_PATH=0 ./node_modules/.bin/playwright install --with-deps chromium
 
 RUN mkdir -p /app/node_modules/@certscore \
   && ln -sfn ../../packages/certscore-contracts /app/node_modules/@certscore/contracts \
