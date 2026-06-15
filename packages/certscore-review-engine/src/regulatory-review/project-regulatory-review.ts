@@ -71,6 +71,11 @@ function projectRow(
   moduleSet: Set<string>,
   coverageLimitations: CoverageLimitation[],
 ): RegulatoryReviewRow {
+  const sessionReplayStrictRow = projectSessionReplayStrictRow(seed, candidatesByKey, moduleSet);
+  if (sessionReplayStrictRow) {
+    return sessionReplayStrictRow;
+  }
+
   const sourceFindingKeys = seed.sourceFindingKeys ?? [];
   const candidates = sourceFindingKeys
     .map((key) => candidatesByKey.get(key))
@@ -244,6 +249,26 @@ function gdprRows(): RowSeed[] {
       includeEligibleMissingCorroborators: true,
       requiredModules: [PRE_CONSENT_MODULE],
     }),
+    row("session_replay_before_consent", "Session replay before consent", "Whether session replay or behavioral recording collection was observed before a recorded consent action.", "currently_supported", {
+      sourceFindingKeys: ["session_replay_or_behavioral_analytics_observed"],
+      matchedStatus: "gap_observed",
+      requiredModules: [PRE_CONSENT_MODULE],
+    }),
+    row("session_replay_disclosure_alignment", "Session replay disclosure alignment", "Whether observed session replay or behavioral analytics vendors were clearly disclosed in reviewed privacy/cookie surfaces.", "currently_supported", {
+      sourceFindingKeys: ["session_replay_or_behavioral_analytics_observed"],
+      matchedStatus: "gap_observed",
+      requiredModules: [PRE_CONSENT_MODULE, POLICY_SURFACE_MODULE],
+    }),
+    row("session_replay_sensitive_surface", "Session replay on sensitive surfaces", "Whether session replay or behavioral analytics was observed on the same page or flow as a sensitive collection surface.", "currently_supported", {
+      sourceFindingKeys: ["session_replay_or_behavioral_analytics_observed"],
+      matchedStatus: "gap_observed",
+      requiredModules: [PRE_CONSENT_MODULE],
+    }),
+    row("session_replay_after_refusal", "Session replay after refusal / opt-out", "Whether session replay or behavioral analytics persisted after a successful reject or opt-out action proof.", "currently_supported", {
+      sourceFindingKeys: ["session_replay_or_behavioral_analytics_observed"],
+      matchedStatus: "gap_observed",
+      requiredModules: [PRE_CONSENT_MODULE, CONSENT_FLOW_MODULE],
+    }),
     row("policy_runtime_vendor_alignment_review", "Policy/runtime vendor alignment", "Whether retained policy evidence mentions vendors that overlap with resolved runtime tracking vendors.", "currently_supported", {
       sourceFindingKeys: ["policy_runtime_vendor_alignment_review_signal"],
       matchedStatus: "review_signal",
@@ -296,6 +321,110 @@ function californiaRows(): RowSeed[] {
       requiredModules: [PRE_CONSENT_MODULE, CONSENT_FLOW_MODULE],
     }),
   ];
+}
+
+function projectSessionReplayStrictRow(
+  seed: RowSeed,
+  candidatesByKey: Map<string, FindingCandidate>,
+  moduleSet: Set<string>,
+): RegulatoryReviewRow | null {
+  if (![
+    "session_replay_before_consent",
+    "session_replay_disclosure_alignment",
+    "session_replay_sensitive_surface",
+    "session_replay_after_refusal",
+  ].includes(seed.id)) {
+    return null;
+  }
+
+  const sourceFindingKeys = seed.sourceFindingKeys ?? ["session_replay_or_behavioral_analytics_observed"];
+  const candidate = candidatesByKey.get("session_replay_or_behavioral_analytics_observed");
+  const requiredModules = seed.requiredModules ?? [PRE_CONSENT_MODULE];
+  const missingModules = requiredModules.filter((moduleName) => !moduleSet.has(moduleName));
+  const observed = candidate?.eligibility.status === "eligible";
+  const evidenceRefs = candidate ? evidenceRefsForCandidates([candidate]) : [];
+  const missingCoverage = missingModules.map((moduleName) => `Missing or incomplete ${moduleName} coverage.`);
+
+  if (!candidate || !observed) {
+    return {
+      id: seed.id,
+      label: seed.label,
+      note: seed.note,
+      status: missingModules.length > 0 ? "not_testable" : "not_observed",
+      evidenceCapability: seed.evidenceCapability,
+      evidenceRefs,
+      regulatoryMapping: seed.regulatoryMapping ?? [],
+      sourceFindingKeys,
+      missingOrIncompleteSourceSignals: missingCoverage,
+    };
+  }
+
+  if (seed.id === "session_replay_before_consent") {
+    const preConsentCollectionObserved =
+      candidate.matchedCriteria.includes("collection_endpoint_observed") &&
+      candidateHasPreConsentSessionReplaySource(candidate);
+    return {
+      id: seed.id,
+      label: seed.label,
+      note: preConsentCollectionObserved
+        ? "Session replay or behavioral recording collection was retained before a recorded consent action."
+        : "Session replay was observed, but retained evidence did not show session replay collection before a recorded consent action.",
+      status: preConsentCollectionObserved ? "gap_observed" : "not_observed",
+      evidenceCapability: seed.evidenceCapability,
+      evidenceRefs,
+      regulatoryMapping: seed.regulatoryMapping ?? [],
+      sourceFindingKeys,
+      missingOrIncompleteSourceSignals: preConsentCollectionObserved
+        ? []
+        : uniqueStrings([...missingCoverage, ...candidate.missingCorroborators]),
+    };
+  }
+
+  const noteByRow: Record<string, string> = {
+    session_replay_disclosure_alignment:
+      "Session replay was observed, but retained policy/cookie disclosure comparison evidence was not available for this scan context.",
+    session_replay_sensitive_surface:
+      "Session replay was observed, but retained evidence did not show same-context sensitive-surface overlap.",
+    session_replay_after_refusal:
+      "Session replay after refusal was not testable because no successful reject or opt-out action proof was retained for comparison.",
+  };
+  const missingSignalByRow: Record<string, string> = {
+    session_replay_disclosure_alignment:
+      "Session replay vendor disclosure comparison evidence was not retained.",
+    session_replay_sensitive_surface:
+      "Sensitive-surface overlap evidence was not retained for observed session replay.",
+    session_replay_after_refusal:
+      "Post-refusal session replay comparison requires successful reject or opt-out action proof.",
+  };
+
+  return {
+    id: seed.id,
+    label: seed.label,
+    note: noteByRow[seed.id] ?? seed.note,
+    status: seed.id === "session_replay_sensitive_surface" ? "not_observed" : "not_testable",
+    evidenceCapability: seed.evidenceCapability,
+    evidenceRefs,
+    regulatoryMapping: seed.regulatoryMapping ?? [],
+    sourceFindingKeys,
+    missingOrIncompleteSourceSignals: uniqueStrings([
+      ...missingCoverage,
+      missingSignalByRow[seed.id] ?? "",
+    ]),
+  };
+}
+
+function candidateHasPreConsentSessionReplaySource(candidate: FindingCandidate) {
+  return candidate.relatedVendors.some((vendor) =>
+    vendor.matchSources.some((source) =>
+      source.consentStateAtTime === "pre_consent" &&
+      (
+        source.sourceScanner === PRE_CONSENT_MODULE ||
+        source.scenario === "fresh_pre_consent" ||
+        source.scenario === "baseline_pre_consent" ||
+        source.scenario === "gpc_enabled"
+      )
+    )
+  );
 }
 
 function row(

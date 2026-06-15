@@ -33,7 +33,7 @@ export async function submitV2ScanLabAction(formData: FormData) {
     redirectWithParams({
       consentDag,
       profile,
-      scanMessage: error instanceof Error ? error.message : "Fresh v2 scan failed.",
+      scanMessage: formatV2ScanLabActionError(error),
       scanStatus: "failed",
       url,
     });
@@ -86,10 +86,19 @@ function redirectWithParams(input: {
     params.set("scanStatus", input.scanStatus);
   }
   if (input.scanMessage) {
-    params.set("scanMessage", input.scanMessage.slice(0, 600));
+    params.set("scanMessage", input.scanMessage.slice(0, 240));
   }
   if (typeof input.scanTimeSec === "number" && Number.isFinite(input.scanTimeSec)) {
     params.set("scanTimeSec", String(Math.max(0, Math.round(input.scanTimeSec))));
   }
   redirect(`/app/admin/v2-scan-lab?${params.toString()}`);
+}
+
+function formatV2ScanLabActionError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "Fresh v2 scan failed.");
+  if (/Executable doesn't exist|playwright install|chrome-headless-shell|chromium_headless_shell/i.test(message)) {
+    return "Fresh v2 scan failed because the local Playwright browser was not ready. The local scan stack can repair this automatically; rerun the readiness script and try again.";
+  }
+  const firstLine = message.split(/\r?\n/).map((line) => line.trim()).find(Boolean);
+  return firstLine || "Fresh v2 scan failed.";
 }

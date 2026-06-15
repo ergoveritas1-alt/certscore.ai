@@ -24,6 +24,16 @@ export type V2RegulatoryChecklistDebugConfidence = {
   score: number;
 };
 
+export type V2RegulatoryChecklistSubcheck = {
+  assessmentStatus: V2GdprEprivacyAssessmentStatus;
+  evidenceRefs: string[];
+  evidenceState: V2GdprEprivacyEvidenceState;
+  id: string;
+  label: string;
+  note: string;
+  status: V2GdprEprivacyChecklistStatus;
+};
+
 export type V2GdprEprivacyChecklistItem = {
   assessmentStatus: V2GdprEprivacyAssessmentStatus;
   criticalEvidence: V2GdprCriticalEvidence;
@@ -37,6 +47,7 @@ export type V2GdprEprivacyChecklistItem = {
   explanation: string;
   evidenceRefs: string[];
   limitation?: string;
+  subchecks?: V2RegulatoryChecklistSubcheck[];
 };
 
 export type V2CaliforniaPrivacyChecklistStatus =
@@ -135,6 +146,15 @@ const ALLOWED_GDPR_EPRIVACY_ROW_IDS = new Set([
   "cross_border_endpoint_review",
 ]);
 
+const SESSION_REPLAY_PARENT_ROW_ID = "session_replay_fingerprinting_review";
+const SESSION_REPLAY_CHILD_ROW_LABELS = new Map([
+  ["session_replay_before_consent", "Before consent"],
+  ["session_replay_disclosure_alignment", "Disclosure alignment"],
+  ["session_replay_sensitive_surface", "Sensitive surfaces"],
+  ["session_replay_after_refusal", "After refusal / opt-out"],
+]);
+const SESSION_REPLAY_CHILD_ROW_IDS = new Set(SESSION_REPLAY_CHILD_ROW_LABELS.keys());
+
 const ALLOWED_CALIFORNIA_PRIVACY_ROW_IDS = new Set([
   "privacy_notice_availability",
   "notice_at_collection",
@@ -163,6 +183,7 @@ export function regulatoryReviewToBetaChecklistAreas(
 
 function gdprRowToChecklistItem(row: RegulatoryReviewRow): V2GdprEprivacyChecklistItem {
   const mapped = mapGdprStatus(row);
+  const subchecks = displaySubchecksForRow(row);
   return {
     assessmentStatus: mapped.assessmentStatus,
     criticalEvidence: gdprCriticalEvidence(row, mapped.status),
@@ -176,19 +197,106 @@ function gdprRowToChecklistItem(row: RegulatoryReviewRow): V2GdprEprivacyCheckli
     explanation: row.note,
     evidenceRefs: displaySafeEvidenceRefs(row),
     limitation: mapped.evidenceState === "not_testable" ? row.note : undefined,
+    ...(subchecks.length > 0 ? { subchecks } : {}),
   };
 }
 
 function gdprRowsForArea(area: RegulatoryReviewArea | undefined): RegulatoryReviewRow[] {
-  return area
-    ? area.rows.filter((row) => ALLOWED_GDPR_EPRIVACY_ROW_IDS.has(row.id))
-    : emptyGdprRows();
+  if (!area) {
+    return emptyGdprRows();
+  }
+  return collapseSessionReplayRows(area.rows)
+    .filter((row) => ALLOWED_GDPR_EPRIVACY_ROW_IDS.has(row.id));
 }
 
 function californiaRowsForArea(area: RegulatoryReviewArea | undefined): RegulatoryReviewRow[] {
   return area
     ? area.rows.filter((row) => ALLOWED_CALIFORNIA_PRIVACY_ROW_IDS.has(row.id))
     : emptyCaliforniaRows();
+}
+
+type DisplayRegulatoryReviewRow = RegulatoryReviewRow & {
+  displaySubchecks?: RegulatoryReviewRow[];
+};
+
+function collapseSessionReplayRows(rows: RegulatoryReviewRow[]): RegulatoryReviewRow[] {
+  const parent = rows.find((row) => row.id === SESSION_REPLAY_PARENT_ROW_ID);
+  const children = rows.filter((row) => SESSION_REPLAY_CHILD_ROW_IDS.has(row.id));
+  if (!parent || children.length === 0) {
+    return rows.filter((row) => !SESSION_REPLAY_CHILD_ROW_IDS.has(row.id));
+  }
+
+  const childWithGap = children.find((row) => row.status === "gap_observed");
+  const mergedStatus = childWithGap ? "gap_observed" : parent.status;
+  const mergedNote = sessionReplayParentNote(parent, children, childWithGap);
+  const mergedMissingSignals = mergedStatus === "gap_observed"
+    ? parent.missingOrIncompleteSourceSignals
+    : uniqueStrings([
+      ...parent.missingOrIncompleteSourceSignals,
+      ...children.flatMap((row) => row.missingOrIncompleteSourceSignals),
+    ]);
+  const mergedRow: DisplayRegulatoryReviewRow = {
+    ...parent,
+    evidenceRefs: uniqueStrings([
+      ...parent.evidenceRefs,
+      ...children.flatMap((row) => row.evidenceRefs),
+    ]),
+    missingOrIncompleteSourceSignals: mergedMissingSignals,
+    note: mergedNote,
+    sourceFindingKeys: uniqueStrings([
+      ...parent.sourceFindingKeys,
+      ...children.flatMap((row) => row.sourceFindingKeys),
+    ]),
+    status: mergedStatus,
+    displaySubchecks: children,
+  };
+
+  return rows.map((row) => row.id === parent.id ? mergedRow : row)
+    .filter((row) => !SESSION_REPLAY_CHILD_ROW_IDS.has(row.id));
+}
+
+function sessionReplayParentNote(
+  parent: RegulatoryReviewRow,
+  children: RegulatoryReviewRow[],
+  childWithGap: RegulatoryReviewRow | undefined,
+) {
+  if (childWithGap?.id === "session_replay_before_consent") {
+    return "Session replay or behavioral analytics was observed before a recorded consent action. Review disclosure, masking, sensitive-page coverage, and refusal behavior as supporting subchecks.";
+  }
+  if (childWithGap?.id === "session_replay_disclosure_alignment") {
+    return "Session replay or behavioral analytics was observed and a disclosure-alignment gap was retained. Review whether the public notice clearly explains the observed replay vendor or domain.";
+  }
+  if (childWithGap?.id === "session_replay_sensitive_surface") {
+    return "Session replay or behavioral analytics was observed on a retained sensitive surface. Review masking, exclusion rules, and collection minimization.";
+  }
+  if (childWithGap?.id === "session_replay_after_refusal") {
+    return "Session replay or behavioral analytics persisted after a confirmed reject or opt-out action. Review whether refusal suppresses behavioral recording.";
+  }
+
+  const observedSubcheck = children.find((row) => row.status === "not_observed" || row.status === "checked");
+  if (parent.status === "review_signal" || parent.status === "litigation_risk_signal") {
+    return observedSubcheck
+      ? "Session replay or behavioral analytics was observed. No strict session-replay gap was proven from the retained subchecks, but disclosure, masking, sensitive-page coverage, and refusal behavior still warrant review."
+      : "Session replay or behavioral analytics was observed, but the retained scan context did not resolve the stricter timing, disclosure, sensitive-surface, or refusal subchecks.";
+  }
+
+  return parent.note;
+}
+
+function displaySubchecksForRow(row: RegulatoryReviewRow): V2RegulatoryChecklistSubcheck[] {
+  const displayRow = row as DisplayRegulatoryReviewRow;
+  return (displayRow.displaySubchecks ?? []).map((subcheck) => {
+    const mapped = mapGdprStatus(subcheck);
+    return {
+      assessmentStatus: mapped.assessmentStatus,
+      evidenceRefs: displaySafeEvidenceRefs(subcheck),
+      evidenceState: mapped.evidenceState,
+      id: subcheck.id,
+      label: SESSION_REPLAY_CHILD_ROW_LABELS.get(subcheck.id) ?? subcheck.label,
+      note: subcheck.note,
+      status: mapped.status,
+    };
+  });
 }
 
 function californiaRowToChecklistItem(row: RegulatoryReviewRow): V2CaliforniaPrivacyChecklistItem {

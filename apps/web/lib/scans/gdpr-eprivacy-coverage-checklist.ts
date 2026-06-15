@@ -39,6 +39,16 @@ export type RegulatoryChecklistDebugConfidence = {
   score: number;
 };
 
+export type RegulatoryChecklistSubcheck = {
+  assessmentStatus: RegulatoryAssessmentStatus;
+  evidenceRefs?: string[];
+  evidenceState: RegulatoryEvidenceState;
+  id: string;
+  label: string;
+  note: string;
+  status: GdprEprivacyCoverageChecklistStatus;
+};
+
 export type GdprEprivacyCoverageChecklistItem = {
   assessmentStatus: RegulatoryAssessmentStatus;
   criticalEvidence: GdprEprivacyCoverageCriticalEvidence;
@@ -52,6 +62,7 @@ export type GdprEprivacyCoverageChecklistItem = {
   explanation: string;
   evidenceRefs: string[];
   limitation?: string;
+  subchecks?: RegulatoryChecklistSubcheck[];
 };
 
 type ChecklistRowDefinition = {

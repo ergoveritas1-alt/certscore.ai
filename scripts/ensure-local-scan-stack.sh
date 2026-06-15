@@ -479,6 +479,48 @@ EOF
   log "visual evidence database columns are present"
 }
 
+ensure_playwright_chromium() {
+  if (
+    cd "${ROOT_DIR}"
+    PLAYWRIGHT_BROWSERS_PATH= node --env-file=apps/web/.env.local --input-type=module <<'EOF' >/dev/null 2>&1
+import { chromium } from "playwright";
+
+let browser;
+try {
+  browser = await chromium.launch({ headless: true });
+  await browser.close();
+  process.exit(0);
+} catch {
+  try {
+    await browser?.close();
+  } catch {}
+  process.exit(1);
+}
+EOF
+  ); then
+    log "playwright chromium is installed and launchable"
+    return 0
+  fi
+
+  log "playwright chromium is missing or not launchable; installing chromium for local v2 scans"
+  (
+    cd "${ROOT_DIR}"
+    PLAYWRIGHT_BROWSERS_PATH= pnpm exec playwright install chromium
+  ) || fail "could not install Playwright Chromium; run: PLAYWRIGHT_BROWSERS_PATH= pnpm exec playwright install chromium"
+
+  (
+    cd "${ROOT_DIR}"
+    PLAYWRIGHT_BROWSERS_PATH= node --env-file=apps/web/.env.local --input-type=module <<'EOF' >/dev/null 2>&1
+import { chromium } from "playwright";
+
+const browser = await chromium.launch({ headless: true });
+await browser.close();
+EOF
+  ) || fail "Playwright Chromium install completed but launch verification still failed"
+
+  log "playwright chromium install verified"
+}
+
 ensure_storage() {
   local pattern="minio server .*tmp/minio-data|run-local-minio.sh"
 
@@ -707,6 +749,7 @@ pnpm db:migrate
 
 ensure_storage
 ensure_visual_evidence_storage
+ensure_playwright_chromium
 ensure_web
 ensure_validation_worker
 ensure_scanner

@@ -1022,8 +1022,11 @@ test("session replay library-only observation is demoted and inferred", async ()
   assert.equal(finding?.directVsInferred, "inferred");
   const gdpr = result.regulatoryReview?.areas.find((area) => area.id === "gdpr-eprivacy");
   const row = gdpr?.rows.find((entry) => entry.id === "session_replay_fingerprinting_review");
+  const beforeConsentRow = gdpr?.rows.find((entry) => entry.id === "session_replay_before_consent");
   assert.equal(row?.status, "review_signal");
   assert.equal(row?.missingOrIncompleteSourceSignals.includes("session_replay_collection_evidence"), true);
+  assert.equal(beforeConsentRow?.status, "not_observed");
+  assert.equal(beforeConsentRow?.missingOrIncompleteSourceSignals.includes("session_replay_collection_evidence"), true);
 });
 
 test("session replay collection evidence stays high confidence and clean", async () => {
@@ -1050,6 +1053,7 @@ test("session replay collection evidence stays high confidence and clean", async
   );
   const gdpr = result.regulatoryReview?.areas.find((area) => area.id === "gdpr-eprivacy");
   const row = gdpr?.rows.find((entry) => entry.id === "session_replay_fingerprinting_review");
+  const beforeConsentRow = gdpr?.rows.find((entry) => entry.id === "session_replay_before_consent");
 
   assert.equal(finding?.eligibility.status, "eligible");
   assert.equal(finding?.matchedCriteria.includes("collection_endpoint_observed"), true);
@@ -1059,6 +1063,9 @@ test("session replay collection evidence stays high confidence and clean", async
   assert.equal(finding?.confidence, 0.95);
   assert.equal(row?.status, "review_signal");
   assert.deepEqual(row?.missingOrIncompleteSourceSignals, []);
+  assert.equal(beforeConsentRow?.status, "gap_observed");
+  assert.equal(beforeConsentRow?.sourceFindingKeys.includes("session_replay_or_behavioral_analytics_observed"), true);
+  assert.deepEqual(beforeConsentRow?.missingOrIncompleteSourceSignals, []);
 });
 
 test("session replay vendor without collection evidence stays medium confidence", async () => {

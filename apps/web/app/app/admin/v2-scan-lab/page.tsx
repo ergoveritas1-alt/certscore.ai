@@ -49,7 +49,11 @@ export default async function AdminV2ScanLabPage({ searchParams }: V2ScanLabPage
     : DEFAULT_SCAN_PROFILE;
   const consentDag = isV2ScanLabConsentDagEligibleProfile(profile)
     && (resolvedSearchParams.consentDag === "yes" || (!hasExplicitProfile && resolvedSearchParams.consentDag === undefined));
-  const result = inputUrl.trim()
+  const scanStatus = resolvedSearchParams.scanStatus ?? "";
+  const scanMessage = resolvedSearchParams.scanMessage ?? "";
+  const shouldLoadSavedArtifact = inputUrl.trim()
+    && !(scanStatus === "failed" && !selectedChainKey);
+  const result = shouldLoadSavedArtifact
     ? await loadV2ScanLabArtifacts({ chainKey: selectedChainKey, url: inputUrl, profile })
     : null;
 
@@ -60,8 +64,8 @@ export default async function AdminV2ScanLabPage({ searchParams }: V2ScanLabPage
           inputUrl={inputUrl}
           profile={profile}
           consentDag={consentDag}
-          scanMessage={resolvedSearchParams.scanMessage ?? ""}
-          scanStatus={resolvedSearchParams.scanStatus ?? ""}
+          scanMessage={scanMessage}
+          scanStatus={scanStatus}
         />
       ) : null}
 
@@ -94,8 +98,8 @@ pnpm v2:wc01-evidence-preview ...`}
           model={result.model}
           profile={profile}
           consentDag={consentDag}
-          scanMessage={resolvedSearchParams.scanMessage ?? ""}
-          scanStatus={resolvedSearchParams.scanStatus ?? ""}
+          scanMessage={scanMessage}
+          scanStatus={scanStatus}
           scanTimeSec={resolvedSearchParams.scanTimeSec ?? ""}
         />
       ) : null}
@@ -193,7 +197,8 @@ function ScanPrompt({
   scanStatus: string;
   variant?: "compact" | "large";
 }) {
-  const showStatusMessage = (scanStatus === "failed" || scanStatus === "invalid") && scanMessage.length > 0;
+  const displayScanMessage = getDisplayScanMessage(scanStatus, scanMessage);
+  const showStatusMessage = (scanStatus === "failed" || scanStatus === "invalid") && displayScanMessage.length > 0;
   const compact = variant === "compact";
   return (
     <Card className={`overflow-visible border-slate-200 bg-white shadow-sm ${compact ? "rounded-2xl" : "rounded-[1.25rem]"}`}>
@@ -283,13 +288,31 @@ function ScanPrompt({
           </div>
           {showStatusMessage ? (
             <div className="mx-5 mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 group-data-[submitted=true]/scan-form:hidden">
-              {scanMessage}
+              {displayScanMessage}
             </div>
           ) : null}
         </form>
       </CardContent>
     </Card>
   );
+}
+
+function getDisplayScanMessage(scanStatus: string, scanMessage: string) {
+  const normalized = scanMessage.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (/Executable doesn't exist|playwright install|chrome-headless-shell|chromium_headless_shell|Looks like Playwright/i.test(normalized)) {
+    return "Fresh v2 scan failed because the local Playwright browser was not ready. The local scan stack has repaired this; reload the page and try again.";
+  }
+  if (/Server Action .*was not found|failed-to-find-server-action|UnrecognizedActionError/i.test(normalized)) {
+    return "The local dev server restarted while this page was open. Reload the page and try the scan again.";
+  }
+  if (scanStatus === "failed") {
+    const firstFrame = normalized.split(/\s+at\s+<anonymous>|\s+at\s+/)[0]?.trim();
+    return (firstFrame || "Fresh v2 scan failed.").slice(0, 240);
+  }
+  return normalized.slice(0, 240);
 }
 
 function getProfileDescription(profile: V2ScanLabRunProfile) {

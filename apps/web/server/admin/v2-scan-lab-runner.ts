@@ -769,7 +769,7 @@ function runScanCliStep(step: V2ScanLabRunStep, options: { cwd: string }) {
       cwd: options.cwd,
       env: {
         ...process.env,
-        PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? "",
+        PLAYWRIGHT_BROWSERS_PATH: normalizeV2ScanPlaywrightBrowsersPath(process.env.PLAYWRIGHT_BROWSERS_PATH),
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -851,6 +851,10 @@ function runScanCliStep(step: V2ScanLabRunStep, options: { cwd: string }) {
       }).finally(() => reject(error));
     });
   });
+}
+
+function normalizeV2ScanPlaywrightBrowsersPath(value: string | undefined) {
+  return value && value !== "0" ? value : "";
 }
 
 export function resolveV2ScanCoreCliCommand(cwd: string) {

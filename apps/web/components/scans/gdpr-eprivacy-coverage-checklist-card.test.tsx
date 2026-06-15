@@ -45,6 +45,26 @@ function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
     note:
       "CertScore observed session replay or behavioral analytics vendors not observed pre-consent in retained evidence, including Microsoft Clarity, Hotjar, and Contentsquare. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
     status: "Review signal",
+    subchecks: [
+      {
+        assessmentStatus: "gap_observed",
+        evidenceRefs: ["https://www.clarity.ms/tag/example"],
+        evidenceState: "observed",
+        id: "session_replay_before_consent",
+        label: "Before consent",
+        note: "Session replay collection was retained before a recorded consent action.",
+        status: "Gap observed"
+      },
+      {
+        assessmentStatus: "coverage_limitation",
+        evidenceRefs: [],
+        evidenceState: "not_testable",
+        id: "session_replay_disclosure_alignment",
+        label: "Disclosure alignment",
+        note: "Disclosure comparison evidence was not available for this scan context.",
+        status: "Not testable"
+      }
+    ],
     tone: "review"
   };
 }
@@ -97,6 +117,9 @@ test("GdprEprivacyCoverageChecklistCard renders specific session replay timing c
   assert.match(html, /GDPR \/ ePrivacy review summary/);
   assert.match(html, /max-w-4xl truncate text-sm/);
   assert.match(html, /Microsoft Clarity, Hotjar, and Contentsquare/);
+  assert.match(html, />Before consent</);
+  assert.match(html, />Disclosure alignment</);
+  assert.match(html, /Session replay collection was retained before a recorded consent action/);
   assert.match(html, />Observed</);
   assert.match(html, />Observed session replay</);
   assert.doesNotMatch(html, /aria-label="Jurisdiction unverified"/);

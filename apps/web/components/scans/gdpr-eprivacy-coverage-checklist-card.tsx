@@ -135,6 +135,34 @@ function DebugConfidenceSummary({
   );
 }
 
+function RegulatorySubcheckStrip({ item }: { item: GdprEprivacyCoverageChecklistItem }) {
+  const subchecks = item.subchecks ?? [];
+  if (subchecks.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-1.5 rounded-md border border-slate-200 bg-slate-50 p-2 sm:grid-cols-2">
+      {subchecks.map((subcheck) => (
+        <div key={subcheck.id} className="min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1.5">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <span className="truncate text-xs font-medium text-slate-700">{subcheck.label}</span>
+            <span
+              className={cn(
+                "inline-flex shrink-0 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em]",
+                getAssessmentBadgeClasses(subcheck.assessmentStatus)
+              )}
+            >
+              {subcheck.status}
+            </span>
+          </div>
+          <p className="mt-1 max-h-8 overflow-hidden text-[11px] leading-4 text-slate-500">{subcheck.note}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function hasScannerCoverageGap(item: GdprEprivacyCoverageChecklistItem) {
   if (item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation") {
     return false;
@@ -335,6 +363,7 @@ function getEvidenceJson(item: GdprEprivacyCoverageChecklistItem) {
     coverageArea: item.label,
     evidenceState: item.evidenceState,
     status: item.status,
+    subchecks: item.subchecks,
     ...item.criticalEvidence
   };
 }
@@ -747,6 +776,7 @@ export function GdprEprivacyCoverageChecklistCard({
               <div className="min-w-0 space-y-1">
                 <p className="hidden text-sm leading-6 text-slate-600 md:block">{getScanContextNote(item)}</p>
                 {item.limitation ? <p className="text-xs leading-5 text-slate-500">{item.limitation}</p> : null}
+                <RegulatorySubcheckStrip item={item} />
                 <RegulatoryChecklistActiveTrace
                   defaultOpen={expandAllAdvancedEvidence}
                   evidenceRefs={getDisplayEvidenceRefs(item)}

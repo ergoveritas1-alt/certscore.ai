@@ -530,6 +530,92 @@ test("cross-border endpoint debug confidence requires retained endpoint location
   );
 });
 
+test("collapses strict session replay rows into one GDPR diagnostic row with subchecks", () => {
+  const fixture = regulatoryReviewFixture();
+  const gdprArea = fixture.areas[0]!;
+  const checklist = regulatoryReviewToProductionChecklistModel({
+    ...fixture,
+    areas: [
+      {
+        ...gdprArea,
+        rows: [
+          {
+            id: "session_replay_fingerprinting_review",
+            label: "Session replay / fingerprinting review",
+            note: "Session replay or behavioral analytics was observed.",
+            status: "review_signal",
+            evidenceCapability: "currently_supported",
+            evidenceRefs: ["Runtime vendor: Microsoft Clarity"],
+            regulatoryMapping: [],
+            sourceFindingKeys: ["session_replay_or_behavioral_analytics_observed"],
+            missingOrIncompleteSourceSignals: [],
+          },
+          {
+            id: "session_replay_before_consent",
+            label: "Session replay before consent",
+            note: "Session replay collection was retained before a recorded consent action.",
+            status: "gap_observed",
+            evidenceCapability: "currently_supported",
+            evidenceRefs: ["https://www.clarity.ms/tag/example"],
+            regulatoryMapping: [],
+            sourceFindingKeys: ["session_replay_or_behavioral_analytics_observed"],
+            missingOrIncompleteSourceSignals: [],
+          },
+          {
+            id: "session_replay_disclosure_alignment",
+            label: "Session replay disclosure alignment",
+            note: "Disclosure comparison evidence was not available for this scan context.",
+            status: "not_testable",
+            evidenceCapability: "currently_supported",
+            evidenceRefs: [],
+            regulatoryMapping: [],
+            sourceFindingKeys: ["session_replay_or_behavioral_analytics_observed"],
+            missingOrIncompleteSourceSignals: ["Session replay vendor disclosure comparison evidence was not retained."],
+          },
+          {
+            id: "session_replay_sensitive_surface",
+            label: "Session replay on sensitive surfaces",
+            note: "No same-context sensitive-surface replay signal was retained.",
+            status: "not_observed",
+            evidenceCapability: "currently_supported",
+            evidenceRefs: [],
+            regulatoryMapping: [],
+            sourceFindingKeys: ["session_replay_or_behavioral_analytics_observed"],
+            missingOrIncompleteSourceSignals: ["Sensitive-surface overlap evidence was not retained for observed session replay."],
+          },
+          {
+            id: "session_replay_after_refusal",
+            label: "Session replay after refusal / opt-out",
+            note: "Post-refusal session replay comparison requires successful reject or opt-out action proof.",
+            status: "not_testable",
+            evidenceCapability: "currently_supported",
+            evidenceRefs: [],
+            regulatoryMapping: [],
+            sourceFindingKeys: ["session_replay_or_behavioral_analytics_observed"],
+            missingOrIncompleteSourceSignals: ["Post-refusal session replay comparison requires successful reject or opt-out action proof."],
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(checklist.gdprEprivacyItems.length, 1);
+  const sessionReplay = checklist.gdprEprivacyItems[0]!;
+  assert.equal(sessionReplay.id, "session_replay_fingerprinting_review");
+  assert.equal(sessionReplay.status, "Gap observed");
+  assert.equal(sessionReplay.assessmentStatus, "gap_observed");
+  assert.match(sessionReplay.note, /before a recorded consent action/i);
+  assert.equal(sessionReplay.subchecks?.length, 4);
+  assert.equal(sessionReplay.subchecks?.[0]?.label, "Before consent");
+  assert.equal(sessionReplay.subchecks?.[0]?.status, "Gap observed");
+  assert.equal(
+    checklist.gdprEprivacyItems.some((item) => item.id === "session_replay_before_consent"),
+    false,
+  );
+  assert.ok(sessionReplay.evidenceRefs.includes("Runtime vendor: Microsoft Clarity"));
+  assert.ok(sessionReplay.evidenceRefs.includes("https://www.clarity.ms/tag/example"));
+});
+
 function regulatoryReviewFixture(): RegulatoryReviewOutput {
   return {
     reviewVersion: "certscore.v2.regulatory_review.1",
