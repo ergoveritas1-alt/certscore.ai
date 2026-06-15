@@ -1,11 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import type { ReactNode } from "react";
-import { CaliforniaPrivacyCoverageChecklistCard } from "../../../../components/scans/california-privacy-coverage-checklist-card";
-import { GdprEprivacyCoverageChecklistCard } from "../../../../components/scans/gdpr-eprivacy-coverage-checklist-card";
-import { RegulatoryChecklistSection } from "../../../../components/scans/regulatory-checklist-section";
 import { VendorBrandChip } from "../../../../components/scans/vendor-brand-chip";
-import { V2ScanLabSubmitControl } from "./v2-scan-lab-submit-progress";
+import { V2ScanLabPendingOverlay, V2ScanLabSubmitControl } from "./v2-scan-lab-submit-progress";
 import { V2PriorityIssuesCarousel, type V2PriorityRegulatoryGap } from "./v2-priority-issues-carousel";
+import { V2RegulatoryReviewBeta } from "./v2-regulatory-review-beta";
 import { submitV2ScanLabAction } from "./actions";
 import type { CaliforniaPrivacyCoverageChecklistItem } from "../../../../lib/scans/california-privacy-coverage-checklist";
 import type { GdprEprivacyCoverageChecklistItem } from "../../../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -59,6 +57,12 @@ export default async function AdminV2ScanLabPage({ searchParams }: V2ScanLabPage
 
   return (
     <div className="space-y-6">
+      <V2ScanLabPendingOverlay
+        artifactStatus={result?.status ?? ""}
+        selectedChainKey={selectedChainKey}
+        scanStatus={scanStatus}
+      />
+
       {result?.status !== "ready" ? (
         <ScanPrompt
           inputUrl={inputUrl}
@@ -69,39 +73,49 @@ export default async function AdminV2ScanLabPage({ searchParams }: V2ScanLabPage
         />
       ) : null}
 
-      {!result ? <InitialState /> : null}
-
-      {result?.status === "error" ? (
-        <StatusCard title="Internal Diagnostic Error" tone="danger">
-          <p>
-            <span className="font-mono">{result.error.code}</span>: {result.error.message}
-          </p>
-          {result.error.artifactPath ? <p className="mt-2 font-mono">{result.error.artifactPath}</p> : null}
-        </StatusCard>
+      {!result ? (
+        <div data-v2-scan-lab-current-artifact>
+          <InitialState />
+        </div>
       ) : null}
 
-{result?.status === "empty" ? (
-        <StatusCard title="No Saved Artifacts" tone="muted">
-          <p>{result.message}</p>
-          <pre className="mt-4 overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs text-slate-100">
+      {result?.status === "error" ? (
+        <div data-v2-scan-lab-current-artifact>
+          <StatusCard title="Internal Diagnostic Error" tone="danger">
+            <p>
+              <span className="font-mono">{result.error.code}</span>: {result.error.message}
+            </p>
+            {result.error.artifactPath ? <p className="mt-2 font-mono">{result.error.artifactPath}</p> : null}
+          </StatusCard>
+        </div>
+      ) : null}
+
+      {result?.status === "empty" ? (
+        <div data-v2-scan-lab-current-artifact>
+          <StatusCard title="No Saved Artifacts" tone="muted">
+            <p>{result.message}</p>
+            <pre className="mt-4 overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs text-slate-100">
 {`pnpm v2:scan --url <url> --profile tiny --out ./artifacts/<domain>
 pnpm v2:review --bundle ./artifacts/<domain>/CanonicalEvidenceBundle.json --out ./artifacts/<domain>/ReviewResult.json
 pnpm v2:project --bundle ./artifacts/<domain>/CanonicalEvidenceBundle.json --review ./artifacts/<domain>/ReviewResult.json --out ./artifacts/<domain>/V2ReportProjectionDraft.json
 pnpm v2:wc01-evidence-preview ...`}
-          </pre>
-        </StatusCard>
+            </pre>
+          </StatusCard>
+        </div>
       ) : null}
 
       {result?.status === "ready" ? (
-        <ScanLabModelView
-          inputUrl={inputUrl}
-          model={result.model}
-          profile={profile}
-          consentDag={consentDag}
-          scanMessage={scanMessage}
-          scanStatus={scanStatus}
-          scanTimeSec={resolvedSearchParams.scanTimeSec ?? ""}
-        />
+        <div data-v2-scan-lab-current-artifact>
+          <ScanLabModelView
+            inputUrl={inputUrl}
+            model={result.model}
+            profile={profile}
+            consentDag={consentDag}
+            scanMessage={scanMessage}
+            scanStatus={scanStatus}
+            scanTimeSec={resolvedSearchParams.scanTimeSec ?? ""}
+          />
+        </div>
       ) : null}
     </div>
   );
@@ -136,49 +150,11 @@ function ScanLabModelView({
         scanTimeSec={scanTimeSec}
       />
       <LegacyStyleReportOverview model={model} />
-      <V2RegulatoryReviewBeta model={model} />
-    </div>
-  );
-}
-
-function V2RegulatoryReviewBeta({ model }: { model: V2ScanLabModel }) {
-  const checklist = model.regulatoryReviewChecklist;
-  return (
-    <section className="scroll-mt-6" id="regulatory-review-beta" data-testid="v2-regulatory-review-beta">
-      <RegulatoryChecklistSection
-        headingLabel="Regulatory Diagnostics"
-        showAdvancedEvidenceToggle
-        tabs={[
-          {
-            content: (
-              <GdprEprivacyCoverageChecklistCard
-                defaultOpen
-                items={checklist.gdprEprivacyItems as GdprEprivacyCoverageChecklistItem[]}
-                showDebugConfidenceImprovements={false}
-                showSummaryStrip={false}
-              />
-            ),
-            id: "gdpr-eprivacy",
-            label: "GDPR / ePrivacy",
-            shortLabel: "GDPR/ePrivacy",
-          },
-          {
-            content: (
-              <CaliforniaPrivacyCoverageChecklistCard
-                defaultOpen
-                items={checklist.californiaPrivacyItems as CaliforniaPrivacyCoverageChecklistItem[]}
-                showDebugConfidenceImprovements={false}
-                showSummaryStrip={false}
-              />
-            ),
-            badgeLabel: "alpha",
-            id: "california-privacy",
-            label: "CCPA/CPRA",
-            shortLabel: "CCPA/CPRA",
-          },
-        ]}
+      <V2RegulatoryReviewBeta
+        californiaPrivacyItems={model.regulatoryReviewChecklist.californiaPrivacyItems as CaliforniaPrivacyCoverageChecklistItem[]}
+        gdprEprivacyItems={model.regulatoryReviewChecklist.gdprEprivacyItems as GdprEprivacyCoverageChecklistItem[]}
       />
-    </section>
+    </div>
   );
 }
 
