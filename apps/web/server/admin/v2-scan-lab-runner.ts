@@ -853,7 +853,10 @@ function runScanCliStep(step: V2ScanLabRunStep, options: { cwd: string }) {
   });
 }
 
-function normalizeV2ScanPlaywrightBrowsersPath(value: string | undefined) {
+export function normalizeV2ScanPlaywrightBrowsersPath(value: string | undefined, nodeEnv = process.env.NODE_ENV) {
+  if (value === "0" && nodeEnv === "production") {
+    return "0";
+  }
   return value && value !== "0" ? value : "";
 }
 

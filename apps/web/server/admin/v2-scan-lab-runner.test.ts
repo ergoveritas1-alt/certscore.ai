@@ -8,6 +8,7 @@ import {
   getV2ScanLabRunProfiles,
   isV2ScanLabConsentDagEligibleProfile,
   isV2ScanLabRunProfile,
+  normalizeV2ScanPlaywrightBrowsersPath,
   resolveV2ScanCoreCliCommand,
   runV2ScanLabArtifactChain,
 } from "./v2-scan-lab-runner";
@@ -20,6 +21,13 @@ test("v2 scan lab runner exposes only supported launch profiles", () => {
   assert.equal(isV2ScanLabRunProfile("consent"), true);
   assert.equal(isV2ScanLabRunProfile("full"), true);
   assert.deepEqual(getV2ScanLabRunProfiles().filter(isV2ScanLabConsentDagEligibleProfile), ["consent", "full"]);
+});
+
+test("normalizes Playwright browser path differently for local and production scans", () => {
+  assert.equal(normalizeV2ScanPlaywrightBrowsersPath("0", "production"), "0");
+  assert.equal(normalizeV2ScanPlaywrightBrowsersPath("0", "development"), "");
+  assert.equal(normalizeV2ScanPlaywrightBrowsersPath("/ms-playwright", "production"), "/ms-playwright");
+  assert.equal(normalizeV2ScanPlaywrightBrowsersPath(undefined, "production"), "");
 });
 
 test("builds a fresh artifact chain plan with stable run roots", () => {

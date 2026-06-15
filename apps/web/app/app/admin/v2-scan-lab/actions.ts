@@ -97,6 +97,9 @@ function redirectWithParams(input: {
 function formatV2ScanLabActionError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "Fresh v2 scan failed.");
   if (/Executable doesn't exist|playwright install|chrome-headless-shell|chromium_headless_shell/i.test(message)) {
+    if (process.env.NODE_ENV === "production") {
+      return "Fresh v2 scan failed because the server browser runtime was not ready. The deploy image needs the bundled Playwright browser; try again after the next deploy.";
+    }
     return "Fresh v2 scan failed because the local Playwright browser was not ready. The local scan stack can repair this automatically; rerun the readiness script and try again.";
   }
   const firstLine = message.split(/\r?\n/).map((line) => line.trim()).find(Boolean);

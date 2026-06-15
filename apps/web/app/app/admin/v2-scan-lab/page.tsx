@@ -303,6 +303,9 @@ function getDisplayScanMessage(scanStatus: string, scanMessage: string) {
     return "";
   }
   if (/Executable doesn't exist|playwright install|chrome-headless-shell|chromium_headless_shell|Looks like Playwright/i.test(normalized)) {
+    if (process.env.NODE_ENV === "production") {
+      return "Fresh v2 scan failed because the server browser runtime was not ready. The deploy image needs the bundled Playwright browser; try again after the next deploy.";
+    }
     return "Fresh v2 scan failed because the local Playwright browser was not ready. The local scan stack has repaired this; reload the page and try again.";
   }
   if (/Server Action .*was not found|failed-to-find-server-action|UnrecognizedActionError/i.test(normalized)) {
