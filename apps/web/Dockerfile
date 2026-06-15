@@ -95,6 +95,13 @@ COPY --from=builder /app/scripts/apply-db-migrations.mjs ./scripts/apply-db-migr
 COPY --from=builder /app/scripts/apply-db-migrations.mjs ./apps/web/scripts/apply-db-migrations.mjs
 COPY --from=builder /app/scripts/insert-integration-api-key.mjs ./apps/web/scripts/insert-integration-api-key.mjs
 
+RUN mkdir -p /app/node_modules/@certscore \
+  && ln -sfn ../../packages/certscore-contracts /app/node_modules/@certscore/contracts \
+  && ln -sfn ../../packages/certscore-vendor-resolver /app/node_modules/@certscore/vendor-resolver \
+  && ln -sfn ../../packages/certscore-review-engine /app/node_modules/@certscore/review-engine \
+  && ln -sfn ../../packages/certscore-report-adapter /app/node_modules/@certscore/report-adapter \
+  && ln -sfn ../../packages/certscore-scan-core /app/node_modules/@certscore/scan-core
+
 EXPOSE 3000
 
 CMD ["node", "apps/web/server.js"]
