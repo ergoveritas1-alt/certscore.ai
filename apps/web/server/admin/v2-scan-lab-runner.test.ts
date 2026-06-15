@@ -140,7 +140,7 @@ test("builds scan lab plans with optional planned consent DAG flags", () => {
   ]);
   assert.deepEqual(scanArgs.slice(scanArgs.indexOf("--consent-flow-deadline-ms"), scanArgs.indexOf("--consent-flow-deadline-ms") + 2), [
     "--consent-flow-deadline-ms",
-    "20000",
+    "30000",
   ]);
 });
 

@@ -124,7 +124,7 @@ export function buildV2ScanLabRunPlan(input: BuildRunPlanInput): V2ScanLabRunPla
   const reviewPath = path.join(calibrationDir, "ReviewResult.json");
   const consentFlowDeadlineMs = input.captureReplayAuxiliaryProbes && input.captureReplayAuxiliaryProbes !== "none"
     ? "45000"
-    : "20000";
+    : "30000";
   const scenarioConcurrency = input.captureReplay ? "3" : "2";
   const policyPlanningDeadlineMs = "1500";
 
