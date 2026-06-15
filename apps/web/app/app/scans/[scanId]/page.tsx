@@ -4,6 +4,7 @@ import { DomainScanForm } from "../../../../components/marketing/domain-scan-for
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
+import { LocalV2DagScanProgressCard } from "../../../../components/scans/scan-submit-progress";
 import { ShareReportActions } from "../../../../components/scans/share-report-actions";
 import {
   hasPendingBrowserExtensionNormalization,
@@ -14,6 +15,10 @@ import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
+import {
+  getLocalV2DagReportInput,
+  materializeLocalV2DagScanDetail
+} from "../../../../server/scans/local-v2-dag-report";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import { getOrganizationSettings } from "../../../../server/settings/get-organization-settings";
 
@@ -55,19 +60,25 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     notFound();
   }
 
+  const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
+  const displayScanRecord =
+    localV2DagReportInput && scanRecord.scan.status === "completed"
+      ? await withServerTiming("app.scan_detail.local_v2_report", () => materializeLocalV2DagScanDetail(scanRecord))
+      : scanRecord;
+
   const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
     events: scanRecord.events,
     scanType: scanRecord.scan.scanType,
     status: scanRecord.scan.status
   });
 
-  if (typeof scanRecord.snapshot?.report_finding_count !== "number" || scanRecord.scan.scanType === "browser_extension") {
+  if (typeof displayScanRecord.snapshot?.report_finding_count !== "number" || displayScanRecord.scan.scanType === "browser_extension") {
     const reportFindingCount = await withServerTiming("app.scan_detail.backfill_finding_count", async () =>
-      buildScanReportUnifiedFindings(scanRecord).length
+      buildScanReportUnifiedFindings(displayScanRecord).length
     );
     await persistReportFindingCount({
       count: reportFindingCount,
-      scanId: scanRecord.scan.id
+      scanId: displayScanRecord.scan.id
     });
   }
   const pendingPostCompletionWork = hasPendingPostCompletionFindingWork({
@@ -76,11 +87,11 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     status: scanRecord.scan.status
   });
 
-  const scanDomainLabel = scanRecord.scan.domainHostname?.trim() || "Scanned website";
+  const scanDomainLabel = displayScanRecord.scan.domainHostname?.trim() || "Scanned website";
   const isPlatformAdmin = isPlatformAdminEmail(user.email);
   const canUseLocalExtensionScan = isPlatformAdmin;
   const visualEvidenceArtifacts = canViewCapturedImage({ isPlatformAdmin, role: membership.role })
-    ? getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts).sort((left, right) => {
+    ? getVisualEvidenceArtifacts(displayScanRecord.runtimeArtifacts).sort((left, right) => {
         const leftPriority = left.captureStep === "initial_load" ? 0 : 1;
         const rightPriority = right.captureStep === "initial_load" ? 0 : 1;
         return leftPriority - rightPriority;
@@ -102,16 +113,17 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
           <ScanStatusAutoRefresh
             pendingBrowserExtensionNormalization={pendingBrowserExtensionNormalization}
             pendingPostCompletionWork={pendingPostCompletionWork}
-            status={scanRecord.scan.status}
+            silent={Boolean(localV2DagReportInput)}
+            status={displayScanRecord.scan.status}
           />
         }
         createdAtInfoTip={recentScanReused ? RECENT_SCAN_REUSED_MESSAGE : null}
         headerActions={
-          scanRecord.scan.status === "completed" ? (
+          displayScanRecord.scan.status === "completed" ? (
             <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <ShareReportActions
                 domainLabel={scanDomainLabel}
-                scanId={scanRecord.scan.id}
+                scanId={displayScanRecord.scan.id}
                 visualEvidenceHref={visualEvidenceHref}
                 visualEvidenceStatus={visualEvidenceStatus}
               />
@@ -130,7 +142,16 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
           ) : null
         }
         headerActionsPlacement="belowTitle"
-        scanRecord={scanRecord}
+        localV2DagInFlightProgress={
+          localV2DagReportInput && (scanRecord.scan.status === "queued" || scanRecord.scan.status === "running" || scanRecord.scan.status === "processing") ? (
+            <LocalV2DagScanProgressCard
+              createdAt={scanRecord.scan.createdAt}
+              profileValue={localV2DagReportInput.profile}
+              startedAt={scanRecord.scan.startedAt}
+            />
+          ) : null
+        }
+        scanRecord={displayScanRecord}
         canViewReviewLenses={isPlatformAdmin || membership.role === "admin"}
         signalSnapshotVisibility={{
           showFingerprinting: organizationSettings?.showSignalSnapshotFingerprinting ?? true,

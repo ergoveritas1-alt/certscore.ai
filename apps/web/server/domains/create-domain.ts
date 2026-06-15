@@ -15,6 +15,11 @@ import { queueFullScanForDomain } from "../scans/create-full-scan";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { getAdminScanThrottleMs } from "../../lib/scan-access";
 import type { QueuedFullScanCaliforniaPrivacyConfig } from "../scans/full-scan-config";
+import {
+  normalizeLocalV2DagRunViaLambda,
+  normalizeLocalV2DagScanProfile,
+  type LocalV2DagScanProfile
+} from "../scans/local-v2-dag-scan-config";
 
 export type CreateDomainActionState = {
   error: string | null;
@@ -40,6 +45,8 @@ export async function createOrQueueDomainScan(input: {
   bypassRecentScanReuse?: boolean;
   californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   domain: string;
+  localV2DagScanProfile?: LocalV2DagScanProfile | null;
+  localV2DagRunViaLambda?: boolean | null;
   provenance?: {
     githubActor?: string | null;
     githubRunId?: string | null;
@@ -101,10 +108,12 @@ export async function createOrQueueDomainScan(input: {
       submittedByUserId: dashboardContext.user.id,
       enforceCooldown: true,
       enforceMonthlyUsageLimit: true,
-	      provenance: input.provenance,
-	      bypassRecentScanReuse: input.bypassRecentScanReuse,
-	      californiaPrivacy: input.californiaPrivacy,
-	      scanFrom: input.scanFrom,
+      provenance: input.provenance,
+      bypassRecentScanReuse: input.bypassRecentScanReuse,
+      californiaPrivacy: input.californiaPrivacy,
+      localV2DagScanProfile: input.localV2DagScanProfile,
+      localV2DagRunViaLambda: input.localV2DagRunViaLambda,
+      scanFrom: input.scanFrom,
       scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
       source: "marketing-full-scan"
     });
@@ -170,6 +179,8 @@ export async function createOrQueueDomainScan(input: {
     enforceMonthlyUsageLimit: true,
     bypassRecentScanReuse: input.bypassRecentScanReuse,
     californiaPrivacy: input.californiaPrivacy,
+    localV2DagScanProfile: input.localV2DagScanProfile,
+    localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     provenance: input.provenance,
     scanFrom: input.scanFrom,
     scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
@@ -190,6 +201,8 @@ export async function createDomainAction(
   const domainInput = String(formData.get("domain") ?? "");
   const californiaPrivacy = getCaliforniaDeepCheckConfig(formData.get("californiaDeepCheck") === "true");
   const forceNewScan = formData.get("forceNewScan") === "true";
+  const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
+  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"));
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
   const parsedBatch = parseDomainBatchInput(domainInput);
 
@@ -209,6 +222,8 @@ export async function createDomainAction(
         allowExistingDomainRescan: true,
         bypassRecentScanReuse: forceNewScan,
         californiaPrivacy,
+        localV2DagScanProfile,
+        localV2DagRunViaLambda,
         scanFrom
       })
     )

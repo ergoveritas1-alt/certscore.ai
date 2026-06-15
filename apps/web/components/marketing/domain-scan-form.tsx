@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
 import { ScanFromSelect, type ScanFrom, type ServerScanFrom } from "../scans/scan-from-select";
+import {
+  ScanSubmitProgressBar,
+  normalizeLocalV2ScanProfile,
+  useScanProgressClock,
+  type LocalV2ScanProfile
+} from "../scans/scan-submit-progress";
 
 type DomainScanFormProps = {
   allowLocalExtensionScan?: boolean;
@@ -265,8 +271,11 @@ export function DomainScanForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [californiaDeepCheck, setCaliforniaDeepCheck] = useState(false);
   const [freshRescan, setFreshRescan] = useState(false);
+  const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("full");
+  const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(false);
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
   const isSubmittingRef = useRef(false);
+  const scanProgress = useScanProgressClock(isSubmitting);
 
   useEffect(() => {
     if (!allowLocalExtensionScan && scanFrom === "local_extension") {
@@ -415,6 +424,8 @@ export function DomainScanForm({
               : undefined,
           domain: submittedDomain,
           forceNewScan: mode === "full" ? freshRescan : false,
+          localV2ScanProfile,
+          localV2RunViaLambda,
           scanFrom: scanFrom as ServerScanFrom
         }),
         headers: {
@@ -524,16 +535,34 @@ export function DomainScanForm({
                 californiaDeepCheckValue={californiaDeepCheck}
                 compact={compact}
                 freshRescanValue={freshRescan}
+                includeLocalV2ScanProfileOption
                 includeFreshRescanOption
                 includeLocalExtension={allowLocalExtensionScan}
+                localV2ScanProfileValue={localV2ScanProfile}
+                localV2RunViaLambdaValue={localV2RunViaLambda}
                 onCaliforniaDeepCheckChange={setCaliforniaDeepCheck}
                 onChange={setScanFrom}
                 onFreshRescanChange={setFreshRescan}
+                onLocalV2ScanProfileChange={(value) => setLocalV2ScanProfile(normalizeLocalV2ScanProfile(value))}
+                onLocalV2RunViaLambdaChange={setLocalV2RunViaLambda}
                 value={scanFrom}
                 variant="icon"
               />
             </div>
-          ) : null}
+          ) : (
+            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
+              <ScanFromSelect
+                compact={compact}
+                includeLocalV2ScanProfileOption
+                includeScanFromOptions={false}
+                localV2ScanProfileValue={localV2ScanProfile}
+                localV2RunViaLambdaValue={localV2RunViaLambda}
+                onLocalV2ScanProfileChange={(value) => setLocalV2ScanProfile(normalizeLocalV2ScanProfile(value))}
+                onLocalV2RunViaLambdaChange={setLocalV2RunViaLambda}
+                variant="icon"
+              />
+            </div>
+          )}
           <Button
             aria-label={buttonLabel}
             className={
@@ -569,6 +598,15 @@ export function DomainScanForm({
         <div className="flex justify-start sm:justify-end">
           <p className="max-w-sm text-xs text-slate-500 sm:text-right">{helperText}</p>
         </div>
+      ) : null}
+      {isSubmitting && scanFrom !== "local_extension" ? (
+        <ScanSubmitProgressBar
+          active
+          compact={compact}
+          nowMs={scanProgress.nowMs}
+          profileValue={localV2ScanProfile}
+          startedAtMs={scanProgress.startedAtMs}
+        />
       ) : null}
       {sampleDomains.length > 0 ? (
         <div className="relative z-0 overflow-hidden rounded-[1.25rem] border border-slate-800 bg-slate-950 shadow-[0_24px_60px_rgba(2,6,23,0.22)]">

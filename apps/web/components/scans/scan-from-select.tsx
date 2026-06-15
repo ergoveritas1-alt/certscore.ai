@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  LOCAL_V2_SCAN_PROFILE_OPTIONS,
+  normalizeLocalV2ScanProfile,
+  type LocalV2ScanProfile
+} from "./scan-submit-progress";
 import { ScanFromMarker } from "./scan-from-icons";
 
 export const SCAN_FROM_OPTIONS = [
@@ -47,12 +52,20 @@ type ScanFromSelectProps = {
   freshRescanName?: string;
   freshRescanValue?: boolean;
   id?: string;
+  includeLocalV2ScanProfileOption?: boolean;
   name?: string;
   includeLocalExtension?: boolean;
   includeFreshRescanOption?: boolean;
+  localV2ScanProfileName?: string;
+  localV2ScanProfileValue?: LocalV2ScanProfile;
+  localV2RunViaLambdaName?: string;
+  localV2RunViaLambdaValue?: boolean;
+  includeScanFromOptions?: boolean;
   onCaliforniaDeepCheckChange?: (value: boolean) => void;
   onChange?: (value: ScanFrom) => void;
   onFreshRescanChange?: (value: boolean) => void;
+  onLocalV2ScanProfileChange?: (value: LocalV2ScanProfile) => void;
+  onLocalV2RunViaLambdaChange?: (value: boolean) => void;
   variant?: "field" | "icon";
   value?: ScanFrom;
 };
@@ -81,12 +94,20 @@ export function ScanFromSelect({
   freshRescanName = "forceNewScan",
   freshRescanValue,
   id = "scanFrom",
+  includeLocalV2ScanProfileOption = false,
   includeFreshRescanOption = false,
   includeLocalExtension = false,
+  includeScanFromOptions = true,
+  localV2ScanProfileName = "localV2ScanProfile",
+  localV2ScanProfileValue,
+  localV2RunViaLambdaName = "localV2RunViaLambda",
+  localV2RunViaLambdaValue,
   name = "scanFrom",
   onCaliforniaDeepCheckChange,
   onChange,
   onFreshRescanChange,
+  onLocalV2ScanProfileChange,
+  onLocalV2RunViaLambdaChange,
   variant = "field",
   value = "default"
 }: ScanFromSelectProps) {
@@ -95,6 +116,8 @@ export function ScanFromSelect({
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const [uncontrolledCaliforniaDeepCheck, setUncontrolledCaliforniaDeepCheck] = useState(false);
   const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(false);
+  const [uncontrolledLocalV2ScanProfile, setUncontrolledLocalV2ScanProfile] = useState<LocalV2ScanProfile>("full");
+  const [uncontrolledLocalV2RunViaLambda, setUncontrolledLocalV2RunViaLambda] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -102,6 +125,8 @@ export function ScanFromSelect({
   const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? SCAN_FROM_OPTIONS[0];
   const californiaDeepCheck = californiaDeepCheckValue ?? uncontrolledCaliforniaDeepCheck;
   const freshRescan = freshRescanValue ?? uncontrolledFreshRescan;
+  const localV2ScanProfile = localV2ScanProfileValue ?? uncontrolledLocalV2ScanProfile;
+  const localV2RunViaLambda = localV2RunViaLambdaValue ?? uncontrolledLocalV2RunViaLambda;
 
   useEffect(() => {
     setIsMounted(true);
@@ -142,7 +167,13 @@ export function ScanFromSelect({
       const desiredLeft = variant === "icon" ? buttonRect.right - width + 96 : buttonRect.left;
       const left = Math.min(Math.max(viewportPadding, desiredLeft), Math.max(viewportPadding, viewportWidth - width - viewportPadding));
       const measuredHeight = menuRef.current?.offsetHeight;
-      const targetHeight = measuredHeight && measuredHeight > 0 ? measuredHeight : includeFreshRescanOption ? 440 : 260;
+      const targetHeight = measuredHeight && measuredHeight > 0
+        ? measuredHeight
+        : includeFreshRescanOption
+          ? 440
+          : includeLocalV2ScanProfileOption && !includeScanFromOptions
+            ? 190
+            : 260;
       const spaceBelow = viewportHeight - anchorBottom - gap - viewportPadding;
       const spaceAbove = anchorTop - gap - viewportPadding;
       const opensAbove = spaceBelow < Math.min(targetHeight, 300) && spaceAbove > spaceBelow;
@@ -165,7 +196,7 @@ export function ScanFromSelect({
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [includeFreshRescanOption, isOpen, variant]);
+  }, [includeFreshRescanOption, includeLocalV2ScanProfileOption, includeScanFromOptions, isOpen, variant]);
 
   function selectScanFrom(nextValue: ScanFrom) {
     onChange?.(nextValue);
@@ -186,6 +217,20 @@ export function ScanFromSelect({
     onCaliforniaDeepCheckChange?.(nextValue);
   }
 
+  function setLocalV2ScanProfile(nextValue: LocalV2ScanProfile) {
+    if (localV2ScanProfileValue === undefined) {
+      setUncontrolledLocalV2ScanProfile(nextValue);
+    }
+    onLocalV2ScanProfileChange?.(nextValue);
+  }
+
+  function setLocalV2RunViaLambda(nextValue: boolean) {
+    if (localV2RunViaLambdaValue === undefined) {
+      setUncontrolledLocalV2RunViaLambda(nextValue);
+    }
+    onLocalV2RunViaLambdaChange?.(nextValue);
+  }
+
   const menuOptions = options;
 
   const buttonClassName =
@@ -198,21 +243,27 @@ export function ScanFromSelect({
   return (
     <div ref={wrapperRef} className={variant === "icon" ? "relative" : compact ? "relative inline-flex items-center gap-2 text-xs font-medium text-slate-600" : "relative block space-y-1.5"}>
       <input id={id} name={name} type="hidden" value={value} />
+      {includeLocalV2ScanProfileOption ? (
+        <input name={localV2ScanProfileName} type="hidden" value={normalizeLocalV2ScanProfile(localV2ScanProfile)} />
+      ) : null}
+      {includeLocalV2ScanProfileOption && localV2RunViaLambda ? (
+        <input name={localV2RunViaLambdaName} type="hidden" value="true" />
+      ) : null}
       {californiaDeepCheck ? <input name={californiaDeepCheckName} type="hidden" value="true" /> : null}
       {includeFreshRescanOption && freshRescan ? <input name={freshRescanName} type="hidden" value="true" /> : null}
       {variant === "field" ? (
         <span className={compact ? "shrink-0" : "block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"}>
-          Scan from
+          {includeScanFromOptions ? "Scan from" : "Scan options"}
         </span>
       ) : null}
       <button
         aria-expanded={isOpen}
         aria-haspopup="listbox"
-        aria-label={`Scan from: ${selectedOption.label}`}
+        aria-label={includeScanFromOptions ? `Scan from: ${selectedOption.label}` : "Scan options"}
         className={buttonClassName}
         onClick={() => setIsOpen((current) => !current)}
         ref={buttonRef}
-        title={`Scan from: ${selectedOption.label}`}
+        title={includeScanFromOptions ? `Scan from: ${selectedOption.label}` : "Scan options"}
         type="button"
       >
         <SelectedScanFromMarker option={selectedOption} />
@@ -235,104 +286,166 @@ export function ScanFromSelect({
                 width: menuPosition?.width ?? (variant === "icon" ? 320 : 288)
               }}
             >
-              {includeFreshRescanOption ? (
+              {includeFreshRescanOption || includeLocalV2ScanProfileOption ? (
                 <div className="pb-1">
                   <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
-                  <label
-                    className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                    title="Bypass the 24-hour recent-scan reuse check."
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-slate-700">Fresh re-scan</span>
-                    </span>
-                    <input
-                      checked={freshRescan}
-                      className="sr-only"
-                      onChange={(event) => setFreshRescan(event.target.checked)}
-                      type="checkbox"
-                    />
-                    <span
-                      className={
-                        freshRescan
-                          ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
-                          : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
-                      }
+                  {includeLocalV2ScanProfileOption ? (
+                    <>
+                      <div className="px-3 pb-2">
+                        <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+                          {LOCAL_V2_SCAN_PROFILE_OPTIONS.map((option) => {
+                            const isSelected = option.value === localV2ScanProfile;
+                            return (
+                              <button
+                                aria-pressed={isSelected}
+                                className={
+                                  isSelected
+                                    ? "rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-950 shadow-sm"
+                                    : "rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-500 transition hover:text-slate-800"
+                                }
+                                key={option.value}
+                                onClick={() => setLocalV2ScanProfile(option.value)}
+                                title={option.description}
+                                type="button"
+                              >
+                                {option.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <label
+                        className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                        title="Dispatch this v2 DAG scan through the configured AWS Lambda path."
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-semibold text-slate-700">Run via Lambda</span>
+                        </span>
+                        <input
+                          checked={localV2RunViaLambda}
+                          className="sr-only"
+                          onChange={(event) => setLocalV2RunViaLambda(event.target.checked)}
+                          type="checkbox"
+                        />
+                        <span
+                          className={
+                            localV2RunViaLambda
+                              ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
+                              : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
+                          }
+                        >
+                          <span
+                            className={
+                              localV2RunViaLambda
+                                ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
+                                : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
+                            }
+                          />
+                        </span>
+                      </label>
+                    </>
+                  ) : null}
+                  {includeFreshRescanOption ? (
+                    <label
+                      className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                      title="Bypass the 24-hour recent-scan reuse check."
                     >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-slate-700">Fresh re-scan</span>
+                      </span>
+                      <input
+                        checked={freshRescan}
+                        className="sr-only"
+                        onChange={(event) => setFreshRescan(event.target.checked)}
+                        type="checkbox"
+                      />
                       <span
                         className={
                           freshRescan
-                            ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
-                            : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
+                            ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
+                            : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
                         }
-                      />
-                    </span>
-                  </label>
-                  <label
-                    className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                    title="Run GPC and privacy-choice interaction checks for California review."
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-slate-700">California deep check</span>
-                    </span>
-                    <input
-                      checked={californiaDeepCheck}
-                      className="sr-only"
-                      onChange={(event) => setCaliforniaDeepCheck(event.target.checked)}
-                      type="checkbox"
-                    />
-                    <span
-                      className={
-                        californiaDeepCheck
-                          ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
-                          : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
-                      }
+                      >
+                        <span
+                          className={
+                            freshRescan
+                              ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
+                              : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
+                          }
+                        />
+                      </span>
+                    </label>
+                  ) : null}
+                  {includeFreshRescanOption ? (
+                    <label
+                      className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                      title="Run GPC and privacy-choice interaction checks for California review."
                     >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-slate-700">California deep check</span>
+                      </span>
+                      <input
+                        checked={californiaDeepCheck}
+                        className="sr-only"
+                        onChange={(event) => setCaliforniaDeepCheck(event.target.checked)}
+                        type="checkbox"
+                      />
                       <span
                         className={
                           californiaDeepCheck
-                            ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
-                            : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
+                            ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
+                            : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
                         }
-                      />
-                    </span>
-                  </label>
+                      >
+                        <span
+                          className={
+                            californiaDeepCheck
+                              ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
+                              : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
+                          }
+                        />
+                      </span>
+                    </label>
+                  ) : null}
                 </div>
               ) : null}
-              <div className={includeFreshRescanOption ? "border-t border-slate-200/70 pt-1" : ""}>
-                <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Scan from</div>
-                <div role="listbox" aria-label="Scan from">
-                  {menuOptions.map((option) => {
-                    const isSelected = option.value === value;
-                    return (
-                      <button
-                        aria-selected={isSelected}
-                        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
-                        key={option.value}
-                        onClick={() => selectScanFrom(option.value)}
-                        role="option"
-                        title={option.description}
-                        type="button"
-                      >
-                        <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-base leading-none">
-                          <ScanFromMarker
-                            flag={"flag" in option ? option.flag : undefined}
-                            icon={"icon" in option ? option.icon : undefined}
-                            selected={isSelected}
-                          />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className={isSelected ? "block text-sm font-semibold text-slate-950" : "block text-sm font-semibold text-slate-700"}>{option.label}</span>
-                        </span>
-                        {isSelected ? (
-                          <svg aria-hidden="true" className="h-4 w-4 text-sky-600" fill="none" viewBox="0 0 20 20">
-                            <path d="m4.5 10.5 3.25 3.25 7.75-8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" />
-                          </svg>
-                        ) : null}
-                      </button>
-                    );
-                  })}
+              {includeScanFromOptions ? (
+                <div className={includeFreshRescanOption || includeLocalV2ScanProfileOption ? "border-t border-slate-200/70 pt-1" : ""}>
+                  <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Scan from</div>
+                  <div role="listbox" aria-label="Scan from">
+                    {menuOptions.map((option) => {
+                      const isSelected = option.value === value;
+                      return (
+                        <button
+                          aria-selected={isSelected}
+                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
+                          key={option.value}
+                          onClick={() => selectScanFrom(option.value)}
+                          role="option"
+                          title={option.description}
+                          type="button"
+                        >
+                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-base leading-none">
+                            <ScanFromMarker
+                              flag={"flag" in option ? option.flag : undefined}
+                              icon={"icon" in option ? option.icon : undefined}
+                              selected={isSelected}
+                            />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className={isSelected ? "block text-sm font-semibold text-slate-950" : "block text-sm font-semibold text-slate-700"}>{option.label}</span>
+                          </span>
+                          {isSelected ? (
+                            <svg aria-hidden="true" className="h-4 w-4 text-sky-600" fill="none" viewBox="0 0 20 20">
+                              <path d="m4.5 10.5 3.25 3.25 7.75-8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" />
+                            </svg>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>,
             document.body
           )

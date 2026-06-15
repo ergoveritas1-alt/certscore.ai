@@ -41,7 +41,7 @@ function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
     explanation:
       "CertScore observed session replay or behavioral analytics vendors not observed pre-consent in retained evidence, including Microsoft Clarity, Hotjar, and Contentsquare. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
     id: "session_replay_fingerprinting_review",
-    label: "Session replay / behavioral analytics observed",
+    label: "Session replay / behavioral analytics",
     note:
       "CertScore observed session replay or behavioral analytics vendors not observed pre-consent in retained evidence, including Microsoft Clarity, Hotjar, and Contentsquare. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
     status: "Review signal",

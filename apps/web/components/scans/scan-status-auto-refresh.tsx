@@ -6,6 +6,7 @@ import React, { useEffect, useRef } from "react";
 type ScanStatusAutoRefreshProps = {
   pendingBrowserExtensionNormalization?: boolean;
   pendingPostCompletionWork?: boolean;
+  silent?: boolean;
   status: string;
 };
 
@@ -22,6 +23,7 @@ export function shouldAutoRefreshScanStatus(input: ScanStatusAutoRefreshProps) {
 export function ScanStatusAutoRefresh({
   pendingBrowserExtensionNormalization = false,
   pendingPostCompletionWork = false,
+  silent = false,
   status
 }: ScanStatusAutoRefreshProps) {
   const shouldRefresh = shouldAutoRefreshScanStatus({
@@ -43,9 +45,11 @@ export function ScanStatusAutoRefresh({
   return (
     <>
       {typeof window !== "undefined" ? <ScanStatusRefreshEffect shouldRefresh={shouldRefresh} /> : null}
-      <p className="text-sm text-slate-500">
-        Refreshing status automatically while this scan is {statusLabel}.
-      </p>
+      {silent ? null : (
+        <p className="text-sm text-slate-500">
+          Refreshing status automatically while this scan is {statusLabel}.
+        </p>
+      )}
     </>
   );
 }

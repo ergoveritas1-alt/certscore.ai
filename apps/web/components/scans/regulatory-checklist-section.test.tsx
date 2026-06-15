@@ -7,16 +7,17 @@ import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 function renderTabs(includeAdminOnlyTabs: boolean) {
   const tabs = [
     {
-      content: createElement("div", null, "California checklist"),
-      id: "california-privacy",
-      label: "CCPA/CPRA",
-      shortLabel: "CCPA/CPRA"
-    },
-    {
       content: createElement("div", null, "GDPR checklist"),
       id: "gdpr-eprivacy",
       label: "GDPR / ePrivacy",
       shortLabel: "GDPR/ePrivacy"
+    },
+    {
+      badgeLabel: "Alpha",
+      content: createElement("div", null, "California checklist"),
+      id: "california-privacy",
+      label: "CCPA/CPRA",
+      shortLabel: "CCPA/CPRA"
     },
     {
       content: createElement("div", null, "FTC checklist"),
@@ -51,15 +52,16 @@ test("RegulatoryChecklistSection can render baseline privacy options for non-adm
   const html = renderTabs(false);
 
   assert.match(html, /GDPR\/ePrivacy/);
-  assert.match(html, /Regulatory Review/);
+  assert.match(html, /Regulatory Diagnostics/);
   assert.match(html, /Privacy-law applicability context/);
   assert.match(html, /Applicability can depend on business facts or visitor geography CertScore has not verified/);
   assert.match(html, /Expand all/);
   assert.match(html, /CCPA\/CPRA/);
   assert.doesNotMatch(html, /CCPA\/CPRA\+CIPA/);
-  assert.ok(html.indexOf("Expand all") < indexOfTabLabel(html, "CCPA/CPRA"));
-  assert.ok(indexOfTabLabel(html, "CCPA/CPRA") < indexOfTabLabel(html, "GDPR/ePrivacy"));
-  assert.doesNotMatch(html, /Alpha/);
+  assert.ok(html.indexOf("Expand all") < indexOfTabLabel(html, "GDPR/ePrivacy"));
+  assert.ok(indexOfTabLabel(html, "GDPR/ePrivacy") < indexOfTabLabel(html, "CCPA/CPRA"));
+  assert.doesNotMatch(html, /Regulatory Review/);
+  assert.match(html, /Alpha/);
   assert.doesNotMatch(html, /FTC/);
   assert.doesNotMatch(html, /UK GDPR \/ PECR/);
   assert.doesNotMatch(html, />More</);
@@ -69,14 +71,15 @@ test("RegulatoryChecklistSection can render all checklist options for admin view
   const html = renderTabs(true);
 
   assert.match(html, /GDPR\/ePrivacy/);
-  assert.match(html, /Regulatory Review/);
+  assert.match(html, /Regulatory Diagnostics/);
   assert.match(html, /Privacy-law applicability context/);
   assert.match(html, /Applicability can depend on business facts or visitor geography CertScore has not verified/);
   assert.match(html, /Expand all/);
   assert.match(html, /CCPA\/CPRA/);
   assert.doesNotMatch(html, /CCPA\/CPRA\+CIPA/);
-  assert.ok(html.indexOf("Expand all") < indexOfTabLabel(html, "CCPA/CPRA"));
-  assert.ok(indexOfTabLabel(html, "CCPA/CPRA") < indexOfTabLabel(html, "GDPR/ePrivacy"));
+  assert.ok(html.indexOf("Expand all") < indexOfTabLabel(html, "GDPR/ePrivacy"));
+  assert.ok(indexOfTabLabel(html, "GDPR/ePrivacy") < indexOfTabLabel(html, "CCPA/CPRA"));
+  assert.doesNotMatch(html, /Regulatory Review/);
   assert.match(html, /FTC/);
   assert.match(html, /UK GDPR \/ PECR/);
   assert.match(html, />More</);

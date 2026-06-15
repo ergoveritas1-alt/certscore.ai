@@ -5,6 +5,12 @@ import { useActionState, useEffect, useState } from "react";
 import { clearPendingScanStarted, markPendingScanStarted } from "../analytics/data-layer-events";
 import { createDomainAction, type CreateDomainActionState } from "../../server/domains/create-domain";
 import { ScanFromSelect, type ScanFrom } from "../scans/scan-from-select";
+import {
+  ScanSubmitProgressBar,
+  normalizeLocalV2ScanProfile,
+  useScanProgressClock,
+  type LocalV2ScanProfile
+} from "../scans/scan-submit-progress";
 
 const initialState: CreateDomainActionState = {
   error: null
@@ -17,7 +23,9 @@ type AddDomainFormProps = {
 export function AddDomainForm({ planCode }: AddDomainFormProps) {
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
   const [freshRescan, setFreshRescan] = useState(false);
+  const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("full");
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
+  const scanProgress = useScanProgressClock(isPending);
 
   useEffect(() => {
     if (state.error) {
@@ -43,8 +51,11 @@ export function AddDomainForm({ planCode }: AddDomainFormProps) {
             <ScanFromSelect
               freshRescanValue={freshRescan}
               includeFreshRescanOption
+              includeLocalV2ScanProfileOption
+              localV2ScanProfileValue={localV2ScanProfile}
               onChange={setScanFrom}
               onFreshRescanChange={setFreshRescan}
+              onLocalV2ScanProfileChange={(value) => setLocalV2ScanProfile(normalizeLocalV2ScanProfile(value))}
               value={scanFrom}
               variant="icon"
             />
@@ -64,6 +75,15 @@ export function AddDomainForm({ planCode }: AddDomainFormProps) {
         <p className="text-xs text-slate-500">
           Trial accounts include a limited page-scan allowance for evaluating the workflow.
         </p>
+      ) : null}
+
+      {isPending ? (
+        <ScanSubmitProgressBar
+          active
+          nowMs={scanProgress.nowMs}
+          profileValue={localV2ScanProfile}
+          startedAtMs={scanProgress.startedAtMs}
+        />
       ) : null}
 
       {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}

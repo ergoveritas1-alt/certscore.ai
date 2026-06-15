@@ -78,8 +78,8 @@ export function ScanPageHeader({
               />
             </span>
           ) : null}
-          {createdAtLabel ? <span className="text-sm font-normal text-slate-400">{createdAtLabel}</span> : null}
         </div>
+        {createdAtLabel ? <div className="flex flex-wrap items-center gap-1.5 text-sm font-normal text-slate-400">{createdAtLabel}</div> : null}
         {actionsPlacement === "belowTitle" ? actions : null}
         {autoRefresh}
       </div>

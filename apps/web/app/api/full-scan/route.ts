@@ -5,6 +5,10 @@ import { isBetterAuthConfigurationError } from "../../../server/better-auth/env"
 import { checkDomainDns } from "../../../server/domains/domain-dns";
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
+import {
+  normalizeLocalV2DagRunViaLambda,
+  normalizeLocalV2DagScanProfile
+} from "../../../server/scans/local-v2-dag-scan-config";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
 import { getFullScanQueueErrorCode } from "./full-scan-errors";
 import { shouldBypassDnsValidationForProductionLoadTest } from "./load-test-intake";
@@ -76,6 +80,10 @@ export async function POST(request: Request) {
     const payload = await request.json();
     const californiaPrivacy = parseCaliforniaPrivacyConfig(payload?.californiaPrivacy);
     const forceNewScan = parseForceNewScan(payload?.forceNewScan);
+    const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);
+    const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(
+      payload?.localV2RunViaLambda ?? payload?.localV2DagRunViaLambda ?? payload?.v2RunViaLambda
+    );
     const scanFrom = normalizeScanFrom(payload?.scanFrom ?? payload?.geo);
     const provenance = getScanRequestProvenance(request);
     const rawDomain = typeof payload?.domain === "string" ? payload.domain : "";
@@ -151,6 +159,8 @@ export async function POST(request: Request) {
         bypassRecentScanReuse: forceNewScan,
         californiaPrivacy,
         hostname: firstDomain.hostname,
+        localV2DagScanProfile,
+        localV2DagRunViaLambda,
         normalizedUrl: firstDomain.normalizedUrl,
         provenance,
         scanFrom
@@ -163,6 +173,8 @@ export async function POST(request: Request) {
 
         const preview = await createPreviewScan({
           hostname: firstDomain.hostname,
+          localV2DagScanProfile,
+          localV2DagRunViaLambda,
           normalizedUrl: firstDomain.normalizedUrl
         });
 
@@ -206,6 +218,8 @@ export async function POST(request: Request) {
           bypassRecentScanReuse: forceNewScan,
           californiaPrivacy,
           domain: item.normalizedUrl,
+          localV2DagScanProfile,
+          localV2DagRunViaLambda,
           provenance,
           scanFrom
         })

@@ -39,6 +39,19 @@ import {
   requiresFreshScanForCaliforniaRuntime,
   type QueuedFullScanCaliforniaPrivacyConfig
 } from "./full-scan-config";
+import {
+  normalizeLocalV2DagRunViaLambda,
+  normalizeLocalV2DagScanProfile,
+  type LocalV2DagScanProfile
+} from "./local-v2-dag-scan-config";
+import {
+  LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
+  LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
+  LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
+  LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
+  dispatchLocalV2DagLambdaScan,
+  summarizeLocalV2DagLambdaDispatchForEvent
+} from "./local-v2-dag-lambda-dispatch";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
 
@@ -73,6 +86,8 @@ type QueueFullScanInput = {
   };
   domainId: string;
   bypassRecentScanReuse?: boolean;
+  localV2DagScanProfile?: LocalV2DagScanProfile | null;
+  localV2DagRunViaLambda?: boolean | null;
   organizationId: string;
   planCode: PlanCode;
   planLimitsOverride?: Awaited<ReturnType<typeof getPlanLimits>>;
@@ -105,6 +120,19 @@ function getCurrentMonthWindow(now = new Date()) {
     periodStart: periodStart.toISOString().slice(0, 10),
     periodEnd: periodEnd.toISOString().slice(0, 10)
   };
+}
+
+function getLocalV2DagLambdaCallbackUrl() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (!appUrl) {
+    return null;
+  }
+
+  try {
+    return new URL("/api/local/v2-dag-lambda-results", appUrl).toString();
+  } catch {
+    return null;
+  }
 }
 
 export async function queueFullScanForDomain(input: QueueFullScanInput): Promise<{
@@ -179,6 +207,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         enforceMonthlyUsageLimit: Boolean(input.enforceMonthlyUsageLimit),
         planCode: input.planCode,
         provenance: input.provenance ?? null,
+        localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
         scanType: input.scanType ?? "full",
         scanFrom,
         source: input.source ?? null
@@ -410,6 +439,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   const scanConfig = buildQueuedFullScanConfig({
     californiaPrivacy: input.californiaPrivacy,
     hostname: domainRecord.domain.hostname,
+    localV2DagScanProfile: input.localV2DagScanProfile,
+    localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     maxPages: pagesRequested,
     normalizedUrl: domainRecord.domain.normalizedUrl,
     priorScanAcceleration,
@@ -417,6 +448,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     scanFrom,
     source: input.source ?? "manual-dashboard"
   });
+  const localV2DagLambdaDispatch = summarizeLocalV2DagLambdaDispatchForEvent(scanConfig);
   const queueMetadata = getFullScanQueueMetadata({
     provenance: input.provenance,
     scanType: input.scanType ?? "full"
@@ -494,16 +526,81 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         githubRunId: input.provenance?.githubRunId ?? null,
         githubWorkflow: input.provenance?.githubWorkflow ?? null,
         provenance: input.provenance ?? null,
-        californiaPrivacy: scanConfig.californiaPrivacy ?? null
+        californiaPrivacy: scanConfig.californiaPrivacy ?? null,
+        localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
+        localV2DagLambdaDispatch
       },
       organizationId: input.organizationId,
       scanId: scan.id
     });
+    if (localV2DagLambdaDispatch) {
+      await insertQueuedFullScanEvent({
+        domainId: domainRecord.domain.id,
+        eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
+        message:
+          "Local v2 DAG Lambda dispatch requested for the artifact-only v2 DAG scanner.",
+        metadataJson: localV2DagLambdaDispatch,
+        organizationId: input.organizationId,
+        scanId: scan.id
+      });
+    }
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Scan created but event logging failed.",
       scanId: null
     };
+  }
+
+  if (localV2DagLambdaDispatch) {
+    await insertQueuedFullScanEvent({
+      domainId: domainRecord.domain.id,
+      eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
+      message: "Invoking local v2 DAG Lambda for artifact-only scan execution.",
+      metadataJson: localV2DagLambdaDispatch,
+      organizationId: input.organizationId,
+      scanId: scan.id
+    });
+
+    try {
+      const dispatchResult = await dispatchLocalV2DagLambdaScan({
+        localCallbackUrl: getLocalV2DagLambdaCallbackUrl(),
+        scanConfig,
+        scanId: scan.id
+      });
+      await insertQueuedFullScanEvent({
+        domainId: domainRecord.domain.id,
+        eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
+        message: "AWS Lambda accepted the local v2 DAG artifact-only scan invocation.",
+        metadataJson: {
+          ...localV2DagLambdaDispatch,
+          invocationRequestId: dispatchResult.invocationRequestId,
+          invocationStatusCode: dispatchResult.invocationStatusCode,
+          invocationType: dispatchResult.invocationType,
+          productionFindingIntegration: false
+        },
+        organizationId: input.organizationId,
+        scanId: scan.id
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Local v2 DAG Lambda dispatch failed.";
+      await insertQueuedFullScanEvent({
+        domainId: domainRecord.domain.id,
+        eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
+        message: "Local v2 DAG Lambda dispatch failed; no fallback scanner execution was started.",
+        metadataJson: {
+          ...localV2DagLambdaDispatch,
+          errorMessage: message,
+          productionFindingIntegration: false
+        },
+        organizationId: input.organizationId,
+        scanId: scan.id
+      });
+
+      return {
+        error: message,
+        scanId: scan.id
+      };
+    }
   }
 
   try {
@@ -516,6 +613,13 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     return {
       error: error instanceof Error ? error.message : "Scan created but latest scan update failed.",
       scanId: null
+    };
+  }
+
+  if (localV2DagLambdaDispatch) {
+    return {
+      error: null,
+      scanId: scan.id
     };
   }
 
@@ -554,6 +658,8 @@ export async function createFullScanAction(
   const domainId = String(formData.get("domainId") ?? "").trim();
   const californiaPrivacy = getCaliforniaDeepCheckConfig(formData.get("californiaDeepCheck") === "true");
   const forceNewScan = formData.get("forceNewScan") === "true";
+  const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
+  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"));
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
 
   const fullScanQueueAvailability = await getFullScanQueueAvailability({ scanFrom });
@@ -578,6 +684,8 @@ export async function createFullScanAction(
     bypassRecentScanReuse: forceNewScan,
     californiaPrivacy,
     enforceMonthlyUsageLimit: true,
+    localV2DagScanProfile,
+    localV2DagRunViaLambda,
     scanFrom,
     scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
     source: "manual-dashboard"

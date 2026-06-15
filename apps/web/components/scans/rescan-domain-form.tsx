@@ -1,9 +1,16 @@
 "use client";
 
 import { Button } from "@website-signal-risk-scanner/ui";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { rescanDomainAction } from "../../server/scans/rescan-domain";
 import type { CreateFullScanActionState } from "../../server/scans/create-full-scan";
+import { ScanFromSelect } from "./scan-from-select";
+import {
+  ScanSubmitProgressBar,
+  normalizeLocalV2ScanProfile,
+  useScanProgressClock,
+  type LocalV2ScanProfile
+} from "./scan-submit-progress";
 
 const initialState: CreateFullScanActionState = {
   error: null
@@ -19,6 +26,8 @@ type RescanDomainFormProps = {
 
 export function RescanDomainForm({ cooldownMessage = null, compact = false, disabled = false, domainId, showLabel = false }: RescanDomainFormProps) {
   const [state, action, isPending] = useActionState(rescanDomainAction, initialState);
+  const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("full");
+  const scanProgress = useScanProgressClock(isPending);
   const errorMessage = state.error;
   const isDisabled = disabled || isPending;
   const tooltipMessage = disabled ? cooldownMessage : null;
@@ -27,7 +36,15 @@ export function RescanDomainForm({ cooldownMessage = null, compact = false, disa
     <form action={action} className={compact ? "space-y-0" : "space-y-2"}>
       <input name="domainId" type="hidden" value={domainId} />
       {errorMessage ? <p className="max-w-sm text-sm text-red-600">{errorMessage}</p> : null}
-      <div className="group relative inline-flex">
+      <div className="group relative inline-flex items-center gap-1.5">
+        <ScanFromSelect
+          compact
+          includeLocalV2ScanProfileOption
+          includeScanFromOptions={false}
+          localV2ScanProfileValue={localV2ScanProfile}
+          onLocalV2ScanProfileChange={(value) => setLocalV2ScanProfile(normalizeLocalV2ScanProfile(value))}
+          variant="icon"
+        />
         <Button
           aria-label={isPending ? "Queueing rescan" : "Re-scan domain"}
           className={
@@ -69,6 +86,15 @@ export function RescanDomainForm({ cooldownMessage = null, compact = false, disa
           </div>
         ) : null}
       </div>
+      {isPending ? (
+        <ScanSubmitProgressBar
+          active
+          compact={compact}
+          nowMs={scanProgress.nowMs}
+          profileValue={localV2ScanProfile}
+          startedAtMs={scanProgress.startedAtMs}
+        />
+      ) : null}
     </form>
   );
 }

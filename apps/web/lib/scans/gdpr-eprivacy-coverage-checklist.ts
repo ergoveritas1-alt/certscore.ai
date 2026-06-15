@@ -279,6 +279,15 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   }
 ];
 
+const SESSION_REPLAY_PARENT_ROW_ID = "session_replay_fingerprinting_review";
+const SESSION_REPLAY_CHILD_ROW_LABELS = new Map([
+  ["session_replay_before_consent", "Before consent"],
+  ["session_replay_disclosure_alignment", "Disclosure alignment"],
+  ["session_replay_sensitive_surface", "Sensitive surfaces"],
+  ["session_replay_after_refusal", "After refusal / opt-out"]
+]);
+const SESSION_REPLAY_CHILD_ROW_IDS = new Set(SESSION_REPLAY_CHILD_ROW_LABELS.keys());
+
 function getChecklistTone(status: GdprEprivacyCoverageChecklistStatus): GdprEprivacyCoverageChecklistTone {
   switch (status) {
       case "Gap observed":
@@ -1363,7 +1372,7 @@ function specializeSessionReplayChecklistRow(input: {
   status: GdprEprivacyCoverageChecklistStatus;
   coverageOutcome?: GdprEprivacyCoverageOutcome;
 }) {
-  if (input.definition.id !== "session_replay_fingerprinting_review") {
+  if (input.definition.id !== SESSION_REPLAY_PARENT_ROW_ID) {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation: input.definition.explanation,
@@ -1402,11 +1411,9 @@ function specializeSessionReplayChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation: preConsentObserved
-        ? "CertScore observed session replay or behavioral analytics before a recorded consent action. Review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls."
+        ? "Session replay or behavioral analytics was observed before a recorded consent action. Review disclosure, masking, sensitive-page coverage, and refusal behavior as supporting subchecks."
         : "CertScore observed session replay or behavioral analytics in a higher-risk context, such as sensitive-surface co-presence, disclosure mismatch, post-reject persistence, or retained payload exposure. Review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
-      label: preConsentObserved
-        ? "Session replay before consent observed"
-        : "Session replay disclosure or sensitive-surface gap observed",
+      label: input.definition.label,
       status: "Gap observed" as const
     };
   }
@@ -1427,7 +1434,7 @@ function specializeSessionReplayChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation: `CertScore observed session replay or behavioral analytics vendors ${timingPhrase}${vendorPhrase ? `, including ${vendorPhrase}` : ""}.`,
-      label: "Session replay / behavioral analytics observed",
+      label: input.definition.label,
       status: "Observed" as const
     };
   }
@@ -1439,7 +1446,7 @@ function specializeSessionReplayChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation: `CertScore observed session replay or behavioral analytics vendors ${timingPhrase}${vendorPhrase ? `, including ${vendorPhrase}` : ""}. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.`,
-      label: "Session replay / behavioral analytics observed",
+      label: input.definition.label,
       status: "Review signal" as const
     };
   }
@@ -1448,7 +1455,7 @@ function specializeSessionReplayChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation: "No eligible session replay, behavioral recording, or fingerprinting-like signal was observed in the tested context.",
-      label: "No session replay / behavioral analytics observed",
+      label: input.definition.label,
       status: input.status
     };
   }
@@ -1457,7 +1464,7 @@ function specializeSessionReplayChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation: "Session replay and behavioral analytics review was not testable from retained runtime evidence for this scan context.",
-      label: "Session replay review not testable",
+      label: input.definition.label,
       status: input.status
     };
   }
@@ -2413,6 +2420,105 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
   return item;
 }
 
+function getSessionReplayParentNote(input: {
+  children: GdprEprivacyCoverageChecklistItem[];
+  parent: GdprEprivacyCoverageChecklistItem;
+}) {
+  const childWithGap = input.children.find((child) => child.status === "Gap observed");
+  if (childWithGap?.id === "session_replay_before_consent") {
+    return "Session replay or behavioral analytics was observed before a recorded consent action. Review disclosure, masking, sensitive-page coverage, and refusal behavior as supporting subchecks.";
+  }
+  if (childWithGap?.id === "session_replay_disclosure_alignment") {
+    return "Session replay or behavioral analytics was observed and a disclosure-alignment gap was retained. Review whether the public notice clearly explains the observed replay vendor or domain.";
+  }
+  if (childWithGap?.id === "session_replay_sensitive_surface") {
+    return "Session replay or behavioral analytics was observed on a retained sensitive surface. Review masking, exclusion rules, and collection minimization.";
+  }
+  if (childWithGap?.id === "session_replay_after_refusal") {
+    return "Session replay or behavioral analytics persisted after a confirmed reject or opt-out action. Review whether refusal suppresses behavioral recording.";
+  }
+  if (/entropy/i.test(input.parent.label)) {
+    return input.parent.explanation;
+  }
+  if (input.parent.status === "Review signal") {
+    return input.children.some((child) => child.status === "Not observed" || child.status === "Observed")
+      ? "Session replay or behavioral analytics was observed. No strict session-replay gap was proven from the retained subchecks, but disclosure, masking, sensitive-page coverage, and refusal behavior still warrant review."
+      : "Session replay or behavioral analytics was observed, but the retained scan context did not resolve the stricter timing, disclosure, sensitive-surface, or refusal subchecks.";
+  }
+  return input.parent.explanation;
+}
+
+function mergeSessionReplayParentStatus(input: {
+  children: GdprEprivacyCoverageChecklistItem[];
+  parent: GdprEprivacyCoverageChecklistItem;
+}) {
+  if (input.children.some((child) => child.status === "Gap observed")) {
+    return "Gap observed" as const;
+  }
+  return input.parent.status;
+}
+
+function collapseSessionReplayDiagnosticRows(items: GdprEprivacyCoverageChecklistItem[]) {
+  const parent = items.find((item) => item.id === SESSION_REPLAY_PARENT_ROW_ID);
+  const children = items.filter((item) => SESSION_REPLAY_CHILD_ROW_IDS.has(item.id));
+  if (!parent || children.length === 0) {
+    return items.filter((item) => !SESSION_REPLAY_CHILD_ROW_IDS.has(item.id));
+  }
+
+  const status = mergeSessionReplayParentStatus({ children, parent });
+  const parentSessionReplayEvidence = getRecordValue(getRetainedEvidenceRecord(parent).sessionReplayEvidence);
+  const parentHasPreConsentSignal =
+    sessionReplayEvidenceHasPreConsentSignal(parentSessionReplayEvidence) ||
+    /before a recorded consent action/i.test(parent.explanation);
+  const assessmentStatus = getAssessmentStatus(status);
+  const evidenceState = getEvidenceState({
+    assessmentStatus,
+    id: parent.id,
+    status
+  });
+  const explanation = getSessionReplayParentNote({ children, parent });
+  const subchecks = children.map((child): RegulatoryChecklistSubcheck => {
+    const childStatus =
+      child.id === "session_replay_before_consent" && parentHasPreConsentSignal
+        ? "Gap observed"
+        : child.status;
+    const childAssessmentStatus = getAssessmentStatus(childStatus);
+    return {
+      assessmentStatus: childAssessmentStatus,
+      evidenceRefs: child.evidenceRefs.length > 0 ? child.evidenceRefs : parent.evidenceRefs,
+      evidenceState: getEvidenceState({
+        assessmentStatus: childAssessmentStatus,
+        id: child.id,
+        status: childStatus
+      }),
+      id: child.id,
+      label: SESSION_REPLAY_CHILD_ROW_LABELS.get(child.id) ?? child.label,
+      note:
+        child.id === "session_replay_before_consent" && parentHasPreConsentSignal
+          ? "Session replay or behavioral recording collection was retained before a recorded consent action."
+          : child.explanation,
+      status: childStatus
+    };
+  });
+
+  return items
+    .map((item) => item.id === parent.id
+      ? {
+        ...parent,
+        assessmentStatus,
+        evidenceRefs: [...new Set([...parent.evidenceRefs, ...children.flatMap((child) => child.evidenceRefs)])].slice(0, 6),
+        evidenceState,
+        explanation,
+        label: parent.label,
+        note: explanation,
+        status,
+        subchecks,
+        tone: getChecklistTone(status)
+      }
+      : item)
+    .filter((item) => !SESSION_REPLAY_CHILD_ROW_IDS.has(item.id));
+}
+
 export function deriveGdprEprivacyCoverageChecklist(
   input: GdprEprivacyCoverageChecklistInput
 ): GdprEprivacyCoverageChecklistItem[] {
@@ -2568,5 +2674,5 @@ export function deriveGdprEprivacyCoverageChecklist(
     });
   });
 
-  return rows.map(applyChecklistEvidenceDeducibilityGuard);
+  return collapseSessionReplayDiagnosticRows(rows.map(applyChecklistEvidenceDeducibilityGuard));
 }

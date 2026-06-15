@@ -180,10 +180,14 @@ test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session r
   assert.equal(row.status, "Observed");
   assert.equal(row.evidenceState, "observed");
   assert.equal(row.assessmentStatus, "checked");
-  assert.equal(row.label, "Session replay / behavioral analytics observed");
+  assert.equal(row.label, "Session replay / behavioral analytics");
   assert.match(row.explanation, /not observed pre-consent in retained evidence/i);
   assert.match(row.explanation, /Microsoft Clarity, Hotjar, and Contentsquare/);
   assert.doesNotMatch(row.explanation, /before consent observed/i);
+  assert.equal(row.subchecks?.length, 4);
+  assert.equal(row.subchecks?.[0]?.label, "Before consent");
+  assert.equal(row.subchecks?.[1]?.label, "Disclosure alignment");
+  assert.equal(items.some((item) => item.id === "session_replay_before_consent"), false);
 });
 
 test("deriveGdprEprivacyCoverageChecklist labels entropy-only evidence separately from session replay", () => {
@@ -267,8 +271,12 @@ test("deriveGdprEprivacyCoverageChecklist labels retained pre-consent session re
   assert.equal(row.status, "Gap observed");
   assert.equal(row.evidenceState, "observed");
   assert.equal(row.assessmentStatus, "gap_observed");
-  assert.equal(row.label, "Session replay before consent observed");
+  assert.equal(row.label, "Session replay / behavioral analytics");
   assert.match(row.explanation, /before a recorded consent action/i);
+  assert.equal(row.subchecks?.length, 4);
+  assert.equal(row.subchecks?.[0]?.label, "Before consent");
+  assert.equal(row.subchecks?.[0]?.status, "Gap observed");
+  assert.equal(items.some((item) => item.id === "session_replay_before_consent"), false);
 });
 
 test("deriveGdprEprivacyCoverageChecklist keeps consent surface and post-choice lifecycle ownership separate", () => {

@@ -452,6 +452,97 @@ export async function loadV2ScanLabArtifacts(input: {
   }
 }
 
+export async function loadLocalV2DagScanLabArtifacts(input: {
+  outDir: string;
+  profile?: string | null;
+  url: string;
+  workspaceRoot?: string;
+}): Promise<V2ScanLabLoadResult> {
+  const normalized = normalizeUrlInput(input.url);
+  if (!normalized) {
+    return {
+      status: "error",
+      error: {
+        code: "invalid_url",
+        message: "Local v2 DAG scan URL could not be normalized.",
+      },
+    };
+  }
+
+  try {
+    const workspaceRoot = findWorkspaceRoot(input.workspaceRoot ?? process.cwd());
+    const outDir = path.resolve(input.outDir);
+    const allowedRoot = path.resolve(workspaceRoot, "artifacts", "local-v2-dag-scans");
+    if (path.relative(allowedRoot, outDir).startsWith("..")) {
+      return {
+        status: "error",
+        error: {
+          code: "artifact_read_failed",
+          message: "Local v2 DAG artifact path is outside the local scan artifact directory.",
+          artifactPath: outDir,
+        },
+      };
+    }
+
+    const definition = ARTIFACT_DEFINITIONS.find((candidate) => candidate.kind === "canonicalEvidenceBundle");
+    if (!definition) {
+      throw new Error("Canonical evidence bundle definition is unavailable.");
+    }
+    const filePath = path.join(outDir, definition.fileName);
+    if (!await fileExists(filePath)) {
+      return {
+        status: "empty",
+        message: "Local v2 DAG scan artifacts are not available yet.",
+      };
+    }
+
+    const raw = await readFile(filePath, "utf8");
+    const { bundle, preview } = parseCanonicalEvidenceBundlePreview(
+      raw,
+      definition,
+      filePath,
+      normalized.domain,
+    );
+    const profile = parseProfile(input.profile);
+    const sourceUrl = stringValue(preview.url) ?? normalized.normalizedUrl;
+    const match: ArtifactMatch = {
+      kind: "canonicalEvidenceBundle",
+      rootName: `v2-calibration-local-${profile}-${normalized.domain}`,
+      rootPath: outDir,
+      domainFolder: normalized.domain,
+      filePath,
+      raw: "",
+      parsed: preview,
+      canonicalEvidenceBundle: bundle,
+      sourceUrl,
+    };
+    const matches = [match];
+    const chains = buildArtifactChains(matches, profile);
+    const selectedChain = selectArtifactChain(chains, profile, null);
+    const model = await buildModel({
+      chains,
+      matches,
+      normalized,
+      profile,
+      selectedChain,
+      workspaceRoot,
+    });
+
+    return { status: "ready", model };
+  } catch (error) {
+    if (isV2ScanLabError(error)) {
+      return { status: "error", error };
+    }
+    return {
+      status: "error",
+      error: {
+        code: "artifact_read_failed",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    };
+  }
+}
+
 async function findNewestDomainChainKey(input: {
   artifactsDir: string;
   domain: string;

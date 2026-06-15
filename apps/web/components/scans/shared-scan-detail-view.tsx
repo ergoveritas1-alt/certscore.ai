@@ -309,6 +309,64 @@ function formatDurationMs(value: number | null | undefined) {
   return parts.join(" ");
 }
 
+function formatScanTimeLabel(input: {
+  completedAt: string | null | undefined;
+  createdAt: string | null | undefined;
+  durationMs?: number | null | undefined;
+  startedAt: string | null | undefined;
+}) {
+  if (typeof input.durationMs === "number" && Number.isFinite(input.durationMs) && input.durationMs >= 0) {
+    return formatScanTimeDurationMs(input.durationMs);
+  }
+
+  const scanOpenedAt = input.createdAt ?? input.startedAt;
+
+  if (!scanOpenedAt || !input.completedAt) {
+    return null;
+  }
+
+  const startedAtMs = Date.parse(scanOpenedAt);
+  const completedAtMs = Date.parse(input.completedAt);
+
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(completedAtMs) || completedAtMs < startedAtMs) {
+    return null;
+  }
+
+  return formatScanTimeDurationMs(completedAtMs - startedAtMs);
+}
+
+function formatScanTimeDurationMs(durationMs: number) {
+  const totalSeconds = Math.max(0, Math.ceil(durationMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
+
+  if (hours > 0) {
+    parts.push(`${hours} hr`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes} min`);
+  }
+  if (seconds > 0 || parts.length === 0) {
+    parts.push(`${seconds} sec`);
+  }
+
+  return parts.join(" ");
+}
+
+function getRuntimeArtifactNumber(
+  runtimeArtifacts: ScanDetailResponse["runtimeArtifacts"],
+  key: string
+) {
+  if (!runtimeArtifacts) {
+    return null;
+  }
+
+  const value = runtimeArtifacts[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function formatReasonLabel(value: string) {
   return value
     .split("_")
@@ -5578,6 +5636,7 @@ type SharedScanDetailViewProps = {
   executiveAccessLimitationOverride?: ExecutiveAccessLimitationNotice | null;
   headerActions?: ReactNode;
   headerActionsPlacement?: "end" | "belowTitle";
+  localV2DagInFlightProgress?: ReactNode;
   previewNotice?: ReactNode;
   previewPayload?: PreviewScanPayload | null;
   previewMode?: "full" | "homepage";
@@ -5907,6 +5966,7 @@ export function SharedScanDetailView({
   executiveAccessLimitationOverride = null,
   headerActions = null,
   headerActionsPlacement = "end",
+  localV2DagInFlightProgress = null,
   previewNotice = null,
   previewPayload: previewPayloadOverride = null,
   previewMode = "full",
@@ -6319,6 +6379,12 @@ export function SharedScanDetailView({
     executiveRegulatoryLenses.find((lens) => lens.acronym === "GDPR / ePrivacy") ?? null;
   const californiaPrivacyExecutiveLens =
     executiveRegulatoryLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA") ?? null;
+  const scanTimeLabel = formatScanTimeLabel({
+    completedAt: scanRecord.scan.completedAt,
+    createdAt: scanRecord.scan.createdAt,
+    durationMs: getRuntimeArtifactNumber(scanRecord.runtimeArtifacts, "local_v2_dag_scan_core_duration_ms"),
+    startedAt: scanRecord.scan.startedAt
+  });
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
@@ -6344,6 +6410,12 @@ export function SharedScanDetailView({
         createdAtLabel={
           <>
             Created <ViewerTimestamp value={scanRecord.scan.createdAt} />
+            {scanTimeLabel ? (
+              <>
+                {" "}
+                <span>(scan time: {scanTimeLabel})</span>
+              </>
+            ) : null}
             {createdAtInfoTip ? (
               <InfoTip
                 align="end"
@@ -6372,14 +6444,16 @@ export function SharedScanDetailView({
         }
       />
       {isScanInFlight ? (
-        <FullScanProgressCard
-          buildPhaseSummaries={buildPhaseSummaries}
-          createdAt={scanRecord.scan.createdAt}
-          events={scanRecord.events}
-          executionSummary={scanRecord.scan.executionSummary}
-          scanId={scanRecord.scan.id}
-          status={scanRecord.scan.status}
-        />
+        localV2DagInFlightProgress ?? (
+          <FullScanProgressCard
+            buildPhaseSummaries={buildPhaseSummaries}
+            createdAt={scanRecord.scan.createdAt}
+            events={scanRecord.events}
+            executionSummary={scanRecord.scan.executionSummary}
+            scanId={scanRecord.scan.id}
+            status={scanRecord.scan.status}
+          />
+        )
       ) : null}
       {previewNotice}
       {!isScanInFlight ? (
@@ -6449,40 +6523,44 @@ export function SharedScanDetailView({
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
           />
           {showRegulatoryChecklistSection ? (
-          <RegulatoryChecklistSection
-            showAdvancedEvidenceToggle
-            tabs={[
-              {
-                content: (
-                  <CaliforniaPrivacyCoverageChecklistCard
-                    californiaLens={californiaPrivacyExecutiveLens}
-                    defaultOpen
-                    items={californiaPrivacyCoverageChecklist}
-                  />
-                ),
-                id: "california-privacy",
-                label: "CCPA/CPRA",
-                shortLabel: "CCPA/CPRA"
-              },
-              {
-                content: (
-                  <GdprEprivacyCoverageChecklistCard
-                    defaultOpen
-                    gdprEprivacyLens={gdprEprivacyExecutiveLens}
-                    items={gdprEprivacyCoverageChecklist}
-                  />
-                ),
-                id: "gdpr-eprivacy",
-                label: "GDPR / ePrivacy",
-                shortLabel: "GDPR/ePrivacy"
-              },
-            ]}
-          />
+            <RegulatoryChecklistSection
+              headingLabel="Regulatory Diagnostics"
+              showAdvancedEvidenceToggle
+              tabs={[
+                {
+                  content: (
+                    <GdprEprivacyCoverageChecklistCard
+                      defaultOpen
+                      gdprEprivacyLens={gdprEprivacyExecutiveLens}
+                      items={gdprEprivacyCoverageChecklist}
+                      showSummaryStrip={false}
+                    />
+                  ),
+                  id: "gdpr-eprivacy",
+                  label: "GDPR / ePrivacy",
+                  shortLabel: "GDPR/ePrivacy"
+                },
+                {
+                  content: (
+                    <CaliforniaPrivacyCoverageChecklistCard
+                      californiaLens={californiaPrivacyExecutiveLens}
+                      defaultOpen
+                      items={californiaPrivacyCoverageChecklist}
+                      showSummaryStrip={false}
+                    />
+                  ),
+                  badgeLabel: "alpha",
+                  id: "california-privacy",
+                  label: "CCPA/CPRA",
+                  shortLabel: "CCPA/CPRA"
+                },
+              ]}
+            />
           ) : null}
           
         </>
-        )}
-      </>
+          )}
+        </>
       ) : null}
     </div>
   );

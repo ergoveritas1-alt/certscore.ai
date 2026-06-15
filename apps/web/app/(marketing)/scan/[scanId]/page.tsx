@@ -7,12 +7,17 @@ import { SharedScanDetailView } from "../../../../components/scans/shared-scan-d
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { AgentSummaryActions, ShareReportActions } from "../../../../components/scans/share-report-actions";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
+import { LocalV2DagScanProgressCard } from "../../../../components/scans/scan-submit-progress";
 import {
   hasPendingBrowserExtensionNormalization,
   hasPendingPostCompletionFindingWork
 } from "../../../../lib/scans/scan-auto-refresh";
 import { absoluteUrl } from "../../../../lib/seo";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
+import {
+  getLocalV2DagReportInput,
+  materializeLocalV2DagScanDetail
+} from "../../../../server/scans/local-v2-dag-report";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 
 export const dynamic = "force-dynamic";
@@ -92,22 +97,28 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     notFound();
   }
 
+  const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
+  const displayScanRecord =
+    localV2DagReportInput && scanRecord.scan.status === "completed"
+      ? await materializeLocalV2DagScanDetail(scanRecord)
+      : scanRecord;
+
   const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
     events: scanRecord.events,
     scanType: scanRecord.scan.scanType,
     status: scanRecord.scan.status
   });
-  const reportFindingCount = buildScanReportUnifiedFindings(scanRecord).length;
+  const reportFindingCount = buildScanReportUnifiedFindings(displayScanRecord).length;
   await persistReportFindingCount({
     count: reportFindingCount,
-    scanId: scanRecord.scan.id
+    scanId: displayScanRecord.scan.id
   });
   const pendingPostCompletionWork = hasPendingPostCompletionFindingWork({
     reportFindingsDerived: true,
     signalEnrichmentWorkflow: scanRecord.signalEnrichmentWorkflow,
     status: scanRecord.scan.status
   });
-  const publicScanDomainLabel = getPublicScanDomainLabel(scanRecord.scan.domainHostname);
+  const publicScanDomainLabel = getPublicScanDomainLabel(displayScanRecord.scan.domainHostname);
 
   return (
     <main className="min-h-screen bg-white">
@@ -119,16 +130,17 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
             <ScanStatusAutoRefresh
               pendingBrowserExtensionNormalization={pendingBrowserExtensionNormalization}
               pendingPostCompletionWork={pendingPostCompletionWork}
-              status={scanRecord.scan.status}
+              silent={Boolean(localV2DagReportInput)}
+              status={displayScanRecord.scan.status}
             />
           }
           createdAtInfoTip={recentScanReused ? RECENT_SCAN_REUSED_MESSAGE : null}
           headerActions={
-            scanRecord.scan.status === "completed" ? (
+            displayScanRecord.scan.status === "completed" ? (
               <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <ShareReportActions
                   domainLabel={publicScanDomainLabel}
-                  scanId={scanRecord.scan.id}
+                  scanId={displayScanRecord.scan.id}
                 />
                 <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                   <DomainScanForm
@@ -144,12 +156,21 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
             ) : null
           }
           headerActionsPlacement="belowTitle"
-          scanRecord={scanRecord}
+          localV2DagInFlightProgress={
+            localV2DagReportInput && (scanRecord.scan.status === "queued" || scanRecord.scan.status === "running" || scanRecord.scan.status === "processing") ? (
+              <LocalV2DagScanProgressCard
+                createdAt={scanRecord.scan.createdAt}
+                profileValue={localV2DagReportInput.profile}
+                startedAt={scanRecord.scan.startedAt}
+              />
+            ) : null
+          }
+          scanRecord={displayScanRecord}
           viewerAccessRole="user"
         />
-        {scanRecord.scan.status === "completed" ? (
+        {displayScanRecord.scan.status === "completed" ? (
           <div className="mt-8 space-y-4">
-            <AgentSummaryActions domainLabel={publicScanDomainLabel} scanId={scanRecord.scan.id} />
+            <AgentSummaryActions domainLabel={publicScanDomainLabel} scanId={displayScanRecord.scan.id} />
           </div>
         ) : null}
       </section>

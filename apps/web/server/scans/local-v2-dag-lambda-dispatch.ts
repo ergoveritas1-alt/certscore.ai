@@ -1,0 +1,322 @@
+import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
+import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
+import {
+  LOCAL_V2_DAG_LAMBDA_AWS_REGION,
+  LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
+  LOCAL_V2_DAG_SCAN_PROCESSOR,
+  type LocalV2DagLambdaTargetEnvironment,
+  type LocalV2DagScanProfile
+} from "./local-v2-dag-scan-config";
+
+export const LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
+export const LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE = "v2_lambda_dispatch.requested";
+export const LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE = "v2_lambda_dispatch.started";
+export const LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE = "v2_lambda_dispatch.accepted";
+export const LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE = "v2_lambda_dispatch.failed";
+export const LOCAL_V2_DAG_LAMBDA_RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
+export const LOCAL_V2_DAG_LAMBDA_RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
+
+export type LocalV2DagLambdaDispatchPayload = {
+  artifactOnly: true;
+  awsRegion: typeof LOCAL_V2_DAG_LAMBDA_AWS_REGION;
+  callbackCorrelationId: string;
+  contractVersion: typeof LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION;
+  functionName: string;
+  hostname: string;
+  localCallbackUrl: string | null;
+  productionFindingIntegration: false;
+  profile: LocalV2DagScanProfile;
+  resultHandoff: "sqs";
+  resultQueueUrl: string;
+  scanId: string;
+  scannerRuntime: "certscore-v2-dag-parallel-path";
+  targetEnvironment: LocalV2DagLambdaTargetEnvironment;
+  targetUrl: string;
+  vpcMode: "none";
+  processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
+};
+
+export type LocalV2DagLambdaDispatchSummary = {
+  awsRegion: typeof LOCAL_V2_DAG_LAMBDA_AWS_REGION;
+  contractVersion: typeof LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION;
+  dispatchRequested: boolean;
+  processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
+  resultHandoff: "sqs";
+  targetEnvironment: LocalV2DagLambdaTargetEnvironment;
+  vpcMode: "none";
+};
+
+export type LocalV2DagLambdaResultStatus = "completed" | "failed";
+
+export type LocalV2DagLambdaResultMessage = {
+  artifactOnly: true;
+  artifactPointers?: {
+    manifestUri?: string;
+    reportAdapterArtifactUri?: string;
+    reviewArtifactUri?: string;
+    scanArtifactUri?: string;
+  };
+  completedAt: string;
+  contractVersion: typeof LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION;
+  error?: {
+    code?: string;
+    message: string;
+  };
+  processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
+  productionFindingIntegration: false;
+  scanId: string;
+  status: LocalV2DagLambdaResultStatus;
+  targetEnvironment: LocalV2DagLambdaTargetEnvironment;
+};
+
+export type LocalV2DagLambdaResultIngestion = {
+  artifactPromotion: false;
+  parsedMessage: LocalV2DagLambdaResultMessage;
+  productionFindingIntegration: false;
+  status: "parsed_only";
+};
+
+export type LocalV2DagLambdaDispatchResult = {
+  dispatched: true;
+  invocationRequestId: string | null;
+  invocationStatusCode: number;
+  invocationType: "Event";
+  payload: LocalV2DagLambdaDispatchPayload;
+};
+
+type LambdaInvokeClient = {
+  send(command: InvokeCommand): Promise<InvokeCommandOutput>;
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getLambdaIntent(config: SharedScanConfig | Record<string, unknown> | null | undefined) {
+  return asRecord(asRecord(config).execution).v2DagLambda;
+}
+
+function getProfile(config: SharedScanConfig | Record<string, unknown>): LocalV2DagScanProfile {
+  const execution = asRecord(asRecord(config).execution);
+  const v2DagParallel = asRecord(execution.v2DagParallel);
+  if (v2DagParallel.profile === "tiny" || asRecord(config).profile === "tiny") {
+    return "tiny";
+  }
+  return "full";
+}
+
+function requireString(value: unknown, field: string): string {
+  const normalized = stringValue(value);
+  if (!normalized) {
+    throw new Error(`Local v2 DAG Lambda dispatch is missing ${field}.`);
+  }
+  return normalized;
+}
+
+export function summarizeLocalV2DagLambdaDispatchForEvent(
+  config: SharedScanConfig | Record<string, unknown> | null | undefined
+): LocalV2DagLambdaDispatchSummary | null {
+  const intent = asRecord(getLambdaIntent(config));
+  if (Object.keys(intent).length === 0) {
+    return null;
+  }
+
+  return {
+    awsRegion: LOCAL_V2_DAG_LAMBDA_AWS_REGION,
+    contractVersion: LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
+    dispatchRequested: true,
+    processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    resultHandoff: "sqs",
+    targetEnvironment:
+      intent.targetEnvironment === "production" ? "production" : "local",
+    vpcMode: "none"
+  };
+}
+
+export function buildLocalV2DagLambdaDispatchPayload(input: {
+  localCallbackUrl?: string | null;
+  scanConfig: SharedScanConfig | Record<string, unknown>;
+  scanId: string;
+}): LocalV2DagLambdaDispatchPayload {
+  const config = asRecord(input.scanConfig);
+  const intent = asRecord(getLambdaIntent(input.scanConfig));
+  if (Object.keys(intent).length === 0) {
+    throw new Error("Local v2 DAG Lambda dispatch requested without execution.v2DagLambda.");
+  }
+
+  if (intent.processor !== LOCAL_V2_DAG_SCAN_PROCESSOR) {
+    throw new Error("Local v2 DAG Lambda dispatch must use the v2 DAG parallel-path processor.");
+  }
+  if (intent.scannerRuntime !== "certscore-v2-dag-parallel-path") {
+    throw new Error("Local v2 DAG Lambda dispatch must use the v2 DAG parallel-path scanner runtime.");
+  }
+  if (intent.resultHandoff !== "sqs") {
+    throw new Error("Local v2 DAG Lambda dispatch must hand results back through SQS.");
+  }
+  if (intent.vpcMode !== "none") {
+    throw new Error("Local v2 DAG Lambda dispatch must run outside a VPC.");
+  }
+  if (intent.contractVersion !== LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION) {
+    throw new Error("Local v2 DAG Lambda dispatch contract version is not supported.");
+  }
+  if (intent.awsRegion !== LOCAL_V2_DAG_LAMBDA_AWS_REGION) {
+    throw new Error("Local v2 DAG Lambda dispatch must target us-west-1.");
+  }
+
+  return {
+    artifactOnly: true,
+    awsRegion: LOCAL_V2_DAG_LAMBDA_AWS_REGION,
+    callbackCorrelationId: input.scanId,
+    contractVersion: LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
+    functionName: requireString(intent.functionName, "functionName"),
+    hostname: requireString(config.hostname, "hostname"),
+    localCallbackUrl: stringValue(input.localCallbackUrl),
+    processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    productionFindingIntegration: false,
+    profile: getProfile(config),
+    resultHandoff: "sqs",
+    resultQueueUrl: requireString(intent.resultQueueUrl, "resultQueueUrl"),
+    scanId: requireString(input.scanId, "scanId"),
+    scannerRuntime: "certscore-v2-dag-parallel-path",
+    targetEnvironment:
+      intent.targetEnvironment === "production" ? "production" : "local",
+    targetUrl: requireString(config.normalizedUrl, "normalizedUrl"),
+    vpcMode: "none"
+  };
+}
+
+export async function dispatchLocalV2DagLambdaScan(input: {
+  lambdaClient?: LambdaInvokeClient;
+  localCallbackUrl?: string | null;
+  scanConfig: SharedScanConfig | Record<string, unknown>;
+  scanId: string;
+}): Promise<LocalV2DagLambdaDispatchResult> {
+  const payload = buildLocalV2DagLambdaDispatchPayload(input);
+  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: payload.awsRegion });
+  const command = new InvokeCommand({
+    FunctionName: payload.functionName,
+    InvocationType: "Event",
+    Payload: Buffer.from(JSON.stringify(payload))
+  });
+  const response = await lambdaClient.send(command);
+  const statusCode = response.StatusCode ?? 0;
+
+  if (statusCode < 200 || statusCode >= 300) {
+    throw new Error(`Local v2 DAG Lambda dispatch was not accepted by AWS Lambda: status ${statusCode}.`);
+  }
+
+  return {
+    dispatched: true,
+    invocationRequestId: response.$metadata.requestId ?? null,
+    invocationStatusCode: statusCode,
+    invocationType: "Event",
+    payload
+  };
+}
+
+function parseJson(value: unknown): unknown {
+  if (typeof value === "string") {
+    return JSON.parse(value);
+  }
+
+  const record = asRecord(value);
+  if (typeof record.Body === "string") {
+    return JSON.parse(record.Body);
+  }
+
+  return value;
+}
+
+function parseArtifactPointers(value: unknown): LocalV2DagLambdaResultMessage["artifactPointers"] {
+  const record = asRecord(value);
+  const artifactPointers: NonNullable<LocalV2DagLambdaResultMessage["artifactPointers"]> = {};
+  const manifestUri = stringValue(record.manifestUri);
+  const reportAdapterArtifactUri = stringValue(record.reportAdapterArtifactUri);
+  const reviewArtifactUri = stringValue(record.reviewArtifactUri);
+  const scanArtifactUri = stringValue(record.scanArtifactUri);
+
+  if (manifestUri) {
+    artifactPointers.manifestUri = manifestUri;
+  }
+  if (reportAdapterArtifactUri) {
+    artifactPointers.reportAdapterArtifactUri = reportAdapterArtifactUri;
+  }
+  if (reviewArtifactUri) {
+    artifactPointers.reviewArtifactUri = reviewArtifactUri;
+  }
+  if (scanArtifactUri) {
+    artifactPointers.scanArtifactUri = scanArtifactUri;
+  }
+
+  return Object.keys(artifactPointers).length > 0 ? artifactPointers : undefined;
+}
+
+export function parseLocalV2DagLambdaResultMessage(
+  rawMessage: unknown,
+  options: { expectedTargetEnvironment?: LocalV2DagLambdaTargetEnvironment } = {}
+): LocalV2DagLambdaResultMessage {
+  const record = asRecord(parseJson(rawMessage));
+  const contractVersion = record.contractVersion;
+  const status = record.status;
+  const targetEnvironment = record.targetEnvironment;
+
+  if (contractVersion !== LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION) {
+    throw new Error("Unsupported local v2 DAG Lambda result contract version.");
+  }
+  if (record.processor !== LOCAL_V2_DAG_SCAN_PROCESSOR) {
+    throw new Error("Local v2 DAG Lambda result came from an unexpected processor.");
+  }
+  if (targetEnvironment !== "local" && targetEnvironment !== "production") {
+    throw new Error("Local v2 DAG Lambda result has an invalid target environment.");
+  }
+  if (options.expectedTargetEnvironment && targetEnvironment !== options.expectedTargetEnvironment) {
+    throw new Error("Local v2 DAG Lambda result target environment does not match this runtime.");
+  }
+  if (status !== "completed" && status !== "failed") {
+    throw new Error("Local v2 DAG Lambda result status must be completed or failed.");
+  }
+  if (record.productionFindingIntegration !== false || record.artifactOnly !== true) {
+    throw new Error("Local v2 DAG Lambda result must remain artifact-only and non-production.");
+  }
+
+  const errorRecord = asRecord(record.error);
+  const errorMessage = stringValue(errorRecord.message);
+  const parsed: LocalV2DagLambdaResultMessage = {
+    artifactOnly: true,
+    completedAt: requireString(record.completedAt, "completedAt"),
+    contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
+    processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    productionFindingIntegration: false,
+    scanId: requireString(record.scanId, "scanId"),
+    status,
+    targetEnvironment
+  };
+  const artifactPointers = parseArtifactPointers(record.artifactPointers);
+  if (artifactPointers) {
+    parsed.artifactPointers = artifactPointers;
+  }
+  if (errorMessage) {
+    parsed.error = {
+      ...(stringValue(errorRecord.code) ? { code: stringValue(errorRecord.code) as string } : {}),
+      message: errorMessage
+    };
+  }
+
+  return parsed;
+}
+
+export function ingestLocalV2DagLambdaResultMessage(
+  rawMessage: unknown,
+  options: { expectedTargetEnvironment?: LocalV2DagLambdaTargetEnvironment } = {}
+): LocalV2DagLambdaResultIngestion {
+  return {
+    artifactPromotion: false,
+    parsedMessage: parseLocalV2DagLambdaResultMessage(rawMessage, options),
+    productionFindingIntegration: false,
+    status: "parsed_only"
+  };
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@website-signal-risk-scanner/v2-dag-lambda",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dev/local Lambda wrapper for CertScore v2 DAG artifact-only scans.",
+  "main": "./dist/src/handler.js",
+  "types": "./dist/src/handler.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test src/*.test.ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.1069.0",
+    "@certscore/contracts": "workspace:*",
+    "@certscore/report-adapter": "workspace:*",
+    "@certscore/review-engine": "workspace:*",
+    "@certscore/scan-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0"
+  }
+}

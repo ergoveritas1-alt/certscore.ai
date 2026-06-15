@@ -6,6 +6,10 @@ import { getAdminScanThrottleMs } from "../../lib/scan-access";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { getDashboardContext } from "../auth";
 import { queueFullScanForDomain, type CreateFullScanActionState } from "./create-full-scan";
+import {
+  normalizeLocalV2DagRunViaLambda,
+  normalizeLocalV2DagScanProfile
+} from "./local-v2-dag-scan-config";
 
 const initialState: CreateFullScanActionState = {
   error: null
@@ -25,6 +29,8 @@ export async function rescanDomainAction(
 
   const dashboardContext = await getDashboardContext();
   const domainId = String(formData.get("domainId") ?? "").trim();
+  const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
+  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"));
 
   if (domainId.length === 0) {
     return {
@@ -39,6 +45,8 @@ export async function rescanDomainAction(
     submittedByUserId: dashboardContext.user.id,
     enforceCooldown: true,
     enforceMonthlyUsageLimit: true,
+    localV2DagScanProfile,
+    localV2DagRunViaLambda,
     scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
     source: "manual-rescan"
   });

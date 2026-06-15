@@ -35,7 +35,7 @@ function TabLabel({ tab, useShortLabel = false }: { tab: RegulatoryChecklistTab;
   );
 }
 
-export function RegulatoryChecklistSection({ headingLabel = "Regulatory Review", showAdvancedEvidenceToggle = false, tabs }: RegulatoryChecklistSectionProps) {
+export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnostics", showAdvancedEvidenceToggle = false, tabs }: RegulatoryChecklistSectionProps) {
   const [activeTabId, setActiveTabId] = useState(tabs[0]?.id ?? "");
   const [expandAllAdvancedEvidence, setExpandAllAdvancedEvidence] = useState(false);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null;

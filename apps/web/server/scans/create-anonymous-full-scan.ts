@@ -12,6 +12,15 @@ import {
   requiresFreshScanForCaliforniaRuntime,
   type QueuedFullScanCaliforniaPrivacyConfig
 } from "./full-scan-config";
+import {
+  LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
+  LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
+  LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
+  LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
+  dispatchLocalV2DagLambdaScan,
+  summarizeLocalV2DagLambdaDispatchForEvent
+} from "./local-v2-dag-lambda-dispatch";
+import type { LocalV2DagScanProfile } from "./local-v2-dag-scan-config";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
 
@@ -26,10 +35,25 @@ type ScanQueueProvenance = {
   userAgent?: string | null;
 };
 
+function getLocalV2DagLambdaCallbackUrl() {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (!appUrl) {
+    return null;
+  }
+
+  try {
+    return new URL("/api/local/v2-dag-lambda-results", appUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function createAnonymousFullScan(input: {
   bypassRecentScanReuse?: boolean;
   californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   hostname: string;
+  localV2DagScanProfile?: LocalV2DagScanProfile | null;
+  localV2DagRunViaLambda?: boolean | null;
   normalizedUrl: string;
   provenance?: ScanQueueProvenance;
   scanFrom?: ScanFrom;
@@ -68,6 +92,7 @@ export async function createAnonymousFullScan(input: {
         requestedUrl: input.normalizedUrl,
         requestContext: {
           bypassRecentScanReuse,
+          localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
           provenance: input.provenance ?? null,
           scanFrom
         },
@@ -101,6 +126,7 @@ export async function createAnonymousFullScan(input: {
       requestedUrl: input.normalizedUrl,
       requestContext: {
         bypassRecentScanReuse,
+        localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
         provenance: input.provenance ?? null,
         scanFrom
       },
@@ -129,6 +155,8 @@ export async function createAnonymousFullScan(input: {
   const scanConfig = buildQueuedFullScanConfig({
     californiaPrivacy: input.californiaPrivacy,
     hostname: input.hostname,
+    localV2DagScanProfile: input.localV2DagScanProfile,
+    localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     maxPages: pagesRequested,
     normalizedUrl: input.normalizedUrl,
     priorScanAcceleration,
@@ -136,6 +164,7 @@ export async function createAnonymousFullScan(input: {
     scanFrom,
     source: input.provenance?.source ?? "marketing-anonymous-full-scan"
   });
+  const localV2DagLambdaDispatch = summarizeLocalV2DagLambdaDispatchForEvent(scanConfig);
   const queueMetadata = getFullScanQueueMetadata({
     provenance: input.provenance,
     scanType: "full"
@@ -162,6 +191,7 @@ export async function createAnonymousFullScan(input: {
     requestContext: {
       bypassRecentScanReuse,
       californiaPrivacy: scanConfig.californiaPrivacy ?? null,
+      localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
       pagesRequested,
       provenance: input.provenance ?? null,
       queueOrigin: queueMetadata.queueOrigin,
@@ -209,13 +239,81 @@ export async function createAnonymousFullScan(input: {
       originIp: input.provenance?.originIp ?? null,
       githubRunId: input.provenance?.githubRunId ?? null,
       githubWorkflow: input.provenance?.githubWorkflow ?? null,
-      provenance: input.provenance ?? null
+      provenance: input.provenance ?? null,
+      localV2DagLambdaDispatch
     },
     organizationId: null,
     scanId: scan.id
   });
+  if (localV2DagLambdaDispatch) {
+    await insertQueuedFullScanEvent({
+      domainId: domain.id,
+      eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
+      message:
+        "Local v2 DAG Lambda dispatch requested for the artifact-only v2 DAG scanner.",
+      metadataJson: localV2DagLambdaDispatch,
+      organizationId: null,
+      scanId: scan.id
+    });
+  }
+
+  if (localV2DagLambdaDispatch) {
+    await insertQueuedFullScanEvent({
+      domainId: domain.id,
+      eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
+      message: "Invoking local v2 DAG Lambda for artifact-only scan execution.",
+      metadataJson: localV2DagLambdaDispatch,
+      organizationId: null,
+      scanId: scan.id
+    });
+
+    try {
+      const dispatchResult = await dispatchLocalV2DagLambdaScan({
+        localCallbackUrl: getLocalV2DagLambdaCallbackUrl(),
+        scanConfig,
+        scanId: scan.id
+      });
+      await insertQueuedFullScanEvent({
+        domainId: domain.id,
+        eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
+        message: "AWS Lambda accepted the local v2 DAG artifact-only scan invocation.",
+        metadataJson: {
+          ...localV2DagLambdaDispatch,
+          invocationRequestId: dispatchResult.invocationRequestId,
+          invocationStatusCode: dispatchResult.invocationStatusCode,
+          invocationType: dispatchResult.invocationType,
+          productionFindingIntegration: false
+        },
+        organizationId: null,
+        scanId: scan.id
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Local v2 DAG Lambda dispatch failed.";
+      await insertQueuedFullScanEvent({
+        domainId: domain.id,
+        eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
+        message: "Local v2 DAG Lambda dispatch failed; no fallback scanner execution was started.",
+        metadataJson: {
+          ...localV2DagLambdaDispatch,
+          errorMessage: message,
+          productionFindingIntegration: false
+        },
+        organizationId: null,
+        scanId: scan.id
+      });
+
+      throw new Error(message);
+    }
+  }
 
   await setPreviewDomainLatestScan(domain.id, scan.id);
+
+  if (localV2DagLambdaDispatch) {
+    return {
+      domain,
+      scan
+    };
+  }
 
   await enqueueNanoSignalEnrichmentJob(scan.id).catch((error) => {
     console.error("[web] anonymous nano signal enrichment handoff failed", {

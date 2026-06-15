@@ -9,6 +9,11 @@ import {
   type SharedScanConfig,
   type ScanFrom
 } from "@website-signal-risk-scanner/shared";
+import {
+  applyLocalV2DagScanConfig,
+  type LocalV2DagScanEnv,
+  type LocalV2DagScanProfile
+} from "./local-v2-dag-scan-config";
 
 export const QUEUED_FULL_SCAN_PROCESSOR = "queued-full-scan-v1";
 export const QUEUED_FULL_SCAN_MAX_REQUESTED_TIER = "tier5_full_scan";
@@ -23,7 +28,10 @@ export const QUEUED_FULL_SCAN_POST_403_POLICY = {
 
 export type BuildQueuedFullScanConfigInput = {
   californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
+  env?: LocalV2DagScanEnv;
   hostname: string;
+  localV2DagScanProfile?: LocalV2DagScanProfile | null;
+  localV2DagRunViaLambda?: boolean | null;
   maxPages: number;
   normalizedUrl: string;
   priorScanAcceleration?: QueuedFullScanPriorScanAcceleration | null;
@@ -119,7 +127,7 @@ export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput)
     ...(input.priorScanAcceleration?.crawlSeedHints ?? []),
     ...buildCanonicalLegalSurfaceHints({ normalizedUrl: input.normalizedUrl })
   ];
-  return buildSharedFullScanConfig({
+  return applyLocalV2DagScanConfig(buildSharedFullScanConfig({
     ...(californiaPrivacy ? { californiaPrivacy } : {}),
     ...(crawlSeedHints.length > 0 || input.priorScanAcceleration
       ? {
@@ -143,5 +151,8 @@ export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput)
     requestedGeo: scanFromDefinition.requestedGeo,
     scanFrom,
     source: input.source
+  }), input.env, {
+    profile: input.localV2DagScanProfile,
+    runViaLambda: input.localV2DagRunViaLambda
   });
 }

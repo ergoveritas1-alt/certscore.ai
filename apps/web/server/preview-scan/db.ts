@@ -1,7 +1,19 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
-import { PREVIEW_SCAN_EVENT_TYPES, type PreviewScanPayload, type ScanSnapshot, type ScanStatus, type ScanType } from "@website-signal-risk-scanner/shared";
+import {
+  PREVIEW_SCAN_EVENT_TYPES,
+  type PreviewScanPayload,
+  type ScanSnapshot,
+  type ScanStatus,
+  type ScanType,
+  type SharedScanConfig
+} from "@website-signal-risk-scanner/shared";
 import { buildDatabaseOperationError } from "../database/describe-database-error";
 import { getPreviewScanQueueMetadata } from "../queue/scan-queue-priority";
+import {
+  applyLocalV2DagScanConfig,
+  type LocalV2DagScanEnv,
+  type LocalV2DagScanProfile
+} from "../scans/local-v2-dag-scan-config";
 
 export type PreviewDomainRow = {
   id: string;
@@ -31,7 +43,7 @@ export type PreviewScanRow = {
   updated_at: string;
 };
 
-type ScanConfig = {
+type ScanConfig = SharedScanConfig & {
   hostname?: string;
   normalizedUrl?: string;
   post403Policy?: {
@@ -44,6 +56,30 @@ type ScanConfig = {
   previewPayload?: PreviewScanPayload;
   processor?: string;
 };
+
+export function buildPreviewScanInitialConfig(input: {
+  env?: LocalV2DagScanEnv;
+  hostname: string;
+  localV2DagScanProfile?: LocalV2DagScanProfile | null;
+  localV2DagRunViaLambda?: boolean | null;
+  normalizedUrl: string;
+}): SharedScanConfig {
+  return applyLocalV2DagScanConfig({
+    hostname: input.hostname,
+    normalizedUrl: input.normalizedUrl,
+    post403Policy: {
+      maxHomepageRetriesAfter403: 0,
+      maxPassiveVerificationFetchesAfter403: 4,
+      passiveOnlyAfter403: true,
+      stopOnHomepage403: true,
+      verifiedSurfaceTargetsAfter403: ["privacy_policy", "terms_of_service", "cookie_policy", "contact_page"]
+    },
+    processor: "live-preview-v1"
+  }, input.env, {
+    profile: input.localV2DagScanProfile,
+    runViaLambda: input.localV2DagRunViaLambda
+  });
+}
 
 export type PreviewSnapshotRow = {
   authWallDetected?: ScanSnapshot["authWallDetected"] | null;
@@ -220,19 +256,19 @@ export async function insertPreviewScanEvent(input: {
   }
 }
 
-export async function createPreviewScanRecord(input: { domainId: string; hostname: string; normalizedUrl: string }) {
-  const initialConfig: ScanConfig = {
+export async function createPreviewScanRecord(input: {
+  domainId: string;
+  hostname: string;
+  localV2DagScanProfile?: LocalV2DagScanProfile | null;
+  localV2DagRunViaLambda?: boolean | null;
+  normalizedUrl: string;
+}) {
+  const initialConfig = buildPreviewScanInitialConfig({
     hostname: input.hostname,
-    normalizedUrl: input.normalizedUrl,
-    post403Policy: {
-      maxHomepageRetriesAfter403: 0,
-      maxPassiveVerificationFetchesAfter403: 4,
-      passiveOnlyAfter403: true,
-      stopOnHomepage403: true,
-      verifiedSurfaceTargetsAfter403: ["privacy_policy", "terms_of_service", "cookie_policy", "contact_page"]
-    },
-    processor: "live-preview-v1"
-  };
+    localV2DagScanProfile: input.localV2DagScanProfile,
+    localV2DagRunViaLambda: input.localV2DagRunViaLambda,
+    normalizedUrl: input.normalizedUrl
+  });
   const queueMetadata = getPreviewScanQueueMetadata();
 
   let scan: PreviewScanRow | null;
