@@ -207,10 +207,15 @@ async function runOne<TCapture extends {
         actionProofStatus: "not_available",
         comparisonEligible: false,
         deadlineHit: completedAtMs > input.deadlineAtMs,
-        error: error instanceof Error ? error.message : String(error),
+        error: boundedScenarioError(error),
       },
     };
   }
+}
+
+function boundedScenarioError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/\s+/g, " ").trim().slice(0, 500);
 }
 
 function minimumScenarioStartBudgetMs(item: ConsentScenarioPlanItem): number {
@@ -236,7 +241,11 @@ function actionProofStatus(
   if (!actionType) {
     return "not_required";
   }
-  const attempt = capture.actionAttempts.find((item) => item.actionType === actionType);
+  const attempt = capture.actionAttempts.find((item) =>
+    item.actionType === actionType &&
+    item.succeeded &&
+    item.actionProof?.attemptedStatus === "attempted_succeeded"
+  ) ?? capture.actionAttempts.find((item) => item.actionType === actionType);
   if (!attempt) {
     return "not_available";
   }

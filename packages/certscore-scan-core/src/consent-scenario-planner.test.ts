@@ -51,6 +51,66 @@ test("planner skips CMP paths when no banner or consent controls are observed", 
   assert.ok(plan.notes.some((note) => /not ready/i.test(note)));
 });
 
+test("planner schedules bounded CMP-only action probes from runtime CMP evidence", () => {
+  const plan = buildConsentScenarioPlan({
+    baseline: {
+      bannerLikelyPresent: false,
+      cmpEvidenceObserved: true,
+      textExcerpt: "Plain page",
+      actionCandidates: [],
+    },
+    captureReplay: false,
+    policyPlanningStatus: "policy_surface_unavailable",
+  });
+
+  assert.ok(plan.plannedScenarios.some((item) =>
+    item.scenario === "reject_all_flow" &&
+    item.actionType === "reject_all" &&
+    item.reasonCodes.includes("cmp_runtime_evidence_observed") &&
+    item.reasonCodes.includes("reject_or_preference_path_probe")
+  ));
+  assert.ok(plan.plannedScenarios.some((item) =>
+    item.scenario === "accept_all_flow" &&
+    item.actionType === "accept_all" &&
+    item.reasonCodes.includes("cmp_runtime_evidence_observed") &&
+    item.reasonCodes.includes("accept_or_preference_path_probe")
+  ));
+  assert.equal(plan.plannerInputs.baselineCmpEvidenceObserved, true);
+});
+
+test("planner schedules CMP probes when runtime evidence has a visible preference path", () => {
+  const plan = buildConsentScenarioPlan({
+    baseline: {
+      bannerLikelyPresent: false,
+      cmpEvidenceObserved: true,
+      textExcerpt: "Plain page",
+      actionCandidates: [
+        {
+          actionType: "manage_preferences",
+          confidence: 0.84,
+          shouldClick: true,
+          labelText: "Cookie settings",
+        },
+      ],
+    },
+    captureReplay: false,
+    policyPlanningStatus: "policy_surface_unavailable",
+  });
+
+  assert.ok(plan.plannedScenarios.some((item) =>
+    item.scenario === "reject_all_flow" &&
+    item.actionType === "reject_all" &&
+    item.reasonCodes.includes("cmp_runtime_evidence_observed") &&
+    item.reasonCodes.includes("reject_or_preference_path_observed")
+  ));
+  assert.ok(plan.plannedScenarios.some((item) =>
+    item.scenario === "accept_all_flow" &&
+    item.actionType === "accept_all" &&
+    item.reasonCodes.includes("cmp_runtime_evidence_observed") &&
+    item.reasonCodes.includes("accept_or_preference_path_observed")
+  ));
+});
+
 test("planner schedules privacy opt-out and replay probes when eligible", () => {
   const plan = buildConsentScenarioPlan({
     baseline: {
@@ -71,6 +131,51 @@ test("planner schedules privacy opt-out and replay probes when eligible", () => 
   ));
   assert.ok(plan.plannedScenarios.some((item) => item.scenario === "form_collection_probe"));
   assert.ok(plan.plannedScenarios.some((item) => item.scenario === "accessibility_probe"));
+});
+
+test("planner skips privacy opt-out when only weak privacy text is observed", () => {
+  const plan = buildConsentScenarioPlan({
+    baseline: {
+      bannerLikelyPresent: false,
+      textExcerpt: "Footer links include Your Privacy Choices and Do Not Sell or Share My Personal Information.",
+      actionCandidates: [],
+    },
+    captureReplay: false,
+    policyPlanningStatus: "policy_surface_unavailable",
+  });
+
+  assert.ok(plan.skippedScenarios.some((item) =>
+    item.scenario === "privacy_opt_out_flow" &&
+    item.skipReason === "privacy_control_not_observed" &&
+    item.reasonCodes.includes("baseline_privacy_choice_text_observed") &&
+    item.reasonCodes.includes("privacy_control_candidate_not_observed")
+  ));
+  assert.equal(plan.plannedScenarios.some((item) => item.scenario === "privacy_opt_out_flow"), false);
+});
+
+test("planner schedules privacy opt-out from a concrete baseline control", () => {
+  const plan = buildConsentScenarioPlan({
+    baseline: {
+      bannerLikelyPresent: false,
+      textExcerpt: "Privacy choices are available.",
+      actionCandidates: [
+        {
+          actionType: "do_not_sell_share",
+          confidence: 0.88,
+          shouldClick: true,
+          labelText: "Your Privacy Choices",
+        },
+      ],
+    },
+    captureReplay: false,
+    policyPlanningStatus: "policy_surface_unavailable",
+  });
+
+  assert.ok(plan.plannedScenarios.some((item) =>
+    item.scenario === "privacy_opt_out_flow" &&
+    item.actionType === "do_not_sell_share" &&
+    item.reasonCodes.includes("baseline_privacy_choice_control_observed")
+  ));
 });
 
 test("planner respects capture replay auxiliary probe selection", () => {

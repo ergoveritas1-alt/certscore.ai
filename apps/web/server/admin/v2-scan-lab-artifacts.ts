@@ -1,7 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { canonicalEvidenceBundleSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import {
+  canonicalEvidenceBundleSchema,
+  type CanonicalEvidenceBundle,
+  type ReviewResult,
+} from "@certscore/contracts";
 import { regulatoryReviewToProductionChecklistModel, type V2RegulatoryReviewChecklistModel } from "@certscore/report-adapter";
 import { reviewEvidenceBundle } from "@certscore/review-engine";
 
@@ -37,6 +41,7 @@ export type V2ScanLabError = {
 };
 
 export type V2ScanLabModel = {
+  benchmarkSummary: V2ScanLabBenchmarkSummary;
   query: {
     input: string;
     normalizedUrl: string;
@@ -60,6 +65,17 @@ export type V2ScanLabModel = {
   timing: V2ScanLabTimingSummary;
   regulatoryReviewChecklist: V2RegulatoryReviewChecklistModel;
   diagnostics: string[];
+};
+
+export type V2ScanLabBenchmarkSummary = {
+  basis: "current_gold_corpus_duration" | "unavailable";
+  comparisonLabel: string;
+  detail: string;
+  p50DurationMs: number | null;
+  p90DurationMs: number | null;
+  sampleSize: number;
+  selectedDurationMs: number | null;
+  status: "observed" | "unavailable";
 };
 
 export type V2ScanLabReviewSummary = {
@@ -390,7 +406,8 @@ export async function loadV2ScanLabArtifacts(input: {
   }
 
   try {
-    const artifactsDir = input.options?.artifactsDir ?? path.join(findWorkspaceRoot(input.options?.workspaceRoot ?? process.cwd()), "artifacts");
+    const workspaceRoot = findWorkspaceRoot(input.options?.workspaceRoot ?? process.cwd());
+    const artifactsDir = input.options?.artifactsDir ?? path.join(workspaceRoot, "artifacts");
     const requestedChainKey = input.chainKey?.trim() || null;
     const preferredChainKey = requestedChainKey ?? await findNewestDomainChainKey({
       artifactsDir,
@@ -417,6 +434,7 @@ export async function loadV2ScanLabArtifacts(input: {
       normalized,
       profile,
       selectedChain,
+      workspaceRoot,
     });
 
     return { status: "ready", model };
@@ -697,6 +715,7 @@ async function buildModel(input: {
   normalized: NonNullable<ReturnType<typeof normalizeUrlInput>>;
   profile: V2ScanLabProfile;
   selectedChain: V2ScanLabArtifactChain;
+  workspaceRoot: string;
 }): Promise<V2ScanLabModel> {
   const selectedMatches = input.matches.filter((match) =>
     deriveCohort(match.rootName) === input.selectedChain.cohort &&
@@ -708,9 +727,12 @@ async function buildModel(input: {
   const canonicalEvidenceBundle = selectedMatches.find((match) => match.kind === "canonicalEvidenceBundle")?.parsed;
   const canonicalEvidenceBundleFull = selectedMatches.find((match) => match.kind === "canonicalEvidenceBundle")?.canonicalEvidenceBundle;
   const scanLabTiming = selectedMatches.find((match) => match.kind === "scanLabTiming")?.parsed;
-  const regulatoryReviewChecklist = canonicalEvidenceBundleFull
-    ? regulatoryReviewToProductionChecklistModel((await reviewEvidenceBundle(canonicalEvidenceBundleFull)).regulatoryReview)
-    : regulatoryReviewToProductionChecklistModel(null);
+  const reviewResult = canonicalEvidenceBundleFull ? await reviewEvidenceBundle(canonicalEvidenceBundleFull) : null;
+  const regulatoryReviewChecklist = enrichRegulatoryChecklistTrace({
+    bundle: canonicalEvidenceBundleFull,
+    checklist: regulatoryReviewToProductionChecklistModel(reviewResult?.regulatoryReview),
+    reviewResult,
+  });
   const queueItems = extractQueueItems(evidencePreview ?? reviewerPacket);
   const shadowRows = extractProjectionRows(reportProjection);
   const familySummaries = buildFamilySummaries(queueItems, shadowRows);
@@ -721,8 +743,15 @@ async function buildModel(input: {
     ...queueItems.flatMap((item) => item.coverageLimitations),
     ...moduleCoverageLimitations,
   ]);
+  const timing = buildTimingSummary(scanLabTiming, canonicalEvidenceBundle);
 
   return {
+    benchmarkSummary: buildBenchmarkSummary({
+      domain: input.normalized.domain,
+      profile: input.profile,
+      selectedDurationMs: timing.totalDurationMs,
+      workspaceRoot: input.workspaceRoot,
+    }),
     query: {
       input: input.normalized.input,
       normalizedUrl: input.normalized.normalizedUrl,
@@ -758,7 +787,7 @@ async function buildModel(input: {
     visualSnapshot: isRecord(canonicalEvidenceBundle?.visualSnapshot)
       ? canonicalEvidenceBundle.visualSnapshot as V2ScanLabVisualSnapshot
       : unavailableVisualSnapshot(),
-    timing: buildTimingSummary(scanLabTiming, canonicalEvidenceBundle),
+    timing,
     regulatoryReviewChecklist,
     diagnostics: buildDiagnostics(evidencePreview, reviewerPacket, canonicalEvidenceBundle),
   };
@@ -873,6 +902,7 @@ function detectNoGoCandidateReasons(bundle: Record<string, unknown>, artifactDir
   const normalizedDomText = domText.replace(/\s+/g, " ").trim();
   const lowerDomText = normalizedDomText.toLowerCase();
   const blockTextMatchers: Array<[string, string]> = [
+    ["access_denied", "access to this site has been denied"],
     ["access_temporarily_restricted", "access is temporarily restricted"],
     ["automated_activity", "automated (bot) activity"],
     ["security_service_block", "this website is using a security service"],
@@ -1111,6 +1141,399 @@ function unavailableRuntimeSnapshot(): V2ScanLabRuntimeSnapshot {
   };
 }
 
+type TraceEvidenceExample = {
+  action?: string;
+  actionSucceeded?: boolean;
+  capturedAtMs?: number;
+  collectionEndpointObserved?: boolean;
+  consentState?: string;
+  cookieDomain?: string;
+  cookieName?: string;
+  cookieParty?: string;
+  cookiePurpose?: string;
+  endpointCategory?: string;
+  eventId?: string;
+  eventType?: string;
+  host?: string;
+  kind: string;
+  label?: string;
+  observed?: boolean;
+  path?: string;
+  purpose?: string;
+  scenario?: string;
+  sourceModule?: string;
+  timestampMs?: number;
+  url?: string;
+  vendor?: string;
+};
+
+function enrichRegulatoryChecklistTrace(input: {
+  bundle?: CanonicalEvidenceBundle;
+  checklist: V2RegulatoryReviewChecklistModel;
+  reviewResult: ReviewResult | null;
+}): V2RegulatoryReviewChecklistModel {
+  if (!input.bundle || !input.reviewResult?.regulatoryReview) {
+    return input.checklist;
+  }
+  const rowsById = new Map(
+    input.reviewResult.regulatoryReview.areas.flatMap((area) => area.rows.map((row) => [row.id, row] as const)),
+  );
+  const candidatesByKey = new Map(input.reviewResult.findingCandidates.map((candidate) => [candidate.findingKey, candidate]));
+  const resolve = (rowId: string) => {
+    const row = rowsById.get(rowId);
+    const candidateRefs = row
+      ? row.sourceFindingKeys.flatMap((key) => candidatesByKey.get(key)?.sourceEvidenceRefs ?? [])
+      : [];
+    return buildSmokingGunEvidence({
+      bundle: input.bundle!,
+      rowId,
+      rowEvidenceRefs: row?.evidenceRefs ?? [],
+      sourceEvidenceRefs: candidateRefs,
+    });
+  };
+  return {
+    californiaPrivacyItems: input.checklist.californiaPrivacyItems.map((item) => ({
+      ...item,
+      criticalEvidence: {
+        ...item.criticalEvidence,
+        retainedEvidence: {
+          ...item.criticalEvidence.retainedEvidence,
+          smokingGunEvidence: resolve(item.id),
+        },
+      },
+    })),
+    gdprEprivacyItems: input.checklist.gdprEprivacyItems.map((item) => ({
+      ...item,
+      criticalEvidence: {
+        ...item.criticalEvidence,
+        retainedEvidence: {
+          ...item.criticalEvidence.retainedEvidence,
+          smokingGunEvidence: resolve(item.id),
+        },
+      },
+    })),
+  };
+}
+
+function buildSmokingGunEvidence(input: {
+  bundle: CanonicalEvidenceBundle;
+  rowEvidenceRefs: string[];
+  rowId: string;
+  sourceEvidenceRefs: Array<{
+    eventId?: string;
+    eventType?: string;
+    label?: string;
+    url?: string;
+  }>;
+}): TraceEvidenceExample[] {
+  const eventById = buildRuntimeEventIndex(input.bundle);
+  const resolvedFromRefs = input.sourceEvidenceRefs
+    .map((ref) => {
+      const event = ref.eventId ? eventById.get(ref.eventId) : undefined;
+      return event
+        ? traceExampleFromRuntimeEvent(event, ref.label)
+        : traceExampleFromEvidenceRef(ref);
+    })
+    .filter((example): example is TraceEvidenceExample => Boolean(example));
+  const rowLabelRefs = input.rowEvidenceRefs
+    .map((label) => traceExampleFromEvidenceRef({ label }))
+    .filter((example): example is TraceEvidenceExample => Boolean(example));
+  const direct = smokingGunFallbackExamples(input.bundle, input.rowId);
+  const ordered = preferDirectSmokingGunFallback(input.rowId)
+    ? [...direct, ...resolvedFromRefs, ...rowLabelRefs]
+    : [...resolvedFromRefs, ...direct, ...rowLabelRefs];
+  return uniqueTraceExamples(ordered).slice(0, 5);
+}
+
+function preferDirectSmokingGunFallback(rowId: string) {
+  return new Set([
+    "post_reject_tracking_reduction",
+    "post_opt_out_tracking_behavior",
+    "reject_all_path_availability",
+    "preference_withdrawal_control",
+  ]).has(rowId);
+}
+
+function buildRuntimeEventIndex(bundle: CanonicalEvidenceBundle) {
+  const events = [
+    ...bundle.networkEvents,
+    ...bundle.networkResponseEvents,
+    ...bundle.cookieEvents,
+    ...bundle.scriptEvents,
+    ...bundle.iframeEvents,
+    ...bundle.consentInteractionEvents,
+    ...bundle.consentActionAttempts,
+  ];
+  return new Map(events.flatMap((event) => {
+    const record = event as unknown as Record<string, unknown>;
+    const eventId = stringValue(record.eventId);
+    return eventId ? [[eventId, record] as const] : [];
+  }));
+}
+
+function traceExampleFromEvidenceRef(ref: {
+  eventId?: string;
+  eventType?: string;
+  label?: string;
+  url?: string;
+}): TraceEvidenceExample | null {
+  const label = stringValue(ref.label);
+  const url = safeTraceUrl(stringValue(ref.url));
+  if (!label && !url) {
+    return null;
+  }
+  return {
+    eventId: stringValue(ref.eventId) ?? undefined,
+    eventType: stringValue(ref.eventType) ?? undefined,
+    host: hostnameFromUrl(url) ?? undefined,
+    kind: "source_ref",
+    label: label ?? undefined,
+    url: url ?? undefined,
+  };
+}
+
+function traceExampleFromRuntimeEvent(event: Record<string, unknown>, fallbackLabel?: string | null): TraceEvidenceExample {
+  return {
+    action: stringValue(event.action) ?? stringValue(event.actionType) ?? undefined,
+    actionSucceeded: event.succeeded === true || event.actionSucceeded === true
+      ? true
+      : event.succeeded === false || event.actionSucceeded === false
+        ? false
+        : undefined,
+    collectionEndpointObserved: event.collectionEndpointObserved === true ? true : undefined,
+    consentState: stringValue(event.consentStateAtTime) ?? undefined,
+    cookieDomain: stringValue(event.cookieDomain) ?? undefined,
+    cookieName: stringValue(event.cookieName) ?? undefined,
+    cookieParty: stringValue(event.cookieParty) ?? undefined,
+    cookiePurpose: stringValue(event.cookiePurpose) ?? undefined,
+    endpointCategory: stringValue(event.endpointCategory) ?? undefined,
+    eventId: stringValue(event.eventId) ?? undefined,
+    eventType: stringValue(event.eventType) ?? undefined,
+    host: stringValue(event.requestHostname) ??
+      stringValue(event.hostname) ??
+      stringValue(event.responseHostname) ??
+      hostnameFromUrl(stringValue(event.requestUrl) ?? stringValue(event.responseUrl) ?? stringValue(event.url)) ??
+      undefined,
+    kind: stringValue(event.eventType) ?? "runtime_event",
+    label: fallbackLabel ?? stringValue(event.cookieName) ?? stringValue(event.hostname) ?? undefined,
+    observed: true,
+    path: stringValue(event.path) ?? undefined,
+    purpose: stringValue(event.purpose) ?? stringValue(event.cookiePurpose) ?? stringValue(event.endpointCategory) ?? undefined,
+    scenario: stringValue(event.scenario) ?? undefined,
+    sourceModule: stringValue(event.sourceScanner) ?? undefined,
+    timestampMs: numberValue(event.timestampMs) ?? numberValue(event.observedAtMs) ?? undefined,
+    url: safeTraceUrl(stringValue(event.requestUrl) ?? stringValue(event.responseUrl) ?? stringValue(event.url)) ?? undefined,
+    vendor: stringValue(event.vendor) ?? stringValue(event.product) ?? undefined,
+  };
+}
+
+function smokingGunFallbackExamples(bundle: CanonicalEvidenceBundle, rowId: string): TraceEvidenceExample[] {
+  switch (rowId) {
+    case "pre_consent_cookies_storage":
+      return bundle.cookieEvents
+        .filter((event) =>
+          event.consentStateAtTime === "pre_consent" &&
+          (event.thirdParty === true || event.vendorAssociated === true || ["advertising", "analytics", "session_replay"].includes(event.cookiePurpose))
+        )
+        .sort((left, right) => left.timestampMs - right.timestampMs)
+        .map((event) => traceExampleFromRuntimeEvent(event as unknown as Record<string, unknown>));
+    case "pre_consent_third_party_tracking":
+    case "targeted_advertising_signals":
+      return bundle.networkEvents
+        .filter((event) =>
+          event.consentStateAtTime === "pre_consent" &&
+          (event.thirdParty === true || event.isThirdParty === true) &&
+          (event.collectionEndpointObserved === true || /advertising|analytics|collection|pixel/i.test(event.endpointCategory ?? ""))
+        )
+        .sort((left, right) => left.timestampMs - right.timestampMs)
+        .map((event) => traceExampleFromRuntimeEvent(event as unknown as Record<string, unknown>));
+    case "consent_surface_observed":
+    case "reject_all_path_availability":
+    case "preference_withdrawal_control":
+      return [
+        ...bundle.consentActionAttempts.map((event) => traceExampleFromRuntimeEvent(event as unknown as Record<string, unknown>)),
+        ...bundle.consentUiObservations.map((observation) => ({
+          consentState: "pre_consent",
+          kind: "consent_surface",
+          label: truncateScanLabText(observation.textExcerpt ?? observation.basis.join(" · "), 120),
+          observed: observation.likelyPresent,
+          sourceModule: "preConsentRuntimeScanner",
+          timestampMs: observation.observedAtMs,
+        })),
+      ];
+    case "post_reject_tracking_reduction":
+    case "post_opt_out_tracking_behavior":
+      return bundle.consentFlowComparisons.flatMap((comparison) =>
+        comparison.journeyPhaseDeltas.map((delta) => ({
+          cookieName: delta.cookieName,
+          host: delta.endpointHostname,
+          kind: "scenario_comparison",
+          label: delta.displayName ?? delta.vendor ?? delta.cookieName ?? delta.endpointHostname,
+          observed: delta.persistedAfterReject || delta.suppressedAfterReject || delta.appearedOnlyAfterAccept,
+          purpose: delta.persistedAfterReject ? "persisted_after_reject" : delta.suppressedAfterReject ? "suppressed_after_reject" : undefined,
+          scenario: comparison.comparedScenarios,
+          vendor: delta.vendor,
+        }))
+      );
+    case "privacy_notice_availability":
+    case "cookie_notice_availability":
+    case "do_not_sell_share_availability":
+    case "gpc_opt_out_signal_handling":
+      return bundle.policySurfaceObservations
+        .filter((surface) => policySurfaceMatchesRow(surface, rowId))
+        .map((surface) => ({
+          kind: "policy_surface",
+          label: surface.surfaceType,
+          observed: true,
+          purpose: surface.surfaceType,
+          url: safeTraceUrl(surface.url) ?? undefined,
+        }));
+    case "notice_at_collection":
+      return bundle.policySurfaceObservations
+        .filter((surface) =>
+          surface.mentionedPurposes.includes("data_sale_sharing") ||
+          surface.mentionedRights.includes("access") ||
+          /notice|collection|privacy/i.test(`${surface.url} ${surface.surfaceType}`)
+        )
+        .map((surface) => ({
+          kind: "collection_notice_surface",
+          label: surface.surfaceType,
+          observed: true,
+          purpose: surface.surfaceType,
+          url: safeTraceUrl(surface.url) ?? undefined,
+        }));
+    case "session_replay_fingerprinting_review":
+      return bundle.observedJourneys
+        .filter((journey) => {
+          const record = journey as unknown as Record<string, unknown>;
+          return /replay|fingerprint|behavior/i.test(`${journey.vendor ?? ""} ${journey.product ?? ""} ${stringValue(record.endpointCategory) ?? ""}`);
+        })
+        .map((journey) => traceExampleFromJourney(journey as unknown as Record<string, unknown>));
+    case "policy_runtime_vendor_alignment_review":
+      return bundle.normalizedVendorObservations
+        .filter((vendor) => vendor.purpose === "advertising" || vendor.purpose === "analytics")
+        .map((vendor) => ({
+          kind: "vendor_alignment",
+          label: vendor.product ?? vendor.vendor ?? vendor.entity,
+          observed: true,
+          purpose: vendor.purpose,
+          vendor: vendor.vendor ?? vendor.entity,
+        }));
+    case "cross_border_endpoint_review":
+      return bundle.networkEvents
+        .filter((event) => event.thirdParty === true || event.isThirdParty === true)
+        .filter((event) => event.endpointGeographyStatus !== "not_evaluated")
+        .sort((left, right) => left.timestampMs - right.timestampMs)
+        .map((event) => traceExampleFromRuntimeEvent(event as unknown as Record<string, unknown>));
+    default:
+      return [];
+  }
+}
+
+function traceExampleFromJourney(journey: Record<string, unknown>): TraceEvidenceExample {
+  return {
+    collectionEndpointObserved: journey.collectionEndpointObserved === true ? true : undefined,
+    consentState: stringValue(journey.consentStateAtTime) ?? undefined,
+    endpointCategory: stringValue(journey.endpointCategory) ?? undefined,
+    host: stringValue(journey.endpointHostname) ?? undefined,
+    kind: "observed_journey",
+    label: stringValue(journey.displayName) ?? stringValue(journey.vendor) ?? stringValue(journey.endpointHostname) ?? undefined,
+    observed: true,
+    purpose: stringValue(journey.endpointCategory) ?? undefined,
+    scenario: stringValue(journey.scenario) ?? undefined,
+    sourceModule: stringValue(journey.sourceScanner) ?? undefined,
+    timestampMs: numberValue(journey.timestampMs) ?? undefined,
+    url: safeTraceUrl(stringValue(journey.requestUrl) ?? stringValue(journey.url)) ?? undefined,
+    vendor: stringValue(journey.vendor) ?? undefined,
+  };
+}
+
+function policySurfaceMatchesRow(surface: {
+  mentionedControls: string[];
+  mentionedPurposes: string[];
+  mentionedRights: string[];
+  surfaceType: string;
+  url: string;
+}, rowId: string) {
+  const haystack = [
+    surface.surfaceType,
+    surface.url,
+    ...surface.mentionedControls,
+    ...surface.mentionedPurposes,
+    ...surface.mentionedRights,
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (rowId === "privacy_notice_availability") {
+    return /privacy/.test(haystack);
+  }
+  if (rowId === "cookie_notice_availability") {
+    return /cookie/.test(haystack);
+  }
+  if (rowId === "do_not_sell_share_availability") {
+    return /do not sell|do not share|privacy choice|opt[- ]?out|sale|sharing/.test(haystack);
+  }
+  if (rowId === "gpc_opt_out_signal_handling") {
+    return /global privacy control|\bgpc\b|opt[- ]?out/.test(haystack);
+  }
+  return false;
+}
+
+function uniqueTraceExamples(examples: TraceEvidenceExample[]) {
+  const seen = new Set<string>();
+  const result: TraceEvidenceExample[] = [];
+  for (const example of examples) {
+    const key = [
+      example.eventId,
+      example.kind,
+      example.cookieName,
+      example.host,
+      example.url,
+      example.timestampMs,
+      example.scenario,
+      example.label,
+    ].filter(Boolean).join("|");
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(compactTraceExample(example));
+  }
+  return result;
+}
+
+function compactTraceExample(example: TraceEvidenceExample): TraceEvidenceExample {
+  const compact: TraceEvidenceExample = { kind: example.kind };
+  for (const [key, value] of Object.entries(example) as Array<[keyof TraceEvidenceExample, TraceEvidenceExample[keyof TraceEvidenceExample]]>) {
+    if (value === null || value === undefined || value === "") {
+      continue;
+    }
+    if (key === "url" || key === "label") {
+      compact[key] = truncateScanLabText(String(value), key === "url" ? 180 : 120);
+    } else {
+      compact[key] = value as never;
+    }
+  }
+  return compact;
+}
+
+function safeTraceUrl(value: string | null) {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = new URL(value);
+    const params = [...parsed.searchParams.keys()];
+    parsed.search = params.length > 0 ? `?${params.slice(0, 6).map((key) => `${encodeURIComponent(key)}=...`).join("&")}` : "";
+    return truncateScanLabText(parsed.toString(), 220);
+  } catch {
+    return truncateScanLabText(value, 180);
+  }
+}
+
+function truncateScanLabText(value: string, maxLength: number) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1).trimEnd()}…` : normalized;
+}
+
 function buildRuntimeMetricPreview(bundle: Record<string, unknown>): V2ScanLabRuntimeSnapshot["metrics"] {
   const networkEvents = Array.isArray(bundle.networkEvents)
     ? bundle.networkEvents.filter(isRecord)
@@ -1136,17 +1559,21 @@ function buildRuntimeMetricPreview(bundle: Record<string, unknown>): V2ScanLabRu
       status: networkEvents.length > 0 ? "observed" : "unavailable",
       value: networkEvents.length > 0 ? thirdPartyRequestCount : null,
       detail: networkEvents.length > 0
-        ? `${thirdPartyRequestCount} 3rd-party request${thirdPartyRequestCount === 1 ? "" : "s"}`
+        ? `${formatScanLabNumber(thirdPartyRequestCount)} 3rd-party request${thirdPartyRequestCount === 1 ? "" : "s"}`
         : "Not projected in v2 lab",
     },
     cookiesBeforeConsent: {
       status: cookieSnapshots.length > 0 ? "observed" : "unavailable",
       value: cookieSnapshots.length > 0 ? cookieNames.length : null,
       detail: cookieSnapshots.length > 0
-        ? `${cookieNames.length} cookie${cookieNames.length === 1 ? "" : "s"} before consent`
+        ? `${formatScanLabNumber(cookieNames.length)} cookie${cookieNames.length === 1 ? "" : "s"} before consent`
         : "Not available in v2 lab",
     },
   };
+}
+
+function formatScanLabNumber(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
 function buildTrackerFootprintPreview(bundle: Record<string, unknown>): V2ScanLabRuntimeSnapshot["trackerFootprint"] {
@@ -1300,6 +1727,97 @@ function buildTimingSummary(
     totalDurationMs,
     rows,
   };
+}
+
+function buildBenchmarkSummary(input: {
+  domain: string;
+  profile: V2ScanLabProfile;
+  selectedDurationMs: number | null;
+  workspaceRoot: string;
+}): V2ScanLabBenchmarkSummary {
+  const benchmarkLabel = inferV2BenchmarkLabel(input.domain);
+  const manifestPath = path.join(input.workspaceRoot, "artifacts", "gold-corpus", "v2-current", "GoldCorpusManifest.json");
+  const manifest = readJsonObjectIfPresent(manifestPath);
+  const targets = Array.isArray(manifest?.targets) ? manifest.targets.filter(isRecord) : [];
+  const durations = targets
+    .flatMap((target) => Array.isArray(target.acceptedArtifacts) ? target.acceptedArtifacts.filter(isRecord) : [])
+    .filter((artifact) => stringValue(artifact.profile) === input.profile)
+    .map((artifact) => numberValue(artifact.durationMs))
+    .filter((duration): duration is number => duration !== null && duration > 0)
+    .sort((left, right) => left - right);
+
+  const p50DurationMs = percentile(durations, 0.5);
+  const p90DurationMs = percentile(durations, 0.9);
+  if (input.selectedDurationMs === null || p50DurationMs === null || p90DurationMs === null) {
+    return {
+      basis: "unavailable",
+      comparisonLabel: benchmarkLabel,
+      detail: "Current v2 gold-corpus timing benchmark is unavailable for this profile.",
+      p50DurationMs,
+      p90DurationMs,
+      sampleSize: durations.length,
+      selectedDurationMs: input.selectedDurationMs,
+      status: "unavailable",
+    };
+  }
+
+  return {
+    basis: "current_gold_corpus_duration",
+    comparisonLabel: benchmarkLabel,
+    detail: `${benchmarkLabel}. Timing reference: ${formatDurationForBenchmark(input.selectedDurationMs)} selected run; ${formatDurationForBenchmark(p50DurationMs)} p50 / ${formatDurationForBenchmark(p90DurationMs)} p90 across ${durations.length} accepted ${input.profile} runs.`,
+    p50DurationMs,
+    p90DurationMs,
+    sampleSize: durations.length,
+    selectedDurationMs: input.selectedDurationMs,
+    status: "observed",
+  };
+}
+
+function inferV2BenchmarkLabel(domain: string) {
+  const normalized = normalizeHostname(domain);
+  if (/webmd|healthline|mayoclinic|clevelandclinic|medicalnewstoday/.test(normalized)) {
+    return "Health information / media publisher";
+  }
+  if (/nytimes|washingtonpost|wsj|cnn|bbc|reuters|apnews|theguardian|usatoday/.test(normalized)) {
+    return "News & Media / publisher";
+  }
+  if (/caltech|\.edu$|harvard|stanford|mit\.edu|berkeley/.test(normalized)) {
+    return "Education / university";
+  }
+  if (/shop|store|cart|retail|target|walmart|amazon/.test(normalized)) {
+    return "Commerce / retail";
+  }
+  if (/bank|capital|credit|finance|invest|insurance/.test(normalized)) {
+    return "Financial services";
+  }
+  if (/app|cloud|software|saas|crm|api|dev/.test(normalized)) {
+    return "SaaS / web application";
+  }
+  return "General web / category peer";
+}
+
+function readJsonObjectIfPresent(filePath: string) {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(filePath, "utf8"));
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function percentile(values: number[], ratio: number) {
+  if (values.length === 0) {
+    return null;
+  }
+  const index = Math.min(values.length - 1, Math.max(0, Math.ceil(values.length * ratio) - 1));
+  return values[index] ?? null;
+}
+
+function formatDurationForBenchmark(durationMs: number) {
+  if (durationMs < 1_000) {
+    return `${Math.round(durationMs)}ms`;
+  }
+  return `${Math.round(durationMs / 100) / 10}s`;
 }
 
 function durationForStep(stepTimings: Record<string, unknown>[], label: string) {

@@ -875,7 +875,7 @@ function coverageLimitationsForCandidate(
   const moduleLimitations: CoverageLimitation[] = [
     ...missingRequiredModules.map((moduleName) => ({
       limitationKey: `missing_module:${moduleName}`,
-      description: `Required source module did not provide evidence for ${candidate.findingKey}.`,
+      description: "Required source module did not provide evidence for this internal candidate.",
       affectedFindingKeys: [candidate.findingKey],
       sourceModulesRequired: [moduleName],
       sourceModulesPresent: candidate.sourceModulesPresent,

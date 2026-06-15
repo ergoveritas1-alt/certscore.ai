@@ -64,6 +64,7 @@ async function main(): Promise<void> {
       consentFlowDeadlineMs: args.consentFlowDeadlineMs,
       scenarioResourceMode: args.scenarioResourceMode,
       resume: args.resume,
+      refreshPlanned: args.refreshPlanned,
     }));
   }
 
@@ -91,6 +92,7 @@ async function runShadowSite(input: {
   consentFlowDeadlineMs?: number;
   scenarioResourceMode?: "normal" | "lean";
   resume?: boolean;
+  refreshPlanned?: boolean;
 }): Promise<ConsentScenarioShadowSiteInput> {
   let legacy: CanonicalEvidenceBundle | undefined;
   let planned: CanonicalEvidenceBundle | undefined;
@@ -100,7 +102,7 @@ async function runShadowSite(input: {
     const legacyDir = path.join(input.siteDir, "legacy_sequential");
     const plannedDir = path.join(input.siteDir, "planned_parallel");
     legacy = input.resume ? await readBundleIfExists(legacyDir) : undefined;
-    planned = input.resume ? await readBundleIfExists(plannedDir) : undefined;
+    planned = input.resume && !input.refreshPlanned ? await readBundleIfExists(plannedDir) : undefined;
     legacyDurationMs = legacy ? bundleDurationMs(legacy) : undefined;
     plannedDurationMs = planned ? bundleDurationMs(planned) : undefined;
 
@@ -114,6 +116,7 @@ async function runShadowSite(input: {
         captureReplayTrace: input.captureReplayTrace,
         privacyControlUrls: input.target.privacyControlUrls,
         scenarioPlanningMode: "legacy_sequential",
+        consentFlowDeadlineMs: input.consentFlowDeadlineMs,
       });
       legacyDurationMs = Date.now() - legacyStartedAtMs;
     }
@@ -237,6 +240,7 @@ interface Args {
   scenarioResourceMode?: "normal" | "lean";
   limit?: number;
   resume?: boolean;
+  refreshPlanned?: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -278,6 +282,9 @@ function parseArgs(argv: string[]): Args {
       index += 1;
     } else if (key === "--resume") {
       parsed.resume = true;
+    } else if (key === "--refresh-planned") {
+      parsed.resume = true;
+      parsed.refreshPlanned = true;
     }
   }
   return parsed;

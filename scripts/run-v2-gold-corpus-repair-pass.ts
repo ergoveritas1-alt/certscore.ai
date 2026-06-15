@@ -14,7 +14,10 @@ type RepairQueueName =
   | "cmp-heavy-review"
   | "training-eligible"
   | "validation-eligible"
-  | "holdout-eligible";
+  | "holdout-eligible"
+  | "scanner-hardening"
+  | "corpus-relabel-review"
+  | "replacement-candidate";
 
 type QueueIntent = "repair" | "review" | "split";
 type QueuePriority = "p0" | "p1" | "p2" | "p3";
@@ -234,6 +237,30 @@ const QUEUE_CONFIGS: Record<RepairQueueName, QueueConfig> = {
     description: "Current holdout split candidates. Report-only by default.",
     intent: "split",
     priority: "p3",
+    profile: "full",
+    runByDefault: false,
+  },
+  "scanner-hardening": {
+    consentDag: true,
+    description: "Actionable scanner/runtime hardening targets from the repaired-state quality gate.",
+    intent: "repair",
+    priority: "p0",
+    profile: "full",
+    runByDefault: false,
+  },
+  "corpus-relabel-review": {
+    consentDag: true,
+    description: "Likely clean/control targets with zero eligible review candidates; review labels before replacement.",
+    intent: "review",
+    priority: "p2",
+    profile: "consent",
+    runByDefault: false,
+  },
+  "replacement-candidate": {
+    consentDag: true,
+    description: "Unstable or repeatedly failing targets to quarantine or replace before relying on split quality.",
+    intent: "review",
+    priority: "p1",
     profile: "full",
     runByDefault: false,
   },

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 type CorpusSource = "consent_dag_expansion_50" | "regulatory_stage1" | "synthetic_stage3";
@@ -56,6 +57,18 @@ interface Stage3FixtureEntry {
   title?: string;
 }
 
+interface CorpusLabelEntry {
+  labels?: string[];
+  reason?: string;
+  targetId: string;
+}
+
+interface CorpusLabelSet {
+  labelSetVersion?: string;
+  notes?: string[];
+  targets?: CorpusLabelEntry[];
+}
+
 interface CohortSummary {
   input?: {
     profile?: string;
@@ -65,6 +78,7 @@ interface CohortSummary {
 }
 
 interface CohortResult {
+  completedAt?: string;
   cohort?: string;
   domain?: string;
   durationMs?: number;
@@ -76,6 +90,11 @@ interface CohortResult {
   }>;
   normalizedUrl?: string;
   privacyControlUrls?: string[];
+  reviewCandidateCounts?: {
+    eligible?: number;
+    notEligible?: number;
+    total?: number;
+  };
   status?: string;
   url?: string;
 }
@@ -98,6 +117,17 @@ interface AcceptedArtifactRef {
   createdAt?: string;
   durationMs?: number;
   profile: string;
+  repairPass?: {
+    generatedAt?: string;
+    queue: string;
+    reportPath: string;
+    summaryPath: string;
+  };
+  reviewCandidateCounts?: {
+    eligible?: number;
+    notEligible?: number;
+    total?: number;
+  };
   source: CorpusSource;
   status: string;
   statusReasons: string[];
@@ -122,6 +152,10 @@ interface CorpusTarget {
   seedUrls: Record<string, string[]>;
   knownLimitations: string[];
   notes: string[];
+  corpusLabels: Array<{
+    labels: string[];
+    reason?: string;
+  }>;
   qualityStatus: "accepted" | "accepted_with_limitations" | "planned_only" | "needs_attention";
   eligibility: {
     candidateBacklog: boolean;
@@ -150,7 +184,7 @@ interface CurrentGoldCorpusManifest {
   manifestVersion: "wc01.v2_current_gold_corpus_manifest.1";
   generatedAt: string;
   guardrails: string[];
-  inputs: Record<string, string>;
+  inputs: Record<string, string | string[]>;
   summary: {
     liveTargets: number;
     syntheticFixtures: number;
@@ -171,7 +205,43 @@ interface Args {
   outDir: string;
   regulatoryArtifactIndex: string;
   regulatoryTargetList: string;
+  corpusLabelsPath: string;
+  repairPassDirs: string[];
+  skipRepairPass: boolean;
   stage3FixtureIndex: string;
+}
+
+interface RepairPassReport {
+  generatedAt?: string;
+  input?: {
+    execute?: boolean;
+  };
+  queues?: RepairQueuePlan[];
+  status?: "planned" | "completed" | "failed";
+}
+
+interface RepairQueuePlan {
+  config?: {
+    profile?: string;
+  };
+  name?: string;
+  outDir?: string;
+  status?: "empty" | "planned" | "completed" | "failed" | "skipped";
+  summary?: {
+    completed?: number;
+    failed?: number;
+    summaryPath?: string;
+  };
+}
+
+interface RepairAcceptedArtifactCandidate {
+  generatedAt?: string;
+  profile: string;
+  queue: string;
+  reportPath: string;
+  result: CohortResult;
+  sortTimestamp: string;
+  summaryPath: string;
 }
 
 const DEFAULT_OUT_DIR = path.join("artifacts", "gold-corpus", "v2-current");
@@ -190,6 +260,8 @@ const DEFAULT_STAGE3_FIXTURE_INDEX = path.join(
   "v2-20260613-stage3-fixtures",
   "synthetic-fixture-index.json",
 );
+const DEFAULT_CORPUS_LABELS_PATH = path.join("docs", "certscore-v2", "current-gold-corpus-labels.json");
+const DEFAULT_REPAIR_PASS_ROOT = path.join("artifacts", "gold-corpus", "v2-current");
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -204,6 +276,7 @@ async function main() {
   const artifactIndex = await readJson<{ latestByTargetProfile?: ArtifactIndexRecord[] }>(args.regulatoryArtifactIndex);
   const stage3Index = await readJson<{ entries?: Stage3FixtureEntry[] }>(args.stage3FixtureIndex);
   const qualityReport = await readJson<QualityReport>(args.expansionQualityReport);
+  const corpusLabels = await readJson<CorpusLabelSet>(args.corpusLabelsPath).catch((): CorpusLabelSet => ({ targets: [] }));
 
   for (const entry of expansionEntries) {
     const target = ensureLiveTarget(targets, entry.url);
@@ -257,6 +330,10 @@ async function main() {
   }
 
   await addExpansionAcceptedArtifacts(targets, qualityReport);
+  const repairPassReportPaths = args.skipRepairPass
+    ? []
+    : await addRepairPassAcceptedArtifacts(targets, args.repairPassDirs);
+  applyCorpusLabels(targets, corpusLabels);
 
   for (const fixture of stage3Index.entries ?? []) {
     const target = createSyntheticTarget(fixture);
@@ -281,7 +358,10 @@ async function main() {
       expansionQualityReport: args.expansionQualityReport,
       regulatoryArtifactIndex: args.regulatoryArtifactIndex,
       regulatoryTargetList: args.regulatoryTargetList,
+      corpusLabelsPath: args.corpusLabelsPath,
       stage3FixtureIndex: args.stage3FixtureIndex,
+      repairPassDirs: args.skipRepairPass ? [] : args.repairPassDirs,
+      repairPassReports: repairPassReportPaths,
     },
     summary: summarizeTargets(targetList),
     targets: targetList,
@@ -322,6 +402,7 @@ function ensureLiveTarget(targets: Map<string, CorpusTarget>, url: string): Corp
     seedUrls: {},
     knownLimitations: [],
     notes: [],
+    corpusLabels: [],
     qualityStatus: "planned_only",
     eligibility: emptyEligibility(),
     acceptedArtifacts: [],
@@ -346,6 +427,7 @@ function createSyntheticTarget(fixture: Stage3FixtureEntry): CorpusTarget {
     seedUrls: {},
     knownLimitations: [],
     notes: [],
+    corpusLabels: [],
     qualityStatus: fixture.status === "pass" ? "accepted" : "needs_attention",
     eligibility: {
       candidateBacklog: false,
@@ -408,6 +490,7 @@ async function addExpansionAcceptedArtifacts(targets: Map<string, CorpusTarget>,
       cohort: result.cohort,
       durationMs: result.durationMs,
       profile: runType === "auxiliary_full" ? "full" : "consent",
+      reviewCandidateCounts: result.reviewCandidateCounts,
       source: "consent_dag_expansion_50",
       status: result.status ?? "unknown",
       statusReasons: (result.moduleRuns ?? [])
@@ -415,6 +498,147 @@ async function addExpansionAcceptedArtifacts(targets: Map<string, CorpusTarget>,
         .flatMap((run) => [`${run.moduleName ?? "module"}:${run.status}`, ...(run.errors ?? [])]),
     });
   }
+}
+
+async function addRepairPassAcceptedArtifacts(targets: Map<string, CorpusTarget>, repairPassDirs: string[]): Promise<string[]> {
+  const reportPaths = await discoverRepairPassReportPaths(repairPassDirs);
+  const latestByKey = new Map<string, RepairAcceptedArtifactCandidate>();
+
+  for (const reportPath of reportPaths) {
+    const report = await readJson<RepairPassReport>(reportPath).catch(() => undefined);
+    if (!report || report.status === "failed") {
+      continue;
+    }
+    for (const queue of report.queues ?? []) {
+      if (!isSuccessfulRepairQueue(queue)) {
+        continue;
+      }
+      const queueName = queue.name;
+      const profile = queue.config?.profile;
+      if (!queueName || !profile) {
+        continue;
+      }
+      const summaries = await readRepairQueueSummaries(queue);
+      for (const { summary, summaryPath } of summaries) {
+        for (const result of summary.results ?? []) {
+          if (result.status !== "completed") {
+            continue;
+          }
+          const url = result.url ?? result.normalizedUrl;
+          if (!url) {
+            continue;
+          }
+          const domain = hostFromUrl(url);
+          const sortTimestamp = result.completedAt ?? report.generatedAt ?? "";
+          const key = `${domain}:${profile}`;
+          const previous = latestByKey.get(key);
+          if (previous && previous.sortTimestamp.localeCompare(sortTimestamp) > 0) {
+            continue;
+          }
+          latestByKey.set(key, {
+            generatedAt: report.generatedAt,
+            profile,
+            queue: queueName,
+            reportPath,
+            result,
+            sortTimestamp,
+            summaryPath,
+          });
+        }
+      }
+    }
+  }
+
+  for (const candidate of latestByKey.values()) {
+    const url = candidate.result.url ?? candidate.result.normalizedUrl;
+    if (!url) {
+      continue;
+    }
+    const target = ensureLiveTarget(targets, url);
+    if (target.sourceSets.length === 0) {
+      addSource(target, "consent_dag_expansion_50");
+    }
+    addUrlVariant(target, url);
+    target.expectedSignalTags = unique([...target.expectedSignalTags, ...(candidate.result.eligibleFindingKeys ?? [])]);
+    target.privacyControlUrls = unique([
+      ...target.privacyControlUrls,
+      ...(candidate.result.privacyControlUrls ?? []),
+    ]);
+    target.acceptedArtifacts = target.acceptedArtifacts.filter((artifact) => artifact.profile !== candidate.profile);
+    target.acceptedArtifacts.push({
+      artifactPaths: artifactPathsForCohortResult(candidate.result),
+      cohort: candidate.result.cohort,
+      createdAt: candidate.result.completedAt ?? candidate.generatedAt,
+      durationMs: candidate.result.durationMs,
+      profile: candidate.profile,
+      repairPass: {
+        generatedAt: candidate.generatedAt,
+        queue: candidate.queue,
+        reportPath: candidate.reportPath,
+        summaryPath: candidate.summaryPath,
+      },
+      reviewCandidateCounts: candidate.result.reviewCandidateCounts,
+      source: target.sourceSets[0] ?? "consent_dag_expansion_50",
+      status: candidate.result.status ?? "unknown",
+      statusReasons: statusReasonsForCohortResult(candidate.result),
+    });
+  }
+  return reportPaths;
+}
+
+async function discoverRepairPassReportPaths(repairPassDirs: string[]): Promise<string[]> {
+  const explicitDirs = repairPassDirs.length > 0;
+  const candidateDirs = explicitDirs ? repairPassDirs : await defaultRepairPassDirs();
+  const reportPaths = candidateDirs
+    .map((dir) => path.join(dir, "V2GoldCorpusRepairPass.json"))
+    .filter((reportPath) => existsSync(reportPath));
+  return unique(reportPaths).sort();
+}
+
+async function defaultRepairPassDirs(): Promise<string[]> {
+  const entries = await readdir(DEFAULT_REPAIR_PASS_ROOT, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith("repair-pass"))
+    .map((entry) => path.join(DEFAULT_REPAIR_PASS_ROOT, entry.name));
+}
+
+function isSuccessfulRepairQueue(queue: RepairQueuePlan): boolean {
+  const completed = queue.summary?.completed ?? 0;
+  const failed = queue.summary?.failed ?? 0;
+  return completed > 0 && failed === 0 && queue.status !== "failed";
+}
+
+async function readRepairQueueSummaries(queue: RepairQueuePlan): Promise<Array<{ summary: CohortSummary; summaryPath: string }>> {
+  const summaryPath = queue.summary?.summaryPath ?? (queue.outDir ? path.join(queue.outDir, "Wc01V2ScanLabCohort.summary.json") : undefined);
+  if (summaryPath && existsSync(summaryPath)) {
+    return [{ summary: await readJson<CohortSummary>(summaryPath), summaryPath }];
+  }
+  if (!queue.outDir || !existsSync(queue.outDir)) {
+    return [];
+  }
+  const nestedSummaryPaths = await findFilesNamed(queue.outDir, "Wc01V2ScanLabCohort.summary.json");
+  const summaries: Array<{ summary: CohortSummary; summaryPath: string }> = [];
+  for (const nestedSummaryPath of nestedSummaryPaths) {
+    const summary = await readJson<CohortSummary>(nestedSummaryPath).catch(() => undefined);
+    if (summary) {
+      summaries.push({ summary, summaryPath: nestedSummaryPath });
+    }
+  }
+  return summaries;
+}
+
+async function findFilesNamed(rootDir: string, fileName: string): Promise<string[]> {
+  const results: string[] = [];
+  const entries = await readdir(rootDir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const entryPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...await findFilesNamed(entryPath, fileName));
+    } else if (entry.name === fileName) {
+      results.push(entryPath);
+    }
+  }
+  return results;
 }
 
 function artifactPathsForCohortResult(result: CohortResult): Record<string, string> {
@@ -433,15 +657,48 @@ function artifactPathsForCohortResult(result: CohortResult): Record<string, stri
   };
 }
 
+function statusReasonsForCohortResult(result: CohortResult): string[] {
+  return (result.moduleRuns ?? [])
+    .filter((run) => run.status && run.status !== "completed")
+    .flatMap((run) => [`${run.moduleName ?? "module"}:${run.status}`, ...(run.errors ?? [])]);
+}
+
+function applyCorpusLabels(targets: Map<string, CorpusTarget>, labelSet: CorpusLabelSet) {
+  const labelsByTarget = new Map((labelSet.targets ?? []).map((entry) => [entry.targetId, entry]));
+  for (const target of targets.values()) {
+    const entry = labelsByTarget.get(target.targetId);
+    if (!entry) {
+      continue;
+    }
+    target.corpusLabels = [{
+      labels: unique(entry.labels ?? []).sort(),
+      reason: entry.reason,
+    }];
+  }
+}
+
 function finalizeTarget(target: CorpusTarget): CorpusTarget {
+  const hasSuccessfulPolicyRepair = target.acceptedArtifacts.some((artifact) =>
+    artifact.profile === "policy" &&
+    artifact.status === "completed" &&
+    artifact.statusReasons.every((reason) => !/policySurfaceScanner:failed|policySurfaceScanner:skipped_budget/i.test(reason))
+  );
+  const hasSuccessfulFullRepair = target.acceptedArtifacts.some((artifact) =>
+    artifact.profile === "full" &&
+    artifact.status === "completed" &&
+    artifact.statusReasons.every((reason) => !isConsentRuntimeAttentionReason(reason))
+  );
   const hasAttentionReasons = target.acceptedArtifacts.some((artifact) =>
     artifact.status !== "completed" && artifact.status !== "pass" ||
-    artifact.statusReasons.some((reason) => /failed|deadline|Target page|budget_exhausted/i.test(reason))
+    artifact.statusReasons.some((reason) =>
+      isAttentionReason(reason, { hasSuccessfulFullRepair, hasSuccessfulPolicyRepair })
+    )
   );
   const acceptedArtifacts = target.acceptedArtifacts.length;
-  const qualityStatus: CorpusTarget["qualityStatus"] = hasAttentionReasons
+  const quarantineHandled = hasCorpusLabel(target, "quarantine_replacement_candidate") && acceptedArtifacts > 0;
+  const qualityStatus: CorpusTarget["qualityStatus"] = hasAttentionReasons && !quarantineHandled
     ? "needs_attention"
-    : acceptedArtifacts > 0 && target.knownLimitations.length > 0
+    : acceptedArtifacts > 0 && (target.knownLimitations.length > 0 || quarantineHandled)
       ? "accepted_with_limitations"
       : acceptedArtifacts > 0
         ? "accepted"
@@ -457,6 +714,10 @@ function finalizeTarget(target: CorpusTarget): CorpusTarget {
     knownLimitations: unique(target.knownLimitations).sort(),
     laneTags: unique([...target.laneTags, ...laneTagsFromSignals(target.expectedSignalTags)]).sort(),
     notes: unique(target.notes).sort(),
+    corpusLabels: target.corpusLabels.map((entry) => ({
+      labels: unique(entry.labels).sort(),
+      reason: entry.reason,
+    })),
     privacyControlUrls: unique(target.privacyControlUrls).sort(),
     qualityStatus,
     eligibility: eligibilityForTarget(targetForEligibility),
@@ -464,6 +725,23 @@ function finalizeTarget(target: CorpusTarget): CorpusTarget {
     sourceSets: unique(target.sourceSets).sort() as CorpusSource[],
     urlVariants: unique(target.urlVariants).sort(),
   };
+}
+
+function isAttentionReason(reason: string, input: { hasSuccessfulFullRepair: boolean; hasSuccessfulPolicyRepair: boolean }): boolean {
+  if (input.hasSuccessfulPolicyRepair && /policySurfaceScanner:(?:failed|skipped_budget)|Policy-surface scanner was not ready/i.test(reason)) {
+    return false;
+  }
+  if (input.hasSuccessfulFullRepair && isConsentRuntimeAttentionReason(reason)) {
+    return false;
+  }
+  if (/pre_consent_runtime_not_in_profile/i.test(reason)) {
+    return false;
+  }
+  return /failed|deadline|Target page|budget_exhausted/i.test(reason);
+}
+
+function isConsentRuntimeAttentionReason(reason: string): boolean {
+  return /consentFlowRuntimeScanner:(?:failed|partial)|preConsentRuntimeScanner:(?:failed|partial)|(?:baseline_pre_consent|gpc_enabled|reject_all_flow|accept_all_flow|privacy_opt_out_flow):.*(?:deadline|Target page|budget_exhausted)|Scenario global deadline reached|Screenshot fallback used/i.test(reason);
 }
 
 function emptyEligibility(): CorpusTarget["eligibility"] {
@@ -479,6 +757,13 @@ function emptyEligibility(): CorpusTarget["eligibility"] {
 }
 
 function eligibilityForTarget(target: CorpusTarget): CorpusTarget["eligibility"] {
+  if (hasCorpusLabel(target, "quarantine_replacement_candidate")) {
+    return {
+      ...emptyEligibility(),
+      regressionOnly: true,
+      reasons: ["corpus_label_quarantine_replacement_candidate"],
+    };
+  }
   if (target.qualityStatus === "planned_only") {
     return {
       ...emptyEligibility(),
@@ -506,6 +791,10 @@ function eligibilityForTarget(target: CorpusTarget): CorpusTarget["eligibility"]
       ? [splitReason, "eligible_with_explicit_limitation_labels"]
       : [splitReason, "accepted_quality_status"],
   };
+}
+
+function hasCorpusLabel(target: CorpusTarget, label: string): boolean {
+  return target.corpusLabels.some((entry) => entry.labels.includes(label));
 }
 
 function laneTagsFromSignals(signals: string[]): string[] {
@@ -642,12 +931,17 @@ function parseArgs(argv: string[]): Args {
     outDir: DEFAULT_OUT_DIR,
     regulatoryArtifactIndex: DEFAULT_REGULATORY_ARTIFACT_INDEX,
     regulatoryTargetList: DEFAULT_REGULATORY_TARGET_LIST,
+    corpusLabelsPath: DEFAULT_CORPUS_LABELS_PATH,
+    repairPassDirs: [],
+    skipRepairPass: false,
     stage3FixtureIndex: DEFAULT_STAGE3_FIXTURE_INDEX,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const next = argv[index + 1];
-    if (arg === "--expansion-jsonl" && next) {
+    if (arg === "--") {
+      continue;
+    } else if (arg === "--expansion-jsonl" && next) {
       args.expansionJsonl = next;
       index += 1;
     } else if (arg === "--expansion-quality-report" && next) {
@@ -662,9 +956,17 @@ function parseArgs(argv: string[]): Args {
     } else if (arg === "--stage3-fixture-index" && next) {
       args.stage3FixtureIndex = next;
       index += 1;
+    } else if (arg === "--corpus-labels" && next) {
+      args.corpusLabelsPath = next;
+      index += 1;
     } else if (arg === "--out-dir" && next) {
       args.outDir = next;
       index += 1;
+    } else if (arg === "--repair-pass-dir" && next) {
+      args.repairPassDirs.push(next);
+      index += 1;
+    } else if (arg === "--skip-repair-pass") {
+      args.skipRepairPass = true;
     } else if (arg === "--help" || arg === "-h") {
       args.help = true;
     } else {
@@ -687,6 +989,9 @@ function usage(): string {
     "  --regulatory-target-list <path>",
     "  --regulatory-artifact-index <path>",
     "  --stage3-fixture-index <path>",
+    "  --corpus-labels <path>",
+    "  --repair-pass-dir <path>  Repeatable. Defaults to artifacts/gold-corpus/v2-current/repair-pass*.",
+    "  --skip-repair-pass",
     "  --out-dir <path>",
   ].join("\n");
 }

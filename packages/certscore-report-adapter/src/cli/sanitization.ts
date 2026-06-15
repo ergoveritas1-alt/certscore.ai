@@ -22,6 +22,9 @@ const INTERNAL_DIAGNOSTIC_FIELD_NAMES = new Set([
   "limitationKey",
   "matchedCriteria",
   "coverageLimitationKeys",
+  "findingKey",
+  "sourceFindingKey",
+  "affectedFindingKeys",
 ]);
 
 export function projectionSanitizationWarnings(projection: V2ReportProjectionDraft) {

@@ -3,12 +3,21 @@
 import { useMemo, useState } from "react";
 import type { V2ScanLabCandidateSignal } from "../../../../server/admin/v2-scan-lab-artifacts";
 
+export type V2PriorityRegulatoryGap = {
+  body: string;
+  framework: "CCPA/CPRA" | "GDPR/ePrivacy";
+  id: string;
+  title: string;
+};
+
 export function V2PriorityIssuesCarousel({
+  regulatoryGaps = [],
   signals,
 }: {
+  regulatoryGaps?: V2PriorityRegulatoryGap[];
   signals: V2ScanLabCandidateSignal[];
 }) {
-  const slides = useMemo(() => buildSlides(signals), [signals]);
+  const slides = useMemo(() => buildSlides(signals, regulatoryGaps), [signals, regulatoryGaps]);
   const [index, setIndex] = useState(0);
   const activeIndex = slides.length > 0 ? Math.min(index, slides.length - 1) : 0;
   const activeSlide = slides[activeIndex] ?? null;
@@ -48,10 +57,9 @@ export function V2PriorityIssuesCarousel({
         <div className="h-1 w-full bg-rose-200/80" />
         <div className="px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
-            <FindingPill>v2 candidate</FindingPill>
-            <FindingPill tone="warning">Stub top finding</FindingPill>
+            <FindingPill>{activeSlide?.kind === "regulatory_gap" ? activeSlide.framework : "v2 candidate"}</FindingPill>
+            <FindingPill tone="warning">{activeSlide?.kind === "regulatory_gap" ? "Gap observed" : "Diagnostic signal"}</FindingPill>
             <FindingPill>{activeSlide ? `${activeSlide.confidence} / ${activeSlide.directness}` : "no candidate"}</FindingPill>
-            {activeSlide ? <FindingPill>{activeSlide.evidenceGroupCount} groups</FindingPill> : null}
           </div>
           <div className="mt-2.5 flex items-start gap-2.5">
             <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-rose-600">
@@ -72,15 +80,28 @@ export function V2PriorityIssuesCarousel({
   );
 }
 
-function buildSlides(signals: V2ScanLabCandidateSignal[]) {
-  return signals.map((signal) => ({
+function buildSlides(signals: V2ScanLabCandidateSignal[], regulatoryGaps: V2PriorityRegulatoryGap[]) {
+  const gapSlides = regulatoryGaps.map((gap) => ({
+    body: gap.body,
+    confidence: "gap observed",
+    directness: "evidence-gated",
+    evidenceGroupCount: 1,
+    framework: gap.framework,
+    id: gap.id,
+    kind: "regulatory_gap" as const,
+    title: gap.title,
+  }));
+  const candidateSlides = signals.map((signal) => ({
     body: buildSlideBody(signal),
     confidence: signal.confidence,
     directness: signal.directness,
     evidenceGroupCount: signal.evidenceGroupCount,
+    framework: null,
     id: signal.id,
+    kind: "candidate" as const,
     title: formatMachineLabel(signal.family),
   }));
+  return [...gapSlides, ...candidateSlides];
 }
 
 function buildSlideBody(signal: V2ScanLabCandidateSignal) {

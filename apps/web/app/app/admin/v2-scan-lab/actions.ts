@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { requirePlatformAdminContext } from "../../../../server/admin/platform-admin";
 import {
+  isV2ScanLabConsentDagEligibleProfile,
   isV2ScanLabRunProfile,
   runV2ScanLabArtifactChain,
   type V2ScanLabRunProfile,
@@ -14,7 +15,7 @@ export async function submitV2ScanLabAction(formData: FormData) {
   const url = getFormString(formData, "url");
   const profile = parseProfile(getFormString(formData, "profile"));
   const freshRescan = formData.get("freshRescan") === "yes";
-  const consentDag = formData.get("consentDag") === "yes";
+  const consentDag = formData.get("consentDag") === "yes" && isV2ScanLabConsentDagEligibleProfile(profile);
   const scanStartedAtMs = parseTimestampMs(getFormString(formData, "scanStartedAtMs")) ?? Date.now();
 
   if (!url) {
@@ -42,7 +43,6 @@ export async function submitV2ScanLabAction(formData: FormData) {
     chain: plan.chainKey,
     consentDag,
     profile: plan.profile,
-    scanMessage: `Fresh v2 scan completed: ${plan.cohort}`,
     scanStatus: "complete",
     scanTimeSec: Math.max(0, Math.round((Date.now() - scanStartedAtMs) / 1_000)),
     url: plan.domain,
@@ -55,7 +55,7 @@ function getFormString(formData: FormData, key: string) {
 }
 
 function parseProfile(value: string): V2ScanLabRunProfile {
-  return isV2ScanLabRunProfile(value) ? value : "tiny";
+  return isV2ScanLabRunProfile(value) ? value : "full";
 }
 
 function parseTimestampMs(value: string) {

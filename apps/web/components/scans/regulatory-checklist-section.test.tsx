@@ -9,8 +9,8 @@ function renderTabs(includeAdminOnlyTabs: boolean) {
     {
       content: createElement("div", null, "California checklist"),
       id: "california-privacy",
-      label: "CCPA/CPRA+CIPA",
-      shortLabel: "CCPA/CPRA+CIPA"
+      label: "CCPA/CPRA",
+      shortLabel: "CCPA/CPRA"
     },
     {
       content: createElement("div", null, "GDPR checklist"),
@@ -55,9 +55,10 @@ test("RegulatoryChecklistSection can render baseline privacy options for non-adm
   assert.match(html, /Privacy-law applicability context/);
   assert.match(html, /Applicability can depend on business facts or visitor geography CertScore has not verified/);
   assert.match(html, /Expand all/);
-  assert.match(html, /CCPA\/CPRA\+CIPA/);
-  assert.ok(html.indexOf("Expand all") < indexOfTabLabel(html, "CCPA/CPRA+CIPA"));
-  assert.ok(indexOfTabLabel(html, "CCPA/CPRA+CIPA") < indexOfTabLabel(html, "GDPR/ePrivacy"));
+  assert.match(html, /CCPA\/CPRA/);
+  assert.doesNotMatch(html, /CCPA\/CPRA\+CIPA/);
+  assert.ok(html.indexOf("Expand all") < indexOfTabLabel(html, "CCPA/CPRA"));
+  assert.ok(indexOfTabLabel(html, "CCPA/CPRA") < indexOfTabLabel(html, "GDPR/ePrivacy"));
   assert.doesNotMatch(html, /Alpha/);
   assert.doesNotMatch(html, /FTC/);
   assert.doesNotMatch(html, /UK GDPR \/ PECR/);
@@ -72,9 +73,10 @@ test("RegulatoryChecklistSection can render all checklist options for admin view
   assert.match(html, /Privacy-law applicability context/);
   assert.match(html, /Applicability can depend on business facts or visitor geography CertScore has not verified/);
   assert.match(html, /Expand all/);
-  assert.match(html, /CCPA\/CPRA\+CIPA/);
-  assert.ok(html.indexOf("Expand all") < indexOfTabLabel(html, "CCPA/CPRA+CIPA"));
-  assert.ok(indexOfTabLabel(html, "CCPA/CPRA+CIPA") < indexOfTabLabel(html, "GDPR/ePrivacy"));
+  assert.match(html, /CCPA\/CPRA/);
+  assert.doesNotMatch(html, /CCPA\/CPRA\+CIPA/);
+  assert.ok(html.indexOf("Expand all") < indexOfTabLabel(html, "CCPA/CPRA"));
+  assert.ok(indexOfTabLabel(html, "CCPA/CPRA") < indexOfTabLabel(html, "GDPR/ePrivacy"));
   assert.match(html, /FTC/);
   assert.match(html, /UK GDPR \/ PECR/);
   assert.match(html, />More</);
@@ -94,8 +96,8 @@ test("RegulatoryChecklistSection renders tab badges inside the More menu", () =>
       {
         content: createElement("div", null, "California checklist"),
         id: "california-privacy",
-        label: "CCPA/CPRA+CIPA",
-        shortLabel: "CCPA/CPRA+CIPA"
+        label: "CCPA/CPRA",
+        shortLabel: "CCPA/CPRA"
       }
     ]
   }));

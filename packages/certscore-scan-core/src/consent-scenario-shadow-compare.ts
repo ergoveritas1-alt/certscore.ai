@@ -6,6 +6,9 @@ import {
   consentScenarioShadowCompareArtifactSchema,
 } from "@certscore/contracts";
 
+const LONG_TAIL_THRESHOLD_MS = 15_000;
+const MAX_FRESH_PAIR_GAP_MS = 30 * 60 * 1000;
+
 export interface ConsentScenarioShadowSiteInput {
   url: string;
   legacy?: CanonicalEvidenceBundle;
@@ -28,8 +31,12 @@ export function buildConsentScenarioShadowCompareArtifact(input: {
   const p90DurationDeltaMs = percentile(completedSites.map((site) => site.durationMs.delta), 0.9);
   const p50DurationImprovementPct = percentile(completedSites.map((site) => site.durationMs.improvementPct), 0.5);
   const p90DurationImprovementPct = percentile(completedSites.map((site) => site.durationMs.improvementPct), 0.9);
+  const truePlannedRegressionSites = completedSites.filter((site) => site.validationOutcome.category === "true_planned_regression").length;
+  const stalePairSites = completedSites.filter((site) => site.validationOutcome.category === "stale_pair").length;
+  const liveVarianceSuspectedSites = completedSites.filter((site) => site.validationOutcome.category === "live_variance_suspected").length;
+  const unstablePairRefreshSites = completedSites.filter((site) => site.validationOutcome.refreshRecommended).length;
 
-    return consentScenarioShadowCompareArtifactSchema.parse({
+  return consentScenarioShadowCompareArtifactSchema.parse({
     artifactVersion: "consent_scenario_shadow_compare.v1",
     sourceScanner: "consent_flow_runtime",
     generatedAt: input.generatedAt ?? new Date().toISOString(),
@@ -38,6 +45,10 @@ export function buildConsentScenarioShadowCompareArtifact(input: {
       urlsScanned: sites.length,
       succeeded: completedSites.length,
       failed: sites.length - completedSites.length,
+      truePlannedRegressionSites,
+      stalePairSites,
+      liveVarianceSuspectedSites,
+      unstablePairRefreshSites,
       p50DurationDeltaMs,
       p90DurationDeltaMs,
       p50DurationImprovementPct,
@@ -86,8 +97,8 @@ export function formatConsentScenarioShadowCompareMarkdown(
     "",
     "## Sites",
     "",
-    "| URL | Status | Duration delta | Improvement | Lane coverage | Comparable legacy -> planned | Artifacts | Trace | Ambiguity |",
-    "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    "| URL | Status | Duration delta | Improvement | Lane coverage | Comparable legacy -> planned | Bottleneck | Artifacts | Trace | Ambiguity |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
   ];
   for (const site of artifact.sites) {
     lines.push([
@@ -97,6 +108,7 @@ export function formatConsentScenarioShadowCompareMarkdown(
       formatPct(site.durationMs.improvementPct),
       `${site.laneCoverage.planned.length}/${site.laneCoverage.legacy.length}`,
       `${site.comparisons.legacyComparable} -> ${site.comparisons.plannedComparable}`,
+      formatBottleneck(site.longTailDiagnostic),
       site.artifacts.plan && site.artifacts.execution && site.artifacts.trace ? "complete" : "missing",
       site.trace.complete ? "complete" : "incomplete",
       site.comparisons.increasedAmbiguity ? "yes" : "no",
@@ -118,6 +130,11 @@ function compareSite(input: ConsentScenarioShadowSiteInput): ConsentScenarioShad
   const legacyComparable = comparableComparisonCount(input.legacy);
   const plannedComparable = comparableComparisonCount(input.planned);
   const artifactSummary = plannedArtifactSummary(input.planned);
+  const notTestableReasons = plannedNotTestableReasons(input.plannedExecution, input.plannedTrace);
+  const increasedAmbiguity = plannedComparable < legacyComparable;
+  const blockingMissingLanes = missingInPlanned.filter((lane) =>
+    !isExpectedPlanningSkipLane(lane, notTestableReasons, increasedAmbiguity)
+  );
   const traceSummary = {
     scenarioNodeCount: input.plannedTrace?.scenarioNodes.length ?? 0,
     coverageAreaCount: input.plannedTrace?.coverageTrace.length ?? 0,
@@ -127,6 +144,20 @@ function compareSite(input: ConsentScenarioShadowSiteInput): ConsentScenarioShad
   const durationDelta = input.legacyDurationMs !== undefined && input.plannedDurationMs !== undefined
     ? input.plannedDurationMs - input.legacyDurationMs
     : undefined;
+  const longTailDiagnostic = buildLongTailDiagnostic(input.plannedDurationMs, input.plannedExecution);
+  const pairFreshness = pairFreshnessSummary(input.legacy, input.planned);
+  const validationOutcome = validationOutcomeForSite({
+    status: "completed",
+    pairFreshness,
+    sameOrBetterLaneCoverage: blockingMissingLanes.length === 0,
+    increasedAmbiguity,
+    productionOutputInvariant,
+    artifacts: artifactSummary,
+    trace: traceSummary,
+    plannedLongTail: longTailDiagnostic?.plannedLongTail === true,
+    legacy: input.legacy,
+    planned: input.planned,
+  });
 
   return {
     url: input.planned.url,
@@ -146,12 +177,13 @@ function compareSite(input: ConsentScenarioShadowSiteInput): ConsentScenarioShad
       legacyConsentFlow: consentFlowModuleStatus(input.legacy),
       plannedConsentFlow: consentFlowModuleStatus(input.planned),
     },
+    pairFreshness,
     laneCoverage: {
       legacy: legacyLanes,
       planned: plannedLanes,
       missingInPlanned,
       additionalInPlanned,
-      sameOrBetter: missingInPlanned.length === 0,
+      sameOrBetter: blockingMissingLanes.length === 0,
     },
     actionAttempts: {
       legacy: actionAttemptSummary(input.legacy),
@@ -165,18 +197,14 @@ function compareSite(input: ConsentScenarioShadowSiteInput): ConsentScenarioShad
         .filter((measurement) => measurement && !measurement.comparable)
         .map((measurement) => measurement?.reason)
         .filter((reason): reason is string => Boolean(reason))),
-      increasedAmbiguity: plannedComparable < legacyComparable,
+      increasedAmbiguity,
     },
     artifacts: artifactSummary,
     trace: traceSummary,
-    notTestableReasons: uniqueStrings([
-      ...(input.plannedExecution?.scenarios ?? []).flatMap((scenario) => [
-        scenario.failureReason,
-        ...scenario.reasonCodes,
-      ]),
-      ...(input.plannedTrace?.coverageTrace ?? []).flatMap((coverage) => coverage.limitationKeys),
-    ].filter((value): value is string => Boolean(value))),
+    notTestableReasons,
     productionOutputInvariant,
+    validationOutcome,
+    longTailDiagnostic,
   };
 }
 
@@ -199,6 +227,9 @@ function emptyFailedSite(input: ConsentScenarioShadowSiteInput): ConsentScenario
       legacyConsentFlow: input.legacy ? consentFlowModuleStatus(input.legacy) : undefined,
       plannedConsentFlow: input.planned ? consentFlowModuleStatus(input.planned) : undefined,
     },
+    pairFreshness: input.legacy && input.planned
+      ? pairFreshnessSummary(input.legacy, input.planned)
+      : unknownPairFreshness(input.legacy, input.planned),
     laneCoverage: {
       legacy: input.legacy ? laneCoverage(input.legacy) : [],
       planned: input.planned ? laneCoverage(input.planned) : [],
@@ -235,7 +266,238 @@ function emptyFailedSite(input: ConsentScenarioShadowSiteInput): ConsentScenario
         boundedString(input.failureReason ?? "shadow_compare_site_failed", 240) ?? "shadow_compare_site_failed",
       ],
     },
+    validationOutcome: {
+      category: "scanner_failure",
+      refreshRecommended: false,
+      reasonCodes: [
+        "site_not_completed",
+        boundedString(input.failureReason ?? "shadow_compare_site_failed", 120) ?? "shadow_compare_site_failed",
+      ],
+    },
+    longTailDiagnostic: buildLongTailDiagnostic(input.plannedDurationMs, input.plannedExecution),
   };
+}
+
+function pairFreshnessSummary(
+  legacy: CanonicalEvidenceBundle,
+  planned: CanonicalEvidenceBundle,
+): ConsentScenarioShadowCompareArtifact["sites"][number]["pairFreshness"] {
+  const legacyStartedAtMs = Date.parse(legacy.startedAt);
+  const plannedStartedAtMs = Date.parse(planned.startedAt);
+  if (!Number.isFinite(legacyStartedAtMs) || !Number.isFinite(plannedStartedAtMs)) {
+    return unknownPairFreshness(legacy, planned);
+  }
+  const captureGapMs = Math.abs(plannedStartedAtMs - legacyStartedAtMs);
+  const stale = captureGapMs > MAX_FRESH_PAIR_GAP_MS;
+  return {
+    legacyStartedAt: legacy.startedAt,
+    plannedStartedAt: planned.startedAt,
+    legacyCompletedAt: legacy.completedAt,
+    plannedCompletedAt: planned.completedAt,
+    captureGapMs,
+    maxFreshPairGapMs: MAX_FRESH_PAIR_GAP_MS,
+    status: stale ? "stale_pair" : "fresh_pair",
+    reasonCodes: stale ? ["capture_gap_over_threshold"] : ["capture_pair_fresh"],
+  };
+}
+
+function unknownPairFreshness(
+  legacy: CanonicalEvidenceBundle | undefined,
+  planned: CanonicalEvidenceBundle | undefined,
+): ConsentScenarioShadowCompareArtifact["sites"][number]["pairFreshness"] {
+  return {
+    legacyStartedAt: legacy?.startedAt,
+    plannedStartedAt: planned?.startedAt,
+    legacyCompletedAt: legacy?.completedAt,
+    plannedCompletedAt: planned?.completedAt,
+    maxFreshPairGapMs: MAX_FRESH_PAIR_GAP_MS,
+    status: "unknown_pair",
+    reasonCodes: ["capture_timestamp_unavailable"],
+  };
+}
+
+function validationOutcomeForSite(input: {
+  status: "completed" | "failed";
+  pairFreshness: ConsentScenarioShadowCompareArtifact["sites"][number]["pairFreshness"];
+  sameOrBetterLaneCoverage: boolean;
+  increasedAmbiguity: boolean;
+  productionOutputInvariant: ConsentScenarioShadowCompareArtifact["sites"][number]["productionOutputInvariant"];
+  artifacts: ConsentScenarioShadowCompareArtifact["sites"][number]["artifacts"];
+  trace: ConsentScenarioShadowCompareArtifact["sites"][number]["trace"];
+  plannedLongTail: boolean;
+  legacy: CanonicalEvidenceBundle;
+  planned: CanonicalEvidenceBundle;
+}): ConsentScenarioShadowCompareArtifact["sites"][number]["validationOutcome"] {
+  const blockingContractIssue = !input.productionOutputInvariant.noNewProductionFacingOutputs ||
+    !(input.artifacts.plan && input.artifacts.execution && input.artifacts.trace && input.artifacts.allInternalOnly && input.artifacts.pathsUnique) ||
+    !input.trace.complete;
+  const coverageOrAmbiguityRegression = !input.sameOrBetterLaneCoverage || input.increasedAmbiguity;
+  const actionProofAsymmetry = actionProofSignature(input.legacy) !== actionProofSignature(input.planned);
+  const reasonCodes = [
+    ...input.pairFreshness.reasonCodes,
+    coverageOrAmbiguityRegression ? "coverage_or_ambiguity_regression" : undefined,
+    !input.sameOrBetterLaneCoverage ? "lane_coverage_below_legacy" : undefined,
+    input.increasedAmbiguity ? "increased_ambiguity" : undefined,
+    actionProofAsymmetry ? "action_proof_asymmetry" : undefined,
+    blockingContractIssue ? "artifact_or_contract_issue" : undefined,
+    input.plannedLongTail ? "planned_long_tail" : undefined,
+  ].filter((value): value is string => Boolean(value));
+
+  if (input.status !== "completed") {
+    return { category: "scanner_failure", refreshRecommended: false, reasonCodes };
+  }
+  if (coverageOrAmbiguityRegression && input.pairFreshness.status !== "fresh_pair") {
+    return { category: "stale_pair", refreshRecommended: true, reasonCodes };
+  }
+  if (coverageOrAmbiguityRegression && actionProofAsymmetry) {
+    return { category: "live_variance_suspected", refreshRecommended: true, reasonCodes };
+  }
+  if (coverageOrAmbiguityRegression || blockingContractIssue) {
+    return { category: "true_planned_regression", refreshRecommended: false, reasonCodes };
+  }
+  if (input.plannedLongTail) {
+    return { category: "long_tail_only", refreshRecommended: false, reasonCodes };
+  }
+  return { category: "healthy", refreshRecommended: false, reasonCodes };
+}
+
+function actionProofSignature(bundle: CanonicalEvidenceBundle): string {
+  return bundle.consentActionAttempts
+    .map((attempt) => [
+      attempt.scenario,
+      attempt.actionType,
+      attempt.attempted ? "attempted" : "not_attempted",
+      attempt.succeeded ? "succeeded" : "not_succeeded",
+      attempt.actionProof?.attemptedStatus ?? "no_proof_status",
+      attempt.actionProof?.failureReason ?? "no_failure",
+    ].join(":"))
+    .sort()
+    .join("|");
+}
+
+function buildLongTailDiagnostic(
+  plannedDurationMs: number | undefined,
+  execution: ConsentScenarioExecutionArtifact | undefined,
+): ConsentScenarioShadowCompareArtifact["sites"][number]["longTailDiagnostic"] {
+  const scenarioDurations = (execution?.scenarios ?? [])
+    .filter((scenario) => scenario.durationMs !== undefined)
+    .map((scenario) => ({
+      scenario: scenario.scenario,
+      status: scenario.status,
+      durationMs: scenario.durationMs,
+      deadlineHit: scenario.deadlineHit,
+    }))
+    .sort((left, right) => (right.durationMs ?? 0) - (left.durationMs ?? 0))
+    .slice(0, 10);
+  const phaseHotspots = (execution?.scenarios ?? [])
+    .flatMap((scenario) => scenario.phaseTimings.map((phase) => ({
+      scenario: scenario.scenario,
+      label: phase.label,
+      durationMs: phase.durationMs,
+      detail: phase.detail,
+    })))
+    .sort((left, right) => right.durationMs - left.durationMs)
+    .slice(0, 8);
+  const topScenario = scenarioDurations[0];
+  const topPhase = phaseHotspots[0];
+  const bottleneckBuckets = phaseBucketTotals(phaseHotspots);
+  const plannedLongTail = (plannedDurationMs ?? 0) > LONG_TAIL_THRESHOLD_MS;
+  const reasonCodes = new Set<string>();
+  if (plannedLongTail) {
+    reasonCodes.add("planned_wall_time_over_threshold");
+  }
+  if (execution?.healthSummary.deadlineHit) {
+    reasonCodes.add("execution_deadline_hit");
+  }
+  if (execution?.healthSummary.failed && execution.healthSummary.failed > 0) {
+    reasonCodes.add("scenario_failure_present");
+  }
+  if (execution?.healthSummary.policyLate) {
+    reasonCodes.add("policy_late");
+  }
+  if (topScenario) {
+    reasonCodes.add(`top_scenario:${topScenario.scenario}`);
+    if (topScenario.deadlineHit) {
+      reasonCodes.add(`top_scenario_deadline_hit:${topScenario.scenario}`);
+    }
+    if (topScenario.status === "failed") {
+      reasonCodes.add(`top_scenario_failed:${topScenario.scenario}`);
+    }
+  }
+  if (topPhase) {
+    reasonCodes.add(`top_phase:${phaseBucket(topPhase.label)}`);
+  } else if (topScenario && (topScenario.durationMs ?? 0) > 0) {
+    reasonCodes.add("top_scenario_phase_timings_missing");
+  }
+
+  return {
+    plannedLongTail,
+    thresholdMs: LONG_TAIL_THRESHOLD_MS,
+    topScenario: topScenario?.scenario,
+    topScenarioStatus: topScenario?.status,
+    topScenarioDurationMs: topScenario?.durationMs,
+    topPhaseScenario: topPhase?.scenario,
+    topPhaseLabel: topPhase?.label,
+    topPhaseDurationMs: topPhase?.durationMs,
+    topPhaseDetail: boundedString(topPhase?.detail, 240),
+    bottleneckReasonCodes: [...reasonCodes].sort(),
+    bottleneckBuckets,
+    scenarioDurations,
+    phaseHotspots: phaseHotspots.map((phase) => ({
+      scenario: phase.scenario,
+      label: phase.label,
+      durationMs: phase.durationMs,
+    })),
+  };
+}
+
+function phaseBucketTotals(phases: Array<{ label: string; durationMs: number }>): Array<{
+  bucket: string;
+  totalMs: number;
+  occurrences: number;
+}> {
+  const totals = new Map<string, { bucket: string; totalMs: number; occurrences: number }>();
+  for (const phase of phases) {
+    const bucket = phaseBucket(phase.label);
+    const existing = totals.get(bucket) ?? { bucket, totalMs: 0, occurrences: 0 };
+    existing.totalMs += phase.durationMs;
+    existing.occurrences += 1;
+    totals.set(bucket, existing);
+  }
+  return [...totals.values()]
+    .sort((left, right) => right.totalMs - left.totalMs || left.bucket.localeCompare(right.bucket))
+    .slice(0, 8);
+}
+
+function phaseBucket(label: string): string {
+  if (label.includes("navigate")) {
+    return "navigation";
+  }
+  if (label.includes("network_idle") || label.includes("readiness") || label.includes("settle")) {
+    return "readiness_or_settle";
+  }
+  if (label.includes("screenshot")) {
+    return "screenshot";
+  }
+  if (label.includes("classification")) {
+    return "classification";
+  }
+  if (label.includes("candidate") || label.includes("recipe")) {
+    return "candidate_extraction";
+  }
+  if (label.includes("preference_center")) {
+    return "preference_center_traversal";
+  }
+  if (label.includes("cookie")) {
+    return "cookie_snapshot";
+  }
+  if (label.includes("response")) {
+    return "response_capture";
+  }
+  if (label.includes("dom")) {
+    return "dom_capture";
+  }
+  return "other";
 }
 
 function laneCoverage(bundle: CanonicalEvidenceBundle): string[] {
@@ -252,6 +514,39 @@ function laneCoverage(bundle: CanonicalEvidenceBundle): string[] {
     }
   }
   return [...lanes].sort();
+}
+
+function plannedNotTestableReasons(
+  execution: ConsentScenarioExecutionArtifact | undefined,
+  trace: ConsentFlowTraceArtifact | undefined,
+): string[] {
+  return uniqueStrings([
+    ...(execution?.scenarios ?? []).flatMap((scenario) => [
+      scenario.failureReason,
+      ...scenario.reasonCodes,
+    ]),
+    ...(trace?.coverageTrace ?? []).flatMap((coverage) => coverage.limitationKeys),
+  ].filter((value): value is string => Boolean(value)));
+}
+
+function isExpectedPlanningSkipLane(
+  lane: string,
+  notTestableReasons: string[],
+  increasedAmbiguity: boolean,
+): boolean {
+  if (increasedAmbiguity) {
+    return false;
+  }
+  if (lane.endsWith(":reopen_preferences")) {
+    return true;
+  }
+  if (!notTestableReasons.includes("cmp_or_banner_not_observed")) {
+    return false;
+  }
+  return lane === "reject_all_flow" ||
+    lane === "reject_all_flow:reject_all" ||
+    lane === "accept_all_flow" ||
+    lane === "accept_all_flow:accept_all";
 }
 
 function actionAttemptSummary(bundle: CanonicalEvidenceBundle): ConsentScenarioShadowCompareArtifact["sites"][number]["actionAttempts"]["legacy"] {
@@ -355,4 +650,19 @@ function formatMs(value: number | undefined): string {
 
 function formatPct(value: number | undefined): string {
   return value === undefined ? "n/a" : `${value.toFixed(1)}%`;
+}
+
+function formatBottleneck(
+  diagnostic: ConsentScenarioShadowCompareArtifact["sites"][number]["longTailDiagnostic"],
+): string {
+  if (!diagnostic?.plannedLongTail) {
+    return "n/a";
+  }
+  return [
+    diagnostic.topScenario,
+    diagnostic.topPhaseScenario && diagnostic.topPhaseLabel
+      ? `${diagnostic.topPhaseScenario}:${diagnostic.topPhaseLabel}`
+      : diagnostic.topPhaseLabel,
+    diagnostic.topPhaseDurationMs !== undefined ? formatMs(diagnostic.topPhaseDurationMs) : undefined,
+  ].filter(Boolean).join(" / ") || "long-tail";
 }

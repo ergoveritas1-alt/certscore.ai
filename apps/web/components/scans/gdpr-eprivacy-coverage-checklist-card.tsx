@@ -4,7 +4,7 @@ import React from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { useRegulatoryChecklistAdvancedEvidence } from "./regulatory-checklist-advanced-evidence-context";
-import { RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
+import { RegulatoryChecklistActiveTrace, RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import type {
   GdprEprivacyCoverageChecklistItem,
@@ -27,6 +27,8 @@ type GdprEprivacyCoverageChecklistCardProps = {
     toneClass: string;
   } | null;
   items: GdprEprivacyCoverageChecklistItem[];
+  showDebugConfidenceImprovements?: boolean;
+  showSummaryStrip?: boolean;
 };
 
 function getAssessmentBadgeClasses(status: RegulatoryAssessmentStatus) {
@@ -89,7 +91,13 @@ function getEvidenceStateLabel(state: RegulatoryEvidenceState) {
   }
 }
 
-function DebugConfidenceSummary({ item }: { item: GdprEprivacyCoverageChecklistItem }) {
+function DebugConfidenceSummary({
+  item,
+  showImprovements,
+}: {
+  item: GdprEprivacyCoverageChecklistItem;
+  showImprovements: boolean;
+}) {
   if (!item.debugConfidence) {
     return null;
   }
@@ -109,7 +117,7 @@ function DebugConfidenceSummary({ item }: { item: GdprEprivacyCoverageChecklistI
       >
         {pillLabel}
       </span>
-      {improvements.length > 0 ? (
+      {showImprovements && improvements.length > 0 ? (
         <span className="min-w-0">
           {actionLabel}: {improvements.join(" · ")}
         </span>
@@ -604,7 +612,9 @@ function getGdprReviewedAreas(items: GdprEprivacyCoverageChecklistItem[]) {
 export function GdprEprivacyCoverageChecklistCard({
   defaultOpen = true,
   gdprEprivacyLens,
-  items
+  items,
+  showDebugConfidenceImprovements = true,
+  showSummaryStrip = true
 }: GdprEprivacyCoverageChecklistCardProps) {
   const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
   const checklistScore = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: items });
@@ -647,7 +657,7 @@ export function GdprEprivacyCoverageChecklistCard({
           <p className="max-w-4xl text-sm leading-6 text-slate-600">{gdprSectionSummary}</p>
         </div>
       </details>
-      <ChecklistRowSummaryStrip items={items} />
+      {showSummaryStrip ? <ChecklistRowSummaryStrip items={items} /> : null}
       <div className="overflow-hidden rounded-lg border border-slate-200">
         <div className="grid grid-cols-1 gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.5fr)]">
           <span>Coverage area</span>
@@ -682,7 +692,7 @@ export function GdprEprivacyCoverageChecklistCard({
                         {getAssessmentStatusLabel(item.assessmentStatus)}
                       </span>
                     </div>
-                    <DebugConfidenceSummary item={item} />
+                    <DebugConfidenceSummary item={item} showImprovements={showDebugConfidenceImprovements} />
                   </div>
                 </div>
                 <p className="mt-1 text-xs leading-5 text-slate-500 md:hidden">{getScanContextNote(item)}</p>
@@ -690,12 +700,23 @@ export function GdprEprivacyCoverageChecklistCard({
               <div className="min-w-0 space-y-1">
                 <p className="hidden text-sm leading-6 text-slate-600 md:block">{getScanContextNote(item)}</p>
                 {item.limitation ? <p className="text-xs leading-5 text-slate-500">{item.limitation}</p> : null}
-                <details className="mt-2 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
-                  <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                <RegulatoryChecklistActiveTrace
+                  defaultOpen={expandAllAdvancedEvidence}
+                  evidenceRefs={getDisplayEvidenceRefs(item)}
+                  jsonPayload={stringifyEvidenceJson(item)}
+                />
+                <details className="mt-1 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
+                  <summary className="cursor-pointer px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
                     Evidence packet
                   </summary>
-                  <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />
+                  <div className="max-h-[50vh] overflow-y-auto">
+                    <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />
+                  </div>
                 </details>
+                <RegulatoryChecklistCorrectionSteps
+                  defaultOpen={expandAllAdvancedEvidence}
+                  jsonPayload={stringifyEvidenceJson(item)}
+                />
               </div>
             </div>
           ))}

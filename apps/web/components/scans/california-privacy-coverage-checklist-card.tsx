@@ -4,7 +4,7 @@ import React from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { useRegulatoryChecklistAdvancedEvidence } from "./regulatory-checklist-advanced-evidence-context";
-import { RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
+import { RegulatoryChecklistActiveTrace, RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import type {
   CaliforniaPrivacyCoverageAssessmentStatus,
@@ -22,6 +22,8 @@ type CaliforniaPrivacyCoverageChecklistCardProps = {
   } | null;
   defaultOpen?: boolean;
   items: CaliforniaPrivacyCoverageChecklistItem[];
+  showDebugConfidenceImprovements?: boolean;
+  showSummaryStrip?: boolean;
 };
 
 function getAssessmentBadgeClasses(status: CaliforniaPrivacyCoverageAssessmentStatus) {
@@ -80,7 +82,13 @@ function getEvidenceStateLabel(state: CaliforniaPrivacyCoverageEvidenceState) {
   }
 }
 
-function DebugConfidenceSummary({ item }: { item: CaliforniaPrivacyCoverageChecklistItem }) {
+function DebugConfidenceSummary({
+  item,
+  showImprovements,
+}: {
+  item: CaliforniaPrivacyCoverageChecklistItem;
+  showImprovements: boolean;
+}) {
   if (!item.debugConfidence) {
     return null;
   }
@@ -100,7 +108,7 @@ function DebugConfidenceSummary({ item }: { item: CaliforniaPrivacyCoverageCheck
       >
         {pillLabel}
       </span>
-      {improvements.length > 0 ? (
+      {showImprovements && improvements.length > 0 ? (
         <span className="min-w-0">
           {actionLabel}: {improvements.join(" · ")}
         </span>
@@ -174,7 +182,7 @@ function getCoverageIconMeta(item: CaliforniaPrivacyCoverageChecklistItem) {
       className: "border-slate-300 bg-slate-100 text-slate-600",
       icon: "slash" as const,
       label: "Needs evidence",
-      tooltip: "The retained public-web scan context did not support testing this CCPA / CPRA + CIPA coverage area."
+      tooltip: "The retained public-web scan context did not support testing this CCPA / CPRA coverage area."
     };
   }
 
@@ -191,7 +199,7 @@ function getCoverageIconMeta(item: CaliforniaPrivacyCoverageChecklistItem) {
         className: "border-indigo-200 bg-indigo-50 text-indigo-700",
         icon: "flag" as const,
         label: "Needs review",
-        tooltip: "Canonical evidence projected a CCPA / CPRA + CIPA review signal. This needs human review, not automatic pass/fail treatment."
+        tooltip: "Canonical evidence projected a CCPA / CPRA review signal. This needs human review, not automatic pass/fail treatment."
       };
     case "coverage_limitation":
       return {
@@ -310,7 +318,7 @@ function getCaliforniaSummary(input: {
   const reviewedAreas = getCaliforniaReviewedAreas(input.items);
   const allRowsNotTestable = input.items.length > 0 && input.items.every((item) => item.evidenceState === "not_testable");
   if (allRowsNotTestable) {
-    return "California privacy review was not scored because retained scanner evidence was not complete enough to evaluate the CCPA / CPRA + CIPA checklist areas. The rows below preserve the missing source-signal reasons for follow-up.";
+    return "California privacy review was not scored because retained scanner evidence was not complete enough to evaluate the CCPA / CPRA checklist areas. The rows below preserve the missing source-signal reasons for follow-up.";
   }
 
   const hasIssues = input.items.some((item) => item.assessmentStatus === "gap_observed" || item.assessmentStatus === "review_signal");
@@ -320,7 +328,7 @@ function getCaliforniaSummary(input: {
   }
   return hasIssues
     ? `${scorePrefix}California privacy review signals are centered on ${reviewedAreas}.`
-    : `${scorePrefix}No major California CCPA / CPRA + CIPA issue surfaced in the top findings. CertScore reviewed ${reviewedAreas} using retained automated evidence.`;
+    : `${scorePrefix}No major California CCPA / CPRA issue surfaced in the top findings. CertScore reviewed ${reviewedAreas} using retained automated evidence.`;
 }
 
 function getCaliforniaReviewedAreas(items: CaliforniaPrivacyCoverageChecklistItem[]) {
@@ -372,7 +380,7 @@ function getSummaryTitle(input: {
     <div className="grid w-full grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(16rem,1fr)]">
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <p className="text-base font-semibold tracking-normal text-slate-950">California CCPA / CPRA + CIPA</p>
+          <p className="text-base font-semibold tracking-normal text-slate-950">California CCPA / CPRA</p>
           <span className="shrink-0 whitespace-nowrap text-sm font-semibold tracking-normal text-slate-950">
             Score: <span className="text-[1.3rem] leading-none">{scoreLabel}</span>
             {typeof input.score === "number" ? <span className="text-[0.8rem] font-medium text-slate-500">/100</span> : null}
@@ -416,7 +424,9 @@ function getSummaryTitle(input: {
 export function CaliforniaPrivacyCoverageChecklistCard({
   californiaLens,
   defaultOpen = true,
-  items
+  items,
+  showDebugConfidenceImprovements = true,
+  showSummaryStrip = true
 }: CaliforniaPrivacyCoverageChecklistCardProps) {
   const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
   const hasTestableCaliforniaEvidence = items.some((item) => item.evidenceState !== "not_testable");
@@ -441,7 +451,7 @@ export function CaliforniaPrivacyCoverageChecklistCard({
           <ScanReportDisclosureIcon className="mt-0.5 group-open/california-summary:rotate-90" />
           <span className="min-w-0 flex-1">
             <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              CPRA + CIPA review summary
+              CPRA review summary
             </span>
             <span className="mt-1 block max-w-4xl truncate text-sm leading-6 text-slate-600 group-open/california-summary:hidden">
               {summary}
@@ -452,7 +462,7 @@ export function CaliforniaPrivacyCoverageChecklistCard({
           <p className="max-w-4xl text-sm leading-6 text-slate-600">{summary}</p>
         </div>
       </details>
-      <ChecklistRowSummaryStrip items={items} />
+      {showSummaryStrip ? <ChecklistRowSummaryStrip items={items} /> : null}
       <div className="overflow-hidden rounded-lg border border-slate-200">
         <div className="grid grid-cols-1 gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.5fr)]">
           <span>Coverage area</span>
@@ -484,19 +494,30 @@ export function CaliforniaPrivacyCoverageChecklistCard({
                         {getAssessmentStatusLabel(item.assessmentStatus)}
                       </span>
                     </div>
-                    <DebugConfidenceSummary item={item} />
+                    <DebugConfidenceSummary item={item} showImprovements={showDebugConfidenceImprovements} />
                   </div>
                 </div>
                 <p className="text-xs leading-5 text-slate-500 md:hidden">{item.note}</p>
               </div>
               <div className="min-w-0 space-y-1">
                 <p className="hidden text-sm leading-6 text-slate-600 md:block">{item.note}</p>
-                <details className="mt-2 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
-                  <summary className="cursor-pointer px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                <RegulatoryChecklistActiveTrace
+                  defaultOpen={expandAllAdvancedEvidence}
+                  evidenceRefs={getDisplayEvidenceRefs(item)}
+                  jsonPayload={stringifyEvidenceJson(item)}
+                />
+                <details className="mt-1 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
+                  <summary className="cursor-pointer px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
                     Evidence packet
                   </summary>
-                  <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />
+                  <div className="max-h-[50vh] overflow-y-auto">
+                    <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />
+                  </div>
                 </details>
+                <RegulatoryChecklistCorrectionSteps
+                  defaultOpen={expandAllAdvancedEvidence}
+                  jsonPayload={stringifyEvidenceJson(item)}
+                />
               </div>
             </div>
           ))}

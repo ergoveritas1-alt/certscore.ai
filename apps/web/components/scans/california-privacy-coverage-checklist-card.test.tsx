@@ -114,8 +114,9 @@ test("California checklist uses row-derived score when retained row evidence is 
   assert.match(html, /Score:.*30.*\/100/s);
   assert.match(html, /California score is weighted from evidence-gated checklist rows/);
   assert.match(html, /<details class="group\/california-summary rounded-lg border border-slate-200 bg-white">/);
-  assert.match(html, /CPRA \+ CIPA review summary/);
-  assert.doesNotMatch(html, /California CCPA \/ CPRA \+ CIPA review summary/);
+  assert.match(html, /CPRA review summary/);
+  assert.doesNotMatch(html, /California CCPA \/ CPRA review summary/);
+  assert.doesNotMatch(html, /CPRA \+ CIPA review summary/);
   assert.match(html, /max-w-4xl truncate text-sm/);
   assert.match(html, /Needs work/);
   assertSummaryCount(html, 1, "review");

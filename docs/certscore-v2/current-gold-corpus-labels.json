@@ -1,0 +1,135 @@
+{
+  "labelSetVersion": "wc01.v2_current_gold_corpus_labels.1",
+  "notes": [
+    "Internal v2 gold-corpus calibration labels only.",
+    "These labels do not create production findings, scoring, regulatory rows, persisted concerns, or customer-facing copy.",
+    "expected_zero_control means the current retained artifacts are useful as a clean/control row with zero eligible review candidates."
+  ],
+  "targets": [
+    {
+      "targetId": "live_apple_com",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_archive_org",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_axios_com",
+      "labels": ["expected_zero_control"],
+      "reason": "Current full and policy artifacts completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_eff_org",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_hopkinsmedicine_org",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent and full artifacts completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_intuit_com",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_kohls_com",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_openai_com",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent, full, and policy repair artifacts completed with zero eligible review candidates; retained older failure labels are superseded by successful repair artifacts."
+    },
+    {
+      "targetId": "live_politico_com",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_reuters_com",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_salesforce_com",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_sephora_com",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_w3_org",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_wikipedia_org",
+      "labels": ["expected_zero_control"],
+      "reason": "Current consent artifact completed with zero eligible review candidates and no retained scanner failure reasons."
+    },
+    {
+      "targetId": "live_adobe_com",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Repeated transport/navigation instability across consent and full repair artifacts; keep as regression/reference only until replaced."
+    },
+    {
+      "targetId": "live_airbnb_com",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Unstable holdout target with consent-flow global deadline failure; keep as regression/reference only until replaced."
+    },
+    {
+      "targetId": "live_bestbuy_com",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Repeated scenario navigation timeouts across consent and full repair artifacts; keep as regression/reference only until replaced."
+    },
+    {
+      "targetId": "live_cnn_com",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Unstable holdout target with GPC lane deadline behavior; keep as regression/reference only until replaced."
+    },
+    {
+      "targetId": "live_costco_com",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Repeated HTTP2/navigation failures across pre-consent and consent repair artifacts; keep as regression/reference only until replaced."
+    },
+    {
+      "targetId": "live_etsy_com",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Unstable holdout target with GPC deadline and policy-surface failure context; keep as regression/reference only until replaced."
+    },
+    {
+      "targetId": "live_fidelity_com",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Repeated HTTP2 navigation failures in GPC lane; keep as regression/reference only until replaced."
+    },
+    {
+      "targetId": "live_forbes_com",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Repeated consent scenario context and privacy opt-out deadline failures; keep as regression/reference only until replaced."
+    },
+    {
+      "targetId": "live_nih_gov",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Policy-surface failures plus zero-eligible artifacts make this weak as a current split target; keep as regression/reference only until replaced."
+    },
+    {
+      "targetId": "live_rollingstone_com",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Unstable holdout target with screenshot and GPC deadline behavior; keep as regression/reference only until replaced."
+    },
+    {
+      "targetId": "live_weather_com",
+      "labels": ["quarantine_replacement_candidate"],
+      "reason": "Unstable holdout target with GPC deadline behavior; keep as regression/reference only until replaced."
+    }
+  ]
+}

@@ -81,7 +81,7 @@ const PLANNED_BASELINE_CONTROL_LIMIT = 72;
 const PLANNED_ACTION_CONTROL_LIMIT = 42;
 const PLANNED_POST_ACTION_CONTROL_LIMIT = 32;
 const PLANNED_RECIPE_CANDIDATE_LIMIT = 28;
-const BASELINE_REUSE_WIDE_PAGE_THRESHOLD = 60;
+const BASELINE_REUSE_WIDE_PAGE_THRESHOLD = 36;
 const PLANNED_MIN_CONTROL_SCORE = 25;
 
 export interface ConsentFlowRuntimeScannerInput {
@@ -198,6 +198,14 @@ interface ClassifiedActionCandidates {
   nanoAssistErrors: string[];
 }
 
+interface ClassifyActionCandidateOptions {
+  allowPreferenceOpenerAsTargetPath?: boolean;
+  allowNanoAssist?: boolean;
+  nanoCandidateLimit?: number;
+  skipNanoWhenHighConfidenceTarget?: boolean;
+  targetActionType?: ConsentActionType;
+}
+
 type ConsentActionProof = NonNullable<ConsentActionAttempt["actionProof"]>;
 
 export async function consentFlowRuntimeScanner(
@@ -212,11 +220,15 @@ export async function consentFlowRuntimeScanner(
     return runPlannedParallelConsentFlow(input, moduleStartedAt, moduleStartedAtMs);
   }
 
+  const legacyDeadlineAtMs = input.consentFlowDeadlineMs
+    ? moduleStartedAtMs + input.consentFlowDeadlineMs
+    : undefined;
   try {
     const baselineCapture = await runScenario(input, {
       scenario: "baseline_pre_consent",
       consentState: "pre_consent",
       moduleStartedAtMs,
+      deadlineAtMs: legacyDeadlineAtMs,
     });
     captures.push(baselineCapture);
     captures.push(await runScenario(input, {
@@ -224,17 +236,20 @@ export async function consentFlowRuntimeScanner(
       consentState: "post_reject",
       actionType: "reject_all",
       moduleStartedAtMs,
+      deadlineAtMs: legacyDeadlineAtMs,
     }, { baselineCapture }));
     captures.push(await runScenario(input, {
       scenario: "accept_all_flow",
       consentState: "post_accept",
       actionType: "accept_all",
       moduleStartedAtMs,
+      deadlineAtMs: legacyDeadlineAtMs,
     }, { baselineCapture }));
     captures.push(await runScenario(input, {
       scenario: "gpc_enabled",
       consentState: "pre_consent",
       moduleStartedAtMs,
+      deadlineAtMs: legacyDeadlineAtMs,
     }, { baselineCapture }));
     if (input.captureReplay) {
       const auxiliaryProbes = enabledReplayAuxiliaryProbes(input);
@@ -246,6 +261,7 @@ export async function consentFlowRuntimeScanner(
           actionType: "do_not_sell_share",
           targetUrl: privacyControlUrl,
           moduleStartedAtMs,
+          deadlineAtMs: legacyDeadlineAtMs,
         }, { baselineCapture }));
       }
       if (auxiliaryProbes.form) {
@@ -253,6 +269,7 @@ export async function consentFlowRuntimeScanner(
           scenario: "form_collection_probe",
           consentState: "pre_consent",
           moduleStartedAtMs,
+          deadlineAtMs: legacyDeadlineAtMs,
         }, { baselineCapture }));
       }
       if (auxiliaryProbes.accessibility) {
@@ -260,6 +277,7 @@ export async function consentFlowRuntimeScanner(
           scenario: "accessibility_probe",
           consentState: "pre_consent",
           moduleStartedAtMs,
+          deadlineAtMs: legacyDeadlineAtMs,
         }, { baselineCapture }));
       }
     }
@@ -336,6 +354,7 @@ async function runPlannedParallelConsentFlow(
       baseline: {
         actionCandidates: baseline.actionCandidates,
         bannerLikelyPresent: baseline.consentUiObservation.likelyPresent,
+        cmpEvidenceObserved: baseline.consentUiObservation.likelyPresent || preConsentCmpEvidenceObserved(input),
         textExcerpt: baseline.consentFlowObservation.textExcerpt,
       },
       captureReplay: input.captureReplay,
@@ -549,7 +568,7 @@ function scenarioActionProofStatus(capture: ScenarioCapture): ConsentScenarioExe
   if (!capture.actionType) {
     return "not_required";
   }
-  const attempt = capture.actionAttempts.find((item) => item.actionType === capture.actionType);
+  const attempt = preferredActionAttempt(capture.actionAttempts, capture.actionType);
   if (!attempt) {
     return "not_available";
   }
@@ -557,6 +576,17 @@ function scenarioActionProofStatus(capture: ScenarioCapture): ConsentScenarioExe
     return "not_attempted";
   }
   return attempt.succeeded ? "attempted_succeeded" : "attempted_failed";
+}
+
+function preferredActionAttempt(
+  attempts: ConsentActionAttempt[],
+  actionType: ConsentActionType,
+): ConsentActionAttempt | undefined {
+  return attempts.find((attempt) =>
+    attempt.actionType === actionType &&
+    attempt.succeeded &&
+    attempt.actionProof?.attemptedStatus === "attempted_succeeded"
+  ) ?? attempts.find((attempt) => attempt.actionType === actionType);
 }
 
 function errorMessage(error: unknown): string {
@@ -937,7 +967,12 @@ async function runScenario(
     const beforeClassification = baselineOnlyCandidateLane || candidateWorkDeadlineLimited
       ? { actionCandidates: reusableBaselineCandidates, nanoAssistErrors: [] }
       : await recordPhase("pre_action_classification", "Pre-action deterministic/Nano candidate classification.", () =>
-        classifyActionCandidates(input, page.url(), scenarioInput.scenario, rawCandidates, beforeDom, beforeScreenshot)
+        classifyActionCandidates(input, page.url(), scenarioInput.scenario, rawCandidates, beforeDom, beforeScreenshot, {
+          allowPreferenceOpenerAsTargetPath: true,
+          nanoCandidateLimit: plannedNanoCandidateLimit(input, scenarioInput.scenario),
+          skipNanoWhenHighConfidenceTarget: shouldPreferDeterministicTargetClassification(input, scenarioInput.scenario),
+          targetActionType: scenarioInput.actionType,
+        })
       );
     const actionCandidates = mergeActionCandidates([
       ...reusableBaselineCandidates,
@@ -956,37 +991,71 @@ async function runScenario(
         await recordPhase("click_action", "Click selected consent action candidate.", () => clickCandidate(page, candidate));
         actionApplied = true;
         const postClickSettleMs = await recordPhase("post_click_settle", "Post-click consent-state settle.", () =>
-          waitForConsentActionSettle(page, 3_000, effectiveDeadlineAtMs)
+          waitForConsentActionSettle(page, consentActionSettleBudgetMs(input, effectiveDeadlineAtMs), effectiveDeadlineAtMs)
         );
         const postActionConsentStateMarkers = await consentStateMarkers(page);
         const afterDom = await recordPhase("post_action_dom", "Post-action DOM text capture.", () =>
           writeDomArtifact(input, page, scenarioInput.scenario, "after", scenarioInput.consentState)
         );
-        let afterScreenshot = captureInlineScreenshots
+        const budgetLimitedPostActionTail = shouldUseBudgetLimitedPostActionTail(input, scenarioInput.scenario, effectiveDeadlineAtMs);
+        const postActionStateChanged = consentStateChangedAfterAction(preActionConsentStateMarkers, postActionConsentStateMarkers);
+        const skipPostActionClassification = shouldSkipPostActionClassificationAfterProof(
+          input,
+          scenarioInput.scenario,
+          true,
+          postActionStateChanged,
+        );
+        let afterScreenshot = captureInlineScreenshots && !budgetLimitedPostActionTail && !skipPostActionClassification
           ? await recordPhase("post_action_screenshot", "Post-action screenshot capture.", () =>
-            writeScreenshotArtifact(input, page, scenarioInput.scenario, "after", scenarioInput.consentState)
+            writeScreenshotArtifact(input, page, scenarioInput.scenario, "after", scenarioInput.consentState, {
+              timeoutMs: screenshotTimeoutWithinDeadline(effectiveDeadlineAtMs),
+            })
           )
           : undefined;
-        const afterCandidates = await recordPhase("post_action_candidate_extract", "Post-action consent control extraction.", () =>
-          extractControlCandidates(page, {
-            actionType: scenarioInput.actionType,
-            limit: controlCandidateLimit(input, scenarioInput.scenario, "post_action"),
-            scenario: scenarioInput.scenario,
-          })
-        );
-        const afterClassification = await recordPhase("post_action_classification", "Post-action deterministic/Nano candidate classification.", () =>
-          classifyActionCandidates(input, page.url(), scenarioInput.scenario, afterCandidates, afterDom, afterScreenshot)
-        );
+        const afterCandidates = budgetLimitedPostActionTail || skipPostActionClassification
+          ? await recordPhase(
+            budgetLimitedPostActionTail ? "deadline_post_action_candidate_short_circuit" : "post_action_candidate_skip_action_proof",
+            budgetLimitedPostActionTail
+              ? "Skipped optional post-action candidate extraction because the consent deadline was nearly exhausted."
+              : "Skipped post-action candidate extraction because action proof already showed a consent state change.",
+            async () => [] as RawControlCandidate[],
+          )
+          : await recordPhase("post_action_candidate_extract", "Post-action consent control extraction.", () =>
+            extractControlCandidates(page, {
+              actionType: scenarioInput.actionType,
+              limit: controlCandidateLimit(input, scenarioInput.scenario, "post_action"),
+              scenario: scenarioInput.scenario,
+            })
+          );
+        const afterClassification = budgetLimitedPostActionTail || skipPostActionClassification
+          ? await recordPhase(
+            budgetLimitedPostActionTail ? "deadline_post_action_classification_short_circuit" : "post_action_classification_skip_action_proof",
+            budgetLimitedPostActionTail
+              ? "Skipped optional post-action classification because the consent deadline was nearly exhausted."
+              : "Skipped post-action classification because action proof already showed a consent state change.",
+            async () => ({ actionCandidates: [], nanoAssistErrors: [] }),
+          )
+          : await recordPhase("post_action_classification", "Post-action deterministic/Nano candidate classification.", () =>
+            classifyActionCandidates(input, page.url(), scenarioInput.scenario, afterCandidates, afterDom, afterScreenshot, {
+              allowNanoAssist: !shouldUseDeterministicOnlyActionTail(input, scenarioInput.scenario, effectiveDeadlineAtMs),
+              nanoCandidateLimit: plannedNanoCandidateLimit(input, scenarioInput.scenario),
+              targetActionType: scenarioInput.actionType,
+            })
+          );
         nanoAssistErrors.push(...afterClassification.nanoAssistErrors);
-        const bannerPresentAfter = bannerLikelyPresent(afterClassification.actionCandidates, afterDom.textExcerpt);
+        const bannerPresentAfter = skipPostActionClassification
+          ? false
+          : bannerLikelyPresent(afterClassification.actionCandidates, afterDom.textExcerpt);
         const succeeded = bannerPresentBefore &&
-          (!bannerPresentAfter || consentStateChangedAfterAction(preActionConsentStateMarkers, postActionConsentStateMarkers));
+          (!bannerPresentAfter || postActionStateChanged);
         const failureReason = succeeded
           ? undefined
           : bannerPresentAfter ? "banner_still_present_after_click" : undefined;
-        if (!succeeded && !afterScreenshot) {
+        if (!succeeded && !afterScreenshot && !budgetLimitedPostActionTail && !scenarioDeadlineNearlyHit(effectiveDeadlineAtMs, 1_200)) {
           afterScreenshot = await recordPhase("failure_screenshot", "Failure/ambiguous action screenshot capture.", () =>
-            writeScreenshotArtifact(input, page, scenarioInput.scenario, "after_failure", scenarioInput.consentState)
+            writeScreenshotArtifact(input, page, scenarioInput.scenario, "after_failure", scenarioInput.consentState, {
+              timeoutMs: screenshotTimeoutWithinDeadline(effectiveDeadlineAtMs),
+            })
           );
         }
         const evidenceRefs = [
@@ -1032,6 +1101,74 @@ async function runScenario(
           scenario: scenarioInput.scenario,
           evidenceRefs,
         });
+        if (
+          !succeeded &&
+          (scenarioInput.actionType === "reject_all" || scenarioInput.actionType === "accept_all") &&
+          !scenarioDeadlineNearlyHit(effectiveDeadlineAtMs, 2_500)
+        ) {
+          const followupActionType = scenarioInput.actionType;
+          const traversal = await recordPhase("preference_center_followup_traversal", "Follow-up preference-center traversal after direct action did not complete.", () => attemptPreferenceCenterRejectTraversal({
+            input,
+            page,
+            scenario: scenarioInput.scenario,
+            consentState: scenarioInput.consentState,
+            targetActionType: followupActionType,
+            scanStartedAtMs: input.scanStartedAtMs,
+            actionCandidates: mergeActionCandidates([
+              ...afterClassification.actionCandidates,
+              ...actionCandidates,
+            ]),
+            beforeDom: afterDom,
+            beforeScreenshot: afterScreenshot,
+            bannerPresentBefore: bannerPresentAfter,
+            preActionConsentStateMarkers: postActionConsentStateMarkers,
+            nanoAssistErrors,
+            nextId: nextScenarioId,
+            deadlineAtMs: effectiveDeadlineAtMs,
+            allowRejectSaveOnly: followupActionType === "reject_all",
+          }));
+          if (traversal) {
+            actionApplied = traversal.succeeded;
+            attempts.push({
+              attemptId: `${attemptId}_preference_followup`,
+              actionType: followupActionType,
+              attempted: traversal.attempted,
+              succeeded: traversal.succeeded,
+              failureReason: traversal.succeeded ? undefined : traversal.failureReason,
+              actionProof: traversal.actionProof,
+              viaPreferenceCenter: true,
+              preferenceCenterTraversal: traversal.preferenceCenterTraversal,
+              beforeScreenshotRef: artifactRefFromOptionalScreenshot(afterScreenshot),
+              afterScreenshotRef: traversal.afterScreenshotRef,
+              beforeDomRef: artifactRefFromDom(afterDom),
+              afterDomRef: traversal.afterDomRef,
+              bannerPresentBefore: bannerPresentAfter,
+              bannerPresentAfter: traversal.bannerPresentAfter,
+              timestampMs: elapsed(input.scanStartedAtMs),
+              scenario: scenarioInput.scenario,
+              evidenceRefs: traversal.evidenceRefs,
+            });
+            actionCandidates.push(...afterClassification.actionCandidates, ...traversal.secondLayerCandidates);
+            if (traversal.succeeded) {
+              consentInteractionEvents.push({
+                eventId: nextScenarioId("cf_consent"),
+                eventType: "consent_interaction",
+                timestampMs: elapsed(input.scanStartedAtMs),
+                sourceScanner: SOURCE_SCANNER,
+                scenario: scenarioInput.scenario,
+                consentStateAtTime: scenarioInput.consentState,
+                pagePhase: "post_interaction",
+                url: page.url(),
+                evidenceRefs: traversal.evidenceRefs,
+                confidence: traversal.preferenceCenterTraversal.confidence,
+                directVsInferred: "direct",
+                action: followupActionType === "accept_all" ? "accept" : "reject",
+                selector: traversal.clickedSelectorSummary,
+                text: `${followupActionType === "accept_all" ? "accept" : "reject"} via preference center follow-up`,
+              });
+            }
+          }
+        }
         if (captureInlineScreenshots && succeeded && (scenarioInput.actionType === "accept_all" || scenarioInput.actionType === "reject_all")) {
           const reopenAttempt = await attemptPostChoicePreferenceReopen({
             input,
@@ -1534,6 +1671,9 @@ function preConsentBaselineCapture(
   if (preConsent.consentUiObservations.some((observation) => observation.likelyPresent)) {
     return undefined;
   }
+  if (preConsent.cmpRuntimeObservations.length > 0) {
+    return undefined;
+  }
   const dom = preConsent.domSnapshots[0];
   if (!dom) {
     return undefined;
@@ -1592,6 +1732,15 @@ function preConsentBaselineCapture(
   };
 }
 
+function preConsentCmpEvidenceObserved(input: ConsentFlowRuntimeScannerInput): boolean {
+  const preConsent = input.preConsentBaseline;
+  if (!preConsent || preConsent.moduleRun.status === "failed") {
+    return false;
+  }
+  return preConsent.cmpRuntimeObservations.length > 0 ||
+    preConsent.consentUiObservations.some((observation) => observation.likelyPresent);
+}
+
 async function classifyActionCandidates(
   input: ConsentFlowRuntimeScannerInput,
   pageUrl: string,
@@ -1599,6 +1748,7 @@ async function classifyActionCandidates(
   rawCandidates: RawControlCandidate[],
   dom: DomSnapshotArtifact,
   screenshot: ScreenshotArtifact | undefined,
+  options: ClassifyActionCandidateOptions = {},
 ): Promise<ClassifiedActionCandidates> {
   if (rawCandidates.length === 0) {
     return { actionCandidates: [], nanoAssistErrors: [] };
@@ -1620,15 +1770,23 @@ async function classifyActionCandidates(
     );
   });
 
-  if (!input.enableNanoConsentUiAssist || !input.nanoConsentUiAssistProvider) {
+  if (options.skipNanoWhenHighConfidenceTarget && hasHighConfidenceDeterministicPath(deterministic, options)) {
+    return { actionCandidates: deterministic, nanoAssistErrors: [] };
+  }
+
+  if (options.allowNanoAssist === false || !input.enableNanoConsentUiAssist || !input.nanoConsentUiAssistProvider) {
     return { actionCandidates: deterministic, nanoAssistErrors: [] };
   }
 
   const assistId = `nano_consent_ui_${scenario}`;
+  const nanoCandidates = rankedNanoCandidates(deterministic, options);
+  if (nanoCandidates.length === 0) {
+    return { actionCandidates: deterministic, nanoAssistErrors: [] };
+  }
   const providerInput = {
     assistId,
     pageUrl,
-    candidates: deterministic.map((candidate) => ({
+    candidates: nanoCandidates.map((candidate) => ({
       actionId: candidate.actionId,
       labelText: candidate.labelText,
       normalizedLabel: candidate.normalizedLabel,
@@ -1729,6 +1887,67 @@ function highConfidenceDeterministicAction(candidate: ConsentActionCandidate): b
     candidate.actionType === "accept_all";
 }
 
+function hasHighConfidenceDeterministicPath(
+  candidates: ConsentActionCandidate[],
+  options: ClassifyActionCandidateOptions,
+): boolean {
+  const targetActionType = options.targetActionType;
+  if (!targetActionType) {
+    return false;
+  }
+  const target = bestCandidate(candidates, targetActionType);
+  if (target && highConfidenceDeterministicAction(target)) {
+    return true;
+  }
+  if (targetActionType === "reject_all" || targetActionType === "accept_all") {
+    return candidates.some((candidate) =>
+      candidate.visible &&
+      candidate.enabled &&
+      candidate.detectionMethod === "deterministic_text" &&
+      (candidate.actionType === "save_preferences" ||
+        (options.allowPreferenceOpenerAsTargetPath === true && candidate.actionType === "manage_preferences")) &&
+      candidate.confidence >= 0.84
+    );
+  }
+  return false;
+}
+
+function rankedNanoCandidates(
+  candidates: ConsentActionCandidate[],
+  options: ClassifyActionCandidateOptions,
+): ConsentActionCandidate[] {
+  const limit = options.nanoCandidateLimit;
+  const ranked = [...candidates].sort((left, right) =>
+    nanoCandidatePriority(right, options.targetActionType) - nanoCandidatePriority(left, options.targetActionType) ||
+    left.actionId.localeCompare(right.actionId)
+  );
+  return typeof limit === "number" ? ranked.slice(0, Math.max(0, limit)) : ranked;
+}
+
+function nanoCandidatePriority(
+  candidate: ConsentActionCandidate,
+  targetActionType: ConsentActionType | undefined,
+): number {
+  let score = candidate.confidence;
+  if (targetActionType && candidate.actionType === targetActionType) {
+    score += 1.2;
+  }
+  if ((targetActionType === "reject_all" || targetActionType === "accept_all") &&
+    candidate.actionType === "manage_preferences") {
+    score += 0.8;
+  }
+  if (candidate.actionType === "save_preferences") {
+    score += 0.5;
+  }
+  if (candidateLikelyConsentRelevant(candidate)) {
+    score += 0.35;
+  }
+  if (!candidate.visible || !candidate.enabled) {
+    score -= 2;
+  }
+  return score;
+}
+
 function highConfidenceExplicitAssistedAction(actionType: ConsentActionType, confidence: number): boolean {
   if (["accept_all", "save_preferences", "do_not_sell_share"].includes(actionType)) {
     return confidence >= 0.9;
@@ -1802,6 +2021,33 @@ function recipeCandidateLimit(
     return 0;
   }
   return PLANNED_RECIPE_CANDIDATE_LIMIT;
+}
+
+function plannedNanoCandidateLimit(
+  input: ConsentFlowRuntimeScannerInput,
+  scenario: ConsentFlowScenario,
+): number | undefined {
+  if (input.scenarioPlanningMode !== "planned_parallel") {
+    return undefined;
+  }
+  if (scenario === "baseline_pre_consent") {
+    return undefined;
+  }
+  if (scenario === "privacy_opt_out_flow") {
+    return 18;
+  }
+  if (scenario === "reject_all_flow" || scenario === "accept_all_flow") {
+    return 14;
+  }
+  return 10;
+}
+
+function shouldPreferDeterministicTargetClassification(
+  input: ConsentFlowRuntimeScannerInput,
+  scenario: ConsentFlowScenario,
+): boolean {
+  return input.scenarioPlanningMode === "planned_parallel" &&
+    (scenario === "reject_all_flow" || scenario === "accept_all_flow" || scenario === "privacy_opt_out_flow");
 }
 
 function reusableBaselineActionCandidates(input: {
@@ -1901,6 +2147,63 @@ function scenarioDeadlineNearlyHit(deadlineAtMs: number | undefined, minimumRema
   return typeof deadlineAtMs === "number" && deadlineAtMs - Date.now() < minimumRemainingMs;
 }
 
+function isChoiceActionScenario(scenario: ConsentFlowScenario): boolean {
+  return scenario === "reject_all_flow" || scenario === "accept_all_flow" || scenario === "privacy_opt_out_flow";
+}
+
+function shouldUseBudgetLimitedPostActionTail(
+  input: ConsentFlowRuntimeScannerInput,
+  scenario: ConsentFlowScenario,
+  deadlineAtMs: number | undefined,
+): boolean {
+  return input.scenarioPlanningMode === "planned_parallel" &&
+    isChoiceActionScenario(scenario) &&
+    scenarioDeadlineNearlyHit(deadlineAtMs, 2_200);
+}
+
+function shouldSkipPostActionClassificationAfterProof(
+  input: ConsentFlowRuntimeScannerInput,
+  scenario: ConsentFlowScenario,
+  attempted: boolean,
+  consentStateChanged: boolean,
+): boolean {
+  return input.scenarioPlanningMode === "planned_parallel" &&
+    isChoiceActionScenario(scenario) &&
+    attempted &&
+    consentStateChanged;
+}
+
+function shouldUseDeterministicOnlyActionTail(
+  input: ConsentFlowRuntimeScannerInput,
+  scenario: ConsentFlowScenario,
+  deadlineAtMs: number | undefined,
+): boolean {
+  return input.scenarioPlanningMode === "planned_parallel" &&
+    isChoiceActionScenario(scenario) &&
+    scenarioDeadlineNearlyHit(deadlineAtMs, 4_500);
+}
+
+function consentActionSettleBudgetMs(input: ConsentFlowRuntimeScannerInput, deadlineAtMs: number | undefined): number {
+  if (input.scenarioPlanningMode !== "planned_parallel") {
+    return 3_000;
+  }
+  const remainingMs = remainingDeadlineMs(deadlineAtMs, 3_000);
+  if (remainingMs < 2_500) {
+    return 650;
+  }
+  if (remainingMs < 4_500) {
+    return 1_000;
+  }
+  return 2_000;
+}
+
+function screenshotTimeoutWithinDeadline(deadlineAtMs: number | undefined): number {
+  if (typeof deadlineAtMs !== "number") {
+    return 5_000;
+  }
+  return Math.max(250, Math.min(5_000, deadlineAtMs - Date.now() - 250));
+}
+
 async function waitForTimeoutWithinDeadline(page: Page, requestedMs: number, deadlineAtMs?: number): Promise<void> {
   const waitMs = Math.min(requestedMs, remainingDeadlineMs(deadlineAtMs, requestedMs));
   if (waitMs <= 0) {
@@ -1979,6 +2282,9 @@ function rawControlCandidateScore(
   if (/cookie|consent|privacy|preference|preferences|settings|choice|choices|cmp|onetrust|trustarc|sourcepoint|didomi|cookiebot/.test(value)) {
     score += 30;
   }
+  if (/\bad choices\b|your privacy choices|cookie settings|cookie preferences|privacy settings|manage cookies|manage preferences|privacy preferences/.test(value)) {
+    score += 80;
+  }
   if (/accept|agree|allow|reject|decline|deny|refuse|necessary|essential|save|confirm|apply|submit|opt[- ]out|do not sell|do not share/.test(value)) {
     score += 35;
   }
@@ -1994,6 +2300,9 @@ function rawControlCandidateScore(
     }
   }
   if (/privacy policy|cookie policy|terms of|accessibility|careers|advertise|subscribe|newsletter/.test(value)) {
+    score -= 80;
+  }
+  if (/readers?' choice|choice awards?|book now|watch now|save story/.test(value)) {
     score -= 80;
   }
   if (candidate.role === "a" && !/accept|agree|allow|reject|decline|deny|refuse|necessary|essential|save|confirm|apply|submit|settings|preferences|choices|opt[- ]out|do not sell|do not share/.test(value)) {
@@ -2625,7 +2934,10 @@ function dedupeReplayControls<T extends {
 
 async function waitForConsentActionSettle(page: Page, maxMs: number, deadlineAtMs?: number): Promise<number> {
   const startedAt = Date.now();
-  await waitForTimeoutWithinDeadline(page, 1_200, deadlineAtMs);
+  const initialWaitMs = Math.min(1_200, maxMs);
+  if (initialWaitMs > 0) {
+    await waitForTimeoutWithinDeadline(page, initialWaitMs, deadlineAtMs);
+  }
   while (Date.now() - startedAt < maxMs) {
     if (!(await pageHasLikelyConsentControls(page))) {
       break;
@@ -2801,6 +3113,11 @@ async function attemptPrivacyOptOutFormSubmission(input: {
     afterRawCandidates,
     afterDom,
     afterScreenshot,
+    {
+      allowNanoAssist: !shouldUseDeterministicOnlyActionTail(input.input, input.scenario, input.deadlineAtMs),
+      nanoCandidateLimit: plannedNanoCandidateLimit(input.input, input.scenario),
+      targetActionType: "do_not_sell_share",
+    },
   );
   const bannerPresentAfter = bannerLikelyPresent(afterClassification.actionCandidates, afterDom.textExcerpt);
   const evidenceRefs = [
@@ -2939,6 +3256,10 @@ async function attemptPostChoicePreferenceReopen(input: {
     centerRawCandidates,
     centerDom,
     centerScreenshot,
+    {
+      nanoCandidateLimit: plannedNanoCandidateLimit(input.input, input.scenario),
+      targetActionType: "reopen_preferences",
+    },
   );
   input.nanoAssistErrors.push(...centerClassification.nanoAssistErrors);
   evidenceRefs.push({ refId: `ref_${centerDom.artifactId}`, artifactId: centerDom.artifactId, eventType: "dom_snapshot", excerpt: centerDom.textExcerpt });
@@ -3035,6 +3356,7 @@ async function attemptPreferenceCenterRejectTraversal(input: {
   nanoAssistErrors: string[];
   nextId: ScenarioIdFactory;
   deadlineAtMs?: number;
+  allowRejectSaveOnly?: boolean;
 }): Promise<{
   attempted: boolean;
   succeeded: boolean;
@@ -3061,8 +3383,11 @@ async function attemptPreferenceCenterRejectTraversal(input: {
   await clickCandidate(input.page, manageCandidate);
   await waitForPreferenceSurfaceSettle(input.page, input.deadlineAtMs);
   const centerDom = await writeDomArtifact(input.input, input.page, input.scenario, "preference_center", "pre_consent");
-  const centerScreenshot = captureInlineScreenshots
-    ? await writeScreenshotArtifact(input.input, input.page, input.scenario, "preference_center", "pre_consent")
+  const budgetLimitedPreferenceCenter = shouldUseDeterministicOnlyActionTail(input.input, input.scenario, input.deadlineAtMs);
+  const centerScreenshot = captureInlineScreenshots && !scenarioDeadlineNearlyHit(input.deadlineAtMs, 1_500)
+    ? await writeScreenshotArtifact(input.input, input.page, input.scenario, "preference_center", "pre_consent", {
+      timeoutMs: screenshotTimeoutWithinDeadline(input.deadlineAtMs),
+    })
     : undefined;
   const centerRawCandidates = await extractControlCandidates(input.page, {
     actionType: input.targetActionType,
@@ -3076,6 +3401,12 @@ async function attemptPreferenceCenterRejectTraversal(input: {
     centerRawCandidates,
     centerDom,
     centerScreenshot,
+    {
+      allowNanoAssist: !budgetLimitedPreferenceCenter,
+      nanoCandidateLimit: plannedNanoCandidateLimit(input.input, input.scenario),
+      skipNanoWhenHighConfidenceTarget: shouldPreferDeterministicTargetClassification(input.input, input.scenario),
+      targetActionType: input.targetActionType,
+    },
   );
   input.nanoAssistErrors.push(...centerClassification.nanoAssistErrors);
   evidenceRefs.push({ refId: `ref_${centerDom.artifactId}`, artifactId: centerDom.artifactId, eventType: "dom_snapshot", excerpt: centerDom.textExcerpt });
@@ -3111,12 +3442,21 @@ async function attemptPreferenceCenterRejectTraversal(input: {
       clickedSelectorSummary = acceptCandidate.selectorSummary;
       actionCandidateForProof = acceptCandidate;
       actionPath = "preference_center_unresolved";
-      postClickSettleMs = await waitForConsentActionSettle(input.page, 3_000, input.deadlineAtMs);
+      postClickSettleMs = await waitForConsentActionSettle(input.page, consentActionSettleBudgetMs(input.input, input.deadlineAtMs), input.deadlineAtMs);
     } else {
       failureReason = acceptCandidate ? "preference_center_accept_confidence_too_low" : "preference_center_accept_not_observed";
     }
   } else if (!rejectCandidate?.shouldClick || rejectCandidate.confidence < 0.78) {
-    if (saveCandidate?.shouldClick && saveCandidate.confidence >= 0.78 && categoryToggleCount > 0) {
+    if (saveCandidate?.shouldClick && saveCandidate.confidence >= 0.78 && input.allowRejectSaveOnly === true) {
+      actionTimestampMs = elapsed(input.scanStartedAtMs);
+      await clickCandidate(input.page, saveCandidate);
+      clickedSelectorSummary = saveCandidate.selectorSummary;
+      attemptedRejectViaPreferenceCenter = true;
+      attemptedSaveChoices = true;
+      actionCandidateForProof = saveCandidate;
+      actionPath = "preference_center_reject_all_save";
+      postClickSettleMs = await waitForConsentActionSettle(input.page, consentActionSettleBudgetMs(input.input, input.deadlineAtMs), input.deadlineAtMs);
+    } else if (saveCandidate?.shouldClick && saveCandidate.confidence >= 0.78 && categoryToggleCount > 0) {
       actionTimestampMs = elapsed(input.scanStartedAtMs);
       disabledCategoryToggles = await disableVisiblePreferenceToggles(input.page);
       attemptedDisableCategoryToggles = disabledCategoryToggles > 0;
@@ -3127,7 +3467,7 @@ async function attemptPreferenceCenterRejectTraversal(input: {
         await clickCandidate(input.page, saveCandidate);
         clickedSelectorSummary = saveCandidate.selectorSummary;
         attemptedSaveChoices = true;
-        postClickSettleMs = await waitForConsentActionSettle(input.page, 3_000, input.deadlineAtMs);
+        postClickSettleMs = await waitForConsentActionSettle(input.page, consentActionSettleBudgetMs(input.input, input.deadlineAtMs), input.deadlineAtMs);
       } else {
         failureReason = "preference_center_no_toggles_disabled";
       }
@@ -3145,9 +3485,9 @@ async function attemptPreferenceCenterRejectTraversal(input: {
       await clickCandidate(input.page, saveCandidate);
       clickedSelectorSummary = saveCandidate.selectorSummary;
       attemptedSaveChoices = true;
-      postClickSettleMs = await waitForConsentActionSettle(input.page, 3_000, input.deadlineAtMs);
+      postClickSettleMs = await waitForConsentActionSettle(input.page, consentActionSettleBudgetMs(input.input, input.deadlineAtMs), input.deadlineAtMs);
     } else {
-      postClickSettleMs = await waitForConsentActionSettle(input.page, 3_000, input.deadlineAtMs);
+      postClickSettleMs = await waitForConsentActionSettle(input.page, consentActionSettleBudgetMs(input.input, input.deadlineAtMs), input.deadlineAtMs);
     }
   }
 
@@ -3156,30 +3496,51 @@ async function attemptPreferenceCenterRejectTraversal(input: {
     ? await consentStateMarkers(input.page)
     : [];
   const afterDom = await writeDomArtifact(input.input, input.page, input.scenario, "after_preference_center", input.consentState);
-  let afterScreenshot = captureInlineScreenshots
-    ? await writeScreenshotArtifact(input.input, input.page, input.scenario, "after_preference_center", input.consentState)
-    : undefined;
-  const afterRawCandidates = await extractControlCandidates(input.page, {
-    actionType: input.targetActionType,
-    limit: controlCandidateLimit(input.input, input.scenario, "post_action"),
-    scenario: input.scenario,
-  });
-  const afterClassification = await classifyActionCandidates(
-    input.input,
-    input.page.url(),
-    input.scenario,
-    afterRawCandidates,
-    afterDom,
-    afterScreenshot,
-  );
-  input.nanoAssistErrors.push(...afterClassification.nanoAssistErrors);
-  const bannerPresentAfter = bannerLikelyPresent(afterClassification.actionCandidates, afterDom.textExcerpt);
+  const budgetLimitedPostActionTail = shouldUseBudgetLimitedPostActionTail(input.input, input.scenario, input.deadlineAtMs);
   const attemptedTargetAction = input.targetActionType === "accept_all"
     ? actionCandidateForProof?.actionType === "accept_all" && Boolean(actionTimestampMs)
     : attemptedRejectViaPreferenceCenter;
+  const postActionStateChanged = consentStateChangedAfterAction(input.preActionConsentStateMarkers, postActionConsentStateMarkers);
+  const skipPostActionClassification = shouldSkipPostActionClassificationAfterProof(
+    input.input,
+    input.scenario,
+    Boolean(attemptedTargetAction),
+    postActionStateChanged,
+  );
+  let afterScreenshot = captureInlineScreenshots && !budgetLimitedPostActionTail && !skipPostActionClassification
+    ? await writeScreenshotArtifact(input.input, input.page, input.scenario, "after_preference_center", input.consentState, {
+      timeoutMs: screenshotTimeoutWithinDeadline(input.deadlineAtMs),
+    })
+    : undefined;
+  const afterRawCandidates = budgetLimitedPostActionTail || skipPostActionClassification
+    ? []
+    : await extractControlCandidates(input.page, {
+      actionType: input.targetActionType,
+      limit: controlCandidateLimit(input.input, input.scenario, "post_action"),
+      scenario: input.scenario,
+    });
+  const afterClassification = budgetLimitedPostActionTail || skipPostActionClassification
+    ? { actionCandidates: [], nanoAssistErrors: [] }
+    : await classifyActionCandidates(
+      input.input,
+      input.page.url(),
+      input.scenario,
+      afterRawCandidates,
+      afterDom,
+      afterScreenshot,
+      {
+        allowNanoAssist: !shouldUseDeterministicOnlyActionTail(input.input, input.scenario, input.deadlineAtMs),
+        nanoCandidateLimit: plannedNanoCandidateLimit(input.input, input.scenario),
+        targetActionType: input.targetActionType,
+      },
+    );
+  input.nanoAssistErrors.push(...afterClassification.nanoAssistErrors);
+  const bannerPresentAfter = skipPostActionClassification
+    ? false
+    : bannerLikelyPresent(afterClassification.actionCandidates, afterDom.textExcerpt);
   const saveRequirementMet = input.targetActionType === "accept_all" || attemptedSaveChoices || !saveCandidate;
   const surfaceClosedOrStateChanged = !bannerPresentAfter ||
-    consentStateChangedAfterAction(input.preActionConsentStateMarkers, postActionConsentStateMarkers);
+    postActionStateChanged;
   const preferenceSurfaceChanged = domTextChangedAfterAction(centerDom.textExcerpt, afterDom.textExcerpt);
   const succeeded = Boolean(attemptedTargetAction) &&
     saveRequirementMet &&
@@ -3191,8 +3552,10 @@ async function attemptPreferenceCenterRejectTraversal(input: {
       ? "preference_center_banner_still_present_after_save"
       : input.targetActionType === "accept_all" ? "preference_center_accept_path_not_completed" : "preference_center_reject_path_not_completed";
   }
-  if (!succeeded && !afterScreenshot) {
-    afterScreenshot = await writeScreenshotArtifact(input.input, input.page, input.scenario, "after_preference_center_failure", input.consentState);
+  if (!succeeded && !afterScreenshot && !budgetLimitedPostActionTail && !scenarioDeadlineNearlyHit(input.deadlineAtMs, 1_200)) {
+    afterScreenshot = await writeScreenshotArtifact(input.input, input.page, input.scenario, "after_preference_center_failure", input.consentState, {
+      timeoutMs: screenshotTimeoutWithinDeadline(input.deadlineAtMs),
+    });
   }
   evidenceRefs.push({ refId: `ref_${afterDom.artifactId}`, artifactId: afterDom.artifactId, eventType: "dom_snapshot", excerpt: afterDom.textExcerpt });
 
@@ -3270,12 +3633,16 @@ async function attemptPreferenceCenterRejectTraversal(input: {
 }
 
 async function waitForPreferenceSurfaceSettle(page: Page, deadlineAtMs?: number): Promise<void> {
-  const loadTimeoutMs = Math.min(3_000, remainingDeadlineMs(deadlineAtMs, 3_000));
+  const compactSettle = scenarioDeadlineNearlyHit(deadlineAtMs, 4_500);
+  const loadTimeoutMs = Math.min(compactSettle ? 1_000 : 3_000, remainingDeadlineMs(deadlineAtMs, compactSettle ? 1_000 : 3_000));
   if (loadTimeoutMs > 0) {
     await page.waitForLoadState("domcontentloaded", { timeout: loadTimeoutMs }).catch(() => undefined);
   }
-  await waitForTimeoutWithinDeadline(page, 250, deadlineAtMs);
-  const preferenceFunctionTimeoutMs = Math.min(2_500, remainingDeadlineMs(deadlineAtMs, 2_500));
+  await waitForTimeoutWithinDeadline(page, compactSettle ? 100 : 250, deadlineAtMs);
+  const preferenceFunctionTimeoutMs = Math.min(
+    compactSettle ? 900 : 2_500,
+    remainingDeadlineMs(deadlineAtMs, compactSettle ? 900 : 2_500),
+  );
   if (preferenceFunctionTimeoutMs <= 0) {
     throw new Error("Scenario global deadline reached before preference surface settle.");
   }
@@ -3294,7 +3661,7 @@ async function waitForPreferenceSurfaceSettle(page: Page, deadlineAtMs?: number)
         /opt out|reject|accept|save|manage settings|cookie settings|privacy settings/i.test(label);
     }) || /opt out|reject all|accept all|save choices|manage settings/i.test(text);
   }, undefined, { timeout: preferenceFunctionTimeoutMs }).catch(() => undefined);
-  await waitForTimeoutWithinDeadline(page, 500, deadlineAtMs);
+  await waitForTimeoutWithinDeadline(page, compactSettle ? 150 : 500, deadlineAtMs);
 }
 
 async function waitForScenarioReadiness(
@@ -3716,10 +4083,11 @@ async function writeScreenshotArtifact(
   scenario: ConsentFlowScenario,
   stage: string,
   consentState: ConsentState,
+  options: { timeoutMs?: number } = {},
 ): Promise<ScreenshotArtifact> {
   const artifactId = `screenshot_${scenario}_${stage}`;
   const path = input.artifactWriter.artifactPath(`${artifactId}.png`);
-  await page.screenshot({ path, fullPage: true, timeout: 5_000 }).catch(async () => {
+  await page.screenshot({ path, fullPage: true, timeout: options.timeoutMs ?? 5_000 }).catch(async () => {
     await writeFile(path, ONE_PIXEL_TRANSPARENT_PNG);
   });
   return {

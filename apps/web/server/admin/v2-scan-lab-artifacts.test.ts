@@ -555,6 +555,42 @@ test("treats empty DataDome captcha shells as no-go scans", async () => {
   assert.deepEqual(model?.candidateSignals, []);
 });
 
+test("treats access denied DOM pages as no-go scans even when runtime modules completed", async () => {
+  const workspaceRoot = await makeWorkspace();
+  const artifactDir = path.join(workspaceRoot, "artifacts/v2-calibration-lab-latimes-com-full/latimes.com");
+  await writeArtifact(workspaceRoot, "artifacts/v2-calibration-lab-latimes-com-full/latimes.com/CanonicalEvidenceBundle.json", {
+    schemaVersion: "certscore.v2.alpha.1",
+    url: "https://latimes.com/",
+    scanProfile: { profileId: "full" },
+    modulesRun: [
+      { moduleName: "preConsentRuntimeScanner", status: "completed", durationMs: 1537, errors: [] },
+      { moduleName: "consentFlowRuntimeScanner", status: "completed", durationMs: 2887, errors: [] },
+      { moduleName: "vendorResolver", status: "completed", durationMs: 0, errors: [] },
+    ],
+    networkEvents: [{ thirdParty: false, requestHostname: "latimes.com" }],
+    cookieSnapshots: [],
+    normalizedVendorObservations: [],
+    policySurfaceObservations: [],
+  });
+  await writeFile(path.join(artifactDir, "dom-text-pre-consent.txt"), "Access to this site has been denied.", "utf8");
+
+  const result = await loadV2ScanLabArtifacts({
+    chainKey: "lab-latimes-com-full:latimes.com",
+    profile: "full",
+    url: "latimes.com",
+    options: { workspaceRoot },
+  });
+
+  assert.equal(result.status, "ready");
+  const model = result.status === "ready" ? result.model : null;
+  assert.equal(model?.noGoSummary.status, "observed");
+  assert.equal(model?.noGoSummary.previewFindingTitle, "Homepage blocked during live scan");
+  assert.ok(model?.noGoSummary.reasons.includes("block_page_text:access_denied"));
+  assert.equal(model?.reviewSummary.posture, "blocked");
+  assert.equal(model?.reviewSummary.headline, "Access limited by site protections");
+  assert.deepEqual(model?.candidateSignals, []);
+});
+
 test("loads lab chain when report projection contains long internal evidence text", async () => {
   const workspaceRoot = await makeWorkspace();
   await writeArtifact(workspaceRoot, "artifacts/v2-calibration-lab-example-com-standard/example.com/CanonicalEvidenceBundle.json", {

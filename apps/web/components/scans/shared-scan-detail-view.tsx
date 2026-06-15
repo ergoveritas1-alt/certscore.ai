@@ -6461,8 +6461,8 @@ export function SharedScanDetailView({
                   />
                 ),
                 id: "california-privacy",
-                label: "CCPA/CPRA+CIPA",
-                shortLabel: "CCPA/CPRA+CIPA"
+                label: "CCPA/CPRA",
+                shortLabel: "CCPA/CPRA"
               },
               {
                 content: (

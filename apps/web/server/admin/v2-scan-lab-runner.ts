@@ -36,10 +36,12 @@ export type V2ScanLabRunProfile = Extract<V2ScanLabProfile, "tiny" | "standard" 
 export type V2ScanLabRunPlan = {
   chainKey: string;
   cohort: string;
+  consentScenarioDag: boolean;
   domain: string;
   normalizedUrl: string;
   privacyControlUrls: string[];
   profile: V2ScanLabRunProfile;
+  scenarioPlanningMode: "legacy_sequential" | "planned_parallel";
   steps: V2ScanLabRunStep[];
   timingPath: string;
 };
@@ -75,9 +77,14 @@ type RunCommand = (step: V2ScanLabRunStep, options: { cwd: string }) => Promise<
 type StepDiagnosticStatus = "completed" | "failed" | "started" | "timed_out";
 
 const SUPPORTED_RUN_PROFILES: readonly V2ScanLabRunProfile[] = ["tiny", "standard", "policy", "consent", "full"] as const;
+const CONSENT_DAG_ELIGIBLE_PROFILES = new Set<V2ScanLabRunProfile>(["consent", "full"]);
 
 export function isV2ScanLabRunProfile(value: string | null | undefined): value is V2ScanLabRunProfile {
   return SUPPORTED_RUN_PROFILES.includes(value as V2ScanLabRunProfile);
+}
+
+export function isV2ScanLabConsentDagEligibleProfile(profile: V2ScanLabRunProfile): boolean {
+  return CONSENT_DAG_ELIGIBLE_PROFILES.has(profile);
 }
 
 export function getV2ScanLabRunProfiles() {
@@ -100,6 +107,8 @@ export function buildV2ScanLabRunPlan(input: BuildRunPlanInput): V2ScanLabRunPla
   const domainDir = normalized.domain;
   const chainKey = `${cohort}:${domainDir}`;
   const privacyControlUrls = normalizeSeedUrls(input.privacyControlUrls ?? []);
+  const consentScenarioDag = Boolean(input.consentScenarioDag && isV2ScanLabConsentDagEligibleProfile(input.profile));
+  const scenarioPlanningMode = consentScenarioDag ? "planned_parallel" : "legacy_sequential";
 
   const calibrationDir = path.join(workspaceRoot, "artifacts", `v2-calibration-${cohort}`, domainDir);
   const projectionPath = path.join(workspaceRoot, "artifacts", `v2-shadow-projection-${cohort}`, domainDir, "V2ReportProjectionDraft.json");
@@ -116,14 +125,18 @@ export function buildV2ScanLabRunPlan(input: BuildRunPlanInput): V2ScanLabRunPla
   const consentFlowDeadlineMs = input.captureReplayAuxiliaryProbes && input.captureReplayAuxiliaryProbes !== "none"
     ? "45000"
     : "20000";
+  const scenarioConcurrency = input.captureReplay ? "3" : "2";
+  const policyPlanningDeadlineMs = "1500";
 
   return {
     chainKey,
     cohort,
+    consentScenarioDag,
     domain: normalized.domain,
     normalizedUrl: normalized.normalizedUrl,
     privacyControlUrls,
     profile: input.profile,
+    scenarioPlanningMode,
     timingPath: path.join(calibrationDir, "V2ScanLabTiming.json"),
     steps: [
       {
@@ -139,9 +152,13 @@ export function buildV2ScanLabRunPlan(input: BuildRunPlanInput): V2ScanLabRunPla
           ...privacyControlUrls.flatMap((privacyControlUrl) => ["--privacy-control-url", privacyControlUrl]),
           ...(input.captureReplay ? ["--capture-replay"] : []),
           ...(input.captureReplayAuxiliaryProbes ? ["--capture-replay-aux-probes", input.captureReplayAuxiliaryProbes] : []),
-          ...(input.consentScenarioDag ? [
+          ...(consentScenarioDag ? [
             "--scenario-planning-mode",
             "planned_parallel",
+            "--scenario-concurrency",
+            scenarioConcurrency,
+            "--policy-planning-deadline-ms",
+            policyPlanningDeadlineMs,
             "--scenario-resource-mode",
             "lean",
             "--consent-flow-deadline-ms",
@@ -265,10 +282,12 @@ export async function runV2ScanLabArtifactChain(
     chainKey: plan.chainKey,
     cohort: plan.cohort,
     completedAt: completedAt.toISOString(),
+    consentScenarioDag: plan.consentScenarioDag,
     domain: plan.domain,
     normalizedUrl: plan.normalizedUrl,
     privacyControlUrls: plan.privacyControlUrls,
     profile: plan.profile,
+    scenarioPlanningMode: plan.scenarioPlanningMode,
     startedAt: startedAt.toISOString(),
     stepTimings,
     timingVersion: "wc01.v2_scan_lab_timing.1",
@@ -729,11 +748,11 @@ function runScanCliStep(step: V2ScanLabRunStep, options: { cwd: string }) {
   }
 
   const envFilePath = path.join(options.cwd, "apps", "web", ".env.local");
+  const scanCli = resolveV2ScanCoreCliCommand(options.cwd);
   const nodeArgs = [
     ...(existsSync(envFilePath) ? [`--env-file=${envFilePath}`] : []),
-    "--import",
-    "tsx",
-    path.join(options.cwd, "packages", "certscore-scan-core", "src", "cli", "scan.ts"),
+    ...(scanCli.requiresTsx ? ["--import", "tsx"] : []),
+    scanCli.entrypoint,
     ...step.args,
   ];
 
@@ -832,6 +851,39 @@ function runScanCliStep(step: V2ScanLabRunStep, options: { cwd: string }) {
       }).finally(() => reject(error));
     });
   });
+}
+
+export function resolveV2ScanCoreCliCommand(cwd: string) {
+  const packageRoot = findWorkspacePackageRoot(cwd, "certscore-scan-core");
+  const isWorkspaceCheckout = findWorkspaceRoot(cwd) !== cwd || existsSync(path.join(cwd, "pnpm-workspace.yaml"));
+  const sourceCandidate = {
+    entrypoint: packageRoot ? path.join(packageRoot, "src", "cli", "scan.ts") : "",
+    requiresTsx: true,
+  };
+  const distCandidate = {
+    entrypoint: packageRoot ? path.join(packageRoot, "dist", "cli", "scan.js") : "",
+    requiresTsx: false,
+  };
+  const candidates = packageRoot
+    ? isWorkspaceCheckout
+      ? [sourceCandidate, distCandidate]
+      : [
+      {
+        entrypoint: path.join(packageRoot, "dist", "cli", "scan.js"),
+        requiresTsx: false,
+      },
+      {
+        entrypoint: path.join(packageRoot, "src", "cli", "scan.ts"),
+        requiresTsx: true,
+      },
+    ]
+    : [];
+  const match = candidates.find((candidate) => existsSync(candidate.entrypoint));
+  if (!match) {
+    const searchedFrom = packageRoot ?? cwd;
+    throw new Error(`Unable to locate CertScore v2 scan CLI from ${searchedFrom}. Expected packages/certscore-scan-core/dist/cli/scan.js or src/cli/scan.ts.`);
+  }
+  return match;
 }
 
 function scanStepTimeoutMs(captureReplay: boolean) {
@@ -956,6 +1008,21 @@ function findWorkspaceRoot(startDir: string) {
     const parentDir = path.dirname(currentDir);
     if (parentDir === currentDir) {
       return startDir;
+    }
+    currentDir = parentDir;
+  }
+}
+
+function findWorkspacePackageRoot(startDir: string, packageDirName: string) {
+  let currentDir = startDir;
+  while (true) {
+    const candidate = path.join(currentDir, "packages", packageDirName);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      return null;
     }
     currentDir = parentDir;
   }

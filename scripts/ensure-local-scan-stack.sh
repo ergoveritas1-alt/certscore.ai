@@ -15,6 +15,8 @@ SKIP_SCANNER="${SKIP_SCANNER:-0}"
 SKIP_VALIDATION_WORKER="${SKIP_VALIDATION_WORKER:-0}"
 STATUS_ONLY="${STATUS_ONLY:-0}"
 ALLOW_SUDO_POSTGRES_REPAIR="${ALLOW_SUDO_POSTGRES_REPAIR:-1}"
+CHECK_V2_SCAN_LAB_DEEP="${CHECK_V2_SCAN_LAB_DEEP:-1}"
+V2_SCAN_LAB_PROBE_TIMEOUT_MS="${V2_SCAN_LAB_PROBE_TIMEOUT_MS:-20000}"
 
 mkdir -p "${LOG_DIR}"
 
@@ -512,6 +514,29 @@ web_is_healthy() {
   web_http_check "/api/health" 20 && web_http_check "/" 45
 }
 
+web_log_size() {
+  if [[ -f "${LOG_DIR}/web.log" ]]; then
+    wc -c <"${LOG_DIR}/web.log" | tr -d ' '
+  else
+    printf '0'
+  fi
+}
+
+web_log_since() {
+  local start_byte="$1"
+
+  if [[ ! -f "${LOG_DIR}/web.log" ]]; then
+    return 0
+  fi
+  tail -c "+$((start_byte + 1))" "${LOG_DIR}/web.log" 2>/dev/null || true
+}
+
+web_log_has_fatal_errors_since() {
+  local start_byte="$1"
+
+  web_log_since "${start_byte}" | grep -E "RangeError: Maximum call stack size exceeded|BodyTimeoutError|failed to pipe response|Server is approaching the used memory threshold" >/dev/null 2>&1
+}
+
 restart_web_with_clean_cache() {
   local pattern="$1"
 
@@ -553,6 +578,52 @@ ensure_web() {
   }
 
   log "web app HTTP checks passed"
+}
+
+ensure_web_final() {
+  local pattern="next-server \\(v[0-9.]+\\)|next dev --turbo --port ${WEB_PORT}|next dev --port ${WEB_PORT}"
+
+  if web_is_healthy; then
+    log "final web app HTTP checks passed"
+    return 0
+  fi
+
+  log "web app failed final HTTP checks; restarting before reporting ready"
+  tail -120 "${LOG_DIR}/web.log" >&2 || true
+  restart_web_with_clean_cache "${pattern}"
+  wait_for_port "web app" "${WEB_PORT}" 60 || {
+    tail -160 "${LOG_DIR}/web.log" >&2 || true
+    fail "web app failed to restart during final readiness check"
+  }
+  web_is_healthy || {
+    tail -180 "${LOG_DIR}/web.log" >&2 || true
+    fail "web app failed final HTTP checks after restart"
+  }
+
+  log "final web app HTTP checks passed"
+}
+
+ensure_v2_scan_lab_deep_probe() {
+  local log_start
+
+  if [[ "${CHECK_V2_SCAN_LAB_DEEP}" != "1" ]]; then
+    log "skipping deep v2 scan-lab probe because CHECK_V2_SCAN_LAB_DEEP=${CHECK_V2_SCAN_LAB_DEEP}"
+    return 0
+  fi
+
+  log_start="$(web_log_size)"
+  log "running deep v2 scan-lab artifact/model probe (timeout: ${V2_SCAN_LAB_PROBE_TIMEOUT_MS}ms)"
+  if ! pnpm v2:scan-lab-artifact-render-smoke -- --url webmd.com --profile full --timeout-ms "${V2_SCAN_LAB_PROBE_TIMEOUT_MS}"; then
+    tail -180 "${LOG_DIR}/web.log" >&2 || true
+    fail "deep v2 scan-lab artifact/model probe failed"
+  fi
+
+  if web_log_has_fatal_errors_since "${log_start}"; then
+    web_log_since "${log_start}" >&2 || true
+    fail "web log recorded fatal errors during deep v2 scan-lab probe"
+  fi
+
+  log "deep v2 scan-lab probe passed"
 }
 
 ensure_validation_worker() {
@@ -643,8 +714,14 @@ ensure_scanner
 log "running runtime checks"
 pnpm --filter @website-signal-risk-scanner/web check-runtime
 pnpm --filter @website-signal-risk-scanner/validation-worker check-runtime
+ensure_web_final
+ensure_v2_scan_lab_deep_probe
 
 log "scan stack is ready"
 log "web: http://localhost:${WEB_PORT}"
+log "v2 scan lab: http://localhost:${WEB_PORT}/app/admin/v2-scan-lab"
+log "v2 DAG smoke: pnpm v2:scan-lab-localhost-smoke"
+log "v2 scan-lab artifact smoke: pnpm v2:scan-lab-artifact-render-smoke"
+log "v2 DAG WebMD URL: http://localhost:${WEB_PORT}/app/admin/v2-scan-lab?profile=full&url=webmd.com&consentDag=yes"
 log "storage: http://127.0.0.1:${STORAGE_PORT}"
 log "logs: ${LOG_DIR}/web.log, ${LOG_DIR}/validation-worker.log, ${LOG_DIR}/minio.log, ${LOG_DIR}/ws01-scanner.log"

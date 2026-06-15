@@ -173,8 +173,8 @@ function regulatoryAreaSeeds(): AreaSeed[] {
   return [
     {
       id: "california-privacy",
-      navLabel: "CCPA/CPRA+CIPA",
-      title: "California CCPA / CPRA + CIPA",
+      navLabel: "CCPA/CPRA",
+      title: "California CCPA / CPRA",
       subtitle: "Notice, opt-out, GPC, targeted advertising, and post-opt-out tracking review signals.",
       summary: "California privacy review is limited to retained public-web evidence relevant to CCPA / CPRA coverage that v2 can currently support.",
       maturityLabel: "Beta",

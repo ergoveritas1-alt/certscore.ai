@@ -37,6 +37,7 @@ export interface ConsentScenarioPlan {
     policyPrivacyControlUrlCount: number;
     baselineActionCandidateCount: number;
     baselineLikelyBannerPresent: boolean;
+    baselineCmpEvidenceObserved: boolean;
   };
   notes: string[];
 }
@@ -53,6 +54,7 @@ export interface BaselinePlanningSummary {
     contextTextExcerpt?: string;
   }>;
   bannerLikelyPresent: boolean;
+  cmpEvidenceObserved?: boolean;
   textExcerpt?: string;
 }
 
@@ -83,23 +85,28 @@ export function buildConsentScenarioPlan(input: BuildConsentScenarioPlanInput): 
   const skippedScenarios: ConsentScenarioSkippedItem[] = [];
 
   const consentSurfaceTextObserved = hasConsentSurfaceText(input.baseline);
-  const hasCmpOrBanner = input.baseline.bannerLikelyPresent || consentSurfaceTextObserved || hasAnyAction(input.baseline, [
+  const cmpEvidenceObserved = input.baseline.cmpEvidenceObserved === true;
+  const hasCmpOrBanner = input.baseline.bannerLikelyPresent || cmpEvidenceObserved || consentSurfaceTextObserved || hasAnyAction(input.baseline, [
     "accept_all",
     "reject_all",
     "manage_preferences",
     "save_preferences",
   ]);
-  const hasRejectPath = input.baseline.bannerLikelyPresent || consentSurfaceTextObserved || hasAnyAction(input.baseline, [
+  const rejectActionPathObserved = hasAnyAction(input.baseline, [
     "reject_all",
     "manage_preferences",
     "save_preferences",
   ]);
-  const hasAcceptPath = input.baseline.bannerLikelyPresent || consentSurfaceTextObserved || hasAnyAction(input.baseline, [
+  const acceptActionPathObserved = hasAnyAction(input.baseline, [
     "accept_all",
     "manage_preferences",
   ]);
+  const hasRejectPath = input.baseline.bannerLikelyPresent || consentSurfaceTextObserved || cmpEvidenceObserved || rejectActionPathObserved;
+  const hasAcceptPath = input.baseline.bannerLikelyPresent || consentSurfaceTextObserved || cmpEvidenceObserved || acceptActionPathObserved;
   const privacyTargetUrl = input.privacyControlUrls?.[0];
-  const hasPrivacyControl = Boolean(privacyTargetUrl) || hasPrivacyText(input.baseline);
+  const privacyTextObserved = hasPrivacyText(input.baseline);
+  const privacyControlObserved = hasPrivacyControlCandidate(input.baseline);
+  const hasPrivacyControl = Boolean(privacyTargetUrl) || privacyControlObserved;
 
   if (input.deadlineHit) {
     for (const scenario of consentScenarioOrder.filter((scenario) => scenario !== "baseline_pre_consent")) {
@@ -123,7 +130,11 @@ export function buildConsentScenarioPlan(input: BuildConsentScenarioPlanInput): 
       actionType: "reject_all",
       reasonCodes: input.baseline.bannerLikelyPresent
         ? ["cmp_or_banner_observed", "reject_or_preference_path_observed"]
-        : consentSurfaceTextObserved
+        : cmpEvidenceObserved && rejectActionPathObserved
+          ? ["cmp_runtime_evidence_observed", "reject_or_preference_path_observed"]
+          : cmpEvidenceObserved
+            ? ["cmp_runtime_evidence_observed", "reject_or_preference_path_probe"]
+          : consentSurfaceTextObserved
           ? ["consent_surface_text_observed", "reject_or_preference_path_probe"]
         : ["reject_or_preference_path_observed"],
     });
@@ -142,7 +153,11 @@ export function buildConsentScenarioPlan(input: BuildConsentScenarioPlanInput): 
       actionType: "accept_all",
       reasonCodes: input.baseline.bannerLikelyPresent
         ? ["cmp_or_banner_observed", "accept_or_preference_path_observed"]
-        : consentSurfaceTextObserved
+        : cmpEvidenceObserved && acceptActionPathObserved
+          ? ["cmp_runtime_evidence_observed", "accept_or_preference_path_observed"]
+          : cmpEvidenceObserved
+            ? ["cmp_runtime_evidence_observed", "accept_or_preference_path_probe"]
+          : consentSurfaceTextObserved
           ? ["consent_surface_text_observed", "accept_or_preference_path_probe"]
         : ["accept_or_preference_path_observed"],
     });
@@ -162,14 +177,16 @@ export function buildConsentScenarioPlan(input: BuildConsentScenarioPlanInput): 
       targetUrl: privacyTargetUrl,
       reasonCodes: privacyTargetUrl
         ? ["privacy_control_url_observed"]
-        : ["baseline_privacy_choice_text_observed"],
+        : ["baseline_privacy_choice_control_observed"],
     });
   } else {
     skippedScenarios.push({
       scenario: "privacy_opt_out_flow",
       actionType: "do_not_sell_share",
       skipReason: "privacy_control_not_observed",
-      reasonCodes: ["privacy_control_not_observed"],
+      reasonCodes: privacyTextObserved
+        ? ["baseline_privacy_choice_text_observed", "privacy_control_candidate_not_observed"]
+        : ["privacy_control_not_observed"],
     });
   }
 
@@ -213,6 +230,7 @@ export function buildConsentScenarioPlan(input: BuildConsentScenarioPlanInput): 
         policyPrivacyControlUrlCount,
         baselineActionCandidateCount: input.baseline.actionCandidates.length,
         baselineLikelyBannerPresent: input.baseline.bannerLikelyPresent,
+        baselineCmpEvidenceObserved: cmpEvidenceObserved,
       },
       notes: policyPlanningStatus === "policy_surface_not_ready_for_planning"
         ? ["Policy surface results were not ready before the consent planner deadline."]
@@ -253,6 +271,13 @@ function hasPrivacyText(baseline: BaselinePlanningSummary): boolean {
     ]),
   ].filter(Boolean).join(" ").toLowerCase();
   return /do not sell|do not share|your privacy choices|privacy choices|opt[- ]out|targeted advertising/.test(value);
+}
+
+function hasPrivacyControlCandidate(baseline: BaselinePlanningSummary): boolean {
+  return baseline.actionCandidates.some((candidate) =>
+    candidate.actionType === "do_not_sell_share" &&
+    (candidate.shouldClick || candidate.confidence >= 0.78)
+  );
 }
 
 function hasConsentSurfaceText(baseline: BaselinePlanningSummary): boolean {

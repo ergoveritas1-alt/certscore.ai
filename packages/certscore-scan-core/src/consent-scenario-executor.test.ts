@@ -120,27 +120,62 @@ test("scenario executor skips action lanes when remaining global budget is too s
   assert.equal(rejectEntry?.deadlineHit, true);
 });
 
+test("scenario executor bounds failed scenario error text for artifact contracts", async () => {
+  const plannedScenarios: ConsentScenarioPlanItem[] = [
+    { scenario: "baseline_pre_consent", reasonCodes: ["baseline_required"] },
+    {
+      scenario: "privacy_opt_out_flow",
+      actionType: "do_not_sell_share",
+      targetUrl: "https://example.com/privacy",
+      reasonCodes: ["privacy_control_url_observed"],
+    },
+  ];
+  const longError = `privacy opt-out failure ${"x".repeat(1_200)}`;
+
+  const result = await executeConsentScenarioPlan({
+    plannedScenarios,
+    skippedScenarios: [],
+    concurrency: 1,
+    deadlineAtMs: Date.now() + 30_000,
+    async runScenario(item) {
+      if (item.scenario === "privacy_opt_out_flow") {
+        throw new Error(longError);
+      }
+      return {
+        scenario: item.scenario,
+        actionAttempts: [],
+      };
+    },
+  });
+
+  const optOutEntry = result.entries.find((entry) => entry.scenario === "privacy_opt_out_flow");
+  assert.equal(optOutEntry?.status, "failed");
+  assert.equal((optOutEntry?.error ?? "").length <= 500, true);
+  assert.match(optOutEntry?.error ?? "", /^privacy opt-out failure/);
+});
+
 function successfulAttempt(
   actionType: ConsentActionAttempt["actionType"],
   scenario: ConsentFlowScenario = actionType === "accept_all" ? "accept_all_flow" : "reject_all_flow",
 ): ConsentActionAttempt {
   return {
     attemptId: `attempt_${actionType}`,
-    sourceScanner: "consent_flow_runtime",
     scenario,
     actionType,
     attempted: true,
     succeeded: true,
     evidenceRefs: [],
-    confidence: 0.9,
+    timestampMs: 0,
     actionProof: {
+      proofVersion: "consent_action_proof.v1",
       candidateObserved: true,
       candidateLabelText: actionType,
       candidateNormalizedActionType: actionType,
       candidateConfidence: 0.9,
       attemptedStatus: "attempted_succeeded",
-      postActionBannerAbsent: true,
-      proofAvailable: true,
+      preActionConsentStateMarkers: [],
+      postActionConsentStateMarkers: [],
+      evidenceRefs: [],
     },
   };
 }

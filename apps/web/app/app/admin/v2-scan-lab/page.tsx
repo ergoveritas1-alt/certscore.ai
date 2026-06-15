@@ -5,11 +5,16 @@ import { GdprEprivacyCoverageChecklistCard } from "../../../../components/scans/
 import { RegulatoryChecklistSection } from "../../../../components/scans/regulatory-checklist-section";
 import { VendorBrandChip } from "../../../../components/scans/vendor-brand-chip";
 import { V2ScanLabSubmitControl } from "./v2-scan-lab-submit-progress";
-import { V2PriorityIssuesCarousel } from "./v2-priority-issues-carousel";
+import { V2PriorityIssuesCarousel, type V2PriorityRegulatoryGap } from "./v2-priority-issues-carousel";
 import { submitV2ScanLabAction } from "./actions";
 import type { CaliforniaPrivacyCoverageChecklistItem } from "../../../../lib/scans/california-privacy-coverage-checklist";
 import type { GdprEprivacyCoverageChecklistItem } from "../../../../lib/scans/gdpr-eprivacy-coverage-checklist";
-import { getV2ScanLabRunProfiles, type V2ScanLabRunProfile } from "../../../../server/admin/v2-scan-lab-runner";
+import { deriveRegulatoryCoverageScore } from "../../../../lib/scans/regulatory-coverage-score";
+import {
+  getV2ScanLabRunProfiles,
+  isV2ScanLabConsentDagEligibleProfile,
+  type V2ScanLabRunProfile,
+} from "../../../../server/admin/v2-scan-lab-runner";
 import {
   loadV2ScanLabArtifacts,
   type V2ScanLabModel,
@@ -32,15 +37,18 @@ type V2ScanLabPageProps = {
 };
 
 const PROFILE_OPTIONS = getV2ScanLabRunProfiles();
+const DEFAULT_SCAN_PROFILE: V2ScanLabRunProfile = "full";
 
 export default async function AdminV2ScanLabPage({ searchParams }: V2ScanLabPageProps) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const inputUrl = resolvedSearchParams.url ?? "";
   const selectedChainKey = resolvedSearchParams.chain ?? "";
+  const hasExplicitProfile = typeof resolvedSearchParams.profile === "string";
   const profile = PROFILE_OPTIONS.includes(resolvedSearchParams.profile as V2ScanLabRunProfile)
     ? resolvedSearchParams.profile as V2ScanLabRunProfile
-    : "tiny";
-  const consentDag = resolvedSearchParams.consentDag === "yes";
+    : DEFAULT_SCAN_PROFILE;
+  const consentDag = isV2ScanLabConsentDagEligibleProfile(profile)
+    && (resolvedSearchParams.consentDag === "yes" || (!hasExplicitProfile && resolvedSearchParams.consentDag === undefined));
   const result = inputUrl.trim()
     ? await loadV2ScanLabArtifacts({ chainKey: selectedChainKey, url: inputUrl, profile })
     : null;
@@ -142,6 +150,8 @@ function V2RegulatoryReviewBeta({ model }: { model: V2ScanLabModel }) {
               <GdprEprivacyCoverageChecklistCard
                 defaultOpen
                 items={checklist.gdprEprivacyItems as GdprEprivacyCoverageChecklistItem[]}
+                showDebugConfidenceImprovements={false}
+                showSummaryStrip={false}
               />
             ),
             id: "gdpr-eprivacy",
@@ -153,6 +163,8 @@ function V2RegulatoryReviewBeta({ model }: { model: V2ScanLabModel }) {
               <CaliforniaPrivacyCoverageChecklistCard
                 defaultOpen
                 items={checklist.californiaPrivacyItems as CaliforniaPrivacyCoverageChecklistItem[]}
+                showDebugConfidenceImprovements={false}
+                showSummaryStrip={false}
               />
             ),
             badgeLabel: "alpha",
@@ -181,7 +193,7 @@ function ScanPrompt({
   scanStatus: string;
   variant?: "compact" | "large";
 }) {
-  const statusTone = scanStatus === "complete" ? "success" : scanStatus === "failed" || scanStatus === "invalid" ? "danger" : null;
+  const showStatusMessage = (scanStatus === "failed" || scanStatus === "invalid") && scanMessage.length > 0;
   const compact = variant === "compact";
   return (
     <Card className={`overflow-visible border-slate-200 bg-white shadow-sm ${compact ? "rounded-2xl" : "rounded-[1.25rem]"}`}>
@@ -269,12 +281,8 @@ function ScanPrompt({
               />
             </div>
           </div>
-          {statusTone ? (
-            <div className={`mx-5 mb-5 rounded-lg border px-4 py-3 text-sm group-data-[submitted=true]/scan-form:hidden ${
-              statusTone === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                : "border-red-200 bg-red-50 text-red-900"
-            }`}>
+          {showStatusMessage ? (
+            <div className="mx-5 mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 group-data-[submitted=true]/scan-form:hidden">
               {scanMessage}
             </div>
           ) : null}
@@ -430,9 +438,9 @@ function LabReportHeader({
   const createdLabel = formatCreatedLabel(model.selectedChain.cohort, scanTimeSec);
   const isNoGo = model.noGoSummary.status === "observed";
   const hasCoverageLimitations = model.coverageLimitations.length > 0 || model.reviewSummary.posture === "limited_artifacts";
-  const statusLabel = isNoGo || hasCoverageLimitations ? "Limited" : "Completed";
+  const statusLabel = isNoGo ? "No-go" : hasCoverageLimitations ? "Limited" : "Completed";
   const statusClassName = isNoGo
-    ? "border-sky-100 bg-sky-100/80 text-sky-900"
+    ? "border-rose-200 bg-rose-50 text-rose-900"
     : hasCoverageLimitations
     ? "border-amber-200 bg-amber-50 text-amber-800"
     : "border-emerald-200 bg-emerald-50 text-emerald-800";
@@ -489,9 +497,9 @@ function LegacyStyleReportOverview({ model }: { model: V2ScanLabModel }) {
   const cookiesBeforeConsent = model.runtimeSnapshot.metrics.cookiesBeforeConsent;
   const trackerFootprint = model.runtimeSnapshot.trackerFootprint;
   const policySurfaces = model.runtimeSnapshot.policySurfaces;
-  const timing = model.timing;
   const noGoSummary = model.noGoSummary;
   const isNoGo = noGoSummary.status === "observed";
+  const overallScore = deriveV2OverallScore(model);
 
   return (
     <section className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
@@ -509,7 +517,7 @@ function LegacyStyleReportOverview({ model }: { model: V2ScanLabModel }) {
             {isNoGo ? "Scan not representative" : getActionLabel(model.reviewSummary.posture)}
           </span>
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
-            Benchmark: <StubInline>not available in v2 artifacts</StubInline>
+            Benchmark: <BenchmarkInline model={model} />
           </span>
         </summary>
         <div
@@ -525,27 +533,28 @@ function LegacyStyleReportOverview({ model }: { model: V2ScanLabModel }) {
                   <div className="grid gap-2 sm:grid-cols-3">
                     <OldMetricCard
                       label="Overall score"
-                      value="Stub"
-                      detail="No v2 score equivalent"
-                      stub
+                      value={overallScore.value}
+                      detail={overallScore.detail}
+                      tone={overallScore.tone}
+                      barPercent={overallScore.score}
+                      stub={overallScore.score === null}
                     />
                     <OldMetricCard
                       label="3rd-party requests"
-                      value={thirdPartyRequests.value === null ? "Stub" : String(thirdPartyRequests.value)}
+                      value={thirdPartyRequests.value === null ? "Stub" : formatMetricNumber(thirdPartyRequests.value)}
                       detail={thirdPartyRequests.detail}
                       stub={thirdPartyRequests.status !== "observed"}
                       tone="orange"
                     />
                     <OldMetricCard
                       label="Cookies before consent"
-                      value={cookiesBeforeConsent.value === null ? "Stub" : String(cookiesBeforeConsent.value)}
+                      value={cookiesBeforeConsent.value === null ? "Stub" : formatMetricNumber(cookiesBeforeConsent.value)}
                       detail={cookiesBeforeConsent.detail}
                       stub={cookiesBeforeConsent.status !== "observed"}
                       tone="green"
                     />
                   </div>
                 )}
-                {isNoGo ? null : <TimingBreakdown timing={timing} />}
               </div>
             </div>
 
@@ -561,7 +570,10 @@ function LegacyStyleReportOverview({ model }: { model: V2ScanLabModel }) {
                 </div>
               </div>
             ) : (
-              <V2PriorityIssuesCarousel signals={model.candidateSignals} />
+              <V2PriorityIssuesCarousel
+                regulatoryGaps={buildRegulatoryGapFindings(model)}
+                signals={model.candidateSignals}
+              />
             )}
           </div>
 
@@ -586,31 +598,6 @@ function LegacyStyleReportOverview({ model }: { model: V2ScanLabModel }) {
         </div>
       </details>
     </section>
-  );
-}
-
-function TimingBreakdown({ timing }: { timing: V2ScanLabModel["timing"] }) {
-  if (timing.status !== "observed") {
-    return null;
-  }
-  return (
-    <div className="rounded-[1.15rem] border border-slate-200 bg-slate-50/70 px-3 py-2.5">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Timing debug</p>
-        <span className="text-[11px] text-slate-400">wall-clock spans; nested/parallel rows do not sum to total</span>
-        {timing.rows.map((row) => (
-          <span
-            className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600"
-            key={row.key}
-            title={row.detail}
-          >
-            {row.label}: {formatDuration(row.durationMs)}
-            {row.percentOfTotal === null ? "" : ` · ${row.percentOfTotal}%`}
-            {row.deltaFromTotalMs === null || row.key === "total" ? "" : ` · ${formatSignedDuration(row.deltaFromTotalMs)}`}
-          </span>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -673,31 +660,140 @@ function NoGoQualityCard({
   );
 }
 
+function deriveV2OverallScore(model: V2ScanLabModel): {
+  detail: string;
+  score: number | null;
+  tone: "blue" | "green" | "orange" | "red";
+  value: string;
+} {
+  const checklist = model.regulatoryReviewChecklist;
+  const frameworkScores = [
+    {
+      label: "GDPR/ePrivacy",
+      result: deriveRegulatoryCoverageScore({
+        framework: "gdpr_eprivacy",
+        rows: checklist.gdprEprivacyItems as GdprEprivacyCoverageChecklistItem[],
+      }),
+    },
+    {
+      label: "CCPA/CPRA",
+      result: deriveRegulatoryCoverageScore({
+        framework: "california",
+        rows: checklist.californiaPrivacyItems as CaliforniaPrivacyCoverageChecklistItem[],
+      }),
+    },
+  ].filter((entry) => entry.result.score !== null);
+
+  if (frameworkScores.length === 0) {
+    return {
+      detail: "No applicable v2 checklist rows were testable.",
+      score: null,
+      tone: "blue",
+      value: "Not scored",
+    };
+  }
+
+  const score = Math.round(
+    frameworkScores.reduce((sum, entry) => sum + (entry.result.score ?? 0), 0) / frameworkScores.length
+  );
+
+  return {
+    detail: "Diagnostic",
+    score,
+    tone: score >= 72 ? "green" : score >= 50 ? "orange" : "red",
+    value: String(score),
+  };
+}
+
+function buildRegulatoryGapFindings(model: V2ScanLabModel): V2PriorityRegulatoryGap[] {
+  const checklist = model.regulatoryReviewChecklist;
+  const gdprGaps = (checklist.gdprEprivacyItems as GdprEprivacyCoverageChecklistItem[])
+    .filter((item) => item.assessmentStatus === "gap_observed")
+    .map((item) => regulatoryGapFromItem({
+      framework: "GDPR/ePrivacy" as const,
+      idPrefix: "gdpr",
+      item,
+    }));
+  const californiaGaps = (checklist.californiaPrivacyItems as CaliforniaPrivacyCoverageChecklistItem[])
+    .filter((item) => item.assessmentStatus === "gap_observed")
+    .map((item) => regulatoryGapFromItem({
+      framework: "CCPA/CPRA" as const,
+      idPrefix: "ccpa",
+      item,
+    }));
+  return [...gdprGaps, ...californiaGaps];
+}
+
+function regulatoryGapFromItem(input: {
+  framework: V2PriorityRegulatoryGap["framework"];
+  idPrefix: string;
+  item: GdprEprivacyCoverageChecklistItem | CaliforniaPrivacyCoverageChecklistItem;
+}): V2PriorityRegulatoryGap {
+  return {
+    body: input.item.criticalEvidence.statusBasis || input.item.note || input.item.explanation,
+    framework: input.framework,
+    id: `${input.idPrefix}:${input.item.id}`,
+    title: input.item.label,
+  };
+}
+
+function BenchmarkInline({ model }: { model: V2ScanLabModel }) {
+  const benchmark = model.benchmarkSummary;
+  if (benchmark.status !== "observed") {
+    return <span className="text-slate-500">not enough v2 corpus timing data</span>;
+  }
+  return (
+    <span className="text-slate-900" title={benchmark.detail}>
+      {benchmark.comparisonLabel}
+    </span>
+  );
+}
+
+function formatMetricNumber(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
 function OldMetricCard({
+  barPercent = null,
   detail,
   label,
   stub = false,
   tone = "blue",
   value,
 }: {
+  barPercent?: number | null;
   detail: string;
   label: string;
   stub?: boolean;
-  tone?: "blue" | "green" | "orange";
+  tone?: "blue" | "green" | "orange" | "red";
   value: string;
 }) {
-  const barClass = stub
+  const normalizedBarPercent = barPercent === null ? null : Math.max(0, Math.min(100, Math.round(barPercent)));
+  const defaultBarClass = stub
     ? "w-1/3 bg-slate-300"
     : tone === "green"
       ? "w-[18%] bg-lime-500"
       : tone === "orange"
         ? "w-[78%] bg-orange-500"
-        : "w-2/3 bg-sky-400";
+        : tone === "red"
+          ? "w-[38%] bg-rose-500"
+          : "w-2/3 bg-sky-400";
+  const fillClass = stub
+    ? "bg-slate-300"
+    : tone === "green"
+      ? "bg-lime-500"
+      : tone === "orange"
+        ? "bg-orange-500"
+        : tone === "red"
+          ? "bg-rose-500"
+          : "bg-sky-400";
   const trackClass = tone === "green"
     ? "bg-emerald-100"
     : tone === "orange"
       ? "bg-amber-100"
-      : "bg-sky-100";
+      : tone === "red"
+        ? "bg-rose-100"
+        : "bg-sky-100";
   return (
     <div className="relative overflow-visible rounded-[1.1rem] border border-slate-200 bg-white px-3.5 py-2.5">
       <div className="flex items-start justify-between gap-3">
@@ -707,7 +803,10 @@ function OldMetricCard({
       <p className="mt-2 text-[2.15rem] font-semibold leading-none tracking-tight text-slate-950">{value}</p>
       <p className="mt-0.5 text-[11px] leading-4 text-slate-600">{detail}</p>
       <div className={`mt-3 h-2 rounded-full ${stub ? "bg-slate-100" : trackClass}`}>
-        <div className={`h-2 rounded-full ${barClass}`} />
+        <div
+          className={`h-2 rounded-full ${normalizedBarPercent === null ? defaultBarClass : fillClass}`}
+          style={normalizedBarPercent === null ? undefined : { width: `${normalizedBarPercent}%` }}
+        />
       </div>
     </div>
   );
@@ -954,21 +1053,6 @@ function formatCreatedLabel(cohort: string, scanTimeSec: string) {
   return `Created ${timestamp}`;
 }
 
-function formatDuration(durationMs: number | null) {
-  if (durationMs === null) {
-    return "n/a";
-  }
-  if (durationMs < 1_000) {
-    return `${durationMs} ms`;
-  }
-  return `${Math.round(durationMs / 100) / 10} sec`;
-}
-
-function formatSignedDuration(durationMs: number) {
-  const sign = durationMs > 0 ? "+" : "";
-  return `${sign}${durationMs < 0 ? "-" : ""}${formatDuration(Math.abs(durationMs))}`;
-}
-
 function getActionLabel(posture: V2ScanLabReviewSummary["posture"]) {
   switch (posture) {
     case "artifact_ready":
@@ -983,11 +1067,7 @@ function getActionLabel(posture: V2ScanLabReviewSummary["posture"]) {
 }
 
 function InitialState() {
-  return (
-    <StatusCard title="Artifact Lookup" tone="muted">
-      Enter a URL or domain to find saved internal v2 artifacts. The default profile is <span className="font-mono">consent</span>.
-    </StatusCard>
-  );
+  return null;
 }
 
 function StatusCard({ children, title, tone }: { children: ReactNode; title: string; tone: "danger" | "muted" }) {

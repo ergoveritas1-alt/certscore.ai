@@ -629,8 +629,8 @@ function regulatoryReviewFixture(): RegulatoryReviewOutput {
       },
       {
         id: "california-privacy",
-        navLabel: "CCPA/CPRA+CIPA",
-        title: "California CCPA / CPRA + CIPA",
+        navLabel: "CCPA/CPRA",
+        title: "California CCPA / CPRA",
         subtitle: "California privacy notice, opt-out, sensitive-data, and runtime tracking review signals.",
         summary: "Evidence-led review only.",
         maturityLabel: "Beta",
