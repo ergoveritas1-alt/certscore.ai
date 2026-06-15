@@ -769,7 +769,7 @@ function runScanCliStep(step: V2ScanLabRunStep, options: { cwd: string }) {
       cwd: options.cwd,
       env: {
         ...process.env,
-        PLAYWRIGHT_BROWSERS_PATH: "",
+        PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? "",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

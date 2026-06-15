@@ -74,8 +74,6 @@ ENV BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET}"
 
 WORKDIR /app
 
-RUN npm install --omit=dev --no-audit --no-fund pg@8.20.0
-
 COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/node_modules ./node_modules
@@ -94,6 +92,13 @@ COPY --from=builder /app/packages/certscore-scan-core/dist ./packages/certscore-
 COPY --from=builder /app/scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
 COPY --from=builder /app/scripts/apply-db-migrations.mjs ./apps/web/scripts/apply-db-migrations.mjs
 COPY --from=builder /app/scripts/insert-integration-api-key.mjs ./apps/web/scripts/insert-integration-api-key.mjs
+
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --no-audit --no-fund \
+    pg@8.20.0 \
+    playwright@1.51.1 \
+    tldts@7.4.2 \
+    zod@3.24.2 \
+  && PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install --with-deps chromium
 
 RUN mkdir -p /app/node_modules/@certscore \
   && ln -sfn ../../packages/certscore-contracts /app/node_modules/@certscore/contracts \
