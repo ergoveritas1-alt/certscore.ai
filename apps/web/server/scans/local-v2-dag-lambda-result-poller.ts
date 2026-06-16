@@ -73,6 +73,21 @@ export async function recordLocalV2DagLambdaResultEvent(parsedMessage: LocalV2Da
     throw new Error(`Cannot record local v2 DAG Lambda result for unknown scan ${parsedMessage.scanId}.`);
   }
 
+  await query(
+    `update scans
+        set completed_at = coalesce(completed_at, $2::timestamptz),
+            error_message = case when $3 = 'failed' then $4 else error_message end,
+            status = case when $3 = 'failed' then 'failed' else 'completed' end
+      where id = $1
+        and status in ('queued', 'running')`,
+    [
+      parsedMessage.scanId,
+      parsedMessage.completedAt,
+      parsedMessage.status,
+      parsedMessage.error?.message ?? null
+    ]
+  );
+
   const eventType =
     parsedMessage.status === "failed"
       ? LOCAL_V2_DAG_LAMBDA_RESULT_FAILED_EVENT_TYPE

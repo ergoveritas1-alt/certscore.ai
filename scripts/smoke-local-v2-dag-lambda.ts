@@ -49,12 +49,11 @@ async function submitScan(input: { baseUrl: string; domain: string; profile: str
   return body;
 }
 
-async function loadLambdaEvents(scanId: string) {
+async function loadScanEvents(scanId: string) {
   const result = await query(
     `select event_type, message, metadata_json, created_at
        from scan_events
       where scan_id = $1
-        and event_type like 'v2_lambda%'
       order by created_at asc`,
     [scanId],
     { readOnly: true }
@@ -67,6 +66,10 @@ async function loadLambdaEvents(scanId: string) {
   }>;
 }
 
+function lambdaEvents(events: Awaited<ReturnType<typeof loadScanEvents>>) {
+  return events.filter((event) => event.event_type.startsWith("v2_lambda"));
+}
+
 async function main() {
   const baseUrl = getArgValue("--base-url") ?? "http://localhost:3000";
   const domain = getArgValue("--domain") ?? "example.com";
@@ -76,14 +79,19 @@ async function main() {
   const scan = await submitScan({ baseUrl, domain, profile });
   const scanId = scan.scanId as string;
 
-  let latestEvents = await loadLambdaEvents(scanId);
+  let latestEvents = await loadScanEvents(scanId);
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     await pollLocalV2DagLambdaResultQueue({
       expectedTargetEnvironment: "local",
       maxMessages: 10,
       waitTimeSeconds: Math.min(waitSeconds, 20)
     });
-    latestEvents = await loadLambdaEvents(scanId);
+    latestEvents = await loadScanEvents(scanId);
+    const localWorkerStarted = latestEvents.find((event) => event.event_type === "full_scan.started");
+    if (localWorkerStarted) {
+      throw new Error(`Local v2 DAG Lambda smoke expected Lambda-only execution, but local worker started scan ${scanId}: ${JSON.stringify(localWorkerStarted.metadata_json)}`);
+    }
+
     const resultEvent = latestEvents.find((event) => event.event_type === "v2_lambda_result.received");
     if (resultEvent) {
       console.log(JSON.stringify({
@@ -107,7 +115,7 @@ async function main() {
     }
   }
 
-  throw new Error(`Timed out waiting for v2_lambda_result.received for ${scanId}; events=${JSON.stringify(latestEvents)}`);
+  throw new Error(`Timed out waiting for v2_lambda_result.received for ${scanId}; events=${JSON.stringify(lambdaEvents(latestEvents))}`);
 }
 
 main().catch((error) => {

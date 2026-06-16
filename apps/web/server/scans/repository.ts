@@ -324,6 +324,7 @@ export type UsageCounterRow = {
 
 export type QueuedFullScanInsert = {
   domainId: string;
+  initialStatus?: "queued" | "running";
   organizationId: string | null;
   pagesRequested: number;
   queueOrigin?: string;
@@ -1040,19 +1041,21 @@ export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise
        submitted_by_user_id,
        scan_type,
        status,
+       started_at,
        pages_requested,
        pages_scanned,
        scan_config_json,
        queue_priority,
        queue_origin
      )
-     values ($1, $2, $3, $4, 'queued', $5, 0, $6, $7, $8)
+     values ($1, $2, $3, $4, $5, case when $5 = 'running' then now() else null end, $6, 0, $7, $8, $9)
      returning id`,
     [
       input.organizationId,
       input.domainId,
       input.submittedByUserId,
       input.scanType ?? "full",
+      input.initialStatus ?? "queued",
       input.pagesRequested,
       input.scanConfigJson,
       input.queuePriority ?? 50,

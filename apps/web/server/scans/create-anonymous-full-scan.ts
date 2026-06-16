@@ -159,6 +159,7 @@ export async function createAnonymousFullScan(input: {
 
   const scan = await createQueuedFullScan({
     domainId: domain.id,
+    initialStatus: localV2DagLambdaDispatch ? "running" : "queued",
     organizationId: null,
     pagesRequested,
     queueOrigin: queueMetadata.queueOrigin,
@@ -213,7 +214,9 @@ export async function createAnonymousFullScan(input: {
   await insertQueuedFullScanEvent({
     domainId: domain.id,
     eventType: FULL_SCAN_EVENT_TYPES.queued,
-    message: "Scan queued and awaiting scanner pickup.",
+    message: localV2DagLambdaDispatch
+      ? "Scan accepted for local v2 DAG Lambda artifact-only execution."
+      : "Scan queued and awaiting scanner pickup.",
     metadataJson: {
       pagesRequested,
       profile: planLimits.scanProfile,

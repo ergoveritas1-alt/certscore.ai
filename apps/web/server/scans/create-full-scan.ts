@@ -446,6 +446,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   try {
     scan = await createQueuedFullScan({
       domainId: domainRecord.domain.id,
+      initialStatus: localV2DagLambdaDispatch ? "running" : "queued",
       organizationId: input.organizationId,
       pagesRequested,
       queueOrigin: queueMetadata.queueOrigin,
@@ -499,7 +500,9 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     await insertQueuedFullScanEvent({
       domainId: domainRecord.domain.id,
       eventType: FULL_SCAN_EVENT_TYPES.queued,
-      message: "Scan queued and awaiting scanner pickup.",
+      message: localV2DagLambdaDispatch
+        ? "Scan accepted for local v2 DAG Lambda artifact-only execution."
+        : "Scan queued and awaiting scanner pickup.",
       metadataJson: {
         pagesRequested,
         profile: planLimits.scanProfile,
