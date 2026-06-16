@@ -78,6 +78,27 @@ export async function recordLocalV2DagLambdaResultEvent(parsedMessage: LocalV2Da
       ? LOCAL_V2_DAG_LAMBDA_RESULT_FAILED_EVENT_TYPE
       : LOCAL_V2_DAG_LAMBDA_RESULT_RECEIVED_EVENT_TYPE;
   const artifactPointers = parsedMessage.artifactPointers ?? {};
+  const existingEvent = await queryOne<{ id: string }>(
+    `select id
+       from scan_events
+      where scan_id = $1
+        and event_type = $2
+        and metadata_json->>'completedAt' = $3
+        and metadata_json->>'resultStatus' = $4
+        and metadata_json->>'processor' = $5
+      limit 1`,
+    [
+      parsedMessage.scanId,
+      eventType,
+      parsedMessage.completedAt,
+      parsedMessage.status,
+      LOCAL_V2_DAG_SCAN_PROCESSOR
+    ],
+    { readOnly: true }
+  );
+  if (existingEvent) {
+    return;
+  }
 
   await query(
     `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)

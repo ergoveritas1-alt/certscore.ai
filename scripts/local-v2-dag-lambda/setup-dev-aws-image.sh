@@ -52,7 +52,8 @@ queue_arn="$(aws sqs get-queue-attributes \
 
 trust_policy="$(mktemp)"
 permission_policy="$(mktemp)"
-trap 'rm -f "$trust_policy" "$permission_policy"' EXIT
+environment_json="$(mktemp)"
+trap 'rm -f "$trust_policy" "$permission_policy" "$environment_json"' EXIT
 
 cat >"$trust_policy" <<'JSON'
 {
@@ -88,6 +89,20 @@ cat >"$permission_policy" <<JSON
   ]
 }
 JSON
+
+node >"$environment_json" <<'NODE'
+const variables = {
+  CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR: "/tmp/certscore-v2-dag-lambda",
+  CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
+  PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
+};
+
+if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim()) {
+  variables.OPENAI_API_KEY = process.env.OPENAI_API_KEY.trim();
+}
+
+process.stdout.write(`${JSON.stringify({ Variables: variables })}\n`);
+NODE
 
 if ! aws iam get-role --role-name "$role_name" >/dev/null 2>&1; then
   aws iam create-role \
@@ -128,7 +143,7 @@ if aws lambda get-function --region "$region" --function-name "$function_name" >
     --role "$role_arn" \
     --timeout 900 \
     --memory-size 2048 \
-    --environment "Variables={CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV=local,PLAYWRIGHT_BROWSERS_PATH=/ms-playwright,CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR=/tmp/certscore-v2-dag-lambda}" >/dev/null
+    --environment "file://${environment_json}" >/dev/null
 else
   aws lambda create-function \
     --region "$region" \
@@ -138,7 +153,7 @@ else
     --code "ImageUri=${image_uri}" \
     --timeout 900 \
     --memory-size 2048 \
-    --environment "Variables={CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV=local,PLAYWRIGHT_BROWSERS_PATH=/ms-playwright,CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR=/tmp/certscore-v2-dag-lambda}" >/dev/null
+    --environment "file://${environment_json}" >/dev/null
 fi
 
 cat <<EOF

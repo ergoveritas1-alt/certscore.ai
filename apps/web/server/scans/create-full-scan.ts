@@ -122,19 +122,6 @@ function getCurrentMonthWindow(now = new Date()) {
   };
 }
 
-function getLocalV2DagLambdaCallbackUrl() {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-  if (!appUrl) {
-    return null;
-  }
-
-  try {
-    return new URL("/api/local/v2-dag-lambda-results", appUrl).toString();
-  } catch {
-    return null;
-  }
-}
-
 export async function queueFullScanForDomain(input: QueueFullScanInput): Promise<{
   error: string | null;
   reusedExistingScan?: boolean;
@@ -563,7 +550,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
 
     try {
       const dispatchResult = await dispatchLocalV2DagLambdaScan({
-        localCallbackUrl: getLocalV2DagLambdaCallbackUrl(),
+        localCallbackUrl: null,
         scanConfig,
         scanId: scan.id
       });

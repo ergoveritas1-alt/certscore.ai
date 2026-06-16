@@ -18,6 +18,10 @@ import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-
 import { deriveDisplayCreatedAt } from "../scans/display-state";
 import { loadAdminScanDetailData } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
+import {
+  mapAdminLocalV2DagLambdaEvent,
+  type AdminLocalV2DagLambdaEvent
+} from "./local-v2-dag-lambda-events";
 
 export type AdminScanDetail = {
   accessPostureSummary: {
@@ -46,6 +50,7 @@ export type AdminScanDetail = {
   domainHostname: string | null;
   organizationName: string | null;
   agencyMappings: AgencyMapping[];
+  localV2DagLambdaEvents: AdminLocalV2DagLambdaEvent[];
   policyEnrichment: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
   pages: Array<{
@@ -174,6 +179,7 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
     accessibilityRuleCounts,
     changes,
     domain,
+    localV2DagLambdaEvents,
     organization,
     pages,
     policyEnrichment,
@@ -273,6 +279,7 @@ export async function getAdminScanDetail(scanId: string): Promise<AdminScanDetai
       ? buildAgencyMappings(buildAgencyMappingSource(stripRecord(snapshot as Record<string, unknown>)))
       : [],
     policyEnrichment: ((policyEnrichment ?? []) as Array<Record<string, unknown>>).map((row) => stripTimestampFields(row)),
+    localV2DagLambdaEvents: ((localV2DagLambdaEvents ?? []) as Array<Record<string, unknown>>).map(mapAdminLocalV2DagLambdaEvent),
     runtimeContextEvents: ((runtimeContextEvents ?? []) as Array<Record<string, unknown>>).map((row) => ({
       createdAt: typeof row.created_at === "string" ? row.created_at : null,
       message: typeof row.message === "string" ? row.message : null,

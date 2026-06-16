@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.51.1-noble AS build
+FROM mcr.microsoft.com/playwright:v1.58.2-noble AS build
 
 WORKDIR /workspace
 ENV CI=1 \
@@ -30,16 +30,15 @@ RUN for package_name in contracts vendor-resolver review-engine report-adapter s
     fi; \
   done
 
-FROM mcr.microsoft.com/playwright:v1.51.1-noble
+FROM mcr.microsoft.com/playwright:v1.58.2-noble
 
 WORKDIR /var/task
 ENV NODE_ENV=production \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR=/tmp/certscore-v2-dag-lambda
 
-RUN npm install -g aws-lambda-ric@3
-
 COPY --from=build /lambda ./
+COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./runtime-bootstrap.mjs
 
-ENTRYPOINT ["npx", "aws-lambda-ric"]
+ENTRYPOINT ["node", "runtime-bootstrap.mjs"]
 CMD ["src/handler.handler"]

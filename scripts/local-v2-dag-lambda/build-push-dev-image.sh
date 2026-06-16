@@ -28,13 +28,14 @@ aws ecr describe-repositories \
 aws ecr get-login-password --region "$region" | \
   docker login --username AWS --password-stdin "${account_id}.dkr.ecr.${region}.amazonaws.com" >/dev/null
 
-docker build \
+docker buildx build \
   --platform "$platform" \
+  --provenance=false \
+  --sbom=false \
   -f "${repo_root}/apps/v2-dag-lambda/Dockerfile" \
   -t "$image_uri" \
+  --push \
   "$repo_root"
-
-docker push "$image_uri" >/dev/null
 
 cat <<EOF
 Built and pushed local v2 DAG Lambda image:

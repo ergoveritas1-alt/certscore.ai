@@ -447,6 +447,7 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
   changes: Array<Record<string, unknown>>;
   domain: AdminScanDomainRow | null;
   organization: AdminScanOrganizationRow | null;
+  localV2DagLambdaEvents: Array<Record<string, unknown>>;
   pages: Array<Record<string, unknown>>;
   policyEnrichment: Array<Record<string, unknown>>;
   policyReviewQueue: Array<Record<string, unknown>>;
@@ -469,6 +470,7 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
       accessibilityRuleCounts: [],
       changes: [],
       domain: null,
+      localV2DagLambdaEvents: [],
       organization: null,
       pages: [],
       policyEnrichment: [],
@@ -491,6 +493,7 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
     organization,
     runtimeArtifacts,
     runtimeContextEvents,
+    localV2DagLambdaEvents,
     policyEnrichment,
     policyReviewQueue
   ] = await Promise.all([
@@ -544,6 +547,22 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
       { readOnly: true }
     ).then((result) => result.rows),
     query<Record<string, unknown>>(
+      `select event_type, message, metadata_json, created_at
+         from scan_events
+        where scan_id = $1
+          and event_type in (
+            'v2_lambda_dispatch.requested',
+            'v2_lambda_dispatch.started',
+            'v2_lambda_dispatch.accepted',
+            'v2_lambda_dispatch.failed',
+            'v2_lambda_result.received',
+            'v2_lambda_result.failed'
+          )
+        order by created_at asc`,
+      [scanId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
       `select *
          from policy_enrichment
         where scan_id = $1
@@ -565,6 +584,7 @@ export async function loadAdminScanDetailData(scanId: string): Promise<{
     accessibilityRuleCounts,
     changes,
     domain,
+    localV2DagLambdaEvents,
     organization,
     pages,
     policyEnrichment,

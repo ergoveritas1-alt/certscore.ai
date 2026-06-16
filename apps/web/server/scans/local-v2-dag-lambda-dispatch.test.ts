@@ -33,7 +33,7 @@ function buildLambdaScanConfig() {
 
 test("builds a local-only v2 DAG Lambda dispatch payload for us-west-1 SQS handoff", () => {
   const payload = buildLocalV2DagLambdaDispatchPayload({
-    localCallbackUrl: "http://localhost:3000/api/local/v2-dag-lambda-results",
+    localCallbackUrl: null,
     scanConfig: buildLambdaScanConfig(),
     scanId: "scan-local-1"
   });
@@ -45,7 +45,7 @@ test("builds a local-only v2 DAG Lambda dispatch payload for us-west-1 SQS hando
     contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
     functionName: "certscore-v2-dag-dev",
     hostname: "example.com",
-    localCallbackUrl: "http://localhost:3000/api/local/v2-dag-lambda-results",
+    localCallbackUrl: null,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     profile: "tiny",

@@ -69,6 +69,46 @@ function getLatestRuntimeContextMetadata(events: Array<{ metadataJson: Record<st
   return events.find((event) => event.metadataJson)?.metadataJson ?? null;
 }
 
+function readRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function readStringField(record: Record<string, unknown> | null, field: string) {
+  const value = record?.[field];
+  return typeof value === "string" ? value : null;
+}
+
+function readBooleanField(record: Record<string, unknown> | null, field: string) {
+  const value = record?.[field];
+  return typeof value === "boolean" ? value : null;
+}
+
+function formatLocalV2DagLambdaStatus(metadataJson: Record<string, unknown> | null) {
+  return readStringField(metadataJson, "resultStatus") ?? readStringField(metadataJson, "targetEnvironment") ?? "recorded";
+}
+
+function formatLocalV2DagLambdaError(metadataJson: Record<string, unknown> | null) {
+  const error = readRecord(metadataJson?.error);
+  const message = readStringField(error, "message");
+  const code = readStringField(error, "code");
+
+  if (message && code) {
+    return `${code}: ${message}`;
+  }
+
+  return message ?? code ?? null;
+}
+
+function formatLocalV2DagLambdaArtifacts(metadataJson: Record<string, unknown> | null) {
+  const artifactPointers = readRecord(metadataJson?.artifactPointers);
+
+  if (!artifactPointers || Object.keys(artifactPointers).length === 0) {
+    return null;
+  }
+
+  return JSON.stringify(artifactPointers);
+}
+
 const SNAPSHOT_SECTIONS = [
   {
     title: "Identity And Crawl",
@@ -435,6 +475,49 @@ export default async function AdminScanDetailPage({ params }: AdminScanDetailPag
           <p>Runtime provider: {formatValue(latestRuntimeContext?.egressProvider)}</p>
           <p>Proxy configured: {formatValue(latestRuntimeContext?.proxyConfigured)}</p>
           <p>Runtime event: {formatAdminDateTime(record.runtimeContextEvents[0]?.createdAt ?? null)}</p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white">
+        <CardHeader>
+          <CardTitle>Local v2 DAG Lambda</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {record.localV2DagLambdaEvents.length === 0 ? (
+            <p className="text-sm text-slate-600">No local v2 DAG Lambda events for this scan.</p>
+          ) : (
+            record.localV2DagLambdaEvents.map((event, index) => {
+              const artifactOnly = readBooleanField(event.metadataJson, "artifactOnly");
+              const productionFindingIntegration = readBooleanField(event.metadataJson, "productionFindingIntegration");
+              const error = formatLocalV2DagLambdaError(event.metadataJson);
+              const artifactPointers = formatLocalV2DagLambdaArtifacts(event.metadataJson);
+
+              return (
+                <div
+                  key={`${event.eventType}-${event.createdAt ?? index}`}
+                  className="rounded-2xl border border-slate-200 p-4 text-sm text-slate-600"
+                >
+                  <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <p className="font-medium text-slate-900">{event.eventType}</p>
+                      <p>{event.message ?? "No message recorded."}</p>
+                    </div>
+                    <span className="inline-flex w-fit rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
+                      {formatLocalV2DagLambdaStatus(event.metadataJson)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                    <p>Created: {formatAdminDateTime(event.createdAt)}</p>
+                    <p>Target env: {formatValue(readStringField(event.metadataJson, "targetEnvironment"))}</p>
+                    <p>Artifact only: {formatValue(artifactOnly)}</p>
+                    <p>Prod finding integration: {formatValue(productionFindingIntegration)}</p>
+                  </div>
+                  {error ? <p className="mt-3 text-sm text-amber-700">Result detail: {error}</p> : null}
+                  {artifactPointers ? <p className="mt-3 break-all font-mono text-xs text-slate-500">{artifactPointers}</p> : null}
+                </div>
+              );
+            })
+          )}
         </CardContent>
       </Card>
 
