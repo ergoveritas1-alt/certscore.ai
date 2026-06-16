@@ -25,6 +25,7 @@ import {
   getRegistrableDomain,
   getRegistrableDomainFromUrl,
 } from "../domain-utils.js";
+import { chromiumLaunchOptions } from "../playwright-runtime.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 
 const SOURCE_SCANNER = "pre_consent_runtime";
@@ -91,10 +92,7 @@ export async function preConsentRuntimeScanner(
 
   const browserMode = input.browserMode ?? "headless";
   const browser = await recordTiming(timingBreakdown, "browser launch", `Playwright Chromium launch (${browserMode}).`, () =>
-    chromium.launch({
-      args: ["--no-sandbox", "--disable-dev-shm-usage"],
-      headless: browserMode !== "headed",
-    })
+    chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }))
   );
   const context = await recordTiming(timingBreakdown, "browser context", "New isolated browser context and page.", async () => {
     const newContext = await browser.newContext({

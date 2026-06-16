@@ -25,6 +25,7 @@ import { resolveEndpointGeography, resolveVendorObservations, type VendorResolve
 import { writeFile } from "node:fs/promises";
 import { chromium, type Browser, type BrowserContext, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
+import { chromiumLaunchOptions } from "../playwright-runtime.js";
 import {
   classifyCookieParty,
   classifyHostnameParty,
@@ -320,10 +321,7 @@ async function runPlannedParallelConsentFlow(
   moduleStartedAtMs: number,
 ): Promise<ConsentFlowRuntimeScannerResult> {
   const browserMode = input.browserMode ?? "headless";
-  const browser = await chromium.launch({
-    args: ["--no-sandbox", "--disable-dev-shm-usage"],
-    headless: browserMode !== "headed",
-  });
+  const browser = await chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }));
   const consentFlowDeadlineMs = input.consentFlowDeadlineMs ?? input.internalBudgetMs;
   const deadlineAtMs = moduleStartedAtMs + consentFlowDeadlineMs;
   const scenarioConcurrency = Math.max(1, Math.min(defaultScenarioConcurrency(input), 4));
@@ -640,10 +638,7 @@ async function runScenario(
   }
 
   const browserMode = input.browserMode ?? "headless";
-  const browser = runtime?.browser ?? await chromium.launch({
-    args: ["--no-sandbox", "--disable-dev-shm-usage"],
-    headless: browserMode !== "headed",
-  });
+  const browser = runtime?.browser ?? await chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }));
   const ownsBrowser = !runtime?.browser;
   const harPath = input.captureReplay
     ? input.artifactWriter.artifactPath(`replay_${scenarioInput.scenario}.har.zip`)

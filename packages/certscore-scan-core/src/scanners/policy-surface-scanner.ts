@@ -7,6 +7,7 @@ import {
 } from "@certscore/contracts";
 import { chromium, type Browser } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
+import { chromiumLaunchOptions } from "../playwright-runtime.js";
 
 const SOURCE_SCANNER = "policy_surface";
 const SCENARIO = "policy_surface_review";
@@ -639,7 +640,7 @@ async function extractRenderedCandidates(
   }
   let browser: Browser | undefined;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
     const context = await browser.newContext({
       ignoreHTTPSErrors: true,
       viewport: { width: 1366, height: 900 },
