@@ -78,10 +78,10 @@ test("scenario executor starts targeted privacy opt-out before exploratory conse
 
   assert.deepEqual(starts, [
     "baseline_pre_consent",
-    "gpc_enabled",
     "privacy_opt_out_flow",
     "reject_all_flow",
     "accept_all_flow",
+    "gpc_enabled",
   ]);
   assert.deepEqual(result.entries.map((entry) => entry.scenario), [
     "baseline_pre_consent",

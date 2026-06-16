@@ -195,6 +195,17 @@ test("rejects result messages from the wrong environment or processor", () => {
       }),
     /unexpected processor/
   );
+  assert.throws(
+    () =>
+      parseLocalV2DagLambdaResultMessage({
+        ...baseMessage,
+        artifactPointers: {
+          manifestUri: "file:///tmp/certscore/manifest.json"
+        },
+        targetEnvironment: "local"
+      }),
+    /durable s3/
+  );
 });
 
 test("local Lambda result ingestion never promotes artifacts into production findings", () => {

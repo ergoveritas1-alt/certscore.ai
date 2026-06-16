@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { parseLocalV2DagLambdaResultMessage } from "../../web/server/scans/local-v2-dag-lambda-dispatch";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  artifactPointersFromS3Keys,
   handler,
-  parseLocalV2DagLambdaDispatchPayload
+  parseLocalV2DagLambdaDispatchPayload,
+  uploadArtifactFiles
 } from "./handler";
 
 function validPayload(overrides: Record<string, unknown> = {}) {
@@ -69,10 +75,18 @@ test("handler emits a validated completed SQS result without production findings
   const result = await handler(validPayload(), {
     now: () => new Date("2026-06-15T18:00:00.000Z"),
     runArtifactChain: async () => ({
-      manifestUri: "file:///tmp/certscore/manifest.json",
-      reportAdapterArtifactUri: "file:///tmp/certscore/V2ReportProjectionDraft.json",
-      reviewArtifactUri: "file:///tmp/certscore/ReviewResult.json",
-      scanArtifactUri: "file:///tmp/certscore/CanonicalEvidenceBundle.json"
+      artifactMetadata: {
+        manifestUri: {
+          sha256: "a".repeat(64),
+          sizeBytes: 10
+        }
+      },
+      artifactPointers: {
+        manifestUri: "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json",
+        reportAdapterArtifactUri: "s3://certscore-dev-artifacts/v2/scan-local-1/V2ReportProjectionDraft.json",
+        reviewArtifactUri: "s3://certscore-dev-artifacts/v2/scan-local-1/ReviewResult.json",
+        scanArtifactUri: "s3://certscore-dev-artifacts/v2/scan-local-1/CanonicalEvidenceBundle.json"
+      }
     }),
     sqsClient: {
       async send(command: SendMessageCommand) {
@@ -94,7 +108,48 @@ test("handler emits a validated completed SQS result without production findings
   assert.equal(parsed.status, "completed");
   assert.equal(parsed.artifactOnly, true);
   assert.equal(parsed.productionFindingIntegration, false);
-  assert.equal(parsed.artifactPointers?.manifestUri, "file:///tmp/certscore/manifest.json");
+  assert.equal(parsed.artifactPointers?.manifestUri, "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json");
+  assert.equal(parsed.artifactMetadata?.manifestUri?.sizeBytes, 10);
+});
+
+test("artifact uploader returns durable metadata for all v2 JSON artifacts", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "certscore-v2-lambda-test-"));
+  const files = {
+    manifestPath: path.join(tmp, "LocalV2DagLambdaManifest.json"),
+    projectionPath: path.join(tmp, "V2ReportProjectionDraft.json"),
+    reviewPath: path.join(tmp, "ReviewResult.json"),
+    scanArtifactPath: path.join(tmp, "CanonicalEvidenceBundle.json")
+  };
+  await Promise.all(Object.entries(files).map(([name, filePath]) => writeFile(filePath, JSON.stringify({ name }), "utf8")));
+  const pointers = artifactPointersFromS3Keys({
+    bucket: "certscore-v2-local-artifacts",
+    keyPrefix: "v2-dag-lambda/local/scan-local-1",
+    manifestFileName: "LocalV2DagLambdaManifest.json",
+    projectionFileName: "V2ReportProjectionDraft.json",
+    reviewFileName: "ReviewResult.json",
+    scanArtifactFileName: "CanonicalEvidenceBundle.json"
+  });
+  const puts: Array<{ bucket: string | undefined; key: string | undefined }> = [];
+
+  const metadata = await uploadArtifactFiles({
+    ...files,
+    pointers,
+    s3Client: {
+      async send(command: PutObjectCommand) {
+        puts.push({
+          bucket: command.input.Bucket,
+          key: command.input.Key
+        });
+        return { $metadata: {} };
+      }
+    }
+  });
+
+  assert.equal(puts.length, 4);
+  assert.ok(puts.every((put) => put.bucket === "certscore-v2-local-artifacts"));
+  assert.ok(puts.some((put) => put.key?.endsWith("/CanonicalEvidenceBundle.json")));
+  assert.equal(typeof metadata.scanArtifactUri?.sha256, "string");
+  assert.ok((metadata.scanArtifactUri?.sizeBytes ?? 0) > 0);
 });
 
 test("handler emits a bounded failed result when the artifact chain fails", async () => {

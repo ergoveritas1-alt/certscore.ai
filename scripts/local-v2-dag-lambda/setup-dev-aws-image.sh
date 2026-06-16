@@ -7,6 +7,8 @@ function_name="${CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME:-${prefix}-lambda}"
 queue_name="${CERTSCORE_V2_DAG_LAMBDA_QUEUE_NAME:-${prefix}-results}"
 role_name="${CERTSCORE_V2_DAG_LAMBDA_ROLE_NAME:-${prefix}-role}"
 image_uri="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_URI:-${1:-}}"
+artifact_bucket="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET:-${prefix}-artifacts-${AWS_ACCOUNT_ID:-}}"
+artifact_prefix="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX:-v2-dag-lambda/local}"
 
 if [[ "$region" != "us-west-1" ]]; then
   echo "Refusing to create local v2 DAG Lambda resources outside us-west-1." >&2
@@ -37,6 +39,24 @@ if [[ "$queue_name" != *local* && "$queue_name" != *dev* ]]; then
 fi
 
 account_id="$(aws sts get-caller-identity --query Account --output text)"
+if [[ "$artifact_bucket" == *- ]]; then
+  artifact_bucket="${prefix}-artifacts-${account_id}"
+fi
+if [[ "$artifact_bucket" != *local* && "$artifact_bucket" != *dev* ]]; then
+  echo "Refusing non-dev/local artifact bucket name: ${artifact_bucket}" >&2
+  exit 1
+fi
+
+if ! aws s3api head-bucket --bucket "$artifact_bucket" >/dev/null 2>&1; then
+  aws s3api create-bucket \
+    --region "$region" \
+    --bucket "$artifact_bucket" \
+    --create-bucket-configuration "LocationConstraint=${region}" >/dev/null
+fi
+aws s3api put-public-access-block \
+  --bucket "$artifact_bucket" \
+  --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true >/dev/null
+
 queue_url="$(aws sqs create-queue \
   --region "$region" \
   --queue-name "$queue_name" \
@@ -53,7 +73,8 @@ queue_arn="$(aws sqs get-queue-attributes \
 trust_policy="$(mktemp)"
 permission_policy="$(mktemp)"
 environment_json="$(mktemp)"
-trap 'rm -f "$trust_policy" "$permission_policy" "$environment_json"' EXIT
+existing_environment_json="$(mktemp)"
+trap 'rm -f "$trust_policy" "$permission_policy" "$environment_json" "$existing_environment_json"' EXIT
 
 cat >"$trust_policy" <<'JSON'
 {
@@ -85,20 +106,46 @@ cat >"$permission_policy" <<JSON
       "Effect": "Allow",
       "Action": "sqs:SendMessage",
       "Resource": "${queue_arn}"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::${artifact_bucket}/${artifact_prefix%/}/*"
     }
   ]
 }
 JSON
 
+if aws lambda get-function-configuration --region "$region" --function-name "$function_name" >/dev/null 2>&1; then
+  aws lambda get-function-configuration \
+    --region "$region" \
+    --function-name "$function_name" \
+    --query 'Environment.Variables' \
+    --output json >"$existing_environment_json"
+else
+  printf '{}\n' >"$existing_environment_json"
+fi
+
+EXISTING_ENVIRONMENT_JSON="$existing_environment_json" \
+CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET="$artifact_bucket" \
+CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX="$artifact_prefix" \
 node >"$environment_json" <<'NODE'
+const { readFileSync } = require("node:fs");
+const existing = JSON.parse(readFileSync(process.env.EXISTING_ENVIRONMENT_JSON, "utf8"));
 const variables = {
   CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR: "/tmp/certscore-v2-dag-lambda",
+  CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET: process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET,
+  CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX: process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX,
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
   PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
 };
 
 if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim()) {
   variables.OPENAI_API_KEY = process.env.OPENAI_API_KEY.trim();
+} else if (existing.OPENAI_API_KEY && String(existing.OPENAI_API_KEY).trim()) {
+  variables.OPENAI_API_KEY = String(existing.OPENAI_API_KEY).trim();
 }
 
 process.stdout.write(`${JSON.stringify({ Variables: variables })}\n`);
@@ -163,4 +210,6 @@ Created/updated local v2 DAG Lambda image resources:
   CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME=${function_name}
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL=${queue_url}
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV=local
+  CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET=${artifact_bucket}
+  CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX=${artifact_prefix}
 EOF

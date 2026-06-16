@@ -50,6 +50,24 @@ export type LocalV2DagLambdaResultStatus = "completed" | "failed";
 
 export type LocalV2DagLambdaResultMessage = {
   artifactOnly: true;
+  artifactMetadata?: {
+    manifestUri?: {
+      sha256: string;
+      sizeBytes: number;
+    };
+    reportAdapterArtifactUri?: {
+      sha256: string;
+      sizeBytes: number;
+    };
+    reviewArtifactUri?: {
+      sha256: string;
+      sizeBytes: number;
+    };
+    scanArtifactUri?: {
+      sha256: string;
+      sizeBytes: number;
+    };
+  };
   artifactPointers?: {
     manifestUri?: string;
     reportAdapterArtifactUri?: string;
@@ -240,19 +258,48 @@ function parseArtifactPointers(value: unknown): LocalV2DagLambdaResultMessage["a
   const scanArtifactUri = stringValue(record.scanArtifactUri);
 
   if (manifestUri) {
-    artifactPointers.manifestUri = manifestUri;
+    artifactPointers.manifestUri = requireDurableArtifactUri(manifestUri);
   }
   if (reportAdapterArtifactUri) {
-    artifactPointers.reportAdapterArtifactUri = reportAdapterArtifactUri;
+    artifactPointers.reportAdapterArtifactUri = requireDurableArtifactUri(reportAdapterArtifactUri);
   }
   if (reviewArtifactUri) {
-    artifactPointers.reviewArtifactUri = reviewArtifactUri;
+    artifactPointers.reviewArtifactUri = requireDurableArtifactUri(reviewArtifactUri);
   }
   if (scanArtifactUri) {
-    artifactPointers.scanArtifactUri = scanArtifactUri;
+    artifactPointers.scanArtifactUri = requireDurableArtifactUri(scanArtifactUri);
   }
 
   return Object.keys(artifactPointers).length > 0 ? artifactPointers : undefined;
+}
+
+function requireDurableArtifactUri(value: string) {
+  if (!value.startsWith("s3://")) {
+    throw new Error("Local v2 DAG Lambda artifact pointers must use durable s3:// URIs.");
+  }
+  return value;
+}
+
+function parseArtifactMetadata(value: unknown): LocalV2DagLambdaResultMessage["artifactMetadata"] {
+  const record = asRecord(value);
+  const fields = ["manifestUri", "reportAdapterArtifactUri", "reviewArtifactUri", "scanArtifactUri"] as const;
+  const artifactMetadata: NonNullable<LocalV2DagLambdaResultMessage["artifactMetadata"]> = {};
+
+  for (const field of fields) {
+    const metadata = asRecord(record[field]);
+    const sha256 = stringValue(metadata.sha256);
+    const sizeBytes = typeof metadata.sizeBytes === "number" && Number.isFinite(metadata.sizeBytes)
+      ? metadata.sizeBytes
+      : null;
+    if (sha256 && sizeBytes !== null && /^[a-f0-9]{64}$/i.test(sha256) && sizeBytes >= 0) {
+      artifactMetadata[field] = {
+        sha256: sha256.toLowerCase(),
+        sizeBytes
+      };
+    }
+  }
+
+  return Object.keys(artifactMetadata).length > 0 ? artifactMetadata : undefined;
 }
 
 export function parseLocalV2DagLambdaResultMessage(
@@ -298,6 +345,10 @@ export function parseLocalV2DagLambdaResultMessage(
   const artifactPointers = parseArtifactPointers(record.artifactPointers);
   if (artifactPointers) {
     parsed.artifactPointers = artifactPointers;
+  }
+  const artifactMetadata = parseArtifactMetadata(record.artifactMetadata);
+  if (artifactMetadata) {
+    parsed.artifactMetadata = artifactMetadata;
   }
   if (errorMessage) {
     parsed.error = {

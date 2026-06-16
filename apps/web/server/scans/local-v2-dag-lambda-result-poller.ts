@@ -1,3 +1,4 @@
+import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import {
   DeleteMessageCommand,
   ReceiveMessageCommand,
@@ -6,6 +7,10 @@ import {
   type Message,
   type ReceiveMessageCommandOutput
 } from "@aws-sdk/client-sqs";
+import { createHash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { Readable } from "node:stream";
 import {
   LOCAL_V2_DAG_LAMBDA_RESULT_FAILED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_RESULT_RECEIVED_EVENT_TYPE,
@@ -21,6 +26,10 @@ import {
 
 type SqsPollClient = {
   send(command: DeleteMessageCommand | ReceiveMessageCommand): Promise<DeleteMessageCommandOutput | ReceiveMessageCommandOutput>;
+};
+
+type S3GetClient = {
+  send(command: GetObjectCommand): Promise<GetObjectCommandOutput>;
 };
 
 export type LocalV2DagLambdaResultPollerEnv = {
@@ -55,14 +64,148 @@ function getReceiptHandle(message: Message) {
   return message.ReceiptHandle;
 }
 
+function safeScanId(scanId: string) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(scanId)) {
+    throw new Error("Local v2 DAG Lambda artifact mirror received an unsafe scan ID.");
+  }
+  return scanId;
+}
+
+function localV2DagArtifactRoot(scanId: string, workspaceRoot = process.cwd()) {
+  return path.resolve(workspaceRoot, "artifacts", "local-v2-dag-scans", safeScanId(scanId));
+}
+
+function parseS3Uri(uri: string) {
+  if (!uri.startsWith("s3://")) {
+    throw new Error(`Local v2 DAG Lambda artifact URI must be durable s3://, got ${uri.slice(0, 24)}.`);
+  }
+  const withoutScheme = uri.slice("s3://".length);
+  const slashIndex = withoutScheme.indexOf("/");
+  if (slashIndex <= 0 || slashIndex === withoutScheme.length - 1) {
+    throw new Error("Local v2 DAG Lambda artifact URI is missing bucket or key.");
+  }
+  return {
+    bucket: withoutScheme.slice(0, slashIndex),
+    key: withoutScheme.slice(slashIndex + 1)
+  };
+}
+
+async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {
+  if (!body) {
+    throw new Error("Local v2 DAG Lambda artifact object did not include a body.");
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+  if (body instanceof Readable) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+  if (typeof body === "object" && "transformToByteArray" in body && typeof body.transformToByteArray === "function") {
+    return Buffer.from(await body.transformToByteArray());
+  }
+  throw new Error("Unsupported local v2 DAG Lambda artifact response body.");
+}
+
+export async function mirrorLocalV2DagLambdaArtifacts(input: {
+  parsedMessage: LocalV2DagLambdaResultMessage;
+  s3Client?: S3GetClient;
+  workspaceRoot?: string;
+}) {
+  const pointers = input.parsedMessage.artifactPointers;
+  if (input.parsedMessage.status !== "completed" || !pointers) {
+    return null;
+  }
+
+  const outDir = localV2DagArtifactRoot(input.parsedMessage.scanId, input.workspaceRoot);
+  await mkdir(outDir, { recursive: true });
+  const s3Client = input.s3Client ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const artifacts = [
+    { field: "manifestUri" as const, fileName: "LocalV2DagLambdaManifest.json", uri: pointers.manifestUri },
+    { field: "scanArtifactUri" as const, fileName: "CanonicalEvidenceBundle.json", uri: pointers.scanArtifactUri },
+    { field: "reviewArtifactUri" as const, fileName: "ReviewResult.json", uri: pointers.reviewArtifactUri },
+    { field: "reportAdapterArtifactUri" as const, fileName: "V2ReportProjectionDraft.json", uri: pointers.reportAdapterArtifactUri }
+  ];
+  const mirroredArtifacts = [];
+
+  for (const artifact of artifacts) {
+    if (!artifact.uri) {
+      continue;
+    }
+    const { bucket, key } = parseS3Uri(artifact.uri);
+    const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const body = await streamToBuffer(response.Body);
+    const sha256 = createHash("sha256").update(body).digest("hex");
+    const expected = input.parsedMessage.artifactMetadata?.[artifact.field];
+    if (expected?.sha256 && expected.sha256 !== sha256) {
+      throw new Error(`Local v2 DAG Lambda artifact checksum mismatch for ${artifact.fileName}.`);
+    }
+    if (typeof expected?.sizeBytes === "number" && expected.sizeBytes !== body.byteLength) {
+      throw new Error(`Local v2 DAG Lambda artifact size mismatch for ${artifact.fileName}.`);
+    }
+    const localPath = path.join(outDir, artifact.fileName);
+    await writeFile(localPath, body);
+    mirroredArtifacts.push({
+      field: artifact.field,
+      fileName: artifact.fileName,
+      localPath,
+      sha256,
+      sizeBytes: body.byteLength,
+      sourceUri: artifact.uri
+    });
+  }
+
+  const manifestPath = path.join(outDir, "LambdaArtifactMirrorManifest.json");
+  await writeFile(manifestPath, `${JSON.stringify({
+    artifactOnly: true,
+    fetchedAt: new Date().toISOString(),
+    mirroredArtifacts,
+    outDir,
+    processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    productionFindingIntegration: false,
+    scanId: input.parsedMessage.scanId,
+    source: "local-v2-dag-lambda-s3-handoff",
+    targetEnvironment: input.parsedMessage.targetEnvironment
+  }, null, 2)}\n`, "utf8");
+
+  return {
+    manifestPath,
+    mirroredArtifacts,
+    outDir
+  };
+}
+
+function withLocalV2DagOutDir(scanConfigJson: Record<string, unknown> | null, outDir: string) {
+  const config = { ...(scanConfigJson ?? {}) };
+  const execution = config.execution && typeof config.execution === "object" && !Array.isArray(config.execution)
+    ? { ...(config.execution as Record<string, unknown>) }
+    : {};
+  execution.localV2Dag = {
+    ...(execution.localV2Dag && typeof execution.localV2Dag === "object" && !Array.isArray(execution.localV2Dag)
+      ? execution.localV2Dag as Record<string, unknown>
+      : {}),
+    artifactOnly: true,
+    lambdaMirrored: true,
+    outDir,
+    productionFindingIntegration: false
+  };
+  config.execution = execution;
+  return config;
+}
+
 export async function recordLocalV2DagLambdaResultEvent(parsedMessage: LocalV2DagLambdaResultMessage) {
   const { query, queryOne } = await import("@website-signal-risk-scanner/db");
   const context = await queryOne<{
     domainId: string | null;
     organizationId: string | null;
+    scanConfigJson: Record<string, unknown> | null;
   }>(
     `select domain_id as "domainId",
-            organization_id as "organizationId"
+            organization_id as "organizationId",
+            scan_config_json as "scanConfigJson"
        from scans
       where id = $1
       limit 1`,
@@ -71,6 +214,19 @@ export async function recordLocalV2DagLambdaResultEvent(parsedMessage: LocalV2Da
   );
   if (!context) {
     throw new Error(`Cannot record local v2 DAG Lambda result for unknown scan ${parsedMessage.scanId}.`);
+  }
+
+  const artifactMirror = await mirrorLocalV2DagLambdaArtifacts({ parsedMessage });
+  if (artifactMirror) {
+    await query(
+      `update scans
+          set scan_config_json = $2::jsonb
+        where id = $1`,
+      [
+        parsedMessage.scanId,
+        withLocalV2DagOutDir(context.scanConfigJson, artifactMirror.outDir)
+      ]
+    );
   }
 
   await query(
@@ -128,6 +284,21 @@ export async function recordLocalV2DagLambdaResultEvent(parsedMessage: LocalV2Da
         : "Local v2 DAG Lambda returned a completed artifact-only result.",
       {
       artifactOnly: true,
+      artifactMetadata: parsedMessage.artifactMetadata ?? {},
+      artifactMirror: artifactMirror
+        ? {
+            manifestPath: artifactMirror.manifestPath,
+            mirroredArtifacts: artifactMirror.mirroredArtifacts.map((artifact) => ({
+              field: artifact.field,
+              fileName: artifact.fileName,
+              localPath: artifact.localPath,
+              sha256: artifact.sha256,
+              sizeBytes: artifact.sizeBytes,
+              sourceUri: artifact.sourceUri
+            })),
+            outDir: artifactMirror.outDir
+          }
+        : null,
       artifactPointers,
       completedAt: parsedMessage.completedAt,
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,

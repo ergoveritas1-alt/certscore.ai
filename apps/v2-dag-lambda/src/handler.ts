@@ -1,4 +1,6 @@
+import { PutObjectCommand, S3Client, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@aws-sdk/client-sqs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
@@ -34,6 +36,24 @@ export type LocalV2DagLambdaDispatchPayload = {
 
 export type LocalV2DagLambdaResultMessage = {
   artifactOnly: true;
+  artifactMetadata?: {
+    manifestUri?: {
+      sha256: string;
+      sizeBytes: number;
+    };
+    reportAdapterArtifactUri?: {
+      sha256: string;
+      sizeBytes: number;
+    };
+    reviewArtifactUri?: {
+      sha256: string;
+      sizeBytes: number;
+    };
+    scanArtifactUri?: {
+      sha256: string;
+      sizeBytes: number;
+    };
+  };
   artifactPointers?: {
     manifestUri?: string;
     reportAdapterArtifactUri?: string;
@@ -54,14 +74,25 @@ export type LocalV2DagLambdaResultMessage = {
 };
 
 type LocalV2DagLambdaArtifactPointers = NonNullable<LocalV2DagLambdaResultMessage["artifactPointers"]>;
+type LocalV2DagLambdaArtifactMetadata = NonNullable<LocalV2DagLambdaResultMessage["artifactMetadata"]>;
 
 type SqsSendClient = {
   send(command: SendMessageCommand): Promise<SendMessageCommandOutput>;
 };
 
+type S3PutClient = {
+  send(command: PutObjectCommand): Promise<PutObjectCommandOutput>;
+};
+
+type ArtifactChainResult = {
+  artifactMetadata?: LocalV2DagLambdaResultMessage["artifactMetadata"];
+  artifactPointers?: LocalV2DagLambdaResultMessage["artifactPointers"];
+};
+
 type HandlerOptions = {
   now?: () => Date;
-  runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: { artifactRoot: string }) => Promise<LocalV2DagLambdaResultMessage["artifactPointers"]>;
+  runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: { artifactRoot: string }) => Promise<ArtifactChainResult>;
+  s3Client?: S3PutClient;
   sqsClient?: SqsSendClient;
   workspaceRoot?: string;
 };
@@ -140,8 +171,11 @@ export function buildLocalV2DagLambdaArtifactRoot(input: {
 
 export async function runLocalV2DagLambdaArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
-  options: { artifactRoot: string; workspaceRoot?: string }
-): Promise<LocalV2DagLambdaArtifactPointers> {
+  options: { artifactRoot: string; s3Client?: S3PutClient; workspaceRoot?: string }
+): Promise<{
+  artifactMetadata: LocalV2DagLambdaArtifactMetadata;
+  artifactPointers: LocalV2DagLambdaArtifactPointers;
+}> {
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
   const artifactRoot = path.resolve(workspaceRoot, options.artifactRoot);
   await mkdir(artifactRoot, { recursive: true });
@@ -166,13 +200,14 @@ export async function runLocalV2DagLambdaArtifactChain(
   await writeJson(projectionPath, projection);
 
   const scanArtifactPath = path.join(artifactRoot, "CanonicalEvidenceBundle.json");
-  const pointers = artifactPointersFromPaths({
-    artifactRoot,
-    manifestPath: path.join(artifactRoot, "LocalV2DagLambdaManifest.json"),
-    projectionPath,
-    reviewPath,
-    scanArtifactPath,
-    workspaceRoot
+  const manifestPath = path.join(artifactRoot, "LocalV2DagLambdaManifest.json");
+  const pointers = artifactPointersFromS3Keys({
+    bucket: requireArtifactBucket(),
+    keyPrefix: artifactKeyPrefix(payload),
+    manifestFileName: "LocalV2DagLambdaManifest.json",
+    projectionFileName: "V2ReportProjectionDraft.json",
+    reviewFileName: "ReviewResult.json",
+    scanArtifactFileName: "CanonicalEvidenceBundle.json"
   });
   await writeManifest({
     artifactRoot,
@@ -180,7 +215,18 @@ export async function runLocalV2DagLambdaArtifactChain(
     payload,
     pointers
   });
-  return pointers;
+  const artifactMetadata = await uploadArtifactFiles({
+    manifestPath,
+    pointers,
+    projectionPath,
+    reviewPath,
+    scanArtifactPath,
+    s3Client: options.s3Client
+  });
+  return {
+    artifactMetadata,
+    artifactPointers: pointers
+  };
 }
 
 function writeJson(filePath: string, value: unknown) {
@@ -202,6 +248,110 @@ export function artifactPointersFromPaths(input: {
     reviewArtifactUri: fileUri(input.reviewPath, workspaceRoot),
     scanArtifactUri: fileUri(input.scanArtifactPath, workspaceRoot)
   };
+}
+
+export function artifactPointersFromS3Keys(input: {
+  bucket: string;
+  keyPrefix: string;
+  manifestFileName: string;
+  projectionFileName: string;
+  reviewFileName: string;
+  scanArtifactFileName: string;
+}): LocalV2DagLambdaArtifactPointers {
+  const prefix = input.keyPrefix.replace(/^\/+|\/+$/g, "");
+  return {
+    manifestUri: s3Uri(input.bucket, `${prefix}/${input.manifestFileName}`),
+    reportAdapterArtifactUri: s3Uri(input.bucket, `${prefix}/${input.projectionFileName}`),
+    reviewArtifactUri: s3Uri(input.bucket, `${prefix}/${input.reviewFileName}`),
+    scanArtifactUri: s3Uri(input.bucket, `${prefix}/${input.scanArtifactFileName}`)
+  };
+}
+
+function requireArtifactBucket() {
+  const bucket = compactString(process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET);
+  if (!bucket) {
+    throw new Error("Local v2 DAG Lambda artifact handoff requires CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET.");
+  }
+  return bucket;
+}
+
+function artifactKeyPrefix(payload: LocalV2DagLambdaDispatchPayload) {
+  const prefix = compactString(process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX) ?? "v2-dag-lambda/local";
+  return `${prefix.replace(/^\/+|\/+$/g, "")}/${payload.scanId}`;
+}
+
+function s3Uri(bucket: string, key: string) {
+  return `s3://${bucket}/${key.replace(/^\/+/g, "")}`;
+}
+
+function parseS3Uri(uri: string) {
+  if (!uri.startsWith("s3://")) {
+    throw new Error(`Local v2 DAG Lambda artifact URI must be s3://, got ${uri.slice(0, 24)}.`);
+  }
+  const withoutScheme = uri.slice("s3://".length);
+  const slashIndex = withoutScheme.indexOf("/");
+  if (slashIndex <= 0 || slashIndex === withoutScheme.length - 1) {
+    throw new Error("Local v2 DAG Lambda artifact URI is missing bucket or key.");
+  }
+  return {
+    bucket: withoutScheme.slice(0, slashIndex),
+    key: withoutScheme.slice(slashIndex + 1)
+  };
+}
+
+async function artifactObjectMetadata(filePath: string) {
+  const body = await readFile(filePath);
+  return {
+    body,
+    sha256: createHash("sha256").update(body).digest("hex"),
+    sizeBytes: body.byteLength
+  };
+}
+
+export async function uploadArtifactFiles(input: {
+  manifestPath: string;
+  pointers: LocalV2DagLambdaArtifactPointers;
+  projectionPath: string;
+  reviewPath: string;
+  s3Client?: S3PutClient;
+  scanArtifactPath: string;
+}): Promise<LocalV2DagLambdaArtifactMetadata> {
+  const s3Client = input.s3Client ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const artifacts = [
+    { field: "manifestUri" as const, path: input.manifestPath },
+    { field: "scanArtifactUri" as const, path: input.scanArtifactPath },
+    { field: "reviewArtifactUri" as const, path: input.reviewPath },
+    { field: "reportAdapterArtifactUri" as const, path: input.projectionPath }
+  ];
+  const metadata: LocalV2DagLambdaArtifactMetadata = {};
+
+  for (const artifact of artifacts) {
+    const uri = input.pointers[artifact.field];
+    if (!uri) {
+      continue;
+    }
+    const { bucket, key } = parseS3Uri(uri);
+    const object = await artifactObjectMetadata(artifact.path);
+    await s3Client.send(new PutObjectCommand({
+      Body: object.body,
+      Bucket: bucket,
+      ContentType: "application/json",
+      Key: key,
+      Metadata: {
+        "certscore-artifact-field": artifact.field,
+        "certscore-artifact-sha256": object.sha256,
+        "certscore-artifact-size-bytes": String(object.sizeBytes),
+        "certscore-production-finding-integration": "false",
+        "certscore-v2-artifact-only": "true"
+      }
+    }));
+    metadata[artifact.field] = {
+      sha256: object.sha256,
+      sizeBytes: object.sizeBytes
+    };
+  }
+
+  return metadata;
 }
 
 async function writeManifest(input: {
@@ -234,6 +384,7 @@ function fileUri(filePath: string, workspaceRoot: string) {
 }
 
 export function buildLocalV2DagLambdaResultMessage(input: {
+  artifactMetadata?: LocalV2DagLambdaResultMessage["artifactMetadata"];
   artifactPointers?: LocalV2DagLambdaResultMessage["artifactPointers"];
   completedAt: Date;
   error?: { code?: string; message: string };
@@ -242,6 +393,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
 }): LocalV2DagLambdaResultMessage {
   return {
     artifactOnly: true,
+    ...(input.artifactMetadata ? { artifactMetadata: input.artifactMetadata } : {}),
     ...(input.artifactPointers ? { artifactPointers: input.artifactPointers } : {}),
     completedAt: input.completedAt.toISOString(),
     contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
@@ -285,10 +437,11 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       workspaceRoot
     });
     const runArtifactChain = options.runArtifactChain ?? ((dispatchPayload, runOptions) =>
-      runLocalV2DagLambdaArtifactChain(dispatchPayload, { ...runOptions, workspaceRoot }));
-    const artifactPointers = await runArtifactChain(payload, { artifactRoot });
+      runLocalV2DagLambdaArtifactChain(dispatchPayload, { ...runOptions, s3Client: options.s3Client, workspaceRoot }));
+    const artifactResult = await runArtifactChain(payload, { artifactRoot });
     const result = buildLocalV2DagLambdaResultMessage({
-      artifactPointers,
+      artifactMetadata: artifactResult.artifactMetadata,
+      artifactPointers: artifactResult.artifactPointers,
       completedAt: now(),
       payload,
       status: "completed"
