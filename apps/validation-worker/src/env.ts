@@ -45,6 +45,17 @@ const workerEnvSchema = z.object({
   SCANNER_CRAWLER_NAME: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
   SCANNER_CRAWLER_PUBLIC_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   VALIDATION_CRAWLER_PUBLIC_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
+  CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
+  CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: z.preprocess(
+    emptyStringToUndefined,
+    z.enum(["local", "production"]).default("local")
+  ),
+  CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional())
+    .transform((value) => value !== "0"),
+  CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS: z.preprocess(
+    emptyStringToUndefined,
+    z.coerce.number().int().min(5).max(300).default(10)
+  ),
   WORKER_CONCURRENCY: z.preprocess(emptyStringToUndefined, z.coerce.number().int().min(1).max(10).default(1)),
   PLAYWRIGHT_BROWSERS_PATH: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
   WORKER_BROWSER_REAPER_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional()).transform((value) => value !== "0"),
