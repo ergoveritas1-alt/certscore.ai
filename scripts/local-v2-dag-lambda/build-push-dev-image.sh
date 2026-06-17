@@ -2,14 +2,14 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-region="${AWS_REGION:-us-west-1}"
+region="${AWS_REGION:-eu-central-1}"
 prefix="${CERTSCORE_V2_DAG_LAMBDA_DEV_PREFIX:-certscore-v2-dag-local}"
 repository_name="${CERTSCORE_V2_DAG_LAMBDA_ECR_REPOSITORY:-${prefix}-lambda}"
 image_tag="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_TAG:-dev}"
 platform="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_PLATFORM:-linux/amd64}"
 
-if [[ "$region" != "us-west-1" ]]; then
-  echo "Refusing to build/push local v2 DAG Lambda image outside us-west-1." >&2
+if [[ "$region" != "eu-central-1" ]]; then
+  echo "Refusing to build/push local v2 DAG Lambda image outside eu-central-1." >&2
   exit 1
 fi
 

@@ -15,7 +15,7 @@ import {
   runScan
 } from "@certscore/scan-core";
 
-export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "us-west-1";
+export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1";
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
 export const LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
@@ -326,7 +326,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     throw new Error("Local v2 DAG Lambda dispatch must hand results back through SQS.");
   }
   if (record.awsRegion !== LOCAL_V2_DAG_LAMBDA_AWS_REGION) {
-    throw new Error("Local v2 DAG Lambda dispatch must target us-west-1.");
+    throw new Error("Local v2 DAG Lambda dispatch must target eu-central-1.");
   }
   if (record.vpcMode !== "none") {
     throw new Error("Local v2 DAG Lambda dispatch must run outside a VPC.");

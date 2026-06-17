@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-region="${AWS_REGION:-us-west-1}"
+region="${AWS_REGION:-eu-central-1}"
 prefix="${CERTSCORE_V2_DAG_LAMBDA_DEV_PREFIX:-certscore-v2-dag-local}"
 function_name="${CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME:-${prefix}-lambda}"
 queue_name="${CERTSCORE_V2_DAG_LAMBDA_QUEUE_NAME:-${prefix}-results}"
 role_name="${CERTSCORE_V2_DAG_LAMBDA_ROLE_NAME:-${prefix}-role}"
 zip_path="${CERTSCORE_V2_DAG_LAMBDA_ZIP:-${1:-}}"
 
-if [[ "$region" != "us-west-1" ]]; then
-  echo "Refusing to create local v2 DAG Lambda resources outside us-west-1." >&2
+if [[ "$region" != "eu-central-1" ]]; then
+  echo "Refusing to create local v2 DAG Lambda resources outside eu-central-1." >&2
   exit 1
 fi
 

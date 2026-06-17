@@ -192,7 +192,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     throw new Error("Local v2 DAG Lambda dispatch contract version is not supported.");
   }
   if (intent.awsRegion !== LOCAL_V2_DAG_LAMBDA_AWS_REGION) {
-    throw new Error("Local v2 DAG Lambda dispatch must target us-west-1.");
+    throw new Error("Local v2 DAG Lambda dispatch must target eu-central-1.");
   }
 
   return {

@@ -18,7 +18,7 @@ function buildLambdaScanConfig(options: {
     env: {
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       NODE_ENV: "development"
@@ -34,7 +34,7 @@ function buildLambdaScanConfig(options: {
   });
 }
 
-test("builds a local-only v2 DAG Lambda dispatch payload for us-west-1 SQS handoff", () => {
+test("builds a local-only v2 DAG Lambda dispatch payload for eu-central-1 SQS handoff", () => {
   const payload = buildLocalV2DagLambdaDispatchPayload({
     localCallbackUrl: null,
     scanConfig: buildLambdaScanConfig(),
@@ -43,7 +43,7 @@ test("builds a local-only v2 DAG Lambda dispatch payload for us-west-1 SQS hando
 
   assert.deepEqual(payload, {
     artifactOnly: true,
-    awsRegion: "us-west-1",
+    awsRegion: "eu-central-1",
     callbackCorrelationId: "scan-local-1",
     contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
     functionName: "certscore-v2-dag-dev",
@@ -54,7 +54,7 @@ test("builds a local-only v2 DAG Lambda dispatch payload for us-west-1 SQS hando
     productionFindingIntegration: false,
     profile: "tiny",
     resultHandoff: "sqs",
-    resultQueueUrl: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
+    resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
     scanId: "scan-local-1",
     scannerRuntime: "certscore-v2-dag-parallel-path",
     targetEnvironment: "local",
@@ -88,7 +88,7 @@ test("builds local Lambda dispatch payload with bounded debug overrides", () => 
 
 test("summarizes Lambda dispatch intent without exposing function or queue names", () => {
   assert.deepEqual(summarizeLocalV2DagLambdaDispatchForEvent(buildLambdaScanConfig()), {
-    awsRegion: "us-west-1",
+    awsRegion: "eu-central-1",
     contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
     dispatchRequested: true,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,

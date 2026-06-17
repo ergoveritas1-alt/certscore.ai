@@ -310,7 +310,7 @@ test("v2 DAG Lambda run flag defaults on only when Lambda handoff is fully confi
     normalizeLocalV2DagRunViaLambda(undefined, {
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-results"
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-results"
     }),
     true
   );
@@ -325,7 +325,7 @@ test("v2 DAG Lambda run flag defaults on only when Lambda handoff is fully confi
     normalizeLocalV2DagRunViaLambda("false", {
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-results"
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-results"
     }),
     false
   );
@@ -392,7 +392,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
       CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       NODE_ENV: "development"
@@ -413,7 +413,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
   assert.equal(v2DagParallel?.postConsentFlowsEnabled, false);
   assert.deepEqual(v2DagLambda, {
     artifactOnly: true,
-    awsRegion: "us-west-1",
+    awsRegion: "eu-central-1",
     callbackCorrelationId: "scan_id",
     contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
     dispatchState: "pending_dispatch",
@@ -423,7 +423,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     resultHandoff: "sqs",
-    resultQueueUrl: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
+    resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
     scannerRuntime: "certscore-v2-dag-parallel-path",
     targetEnvironment: "local",
     vpcMode: "none"
@@ -438,7 +438,7 @@ test("queued full-scan config can dispatch v2 DAG Lambda outside localhost when 
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
       CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-prod-results",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-prod-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "production",
       NEXT_PUBLIC_APP_URL: "https://certscore.ai",
       NODE_ENV: "production"
