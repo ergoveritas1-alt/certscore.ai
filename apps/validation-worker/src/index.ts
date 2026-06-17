@@ -2,6 +2,7 @@ import { hostname as getHostname } from "node:os";
 import { createBrowserCleanupScheduler } from "./browser-cleanup";
 import { getWorkerEnv } from "./env";
 import { startValidationDispatcher } from "./validation/dispatcher";
+import { startLocalV2DagLambdaResultPoller } from "./validation/local-v2-dag-lambda-results";
 import { recordValidationWorkerHeartbeat } from "./validation/repository";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -43,6 +44,12 @@ function bootstrapValidationWorker() {
   });
 
   void browserCleanup?.runNow("worker_startup");
+  startLocalV2DagLambdaResultPoller({
+    enabled: env.CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED,
+    pollMs: env.CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS * 1000,
+    queueUrl: env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL,
+    targetEnvironment: env.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV
+  });
   void startValidationDispatcher({
     browserCleanup,
     concurrency: env.WORKER_CONCURRENCY

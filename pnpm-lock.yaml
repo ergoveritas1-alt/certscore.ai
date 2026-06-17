@@ -56,6 +56,9 @@ importers:
 
   apps/validation-worker:
     dependencies:
+      '@aws-sdk/client-sqs':
+        specifier: ^3.922.0
+        version: 3.1069.0
       '@axe-core/playwright':
         specifier: ^4.10.1
         version: 4.11.2(playwright-core@1.58.2)
