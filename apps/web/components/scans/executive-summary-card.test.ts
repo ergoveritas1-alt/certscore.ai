@@ -259,7 +259,7 @@ test("buildRegulatoryLenses explains degraded lenses even without mapped top-lev
   assert.match(regulatoryFindingLabels(ftcLens?.findings ?? []).join(" "), /Score driver: pre-consent tracking/);
 });
 
-test("buildRegulatoryLenses retains reject-path tracking failure as dedicated regulatory evidence", () => {
+test("buildRegulatoryLenses keeps post-reject tracking out of GDPR/FTC production lenses while deferred", () => {
   const lenses = buildRegulatoryLenses([
     makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject", {
       confidence: "strong",
@@ -286,11 +286,11 @@ test("buildRegulatoryLenses retains reject-path tracking failure as dedicated re
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
   const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
 
-  assert.ok(gdprLens?.findings.some((finding) => /Non-essential tracking continued after reject/i.test(finding.label)));
-  assert.ok(ftcLens?.findings.some((finding) => /Non-essential tracking continued after reject/i.test(finding.label)));
+  assert.equal(gdprLens?.findings.some((finding) => /Non-essential tracking continued after reject/i.test(finding.label)), false);
+  assert.equal(ftcLens?.findings.some((finding) => /Non-essential tracking continued after reject/i.test(finding.label)), false);
 });
 
-test("buildRegulatoryLenses maps CPRA CBA opt-out missing into the CCPA CPRA lens", () => {
+test("buildRegulatoryLenses keeps CPRA CBA opt-out evidence in deferred lens context", () => {
   const lenses = buildRegulatoryLenses(
     [
       makeFinding("cpra_cba_opt_out_missing", "CPRA opt-out missing for advertising sharing", {
@@ -306,7 +306,7 @@ test("buildRegulatoryLenses maps CPRA CBA opt-out missing into the CCPA CPRA len
   const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
 
   assert.equal(cpraLens?.summary, "Cross-context behavioral advertising and CPRA opt-out posture drive this score.");
-  assert.ok(regulatoryFindingLabels(cpraLens?.findings ?? []).includes("CPRA / privacy choice opt-out review signal"));
+  assert.equal(regulatoryFindingLabels(cpraLens?.findings ?? []).includes("CPRA / privacy choice opt-out review signal"), false);
 });
 
 test("buildRegulatoryLenses maps cross-domain identifiers to GDPR only with tracking or device context", () => {
@@ -3056,7 +3056,7 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
   assert.match(html, /Evidence details/);
   assert.match(html, /Regulatory context/);
   assert.match(html, /GDPR \/ ePrivacy/);
-  assert.match(html, /CCPA \/ CPRA/);
+  assert.doesNotMatch(html, /CCPA \/ CPRA/);
   assert.match(html, /View applicability notes/);
   assert.match(html, /regulatory review context for the scanned report finding/);
   assert.match(html, /Google Tag Manager and HubSpot appeared before recorded consent; first classified signal at 1500ms after page load\. Tracking before a clear user choice can undermine consent expectations\./);
@@ -3816,9 +3816,9 @@ test("ExecutiveSummaryCard keeps regulatory cookie copy aligned with canonical c
   );
 
   assert.match(html, /Consent and pre-consent tracking risk is the main issue\./);
-  assert.match(html, /CCPA \/ CPRA/);
+  assert.doesNotMatch(html, /CCPA \/ CPRA/);
   assert.match(html, /<span class="block text-xl font-semibold tracking-tight text-slate-900">70<\/span>/);
-  assert.match(html, /Third-party collection and disclosure posture drives this score\./);
+  assert.doesNotMatch(html, /Third-party collection and disclosure posture drives this score\./);
   assert.match(html, /FTC/);
   assert.match(html, /Pre-consent tracking and third-party collection should be reviewed for consumer-protection context\./);
   assert.match(html, /64 cookie timing records were retained before consent; vendor\/category attribution was not retained\./);

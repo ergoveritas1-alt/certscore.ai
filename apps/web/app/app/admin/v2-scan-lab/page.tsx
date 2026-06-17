@@ -677,13 +677,6 @@ function deriveV2OverallScore(model: V2ScanLabModel): {
         rows: checklist.gdprEprivacyItems as GdprEprivacyCoverageChecklistItem[],
       }),
     },
-    {
-      label: "CCPA/CPRA",
-      result: deriveRegulatoryCoverageScore({
-        framework: "california",
-        rows: checklist.californiaPrivacyItems as CaliforniaPrivacyCoverageChecklistItem[],
-      }),
-    },
   ].filter((entry) => entry.result.score !== null);
 
   if (frameworkScores.length === 0) {
@@ -716,14 +709,7 @@ function buildRegulatoryGapFindings(model: V2ScanLabModel): V2PriorityRegulatory
       idPrefix: "gdpr",
       item,
     }));
-  const californiaGaps = (checklist.californiaPrivacyItems as CaliforniaPrivacyCoverageChecklistItem[])
-    .filter((item) => item.assessmentStatus === "gap_observed")
-    .map((item) => regulatoryGapFromItem({
-      framework: "CCPA/CPRA" as const,
-      idPrefix: "ccpa",
-      item,
-    }));
-  return [...gdprGaps, ...californiaGaps];
+  return gdprGaps;
 }
 
 function regulatoryGapFromItem(input: {

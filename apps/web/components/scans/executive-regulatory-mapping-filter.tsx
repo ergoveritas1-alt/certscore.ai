@@ -3,14 +3,13 @@
 import React from "react";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 
-export type RegulatoryMappingFilterId = "gdpr" | "ccpa" | "ftc" | "ada";
+export type RegulatoryMappingFilterId = "gdpr" | "ftc" | "ada";
 
 const REGULATORY_MAPPING_FILTERS: Array<{
   id: RegulatoryMappingFilterId;
   label: string;
 }> = [
   { id: "gdpr", label: "GDPR / ePrivacy" },
-  { id: "ccpa", label: "CCPA / CPRA" },
   { id: "ftc", label: "FTC" },
   { id: "ada", label: "ADA / accessibility" }
 ];

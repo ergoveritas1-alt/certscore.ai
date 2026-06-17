@@ -115,16 +115,13 @@ function compareExecutionStartOrder(
   right: ConsentScenarioPlanItem,
 ): number {
   const priority = (item: ConsentScenarioPlanItem): number => {
-    if (item.scenario === "privacy_opt_out_flow" && item.targetUrl) {
-      return 0;
-    }
     switch (item.scenario) {
-      case "privacy_opt_out_flow":
-        return 1;
       case "reject_all_flow":
-        return 2;
+        return 0;
       case "accept_all_flow":
-        return 3;
+        return 1;
+      case "privacy_opt_out_flow":
+        return item.targetUrl ? 2 : 3;
       case "gpc_enabled":
         return 4;
       case "form_collection_probe":

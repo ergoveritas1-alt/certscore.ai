@@ -63,15 +63,6 @@ const initialState: CreateFullScanActionState = {
   error: null
 };
 
-function getCaliforniaDeepCheckConfig(enabled: boolean): QueuedFullScanCaliforniaPrivacyConfig | null {
-  return enabled
-    ? {
-        exercisePrivacyChoicePath: true,
-        forceGpcVerification: true
-      }
-    : null;
-}
-
 type QueueFullScanInput = {
   californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   domainContext?: {
@@ -86,6 +77,7 @@ type QueueFullScanInput = {
   };
   domainId: string;
   bypassRecentScanReuse?: boolean;
+  localV2DagLambdaDebugOverrides?: import("./local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagRunViaLambda?: boolean | null;
   organizationId: string;
@@ -426,6 +418,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   const scanConfig = buildQueuedFullScanConfig({
     californiaPrivacy: input.californiaPrivacy,
     hostname: domainRecord.domain.hostname,
+    localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     maxPages: pagesRequested,
@@ -646,7 +639,6 @@ export async function createFullScanAction(
 ): Promise<CreateFullScanActionState> {
   const dashboardContext = await getDashboardContext();
   const domainId = String(formData.get("domainId") ?? "").trim();
-  const californiaPrivacy = getCaliforniaDeepCheckConfig(formData.get("californiaDeepCheck") === "true");
   const forceNewScan = formData.get("forceNewScan") === "true";
   const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
   const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"));
@@ -672,7 +664,7 @@ export async function createFullScanAction(
     planCode: dashboardContext.organization.plan,
     submittedByUserId: dashboardContext.user.id,
     bypassRecentScanReuse: forceNewScan,
-    californiaPrivacy,
+    californiaPrivacy: null,
     enforceMonthlyUsageLimit: true,
     localV2DagScanProfile,
     localV2DagRunViaLambda,

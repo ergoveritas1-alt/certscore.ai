@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-export type LocalV2ScanProfile = "full" | "tiny";
+export type LocalV2ScanProfile = "standard" | "tiny";
 
 export const LOCAL_V2_SCAN_PROFILE_OPTIONS: Array<{
   description: string;
@@ -10,9 +10,9 @@ export const LOCAL_V2_SCAN_PROFILE_OPTIONS: Array<{
   value: LocalV2ScanProfile;
 }> = [
   {
-    description: "Complete local v2 DAG scan with runtime, consent-flow, and policy coverage.",
-    label: "Full",
-    value: "full"
+    description: "Core v2 DAG scan with pre-consent runtime and policy-surface coverage.",
+    label: "Core",
+    value: "standard"
   },
   {
     description: "Minimal local v2 DAG pass for fast scan-flow testing.",
@@ -32,7 +32,7 @@ export function ScanSubmitProgressBar({
   labelPrefix = "v2",
   nowMs,
   progressEstimate,
-  profileValue = "full",
+  profileValue = "standard",
   startedAtMs,
 }: {
   active: boolean;
@@ -45,7 +45,6 @@ export function ScanSubmitProgressBar({
 }) {
   const derivedEstimate = useMemo(() => (
     estimateScanProgressForOptions({
-      consentDag: profileValue === "full",
       profileValue
     })
   ), [profileValue]);
@@ -112,7 +111,7 @@ export function useScanProgressClock(active: boolean) {
 
 export function LocalV2DagScanProgressCard({
   createdAt,
-  profileValue = "full",
+  profileValue = "standard",
   startedAt,
 }: {
   createdAt?: string | null;
@@ -149,7 +148,7 @@ export function LocalV2DagScanProgressCard({
           </p>
         </div>
         <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
-          {profileValue === "tiny" ? "Tiny" : "Full"}
+          {profileValue === "tiny" ? "Tiny" : "Core"}
         </span>
       </div>
       <ScanSubmitProgressBar
@@ -163,7 +162,7 @@ export function LocalV2DagScanProgressCard({
 }
 
 export function normalizeLocalV2ScanProfile(value: unknown): LocalV2ScanProfile {
-  return value === "tiny" ? "tiny" : "full";
+  return value === "tiny" ? "tiny" : "standard";
 }
 
 export function calculateDisplayedScanProgress(input: {
@@ -202,7 +201,7 @@ export function describeScanProgressPhase(input: {
     return "capturing page evidence";
   }
   if (ratio < 0.74) {
-    return "running consent paths";
+    return "checking policy surfaces";
   }
   if (ratio < 1.05) {
     return "reviewing signals";
@@ -211,7 +210,7 @@ export function describeScanProgressPhase(input: {
 }
 
 export function estimateScanProgressForOptions(input: {
-  consentDag: boolean;
+  consentDag?: boolean;
   profileValue: string;
 }): ScanProgressEstimate {
   const profileValue = input.profileValue;
@@ -224,15 +223,8 @@ export function estimateScanProgressForOptions(input: {
         : profileValue === "consent"
           ? 24_000
           : 32_000;
-  const isPlannedDag = input.consentDag && (profileValue === "consent" || profileValue === "full");
-  const estimatedDurationMs = isPlannedDag
-    ? profileValue === "full"
-      ? 55_000
-      : 32_000
-    : profileEstimateMs;
-  const modeLabel = isPlannedDag
-    ? "planned DAG scan"
-    : `${profileValue} scan`;
+  const estimatedDurationMs = profileEstimateMs;
+  const modeLabel = `${profileValue} scan`;
   return { estimatedDurationMs, modeLabel };
 }
 

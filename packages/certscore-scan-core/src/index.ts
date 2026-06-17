@@ -15,11 +15,13 @@ import {
   type RuntimeEvidenceEvent,
   type ScanProfile,
   type ScreenshotArtifact,
+  type ConsentFlowScenario,
   type StorageSnapshot,
   SCHEMA_VERSION,
   canonicalEvidenceBundleSchema,
 } from "@certscore/contracts";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
+import { chromium, type Browser } from "playwright";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
   buildObservedJourneys,
@@ -33,6 +35,14 @@ import { policySurfaceScannerPlaceholder } from "./scanners/placeholders.js";
 import { consentFlowRuntimeScanner } from "./scanners/consent-flow-runtime-scanner.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
+import { chromiumLaunchOptions } from "./playwright-runtime.js";
+
+export {
+  chromiumLaunchArgs,
+  chromiumLaunchOptions,
+  isAwsLambdaRuntime,
+  lambdaChromiumSingleProcessEnabled,
+} from "./playwright-runtime.js";
 
 export interface RunScanInput {
   url: string;
@@ -45,9 +55,43 @@ export interface RunScanInput {
   privacyControlUrls?: string[];
   scenarioPlanningMode?: "legacy_sequential" | "planned_parallel";
   scenarioConcurrency?: number;
+  allowedConsentFlowScenarios?: ConsentFlowScenario[];
   policyPlanningDeadlineMs?: number;
+  policyOutputGraceMs?: number;
+  preConsentScreenshotMode?: "always" | "selective" | "never";
+  preConsentScreenshotTimeoutMs?: number;
+  consentFlowScreenshotMode?: "auto" | "none";
   consentFlowDeadlineMs?: number;
-  scenarioResourceMode?: "normal" | "lean";
+  consentFlowActionFinalSettleMs?: number;
+  scenarioResourceMode?: "normal" | "lean" | "cmp_safe";
+  consentFlowPreActionObservationMs?: number;
+  consentFlowActionSearchDeadlineMs?: number;
+  consentActionRecipe?: ConsentActionRecipeInput;
+  consentFlowOneTrustHiddenActionMode?: "off" | "diagnostic";
+  consentFlowExternalBaselinePlanning?: "enrich" | "reuse_only";
+  consentFlowForceAllowedScenarioPlanning?: boolean;
+  postConsentFlowsEnabled?: boolean;
+  browserReuseMode?: "per_module" | "single";
+}
+
+export interface ConsentActionRecipeInput {
+  artifactVersion: "certscore.v2.consent-action-recipe.v1";
+  generatedAt: string;
+  normalizedUrl: string;
+  scenarios: Array<{
+    actionType?: string;
+    candidates: Array<{
+      actionType?: string;
+      confidence?: number;
+      frameKind?: string;
+      frameUrl?: string;
+      labelText: string;
+      selectorSummary?: string;
+      visible?: boolean;
+    }>;
+    scenario: string;
+    targetUrl?: string;
+  }>;
 }
 
 export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBundle> {
@@ -66,7 +110,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
 
   const preConsentEnabled = scanProfile.enabledModules.includes("preConsentRuntimeScanner");
   const policySurfaceEnabled = scanProfile.enabledModules.includes("policySurfaceScanner");
-  const consentFlowEnabled = scanProfile.enabledModules.includes("consentFlowRuntimeScanner");
+  const profileConsentFlowEnabled = scanProfile.enabledModules.includes("consentFlowRuntimeScanner");
+  const consentFlowEnabled = profileConsentFlowEnabled && input.postConsentFlowsEnabled === true;
   const plannedParallel = input.scenarioPlanningMode === "planned_parallel";
   const leanPreConsent = plannedParallel || input.captureReplay === true;
   const nanoPolicyAssistProvider = createOpenAiNanoPolicyAssistProviderFromEnv();
@@ -80,8 +125,20 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   await phaseRecorder.record("nano_assist_provider", "completed");
   const artifactWriter = await createArtifactWriter(outDir);
   await phaseRecorder.record("artifact_writer", "completed", { outDir });
+  const useSingleBrowser = input.browserReuseMode === "single" && (preConsentEnabled || policySurfaceEnabled);
+  let sharedBrowser: Browser | undefined;
+  if (useSingleBrowser) {
+    await phaseRecorder.record("shared_browser", "started", {
+      mode: "single_chromium_process",
+    });
+    sharedBrowser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
+    await phaseRecorder.record("shared_browser", "completed");
+  }
+
+  try {
   await phaseRecorder.record("module_promises_start", "started", {
     consentFlowEnabled,
+    postConsentFlowsDeferred: profileConsentFlowEnabled && !consentFlowEnabled,
     policySurfaceEnabled,
     preConsentEnabled,
   });
@@ -92,8 +149,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       scanStartedAtMs: startedAtMs,
       internalBudgetMs: scanProfile.internalBudgetMs,
       artifactWriter,
+      browser: sharedBrowser,
       stubHeavyResources: input.captureReplay,
-      screenshotMode: leanPreConsent ? "selective" : "always",
+      screenshotMode: input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always"),
+      screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
       waitMode: leanPreConsent ? "fast" : "full",
     })
     : Promise.resolve(emptyPreConsentResult(nowIso(startedAtMs)));
@@ -104,6 +163,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       scanStartedAtMs: startedAtMs,
       internalBudgetMs: scanProfile.internalBudgetMs,
       artifactWriter,
+      browser: sharedBrowser,
       nanoAssistProvider: nanoPolicyAssistProvider,
       discoveryMode: input.scenarioPlanningMode === "planned_parallel" ? "fast" : "full",
     }).then(
@@ -128,7 +188,12 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     throw error;
   }
   if (preConsentEnabled && shouldRetryPreConsentWithHeaded(preConsentResult)) {
-    if (input.captureReplay === true && !isCaptureReplayHeadedRetryEnabled()) {
+    if (sharedBrowser) {
+      await phaseRecorder.record("pre_consent_headed_retry", "skipped", {
+        reason: "single_browser_mode_enabled",
+        originalError: preConsentResult.moduleRun.errors[0] ?? "headless_runtime_failure",
+      });
+    } else if (input.captureReplay === true && !isCaptureReplayHeadedRetryEnabled()) {
       await phaseRecorder.record("pre_consent_headed_retry", "skipped", {
         reason: "capture_replay_headed_retry_disabled",
         originalError: preConsentResult.moduleRun.errors[0] ?? "headless_runtime_failure",
@@ -146,7 +211,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         artifactWriter,
         browserMode: "headed",
         stubHeavyResources: input.captureReplay,
-        screenshotMode: leanPreConsent ? "selective" : "always",
+        screenshotMode: input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always"),
+        screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         waitMode: leanPreConsent ? "fast" : "full",
       });
       preConsentResult = {
@@ -197,6 +263,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     : [];
   await phaseRecorder.record("consent_flow_runtime", consentFlowEnabled ? "started" : "skipped", {
     captureReplay: input.captureReplay === true,
+    deferredFromProductionScanner: profileConsentFlowEnabled && !consentFlowEnabled,
     replayPrivacyControlUrlCount: replayPrivacyControlUrls.length,
     seededPrivacyControlUrlCount: seededPrivacyControlUrls.length,
   });
@@ -216,9 +283,18 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       nanoConsentUiAssistProvider,
       scenarioPlanningMode: input.scenarioPlanningMode,
       scenarioConcurrency: input.scenarioConcurrency,
+      allowedScenarios: input.allowedConsentFlowScenarios,
       policyPlanningDeadlineMs: input.policyPlanningDeadlineMs,
       consentFlowDeadlineMs: input.consentFlowDeadlineMs,
+      plannedActionFinalSettleMs: input.consentFlowActionFinalSettleMs,
+      preActionObservationMs: input.consentFlowPreActionObservationMs,
+      actionSearchDeadlineMs: input.consentFlowActionSearchDeadlineMs,
+      consentActionRecipe: input.consentActionRecipe,
+      oneTrustHiddenActionMode: input.consentFlowOneTrustHiddenActionMode,
+      externalBaselinePlanning: input.consentFlowExternalBaselinePlanning,
+      forceAllowedScenarioPlanning: input.consentFlowForceAllowedScenarioPlanning,
       scenarioResourceMode: input.scenarioResourceMode,
+      screenshotMode: input.consentFlowScreenshotMode,
       policyPlanningStatus: policyPlanningStatus(policySurfaceEnabled, policySurfaceSettled),
       policyPrivacyControlUrlCount: replayPrivacyControlUrls.length,
       preConsentBaseline: plannedParallel ? preConsentResult : undefined,
@@ -235,7 +311,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   if (policyRequiredForOutput) {
     policySurfaceSettled ??= await policySurfaceResultPromise;
   } else if (policySurfaceEnabled) {
-    policySurfaceSettled ??= await settlePolicySurfaceBeforeDeadline(policySurfaceResultPromise, 0);
+    const policyOutputGraceMs = input.policyOutputGraceMs ?? 0;
+    await phaseRecorder.record("policy_surface_output_grace", policyOutputGraceMs > 0 ? "started" : "skipped", {
+      deadlineMs: policyOutputGraceMs,
+    });
+    policySurfaceSettled ??= await settlePolicySurfaceBeforeDeadline(policySurfaceResultPromise, policyOutputGraceMs);
+    if (policyOutputGraceMs > 0) {
+      await phaseRecorder.record("policy_surface_output_grace", policySurfaceSettled?.status === "fulfilled" ? "completed" : "skipped");
+    }
   }
   if (policySurfaceSettled?.status === "rejected") {
     await phaseRecorder.record("policy_surface_for_output", "failed", {
@@ -283,7 +366,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       ? [policySurfaceResult.moduleRun]
       : policySurfaceEnabled
         ? [policySurfaceScannerPlaceholder(now, plannedParallel && consentFlowEnabled
-          ? "Policy-surface scanner was not ready before the planned consent DAG deadline and was not awaited after consent execution."
+          ? "Policy-surface scanner was not ready before the planned consent DAG deadline or bounded output grace window."
           : undefined)]
         : []),
   ];
@@ -431,6 +514,13 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     durationMs: Date.now() - startedAtMs,
   });
   return bundle;
+  } finally {
+    if (sharedBrowser) {
+      await phaseRecorder.record("shared_browser_close", "started");
+      await sharedBrowser.close().catch(() => undefined);
+      await phaseRecorder.record("shared_browser_close", "completed");
+    }
+  }
 }
 
 export async function handler(event: {
@@ -445,7 +535,7 @@ export async function handler(event: {
 export { scanProfiles } from "./profiles.js";
 export { buildObservedJourneys, summarizeObservedJourneys } from "./journey-builder.js";
 export { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
-export { consentFlowRuntimeScanner } from "./scanners/consent-flow-runtime-scanner.js";
+export { buildConsentFlowComparisonsFromEvidence, consentFlowRuntimeScanner } from "./scanners/consent-flow-runtime-scanner.js";
 export {
   policySurfaceScannerPlaceholder,
 } from "./scanners/placeholders.js";

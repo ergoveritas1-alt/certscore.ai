@@ -138,7 +138,7 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
       "Network evidence shows adtech sync, match, redirect, or identifier-like request patterns that may indicate RTB or identity matching.",
     regulatoryLabel: "Adtech sync and identity matching review",
     regulatoryCopy:
-      "Useful for reviewing sync endpoints, identifier scope, redirects, consent timing, sale/share context, and vendor-governance questions.",
+      "Useful for reviewing sync endpoints, identifier scope, redirects, pre-consent timing, disclosure context, and vendor-governance questions.",
     evidence: {
       title: "Adtech sync sample",
       lines: [
@@ -180,38 +180,6 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
       ]
     },
     reviewPrompts: ["Which consent-surface signals were retained, and how do they affect the choice path?"]
-  },
-  consent_preference_reopen_control_not_observed: {
-    overview:
-      "Retained public-page evidence showed consent or tracking context, but did not show an obvious cookie preferences, privacy settings, or consent-preference reopen control.",
-    regulatoryLabel: "Consent preference lifecycle review",
-    regulatoryCopy:
-      "Useful for reviewing whether users can revisit, change, or withdraw cookie and privacy choices through an accessible footer link, CMP widget, preference center, or privacy-choice page.",
-    evidence: {
-      title: "Preference reopen sample",
-      lines: [
-        "{\"artifact\":\"consent_lifecycle_001\",\"surface\":\"public_page\"}",
-        "{\"controlsSearched\":[\"cookie preferences\",\"privacy settings\",\"manage consent\"]}",
-        "{\"preferenceReopen\":\"not_observed_in_retained_public_pages\",\"coverageStatus\":\"usable\"}"
-      ]
-    },
-    reviewPrompts: ["Which page areas and preference-control labels were searched, and what consent or tracking context made the lifecycle review relevant?"]
-  },
-  cpra_cba_opt_out_missing: {
-    overview:
-      "Public-surface and runtime evidence suggests advertising or sale/share review context, but no clear California privacy choice path was observed.",
-    regulatoryLabel: "California privacy choice review",
-    regulatoryCopy:
-      "Useful for reviewing Do Not Sell or Share, Your Privacy Choices, opt-out, GPC, footer, policy, and preference-center coverage.",
-    evidence: {
-      title: "Privacy choice sample",
-      lines: [
-        "{\"artifact\":\"privacy_choice_001\",\"surface\":\"footer_and_privacy_links\"}",
-        "{\"adOrCrossContextSignal\":true,\"dnsLinkObserved\":false}",
-        "{\"stateChoiceObserved\":false,\"gpcHandling\":\"not_determined\"}"
-      ]
-    },
-    reviewPrompts: ["Which public surface was retained, and what made the opt-out path relevant?"]
   },
   forced_consent_interaction: {
     overview:
@@ -324,22 +292,6 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
       ]
     },
     reviewPrompts: ["Which outbound request carried the identifier-like key or value?"]
-  },
-  reject_tracking_persists_after_reject: {
-    overview:
-      "Runtime evidence shows a reject-style interaction followed by classified non-essential request or storage activity in the same observed scope.",
-    regulatoryLabel: "Post-reject tracking effect review",
-    regulatoryCopy:
-      "Useful for reviewing whether rejection propagated to tags, vendors, cookies, storage, consent mode, queued beacons, and purpose controls.",
-    evidence: {
-      title: "Post-reject artifact sample",
-      lines: [
-        "{\"artifact\":\"post_reject_req_001\",\"role\":\"supporting\"}",
-        "{\"rejectObserved\":true,\"rejectMs\":2600,\"postRejectMs\":4120}",
-        "{\"origin\":\"https://analytics.example\",\"essentiality\":\"non_essential\"}"
-      ]
-    },
-    reviewPrompts: ["Was a reject-style interaction actually observed and timestamped?"]
   },
   possible_session_replay_on_sensitive_input_surface: {
     overview:
@@ -465,10 +417,6 @@ function getReviewLensBadges(finding: FindingReferenceItem) {
     ...context.jurisdictionalContexts.map((item) => item.label)
   ].join(" ");
   const badges: string[] = [];
-
-  if (/ccpa|cpra|cipa|california/i.test(labels)) {
-    badges.push("CCPA / CPRA / CIPA");
-  }
 
   if (/gdpr|eprivacy|pecr|ico|edpb/i.test(labels)) {
     badges.push("GDPR / ePrivacy");

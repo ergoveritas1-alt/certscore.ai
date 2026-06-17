@@ -37,14 +37,6 @@ const FINDING_CRITICALITY_BADGES = {
     badge: "high",
     rationale: "Strong privacy/adtech ecosystem risk signal."
   },
-  cpra_cba_opt_out_missing: {
-    badge: "high",
-    rationale: "Important advertising opt-out risk without asserting legal violation."
-  },
-  reject_tracking_persists_after_reject: {
-    badge: "critical",
-    rationale: "Tracking after explicit reject is highly urgent."
-  },
   session_recording_services_detected: {
     badge: "medium",
     rationale: "Review-worthy but not inherently critical without sensitive-surface evidence."
@@ -84,10 +76,6 @@ const FINDING_CRITICALITY_BADGES = {
   scan_quality_visual_no_go: {
     badge: "high",
     rationale: "The retained visual evidence shows the scan did not capture a normal public site, so substantive findings should be reviewed or rerun before reliance."
-  },
-  consent_preference_reopen_control_not_observed: {
-    badge: "medium",
-    rationale: "Consent lifecycle review signal that depends on retained control-search coverage and tracking context."
   },
   consent_dark_patterns_detected: {
     badge: "high",

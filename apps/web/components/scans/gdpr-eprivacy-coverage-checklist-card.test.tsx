@@ -121,7 +121,7 @@ test("GdprEprivacyCoverageChecklistCard renders specific session replay timing c
   assert.match(html, />Disclosure alignment</);
   assert.match(html, /Session replay collection was retained before a recorded consent action/);
   assert.match(html, />Observed</);
-  assert.match(html, />Observed session replay</);
+  assert.match(html, />Review signal</);
   assert.doesNotMatch(html, /aria-label="Jurisdiction unverified"/);
   assert.doesNotMatch(html, /GDPR\/ePrivacy can depend on EU\/EEA presence, targeting, or monitoring/);
   assert.doesNotMatch(html, /signals require review from the retained runtime evidence/i);
@@ -244,12 +244,11 @@ test("GdprEprivacyCoverageChecklistCard summarizes evaluated and coverage-missin
     })
   );
 
-  assert.match(html, /Evaluated rows/);
-  assert.match(html, /Coverage missing/);
-  assert.match(html, /Review signals/);
-  assert.match(html, /Gap rows/);
-  assert.match(html, /<div class="text-lg font-semibold leading-none text-slate-950">2<\/div><div class="mt-1 text-\[10px\] font-semibold uppercase tracking-\[0\.12em\]">Evaluated rows<\/div>/);
-  assert.match(html, /<div class="text-lg font-semibold leading-none text-slate-950">1<\/div><div class="mt-1 text-\[10px\] font-semibold uppercase tracking-\[0\.12em\]">Coverage missing<\/div>/);
+  assert.match(html, /Observed/);
+  assert.match(html, /Not observed/);
+  assert.match(html, /Partial/);
+  assert.match(html, /Gaps \/ limits/);
+  assert.match(html, /<div class="text-lg font-semibold leading-none text-slate-950">2<\/div><div class="mt-1 text-\[10px\] font-semibold uppercase tracking-\[0\.12em\]">Gaps \/ limits<\/div>/);
 });
 
 test("GdprEprivacyCoverageChecklistCard does not render suggested follow-up capture guidance", () => {

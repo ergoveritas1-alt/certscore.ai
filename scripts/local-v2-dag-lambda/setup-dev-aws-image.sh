@@ -9,6 +9,7 @@ role_name="${CERTSCORE_V2_DAG_LAMBDA_ROLE_NAME:-${prefix}-role}"
 image_uri="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_URI:-${1:-}}"
 artifact_bucket="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET:-${prefix}-artifacts-${AWS_ACCOUNT_ID:-}}"
 artifact_prefix="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX:-v2-dag-lambda/local}"
+memory_size="${CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-2048}"
 
 if [[ "$region" != "us-west-1" ]]; then
   echo "Refusing to create local v2 DAG Lambda resources outside us-west-1." >&2
@@ -25,6 +26,11 @@ This script creates/updates dev/local AWS resources only:
   queue: ${queue_name}
   role: ${role_name}
 EOF
+  exit 1
+fi
+
+if ! [[ "$memory_size" =~ ^[0-9]+$ ]] || (( memory_size < 512 || memory_size > 10240 )); then
+  echo "CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE must be an integer between 512 and 10240 MB for the current local/dev Lambda target." >&2
   exit 1
 fi
 
@@ -110,9 +116,15 @@ cat >"$permission_policy" <<JSON
     {
       "Effect": "Allow",
       "Action": [
+        "s3:GetObject",
         "s3:PutObject"
       ],
       "Resource": "arn:aws:s3:::${artifact_bucket}/${artifact_prefix%/}/*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "lambda:InvokeFunction",
+      "Resource": "arn:aws:lambda:${region}:${account_id}:function:${prefix}-*"
     }
   ]
 }
@@ -141,6 +153,24 @@ const variables = {
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
   PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
 };
+
+for (const key of [
+  "CERTSCORE_V2_DAG_LAMBDA_ACTION_FINAL_SETTLE_MS",
+  "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS",
+  "CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE",
+  "CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE",
+  "CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE",
+  "CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_MODE",
+  "CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS",
+  "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY",
+  "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE"
+]) {
+  if (process.env[key] && String(process.env[key]).trim()) {
+    variables[key] = String(process.env[key]).trim();
+  } else if (existing[key] && String(existing[key]).trim()) {
+    variables[key] = String(existing[key]).trim();
+  }
+}
 
 if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim()) {
   variables.OPENAI_API_KEY = process.env.OPENAI_API_KEY.trim();
@@ -189,7 +219,7 @@ if aws lambda get-function --region "$region" --function-name "$function_name" >
     --function-name "$function_name" \
     --role "$role_arn" \
     --timeout 900 \
-    --memory-size 2048 \
+    --memory-size "$memory_size" \
     --environment "file://${environment_json}" >/dev/null
 else
   aws lambda create-function \
@@ -199,7 +229,7 @@ else
     --package-type Image \
     --code "ImageUri=${image_uri}" \
     --timeout 900 \
-    --memory-size 2048 \
+    --memory-size "$memory_size" \
     --environment "file://${environment_json}" >/dev/null
 fi
 
@@ -212,4 +242,5 @@ Created/updated local v2 DAG Lambda image resources:
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV=local
   CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET=${artifact_bucket}
   CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX=${artifact_prefix}
+  CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE=${memory_size}
 EOF

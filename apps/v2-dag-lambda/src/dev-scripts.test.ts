@@ -29,6 +29,16 @@ test("dev image setup uses local names and refuses non-dev resource names", asyn
   assert.match(setupScript, /Refusing non-dev\/local Lambda function name/);
   assert.match(setupScript, /Refusing non-dev\/local SQS queue name/);
   assert.match(setupScript, /--package-type Image/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE/);
+  assert.match(setupScript, /between 512 and 10240 MB/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY/);
+  assert.match(setupScript, /s3:GetObject/);
+  assert.match(setupScript, /lambda:InvokeFunction/);
+  assert.match(setupScript, /--memory-size "\$memory_size"/);
   assert.match(setupScript, /OPENAI_API_KEY/);
   assert.match(setupScript, /file:\/\/\$\{environment_json\}/);
   assert.doesNotMatch(setupScript, /certscore-prod|production/);
@@ -50,6 +60,49 @@ test("handler keeps Lambda outputs artifact-only and non-production", async () =
   const handlerSource = await readRepoFile("apps/v2-dag-lambda/src/handler.ts");
 
   assert.match(handlerSource, /artifactOnly: true/);
+  assert.match(handlerSource, /expectedConsentScenarios/);
+  assert.match(handlerSource, /diagnosticExpectedScenarios/);
+  assert.match(handlerSource, /actionTypeForConsentScenario/);
   assert.match(handlerSource, /productionFindingIntegration: false/);
   assert.doesNotMatch(handlerSource, /insert.*finding|checklistRows|executiveSummary|score:/i);
+});
+
+test("local Lambda parity cohort runner bounds per-site hangs with explicit quality artifacts", async () => {
+  const cohortRunner = await readRepoFile("scripts/run-local-v2-dag-lambda-parity-cohort.ts");
+
+  assert.match(cohortRunner, /siteTimeoutMs: 180_000/);
+  assert.match(cohortRunner, /--site-timeout-ms/);
+  assert.match(cohortRunner, /cohort_site_command_timeout/);
+  assert.match(cohortRunner, /cohort_site_completed_after_wrapper_timeout/);
+  assert.match(cohortRunner, /readCompletedSiteSummary/);
+  assert.match(cohortRunner, /SIGKILL/);
+  assert.match(cohortRunner, /timed out after \$\{options\.timeoutMs\}ms/);
+  assert.match(cohortRunner, /cohort_site_timeout_before_scenario_quality/);
+  assert.match(cohortRunner, /difficult10Sites/);
+  assert.match(cohortRunner, /goldCohortSiteForUrl/);
+  assert.match(cohortRunner, /gold_metadata_hydrated_for_local_lambda_parity/);
+  assert.match(cohortRunner, /scenarioQuality: input\.siteMetadata\.expectedLanes/);
+  assert.match(cohortRunner, /exercisedByWorker/);
+  assert.match(cohortRunner, /goldExpectedButNotPlanned\.length === 0/);
+  assert.match(cohortRunner, /!scenario\.plannedByCoordinator && !scenario\.expectedByGold && !scenario\.exercisedByWorker/);
+  assert.match(cohortRunner, /input\.expectedByGold && !input\.plannedByCoordinator && !input\.exercisedByWorker/);
+  assert.match(cohortRunner, /no_relevant_action_scenarios/);
+  assert.match(cohortRunner, /topFailureBucketsForReport/);
+  assert.match(cohortRunner, /isVagueActionLimitation/);
+  assert.match(cohortRunner, /vague_action_limitation/);
+  assert.match(cohortRunner, /privacy_center_surface_observed_without_verifiable_opt_out_control/);
+  assert.match(cohortRunner, /privacy_control_click_without_verifiable_state_change/);
+  assert.match(cohortRunner, /privacy_control_observed_without_clickable_target/);
+  assert.match(cohortRunner, /privacy_control_target_closed_before_quality_artifact/);
+  assert.match(cohortRunner, /planner_text_control_not_reacquired/);
+  assert.match(cohortRunner, /privacy_control_not_observed/);
+  assert.match(cohortRunner, /preference_center_action_not_observed/);
+  assert.match(cohortRunner, /scenario_deadline_before_quality_artifact/);
+  assert.match(cohortRunner, /scenario_failed_before_quality_artifact/);
+  assert.match(cohortRunner, /banner_still_present_after_click\|action_not_completed\|attempted_not_succeeded/);
+  assert.match(cohortRunner, /fallbackPrivacyControlUrls/);
+  assert.match(cohortRunner, /expectedConsentScenarios/);
+  assert.match(cohortRunner, /\/privacy-choices/);
+  assert.match(cohortRunner, /\/do-not-sell/);
+  assert.match(cohortRunner, /productionFindingIntegration: false/);
 });

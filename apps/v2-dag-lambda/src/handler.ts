@@ -1,18 +1,26 @@
-import { PutObjectCommand, S3Client, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
+import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
+import { GetObjectCommand, PutObjectCommand, S3Client, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@aws-sdk/client-sqs";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { canonicalEvidenceBundleSchema, type CanonicalEvidenceBundle, type ConsentFlowScenario, type ScreenshotArtifact } from "@certscore/contracts";
 import { projectReviewResultToV2ReportDraft } from "@certscore/report-adapter";
 import { reviewEvidenceBundle } from "@certscore/review-engine";
-import { runScan } from "@certscore/scan-core";
+import {
+  buildConsentFlowComparisonsFromEvidence,
+  chromiumLaunchArgs,
+  isAwsLambdaRuntime,
+  lambdaChromiumSingleProcessEnabled,
+  runScan
+} from "@certscore/scan-core";
 
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "us-west-1";
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
 export const LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 export const LOCAL_V2_DAG_SCANNER_RUNTIME = "certscore-v2-dag-parallel-path";
+export const POST_CONSENT_FLOW_SCANNING_ENABLED = false;
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
@@ -22,16 +30,21 @@ export type LocalV2DagLambdaDispatchPayload = {
   functionName: string;
   hostname: string;
   localCallbackUrl: string | null;
+  orchestrationMode?: "single" | "sharded" | "worker";
   productionFindingIntegration: false;
-  profile: "full" | "tiny";
+  profile: "standard" | "tiny";
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
+  coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
+  debugOverrides?: LocalV2DagLambdaDebugOverrides;
   resultHandoff: "sqs";
   resultQueueUrl: string;
   scanId: string;
   scannerRuntime: typeof LOCAL_V2_DAG_SCANNER_RUNTIME;
+  strongEvidenceMode?: "webmd";
   targetEnvironment: "local" | "production";
   targetUrl: string;
   vpcMode: "none";
+  workerLane?: LocalV2DagLambdaWorkerLane;
 };
 
 export type LocalV2DagLambdaResultMessage = {
@@ -66,6 +79,7 @@ export type LocalV2DagLambdaResultMessage = {
     code?: string;
     message: string;
   };
+  phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
   scanId: string;
@@ -75,6 +89,68 @@ export type LocalV2DagLambdaResultMessage = {
 
 type LocalV2DagLambdaArtifactPointers = NonNullable<LocalV2DagLambdaResultMessage["artifactPointers"]>;
 type LocalV2DagLambdaArtifactMetadata = NonNullable<LocalV2DagLambdaResultMessage["artifactMetadata"]>;
+type LocalV2DagLambdaAuxiliaryArtifact = {
+  fileName: string;
+  sha256: string;
+  sizeBytes: number;
+  uri: string;
+};
+type LocalV2DagLambdaPhaseTiming = {
+  durationMs: number;
+  label: string;
+  status: "completed" | "failed" | "skipped";
+};
+type LocalV2DagLambdaWorkerLane = "coordinator" | "consent_flows" | "accept_gpc" | "accept_only" | "reject_manage";
+type LocalV2DagLambdaDebugOverrides = {
+  actionFinalSettleMs?: number;
+  actionSearchDeadlineMs?: number;
+  consentFlowDeadlineMs?: number;
+  expectedConsentScenarios?: ConsentFlowScenario[];
+  preActionObservationMs?: number;
+  oneTrustHiddenActionMode?: "off" | "diagnostic";
+  privacyControlUrls?: string[];
+  scenarioConcurrency?: number;
+  scenarioResourceMode?: "normal" | "lean" | "cmp_safe";
+  strongEvidenceMode?: "webmd";
+};
+type LocalV2DagLambdaCoordinatorPlanSummary = {
+  actionRecipe?: LocalV2DagLambdaConsentActionRecipe;
+  artifactVersion: "certscore.v2.lambda.coordinator-plan-summary.v1";
+  generatedAt: string;
+  plannedScenarios: ConsentFlowScenario[];
+  skippedScenarios: Array<{
+    reasonCodes: string[];
+    scenario: ConsentFlowScenario;
+    skipReason: string;
+  }>;
+};
+type LocalV2DagLambdaConsentActionRecipe = {
+  artifactVersion: "certscore.v2.consent-action-recipe.v1";
+  generatedAt: string;
+  normalizedUrl: string;
+  scenarios: Array<{
+    actionType?: string;
+    candidates: Array<{
+      actionType?: string;
+      confidence?: number;
+      frameKind?: string;
+      frameUrl?: string;
+      labelText: string;
+      selectorSummary?: string;
+      visible?: boolean;
+    }>;
+    scenario: string;
+    targetUrl?: string;
+  }>;
+};
+type LocalV2DagLambdaShardResult = {
+  artifactMetadata?: LocalV2DagLambdaArtifactMetadata;
+  artifactPointers?: LocalV2DagLambdaArtifactPointers;
+  phaseTimings?: LocalV2DagLambdaPhaseTiming[];
+  scanId: string;
+  status: "completed" | "failed";
+  workerLane: LocalV2DagLambdaWorkerLane;
+};
 
 type SqsSendClient = {
   send(command: SendMessageCommand): Promise<SendMessageCommandOutput>;
@@ -84,14 +160,27 @@ type S3PutClient = {
   send(command: PutObjectCommand): Promise<PutObjectCommandOutput>;
 };
 
+type S3GetClient = {
+  send(command: GetObjectCommand): Promise<GetObjectCommandOutput>;
+};
+
+type LambdaInvokeClient = {
+  send(command: InvokeCommand): Promise<InvokeCommandOutput>;
+};
+
 type ArtifactChainResult = {
   artifactMetadata?: LocalV2DagLambdaResultMessage["artifactMetadata"];
   artifactPointers?: LocalV2DagLambdaResultMessage["artifactPointers"];
+  phaseTimings?: LocalV2DagLambdaPhaseTiming[];
 };
 
+export type LocalV2DagLambdaRuntimeDiagnostics = ReturnType<typeof buildLocalV2DagLambdaRuntimeDiagnostics>;
+
 type HandlerOptions = {
+  lambdaClient?: LambdaInvokeClient;
   now?: () => Date;
   runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: { artifactRoot: string }) => Promise<ArtifactChainResult>;
+  s3GetClient?: S3GetClient;
   s3Client?: S3PutClient;
   sqsClient?: SqsSendClient;
   workspaceRoot?: string;
@@ -105,6 +194,86 @@ function compactString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function parseDebugOverrides(value: unknown): LocalV2DagLambdaDebugOverrides | undefined {
+  const record = asRecord(value);
+  const overrides: LocalV2DagLambdaDebugOverrides = {};
+  if (record.scenarioResourceMode === "normal" || record.scenarioResourceMode === "lean" || record.scenarioResourceMode === "cmp_safe") {
+    overrides.scenarioResourceMode = record.scenarioResourceMode;
+  }
+  if (record.strongEvidenceMode === "webmd") {
+    overrides.strongEvidenceMode = "webmd";
+  }
+  if (record.oneTrustHiddenActionMode === "off" || record.oneTrustHiddenActionMode === "diagnostic") {
+    overrides.oneTrustHiddenActionMode = record.oneTrustHiddenActionMode;
+  }
+  const privacyControlUrls = boundedDebugUrlList(record.privacyControlUrls, 3);
+  if (privacyControlUrls.length > 0) {
+    overrides.privacyControlUrls = privacyControlUrls;
+  }
+  const expectedConsentScenarios = parseConsentFlowScenarioList(record.expectedConsentScenarios)
+    .filter((scenario) =>
+      scenario === "accept_all_flow" ||
+      scenario === "reject_all_flow" ||
+      scenario === "privacy_opt_out_flow"
+    )
+    .slice(0, 4);
+  if (expectedConsentScenarios.length > 0) {
+    overrides.expectedConsentScenarios = [...new Set(expectedConsentScenarios)];
+  }
+  const actionFinalSettleMs = boundedDebugInteger(record.actionFinalSettleMs, 350, 10_000);
+  if (actionFinalSettleMs !== undefined) {
+    overrides.actionFinalSettleMs = actionFinalSettleMs;
+  }
+  const actionSearchDeadlineMs = boundedDebugInteger(record.actionSearchDeadlineMs, 1_000, 20_000);
+  if (actionSearchDeadlineMs !== undefined) {
+    overrides.actionSearchDeadlineMs = actionSearchDeadlineMs;
+  }
+  const consentFlowDeadlineMs = boundedDebugInteger(record.consentFlowDeadlineMs, 10_000, 90_000);
+  if (consentFlowDeadlineMs !== undefined) {
+    overrides.consentFlowDeadlineMs = consentFlowDeadlineMs;
+  }
+  const preActionObservationMs = boundedDebugInteger(record.preActionObservationMs, 0, 12_000);
+  if (preActionObservationMs !== undefined) {
+    overrides.preActionObservationMs = preActionObservationMs;
+  }
+  const scenarioConcurrency = boundedDebugInteger(record.scenarioConcurrency, 1, 4);
+  if (scenarioConcurrency !== undefined) {
+    overrides.scenarioConcurrency = scenarioConcurrency;
+  }
+  return Object.keys(overrides).length > 0 ? overrides : undefined;
+}
+
+function boundedDebugInteger(value: unknown, min: number, max: number): number | undefined {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number.parseInt(value, 10) : Number.NaN;
+  return Number.isFinite(parsed) ? Math.max(min, Math.min(max, Math.trunc(parsed))) : undefined;
+}
+
+function boundedDebugUrlList(value: unknown, max: number): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const urls: string[] = [];
+  for (const entry of value) {
+    const raw = compactString(entry);
+    if (!raw) {
+      continue;
+    }
+    try {
+      const url = new URL(raw);
+      if (url.protocol !== "https:" && url.protocol !== "http:") {
+        continue;
+      }
+      urls.push(url.toString());
+    } catch {
+      continue;
+    }
+    if (urls.length >= max) {
+      break;
+    }
+  }
+  return [...new Set(urls)];
+}
+
 function requireString(record: Record<string, unknown>, field: string) {
   const value = compactString(record[field]);
   if (!value) {
@@ -115,6 +284,8 @@ function requireString(record: Record<string, unknown>, field: string) {
 
 export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2DagLambdaDispatchPayload {
   const record = asRecord(typeof event === "string" ? JSON.parse(event) : event);
+  const coordinatorPlanSummary = parseCoordinatorPlanSummary(record.coordinatorPlanSummary);
+  const debugOverrides = parseDebugOverrides(record.debugOverrides);
   const payload: LocalV2DagLambdaDispatchPayload = {
     artifactOnly: true,
     awsRegion: LOCAL_V2_DAG_LAMBDA_AWS_REGION,
@@ -123,16 +294,23 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     functionName: requireString(record, "functionName"),
     hostname: requireString(record, "hostname"),
     localCallbackUrl: compactString(record.localCallbackUrl),
+    ...(record.orchestrationMode === "sharded" || record.orchestrationMode === "worker" || record.orchestrationMode === "single"
+      ? { orchestrationMode: record.orchestrationMode }
+      : {}),
     productionFindingIntegration: false,
-    profile: record.profile === "tiny" ? "tiny" : "full",
+    profile: record.profile === "tiny" ? "tiny" : "standard",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    ...(coordinatorPlanSummary ? { coordinatorPlanSummary } : {}),
+    ...(debugOverrides ? { debugOverrides } : {}),
     resultHandoff: "sqs",
     resultQueueUrl: requireString(record, "resultQueueUrl"),
     scanId: requireString(record, "scanId"),
     scannerRuntime: LOCAL_V2_DAG_SCANNER_RUNTIME,
+    ...(record.strongEvidenceMode === "webmd" || asRecord(record.debugOverrides).strongEvidenceMode === "webmd" ? { strongEvidenceMode: "webmd" as const } : {}),
     targetEnvironment: record.targetEnvironment === "production" ? "production" : "local",
     targetUrl: requireString(record, "targetUrl"),
-    vpcMode: "none"
+    vpcMode: "none",
+    ...(isWorkerLane(record.workerLane) ? { workerLane: record.workerLane } : {})
   };
 
   if (record.contractVersion !== LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION) {
@@ -156,8 +334,119 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   if (record.artifactOnly !== true || record.productionFindingIntegration !== false) {
     throw new Error("Local v2 DAG Lambda dispatch must remain artifact-only and non-production.");
   }
+  if (payload.orchestrationMode === "worker" && !payload.workerLane) {
+    throw new Error("Local v2 DAG Lambda worker dispatch requires a workerLane.");
+  }
 
   return payload;
+}
+
+function isWorkerLane(value: unknown): value is LocalV2DagLambdaWorkerLane {
+  return value === "coordinator" || value === "consent_flows" || value === "accept_gpc" || value === "accept_only" || value === "reject_manage";
+}
+
+function parseCoordinatorPlanSummary(value: unknown): LocalV2DagLambdaCoordinatorPlanSummary | undefined {
+  const record = asRecord(value);
+  if (record.artifactVersion !== "certscore.v2.lambda.coordinator-plan-summary.v1") {
+    return undefined;
+  }
+  const actionRecipe = parseConsentActionRecipe(record.actionRecipe);
+  return {
+    ...(actionRecipe ? { actionRecipe } : {}),
+    artifactVersion: "certscore.v2.lambda.coordinator-plan-summary.v1",
+    generatedAt: compactString(record.generatedAt) ?? new Date(0).toISOString(),
+    plannedScenarios: parseConsentFlowScenarioList(record.plannedScenarios),
+    skippedScenarios: Array.isArray(record.skippedScenarios)
+      ? record.skippedScenarios.flatMap((entry) => {
+        const skipped = asRecord(entry);
+        const scenario = parseConsentFlowScenario(skipped.scenario);
+        const skipReason = compactString(skipped.skipReason);
+        if (!scenario || !skipReason) {
+          return [];
+        }
+        return [{
+          reasonCodes: Array.isArray(skipped.reasonCodes)
+            ? skipped.reasonCodes.flatMap((reason) => compactString(reason) ?? []).slice(0, 12)
+            : [],
+          scenario,
+          skipReason: skipReason.slice(0, 80)
+        }];
+      }).slice(0, 12)
+      : []
+  };
+}
+
+function parseConsentActionRecipe(value: unknown): LocalV2DagLambdaConsentActionRecipe | undefined {
+  const record = asRecord(value);
+  if (record.artifactVersion !== "certscore.v2.consent-action-recipe.v1") {
+    return undefined;
+  }
+  const normalizedUrl = compactString(record.normalizedUrl);
+  if (!normalizedUrl) {
+    return undefined;
+  }
+  const scenarios = Array.isArray(record.scenarios)
+    ? record.scenarios.flatMap((entry) => {
+      const scenario = asRecord(entry);
+      const scenarioName = compactString(scenario.scenario);
+      if (!scenarioName) {
+        return [];
+      }
+      return [{
+        ...(compactString(scenario.actionType) ? { actionType: compactString(scenario.actionType) ?? undefined } : {}),
+        candidates: parseConsentActionRecipeCandidates(scenario.candidates),
+        scenario: scenarioName.slice(0, 80),
+        ...(compactString(scenario.targetUrl) ? { targetUrl: compactString(scenario.targetUrl) ?? undefined } : {})
+      }];
+    }).slice(0, 8)
+    : [];
+  return {
+    artifactVersion: "certscore.v2.consent-action-recipe.v1",
+    generatedAt: compactString(record.generatedAt) ?? new Date(0).toISOString(),
+    normalizedUrl,
+    scenarios
+  };
+}
+
+function parseConsentActionRecipeCandidates(value: unknown): LocalV2DagLambdaConsentActionRecipe["scenarios"][number]["candidates"] {
+  return Array.isArray(value)
+    ? value.flatMap((entry) => {
+      const candidate = asRecord(entry);
+      const labelText = compactString(candidate.labelText);
+      if (!labelText) {
+        return [];
+      }
+      return [{
+        ...(compactString(candidate.actionType) ? { actionType: compactString(candidate.actionType) ?? undefined } : {}),
+        ...(typeof candidate.confidence === "number" ? { confidence: Math.max(0, Math.min(1, candidate.confidence)) } : {}),
+        ...(compactString(candidate.frameKind) ? { frameKind: compactString(candidate.frameKind) ?? undefined } : {}),
+        ...(compactString(candidate.frameUrl) ? { frameUrl: compactString(candidate.frameUrl) ?? undefined } : {}),
+        labelText: labelText.slice(0, 160),
+        ...(compactString(candidate.selectorSummary) ? { selectorSummary: compactString(candidate.selectorSummary) ?? undefined } : {}),
+        ...(typeof candidate.visible === "boolean" ? { visible: candidate.visible } : {})
+      }];
+    }).slice(0, 24)
+    : [];
+}
+
+function parseConsentFlowScenarioList(value: unknown): ConsentFlowScenario[] {
+  return Array.isArray(value)
+    ? value.flatMap((entry) => parseConsentFlowScenario(entry) ?? [])
+    : [];
+}
+
+function parseConsentFlowScenario(value: unknown): ConsentFlowScenario | undefined {
+  return typeof value === "string" && [
+    "baseline_pre_consent",
+    "gpc_enabled",
+    "reject_all_flow",
+    "accept_all_flow",
+    "privacy_opt_out_flow",
+    "form_collection_probe",
+    "accessibility_probe"
+  ].includes(value)
+    ? value as ConsentFlowScenario
+    : undefined;
 }
 
 export function buildLocalV2DagLambdaArtifactRoot(input: {
@@ -171,35 +460,115 @@ export function buildLocalV2DagLambdaArtifactRoot(input: {
 
 export async function runLocalV2DagLambdaArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
-  options: { artifactRoot: string; s3Client?: S3PutClient; workspaceRoot?: string }
+  options: {
+    allowedConsentFlowScenarios?: ConsentFlowScenario[];
+    artifactRoot: string;
+    externalBaselinePlanning?: "enrich" | "reuse_only";
+    forceAllowedScenarioPlanning?: boolean;
+    phaseLabelPrefix?: string;
+    preConsentScreenshotMode?: "always" | "selective" | "never";
+    s3Client?: S3PutClient;
+    workspaceRoot?: string;
+  }
 ): Promise<{
   artifactMetadata: LocalV2DagLambdaArtifactMetadata;
   artifactPointers: LocalV2DagLambdaArtifactPointers;
+  phaseTimings: LocalV2DagLambdaPhaseTiming[];
+  shards?: LocalV2DagLambdaShardResult[];
 }> {
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
   const artifactRoot = path.resolve(workspaceRoot, options.artifactRoot);
+  const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
+  const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
 
-  const bundle = await runScan({
-    consentFlowDeadlineMs: 30_000,
-    outDir: artifactRoot,
-    policyPlanningDeadlineMs: 1_500,
-    profile: payload.profile,
-    scenarioConcurrency: 2,
-    scenarioPlanningMode: "planned_parallel",
-    scenarioResourceMode: "lean",
-    url: payload.targetUrl
+  const bundle = await runLocalV2DagLambdaScanBundle(payload, {
+    allowedConsentFlowScenarios: options.allowedConsentFlowScenarios,
+    artifactRoot,
+    externalBaselinePlanning: options.externalBaselinePlanning,
+    forceAllowedScenarioPlanning: options.forceAllowedScenarioPlanning,
+    phaseLabelPrefix: options.phaseLabelPrefix,
+    phaseTimings,
+    preConsentScreenshotMode: options.preConsentScreenshotMode ?? scanTuning.preConsentScreenshotMode,
+    scanTuning
   });
 
-  const review = await reviewEvidenceBundle(bundle);
-  const reviewPath = path.join(artifactRoot, "ReviewResult.json");
-  await writeJson(reviewPath, review);
+  return writeAndUploadLocalV2DagLambdaArtifacts({
+    artifactRoot,
+    bundle,
+    payload,
+    phaseTimings,
+    s3Client: options.s3Client,
+    scanTuning
+  });
+}
 
-  const projection = projectReviewResultToV2ReportDraft({ bundle, review });
-  const projectionPath = path.join(artifactRoot, "V2ReportProjectionDraft.json");
-  await writeJson(projectionPath, projection);
+async function runLocalV2DagLambdaScanBundle(
+  payload: LocalV2DagLambdaDispatchPayload,
+  options: {
+    allowedConsentFlowScenarios?: ConsentFlowScenario[];
+    artifactRoot: string;
+    externalBaselinePlanning?: "enrich" | "reuse_only";
+    forceAllowedScenarioPlanning?: boolean;
+    phaseLabelPrefix?: string;
+    phaseTimings: LocalV2DagLambdaPhaseTiming[];
+    preConsentScreenshotMode?: "always" | "selective" | "never";
+    scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
+  }
+) {
+  return timeLambdaPhase(options.phaseTimings, phaseLabel(options.phaseLabelPrefix, "scan"), () => runScan({
+    allowedConsentFlowScenarios: options.allowedConsentFlowScenarios,
+    browserReuseMode: "single",
+    consentFlowActionFinalSettleMs: effectiveActionFinalSettleMs(payload, options.scanTuning),
+    consentFlowActionSearchDeadlineMs: effectiveActionSearchDeadlineMs(payload),
+    consentFlowDeadlineMs: effectiveConsentFlowDeadlineMs(payload, options.scanTuning),
+    consentFlowExternalBaselinePlanning: options.externalBaselinePlanning ?? "enrich",
+    consentFlowForceAllowedScenarioPlanning: options.forceAllowedScenarioPlanning,
+    consentFlowOneTrustHiddenActionMode: effectiveOneTrustHiddenActionMode(payload),
+    consentFlowPreActionObservationMs: effectivePreActionObservationMs(payload),
+    consentActionRecipe: payload.coordinatorPlanSummary?.actionRecipe,
+    consentFlowScreenshotMode: options.scanTuning.consentFlowScreenshotMode,
+    outDir: options.artifactRoot,
+    policyOutputGraceMs: 1_000,
+    policyPlanningDeadlineMs: 1_500,
+    postConsentFlowsEnabled: false,
+    preConsentScreenshotMode: options.preConsentScreenshotMode,
+    preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
+    privacyControlUrls: payload.debugOverrides?.privacyControlUrls,
+    profile: payload.profile,
+    scenarioConcurrency: effectiveScenarioConcurrency(payload, options.scanTuning),
+    scenarioPlanningMode: "planned_parallel",
+    scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
+    url: payload.targetUrl
+  }));
+}
 
+async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
+  artifactRoot: string;
+  bundle: CanonicalEvidenceBundle;
+  payload: LocalV2DagLambdaDispatchPayload;
+  phaseTimings: LocalV2DagLambdaPhaseTiming[];
+  s3Client?: S3PutClient;
+  scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
+}): Promise<{
+  artifactMetadata: LocalV2DagLambdaArtifactMetadata;
+  artifactPointers: LocalV2DagLambdaArtifactPointers;
+  phaseTimings: LocalV2DagLambdaPhaseTiming[];
+}> {
+  const { artifactRoot, bundle, payload, phaseTimings, scanTuning } = input;
   const scanArtifactPath = path.join(artifactRoot, "CanonicalEvidenceBundle.json");
+  await timeLambdaPhase(phaseTimings, "scan_artifact_write", () => writeJson(scanArtifactPath, bundle));
+
+  const review = await timeLambdaPhase(phaseTimings, "review", () => reviewEvidenceBundle(bundle));
+  const reviewPath = path.join(artifactRoot, "ReviewResult.json");
+  await timeLambdaPhase(phaseTimings, "review_write", () => writeJson(reviewPath, review));
+
+  const projection = await timeLambdaPhase(phaseTimings, "projection", async () =>
+    projectReviewResultToV2ReportDraft({ bundle, review })
+  );
+  const projectionPath = path.join(artifactRoot, "V2ReportProjectionDraft.json");
+  await timeLambdaPhase(phaseTimings, "projection_write", () => writeJson(projectionPath, projection));
+
   const manifestPath = path.join(artifactRoot, "LocalV2DagLambdaManifest.json");
   const pointers = artifactPointersFromS3Keys({
     bucket: requireArtifactBucket(),
@@ -209,28 +578,673 @@ export async function runLocalV2DagLambdaArtifactChain(
     reviewFileName: "ReviewResult.json",
     scanArtifactFileName: "CanonicalEvidenceBundle.json"
   });
-  await writeManifest({
+  const auxiliaryArtifacts = await timeLambdaPhase(phaseTimings, "auxiliary_upload", () => uploadAuxiliaryArtifactFiles({
     artifactRoot,
+    payload,
+    s3Client: input.s3Client
+  }));
+  await timeLambdaPhase(phaseTimings, "manifest_write", () => writeManifest({
+    artifactRoot,
+    auxiliaryArtifacts,
     bundle,
     payload,
-    pointers
-  });
-  const artifactMetadata = await uploadArtifactFiles({
+    phaseTimings,
+    pointers,
+    scanTuning
+  }));
+  const artifactMetadata = await timeLambdaPhase(phaseTimings, "core_artifact_upload", () => uploadArtifactFiles({
     manifestPath,
     pointers,
     projectionPath,
     reviewPath,
     scanArtifactPath,
-    s3Client: options.s3Client
-  });
+    s3Client: input.s3Client
+  }));
   return {
     artifactMetadata,
-    artifactPointers: pointers
+    artifactPointers: pointers,
+    phaseTimings
   };
+}
+
+function phaseLabel(prefix: string | undefined, label: string) {
+  return prefix ? `${prefix}_${label}` : label;
 }
 
 function writeJson(filePath: string, value: unknown) {
   return writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+export async function runLocalV2DagLambdaShardedArtifactChain(
+  payload: LocalV2DagLambdaDispatchPayload,
+  options: {
+    artifactRoot: string;
+    lambdaClient?: LambdaInvokeClient;
+    s3Client?: S3PutClient;
+    s3GetClient?: S3GetClient;
+    workspaceRoot?: string;
+  }
+): Promise<{
+  artifactMetadata: LocalV2DagLambdaArtifactMetadata;
+  artifactPointers: LocalV2DagLambdaArtifactPointers;
+  phaseTimings: LocalV2DagLambdaPhaseTiming[];
+}> {
+  const workspaceRoot = options.workspaceRoot ?? process.cwd();
+  const artifactRoot = path.resolve(workspaceRoot, options.artifactRoot);
+  const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
+  const scanTuning = buildLocalV2DagLambdaScanTuning();
+  await mkdir(artifactRoot, { recursive: true });
+
+  const strongWebMdMode = isStrongWebMdEvidenceMode(payload, scanTuning);
+  const coordinatorBundle = await runLocalV2DagLambdaScanBundle(payload, {
+    allowedConsentFlowScenarios: [],
+    artifactRoot,
+    phaseLabelPrefix: "coordinator",
+    phaseTimings,
+    preConsentScreenshotMode: scanTuning.preConsentScreenshotMode,
+    scanTuning
+  });
+  if (!POST_CONSENT_FLOW_SCANNING_ENABLED) {
+    phaseTimings.push({
+      durationMs: 0,
+      label: "worker_invocations",
+      status: "skipped"
+    });
+    await writeJson(path.join(artifactRoot, "LocalV2DagLambdaShardSummary.json"), {
+      artifactOnly: true,
+      generatedAt: new Date().toISOString(),
+      productionFindingIntegration: false,
+      scanId: payload.scanId,
+      skippedReason: "post_consent_flow_scanning_deferred_from_production_scanner",
+      workerResults: []
+    });
+
+    return writeAndUploadLocalV2DagLambdaArtifacts({
+      artifactRoot,
+      bundle: coordinatorBundle,
+      payload,
+      phaseTimings,
+      s3Client: options.s3Client,
+      scanTuning
+    });
+  }
+  const coordinatorPlanSummary = await readCoordinatorPlanSummary(
+    artifactRoot,
+    payload.debugOverrides?.expectedConsentScenarios
+  );
+  if (coordinatorPlanSummary) {
+    await writeJson(path.join(artifactRoot, "LocalV2DagLambdaCoordinatorPlanSummary.json"), coordinatorPlanSummary);
+  }
+  const workerResults = await timeLambdaPhase(phaseTimings, "worker_invocations", () =>
+    invokeLocalV2DagLambdaWorkers({
+      coordinatorPlanSummary,
+      lambdaClient: options.lambdaClient,
+      parentPayload: strongWebMdMode ? { ...payload, strongEvidenceMode: "webmd" } : payload,
+      parentScanId: payload.scanId,
+      workerLanes: strongWebMdMode ? ["accept_only", "reject_manage"] : ["accept_gpc", "reject_manage"]
+    })
+  );
+  const workerBundles = await timeLambdaPhase(phaseTimings, "worker_bundle_download", () =>
+    Promise.all(workerResults.map((result) =>
+      readWorkerBundleFromArtifactResult(result, { s3GetClient: options.s3GetClient })
+    ))
+  );
+  await timeLambdaPhase(phaseTimings, "worker_auxiliary_mirror", () =>
+    mirrorWorkerArtifactsIntoFinalArtifactRoot({
+      artifactRoot,
+      s3GetClient: options.s3GetClient,
+      workerResults
+    })
+  );
+  const bundle = await timeLambdaPhase(phaseTimings, "shard_bundle_merge", async () =>
+    mergeLocalV2DagLambdaShardBundles({
+      base: coordinatorBundle,
+      scanId: payload.scanId,
+      workerBundles
+    })
+  );
+  await writeJson(path.join(artifactRoot, "LocalV2DagLambdaShardSummary.json"), {
+    artifactOnly: true,
+    generatedAt: new Date().toISOString(),
+    productionFindingIntegration: false,
+    scanId: payload.scanId,
+    coordinatorPlanSummary,
+    workerResults: workerResults.map((result) => ({
+      artifactPointers: result.artifactPointers,
+      phaseTimings: result.phaseTimings ?? [],
+      scanId: result.scanId,
+      status: result.status,
+      workerLane: result.workerLane
+    }))
+  });
+
+  return writeAndUploadLocalV2DagLambdaArtifacts({
+    artifactRoot,
+    bundle,
+    payload: coordinatorPlanSummary ? { ...payload, coordinatorPlanSummary } : payload,
+    phaseTimings,
+    s3Client: options.s3Client,
+    scanTuning
+  });
+}
+
+async function timeLambdaPhase<T>(
+  phaseTimings: LocalV2DagLambdaPhaseTiming[],
+  label: string,
+  fn: () => Promise<T>
+) {
+  const startedAt = Date.now();
+  try {
+    const value = await fn();
+    phaseTimings.push({
+      durationMs: Date.now() - startedAt,
+      label,
+      status: "completed"
+    });
+    return value;
+  } catch (error) {
+    phaseTimings.push({
+      durationMs: Date.now() - startedAt,
+      label,
+      status: "failed"
+    });
+    throw error;
+  }
+}
+
+async function invokeLocalV2DagLambdaWorkers(input: {
+  coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
+  lambdaClient?: LambdaInvokeClient;
+  parentPayload: LocalV2DagLambdaDispatchPayload;
+  parentScanId: string;
+  workerLanes: LocalV2DagLambdaWorkerLane[];
+}): Promise<LocalV2DagLambdaShardResult[]> {
+  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  return Promise.all(input.workerLanes.map(async (workerLane) => {
+    const workerPayload: LocalV2DagLambdaDispatchPayload = {
+      ...input.parentPayload,
+      callbackCorrelationId: input.parentScanId,
+      ...(input.coordinatorPlanSummary ? { coordinatorPlanSummary: input.coordinatorPlanSummary } : {}),
+      orchestrationMode: "worker",
+      scanId: `${input.parentScanId}_${workerLane}`,
+      workerLane
+    };
+    const response = await lambdaClient.send(new InvokeCommand({
+      FunctionName: input.parentPayload.functionName,
+      InvocationType: "RequestResponse",
+      Payload: Buffer.from(JSON.stringify(workerPayload))
+    }));
+    if ((response.StatusCode ?? 0) < 200 || (response.StatusCode ?? 0) >= 300) {
+      throw new Error(`Local v2 DAG Lambda worker ${workerLane} was not accepted: status ${response.StatusCode ?? 0}.`);
+    }
+    if (response.FunctionError) {
+      throw new Error(`Local v2 DAG Lambda worker ${workerLane} failed: ${response.FunctionError}.`);
+    }
+    return parseLocalV2DagLambdaShardResult(response.Payload, workerLane);
+  }));
+}
+
+function parseLocalV2DagLambdaShardResult(
+  payload: Uint8Array | undefined,
+  expectedWorkerLane: LocalV2DagLambdaWorkerLane
+): LocalV2DagLambdaShardResult {
+  if (!payload) {
+    throw new Error(`Local v2 DAG Lambda worker ${expectedWorkerLane} returned no payload.`);
+  }
+  const parsed = asRecord(JSON.parse(Buffer.from(payload).toString("utf8")));
+  const workerLane = parsed.workerLane;
+  if (workerLane !== expectedWorkerLane || !isWorkerLane(workerLane)) {
+    throw new Error(`Local v2 DAG Lambda worker response lane mismatch for ${expectedWorkerLane}.`);
+  }
+  if (parsed.status !== "completed") {
+    throw new Error(`Local v2 DAG Lambda worker ${expectedWorkerLane} returned ${String(parsed.status)}.`);
+  }
+  const artifactPointers = parseArtifactPointersRecord(parsed.artifactPointers);
+  if (!artifactPointers.scanArtifactUri) {
+    throw new Error(`Local v2 DAG Lambda worker ${expectedWorkerLane} did not return a scan artifact URI.`);
+  }
+  return {
+    artifactMetadata: parseArtifactMetadataRecord(parsed.artifactMetadata),
+    artifactPointers,
+    phaseTimings: parsePhaseTimings(parsed.phaseTimings),
+    scanId: requireString(parsed, "scanId"),
+    status: "completed",
+    workerLane
+  };
+}
+
+function parseArtifactPointersRecord(value: unknown): LocalV2DagLambdaArtifactPointers {
+  const record = asRecord(value);
+  return {
+    manifestUri: compactString(record.manifestUri) ?? undefined,
+    reportAdapterArtifactUri: compactString(record.reportAdapterArtifactUri) ?? undefined,
+    reviewArtifactUri: compactString(record.reviewArtifactUri) ?? undefined,
+    scanArtifactUri: compactString(record.scanArtifactUri) ?? undefined
+  };
+}
+
+function parseArtifactMetadataRecord(value: unknown): LocalV2DagLambdaArtifactMetadata {
+  const record = asRecord(value);
+  return {
+    manifestUri: parseArtifactMetadataEntry(record.manifestUri),
+    reportAdapterArtifactUri: parseArtifactMetadataEntry(record.reportAdapterArtifactUri),
+    reviewArtifactUri: parseArtifactMetadataEntry(record.reviewArtifactUri),
+    scanArtifactUri: parseArtifactMetadataEntry(record.scanArtifactUri)
+  };
+}
+
+function parseArtifactMetadataEntry(value: unknown) {
+  const record = asRecord(value);
+  const sha256 = compactString(record.sha256);
+  const sizeBytes = typeof record.sizeBytes === "number" ? record.sizeBytes : null;
+  return sha256 && sizeBytes !== null ? { sha256, sizeBytes } : undefined;
+}
+
+function parsePhaseTimings(value: unknown): LocalV2DagLambdaPhaseTiming[] {
+  return Array.isArray(value)
+    ? value.flatMap((entry) => {
+      const record = asRecord(entry);
+      const label = compactString(record.label);
+      const durationMs = typeof record.durationMs === "number" ? record.durationMs : null;
+      const status =
+        record.status === "failed" || record.status === "completed" || record.status === "skipped"
+          ? record.status
+          : null;
+      return label && durationMs !== null && status ? [{ label, durationMs, status }] : [];
+    })
+    : [];
+}
+
+async function readWorkerBundleFromArtifactResult(
+  result: LocalV2DagLambdaShardResult,
+  options: { s3GetClient?: S3GetClient }
+) {
+  const uri = result.artifactPointers?.scanArtifactUri;
+  if (!uri) {
+    throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} did not include a scan artifact pointer.`);
+  }
+  const { bucket, key } = parseS3Uri(uri);
+  const s3Client = options.s3GetClient ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const body = await streamToBuffer(response.Body);
+  const expected = result.artifactMetadata?.scanArtifactUri;
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  if (expected?.sha256 && expected.sha256 !== sha256) {
+    throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} scan artifact checksum mismatch.`);
+  }
+  return canonicalEvidenceBundleSchema.parse(JSON.parse(body.toString("utf8")));
+}
+
+export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
+  artifactRoot: string;
+  s3GetClient?: S3GetClient;
+  workerResults: LocalV2DagLambdaShardResult[];
+}) {
+  const s3Client = input.s3GetClient ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  await Promise.all(input.workerResults.map(async (result) => {
+    const manifestUri = result.artifactPointers?.manifestUri;
+    if (!manifestUri) {
+      return;
+    }
+    const manifestBody = await readS3ObjectBody(manifestUri, s3Client);
+    const manifestFileName = safeAuxiliaryFileName(`worker-${result.workerLane}-LocalV2DagLambdaManifest.json`);
+    await writeFile(path.join(input.artifactRoot, manifestFileName), manifestBody);
+    const manifest = asRecord(JSON.parse(manifestBody.toString("utf8")));
+    const auxiliaryArtifacts = Array.isArray(manifest.auxiliaryArtifacts) ? manifest.auxiliaryArtifacts : [];
+    await Promise.all(auxiliaryArtifacts.flatMap((value) => {
+      const artifact = asRecord(value);
+      const fileName = compactString(artifact.fileName);
+      const uri = compactString(artifact.uri);
+      if (!fileName || !uri || !isSupportedAuxiliaryFileName(fileName)) {
+        return [];
+      }
+      return [async () => {
+        const body = await readS3ObjectBody(uri, s3Client);
+        const expectedSha256 = compactString(artifact.sha256);
+        const sha256 = createHash("sha256").update(body).digest("hex");
+        if (expectedSha256 && expectedSha256 !== sha256) {
+          throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} auxiliary artifact checksum mismatch for ${fileName}.`);
+        }
+        const expectedSizeBytes = typeof artifact.sizeBytes === "number" ? artifact.sizeBytes : null;
+        if (expectedSizeBytes !== null && expectedSizeBytes !== body.byteLength) {
+          throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} auxiliary artifact size mismatch for ${fileName}.`);
+        }
+        const workerFileName = safeAuxiliaryFileName(`worker-${result.workerLane}-${fileName}`);
+        await writeFile(path.join(input.artifactRoot, workerFileName), body);
+      }];
+    }).map((mirror) => mirror()));
+  }));
+}
+
+async function readS3ObjectBody(uri: string, s3Client: S3GetClient) {
+  const { bucket, key } = parseS3Uri(uri);
+  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  return streamToBuffer(response.Body);
+}
+
+async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {
+  if (!body) {
+    throw new Error("Local v2 DAG Lambda shard artifact object did not include a body.");
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+  if (typeof body === "object" && "transformToByteArray" in body && typeof body.transformToByteArray === "function") {
+    return Buffer.from(await body.transformToByteArray());
+  }
+  if (typeof body === "object" && Symbol.asyncIterator in body) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body as AsyncIterable<Uint8Array | string>) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+  throw new Error("Unsupported local v2 DAG Lambda shard artifact response body.");
+}
+
+function safeAuxiliaryFileName(fileName: string) {
+  if (!isSupportedAuxiliaryFileName(fileName)) {
+    throw new Error(`Local v2 DAG Lambda auxiliary artifact file name is unsupported: ${fileName.slice(0, 80)}.`);
+  }
+  return fileName;
+}
+
+function isSupportedAuxiliaryFileName(fileName: string) {
+  return path.basename(fileName) === fileName && (
+    fileName.endsWith(".json") ||
+    fileName.endsWith(".png")
+  );
+}
+
+export function mergeLocalV2DagLambdaShardBundles(input: {
+  base: CanonicalEvidenceBundle;
+  scanId: string;
+  workerBundles: CanonicalEvidenceBundle[];
+}): CanonicalEvidenceBundle {
+  const bundles = [input.base, ...input.workerBundles];
+  const merged = {
+    ...input.base,
+    scanId: input.scanId,
+    completedAt: new Date().toISOString(),
+    modulesRun: dedupeByJson(bundles.flatMap((bundle) => bundle.modulesRun)),
+    runtimeTimeline: dedupeByEventId(bundles.flatMap((bundle) => bundle.runtimeTimeline)),
+    networkEvents: dedupeByEventId(bundles.flatMap((bundle) => bundle.networkEvents)),
+    networkResponseEvents: dedupeByEventId(bundles.flatMap((bundle) => bundle.networkResponseEvents)),
+    cookieEvents: dedupeByEventId(bundles.flatMap((bundle) => bundle.cookieEvents)),
+    cookieSnapshots: dedupeByArtifactId(bundles.flatMap((bundle) => bundle.cookieSnapshots)),
+    storageSnapshots: dedupeByArtifactId(bundles.flatMap((bundle) => bundle.storageSnapshots)),
+    scriptEvents: dedupeByEventId(bundles.flatMap((bundle) => bundle.scriptEvents)),
+    iframeEvents: dedupeByEventId(bundles.flatMap((bundle) => bundle.iframeEvents)),
+    consentUiObservations: dedupeByField(bundles.flatMap((bundle) => bundle.consentUiObservations), "observationId"),
+    consentInteractionEvents: dedupeByField(bundles.flatMap((bundle) => bundle.consentInteractionEvents), "eventId"),
+    consentFlowObservations: dedupeByField(bundles.flatMap((bundle) => bundle.consentFlowObservations), "observationId"),
+    consentActionCandidates: dedupeByField(bundles.flatMap((bundle) => bundle.consentActionCandidates), "candidateId"),
+    consentActionAttempts: dedupeByField(bundles.flatMap((bundle) => bundle.consentActionAttempts), "attemptId"),
+    consentFlowComparisons: [] as CanonicalEvidenceBundle["consentFlowComparisons"],
+    policySurfaceObservations: dedupeByField(bundles.flatMap((bundle) => bundle.policySurfaceObservations), "observationId"),
+    cmpRuntimeObservations: dedupeByField(bundles.flatMap((bundle) => bundle.cmpRuntimeObservations), "observationId"),
+    screenshots: selectDiagnosticScreenshot(bundles.flatMap((bundle) => bundle.screenshots)),
+    domSnapshots: dedupeByArtifactId(bundles.flatMap((bundle) => bundle.domSnapshots)),
+    normalizedVendorObservations: dedupeByField(bundles.flatMap((bundle) => bundle.normalizedVendorObservations), "vendorObservationId"),
+    observedJourneys: dedupeByField(bundles.flatMap((bundle) => bundle.observedJourneys), "journeyId"),
+    artifactRefs: dedupeByField(bundles.flatMap((bundle) => bundle.artifactRefs), "artifactId"),
+    derivedRuntimeSignals: mergeDerivedRuntimeSignals(bundles),
+    runtimeCoverage: mergeRuntimeCoverage(bundles)
+  };
+  merged.consentFlowComparisons = mergeShardConsentFlowComparisons(bundles, merged);
+  return canonicalEvidenceBundleSchema.parse(merged);
+}
+
+function selectDiagnosticScreenshot(screenshots: ScreenshotArtifact[]): ScreenshotArtifact[] {
+  const deduped = dedupeByArtifactId(screenshots);
+  const baseline = deduped.find((screenshot) =>
+    screenshot.artifactId === "screenshot_pre_consent" ||
+    screenshot.artifactId === "screenshot_baseline_pre_consent_before" ||
+    /pre[_-]?consent|baseline/i.test(screenshot.artifactId)
+  );
+  const selected = baseline ?? deduped[0];
+  return selected ? [selected] : [];
+}
+
+function mergeShardConsentFlowComparisons(
+  bundles: CanonicalEvidenceBundle[],
+  merged: CanonicalEvidenceBundle,
+): CanonicalEvidenceBundle["consentFlowComparisons"] {
+  return dedupeByField([
+    ...bundles.flatMap((bundle) => bundle.consentFlowComparisons),
+    ...buildConsentFlowComparisonsFromEvidence({
+      consentActionAttempts: merged.consentActionAttempts,
+      consentFlowObservations: merged.consentFlowObservations,
+      cookieEvents: merged.cookieEvents,
+      networkEvents: merged.networkEvents,
+      normalizedVendorObservations: merged.normalizedVendorObservations
+    })
+  ], "comparisonId");
+}
+
+function dedupeByEventId<T extends { eventId?: string }>(items: T[]): T[] {
+  return dedupeByField(items, "eventId");
+}
+
+function dedupeByArtifactId<T extends { artifactId?: string }>(items: T[]): T[] {
+  return dedupeByField(items, "artifactId");
+}
+
+function dedupeByField<T extends Record<string, unknown>>(items: T[], field: string): T[] {
+  const seen = new Set<string>();
+  const values: T[] = [];
+  for (const item of items) {
+    const rawKey = item[field];
+    const key = typeof rawKey === "string" && rawKey.length > 0 ? rawKey : JSON.stringify(item);
+    if (!seen.has(key)) {
+      seen.add(key);
+      values.push(item);
+    }
+  }
+  return values;
+}
+
+function dedupeByJson<T>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = JSON.stringify(item);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function mergeDerivedRuntimeSignals(bundles: CanonicalEvidenceBundle[]): CanonicalEvidenceBundle["derivedRuntimeSignals"] {
+  const [base] = bundles;
+  if (!base) {
+    throw new Error("Cannot merge local v2 DAG Lambda shards without a base bundle.");
+  }
+  const signal = base.derivedRuntimeSignals;
+  return {
+    ...signal,
+    consentBannerLikelyPresent: bundles.some((bundle) => bundle.derivedRuntimeSignals.consentBannerLikelyPresent === true),
+    preConsentTrackingObserved: bundles.some((bundle) => bundle.derivedRuntimeSignals.preConsentTrackingObserved),
+    sessionReplayOrBehavioralAnalyticsObserved: bundles.some((bundle) => bundle.derivedRuntimeSignals.sessionReplayOrBehavioralAnalyticsObserved),
+    thirdPartyCookiesPreConsentObserved: bundles.some((bundle) => bundle.derivedRuntimeSignals.thirdPartyCookiesPreConsentObserved),
+    thirdPartyVendorsObserved: bundles.some((bundle) => bundle.derivedRuntimeSignals.thirdPartyVendorsObserved)
+  };
+}
+
+function mergeRuntimeCoverage(bundles: CanonicalEvidenceBundle[]): CanonicalEvidenceBundle["runtimeCoverage"] {
+  const coverages = bundles.map((bundle) => bundle.runtimeCoverage).filter((coverage): coverage is NonNullable<CanonicalEvidenceBundle["runtimeCoverage"]> => Boolean(coverage));
+  if (coverages.length === 0) {
+    return undefined;
+  }
+  const coverageStatus = coverages.some((coverage) => coverage.coverageStatus === "usable")
+    ? "usable"
+    : coverages.some((coverage) => coverage.coverageStatus === "limited_partial")
+      ? "limited_partial"
+      : coverages[0]?.coverageStatus ?? "not_applicable";
+  return {
+    coverageStatus,
+    fallbackModesUsed: uniqueStrings(coverages.flatMap((coverage) => coverage.fallbackModesUsed)),
+    limitationKeys: uniqueStrings(coverages.flatMap((coverage) => coverage.limitationKeys)),
+    notes: uniqueStrings(coverages.flatMap((coverage) => coverage.notes)),
+    observationCounts: coverages.reduce((counts, coverage) => ({
+      cookieEvents: counts.cookieEvents + coverage.observationCounts.cookieEvents,
+      cookiesBeforeConsent: counts.cookiesBeforeConsent + coverage.observationCounts.cookiesBeforeConsent,
+      networkEvents: counts.networkEvents + coverage.observationCounts.networkEvents,
+      normalizedVendors: counts.normalizedVendors + coverage.observationCounts.normalizedVendors,
+      observedJourneys: counts.observedJourneys + coverage.observationCounts.observedJourneys,
+      thirdPartyRequests: counts.thirdPartyRequests + coverage.observationCounts.thirdPartyRequests
+    }), {
+      cookieEvents: 0,
+      cookiesBeforeConsent: 0,
+      networkEvents: 0,
+      normalizedVendors: 0,
+      observedJourneys: 0,
+      thirdPartyRequests: 0
+    }),
+    silentEmpty: coverages.every((coverage) => coverage.silentEmpty)
+  };
+}
+
+function uniqueStrings<T extends string>(values: T[]): T[] {
+  return [...new Set(values)];
+}
+
+export function buildLocalV2DagLambdaRuntimeDiagnostics(env: NodeJS.ProcessEnv = process.env) {
+  const memorySizeMb = Number.parseInt(env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ?? "", 10);
+  return {
+    awsLambdaRuntime: isAwsLambdaRuntime(env),
+    chromiumLaunchArgs: chromiumLaunchArgs({ env }),
+    chromiumSingleProcessEnabled: lambdaChromiumSingleProcessEnabled(env),
+    memorySizeMb: Number.isFinite(memorySizeMb) ? memorySizeMb : null,
+    nodeVersion: process.version,
+    platform: process.platform,
+    architecture: process.arch
+  };
+}
+
+export function buildLocalV2DagLambdaScanTuning(env: NodeJS.ProcessEnv = process.env) {
+  return {
+    actionFinalSettleMs: boundedIntegerEnv(env.CERTSCORE_V2_DAG_LAMBDA_ACTION_FINAL_SETTLE_MS, {
+      defaultValue: 350,
+      max: 2_000,
+      min: 350
+    }),
+    consentFlowScreenshotMode: consentFlowScreenshotModeEnv(env.CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE),
+    evidenceDiagnosticMode: env.CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE === "webmd" ? "webmd" as const : "off" as const,
+    preConsentScreenshotMode: preConsentScreenshotModeEnv(env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_MODE),
+    preConsentScreenshotTimeoutMs: boundedIntegerEnv(env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS, {
+      defaultValue: 5_000,
+      max: 5_000,
+      min: 500
+    }),
+    scenarioConcurrency: boundedIntegerEnv(env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY, {
+      defaultValue: 2,
+      max: 4,
+      min: 1
+    }),
+    scenarioResourceMode: scenarioResourceModeEnv(env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE)
+  };
+}
+
+function scenarioResourceModeEnv(value: string | undefined): "normal" | "lean" | "cmp_safe" {
+  if (value === "normal" || value === "cmp_safe") {
+    return value;
+  }
+  return "lean";
+}
+
+function consentFlowScreenshotModeEnv(value: string | undefined): "auto" | "none" {
+  return value === "auto" ? "auto" : "none";
+}
+
+function preConsentScreenshotModeEnv(value: string | undefined): "always" | "selective" | "never" {
+  if (value === "selective" || value === "never") {
+    return value;
+  }
+  return "always";
+}
+
+function effectiveActionFinalSettleMs(
+  payload: LocalV2DagLambdaDispatchPayload,
+  scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>
+) {
+  if (payload.debugOverrides?.actionFinalSettleMs !== undefined) {
+    return payload.debugOverrides.actionFinalSettleMs;
+  }
+  if (isStrongWebMdEvidenceMode(payload, scanTuning)) {
+    return Math.max(scanTuning.actionFinalSettleMs, 2_000);
+  }
+  return scanTuning.actionFinalSettleMs;
+}
+
+function effectiveActionSearchDeadlineMs(payload: LocalV2DagLambdaDispatchPayload) {
+  return payload.debugOverrides?.actionSearchDeadlineMs;
+}
+
+function effectiveConsentFlowDeadlineMs(
+  payload: LocalV2DagLambdaDispatchPayload,
+  scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>
+) {
+  if (payload.debugOverrides?.consentFlowDeadlineMs !== undefined) {
+    return payload.debugOverrides.consentFlowDeadlineMs;
+  }
+  return isStrongWebMdEvidenceMode(payload, scanTuning) ? 45_000 : 30_000;
+}
+
+function effectivePreActionObservationMs(payload: LocalV2DagLambdaDispatchPayload) {
+  return payload.debugOverrides?.preActionObservationMs;
+}
+
+function effectiveOneTrustHiddenActionMode(payload: LocalV2DagLambdaDispatchPayload) {
+  return payload.targetEnvironment === "local"
+    ? payload.debugOverrides?.oneTrustHiddenActionMode
+    : undefined;
+}
+
+function effectiveScenarioConcurrency(
+  payload: LocalV2DagLambdaDispatchPayload,
+  scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>
+) {
+  if (payload.debugOverrides?.scenarioConcurrency !== undefined) {
+    return payload.debugOverrides.scenarioConcurrency;
+  }
+  return isStrongWebMdEvidenceMode(payload, scanTuning) ? 1 : scanTuning.scenarioConcurrency;
+}
+
+function effectiveScenarioResourceMode(
+  payload: LocalV2DagLambdaDispatchPayload,
+  scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>
+) {
+  return payload.debugOverrides?.scenarioResourceMode ?? scanTuning.scenarioResourceMode;
+}
+
+function isStrongWebMdEvidenceMode(
+  payload: LocalV2DagLambdaDispatchPayload,
+  scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>
+) {
+  return isWebMdTarget(payload.targetUrl) &&
+    (payload.strongEvidenceMode === "webmd" || scanTuning.evidenceDiagnosticMode === "webmd");
+}
+
+function isWebMdTarget(url: string) {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
+    return hostname === "webmd.com" || hostname.endsWith(".webmd.com");
+  } catch {
+    return false;
+  }
+}
+
+function boundedIntegerEnv(
+  value: string | undefined,
+  input: { defaultValue: number; max: number; min: number }
+) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (!Number.isFinite(parsed)) {
+    return input.defaultValue;
+  }
+  return Math.min(input.max, Math.max(input.min, parsed));
 }
 
 export function artifactPointersFromPaths(input: {
@@ -308,6 +1322,64 @@ async function artifactObjectMetadata(filePath: string) {
   };
 }
 
+const CORE_ARTIFACT_FILE_NAMES = new Set([
+  "CanonicalEvidenceBundle.json",
+  "LambdaArtifactMirrorManifest.json",
+  "LocalV2DagLambdaManifest.json",
+  "ReviewResult.json",
+  "V2ReportProjectionDraft.json"
+]);
+
+export async function uploadAuxiliaryArtifactFiles(input: {
+  artifactRoot: string;
+  payload: LocalV2DagLambdaDispatchPayload;
+  s3Client?: S3PutClient;
+}): Promise<LocalV2DagLambdaAuxiliaryArtifact[]> {
+  const entries = await readdir(input.artifactRoot, { withFileTypes: true });
+  const fileNames = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .filter((fileName) => isSupportedAuxiliaryFileName(fileName) && !CORE_ARTIFACT_FILE_NAMES.has(fileName))
+    .sort();
+  if (fileNames.length === 0) {
+    return [];
+  }
+
+  const bucket = requireArtifactBucket();
+  const prefix = artifactKeyPrefix(input.payload).replace(/^\/+|\/+$/g, "");
+  const s3Client = input.s3Client ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  return Promise.all(fileNames.map(async (fileName) => {
+    const object = await artifactObjectMetadata(path.join(input.artifactRoot, fileName));
+    const key = `${prefix}/auxiliary/${fileName}`;
+    await s3Client.send(new PutObjectCommand({
+      Body: object.body,
+      Bucket: bucket,
+      ContentType: auxiliaryContentType(fileName),
+      Key: key,
+      Metadata: {
+        "certscore-artifact-field": "auxiliaryArtifact",
+        "certscore-artifact-sha256": object.sha256,
+        "certscore-artifact-size-bytes": String(object.sizeBytes),
+        "certscore-production-finding-integration": "false",
+        "certscore-v2-artifact-only": "true"
+      }
+    }));
+    return {
+      fileName,
+      sha256: object.sha256,
+      sizeBytes: object.sizeBytes,
+      uri: s3Uri(bucket, key)
+    };
+  }));
+}
+
+function auxiliaryContentType(fileName: string) {
+  if (fileName.endsWith(".png")) {
+    return "image/png";
+  }
+  return "application/json";
+}
+
 export async function uploadArtifactFiles(input: {
   manifestPath: string;
   pointers: LocalV2DagLambdaArtifactPointers;
@@ -323,12 +1395,10 @@ export async function uploadArtifactFiles(input: {
     { field: "reviewArtifactUri" as const, path: input.reviewPath },
     { field: "reportAdapterArtifactUri" as const, path: input.projectionPath }
   ];
-  const metadata: LocalV2DagLambdaArtifactMetadata = {};
-
-  for (const artifact of artifacts) {
+  const uploaded = await Promise.all(artifacts.map(async (artifact) => {
     const uri = input.pointers[artifact.field];
     if (!uri) {
-      continue;
+      return null;
     }
     const { bucket, key } = parseS3Uri(uri);
     const object = await artifactObjectMetadata(artifact.path);
@@ -345,10 +1415,20 @@ export async function uploadArtifactFiles(input: {
         "certscore-v2-artifact-only": "true"
       }
     }));
-    metadata[artifact.field] = {
-      sha256: object.sha256,
-      sizeBytes: object.sizeBytes
+    return {
+      field: artifact.field,
+      metadata: {
+        sha256: object.sha256,
+        sizeBytes: object.sizeBytes
+      }
     };
+  }));
+
+  const metadata: LocalV2DagLambdaArtifactMetadata = {};
+  for (const artifact of uploaded) {
+    if (artifact) {
+      metadata[artifact.field] = artifact.metadata;
+    }
   }
 
   return metadata;
@@ -356,23 +1436,35 @@ export async function uploadArtifactFiles(input: {
 
 async function writeManifest(input: {
   artifactRoot: string;
+  auxiliaryArtifacts: LocalV2DagLambdaAuxiliaryArtifact[];
   bundle: CanonicalEvidenceBundle;
   payload: LocalV2DagLambdaDispatchPayload;
+  phaseTimings: LocalV2DagLambdaPhaseTiming[];
   pointers: LocalV2DagLambdaArtifactPointers;
+  scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
 }) {
   const manifestPath = path.join(input.artifactRoot, "LocalV2DagLambdaManifest.json");
   await writeFile(manifestPath, `${JSON.stringify({
     artifactOnly: true,
+    auxiliaryArtifacts: input.auxiliaryArtifacts,
     contractVersion: "certscore.v2.lambda-dag-artifact-manifest.v1",
     generatedAt: new Date().toISOString(),
     modulesRun: input.bundle.modulesRun.map((moduleRun) => ({
+      durationMs: moduleRun.durationMs,
+      errorCount: (moduleRun.errors ?? []).length,
       moduleName: moduleRun.moduleName,
       status: moduleRun.status
     })),
+    phaseTimings: input.phaseTimings,
     pointers: input.pointers,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
+    runtimeDiagnostics: buildLocalV2DagLambdaRuntimeDiagnostics(),
+    scanTuning: input.scanTuning,
+    ...(input.payload.debugOverrides ? { debugOverrides: input.payload.debugOverrides } : {}),
     scanId: input.payload.scanId,
+    ...(input.payload.coordinatorPlanSummary ? { coordinatorPlanSummary: input.payload.coordinatorPlanSummary } : {}),
+    ...(input.payload.strongEvidenceMode ? { strongEvidenceMode: input.payload.strongEvidenceMode } : {}),
     targetEnvironment: input.payload.targetEnvironment,
     targetUrl: input.payload.targetUrl
   }, null, 2)}\n`, "utf8");
@@ -389,6 +1481,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
   completedAt: Date;
   error?: { code?: string; message: string };
   payload: LocalV2DagLambdaDispatchPayload;
+  phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   status: "completed" | "failed";
 }): LocalV2DagLambdaResultMessage {
   return {
@@ -398,6 +1491,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
     completedAt: input.completedAt.toISOString(),
     contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
     ...(input.error ? { error: sanitizeError(input.error) } : {}),
+    ...(input.phaseTimings ? { phaseTimings: input.phaseTimings } : {}),
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     scanId: input.payload.scanId,
@@ -431,19 +1525,63 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
 
   try {
     payload = parseLocalV2DagLambdaDispatchPayload(event);
+    const effectiveMode = payload.orchestrationMode ?? defaultLambdaOrchestrationMode();
     const workspaceRoot = options.workspaceRoot ?? process.cwd();
     const artifactRoot = buildLocalV2DagLambdaArtifactRoot({
       scanId: payload.scanId,
       workspaceRoot
     });
+    if (effectiveMode === "worker") {
+      if (!POST_CONSENT_FLOW_SCANNING_ENABLED) {
+        throw new Error("Post-consent consent-flow Lambda worker scanning is deferred from the production scanner.");
+      }
+      const workerLane = payload.workerLane;
+      if (!workerLane) {
+        throw new Error("Local v2 DAG Lambda worker mode requires workerLane.");
+      }
+      await writePlannerHintUsageArtifact({
+        artifactRoot,
+        payload,
+        workerLane
+      });
+      const artifactResult = options.runArtifactChain
+      ? await options.runArtifactChain(payload, { artifactRoot })
+      : await runLocalV2DagLambdaArtifactChain(payload, {
+        allowedConsentFlowScenarios: consentScenariosForWorkerLane(workerLane),
+        artifactRoot,
+        externalBaselinePlanning: "reuse_only",
+        forceAllowedScenarioPlanning: true,
+        phaseLabelPrefix: workerLane,
+        preConsentScreenshotMode: "never",
+        s3Client: options.s3Client,
+        workspaceRoot
+      });
+      return {
+        artifactMetadata: artifactResult.artifactMetadata,
+        artifactPointers: artifactResult.artifactPointers,
+        phaseTimings: artifactResult.phaseTimings,
+        scanId: payload.scanId,
+        status: "completed" as const,
+        workerLane
+      };
+    }
     const runArtifactChain = options.runArtifactChain ?? ((dispatchPayload, runOptions) =>
-      runLocalV2DagLambdaArtifactChain(dispatchPayload, { ...runOptions, s3Client: options.s3Client, workspaceRoot }));
+      effectiveMode === "sharded"
+        ? runLocalV2DagLambdaShardedArtifactChain(dispatchPayload, {
+          ...runOptions,
+          lambdaClient: options.lambdaClient,
+          s3Client: options.s3Client,
+          s3GetClient: options.s3GetClient,
+          workspaceRoot
+        })
+        : runLocalV2DagLambdaArtifactChain(dispatchPayload, { ...runOptions, s3Client: options.s3Client, workspaceRoot }));
     const artifactResult = await runArtifactChain(payload, { artifactRoot });
     const result = buildLocalV2DagLambdaResultMessage({
       artifactMetadata: artifactResult.artifactMetadata,
       artifactPointers: artifactResult.artifactPointers,
       completedAt: now(),
       payload,
+      phaseTimings: artifactResult.phaseTimings,
       status: "completed"
     });
     await sendLocalV2DagLambdaResultMessage({
@@ -455,6 +1593,17 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   } catch (error) {
     if (!payload) {
       throw error;
+    }
+    if (payload.orchestrationMode === "worker") {
+      return {
+        error: sanitizeError({
+          code: "v2_dag_lambda_worker_failed",
+          message: error instanceof Error ? error.message : String(error)
+        }),
+        scanId: payload.scanId,
+        status: "failed" as const,
+        workerLane: payload.workerLane ?? "coordinator"
+      };
     }
     const result = buildLocalV2DagLambdaResultMessage({
       completedAt: now(),
@@ -472,6 +1621,190 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     });
     return result;
   }
+}
+
+function defaultLambdaOrchestrationMode(): "single" | "sharded" {
+  return process.env.CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE === "sharded" ? "sharded" : "single";
+}
+
+function consentScenariosForWorkerLane(workerLane: LocalV2DagLambdaWorkerLane): ConsentFlowScenario[] {
+  switch (workerLane) {
+    case "coordinator":
+      return [];
+    case "consent_flows":
+      return ["accept_all_flow", "gpc_enabled", "reject_all_flow", "privacy_opt_out_flow"];
+    case "accept_gpc":
+      return ["accept_all_flow", "gpc_enabled"];
+    case "accept_only":
+      return ["accept_all_flow"];
+    case "reject_manage":
+      return ["reject_all_flow", "privacy_opt_out_flow"];
+  }
+}
+
+async function writePlannerHintUsageArtifact(input: {
+  artifactRoot: string;
+  payload: LocalV2DagLambdaDispatchPayload;
+  workerLane: LocalV2DagLambdaWorkerLane;
+}) {
+  if (input.workerLane === "coordinator") {
+    return;
+  }
+  await mkdir(input.artifactRoot, { recursive: true });
+  const laneScenarios = consentScenariosForWorkerLane(input.workerLane);
+  const planned = new Set(input.payload.coordinatorPlanSummary?.plannedScenarios ?? []);
+  const recipeScenarios = new Set(input.payload.coordinatorPlanSummary?.actionRecipe?.scenarios
+    .flatMap((scenario) => parseConsentFlowScenario(scenario.scenario) ?? []) ?? []);
+  const plannedLaneScenarios = laneScenarios.filter((scenario) => planned.has(scenario) || recipeScenarios.has(scenario));
+  const status = input.payload.coordinatorPlanSummary
+    ? plannedLaneScenarios.length > 0 ? "used" : "present_but_no_lane_match"
+    : "missing";
+  await writeJson(path.join(input.artifactRoot, `LambdaPlannerHintUsage-${input.workerLane}.json`), {
+    artifactOnly: true,
+    artifactVersion: "certscore.v2.lambda.planner_hint_usage.v1",
+    generatedAt: new Date().toISOString(),
+    laneScenarios,
+    plannedLaneScenarios,
+    productionFindingIntegration: false,
+    scanId: input.payload.scanId,
+    source: "coordinatorPlanSummary",
+    status,
+    targetUrl: input.payload.targetUrl,
+    workerLane: input.workerLane
+  });
+}
+
+async function readCoordinatorPlanSummary(
+  artifactRoot: string,
+  expectedConsentScenarios?: ConsentFlowScenario[]
+): Promise<LocalV2DagLambdaCoordinatorPlanSummary | undefined> {
+  try {
+    const artifact = asRecord(JSON.parse(await readFile(path.join(artifactRoot, "consent_scenario_plan.json"), "utf8")));
+    const plannedScenarios = Array.isArray(artifact.plannedScenarios)
+      ? artifact.plannedScenarios.flatMap((item) => parseConsentFlowScenario(asRecord(item).scenario) ?? [])
+      : [];
+    const skippedScenarios = Array.isArray(artifact.skippedScenarios)
+      ? artifact.skippedScenarios.flatMap((item) => {
+        const record = asRecord(item);
+        const scenario = parseConsentFlowScenario(record.scenario);
+        const skipReason = compactString(record.skipReason);
+        if (!scenario || !skipReason) {
+          return [];
+        }
+        return [{
+          reasonCodes: Array.isArray(record.reasonCodes)
+            ? record.reasonCodes.flatMap((reason) => compactString(reason) ?? []).slice(0, 12)
+            : [],
+          scenario,
+          skipReason: skipReason.slice(0, 80)
+        }];
+      }).slice(0, 12)
+      : [];
+    const actionRecipe = await readCoordinatorActionRecipe(artifactRoot, artifact, expectedConsentScenarios);
+    return {
+      ...(actionRecipe ? { actionRecipe } : {}),
+      artifactVersion: "certscore.v2.lambda.coordinator-plan-summary.v1",
+      generatedAt: new Date().toISOString(),
+      plannedScenarios,
+      skippedScenarios
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function readCoordinatorActionRecipe(
+  artifactRoot: string,
+  planArtifact: Record<string, unknown>,
+  expectedConsentScenarios?: ConsentFlowScenario[]
+): Promise<LocalV2DagLambdaConsentActionRecipe | undefined> {
+  const normalizedUrl = compactString(planArtifact.normalizedUrl) ?? compactString(planArtifact.sourceUrl);
+  if (!normalizedUrl) {
+    return undefined;
+  }
+  const researchArtifact = await readOptionalJsonRecord(path.join(artifactRoot, "consent_action_recipe_research.json"));
+  const baselineCandidates = parseRecipeResearchCandidates(asRecord(researchArtifact?.baseline).candidates);
+  const plannedScenarios = Array.isArray(planArtifact.plannedScenarios) ? planArtifact.plannedScenarios : [];
+  const scenarios = plannedScenarios.flatMap((item) => {
+    const record = asRecord(item);
+    const scenario = parseConsentFlowScenario(record.scenario);
+    const actionType = compactString(record.actionType);
+    if (!scenario || scenario === "baseline_pre_consent" || !actionType) {
+      return [];
+    }
+    return [{
+      actionType,
+      candidates: baselineCandidates
+        .filter((candidate) => !candidate.actionType || candidate.actionType === actionType)
+        .slice(0, 12),
+      scenario,
+      ...(compactString(record.targetUrl) ? { targetUrl: compactString(record.targetUrl) ?? undefined } : {})
+    }];
+  });
+  const existingScenarios = new Set<ConsentFlowScenario>(
+    scenarios.flatMap((scenario) => parseConsentFlowScenario(scenario.scenario) ?? [])
+  );
+  const diagnosticExpectedScenarios = (expectedConsentScenarios ?? [])
+    .filter((scenario) => !existingScenarios.has(scenario))
+    .flatMap((scenario) => {
+      const actionType = actionTypeForConsentScenario(scenario);
+      if (!actionType) {
+        return [];
+      }
+      return [{
+        actionType,
+        candidates: [],
+        scenario
+      }];
+    });
+  return {
+    artifactVersion: "certscore.v2.consent-action-recipe.v1",
+    generatedAt: new Date().toISOString(),
+    normalizedUrl,
+    scenarios: [...scenarios, ...diagnosticExpectedScenarios].slice(0, 8)
+  };
+}
+
+function actionTypeForConsentScenario(scenario: ConsentFlowScenario): string | undefined {
+  switch (scenario) {
+    case "accept_all_flow":
+      return "accept_all";
+    case "reject_all_flow":
+      return "reject_all";
+    case "privacy_opt_out_flow":
+      return "do_not_sell_share";
+    default:
+      return undefined;
+  }
+}
+
+async function readOptionalJsonRecord(filePath: string): Promise<Record<string, unknown> | undefined> {
+  try {
+    return asRecord(JSON.parse(await readFile(filePath, "utf8")));
+  } catch {
+    return undefined;
+  }
+}
+
+function parseRecipeResearchCandidates(value: unknown): LocalV2DagLambdaConsentActionRecipe["scenarios"][number]["candidates"] {
+  return Array.isArray(value)
+    ? value.flatMap((entry) => {
+      const record = asRecord(entry);
+      const labelText = compactString(record.labelText);
+      if (!labelText) {
+        return [];
+      }
+      return [{
+        ...(compactString(record.actionType) ? { actionType: compactString(record.actionType) ?? undefined } : {}),
+        ...(typeof record.confidence === "number" ? { confidence: Math.max(0, Math.min(1, record.confidence)) } : {}),
+        ...(compactString(record.frameKind) ? { frameKind: compactString(record.frameKind) ?? undefined } : {}),
+        ...(compactString(record.frameUrl) ? { frameUrl: compactString(record.frameUrl) ?? undefined } : {}),
+        labelText: labelText.slice(0, 160),
+        ...(compactString(record.selectorSummary) ? { selectorSummary: compactString(record.selectorSummary) ?? undefined } : {}),
+        ...(typeof record.visible === "boolean" ? { visible: record.visible } : {})
+      }];
+    }).slice(0, 24)
+    : [];
 }
 
 export async function readLocalManifest(pathOrUri: string) {

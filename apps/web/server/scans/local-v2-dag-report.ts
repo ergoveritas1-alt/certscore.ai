@@ -38,11 +38,11 @@ export function getLocalV2DagReportInput(scanRecord: ScanDetailResponse) {
   const outDir = getString(localV2Dag?.outDir);
   const normalizedUrl = getString(config.normalizedUrl);
   const hostname = getString(config.hostname) ?? scanRecord.scan.domainHostname;
-  const profile = getString(v2DagParallel.profile) ?? getString(config.profile) ?? "full";
+  const profile = getString(v2DagParallel.profile) ?? getString(config.profile) ?? "standard";
 
   return {
     outDir,
-    profile: profile === "tiny" ? "tiny" as LocalV2DagScanProfile : "full" as LocalV2DagScanProfile,
+    profile: profile === "tiny" ? "tiny" as LocalV2DagScanProfile : "standard" as LocalV2DagScanProfile,
     url: normalizedUrl ?? hostname ?? null
   };
 }

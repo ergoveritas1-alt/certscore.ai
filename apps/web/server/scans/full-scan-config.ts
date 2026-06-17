@@ -11,6 +11,7 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import {
   applyLocalV2DagScanConfig,
+  type LocalV2DagLambdaDebugOverrides,
   type LocalV2DagScanEnv,
   type LocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
@@ -31,6 +32,7 @@ export type BuildQueuedFullScanConfigInput = {
   env?: LocalV2DagScanEnv;
   hostname: string;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
+  localV2DagLambdaDebugOverrides?: LocalV2DagLambdaDebugOverrides | null;
   localV2DagRunViaLambda?: boolean | null;
   maxPages: number;
   normalizedUrl: string;
@@ -152,6 +154,7 @@ export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput)
     scanFrom,
     source: input.source
   }), input.env, {
+    lambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     profile: input.localV2DagScanProfile,
     runViaLambda: input.localV2DagRunViaLambda
   });

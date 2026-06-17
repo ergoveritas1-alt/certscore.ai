@@ -327,7 +327,7 @@ export function BetaRegulatoryChecklistCard({ area, defaultOpen = true }: BetaRe
         </div>
       </div>
       <p className="text-xs leading-5 text-slate-500">
-        {maturityLabel} checklist rows are limited to public-web scan evidence, policy-page review, runtime request/cookie/vendor observations, consent-flow observations, form/sensitive-field detection, opt-out/GPC testing where available, and basic accessibility checks.
+        {maturityLabel} checklist rows are limited to public-web scan evidence, policy-page review, pre-consent runtime request/cookie/vendor observations, consent/banner control observations, form/sensitive-field detection, and basic accessibility checks.
       </p>
     </CollapsibleSectionCard>
   );

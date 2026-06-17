@@ -5,6 +5,7 @@ import { buildQueuedFullScanConfig, requiresFreshScanForCaliforniaRuntime } from
 import {
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   applyLocalV2DagScanConfig,
+  normalizeLocalV2DagRunViaLambda,
   shouldUseLocalV2DagScanTool
 } from "./local-v2-dag-scan-config";
 
@@ -261,15 +262,16 @@ test("localhost scan configs use the local v2 planned-parallel DAG processor onl
   );
 
   assert.equal(config.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
-  assert.equal(config.profile, "full");
+  assert.equal(config.profile, "standard");
   assert.deepEqual(config.execution?.v2DagParallel as Record<string, unknown> | undefined, {
     artifactOnly: true,
-    consentFlowDeadlineMs: 30000,
     localOnly: true,
     plannedParallel: true,
+    postConsentFlowsEnabled: false,
+    policyOutputGraceMs: 1000,
     policyPlanningDeadlineMs: 1500,
     productionFindingIntegration: false,
-    profile: "full",
+    profile: "standard",
     scenarioConcurrency: 2,
     scenarioPlanningMode: "planned_parallel",
     scenarioResourceMode: "lean",
@@ -303,6 +305,32 @@ test("local v2 DAG scan switch is disabled away from localhost and in production
   );
 });
 
+test("v2 DAG Lambda run flag defaults on only when Lambda handoff is fully configured", () => {
+  assert.equal(
+    normalizeLocalV2DagRunViaLambda(undefined, {
+      CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-results"
+    }),
+    true
+  );
+  assert.equal(
+    normalizeLocalV2DagRunViaLambda(undefined, {
+      CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod"
+    }),
+    false
+  );
+  assert.equal(
+    normalizeLocalV2DagRunViaLambda("false", {
+      CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-results"
+    }),
+    false
+  );
+});
+
 test("queued full-scan config emits v2 DAG metadata on localhost without evidence shortcuts", () => {
   const config = buildQueuedFullScanConfig({
     californiaPrivacy: {
@@ -322,9 +350,10 @@ test("queued full-scan config emits v2 DAG metadata on localhost without evidenc
   const v2DagParallel = config.execution?.v2DagParallel as Record<string, unknown> | undefined;
 
   assert.equal(config.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
-  assert.equal(config.profile, "full");
-  assert.equal(v2DagParallel?.profile, "full");
+  assert.equal(config.profile, "standard");
+  assert.equal(v2DagParallel?.profile, "standard");
   assert.equal(v2DagParallel?.scenarioPlanningMode, "planned_parallel");
+  assert.equal(v2DagParallel?.postConsentFlowsEnabled, false);
   assert.deepEqual(config.californiaPrivacy, {
     exercisePrivacyChoicePath: true,
     forceGpcVerification: true
@@ -362,6 +391,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     env: {
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
+      CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
       CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
@@ -380,6 +410,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
   assert.equal(config.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
   assert.equal(v2DagParallel?.tool, "certscore-scan-core");
   assert.equal(v2DagParallel?.productionFindingIntegration, false);
+  assert.equal(v2DagParallel?.postConsentFlowsEnabled, false);
   assert.deepEqual(v2DagLambda, {
     artifactOnly: true,
     awsRegion: "us-west-1",
@@ -388,6 +419,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     dispatchState: "pending_dispatch",
     functionName: "certscore-v2-dag-dev",
     localOnly: true,
+    orchestrationMode: "sharded",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     resultHandoff: "sqs",
@@ -398,6 +430,37 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
   });
   assert.equal(Object.hasOwn(config, "findings"), false);
   assert.equal(Object.hasOwn(config, "signals"), false);
+});
+
+test("queued full-scan config can dispatch v2 DAG Lambda outside localhost when explicitly enabled", () => {
+  const config = buildQueuedFullScanConfig({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
+      CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-prod-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "production",
+      NEXT_PUBLIC_APP_URL: "https://certscore.ai",
+      NODE_ENV: "production"
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: true,
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "manual-dashboard"
+  });
+  const v2DagParallel = config.execution?.v2DagParallel as Record<string, unknown> | undefined;
+  const v2DagLambda = config.execution?.v2DagLambda as Record<string, unknown> | undefined;
+
+  assert.equal(config.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
+  assert.equal(config.profile, "standard");
+  assert.equal(v2DagParallel?.profile, "standard");
+  assert.equal(v2DagParallel?.postConsentFlowsEnabled, false);
+  assert.equal(v2DagLambda?.functionName, "certscore-v2-dag-prod");
+  assert.equal(v2DagLambda?.localOnly, false);
+  assert.equal(v2DagLambda?.targetEnvironment, "production");
+  assert.equal(v2DagLambda?.productionFindingIntegration, false);
 });
 
 test("queued full-scan Lambda option fails closed when AWS handoff env is missing", () => {

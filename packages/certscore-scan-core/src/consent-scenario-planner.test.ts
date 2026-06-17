@@ -51,7 +51,33 @@ test("planner skips CMP paths when no banner or consent controls are observed", 
   assert.ok(plan.notes.some((note) => /not ready/i.test(note)));
 });
 
-test("planner schedules bounded CMP-only action probes from runtime CMP evidence", () => {
+test("planner skips banner-only CMP paths without concrete actions", () => {
+  const plan = buildConsentScenarioPlan({
+    baseline: {
+      bannerLikelyPresent: true,
+      cmpEvidenceObserved: true,
+      textExcerpt: "We use cookies.",
+      actionCandidates: [],
+    },
+    captureReplay: false,
+    policyPlanningStatus: "policy_surface_ready_for_planning",
+  });
+
+  assert.equal(plan.plannedScenarios.some((item) => item.scenario === "reject_all_flow"), false);
+  assert.equal(plan.plannedScenarios.some((item) => item.scenario === "accept_all_flow"), false);
+  assert.ok(plan.skippedScenarios.some((item) =>
+    item.scenario === "reject_all_flow" &&
+    item.skipReason === "action_candidate_not_observed" &&
+    item.reasonCodes.includes("reject_candidate_not_observed")
+  ));
+  assert.ok(plan.skippedScenarios.some((item) =>
+    item.scenario === "accept_all_flow" &&
+    item.skipReason === "action_candidate_not_observed" &&
+    item.reasonCodes.includes("accept_candidate_not_observed")
+  ));
+});
+
+test("planner does not schedule CMP-only action probes from runtime CMP evidence without actionable surface", () => {
   const plan = buildConsentScenarioPlan({
     baseline: {
       bannerLikelyPresent: false,
@@ -63,17 +89,23 @@ test("planner schedules bounded CMP-only action probes from runtime CMP evidence
     policyPlanningStatus: "policy_surface_unavailable",
   });
 
-  assert.ok(plan.plannedScenarios.some((item) =>
+  assert.equal(plan.plannedScenarios.some((item) => item.scenario === "reject_all_flow"), false);
+  assert.equal(plan.plannedScenarios.some((item) => item.scenario === "accept_all_flow"), false);
+  assert.ok(plan.skippedScenarios.some((item) =>
     item.scenario === "reject_all_flow" &&
     item.actionType === "reject_all" &&
+    item.skipReason === "action_candidate_not_observed" &&
     item.reasonCodes.includes("cmp_runtime_evidence_observed") &&
-    item.reasonCodes.includes("reject_or_preference_path_probe")
+    item.reasonCodes.includes("cmp_runtime_without_actionable_surface") &&
+    item.reasonCodes.includes("reject_candidate_not_observed")
   ));
-  assert.ok(plan.plannedScenarios.some((item) =>
+  assert.ok(plan.skippedScenarios.some((item) =>
     item.scenario === "accept_all_flow" &&
     item.actionType === "accept_all" &&
+    item.skipReason === "action_candidate_not_observed" &&
     item.reasonCodes.includes("cmp_runtime_evidence_observed") &&
-    item.reasonCodes.includes("accept_or_preference_path_probe")
+    item.reasonCodes.includes("cmp_runtime_without_actionable_surface") &&
+    item.reasonCodes.includes("accept_candidate_not_observed")
   ));
   assert.equal(plan.plannerInputs.baselineCmpEvidenceObserved, true);
 });
@@ -131,6 +163,51 @@ test("planner schedules privacy opt-out and replay probes when eligible", () => 
   ));
   assert.ok(plan.plannedScenarios.some((item) => item.scenario === "form_collection_probe"));
   assert.ok(plan.plannedScenarios.some((item) => item.scenario === "accessibility_probe"));
+});
+
+test("planner schedules URL-seeded privacy opt-out in normal consent mode", () => {
+  const plan = buildConsentScenarioPlan({
+    baseline: {
+      bannerLikelyPresent: false,
+      textExcerpt: "Your Privacy Choices and Do Not Sell or Share My Personal Information",
+      actionCandidates: [],
+    },
+    captureReplay: false,
+    privacyControlUrls: ["https://example.test/privacy"],
+    policyPlanningStatus: "policy_surface_ready_for_planning",
+    policyPrivacyControlUrlCount: 1,
+  });
+
+  assert.ok(plan.plannedScenarios.some((item) =>
+    item.scenario === "privacy_opt_out_flow" &&
+    item.actionType === "do_not_sell_share" &&
+    item.targetUrl === "https://example.test/privacy" &&
+    item.reasonCodes.includes("privacy_control_url_observed")
+  ));
+});
+
+test("planner prefers privacy-control URLs over generic privacy policy URLs", () => {
+  const plan = buildConsentScenarioPlan({
+    baseline: {
+      bannerLikelyPresent: false,
+      textExcerpt: "Privacy choices are available.",
+      actionCandidates: [],
+    },
+    captureReplay: false,
+    privacyControlUrls: [
+      "https://example.test/privacy",
+      "https://example.test/privacy-choices",
+      "https://example.test/privacy-policy",
+    ],
+    policyPlanningStatus: "policy_surface_ready_for_planning",
+    policyPrivacyControlUrlCount: 3,
+  });
+
+  assert.ok(plan.plannedScenarios.some((item) =>
+    item.scenario === "privacy_opt_out_flow" &&
+    item.actionType === "do_not_sell_share" &&
+    item.targetUrl === "https://example.test/privacy-choices"
+  ));
 });
 
 test("planner skips privacy opt-out when only weak privacy text is observed", () => {

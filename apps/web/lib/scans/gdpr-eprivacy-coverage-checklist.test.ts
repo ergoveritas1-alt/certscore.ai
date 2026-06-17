@@ -86,7 +86,7 @@ const usableRuntimeVendorDisclosureMismatch = JSON.stringify({
   unmatchedVendorDisclosureCount: 1
 });
 
-test("deriveGdprEprivacyCoverageChecklist orders consent quality before reject-path availability", () => {
+test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evidence rows", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     scanCompleted: true,
@@ -94,15 +94,35 @@ test("deriveGdprEprivacyCoverageChecklist orders consent quality before reject-p
   });
 
   assert.deepEqual(
-    items.slice(0, 5).map((item) => item.id),
+    items.slice(0, 9).map((item) => item.id),
     [
+      "consent_surface_observed",
+      "reject_all_path_availability",
+      "cmp_framework_signal_observed",
+      "cookie_notice_policy_availability",
       "pre_consent_cookies_storage",
       "pre_consent_third_party_tracking",
-      "consent_surface_observed",
-      "consent_choice_quality",
-      "reject_all_path_availability"
+      "analytics_vendor_observed",
+      "session_replay_fingerprinting_review",
+      "device_identification_fingerprinting_signal_observed"
     ]
   );
+});
+
+test("deriveGdprEprivacyCoverageChecklist omits deferred low-confidence production rows", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+  const rowIds = new Set(items.map((item) => item.id));
+
+  assert.equal(rowIds.has("marketing_consent_checkbox_observed"), false);
+  assert.equal(rowIds.has("privacy_notice_near_collection_surface"), false);
+  assert.equal(rowIds.has("newsletter_marketing_signup_observed"), false);
+  assert.equal(rowIds.has("embedded_content_pre_consent"), false);
+  assert.equal(rowIds.has("embedded_content_disclosure_alignment"), false);
+  assert.equal(rowIds.has("analytics_disclosure_alignment"), false);
 });
 
 test("deriveGdprEprivacyCoverageChecklist maps canonical unified findings without creating pass/fail language", () => {
@@ -134,9 +154,27 @@ test("deriveGdprEprivacyCoverageChecklist maps canonical unified findings withou
     "Evidence flag: direct_runtime",
     "Evidence strength: direct runtime"
   ]);
-  assert.equal(byId(items, "post_reject_tracking_reduction").status, "Gap observed");
+  assert.equal(byId(items, "post_reject_tracking_reduction").status, "Review signal");
   assert.equal(byId(items, "pre_consent_third_party_tracking").status, "Not observed");
   assert.equal(items.some((item) => ["Pass", "Fail"].includes(String(item.status))), false);
+});
+
+test("deriveGdprEprivacyCoverageChecklist maps Article 13 disclosure findings into transparency rows", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("legal_basis_disclosure_present", "Legal basis disclosure present"),
+      makeFinding("retention_disclosure_present", "Retention disclosure present"),
+      makeFinding("supervisory_authority_disclosure_present", "Supervisory authority complaint disclosure present"),
+      makeFinding("automated_decision_profiling_disclosure_present", "Automated decision-making/profiling disclosure present")
+    ]
+  });
+
+  assert.equal(byId(items, "legal_basis_disclosure_observed").status, "Observed");
+  assert.equal(byId(items, "retention_disclosure_observed").status, "Observed");
+  assert.equal(byId(items, "supervisory_authority_complaint_disclosure").status, "Observed");
+  assert.equal(byId(items, "automated_decision_making_profiling_disclosure").status, "Observed");
 });
 
 test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session replay as observed", () => {
@@ -180,13 +218,11 @@ test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session r
   assert.equal(row.status, "Observed");
   assert.equal(row.evidenceState, "observed");
   assert.equal(row.assessmentStatus, "checked");
-  assert.equal(row.label, "Session replay / behavioral analytics");
+  assert.equal(row.label, "Session replay signal observed");
   assert.match(row.explanation, /not observed pre-consent in retained evidence/i);
   assert.match(row.explanation, /Microsoft Clarity, Hotjar, and Contentsquare/);
   assert.doesNotMatch(row.explanation, /before consent observed/i);
-  assert.equal(row.subchecks?.length, 4);
-  assert.equal(row.subchecks?.[0]?.label, "Before consent");
-  assert.equal(row.subchecks?.[1]?.label, "Disclosure alignment");
+  assert.equal(row.subchecks, undefined);
   assert.equal(items.some((item) => item.id === "session_replay_before_consent"), false);
 });
 
@@ -223,12 +259,18 @@ test("deriveGdprEprivacyCoverageChecklist labels entropy-only evidence separatel
   });
 
   const row = byId(items, "session_replay_fingerprinting_review");
-  assert.equal(row.status, "Review signal");
-  assert.equal(row.evidenceState, "observed");
-  assert.equal(row.assessmentStatus, "review_signal");
-  assert.equal(row.label, "Browser/device entropy review signal");
-  assert.match(row.explanation, /no session replay vendor/i);
-  assert.doesNotMatch(row.label, /Session replay/i);
+  assert.equal(row.status, "Not observed");
+  assert.equal(row.evidenceState, "not_observed");
+  assert.equal(row.assessmentStatus, "checked");
+  assert.equal(row.label, "Session replay signal observed");
+  assert.match(row.explanation, /device identification row/i);
+
+  const deviceRow = byId(items, "device_identification_fingerprinting_signal_observed");
+  assert.equal(deviceRow.status, "Review signal");
+  assert.equal(deviceRow.evidenceState, "observed");
+  assert.equal(deviceRow.assessmentStatus, "review_signal");
+  assert.equal(deviceRow.label, "Device identification / fingerprinting signal observed");
+  assert.match(deviceRow.explanation, /Browser\/device entropy review signal/i);
 });
 
 test("deriveGdprEprivacyCoverageChecklist labels retained pre-consent session replay as a gap", () => {
@@ -271,11 +313,9 @@ test("deriveGdprEprivacyCoverageChecklist labels retained pre-consent session re
   assert.equal(row.status, "Gap observed");
   assert.equal(row.evidenceState, "observed");
   assert.equal(row.assessmentStatus, "gap_observed");
-  assert.equal(row.label, "Session replay / behavioral analytics");
+  assert.equal(row.label, "Session replay signal observed");
   assert.match(row.explanation, /before a recorded consent action/i);
-  assert.equal(row.subchecks?.length, 4);
-  assert.equal(row.subchecks?.[0]?.label, "Before consent");
-  assert.equal(row.subchecks?.[0]?.status, "Gap observed");
+  assert.equal(row.subchecks, undefined);
   assert.equal(items.some((item) => item.id === "session_replay_before_consent"), false);
 });
 
@@ -301,7 +341,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps consent surface and post-choice 
   });
 
   const consentSurface = byId(items, "consent_surface_observed");
-  assert.equal(consentSurface.label, "Consent banner / preference surface");
+  assert.equal(consentSurface.label, "Consent banner observed");
   assert.equal(consentSurface.evidenceState, "observed");
   assert.equal(consentSurface.assessmentStatus, "checked");
   assert.equal(consentSurface.status, "Observed");
@@ -820,7 +860,7 @@ test("deriveGdprEprivacyCoverageChecklist words runtime vendor disclosure gaps a
   });
 
   const row = byId(items, "runtime_vendor_disclosure_alignment");
-  assert.equal(row.label, "Runtime vendor disclosure mismatch");
+  assert.equal(row.label, "Runtime vendor vs disclosure alignment");
   assert.equal(row.status, "Gap observed");
   assert.match(row.explanation, /not clearly matched by name or known domain alias/i);
   assert.doesNotMatch(row.explanation, /violates|noncompliant|undisclosed/i);
@@ -891,7 +931,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps CCPA do-not-sell conflicts out o
   });
 
   const row = byId(items, "runtime_vendor_disclosure_alignment");
-  assert.equal(row.label, "Runtime vendor disclosure mismatch");
+  assert.equal(row.label, "Runtime vendor vs disclosure alignment");
   assert.equal(row.status, "Not observed");
   assert.equal(row.assessmentStatus, "checked");
 });
@@ -2188,7 +2228,7 @@ test("deriveGdprEprivacyReviewSummary composes simple-cookie-notice reject persi
   const summary = deriveGdprEprivacyReviewSummary(items);
   const renderedSummary = JSON.stringify(summary);
 
-  assert.equal(summary.bullets[0]?.headline, "Reject path observed, but tracking persisted around refusal");
+  assert.equal(summary.bullets[0]?.headline, "Third-party tracking observed before recorded consent");
   assert.match(renderedSummary, /Third-party tracking observed before recorded consent/);
   assert.match(renderedSummary, /Google Analytics/);
   assert.match(renderedSummary, /Google Tag Manager/);

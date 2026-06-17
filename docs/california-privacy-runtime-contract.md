@@ -1,5 +1,7 @@
 # California Privacy Runtime Contract
 
+> Deferred: this contract is retained for internal research and historical artifact interpretation only. CCPA/CPRA California privacy review is out of scope for the current production scanner and must not feed production report cards, executive findings, regulatory lenses, or public scan options without a separate approved integration.
+
 This is the WC01 contract for Phase 2 California CCPA/CPRA review inputs from WS01.
 
 WC01 remains the normalization, policy, unified-finding, checklist, and display owner. WS01 remains the observed runtime capture owner. The canonical flow stays:
@@ -117,7 +119,7 @@ Important fields:
 
 ### `post_opt_out_tracking`
 
-Used for before/after behavior after an observed opt-out or reject action. WC01 should leave this row `not_testable` unless WS01 retained a confirmed opt-out action or equivalent exercised control.
+Deferred from the current production core scanner. Historical or research artifacts may retain before/after behavior after an observed opt-out or reject action, but WC01 should not promote this row into production findings or checklist gaps. In current production posture, leave this row `not_testable` / internal-review unless a separate product-approved post-choice integration is explicitly enabled.
 
 Important fields:
 
@@ -286,7 +288,7 @@ Interpretation:
 - The richer preference-center fields improved evidence depth, not status aggressiveness.
 - `weakCount` remained `0`, so every row posture still has enough retained evidence for review.
 - `potential_gap` stayed properly gated; no potential gap was emitted without normalized concern backing.
-- Most remaining `not_testable` rows are post-opt-out tracking rows where WS01 did not retain a confirmed opt-out/reject action. These should stay `not_testable` unless WS01 can exercise the path and retain before/after tracking comparisons.
+- Post-opt-out tracking rows are outside the current production core scanner. They should stay `not_testable` / internal-review unless a separate product-approved post-choice integration is explicitly enabled.
 
 Current capture gaps to harden upstream in WS01:
 

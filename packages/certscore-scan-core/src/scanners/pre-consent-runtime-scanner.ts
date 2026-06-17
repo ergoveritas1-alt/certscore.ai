@@ -16,7 +16,7 @@ import {
 } from "@certscore/contracts";
 import { resolveEndpointGeography, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import { writeFile } from "node:fs/promises";
-import { chromium, type Page, type Request, type Response, type Route } from "playwright";
+import { chromium, type Browser, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import {
   classifyCookieParty,
@@ -41,10 +41,12 @@ export interface PreConsentRuntimeScannerInput {
   scanStartedAtMs: number;
   internalBudgetMs: number;
   artifactWriter: ArtifactWriter;
+  browser?: Browser;
   browserMode?: "headless" | "headed";
   stubHeavyResources?: boolean;
   routeFulfillers?: FixtureRouteFulfiller[];
-  screenshotMode?: "always" | "selective";
+  screenshotMode?: "always" | "selective" | "never";
+  screenshotTimeoutMs?: number;
   waitMode?: "full" | "fast";
 }
 
@@ -88,10 +90,12 @@ export async function preConsentRuntimeScanner(
   const scriptEvents: ScriptEvent[] = [];
   const iframeEvents: IframeEvent[] = [];
   const vendorResolverInputs: VendorResolverInput[] = [];
+  const runtimeErrors: string[] = [];
   const requestIds = new WeakMap<Request, string>();
 
   const browserMode = input.browserMode ?? "headless";
-  const browser = await recordTiming(timingBreakdown, "browser launch", `Playwright Chromium launch (${browserMode}).`, () =>
+  const ownsBrowser = !input.browser;
+  const browser = input.browser ?? await recordTiming(timingBreakdown, "browser launch", `Playwright Chromium launch (${browserMode}).`, () =>
     chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }))
   );
   const context = await recordTiming(timingBreakdown, "browser context", "New isolated browser context and page.", async () => {
@@ -273,7 +277,13 @@ export async function preConsentRuntimeScanner(
       fastWait
         ? "Fast planned-DAG observation settle window after bounded network quiet."
         : "Fixed pre-consent observation window after network quiet.",
-      () => page.waitForTimeout(settleWaitMs)
+      () => page.waitForTimeout(settleWaitMs).catch((error) => {
+        if (isContextClosedError(error)) {
+          runtimeErrors.push(`Observation settle ended early because the page/context closed: ${errorMessage(error)}`);
+          return;
+        }
+        throw error;
+      })
     );
     recordInstantTiming(
       timingBreakdown,
@@ -315,7 +325,13 @@ export async function preConsentRuntimeScanner(
     }
 
     const cookies = await recordTiming(timingBreakdown, "cookie capture", "Browser-context cookie snapshot before consent.", () =>
-      browserContext.cookies()
+      browserContext.cookies().catch((error) => {
+        if (isContextClosedError(error)) {
+          runtimeErrors.push(`Cookie capture unavailable because the page/context closed: ${errorMessage(error)}`);
+          return [];
+        }
+        throw error;
+      })
     );
     const cookieSnapshot: CookieSnapshot = {
       artifactId: "cookie_snapshot_pre_consent",
@@ -416,10 +432,7 @@ export async function preConsentRuntimeScanner(
     if (shouldCaptureScreenshot) {
       const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
       await recordTiming(timingBreakdown, "screenshot capture", "Full-page pre-consent screenshot with 1x1 fallback on failure.", () =>
-        page.screenshot({ path: screenshotPath, fullPage: true, timeout: 5_000 }).catch(async (error: unknown) => {
-          screenshotErrors.push(`Screenshot fallback used: ${error instanceof Error ? error.message : String(error)}`);
-          await writeFile(screenshotPath, ONE_PIXEL_TRANSPARENT_PNG);
-        })
+        capturePreConsentScreenshot(page, screenshotPath, input.screenshotTimeoutMs ?? 5_000, screenshotErrors)
       );
       screenshots.push({
         artifactId: "screenshot_pre_consent",
@@ -462,13 +475,13 @@ export async function preConsentRuntimeScanner(
     return {
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
-        status: screenshotErrors.length > 0 ? "partial" : "completed",
+        status: runtimeErrors.length > 0 || screenshotErrors.length > 0 ? "partial" : "completed",
         startedAt: moduleStartedAt,
         completedAt: new Date().toISOString(),
         durationMs: Date.now() - moduleStartedAtMs,
         timingBreakdown,
         evidenceRefs: [],
-        errors: screenshotErrors,
+        errors: [...runtimeErrors, ...screenshotErrors],
       },
       runtimeTimeline: [...networkEvents, ...networkResponseEvents, ...cookieEvents, ...scriptEvents, ...iframeEvents],
       networkEvents,
@@ -511,7 +524,9 @@ export async function preConsentRuntimeScanner(
       vendorResolverInputs,
     };
   } finally {
-    await browser.close();
+    if (ownsBrowser) {
+      await browser.close();
+    }
   }
 
   async function captureResponse(response: Response): Promise<void> {
@@ -663,6 +678,14 @@ function recordInstantTiming(
     detail,
     durationMs: 0,
   });
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isContextClosedError(error: unknown): boolean {
+  return /target page, context or browser has been closed|browser has been closed|context has been closed/i.test(errorMessage(error));
 }
 
 function resolverInputForEvent(
@@ -1613,12 +1636,38 @@ function stableFrameId(frameUrl: string | undefined): string | undefined {
 function shouldCapturePreConsentScreenshot(input: {
   cmpRuntimeObservations: CmpRuntimeObservation[];
   consentObservation: ConsentUiObservation;
-  screenshotMode: "always" | "selective";
+  screenshotMode: "always" | "selective" | "never";
 }) {
+  if (input.screenshotMode === "never") {
+    return false;
+  }
   if (input.screenshotMode === "always") {
     return true;
   }
   return input.consentObservation.likelyPresent || input.cmpRuntimeObservations.length > 0;
+}
+
+async function capturePreConsentScreenshot(
+  page: Page,
+  screenshotPath: string,
+  timeoutMs: number,
+  screenshotErrors: string[],
+) {
+  try {
+    await page.screenshot({ path: screenshotPath, fullPage: true, timeout: timeoutMs });
+    return;
+  } catch (error) {
+    screenshotErrors.push(`Full-page screenshot failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    await page.screenshot({ path: screenshotPath, fullPage: false, timeout: Math.max(750, Math.min(timeoutMs, 2_500)) });
+    screenshotErrors.push("Viewport screenshot fallback used after full-page screenshot failure.");
+    return;
+  } catch (error) {
+    screenshotErrors.push(`Viewport screenshot fallback failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  await writeFile(screenshotPath, ONE_PIXEL_TRANSPARENT_PNG);
+  screenshotErrors.push("1x1 screenshot placeholder used after screenshot capture failures.");
 }
 
 function unique(values: string[]): string[] {

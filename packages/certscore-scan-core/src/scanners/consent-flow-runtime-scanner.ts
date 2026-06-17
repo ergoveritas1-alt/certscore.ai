@@ -17,13 +17,14 @@ import {
   type EvidenceRef,
   type NetworkEvent,
   type NetworkResponseEvent,
+  type NormalizedVendorObservation,
   type RuntimeEvidenceEvent,
   type ScanModuleRun,
   type ScreenshotArtifact,
 } from "@certscore/contracts";
 import { resolveEndpointGeography, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import { writeFile } from "node:fs/promises";
-import { chromium, type Browser, type BrowserContext, type Page, type Request, type Response, type Route } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Frame, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import { chromiumLaunchOptions } from "../playwright-runtime.js";
 import {
@@ -63,6 +64,7 @@ import {
 import {
   buildConsentScenarioPlan,
   comparePlanItems,
+  consentScenarioOrder,
   type ConsentScenarioPlan,
   type ConsentReplayAuxiliaryProbeMode,
   type ConsentScenarioPlanItem,
@@ -102,12 +104,45 @@ export interface ConsentFlowRuntimeScannerInput {
   nanoConsentUiAssistProvider?: NanoConsentUiAssistProvider;
   scenarioPlanningMode?: ConsentScenarioPlanningMode;
   scenarioConcurrency?: number;
+  allowedScenarios?: ConsentFlowScenario[];
   policyPlanningDeadlineMs?: number;
   consentFlowDeadlineMs?: number;
   policyPlanningStatus?: ConsentScenarioPolicyPlanningStatus;
   policyPrivacyControlUrlCount?: number;
-  scenarioResourceMode?: "normal" | "lean";
+  scenarioResourceMode?: "normal" | "lean" | "cmp_safe";
+  screenshotMode?: "auto" | "none";
   preConsentBaseline?: PreConsentRuntimeScannerResult;
+  plannedActionFinalSettleMs?: number;
+  preActionObservationMs?: number;
+  actionSearchDeadlineMs?: number;
+  consentActionRecipe?: ConsentActionRecipeInput;
+  oneTrustHiddenActionMode?: "off" | "diagnostic";
+  externalBaselinePlanning?: "enrich" | "reuse_only";
+  forceAllowedScenarioPlanning?: boolean;
+}
+
+export interface ConsentActionRecipeInput {
+  artifactVersion: "certscore.v2.consent-action-recipe.v1";
+  generatedAt: string;
+  normalizedUrl: string;
+  scenarios: ConsentActionRecipeScenario[];
+}
+
+export interface ConsentActionRecipeScenario {
+  actionType?: string;
+  candidates: ConsentActionRecipeCandidate[];
+  scenario: string;
+  targetUrl?: string;
+}
+
+export interface ConsentActionRecipeCandidate {
+  actionType?: string;
+  confidence?: number;
+  frameKind?: string;
+  frameUrl?: string;
+  labelText: string;
+  selectorSummary?: string;
+  visible?: boolean;
 }
 
 export interface ConsentFlowRuntimeScannerResult {
@@ -179,6 +214,54 @@ export interface ScenarioCapture {
   phaseTimings: ScenarioPhaseTiming[];
 }
 
+interface ScenarioRuntimeDiagnosticState {
+  activeRequestIds: Set<string>;
+  blockedResourceCounts: Record<string, number>;
+  cmpSurfaceProbe?: CmpSurfaceProbeDiagnostic;
+  consoleMessages: Array<{ level: string; text: string }>;
+  finalSettleMs: number;
+  finalSettleStartedAtMs: number;
+  pageErrors: string[];
+  requestFailures: Array<{
+    failureText?: string;
+    method: string;
+    requestId?: string;
+    resourceType: string;
+    url: string;
+  }>;
+  recipeDiagnostics?: ScenarioRecipeDiagnostic;
+  resourceTypeCounts: Record<string, number>;
+}
+
+interface ScenarioRecipeDiagnostic {
+  candidateLabels: string[];
+  equivalentCandidateCount: number;
+  equivalentVisibleCandidateCount: number;
+  recipeCandidateCount: number;
+  status: "not_applicable" | "missing" | "present_empty" | "present_not_matched" | "reacquired";
+  targetUrl?: string;
+}
+
+interface ConsentFlowComparisonCapture {
+  scenario: ConsentFlowScenario;
+  consentState: ConsentState;
+  networkEvents: NetworkEvent[];
+  networkResponseEvents?: NetworkResponseEvent[];
+  cookieEvents: CookieEvent[];
+  consentInteractionEvents?: ConsentInteractionEvent[];
+  actionAttempts: ConsentActionAttempt[];
+  vendorResolverInputs?: VendorResolverInput[];
+  normalizedVendorObservations?: NormalizedVendorObservation[];
+}
+
+export interface ConsentFlowComparisonEvidenceInput {
+  networkEvents: NetworkEvent[];
+  cookieEvents: CookieEvent[];
+  consentActionAttempts: ConsentActionAttempt[];
+  consentFlowObservations?: ConsentFlowObservation[];
+  normalizedVendorObservations?: NormalizedVendorObservation[];
+}
+
 interface RawControlCandidate {
   actionId: string;
   candidateIndex: number;
@@ -192,6 +275,20 @@ interface RawControlCandidate {
   enabled: boolean;
   role?: string;
   ariaLabel?: string;
+}
+
+interface CmpSurfaceProbeDiagnostic {
+  attemptedCalls: string[];
+  controlsVisibleAfterProbe: number;
+  oneTrustDomState?: {
+    consentSdkPresent: boolean;
+    hiddenButtonLabels: string[];
+    pcSdkPresent: boolean;
+    pcSdkVisible: boolean;
+    visibleButtonLabels: string[];
+  };
+  observedOneTrustGlobals: string[];
+  preferenceSurfaceObserved: boolean;
 }
 
 interface ClassifiedActionCandidates {
@@ -321,7 +418,7 @@ async function runPlannedParallelConsentFlow(
   moduleStartedAtMs: number,
 ): Promise<ConsentFlowRuntimeScannerResult> {
   const browserMode = input.browserMode ?? "headless";
-  const browser = await chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }));
+  let browser = await chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }));
   const consentFlowDeadlineMs = input.consentFlowDeadlineMs ?? input.internalBudgetMs;
   const deadlineAtMs = moduleStartedAtMs + consentFlowDeadlineMs;
   const scenarioConcurrency = Math.max(1, Math.min(defaultScenarioConcurrency(input), 4));
@@ -336,7 +433,7 @@ async function runPlannedParallelConsentFlow(
       reasonCodes: ["baseline_required"],
     };
     const externalBaseline = preConsentBaselineCapture(input, moduleStartedAtMs);
-    const baseline = externalBaseline ?? await runScenario(input, {
+    const initialBaseline = externalBaseline ?? await runScenario(input, {
       scenario: "baseline_pre_consent",
       consentState: "pre_consent",
       moduleStartedAtMs,
@@ -346,6 +443,9 @@ async function runPlannedParallelConsentFlow(
       idFactory: createConsentScenarioIdFactory("baseline_pre_consent"),
       deadlineAtMs,
     });
+    const baseline = externalBaseline && input.externalBaselinePlanning !== "reuse_only"
+      ? await enrichExternalBaselineForPlanning(input, browser, initialBaseline, deadlineAtMs)
+      : initialBaseline;
     externalBaselineReused = Boolean(externalBaseline);
     retainedCaptures.push(baseline);
     plan = buildConsentScenarioPlan({
@@ -362,6 +462,7 @@ async function runPlannedParallelConsentFlow(
       policyPrivacyControlUrlCount: input.policyPrivacyControlUrlCount,
       deadlineHit: Date.now() > deadlineAtMs,
     });
+    plan = forceAllowedScenarioPlanItems(plan, input);
     applyBaselineRecipeTargets(plan.plannedScenarios, baseline, input.normalizedUrl);
     const planRef = await writeConsentScenarioPlanArtifact({
       artifactWriter: input.artifactWriter,
@@ -374,35 +475,60 @@ async function runPlannedParallelConsentFlow(
       consentFlowDeadlineMs,
     });
     artifactRefs.push(planRef);
-    const plannedWithoutBaseline = plan.plannedScenarios.filter((item) => item.scenario !== "baseline_pre_consent");
+    const allowedScenarioSet = input.allowedScenarios
+      ? new Set<ConsentFlowScenario>(input.allowedScenarios)
+      : null;
+    const plannedWithoutBaseline = plan.plannedScenarios.filter((item) =>
+      item.scenario !== "baseline_pre_consent" &&
+      (!allowedScenarioSet || allowedScenarioSet.has(item.scenario))
+    );
+    const runPlannedScenarioWithBrowserRetry = async (item: ConsentScenarioPlanItem): Promise<ScenarioCapture> => {
+      if (item.scenario === "baseline_pre_consent") {
+        return baseline;
+      }
+      const scenarioDeadlineAtMs = plannedScenarioExecutionDeadlineAtMs(item, deadlineAtMs);
+      const run = () => runScenario(input, {
+        scenario: item.scenario,
+        consentState: consentStateForScenarioExecution(item.scenario),
+        actionType: item.actionType,
+        targetUrl: item.targetUrl,
+        moduleStartedAtMs,
+        deadlineAtMs: scenarioDeadlineAtMs,
+      }, {
+        browser,
+        idFactory: createConsentScenarioIdFactory(item.scenario),
+        baselineCapture: baseline,
+        deadlineAtMs: scenarioDeadlineAtMs,
+      });
+      try {
+        return await run();
+      } catch (error) {
+        if (!isBrowserContextClosedError(error) || scenarioDeadlineNearlyHit(scenarioDeadlineAtMs, 8_000)) {
+          throw error;
+        }
+        await closeBrowserWithTimeout(browser);
+        browser = await chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }));
+        return run();
+      }
+    };
     const execution = await executeConsentScenarioPlan({
       plannedScenarios: [baselineItem, ...plannedWithoutBaseline],
       skippedScenarios: plan.skippedScenarios,
       concurrency: scenarioConcurrency,
       deadlineAtMs,
       async runScenario(item) {
-        if (item.scenario === "baseline_pre_consent") {
-          return baseline;
-        }
-        const scenarioDeadlineAtMs = plannedScenarioExecutionDeadlineAtMs(item, deadlineAtMs);
-        return runScenario(input, {
-      scenario: item.scenario,
-      consentState: consentStateForScenarioExecution(item.scenario),
-      actionType: item.actionType,
-      targetUrl: item.targetUrl,
-      moduleStartedAtMs,
-      deadlineAtMs: scenarioDeadlineAtMs,
-    }, {
-      browser,
-      idFactory: createConsentScenarioIdFactory(item.scenario),
-      baselineCapture: baseline,
-      deadlineAtMs: scenarioDeadlineAtMs,
+        return runPlannedScenarioWithBrowserRetry(item);
+      },
     });
-  },
-});
     executionEntries = execution.entries;
     const captures = execution.captures.sort(comparePlanItems);
     retainedCaptures.splice(0, retainedCaptures.length, ...captures);
+    const fallbackQualityRefs = await writeFallbackScenarioEvidenceQualityArtifacts({
+      artifactWriter: input.artifactWriter,
+      capturedScenarios: new Set(captures.map((capture) => capture.scenario)),
+      executionEntries,
+    });
+    artifactRefs.push(...fallbackQualityRefs);
     const comparisons = buildComparisons(captures);
     const executionRef = await writeConsentScenarioExecutionArtifact({
       artifactWriter: input.artifactWriter,
@@ -469,6 +595,13 @@ async function runPlannedParallelConsentFlow(
       if (fallbackRef) {
         artifactRefs.push(fallbackRef);
       }
+      const capturedScenarios = new Set(captures.map((capture) => capture.scenario));
+      const fallbackQualityRefs = await writeFallbackScenarioEvidenceQualityArtifacts({
+        artifactWriter: input.artifactWriter,
+        capturedScenarios,
+        executionEntries: fallbackEntries,
+      }).catch(() => []);
+      artifactRefs.push(...fallbackQualityRefs);
     }
     return {
       moduleRun: moduleRun(
@@ -495,6 +628,69 @@ async function runPlannedParallelConsentFlow(
     };
   } finally {
     await closeBrowserWithTimeout(browser);
+  }
+}
+
+function forceAllowedScenarioPlanItems(
+  plan: ConsentScenarioPlan,
+  input: ConsentFlowRuntimeScannerInput,
+): ConsentScenarioPlan {
+  if (!input.forceAllowedScenarioPlanning || !input.allowedScenarios?.length || !input.consentActionRecipe) {
+    return plan;
+  }
+  const allowed = new Set(input.allowedScenarios);
+  const alreadyPlanned = new Set(plan.plannedScenarios.map((item) => item.scenario));
+  const recipeScenarios = input.consentActionRecipe.scenarios.flatMap((scenario) => {
+    const parsedScenario = parseConsentFlowScenarioValue(scenario.scenario);
+    const parsedActionType = parseConsentActionTypeValue(scenario.actionType);
+    if (!parsedScenario || !allowed.has(parsedScenario) || parsedScenario === "baseline_pre_consent" || alreadyPlanned.has(parsedScenario)) {
+      return [];
+    }
+    return [{
+      actionType: parsedActionType,
+      scenario: parsedScenario,
+      targetUrl: scenario.targetUrl,
+    }];
+  });
+  if (recipeScenarios.length === 0) {
+    return plan;
+  }
+  const forcedItems: ConsentScenarioPlanItem[] = recipeScenarios.map((scenario) => ({
+    scenario: scenario.scenario,
+    actionType: scenario.actionType,
+    ...(scenario.targetUrl ? { targetUrl: scenario.targetUrl } : {}),
+    reasonCodes: ["coordinator_plan_requested", "worker_lane_forced_planning"],
+  }));
+  const forcedScenarioSet = new Set(forcedItems.map((item) => item.scenario));
+  return {
+    ...plan,
+    plannedScenarios: [...plan.plannedScenarios, ...forcedItems].sort(comparePlanItems),
+    skippedScenarios: plan.skippedScenarios
+      .filter((item) => !forcedScenarioSet.has(item.scenario))
+      .sort(comparePlanItems),
+    notes: [
+      ...plan.notes,
+      "Worker lane honored coordinator-planned consent scenarios even when the reused local baseline had no action candidates.",
+    ],
+  };
+}
+
+function parseConsentFlowScenarioValue(value: unknown): ConsentFlowScenario | undefined {
+  return typeof value === "string" && (consentScenarioOrder as string[]).includes(value)
+    ? value as ConsentFlowScenario
+    : undefined;
+}
+
+function parseConsentActionTypeValue(value: unknown): ConsentActionType | undefined {
+  switch (value) {
+    case "accept_all":
+    case "reject_all":
+    case "manage_preferences":
+    case "save_preferences":
+    case "do_not_sell_share":
+      return value;
+    default:
+      return undefined;
   }
 }
 
@@ -621,6 +817,20 @@ async function runScenario(
   const responseCapturePromises: Promise<void>[] = [];
   const captureInlineScreenshots = shouldCaptureInlineScreenshots(input, scenarioInput.scenario);
   const phaseTimings: ScenarioPhaseTiming[] = [];
+  let cookieCountBeforeAction: number | null = null;
+  let storageCountBeforeAction: number | null = null;
+  const runtimeDiagnostics: ScenarioRuntimeDiagnosticState = {
+    activeRequestIds: new Set<string>(),
+    blockedResourceCounts: {},
+    cmpSurfaceProbe: undefined,
+    consoleMessages: [],
+    finalSettleMs: 0,
+    finalSettleStartedAtMs: 0,
+    pageErrors: [],
+    requestFailures: [],
+    recipeDiagnostics: undefined,
+    resourceTypeCounts: {},
+  };
   let actionApplied = false;
   const replayArtifactRefs: ArtifactRef[] = [];
 
@@ -706,12 +916,14 @@ async function runScenario(
         });
       });
     }
-    if (input.stubHeavyResources || shouldUseLeanResources(input, scenarioInput.scenario)) {
-      const preserveOptions = shouldUseLeanResources(input, scenarioInput.scenario)
+    if (input.stubHeavyResources || shouldUseGuardedResources(input, scenarioInput.scenario)) {
+      const preserveOptions = shouldUseGuardedResources(input, scenarioInput.scenario)
         ? guardedLeanResourceOptions(input, runtime?.baselineCapture)
         : undefined;
       await context.route("**/*", async (route) => {
+        const routeResourceType = route.request().resourceType();
         if (await maybeFulfillHeavyResource(route, preserveOptions)) {
+          incrementCount(runtimeDiagnostics.blockedResourceCounts, routeResourceType);
           return;
         }
         await route.continue();
@@ -725,6 +937,8 @@ async function runScenario(
       }
       const requestId = nextScenarioId("cf_req");
       requestIds.set(request, requestId);
+      runtimeDiagnostics.activeRequestIds.add(requestId);
+      incrementCount(runtimeDiagnostics.resourceTypeCounts, request.resourceType());
       const hostname = getHostname(requestUrl) ?? undefined;
       const registrableDomain = getRegistrableDomain(hostname) ?? undefined;
       const party = classifyHostnameParty(hostname, firstPartyHostname);
@@ -819,6 +1033,37 @@ async function runScenario(
     page.on("response", (response) => {
       const promise = captureResponse(response).catch(() => undefined);
       responseCapturePromises.push(promise);
+    });
+    page.on("requestfinished", (request) => {
+      const requestId = requestIds.get(request);
+      if (requestId) {
+        runtimeDiagnostics.activeRequestIds.delete(requestId);
+      }
+    });
+    page.on("requestfailed", (request) => {
+      const requestId = requestIds.get(request);
+      if (requestId) {
+        runtimeDiagnostics.activeRequestIds.delete(requestId);
+      }
+      pushBounded(runtimeDiagnostics.requestFailures, {
+        failureText: request.failure()?.errorText,
+        method: request.method(),
+        requestId,
+        resourceType: request.resourceType(),
+        url: sanitizeDiagnosticUrl(request.url()),
+      }, 24);
+    });
+    page.on("pageerror", (error) => {
+      pushBounded(runtimeDiagnostics.pageErrors, error.message.replace(/\s+/g, " ").slice(0, 240), 12);
+    });
+    page.on("console", (message) => {
+      if (!["error", "warning"].includes(message.type())) {
+        return;
+      }
+      pushBounded(runtimeDiagnostics.consoleMessages, {
+        level: message.type(),
+        text: message.text().replace(/\s+/g, " ").slice(0, 240),
+      }, 16);
     });
 
     async function captureResponse(response: Response): Promise<void> {
@@ -916,15 +1161,31 @@ async function runScenario(
         : "Non-baseline action readiness probe plus bounded settle.",
       () => waitForScenarioReadiness(page, scenarioInput.scenario, input.internalBudgetMs, effectiveDeadlineAtMs),
     );
+    if (scenarioInput.actionType && preActionObservationMs(input) > 0) {
+      await recordPhase("pre_action_observation", "Payload-controlled bounded pre-action observation window.", () =>
+        waitForTimeoutWithinDeadline(page, preActionObservationMs(input), effectiveDeadlineAtMs)
+      );
+    }
 
     const beforeDom = await recordPhase("pre_action_dom", "Pre-action DOM text capture.", () =>
       writeDomArtifact(input, page, scenarioInput.scenario, "before", "pre_consent")
+    );
+    cookieCountBeforeAction = await recordPhase("pre_action_cookie_count", "Pre-action cookie count snapshot.", () =>
+      context.cookies().then((values) => values.length).catch(() => null)
+    );
+    storageCountBeforeAction = await recordPhase("pre_action_storage_count", "Pre-action storage count snapshot.", () =>
+      browserStorageCount(page)
     );
     const beforeScreenshot = captureInlineScreenshots
       ? await recordPhase("pre_action_screenshot", "Pre-action screenshot capture.", () =>
         writeScreenshotArtifact(input, page, scenarioInput.scenario, "before", "pre_consent")
       )
       : undefined;
+    if (scenarioInput.actionType) {
+      runtimeDiagnostics.cmpSurfaceProbe = await recordPhase("cmp_api_surface_probe", "Bounded CMP API and global preference-surface probe before action candidate extraction.", () =>
+        openCmpSurfaceIfAvailable(page, effectiveDeadlineAtMs)
+      );
+    }
     const reusableBaselineCandidates = reusableBaselineActionCandidates({
       baselineCapture: runtime?.baselineCapture,
       dom: beforeDom,
@@ -940,7 +1201,10 @@ async function runScenario(
       runtime?.baselineCapture,
       reusableBaselineCandidates,
     );
-    const candidateWorkDeadlineLimited = scenarioDeadlineNearlyHit(runtime?.deadlineAtMs ?? scenarioInput.deadlineAtMs, scenarioInput.actionType ? 1_800 : 700);
+    const candidateWorkDeadlineLimited = scenarioDeadlineNearlyHit(
+      runtime?.deadlineAtMs ?? scenarioInput.deadlineAtMs,
+      scenarioInput.actionType ? actionSearchMinimumRemainingMs(input) : 700,
+    );
     const rawCandidates = baselineOnlyCandidateLane || candidateWorkDeadlineLimited
       ? await recordPhase(
         baselineOnlyCandidateLane ? "baseline_candidate_reuse" : "deadline_candidate_short_circuit",
@@ -973,10 +1237,43 @@ async function runScenario(
           targetActionType: scenarioInput.actionType,
         })
       );
+    const targetActionType = scenarioInput.actionType;
+    const oneTrustHiddenDiagnosticCandidates = targetActionType && shouldUseOneTrustHiddenActionDiagnostic(input)
+      ? await recordPhase("onetrust_hidden_diagnostic_candidate_extract", "Extract local/dev diagnostic OneTrust hidden action candidates.", () =>
+        extractOneTrustHiddenDiagnosticActionCandidates({
+          dom: beforeDom,
+          page,
+          scenario: scenarioInput.scenario,
+          screenshot: beforeScreenshot,
+          surfaceProbe: runtimeDiagnostics.cmpSurfaceProbe,
+          targetActionType,
+        })
+      )
+      : [];
     const actionCandidates = mergeActionCandidates([
       ...reusableBaselineCandidates,
       ...beforeClassification.actionCandidates,
+      ...oneTrustHiddenDiagnosticCandidates,
     ]);
+    runtimeDiagnostics.recipeDiagnostics = scenarioRecipeDiagnostic({
+      candidates: actionCandidates,
+      input,
+      scenario: scenarioInput.scenario,
+    });
+    if (scenarioInput.actionType) {
+      const targetActionType = scenarioInput.actionType;
+      await recordPhase("planner_candidate_diagnostics_write", "Write bounded planner candidate diagnostics.", () =>
+        writePlannerCandidateDiagnosticsArtifact({
+          actionCandidates,
+          cmpSurfaceProbe: runtimeDiagnostics.cmpSurfaceProbe,
+          input,
+          rawCandidates,
+          recipeResearchCandidates,
+          scenario: scenarioInput.scenario,
+          targetActionType,
+        })
+      );
+    }
     const nanoAssistErrors = [...beforeClassification.nanoAssistErrors];
     const bannerPresentBefore = bannerLikelyPresent(actionCandidates, beforeDom.textExcerpt);
     const preActionConsentStateMarkers = await consentStateMarkers(page);
@@ -1049,7 +1346,16 @@ async function runScenario(
           (!bannerPresentAfter || postActionStateChanged);
         const failureReason = succeeded
           ? undefined
-          : bannerPresentAfter ? "banner_still_present_after_click" : undefined;
+          : directActionFailureReason({
+            afterDomExcerpt: afterDom.textExcerpt,
+            bannerPresentAfter,
+            beforeDomExcerpt: beforeDom.textExcerpt,
+            candidateContextTextExcerpt: candidate.contextTextExcerpt,
+            candidateLabelText: candidate.labelText,
+            postActionConsentStateMarkers,
+            preActionConsentStateMarkers,
+            scenario: scenarioInput.scenario,
+          });
         if (!succeeded && !afterScreenshot && !budgetLimitedPostActionTail && !scenarioDeadlineNearlyHit(effectiveDeadlineAtMs, 1_200)) {
           afterScreenshot = await recordPhase("failure_screenshot", "Failure/ambiguous action screenshot capture.", () =>
             writeScreenshotArtifact(input, page, scenarioInput.scenario, "after_failure", scenarioInput.consentState, {
@@ -1241,6 +1547,61 @@ async function runScenario(
               scenario: scenarioInput.scenario,
               evidenceRefs: formAttempt.evidenceRefs,
             });
+          } else if (customPrivacyFormVisible(afterDom.textExcerpt) || await customPrivacyFormVisibleOnPage(page)) {
+            const afterDomRef = artifactRefFromDom(afterDom);
+            const afterScreenshotRef = artifactRefFromOptionalScreenshot(afterScreenshot);
+            const beforeDomRef = artifactRefFromDom(beforeDom);
+            const beforeScreenshotRef = artifactRefFromOptionalScreenshot(beforeScreenshot);
+            const formDiagnostic = await writePrivacyOptOutFormDiagnosticArtifact(input, page, scenarioInput.scenario, "after_selection");
+            const diagnosticRefs = [
+              artifactRefFromJsonArtifact(formDiagnostic, "privacy_opt_out_form_diagnostic_manual_review"),
+            ].filter((ref): ref is ArtifactRef => Boolean(ref));
+            const evidenceRefs = [
+              { refId: `ref_${beforeDom.artifactId}`, artifactId: beforeDom.artifactId, eventType: "dom_snapshot" as const, excerpt: beforeDom.textExcerpt },
+              { refId: `ref_${afterDom.artifactId}`, artifactId: afterDom.artifactId, eventType: "dom_snapshot" as const, excerpt: afterDom.textExcerpt },
+              ...diagnosticRefs.map((ref) => ({
+                refId: `ref_${ref.artifactId}`,
+                artifactId: ref.artifactId,
+                eventType: "dom_snapshot" as const,
+                excerpt: ref.label,
+              })),
+            ];
+            const failureReason = "manual_review_required_custom_privacy_form";
+            attempts.push({
+              attemptId: `${attemptId}_manual_review_custom_privacy_form`,
+              actionType: scenarioInput.actionType,
+              attempted: true,
+              succeeded: false,
+              failureReason,
+              actionProof: actionProof({
+                afterDomRef,
+                afterScreenshotRef,
+                attempted: true,
+                beforeDomRef,
+                beforeScreenshotRef,
+                candidate,
+                evidenceRefs,
+                failureReason,
+                actionTimestampMs: elapsed(input.scanStartedAtMs),
+                afterDomExcerpt: afterDom.textExcerpt,
+                beforeDomExcerpt: beforeDom.textExcerpt,
+                cmpContext: detectCmpContext([beforeDom.textExcerpt, afterDom.textExcerpt, candidate.labelText, candidate.contextTextExcerpt]),
+                actionPath: "privacy_opt_out_form",
+                postActionConsentStateMarkers,
+                preActionConsentStateMarkers,
+                postClickSettleMs,
+                succeeded: false,
+              }),
+              beforeScreenshotRef,
+              afterScreenshotRef,
+              beforeDomRef,
+              afterDomRef,
+              bannerPresentBefore,
+              bannerPresentAfter,
+              timestampMs: elapsed(input.scanStartedAtMs),
+              scenario: scenarioInput.scenario,
+              evidenceRefs,
+            });
           }
         }
         consentInteractionEvents.push({
@@ -1345,6 +1706,95 @@ async function runScenario(
         }
       } else if (scenarioInput.actionType === "reject_all" || scenarioInput.actionType === "accept_all") {
         const targetActionType = scenarioInput.actionType;
+        const diagnosticRejectSaveCandidate = targetActionType === "reject_all" && shouldUseOneTrustHiddenActionDiagnostic(input)
+          ? bestCandidate(actionCandidates, "save_preferences")
+          : undefined;
+        if (
+          !candidate &&
+          diagnosticRejectSaveCandidate?.shouldClick &&
+          diagnosticRejectSaveCandidate.confidence >= 0.78 &&
+          !bestPreferenceSurfaceOpener(actionCandidates)
+        ) {
+          const actionTimestampMs = elapsed(input.scanStartedAtMs);
+          await recordPhase("diagnostic_reject_save_action", "Local/dev diagnostic OneTrust reject flow save-only action.", () =>
+            clickCandidate(page, diagnosticRejectSaveCandidate)
+          );
+          const postClickSettleMs = await recordPhase("post_click_settle", "Post-click consent-state settle.", () =>
+            waitForConsentActionSettle(page, consentActionSettleBudgetMs(input, effectiveDeadlineAtMs), effectiveDeadlineAtMs)
+          );
+          const postActionConsentStateMarkers = await consentStateMarkers(page);
+          const afterDom = await recordPhase("post_action_dom", "Post-action DOM text capture.", () =>
+            writeDomArtifact(input, page, scenarioInput.scenario, "after_diagnostic_reject_save", scenarioInput.consentState)
+          );
+          const postActionStateChanged = consentStateChangedAfterAction(preActionConsentStateMarkers, postActionConsentStateMarkers);
+          const preferenceSurfaceChanged = domTextChangedAfterAction(beforeDom.textExcerpt, afterDom.textExcerpt);
+          const succeeded = postActionStateChanged || preferenceSurfaceChanged;
+          const failureReason = succeeded ? undefined : "preference_center_reject_path_not_completed";
+          const evidenceRefs = [
+            { refId: `ref_${beforeDom.artifactId}`, artifactId: beforeDom.artifactId, eventType: "dom_snapshot" as const, excerpt: beforeDom.textExcerpt },
+            { refId: `ref_${afterDom.artifactId}`, artifactId: afterDom.artifactId, eventType: "dom_snapshot" as const, excerpt: afterDom.textExcerpt },
+          ];
+          const beforeScreenshotRef = artifactRefFromOptionalScreenshot(beforeScreenshot);
+          const beforeDomRef = artifactRefFromDom(beforeDom);
+          const afterDomRef = artifactRefFromDom(afterDom);
+          actionApplied = succeeded;
+          attempts.push({
+            attemptId,
+            actionType: scenarioInput.actionType,
+            attempted: true,
+            succeeded,
+            failureReason,
+            actionProof: actionProof({
+              afterDomRef,
+              attempted: true,
+              beforeDomRef,
+              beforeScreenshotRef,
+              candidate: diagnosticRejectSaveCandidate,
+              evidenceRefs,
+              failureReason,
+              actionTimestampMs,
+              afterDomExcerpt: afterDom.textExcerpt,
+              beforeDomExcerpt: beforeDom.textExcerpt,
+              cmpContext: detectCmpContext([
+                beforeDom.textExcerpt,
+                afterDom.textExcerpt,
+                diagnosticRejectSaveCandidate.labelText,
+                diagnosticRejectSaveCandidate.contextTextExcerpt,
+              ]),
+              actionPath: "preference_center_reject_all_save",
+              postActionConsentStateMarkers,
+              preActionConsentStateMarkers,
+              postClickSettleMs,
+              succeeded,
+            }),
+            beforeScreenshotRef,
+            beforeDomRef,
+            afterDomRef,
+            bannerPresentBefore,
+            bannerPresentAfter: false,
+            timestampMs: actionTimestampMs,
+            scenario: scenarioInput.scenario,
+            evidenceRefs,
+          });
+          if (succeeded) {
+            consentInteractionEvents.push({
+              eventId: nextScenarioId("cf_consent"),
+              eventType: "consent_interaction",
+              timestampMs: actionTimestampMs,
+              sourceScanner: SOURCE_SCANNER,
+              scenario: scenarioInput.scenario,
+              consentStateAtTime: scenarioInput.consentState,
+              pagePhase: "post_interaction",
+              url: page.url(),
+              evidenceRefs,
+              confidence: diagnosticRejectSaveCandidate.confidence,
+              directVsInferred: "direct",
+              action: "reject",
+              selector: diagnosticRejectSaveCandidate.selectorSummary,
+              text: "reject via diagnostic OneTrust save-only action",
+            });
+          }
+        } else {
         const traversal = await recordPhase("preference_center_traversal", "Preference-center open/action/save traversal.", () => attemptPreferenceCenterRejectTraversal({
           input,
           page,
@@ -1360,6 +1810,7 @@ async function runScenario(
           nanoAssistErrors,
           nextId: nextScenarioId,
           deadlineAtMs: effectiveDeadlineAtMs,
+          allowRejectSaveOnly: shouldUseOneTrustHiddenActionDiagnostic(input) && targetActionType === "reject_all",
         }));
         if (traversal) {
           actionApplied = traversal.succeeded;
@@ -1433,6 +1884,7 @@ async function runScenario(
             evidenceRefs,
           });
         }
+        }
       } else {
         const evidenceRefs = [{ refId: `ref_${beforeDom.artifactId}`, artifactId: beforeDom.artifactId, eventType: "dom_snapshot" as const, excerpt: beforeDom.textExcerpt }];
         const beforeScreenshotRef = artifactRefFromOptionalScreenshot(beforeScreenshot);
@@ -1468,6 +1920,8 @@ async function runScenario(
     }
 
     const finalSettleMs = finalScenarioSettleMs(input, scenarioInput.scenario);
+    runtimeDiagnostics.finalSettleMs = finalSettleMs;
+    runtimeDiagnostics.finalSettleStartedAtMs = elapsed(input.scanStartedAtMs);
     await recordPhase("final_settle", `Final bounded post-scenario settle (${finalSettleMs}ms).`, () =>
       waitForTimeoutWithinDeadline(page, finalSettleMs, effectiveDeadlineAtMs)
     );
@@ -1489,6 +1943,9 @@ async function runScenario(
         return [];
       }
     });
+    const storageCountAfterAction = await recordPhase("final_storage_count", "Final storage count snapshot.", () =>
+      browserStorageCount(page)
+    );
     const cookieSnapshot = cookieSnapshotForScenario(cookies, input, scenarioInput.scenario, actionApplied ? scenarioInput.consentState : "pre_consent");
     const snapshotCookieEvents = cookies.map((cookie) => {
       const hostname = cookie.domain.replace(/^\./, "");
@@ -1556,10 +2013,55 @@ async function runScenario(
       evidenceRefs: [{ refId: `ref_${beforeDom.artifactId}`, artifactId: beforeDom.artifactId, path: beforeDom.path }],
       confidence: bannerPresentBefore ? 0.76 : 0.45,
     };
+    const diagnosticsRef = await recordPhase("runtime_diagnostics_write", "Write bounded per-scenario runtime diagnostics.", () =>
+      writeScenarioRuntimeDiagnosticsArtifact({
+        actionApplied,
+        attempts,
+        capture: {
+          cookieEvents,
+          networkEvents,
+          networkResponseEvents,
+          phaseTimings,
+          scenario: scenarioInput.scenario,
+        },
+        input,
+        runtimeDiagnostics,
+      })
+    );
+    const qualityRef = await recordPhase("scenario_evidence_quality_write", "Write bounded per-scenario evidence quality artifact.", () =>
+      writeScenarioEvidenceQualityArtifact({
+        actionApplied,
+        attempts,
+        cookieCountAfterAction: cookies.length,
+        cookieCountBeforeAction,
+        evidenceExcerptCount: countScenarioEvidenceExcerpts({
+          attempts,
+          beforeDomExcerpt: beforeDom.textExcerpt,
+        }),
+        input,
+        runtimeDiagnostics,
+        scenario: scenarioInput.scenario,
+        storageCountAfterAction,
+        storageCountBeforeAction,
+        totals: {
+          actionCandidateCount: actionCandidates.length,
+          cookieEventCount: cookieEvents.length,
+          finalWindowNetworkEventCount: networkEvents.filter((event) =>
+            event.timestampMs >= runtimeDiagnostics.finalSettleStartedAtMs
+          ).length,
+          networkEventCount: networkEvents.length,
+          networkResponseEventCount: networkResponseEvents.length,
+          postActionNetworkEventCount: networkEvents.filter((event) => event.pagePhase === "post_interaction").length,
+        },
+        uiObservation: consentUiObservation,
+      })
+    );
 
     const artifacts = [
       artifactRefFromDom(beforeDom),
       artifactRefFromOptionalScreenshot(beforeScreenshot),
+      diagnosticsRef,
+      qualityRef,
       ...attempts.flatMap((attempt) => [
         attempt.afterDomRef,
         attempt.afterScreenshotRef,
@@ -1746,6 +2248,138 @@ function preConsentCmpEvidenceObserved(input: ConsentFlowRuntimeScannerInput): b
   }
   return preConsent.cmpRuntimeObservations.length > 0 ||
     preConsent.consentUiObservations.some((observation) => observation.likelyPresent);
+}
+
+async function enrichExternalBaselineForPlanning(
+  input: ConsentFlowRuntimeScannerInput,
+  browser: Browser,
+  baseline: ScenarioCapture,
+  deadlineAtMs: number,
+): Promise<ScenarioCapture> {
+  if (baseline.actionCandidates.length > 0) {
+    return baseline;
+  }
+  const dom = baseline.domSnapshots[0];
+  if (!dom) {
+    return baseline;
+  }
+  const startedAtMs = Date.now();
+  const context = await browser.newContext({
+    ignoreHTTPSErrors: true,
+    viewport: { width: 1366, height: 900 },
+  }).catch(() => undefined);
+  if (!context) {
+    return baseline;
+  }
+  try {
+    for (const fulfiller of input.routeFulfillers ?? []) {
+      await context.route(fulfiller.urlPattern, async (route: Route) => {
+        await route.fulfill({
+          status: fulfiller.status ?? 200,
+          contentType: fulfiller.contentType ?? "text/plain",
+          body: fulfiller.body ?? "",
+          headers: fulfiller.headers,
+        });
+      });
+    }
+    if (input.stubHeavyResources) {
+      await context.route("**/*", async (route) => {
+        if (await maybeFulfillHeavyResource(route)) {
+          return;
+        }
+        await route.continue();
+      });
+    }
+    const page = await context.newPage();
+    const navigationTimeoutMs = Math.min(8_000, remainingDeadlineMs(deadlineAtMs, 8_000));
+    if (navigationTimeoutMs <= 0) {
+      return baseline;
+    }
+    await page.goto(input.normalizedUrl, { waitUntil: "domcontentloaded", timeout: navigationTimeoutMs }).catch(() => undefined);
+    await waitForTimeoutWithinDeadline(page, 750, deadlineAtMs);
+    const surfaceProbe = await openCmpSurfaceIfAvailable(page, deadlineAtMs);
+    const rawCandidates = await extractControlCandidates(page, {
+      limit: PLANNED_BASELINE_CONTROL_LIMIT,
+      scenario: "baseline_pre_consent",
+    });
+    const screenshot = baseline.screenshots[0];
+    const classification = await classifyActionCandidates(input, page.url(), "baseline_pre_consent", rawCandidates, dom, screenshot, {
+      allowPreferenceOpenerAsTargetPath: true,
+      nanoCandidateLimit: plannedNanoCandidateLimit(input, "baseline_pre_consent"),
+      skipNanoWhenHighConfidenceTarget: true,
+    });
+    const oneTrustHiddenDiagnosticCandidates = shouldUseOneTrustHiddenActionDiagnostic(input)
+      ? [
+        ...await extractOneTrustHiddenDiagnosticActionCandidates({
+          dom,
+          page,
+          scenario: "baseline_pre_consent",
+          screenshot,
+          surfaceProbe,
+          targetActionType: "accept_all",
+        }),
+        ...await extractOneTrustHiddenDiagnosticActionCandidates({
+          dom,
+          page,
+          scenario: "baseline_pre_consent",
+          screenshot,
+          surfaceProbe,
+          targetActionType: "reject_all",
+        }),
+      ]
+      : [];
+    const actionCandidates = mergeActionCandidates([
+      ...classification.actionCandidates,
+      ...oneTrustHiddenDiagnosticCandidates,
+    ]).filter(candidateLikelyConsentRelevant);
+    if (actionCandidates.length === 0) {
+      return {
+        ...baseline,
+        nanoAssistErrors: unique([...baseline.nanoAssistErrors, ...classification.nanoAssistErrors]),
+        phaseTimings: [
+          ...baseline.phaseTimings,
+          {
+            label: "external_baseline_candidate_enrichment",
+            detail: "Coordinator refreshed the reused baseline page for bounded action-candidate discovery; no actionable candidates were retained.",
+            durationMs: Math.max(0, Date.now() - startedAtMs),
+          },
+        ],
+      };
+    }
+    const likelyPresent = baseline.consentUiObservation.likelyPresent || bannerLikelyPresent(actionCandidates, dom.textExcerpt);
+    return {
+      ...baseline,
+      actionCandidates,
+      nanoAssistErrors: unique([...baseline.nanoAssistErrors, ...classification.nanoAssistErrors]),
+      consentUiObservation: {
+        ...baseline.consentUiObservation,
+        likelyPresent,
+        basis: unique([
+          ...baseline.consentUiObservation.basis,
+          "external_baseline_candidate_enrichment",
+        ]),
+        confidence: Math.max(baseline.consentUiObservation.confidence, likelyPresent ? 0.78 : 0.45),
+      },
+      consentFlowObservation: {
+        ...baseline.consentFlowObservation,
+        actionCandidates,
+        bannerLikelyPresent: likelyPresent,
+        confidence: Math.max(baseline.consentFlowObservation.confidence, likelyPresent ? 0.78 : 0.45),
+      },
+      phaseTimings: [
+        ...baseline.phaseTimings,
+        {
+          label: "external_baseline_candidate_enrichment",
+          detail: "Coordinator refreshed the reused baseline page for bounded action-candidate discovery.",
+          durationMs: Math.max(0, Date.now() - startedAtMs),
+        },
+      ],
+    };
+  } catch {
+    return baseline;
+  } finally {
+    await context.close().catch(() => undefined);
+  }
 }
 
 async function classifyActionCandidates(
@@ -2154,6 +2788,11 @@ function scenarioDeadlineNearlyHit(deadlineAtMs: number | undefined, minimumRema
   return typeof deadlineAtMs === "number" && deadlineAtMs - Date.now() < minimumRemainingMs;
 }
 
+function isBrowserContextClosedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /target page, context or browser has been closed|browserContext\.newPage|browser has been closed/i.test(message);
+}
+
 function isChoiceActionScenario(scenario: ConsentFlowScenario): boolean {
   return scenario === "reject_all_flow" || scenario === "accept_all_flow" || scenario === "privacy_opt_out_flow";
 }
@@ -2321,18 +2960,19 @@ function rankAndLimitRawCandidates(
   return typeof options.limit === "number" ? ranked.slice(0, options.limit) : ranked;
 }
 
-function rawControlCandidateScore(
+export function rawControlCandidateScore(
   candidate: RawControlCandidate,
   actionType: ConsentActionType | undefined,
   scenario: ConsentFlowScenario | undefined,
 ): number {
-  const value = `${candidate.normalizedLabel} ${candidate.labelText} ${candidate.ariaLabel ?? ""} ${candidate.contextTextExcerpt ?? ""}`.toLowerCase();
+  const labelValue = `${candidate.normalizedLabel} ${candidate.labelText} ${candidate.ariaLabel ?? ""}`.toLowerCase();
+  const value = `${labelValue} ${candidate.contextTextExcerpt ?? ""}`.toLowerCase();
   let score = candidate.enabled ? 5 : 0;
   score += candidate.frameContext?.frameKind === "main_frame" ? 2 : 0;
   if (/cookie|consent|privacy|preference|preferences|settings|choice|choices|cmp|onetrust|trustarc|sourcepoint|didomi|cookiebot/.test(value)) {
     score += 30;
   }
-  if (/\bad choices\b|your privacy choices|cookie settings|cookie preferences|privacy settings|manage cookies|manage preferences|privacy preferences/.test(value)) {
+  if (/\bad choices\b|privacy and ad settings|review all privacy|your privacy choices|data privacy rights|state privacy rights|privacy rights|cookie settings|cookie preferences|privacy settings|privacy preference|preference center|manage cookies|manage preferences|privacy preferences/.test(value)) {
     score += 80;
   }
   if (/accept|agree|allow|reject|decline|deny|refuse|necessary|essential|save|confirm|apply|submit|opt[- ]out|do not sell|do not share/.test(value)) {
@@ -2345,20 +2985,43 @@ function rawControlCandidateScore(
     score += 45;
   }
   if (actionType === "do_not_sell_share" || scenario === "privacy_opt_out_flow") {
-    if (/do not sell|do not share|privacy choices|opt[- ]out|targeted advertising/.test(value)) {
+    if (/do not sell|do not share|privacy choices|privacy and ad settings|review all privacy|data privacy rights|state privacy rights|privacy rights|opt[- ]out|targeted advertising/.test(value)) {
       score += 50;
     }
   }
-  if (/privacy policy|cookie policy|terms of|accessibility|careers|advertise|subscribe|newsletter/.test(value)) {
+  if (/privacy policy|cookie policy|terms of|accessibility|careers|advertise|subscribe|newsletter/.test(labelValue)) {
     score -= 80;
   }
-  if (/readers?' choice|choice awards?|book now|watch now|save story/.test(value)) {
+  if (/readers?' choice|choice awards?|book now|watch now|save story/.test(labelValue)) {
     score -= 80;
   }
-  if (candidate.role === "a" && !/accept|agree|allow|reject|decline|deny|refuse|necessary|essential|save|confirm|apply|submit|settings|preferences|choices|opt[- ]out|do not sell|do not share/.test(value)) {
+  if (candidate.role === "a" && !/accept|agree|allow|reject|decline|deny|refuse|necessary|essential|save|confirm|apply|submit|settings|preferences|choices|rights|opt[- ]out|do not sell|do not share/.test(labelValue)) {
     score -= 30;
   }
   return score;
+}
+
+export function textFallbackConsentControlAction(label: string, scenario?: ConsentFlowScenario): {
+  actionType: ConsentActionType;
+  confidence: number;
+} | undefined {
+  const normalized = label.toLowerCase().replace(/\s+/g, " ").trim();
+  if (/^(do not sell or share my personal information|do not sell or share|do not sell my personal information|your privacy choices|your data privacy rights|data privacy rights|your state privacy rights|state privacy rights|your us state privacy rights|us state privacy rights)$/.test(normalized)) {
+    return { actionType: "do_not_sell_share", confidence: 0.88 };
+  }
+  if (/^(review all privacy and ad settings|privacy settings|cookie settings|privacy preferences|manage preferences)$/.test(normalized)) {
+    return {
+      actionType: scenario === "privacy_opt_out_flow" ? "do_not_sell_share" : "manage_preferences",
+      confidence: scenario === "privacy_opt_out_flow" ? 0.86 : 0.84,
+    };
+  }
+  if (/^(reject all|decline all|only necessary|necessary only|essential only)$/.test(normalized)) {
+    return { actionType: "reject_all", confidence: 0.9 };
+  }
+  if (/^(accept all|allow all|accept cookies|i agree)$/.test(normalized)) {
+    return { actionType: "accept_all", confidence: 0.9 };
+  }
+  return undefined;
 }
 
 async function extractControlCandidates(
@@ -2373,17 +3036,71 @@ async function extractControlCandidates(
   const frames = page.frames();
   for (const [frameIndex, frame] of frames.entries()) {
     const frameCandidates = await frame.evaluate((input) => {
-      const controls = [...document.querySelectorAll("button, [role='button'], input[type='button'], input[type='submit'], a")];
+      type DeepControl = {
+        domLocation: string;
+        element: Element;
+        shadowPath: number[];
+      };
+      type RawCandidate = {
+        actionId: string;
+        candidateIndex: number;
+        labelText: string;
+        normalizedLabel: string;
+        selectorSummary: string;
+        domLocation: string;
+        contextTextExcerpt: string;
+        frameContext: {
+          frameKind: "main_frame" | "sub_frame";
+          frameUrl: string;
+          frameName?: string;
+        };
+        visible: boolean;
+        enabled: boolean;
+        role: string;
+        ariaLabel?: string;
+      };
+      const controlSelector = "button, [role='button'], input[type='button'], input[type='submit'], a, [aria-label], [data-testid], [data-test], [id*='consent' i], [id*='privacy' i], [class*='consent' i], [class*='privacy' i], [class*='cookie' i]";
+      const controls: DeepControl[] = [];
+      const visit = (root: Document | ShadowRoot, shadowPath: number[], hostPath: string[]) => {
+        const rootControls = [...root.querySelectorAll(controlSelector)];
+        for (const [controlIndex, element] of rootControls.entries()) {
+          controls.push({
+            domLocation: [...hostPath, element.tagName.toLowerCase()].slice(-6).join(">"),
+            element,
+            shadowPath: [...shadowPath, controlIndex],
+          });
+        }
+        const shadowHosts = [...root.querySelectorAll("*")].filter((element) => Boolean(element.shadowRoot));
+        for (const [hostIndex, host] of shadowHosts.entries()) {
+          const shadowRoot = host.shadowRoot;
+          if (shadowRoot) {
+            visit(shadowRoot, [...shadowPath, -1, hostIndex], [...hostPath, `${host.tagName.toLowerCase()}#shadow`]);
+          }
+        }
+      };
+      visit(document, [], ["document"]);
       const contextTextExcerpt = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
-      return controls.map((element, index) => {
+      const candidates: RawCandidate[] = controls.map(({ domLocation, element, shadowPath }, index) => {
         const rect = element.getBoundingClientRect();
+        const inputElement = element as HTMLInputElement;
+        const childImage = element instanceof HTMLImageElement ? element : element.querySelector("img[alt], img[title]");
+        const htmlElement = element as HTMLElement;
+        const visibleText = htmlElement.innerText || element.textContent || "";
         const text = (
-          element.textContent ||
+          visibleText ||
           element.getAttribute("aria-label") ||
-          element.getAttribute("value") ||
+          element.getAttribute("title") ||
+          childImage?.getAttribute("aria-label") ||
+          childImage?.getAttribute("title") ||
+          childImage?.getAttribute("alt") ||
+          inputElement.value ||
+          element.getAttribute("data-testid") ||
+          element.getAttribute("data-test") ||
+          element.id ||
+          element.className?.toString() ||
           ""
         ).replace(/\s+/g, " ").trim();
-        const parentNames: string[] = [];
+        const parentNames: string[] = [domLocation].filter(Boolean);
         let parent = element.parentElement;
         while (parent && parentNames.length < 4) {
           parentNames.push(parent.tagName.toLowerCase());
@@ -2394,7 +3111,9 @@ async function extractControlCandidates(
           candidateIndex: index,
           labelText: text.slice(0, 160),
           normalizedLabel: text.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 160),
-          selectorSummary: input.frameIndex === 0 ? `controlIndex:${index}` : `frameIndex:${input.frameIndex};controlIndex:${index}`,
+          selectorSummary: input.frameIndex === 0
+            ? `deepControlIndex:${index};shadowPath:${shadowPath.join(".")}`
+            : `frameIndex:${input.frameIndex};deepControlIndex:${index};shadowPath:${shadowPath.join(".")}`,
           domLocation: parentNames.join(">"),
           contextTextExcerpt,
           frameContext: {
@@ -2403,11 +3122,53 @@ async function extractControlCandidates(
             frameName: input.frameName || undefined,
           },
           visible: rect.width > 0 && rect.height > 0,
-          enabled: !(element as HTMLButtonElement).disabled,
+          enabled: !(element as HTMLButtonElement).disabled && element.getAttribute("aria-disabled") !== "true",
           role: element.getAttribute("role") || element.tagName.toLowerCase(),
           ariaLabel: element.getAttribute("aria-label") || undefined,
         };
       }).filter((candidate) => candidate.labelText.length > 0 && candidate.visible);
+      const existingLabels = new Set(candidates.map((candidate) => candidate.normalizedLabel));
+      const bodyText = document.body?.innerText ?? "";
+      const fallbackLabels = [
+        "Review All Privacy and Ad Settings",
+        "Do Not Sell or Share My Personal Information",
+        "Your Privacy Choices",
+        "Privacy Settings",
+        "Cookie Settings",
+        "Manage Preferences",
+        "Reject All",
+        "Decline All",
+        "Only Necessary",
+        "Accept All",
+        "Allow All",
+        "Accept Cookies",
+      ];
+      for (const label of fallbackLabels) {
+        const normalizedLabel = label.toLowerCase().replace(/\s+/g, " ").trim();
+        if (existingLabels.has(normalizedLabel) || !bodyText.includes(label)) {
+          continue;
+        }
+        candidates.push({
+          actionId: `consent_text_control_${input.frameIndex}_${candidates.length}`,
+          candidateIndex: candidates.length,
+          labelText: label,
+          normalizedLabel,
+          selectorSummary: input.frameIndex === 0
+            ? `textControl:${encodeURIComponent(label)}`
+            : `frameIndex:${input.frameIndex};textControl:${encodeURIComponent(label)}`,
+          domLocation: "document>text_control",
+          contextTextExcerpt,
+          frameContext: {
+            frameKind: input.frameIndex === 0 ? "main_frame" as const : "sub_frame" as const,
+            frameUrl: input.frameUrl,
+            frameName: input.frameName || undefined,
+          },
+          visible: true,
+          enabled: true,
+          role: "text",
+        });
+      }
+      return candidates;
     }, {
       frameIndex,
       frameName: frame.name(),
@@ -2415,7 +3176,76 @@ async function extractControlCandidates(
     }).catch(() => []);
     candidates.push(...frameCandidates);
   }
+  const textFallbackCandidates = await extractTextFallbackControlCandidates(page, options.scenario);
+  const existingLabels = new Set(candidates.map((candidate) => candidate.normalizedLabel));
+  for (const candidate of textFallbackCandidates) {
+    if (!existingLabels.has(candidate.normalizedLabel)) {
+      existingLabels.add(candidate.normalizedLabel);
+      candidates.push(candidate);
+    }
+  }
   return rankAndLimitRawCandidates(candidates, options);
+}
+
+async function extractTextFallbackControlCandidates(
+  page: Page,
+  scenario: ConsentFlowScenario | undefined,
+): Promise<RawControlCandidate[]> {
+  const candidates: RawControlCandidate[] = [];
+  for (const [frameIndex, frame] of page.frames().entries()) {
+    const bodyText = await frame.locator("body").innerText({ timeout: 500 }).catch(() => "");
+    if (!bodyText) {
+      continue;
+    }
+    const normalizedBodyText = bodyText.toLowerCase().replace(/\s+/g, " ");
+    const contextTextExcerpt = bodyText.replace(/\s+/g, " ").trim().slice(0, 500);
+    const fallbackLabels = [
+      "Review All Privacy and Ad Settings",
+      "Do Not Sell or Share My Personal Information",
+      "Your Privacy Choices",
+      "Your Data Privacy Rights",
+      "Data Privacy Rights",
+      "Your State Privacy Rights",
+      "State Privacy Rights",
+      "Your US State Privacy Rights",
+      "US State Privacy Rights",
+      "Privacy Settings",
+      "Cookie Settings",
+      "Manage Preferences",
+      "Reject All",
+      "Decline All",
+      "Only Necessary",
+      "Accept All",
+      "Allow All",
+      "Accept Cookies",
+    ];
+    for (const label of fallbackLabels) {
+      const normalizedLabel = label.toLowerCase().replace(/\s+/g, " ").trim();
+      if (!normalizedBodyText.includes(normalizedLabel) || !textFallbackConsentControlAction(label, scenario)) {
+        continue;
+      }
+      candidates.push({
+        actionId: `consent_text_control_${frameIndex}_${candidates.length}`,
+        candidateIndex: candidates.length,
+        labelText: label,
+        normalizedLabel,
+        selectorSummary: frameIndex === 0
+          ? `textControl:${encodeURIComponent(label)}`
+          : `frameIndex:${frameIndex};textControl:${encodeURIComponent(label)}`,
+        domLocation: "document>text_control",
+        contextTextExcerpt,
+        frameContext: {
+          frameKind: frameIndex === 0 ? "main_frame" : "sub_frame",
+          frameUrl: frame.url(),
+          frameName: frame.name() || undefined,
+        },
+        visible: true,
+        enabled: true,
+        role: "text",
+      });
+    }
+  }
+  return candidates;
 }
 
 async function extractRecipeResearchCandidates(
@@ -2427,18 +3257,51 @@ async function extractRecipeResearchCandidates(
   const frames = page.frames();
   for (const [frameIndex, frame] of frames.entries()) {
     const frameCandidates = await frame.evaluate((input) => {
-      const controls = [...document.querySelectorAll("a, button, [role='button'], input[type='button'], input[type='submit']")];
-      return controls.map((element, index) => {
+      type DeepControl = {
+        domLocation: string;
+        element: Element;
+      };
+      const controlSelector = "a, button, [role='button'], input[type='button'], input[type='submit'], [aria-label], [data-testid], [data-test], [id*='consent' i], [id*='privacy' i], [class*='consent' i], [class*='privacy' i], [class*='cookie' i]";
+      const controls: DeepControl[] = [];
+      const visit = (root: Document | ShadowRoot, hostPath: string[]) => {
+        for (const element of [...root.querySelectorAll(controlSelector)]) {
+          controls.push({
+            domLocation: [...hostPath, element.tagName.toLowerCase()].slice(-6).join(">"),
+            element,
+          });
+        }
+        const shadowHosts = [...root.querySelectorAll("*")].filter((element) => Boolean(element.shadowRoot));
+        for (const host of shadowHosts) {
+          const shadowRoot = host.shadowRoot;
+          if (shadowRoot) {
+            visit(shadowRoot, [...hostPath, `${host.tagName.toLowerCase()}#shadow`]);
+          }
+        }
+      };
+      visit(document, ["document"]);
+      return controls.map(({ domLocation, element }, index) => {
         const rect = element.getBoundingClientRect();
         const anchor = element instanceof HTMLAnchorElement ? element : element.closest("a");
+        const inputElement = element as HTMLInputElement;
+        const htmlElement = element as HTMLElement;
+        const visibleText = htmlElement.innerText || element.textContent || "";
+        const childImage = element instanceof HTMLImageElement ? element : element.querySelector("img[alt], img[title]");
         const text = (
-          element.textContent ||
+          visibleText ||
           element.getAttribute("aria-label") ||
-          element.getAttribute("value") ||
+          element.getAttribute("title") ||
+          childImage?.getAttribute("aria-label") ||
+          childImage?.getAttribute("title") ||
+          childImage?.getAttribute("alt") ||
+          inputElement.value ||
+          element.getAttribute("data-testid") ||
+          element.getAttribute("data-test") ||
+          element.id ||
+          element.className?.toString() ||
           anchor?.textContent ||
           ""
         ).replace(/\s+/g, " ").trim();
-        const parentNames: string[] = [];
+        const parentNames: string[] = [domLocation].filter(Boolean);
         let parent = element.parentElement;
         while (parent && parentNames.length < 4) {
           parentNames.push(parent.tagName.toLowerCase());
@@ -2526,7 +3389,7 @@ function classifyControlText(label: string, ariaLabel?: string, contextTextExcer
   if (/(?:save|confirm|submit|apply)(?: my)? (?:choice|choices|preferences)/.test(value)) {
     return { actionType: "save_preferences", confidence: 0.88, method: "deterministic_text" };
   }
-  if (/manage preferences|cookie settings|privacy settings|\bsettings\b|customize|preferences|more options|choices/.test(value)) {
+  if (/manage preferences|cookie settings|privacy settings|privacy preference|preference center|\bsettings\b|customize|preferences|more options|choices/.test(value)) {
     return { actionType: "manage_preferences", confidence: 0.84, method: "deterministic_text" };
   }
   if (/continue/.test(value)) {
@@ -2535,22 +3398,337 @@ function classifyControlText(label: string, ariaLabel?: string, contextTextExcer
   return { actionType: "unknown", confidence: 0.2, method: "deterministic_text" };
 }
 
-function classifyPrivacyOptOutControl(label: string, ariaLabel?: string, contextTextExcerpt?: string): {
+export function classifyPrivacyOptOutControl(label: string, ariaLabel?: string, contextTextExcerpt?: string): {
   actionType: ConsentActionType;
   confidence: number;
   method: ConsentActionCandidate["detectionMethod"];
 } | undefined {
   const value = `${label} ${ariaLabel ?? ""}`.toLowerCase();
   const context = `${contextTextExcerpt ?? ""}`.toLowerCase();
-  if (/do not sell|do not share|do not sell or share|your privacy choices|opt out|opt-out|exclude my data|do not use my data|limit use of my sensitive/.test(value) &&
+  if (/do not sell|do not share|do not sell or share|your privacy choices|privacy and ad settings|review all privacy|(?:your )?(?:data |state |us state )?privacy rights|opt out|opt-out|exclude my data|do not use my data|limit use of my sensitive/.test(value) &&
     /privacy|advertising|targeted|sell|share|data processing|personal information/.test(`${value} ${context}`)) {
     return { actionType: "do_not_sell_share", confidence: 0.88, method: "deterministic_text" };
   }
   return undefined;
 }
 
+async function openCmpSurfaceIfAvailable(page: Page, deadlineAtMs?: number): Promise<CmpSurfaceProbeDiagnostic> {
+  const probeTimeoutMs = Math.min(1_500, remainingDeadlineMs(deadlineAtMs, 1_500));
+  if (probeTimeoutMs <= 0) {
+    return {
+      attemptedCalls: [],
+      controlsVisibleAfterProbe: 0,
+      oneTrustDomState: undefined,
+      observedOneTrustGlobals: [],
+      preferenceSurfaceObserved: false,
+    };
+  }
+  const probe = await promiseWithTimeout(page.evaluate(() => {
+    const w = window as typeof window & {
+      __tcfapi?: (...args: unknown[]) => unknown;
+      __uspapi?: (...args: unknown[]) => unknown;
+      Didomi?: { preferences?: { show?: () => unknown }; showPreferences?: () => unknown };
+      OneTrust?: { ToggleInfoDisplay?: () => unknown; LoadBanner?: () => unknown };
+      Optanon?: { ToggleInfoDisplay?: () => unknown };
+      _sp_?: { gdpr?: { loadPrivacyManagerModal?: (...args: unknown[]) => unknown }; loadPrivacyManagerModal?: (...args: unknown[]) => unknown };
+    };
+    const attempts: string[] = [];
+    const observedOneTrustGlobals = Object.keys(w)
+      .filter((key) => /onetrust|optanon|__tcfapi|__uspapi/i.test(key))
+      .slice(0, 40);
+    const tryCall = (label: string, fn: (() => unknown) | undefined) => {
+      if (typeof fn !== "function") {
+        return;
+      }
+      try {
+        fn();
+        attempts.push(label);
+      } catch {
+        // Best-effort probe only.
+      }
+    };
+    tryCall("OneTrust.ToggleInfoDisplay", w.OneTrust?.ToggleInfoDisplay?.bind(w.OneTrust));
+    tryCall("Optanon.ToggleInfoDisplay", w.Optanon?.ToggleInfoDisplay?.bind(w.Optanon));
+    tryCall("OneTrust.LoadBanner", w.OneTrust?.LoadBanner?.bind(w.OneTrust));
+    tryCall("Didomi.preferences.show", w.Didomi?.preferences?.show?.bind(w.Didomi.preferences));
+    tryCall("Didomi.showPreferences", w.Didomi?.showPreferences?.bind(w.Didomi));
+    tryCall("Sourcepoint.loadPrivacyManagerModal", w._sp_?.loadPrivacyManagerModal?.bind(w._sp_));
+    tryCall("Sourcepoint.gdpr.loadPrivacyManagerModal", w._sp_?.gdpr?.loadPrivacyManagerModal?.bind(w._sp_.gdpr));
+    if (typeof w.__tcfapi === "function") {
+      try {
+        w.__tcfapi("displayConsentUi", 2, () => undefined);
+        attempts.push("__tcfapi.displayConsentUi");
+      } catch {
+        // Best-effort probe only.
+      }
+    }
+    if (typeof w.__uspapi === "function") {
+      try {
+        w.__uspapi("displayUspUi", 1, () => undefined);
+        attempts.push("__uspapi.displayUspUi");
+      } catch {
+        // Best-effort probe only.
+      }
+    }
+    return { attempts, observedOneTrustGlobals };
+  }).catch(() => ({ attempts: [], observedOneTrustGlobals: [] })), probeTimeoutMs, { attempts: [], observedOneTrustGlobals: [] });
+  const waitTimeoutMs = Math.min(2_000, remainingDeadlineMs(deadlineAtMs, 2_000));
+  if (probe.attempts.length > 0 && waitTimeoutMs > 0) {
+    await page.waitForFunction(() => {
+      const text = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim();
+      const visibleControls = [...document.querySelectorAll("button, [role='button'], input[type='button'], input[type='submit'], a, [aria-label]")].filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+      return Boolean(document.querySelector("#onetrust-pc-sdk, #onetrust-banner-sdk, .ot-sdk-container, .otPcTab")) ||
+        /privacy preference center|preference center|confirm my choices|save choices|reject all|accept all/i.test(text) ||
+        visibleControls.some((element) => {
+          const label = (
+            element.textContent ||
+            element.getAttribute("aria-label") ||
+            element.getAttribute("value") ||
+            ""
+          ).replace(/\s+/g, " ").trim();
+          return /confirm my choices|save choices|reject all|accept all|privacy preference|cookie settings/i.test(label);
+        });
+    }, undefined, { timeout: waitTimeoutMs }).catch(() => undefined);
+  }
+  await waitForTimeoutWithinDeadline(page, probe.attempts.length > 0 ? 750 : 500, deadlineAtMs);
+  const surface = await page.evaluate(() => {
+    const controls = [...document.querySelectorAll("button, [role='button'], input[type='button'], input[type='submit'], a, [aria-label]")].filter((element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+    const oneTrustButtons = [...document.querySelectorAll("#onetrust-consent-sdk button, #onetrust-consent-sdk [role='button'], #onetrust-consent-sdk input[type='button'], #onetrust-consent-sdk input[type='submit'], #onetrust-consent-sdk a")].map((element) => {
+      const rect = element.getBoundingClientRect();
+      const label = (
+        element.textContent ||
+        element.getAttribute("aria-label") ||
+        element.getAttribute("value") ||
+        element.getAttribute("title") ||
+        ""
+      ).replace(/\s+/g, " ").trim().slice(0, 120);
+      return {
+        label,
+        visible: rect.width > 0 && rect.height > 0,
+      };
+    }).filter((item) => item.label.length > 0);
+    const pcSdk = document.querySelector("#onetrust-pc-sdk");
+    const pcRect = pcSdk?.getBoundingClientRect();
+    const text = (document.body?.innerText ?? "").replace(/\s+/g, " ").trim();
+    return {
+      controlsVisibleAfterProbe: controls.length,
+      oneTrustDomState: {
+        consentSdkPresent: Boolean(document.querySelector("#onetrust-consent-sdk")),
+        hiddenButtonLabels: oneTrustButtons.filter((button) => !button.visible).map((button) => button.label).slice(0, 20),
+        pcSdkPresent: Boolean(pcSdk),
+        pcSdkVisible: Boolean(pcRect && pcRect.width > 0 && pcRect.height > 0),
+        visibleButtonLabels: oneTrustButtons.filter((button) => button.visible).map((button) => button.label).slice(0, 20),
+      },
+      preferenceSurfaceObserved: Boolean(document.querySelector("#onetrust-pc-sdk, #onetrust-banner-sdk, .ot-sdk-container, .otPcTab")) ||
+        /privacy preference center|preference center|confirm my choices|save choices|reject all|accept all/i.test(text),
+    };
+  }).catch(() => ({
+    controlsVisibleAfterProbe: 0,
+    oneTrustDomState: undefined,
+    preferenceSurfaceObserved: false,
+  }));
+  return {
+    attemptedCalls: probe.attempts,
+    controlsVisibleAfterProbe: surface.controlsVisibleAfterProbe,
+    oneTrustDomState: surface.oneTrustDomState,
+    observedOneTrustGlobals: probe.observedOneTrustGlobals,
+    preferenceSurfaceObserved: surface.preferenceSurfaceObserved,
+  };
+}
+
+async function extractOneTrustHiddenDiagnosticActionCandidates(input: {
+  dom: DomSnapshotArtifact;
+  page: Page;
+  scenario: ConsentFlowScenario;
+  screenshot: ScreenshotArtifact | undefined;
+  surfaceProbe?: CmpSurfaceProbeDiagnostic;
+  targetActionType: ConsentActionType;
+}): Promise<ConsentActionCandidate[]> {
+  if (!input.surfaceProbe?.oneTrustDomState?.consentSdkPresent ||
+    input.surfaceProbe.oneTrustDomState.pcSdkVisible) {
+    return [];
+  }
+  if (
+    input.targetActionType !== "accept_all" &&
+    input.targetActionType !== "reject_all" &&
+    input.targetActionType !== "do_not_sell_share"
+  ) {
+    return [];
+  }
+  const diagnosticLabels = unique([
+    ...input.surfaceProbe.oneTrustDomState.hiddenButtonLabels,
+    ...input.surfaceProbe.oneTrustDomState.visibleButtonLabels,
+  ]);
+  const apiControls = input.surfaceProbe.oneTrustDomState.consentSdkPresent
+    ? input.targetActionType === "accept_all"
+      ? [{ actionType: "accept_all" as const, confidence: 0.86, label: "OneTrust.AllowAll API" }]
+      : input.targetActionType === "reject_all"
+        ? [{ actionType: "reject_all" as const, confidence: 0.86, label: "OneTrust.RejectAll API" }]
+        : []
+    : [];
+  const hiddenControls = [
+    ...apiControls,
+    ...diagnosticLabels
+    .flatMap((label) => {
+      const classification = oneTrustHiddenDiagnosticLabelAction(label, input.targetActionType);
+      return classification ? [{ ...classification, label }] : [];
+    }),
+  ]
+    .slice(0, 8);
+  const screenshotRef = artifactRefFromOptionalScreenshot(input.screenshot);
+  return hiddenControls.map((control, index): ConsentActionCandidate => {
+    const labelText = `${control.label} (OneTrust hidden diagnostic activation)`;
+    return {
+      actionId: `${input.scenario}_onetrust_hidden_${index}`,
+      actionType: control.actionType,
+      labelText,
+      normalizedLabel: labelText.toLowerCase().replace(/\s+/g, " ").trim(),
+      selectorSummary: `diagnosticOneTrustHiddenLabel:${encodeURIComponent(control.label)}`,
+      domLocation: "#onetrust-consent-sdk hidden control",
+      contextTextExcerpt: "Local/dev diagnostic mode observed a hidden OneTrust preference-center control and attempted programmatic activation for evidence-quality debugging.",
+      frameContext: {
+        frameKind: "main_frame",
+        frameUrl: input.page.url(),
+      },
+      visible: true,
+      enabled: true,
+      confidence: control.confidence,
+      detectionMethod: "css_selector",
+      shouldClick: true,
+      evidenceRefs: [{
+        refId: `ref_${input.dom.artifactId}_onetrust_hidden_${index}`,
+        artifactId: input.dom.artifactId,
+        eventType: "dom_snapshot",
+        label: control.label,
+        excerpt: control.label,
+      }],
+      screenshotArtifactRefs: screenshotRef ? [screenshotRef] : [],
+      assistMetadata: [],
+    };
+  });
+}
+
+export function oneTrustHiddenDiagnosticLabelAction(
+  label: string,
+  targetActionType: ConsentActionType,
+): { actionType: Extract<ConsentActionType, "accept_all" | "reject_all" | "manage_preferences" | "save_preferences" | "do_not_sell_share">; confidence: number } | undefined {
+  const normalized = label.toLowerCase().replace(/\s+/g, " ").trim();
+  if (targetActionType === "accept_all" && /^(accept|allow all|accept all|accept cookies|i agree)$/.test(normalized)) {
+    return { actionType: "accept_all", confidence: 0.88 };
+  }
+  if (
+    (targetActionType === "accept_all" || targetActionType === "reject_all") &&
+    /^(privacy center|privacy settings|privacy preferences|cookie settings|manage preferences)$/.test(normalized)
+  ) {
+    return { actionType: "manage_preferences", confidence: 0.84 };
+  }
+  if (targetActionType === "reject_all" &&
+    /^(reject|accept essential|reject all|reject optional|decline all|deny all|only necessary|necessary only|essential only)$/.test(normalized)) {
+    return { actionType: "reject_all", confidence: 0.86 };
+  }
+  if (targetActionType === "reject_all" && /^(confirm my choices|save choices|save preferences|apply)$/.test(normalized)) {
+    return { actionType: "save_preferences", confidence: 0.82 };
+  }
+  if (
+    targetActionType === "do_not_sell_share" &&
+    /^(do not sell|do not sell my personal information|do not sell or share|do not share|opt out|opt-out|opt out form|opt-out form|opt out of sale|privacy choices|privacy request|data privacy rights|your data privacy rights|state privacy rights|your state privacy rights|us state privacy rights|your us state privacy rights|submit data request|data request|submit request)$/.test(normalized)
+  ) {
+    return { actionType: "do_not_sell_share", confidence: 0.8 };
+  }
+  if (
+    targetActionType === "do_not_sell_share" &&
+    /^(privacy center|privacy settings|privacy preferences|cookie settings|manage preferences|your privacy choices)$/.test(normalized)
+  ) {
+    return { actionType: "manage_preferences", confidence: 0.78 };
+  }
+  return undefined;
+}
+
+function shouldUseOneTrustHiddenActionDiagnostic(input: ConsentFlowRuntimeScannerInput) {
+  return input.oneTrustHiddenActionMode === "diagnostic" &&
+    input.scenarioPlanningMode === "planned_parallel";
+}
+
 async function clickCandidate(page: Page, candidate: ConsentActionCandidate): Promise<void> {
-  const match = /(?:frameIndex:(\d+);)?controlIndex:(\d+)/.exec(candidate.selectorSummary ?? "");
+  const oneTrustHiddenLabelMatch = /^diagnosticOneTrustHiddenLabel:(.+)$/.exec(candidate.selectorSummary ?? "");
+  if (oneTrustHiddenLabelMatch?.[1]) {
+    const label = decodeURIComponent(oneTrustHiddenLabelMatch[1]);
+    const actionType = candidate.actionType;
+    const frame = page.frames()[0];
+    if (!frame) {
+      throw new Error("diagnostic_onetrust_hidden_frame_not_found");
+    }
+    await frame.evaluate(({ targetActionType, targetLabel }) => {
+      const oneTrust = (window as unknown as {
+        OneTrust?: {
+          AllowAll?: () => unknown;
+          Close?: () => unknown;
+          RejectAll?: () => unknown;
+          ToggleInfoDisplay?: () => unknown;
+        };
+      }).OneTrust;
+      if (targetActionType === "accept_all" && typeof oneTrust?.AllowAll === "function") {
+        oneTrust.AllowAll();
+        if (typeof oneTrust.Close === "function") {
+          oneTrust.Close();
+        }
+        return;
+      }
+      if (targetActionType === "reject_all" && typeof oneTrust?.RejectAll === "function") {
+        oneTrust.RejectAll();
+        if (typeof oneTrust.Close === "function") {
+          oneTrust.Close();
+        }
+        return;
+      }
+      if (targetActionType === "manage_preferences" && typeof oneTrust?.ToggleInfoDisplay === "function") {
+        oneTrust.ToggleInfoDisplay();
+        return;
+      }
+      const controls = [...document.querySelectorAll("#onetrust-consent-sdk button, #onetrust-consent-sdk [role='button'], #onetrust-consent-sdk input[type='button'], #onetrust-consent-sdk input[type='submit'], #onetrust-consent-sdk a")];
+      let element: HTMLElement | undefined;
+      for (const control of controls) {
+        const htmlElement = control as HTMLElement;
+        const inputElement = control as HTMLInputElement;
+        const rawLabel = (
+          htmlElement.innerText ||
+          control.textContent ||
+          inputElement.value ||
+          control.getAttribute("aria-label") ||
+          control.getAttribute("title")
+        );
+        const labelText = (rawLabel ?? "").replace(/\s+/g, " ").trim();
+        if (labelText.toLowerCase() === targetLabel.toLowerCase()) {
+          element = htmlElement;
+          break;
+        }
+      }
+      if (!element) {
+        throw new Error("diagnostic_onetrust_hidden_label_not_found");
+      }
+      element.click();
+    }, { targetActionType: actionType, targetLabel: label });
+    return;
+  }
+  const textControlMatch = /(?:frameIndex:(\d+);)?textControl:(.+)$/.exec(candidate.selectorSummary ?? "");
+  if (textControlMatch?.[2]) {
+    const frameIndex = textControlMatch[1] ? Number(textControlMatch[1]) : 0;
+    const label = decodeURIComponent(textControlMatch[2]);
+    const frame = page.frames()[frameIndex];
+    if (!frame) {
+      throw new Error(`Consent text control frame not found: ${candidate.selectorSummary ?? "none"}`);
+    }
+    await clickTextControlCandidate(frame, label, candidate);
+    return;
+  }
+  const deepMatch = /(?:frameIndex:(\d+);)?deepControlIndex:(\d+)/.exec(candidate.selectorSummary ?? "");
+  const match = deepMatch ?? /(?:frameIndex:(\d+);)?controlIndex:(\d+)/.exec(candidate.selectorSummary ?? "");
   const frameIndex = match?.[1] ? Number(match[1]) : 0;
   const index = match?.[2] ? Number(match[2]) : Number.NaN;
   if (!Number.isInteger(index) || !Number.isInteger(frameIndex)) {
@@ -2560,11 +3738,84 @@ async function clickCandidate(page: Page, candidate: ConsentActionCandidate): Pr
   if (!frame) {
     throw new Error(`Consent control frame not found: ${candidate.selectorSummary ?? "none"}`);
   }
-  await frame.evaluate((candidateIndex) => {
-    const controls = [...document.querySelectorAll("button, [role='button'], input[type='button'], input[type='submit'], a")];
-    const element = controls[candidateIndex] as HTMLElement | undefined;
-    element?.click();
-  }, index);
+  await frame.evaluate((input) => {
+    const flatSelector = "button, [role='button'], input[type='button'], input[type='submit'], a";
+    const deepSelector = "button, [role='button'], input[type='button'], input[type='submit'], a, [aria-label], [data-testid], [data-test], [id*='consent' i], [id*='privacy' i], [class*='consent' i], [class*='privacy' i], [class*='cookie' i]";
+    const deepControls: Element[] = [];
+    const visit = (root: Document | ShadowRoot) => {
+      deepControls.push(...root.querySelectorAll(deepSelector));
+      for (const host of [...root.querySelectorAll("*")]) {
+        if (host.shadowRoot) {
+          visit(host.shadowRoot);
+        }
+      }
+    };
+    visit(document);
+    const controls = input.deep
+      ? deepControls
+      : [...document.querySelectorAll(flatSelector)];
+    const element = controls[input.candidateIndex] as HTMLElement | undefined;
+    if (!element) {
+      throw new Error("candidate_element_not_found");
+    }
+    element.click();
+  }, { deep: Boolean(deepMatch), candidateIndex: index });
+}
+
+async function clickTextControlCandidate(
+  frame: Frame,
+  label: string,
+  candidate: ConsentActionCandidate,
+): Promise<void> {
+  const clickableSelector = [
+    "button",
+    "[role='button']",
+    "[role='link']",
+    "a",
+    "label",
+    "summary",
+    "input[type='button']",
+    "input[type='submit']",
+    "input[type='checkbox']",
+    "input[type='radio']",
+    "[tabindex]",
+    "[onclick]",
+    "[data-testid]",
+    "[data-test]",
+    "[class*='button' i]",
+    "[class*='btn' i]",
+  ].join(",");
+  const attempts = [
+    frame.getByText(label, { exact: true }).first(),
+    frame.getByRole("button", { name: label, exact: true }).first(),
+    frame.getByRole("link", { name: label, exact: true }).first(),
+    frame.getByLabel(label, { exact: true }).first(),
+    frame.locator(clickableSelector).filter({ hasText: label }).first(),
+  ];
+  for (const locator of attempts) {
+    const clicked = await locator.click({ force: true, timeout: 1_200 })
+      .then(() => true)
+      .catch(() => false);
+    if (clicked) {
+      return;
+    }
+  }
+  const textObserved = await frame.getByText(label, { exact: true }).first().isVisible({ timeout: 750 })
+    .catch(() => false) ||
+    await frame.getByText(label, { exact: false }).first().isVisible({ timeout: 750 })
+      .catch(() => false);
+  if (textObserved) {
+    throw new Error([
+      "text_control_observed_without_clickable_target",
+      `action=${candidate.actionType}`,
+      `label=${label}`,
+    ].join("; "));
+  }
+  throw new Error([
+    "planner_text_control_not_reacquired",
+    `action=${candidate.actionType}`,
+    `label=${label}`,
+  ].join("; "));
 }
 
 function actionProof(input: {
@@ -2615,6 +3866,135 @@ function actionProof(input: {
     postActionConsentStateMarkers: input.postActionConsentStateMarkers ?? [],
     evidenceRefs: input.evidenceRefs,
   };
+}
+
+async function writePlannerCandidateDiagnosticsArtifact(input: {
+  actionCandidates: ConsentActionCandidate[];
+  cmpSurfaceProbe?: CmpSurfaceProbeDiagnostic;
+  input: ConsentFlowRuntimeScannerInput;
+  rawCandidates: RawControlCandidate[];
+  recipeResearchCandidates: ConsentRecipeResearchCandidate[];
+  scenario: ConsentFlowScenario;
+  targetActionType: ConsentActionType;
+}): Promise<void> {
+  await input.input.artifactWriter.writeJsonArtifact(`ConsentPlannerCandidateDiagnostics-${input.scenario}.json`, {
+    actionCandidateSummary: summarizeActionCandidates(input.actionCandidates, input.targetActionType),
+    artifactOnly: true,
+    artifactVersion: "certscore.v2.consent_planner_candidate_diagnostics.v1",
+    cmpSurfaceProbe: input.cmpSurfaceProbe ?? {
+      attemptedCalls: [],
+      controlsVisibleAfterProbe: 0,
+      observedOneTrustGlobals: [],
+      preferenceSurfaceObserved: false,
+    },
+    generatedAt: new Date().toISOString(),
+    productionFindingIntegration: false,
+    rawCandidateSummary: summarizeRawControlCandidates(input.rawCandidates, input.targetActionType),
+    recipeResearchCandidateSummary: input.recipeResearchCandidates.slice(0, 30).map((candidate) => ({
+      candidateId: candidate.candidateId,
+      confidence: candidate.confidence,
+      domLocation: candidate.domLocation,
+      frameKind: candidate.frameKind,
+      frameUrl: boundedExcerpt(candidate.frameUrl, 300),
+      labelText: candidate.labelText,
+      reasonCodes: candidate.reasonCodes,
+      suggestedScenario: candidate.suggestedScenario,
+    })),
+    scenario: input.scenario,
+    sourceScanner: SOURCE_SCANNER,
+    targetActionType: input.targetActionType,
+  });
+}
+
+function summarizeRawControlCandidates(
+  candidates: RawControlCandidate[],
+  targetActionType: ConsentActionType,
+) {
+  return candidates.slice(0, 50).map((candidate) => {
+    const classification = classifyControlText(candidate.normalizedLabel, candidate.ariaLabel, candidate.contextTextExcerpt);
+    return {
+      ariaLabel: boundedExcerpt(candidate.ariaLabel, 160),
+      classification,
+      contextTextExcerpt: boundedExcerpt(candidate.contextTextExcerpt, 240),
+      domLocation: boundedExcerpt(candidate.domLocation, 180),
+      enabled: candidate.enabled,
+      frameKind: candidate.frameContext?.frameKind,
+      frameUrl: boundedExcerpt(candidate.frameContext?.frameUrl, 300),
+      labelText: candidate.labelText,
+      rejectionReasons: rawCandidateRejectionReasons(candidate, classification, targetActionType),
+      role: candidate.role,
+      selectorSummary: candidate.selectorSummary,
+      visible: candidate.visible,
+    };
+  });
+}
+
+function summarizeActionCandidates(
+  candidates: ConsentActionCandidate[],
+  targetActionType: ConsentActionType,
+) {
+  return candidates.slice(0, 50).map((candidate) => ({
+    actionType: candidate.actionType,
+    confidence: candidate.confidence,
+    detectionMethod: candidate.detectionMethod,
+    enabled: candidate.enabled,
+    labelText: candidate.labelText,
+    rejectionReasons: actionCandidateRejectionReasons(candidate, targetActionType),
+    selectorSummary: candidate.selectorSummary,
+    shouldClick: candidate.shouldClick,
+    visible: candidate.visible,
+  }));
+}
+
+function rawCandidateRejectionReasons(
+  candidate: RawControlCandidate,
+  classification: ReturnType<typeof classifyControlText>,
+  targetActionType: ConsentActionType,
+): string[] {
+  const reasons: string[] = [];
+  if (!candidate.visible) {
+    reasons.push("not_visible");
+  }
+  if (!candidate.enabled) {
+    reasons.push("not_enabled");
+  }
+  if (classification.actionType === "unknown") {
+    reasons.push("classified_unknown");
+  }
+  if (classification.actionType !== targetActionType &&
+    !(targetActionType === "reject_all" && ["manage_preferences", "save_preferences"].includes(classification.actionType)) &&
+    !(targetActionType === "accept_all" && ["manage_preferences", "save_preferences"].includes(classification.actionType))) {
+    reasons.push("not_target_action_type");
+  }
+  if (classification.confidence < 0.78) {
+    reasons.push("confidence_below_click_threshold");
+  }
+  return reasons;
+}
+
+function actionCandidateRejectionReasons(
+  candidate: ConsentActionCandidate,
+  targetActionType: ConsentActionType,
+): string[] {
+  const reasons: string[] = [];
+  if (!candidate.visible) {
+    reasons.push("not_visible");
+  }
+  if (!candidate.enabled) {
+    reasons.push("not_enabled");
+  }
+  if (!candidate.shouldClick) {
+    reasons.push("should_click_false");
+  }
+  if (candidate.confidence < 0.78) {
+    reasons.push("confidence_below_click_threshold");
+  }
+  if (candidate.actionType !== targetActionType &&
+    !(targetActionType === "reject_all" && ["manage_preferences", "save_preferences"].includes(candidate.actionType)) &&
+    !(targetActionType === "accept_all" && ["manage_preferences", "save_preferences"].includes(candidate.actionType))) {
+    reasons.push("not_target_action_type");
+  }
+  return reasons;
 }
 
 function boundedExcerpt(value: string | undefined, maxLength: number): string | undefined {
@@ -3055,24 +4435,39 @@ async function attemptPrivacyOptOutFormSubmission(input: {
     return undefined;
   }
 
-  const livePageText = await input.page.evaluate(() =>
+  let livePageText = await input.page.evaluate(() =>
     (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 5_000),
   ).catch(() => "");
-  const pageContext = `${input.beforeDom.textExcerpt ?? ""} ${livePageText} ${input.page.url()}`.toLowerCase();
-  const hasOptOutRight = /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out of (?:the )?sale|sale or sharing|opt[- ]out of sharing|targeted advertising/.test(pageContext);
-  const hasRequestFormContext = /california|ccpa|cpra|consumer privacy|privacy request|request form|data privacy|rights request|privacyportal|onetrust/.test(pageContext);
+  let pageContext = `${input.beforeDom.textExcerpt ?? ""} ${livePageText} ${input.page.url()}`.toLowerCase();
+  let hasOptOutRight = /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out of (?:the )?sale|sale (?:or|and) sharing|opt[- ]out of sharing|targeted advertising/.test(pageContext);
+  let hasRequestFormContext = /california|ccpa|cpra|consumer privacy|privacy request|request form|data privacy|rights request|privacyportal|onetrust/.test(pageContext);
+  if (!hasOptOutRight || !hasRequestFormContext) {
+    await input.page.waitForFunction(() => {
+      const text = (document.body?.innerText ?? "").replace(/\s+/g, " ").toLowerCase();
+      return /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out|sale (?:or|and) sharing/.test(text) &&
+        /california|ccpa|cpra|privacy settings|advertising settings|right to opt out/.test(text);
+    }, undefined, { timeout: 4_000 }).catch(() => undefined);
+    livePageText = await input.page.evaluate(() =>
+      (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 8_000),
+    ).catch(() => livePageText);
+    pageContext = `${input.beforeDom.textExcerpt ?? ""} ${livePageText} ${input.page.url()}`.toLowerCase();
+    hasOptOutRight = /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out of (?:the )?sale|sale (?:or|and) sharing|opt[- ]out of sharing|targeted advertising/.test(pageContext);
+    hasRequestFormContext = /california|ccpa|cpra|consumer privacy|privacy request|request form|data privacy|rights request|privacyportal|onetrust|privacy settings|advertising settings|right to opt out/.test(pageContext);
+  }
   if (!hasOptOutRight || !hasRequestFormContext) {
     return undefined;
   }
 
   const actionTimestampMs = elapsed(input.scanStartedAtMs);
-  const optOutPattern = /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out of (?:the )?sale|sale or sharing|opt[- ]out of sharing|targeted advertising/i;
+  const optOutPattern = /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out of (?:the )?sale|sale (?:or|and) sharing|opt[- ]out of sharing|targeted advertising/i;
   const affirmPattern = /affirm|certif|california resident|i am a california|under penalty|authorize/i;
   const submitPattern = /submit|send request|save|apply|confirm|continue|next/i;
   let selectedDoNotSell = false;
   let submitted = false;
   let affirmed = false;
   let affirmationRequired = false;
+  let optOutSelectionAttempted = false;
+  const beforeFormDiagnostic = await writePrivacyOptOutFormDiagnosticArtifact(input.input, input.page, input.scenario, "before_selection");
   let submittedLabel: string | undefined;
 
   const labeledControl = input.page.getByLabel(optOutPattern).first();
@@ -3114,6 +4509,17 @@ async function attemptPrivacyOptOutFormSubmission(input: {
     }
   }
 
+  const verifiedOptOutChoice = await selectAndVerifyPrivacyOptOutChoice(
+    input.page,
+    input.input.nanoConsentUiAssistProvider,
+  );
+  if (verifiedOptOutChoice.attempted) {
+    optOutSelectionAttempted = true;
+    selectedDoNotSell = verifiedOptOutChoice.selected;
+  } else if (selectedDoNotSell) {
+    selectedDoNotSell = await privacyOptOutChoiceSelected(input.page);
+  }
+
   const affirmControl = input.page.locator("label, button, [role='button'], [role='checkbox']").filter({ hasText: affirmPattern }).first();
   if (await affirmControl.count() > 0) {
     affirmationRequired = true;
@@ -3143,12 +4549,13 @@ async function attemptPrivacyOptOutFormSubmission(input: {
     submittedLabel,
   };
 
-  if (!result.selectedDoNotSell && !result.submitted) {
+  if (!result.selectedDoNotSell && !result.submitted && !optOutSelectionAttempted) {
     return undefined;
   }
 
   const postClickSettleMs = await waitForConsentActionSettle(input.page, 3_000, input.deadlineAtMs);
   const postActionConsentStateMarkers = await consentStateMarkers(input.page);
+  const afterFormDiagnostic = await writePrivacyOptOutFormDiagnosticArtifact(input.input, input.page, input.scenario, "after_selection");
   const afterDom = await writeDomArtifact(input.input, input.page, input.scenario, "after_privacy_opt_out_form", input.consentState);
   const afterScreenshot = await writeScreenshotArtifact(input.input, input.page, input.scenario, "after_privacy_opt_out_form", input.consentState);
   const afterRawCandidates = await extractControlCandidates(input.page, {
@@ -3193,24 +4600,44 @@ async function attemptPrivacyOptOutFormSubmission(input: {
   const afterScreenshotRef = artifactRefFromOptionalScreenshot(afterScreenshot);
   const beforeDomRef = artifactRefFromDom(input.beforeDom);
   const afterDomRef = artifactRefFromDom(afterDom);
+  const diagnosticRefs = [
+    artifactRefFromJsonArtifact(beforeFormDiagnostic, "privacy_opt_out_form_diagnostic_before_selection"),
+    artifactRefFromJsonArtifact(afterFormDiagnostic, "privacy_opt_out_form_diagnostic_after_selection"),
+  ].filter((ref): ref is ArtifactRef => Boolean(ref));
 
   return {
-    attempted: result.selectedDoNotSell || result.submitted,
+    attempted: result.selectedDoNotSell || result.submitted || optOutSelectionAttempted,
     succeeded,
     failureReason,
     bannerPresentAfter,
     afterDomRef,
     afterScreenshotRef,
-    evidenceRefs,
+    evidenceRefs: [
+      ...evidenceRefs,
+      ...diagnosticRefs.map((ref) => ({
+        refId: `ref_${ref.artifactId}`,
+        artifactId: ref.artifactId,
+        eventType: "dom_snapshot" as const,
+        excerpt: ref.label,
+      })),
+    ],
     candidate: syntheticCandidate,
     actionProof: actionProof({
       afterDomRef,
       afterScreenshotRef,
-      attempted: result.selectedDoNotSell || result.submitted,
+      attempted: result.selectedDoNotSell || result.submitted || optOutSelectionAttempted,
       beforeDomRef,
       beforeScreenshotRef,
       candidate: syntheticCandidate,
-      evidenceRefs,
+      evidenceRefs: [
+        ...evidenceRefs,
+        ...diagnosticRefs.map((ref) => ({
+          refId: `ref_${ref.artifactId}`,
+          artifactId: ref.artifactId,
+          eventType: "dom_snapshot" as const,
+          excerpt: ref.label,
+        })),
+      ],
       failureReason,
       actionTimestampMs,
       afterDomExcerpt: afterDom.textExcerpt,
@@ -3223,6 +4650,657 @@ async function attemptPrivacyOptOutFormSubmission(input: {
       succeeded,
     }),
   };
+}
+
+async function selectAndVerifyPrivacyOptOutChoice(
+  page: Page,
+  nanoConsentUiAssistProvider: NanoConsentUiAssistProvider | undefined,
+): Promise<{ attempted: boolean; selected: boolean }> {
+  if (await clickPrivacyOptOutLeadingControl(page)) {
+    return { attempted: true, selected: true };
+  }
+  const customControl = await activatePrivacyOptOutCustomControl(page);
+  if (customControl.attempted) {
+    return customControl;
+  }
+  const deterministic = await page.evaluate(() => {
+    const optOutPattern = /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out|sale (?:or|and) sharing|sharing of my personal information/i;
+    const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+    const visible = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const selected = (element: Element | null | undefined) => {
+      if (!element) {
+        return false;
+      }
+      if (element instanceof HTMLInputElement) {
+        return element.checked;
+      }
+      return element.getAttribute("aria-checked") === "true" ||
+        element.getAttribute("data-checked") === "true" ||
+        element.className.toString().toLowerCase().includes("checked");
+    };
+    const clickAndCheck = (element: Element | null | undefined) => {
+      if (!element) {
+        return undefined;
+      }
+      (element as HTMLElement).click();
+      return selected(element);
+    };
+
+    const controls = [...document.querySelectorAll("input[type='radio'], input[type='checkbox'], [role='radio'], [role='checkbox']")]
+      .filter(visible);
+    for (const control of controls) {
+      const htmlControl = control as HTMLElement;
+      const id = htmlControl.id;
+      const label = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+      const container = htmlControl.closest("label, [role='group'], fieldset, section, div, li") ?? htmlControl.parentElement;
+      const context = normalize([
+        label?.textContent,
+        htmlControl.getAttribute("aria-label"),
+        htmlControl.getAttribute("name"),
+        htmlControl.getAttribute("value"),
+        container?.textContent,
+      ].filter(Boolean).join(" "));
+      if (optOutPattern.test(context)) {
+        const result = clickAndCheck(control);
+        if (result !== undefined) {
+          return { attempted: true, selected: result };
+        }
+      }
+    }
+
+    const textMatches = [...document.querySelectorAll("label, p, span, div, strong")]
+      .filter((element) => visible(element) && optOutPattern.test(normalize(element.textContent)))
+      .slice(0, 20);
+    for (const textElement of textMatches) {
+      const container = textElement.closest("label, [role='group'], fieldset, section, div, li") ?? textElement.parentElement;
+      const control = container?.querySelector("input[type='radio'], input[type='checkbox'], [role='radio'], [role='checkbox']");
+      const result = clickAndCheck(control);
+      if (result !== undefined) {
+        return { attempted: true, selected: result };
+      }
+    }
+
+    return { attempted: false, selected: false };
+  }).catch(() => ({ attempted: false, selected: false }));
+  if (deterministic.attempted) {
+    return deterministic;
+  }
+  return selectAndVerifyPrivacyOptOutChoiceWithNano(page, nanoConsentUiAssistProvider);
+}
+
+async function activatePrivacyOptOutCustomControl(page: Page): Promise<{ attempted: boolean; selected: boolean }> {
+  const activated = await page.evaluate(() => {
+    const optOutPattern = /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out|sale (?:or|and) sharing|sharing of my personal information/i;
+    const optInPattern = /accept standard advertising settings|opt in|i agree to the sale (?:or|and) sharing/i;
+    const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+    const visible = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const selected = (element: Element | null | undefined) => {
+      if (!element) return false;
+      if (element instanceof HTMLInputElement) return element.checked;
+      const value = [
+        element.getAttribute("aria-checked"),
+        element.getAttribute("aria-selected"),
+        element.getAttribute("data-checked"),
+        element.getAttribute("data-state"),
+        element.getAttribute("data-selected"),
+        element.className.toString(),
+      ].join(" ").toLowerCase();
+      return /\btrue\b|\bchecked\b|\bselected\b|\bactive\b/.test(value);
+    };
+    const dispatchClick = (element: Element | null | undefined) => {
+      if (!(element instanceof HTMLElement)) {
+        return false;
+      }
+      element.scrollIntoView({ block: "center", inline: "center" });
+      const rect = element.getBoundingClientRect();
+      const clientX = rect.left + rect.width / 2;
+      const clientY = rect.top + rect.height / 2;
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        element.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY, view: window }));
+      }
+      element.click();
+      return true;
+    };
+    const textMatches = [...document.querySelectorAll("label, p, span, div, strong")]
+      .filter((element) => visible(element) && optOutPattern.test(normalize(element.textContent)))
+      .slice(0, 12);
+    for (const textElement of textMatches) {
+      const ancestors = ancestorElements(textElement).slice(0, 8);
+      const optOutRow = ancestors.find((ancestor) => {
+        const text = normalize(ancestor.textContent);
+        return optOutPattern.test(text) && !optInPattern.test(text.slice(0, Math.max(0, text.indexOf(normalize(textElement.textContent)) || text.length)));
+      }) ?? textElement.closest("label, [role='radio'], [role='checkbox'], [role='button'], button, li, div");
+      const controls = uniqueElements([
+        ...(optOutRow ? [...optOutRow.querySelectorAll("input[type='radio'], input[type='checkbox'], [role='radio'], [role='checkbox'], button, [role='button'], [tabindex]")] : []),
+        ...ancestors.flatMap((ancestor) => [...ancestor.querySelectorAll("input[type='radio'], input[type='checkbox'], [role='radio'], [role='checkbox']")]),
+      ]).filter(visible);
+      const uncheckedControls = controls.filter((control) => !selected(control));
+      for (const control of [...uncheckedControls, ...controls]) {
+        const controlContext = normalize([
+          control.getAttribute("aria-label"),
+          control.getAttribute("name"),
+          control.getAttribute("value"),
+          (control.closest("label, [role='group'], fieldset, section, li, div") ?? control.parentElement)?.textContent,
+        ].filter(Boolean).join(" "));
+        if (optInPattern.test(controlContext) && !optOutPattern.test(controlContext)) {
+          continue;
+        }
+        if (dispatchClick(control) || dispatchClick(control.closest("label, [role='radio'], [role='checkbox'], [role='button'], button, li, div"))) {
+          return true;
+        }
+      }
+      const clickedRow = dispatchClick(optOutRow) || dispatchClick(textElement);
+      if (clickedRow) {
+        return true;
+      }
+    }
+    return false;
+
+    function ancestorElements(element: Element): Element[] {
+      const values: Element[] = [];
+      let cursor: Element | null = element;
+      while (cursor && cursor !== document.body && values.length < 12) {
+        values.push(cursor);
+        cursor = cursor.parentElement;
+      }
+      return values;
+    }
+
+    function uniqueElements(values: Element[]): Element[] {
+      return [...new Set(values)];
+    }
+  }).catch(() => false);
+  if (!activated) {
+    return { attempted: false, selected: false };
+  }
+  await waitForTimeoutWithinDeadline(page, 250);
+  if (await privacyOptOutChoiceSelected(page)) {
+    return { attempted: true, selected: true };
+  }
+  await page.keyboard.press("Space").catch(() => undefined);
+  await waitForTimeoutWithinDeadline(page, 250);
+  return { attempted: true, selected: await privacyOptOutChoiceSelected(page) };
+}
+
+async function selectAndVerifyPrivacyOptOutChoiceWithNano(
+  page: Page,
+  nanoConsentUiAssistProvider: NanoConsentUiAssistProvider | undefined,
+): Promise<{ attempted: boolean; selected: boolean }> {
+  if (!nanoConsentUiAssistProvider) {
+    throw new Error("Nano consent UI assist provider is required for privacy opt-out control disambiguation.");
+  }
+  const candidateSnapshot = await collectPrivacyOptOutControlDisambiguationCandidates(page);
+  if (candidateSnapshot.candidates.length === 0) {
+    return { attempted: false, selected: false };
+  }
+  const result = await nanoConsentUiAssistProvider.classifyControls({
+    assistId: "nano_privacy_opt_out_control_disambiguation",
+    pageUrl: page.url(),
+    candidates: candidateSnapshot.candidates.map((candidate) => ({
+      actionId: candidate.actionId,
+      labelText: candidate.labelText,
+      normalizedLabel: candidate.labelText.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 240),
+      domLocation: candidate.domLocation,
+      selectorSummary: candidate.selectorSummary,
+    })),
+  });
+  const candidateById = new Map(candidateSnapshot.candidates.map((candidate) => [candidate.actionId, candidate]));
+  const selectedCandidate = result.classifications
+    .filter((classification) =>
+      classification.actionType === "do_not_sell_share" &&
+      classification.shouldClick &&
+      classification.confidence >= 0.72,
+    )
+    .sort((left, right) =>
+      privacyOptOutClickCandidateRank(candidateById.get(right.actionId)) -
+      privacyOptOutClickCandidateRank(candidateById.get(left.actionId)) ||
+      right.confidence - left.confidence ||
+      left.actionId.localeCompare(right.actionId),
+    )[0];
+  if (!selectedCandidate) {
+    return { attempted: false, selected: false };
+  }
+  const clickPoint = candidateSnapshot.candidates.find((candidate) => candidate.actionId === selectedCandidate.actionId)?.clickPoint;
+  const clicked = clickPoint
+    ? await page.mouse.click(clickPoint.x, clickPoint.y).then(() => true, () => false)
+    : await page.evaluate((actionId) => {
+    const element = document.querySelector(`[data-certscore-privacy-control-id="${CSS.escape(actionId)}"]`);
+    if (!element) {
+      return false;
+    }
+    const target = clickablePrivacyControlTarget(element);
+    if (!target) {
+      return false;
+    }
+    dispatchTrustedLikeClick(target);
+    return true;
+
+    function clickablePrivacyControlTarget(element: Element): HTMLElement | undefined {
+      if (element instanceof HTMLElement) {
+        return element;
+      }
+      return undefined;
+    }
+
+    function dispatchTrustedLikeClick(element: HTMLElement): void {
+      const rect = element.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) {
+        element.dispatchEvent(new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+          view: window,
+        }));
+      }
+      element.click();
+    }
+  }, selectedCandidate.actionId).catch(() => false);
+  if (!clicked) {
+    return { attempted: false, selected: false };
+  }
+  await waitForTimeoutWithinDeadline(page, 300);
+  if (await privacyOptOutChoiceSelected(page)) {
+    return { attempted: true, selected: true };
+  }
+  for (const candidate of candidateSnapshot.candidates
+    .filter((item) => item.clickPoint && /leading_/.test(item.selectorSummary))
+    .sort((left, right) => privacyOptOutClickCandidateRank(right) - privacyOptOutClickCandidateRank(left))) {
+    if (!candidate.clickPoint || candidate.actionId === selectedCandidate.actionId) {
+      continue;
+    }
+    const coordinateClicked = await page.mouse.click(candidate.clickPoint.x, candidate.clickPoint.y).then(() => true, () => false);
+    if (!coordinateClicked) {
+      continue;
+    }
+    await waitForTimeoutWithinDeadline(page, 250);
+    if (await privacyOptOutChoiceSelected(page)) {
+      return { attempted: true, selected: true };
+    }
+  }
+  return { attempted: true, selected: false };
+}
+
+function privacyOptOutClickCandidateRank(candidate: {
+  selectorSummary: string;
+  clickPoint?: { x: number; y: number };
+} | undefined): number {
+  if (!candidate) {
+    return 0;
+  }
+  if (/leading_36px|leading_56px/.test(candidate.selectorSummary)) {
+    return 4;
+  }
+  if (/leading_18px/.test(candidate.selectorSummary)) {
+    return 3;
+  }
+  if (candidate.clickPoint) {
+    return 2;
+  }
+  return 1;
+}
+
+async function collectPrivacyOptOutControlDisambiguationCandidates(page: Page): Promise<{
+  candidates: Array<{
+    actionId: string;
+    labelText: string;
+    selectorSummary: string;
+    domLocation: string;
+    clickPoint?: { x: number; y: number };
+  }>;
+}> {
+  return page.evaluate(() => {
+    const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+    const optOutPattern = /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out|sale (?:or|and) sharing|sharing of my personal information|targeted advertising/i;
+    const visible = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const controlSelector = [
+      "input[type='radio']",
+      "input[type='checkbox']",
+      "[role='radio']",
+      "[role='checkbox']",
+      "button",
+      "[role='button']",
+      "[tabindex]",
+      "[class*='radio' i]",
+      "[class*='checkbox' i]",
+      "[class*='toggle' i]",
+      "[class*='choice' i]",
+      "[class*='option' i]",
+    ].join(",");
+    const textMatches = [...document.querySelectorAll("label, p, span, div, strong")]
+      .filter((element) => visible(element) && optOutPattern.test(normalize(element.textContent)))
+      .slice(0, 12);
+    const candidates: Array<{
+      actionId: string;
+      labelText: string;
+      selectorSummary: string;
+      domLocation: string;
+      element: Element;
+      distance: number;
+      clickPoint?: { x: number; y: number };
+    }> = [];
+    let sequence = 0;
+    for (const textElement of textMatches) {
+      const textRect = textElement.getBoundingClientRect();
+      const matchedText = normalize(textElement.textContent).slice(0, 180);
+      const coordinateCandidates = [
+        { label: "label_text_center", x: textRect.left + textRect.width / 2, y: textRect.top + textRect.height / 2 },
+        { label: "leading_18px", x: textRect.left - 18, y: textRect.top + textRect.height / 2 },
+        { label: "leading_36px", x: textRect.left - 36, y: textRect.top + textRect.height / 2 },
+        { label: "leading_56px", x: textRect.left - 56, y: textRect.top + textRect.height / 2 },
+      ].filter((point) => point.x >= 0 && point.y >= 0 && point.x <= window.innerWidth && point.y <= window.innerHeight);
+      for (const point of coordinateCandidates) {
+        const id = `privacy_opt_out_candidate_${sequence++}`;
+        candidates.push({
+          actionId: id,
+          labelText: normalize([
+            `matchedText=${matchedText}`,
+            `candidateKind=coordinate`,
+            `clickTarget=${point.label}`,
+            `context=${normalize((textElement.closest("label, [role='group'], fieldset, section, li, div") ?? textElement.parentElement)?.textContent).slice(0, 260)}`,
+          ].join(" | ")),
+          selectorSummary: `privacyControlCoordinate:${point.label}`,
+          domLocation: "coordinate_near_opt_out_text",
+          element: textElement,
+          distance: point.label === "label_text_center" ? 20 : Number(point.label.match(/\d+/)?.[0] ?? 40),
+          clickPoint: { x: Math.round(point.x), y: Math.round(point.y) },
+        });
+      }
+      const containers = ancestorElements(textElement).slice(0, 8);
+      const controls = uniqueElements(
+        containers.flatMap((container) => [
+          ...[...container.querySelectorAll(controlSelector)],
+          ...previousElementControls(container, controlSelector),
+          ...nextElementControls(container, controlSelector),
+        ]),
+      ).filter((element) => visible(element));
+      for (const control of controls.slice(0, 16)) {
+        const rect = control.getBoundingClientRect();
+        const centerDistance = Math.round(Math.hypot(
+          (rect.left + rect.width / 2) - (textRect.left + textRect.width / 2),
+          (rect.top + rect.height / 2) - (textRect.top + textRect.height / 2),
+        ));
+        if (centerDistance > 900) {
+          continue;
+        }
+        const html = control as HTMLElement;
+        const id = `privacy_opt_out_candidate_${sequence++}`;
+        html.dataset.certscorePrivacyControlId = id;
+        const container = html.closest("label, [role='group'], fieldset, section, li, div") ?? html.parentElement;
+        candidates.push({
+          actionId: id,
+          labelText: normalize([
+            `matchedText=${normalize(textElement.textContent).slice(0, 180)}`,
+            `controlText=${normalize(html.textContent).slice(0, 180)}`,
+            `ariaLabel=${html.getAttribute("aria-label") ?? ""}`,
+            `role=${html.getAttribute("role") ?? html.tagName.toLowerCase()}`,
+            `type=${html.getAttribute("type") ?? ""}`,
+            `name=${html.getAttribute("name") ?? ""}`,
+            `value=${html.getAttribute("value") ?? ""}`,
+            `checked=${html instanceof HTMLInputElement ? String(html.checked) : html.getAttribute("aria-checked") ?? html.getAttribute("data-checked") ?? ""}`,
+            `context=${normalize(container?.textContent).slice(0, 260)}`,
+            `distance=${centerDistance}`,
+          ].join(" | ")),
+          selectorSummary: `privacyControlCandidate:${id}`,
+          domLocation: `${html.tagName.toLowerCase()}${html.getAttribute("role") ? `[role=${html.getAttribute("role")}]` : ""}`,
+          element: control,
+          distance: centerDistance,
+        });
+      }
+    }
+    return {
+      candidates: candidates
+        .sort((left, right) => left.distance - right.distance || left.actionId.localeCompare(right.actionId))
+        .slice(0, 16)
+        .map(({ actionId, labelText, selectorSummary, domLocation, clickPoint }) => ({
+          actionId,
+          labelText,
+          selectorSummary,
+          domLocation,
+          clickPoint,
+        })),
+    };
+
+    function ancestorElements(element: Element): Element[] {
+      const values: Element[] = [];
+      let cursor: Element | null = element;
+      while (cursor && cursor !== document.body && values.length < 12) {
+        values.push(cursor);
+        cursor = cursor.parentElement;
+      }
+      if (document.body) {
+        values.push(document.body);
+      }
+      return values;
+    }
+
+    function previousElementControls(element: Element, selector: string): Element[] {
+      const values: Element[] = [];
+      let cursor = element.previousElementSibling;
+      while (cursor && values.length < 8) {
+        if (cursor.matches(selector)) {
+          values.push(cursor);
+        }
+        values.push(...cursor.querySelectorAll(selector));
+        cursor = cursor.previousElementSibling;
+      }
+      return values;
+    }
+
+    function nextElementControls(element: Element, selector: string): Element[] {
+      const values: Element[] = [];
+      let cursor = element.nextElementSibling;
+      while (cursor && values.length < 8) {
+        if (cursor.matches(selector)) {
+          values.push(cursor);
+        }
+        values.push(...cursor.querySelectorAll(selector));
+        cursor = cursor.nextElementSibling;
+      }
+      return values;
+    }
+
+    function uniqueElements(values: Element[]): Element[] {
+      return [...new Set(values)];
+    }
+  }).catch(() => ({ candidates: [] }));
+}
+
+async function writePrivacyOptOutFormDiagnosticArtifact(
+  input: ConsentFlowRuntimeScannerInput,
+  page: Page,
+  scenario: ConsentFlowScenario,
+  phase: "before_selection" | "after_selection",
+): Promise<{ artifactId: string; path: string; observedAtMs: number } | undefined> {
+  const observedAtMs = elapsed(input.scanStartedAtMs);
+  let diagnostic: { pageUrl: string; sections: Array<Record<string, unknown>> } | undefined = await page.evaluate(() => {
+    const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+    const optOutPattern = /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out|sale (?:or|and) sharing|sharing of my personal information/i;
+    const optInPattern = /accept standard advertising settings|opt in|i agree to the sale (?:or|and) sharing/i;
+    const visible = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    const selected = (element: Element) => {
+      if (element instanceof HTMLInputElement) {
+        return element.checked;
+      }
+      const value = [
+        element.getAttribute("aria-checked"),
+        element.getAttribute("aria-selected"),
+        element.getAttribute("data-checked"),
+        element.getAttribute("data-state"),
+        element.getAttribute("data-selected"),
+        element.className.toString(),
+      ].join(" ").toLowerCase();
+      return /\btrue\b|\bchecked\b|\bselected\b|\bactive\b/.test(value);
+    };
+    const textMatches = [...document.querySelectorAll("label, p, span, div, strong")]
+      .filter((element) => visible(element) && optOutPattern.test(normalize(element.textContent)))
+      .slice(0, 8);
+    const sections = textMatches.map((textElement, index) => {
+      const container = textElement.closest("label, [role='radiogroup'], [role='group'], fieldset, section, form, li, div") ?? textElement.parentElement;
+      const controls = container
+        ? [...container.querySelectorAll("input, button, [role], [tabindex], label")]
+          .filter((element) => visible(element))
+          .slice(0, 28)
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            const html = element as HTMLElement;
+            return {
+              tagName: element.tagName.toLowerCase(),
+              role: html.getAttribute("role"),
+              type: html.getAttribute("type"),
+              name: html.getAttribute("name"),
+              value: html.getAttribute("value"),
+              ariaLabel: html.getAttribute("aria-label"),
+              ariaChecked: html.getAttribute("aria-checked"),
+              ariaSelected: html.getAttribute("aria-selected"),
+              dataState: html.getAttribute("data-state"),
+              classHint: html.className.toString().replace(/\s+/g, " ").slice(0, 180),
+              selected: selected(element),
+              text: normalize(element.textContent).slice(0, 220),
+              rect: {
+                x: Math.round(rect.x),
+                y: Math.round(rect.y),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+              },
+            };
+          })
+        : [];
+      const htmlExcerpt = container
+        ? sanitizeHtml(container.outerHTML).slice(0, 4_000)
+        : undefined;
+      return {
+        index,
+        matchedText: normalize(textElement.textContent).slice(0, 240),
+        hasOptOutText: optOutPattern.test(normalize(container?.textContent)),
+        hasOptInText: optInPattern.test(normalize(container?.textContent)),
+        controls,
+        htmlExcerpt,
+      };
+    });
+    return {
+      pageUrl: location.href,
+      sections,
+    };
+
+    function sanitizeHtml(value: string): string {
+      return value
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/\s(?:href|src)=["'][^"']{160,}["']/gi, "")
+        .replace(/\s(?:data-[\w-]+)=["'][^"']{240,}["']/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+  }).catch(() => undefined);
+  if (!diagnostic || diagnostic.sections.length === 0) {
+    const text = await page.locator("body").innerText({ timeout: 1_500 }).catch(() => "");
+    const excerpt = boundedPrivacyFormExcerpt(text);
+    if (!excerpt) {
+      return undefined;
+    }
+    diagnostic = {
+      pageUrl: page.url(),
+      sections: [{
+        controls: [],
+        fallbackTextExcerpt: excerpt,
+        hasOptInText: /accept standard advertising settings|opt in|i agree to the sale (?:or|and) sharing/i.test(excerpt),
+        hasOptOutText: /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out|sale (?:or|and) sharing/i.test(excerpt),
+        htmlExcerpt: undefined,
+        index: 0,
+        matchedText: "fallback_text_privacy_opt_out_form",
+      }],
+    };
+  }
+  const artifactId = `PrivacyOptOutFormDiagnostics-${scenario}-${phase}`;
+  const artifactPath = await input.artifactWriter.writeJsonArtifact(`${artifactId}.json`, {
+    artifactVersion: "certscore.v2.privacy_opt_out_form_diagnostics.v1",
+    sourceScanner: SOURCE_SCANNER,
+    scenario,
+    phase,
+    observedAtMs,
+    ...diagnostic,
+  });
+  return { artifactId, path: artifactPath, observedAtMs };
+}
+
+function boundedPrivacyFormExcerpt(text: string): string | undefined {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const lower = normalized.toLowerCase();
+  const anchors = [
+    lower.indexOf("do not sell or share"),
+    lower.indexOf("california privacy rights act"),
+    lower.indexOf("right to opt out"),
+    lower.indexOf("accept standard advertising settings"),
+  ].filter((index) => index >= 0);
+  if (anchors.length === 0) {
+    return undefined;
+  }
+  const start = Math.max(0, Math.min(...anchors) - 800);
+  return normalized.slice(start, start + 4_000);
+}
+
+async function clickPrivacyOptOutLeadingControl(page: Page): Promise<boolean> {
+  const labels = [
+    "Do Not Sell or Share My Personal Information (Opt Out)",
+    "Do Not Sell or Share My Personal Information",
+  ];
+  for (const label of labels) {
+    const locator = page.getByText(label, { exact: false }).first();
+    const box = await locator.boundingBox({ timeout: 750 }).catch(() => null);
+    if (!box) {
+      continue;
+    }
+    await page.mouse.click(Math.max(0, box.x - 18), box.y + (box.height / 2)).catch(() => undefined);
+    await waitForTimeoutWithinDeadline(page, 250);
+    if (await privacyOptOutChoiceSelected(page)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function privacyOptOutChoiceSelected(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const optOutPattern = /do not sell(?: my)?(?: personal)? information|do not sell or share|opt[- ]out|sale (?:or|and) sharing|sharing of my personal information/i;
+    const normalize = (value: string | null | undefined) => (value ?? "").replace(/\s+/g, " ").trim();
+    const selected = (element: Element) => element instanceof HTMLInputElement
+      ? element.checked
+      : element.getAttribute("aria-checked") === "true" ||
+        element.getAttribute("data-checked") === "true" ||
+        element.className.toString().toLowerCase().includes("checked");
+    const controls = [...document.querySelectorAll("input[type='radio'], input[type='checkbox'], [role='radio'], [role='checkbox']")];
+    return controls.some((control) => {
+      if (!selected(control)) {
+        return false;
+      }
+      const htmlControl = control as HTMLElement;
+      const id = htmlControl.id;
+      const label = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
+      const container = htmlControl.closest("label, [role='group'], fieldset, section, div, li") ?? htmlControl.parentElement;
+      return optOutPattern.test(normalize([
+        label?.textContent,
+        htmlControl.getAttribute("aria-label"),
+        htmlControl.getAttribute("name"),
+        htmlControl.getAttribute("value"),
+        container?.textContent,
+      ].filter(Boolean).join(" ")));
+    });
+  }).catch(() => false);
 }
 
 function privacyOptOutFormCandidate(
@@ -3811,7 +5889,63 @@ async function countVisiblePreferenceToggles(page: Page): Promise<number> {
   }).catch(() => 0);
 }
 
-function buildComparisons(captures: ScenarioCapture[]): ConsentFlowComparison[] {
+export function buildConsentFlowComparisonsFromEvidence(
+  input: ConsentFlowComparisonEvidenceInput,
+): ConsentFlowComparison[] {
+  const scenarios = unique([
+    ...input.networkEvents.map((event) => event.scenario),
+    ...input.cookieEvents.map((event) => event.scenario),
+    ...input.consentActionAttempts.map((attempt) => attempt.scenario),
+    ...(input.consentFlowObservations ?? []).map((observation) => observation.scenario),
+  ]).filter(isConsentFlowScenario);
+  const captures: ConsentFlowComparisonCapture[] = scenarios.map((scenario) => {
+    const observations = (input.consentFlowObservations ?? []).filter((observation) => observation.scenario === scenario);
+    const actionAttempts = input.consentActionAttempts.filter((attempt) => attempt.scenario === scenario);
+    return {
+      scenario,
+      consentState: consentStateForPersistedScenario(scenario, observations, actionAttempts),
+      networkEvents: input.networkEvents.filter((event) => event.scenario === scenario),
+      cookieEvents: input.cookieEvents.filter((event) => event.scenario === scenario),
+      actionAttempts,
+      normalizedVendorObservations: input.normalizedVendorObservations ?? [],
+    };
+  });
+  return buildComparisons(captures);
+}
+
+function isConsentFlowScenario(value: string): value is ConsentFlowScenario {
+  return [
+    "baseline_pre_consent",
+    "reject_all_flow",
+    "accept_all_flow",
+    "gpc_enabled",
+    "privacy_opt_out_flow",
+    "form_collection_probe",
+    "accessibility_probe",
+  ].includes(value);
+}
+
+function consentStateForPersistedScenario(
+  scenario: ConsentFlowScenario,
+  observations: ConsentFlowObservation[],
+  actionAttempts: ConsentActionAttempt[],
+): ConsentState {
+  const succeeded = actionAttempts.some((attempt) => attempt.succeeded);
+  if (succeeded) {
+    if (scenario === "accept_all_flow") {
+      return "post_accept";
+    }
+    if (scenario === "reject_all_flow") {
+      return "post_reject";
+    }
+    if (scenario === "privacy_opt_out_flow") {
+      return "post_reject";
+    }
+  }
+  return observations[0]?.consentStateAtTime ?? "pre_consent";
+}
+
+function buildComparisons(captures: ConsentFlowComparisonCapture[]): ConsentFlowComparison[] {
   const baseline = captures.find((capture) => capture.scenario === "baseline_pre_consent");
   const reject = captures.find((capture) => capture.scenario === "reject_all_flow");
   const accept = captures.find((capture) => capture.scenario === "accept_all_flow");
@@ -3838,8 +5972,8 @@ function buildComparisons(captures: ScenarioCapture[]): ConsentFlowComparison[] 
 
 function comparison(
   comparedScenarios: ConsentFlowComparison["comparedScenarios"],
-  left: ScenarioCapture,
-  right: ScenarioCapture,
+  left: ConsentFlowComparisonCapture,
+  right: ConsentFlowComparisonCapture,
   actionType: ConsentActionType,
 ): ConsentFlowComparison {
   const leftSignals = scenarioSignals(left);
@@ -3975,8 +6109,8 @@ function comparison(
   };
 }
 
-function measurementWindow(capture: ScenarioCapture): NonNullable<ConsentFlowComparison["comparableMeasurement"]>["preActionWindow"] {
-  const events = runtimeTimeline(capture);
+function measurementWindow(capture: ConsentFlowComparisonCapture): NonNullable<ConsentFlowComparison["comparableMeasurement"]>["preActionWindow"] {
+  const events = comparisonRuntimeTimeline(capture);
   const timestamps = events.map((event) => event.timestampMs).filter((value) => Number.isFinite(value));
   const startedAtMs = timestamps.length > 0 ? Math.min(...timestamps) : 0;
   const completedAtMs = timestamps.length > 0 ? Math.max(...timestamps) : startedAtMs;
@@ -3994,11 +6128,11 @@ function measurementWindow(capture: ScenarioCapture): NonNullable<ConsentFlowCom
 
 function actionAttemptForComparison(
   comparedScenarios: ConsentFlowComparison["comparedScenarios"],
-  left: ScenarioCapture,
-  right: ScenarioCapture,
+  left: ConsentFlowComparisonCapture,
+  right: ConsentFlowComparisonCapture,
   actionType: ConsentActionType,
 ): ConsentActionAttempt | undefined {
-  const preferredAttempt = (capture: ScenarioCapture) =>
+  const preferredAttempt = (capture: ConsentFlowComparisonCapture) =>
     capture.actionAttempts.find((attempt) =>
       attempt.actionType === actionType &&
       attempt.succeeded &&
@@ -4017,10 +6151,10 @@ function comparisonIncludesAccept(comparedScenarios: ConsentFlowComparison["comp
 
 function requiredActionsForComparison(
   comparedScenarios: ConsentFlowComparison["comparedScenarios"],
-  left: ScenarioCapture,
-  right: ScenarioCapture,
+  left: ConsentFlowComparisonCapture,
+  right: ConsentFlowComparisonCapture,
   actionType: ConsentActionType,
-): Array<{ capture: ScenarioCapture; actionType: ConsentActionType }> {
+): Array<{ capture: ConsentFlowComparisonCapture; actionType: ConsentActionType }> {
   if (comparedScenarios === "fresh_pre_consent_vs_gpc_enabled") {
     return [];
   }
@@ -4033,7 +6167,7 @@ function requiredActionsForComparison(
   return [{ capture: right, actionType }];
 }
 
-function scenarioSignals(capture: ScenarioCapture): {
+function scenarioSignals(capture: ConsentFlowComparisonCapture): {
   vendors: string[];
   cookies: string[];
   collectionEndpoints: string[];
@@ -4042,7 +6176,11 @@ function scenarioSignals(capture: ScenarioCapture): {
   keys: string[];
   counts: Record<string, number>;
 } {
-  const vendors = resolveVendorObservations(capture.vendorResolverInputs)
+  const vendors = (
+    capture.vendorResolverInputs
+      ? resolveVendorObservations(capture.vendorResolverInputs)
+      : (capture.normalizedVendorObservations ?? []).filter((vendor) => vendorObservedInScenario(vendor, capture))
+  )
     .filter((vendor) => ![
       "consent_management",
       "infrastructure",
@@ -4080,6 +6218,17 @@ function scenarioSignals(capture: ScenarioCapture): {
     keys,
     counts: countBy(keys),
   };
+}
+
+function vendorObservedInScenario(vendor: NormalizedVendorObservation, capture: ConsentFlowComparisonCapture): boolean {
+  if (vendor.matchSources.some((source) => source.scenario === capture.scenario)) {
+    return true;
+  }
+  const eventIds = new Set([
+    ...capture.networkEvents.map((event) => event.eventId),
+    ...capture.cookieEvents.map((event) => event.eventId),
+  ]);
+  return vendor.matchedEvidenceIds.some((eventId) => eventIds.has(eventId));
 }
 
 function cookieSnapshotForScenario(
@@ -4158,6 +6307,20 @@ function bannerLikelyPresent(candidates: ConsentActionCandidate[], text: string 
     /cookie consent|we use cookies|choose your consent setting|privacy preference/i.test(text ?? "");
 }
 
+function customPrivacyFormVisible(text: string | undefined): boolean {
+  const value = (text ?? "").toLowerCase();
+  return /privacy settings|right to opt out|data privacy rights|california privacy rights act|cpra|advertising settings/.test(value) &&
+    /do not sell(?: or share)?(?: my)? personal information|sale (?:or|and) sharing|opt[- ]out/.test(value) &&
+    /save|submit|apply|confirm|select a request type|select (?:the )?(?:below|right)/.test(value);
+}
+
+async function customPrivacyFormVisibleOnPage(page: Page): Promise<boolean> {
+  const text = await page.evaluate(() =>
+    (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 12_000),
+  ).catch(() => "");
+  return customPrivacyFormVisible(text);
+}
+
 function bestCandidate(candidates: ConsentActionCandidate[], actionType: ConsentActionType): ConsentActionCandidate | undefined {
   return candidates
     .filter((candidate) => candidate.actionType === actionType && candidate.visible && candidate.enabled)
@@ -4170,8 +6333,9 @@ function candidateActionScore(candidate: ConsentActionCandidate, actionType: Con
   }
   const label = `${candidate.normalizedLabel} ${candidate.labelText} ${candidate.contextTextExcerpt ?? ""}`.toLowerCase();
   return candidate.confidence +
+    (/review all privacy and ad settings|privacy settings|privacy preferences|cookie settings|manage preferences/.test(label) ? 0.5 : 0) +
     (/opt[- ]out (?:of )?(?:sale|sharing|targeted advertising)/.test(label) ? 0.45 : 0) +
-    (/do not sell(?: or share)?|do not share/.test(label) ? 0.4 : 0) +
+    (/do not sell(?: or share)?|do not share/.test(label) ? 0.3 : 0) +
     (/limit use of (?:my )?sensitive|exclude my data|do not use my data/.test(label) ? 0.3 : 0) +
     (/confirm|save|submit|apply/.test(label) ? 0.18 : 0) -
     (/your privacy choices|privacy choices|privacy controls/.test(label) &&
@@ -4183,7 +6347,7 @@ function bestPreferenceSurfaceOpener(candidates: ConsentActionCandidate[]): Cons
     .filter((candidate) => candidate.visible && candidate.enabled)
     .map((candidate) => {
       const value = `${candidate.normalizedLabel} ${candidate.labelText} ${candidate.contextTextExcerpt ?? ""}`.toLowerCase();
-      const isPrivacyControl = /\byour privacy choices\b|privacy choices|do not sell|do not share|exclude my data|do not use my data|ad choices|cookie settings|privacy settings|manage preferences|preferences/.test(value);
+      const isPrivacyControl = /\byour privacy choices\b|privacy choices|privacy preference|preference center|do not sell|do not share|exclude my data|do not use my data|ad choices|cookie settings|privacy settings|manage preferences|preferences/.test(value);
       const isPolicyOnly = /privacy policy|cookie policy|privacy notice|terms of service|california notice/.test(value) &&
         !/choices|settings|preferences|do not sell|do not share|ad choices/.test(value);
       const clickEligible = candidate.shouldClick && candidate.confidence >= 0.78;
@@ -4198,7 +6362,7 @@ function bestPreferenceSurfaceOpener(candidates: ConsentActionCandidate[]): Cons
         score: candidate.confidence +
           (clickEligible ? 0.4 : 0) +
           (isPrivacyControl ? 0.25 : 0) +
-          (/cookie settings|privacy settings|manage preferences|preferences/.test(value) ? 0.15 : 0),
+          (/cookie settings|privacy settings|privacy preference|preference center|manage preferences|preferences/.test(value) ? 0.15 : 0),
       };
     })
     .filter((entry): entry is { candidate: ConsentActionCandidate; score: number } => Boolean(entry));
@@ -4262,6 +6426,15 @@ function runtimeTimeline(capture: ScenarioCapture): RuntimeEvidenceEvent[] {
   ];
 }
 
+function comparisonRuntimeTimeline(capture: ConsentFlowComparisonCapture): RuntimeEvidenceEvent[] {
+  return [
+    ...capture.networkEvents,
+    ...(capture.networkResponseEvents ?? []),
+    ...capture.cookieEvents,
+    ...(capture.consentInteractionEvents ?? []),
+  ];
+}
+
 function resolverInputForEvent(
   event: RuntimeEvidenceEvent,
   label?: string,
@@ -4314,8 +6487,603 @@ function artifactRefFromScreenshot(screenshot: ScreenshotArtifact): ArtifactRef 
   };
 }
 
+function artifactRefFromJsonArtifact(
+  artifact: { artifactId: string; path: string; observedAtMs: number } | undefined,
+  label: string,
+): ArtifactRef | undefined {
+  if (!artifact) {
+    return undefined;
+  }
+  return {
+    artifactId: artifact.artifactId,
+    artifactType: "json",
+    path: artifact.path,
+    observedAtMs: artifact.observedAtMs,
+    sourceScanner: SOURCE_SCANNER,
+    sensitivity: "redacted",
+    redactionStatus: "redacted",
+    relatedEventIds: [],
+    label,
+  };
+}
+
 function artifactRefFromOptionalScreenshot(screenshot: ScreenshotArtifact | undefined): ArtifactRef | undefined {
   return screenshot ? artifactRefFromScreenshot(screenshot) : undefined;
+}
+
+async function writeScenarioRuntimeDiagnosticsArtifact(input: {
+  actionApplied: boolean;
+  attempts: ConsentActionAttempt[];
+  capture: {
+    cookieEvents: CookieEvent[];
+    networkEvents: NetworkEvent[];
+    networkResponseEvents: NetworkResponseEvent[];
+    phaseTimings: ScenarioPhaseTiming[];
+    scenario: ConsentFlowScenario;
+  };
+  input: ConsentFlowRuntimeScannerInput;
+  runtimeDiagnostics: ScenarioRuntimeDiagnosticState;
+}): Promise<ArtifactRef> {
+  const postActionNetworkEvents = input.capture.networkEvents.filter((event) => event.pagePhase === "post_interaction");
+  const finalWindowRequestEvents = input.capture.networkEvents.filter((event) =>
+    event.timestampMs >= input.runtimeDiagnostics.finalSettleStartedAtMs
+  );
+  const finalWindowSeconds = Math.max(0.001, input.runtimeDiagnostics.finalSettleMs / 1000);
+  const actionAttempt = preferredScenarioQualityAttempt(input.attempts);
+  const limitationKeys = scenarioRuntimeLimitationKeys({
+    actionApplied: input.actionApplied,
+    activeRequestCount: input.runtimeDiagnostics.activeRequestIds.size,
+    networkEvents: input.capture.networkEvents.length,
+    postActionNetworkEvents: postActionNetworkEvents.length,
+    requestFailures: input.runtimeDiagnostics.requestFailures.length,
+    scenario: input.capture.scenario,
+  });
+  const path = await input.input.artifactWriter.writeJsonArtifact(`consent-runtime-diagnostics-${input.capture.scenario}.json`, {
+    artifactOnly: true,
+    artifactVersion: "certscore.v2.consent_runtime_diagnostics.v1",
+    generatedAt: new Date().toISOString(),
+    productionFindingIntegration: false,
+    scenario: input.capture.scenario,
+    sourceScanner: SOURCE_SCANNER,
+    counts: {
+      activeRequestsAtClose: input.runtimeDiagnostics.activeRequestIds.size,
+      blockedHeavyResources: { ...input.runtimeDiagnostics.blockedResourceCounts },
+      consoleMessages: input.runtimeDiagnostics.consoleMessages.length,
+      cookieEvents: input.capture.cookieEvents.length,
+      finalWindowRequestRatePerSecond: Number((finalWindowRequestEvents.length / finalWindowSeconds).toFixed(3)),
+      finalWindowRequests: finalWindowRequestEvents.length,
+      networkEvents: input.capture.networkEvents.length,
+      networkResponseEvents: input.capture.networkResponseEvents.length,
+      pageErrors: input.runtimeDiagnostics.pageErrors.length,
+      postActionNetworkEvents: postActionNetworkEvents.length,
+      requestFailures: input.runtimeDiagnostics.requestFailures.length,
+      resourceTypes: { ...input.runtimeDiagnostics.resourceTypeCounts },
+    },
+    consentActionOutcome: {
+      actionApplied: input.actionApplied,
+      actionType: actionAttempt?.actionType,
+      attempted: actionAttempt?.attempted ?? false,
+      failureReason: actionAttempt?.failureReason,
+      succeeded: actionAttempt?.succeeded ?? false,
+    },
+    limitationKeys,
+    samples: {
+      consoleMessages: input.runtimeDiagnostics.consoleMessages,
+      pageErrors: input.runtimeDiagnostics.pageErrors,
+      requestFailures: input.runtimeDiagnostics.requestFailures,
+    },
+    timing: {
+      finalSettleMs: input.runtimeDiagnostics.finalSettleMs,
+      finalSettleStartedAtMs: input.runtimeDiagnostics.finalSettleStartedAtMs,
+      phaseTimings: input.capture.phaseTimings,
+    },
+  });
+  return {
+    artifactId: `consent_runtime_diagnostics_${input.capture.scenario}`,
+    artifactType: "json",
+    path,
+    createdAt: new Date().toISOString(),
+    sourceScanner: SOURCE_SCANNER,
+    scenario: input.capture.scenario,
+    sensitivity: "internal_only",
+    redactionStatus: "internal_only",
+    relatedEventIds: input.capture.networkEvents.slice(0, 50).map((event) => event.eventId),
+    label: "Consent-flow runtime diagnostics",
+  };
+}
+
+export function scenarioRuntimeLimitationKeys(input: {
+  actionApplied: boolean;
+  activeRequestCount: number;
+  networkEvents: number;
+  postActionNetworkEvents: number;
+  requestFailures: number;
+  scenario: ConsentFlowScenario;
+}) {
+  const keys: string[] = [];
+  if (input.scenario !== "baseline_pre_consent" && input.actionApplied && input.postActionNetworkEvents < 25) {
+    keys.push("thin_post_consent_network_tail");
+  }
+  if (input.networkEvents === 0) {
+    keys.push("zero_network_events");
+  }
+  if (input.requestFailures > 0) {
+    keys.push("request_failures_observed");
+  }
+  if (input.activeRequestCount > 0) {
+    keys.push("active_requests_at_close");
+  }
+  return keys;
+}
+
+async function writeScenarioEvidenceQualityArtifact(input: {
+  actionApplied: boolean;
+  attempts: ConsentActionAttempt[];
+  cookieCountAfterAction: number | null;
+  cookieCountBeforeAction: number | null;
+  evidenceExcerptCount: number;
+  input: ConsentFlowRuntimeScannerInput;
+  runtimeDiagnostics: ScenarioRuntimeDiagnosticState;
+  scenario: ConsentFlowScenario;
+  storageCountAfterAction: number | null;
+  storageCountBeforeAction: number | null;
+  totals: {
+    actionCandidateCount: number;
+    cookieEventCount: number;
+    finalWindowNetworkEventCount: number;
+    networkEventCount: number;
+    networkResponseEventCount: number;
+    postActionNetworkEventCount: number;
+  };
+  uiObservation: ConsentUiObservation;
+}): Promise<ArtifactRef> {
+  const actionAttempt = preferredScenarioQualityAttempt(input.attempts);
+  const quality = scenarioEvidenceQualitySummary({
+    actionApplied: input.actionApplied,
+    actionAttempt,
+    activeRequestCount: input.runtimeDiagnostics.activeRequestIds.size,
+    evidenceExcerptCount: input.evidenceExcerptCount,
+    failedRequestCount: input.runtimeDiagnostics.requestFailures.length,
+    finalSettleMs: input.runtimeDiagnostics.finalSettleMs,
+    networkEventCount: input.totals.networkEventCount,
+    networkResponseEventCount: input.totals.networkResponseEventCount,
+    postActionNetworkEventCount: input.totals.postActionNetworkEventCount,
+    scenario: input.scenario,
+  });
+  const limitationReason = refinedScenarioLimitationReason({
+    actionAttempt,
+    defaultReason: quality.limitationReason,
+    scenario: input.scenario,
+    surfaceProbe: input.runtimeDiagnostics.cmpSurfaceProbe,
+  });
+  const finalWindowSeconds = Math.max(0.001, input.runtimeDiagnostics.finalSettleMs / 1000);
+  const finalWindowRequestCount = input.totals.finalWindowNetworkEventCount;
+  const path = await input.input.artifactWriter.writeJsonArtifact(`ScenarioEvidenceQuality-${input.scenario}.json`, {
+    action: {
+      actionApplied: input.actionApplied,
+      actionOutcome: actionAttempt?.succeeded === true
+        ? "succeeded"
+        : actionAttempt?.attempted === true ? "attempted_not_succeeded" : "not_attempted",
+      actionType: actionAttempt?.actionType,
+      attempted: actionAttempt?.attempted ?? false,
+      failureReason: actionAttempt?.failureReason,
+      plannerHintsStatus: plannerHintsStatus(input.input, input.scenario),
+      succeeded: actionAttempt?.succeeded ?? false,
+    },
+    artifactOnly: true,
+    artifactVersion: "certscore.v2.scenario_evidence_quality.v1",
+    counts: {
+      actionCandidatesFound: input.totals.actionCandidateCount,
+      activeRequestsAtClose: input.runtimeDiagnostics.activeRequestIds.size,
+      blockedOrFulfilledHeavyResources: { ...input.runtimeDiagnostics.blockedResourceCounts },
+      consoleMessages: input.runtimeDiagnostics.consoleMessages.length,
+      cookieEvents: input.totals.cookieEventCount,
+      cookiesAfterAction: input.cookieCountAfterAction,
+      cookiesBeforeAction: input.cookieCountBeforeAction,
+      evidenceExcerpts: input.evidenceExcerptCount,
+      failedRequests: input.runtimeDiagnostics.requestFailures.length,
+      finalWindowRequestRatePerSecond: Number((finalWindowRequestCount / finalWindowSeconds).toFixed(3)),
+      finalWindowRequests: finalWindowRequestCount,
+      pageErrors: input.runtimeDiagnostics.pageErrors.length,
+      postActionRequests: input.totals.postActionNetworkEventCount,
+      requests: input.totals.networkEventCount,
+      resourceTypes: { ...input.runtimeDiagnostics.resourceTypeCounts },
+      responses: input.totals.networkResponseEventCount,
+      storageAfterAction: input.storageCountAfterAction,
+      storageBeforeAction: input.storageCountBeforeAction,
+    },
+    generatedAt: new Date().toISOString(),
+    limitationReason,
+    passStatus: quality.passStatus,
+    productionFindingIntegration: false,
+    scenario: input.scenario,
+    sourceScanner: SOURCE_SCANNER,
+    timing: {
+      finalSettleMs: input.runtimeDiagnostics.finalSettleMs,
+      finalSettleStartedAtMs: input.runtimeDiagnostics.finalSettleStartedAtMs,
+    },
+    plannerRecipe: input.runtimeDiagnostics.recipeDiagnostics,
+    plannerProbe: input.runtimeDiagnostics.cmpSurfaceProbe,
+    ui: {
+      cmpOrBannerObserved: input.uiObservation.likelyPresent,
+      evidenceBasis: input.uiObservation.basis,
+    },
+  });
+  return {
+    artifactId: `scenario_evidence_quality_${input.scenario}`,
+    artifactType: "json",
+    path,
+    createdAt: new Date().toISOString(),
+    sourceScanner: SOURCE_SCANNER,
+    scenario: input.scenario,
+    sensitivity: "internal_only",
+    redactionStatus: "internal_only",
+    relatedEventIds: [],
+    label: "Scenario evidence quality",
+  };
+}
+
+async function writeFallbackScenarioEvidenceQualityArtifacts(input: {
+  artifactWriter: ArtifactWriter;
+  capturedScenarios: Set<ConsentFlowScenario>;
+  executionEntries: ConsentScenarioExecutionEntry[];
+}): Promise<ArtifactRef[]> {
+  const refs: ArtifactRef[] = [];
+  for (const entry of input.executionEntries) {
+    if (entry.status !== "failed" || !isActionScenario(entry.scenario) || input.capturedScenarios.has(entry.scenario)) {
+      continue;
+    }
+    const limitationReason = entry.failureReason ?? fallbackScenarioQualityLimitationReason({
+      error: entry.error,
+      reasonCodes: entry.reasonCodes,
+      scenario: entry.scenario,
+    });
+    const path = await input.artifactWriter.writeJsonArtifact(`ScenarioEvidenceQuality-${entry.scenario}.json`, {
+      action: {
+        actionApplied: false,
+        actionOutcome: "not_attempted",
+        actionType: entry.actionType,
+        attempted: false,
+        failureReason: limitationReason,
+        plannerHintsStatus: "unknown",
+        succeeded: false,
+      },
+      artifactOnly: true,
+      artifactVersion: "certscore.v2.scenario_evidence_quality.v1",
+      counts: {
+        actionCandidatesFound: 0,
+        activeRequestsAtClose: 0,
+        blockedOrFulfilledHeavyResources: {},
+        consoleMessages: 0,
+        cookieEvents: 0,
+        cookiesAfterAction: null,
+        cookiesBeforeAction: null,
+        evidenceExcerpts: 0,
+        failedRequests: 0,
+        finalWindowRequestRatePerSecond: 0,
+        finalWindowRequests: 0,
+        pageErrors: 0,
+        postActionRequests: 0,
+        requests: 0,
+        resourceTypes: {},
+        responses: 0,
+        storageAfterAction: null,
+        storageBeforeAction: null,
+      },
+      generatedAt: new Date().toISOString(),
+      limitationReason,
+      passStatus: "limited",
+      productionFindingIntegration: false,
+      scenario: entry.scenario,
+      sourceScanner: SOURCE_SCANNER,
+      timing: {
+        finalSettleMs: 0,
+        finalSettleStartedAtMs: null,
+      },
+      plannerRecipe: {
+        candidatesMatched: 0,
+        candidatesProvided: 0,
+        status: "unknown",
+      },
+      plannerProbe: null,
+      ui: {
+        cmpOrBannerObserved: false,
+        evidenceBasis: ["scenario_failed_before_quality_artifact"],
+      },
+      executionFailure: {
+        actionProofStatus: entry.actionProofStatus,
+        deadlineHit: entry.deadlineHit,
+        error: entry.error,
+        reasonCodes: entry.reasonCodes,
+        status: entry.status,
+      },
+    });
+    refs.push({
+      artifactId: `scenario_evidence_quality_${entry.scenario}`,
+      artifactType: "json",
+      path,
+      createdAt: new Date().toISOString(),
+      sourceScanner: SOURCE_SCANNER,
+      scenario: entry.scenario,
+      sensitivity: "internal_only",
+      redactionStatus: "internal_only",
+      relatedEventIds: [],
+      label: "Scenario evidence quality",
+    });
+  }
+  return refs;
+}
+
+function fallbackScenarioQualityLimitationReason(input: {
+  error?: string;
+  reasonCodes?: string[];
+  scenario?: ConsentFlowScenario;
+}) {
+  const textControlReason = textControlActivationFailureLimitationReason(input.error);
+  if (textControlReason) {
+    return textControlReason;
+  }
+  if (input.error && /target page, context or browser has been closed|browser has been closed|context has been closed/i.test(input.error)) {
+    if (
+      input.scenario === "privacy_opt_out_flow" &&
+      input.reasonCodes?.includes("privacy_control_url_observed")
+    ) {
+      return "privacy_control_target_closed_before_quality_artifact";
+    }
+    return "browser_or_context_closed_before_quality_artifact";
+  }
+  if (input.error && /deadline|timeout/i.test(input.error)) {
+    return "scenario_deadline_before_quality_artifact";
+  }
+  return "scenario_failed_before_quality_artifact";
+}
+
+export function textControlActivationFailureLimitationReason(error?: string) {
+  if (!error) {
+    return undefined;
+  }
+  if (/text_control_observed_without_clickable_target/.test(error)) {
+    return "privacy_control_observed_without_clickable_target";
+  }
+  if (/planner_text_control_not_reacquired/.test(error)) {
+    return "planner_text_control_not_reacquired";
+  }
+  return undefined;
+}
+
+function preferredScenarioQualityAttempt(attempts: ConsentActionAttempt[]): ConsentActionAttempt | undefined {
+  return attempts.find((attempt) => attempt.failureReason === "manual_review_required_custom_privacy_form") ??
+    attempts.find((attempt) => attempt.attempted) ??
+    attempts[0];
+}
+
+export function directActionFailureReason(input: {
+  afterDomExcerpt?: string;
+  bannerPresentAfter: boolean;
+  beforeDomExcerpt?: string;
+  candidateContextTextExcerpt?: string;
+  candidateLabelText?: string;
+  postActionConsentStateMarkers?: string[];
+  preActionConsentStateMarkers?: string[];
+  scenario: ConsentFlowScenario;
+}) {
+  if (!input.bannerPresentAfter) {
+    return undefined;
+  }
+  if (input.scenario === "privacy_opt_out_flow" && customPrivacyFormVisible(input.afterDomExcerpt)) {
+    return "manual_review_required_custom_privacy_form";
+  }
+  if (input.scenario === "privacy_opt_out_flow" && privacyCenterSurfaceStayedStatic(input)) {
+    return "privacy_center_surface_observed_without_verifiable_opt_out_control";
+  }
+  if (input.scenario === "privacy_opt_out_flow" && privacyControlClickWithoutVerifiableStateChange(input)) {
+    return "privacy_control_click_without_verifiable_state_change";
+  }
+  return "banner_still_present_after_click";
+}
+
+function privacyControlClickWithoutVerifiableStateChange(input: {
+  candidateContextTextExcerpt?: string;
+  candidateLabelText?: string;
+  postActionConsentStateMarkers?: string[];
+  preActionConsentStateMarkers?: string[];
+}) {
+  const candidateText = normalizeDiagnosticText([
+    input.candidateLabelText,
+    input.candidateContextTextExcerpt,
+  ].filter(Boolean).join(" "));
+  const privacyTargetCandidate = /\b(do not sell|do not share|personal information|privacy choices|privacy rights|privacy settings|opt[- ]out)\b/.test(candidateText);
+  return privacyTargetCandidate &&
+    stringArraysEquivalent(input.preActionConsentStateMarkers, input.postActionConsentStateMarkers);
+}
+
+function privacyCenterSurfaceStayedStatic(input: {
+  afterDomExcerpt?: string;
+  beforeDomExcerpt?: string;
+  candidateContextTextExcerpt?: string;
+  candidateLabelText?: string;
+  postActionConsentStateMarkers?: string[];
+  preActionConsentStateMarkers?: string[];
+}) {
+  const beforeDom = normalizeDiagnosticText(input.beforeDomExcerpt);
+  const afterDom = normalizeDiagnosticText(input.afterDomExcerpt);
+  const candidateText = normalizeDiagnosticText([
+    input.candidateLabelText,
+    input.candidateContextTextExcerpt,
+  ].filter(Boolean).join(" "));
+  if (!beforeDom || !afterDom || beforeDom !== afterDom) {
+    return false;
+  }
+  const surfaceText = `${beforeDom} ${candidateText}`;
+  const privacySurfaceObserved = /\b(privacy center|privacy choices|privacy settings|privacy preferences|privacy options)\b/.test(surfaceText);
+  const openerLikeCandidate = /\b(your privacy choices|privacy choices|privacy center|manage privacy|privacy settings|privacy preferences|privacy options)\b/.test(candidateText);
+  return privacySurfaceObserved &&
+    openerLikeCandidate &&
+    stringArraysEquivalent(input.preActionConsentStateMarkers, input.postActionConsentStateMarkers);
+}
+
+function normalizeDiagnosticText(value?: string) {
+  return (value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function stringArraysEquivalent(left?: string[], right?: string[]) {
+  const normalizedLeft = [...new Set((left ?? []).filter(Boolean))].sort();
+  const normalizedRight = [...new Set((right ?? []).filter(Boolean))].sort();
+  if (normalizedLeft.length !== normalizedRight.length) {
+    return false;
+  }
+  return normalizedLeft.every((value, index) => value === normalizedRight[index]);
+}
+
+export function scenarioEvidenceQualitySummary(input: {
+  actionApplied: boolean;
+  actionAttempt?: ConsentActionAttempt;
+  activeRequestCount: number;
+  evidenceExcerptCount: number;
+  failedRequestCount: number;
+  finalSettleMs: number;
+  networkEventCount: number;
+  networkResponseEventCount: number;
+  postActionNetworkEventCount: number;
+  scenario: ConsentFlowScenario;
+}): { limitationReason?: string; passStatus: "passing" | "limited" } {
+  const actionScenario = input.scenario === "accept_all_flow" ||
+    input.scenario === "reject_all_flow" ||
+    input.scenario === "privacy_opt_out_flow";
+  if (actionScenario && !input.actionAttempt) {
+    return { limitationReason: "action_not_found", passStatus: "limited" };
+  }
+  if (actionScenario && input.actionAttempt?.attempted !== true) {
+    return { limitationReason: input.actionAttempt?.failureReason ?? "action_not_found", passStatus: "limited" };
+  }
+  if (actionScenario && input.actionAttempt?.succeeded !== true) {
+    return { limitationReason: input.actionAttempt?.failureReason ?? "action_not_completed", passStatus: "limited" };
+  }
+  if (actionScenario && input.actionApplied && input.finalSettleMs < 1_500) {
+    return { limitationReason: "post_action_tail_too_short", passStatus: "limited" };
+  }
+  const quietActionTailRetained =
+    (input.scenario === "accept_all_flow" || input.scenario === "reject_all_flow") &&
+    input.actionApplied &&
+    input.postActionNetworkEventCount === 0 &&
+    input.evidenceExcerptCount > 0 &&
+    input.networkEventCount >= 10 &&
+    input.networkResponseEventCount > 0 &&
+    input.activeRequestCount <= 1;
+  if (actionScenario && input.actionApplied && input.postActionNetworkEventCount === 0 && !quietActionTailRetained) {
+    return { limitationReason: "post_action_evidence_tail_missing", passStatus: "limited" };
+  }
+  if (actionScenario && input.actionApplied && input.networkEventCount < 10) {
+    return { limitationReason: "near_zero_runtime_evidence", passStatus: "limited" };
+  }
+  if (input.networkResponseEventCount === 0 && input.networkEventCount > 0) {
+    return { limitationReason: "request_response_evidence_below_threshold", passStatus: "limited" };
+  }
+  if (input.evidenceExcerptCount === 0) {
+    return { limitationReason: "evidence_excerpts_below_threshold", passStatus: "limited" };
+  }
+  if (input.activeRequestCount >= 10) {
+    return { limitationReason: "browser_closed_while_network_materially_active", passStatus: "limited" };
+  }
+  if (input.failedRequestCount >= Math.max(10, Math.ceil(input.networkEventCount * 0.3))) {
+    return { limitationReason: "request_failures_material", passStatus: "limited" };
+  }
+  return { passStatus: "passing" };
+}
+
+function refinedScenarioLimitationReason(input: {
+  actionAttempt?: ConsentActionAttempt;
+  defaultReason?: string;
+  scenario: ConsentFlowScenario;
+  surfaceProbe?: CmpSurfaceProbeDiagnostic;
+}): string | undefined {
+  const actionScenario = input.scenario === "accept_all_flow" ||
+    input.scenario === "reject_all_flow" ||
+    input.scenario === "privacy_opt_out_flow";
+  if (!actionScenario) {
+    return input.defaultReason;
+  }
+  const failureReason = input.actionAttempt?.failureReason ?? input.defaultReason;
+  if (failureReason === "candidate_not_observed" &&
+    input.surfaceProbe?.preferenceSurfaceObserved &&
+    input.surfaceProbe.oneTrustDomState?.pcSdkPresent) {
+    if (input.scenario === "accept_all_flow") {
+      return "preference_surface_observed_without_accept_action";
+    }
+    if (input.scenario === "reject_all_flow") {
+      return "preference_surface_observed_without_reject_action";
+    }
+    return "preference_surface_observed_without_target_action";
+  }
+  if (failureReason === "candidate_not_observed" &&
+    input.surfaceProbe?.oneTrustDomState?.consentSdkPresent) {
+    return "cmp_dom_observed_without_actionable_control";
+  }
+  return failureReason ?? input.defaultReason;
+}
+
+function isActionScenario(scenario: ConsentFlowScenario) {
+  return scenario === "accept_all_flow" ||
+    scenario === "reject_all_flow" ||
+    scenario === "privacy_opt_out_flow";
+}
+
+export function countScenarioEvidenceExcerpts(input: {
+  attempts: ConsentActionAttempt[];
+  beforeDomExcerpt?: string;
+}) {
+  return [
+    input.beforeDomExcerpt,
+    ...input.attempts.flatMap((attempt) => [
+      attempt.actionProof?.beforeDomExcerpt,
+      attempt.actionProof?.afterDomExcerpt,
+      attempt.actionProof?.candidateLabelText,
+      attempt.actionProof?.candidateSelectorSummary,
+      attempt.actionProof?.candidateNormalizedActionType,
+      ...(attempt.actionProof?.preActionConsentStateMarkers ?? []),
+      ...(attempt.actionProof?.postActionConsentStateMarkers ?? []),
+      ...attempt.evidenceRefs.map((ref) => ref.excerpt),
+    ]),
+  ].filter((value) => typeof value === "string" && value.trim().length > 0).length;
+}
+
+function plannerHintsStatus(
+  input: ConsentFlowRuntimeScannerInput,
+  scenario: ConsentFlowScenario,
+): "not_applicable" | "missing" | "present" {
+  if (scenario === "baseline_pre_consent") {
+    return "not_applicable";
+  }
+  return input.preConsentBaseline ? "present" : "missing";
+}
+
+async function browserStorageCount(page: Page): Promise<number | null> {
+  return page.evaluate(() => window.localStorage.length + window.sessionStorage.length).catch(() => null);
+}
+
+function incrementCount(counts: Record<string, number>, key: string | undefined) {
+  const normalized = key && key.length > 0 ? key : "unknown";
+  counts[normalized] = (counts[normalized] ?? 0) + 1;
+}
+
+function pushBounded<T>(values: T[], value: T, limit: number) {
+  if (values.length < limit) {
+    values.push(value);
+  }
+}
+
+function sanitizeDiagnosticUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    parsed.search = parsed.search ? "?<redacted>" : "";
+    return parsed.toString().slice(0, 500);
+  } catch {
+    return url.slice(0, 500);
+  }
 }
 
 function screenshotFromRef(ref: ArtifactRef, url: string, consentState: ConsentState): ScreenshotArtifact {
@@ -4545,13 +7313,13 @@ function plannedScenarioExecutionBudgetMs(item: ConsentScenarioPlanItem): number
     return 8_000;
   }
   if (item.scenario === "privacy_opt_out_flow") {
-    return item.targetUrl ? 14_000 : 10_000;
+    return item.targetUrl ? 36_000 : 18_000;
   }
   if (item.scenario === "reject_all_flow") {
-    return 14_000;
+    return 36_000;
   }
   if (item.scenario === "accept_all_flow") {
-    return 18_000;
+    return 24_000;
   }
   if (item.scenario === "form_collection_probe" || item.scenario === "accessibility_probe") {
     return 10_000;
@@ -4587,6 +7355,9 @@ function shouldCaptureInlineScreenshots(
   input: ConsentFlowRuntimeScannerInput,
   scenario: ConsentFlowScenario,
 ): boolean {
+  if (input.screenshotMode === "none") {
+    return false;
+  }
   return !(input.scenarioPlanningMode === "planned_parallel" &&
     (scenario === "reject_all_flow" || scenario === "gpc_enabled"));
 }
@@ -4616,7 +7387,14 @@ function finalScenarioSettleMs(
   if (input.scenarioPlanningMode !== "planned_parallel" || scenario === "baseline_pre_consent") {
     return 800;
   }
-  return 350;
+  return boundedPlannedActionFinalSettleMs(input.plannedActionFinalSettleMs);
+}
+
+function boundedPlannedActionFinalSettleMs(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return 350;
+  }
+  return Math.min(2_000, Math.max(350, Math.trunc(value)));
 }
 
 function scenarioReadinessTimeoutMs(scenario: ConsentFlowScenario): number {
@@ -4630,11 +7408,12 @@ function scenarioReadinessTimeoutMs(scenario: ConsentFlowScenario): number {
   }
 }
 
-function shouldUseLeanResources(
+function shouldUseGuardedResources(
   input: ConsentFlowRuntimeScannerInput,
   scenario: ConsentFlowScenario,
 ): boolean {
-  return input.scenarioResourceMode === "lean" && scenario !== "baseline_pre_consent";
+  return (input.scenarioResourceMode === "lean" || input.scenarioResourceMode === "cmp_safe") &&
+    scenario !== "baseline_pre_consent";
 }
 
 function guardedLeanResourceOptions(
@@ -4689,12 +7468,124 @@ function guardedLeanResourceOptions(
   protectedUrlSubstrings.add("do-not-sell");
   protectedUrlSubstrings.add("optout");
   protectedUrlSubstrings.add("opt-out");
+  if (input.scenarioResourceMode === "cmp_safe") {
+    protectedUrlSubstrings.add("onetrust");
+    protectedUrlSubstrings.add("trustarc");
+    protectedUrlSubstrings.add("sourcepoint");
+    protectedUrlSubstrings.add("didomi");
+    protectedUrlSubstrings.add("cookiebot");
+    protectedUrlSubstrings.add("privacy-manager");
+    protectedUrlSubstrings.add("privacy_manager");
+    protectedUrlSubstrings.add("preference");
+    protectedUrlSubstrings.add("preferences");
+    protectedUrlSubstrings.add("choice");
+    protectedUrlSubstrings.add("choices");
+  }
 
   return {
     protectedHostnames,
     protectedUrlPrefixes,
     protectedUrlSubstrings,
   };
+}
+
+function preActionObservationMs(input: ConsentFlowRuntimeScannerInput): number {
+  return boundedTimingOverride(input.preActionObservationMs, 0, 12_000, 0);
+}
+
+function actionSearchMinimumRemainingMs(input: ConsentFlowRuntimeScannerInput): number {
+  const override = boundedTimingOverride(input.actionSearchDeadlineMs, 1_000, 20_000, 1_800);
+  return Math.min(1_800, override);
+}
+
+function boundedTimingOverride(
+  value: number | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(min, Math.min(max, Math.trunc(value)))
+    : fallback;
+}
+
+function scenarioRecipeDiagnostic(input: {
+  candidates: ConsentActionCandidate[];
+  input: ConsentFlowRuntimeScannerInput;
+  scenario: ConsentFlowScenario;
+}): ScenarioRecipeDiagnostic {
+  return scenarioRecipeDiagnosticSummary({
+    candidates: input.candidates,
+    recipe: input.input.consentActionRecipe?.scenarios.find((scenario) => scenario.scenario === input.scenario),
+    scenario: input.scenario,
+  });
+}
+
+export function scenarioRecipeDiagnosticSummary(input: {
+  candidates: Array<Pick<ConsentActionCandidate, "actionType" | "enabled" | "labelText" | "visible">>;
+  recipe?: ConsentActionRecipeScenario;
+  scenario: ConsentFlowScenario;
+}): ScenarioRecipeDiagnostic {
+  if (input.scenario === "baseline_pre_consent") {
+    return {
+      candidateLabels: [],
+      equivalentCandidateCount: 0,
+      equivalentVisibleCandidateCount: 0,
+      recipeCandidateCount: 0,
+      status: "not_applicable",
+    };
+  }
+  if (!input.recipe) {
+    return {
+      candidateLabels: input.candidates.map((candidate) => candidate.labelText.slice(0, 120)).slice(0, 12),
+      equivalentCandidateCount: 0,
+      equivalentVisibleCandidateCount: 0,
+      recipeCandidateCount: 0,
+      status: "missing",
+    };
+  }
+  const equivalentCandidates = input.candidates.filter((candidate) =>
+    input.recipe?.candidates.some((recipeCandidate) => recipeCandidateMatches(candidate, recipeCandidate))
+  );
+  if (input.recipe.candidates.length === 0) {
+    return {
+      candidateLabels: input.candidates.map((candidate) => candidate.labelText.slice(0, 120)).slice(0, 12),
+      equivalentCandidateCount: 0,
+      equivalentVisibleCandidateCount: 0,
+      recipeCandidateCount: 0,
+      status: "present_empty",
+      targetUrl: input.recipe.targetUrl,
+    };
+  }
+  return {
+    candidateLabels: input.candidates.map((candidate) => candidate.labelText.slice(0, 120)).slice(0, 12),
+    equivalentCandidateCount: equivalentCandidates.length,
+    equivalentVisibleCandidateCount: equivalentCandidates.filter((candidate) => candidate.visible && candidate.enabled).length,
+    recipeCandidateCount: input.recipe.candidates.length,
+    status: equivalentCandidates.some((candidate) => candidate.visible && candidate.enabled) ? "reacquired" : "present_not_matched",
+    targetUrl: input.recipe.targetUrl,
+  };
+}
+
+function recipeCandidateMatches(
+  candidate: Pick<ConsentActionCandidate, "actionType" | "labelText">,
+  recipeCandidate: ConsentActionRecipeCandidate,
+): boolean {
+  if (recipeCandidate.actionType && candidate.actionType !== recipeCandidate.actionType) {
+    return false;
+  }
+  const candidateLabel = normalizeRecipeLabel(candidate.labelText);
+  const recipeLabel = normalizeRecipeLabel(recipeCandidate.labelText);
+  if (!candidateLabel || !recipeLabel) {
+    return false;
+  }
+  return candidateLabel === recipeLabel ||
+    candidateLabel.includes(recipeLabel) ||
+    recipeLabel.includes(candidateLabel);
+}
+
+function normalizeRecipeLabel(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
 function applyBaselineRecipeTargets(

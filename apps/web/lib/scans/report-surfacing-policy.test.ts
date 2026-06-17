@@ -1145,7 +1145,7 @@ test("structured policy disclosure gaps stay review-level without runtime corrob
   assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
 });
 
-test("high-exposure rights gaps confirm when structured validation strongly backs them", () => {
+test("deferred CCPA/CPRA rights gaps stay in confidence coverage even with structured validation", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
       makePacket("sale_sharing_controls_missing", {
@@ -1159,9 +1159,9 @@ test("high-exposure rights gaps confirm when structured validation strongly back
   });
 
   const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "confirmed");
-  assert.equal(decision?.reportLane, "main");
-  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.confirmed_high_exposure_or_runtime"));
+  assert.equal(decision?.decisionState, "review");
+  assert.equal(decision?.reportLane, "confidence_and_coverage");
+  assert.ok(decision?.appliedRules.includes("posture.ccpa_cpra.deferred_from_core"));
 });
 
 test("latest policy absence findings confirm only with structured validation and fetched policy evidence", () => {
@@ -1909,20 +1909,20 @@ test("policy version and debug decisions are stable in evaluation output", () =>
   assert.deepEqual(evaluation.debugDecisions[0], {
     appliedRules: [
       "family.rights_gap.default",
-      "evidence.rights_gap.confirmed_high_exposure_or_runtime"
+      "posture.ccpa_cpra.deferred_from_core"
     ],
     decisionReasons: [
       "Disclosure and rights-gap findings belong in the main narrative, but stay conservative until evidence is stronger.",
-      "Concrete runtime evidence, or a high-exposure rights gap backed by structured validation, was retained strongly enough for this finding to stand on its own."
+      "CCPA/CPRA and California privacy review are deferred from the current production scanner. Retained evidence remains available for internal review, but it is not promoted as a production report finding."
     ],
-    decisionState: "confirmed",
+    decisionState: "review",
     family: "rights_gap",
     policyVersion: REPORT_SURFACING_POLICY_VERSION,
-    reportLane: "main",
+    reportLane: "confidence_and_coverage",
     reportable: true,
     supportTargetId: undefined,
     supportedBy: undefined,
-    surfaceTier: "section",
+    surfaceTier: "support",
     supports: [],
     suppressedBy: undefined,
     unifiedFindingId: "sale_sharing_controls_missing",

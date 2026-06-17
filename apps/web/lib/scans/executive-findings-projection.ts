@@ -83,6 +83,18 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
 
 const UMBRELLA_DARK_PATTERN_PACKET_IDS = new Set(["accept_only_banner", "dismiss_without_reject"]);
 
+const DEFERRED_PRODUCTION_FINDING_IDS = new Set([
+  "cpra_cba_opt_out_missing",
+  "reject_did_not_reduce_tracking",
+  "reject_did_not_reduce_third_party_cookies",
+  "reject_tracking_persists_after_reject",
+  "accept_flow_unavailable_after_reject",
+  "consent_control_not_reopenable",
+  "consent_preference_reopen_control_not_observed",
+  "sale_sharing_controls_missing",
+  "do_not_sell_sharing_disclosure_conflict"
+]);
+
 const FINGERPRINTING_CORROBORATING_TRACKING_IDS = new Set([
   "pre_consent_tracking_detected",
   "preconsent_tracking",
@@ -574,6 +586,9 @@ function trimTrailingSentencePunctuation(value: string) {
 function getMappedFindingId(
   packet: UnifiedFindingDisplayPacket
 ): keyof typeof CERT_SCORE_FINDING_REGISTRY | null {
+  if (DEFERRED_PRODUCTION_FINDING_IDS.has(packet.unifiedFindingId)) {
+    return null;
+  }
   if (packet.unifiedFindingId === "fingerprinting_observed") {
     const rawEvidence = buildFingerprintingRawEvidence(packet);
     const tier = deriveFingerprintEvidenceTier(rawEvidence).tier;
@@ -1359,54 +1374,8 @@ function hasThirdPartyCookiePreConsentEvidence(packet: UnifiedFindingDisplayPack
   );
 }
 
-function getRecordValueAsBoolean(row: Record<string, unknown> | null | undefined, keys: string[]) {
-  return getRecordBoolean(row ?? {}, keys);
-}
-
 function hasRejectPersistencePromotionEvidence(packet: UnifiedFindingDisplayPacket) {
-  if (packet.unifiedFindingId !== "reject_did_not_reduce_tracking") {
-    return true;
-  }
-
-  const promotionDecision = getFirstEntityJsonObject(packet, "promotionDecision");
-  if (getRecordValueAsBoolean(promotionDecision, ["promoted"]) === false) {
-    return false;
-  }
-
-  const suppressionChecks = getFirstEntityJsonObject(packet, "suppressionChecks");
-  const navigationOrReloadAmbiguous = getRecordValueAsBoolean(suppressionChecks, [
-    "navigation_or_reload_ambiguous",
-    "navigationOrReloadAmbiguous",
-    "redirect_or_auth_wall_ambiguous",
-    "redirectOrAuthWallAmbiguous"
-  ]);
-  const postRejectWindowAvailable = getRecordValueAsBoolean(suppressionChecks, [
-    "post_reject_window_available",
-    "postRejectWindowAvailable"
-  ]);
-  const rejectClickConfirmed = getRecordValueAsBoolean(suppressionChecks, [
-    "reject_click_confirmed",
-    "rejectClickConfirmed"
-  ]);
-  const nonEssentialVendorAfterReject = getRecordValueAsBoolean(suppressionChecks, [
-    "non_essential_vendor_after_reject",
-    "nonEssentialVendorAfterReject"
-  ]);
-  if (navigationOrReloadAmbiguous === true || postRejectWindowAvailable === false) {
-    return false;
-  }
-  if (rejectClickConfirmed === false || nonEssentialVendorAfterReject === false) {
-    return false;
-  }
-
-  const postRejectRequests = getEntityJsonObjects(packet, "postRejectNonEssentialRequests");
-  const hasTimedPostRejectRequest = postRejectRequests.some((row) =>
-    getRecordNumber(row, ["ms_after_reject", "msAfterReject"]) !== null ||
-    getRecordNumber(row, ["ts_ms", "timestampMs", "firstSeenMs"]) !== null
-  );
-  const hasConfirmedFlag = packet.evidence?.flags?.includes("reject_evidence_confirmed") === true;
-
-  return hasConfirmedFlag && hasTimedPostRejectRequest;
+  return packet.unifiedFindingId !== "reject_did_not_reduce_tracking";
 }
 
 function getRetainedPolicyDisclosureEvaluation(packet: UnifiedFindingDisplayPacket) {

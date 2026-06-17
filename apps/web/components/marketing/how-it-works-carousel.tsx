@@ -37,7 +37,7 @@ const SLIDES: CarouselSlide[] = [
   },
   {
     src: "/how-it-works/review-lenses.png",
-    alt: "Regulatory review lens cards grouping findings by EU privacy, California privacy, and U.S. accessibility context.",
+    alt: "Review lens cards grouping findings by GDPR/ePrivacy, accessibility, and public-web disclosure context.",
     title: "Review lenses",
     highlight: "See how findings are organized into privacy, consumer-protection, and accessibility review contexts without making legal conclusions."
   },

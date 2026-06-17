@@ -12,7 +12,7 @@ import {
 
 const pageTitle = "Regulatory Website Signal Pages | CertScore.ai";
 const pageDescription =
-  "Browse CertScore.ai public regulatory signal pages for GDPR, CCPA/CPRA, accessibility, cookie, consent, disclosure, and privacy review workflows.";
+  "Browse CertScore.ai public regulatory signal pages for GDPR/ePrivacy, accessibility, cookie, consent, disclosure, and privacy review workflows.";
 const pagePath = "/regulatory";
 
 const regulatoryPages = [
@@ -21,12 +21,6 @@ const regulatoryPages = [
     title: "GDPR privacy scanner",
     description:
       "Runtime consent, cookie, tracking, session replay, fingerprinting, and disclosure-alignment signals for GDPR/ePrivacy review."
-  },
-  {
-    href: "/ccpa",
-    title: "CCPA privacy scanner",
-    description:
-      "Public privacy, opt-out, cookie, tracker, sensitive-context, and policy/runtime signals for CCPA/CPRA review."
   },
   {
     href: "/ftc",

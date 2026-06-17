@@ -101,12 +101,13 @@ export function buildConsentScenarioPlan(input: BuildConsentScenarioPlanInput): 
     "accept_all",
     "manage_preferences",
   ]);
-  const hasRejectPath = input.baseline.bannerLikelyPresent || consentSurfaceTextObserved || cmpEvidenceObserved || rejectActionPathObserved;
-  const hasAcceptPath = input.baseline.bannerLikelyPresent || consentSurfaceTextObserved || cmpEvidenceObserved || acceptActionPathObserved;
-  const privacyTargetUrl = input.privacyControlUrls?.[0];
+  const hasActionableCmpSurface = rejectActionPathObserved || acceptActionPathObserved;
+  const hasRejectPath = rejectActionPathObserved;
+  const hasAcceptPath = acceptActionPathObserved;
+  const privacyTargetUrl = preferredPrivacyControlUrl(input.privacyControlUrls ?? []);
   const privacyTextObserved = hasPrivacyText(input.baseline);
   const privacyControlObserved = hasPrivacyControlCandidate(input.baseline);
-  const hasPrivacyControl = Boolean(privacyTargetUrl) || privacyControlObserved;
+  const hasPrivacyControl = privacyControlObserved || Boolean(privacyTargetUrl);
 
   if (input.deadlineHit) {
     for (const scenario of consentScenarioOrder.filter((scenario) => scenario !== "baseline_pre_consent")) {
@@ -143,7 +144,13 @@ export function buildConsentScenarioPlan(input: BuildConsentScenarioPlanInput): 
       scenario: "reject_all_flow",
       actionType: "reject_all",
       skipReason: hasCmpOrBanner ? "action_candidate_not_observed" : "cmp_or_banner_not_observed",
-      reasonCodes: hasCmpOrBanner ? ["reject_candidate_not_observed"] : ["cmp_or_banner_not_observed"],
+      reasonCodes: hasCmpOrBanner
+        ? cmpEvidenceObserved && !hasActionableCmpSurface
+          ? ["cmp_runtime_evidence_observed", "cmp_runtime_without_actionable_surface", "reject_candidate_not_observed"]
+          : input.baseline.bannerLikelyPresent && !hasRejectPath
+            ? ["cmp_or_banner_observed", "reject_candidate_not_observed"]
+          : ["reject_candidate_not_observed"]
+        : ["cmp_or_banner_not_observed"],
     });
   }
 
@@ -166,7 +173,13 @@ export function buildConsentScenarioPlan(input: BuildConsentScenarioPlanInput): 
       scenario: "accept_all_flow",
       actionType: "accept_all",
       skipReason: hasCmpOrBanner ? "action_candidate_not_observed" : "cmp_or_banner_not_observed",
-      reasonCodes: hasCmpOrBanner ? ["accept_candidate_not_observed"] : ["cmp_or_banner_not_observed"],
+      reasonCodes: hasCmpOrBanner
+        ? cmpEvidenceObserved && !hasActionableCmpSurface
+          ? ["cmp_runtime_evidence_observed", "cmp_runtime_without_actionable_surface", "accept_candidate_not_observed"]
+          : input.baseline.bannerLikelyPresent && !hasAcceptPath
+            ? ["cmp_or_banner_observed", "accept_candidate_not_observed"]
+          : ["accept_candidate_not_observed"]
+        : ["cmp_or_banner_not_observed"],
     });
   }
 
@@ -184,7 +197,9 @@ export function buildConsentScenarioPlan(input: BuildConsentScenarioPlanInput): 
       scenario: "privacy_opt_out_flow",
       actionType: "do_not_sell_share",
       skipReason: "privacy_control_not_observed",
-      reasonCodes: privacyTextObserved
+      reasonCodes: privacyTargetUrl
+        ? ["privacy_control_url_observed", "privacy_control_candidate_not_observed"]
+        : privacyTextObserved
         ? ["baseline_privacy_choice_text_observed", "privacy_control_candidate_not_observed"]
         : ["privacy_control_not_observed"],
     });
@@ -290,4 +305,28 @@ function hasConsentSurfaceText(baseline: BaselinePlanningSummary): boolean {
     ]),
   ].filter(Boolean).join(" ").toLowerCase();
   return /cookie|consent|privacy preference|privacy choices|your privacy choices|manage preferences|tracking preferences|do not sell|do not share/.test(value);
+}
+
+function preferredPrivacyControlUrl(urls: string[]): string | undefined {
+  return [...urls]
+    .filter((url) => /^https?:\/\//i.test(url))
+    .sort((left, right) => privacyControlUrlPriority(left) - privacyControlUrlPriority(right))
+    [0];
+}
+
+function privacyControlUrlPriority(url: string): number {
+  const value = url.toLowerCase();
+  if (/do[-_/]?not[-_/]?(sell|share)|donotsell|dnsmpi|privacy[-_/]?choices|your[-_/]?privacy[-_/]?choices|opt[-_/]?out/.test(value)) {
+    return 0;
+  }
+  if (/privacy[-_/]?(center|preference|settings|portal|request)/.test(value)) {
+    return 1;
+  }
+  if (/california|ccpa|cpra/.test(value)) {
+    return 2;
+  }
+  if (/privacy/.test(value)) {
+    return 3;
+  }
+  return 9;
 }

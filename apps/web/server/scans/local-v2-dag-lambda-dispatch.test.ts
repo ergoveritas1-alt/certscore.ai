@@ -11,7 +11,9 @@ import {
 } from "./local-v2-dag-lambda-dispatch";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 
-function buildLambdaScanConfig() {
+function buildLambdaScanConfig(options: {
+  localV2DagLambdaDebugOverrides?: Parameters<typeof buildQueuedFullScanConfig>[0]["localV2DagLambdaDebugOverrides"];
+} = {}) {
   return buildQueuedFullScanConfig({
     env: {
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
@@ -22,6 +24,7 @@ function buildLambdaScanConfig() {
       NODE_ENV: "development"
     },
     hostname: "example.com",
+    localV2DagLambdaDebugOverrides: options.localV2DagLambdaDebugOverrides,
     localV2DagRunViaLambda: true,
     localV2DagScanProfile: "tiny",
     maxPages: 3,
@@ -46,6 +49,7 @@ test("builds a local-only v2 DAG Lambda dispatch payload for us-west-1 SQS hando
     functionName: "certscore-v2-dag-dev",
     hostname: "example.com",
     localCallbackUrl: null,
+    orchestrationMode: "single",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     profile: "tiny",
@@ -57,6 +61,29 @@ test("builds a local-only v2 DAG Lambda dispatch payload for us-west-1 SQS hando
     targetUrl: "https://example.com/",
     vpcMode: "none"
   });
+});
+
+test("builds local Lambda dispatch payload with bounded debug overrides", () => {
+  const payload = buildLocalV2DagLambdaDispatchPayload({
+    localCallbackUrl: null,
+    scanConfig: buildLambdaScanConfig({
+      localV2DagLambdaDebugOverrides: {
+        actionSearchDeadlineMs: 12_000,
+        preActionObservationMs: 5_000,
+        scenarioResourceMode: "cmp_safe",
+        strongEvidenceMode: "webmd"
+      }
+    }),
+    scanId: "scan-local-1"
+  });
+
+  assert.deepEqual(payload.debugOverrides, {
+    actionSearchDeadlineMs: 12_000,
+    preActionObservationMs: 5_000,
+    scenarioResourceMode: "cmp_safe",
+    strongEvidenceMode: "webmd"
+  });
+  assert.equal(payload.productionFindingIntegration, false);
 });
 
 test("summarizes Lambda dispatch intent without exposing function or queue names", () => {
@@ -153,6 +180,7 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
       },
       completedAt: "2026-06-15T18:00:00.000Z",
       contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
+      phaseTimings: [{ durationMs: 42.4, label: "core_artifact_upload", status: "completed" }],
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
       scanId: "scan-local-1",
@@ -168,6 +196,7 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
   assert.equal(parsed.productionFindingIntegration, false);
   assert.equal(parsed.artifactOnly, true);
   assert.equal(parsed.artifactPointers?.manifestUri, "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json");
+  assert.deepEqual(parsed.phaseTimings, [{ durationMs: 42, label: "core_artifact_upload", status: "completed" }]);
 });
 
 test("rejects result messages from the wrong environment or processor", () => {

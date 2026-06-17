@@ -1,6 +1,5 @@
 "use client";
 
-import { CaliforniaPrivacyCoverageChecklistCard } from "../../../../components/scans/california-privacy-coverage-checklist-card";
 import { GdprEprivacyCoverageChecklistCard } from "../../../../components/scans/gdpr-eprivacy-coverage-checklist-card";
 import { RegulatoryChecklistSection } from "../../../../components/scans/regulatory-checklist-section";
 import type { CaliforniaPrivacyCoverageChecklistItem } from "../../../../lib/scans/california-privacy-coverage-checklist";
@@ -12,7 +11,6 @@ type V2RegulatoryReviewBetaProps = {
 };
 
 export function V2RegulatoryReviewBeta({
-  californiaPrivacyItems,
   gdprEprivacyItems,
 }: V2RegulatoryReviewBetaProps) {
   return (
@@ -33,20 +31,6 @@ export function V2RegulatoryReviewBeta({
             id: "gdpr-eprivacy",
             label: "GDPR / ePrivacy",
             shortLabel: "GDPR/ePrivacy",
-          },
-          {
-            content: (
-              <CaliforniaPrivacyCoverageChecklistCard
-                defaultOpen
-                items={californiaPrivacyItems}
-                showDebugConfidenceImprovements={false}
-                showSummaryStrip={false}
-              />
-            ),
-            badgeLabel: "alpha",
-            id: "california-privacy",
-            label: "CCPA/CPRA",
-            shortLabel: "CCPA/CPRA",
           },
         ]}
       />

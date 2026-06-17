@@ -71,8 +71,8 @@ const parameters = [
   ["format", "`json` or `markdown`. Defaults to `json`."],
   ["detail", "`tiny`, `quick`, `standard`, or `full`. Defaults to `standard`. `quick` is an alias for `tiny`."],
   ["freshness", "`latest` or `refresh`. Defaults to `latest`."],
-  ["scanFrom", "`default`, `eu`, `uk`, or `california`. Selects the geo execution context for newly queued scans."],
-  ["geo", "Alias for `scanFrom`; accepts `default`, `eu`, `uk`, or `california`."],
+  ["scanFrom", "`default`, `eu`, or `uk`. Selects the geo execution context for newly queued scans."],
+  ["geo", "Alias for `scanFrom`; accepts `default`, `eu`, or `uk`."],
   ["forceNewScan", "`true` or `1` bypasses the 24-hour recent-scan reuse check. It does not bypass throttles or validation."],
   [
     "wait",
@@ -522,7 +522,7 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
    url: <public URL>
    format: markdown
    detail: standard
-   scanFrom: default | eu | uk | california
+   scanFrom: default | eu | uk
    wait: 35
 3. Use detail=tiny for quick checks.
 4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.

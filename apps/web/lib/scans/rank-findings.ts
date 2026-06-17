@@ -32,8 +32,6 @@ export const EXECUTIVE_SUMMARY_TOP_FINDING_IDS = [
   "visual_contrast_accessibility_issue",
   "focus_management_issue",
   "cross_domain_identifier_sharing_observed",
-  "cpra_cba_opt_out_missing",
-  "reject_tracking_persists_after_reject",
   "session_recording_services_detected",
   "third_party_cookie_pre_consent",
   "long_lived_cookie_retention_review",
@@ -44,7 +42,6 @@ export const EXECUTIVE_SUMMARY_TOP_FINDING_IDS = [
   "rtb_cookie_sync_observed",
   "policy_behavior_contradiction_detected",
   "scan_quality_visual_no_go",
-  "consent_preference_reopen_control_not_observed",
   "consent_dark_patterns_detected",
   "reject_option_missing_or_hidden",
   "asymmetric_consent_ui",
@@ -60,7 +57,7 @@ const COOKIE_RETENTION_STRONGER_FINDING_IDS = new Set([
   "pre_consent_tracking_detected",
   "third_party_cookie_pre_consent",
   "tracking_cookies_set_before_consent",
-  "reject_tracking_persists_after_reject"
+  "third_party_tracking_pre_consent"
 ]);
 
 const VENDOR_DISCLOSURE_STRONGER_FINDING_IDS = new Set([
@@ -69,8 +66,6 @@ const VENDOR_DISCLOSURE_STRONGER_FINDING_IDS = new Set([
   "third_party_cookie_pre_consent",
   "tracking_cookies_set_before_consent",
   "analytics_cookies_before_consent",
-  "non_essential_tracking_continued_after_reject",
-  "reject_tracking_persists_after_reject",
   "rtb_cookie_sync_observed",
   "cross_domain_identifier_sharing_observed",
   "session_replay_undisclosed"
@@ -271,16 +266,6 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   if (ranked.some((finding) => finding.id === "cpra_cba_opt_out_missing")) {
     forcedIds.add("cpra_cba_opt_out_missing");
   }
-  if (
-    ranked.some(
-      (finding) =>
-        finding.id === "reject_tracking_persists_after_reject" &&
-        (finding.severity === "critical" || finding.severity === "high")
-    )
-  ) {
-    forcedIds.add("reject_tracking_persists_after_reject");
-  }
-
   for (const finding of ranked) {
     if (suppressedIds.has(finding.id)) {
       continue;

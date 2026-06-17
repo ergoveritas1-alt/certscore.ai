@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chromiumLaunchArgs, chromiumLaunchOptions, isAwsLambdaRuntime } from "./playwright-runtime";
+import {
+  chromiumLaunchArgs,
+  chromiumLaunchOptions,
+  isAwsLambdaRuntime,
+  lambdaChromiumSingleProcessEnabled
+} from "./playwright-runtime";
 
 test("detects AWS Lambda runtime from bounded environment keys", () => {
   assert.equal(isAwsLambdaRuntime({}), false);
@@ -21,6 +26,18 @@ test("adds serverless Chromium launch args inside Lambda", () => {
   assert.ok(args.includes("--disable-setuid-sandbox"));
   assert.ok(args.includes("--no-zygote"));
   assert.ok(args.includes("--single-process"));
+});
+
+test("can disable single-process Chromium mode inside Lambda for quality A/B runs", () => {
+  const env = {
+    AWS_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-local-lambda",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS: "false"
+  };
+  const args = chromiumLaunchArgs({ env });
+
+  assert.equal(lambdaChromiumSingleProcessEnabled(env), false);
+  assert.ok(args.includes("--no-zygote"));
+  assert.equal(args.includes("--single-process"), false);
 });
 
 test("builds Chromium launch options without changing headless intent", () => {

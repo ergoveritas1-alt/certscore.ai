@@ -88,6 +88,8 @@ export type SurfacingPolicyRuleId =
   | "evidence.finding_contract.suppressed"
   | "evidence.commercial.confirmed_when_runtime_or_structured"
   | "evidence.context.keep_review"
+  | "posture.post_choice_flow.deferred_from_core"
+  | "posture.ccpa_cpra.deferred_from_core"
   | "precedence.specific_contradiction_supports_generic"
   | "precedence.contradiction_beats_generic_absence"
   | "precedence.specific_contradiction_supports_preconsent"
@@ -186,6 +188,8 @@ const POSITIVE_SURFACE_IDS = [
   "contact_support_path_present",
   "privacy_rights_path_present",
   "privacy_contact_path_present",
+  "legal_basis_disclosure_present",
+  "retention_disclosure_present",
   "targeted_advertising_choices_present",
   "gpc_disclosure_present",
   "tracking_technologies_disclosure_present",
@@ -193,6 +197,8 @@ const POSITIVE_SURFACE_IDS = [
   "targeted_advertising_disclosure_present",
   "third_party_advertising_disclosure_present",
   "behavioral_analytics_disclosure_present",
+  "supervisory_authority_disclosure_present",
+  "automated_decision_profiling_disclosure_present",
   "children_privacy_disclosure_present",
   "arbitration_clause_present",
   "accessibility_support_path_present"
@@ -604,8 +610,8 @@ export const UNIFIED_FINDING_SURFACING_POLICY_REGISTRY: Record<ReportUnifiedFind
     findingId: "reject_did_not_reduce_tracking",
     family: "consent_tracking",
     initialState: "review",
-    initialTier: "headline",
-    initialLane: "main"
+    initialTier: "support",
+    initialLane: "confidence_and_coverage"
   },
   consent_gated_tracking_claim_conflict: {
     findingId: "consent_gated_tracking_claim_conflict",
@@ -1120,6 +1126,14 @@ function hasFindingSpecificHighValuePrivacyDisclosureText(packet: UnifiedFinding
       return /targeted advertis(?:e|ing)|interest-based advertis(?:e|ing)|personalized ads?|cross-context behavioral advertis(?:e|ing)/i.test(text);
     case "third_party_advertising_disclosure_present":
       return /third-party advertis(?:e|ing)|advertising partners?|ad networks?|outside advertising partners?/i.test(text);
+    case "legal_basis_disclosure_present":
+      return /legal basis|lawful basis|legitimate interests?|contractual necessity|legal obligations?|consent/i.test(text);
+    case "retention_disclosure_present":
+      return /retain|retention|kept for|storage period|as long as necessary/i.test(text);
+    case "supervisory_authority_disclosure_present":
+      return /supervisory authority|data protection authority|lodge a complaint|complaint with (?:your )?(?:local )?(?:supervisory|data protection) authority/i.test(text);
+    case "automated_decision_profiling_disclosure_present":
+      return /automated decision|solely automated|automated processing|profiling|meaningful information about the logic/i.test(text);
     default:
       return false;
   }
@@ -1868,18 +1882,37 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
     return;
   }
 
-  if (packet.unifiedFindingId === "reject_did_not_reduce_tracking" || packet.unifiedFindingId === "reject_did_not_reduce_third_party_cookies") {
-    if (evidenceFlags.has("reject_evidence_suppress")) {
-      overrideDecision(decision, {
-        state: "suppressed",
-        lane: "suppressed",
-        tier: "support",
-        reason:
-          "Reject-path tracking evidence was suppressed because the reject click, post-reject timing window, or attribution context was not defensible.",
-        ruleId: "evidence.consent_behavior.suppress_low_confidence_interface_context"
-      });
-      return;
-    }
+  if (
+    packet.unifiedFindingId === "reject_did_not_reduce_tracking" ||
+    packet.unifiedFindingId === "reject_did_not_reduce_third_party_cookies" ||
+    packet.unifiedFindingId === "accept_flow_unavailable_after_reject" ||
+    packet.unifiedFindingId === "consent_control_not_reopenable"
+  ) {
+    overrideDecision(decision, {
+      state: "review",
+      lane: "confidence_and_coverage",
+      tier: "support",
+      reason:
+        "Post-choice consent-flow behavior is deferred from the current production core scanner. Retained post-reject evidence remains available for analyst review, but it is not promoted as a core report finding.",
+      ruleId: "posture.post_choice_flow.deferred_from_core"
+    });
+    return;
+  }
+
+  if (
+    packet.unifiedFindingId === "cpra_cba_opt_out_missing" ||
+    packet.unifiedFindingId === "sale_sharing_controls_missing" ||
+    packet.unifiedFindingId === "do_not_sell_sharing_disclosure_conflict"
+  ) {
+    overrideDecision(decision, {
+      state: "review",
+      lane: "confidence_and_coverage",
+      tier: "support",
+      reason:
+        "CCPA/CPRA and California privacy review are deferred from the current production scanner. Retained evidence remains available for internal review, but it is not promoted as a production report finding.",
+      ruleId: "posture.ccpa_cpra.deferred_from_core"
+    });
+    return;
   }
 
   if (
@@ -2028,7 +2061,11 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
         "tracking_technologies_disclosure_present",
         "targeted_advertising_disclosure_present",
         "third_party_advertising_disclosure_present",
-        "behavioral_analytics_disclosure_present"
+        "behavioral_analytics_disclosure_present",
+        "legal_basis_disclosure_present",
+        "retention_disclosure_present",
+        "supervisory_authority_disclosure_present",
+        "automated_decision_profiling_disclosure_present"
       ].includes(packet.unifiedFindingId) &&
       packet.confidenceInputs.hasPolicyTextEvidence &&
       hasReadableSnippet(packet) &&

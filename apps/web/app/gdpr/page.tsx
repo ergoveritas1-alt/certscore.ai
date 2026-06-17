@@ -199,12 +199,6 @@ const regulatoryContexts = [
       }
     ]
   },
-  {
-    title: "CPRA / FTC comparative privacy context",
-    body:
-      "US privacy-choice, disclosure, and consumer-protection review can be a secondary lens for multi-jurisdictional programs, separate from this GDPR page.",
-    links: []
-  }
 ];
 
 const methodologySteps = [

@@ -2570,6 +2570,25 @@ export const REPORT_UNIFIED_FINDINGS = [
     signalMappings: [{ source: "document_semantic_signal", key: "privacy.privacy_contact_path_present" }]
   }),
   defineReportUnifiedFinding({
+    id: "legal_basis_disclosure_present",
+    label: "Legal basis disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["rights_request_mechanisms"],
+    overlays: ["transparency_notice_data_subject_rights", "notice_rights_baseline", "consent_lawful_basis_user_choice"],
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.legal_basis_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "retention_disclosure_present",
+    label: "Retention disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["privacy_contacts_accountability"],
+    overlays: ["transparency_notice_data_subject_rights", "notice_rights_baseline", "governance_accountability_transfers"],
+    signalMappings: [
+      { source: "document_semantic_signal", key: "privacy.retention_disclosure_present" },
+      { source: "snapshot_signal", key: "privacy.retention_disclosure_present" }
+    ]
+  }),
+  defineReportUnifiedFinding({
     id: "missing_dsar_high_exposure",
     label: "Missing DSAR mechanism on high-exposure site",
     owner: "rights_request_mechanisms",
@@ -3228,6 +3247,25 @@ export const REPORT_UNIFIED_FINDINGS = [
     mirrors: ["adtech_analytics_replay_footprint"],
     overlays: ["tracking_profiling_sensitive_data_risk", "profiling_high_risk_data_use_signals", "notice_rights_baseline"],
     signalMappings: [{ source: "document_semantic_signal", key: "privacy.behavioral_analytics_disclosure_present" }]
+  }),
+  defineReportUnifiedFinding({
+    id: "supervisory_authority_disclosure_present",
+    label: "Supervisory authority complaint disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["rights_request_mechanisms"],
+    overlays: ["transparency_notice_data_subject_rights", "notice_rights_baseline", "governance_accountability_transfers"],
+    signalMappings: [
+      { source: "document_semantic_signal", key: "privacy.supervisory_authority_disclosure_present" },
+      { source: "snapshot_signal", key: "disclosure.supervisory_authority_reference_present" }
+    ]
+  }),
+  defineReportUnifiedFinding({
+    id: "automated_decision_profiling_disclosure_present",
+    label: "Automated decision-making/profiling disclosure present",
+    owner: "data_handling_disclosures",
+    mirrors: ["adtech_analytics_replay_footprint"],
+    overlays: ["profiling_high_risk_data_use_signals", "tracking_profiling_sensitive_data_risk", "notice_rights_baseline"],
+    signalMappings: [{ source: "document_semantic_signal", key: "privacy.automated_decision_profiling_disclosure_present" }]
   }),
   defineReportUnifiedFinding({
     id: "children_privacy_disclosure_present",

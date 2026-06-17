@@ -4,6 +4,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_AWS_REGION,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  type LocalV2DagLambdaDebugOverrides,
   type LocalV2DagLambdaTargetEnvironment,
   type LocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
@@ -22,8 +23,10 @@ export type LocalV2DagLambdaDispatchPayload = {
   callbackCorrelationId: string;
   contractVersion: typeof LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION;
   functionName: string;
+  debugOverrides?: LocalV2DagLambdaDebugOverrides;
   hostname: string;
   localCallbackUrl: string | null;
+  orchestrationMode?: "single" | "sharded";
   productionFindingIntegration: false;
   profile: LocalV2DagScanProfile;
   resultHandoff: "sqs";
@@ -47,6 +50,12 @@ export type LocalV2DagLambdaDispatchSummary = {
 };
 
 export type LocalV2DagLambdaResultStatus = "completed" | "failed";
+
+export type LocalV2DagLambdaPhaseTiming = {
+  durationMs: number;
+  label: string;
+  status: "completed" | "failed" | "skipped";
+};
 
 export type LocalV2DagLambdaResultMessage = {
   artifactOnly: true;
@@ -80,6 +89,7 @@ export type LocalV2DagLambdaResultMessage = {
     code?: string;
     message: string;
   };
+  phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
   scanId: string;
@@ -124,7 +134,7 @@ function getProfile(config: SharedScanConfig | Record<string, unknown>): LocalV2
   if (v2DagParallel.profile === "tiny" || asRecord(config).profile === "tiny") {
     return "tiny";
   }
-  return "full";
+  return "standard";
 }
 
 function requireString(value: unknown, field: string): string {
@@ -191,8 +201,12 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     callbackCorrelationId: input.scanId,
     contractVersion: LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
     functionName: requireString(intent.functionName, "functionName"),
+    ...(asRecord(intent.debugOverrides) && Object.keys(asRecord(intent.debugOverrides)).length > 0
+      ? { debugOverrides: asRecord(intent.debugOverrides) as LocalV2DagLambdaDebugOverrides }
+      : {}),
     hostname: requireString(config.hostname, "hostname"),
     localCallbackUrl: stringValue(input.localCallbackUrl),
+    orchestrationMode: intent.orchestrationMode === "sharded" ? "sharded" : "single",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     profile: getProfile(config),
@@ -302,6 +316,27 @@ function parseArtifactMetadata(value: unknown): LocalV2DagLambdaResultMessage["a
   return Object.keys(artifactMetadata).length > 0 ? artifactMetadata : undefined;
 }
 
+function parsePhaseTimings(value: unknown): LocalV2DagLambdaPhaseTiming[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const timings = value.flatMap((item) => {
+    const record = asRecord(item);
+    const label = stringValue(record.label);
+    const durationMs = typeof record.durationMs === "number" && Number.isFinite(record.durationMs)
+      ? record.durationMs
+      : null;
+    const status: LocalV2DagLambdaPhaseTiming["status"] | null =
+      record.status === "failed" || record.status === "completed" || record.status === "skipped"
+        ? record.status
+        : null;
+    return label && durationMs !== null && status
+      ? [{ label: label.slice(0, 80), durationMs: Math.max(0, Math.round(durationMs)), status }]
+      : [];
+  });
+  return timings.length > 0 ? timings.slice(0, 40) : undefined;
+}
+
 export function parseLocalV2DagLambdaResultMessage(
   rawMessage: unknown,
   options: { expectedTargetEnvironment?: LocalV2DagLambdaTargetEnvironment } = {}
@@ -349,6 +384,10 @@ export function parseLocalV2DagLambdaResultMessage(
   const artifactMetadata = parseArtifactMetadata(record.artifactMetadata);
   if (artifactMetadata) {
     parsed.artifactMetadata = artifactMetadata;
+  }
+  const phaseTimings = parsePhaseTimings(record.phaseTimings);
+  if (phaseTimings) {
+    parsed.phaseTimings = phaseTimings;
   }
   if (errorMessage) {
     parsed.error = {

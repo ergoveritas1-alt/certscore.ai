@@ -31,7 +31,7 @@ export function PrivacyRequestForm() {
             <option value="correct">Correct my data</option>
             <option value="portability">Portability / export</option>
             <option value="object">Object or restrict processing</option>
-            <option value="opt-out">Opt out of sale/share or marketing</option>
+            <option value="opt-out">Object to processing or marketing</option>
             <option value="other">Other privacy request</option>
           </select>
         </div>
@@ -49,7 +49,6 @@ export function PrivacyRequestForm() {
             <option value="other">Not sure / other</option>
             <option value="gdpr">GDPR / EEA</option>
             <option value="uk-gdpr">UK GDPR</option>
-            <option value="ccpa-cpra">CCPA / CPRA / CIPA</option>
           </select>
         </div>
 
@@ -78,7 +77,7 @@ export function PrivacyRequestForm() {
           <label className="block text-sm font-medium text-slate-700" htmlFor="privacyCountryOrState">
             Country or state <span className="text-slate-400">(optional)</span>
           </label>
-          <Input id="privacyCountryOrState" name="countryOrState" placeholder="California, Germany, United Kingdom" type="text" />
+          <Input id="privacyCountryOrState" name="countryOrState" placeholder="Germany, France, United Kingdom" type="text" />
         </div>
       </div>
 

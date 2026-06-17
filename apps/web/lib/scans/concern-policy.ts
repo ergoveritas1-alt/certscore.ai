@@ -548,6 +548,14 @@ function getPositiveInfrastructureEvidenceGrade(
         return hasPrivacySpecificContactChannelEvidence(rawEvidence)
           ? "verified" as const
           : "weak" as const;
+      case "legal_basis_disclosure_present":
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /legal_basis|legal basis|lawful basis|legitimate interests?|contractual necessity/i)
+          ? "verified" as const
+          : "weak" as const;
+      case "retention_disclosure_present":
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /retention|retain|kept for|storage period|as long as necessary/i)
+          ? "verified" as const
+          : "weak" as const;
       case "gpc_disclosure_present":
         return hasPolicyPositiveTopicSnippet(rawEvidence, /\bgpc(?:_disclosure)?\b|global privacy control/i)
           ? "verified" as const
@@ -566,6 +574,14 @@ function getPositiveInfrastructureEvidenceGrade(
           : "weak" as const;
       case "behavioral_analytics_disclosure_present":
         return hasPolicyPositiveTopicSnippet(rawEvidence, /behavioral_analytics|session_replay|product_analytics/i)
+          ? "verified" as const
+          : "weak" as const;
+      case "supervisory_authority_disclosure_present":
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /supervisory_authority|supervisory authority|data protection authority|lodge a complaint/i)
+          ? "verified" as const
+          : "weak" as const;
+      case "automated_decision_profiling_disclosure_present":
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /automated_decision|automated decision|profiling|solely automated/i)
           ? "verified" as const
           : "weak" as const;
       case "children_privacy_disclosure_present":
@@ -633,10 +649,14 @@ function getPositiveInfrastructureEvidenceGrade(
         ? "corroborated" as const
         : "weak" as const;
     case "gpc_disclosure_present":
+    case "legal_basis_disclosure_present":
+    case "retention_disclosure_present":
     case "tracking_technologies_disclosure_present":
     case "third_party_advertising_disclosure_present":
     case "targeted_advertising_disclosure_present":
     case "behavioral_analytics_disclosure_present":
+    case "supervisory_authority_disclosure_present":
+    case "automated_decision_profiling_disclosure_present":
     case "children_privacy_disclosure_present":
       return hasPacketBacking &&
         snippets.some(hasMeaningfulReviewerSnippet) &&
@@ -1499,6 +1519,14 @@ function isCpraCbaOptOutMissingConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   return concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing";
+}
+
+function isCcpaCpraDeferredConcern(
+  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
+) {
+  return concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing" ||
+    concern.suggestedUnifiedFindingId === "sale_sharing_controls_missing" ||
+    concern.suggestedUnifiedFindingId === "do_not_sell_sharing_disclosure_conflict";
 }
 
 function isBlockingOverlayConcern(
@@ -2444,22 +2472,20 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isRejectTrackingPersistenceConcern(input.concern)) {
-    const hasConfirmedTiming = hasConfirmedRejectTimingEvidence(input.rawEvidence);
-
-    if (!hasConfirmedTiming) {
-      return {
-        allowedNarrativeTier: "weak",
-        externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_post_reject_timing_evidence"],
-        promotionEligibility: "internal_only"
-      };
-    }
-
     return {
-      allowedNarrativeTier: "strong",
-      externalSurfacingEligibility: "eligible",
-      negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "eligible"
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "post_choice_flow_deferred_from_core"],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (isCcpaCpraDeferredConcern(input.concern)) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "ccpa_cpra_deferred_from_core"],
+      promotionEligibility: "internal_only"
     };
   }
 
@@ -2848,22 +2874,20 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isRejectTrackingPersistenceConcern(input.concern)) {
-    const hasConfirmedTiming = hasConfirmedRejectTimingEvidence(input.rawEvidence);
-
-    if (!hasConfirmedTiming) {
-      return {
-        allowedNarrativeTier: "weak",
-        externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_post_reject_timing_evidence"],
-        promotionEligibility: "internal_only"
-      };
-    }
-
     return {
-      allowedNarrativeTier: "strong",
-      externalSurfacingEligibility: "eligible",
-      negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "eligible"
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "post_choice_flow_deferred_from_core"],
+      promotionEligibility: "internal_only"
+    };
+  }
+
+  if (isCcpaCpraDeferredConcern(input.concern)) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "ccpa_cpra_deferred_from_core"],
+      promotionEligibility: "internal_only"
     };
   }
 

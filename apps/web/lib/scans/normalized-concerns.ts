@@ -192,6 +192,8 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "prior_consent_state_may_hide_control"
   | "shallow_consent_control_search_scope"
   | "missing_post_reject_timing_evidence"
+  | "post_choice_flow_deferred_from_core"
+  | "ccpa_cpra_deferred_from_core"
   | "missing_concrete_sensitive_payload"
   | "missing_third_party_tracking_artifact"
   | "runtime_cookie_inventory_ignored_only"

@@ -42,11 +42,32 @@ const policyTopics = [
   "consent_withdrawal",
   "cookie_settings",
   "data_retention",
+  "controller_contact",
+  "processing_purposes",
+  "legal_basis",
+  "recipients_or_vendor_categories",
+  "data_subject_rights",
+  "international_transfers",
+  "dpo_contact",
+  "supervisory_authority",
   "ai_generated_content",
   "ai_features",
   "contact_privacy",
   "accessibility",
   "unknown",
+] as const;
+
+const article13DisclosureTypes = [
+  "controller_contact",
+  "processing_purposes",
+  "legal_basis",
+  "recipients_or_vendor_categories",
+  "data_retention",
+  "data_subject_rights",
+  "international_transfers",
+  "dpo_contact",
+  "supervisory_authority",
+  "automated_decision_making_or_profiling",
 ] as const;
 
 const MAX_LINK_CANDIDATES_FOR_PROMPT = 120;
@@ -128,7 +149,7 @@ export function createOpenAiNanoPolicyAssistProvider(
         apiKey: options.apiKey,
         model,
         system:
-          "You extract policy-surface topics and vendor/control mentions from a bounded excerpt. Return JSON only. Use only the supplied excerpt and metadata. Do not infer legal compliance, do not invent vendors, and do not add topics unsupported by the text. Mark AI topics only when the excerpt describes artificial-intelligence features, AI-generated content, automated decisions, or a policy/disclosure about AI use; do not mark AI merely because the letters AI appear in navigation, branding, or unrelated words.",
+          "You extract policy-surface topics, Article 13 disclosure signals, and vendor/control mentions from a bounded excerpt. Return JSON only. Use only the supplied excerpt and metadata. Do not infer legal compliance, do not invent vendors, and do not add topics or Article 13 signals unsupported by the text. Article 13 signals are evidence labels only, not legal conclusions. Use status observed when the excerpt clearly contains the disclosure and partial when it contains a vague or incomplete hint. Mark AI topics only when the excerpt describes artificial-intelligence features, AI-generated content, automated decisions, or a policy/disclosure about AI use; do not mark AI merely because the letters AI appear in navigation, branding, or unrelated words.",
         user: {
           surfaceUrl: input.surfaceUrl,
           surfaceType: input.surfaceType,
@@ -136,8 +157,15 @@ export function createOpenAiNanoPolicyAssistProvider(
           excerpt: input.excerpt,
           deterministicTopicHits: input.deterministicTopicHits,
           allowedTopics: policyTopics,
+          allowedArticle13DisclosureTypes: article13DisclosureTypes,
           outputShape: {
             observedTopics: ["allowed topic strings"],
+            article13DisclosureSignals: [{
+              disclosureType: "one allowed Article 13 disclosure type",
+              status: "observed|partial",
+              evidenceText: "short excerpt-supported phrase, max 320 chars",
+              confidence: "0..1",
+            }],
             mentionedVendors: ["vendor names explicitly present in excerpt"],
             mentionedPurposes: ["short purpose labels explicitly supported"],
             mentionedRights: ["rights/control labels explicitly supported"],
@@ -287,6 +315,7 @@ function normalizeTopicExtraction(
   return {
     assistId: input.assistId,
     observedTopics: enumArray(parsed.observedTopics, policyTopics, 16),
+    article13DisclosureSignals: normalizeArticle13Signals(parsed.article13DisclosureSignals),
     mentionedVendors: stringArray(parsed.mentionedVendors, 24),
     mentionedPurposes: stringArray(parsed.mentionedPurposes, 12),
     mentionedRights: stringArray(parsed.mentionedRights, 12),
@@ -294,6 +323,26 @@ function normalizeTopicExtraction(
     confidence: confidenceValue(parsed.confidence, 0.5),
     uncertaintyNotes: stringArray(parsed.uncertaintyNotes, 5),
   };
+}
+
+function normalizeArticle13Signals(value: unknown): NanoTopicExtractionResult["article13DisclosureSignals"] {
+  return arrayOfRecords(value).flatMap((record) => {
+    const rawDisclosureType = stringValue(record.disclosureType);
+    const disclosureType = article13DisclosureTypes.find((type) => type === rawDisclosureType);
+    const rawStatus = stringValue(record.status);
+    const status: "observed" | "partial" | undefined =
+      rawStatus === "observed" || rawStatus === "partial" ? rawStatus : undefined;
+    if (!disclosureType || !status) {
+      return [];
+    }
+    return [{
+      disclosureType,
+      status,
+      evidenceText: stringValue(record.evidenceText).slice(0, 320) || undefined,
+      confidence: confidenceValue(record.confidence, 0.5),
+      source: "nano" as const,
+    }];
+  }).slice(0, 12);
 }
 
 function extractJson(content: string): string {

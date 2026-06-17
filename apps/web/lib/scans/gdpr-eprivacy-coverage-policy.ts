@@ -106,6 +106,7 @@ function getNumber(record: Record<string, unknown> | null | undefined, keys: str
 }
 
 const MAX_RUNTIME_ELAPSED_MS = 10 * 60 * 1000;
+const POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE: boolean = true;
 
 function normalizeRuntimeElapsedMs(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -2034,6 +2035,22 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     rejectInteractionFailureReason,
     rejectInteractionConfirmed: rejectInteractionSucceeded
   };
+
+  if (POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE) {
+    return makeOutcome(
+      "post_reject_tracking_reduction",
+      "Not testable",
+      "Post-choice consent-flow automation is deferred from the current production core scanner. Retained reject-path or post-reject evidence may remain available for analyst review, but CertScore does not currently report a production gap or success conclusion for post-choice tracking reduction.",
+      reductionEvidenceRefs,
+      {
+        retainedEvidence: {
+          ...postRejectRetainedEvidence,
+          productionPosture: "post_choice_flow_deferred_from_core"
+        }
+      }
+    );
+  }
+
   const postRejectMissingSignals = [
     rejectInteractionSucceeded
       ? null
@@ -3701,6 +3718,22 @@ function deriveSessionReplayAfterRefusalOutcome(input: GdprEprivacyCoveragePolic
     "postRejectWindowAvailable",
     "post_reject_window_available"
   ]);
+
+  if (POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE) {
+    return makeOutcome(
+      "session_replay_after_refusal",
+      "Not testable",
+      "Post-choice consent-flow automation is deferred from the current production core scanner. CertScore evaluates session replay and behavioral analytics through pre-consent, sensitive-surface, and disclosure-alignment evidence, not after-refusal persistence conclusions.",
+      sessionReplayEvidenceRefs(sessionReplayEvidence, "Session replay post-choice comparison deferred"),
+      {
+        retainedEvidence: {
+          postRejectEvidence,
+          productionPosture: "post_choice_flow_deferred_from_core",
+          sessionReplayEvidence
+        }
+      }
+    );
+  }
 
   if (rejectInteractionConfirmed && postRejectObserved) {
     return makeOutcome(

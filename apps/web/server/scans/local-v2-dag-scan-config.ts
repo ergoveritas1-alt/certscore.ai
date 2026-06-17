@@ -1,17 +1,27 @@
 import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
 
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
-export const LOCAL_V2_DAG_SCAN_PROFILE = "full";
-export const LOCAL_V2_DAG_SCAN_PROFILES = ["full", "tiny"] as const;
+export const LOCAL_V2_DAG_SCAN_PROFILE = "standard";
+export const LOCAL_V2_DAG_SCAN_PROFILES = ["standard", "tiny"] as const;
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "us-west-1";
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
 
 export type LocalV2DagScanProfile = (typeof LOCAL_V2_DAG_SCAN_PROFILES)[number];
 export type LocalV2DagLambdaTargetEnvironment = "local" | "production";
+export type LocalV2DagLambdaDebugOverrides = {
+  actionFinalSettleMs?: number;
+  actionSearchDeadlineMs?: number;
+  consentFlowDeadlineMs?: number;
+  preActionObservationMs?: number;
+  scenarioConcurrency?: number;
+  scenarioResourceMode?: "normal" | "lean" | "cmp_safe";
+  strongEvidenceMode?: "webmd";
+};
 
 export type LocalV2DagScanEnv = {
   CERTSCORE_V2_DAG_LAMBDA_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME?: string;
+  CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE?: string;
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL?: string;
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV?: string;
   NEXT_PUBLIC_APP_URL?: string;
@@ -47,8 +57,17 @@ function compactEnvValue(value: string | undefined) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-export function normalizeLocalV2DagRunViaLambda(value: unknown) {
-  return value === true || value === "true" || value === "1" || value === "on";
+export function normalizeLocalV2DagRunViaLambda(value: unknown, env: LocalV2DagScanEnv = process.env) {
+  if (value === true || value === "true" || value === "1" || value === "on") {
+    return true;
+  }
+  if (value === false || value === "false" || value === "0" || value === "off") {
+    return false;
+  }
+
+  return env.CERTSCORE_V2_DAG_LAMBDA_ENABLED === "true" &&
+    Boolean(compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME)) &&
+    Boolean(compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL));
 }
 
 export function getLocalV2DagLambdaTargetEnvironment(
@@ -79,6 +98,7 @@ export function getLocalV2DagLambdaConfiguration(env: LocalV2DagScanEnv = proces
     enabled,
     functionName,
     missing,
+    orchestrationMode: env.CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE === "sharded" ? "sharded" as const : "single" as const,
     resultQueueUrl,
     targetEnvironment: getLocalV2DagLambdaTargetEnvironment(env),
     vpcMode: "none" as const
@@ -97,9 +117,13 @@ export function assertLocalV2DagLambdaConfigured(env: LocalV2DagScanEnv = proces
 export function applyLocalV2DagScanConfig(
   config: SharedScanConfig,
   env?: LocalV2DagScanEnv,
-  options: { profile?: LocalV2DagScanProfile | null; runViaLambda?: boolean | null } = {}
+  options: {
+    lambdaDebugOverrides?: LocalV2DagLambdaDebugOverrides | null;
+    profile?: LocalV2DagScanProfile | null;
+    runViaLambda?: boolean | null;
+  } = {}
 ): SharedScanConfig {
-  if (!shouldUseLocalV2DagScanTool(env)) {
+  if (!shouldUseLocalV2DagScanTool(env) && options.runViaLambda !== true) {
     return config;
   }
 
@@ -112,9 +136,10 @@ export function applyLocalV2DagScanConfig(
       ...(config.execution ?? {}),
       v2DagParallel: {
         artifactOnly: true,
-        consentFlowDeadlineMs: 30_000,
         localOnly: true,
         plannedParallel: true,
+        postConsentFlowsEnabled: false,
+        policyOutputGraceMs: 1_000,
         policyPlanningDeadlineMs: 1_500,
         productionFindingIntegration: false,
         profile,
@@ -132,7 +157,9 @@ export function applyLocalV2DagScanConfig(
               contractVersion: lambdaConfig.contractVersion,
               dispatchState: "pending_dispatch",
               functionName: lambdaConfig.functionName,
+              ...(options.lambdaDebugOverrides ? { debugOverrides: options.lambdaDebugOverrides } : {}),
               localOnly: lambdaConfig.targetEnvironment === "local",
+              orchestrationMode: lambdaConfig.orchestrationMode,
               processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
               productionFindingIntegration: false,
               resultHandoff: "sqs",

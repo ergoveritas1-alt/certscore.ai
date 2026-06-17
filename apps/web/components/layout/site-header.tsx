@@ -11,7 +11,6 @@ const navLinks = [
 
 const resourceLinks = [
   { href: "/gdpr", label: "GDPR privacy" },
-  { href: "/ccpa", label: "CCPA privacy" },
   { href: "/ftc", label: "FTC disclosure" },
   { href: "/accessibility", label: "ADA accessibility" },
   { href: "/guides", label: "Guides" },

@@ -62,16 +62,6 @@ export function getReferenceNotes(activeFinding?: FindingReferenceItem) {
     ];
   }
 
-  if (activeFinding?.id === "cpra_cba_opt_out_missing") {
-    return [
-      ...commonNotes,
-      "CPRA opt-out, Do Not Sell or Share, and privacy-choice obligations may depend on organization scope, user region, data purpose, sale/share analysis, cross-context behavioral advertising context, exemptions, and manual review.",
-      "GPC handling may require region-specific and implementation-specific review; this public finding does not determine backend preference handling.",
-      "FTC privacy claims and choice-architecture materials may be relevant where public statements, opt-out paths, or runtime behavior affect user expectations, but this finding does not determine deception, unfairness, legal status, or compliance status.",
-      `Prevalence labels use the ${FINDING_DENSITY_BENCHMARK_SCOPE.label}, an approximately ${FINDING_DENSITY_BENCHMARK_SCOPE.sampleSizeApprox.toLocaleString()}-scan directional calibration set.`
-    ];
-  }
-
   return [
     ...commonNotes,
     "EDPB consent guidance is relevant to consent quality and affirmative indication where consent is relied upon.",
@@ -389,7 +379,7 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
           <p>
             CertScore's finding references are reviewed periodically and updated when material regulatory or accessibility guidance changes.
             Guidance families monitored include EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC
-            privacy and dark-pattern materials, CPRA/privacy-choice materials, and accessibility guidance where applicable.
+            privacy and dark-pattern materials, and accessibility guidance where applicable.
           </p>
           <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
             <p>Want to test these findings on a public website? Use the CertScore GPT to scan a public website from ChatGPT.</p>
