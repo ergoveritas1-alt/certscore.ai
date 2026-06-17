@@ -156,6 +156,31 @@ test("GdprEprivacyCoverageChecklistCard renders debug confidence metadata", () =
   assert.match(html, /Resolve vendor and purpose for third-party endpoints/);
 });
 
+test("GdprEprivacyCoverageChecklistCard avoids duplicate observed wording for not-observed rows", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          id: "controller_contact_disclosure",
+          label: "Controller/contact disclosure observed",
+          status: "Not observed"
+        }),
+        makeChecklistItem({
+          id: "privacy_notice_availability",
+          label: "Privacy notice availability",
+          status: "Not observed"
+        })
+      ]
+    })
+  );
+
+  assert.match(html, /No eligible evidence for controller\/contact disclosure was observed in the tested context/);
+  assert.match(html, /No eligible evidence for privacy notice was observed in the tested context/);
+  assert.doesNotMatch(html, /observed was observed/i);
+  assert.doesNotMatch(html, /availability was observed/i);
+});
+
 test("GdprEprivacyCoverageChecklistCard labels scanner module gaps as coverage missing", () => {
   const item = makeChecklistItem({
     assessmentStatus: "coverage_limitation",

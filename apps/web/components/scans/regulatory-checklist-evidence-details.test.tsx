@@ -174,7 +174,7 @@ test("RegulatoryChecklistCorrectionSteps does not provide remediation for checke
     })
   );
 
-  assert.match(html, /No corrective action is indicated/);
+  assert.match(html, /No site remediation is indicated from this row alone/);
   assert.match(html, /Privacy notice availability is currently rated Observed/);
   assert.doesNotMatch(html, /<ol/);
   assert.doesNotMatch(html, /Add or repair/);

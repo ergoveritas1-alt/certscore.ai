@@ -695,7 +695,7 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
     const statusText = status ?? assessmentStatus ?? "checked";
     return {
       kind: "none",
-      message: `${coverageArea} is currently rated ${statusText}. No corrective action is indicated from this scan row; keep the relevant consent, policy, and tag behavior stable and rerun after material site changes.`,
+      message: `${coverageArea} is currently rated ${statusText}. No site remediation is indicated from this row alone; rerun after material site, policy, or tag changes.`,
       steps: [],
     };
   }
