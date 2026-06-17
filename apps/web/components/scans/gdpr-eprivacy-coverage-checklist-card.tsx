@@ -692,7 +692,7 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
       : "No consent/privacy-control accessibility issue was retained in the tested context.";
   }
 
-  const subject = item.label.charAt(0).toLowerCase() + item.label.slice(1);
+  const subject = getChecklistSentenceSubject(item.label);
   switch (item.status) {
     case "Observed":
       return `${item.label} was observed in the tested context.`;
@@ -701,7 +701,7 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
     case "Review signal":
       return `${item.label} produced a review signal in the tested context.`;
     case "Not observed":
-      return `No eligible ${subject} was observed in the tested context.`;
+      return `No eligible evidence for ${subject} was observed in the tested context.`;
     case "Insufficient evidence":
       return `The scan retained partial evidence for ${subject}, but not enough canonical evidence to resolve the row.`;
     case "Not testable":
@@ -711,6 +711,18 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
     default:
       return item.explanation;
   }
+}
+
+function getChecklistSentenceSubject(label: string) {
+  const cleanedLabel = label
+    .replace(/\s+observed$/i, "")
+    .replace(/\s+availability$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleanedLabel.length > 0
+    ? cleanedLabel.charAt(0).toLowerCase() + cleanedLabel.slice(1)
+    : "this row";
 }
 
 function getRetainedEvidenceRecord(item: GdprEprivacyCoverageChecklistItem) {
