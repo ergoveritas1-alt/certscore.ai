@@ -550,10 +550,11 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
 
 export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResponse): Promise<ScanDetailResponse> {
   const input = getLocalV2DagReportInput(scanRecord);
-  if (!input || scanRecord.scan.status !== "completed" || !shouldUseLocalV2DagScanTool()) {
+  if (!input || scanRecord.scan.status !== "completed") {
     return scanRecord;
   }
-  const bundle = input.outDir
+  const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
+  const bundle = shouldReadLocalOutDir && input.outDir
     ? await readLocalV2DagBundle(input.outDir)
     : input.scanArtifactUri
       ? await readLocalV2DagBundleFromS3(input.scanArtifactUri)
