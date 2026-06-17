@@ -7,11 +7,15 @@ export type PolicyPositiveSignalSpec = {
   unifiedFindingId:
     | "privacy_rights_path_present"
     | "privacy_contact_path_present"
+    | "legal_basis_disclosure_present"
+    | "retention_disclosure_present"
     | "gpc_disclosure_present"
     | "tracking_technologies_disclosure_present"
     | "third_party_advertising_disclosure_present"
     | "targeted_advertising_disclosure_present"
     | "behavioral_analytics_disclosure_present"
+    | "supervisory_authority_disclosure_present"
+    | "automated_decision_profiling_disclosure_present"
     | "children_privacy_disclosure_present"
     | "arbitration_clause_present";
 };
@@ -32,6 +36,22 @@ export const POLICY_POSITIVE_SIGNAL_SPECS: PolicyPositiveSignalSpec[] = [
     label: "Privacy contact path present",
     pageType: "privacy_policy",
     unifiedFindingId: "privacy_contact_path_present"
+  },
+  {
+    aliases: [],
+    canonicalSignalKey: "privacy.legal_basis_disclosure_present",
+    evidenceSnippetKey: "topic:legal_basis",
+    label: "Legal basis disclosure present",
+    pageType: "privacy_policy",
+    unifiedFindingId: "legal_basis_disclosure_present"
+  },
+  {
+    aliases: ["mentions_data_retention"],
+    canonicalSignalKey: "privacy.retention_disclosure_present",
+    evidenceSnippetKey: "topic:retention",
+    label: "Retention disclosure present",
+    pageType: "privacy_policy",
+    unifiedFindingId: "retention_disclosure_present"
   },
   {
     aliases: [],
@@ -72,6 +92,22 @@ export const POLICY_POSITIVE_SIGNAL_SPECS: PolicyPositiveSignalSpec[] = [
     label: "Behavioral analytics disclosure present",
     pageType: "privacy_policy",
     unifiedFindingId: "behavioral_analytics_disclosure_present"
+  },
+  {
+    aliases: ["disclosure.supervisory_authority_reference_present"],
+    canonicalSignalKey: "privacy.supervisory_authority_disclosure_present",
+    evidenceSnippetKey: "topic:supervisory_authority",
+    label: "Supervisory authority complaint disclosure present",
+    pageType: "privacy_policy",
+    unifiedFindingId: "supervisory_authority_disclosure_present"
+  },
+  {
+    aliases: [],
+    canonicalSignalKey: "privacy.automated_decision_profiling_disclosure_present",
+    evidenceSnippetKey: "topic:automated_decision_making",
+    label: "Automated decision-making/profiling disclosure present",
+    pageType: "privacy_policy",
+    unifiedFindingId: "automated_decision_profiling_disclosure_present"
   },
   {
     aliases: [],

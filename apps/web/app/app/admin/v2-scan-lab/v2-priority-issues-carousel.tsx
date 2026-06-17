@@ -5,7 +5,7 @@ import type { V2ScanLabCandidateSignal } from "../../../../server/admin/v2-scan-
 
 export type V2PriorityRegulatoryGap = {
   body: string;
-  framework: "CCPA/CPRA" | "GDPR/ePrivacy";
+  framework: "GDPR/ePrivacy";
   id: string;
   title: string;
 };

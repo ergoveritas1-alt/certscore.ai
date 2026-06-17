@@ -48,6 +48,7 @@ export type V2ModuleRunContext = Pick<
   "moduleName" | "status" | "durationMs"
 > & {
   errorCount: number;
+  errors: string[];
 };
 
 export type V2EvidencePacket = {
@@ -868,7 +869,7 @@ function coverageLimitationsForCandidate(
   const failedOrPartialRequiredModules = moduleRunContext.filter((moduleRun) =>
     candidate.sourceModulesRequired.includes(moduleRun.moduleName) &&
     (moduleRun.status === "failed" ||
-      moduleRun.status === "partial" ||
+      (moduleRun.status === "partial" && !isScreenshotOnlyPartial(moduleRun)) ||
       moduleRun.status === "skipped_budget" ||
       moduleRun.status === "not_testable"),
   );
@@ -897,8 +898,15 @@ function buildModuleRunContext(bundle?: CanonicalEvidenceBundle): V2ModuleRunCon
     moduleName: moduleRun.moduleName,
     status: moduleRun.status,
     durationMs: moduleRun.durationMs,
+    errors: moduleRun.errors,
     errorCount: moduleRun.errors.length,
   }));
+}
+
+function isScreenshotOnlyPartial(moduleRun: V2ModuleRunContext) {
+  return moduleRun.status === "partial" &&
+    moduleRun.errors.length > 0 &&
+    moduleRun.errors.every((error) => /screenshot fallback used|page\.screenshot/i.test(error));
 }
 
 function moduleContextForCandidate(

@@ -571,8 +571,8 @@ test("consent audit reject-tracking finding retains post-reject runtime evidence
       urlAfterClick: "https://example.com/"
     }
   ]);
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.surfacingDecision.decisionState, "review");
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
   assert.equal(
     packet?.evidence?.entities?.confidenceRisks?.some((risk) =>
@@ -668,13 +668,13 @@ test("consent audit reject-tracking finding confirms near-immediate post-reject 
   const confirmedPacket = buildPacket(257);
   const reviewPacket = buildPacket(249);
 
-  assert.equal(confirmedPacket?.presentationDecision.status, "surface");
-  assert.equal(confirmedPacket?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(confirmedPacket?.presentationDecision.status, "audit_only");
+  assert.equal(confirmedPacket?.surfacingDecision.decisionState, "review");
   assert.ok(confirmedPacket?.evidence?.flags?.includes("reject_evidence_confirmed"));
   assert.equal(reviewPacket?.presentationDecision.status, "audit_only");
   assert.notEqual(reviewPacket?.surfacingDecision.decisionState, "confirmed");
   assert.ok(reviewPacket?.evidence?.flags?.includes("reject_evidence_review"));
-  assert.ok(reviewPacket?.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"));
+  assert.ok(reviewPacket?.concernContext?.negativeEvidenceFlags.includes("post_choice_flow_deferred_from_core"));
 });
 
 test("consent audit derives reject-tracking concern from structured post-reject request evidence", () => {
@@ -735,8 +735,8 @@ test("consent audit derives reject-tracking concern from structured post-reject 
     validationFindingLookup: new Map()
   }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
 
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.surfacingDecision.decisionState, "review");
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
 });
 
@@ -794,8 +794,8 @@ test("consent audit reject-tracking finding suppresses when reject click or timi
     validationFindingLookup: new Map()
   }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
 
-  assert.equal(packet?.presentationDecision.status, "suppress");
-  assert.equal(packet?.surfacingDecision.decisionState, "suppressed");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.surfacingDecision.decisionState, "review");
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_suppress"));
 });
 
@@ -901,8 +901,8 @@ test("consent audit reject-tracking finding uses attribution and cookie-diff pro
     validationFindingLookup: new Map()
   }).find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
 
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.surfacingDecision.reportLane, "main");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
+  assert.equal(packet?.surfacingDecision.reportLane, "confidence_and_coverage");
   assert.ok(!packet?.evidence?.flags?.includes("reject_evidence_suppress"));
   assert.deepEqual(fallbackEvidence?.suppressionChecks, {
     reject_click_confirmed: true,
@@ -984,10 +984,10 @@ test("consent audit reject-tracking finding promotes vendor-rich post-reject evi
 
   assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.equal(packet?.surfacingDecision.reportLane, "confidence_and_coverage");
-  assert.ok(packet?.surfacingDecision.appliedRules.includes("evidence.finding_contract.audit_only"));
+  assert.ok(packet?.surfacingDecision.appliedRules.includes("posture.post_choice_flow.deferred_from_core"));
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_review"));
   assert.ok(!packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
-  assert.ok(packet?.concernContext?.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"));
+  assert.ok(packet?.concernContext?.negativeEvidenceFlags.includes("post_choice_flow_deferred_from_core"));
   assert.equal((fallbackEvidence?.promotionDecision as Record<string, unknown> | undefined)?.promoted, false);
   assert.equal((fallbackEvidence?.promotionDecision as Record<string, unknown> | undefined)?.requiredTimingSatisfied, false);
   assert.deepEqual((fallbackEvidence?.rejectEvidenceDiff as Record<string, unknown> | undefined)?.baseline_vendors, ["Marketo"]);
@@ -2363,7 +2363,7 @@ test("runtime-derived reject persistence projects when retained post-reject rows
   const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
   const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
 
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
   assert.ok(packet?.evidence?.flags?.includes("nonessential_vendor_persisted_after_reject"));
   assert.deepEqual(packet?.evidence?.entities?.postRejectNonEssentialRequests, [
@@ -2386,8 +2386,8 @@ test("runtime-derived reject persistence projects when retained post-reject rows
       interpretation: "At least one classified non-essential vendor still fired after reject."
     })
   ]);
-  assert.ok(projection.findings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
-  assert.ok(projection.topFindings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
+  assert.ok(!projection.topFindings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
 });
 
 test("runtime-derived reject persistence projects retained post-reject tag-manager rows", () => {
@@ -2448,9 +2448,9 @@ test("runtime-derived reject persistence projects retained post-reject tag-manag
   const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "reject_did_not_reduce_tracking");
   const projection = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
 
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.ok(packet?.evidence?.flags?.includes("reject_evidence_confirmed"));
-  assert.ok(projection.findings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "reject_tracking_persists_after_reject"));
 });
 
 test("runtime reject path depth promotes concrete dark-pattern reject-missing evidence", () => {

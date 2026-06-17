@@ -21,7 +21,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (!args.url) {
-    console.error("Usage: pnpm v2:scan --url <url> [--profile tiny] [--out ./artifacts/example] [--capture-replay] [--capture-replay-trace] [--capture-replay-aux-probes all|none|form|accessibility] [--privacy-control-url <url>...] [--scenario-planning-mode legacy_sequential|planned_parallel] [--scenario-resource-mode normal|lean]");
+    console.error("Usage: pnpm v2:scan --url <url> [--profile tiny] [--out ./artifacts/example] [--capture-replay] [--capture-replay-trace] [--capture-replay-aux-probes all|none|form|accessibility] [--privacy-control-url <url>...] [--scenario-planning-mode legacy_sequential|planned_parallel] [--policy-output-grace-ms 1000] [--scenario-resource-mode normal|lean] [--consent-flow-screenshot-mode auto|none]");
     process.exit(1);
   }
 
@@ -37,8 +37,10 @@ async function main(): Promise<void> {
     scenarioPlanningMode: args.scenarioPlanningMode,
     scenarioConcurrency: args.scenarioConcurrency,
     policyPlanningDeadlineMs: args.policyPlanningDeadlineMs,
+    policyOutputGraceMs: args.policyOutputGraceMs,
     consentFlowDeadlineMs: args.consentFlowDeadlineMs,
     scenarioResourceMode: args.scenarioResourceMode,
+    consentFlowScreenshotMode: args.consentFlowScreenshotMode,
   });
 
   console.log(`Wrote ${path.join(outDir, "CanonicalEvidenceBundle.json")}`);
@@ -62,8 +64,10 @@ function parseArgs(argv: string[]): {
   scenarioPlanningMode?: "legacy_sequential" | "planned_parallel";
   scenarioConcurrency?: number;
   policyPlanningDeadlineMs?: number;
+  policyOutputGraceMs?: number;
   consentFlowDeadlineMs?: number;
   scenarioResourceMode?: "normal" | "lean";
+  consentFlowScreenshotMode?: "auto" | "none";
 } {
   const parsed: {
     url?: string;
@@ -76,8 +80,10 @@ function parseArgs(argv: string[]): {
     scenarioPlanningMode?: "legacy_sequential" | "planned_parallel";
     scenarioConcurrency?: number;
     policyPlanningDeadlineMs?: number;
+    policyOutputGraceMs?: number;
     consentFlowDeadlineMs?: number;
     scenarioResourceMode?: "normal" | "lean";
+    consentFlowScreenshotMode?: "auto" | "none";
   } = { privacyControlUrls: [] };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -112,11 +118,17 @@ function parseArgs(argv: string[]): {
     } else if (key === "--policy-planning-deadline-ms" && value) {
       parsed.policyPlanningDeadlineMs = numberArg(value);
       index += 1;
+    } else if (key === "--policy-output-grace-ms" && value) {
+      parsed.policyOutputGraceMs = numberArg(value);
+      index += 1;
     } else if (key === "--consent-flow-deadline-ms" && value) {
       parsed.consentFlowDeadlineMs = numberArg(value);
       index += 1;
     } else if (key === "--scenario-resource-mode" && isScenarioResourceMode(value)) {
       parsed.scenarioResourceMode = value;
+      index += 1;
+    } else if (key === "--consent-flow-screenshot-mode" && isConsentFlowScreenshotMode(value)) {
+      parsed.consentFlowScreenshotMode = value;
       index += 1;
     }
   }
@@ -139,6 +151,10 @@ function numberArg(value: string): number | undefined {
 
 function isScenarioResourceMode(value: string | undefined): value is "normal" | "lean" {
   return value === "normal" || value === "lean";
+}
+
+function isConsentFlowScreenshotMode(value: string | undefined): value is "auto" | "none" {
+  return value === "auto" || value === "none";
 }
 
 function isCaptureReplayAuxiliaryProbeMode(value: string | undefined): value is "all" | "none" | "form" | "accessibility" {

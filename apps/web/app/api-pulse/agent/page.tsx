@@ -81,7 +81,7 @@ export default function PulseAgentFallbackPage() {
               Use <code className="rounded bg-white px-1">scanFrom</code> or{" "}
               <code className="rounded bg-white px-1">geo</code> to select the scan location. Accepted values are{" "}
               <code className="rounded bg-white px-1">default</code>, <code className="rounded bg-white px-1">eu</code>,{" "}
-              <code className="rounded bg-white px-1">uk</code>, and <code className="rounded bg-white px-1">california</code>.
+              and <code className="rounded bg-white px-1">uk</code>.
             </li>
             <li>
               For a quick check, use <code className="rounded bg-white px-1">format=markdown</code> and{" "}

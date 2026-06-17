@@ -377,6 +377,54 @@ test("policySurfaceScanner escalates when Nano assist is explicitly disabled", a
   }, { enableNanoPolicyAssist: false }, { expectCompleted: false });
 });
 
+test("policySurfaceScanner retains Nano Article 13 disclosure signals as bounded evidence", async () => {
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    ...createDefaultMockNanoPolicyAssistProvider(),
+    async extractTopics(input) {
+      return {
+        assistId: input.assistId,
+        observedTopics: ["legal_basis", "data_subject_rights", "international_transfers"],
+        article13DisclosureSignals: [
+          {
+            disclosureType: "legal_basis",
+            status: "observed",
+            evidenceText: "We rely on consent, contract, and legitimate interests as lawful bases.",
+            confidence: 0.91,
+            source: "nano",
+          },
+          {
+            disclosureType: "international_transfers",
+            status: "partial",
+            evidenceText: "We may transfer personal data outside your country.",
+            confidence: 0.67,
+            source: "nano",
+          },
+        ],
+        mentionedControls: [],
+        mentionedPurposes: ["analytics"],
+        mentionedRights: ["access", "delete"],
+        mentionedVendors: [],
+        confidence: 0.9,
+      };
+    },
+  };
+
+  await withPolicyScan("policy-simple", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    assert.ok(privacy);
+    assert.equal(privacy.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "legal_basis" &&
+      signal.status === "observed" &&
+      signal.source === "nano"
+    ), true);
+    assert.equal(privacy.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "international_transfers" &&
+      signal.status === "partial" &&
+      signal.source === "nano"
+    ), true);
+  }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
 interface ScanContext {
   result: Awaited<ReturnType<typeof policySurfaceScanner>>;
   baseUrl: string;

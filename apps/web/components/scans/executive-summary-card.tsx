@@ -3883,9 +3883,6 @@ function buildRegulatoryContextBadges(
   if (/\bGDPR\b|ePrivacy|EU\/EEA|PECR|ICO|European Accessibility Act|EN 301 549|Web Accessibility Directive/i.test(haystack)) {
     addBadge("GDPR / ePrivacy", "privacy");
   }
-  if (/CCPA|CPRA|CIPA|California|sale\/share|Do Not Sell|Do Not Share/i.test(haystack)) {
-    addBadge("CCPA / CPRA", "privacy");
-  }
   if (/FTC|consumer-protection|consumer protection|dark-pattern|deception|unfairness/i.test(haystack)) {
     addBadge("FTC", "consumer");
   }
@@ -3905,9 +3902,6 @@ function getFindingRegulatoryFilterIds(finding: CertScoreFinding): RegulatoryMap
   return context.badges.flatMap((badge): RegulatoryMappingFilterId[] => {
     if (/GDPR|ePrivacy/i.test(badge.label)) {
       return ["gdpr"];
-    }
-    if (/CCPA|CPRA/i.test(badge.label)) {
-      return ["ccpa"];
     }
     if (/FTC/i.test(badge.label)) {
       return ["ftc"];
@@ -4691,6 +4685,7 @@ export function ExecutiveSummaryCard(input: {
   const regulatoryLenses = input.unifiedFindings
     ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
     : buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
+  const productionRegulatoryLenses = regulatoryLenses.filter((lens) => lens.acronym !== "CCPA / CPRA / CIPA");
   return (
     <section className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
       <details className="group/executive-summary" data-testid="executive-summary-details" open>
@@ -4922,7 +4917,7 @@ export function ExecutiveSummaryCard(input: {
                         </p>
                       ) : null}
                       <div className="space-y-3">
-                        {regulatoryLenses.map((lens) => (
+                        {productionRegulatoryLenses.map((lens) => (
                           <details
                             key={lens.acronym}
                             id={getRegulatoryLensAnchor(lens.acronym)}

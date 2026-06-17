@@ -36,7 +36,6 @@ import {
   type BetaRegulatoryChecklistRow,
   type BetaRegulatoryChecklistStatus
 } from "./beta-regulatory-checklist-card";
-import { CaliforniaPrivacyCoverageChecklistCard } from "./california-privacy-coverage-checklist-card";
 import { GdprEprivacyCoverageChecklistCard } from "./gdpr-eprivacy-coverage-checklist-card";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
@@ -142,9 +141,6 @@ import {
 } from "../../lib/scans/finding-evidence-contracts";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
-import { deriveCaliforniaPrivacyCoverageChecklist } from "../../lib/scans/california-privacy-coverage-checklist";
-import { deriveCaliforniaPrivacyCoveragePolicyOutcomes } from "../../lib/scans/california-privacy-coverage-policy";
-import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
@@ -6267,42 +6263,7 @@ export function SharedScanDetailView({
     scanCompleted: scanRecord.scan.status === "completed",
     unifiedFindings: findingEvidenceDiagnostics
   });
-  const californiaPrivacyCoverageConcerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts,
-    validationFindings: []
-  });
-  const retainedCaliforniaPrivacyConfig =
-    scanRecord.scan.scanConfigJson?.californiaPrivacy &&
-    typeof scanRecord.scan.scanConfigJson.californiaPrivacy === "object" &&
-    !Array.isArray(scanRecord.scan.scanConfigJson.californiaPrivacy)
-      ? scanRecord.scan.scanConfigJson.californiaPrivacy as Record<string, unknown>
-      : null;
-  const californiaDeepCheckRequested =
-    scanRecord.scan.scanFromValue === "california" ||
-    retainedCaliforniaPrivacyConfig?.exercisePrivacyChoicePath === true ||
-    retainedCaliforniaPrivacyConfig?.forceGpcVerification === true;
-  const californiaPrivacyCoverageChecklist = deriveCaliforniaPrivacyCoverageChecklist({
-    coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
-    coverageOutcomes: deriveCaliforniaPrivacyCoveragePolicyOutcomes({
-      coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
-      events: scanRecord.events,
-      normalizedConcerns: californiaPrivacyCoverageConcerns,
-      runtimeArtifacts,
-      scanCompleted: scanRecord.scan.status === "completed"
-    }),
-    projectedFindings: allExecutiveFindings,
-    scanCompleted: scanRecord.scan.status === "completed",
-    unifiedFindings: findingEvidenceDiagnostics,
-    withholdDeepCheckOnlyRows: !californiaDeepCheckRequested,
-    withholdForNonRepresentativeScan: executiveAccessLimitationNotice?.finding.id === "scan_quality_visual_no_go"
-  });
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
-    californiaPrivacyArea: {
-      id: "california_ccpa_cpra",
-      rows: californiaPrivacyCoverageChecklist,
-      title: "California privacy"
-    },
     gdprEprivacyArea: {
       id: "gdpr_eprivacy",
       rows: gdprEprivacyCoverageChecklist,
@@ -6377,8 +6338,6 @@ export function SharedScanDetailView({
   );
   const gdprEprivacyExecutiveLens =
     executiveRegulatoryLenses.find((lens) => lens.acronym === "GDPR / ePrivacy") ?? null;
-  const californiaPrivacyExecutiveLens =
-    executiveRegulatoryLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA") ?? null;
   const scanTimeLabel = formatScanTimeLabel({
     completedAt: scanRecord.scan.completedAt,
     createdAt: scanRecord.scan.createdAt,
@@ -6524,7 +6483,7 @@ export function SharedScanDetailView({
           />
           {showRegulatoryChecklistSection ? (
             <RegulatoryChecklistSection
-              headingLabel="Regulatory Diagnostics"
+              headingLabel="GDPR / ePrivacy Evidence Review"
               showAdvancedEvidenceToggle
               tabs={[
                 {
@@ -6539,20 +6498,6 @@ export function SharedScanDetailView({
                   id: "gdpr-eprivacy",
                   label: "GDPR / ePrivacy",
                   shortLabel: "GDPR/ePrivacy"
-                },
-                {
-                  content: (
-                    <CaliforniaPrivacyCoverageChecklistCard
-                      californiaLens={californiaPrivacyExecutiveLens}
-                      defaultOpen
-                      items={californiaPrivacyCoverageChecklist}
-                      showSummaryStrip={false}
-                    />
-                  ),
-                  badgeLabel: "alpha",
-                  id: "california-privacy",
-                  label: "CCPA/CPRA",
-                  shortLabel: "CCPA/CPRA"
                 },
               ]}
             />

@@ -41,21 +41,22 @@ test("v2 scan lab progress slows near completion until redirect finishes", () =>
   assert.ok(overdueProgress <= 96);
 });
 
-test("v2 scan lab uses a WebMD-scale estimate for full planned DAG scans", () => {
+test("v2 scan progress estimates remain core-profile based when consent DAG is requested", () => {
   const estimate = estimateScanProgressForOptions({
     consentDag: true,
     profileValue: "full",
   });
 
-  assert.equal(estimate.modeLabel, "planned DAG scan");
-  assert.equal(estimate.estimatedDurationMs, 55_000);
+  assert.equal(estimate.modeLabel, "full scan");
+  assert.equal(estimate.estimatedDurationMs, 32_000);
 
-  const progressAtOldEstimate = calculateDisplayedScanProgress({
+  const progressAtLateCoreEstimate = calculateDisplayedScanProgress({
     active: true,
     elapsedMs: 26_000,
     estimatedDurationMs: estimate.estimatedDurationMs,
   });
-  assert.ok(progressAtOldEstimate < 60);
+  assert.ok(progressAtLateCoreEstimate >= 78);
+  assert.ok(progressAtLateCoreEstimate <= 86);
 
   const progressAtEstimate = calculateDisplayedScanProgress({
     active: true,
@@ -78,7 +79,7 @@ test("v2 scan lab progress describes the visible scan phase", () => {
   assert.equal(describeScanProgressPhase({
     elapsedMs: 16_000,
     estimatedDurationMs: 26_000,
-  }), "running consent paths");
+  }), "checking policy surfaces");
   assert.equal(describeScanProgressPhase({
     elapsedMs: 22_000,
     estimatedDurationMs: 26_000,

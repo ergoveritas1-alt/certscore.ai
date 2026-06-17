@@ -96,6 +96,7 @@ export function wc01ShadowRowFixture(input: {
         moduleName: sourceModulesRequired[0] ?? "preConsentRuntimeScanner",
         status: input.moduleRunStatus ?? "completed",
         durationMs: 10,
+        errors: input.moduleRunStatus && input.moduleRunStatus !== "completed" ? ["fixture module limitation"] : [],
         errorCount: input.moduleRunStatus && input.moduleRunStatus !== "completed" ? 1 : 0,
       }],
       limitations: input.coverageLimitations ?? [],

@@ -913,7 +913,7 @@ test("projects concrete reject-missing dark-pattern evidence into the umbrella e
   assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });
 
-test("missing consent preference reopen control projects as lifecycle review, not dark-pattern finding", () => {
+test("missing consent preference reopen control stays deferred from production executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("consent_control_not_reopenable", {
       confidenceBand: "moderate",
@@ -950,22 +950,15 @@ test("missing consent preference reopen control projects as lifecycle review, no
     })
   ]);
 
-  const finding = projection.findings.find((entry) => entry.id === "consent_preference_reopen_control_not_observed");
-  assert.ok(finding);
-  assert.equal(finding.label, "Consent preference reopen control not observed");
-  assert.equal(finding.severity, "medium");
-  assert.equal(finding.confidence, "good");
-  assert.equal(finding.directVsInferred, "inferred");
-  assert.match(finding.shortSummary, /Manual review should confirm/i);
-  assert.doesNotMatch(finding.shortSummary, /dark pattern|reject was not available/i);
-  assert.equal(projection.findings.some((entry) => entry.id === "consent_dark_patterns_detected"), false);
   assert.equal(
-    projection.topFindingEligibility.consent_preference_reopen_control_not_observed?.matchedCriteria.includes("runtime_request_anchor"),
+    projection.findings.some((entry) => entry.id === "consent_preference_reopen_control_not_observed"),
     false
   );
+  assert.equal(projection.findings.some((entry) => entry.id === "consent_dark_patterns_detected"), false);
+  assert.equal(projection.topFindings.some((entry) => entry.id === "consent_preference_reopen_control_not_observed"), false);
 });
 
-test("missing consent preference reopen control without consent or tracking context is audit-only", () => {
+test("missing consent preference reopen control without consent or tracking context stays deferred", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("consent_control_not_reopenable", {
       details: { family: "consent_tracking", kind: "consent_control_not_reopenable" },
@@ -993,9 +986,10 @@ test("missing consent preference reopen control without consent or tracking cont
     })
   ]);
 
-  const finding = projection.findings.find((entry) => entry.id === "consent_preference_reopen_control_not_observed");
-  assert.ok(finding);
-  assert.equal(projection.topFindingEligibility.consent_preference_reopen_control_not_observed?.eligibility, "audit_only");
+  assert.equal(
+    projection.findings.some((entry) => entry.id === "consent_preference_reopen_control_not_observed"),
+    false
+  );
   assert.equal(projection.topFindings.some((entry) => entry.id === "consent_preference_reopen_control_not_observed"), false);
 });
 
@@ -2431,7 +2425,7 @@ test("keeps confirmed cookie disclosure gaps in top findings alongside higher-ra
   assert.equal(projection.trace.packets.find((packet) => packet.unifiedFindingId === "cookie_disclosure_gap")?.inTopFindings, true);
 });
 
-test("projects reject-path tracking failure into executive findings with dedicated evidence", () => {
+test("keeps reject-path tracking failure out of executive findings under core posture", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("reject_did_not_reduce_tracking", {
       confidenceBand: "high",
@@ -2516,40 +2510,12 @@ test("projects reject-path tracking failure into executive findings with dedicat
     })
   ]);
 
-  const finding = projection.findings.find((entry) => entry.id === "reject_tracking_persists_after_reject");
-
-  assert.ok(finding);
-  assert.equal(finding?.directVsInferred, "direct");
-  assert.deepEqual(finding?.evidenceDetails?.runtimeRequestUrls, [
-    "https://example.com/baseline.js",
-    "https://example.com/post-reject.js"
-  ]);
-  assert.deepEqual(finding?.evidenceDetails?.counts, {
-    consentBaselineThirdPartyCookieCount: 3,
-    consentOptOutClicks: 1,
-    consentPostRejectThirdPartyCookieCount: 3
-  });
-  assert.ok(finding?.evidenceDetails?.evidenceFlags?.includes("nonessential_vendor_persisted_after_reject"));
-  assert.equal(finding?.evidenceVersion, "1.1");
-  assert.equal(finding?.evidenceDetails?.postRejectEvidence?.trackingPersistedAfterReject, true);
-  assert.deepEqual(finding?.evidenceDetails?.rejectSuppressionOutcome, {
-    firstPostRejectNonEssentialRequestMs: 842,
-    interpretation: "At least one classified non-essential vendor still fired after reject.",
-    nonEssentialVendorsPersistedAfterReject: true,
-    overallTrackingReducedAfterReject: false,
-    persistingNonEssentialVendors: ["Google Ads", "Adobe Analytics"],
-    postRejectNonEssentialRequestCount: 1
-  });
-  assert.equal(finding?.evidenceDetails?.rejectInteraction?.action_type, "reject_all");
-  assert.deepEqual(finding?.evidenceDetails?.policyEvidence, { evaluated: false });
-  assert.equal(finding?.evidenceDetails?.consentInteraction?.action_type, "reject_all");
-  assert.equal(finding?.evidenceDetails?.postRejectNonEssentialRequests?.[0]?.ms_after_reject, 842);
-  assert.equal(finding?.evidenceDetails?.suppressionChecks?.reject_click_confirmed, true);
-  assert.equal(projection.trace.packets[0]?.executiveFindingId, "reject_tracking_persists_after_reject");
-  assert.equal(projection.trace.packets[0]?.inRegulatoryLensInput, true);
+  assert.ok(!projection.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
+  assert.equal(projection.trace.packets[0]?.executiveFindingId, null);
+  assert.equal(projection.trace.packets[0]?.inRegulatoryLensInput, false);
 });
 
-test("projects confirmed reject-path tracking into top findings and regulatory lenses with clean vendor copy", () => {
+test("keeps confirmed reject-path tracking out of top findings and regulatory lenses under core posture", () => {
   const packet = makePacket("reject_did_not_reduce_tracking", {
     confidenceBand: "high",
     details: {
@@ -2593,26 +2559,15 @@ test("projects confirmed reject-path tracking into top findings and regulatory l
     summary: "The consent audit completed a reject interaction, but these tracker vendors still remained after rejection: Google Ads."
   });
   const projection = projectExecutiveFindingsFromUnifiedPackets([packet]);
-  const finding = projection.findings.find((entry) => entry.id === "reject_tracking_persists_after_reject");
+  assert.ok(!projection.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
   const lenses = buildRegulatoryLensesFromUnifiedPackets([packet], {
     beforeConsentCookieCount: 0,
     thirdPartyRequestCount: 0
   });
-  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
-  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
-
-  assert.ok(finding);
-  assert.equal(finding?.shortSummary, "Non-essential tracking requests fired after the reject interaction for Google Ads.");
-  assert.ok(!finding?.shortSummary.includes("{"));
-  assert.ok(projection.topFindings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
-  assert.equal(projection.trace.packets[0]?.inRegulatoryLensInput, true);
-  assert.ok(gdprLens?.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
-  assert.equal(cpraLens?.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"), false);
-  assert.ok(ftcLens?.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
+  assert.equal(lenses.some((lens) => lens.findings.some((entry) => entry.id === "reject_tracking_persists_after_reject")), false);
 });
 
-test("keeps confirmed reject-path tracking in top findings alongside pre-consent and session replay", () => {
+test("keeps confirmed reject-path tracking out of top findings while retaining pre-consent and session replay", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("preconsent_tracking", {
       confidenceBand: "high",
@@ -2664,7 +2619,7 @@ test("keeps confirmed reject-path tracking in top findings alongside pre-consent
 
   assert.ok(projection.topFindings.some((entry) => entry.id === "pre_consent_tracking_detected"));
   assert.ok(projection.topFindings.some((entry) => entry.id === "session_recording_services_detected"));
-  assert.ok(projection.topFindings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
+  assert.ok(!projection.topFindings.some((entry) => entry.id === "reject_tracking_persists_after_reject"));
 });
 
 test("suppresses reject-path tracking projection when post-reject timing is missing", () => {
@@ -4301,7 +4256,7 @@ test("focus-management projection keeps WS01 behavior-reproduced traversal evide
   );
 });
 
-test("projects CPRA CBA opt-out missing into executive findings and top findings", () => {
+test("keeps CPRA CBA opt-out missing out of production executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("preconsent_tracking", {
       confidenceBand: "high",
@@ -4359,31 +4314,14 @@ test("projects CPRA CBA opt-out missing into executive findings and top findings
 
   const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
 
-  assert.ok(finding);
-  assert.equal(finding?.section, "Privacy & Tracking");
-  assert.equal(finding?.severity, "high");
-  assert.equal(finding?.evidenceVersion, "1.1");
-  assert.equal(finding?.label, "CPRA / privacy choice opt-out review signal");
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.result, "absent");
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.optOutSubtype, "opt_out_absent");
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.missingOrAbsent, true);
-  assert.equal(finding?.evidenceDetails?.trackingOrSharingContext?.cbaVendorEvidenceObserved, true);
-  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcScanStateSent, false);
-  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingObserved, "not_determined");
-  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingBasis, "not_tested");
-  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.privacyChoiceCompletenessSubtype, "missing");
-  const policyEvidence = finding?.evidenceDetails?.policyEvidence as Record<string, unknown> | undefined;
-  assert.equal(policyEvidence?.evaluated, false);
-  assert.equal(policyEvidence?.framework, "CPRA");
-  assert.equal(policyEvidence?.policyCbaLanguage, null);
-  assert.ok(projection.topFindings.some((candidate) => candidate.id === "cpra_cba_opt_out_missing"));
-  assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("privacy_choice_control_missing"));
-  assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("cba_vendor_runtime_context"));
-  assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
-  assert.ok(finding?.shortSummary.includes("The Trade Desk"));
+  assert.equal(finding, undefined);
+  assert.equal(projection.topFindings.some((candidate) => candidate.id === "cpra_cba_opt_out_missing"), false);
+  assert.equal(projection.topFindingEligibility.cpra_cba_opt_out_missing, undefined);
+  assert.ok(projection.findings.some((candidate) => candidate.id === "pre_consent_tracking_detected"));
+  assert.ok(projection.findings.some((candidate) => candidate.id === "rtb_cookie_sync_observed"));
 });
 
-test("projects CPRA CBA opt-out subtype for partial privacy choice treatment", () => {
+test("keeps partial CPRA privacy-choice packets out of production executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("cpra_cba_opt_out_missing", {
       confidenceBand: "high",
@@ -4422,44 +4360,18 @@ test("projects CPRA CBA opt-out subtype for partial privacy choice treatment", (
   ]);
   const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
 
-  assert.ok(finding);
-  assert.equal(finding?.severity, "medium");
-  assert.equal(finding?.shortSummary.includes("missing"), false);
-  assert.doesNotMatch(finding?.shortSummary ?? "", /absent|no CPRA-specific opt-out control/i);
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.optOutSubtype, "partial_no_icon");
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.result, "partial_no_icon");
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.privacyChoiceCompletenessSubtype, "incomplete_or_unconfirmed");
-  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.privacyChoiceCompletenessSubtype, "incomplete_or_unconfirmed");
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.missingOrAbsent, false);
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.incompleteOrUnconfirmed, true);
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.choiceControlsInspected, true);
-  assert.equal(finding?.evidenceDetails?.counts?.cbaVendorsObserved, 9);
-  assert.equal(finding?.evidenceDetails?.counts?.optOutControlsObserved, 1);
-  assert.equal(finding?.evidenceDetails?.trackingOrSharingContext?.cbaVendorEvidenceObserved, true);
-  const policyEvidence = finding?.evidenceDetails?.policyEvidence as Record<string, unknown> | undefined;
-  assert.equal(policyEvidence?.evaluated, true);
-  assert.equal(policyEvidence?.policyCbaLanguage, "full_cba_language");
-  assert.equal(policyEvidence?.policyUiCongruent, true);
-  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.policyUiCongruent, true);
-  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcScanStateSent, false);
-  assert.equal(finding?.evidenceDetails?.jurisdictionOrPolicyContext?.gpcHandlingObserved, "not_determined");
-  assert.equal(projection.topFindingEligibility.cpra_cba_opt_out_missing?.eligibility, "top_candidate");
-  assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("privacy_choice_control_observed"));
-  assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.matchedCriteria.includes("cpra_completeness_not_confirmed"));
-  assert.ok(projection.topFindingEligibility.cpra_cba_opt_out_missing?.missingCorroborators.includes("gpc_handling_test"));
-  assert.match(finding?.shortSummary ?? "", /incomplete|not confirmed as CPRA-complete/i);
-  assert.doesNotMatch(finding?.evidenceDetails?.optOutControlEvidence?.basis as string, /missing/i);
+  assert.equal(finding, undefined);
+  assert.equal(projection.topFindingEligibility.cpra_cba_opt_out_missing, undefined);
 });
 
-test("projects CPRA CBA opt-out subtype for generic do-not-sell only", () => {
+test("keeps generic do-not-sell CPRA packets out of production executive findings", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makeCpraPacket({ optOutControlFound: "true", optOutUiResult: "generic_do_not_sell" })
   ]);
   const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
 
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.optOutSubtype, "generic_do_not_sell_only");
-  assert.equal(finding?.evidenceDetails?.optOutControlEvidence?.missingOrAbsent, false);
-  assert.match(finding?.evidenceDetails?.optOutControlEvidence?.basis as string, /Do Not Share|CBA-specific/i);
+  assert.equal(finding, undefined);
+  assert.equal(projection.topFindingEligibility.cpra_cba_opt_out_missing, undefined);
 });
 
 test("projects remaining top finding families with canonical evidence details", () => {

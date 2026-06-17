@@ -90,52 +90,17 @@ export type GdprEprivacyCoverageChecklistInput = {
 
 const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   {
-    id: "pre_consent_cookies_storage",
-    label: "Cookies or storage before consent",
-    explanation: "Whether non-essential cookies or browser storage were observed before a recorded consent action.",
-    findingIds: [
-      "adtech_cookie_pre_consent",
-      "analytics_cookie_pre_consent",
-      "third_party_cookie_pre_consent"
-    ],
-    defaultFindingStatus: "Gap observed",
-    notObservedText: "No pre-consent non-essential cookie or storage finding was surfaced in this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
-    id: "pre_consent_third_party_tracking",
-    label: "Pre-consent third-party tracking",
-    explanation: "Whether analytics, advertising, cross-site measurement, or similar third-party requests were observed before recorded consent.",
-    findingIds: [
-      "preconsent_tracking",
-      "pre_consent_tracking_detected",
-      "third_party_tracking_pre_consent"
-    ],
-    defaultFindingStatus: "Gap observed",
-    notObservedText: "No pre-consent third-party tracking finding was surfaced in this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
     id: "consent_surface_observed",
-    label: "Consent banner / preference surface",
-    explanation: "Whether an actionable cookie/consent banner or preference surface was observed in the tested context.",
+    label: "Consent banner observed",
+    explanation: "Whether an actionable cookie/consent banner or CMP preference surface was observed in the tested context.",
     findingIds: [],
     defaultFindingStatus: "Observed",
-    notObservedText: "No actionable consent surface issue was surfaced from the canonical report findings.",
-    requiresPublicWebCoverage: true
-  },
-  {
-    id: "consent_choice_quality",
-    label: "Consent choice quality",
-    explanation: "Whether an observed GDPR/ePrivacy cookie consent surface provided meaningful, balanced, and granular user choice.",
-    findingIds: [],
-    defaultFindingStatus: "Review signal",
-    notObservedText: "No consent-choice quality outcome was surfaced from retained canonical evidence.",
+    notObservedText: "No actionable GDPR/ePrivacy consent banner or CMP preference surface was retained in this scan context.",
     requiresPublicWebCoverage: true
   },
   {
     id: "reject_all_path_availability",
-    label: "Decline / reject option availability",
+    label: "Reject option observed",
     explanation: "Whether a reject-all or equivalent refusal path was available from the observed consent surface.",
     findingIds: [
       "accept_only_banner",
@@ -150,33 +115,131 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
-    id: "post_reject_tracking_reduction",
-    label: "Tracking after refusal",
-    explanation: "Whether non-essential tracking materially decreased after a reject action was recorded.",
-    findingIds: [
-      "reject_did_not_reduce_tracking",
-      "reject_did_not_reduce_third_party_cookies",
-      "reject_tracking_persists_after_reject"
-    ],
-    defaultFindingStatus: "Gap observed",
-    notObservedText: "No post-reject tracking persistence finding was surfaced in this scan context.",
+    id: "cmp_framework_signal_observed",
+    label: "Consent framework / CMP signal observed",
+    explanation: "Whether a consent-management framework, CMP vendor, or CMP runtime signal was observed in the pre-consent/public-web context.",
+    findingIds: ["consent_surface_observed"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No CMP, consent framework, or consent-management runtime signal was retained in this scan context.",
     requiresPublicWebCoverage: true
   },
   {
-    id: "preference_withdrawal_control",
-    label: "Post-choice consent controls",
-    explanation: "Whether CertScore observed a way to reopen or change consent preferences after the initial choice.",
+    id: "cookie_notice_policy_availability",
+    label: "Cookie notice / cookie policy availability",
+    explanation: "Whether a cookie notice, cookie policy, cookie settings surface, or equivalent cookie disclosure surface was retained.",
+    findingIds: ["cookie_policy_present"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No reachable cookie notice, cookie policy, or cookie-settings disclosure surface was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "pre_consent_cookies_storage",
+    label: "Pre-consent cookies/storage observed",
+    explanation: "Whether non-essential cookies or browser storage were observed before a recorded consent action.",
     findingIds: [
-      "consent_control_not_reopenable",
-      "consent_preference_reopen_control_not_observed"
+      "adtech_cookie_pre_consent",
+      "analytics_cookie_pre_consent",
+      "third_party_cookie_pre_consent"
     ],
     defaultFindingStatus: "Gap observed",
-    notObservedText: "No consent preference reopen-control finding was surfaced in this scan context.",
+    notObservedText: "No pre-consent non-essential cookie or storage finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "pre_consent_third_party_tracking",
+    label: "Pre-consent third-party tracking observed",
+    explanation: "Whether analytics, advertising, cross-site measurement, or similar third-party requests were observed before recorded consent.",
+    findingIds: [
+      "preconsent_tracking",
+      "pre_consent_tracking_detected",
+      "third_party_tracking_pre_consent"
+    ],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No pre-consent third-party tracking finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "analytics_vendor_observed",
+    label: "Analytics vendor observed",
+    explanation: "Whether analytics or measurement vendors were observed in retained pre-consent/public-web runtime evidence.",
+    findingIds: [
+      "analytics_cookie_pre_consent",
+      "preconsent_tracking",
+      "pre_consent_tracking_detected",
+      "third_party_tracking_pre_consent"
+    ],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No analytics or measurement vendor finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "session_replay_fingerprinting_review",
+    label: "Session replay signal observed",
+    explanation: "Whether session replay, behavioral recording, or behavioral analytics signals were observed in the tested pre-consent/public-web context.",
+    findingIds: [
+      "possible_session_replay_on_sensitive_input_surface",
+      "session_replay_observed",
+      "session_replay_present_with_sensitive_surfaces_observed",
+      "session_recording_services_detected"
+    ],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No session replay or fingerprinting-related finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "device_identification_fingerprinting_signal_observed",
+    label: "Device identification / fingerprinting signal observed",
+    explanation: "Whether browser/device entropy, fingerprinting, or identifier-like device collection signals were observed in retained runtime evidence.",
+    findingIds: [
+      "device_data_collection_detected",
+      "fingerprinting_observed",
+      "fingerprinting_related_signals_observed",
+      "probable_fingerprinting",
+      "telemetry_rich_identification_observed"
+    ],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No device identification, entropy, or fingerprinting-related finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "collection_surface_observed",
+    label: "Collection surface observed",
+    explanation: "Whether a form, input, newsletter, account, checkout, contact, or other collection surface was retained in public-web evidence.",
+    findingIds: ["sensitive_collection_surface_observed"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No public-web collection surface finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "privacy_notice_availability",
+    label: "Privacy notice availability",
+    explanation: "Whether a reachable privacy notice or privacy policy surface was retained for the scanned site.",
+    findingIds: ["privacy_policy_present"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No reachable privacy notice or privacy policy finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "legal_basis_disclosure_observed",
+    label: "Legal basis disclosure observed",
+    explanation: "Whether retained privacy-policy evidence included a canonical legal-basis disclosure signal.",
+    findingIds: ["legal_basis_disclosure_present"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No canonical legal-basis disclosure evidence was retained for this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "retention_disclosure_observed",
+    label: "Retention disclosure observed",
+    explanation: "Whether retained privacy-policy evidence included a data-retention disclosure signal.",
+    findingIds: ["retention_disclosure_present"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No canonical retention disclosure evidence was retained for this scan context.",
     requiresPublicWebCoverage: true
   },
   {
     id: "runtime_vendor_disclosure_alignment",
-    label: "Runtime vendor disclosure mismatch",
+    label: "Runtime vendor vs disclosure alignment",
     explanation: "Whether observed runtime vendors were clearly matched by name or known domain alias in reviewed public privacy/cookie disclosures.",
     findingIds: [
       "cookie_disclosure_gap",
@@ -191,6 +254,40 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
+    id: "consent_choice_quality",
+    label: "Consent choice quality",
+    explanation: "Deferred from the current production core scanner; retained consent-choice quality evidence is review context, not production consent-path validation.",
+    findingIds: [],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No consent-choice quality outcome was surfaced from retained canonical evidence.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "post_reject_tracking_reduction",
+    label: "Post-choice tracking reduction",
+    explanation: "Deferred from the current production core scanner; retained post-choice tracking evidence is review context, not a production gap conclusion.",
+    findingIds: [
+      "reject_did_not_reduce_tracking",
+      "reject_did_not_reduce_third_party_cookies",
+      "reject_tracking_persists_after_reject"
+    ],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "Post-choice tracking reduction is deferred from the current production core scanner.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "preference_withdrawal_control",
+    label: "Post-choice consent controls",
+    explanation: "Deferred from the current production core scanner; retained post-choice control evidence is review context, not production consent-path validation.",
+    findingIds: [
+      "consent_control_not_reopenable",
+      "consent_preference_reopen_control_not_observed"
+    ],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No consent preference reopen-control finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
     id: "sensitive_surfaces_third_party_tracking",
     label: "Sensitive surfaces with third-party tracking",
     explanation: "Whether forms or sensitive flows appeared alongside third-party tracking or measurement scripts.",
@@ -200,59 +297,6 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     ],
     defaultFindingStatus: "Review signal",
     notObservedText: "No sensitive-surface third-party tracking finding was surfaced in this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
-    id: "session_replay_fingerprinting_review",
-    label: "Session replay / behavioral analytics",
-    explanation: "Whether session replay, behavioral recording, or behavioral analytics signals were observed in the tested context.",
-    findingIds: [
-      "fingerprinting_observed",
-      "fingerprinting_related_signals_observed",
-      "possible_session_replay_on_sensitive_input_surface",
-      "probable_fingerprinting",
-      "session_replay_observed",
-      "session_replay_present_with_sensitive_surfaces_observed",
-      "session_recording_services_detected"
-    ],
-    defaultFindingStatus: "Review signal",
-    notObservedText: "No session replay or fingerprinting-related finding was surfaced in this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
-    id: "session_replay_before_consent",
-    label: "Session replay before consent",
-    explanation: "Whether session replay or behavioral recording collection was observed before a recorded consent action.",
-    findingIds: [],
-    defaultFindingStatus: "Gap observed",
-    notObservedText: "No pre-consent session replay collection signal was retained in this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
-    id: "session_replay_disclosure_alignment",
-    label: "Session replay disclosure alignment",
-    explanation: "Whether observed session replay or behavioral analytics vendors were clearly disclosed in reviewed privacy/cookie surfaces.",
-    findingIds: [],
-    defaultFindingStatus: "Gap observed",
-    notObservedText: "No session replay disclosure mismatch was retained in this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
-    id: "session_replay_sensitive_surface",
-    label: "Session replay on sensitive surfaces",
-    explanation: "Whether session replay or behavioral analytics was observed on the same page or flow as a sensitive collection surface.",
-    findingIds: [],
-    defaultFindingStatus: "Gap observed",
-    notObservedText: "No same-context sensitive-surface session replay signal was retained in this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
-    id: "session_replay_after_refusal",
-    label: "Session replay after refusal / opt-out",
-    explanation: "Whether session replay or behavioral analytics persisted after a successful reject or opt-out action proof.",
-    findingIds: [],
-    defaultFindingStatus: "Gap observed",
-    notObservedText: "No action-proof-gated post-refusal session replay persistence signal was retained in this scan context.",
     requiresPublicWebCoverage: true
   },
   {
@@ -270,11 +314,91 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "accessibility_consent_controls",
-    label: "Accessibility of consent controls",
-    explanation: "Whether consent controls appeared reachable and understandable through basic automated accessibility checks.",
+    label: "Accessibility of privacy/consent controls",
+    explanation: "Whether privacy or consent controls appeared reachable and understandable through basic automated accessibility checks.",
     findingIds: [],
     defaultFindingStatus: "Review signal",
-    notObservedText: "No consent-control accessibility finding was surfaced in this scan context.",
+    notObservedText: "No privacy/consent-control accessibility finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "controller_contact_disclosure",
+    label: "Controller/contact disclosure observed",
+    explanation: "Whether retained privacy-policy evidence included a controller, privacy contact, or equivalent contact point.",
+    findingIds: ["privacy_contact_path_present"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No canonical controller or privacy-contact disclosure evidence was retained for this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "processing_purposes_disclosure",
+    label: "Processing purposes disclosure observed",
+    explanation: "Whether retained privacy-policy evidence described the purposes for processing personal data.",
+    findingIds: ["purpose_of_use_disclosure_missing"],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No canonical processing-purpose disclosure evidence was retained for this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "recipients_vendor_categories_disclosure",
+    label: "Recipients/vendor categories disclosed",
+    explanation: "Whether retained privacy-policy evidence described recipient, vendor, or third-party categories.",
+    findingIds: [
+      "third_party_advertising_disclosure_present",
+      "third_party_recipient_disclosure_missing",
+      "tracking_technologies_disclosure_present"
+    ],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No canonical recipient or vendor-category disclosure evidence was retained for this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "data_subject_rights_disclosure",
+    label: "Data subject rights disclosure observed",
+    explanation: "Whether retained privacy-policy evidence described data subject rights or a rights request path.",
+    findingIds: ["privacy_rights_path_present", "missing_dsar_mechanism", "missing_dsar_high_exposure"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No canonical data-subject-rights disclosure evidence was retained for this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "international_transfers_disclosure",
+    label: "International transfer disclosure observed",
+    explanation: "Whether retained privacy-policy evidence described international transfers or transfer-relevant endpoint/vendor context.",
+    findingIds: [
+      "cross_border_endpoint_transfer_review_signal",
+      "cross_border_vendor_disclosure_gap",
+      "missing_transfer_disclosure"
+    ],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No canonical international-transfer disclosure or endpoint review evidence was retained for this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "dpo_contact_point_disclosure",
+    label: "DPO/contact point",
+    explanation: "Whether retained privacy-policy evidence identified a DPO, privacy office, or data-protection contact point.",
+    findingIds: ["privacy_contact_path_present"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No canonical DPO or data-protection contact point evidence was retained for this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "supervisory_authority_complaint_disclosure",
+    label: "Supervisory authority complaint",
+    explanation: "Whether retained privacy-policy evidence referenced a right to complain to a supervisory authority.",
+    findingIds: ["supervisory_authority_disclosure_present"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No canonical supervisory-authority complaint disclosure evidence was retained for this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "automated_decision_making_profiling_disclosure",
+    label: "Automated decision-making/profiling",
+    explanation: "Whether retained privacy-policy evidence disclosed automated decision-making or profiling where found.",
+    findingIds: ["automated_decision_profiling_disclosure_present"],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No canonical automated decision-making or profiling disclosure evidence was retained for this scan context.",
     requiresPublicWebCoverage: true
   }
 ];
@@ -284,7 +408,7 @@ const SESSION_REPLAY_CHILD_ROW_LABELS = new Map([
   ["session_replay_before_consent", "Before consent"],
   ["session_replay_disclosure_alignment", "Disclosure alignment"],
   ["session_replay_sensitive_surface", "Sensitive surfaces"],
-  ["session_replay_after_refusal", "After refusal / opt-out"]
+  ["session_replay_after_refusal", "Post-choice persistence"]
 ]);
 const SESSION_REPLAY_CHILD_ROW_IDS = new Set(SESSION_REPLAY_CHILD_ROW_LABELS.keys());
 
@@ -407,7 +531,7 @@ function getMissingEvidenceNeeded(input: {
     case "consent_choice_quality":
       return "Confirmed granular preference center evidence, purpose/vendor choices, default toggle states, save choices, and accept/reject visual parity.";
     case "post_reject_tracking_reduction":
-      return "Confirmed reject interaction and retained post-reject request/cookie comparison window.";
+      return "Post-choice consent-flow automation is deferred from the production core scanner; use retained evidence only as analyst review context.";
     case "preference_withdrawal_control":
       return "Cookie preference center, cookie-category controls, or consent-withdrawal control tied to GDPR/ePrivacy cookie consent.";
     case "runtime_vendor_disclosure_alignment":
@@ -1421,9 +1545,9 @@ function specializeSessionReplayChecklistRow(input: {
   if (entropyOnlyReview && input.status === "Review signal") {
     return {
       evidenceRefs: input.evidenceRefs,
-      explanation: "Browser/device entropy evidence was retained for review, but no session replay vendor, replay collection endpoint, entropy transmission, identifier linkage, or known fingerprinting library was retained.",
-      label: "Browser/device entropy review signal",
-      status: "Review signal" as const
+      explanation: "No eligible session replay or behavioral recording vendor was observed in the tested context. Browser/device entropy evidence is evaluated separately in the device identification row.",
+      label: input.definition.label,
+      status: "Not observed" as const
     };
   }
 
@@ -1524,7 +1648,7 @@ function specializeChecklistRow(input: {
       evidenceRefs: input.evidenceRefs,
       explanation:
         `Advertising and analytics requests fired before a recorded consent choice${vendors.length > 0 ? `, including ${formatVendorPhrase(vendors)}` : ""}. This is a consent timing/enforcement gap even when a consent banner and reject path are present.`,
-      label: "Advertising and analytics before consent",
+      label: input.definition.label,
       status: "Gap observed" as const
     };
   }
@@ -1537,8 +1661,19 @@ function specializeChecklistRow(input: {
       evidenceRefs: input.evidenceRefs,
       explanation:
         `Storage or cookie evidence was observed before a recorded consent choice${vendorPhrase ? ` for ${vendorPhrase}` : ""}${domainPhrase ? ` on ${domainPhrase}` : ""}. This row is limited to concrete storage/cookie evidence and does not imply every observed runtime vendor wrote storage.`,
-      label: "Storage before consent observed",
+      label: input.definition.label,
       status: "Gap observed" as const
+    };
+  }
+
+  if (input.definition.id === "device_identification_fingerprinting_signal_observed" && input.status === "Review signal") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation:
+        input.coverageOutcome?.limitation ??
+        "Browser/device entropy, fingerprinting, or identifier-like device collection evidence was retained for review.",
+      label: input.definition.label,
+      status: "Review signal" as const
     };
   }
 
@@ -1842,7 +1977,11 @@ const RUNTIME_TIMING_ROW_FLAG_ALLOWLIST = [
 ];
 
 function isRuntimeTimingRow(rowId: string) {
-  return rowId === "pre_consent_third_party_tracking" || rowId === "session_replay_fingerprinting_review";
+  return (
+    rowId === "pre_consent_third_party_tracking" ||
+    rowId === "session_replay_fingerprinting_review" ||
+    rowId === "device_identification_fingerprinting_signal_observed"
+  );
 }
 
 function getFindingEntityPreview(rowId: string, finding: UnifiedFindingDisplayPacket) {
@@ -2527,7 +2666,17 @@ export function deriveGdprEprivacyCoverageChecklist(
   const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
 
   const rows = CHECKLIST_ROWS.map((definition) => {
-    const coverageOutcome = input.coverageOutcomes?.[definition.id];
+    const directCoverageOutcome = input.coverageOutcomes?.[definition.id];
+    const combinedReplayFingerprintingOutcome = input.coverageOutcomes?.[SESSION_REPLAY_PARENT_ROW_ID];
+    const coverageOutcome =
+      definition.id === "device_identification_fingerprinting_signal_observed" &&
+      !directCoverageOutcome &&
+      (
+        Boolean(getBrowserDeviceEntropyEvidenceFromOutcome(combinedReplayFingerprintingOutcome)) ||
+        combinedReplayFingerprintingOutcome?.criticalEvidence.retainedEvidence.fingerprintingObserved === true
+      )
+        ? combinedReplayFingerprintingOutcome
+        : directCoverageOutcome;
     const matchingFindings = definition.findingIds.flatMap((id) => {
       const finding = findingsById.get(id);
       return finding && isFindingEligibleForCoverageRow(definition.id, finding) ? [finding] : [];

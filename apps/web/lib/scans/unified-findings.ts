@@ -5001,10 +5001,15 @@ type PolicyEnrichmentFindingSupportRule = {
     | "cookie_policy_present"
     | "privacy_rights_path_present"
     | "privacy_contact_path_present"
+    | "legal_basis_disclosure_present"
+    | "retention_disclosure_present"
     | "gpc_disclosure_present"
     | "tracking_technologies_disclosure_present"
+    | "third_party_advertising_disclosure_present"
     | "targeted_advertising_disclosure_present"
     | "behavioral_analytics_disclosure_present"
+    | "supervisory_authority_disclosure_present"
+    | "automated_decision_profiling_disclosure_present"
     | "children_privacy_disclosure_present"
     | "arbitration_clause_present";
   rationale: string;
@@ -5170,6 +5175,14 @@ const POLICY_ENRICHMENT_FINDING_SUPPORT_RULES: PolicyEnrichmentFindingSupportRul
     rationale: "Surfaced because structured policy evidence retained a clear privacy contact path."
   },
   {
+    findingId: "legal_basis_disclosure_present",
+    rationale: "Surfaced because structured policy evidence retained a legal-basis disclosure."
+  },
+  {
+    findingId: "retention_disclosure_present",
+    rationale: "Surfaced because structured policy evidence retained a data-retention disclosure."
+  },
+  {
     findingId: "gpc_disclosure_present",
     rationale: "Surfaced because structured policy evidence retained a clear disclosure about GPC handling."
   },
@@ -5185,6 +5198,14 @@ const POLICY_ENRICHMENT_FINDING_SUPPORT_RULES: PolicyEnrichmentFindingSupportRul
   {
     findingId: "behavioral_analytics_disclosure_present",
     rationale: "Surfaced because structured policy evidence retained a disclosure about behavioral analytics or replay-style monitoring."
+  },
+  {
+    findingId: "supervisory_authority_disclosure_present",
+    rationale: "Surfaced because structured policy evidence retained a supervisory-authority complaint disclosure."
+  },
+  {
+    findingId: "automated_decision_profiling_disclosure_present",
+    rationale: "Surfaced because structured policy evidence retained an automated decision-making or profiling disclosure."
   },
   {
     findingId: "children_privacy_disclosure_present",
@@ -5211,6 +5232,16 @@ const POLICY_ENRICHMENT_POSITIVE_SNIPPET_SELECTORS: Record<string, Array<string 
     /privacy_choices/i
   ],
   privacy_contact_path_present: ["privacy_contact", "notice_contact", "dsar", /privacy.*contact/i],
+  legal_basis_disclosure_present: [
+    "topic:legal_basis",
+    "legal_basis",
+    /legal basis|lawful basis|legitimate interests?|contractual necessity|consent as (?:a )?legal basis|public interest|vital interests?/i
+  ],
+  retention_disclosure_present: [
+    "topic:retention",
+    "retention",
+    /retain|retention|kept for|keep your (?:personal )?(?:data|information)|storage period|as long as necessary/i
+  ],
   privacy_rights_path_present: [
     "dsar",
     "access",
@@ -5246,6 +5277,18 @@ const POLICY_ENRICHMENT_POSITIVE_SNIPPET_SELECTORS: Record<string, Array<string 
     "behavioral_analytics_disclosure",
     "product_analytics_disclosure",
     /session_replay|behavioral_analytics|product_analytics|tracking_technologies/i
+  ],
+  supervisory_authority_disclosure_present: [
+    "topic:supervisory_authority",
+    "supervisory_authority",
+    /supervisory authority|data protection authority|complain to (?:a )?(?:regulator|authority)|lodge a complaint/i
+  ],
+  automated_decision_profiling_disclosure_present: [
+    "topic:automated_decision_making",
+    "topic:profiling",
+    "automated_decision_making",
+    "profiling",
+    /automated decision|solely automated|profiling|meaningful information about the logic/i
   ],
   children_privacy_disclosure_present: ["topic:children", "children", /children|child|minor|under_13/i],
   arbitration_clause_present: ["arbitration", /arbitration|dispute/i]
@@ -5747,6 +5790,14 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Keep the privacy contact path easy to find and make sure the listed email, form, or portal stays current.",
     whyThisMatters: "A clear privacy contact path makes it easier for people to ask privacy questions or reach the site owner about data-handling concerns."
   },
+  legal_basis_disclosure_present: {
+    suggestedFix: "Keep the legal-basis explanation specific to the main processing purposes and update it when purposes or vendors change.",
+    whyThisMatters: "A visible legal-basis disclosure helps people and reviewers understand the stated basis for processing personal data."
+  },
+  retention_disclosure_present: {
+    suggestedFix: "Keep the retention explanation specific enough to show how long personal data is kept or how retention periods are determined.",
+    whyThisMatters: "A visible retention disclosure helps people understand how long their data may remain in use or storage."
+  },
   privacy_policy_present: {
     suggestedFix: "Keep the privacy policy linked from stable footer, legal, or help surfaces and make sure the destination remains crawlable.",
     whyThisMatters: "A visible privacy policy surface helps users and reviewers find the site's core notice and data-handling disclosures."
@@ -5818,6 +5869,14 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   behavioral_analytics_disclosure_present: {
     suggestedFix: "Keep the behavioral-analytics disclosure aligned with the actual tooling, pages, and monitoring practices the site uses.",
     whyThisMatters: "A public disclosure about behavioral analytics or replay-style tooling helps users and reviewers understand when more detailed interaction monitoring may occur."
+  },
+  supervisory_authority_disclosure_present: {
+    suggestedFix: "Keep the supervisory-authority complaint language easy to find in the privacy notice and aligned with the jurisdictions the notice addresses.",
+    whyThisMatters: "A visible supervisory-authority complaint disclosure helps people understand escalation options described by the notice."
+  },
+  automated_decision_profiling_disclosure_present: {
+    suggestedFix: "Keep automated decision-making or profiling language aligned with actual profiling, personalization, or automated assessment practices.",
+    whyThisMatters: "A visible profiling disclosure helps people understand whether automated processing may materially affect their experience or rights."
   },
   children_privacy_disclosure_present: {
     suggestedFix: "Keep the children's privacy disclosure easy to find and aligned with the site's current age-related practices and contact paths.",

@@ -13,7 +13,6 @@ const staticPaths = [
   "/guides",
   "/regulatory",
   "/gdpr",
-  "/ccpa",
   "/ftc",
   "/accessibility",
   "/benchmarks",

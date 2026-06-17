@@ -164,6 +164,7 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
     snapshot.consentWithdrawalMechanismPresent === true
   );
   pushBoolean("privacy", "privacy.subprocessor_list_present", "Subprocessor list present", snapshot.subprocessorListPresent);
+  pushBoolean("privacy", "privacy.retention_disclosure_present", "Retention disclosure present", snapshot.mentionsDataRetention === true);
   pushNumber("privacy", "privacy.tracker_count_total", "Tracker vendors detected", snapshot.trackerCountTotal);
   pushNumber(
     "privacy",

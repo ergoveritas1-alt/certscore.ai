@@ -269,9 +269,8 @@ export function DomainScanForm({
   const [localExtensionStatus, setLocalExtensionStatus] = useState<Bx01Status | null>(null);
   const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [californiaDeepCheck, setCaliforniaDeepCheck] = useState(false);
   const [freshRescan, setFreshRescan] = useState(false);
-  const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("full");
+  const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(false);
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
   const isSubmittingRef = useRef(false);
@@ -415,13 +414,6 @@ export function DomainScanForm({
 
       const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
         body: JSON.stringify({
-          californiaPrivacy:
-            mode === "full" && californiaDeepCheck
-              ? {
-                  exercisePrivacyChoicePath: true,
-                  forceGpcVerification: true
-                }
-              : undefined,
           domain: submittedDomain,
           forceNewScan: mode === "full" ? freshRescan : false,
           localV2ScanProfile,
@@ -532,7 +524,6 @@ export function DomainScanForm({
           {mode === "full" ? (
             <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
               <ScanFromSelect
-                californiaDeepCheckValue={californiaDeepCheck}
                 compact={compact}
                 freshRescanValue={freshRescan}
                 includeLocalV2ScanProfileOption
@@ -540,7 +531,6 @@ export function DomainScanForm({
                 includeLocalExtension={allowLocalExtensionScan}
                 localV2ScanProfileValue={localV2ScanProfile}
                 localV2RunViaLambdaValue={localV2RunViaLambda}
-                onCaliforniaDeepCheckChange={setCaliforniaDeepCheck}
                 onChange={setScanFrom}
                 onFreshRescanChange={setFreshRescan}
                 onLocalV2ScanProfileChange={(value) => setLocalV2ScanProfile(normalizeLocalV2ScanProfile(value))}

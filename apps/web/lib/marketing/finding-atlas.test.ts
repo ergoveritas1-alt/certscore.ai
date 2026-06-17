@@ -60,7 +60,6 @@ const CONSENT_UI_BATCH_FINDING_IDS = [
 
 const RUNTIME_TRACKING_BATCH_FINDING_IDS = [
   "third_party_cookie_pre_consent",
-  "reject_tracking_persists_after_reject",
   "rtb_cookie_sync_observed",
   "cross_domain_identifier_sharing_observed"
 ] as const;
@@ -73,7 +72,6 @@ const SESSION_REPLAY_BATCH_FINDING_IDS = [
 ] as const;
 
 const FINGERPRINTING_BATCH_FINDING_IDS = [
-  "fingerprinting_related_signals_observed",
   "probable_fingerprinting"
 ] as const;
 
@@ -86,9 +84,16 @@ const REVIEWED_FINDING_REFERENCE_IDS = [
   ...SESSION_REPLAY_BATCH_FINDING_IDS,
   ...FINGERPRINTING_BATCH_FINDING_IDS,
   "cookie_disclosure_gap",
-  "cpra_cba_opt_out_missing",
   "policy_behavior_contradiction_detected"
 ] as const;
+
+const EXECUTIVE_SUMMARY_TOP_FINDING_ID_STRINGS: readonly string[] = EXECUTIVE_SUMMARY_TOP_FINDING_IDS;
+const PUBLIC_FINDING_REFERENCE_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_ID_STRINGS.filter(
+  (findingId) => findingId !== "scan_quality_visual_no_go" && findingId !== "cpra_cba_opt_out_missing"
+);
+const PUBLIC_HOMEPAGE_CAROUSEL_FINDING_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_ID_STRINGS.filter(
+  (findingId) => findingId !== "cpra_cba_opt_out_missing"
+);
 
 function parseHomepageCarouselCopyIds() {
   const source = readFileSync("apps/web/components/marketing/homepage-findings-overview.tsx", "utf8");
@@ -139,13 +144,11 @@ test("homepage finding examples align with each finding subtype", () => {
   assert.match(findings.get("cookie_disclosure_gap")?.exampleEvidence[0]?.code ?? "", /runtime_vendor_not_disclosed/);
   assert.match(findings.get("long_lived_cookie_retention_review")?.exampleEvidence[0]?.code ?? "", /artifact=cookie_retention_001/);
   assert.match(findings.get("long_lived_cookie_retention_review")?.exampleEvidence[0]?.code ?? "", /CertScore product review threshold/);
-  assert.match(findings.get("reject_tracking_persists_after_reject")?.exampleEvidence[0]?.code ?? "", /artifact=req_002/);
   assert.match(findings.get("rtb_cookie_sync_observed")?.exampleEvidence[0]?.code ?? "", /artifact=req_003/);
   assert.match(findings.get("cross_domain_identifier_sharing_observed")?.exampleEvidence[0]?.code ?? "", /artifact=req_004/);
   assert.match(findings.get("session_recording_services_detected")?.exampleEvidence[0]?.code ?? "", /artifact=req_005/);
   assert.match(findings.get("possible_session_replay_on_sensitive_input_surface")?.exampleEvidence[0]?.code ?? "", /artifact=replay_sensitive_001/);
   assert.match(findings.get("sensitive_data_collection_with_third_party_tracking_present")?.exampleEvidence[0]?.code ?? "", /artifact=sensitive_tracking_001/);
-  assert.match(findings.get("fingerprinting_related_signals_observed")?.exampleEvidence[0]?.code ?? "", /artifact=fingerprint_related_001/);
   assert.match(findings.get("probable_fingerprinting")?.exampleEvidence[0]?.code ?? "", /artifact=fingerprint_cluster_001/);
   assert.match(findings.get("reject_option_missing_or_hidden")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_001/);
   assert.match(findings.get("forced_consent_interaction")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_002/);
@@ -157,17 +160,42 @@ test("homepage finding examples align with each finding subtype", () => {
 test("finding reference index is exactly the official executive top findings", () => {
   assert.deepEqual(
     getFindingReferenceItems().map((finding) => finding.id),
-    [...EXECUTIVE_SUMMARY_TOP_FINDING_IDS]
+    [...PUBLIC_FINDING_REFERENCE_IDS]
   );
 });
 
 test("homepage mini findings carousel copy covers only official executive top findings", () => {
   const homepageSource = readFileSync("apps/web/app/(marketing)/page.tsx", "utf8");
-  const expectedIds = [...EXECUTIVE_SUMMARY_TOP_FINDING_IDS].sort();
+  const expectedIds = [...PUBLIC_HOMEPAGE_CAROUSEL_FINDING_IDS].sort();
 
   assert.match(homepageSource, /const findings = getFindingReferenceItems\(\);/);
   assert.match(homepageSource, /<HomepageFindingsOverview findings=\{findings\} \/>/);
   assert.deepEqual(parseHomepageCarouselCopyIds().sort(), expectedIds);
+});
+
+test("public finding references omit deferred CCPA/CPRA context", () => {
+  const publicText = getFindingReferenceItems().flatMap((finding) => [
+    finding.id,
+    finding.title,
+    finding.regulatoryContext?.label ?? "",
+    finding.regulatoryContext?.displayCaution ?? "",
+    finding.regulatoryContext?.primaryConcern.label ?? "",
+    finding.regulatoryContext?.primaryConcern.displayCopy ?? "",
+    ...(finding.regulatoryContext?.technicalStandards ?? []).flatMap((item) => [
+      item.id,
+      item.label,
+      item.appliesWhen,
+      ...item.sourceRefs
+    ]),
+    ...(finding.regulatoryContext?.jurisdictionalContexts ?? []).flatMap((item) => [
+      item.id,
+      item.label,
+      item.appliesWhen,
+      ...item.sourceRefs
+    ])
+  ]).join("\n");
+
+  assert.doesNotMatch(publicText, /CCPA|CPRA|California|CPPA|Do Not Sell|Do Not Share|sale\/share/i);
 });
 
 test("homepage finding samples use the active finding id and label", () => {
@@ -203,9 +231,7 @@ test("disclosure and policy alignment findings expose regulatory lens badges", (
   ].join(" ");
 
   assert.match(cookieLabels, /GDPR|ePrivacy|PECR/i);
-  assert.match(cookieLabels, /CCPA|CPRA/i);
   assert.match(policyLabels, /GDPR|ePrivacy|PECR/i);
-  assert.match(policyLabels, /CCPA|CPRA/i);
   assert.match(policyLabels, /FTC|consumer protection|privacy claim/i);
 });
 
@@ -318,7 +344,6 @@ test("finding atlas index groups all reviewed findings with registry context", (
   assert.match(source, /Consent and choice architecture/);
   assert.match(source, /Third-party tracking and adtech/);
   assert.match(source, /Fingerprinting and device signals/);
-  assert.match(source, /Privacy choice \/ CPRA/);
   assert.match(source, /finding\.category[\s\S]*formatChipLabel\(finding\.criticality\)[\s\S]*finding\.benchmark\.contextLabel/);
 
   for (const findingId of REVIEWED_FINDING_REFERENCE_IDS) {
@@ -335,10 +360,9 @@ test("reference notes include content currency note", () => {
 test("finding atlas browser uses family-aware evidence footer text", () => {
   const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
 
-  assert.match(source, /Evidence levels explain how CertScore treats retained accessibility artifacts\. They are not legal conclusions\./);
-  assert.match(source, /Evidence levels explain how CertScore treats retained consent-surface artifacts\. They are not legal conclusions\./);
-  assert.match(source, /Evidence levels explain how CertScore treats retained runtime artifacts\. They are not legal conclusions\./);
-  assert.match(source, /Evidence levels explain how CertScore treats retained public-surface and runtime artifacts\. They are not legal conclusions\./);
+  assert.match(source, /Evidence levels explain how CertScore\.ai treats retained accessibility artifacts\. They are not legal conclusions\./);
+  assert.match(source, /Evidence levels explain how CertScore\.ai treats retained consent-surface artifacts\. They are not legal conclusions\./);
+  assert.match(source, /Evidence levels explain how CertScore\.ai treats retained runtime artifacts\. They are not legal conclusions\./);
 });
 
 test("finding atlas browser uses clearer regulatory labels", () => {
@@ -355,8 +379,7 @@ test("fingerprinting relationship callouts render only for the fingerprinting pa
   const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
 
   assert.match(source, /FINGERPRINTING_RELATIONSHIP_COPY/);
-  assert.match(source, /lower-tier fingerprinting\/device-signal review signal/);
-  assert.match(source, /higher-tier fingerprinting\/device-signal review signal/);
+  assert.match(source, /clustered set of high-entropy browser or device signals/);
   assert.match(source, /const copy = FINGERPRINTING_RELATIONSHIP_COPY\[finding\.id\]/);
 });
 
@@ -364,14 +387,12 @@ test("common remediation approaches and prevalence notes are targeted", () => {
   const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
   const remediationIds = [
     "pre_consent_tracking_detected",
-    "reject_tracking_persists_after_reject",
     "rtb_cookie_sync_observed",
     "probable_fingerprinting",
     "sensitive_data_collection_with_third_party_tracking_present"
   ];
   const prevalenceIds = [
     "pre_consent_tracking_detected",
-    "reject_tracking_persists_after_reject",
     "rtb_cookie_sync_observed",
     "probable_fingerprinting"
   ];
@@ -662,75 +683,6 @@ test("consent UI related reading remains consent and privacy-choice specific", (
   assert.match(source, /retained consent-surface artifacts/);
 });
 
-test("CPRA privacy choice finding uses evidence-first public reference copy", () => {
-  const finding = getFindingReferenceItems().find((item) => item.id === "cpra_cba_opt_out_missing");
-  const source = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
-
-  assert.ok(finding);
-  assert.equal(finding.id, "cpra_cba_opt_out_missing");
-  assert.equal(finding.title, "CPRA / privacy choice opt-out review signal");
-  assert.notEqual(finding.title, "CPRA CBA opt-out missing");
-  assert.equal(finding.category, "Disclosure gaps");
-  assert.equal(finding.sample.sourceLabel, "Illustrative public evidence sample");
-  assert.equal(finding.sample.payload.criticality, finding.criticality);
-  assert.match(finding.observed, /Retained public-surface and runtime evidence/);
-  assert.match(finding.observed, /cross-context behavioral advertising/);
-  assert.match(finding.detectionMethodology, /does not determine legal status, CPRA applicability, sale\/share status, cross-context behavioral advertising status, opt-out failure, GPC handling, or compliance status/);
-  assert.match(finding.confidenceSemantics, /Good when retained evidence includes advertising or sale\/share-related review signals/);
-  assert.match(finding.confidenceSemantics, /Manual review is still needed/);
-  assert.ok(finding.evidenceStandard);
-  assert.deepEqual(Object.keys(finding.evidenceStandard), ["strong", "good", "auditOnly", "insufficient"]);
-  assert.match(finding.evidenceStandard.strong.join(" "), /Retained evidence includes public page URL/);
-  assert.match(finding.evidenceStandard.good.join(" "), /manual review/);
-  assert.match(finding.evidenceStandard.auditOnly.join(" "), /retained evidence/);
-  assert.match(finding.evidenceStandard.insufficient.join(" "), /Vendor name alone/);
-  assert.match(finding.exampleEvidence.map((example) => example.code).join("\n"), /artifact=privacy_choice_001/);
-  assert.match(finding.exampleEvidence.map((example) => example.code).join("\n"), /https:\/\/example\.com\/privacy/);
-  assert.match(finding.exampleEvidence.map((example) => example.code).join("\n"), /manual_review_needed=true|manual review should confirm/);
-  assert.ok(finding.commonCauses.length >= 5);
-  assert.ok(finding.reviewQuestions.length >= 9);
-  assert.ok(finding.limitations.length >= 7);
-  assert.equal(
-    finding.limitations.filter(
-      (limitation) => limitation === "Not detected means not observed in the scan scope; it is not proof of absence."
-    ).length,
-    1
-  );
-  assert.match(finding.limitations.join("\n"), /not a legal conclusion, certification, compliance determination/);
-  assert.match(finding.limitations.join("\n"), /Manual review is needed/);
-  assert.match(finding.regulatoryContext?.primaryConcern.displayCopy ?? "", /may be relevant to CPRA, opt-out, GPC, disclosure, consent, and vendor-governance review/);
-  assert.match(finding.regulatoryContext?.displayCaution ?? "", /does not determine legal status, CPRA applicability, sale\/share status/);
-  assert.match(getReferenceNotes(finding).join("\n"), /CPRA opt-out, Do Not Sell or Share, and privacy-choice obligations/);
-  assert.doesNotMatch(getReferenceNotes(finding).join("\n"), /Automated accessibility evidence/);
-  assert.equal(finding.sample.payload.observed, finding.observed);
-  assert.doesNotMatch(JSON.stringify(finding.sample.payload), PUBLIC_SAMPLE_HYGIENE_PATTERN);
-  assert.doesNotMatch(JSON.stringify(finding.sample.payload), PUBLIC_SAMPLE_PAYLOAD_LEAKAGE_PATTERN);
-  assert.match(source, /PRIVACY_CHOICE_RELATED_READING = \[[\s\S]*Cookie consent enforcement[\s\S]*Tracking before consent[\s\S]*Cookie banner requirements[\s\S]*Third-party cookies before consent[\s\S]*Privacy policy requirements[\s\S]*\]/);
-  assert.match(source, /finding\.id === "cpra_cba_opt_out_missing"[\s\S]*PRIVACY_CHOICE_RELATED_READING/);
-
-  const publicCopy = [
-    finding.title,
-    finding.observed,
-    finding.detectionMethodology,
-    finding.confidenceSemantics,
-    ...finding.exampleEvidence.flatMap((example) => [example.title, example.code]),
-    JSON.stringify(finding.evidenceStandard),
-    ...finding.commonCauses,
-    ...finding.reviewQuestions,
-    ...finding.limitations,
-    finding.regulatoryContext?.primaryConcern.displayCopy,
-    finding.regulatoryContext?.displayCaution,
-    JSON.stringify(finding.sample.payload)
-  ].filter(Boolean).join("\n");
-  const withoutNegativeCaveats = publicCopy
-    .replace(/does not determine [^.]+\./gi, "")
-    .replace(/not a legal conclusion, certification, compliance determination[^.]*\./gi, "");
-
-  assert.doesNotMatch(publicCopy, /\bCBA\b/);
-  assert.doesNotMatch(withoutNegativeCaveats, /\billegal\b|\bviolation\b|\bnon-compliant\b|\bproves\b|\bcertifies compliance\b|\bdetermines compliance\b|\bguaranteed\b|\bdefinitive\b/i);
-  assert.doesNotMatch(withoutNegativeCaveats, /\bconfirms CCPA applicability\b|\bdetermines opt-out failure\b|\bGPC failure\b/i);
-});
-
 test("runtime tracking batch findings use sanitized evidence-first copy", () => {
   const findings = new Map(getFindingReferenceItems().map((finding) => [finding.id, finding]));
 
@@ -959,10 +911,6 @@ test("fingerprinting batch findings use sanitized evidence-first copy", () => {
     assert.doesNotMatch(JSON.stringify(finding.sample.payload), PUBLIC_SAMPLE_PAYLOAD_LEAKAGE_PATTERN);
   }
 
-  assert.equal(
-    findings.get("fingerprinting_related_signals_observed")?.title,
-    "Fingerprinting-related browser/device signals observed"
-  );
   assert.equal(findings.get("probable_fingerprinting")?.title, "Probable browser/device fingerprinting review signal");
   assert.match(browserSource, /FINGERPRINTING_RELATED_READING = \[[\s\S]*Website fingerprinting[\s\S]*Tracking before consent[\s\S]*Third-party cookies before consent[\s\S]*Third-party cookies and RTB sync[\s\S]*\]/);
   const fingerprintingRelatedReading = browserSource.match(/const FINGERPRINTING_RELATED_READING = \[([\s\S]*?)\];/)?.[1] ?? "";
@@ -1003,10 +951,8 @@ test("fingerprinting batch copy avoids identity and legal overclaims", () => {
 test("fingerprinting micro-polish keeps probable wording cautious", () => {
   const findings = new Map(getFindingReferenceItems().map((finding) => [finding.id, finding]));
   const browserSource = readFileSync("apps/web/components/marketing/findings/finding-atlas-browser.tsx", "utf8");
-  const related = findings.get("fingerprinting_related_signals_observed");
   const probable = findings.get("probable_fingerprinting");
 
-  assert.ok(related);
   assert.ok(probable);
 
   assert.match(browserSource, /may warrant manual review/);
@@ -1045,16 +991,6 @@ test("fingerprinting micro-polish keeps probable wording cautious", () => {
   assert.match(probablePublicText, /does not determine[^.]*consent validity/i);
   assert.match(probablePublicText, /does not determine[^.]*compliance status/i);
 
-  const relatedPublicText = [
-    related.observed,
-    related.detectionMethodology,
-    ...related.limitations,
-    related.regulatoryContext?.displayCaution,
-    JSON.stringify(related.sample.payload)
-  ].filter(Boolean).join("\n");
-
-  assert.match(relatedPublicText, /does not determine[^.]*persistent fingerprint/i);
-  assert.match(relatedPublicText, /does not determine[^.]*identity resolution/i);
 });
 
 test("fingerprinting sample user-data checks are scoped to actual sample payloads", () => {
@@ -1134,9 +1070,9 @@ test("runtime tracking hardening keeps titles and applicability copy cautious", 
   assert.doesNotMatch(rtbAppliesWhen, /EU\/EEA users and adtech cookie sync or identity matching are in scope/);
   assert.doesNotMatch(rtbAppliesWhen, /California users, advertising sharing, or cross-context behavioral advertising are in scope/);
   assert.match(rtbAppliesWhen, /identity-matching signals may be in scope/);
-  assert.match(rtbAppliesWhen, /advertising-sharing signals, or cross-context behavioral advertising context may be in scope/);
+  assert.doesNotMatch(rtbAppliesWhen, /advertising-sharing signals|California users|cross-context behavioral advertising context may be in scope/);
   assert.doesNotMatch(crossDomainAppliesWhen, /identifiers are shared/);
-  assert.match(crossDomainAppliesWhen, /identifier-like request signals may be relevant/);
+  assert.doesNotMatch(crossDomainAppliesWhen, /identifier-like request signals|California users|sale\/share/);
 });
 
 test("public regulatory applicability copy avoids deterministic in-scope phrasing", () => {

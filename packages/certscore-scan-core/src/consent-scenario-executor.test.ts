@@ -47,7 +47,7 @@ test("scenario executor returns stable scenario order under parallel completion"
   assert.equal(result.entries.find((entry) => entry.scenario === "accept_all_flow")?.comparisonEligible, true);
 });
 
-test("scenario executor starts targeted privacy opt-out before exploratory consent actions", async () => {
+test("scenario executor starts consent action lanes before targeted privacy opt-out", async () => {
   const plannedScenarios: ConsentScenarioPlanItem[] = [
     { scenario: "baseline_pre_consent", reasonCodes: ["baseline_required"] },
     { scenario: "accept_all_flow", actionType: "accept_all", reasonCodes: ["accept"] },
@@ -78,9 +78,9 @@ test("scenario executor starts targeted privacy opt-out before exploratory conse
 
   assert.deepEqual(starts, [
     "baseline_pre_consent",
-    "privacy_opt_out_flow",
     "reject_all_flow",
     "accept_all_flow",
+    "privacy_opt_out_flow",
     "gpc_enabled",
   ]);
   assert.deepEqual(result.entries.map((entry) => entry.scenario), [

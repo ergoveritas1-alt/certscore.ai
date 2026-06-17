@@ -39,6 +39,7 @@ export async function createAnonymousFullScan(input: {
   bypassRecentScanReuse?: boolean;
   californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   hostname: string;
+  localV2DagLambdaDebugOverrides?: import("./local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagRunViaLambda?: boolean | null;
   normalizedUrl: string;
@@ -142,6 +143,7 @@ export async function createAnonymousFullScan(input: {
   const scanConfig = buildQueuedFullScanConfig({
     californiaPrivacy: input.californiaPrivacy,
     hostname: input.hostname,
+    localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     maxPages: pagesRequested,

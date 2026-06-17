@@ -437,7 +437,6 @@ const CONSENT_UI_FINDING_IDS = new Set([
 const RUNTIME_ARTIFACT_FINDING_IDS = new Set([
   "pre_consent_tracking_detected",
   "third_party_cookie_pre_consent",
-  "reject_tracking_persists_after_reject",
   "rtb_cookie_sync_observed",
   "cross_domain_identifier_sharing_observed",
   "session_recording_services_detected",
@@ -445,15 +444,12 @@ const RUNTIME_ARTIFACT_FINDING_IDS = new Set([
   "session_replay_present_with_sensitive_surfaces_observed",
   "sensitive_data_collection_with_third_party_tracking_present",
   "policy_behavior_contradiction_detected",
-  "fingerprinting_related_signals_observed",
   "probable_fingerprinting"
 ]);
 
 const FINGERPRINTING_RELATIONSHIP_COPY: Record<string, string> = {
-  fingerprinting_related_signals_observed:
-    "This finding is the lower-tier fingerprinting/device-signal review signal. It is used when retained evidence shows browser or device signal collection that may warrant review, but the retained cluster does not support the higher-tier probable fingerprinting finding. A site may show this finding on its own, or alongside probable fingerprinting when stronger multi-category clustering is also retained.",
   probable_fingerprinting:
-    "This finding is the higher-tier fingerprinting/device-signal review signal. It is used when retained evidence shows a stronger clustered set of high-entropy browser or device signals, such as multiple signal categories or stronger corroboration, that may warrant probable fingerprinting review. A site may also show the related lower-tier fingerprinting signal when additional device-signal context is retained."
+    "This finding is used when retained evidence shows a stronger clustered set of high-entropy browser or device signals, such as multiple signal categories or stronger corroboration, that may warrant manual review for probable fingerprinting."
 };
 
 const COMMON_REMEDIATION_APPROACHES: Record<string, string[]> = {
@@ -463,13 +459,6 @@ const COMMON_REMEDIATION_APPROACHES: Record<string, string[]> = {
     "CMP event listeners are often reviewed to confirm that analytics, advertising, measurement, and replay vendors are blocked until the intended consent state is available.",
     "Clean-profile testing with the browser network panel open can help compare the first non-essential request timestamp against banner visibility and consent-state observations.",
     "Regional CMP configuration should be tested separately where consent behavior varies by geography."
-  ],
-  reject_tracking_persists_after_reject: [
-    "Teams commonly replay the reject path with the browser network panel open and compare pre-reject and post-reject request timing.",
-    "CMP-to-tag-manager propagation is often reviewed to confirm that reject state reaches the data layer, consent mode, and vendor trigger conditions.",
-    "Queued or delayed beacons may need special review because a request can fire after reject even if it was initiated before the choice.",
-    "Cookie and storage behavior should be reviewed to confirm whether non-essential identifiers are cleared, suppressed, or not written after reject.",
-    "Regional CMP variants should be tested separately where reject behavior differs by jurisdiction or language."
   ],
   rtb_cookie_sync_observed: [
     "Teams commonly audit which programmatic advertising tags, header-bidding wrappers, or adtech adapters trigger sync-style requests.",
@@ -497,8 +486,6 @@ const COMMON_REMEDIATION_APPROACHES: Record<string, string[]> = {
 const PREVALENCE_INTERPRETATION_NOTES: Record<string, string> = {
   pre_consent_tracking_detected:
     "Directionally, this is one of the more common findings in the calibration set. It suggests that consent-timing enforcement remains a recurring implementation challenge across public websites.",
-  reject_tracking_persists_after_reject:
-    "This pattern appears less often in the calibration set, but it can be higher-priority when observed because it concerns behavior after an explicit reject-style interaction rather than only initial consent timing.",
   rtb_cookie_sync_observed:
     "This prevalence is concentrated around adtech-heavy implementations. The signal is most relevant where programmatic advertising, identity matching, or audience-management integrations are active.",
   probable_fingerprinting:
@@ -513,7 +500,6 @@ const FINDING_REGISTRY_GROUPS: Array<{
     title: "Consent and choice architecture",
     findingIds: [
       "pre_consent_tracking_detected",
-      "reject_tracking_persists_after_reject",
       "third_party_cookie_pre_consent",
       "cookie_disclosure_gap",
       "policy_behavior_contradiction_detected",
@@ -536,7 +522,7 @@ const FINDING_REGISTRY_GROUPS: Array<{
   },
   {
     title: "Fingerprinting and device signals",
-    findingIds: ["probable_fingerprinting", "fingerprinting_related_signals_observed"]
+    findingIds: ["probable_fingerprinting"]
   },
   {
     title: "Accessibility",
@@ -548,10 +534,6 @@ const FINDING_REGISTRY_GROUPS: Array<{
       "focus_management_issue"
     ]
   },
-  {
-    title: "Privacy choice / CPRA",
-    findingIds: ["cpra_cba_opt_out_missing"]
-  }
 ];
 
 const PRIVACY_RELATED_READING = [
@@ -575,14 +557,6 @@ const TRACKING_RELATED_READING = [
   { href: "/guides/rtb-cookie-syncing", label: "Third-party cookies and RTB sync" }
 ];
 
-const PRIVACY_CHOICE_RELATED_READING = [
-  { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement" },
-  { href: "/guides/pre-consent-tracking", label: "Tracking before consent" },
-  { href: "/guides/cookie-banner-requirements", label: "Cookie banner requirements" },
-  { href: "/guides/third-party-cookies-before-consent", label: "Third-party cookies before consent" },
-  { href: "/guides/website-privacy-policy-requirements", label: "Privacy policy requirements" }
-];
-
 const FINGERPRINTING_RELATED_READING = [
   { href: "/guides/website-fingerprinting", label: "Website fingerprinting" },
   { href: "/guides/pre-consent-tracking", label: "Tracking before consent" },
@@ -595,10 +569,6 @@ const ACCESSIBILITY_RELATED_READING = [
 ];
 
 function getRelatedReadingLinks(finding: FindingReferenceItem) {
-  if (finding.id === "cpra_cba_opt_out_missing") {
-    return PRIVACY_CHOICE_RELATED_READING;
-  }
-
   if (finding.category === "Accessibility") {
     return ACCESSIBILITY_RELATED_READING;
   }
@@ -625,10 +595,6 @@ function getEvidenceStandardNote(finding: FindingReferenceItem) {
 
   if (CONSENT_UI_FINDING_IDS.has(finding.id)) {
     return "Evidence levels explain how CertScore.ai treats retained consent-surface artifacts. They are not legal conclusions.";
-  }
-
-  if (finding.id === "cpra_cba_opt_out_missing") {
-    return "Evidence levels explain how CertScore.ai treats retained public-surface and runtime artifacts. They are not legal conclusions.";
   }
 
   if (RUNTIME_ARTIFACT_FINDING_IDS.has(finding.id)) {
@@ -905,16 +871,8 @@ export function getWhyThisMattersCopy(finding: FindingReferenceItem) {
     return "Consent interfaces can shape how users understand and exercise privacy choices. For review teams, this signal can help identify consent UX patterns that may warrant deeper review across choice availability, effort, clarity, repetition, accessibility, and consistency with public statements.";
   }
 
-  if (finding.id === "cpra_cba_opt_out_missing") {
-    return "When advertising, cross-context behavioral advertising, sale/share, or similar privacy-choice signals appear on a site, reviewers may need to confirm whether applicable opt-out paths are present, discoverable, and connected to the relevant data uses. For privacy and product teams, this signal can help identify footer, privacy-policy, preference-center, CMP, GPC, and state-specific rights-flow gaps that may require CPRA or privacy-choice review.";
-  }
-
   if (finding.id === "third_party_cookie_pre_consent") {
     return "Cookies or browser storage set by third-party domains before a recorded choice can be relevant to cookie, consent, tracking, and vendor-governance review. For review teams, this signal can help identify whether the storage is necessary, exempt, consent-gated, or tied to analytics, advertising, measurement, security, fraud prevention, or another purpose.";
-  }
-
-  if (finding.id === "reject_tracking_persists_after_reject") {
-    return "When non-essential tracking or storage continues after a reject-style interaction, reviewers may need to confirm whether the reject action succeeded, whether consent state propagated correctly, and whether downstream tags or vendors honored the intended choice. For engineering and privacy teams, this signal can help identify CMP-to-tag-manager wiring, consent-mode propagation, queued beacons, or vendor-suppression issues.";
   }
 
   if (finding.id === "rtb_cookie_sync_observed") {
@@ -935,10 +893,6 @@ export function getWhyThisMattersCopy(finding: FindingReferenceItem) {
 
   if (finding.id === "sensitive_data_collection_with_third_party_tracking_present") {
     return "Sensitive forms or flows that also load third-party tracking context may warrant deeper review because field purpose, payload contents, vendor purpose, consent state, and minimization can change the risk assessment. The signal helps teams find shared templates or tag rules that may need page-level exclusions.";
-  }
-
-  if (finding.id === "fingerprinting_related_signals_observed") {
-    return "Browser and device signals can be relevant to fingerprinting review even when retained evidence does not support a probable fingerprinting finding. For review teams, this signal can help identify where high-entropy collection, purpose, consent state, vendor role, and minimization may warrant manual review.";
   }
 
   if (finding.id === "probable_fingerprinting") {

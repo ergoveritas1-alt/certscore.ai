@@ -664,6 +664,16 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       subcategory: "Privacy Rights & Controls",
       regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]
     },
+    "privacy.legal_basis_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures",
+      regulatoryTags: ["gdpr_eu_privacy"]
+    },
+    "privacy.retention_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures",
+      regulatoryTags: ["gdpr_eu_privacy"]
+    },
     "privacy.gpc_disclosure_present": {
       primaryCategory: "privacy_consent_user_choice",
       subcategory: "Privacy Rights & Controls",
@@ -688,6 +698,16 @@ export function mapSignalKeyToTaxonomy(input: { category: string; key: string; l
       primaryCategory: "consumer_transparency_disclosures",
       subcategory: "Privacy & Cookie Disclosures",
       regulatoryTags: ["gdpr_eu_privacy", "ccpa_cpra"]
+    },
+    "privacy.supervisory_authority_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy Rights & Controls",
+      regulatoryTags: ["gdpr_eu_privacy"]
+    },
+    "privacy.automated_decision_profiling_disclosure_present": {
+      primaryCategory: "consumer_transparency_disclosures",
+      subcategory: "Privacy & Cookie Disclosures",
+      regulatoryTags: ["gdpr_eu_privacy"]
     },
     "privacy.children_privacy_disclosure_present": {
       primaryCategory: "consumer_transparency_disclosures",

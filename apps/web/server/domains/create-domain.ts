@@ -31,20 +31,12 @@ const initialState: CreateDomainActionState = {
   queuedCount: null
 };
 
-function getCaliforniaDeepCheckConfig(enabled: boolean): QueuedFullScanCaliforniaPrivacyConfig | null {
-  return enabled
-    ? {
-        exercisePrivacyChoicePath: true,
-        forceGpcVerification: true
-      }
-    : null;
-}
-
 export async function createOrQueueDomainScan(input: {
   allowExistingDomainRescan?: boolean;
   bypassRecentScanReuse?: boolean;
   californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   domain: string;
+  localV2DagLambdaDebugOverrides?: import("../scans/local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagRunViaLambda?: boolean | null;
   provenance?: {
@@ -179,6 +171,7 @@ export async function createOrQueueDomainScan(input: {
     enforceMonthlyUsageLimit: true,
     bypassRecentScanReuse: input.bypassRecentScanReuse,
     californiaPrivacy: input.californiaPrivacy,
+    localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     provenance: input.provenance,
@@ -199,7 +192,6 @@ export async function createDomainAction(
   formData: FormData
 ): Promise<CreateDomainActionState> {
   const domainInput = String(formData.get("domain") ?? "");
-  const californiaPrivacy = getCaliforniaDeepCheckConfig(formData.get("californiaDeepCheck") === "true");
   const forceNewScan = formData.get("forceNewScan") === "true";
   const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
   const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"));
@@ -221,7 +213,7 @@ export async function createDomainAction(
         domain: item.domain,
         allowExistingDomainRescan: true,
         bypassRecentScanReuse: forceNewScan,
-        californiaPrivacy,
+        californiaPrivacy: null,
         localV2DagScanProfile,
         localV2DagRunViaLambda,
         scanFrom

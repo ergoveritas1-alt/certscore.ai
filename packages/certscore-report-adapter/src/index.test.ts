@@ -156,6 +156,33 @@ test("module limitations are preserved in projection and WC01 draft rows", async
   assert.equal(wc01Row?.assessmentStatus, "coverage_limitation");
 });
 
+test("screenshot-only runtime partials do not demote otherwise usable evidence", async () => {
+  const bundle = await readFixture("ga-collection");
+  const bundleWithScreenshotFallback: CanonicalEvidenceBundle = {
+    ...bundle,
+    modulesRun: bundle.modulesRun.map((moduleRun) =>
+      moduleRun.moduleName === "preConsentRuntimeScanner"
+        ? {
+            ...moduleRun,
+            status: "partial",
+            errors: ["Screenshot fallback used: page.screenshot: Timeout 5000ms exceeded."]
+          }
+        : moduleRun,
+    ),
+  };
+  const review = await reviewEvidenceBundle(bundleWithScreenshotFallback);
+  const projection = projectReviewResultToV2ReportDraft({
+    review,
+    bundle: bundleWithScreenshotFallback,
+  });
+  const row = requiredRow(projection, "pre_consent_tracking_detected");
+
+  assert.equal(row.status, "observed");
+  assert.equal(row.coverageLimitations.some((limitation) =>
+    limitation.limitationKey === "module_partial:preConsentRuntimeScanner",
+  ), false);
+});
+
 test("high-volume row excerpts are retained as bounded representative groups without changing evidence ids", () => {
   const evidenceExcerptIds = Array.from({ length: 120 }, (_, index) => `excerpt_${index}`);
   const projection = projectReviewResultToV2ReportDraft({

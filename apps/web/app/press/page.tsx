@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 const scanCategories = [
   "Tracking requests and third-party activity",
   "Cookies before consent",
-  "Consent flow behavior",
+  "Public consent and policy surfaces",
   "Session recording and replay-related signals",
   "Fingerprinting-related signals",
   "Homepage accessibility signals",
@@ -57,7 +57,7 @@ export default function PressPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Press</p>
           <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Press and media information</h1>
           <p className="text-lg leading-8 text-slate-600">
-            CertScore.ai scans public websites for observable tracking, cookie, consent, accessibility, session recording, fingerprinting-related, and disclosure-consistency risk signals.
+            CertScore.ai scans public websites for observable pre-consent tracking, cookie and storage, public policy surface, accessibility, session recording, fingerprinting-related, and disclosure-consistency risk signals.
           </p>
         </div>
 
@@ -71,7 +71,7 @@ export default function PressPage() {
               <CardTitle className="text-xl text-slate-950">Boilerplate</CardTitle>
             </CardHeader>
             <CardContent className="text-sm leading-7 text-slate-600">
-              CertScore.ai is a website risk-signal scanner that observes real website behavior around tracking, cookies, consent flows, accessibility, session recording, fingerprinting-related signals, and disclosure consistency. CertScore.ai helps teams review automated evidence about how public websites behave, not just what policies claim.
+              CertScore.ai is a website risk-signal scanner that observes real website behavior around pre-consent tracking, cookies and storage, public policy surfaces, accessibility, session recording, fingerprinting-related signals, and disclosure consistency. CertScore.ai helps teams review automated evidence about how public websites behave, not just what policies claim.
             </CardContent>
           </Card>
 

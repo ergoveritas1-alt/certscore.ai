@@ -52,13 +52,13 @@ const openApiDocument = {
             name: "scanFrom",
             in: "query",
             description: "Geo execution context for newly queued scans. Existing scans are returned with their recorded context. Alias: geo.",
-            schema: { type: "string", enum: ["default", "eu", "uk", "california"], default: "default" }
+            schema: { type: "string", enum: ["default", "eu", "uk"], default: "default" }
           },
           {
             name: "geo",
             in: "query",
-            description: "Alias for scanFrom. Allowed values: default, eu, uk, california.",
-            schema: { type: "string", enum: ["default", "eu", "uk", "california"], default: "default" }
+            description: "Alias for scanFrom. Allowed values: default, eu, uk.",
+            schema: { type: "string", enum: ["default", "eu", "uk"], default: "default" }
           },
           {
             name: "forceNewScan",

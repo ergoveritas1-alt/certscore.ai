@@ -111,8 +111,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained consent and runti
   assert.match(outcomes.pre_consent_cookies_storage?.limitation ?? "", /did not classify/i);
   assert.equal(outcomes.reject_all_path_availability?.status, "Insufficient evidence");
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /complete reject-all control/i);
-  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not confirmed");
-  assert.match(outcomes.post_reject_tracking_reduction?.limitation ?? "", /no reject action was confirmed/i);
+  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
+  assert.match(outcomes.post_reject_tracking_reduction?.limitation ?? "", /deferred from the current production core scanner/i);
   assert.equal(outcomes.runtime_vendor_disclosure_alignment?.status, "Not testable");
   assert.match(outcomes.runtime_vendor_disclosure_alignment?.limitation ?? "", /no privacy or cookie policy surface/i);
   assert.equal(outcomes.sensitive_surfaces_third_party_tracking?.status, "Not observed");
@@ -560,8 +560,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes classifies first-layer legal/priv
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.legalPrivacyNoticeGateObserved, true);
   assert.equal(outcomes.reject_all_path_availability?.status, "Gap observed");
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /only visible action was Continue/i);
-  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not confirmed");
-  assert.match(outcomes.post_reject_tracking_reduction?.limitation ?? "", /no valid after-reject state/i);
+  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
+  assert.match(outcomes.post_reject_tracking_reduction?.limitation ?? "", /deferred from the current production core scanner/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes classifies first-layer privacy notice gates with privacy choices", () => {
@@ -624,7 +624,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes classifies first-layer privacy no
   assert.match(outcomes.consent_choice_quality?.limitation ?? "", /privacy notice gate with visible actions for privacy choices and Continue/i);
   assert.equal(outcomes.reject_all_path_availability?.status, "Gap observed");
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /privacy choices and Continue/i);
-  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not confirmed");
+  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks consent choice quality not testable for footer privacy choices only", () => {
@@ -1810,8 +1810,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes nested reject interactio
     }
   });
 
-  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not observed");
-  assert.deepEqual(outcomes.post_reject_tracking_reduction?.evidenceRefs, ["Evidence: reject interaction retained"]);
+  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
+  assert.equal(
+    outcomes.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.productionPosture,
+    "post_choice_flow_deferred_from_core"
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained first-layer decline path as observed", () => {
@@ -1857,8 +1860,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
       }
     }
   });
-  assert.equal(notTestable.post_reject_tracking_reduction?.status, "Not confirmed");
-  assert.match(notTestable.post_reject_tracking_reduction?.limitation ?? "", /did not retain a reject/i);
+  assert.equal(notTestable.post_reject_tracking_reduction?.status, "Not testable");
+  assert.match(notTestable.post_reject_tracking_reduction?.limitation ?? "", /deferred from the current production core scanner/i);
   assert.equal(
     notTestable.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.rejectInteractionFailureClass,
     "reject_control_not_found"
@@ -1899,14 +1902,14 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
       }
     }
   });
-  assert.equal(retainedLifecycleSurface.post_reject_tracking_reduction?.status, "Not confirmed");
+  assert.equal(retainedLifecycleSurface.post_reject_tracking_reduction?.status, "Not testable");
   assert.equal(
     retainedLifecycleSurface.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.rejectInteractionFailureClass,
     "consent_surface_not_observed"
   );
   assert.match(
     retainedLifecycleSurface.post_reject_tracking_reduction?.limitation ?? "",
-    /no first-layer GDPR\/ePrivacy consent banner and no valid reject action were confirmed/i
+    /deferred from the current production core scanner/i
   );
   assert.doesNotMatch(
     retainedLifecycleSurface.post_reject_tracking_reduction?.limitation ?? "",
@@ -1926,7 +1929,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
       }
     }
   });
-  assert.equal(insufficient.post_reject_tracking_reduction?.status, "Insufficient evidence");
+  assert.equal(insufficient.post_reject_tracking_reduction?.status, "Not testable");
 
   const rejectNotConfirmed = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -1939,7 +1942,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
       }
     }
   });
-  assert.equal(rejectNotConfirmed.post_reject_tracking_reduction?.status, "Not confirmed");
+  assert.equal(rejectNotConfirmed.post_reject_tracking_reduction?.status, "Not testable");
 
   const postRejectWindowMissing = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -1952,7 +1955,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
       }
     }
   });
-  assert.equal(postRejectWindowMissing.post_reject_tracking_reduction?.status, "Not confirmed");
+  assert.equal(postRejectWindowMissing.post_reject_tracking_reduction?.status, "Not testable");
 
   const reduced = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -1967,7 +1970,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
       }
     }
   });
-  assert.equal(reduced.post_reject_tracking_reduction?.status, "Not observed");
+  assert.equal(reduced.post_reject_tracking_reduction?.status, "Not testable");
   assert.deepEqual(reduced.post_reject_tracking_reduction?.evidenceRefs, [
     "Evidence: post-reject tracking reduction evidence",
     "reject_interaction_succeeded",
@@ -1993,10 +1996,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
       }
     }
   });
-  assert.equal(retainedPersistenceWithoutProjection.post_reject_tracking_reduction?.status, "Review signal");
+  assert.equal(retainedPersistenceWithoutProjection.post_reject_tracking_reduction?.status, "Not testable");
   assert.equal(
-    retainedPersistenceWithoutProjection.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.projectionSuppressed,
-    true
+    retainedPersistenceWithoutProjection.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.productionPosture,
+    "post_choice_flow_deferred_from_core"
   );
   assert.deepEqual(retainedPersistenceWithoutProjection.post_reject_tracking_reduction?.criticalEvidence.projectedFindings, []);
 
@@ -2031,7 +2034,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
       }
     }
   });
-  assert.equal(retainedConcretePersistence.post_reject_tracking_reduction?.status, "Gap observed");
+  assert.equal(retainedConcretePersistence.post_reject_tracking_reduction?.status, "Not testable");
   assert.equal(
     retainedConcretePersistence.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.concretePostRejectNonEssentialDetailsRetained,
     true
@@ -2068,8 +2071,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
       }
     }
   });
-  assert.equal(retainedSessionReplayPersistence.session_replay_after_refusal?.status, "Gap observed");
-  assert.match(retainedSessionReplayPersistence.session_replay_after_refusal?.limitation ?? "", /persisted/i);
+  assert.equal(retainedSessionReplayPersistence.session_replay_after_refusal?.status, "Not testable");
+  assert.match(retainedSessionReplayPersistence.session_replay_after_refusal?.limitation ?? "", /deferred from the current production core scanner/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps general page accessibility issues as consent-control review", () => {

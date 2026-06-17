@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   ...createPageMetadata({
     title: "CertScore.ai — Evidence-Based Website Risk Signal Scanner",
     description:
-      "Scan websites to review pre-consent tracking, third-party requests, cookie activity, consent behavior, and policy-runtime consistency signals.",
+      "Scan websites to review pre-consent tracking, third-party requests, cookie and storage activity, public policy surfaces, and disclosure-alignment signals.",
     path: "/"
   }),
   title: {
@@ -35,9 +35,9 @@ const personas = [
       "Run white-label-ready scans that surface observable website behavior without depending on manual inspection alone."
   },
   {
-    title: "Digital policy analysts verifying consent flows",
+    title: "Digital policy analysts reviewing public privacy surfaces",
     detail:
-      "Review when cookies and trackers appear in milliseconds, including whether they load pre-consent or change after accept/reject choices."
+      "Review pre-consent cookies, storage, tracking, public disclosures, collection surfaces, and consent-control accessibility without depending on brittle post-choice automation."
   },
   {
     title: "Teams reviewing third-party websites",
@@ -130,7 +130,7 @@ export default async function MarketingHomePage() {
               See how websites handle consent, privacy and accessibility.
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
-              Evidence based analysis of pre-consent tracking, 3rd-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies. Mapped to GDPR and CCPA.
+              Evidence based analysis of pre-consent tracking, third-party requests, consent surfaces, cookie activity, accessibility issues, and disclosure inconsistencies. Mapped to GDPR/ePrivacy.
             </p>
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
               <PendingButtonLink
@@ -222,7 +222,7 @@ export default async function MarketingHomePage() {
                 Get a clearer read on public-facing website signals.
               </h2>
               <p className="max-w-3xl text-lg leading-8 text-slate-300">
-                Use CertScore.ai to observe website behavior, detect tracking activity, verify consent flows, and monitor changes over time.
+                Use CertScore.ai to observe pre-consent website behavior, detect tracking activity, review public policy surfaces, and monitor changes over time.
               </p>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <PendingButtonLink

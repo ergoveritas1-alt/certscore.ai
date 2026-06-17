@@ -26,7 +26,7 @@ type RescanDomainFormProps = {
 
 export function RescanDomainForm({ cooldownMessage = null, compact = false, disabled = false, domainId, showLabel = false }: RescanDomainFormProps) {
   const [state, action, isPending] = useActionState(rescanDomainAction, initialState);
-  const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("full");
+  const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const scanProgress = useScanProgressClock(isPending);
   const errorMessage = state.error;
   const isDisabled = disabled || isPending;

@@ -15,6 +15,7 @@ const consentActionTypes = [
   "save_preferences",
   "close_banner",
   "reopen_preferences",
+  "do_not_sell_share",
   "unknown",
 ] as const satisfies readonly ConsentActionType[];
 
@@ -166,6 +167,9 @@ function explicitlyMatchesAction(
   }
   if (actionType === "reject_all") {
     return /reject all|reject optional|reject analytics|do not accept|decline all|deny all|refuse all|only necessary|necessary only|essential only|accept essential|accept necessary|^reject$|^decline$|^deny$|^refuse$/.test(value);
+  }
+  if (actionType === "do_not_sell_share") {
+    return /do not sell|do not share|opt[- ]out|sale or sharing|targeted advertising|privacy choices|privacy settings|privacy preferences/.test(value);
   }
   return false;
 }

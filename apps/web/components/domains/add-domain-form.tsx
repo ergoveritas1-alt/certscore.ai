@@ -23,7 +23,7 @@ type AddDomainFormProps = {
 export function AddDomainForm({ planCode }: AddDomainFormProps) {
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
   const [freshRescan, setFreshRescan] = useState(false);
-  const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("full");
+  const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
   const scanProgress = useScanProgressClock(isPending);
 

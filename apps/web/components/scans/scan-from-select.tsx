@@ -33,12 +33,6 @@ export const SCAN_FROM_OPTIONS = [
     flag: "🇬🇧",
     label: "UK",
     value: "uk"
-  },
-  {
-    description: "Run from CertScore's California scan context.",
-    flag: "california",
-    label: "California",
-    value: "california"
   }
 ] as const;
 
@@ -46,8 +40,6 @@ export type ScanFrom = (typeof SCAN_FROM_OPTIONS)[number]["value"];
 export type ServerScanFrom = Exclude<ScanFrom, "local_extension">;
 
 type ScanFromSelectProps = {
-  californiaDeepCheckName?: string;
-  californiaDeepCheckValue?: boolean;
   compact?: boolean;
   freshRescanName?: string;
   freshRescanValue?: boolean;
@@ -61,7 +53,6 @@ type ScanFromSelectProps = {
   localV2RunViaLambdaName?: string;
   localV2RunViaLambdaValue?: boolean;
   includeScanFromOptions?: boolean;
-  onCaliforniaDeepCheckChange?: (value: boolean) => void;
   onChange?: (value: ScanFrom) => void;
   onFreshRescanChange?: (value: boolean) => void;
   onLocalV2ScanProfileChange?: (value: LocalV2ScanProfile) => void;
@@ -88,8 +79,6 @@ function SelectedScanFromMarker({ option }: { option: (typeof SCAN_FROM_OPTIONS)
 }
 
 export function ScanFromSelect({
-  californiaDeepCheckName = "californiaDeepCheck",
-  californiaDeepCheckValue,
   compact = false,
   freshRescanName = "forceNewScan",
   freshRescanValue,
@@ -103,7 +92,6 @@ export function ScanFromSelect({
   localV2RunViaLambdaName = "localV2RunViaLambda",
   localV2RunViaLambdaValue,
   name = "scanFrom",
-  onCaliforniaDeepCheckChange,
   onChange,
   onFreshRescanChange,
   onLocalV2ScanProfileChange,
@@ -114,16 +102,14 @@ export function ScanFromSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
-  const [uncontrolledCaliforniaDeepCheck, setUncontrolledCaliforniaDeepCheck] = useState(false);
   const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(false);
-  const [uncontrolledLocalV2ScanProfile, setUncontrolledLocalV2ScanProfile] = useState<LocalV2ScanProfile>("full");
+  const [uncontrolledLocalV2ScanProfile, setUncontrolledLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [uncontrolledLocalV2RunViaLambda, setUncontrolledLocalV2RunViaLambda] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const options = includeLocalExtension ? SCAN_FROM_OPTIONS : SCAN_FROM_OPTIONS.filter((option) => option.value !== "local_extension");
   const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? SCAN_FROM_OPTIONS[0];
-  const californiaDeepCheck = californiaDeepCheckValue ?? uncontrolledCaliforniaDeepCheck;
   const freshRescan = freshRescanValue ?? uncontrolledFreshRescan;
   const localV2ScanProfile = localV2ScanProfileValue ?? uncontrolledLocalV2ScanProfile;
   const localV2RunViaLambda = localV2RunViaLambdaValue ?? uncontrolledLocalV2RunViaLambda;
@@ -210,13 +196,6 @@ export function ScanFromSelect({
     onFreshRescanChange?.(nextValue);
   }
 
-  function setCaliforniaDeepCheck(nextValue: boolean) {
-    if (californiaDeepCheckValue === undefined) {
-      setUncontrolledCaliforniaDeepCheck(nextValue);
-    }
-    onCaliforniaDeepCheckChange?.(nextValue);
-  }
-
   function setLocalV2ScanProfile(nextValue: LocalV2ScanProfile) {
     if (localV2ScanProfileValue === undefined) {
       setUncontrolledLocalV2ScanProfile(nextValue);
@@ -249,7 +228,6 @@ export function ScanFromSelect({
       {includeLocalV2ScanProfileOption && localV2RunViaLambda ? (
         <input name={localV2RunViaLambdaName} type="hidden" value="true" />
       ) : null}
-      {californiaDeepCheck ? <input name={californiaDeepCheckName} type="hidden" value="true" /> : null}
       {includeFreshRescanOption && freshRescan ? <input name={freshRescanName} type="hidden" value="true" /> : null}
       {variant === "field" ? (
         <span className={compact ? "shrink-0" : "block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"}>
@@ -369,37 +347,6 @@ export function ScanFromSelect({
                         <span
                           className={
                             freshRescan
-                              ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
-                              : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
-                          }
-                        />
-                      </span>
-                    </label>
-                  ) : null}
-                  {includeFreshRescanOption ? (
-                    <label
-                      className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                      title="Run GPC and privacy-choice interaction checks for California review."
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-slate-700">California deep check</span>
-                      </span>
-                      <input
-                        checked={californiaDeepCheck}
-                        className="sr-only"
-                        onChange={(event) => setCaliforniaDeepCheck(event.target.checked)}
-                        type="checkbox"
-                      />
-                      <span
-                        className={
-                          californiaDeepCheck
-                            ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
-                            : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
-                        }
-                      >
-                        <span
-                          className={
-                            californiaDeepCheck
                               ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
                               : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
                           }

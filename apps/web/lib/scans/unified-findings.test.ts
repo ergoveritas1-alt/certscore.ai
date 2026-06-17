@@ -4040,7 +4040,7 @@ test("surfaces visual contrast finding with complete representative axe evidence
   );
 });
 
-test("surfaces missing sale or sharing controls as a domain-level rights finding", () => {
+test("keeps missing sale or sharing controls audit-only outside the GDPR/ePrivacy production scope", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
@@ -4066,11 +4066,11 @@ test("surfaces missing sale or sharing controls as a domain-level rights finding
   });
 
   assert.equal(packet?.unifiedFindingId, "sale_sharing_controls_missing");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.match(packet?.presentation.whyThisMatters ?? "", /privacy choice/i);
 });
 
-test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
+test("keeps CPRA CBA opt-out missing audit-only outside the GDPR/ePrivacy production scope", () => {
   const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
@@ -4110,7 +4110,7 @@ test("surfaces CPRA CBA opt-out missing from retained runtime evidence", () => {
   const [packet] = packets;
 
   assert.equal(packet?.unifiedFindingId, "cpra_cba_opt_out_missing");
-  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.presentationDecision.status, "audit_only");
   assert.match(packet?.presentation.suggestedFix ?? "", /Your Privacy Choices/i);
 });
 
@@ -5474,6 +5474,40 @@ test("surfaces visitor-use analytics tool disclosure from policy enrichment", ()
   assert.deepEqual(packet?.evidence?.snippets, [
     "We use analytics tools (e.g., Google Analytics) and session cookies to understand how visitors use our Services."
   ]);
+});
+
+test("surfaces Article 13 disclosure rows from policy enrichment", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
+    policyEnrichment: [
+      {
+        page_type: "privacy_policy",
+        page_url: "https://example.com/privacy",
+        policy_evidence_snippets: {
+          "topic:automated_decision_making":
+            "We do not make decisions based solely on automated processing, including profiling, that produce legal effects.",
+          "topic:legal_basis":
+            "We process personal data based on consent, contractual necessity, legal obligations, and legitimate interests.",
+          "topic:retention":
+            "We retain personal data only as long as necessary for the purposes described in this notice.",
+          "topic:supervisory_authority":
+            "You have the right to lodge a complaint with your local supervisory authority."
+        }
+      }
+    ],
+    reviewFindingCandidates: [],
+    validationFindings: [],
+    validationFindingLookup: new Map()
+  });
+
+  const packetIds = new Set(packets.map((packet) => packet.unifiedFindingId));
+  assert.equal(packetIds.has("automated_decision_profiling_disclosure_present"), true);
+  assert.equal(packetIds.has("legal_basis_disclosure_present"), true);
+  assert.equal(packetIds.has("retention_disclosure_present"), true);
+  assert.equal(packetIds.has("supervisory_authority_disclosure_present"), true);
+  assert.equal(
+    packets.every((packet) => packet.presentationDecision.status === "surface"),
+    true
+  );
 });
 
 test("surfaces behavioral tracking disclosure retained under tracking-technology topic", () => {

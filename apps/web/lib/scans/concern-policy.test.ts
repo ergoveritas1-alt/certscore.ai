@@ -1362,11 +1362,11 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         allowedNarrativeTier: "weak",
         promotionEligibility: "internal_only",
         externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: ["missing_policy_side_evidence"]
+        negativeEvidenceFlags: ["ccpa_cpra_deferred_from_core"]
       }
     },
     {
-      name: "sale sharing controls missing with policy behavior anchor can promote",
+      name: "sale sharing controls missing with policy behavior anchor stays deferred",
       concern: makeConcern({
         originKey: "privacy.sale_sharing_controls_missing",
         suggestedUnifiedFindingId: "sale_sharing_controls_missing",
@@ -1385,10 +1385,10 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         targetedAdvertisingDisclosurePresent: true
       },
       expected: {
-        allowedNarrativeTier: "strong",
-        promotionEligibility: "eligible",
-        externalSurfacingEligibility: "eligible",
-        negativeEvidenceFlags: []
+        allowedNarrativeTier: "weak",
+        promotionEligibility: "internal_only",
+        externalSurfacingEligibility: "audit_only",
+        negativeEvidenceFlags: ["ccpa_cpra_deferred_from_core"]
       }
     },
     {
@@ -2130,8 +2130,9 @@ test("CPRA CBA opt-out concern policy requires CPRA-relevant context", () => {
       suppressorApplied: null
     }
   });
-  assert.equal(policyContext.promotionEligibility, "eligible");
-  assert.equal(policyContext.externalSurfacingEligibility, "eligible");
+  assert.equal(policyContext.promotionEligibility, "internal_only");
+  assert.equal(policyContext.externalSurfacingEligibility, "audit_only");
+  assert.ok(policyContext.negativeEvidenceFlags.includes("ccpa_cpra_deferred_from_core"));
 });
 
 test("pre-consent policy requires timeline sequence plus non-essential request classification", () => {
@@ -2240,7 +2241,8 @@ test("reject persistence policy requires a successful reject path and post-rejec
     }
   });
 
-  assert.equal(eligible.promotionEligibility, "eligible");
+  assert.equal(eligible.promotionEligibility, "internal_only");
+  assert.ok(eligible.negativeEvidenceFlags.includes("post_choice_flow_deferred_from_core"));
 
   const eligibleRequestUrl = deriveConcernPolicy({
     concern,
@@ -2275,8 +2277,8 @@ test("reject persistence policy requires a successful reject path and post-rejec
     }
   });
 
-  assert.equal(eligibleRequestUrl.promotionEligibility, "eligible");
-  assert.equal(eligibleRequestUrl.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"), false);
+  assert.equal(eligibleRequestUrl.promotionEligibility, "internal_only");
+  assert.ok(eligibleRequestUrl.negativeEvidenceFlags.includes("post_choice_flow_deferred_from_core"));
 
   const eligibleTagManagerRequest = deriveConcernPolicy({
     concern,
@@ -2304,7 +2306,8 @@ test("reject persistence policy requires a successful reject path and post-rejec
     }
   });
 
-  assert.equal(eligibleTagManagerRequest.promotionEligibility, "eligible");
+  assert.equal(eligibleTagManagerRequest.promotionEligibility, "internal_only");
+  assert.ok(eligibleTagManagerRequest.negativeEvidenceFlags.includes("post_choice_flow_deferred_from_core"));
 
   const eligibleWs01ControlAttribution = deriveConcernPolicy({
     concern,
@@ -2336,7 +2339,8 @@ test("reject persistence policy requires a successful reject path and post-rejec
     }
   });
 
-  assert.equal(eligibleWs01ControlAttribution.promotionEligibility, "eligible");
+  assert.equal(eligibleWs01ControlAttribution.promotionEligibility, "internal_only");
+  assert.ok(eligibleWs01ControlAttribution.negativeEvidenceFlags.includes("post_choice_flow_deferred_from_core"));
 
   const failedReject = deriveConcernPolicy({
     concern,
@@ -2361,7 +2365,7 @@ test("reject persistence policy requires a successful reject path and post-rejec
   });
 
   assert.equal(failedReject.promotionEligibility, "internal_only");
-  assert.equal(failedReject.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"), true);
+  assert.ok(failedReject.negativeEvidenceFlags.includes("post_choice_flow_deferred_from_core"));
 });
 
 test("reject persistence policy keeps vendor-backed post-reject evidence without retained timing audit-only", () => {
@@ -2400,7 +2404,7 @@ test("reject persistence policy keeps vendor-backed post-reject evidence without
   assert.equal(noTiming.allowedNarrativeTier, "weak");
   assert.equal(noTiming.externalSurfacingEligibility, "audit_only");
   assert.equal(noTiming.promotionEligibility, "internal_only");
-  assert.ok(noTiming.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"));
+  assert.ok(noTiming.negativeEvidenceFlags.includes("post_choice_flow_deferred_from_core"));
 
   const thin = deriveConcernPolicy({
     concern,
@@ -2468,7 +2472,7 @@ test("reject persistence policy keeps cookie diff provenance audit-only without 
   assert.equal(promoted.allowedNarrativeTier, "weak");
   assert.equal(promoted.externalSurfacingEligibility, "audit_only");
   assert.equal(promoted.promotionEligibility, "internal_only");
-  assert.ok(promoted.negativeEvidenceFlags.includes("missing_post_reject_timing_evidence"));
+  assert.ok(promoted.negativeEvidenceFlags.includes("post_choice_flow_deferred_from_core"));
 
   const nonRejectLabel = deriveConcernPolicy({
     concern,
@@ -3362,10 +3366,10 @@ test("deriveConcernPolicy keeps generic CPRA opt-out absence audit-only without 
   assert.equal(policy.allowedNarrativeTier, "weak");
   assert.equal(policy.promotionEligibility, "internal_only");
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
-  assert.ok(policy.negativeEvidenceFlags.includes("missing_privacy_choice_control_search_scope"));
+  assert.ok(policy.negativeEvidenceFlags.includes("ccpa_cpra_deferred_from_core"));
 });
 
-test("deriveConcernPolicy promotes CPRA opt-out gaps with CBA evidence and inspected choice surfaces", () => {
+test("deriveConcernPolicy keeps CPRA opt-out gaps deferred with CBA evidence and inspected choice surfaces", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "privacy.cpra_cba_opt_out_missing",
@@ -3386,12 +3390,13 @@ test("deriveConcernPolicy promotes CPRA opt-out gaps with CBA evidence and inspe
     }
   });
 
-  assert.equal(policy.allowedNarrativeTier, "strong");
-  assert.equal(policy.promotionEligibility, "eligible");
-  assert.equal(policy.externalSurfacingEligibility, "eligible");
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("ccpa_cpra_deferred_from_core"));
 });
 
-test("deriveConcernPolicy promotes partial CPRA opt-out controls as incomplete CBA evidence", () => {
+test("deriveConcernPolicy keeps partial CPRA opt-out controls deferred", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "privacy.cpra_cba_opt_out_missing",
@@ -3412,9 +3417,10 @@ test("deriveConcernPolicy promotes partial CPRA opt-out controls as incomplete C
     }
   });
 
-  assert.equal(policy.allowedNarrativeTier, "strong");
-  assert.equal(policy.promotionEligibility, "eligible");
-  assert.equal(policy.externalSurfacingEligibility, "eligible");
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("ccpa_cpra_deferred_from_core"));
 });
 
 test("deriveConcernPolicy keeps full CPRA-compliant controls internal-only for missing opt-out finding", () => {

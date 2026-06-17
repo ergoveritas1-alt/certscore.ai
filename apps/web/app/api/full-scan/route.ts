@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
-import { createDomainRequestSchema, normalizeScanFrom, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
+import {
+  createDomainRequestSchema,
+  normalizeScanFrom,
+  parseDomainBatchInput,
+  type ScanFrom
+} from "@website-signal-risk-scanner/shared";
 import { getCurrentUser } from "../../../server/auth";
 import { isBetterAuthConfigurationError } from "../../../server/better-auth/env";
 import { checkDomainDns } from "../../../server/domains/domain-dns";
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
 import {
+  type LocalV2DagLambdaDebugOverrides,
   normalizeLocalV2DagRunViaLambda,
   normalizeLocalV2DagScanProfile
 } from "../../../server/scans/local-v2-dag-scan-config";
@@ -51,40 +57,64 @@ function parseForceNewScan(value: unknown) {
   return value === true || value === "true" || value === "1";
 }
 
-function parseCaliforniaPrivacyConfig(value: unknown) {
+function normalizePublicScanFrom(value: unknown): ScanFrom {
+  const scanFrom = normalizeScanFrom(value);
+  return scanFrom === "california" ? "default" : scanFrom;
+}
+
+function parseLocalV2DagLambdaDebugOverrides(value: unknown): LocalV2DagLambdaDebugOverrides | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
+  const record = value as Record<string, unknown>;
+  const overrides: LocalV2DagLambdaDebugOverrides = {};
+  const scenarioResourceMode = record.scenarioResourceMode;
+  if (scenarioResourceMode === "normal" || scenarioResourceMode === "lean" || scenarioResourceMode === "cmp_safe") {
+    overrides.scenarioResourceMode = scenarioResourceMode;
+  }
+  if (record.strongEvidenceMode === "webmd") {
+    overrides.strongEvidenceMode = "webmd";
+  }
+  const actionFinalSettleMs = boundedDebugInteger(record.actionFinalSettleMs, 350, 10_000);
+  if (actionFinalSettleMs !== null) {
+    overrides.actionFinalSettleMs = actionFinalSettleMs;
+  }
+  const actionSearchDeadlineMs = boundedDebugInteger(record.actionSearchDeadlineMs, 1_000, 20_000);
+  if (actionSearchDeadlineMs !== null) {
+    overrides.actionSearchDeadlineMs = actionSearchDeadlineMs;
+  }
+  const consentFlowDeadlineMs = boundedDebugInteger(record.consentFlowDeadlineMs, 10_000, 90_000);
+  if (consentFlowDeadlineMs !== null) {
+    overrides.consentFlowDeadlineMs = consentFlowDeadlineMs;
+  }
+  const preActionObservationMs = boundedDebugInteger(record.preActionObservationMs, 0, 12_000);
+  if (preActionObservationMs !== null) {
+    overrides.preActionObservationMs = preActionObservationMs;
+  }
+  const scenarioConcurrency = boundedDebugInteger(record.scenarioConcurrency, 1, 4);
+  if (scenarioConcurrency !== null) {
+    overrides.scenarioConcurrency = scenarioConcurrency;
+  }
+  return Object.keys(overrides).length > 0 ? overrides : null;
+}
 
-  const config = value as Record<string, unknown>;
-  const exercisePrivacyChoicePath =
-    config.exercisePrivacyChoicePath === true ||
-    config.exercisePrivacyChoicePath === "true" ||
-    config.exercisePrivacyChoicePath === "1";
-  const forceGpcVerification =
-    config.forceGpcVerification === true ||
-    config.forceGpcVerification === "true" ||
-    config.forceGpcVerification === "1" ||
-    exercisePrivacyChoicePath;
-
-  return exercisePrivacyChoicePath || forceGpcVerification
-    ? {
-        ...(exercisePrivacyChoicePath ? { exercisePrivacyChoicePath: true } : {}),
-        ...(forceGpcVerification ? { forceGpcVerification: true } : {})
-      }
-    : null;
+function boundedDebugInteger(value: unknown, min: number, max: number): number | null {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number.parseInt(value, 10) : Number.NaN;
+  return Number.isFinite(parsed) ? Math.max(min, Math.min(max, Math.trunc(parsed))) : null;
 }
 
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
-    const californiaPrivacy = parseCaliforniaPrivacyConfig(payload?.californiaPrivacy);
     const forceNewScan = parseForceNewScan(payload?.forceNewScan);
     const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);
     const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(
       payload?.localV2RunViaLambda ?? payload?.localV2DagRunViaLambda ?? payload?.v2RunViaLambda
     );
-    const scanFrom = normalizeScanFrom(payload?.scanFrom ?? payload?.geo);
+    const localV2DagLambdaDebugOverrides = parseLocalV2DagLambdaDebugOverrides(
+      payload?.localV2DagLambdaDebugOverrides ?? payload?.v2LambdaDebugOverrides
+    );
+    const scanFrom = normalizePublicScanFrom(payload?.scanFrom ?? payload?.geo);
     const provenance = getScanRequestProvenance(request);
     const rawDomain = typeof payload?.domain === "string" ? payload.domain : "";
     const parsedBatch = parseDomainBatchInput(rawDomain);
@@ -157,8 +187,9 @@ export async function POST(request: Request) {
 
       const anonymousScan = await createAnonymousFullScan({
         bypassRecentScanReuse: forceNewScan,
-        californiaPrivacy,
+        californiaPrivacy: null,
         hostname: firstDomain.hostname,
+        localV2DagLambdaDebugOverrides,
         localV2DagScanProfile,
         localV2DagRunViaLambda,
         normalizedUrl: firstDomain.normalizedUrl,
@@ -216,7 +247,7 @@ export async function POST(request: Request) {
         createOrQueueDomainScan({
           allowExistingDomainRescan: true,
           bypassRecentScanReuse: forceNewScan,
-          californiaPrivacy,
+          californiaPrivacy: null,
           domain: item.normalizedUrl,
           localV2DagScanProfile,
           localV2DagRunViaLambda,

@@ -8,7 +8,7 @@ import {
   type ReceiveMessageCommandOutput
 } from "@aws-sdk/client-sqs";
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import {
@@ -32,6 +32,15 @@ type S3GetClient = {
   send(command: GetObjectCommand): Promise<GetObjectCommandOutput>;
 };
 
+type MirroredLambdaArtifact = {
+  field: "manifestUri" | "scanArtifactUri" | "reviewArtifactUri" | "reportAdapterArtifactUri" | "auxiliaryArtifact";
+  fileName: string;
+  localPath: string;
+  sha256: string;
+  sizeBytes: number;
+  sourceUri: string;
+};
+
 export type LocalV2DagLambdaResultPollerEnv = {
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL?: string;
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV?: string;
@@ -46,6 +55,10 @@ export type LocalV2DagLambdaPollResult = {
 
 function compactEnvValue(value: string | undefined) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function messageBody(message: Message) {
@@ -120,6 +133,7 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
     return null;
   }
 
+  const mirrorStartedAt = Date.now();
   const outDir = localV2DagArtifactRoot(input.parsedMessage.scanId, input.workspaceRoot);
   await mkdir(outDir, { recursive: true });
   const s3Client = input.s3Client ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
@@ -129,38 +143,46 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
     { field: "reviewArtifactUri" as const, fileName: "ReviewResult.json", uri: pointers.reviewArtifactUri },
     { field: "reportAdapterArtifactUri" as const, fileName: "V2ReportProjectionDraft.json", uri: pointers.reportAdapterArtifactUri }
   ];
-  const mirroredArtifacts = [];
+  const mirroredArtifacts: MirroredLambdaArtifact[] = await Promise.all(artifacts
+    .filter((artifact): artifact is typeof artifact & { uri: string } => Boolean(artifact.uri))
+    .map(async (artifact) => {
+      const { bucket, key } = parseS3Uri(artifact.uri);
+      const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      const body = await streamToBuffer(response.Body);
+      const sha256 = createHash("sha256").update(body).digest("hex");
+      const expected = input.parsedMessage.artifactMetadata?.[artifact.field];
+      if (expected?.sha256 && expected.sha256 !== sha256) {
+        throw new Error(`Local v2 DAG Lambda artifact checksum mismatch for ${artifact.fileName}.`);
+      }
+      if (typeof expected?.sizeBytes === "number" && expected.sizeBytes !== body.byteLength) {
+        throw new Error(`Local v2 DAG Lambda artifact size mismatch for ${artifact.fileName}.`);
+      }
+      const localPath = path.join(outDir, artifact.fileName);
+      await writeFile(localPath, body);
+      return {
+        field: artifact.field,
+        fileName: artifact.fileName,
+        localPath,
+        sha256,
+        sizeBytes: body.byteLength,
+        sourceUri: artifact.uri
+      };
+    }));
 
-  for (const artifact of artifacts) {
-    if (!artifact.uri) {
-      continue;
-    }
-    const { bucket, key } = parseS3Uri(artifact.uri);
-    const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-    const body = await streamToBuffer(response.Body);
-    const sha256 = createHash("sha256").update(body).digest("hex");
-    const expected = input.parsedMessage.artifactMetadata?.[artifact.field];
-    if (expected?.sha256 && expected.sha256 !== sha256) {
-      throw new Error(`Local v2 DAG Lambda artifact checksum mismatch for ${artifact.fileName}.`);
-    }
-    if (typeof expected?.sizeBytes === "number" && expected.sizeBytes !== body.byteLength) {
-      throw new Error(`Local v2 DAG Lambda artifact size mismatch for ${artifact.fileName}.`);
-    }
-    const localPath = path.join(outDir, artifact.fileName);
-    await writeFile(localPath, body);
-    mirroredArtifacts.push({
-      field: artifact.field,
-      fileName: artifact.fileName,
-      localPath,
-      sha256,
-      sizeBytes: body.byteLength,
-      sourceUri: artifact.uri
+  const manifestArtifact = mirroredArtifacts.find((artifact) => artifact.fileName === "LocalV2DagLambdaManifest.json");
+  if (manifestArtifact) {
+    const auxiliaryArtifacts = await mirrorAuxiliaryArtifactsFromLambdaManifest({
+      manifestPath: manifestArtifact.localPath,
+      outDir,
+      s3Client
     });
+    mirroredArtifacts.push(...auxiliaryArtifacts);
   }
 
   const manifestPath = path.join(outDir, "LambdaArtifactMirrorManifest.json");
   await writeFile(manifestPath, `${JSON.stringify({
     artifactOnly: true,
+    durationMs: Date.now() - mirrorStartedAt,
     fetchedAt: new Date().toISOString(),
     mirroredArtifacts,
     outDir,
@@ -172,10 +194,59 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
   }, null, 2)}\n`, "utf8");
 
   return {
+    durationMs: Date.now() - mirrorStartedAt,
     manifestPath,
     mirroredArtifacts,
     outDir
   };
+}
+
+async function mirrorAuxiliaryArtifactsFromLambdaManifest(input: {
+  manifestPath: string;
+  outDir: string;
+  s3Client: S3GetClient;
+}): Promise<MirroredLambdaArtifact[]> {
+  const manifest = asRecord(JSON.parse(await readFile(input.manifestPath, "utf8")));
+  const auxiliaryArtifacts = Array.isArray(manifest.auxiliaryArtifacts) ? manifest.auxiliaryArtifacts : [];
+  return Promise.all(auxiliaryArtifacts.flatMap((value) => {
+    const artifact = asRecord(value);
+    const fileName = typeof artifact.fileName === "string" ? artifact.fileName : "";
+    const uri = typeof artifact.uri === "string" ? artifact.uri : "";
+    if (!isSupportedAuxiliaryFileName(fileName) || !uri) {
+      return [];
+    }
+    return [async () => {
+    const { bucket, key } = parseS3Uri(uri);
+    const response = await input.s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const body = await streamToBuffer(response.Body);
+    const sha256 = createHash("sha256").update(body).digest("hex");
+    const expectedSha256 = typeof artifact.sha256 === "string" ? artifact.sha256 : null;
+    const expectedSizeBytes = typeof artifact.sizeBytes === "number" ? artifact.sizeBytes : null;
+    if (expectedSha256 && expectedSha256 !== sha256) {
+      throw new Error(`Local v2 DAG Lambda auxiliary artifact checksum mismatch for ${fileName}.`);
+    }
+    if (expectedSizeBytes !== null && expectedSizeBytes !== body.byteLength) {
+      throw new Error(`Local v2 DAG Lambda auxiliary artifact size mismatch for ${fileName}.`);
+    }
+    const localPath = path.join(input.outDir, fileName);
+    await writeFile(localPath, body);
+    return {
+      field: "auxiliaryArtifact" as const,
+      fileName,
+      localPath,
+      sha256,
+      sizeBytes: body.byteLength,
+      sourceUri: uri
+    };
+    }];
+  }).map((mirror) => mirror()));
+}
+
+function isSupportedAuxiliaryFileName(fileName: string) {
+  return path.basename(fileName) === fileName && (
+    fileName.endsWith(".json") ||
+    fileName.endsWith(".png")
+  );
 }
 
 function withLocalV2DagOutDir(scanConfigJson: Record<string, unknown> | null, outDir: string) {
@@ -287,6 +358,7 @@ export async function recordLocalV2DagLambdaResultEvent(parsedMessage: LocalV2Da
       artifactMetadata: parsedMessage.artifactMetadata ?? {},
       artifactMirror: artifactMirror
         ? {
+            durationMs: artifactMirror.durationMs,
             manifestPath: artifactMirror.manifestPath,
             mirroredArtifacts: artifactMirror.mirroredArtifacts.map((artifact) => ({
               field: artifact.field,
@@ -301,6 +373,7 @@ export async function recordLocalV2DagLambdaResultEvent(parsedMessage: LocalV2Da
         : null,
       artifactPointers,
       completedAt: parsedMessage.completedAt,
+      lambdaPhaseTimings: parsedMessage.phaseTimings ?? [],
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
       resultStatus: parsedMessage.status,

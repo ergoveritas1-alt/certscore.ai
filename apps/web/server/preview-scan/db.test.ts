@@ -15,9 +15,10 @@ test("preview scan initial config switches to v2 DAG processor on localhost", ()
   const v2DagParallel = config.execution?.v2DagParallel as Record<string, unknown> | undefined;
 
   assert.equal(config.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
-  assert.equal(config.profile, "full");
-  assert.equal(v2DagParallel?.profile, "full");
+  assert.equal(config.profile, "standard");
+  assert.equal(v2DagParallel?.profile, "standard");
   assert.equal(v2DagParallel?.scenarioPlanningMode, "planned_parallel");
+  assert.equal(v2DagParallel?.policyOutputGraceMs, 1000);
   assert.equal(v2DagParallel?.productionFindingIntegration, false);
   assert.equal(Object.hasOwn(config, "findings"), false);
   assert.equal(Object.hasOwn(config, "signals"), false);

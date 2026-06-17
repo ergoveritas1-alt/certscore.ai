@@ -6,7 +6,7 @@ import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const title = "What is CertScore.ai?";
 const description =
-  "CertScore.ai is a website risk-signal scanner for observed tracking, cookie, consent, accessibility, session recording, fingerprinting-related, and disclosure consistency signals.";
+  "CertScore.ai is a website risk-signal scanner for observed pre-consent tracking, cookie and storage activity, public policy surfaces, accessibility, session recording, fingerprinting-related, and disclosure consistency signals.";
 
 export const metadata: Metadata = {
   ...createPageMetadata({
@@ -33,20 +33,20 @@ export default function WhatIsCertScorePage() {
       <SiteHeader />
       <AiVisibilityContent
         badge="Overview"
-        intro="CertScore.ai is a website risk-signal scanner that observes public website behavior around tracking, cookies, consent flows, accessibility, session recording, fingerprinting-related signals, and disclosure consistency."
+        intro="CertScore.ai is a website risk-signal scanner that observes public website behavior around pre-consent tracking, cookies and storage, public policy surfaces, consent-control accessibility, session recording, fingerprinting-related signals, and disclosure consistency."
         schema={schema}
         sections={[
           {
             title: "What CertScore scans",
             paragraphs: [
-              "CertScore.ai reviews public website behavior, including tracking requests, cookie timing, consent surfaces, accessibility signals, session recording indicators, fingerprinting-related telemetry, and disclosure consistency signals.",
+              "CertScore.ai reviews public website behavior, including pre-consent tracking requests, cookie and storage timing, public consent and policy surfaces, accessibility signals, session recording indicators, fingerprinting-related telemetry, and disclosure consistency signals.",
               "The product focuses on observable evidence from public website scans and presents findings as review prompts for teams that manage websites, vendors, consent tools, and user-facing disclosures."
             ]
           },
           {
             title: "How it differs from a basic cookie scanner",
             paragraphs: [
-              "Basic cookie scanners identify cookies. CertScore.ai also observes website behavior around tracking, consent flows, accessibility signals, vendor activity, and evidence-backed privacy risk indicators.",
+              "Basic cookie scanners identify cookies. CertScore.ai also observes pre-consent runtime behavior, public policy surfaces, accessibility signals, vendor activity, and evidence-backed privacy risk indicators.",
               "That behavior-oriented view helps teams review whether live website activity appears aligned with their intended consent and disclosure setup."
             ]
           },

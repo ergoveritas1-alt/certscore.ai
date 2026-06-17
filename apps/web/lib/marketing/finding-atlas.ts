@@ -89,6 +89,11 @@ export type DetectionMethodologySection = {
 };
 
 const TOP_FINDING_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_IDS;
+const PUBLIC_DEFERRED_FINDING_IDS = new Set<string>([
+  "cpra_cba_opt_out_missing"
+]);
+const PUBLIC_DEFERRED_REGULATORY_CONTEXT_PATTERN =
+  /CCPA|CPRA|California|CPPA|Do Not Sell|Do Not Share|sale\/share|sale or share|sale, sharing|selling\/sharing/i;
 
 const ILLUSTRATIVE_PUBLIC_SAMPLE_FINDING_IDS = new Set<string>([
   "pre_consent_tracking_detected",
@@ -241,6 +246,39 @@ const PUBLIC_TITLE_OVERRIDES: Record<string, string> = {
   rtb_cookie_sync_observed: "Adtech identity sync-like request observed",
   third_party_cookie_pre_consent: "Third-party cookie or storage observed before consent"
 };
+
+function sanitizePublicRegulatoryContext(
+  context: FindingRegulatoryContext | undefined
+): FindingRegulatoryContext | undefined {
+  if (!context || PUBLIC_DEFERRED_REGULATORY_CONTEXT_PATTERN.test(context.label)) {
+    return undefined;
+  }
+
+  const technicalStandards = context.technicalStandards.filter((item) =>
+    !PUBLIC_DEFERRED_REGULATORY_CONTEXT_PATTERN.test(`${item.id} ${item.label} ${item.appliesWhen} ${item.sourceRefs.join(" ")}`)
+  );
+  const jurisdictionalContexts = context.jurisdictionalContexts.filter((item) =>
+    !PUBLIC_DEFERRED_REGULATORY_CONTEXT_PATTERN.test(`${item.id} ${item.label} ${item.appliesWhen} ${item.sourceRefs.join(" ")}`)
+  );
+  const sanitizeCopy = (value: string) => value
+    .replace(/,?\s*sale\/share status/gi, "")
+    .replace(/,?\s*sale\/share/gi, "")
+    .replace(/,?\s*selling\/sharing status/gi, "")
+    .replace(/,?\s*Do Not Sell\/Share status/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  return {
+    ...context,
+    displayCaution: sanitizeCopy(context.displayCaution),
+    primaryConcern: {
+      ...context.primaryConcern,
+      displayCopy: sanitizeCopy(context.primaryConcern.displayCopy)
+    },
+    technicalStandards,
+    jurisdictionalContexts
+  };
+}
 
 const RELATED_FINDINGS: Record<string, string[]> = {
   asymmetric_consent_ui: ["reject_option_missing_or_hidden", "forced_consent_interaction", "consent_dark_patterns_detected"],
@@ -2554,6 +2592,10 @@ export const DETECTION_METHODOLOGY_SECTIONS: DetectionMethodologySection[] = [
 
 export function getFindingReferenceItems(): FindingReferenceItem[] {
   return TOP_FINDING_IDS.flatMap((findingId) => {
+    if (PUBLIC_DEFERRED_FINDING_IDS.has(findingId)) {
+      return [];
+    }
+
     const definition = CERT_SCORE_FINDING_REGISTRY[findingId];
     const benchmark = FINDING_DENSITY_BENCHMARKS[findingId];
 
@@ -2575,13 +2617,13 @@ export function getFindingReferenceItems(): FindingReferenceItem[] {
       exampleEvidence: makeEvidenceExamples(findingId),
       commonCauses: COMMON_CAUSES[findingId] ?? ["Unexpected runtime configuration", "Third-party tag behavior changed", "Public surface differed from expected implementation"],
       reviewQuestions: REVIEW_QUESTIONS[findingId] ?? ["What signal was retained?", "Which public surface or runtime event supports it?", "What implementation owner can confirm the behavior?"],
-      relatedFindingIds: RELATED_FINDINGS[findingId] ?? [],
+      relatedFindingIds: (RELATED_FINDINGS[findingId] ?? []).filter((id) => !PUBLIC_DEFERRED_FINDING_IDS.has(id)),
       benchmark,
       benchmarkBadge: makeBenchmarkBadge(benchmark),
       limitations: [...(LIMITATIONS[findingId] ?? []), ...DEFAULT_LIMITATIONS],
       userImpact: USER_IMPACT[findingId],
       sample: getSampleFindingById(findingId) ?? makeFallbackSample(definition, benchmark),
-      regulatoryContext: FINDING_REGULATORY_CONTEXTS[findingId]
+      regulatoryContext: sanitizePublicRegulatoryContext(FINDING_REGULATORY_CONTEXTS[findingId])
     };
 
     return [item];
