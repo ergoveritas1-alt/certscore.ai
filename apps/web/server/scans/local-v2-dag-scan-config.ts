@@ -3,7 +3,7 @@ import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 export const LOCAL_V2_DAG_SCAN_PROFILE = "standard";
 export const LOCAL_V2_DAG_SCAN_PROFILES = ["standard", "tiny"] as const;
-export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "us-west-1";
+export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1";
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
 
 export type LocalV2DagScanProfile = (typeof LOCAL_V2_DAG_SCAN_PROFILES)[number];

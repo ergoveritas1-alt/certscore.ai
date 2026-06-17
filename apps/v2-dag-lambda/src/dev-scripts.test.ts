@@ -10,16 +10,16 @@ async function readRepoFile(relativePath: string) {
   return readFile(path.join(repoRoot, relativePath), "utf8");
 }
 
-test("dev image scripts refuse non-us-west-1 AWS regions", async () => {
+test("dev image scripts refuse non-eu-central-1 AWS regions", async () => {
   const buildScript = await readRepoFile("scripts/local-v2-dag-lambda/build-push-dev-image.sh");
   const setupScript = await readRepoFile("scripts/local-v2-dag-lambda/setup-dev-aws-image.sh");
 
-  assert.match(buildScript, /region="\$\{AWS_REGION:-us-west-1\}"/);
-  assert.match(buildScript, /Refusing to build\/push local v2 DAG Lambda image outside us-west-1/);
+  assert.match(buildScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
+  assert.match(buildScript, /Refusing to build\/push local v2 DAG Lambda image outside eu-central-1/);
   assert.match(buildScript, /--provenance=false/);
   assert.match(buildScript, /--sbom=false/);
-  assert.match(setupScript, /region="\$\{AWS_REGION:-us-west-1\}"/);
-  assert.match(setupScript, /Refusing to create local v2 DAG Lambda resources outside us-west-1/);
+  assert.match(setupScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
+  assert.match(setupScript, /Refusing to create local v2 DAG Lambda resources outside eu-central-1/);
 });
 
 test("dev image setup uses local names and refuses non-dev resource names", async () => {

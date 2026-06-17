@@ -38,7 +38,7 @@ test("SQS poller validates and deletes completed and failed local v2 DAG message
   const sqsClient = {
     async send(command: ReceiveMessageCommand | DeleteMessageCommand) {
       if (command instanceof ReceiveMessageCommand) {
-        assert.equal(command.input.QueueUrl, "https://sqs.us-west-1.amazonaws.com/123/local-results");
+        assert.equal(command.input.QueueUrl, "https://sqs.eu-central-1.amazonaws.com/123/local-results");
         assert.equal(command.input.MaxNumberOfMessages, 10);
         return {
           $metadata: {},
@@ -68,7 +68,7 @@ test("SQS poller validates and deletes completed and failed local v2 DAG message
 
   const result = await pollLocalV2DagLambdaResultQueue({
     env: {
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/local-results",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/local-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
     },
     handleMessage: async (rawMessage, options) => {
@@ -123,7 +123,7 @@ test("SQS poller rejects wrong environment/processor/contract and does not delet
 
   const result = await pollLocalV2DagLambdaResultQueue({
     env: {
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/local-results",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/local-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
     },
     handleMessage: async (rawMessage, options) => ingestLocalV2DagLambdaResultMessage(rawMessage, options),

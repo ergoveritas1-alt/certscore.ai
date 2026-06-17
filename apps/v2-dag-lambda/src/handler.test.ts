@@ -25,7 +25,7 @@ import {
 function validPayload(overrides: Record<string, unknown> = {}) {
   return {
     artifactOnly: true,
-    awsRegion: "us-west-1",
+    awsRegion: "eu-central-1",
     callbackCorrelationId: "scan-local-1",
     contractVersion: LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
     functionName: "certscore-v2-dag-local",
@@ -35,7 +35,7 @@ function validPayload(overrides: Record<string, unknown> = {}) {
     productionFindingIntegration: false,
     profile: "tiny",
     resultHandoff: "sqs",
-    resultQueueUrl: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
+    resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
     scanId: "scan-local-1",
     scannerRuntime: "certscore-v2-dag-parallel-path",
     targetEnvironment: "local",
@@ -177,7 +177,7 @@ test("handler rejects wrong contract, processor, region, VPC, or production-inte
   );
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ awsRegion: "us-east-1" })),
-    /us-west-1/
+    /eu-central-1/
   );
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ vpcMode: "private" })),
@@ -211,7 +211,7 @@ test("handler emits a validated completed SQS result without production findings
     sqsClient: {
       async send(command: SendMessageCommand) {
         sentBodies.push(String(command.input.MessageBody));
-        assert.equal(command.input.QueueUrl, "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-local-results");
+        assert.equal(command.input.QueueUrl, "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results");
         return { $metadata: {} };
       }
     }

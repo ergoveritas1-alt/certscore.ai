@@ -185,7 +185,7 @@ async function main() {
 
     const payload = {
       artifactOnly: true,
-      awsRegion: "us-west-1",
+      awsRegion: "eu-central-1",
       callbackCorrelationId: args.scanId,
       contractVersion: LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
       functionName: args.functionName,
