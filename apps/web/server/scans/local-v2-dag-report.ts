@@ -1,10 +1,13 @@
 import "server-only";
 
+import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import {
+  LOCAL_V2_DAG_LAMBDA_AWS_REGION,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   shouldUseLocalV2DagScanTool,
   type LocalV2DagScanProfile
@@ -22,6 +25,24 @@ function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function getLocalV2DagLambdaScanArtifactUri(scanRecord: ScanDetailResponse) {
+  return scanRecord.events
+    .filter((event) => event.eventType === "v2_lambda_result.received")
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+    .map((event) => {
+      const metadata = isRecord(event.metadataJson) ? event.metadataJson : null;
+      if (
+        metadata?.artifactOnly !== true ||
+        metadata?.productionFindingIntegration !== false ||
+        metadata?.processor !== LOCAL_V2_DAG_SCAN_PROCESSOR
+      ) {
+        return null;
+      }
+      return getString(getRecord(metadata, "artifactPointers")?.scanArtifactUri);
+    })
+    .find((uri): uri is string => Boolean(uri)) ?? null;
+}
+
 export function getLocalV2DagReportInput(scanRecord: ScanDetailResponse) {
   const config = scanRecord.scan.scanConfigJson;
   if (!isRecord(config) || config.processor !== LOCAL_V2_DAG_SCAN_PROCESSOR) {
@@ -36,6 +57,7 @@ export function getLocalV2DagReportInput(scanRecord: ScanDetailResponse) {
 
   const localV2Dag = getRecord(execution, "localV2Dag");
   const outDir = getString(localV2Dag?.outDir);
+  const scanArtifactUri = getLocalV2DagLambdaScanArtifactUri(scanRecord);
   const normalizedUrl = getString(config.normalizedUrl);
   const hostname = getString(config.hostname) ?? scanRecord.scan.domainHostname;
   const profile = getString(v2DagParallel.profile) ?? getString(config.profile) ?? "standard";
@@ -43,6 +65,7 @@ export function getLocalV2DagReportInput(scanRecord: ScanDetailResponse) {
   return {
     outDir,
     profile: profile === "tiny" ? "tiny" as LocalV2DagScanProfile : "standard" as LocalV2DagScanProfile,
+    scanArtifactUri,
     url: normalizedUrl ?? hostname ?? null
   };
 }
@@ -174,6 +197,61 @@ async function readLocalV2DagBundle(outDir: string): Promise<CanonicalEvidenceBu
   try {
     const raw = await readFile(path.join(resolveLocalV2OutDir(outDir), "CanonicalEvidenceBundle.json"), "utf8");
     const parsed: unknown = JSON.parse(raw);
+    if (
+      !isRecord(parsed) ||
+      (parsed.schemaVersion !== "certscore.v2.canonical-evidence-bundle.v1" &&
+        parsed.schemaVersion !== "certscore.v2.alpha.1")
+    ) {
+      return null;
+    }
+    return parsed as CanonicalEvidenceBundle;
+  } catch {
+    return null;
+  }
+}
+
+function parseS3Uri(uri: string) {
+  if (!uri.startsWith("s3://")) {
+    throw new Error("Local v2 DAG Lambda scan artifact URI must be s3://.");
+  }
+  const withoutScheme = uri.slice("s3://".length);
+  const slashIndex = withoutScheme.indexOf("/");
+  if (slashIndex <= 0 || slashIndex === withoutScheme.length - 1) {
+    throw new Error("Local v2 DAG Lambda scan artifact URI is missing bucket or key.");
+  }
+  return {
+    bucket: withoutScheme.slice(0, slashIndex),
+    key: withoutScheme.slice(slashIndex + 1)
+  };
+}
+
+async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {
+  if (!body) {
+    throw new Error("Local v2 DAG Lambda scan artifact did not include a body.");
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+  if (body instanceof Readable) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+  if (typeof body === "object" && "transformToByteArray" in body && typeof body.transformToByteArray === "function") {
+    return Buffer.from(await body.transformToByteArray());
+  }
+  throw new Error("Unsupported local v2 DAG Lambda scan artifact response body.");
+}
+
+async function readLocalV2DagBundleFromS3(scanArtifactUri: string): Promise<CanonicalEvidenceBundle | null> {
+  try {
+    const { bucket, key } = parseS3Uri(scanArtifactUri);
+    const response = await new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION }).send(
+      new GetObjectCommand({ Bucket: bucket, Key: key })
+    );
+    const parsed: unknown = JSON.parse((await streamToBuffer(response.Body)).toString("utf8"));
     if (
       !isRecord(parsed) ||
       (parsed.schemaVersion !== "certscore.v2.canonical-evidence-bundle.v1" &&
@@ -472,9 +550,13 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
 
 export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResponse): Promise<ScanDetailResponse> {
   const input = getLocalV2DagReportInput(scanRecord);
-  if (!input || scanRecord.scan.status !== "completed" || !input.outDir || !shouldUseLocalV2DagScanTool()) {
+  if (!input || scanRecord.scan.status !== "completed" || !shouldUseLocalV2DagScanTool()) {
     return scanRecord;
   }
-  const bundle = await readLocalV2DagBundle(input.outDir);
+  const bundle = input.outDir
+    ? await readLocalV2DagBundle(input.outDir)
+    : input.scanArtifactUri
+      ? await readLocalV2DagBundleFromS3(input.scanArtifactUri)
+      : null;
   return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle) : scanRecord;
 }
