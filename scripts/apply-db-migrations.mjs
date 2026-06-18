@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
-import pg from "pg";
 
+const require = createRequire(import.meta.url);
+const pg = require("pg");
 const { Client } = pg;
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "packages/db/migrations");
