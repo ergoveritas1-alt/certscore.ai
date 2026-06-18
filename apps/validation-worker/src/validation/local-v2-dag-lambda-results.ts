@@ -235,6 +235,8 @@ async function pollOnce(input: {
       received: messages.length
     });
   }
+
+  return { failed, handled, received: messages.length };
 }
 
 export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResultPollerOptions) {
@@ -252,11 +254,14 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
   async function loop() {
     while (!stopped) {
       try {
-        await pollOnce({
+        const result = await pollOnce({
           client,
           queueUrl: options.queueUrl as string,
           targetEnvironment: options.targetEnvironment
         });
+        if (result.received === 0) {
+          continue;
+        }
       } catch (error) {
         console.error("[validation-worker] v2 DAG Lambda result poll failed", {
           error: error instanceof Error ? error.message : String(error)
