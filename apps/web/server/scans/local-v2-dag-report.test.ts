@@ -121,6 +121,24 @@ test("getLocalV2DagReportInput ignores Lambda events that would enable productio
   assert.equal(input?.scanArtifactUri, null);
 });
 
+test("inferS3ArtifactRegion follows the regional Lambda artifact bucket", async () => {
+  const { inferS3ArtifactRegion } = await loadLocalV2DagReport();
+
+  assert.equal(
+    inferS3ArtifactRegion("certscore-v2-dag-local-artifacts-eu-central-1-199536052647"),
+    "eu-central-1"
+  );
+  assert.equal(
+    inferS3ArtifactRegion("certscore-v2-dag-local-artifacts-eu-west-1-199536052647"),
+    "eu-west-1"
+  );
+  assert.equal(
+    inferS3ArtifactRegion("certscore-v2-dag-local-artifacts-us-west-2-199536052647"),
+    "us-west-2"
+  );
+  assert.equal(inferS3ArtifactRegion("certscore-v2-dag-local-artifacts"), "eu-central-1");
+});
+
 test("shouldAttemptLocalV2DagLambdaResultRefresh gates stale in-flight Lambda scans", async () => {
   const { shouldAttemptLocalV2DagLambdaResultRefresh } = await loadLocalV2DagReport();
   const nowMs = Date.parse("2026-06-17T13:14:20.000Z");

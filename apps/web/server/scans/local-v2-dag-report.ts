@@ -8,6 +8,7 @@ import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import {
   LOCAL_V2_DAG_LAMBDA_AWS_REGION,
+  isLocalV2DagLambdaAwsRegion,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   shouldUseLocalV2DagScanTool,
   type LocalV2DagScanProfile
@@ -348,6 +349,12 @@ function parseS3Uri(uri: string) {
   };
 }
 
+export function inferS3ArtifactRegion(bucket: string) {
+  const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-2)(?:-|$)/);
+  const region = match?.[1] ?? null;
+  return isLocalV2DagLambdaAwsRegion(region) ? region : LOCAL_V2_DAG_LAMBDA_AWS_REGION;
+}
+
 async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {
   if (!body) {
     throw new Error("Local v2 DAG Lambda scan artifact did not include a body.");
@@ -371,7 +378,7 @@ async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {
 async function readLocalV2DagBundleFromS3(scanArtifactUri: string): Promise<CanonicalEvidenceBundle | null> {
   try {
     const { bucket, key } = parseS3Uri(scanArtifactUri);
-    const response = await new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION }).send(
+    const response = await new S3Client({ region: inferS3ArtifactRegion(bucket) }).send(
       new GetObjectCommand({ Bucket: bucket, Key: key })
     );
     const parsed: unknown = JSON.parse((await streamToBuffer(response.Body)).toString("utf8"));
@@ -1089,10 +1096,11 @@ export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResp
     return scanRecord;
   }
   const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
-  const bundle = shouldReadLocalOutDir && input.outDir
+  const localBundle = shouldReadLocalOutDir && input.outDir
     ? await readLocalV2DagBundle(input.outDir)
-    : input.scanArtifactUri
-      ? await readLocalV2DagBundleFromS3(input.scanArtifactUri)
-      : null;
+    : null;
+  const bundle = localBundle ?? (input.scanArtifactUri
+    ? await readLocalV2DagBundleFromS3(input.scanArtifactUri)
+    : null);
   return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle) : scanRecord;
 }
