@@ -144,7 +144,9 @@ test("dedupePolicySurfaces collapses equivalent privacy URLs before report proje
       observationId: "terms",
       surfaceType: "terms",
       url: "/terms",
-      confidence: 0.45
+      confidence: 0.45,
+      status: "fetched",
+      textExcerpt: "Terms of service text"
     }
   ] as never, "https://cnn.com/");
 
@@ -155,6 +157,85 @@ test("dedupePolicySurfaces collapses equivalent privacy URLs before report proje
       { pageUrl: "https://cnn.com/terms", type: "terms" }
     ]
   );
+});
+
+test("dedupePolicySurfaces suppresses failed common-path privacy guesses", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "caltech-privacy",
+      surfaceType: "privacy_policy",
+      url: "/privacy",
+      normalizedUrl: "https://caltech.edu/privacy",
+      discoveryMethod: "guessed_common_path",
+      status: "failed",
+      fetchable: true,
+      confidence: 0.58
+    },
+    {
+      observationId: "caltech-privacy-policy",
+      surfaceType: "privacy_policy",
+      url: "/privacy-policy",
+      normalizedUrl: "https://caltech.edu/privacy-policy",
+      discoveryMethod: "guessed_common_path",
+      status: "failed",
+      fetchable: true,
+      confidence: 0.58
+    },
+    {
+      observationId: "caltech-privacy-notice",
+      surfaceType: "privacy_policy",
+      url: "/privacy-notice",
+      normalizedUrl: "https://caltech.edu/privacy-notice",
+      discoveryMethod: "guessed_common_path",
+      status: "failed",
+      fetchable: true,
+      confidence: 0.58
+    }
+  ] as never, "https://caltech.edu/");
+
+  assert.deepEqual(surfaces, []);
+  const summary = summarizePolicySurfaces(surfaces, "caltech.edu");
+  assert.equal(summary.policySurfaceCount, 0);
+  assert.equal(summary.privacyPolicyPresent, false);
+  assert.deepEqual(summary.privacyPolicyUrls, []);
+});
+
+test("dedupePolicySurfaces keeps the strongest fetched privacy document over weaker candidates", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "weak-candidate",
+      surfaceType: "privacy_policy",
+      url: "/privacy",
+      normalizedUrl: "https://example.edu/privacy",
+      discoveryMethod: "guessed_common_path",
+      status: "candidate",
+      fetchable: true,
+      confidence: 0.9
+    },
+    {
+      observationId: "fetched-notice",
+      surfaceType: "privacy_policy",
+      url: "https://www.example.edu/privacy-notice",
+      normalizedUrl: "https://www.example.edu/privacy-notice",
+      discoveryMethod: "footer_link",
+      status: "fetched",
+      fetchable: true,
+      confidence: 0.7,
+      textExcerpt: "Privacy Notice. We explain controller contact, processing purposes, legal basis, retention, rights, and international transfers.",
+      observedTopics: ["controller_contact", "processing_purposes", "legal_basis", "data_retention", "data_subject_rights", "international_transfers"]
+    }
+  ] as never, "https://example.edu/");
+
+  assert.deepEqual(
+    surfaces.map((row) => ({ pageUrl: row.pageUrl, status: row.surface.status, type: row.surface.surfaceType })),
+    [{ pageUrl: "https://example.edu/privacy-notice", status: "fetched", type: "privacy_policy" }]
+  );
+  const summary = summarizePolicySurfaces(surfaces, "example.edu");
+  assert.equal(summary.policySurfaceCount, 1);
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.deepEqual(summary.privacyPolicyUrls, ["https://example.edu/privacy-notice"]);
 });
 
 test("summarizePolicySurfaces limits Article 13 aggregation to target-relevant privacy notices", async () => {

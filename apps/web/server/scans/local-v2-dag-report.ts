@@ -193,8 +193,38 @@ function policySurfaceDeduplicationKey(surface: LocalV2PolicySurface, fallbackBa
   return canonicalUrl ? `${pageType}:${canonicalUrl.toLowerCase()}` : `${pageType}:${surface.observationId ?? ""}`;
 }
 
+function hasSubstantivePolicySurfaceEvidence(surface: LocalV2PolicySurface) {
+  return Boolean(
+    firstString(surface.textExcerpt) ||
+    (surface.observedTopics ?? []).length > 0 ||
+    (surface.article13DisclosureSignals ?? []).length > 0 ||
+    (surface.mentionedControls ?? []).length > 0 ||
+    (surface.boundedTextExcerptIds ?? []).length > 0 ||
+    (surface.evidenceRefs ?? []).length > 0 ||
+    (surface.artifactRefs ?? []).length > 0
+  );
+}
+
+function isReportablePolicySurface(surface: LocalV2PolicySurface) {
+  if (surface.status === "failed" || surface.status === "skipped_budget" || surface.status === "not_observed") {
+    return false;
+  }
+
+  if (surface.status === "fetched") {
+    return true;
+  }
+
+  if (surface.surfaceType === "privacy_policy" || surface.surfaceType === "cookie_policy" || surface.surfaceType === "terms") {
+    return hasSubstantivePolicySurfaceEvidence(surface);
+  }
+
+  return surface.status === "observed" || hasSubstantivePolicySurfaceEvidence(surface);
+}
+
 function policySurfaceEvidenceWeight(surface: LocalV2PolicySurface, pageUrl: string | null) {
   return [
+    surface.status === "fetched" ? 100_000 : 0,
+    hasSubstantivePolicySurfaceEvidence(surface) ? 10_000 : 0,
     pageUrl && !pageUrl.startsWith("/") ? 10 : 0,
     typeof surface.confidence === "number" ? surface.confidence : 0,
     firstString(surface.textExcerpt)?.length ?? 0,
@@ -207,6 +237,10 @@ export function dedupePolicySurfaces(surfaces: readonly LocalV2PolicySurface[], 
   const retained = new Map<string, { pageUrl: string | null; surface: LocalV2PolicySurface }>();
 
   for (const surface of surfaces) {
+    if (!isReportablePolicySurface(surface)) {
+      continue;
+    }
+
     const pageUrl = canonicalPolicySurfaceUrl(surface, fallbackBaseUrl);
     const key = policySurfaceDeduplicationKey(surface, fallbackBaseUrl);
     const existing = retained.get(key);
