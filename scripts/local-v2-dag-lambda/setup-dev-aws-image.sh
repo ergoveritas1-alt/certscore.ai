@@ -7,7 +7,7 @@ function_name="${CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME:-${prefix}-lambda}"
 queue_name="${CERTSCORE_V2_DAG_LAMBDA_QUEUE_NAME:-${prefix}-results}"
 role_name="${CERTSCORE_V2_DAG_LAMBDA_ROLE_NAME:-${prefix}-role}"
 image_uri="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_URI:-${1:-}}"
-artifact_bucket="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET:-${prefix}-artifacts-${AWS_ACCOUNT_ID:-}}"
+artifact_bucket="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET:-}"
 artifact_prefix="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX:-v2-dag-lambda/local}"
 memory_size="${CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-2048}"
 
@@ -50,8 +50,10 @@ if [[ "$queue_name" != *local* && "$queue_name" != *dev* ]]; then
 fi
 
 account_id="$(aws sts get-caller-identity --query Account --output text)"
-if [[ "$artifact_bucket" == *- ]]; then
-  artifact_bucket="${prefix}-artifacts-${account_id}"
+if [[ -z "$artifact_bucket" ]]; then
+  artifact_bucket="${prefix}-artifacts-${region}-${account_id}"
+elif [[ "$artifact_bucket" == *- ]]; then
+  artifact_bucket="${prefix}-artifacts-${region}-${account_id}"
 fi
 if [[ "$artifact_bucket" != *local* && "$artifact_bucket" != *dev* ]]; then
   echo "Refusing non-dev/local artifact bucket name: ${artifact_bucket}" >&2
@@ -80,6 +82,27 @@ queue_arn="$(aws sqs get-queue-attributes \
   --attribute-names QueueArn \
   --query 'Attributes.QueueArn' \
   --output text)"
+supported_regions=("eu-central-1" "eu-west-1" "us-west-2")
+
+json_array() {
+  node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' "$@"
+}
+
+log_resources=()
+sqs_resources=()
+s3_resources=()
+lambda_resources=()
+for supported_region in "${supported_regions[@]}"; do
+  log_resources+=("arn:aws:logs:${supported_region}:${account_id}:*")
+  sqs_resources+=("arn:aws:sqs:${supported_region}:${account_id}:${queue_name}")
+  s3_resources+=("arn:aws:s3:::${prefix}-artifacts-${supported_region}-${account_id}/${artifact_prefix%/}/*")
+  lambda_resources+=("arn:aws:lambda:${supported_region}:${account_id}:function:${prefix}-*")
+done
+s3_resources+=("arn:aws:s3:::${artifact_bucket}/${artifact_prefix%/}/*")
+log_resources_json="$(json_array "${log_resources[@]}")"
+sqs_resources_json="$(json_array "${sqs_resources[@]}")"
+s3_resources_json="$(json_array "${s3_resources[@]}")"
+lambda_resources_json="$(json_array "${lambda_resources[@]}")"
 
 trust_policy="$(mktemp)"
 permission_policy="$(mktemp)"
@@ -111,12 +134,12 @@ cat >"$permission_policy" <<JSON
         "logs:CreateLogStream",
         "logs:PutLogEvents"
       ],
-      "Resource": "arn:aws:logs:${region}:${account_id}:*"
+      "Resource": ${log_resources_json}
     },
     {
       "Effect": "Allow",
       "Action": "sqs:SendMessage",
-      "Resource": "${queue_arn}"
+      "Resource": ${sqs_resources_json}
     },
     {
       "Effect": "Allow",
@@ -124,12 +147,12 @@ cat >"$permission_policy" <<JSON
         "s3:GetObject",
         "s3:PutObject"
       ],
-      "Resource": "arn:aws:s3:::${artifact_bucket}/${artifact_prefix%/}/*"
+      "Resource": ${s3_resources_json}
     },
     {
       "Effect": "Allow",
       "Action": "lambda:InvokeFunction",
-      "Resource": "arn:aws:lambda:${region}:${account_id}:function:${prefix}-*"
+      "Resource": ${lambda_resources_json}
     }
   ]
 }

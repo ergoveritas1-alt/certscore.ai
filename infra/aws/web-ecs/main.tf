@@ -5,14 +5,28 @@ data "tls_certificate" "github_actions_oidc" {
 }
 
 locals {
-  prefix           = var.project_name
-  vpc_id           = var.existing_vpc_id
-  public_subnets   = var.public_subnet_ids
-  private_subnets  = var.private_subnet_ids
-  certificate_arn  = trimspace(var.existing_certificate_arn) != "" ? var.existing_certificate_arn : null
-  create_cluster   = trimspace(var.existing_ecs_cluster_name) == ""
-  ecs_cluster_name = local.create_cluster ? aws_ecs_cluster.web[0].name : var.existing_ecs_cluster_name
-  common_tags      = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "web-ecs" })
+  prefix                      = var.project_name
+  vpc_id                      = var.existing_vpc_id
+  public_subnets              = var.public_subnet_ids
+  private_subnets             = var.private_subnet_ids
+  certificate_arn             = trimspace(var.existing_certificate_arn) != "" ? var.existing_certificate_arn : null
+  create_cluster              = trimspace(var.existing_ecs_cluster_name) == ""
+  ecs_cluster_name            = local.create_cluster ? aws_ecs_cluster.web[0].name : var.existing_ecs_cluster_name
+  common_tags                 = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "web-ecs" })
+  v2_dag_lambda_function_name = "certscore-v2-dag-local-lambda"
+  v2_dag_lambda_regions = {
+    eu_de      = "eu-central-1"
+    eu_ie      = "eu-west-1"
+    california = "us-west-2"
+  }
+  v2_dag_lambda_queue_urls = {
+    for key, region in local.v2_dag_lambda_regions :
+    key => "https://sqs.${region}.amazonaws.com/${data.aws_caller_identity.current.account_id}/certscore-v2-dag-local-results"
+  }
+  v2_dag_lambda_artifact_object_arns = [
+    for region in values(local.v2_dag_lambda_regions) :
+    "arn:aws:s3:::certscore-v2-dag-local-artifacts-${region}-${data.aws_caller_identity.current.account_id}/v2-dag-lambda/local/*"
+  ]
   web_secret_arns = compact([
     var.database_url_secret_arn,
     var.better_auth_secret_arn,
@@ -38,6 +52,20 @@ locals {
       { name = "HOSTNAME", value = "0.0.0.0" },
       { name = "NEXT_PUBLIC_AUTH_GOOGLE_ENABLED", value = var.next_public_auth_google_enabled },
       { name = "CERTSCORE_ADMIN_EMAILS", value = var.certscore_admin_emails },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_ENABLED", value = "true" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE", value = "sharded" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV", value = "production" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME", value = local.v2_dag_lambda_function_name },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_de },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_EU_DE_ENABLED", value = "true" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_EU_DE_FUNCTION_NAME", value = local.v2_dag_lambda_function_name },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_de },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED", value = "true" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME", value = local.v2_dag_lambda_function_name },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_ie },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED", value = "true" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME", value = local.v2_dag_lambda_function_name },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.california },
       { name = "FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT", value = tostring(var.full_scan_queue_allow_degraded_heartbeat) },
       { name = "FULL_SCAN_ALLOW_PRODUCTION_LOAD_TEST_DNS_BYPASS", value = tostring(var.full_scan_allow_production_load_test_dns_bypass) },
       { name = "S3_BUCKET", value = var.s3_bucket },
@@ -345,6 +373,35 @@ resource "aws_iam_role_policy" "task_exec" {
         Effect   = "Allow"
         Action   = ["ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"]
         Resource = "*"
+      },
+      {
+        Sid    = "InvokeRegionalV2DagLambda"
+        Effect = "Allow"
+        Action = "lambda:InvokeFunction"
+        Resource = [
+          for region in values(local.v2_dag_lambda_regions) :
+          "arn:aws:lambda:${region}:${data.aws_caller_identity.current.account_id}:function:${local.v2_dag_lambda_function_name}"
+        ]
+      },
+      {
+        Sid    = "ReadRegionalV2DagLambdaResults"
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl"
+        ]
+        Resource = [
+          for region in values(local.v2_dag_lambda_regions) :
+          "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:certscore-v2-dag-local-results"
+        ]
+      },
+      {
+        Sid      = "ReadRegionalV2DagLambdaArtifacts"
+        Effect   = "Allow"
+        Action   = "s3:GetObject"
+        Resource = local.v2_dag_lambda_artifact_object_arns
       }
     ]
   })
@@ -466,9 +523,9 @@ resource "aws_ecs_task_definition" "certscore" {
       ]
       environment = concat(local.base_environment, [
         { name = "NEXT_PUBLIC_APP_URL", value = local.certscore_base_url },
-      { name = "STRIPE_PRICE_INDIVIDUAL_MONTHLY", value = var.stripe_price_individual_monthly },
-      { name = "STRIPE_PRICE_STARTER_MONTHLY", value = var.stripe_price_individual_monthly },
-      { name = "STRIPE_PRICE_PRO_MONTHLY", value = var.stripe_price_pro_monthly },
+        { name = "STRIPE_PRICE_INDIVIDUAL_MONTHLY", value = var.stripe_price_individual_monthly },
+        { name = "STRIPE_PRICE_STARTER_MONTHLY", value = var.stripe_price_individual_monthly },
+        { name = "STRIPE_PRICE_PRO_MONTHLY", value = var.stripe_price_pro_monthly },
         { name = "STRIPE_BILLING_PORTAL_CONFIGURATION_ID", value = var.stripe_billing_portal_configuration_id },
         { name = "STRIPE_BILLING_PORTAL_RETURN_PATH", value = var.stripe_billing_portal_return_path }
       ])

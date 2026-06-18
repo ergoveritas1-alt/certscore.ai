@@ -22,6 +22,19 @@ locals {
   ecs_task_security_groups = length(var.ecs_task_security_group_ids) > 0 ? var.ecs_task_security_group_ids : [
     aws_security_group.ecs_tasks.id
   ]
+  v2_dag_lambda_regions = {
+    eu_de      = "eu-central-1"
+    eu_ie      = "eu-west-1"
+    california = "us-west-2"
+  }
+  v2_dag_lambda_queue_urls = {
+    for key, region in local.v2_dag_lambda_regions :
+    key => "https://sqs.${region}.amazonaws.com/${data.aws_caller_identity.current.account_id}/certscore-v2-dag-local-results"
+  }
+  v2_dag_lambda_artifact_object_arns = [
+    for region in values(local.v2_dag_lambda_regions) :
+    "arn:aws:s3:::certscore-v2-dag-local-artifacts-${region}-${data.aws_caller_identity.current.account_id}/v2-dag-lambda/local/*"
+  ]
   web_container_environment = concat(
     [
       { name = "APP_FLAVOR", value = "validation_ops" },
@@ -58,7 +71,14 @@ locals {
       { name = "VALIDATION_TRANCO_MAX_RANK", value = tostring(var.validation_tranco_max_rank) },
       { name = "WORKER_CONCURRENCY", value = var.worker_concurrency },
       { name = "LLM_ENRICHMENT_ENABLED", value = var.llm_enrichment_enabled },
-      { name = "PLAYWRIGHT_BROWSERS_PATH", value = var.playwright_browsers_path }
+      { name = "PLAYWRIGHT_BROWSERS_PATH", value = var.playwright_browsers_path },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED", value = "1" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS", value = "10" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV", value = "production" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_de },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_de },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_ie },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.california }
     ],
     var.s3_endpoint != "" ? [{ name = "S3_ENDPOINT", value = var.s3_endpoint }] : [],
     var.s3_force_path_style != "" ? [{ name = "S3_FORCE_PATH_STYLE", value = var.s3_force_path_style }] : [],
@@ -544,6 +564,26 @@ resource "aws_iam_role_policy" "task_exec" {
         Effect   = "Allow"
         Action   = ["ssmmessages:CreateControlChannel", "ssmmessages:CreateDataChannel", "ssmmessages:OpenControlChannel", "ssmmessages:OpenDataChannel"]
         Resource = "*"
+      },
+      {
+        Sid    = "PollRegionalV2DagLambdaResults"
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl"
+        ]
+        Resource = [
+          for region in values(local.v2_dag_lambda_regions) :
+          "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:certscore-v2-dag-local-results"
+        ]
+      },
+      {
+        Sid      = "ReadRegionalV2DagLambdaArtifacts"
+        Effect   = "Allow"
+        Action   = "s3:GetObject"
+        Resource = local.v2_dag_lambda_artifact_object_arns
       }
     ]
   })
