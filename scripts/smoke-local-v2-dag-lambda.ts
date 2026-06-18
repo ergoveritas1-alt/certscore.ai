@@ -26,13 +26,14 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function submitScan(input: { baseUrl: string; domain: string; profile: string }) {
+async function submitScan(input: { baseUrl: string; domain: string; profile: string; scanFrom: string }) {
   const response = await fetch(`${input.baseUrl.replace(/\/$/, "")}/api/full-scan`, {
     body: JSON.stringify({
       domain: input.domain,
       forceNewScan: true,
       localV2RunViaLambda: true,
-      localV2ScanProfile: input.profile
+      localV2ScanProfile: input.profile,
+      scanFrom: input.scanFrom
     }),
     headers: {
       "content-type": "application/json",
@@ -74,9 +75,10 @@ async function main() {
   const baseUrl = getArgValue("--base-url") ?? "http://localhost:3000";
   const domain = getArgValue("--domain") ?? "example.com";
   const profile = getArgValue("--profile") ?? "tiny";
+  const scanFrom = getArgValue("--scan-from") ?? "eu_de";
   const maxAttempts = parsePositiveIntegerArg("--attempts", 18);
   const waitSeconds = parsePositiveIntegerArg("--wait-seconds", 10);
-  const scan = await submitScan({ baseUrl, domain, profile });
+  const scan = await submitScan({ baseUrl, domain, profile, scanFrom });
   const scanId = scan.scanId as string;
 
   let latestEvents = await loadScanEvents(scanId);
@@ -97,7 +99,9 @@ async function main() {
       console.log(JSON.stringify({
         baseUrl,
         domain,
+        lambdaDispatchRegion: lambdaEvents(latestEvents).find((event) => event.event_type === "v2_lambda_dispatch.started")?.metadata_json?.awsRegion ?? null,
         lambdaResultStatus: resultEvent.metadata_json?.resultStatus ?? null,
+        scanFrom,
         scanId,
         scanUrl: scan.scanUrl ?? `/scan/${scanId}`,
         status: "passed"
