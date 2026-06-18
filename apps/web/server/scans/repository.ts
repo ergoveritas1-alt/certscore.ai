@@ -10,12 +10,7 @@ import type {
   SharedPriorDocumentSource,
   SharedPriorScanAccelerationConfig
 } from "@website-signal-risk-scanner/shared";
-import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
-import {
-  LEGACY_CHANGE_EVENT_TYPES,
-  isMissingComplianceChangeEventsTable,
-  type LegacyScanEventRow
-} from "../changes/legacy-change-events";
+import { isMissingComplianceChangeEventsTable } from "../changes/legacy-change-events";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 
 export type ScanDetailQueryRow = {
@@ -1841,42 +1836,6 @@ export async function loadOrganizationScanPageData(
     validationRuns,
     verdictByFindingId
   };
-}
-
-export async function loadOrganizationScanLegacyEvents(
-  organizationId: string,
-  scanIds: string[]
-): Promise<LegacyScanEventRow[]> {
-  const legacyEvents: LegacyScanEventRow[] = [];
-  let legacyEventsError: QueryErrorLike = null;
-
-  for (const scanIdBatch of chunkValues(scanIds, CHANGE_EVENT_BATCH_SIZE)) {
-    try {
-      const data = await query<LegacyScanEventRow>(
-        `
-          select id, scan_id, event_type, message, metadata_json, created_at
-          from scan_events
-          where organization_id = $1
-            and scan_id = any($2::uuid[])
-            and event_type = any($3::text[])
-          order by created_at desc
-        `,
-        [organizationId, scanIdBatch, [...LEGACY_CHANGE_EVENT_TYPES, SCAN_EVENT_TYPES.changesComputed]],
-        { readOnly: true }
-      ).then((result) => result.rows);
-
-      legacyEvents.push(...data);
-    } catch (error) {
-      legacyEventsError = { message: getErrorMessage(error) };
-      break;
-    }
-  }
-
-  if (legacyEventsError) {
-    throw new Error(`Failed to load organization scans: ${legacyEventsError.message}`);
-  }
-
-  return legacyEvents;
 }
 
 export { isMissingComplianceChangeEventsTable };

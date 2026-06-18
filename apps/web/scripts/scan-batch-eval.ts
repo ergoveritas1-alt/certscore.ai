@@ -1,7 +1,6 @@
 import { closePools, query, queryOne } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES, parseDomainBatchInput } from "@website-signal-risk-scanner/shared";
 import { buildScanCalibrationSummary } from "../lib/scans/calibration-summary";
-import { deriveCaliforniaPrivacyCoveragePolicyOutcomes } from "../lib/scans/california-privacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "../lib/scans/gdpr-eprivacy-coverage-checklist";
 import {
   deriveGdprEprivacyCoveragePolicyOutcomes,
@@ -13,10 +12,8 @@ import {
 } from "../lib/scans/consent-audit-findings";
 import { deriveCertScoreFindings } from "../lib/scans/derive-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../lib/scans/executive-findings-projection";
-import { deriveHighRiskTrackingContext } from "../lib/scans/high-risk-tracking-context";
 import { getHybridDerivedTrackerVendors, withHybridRuntimeArtifactFallbacks } from "../lib/scans/hybrid-runtime-evidence";
 import { buildNanoPolicyInputsFromDocumentSources, shouldPreferNanoDocumentSources } from "../lib/scans/nano-document-sources";
-import { buildNormalizedConcerns } from "../lib/scans/normalized-concerns";
 import { deriveRuntimeVendorDisclosureEvidenceFromRetainedSources } from "../lib/scans/runtime-vendor-disclosure";
 import { buildScanReportUnifiedFindingState } from "../lib/scans/scan-report-unified-findings";
 import type { UnifiedFindingDisplayPacket } from "../lib/scans/unified-findings";
@@ -56,25 +53,6 @@ type ScanTrackerVendorRecord = {
   scriptHost: string | null;
   vendorCategory: string;
   vendorName: string;
-};
-
-type CaliforniaCohortSummaryRow = {
-  cipaCommunication: string;
-  cipaRecording: string;
-  cmp: string;
-  cmpExcludedFromDirectAdtech: boolean;
-  collectionNotice: string;
-  domain: string;
-  gpc: string;
-  notes: string[];
-  optOut: string;
-  privacyNotice: string;
-  rows: Record<string, {
-    status: string;
-  }>;
-  saleShare: string;
-  scanId: string;
-  sensitiveContext: string;
 };
 
 type GdprEprivacyCohortSummaryRow = {
@@ -300,134 +278,6 @@ function normalizeTrackerVendorRows(
       left.vendorName.localeCompare(right.vendorName) ||
       (left.scriptHost ?? "").localeCompare(right.scriptHost ?? "")
   );
-}
-
-function getStringArrayFromRecord(record: Record<string, unknown> | null | undefined, keys: string[]) {
-  const values: string[] = [];
-  for (const key of keys) {
-    const value = record?.[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      values.push(value.trim());
-      continue;
-    }
-    if (Array.isArray(value)) {
-      for (const entry of value) {
-        if (typeof entry === "string" && entry.trim().length > 0) {
-          values.push(entry.trim());
-        }
-      }
-    }
-  }
-  return [...new Set(values)];
-}
-
-function getRuntimeRecord(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function compactNames(values: string[], limit = 4) {
-  const unique = [...new Set(values.filter((value) => value.trim().length > 0))];
-  if (unique.length === 0) {
-    return "none";
-  }
-  if (unique.length <= limit) {
-    return unique.join(", ");
-  }
-  return `${unique.slice(0, limit).join(", ")} +${unique.length - limit}`;
-}
-
-function getOutcomeStatus(
-  outcomes: ReturnType<typeof deriveCaliforniaPrivacyCoveragePolicyOutcomes>,
-  rowId: string
-) {
-  return outcomes[rowId]?.status ?? "missing";
-}
-
-function buildCaliforniaCohortSummaryRow(input: {
-  domain: string;
-  events: GdprEprivacyCoveragePolicyEvent[];
-  runtimeArtifacts: Record<string, unknown> | null;
-  scanCompleted: boolean;
-  scanId: string;
-  snapshot: Record<string, unknown> | null;
-}): CaliforniaCohortSummaryRow {
-  const normalizedConcerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: input.runtimeArtifacts,
-    validationFindings: []
-  });
-  const outcomes = deriveCaliforniaPrivacyCoveragePolicyOutcomes({
-    coverageLimited:
-      input.snapshot?.coverage_level === "limited" ||
-      input.snapshot?.coverage_level === "limited_partial" ||
-      input.snapshot?.partial_scan === true ||
-      input.snapshot?.blocked_flag === true,
-    events: input.events,
-    normalizedConcerns,
-    runtimeArtifacts: input.runtimeArtifacts,
-    scanCompleted: input.scanCompleted
-  });
-  const californiaEvidence = getRuntimeRecord(
-    input.runtimeArtifacts?.californiaPrivacyEvidence ?? input.runtimeArtifacts?.california_privacy_evidence
-  );
-  const directAdtech = getStringArrayFromRecord(californiaEvidence, [
-    "directAdvertisingSharingVendors",
-    "direct_advertising_sharing_vendors",
-    "directSaleShareOrTargetedAdvertisingVendors",
-    "direct_sale_share_or_targeted_advertising_vendors"
-  ]);
-  const analyticsContext = getStringArrayFromRecord(californiaEvidence, [
-    "analyticsTagManagementVendors",
-    "analytics_tag_management_vendors",
-    "analyticsOrMeasurementVendors",
-    "analytics_or_measurement_vendors"
-  ]);
-  const highRiskContext = deriveHighRiskTrackingContext({
-    evidenceUrls: [
-      ...getStringArrayFromRecord(input.runtimeArtifacts, ["consent_baseline_tracker_evidence_urls", "consentBaselineTrackerEvidenceUrls"]),
-      ...getStringArrayFromRecord(input.runtimeArtifacts, ["consent_post_reject_tracker_evidence_urls", "consentPostRejectTrackerEvidenceUrls"])
-    ],
-    hostname: input.domain,
-    runtimeArtifacts: input.runtimeArtifacts,
-    snapshot: input.snapshot,
-    thirdPartyDomains: [
-      ...getStringArrayFromRecord(input.runtimeArtifacts, ["third_party_request_domains", "thirdPartyRequestDomains"]),
-      ...getStringArrayFromRecord(input.runtimeArtifacts, ["script_src_domains", "scriptSrcDomains"])
-    ]
-  });
-  const cmpNames = highRiskContext.cmpVendors.map((vendor) => vendor.name);
-  const notes = [
-    `CMP excluded from direct adtech: ${cmpNames.every((name) => !directAdtech.includes(name)) ? "yes" : "no"}`,
-    directAdtech.length > 0 ? `direct: ${compactNames(directAdtech)}` : null,
-    analyticsContext.length > 0 ? `analytics/context: ${compactNames(analyticsContext)}` : null
-  ].filter((note): note is string => typeof note === "string");
-  const rows = Object.fromEntries(
-    Object.entries(outcomes).map(([rowId, outcome]) => [
-      rowId,
-      {
-        status: outcome.status
-      }
-    ])
-  );
-
-  return {
-    cipaCommunication: getOutcomeStatus(outcomes, "cipa_sensitive_communication_interception"),
-    cipaRecording: getOutcomeStatus(outcomes, "cipa_sensitive_interaction_recording"),
-    cmp: compactNames(cmpNames),
-    cmpExcludedFromDirectAdtech: cmpNames.every((name) => !directAdtech.includes(name)),
-    collectionNotice: getOutcomeStatus(outcomes, "notice_at_collection"),
-    domain: input.domain,
-    gpc: getOutcomeStatus(outcomes, "gpc_opt_out_signal_handling"),
-    notes,
-    optOut: getOutcomeStatus(outcomes, "do_not_sell_share_availability"),
-    privacyNotice: getOutcomeStatus(outcomes, "privacy_notice_availability"),
-    rows,
-    saleShare: getOutcomeStatus(outcomes, "targeted_advertising_signals"),
-    scanId: input.scanId,
-    sensitiveContext: getOutcomeStatus(outcomes, "limit_use_sensitive_pi")
-  };
 }
 
 function normalizeGdprStatusKey(status: string) {
@@ -987,19 +837,6 @@ async function summarizeScan(input: {
     verifiedPublicSurfacesCount:
       typeof snapshot?.verified_public_surfaces_count === "number" ? snapshot.verified_public_surfaces_count : null
   });
-  const californiaCohortSummary = buildCaliforniaCohortSummaryRow({
-    domain: input.hostname,
-    events: repairedEvents.map((event) => ({
-      createdAt: event.createdAt,
-      eventType: event.eventType,
-      metadataJson: event.metadataJson
-    })),
-    runtimeArtifacts: reportRuntimeArtifacts,
-    scanCompleted: scanRow.status === "completed",
-    scanId: input.scanId,
-    snapshot
-  });
-
   const scannerSignalCount = signalRows.filter((row) => !row.population_source || row.population_source === "scanner").length;
   const nanoSignalCount = signalRows.filter((row) => row.population_source === "nano").length;
   const workflow = deriveSignalEnrichmentWorkflowState({
@@ -1034,7 +871,6 @@ async function summarizeScan(input: {
       status: typeof scanRow?.status === "string" ? scanRow.status : null
     },
     snapshot,
-    californiaCohortSummary,
     gdprEprivacyCohortSummary,
     calibrationSummary,
     surfaced,
@@ -1058,12 +894,6 @@ async function loadScanIdentity(scanId: string) {
   );
 }
 
-function getCaliforniaCohortSummary(row: Record<string, unknown>) {
-  return row.californiaCohortSummary && typeof row.californiaCohortSummary === "object"
-    ? row.californiaCohortSummary as CaliforniaCohortSummaryRow
-    : null;
-}
-
 function getGdprEprivacyCohortSummary(row: Record<string, unknown>) {
   return row.gdprEprivacyCohortSummary && typeof row.gdprEprivacyCohortSummary === "object"
     ? row.gdprEprivacyCohortSummary as GdprEprivacyCohortSummaryRow
@@ -1075,54 +905,6 @@ function escapeMarkdownCell(value: unknown) {
     .replace(/\|/g, "\\|")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function printCaliforniaCohortMarkdownTable(results: Array<Record<string, unknown>>) {
-  console.log("| domain | privacy notice | collection notice | sale/share | opt-out | GPC | sensitive context | CIPA recording | CIPA communication | CMP | notes |");
-  console.log("|---|---|---|---|---|---|---|---|---|---|---|");
-  for (const row of results) {
-    const summary = getCaliforniaCohortSummary(row);
-    if (!summary) {
-      continue;
-    }
-    console.log([
-      summary.domain,
-      summary.privacyNotice,
-      summary.collectionNotice,
-      summary.saleShare,
-      summary.optOut,
-      summary.gpc,
-      summary.sensitiveContext,
-      summary.cipaRecording,
-      summary.cipaCommunication,
-      summary.cmp,
-      summary.notes.join("; ")
-    ].map(escapeMarkdownCell).join(" | ").replace(/^/, "| ").replace(/$/, " |"));
-  }
-}
-
-function collectCaliforniaStatusCounts(results: Array<Record<string, unknown>>) {
-  const counts = new Map<string, Record<string, number>>();
-
-  for (const result of results) {
-    const summary = getCaliforniaCohortSummary(result);
-    if (!summary) {
-      continue;
-    }
-    for (const [rowId, row] of Object.entries(summary.rows ?? {})) {
-      const bucket = counts.get(rowId) ?? {};
-      bucket[row.status] = (bucket[row.status] ?? 0) + 1;
-      counts.set(rowId, bucket);
-    }
-  }
-
-  return [...counts.entries()]
-    .map(([rowId, rowCounts]) => ({
-      rowId,
-      review_signal: rowCounts.review_signal ?? 0,
-      statuses: rowCounts
-    }))
-    .sort((a, b) => b.review_signal - a.review_signal || a.rowId.localeCompare(b.rowId));
 }
 
 function collectGdprEprivacyStatusCounts(results: Array<Record<string, unknown>>) {
@@ -1183,8 +965,6 @@ async function main() {
   const onlySummarize = hasFlag("--summarize-only");
   const queueOnly = hasFlag("--queue-only");
   const aggregateTimings = hasFlag("--aggregate-timings");
-  const californiaCohortSummary = hasFlag("--california-cohort-summary");
-  const californiaCounts = hasFlag("--california-counts");
   const gdprEprivacySummary = hasFlag("--gdpr-eprivacy-summary");
   const gdprEprivacyCounts = hasFlag("--gdpr-eprivacy-counts");
   const markdownTable = hasFlag("--markdown-table");
@@ -1278,17 +1058,12 @@ async function main() {
         mergedSignalsReady: summary.workflow.mergedSignalsReady,
         timings: summary.workflow.timings
       },
-      californiaCohortSummary: summary.californiaCohortSummary,
       gdprEprivacyCohortSummary: summary.gdprEprivacyCohortSummary,
       surfaced: summary.surfaced
     });
   }
 
   if (explicitScanIds.length > 0) {
-    if (californiaCounts) {
-      console.log(JSON.stringify(collectCaliforniaStatusCounts(results), null, 2));
-      return;
-    }
     if (gdprEprivacyCounts) {
       console.log(JSON.stringify(collectGdprEprivacyStatusCounts(results), null, 2));
       return;
@@ -1299,14 +1074,6 @@ async function main() {
     }
     if (gdprEprivacySummary) {
       console.log(JSON.stringify(results.map((row) => row.gdprEprivacyCohortSummary), null, 2));
-      return;
-    }
-    if (californiaCohortSummary && markdownTable) {
-      printCaliforniaCohortMarkdownTable(results);
-      return;
-    }
-    if (californiaCohortSummary) {
-      console.log(JSON.stringify(results.map((row) => row.californiaCohortSummary), null, 2));
       return;
     }
     console.log(JSON.stringify(results, null, 2));
@@ -1419,7 +1186,6 @@ async function main() {
         mergedSignalsReady: summary.workflow.mergedSignalsReady,
         timings: summary.workflow.timings
       },
-      californiaCohortSummary: summary.californiaCohortSummary,
       surfaced: summary.surfaced
     });
   }
@@ -1482,19 +1248,6 @@ async function main() {
         2
       )
     );
-    return;
-  }
-
-  if (californiaCohortSummary && markdownTable) {
-    printCaliforniaCohortMarkdownTable(results);
-    return;
-  }
-  if (californiaCounts) {
-    console.log(JSON.stringify(collectCaliforniaStatusCounts(results), null, 2));
-    return;
-  }
-  if (californiaCohortSummary) {
-    console.log(JSON.stringify(results.map((row) => row.californiaCohortSummary), null, 2));
     return;
   }
 

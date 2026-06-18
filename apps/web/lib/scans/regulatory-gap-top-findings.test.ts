@@ -93,25 +93,10 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
           note: "Vendor purpose requires review."
         }
       ]
-    },
-    californiaPrivacyArea: {
-      id: "california_ccpa_cpra",
-      title: "California privacy",
-      rows: [
-        {
-          assessmentStatus: "gap_observed",
-          evidenceRefs: ["ccpa-ref-1"],
-          id: "sale_share_control",
-          label: "Do Not Sell or Share availability",
-          note: "No retained privacy choice path was confirmed.",
-          statusLabel: "Potential gap"
-        }
-      ]
     }
   });
 
   assert.deepEqual(findings.map((finding) => finding.id), [
-    "regulatory_gap__california_ccpa_cpra__sale_share_control",
     "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking",
     "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
     "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
@@ -119,10 +104,10 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
     "regulatory_gap__gdpr_eprivacy__advertising_retargeting_vendor_signal_observed",
     "regulatory_gap__gdpr_eprivacy__analytics_vendor_observed"
   ]);
-  assert.equal(findings[0]?.label, "Do Not Sell or Share availability");
+  assert.equal(findings[0]?.label, "Pre-consent third-party tracking");
   assert.equal(findings[0]?.severity, "high");
   assert.equal(findings[0]?.section, "Privacy & Tracking");
-  assert.equal(findings[0]?.evidenceRefs[0], "ccpa-ref-1");
+  assert.equal(findings[0]?.evidenceRefs[0], "gdpr-ref-1");
   assert.equal(
     findings.some((finding) => finding.id.includes("privacy_notice")),
     false
@@ -131,7 +116,7 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
     findings.map((finding) => finding.whyItMatters).join("\n"),
     /not a legal conclusion/
   );
-  assert.equal(findings[1]?.shortSummary, "Advertising and analytics before consent.");
+  assert.equal(findings[0]?.shortSummary, "Advertising and analytics before consent.");
   assert.doesNotMatch(
     findings.map((finding) => finding.shortSummary).join("\n"),
     /checklist potential concern/i

@@ -46,42 +46,12 @@ test("builds a fresh artifact chain plan with stable run roots", () => {
   assert.equal(plan.profile, "standard");
   assert.equal(plan.scenarioPlanningMode, "legacy_sequential");
   assert.equal(plan.timingPath, path.join(workspaceRoot, "artifacts", "v2-calibration-lab-cnn-com-standard-20260610T171112", "cnn.com", "V2ScanLabTiming.json"));
-  assert.deepEqual(plan.steps.map((step) => step.script), [
-    "v2:scan",
-    "v2:review",
-    "v2:project",
-    "v2:wc01-shadow",
-    "v2:wc01-allowlist-dry-run",
-    "v2:wc01-concern-input-dry-run",
-    "v2:wc01-concern-policy-simulate",
-    "v2:wc01-normalized-concern-adapter",
-    "v2:wc01-concern-policy-compare",
-    "v2:wc01-reviewer-packet",
-    "v2:wc01-evidence-preview",
-  ]);
+  assert.deepEqual(plan.steps.map((step) => step.script), ["v2:scan"]);
   assert.deepEqual(plan.steps.map((step) => [step.label, step.dependsOn ?? []]), [
     ["scan", []],
-    ["review", ["scan"]],
-    ["project", ["review"]],
-    ["shadow", ["project"]],
-    ["allowlist", ["shadow"]],
-    ["concern input", ["allowlist"]],
-    ["policy simulation", ["concern input"]],
-    ["normalized concern adapter", ["policy simulation"]],
-    ["policy comparison", ["normalized concern adapter"]],
-    ["reviewer packet", ["policy comparison"]],
-    ["evidence preview", ["reviewer packet"]],
   ]);
   assert.ok(plan.steps[0]?.args.includes(path.join(workspaceRoot, "artifacts", "v2-calibration-lab-cnn-com-standard-20260610T171112", "cnn.com")));
-  assert.ok(plan.steps.at(-1)?.args.includes(path.join(workspaceRoot, "artifacts", "v2-wc01-evidence-preview-lab-cnn-com-standard-20260610T171112", "cnn.com", "Wc01V2EvidencePreviewPacket.json")));
-  const projectStep = plan.steps.find((step) => step.label === "project");
-  assert.ok(projectStep?.args.includes("--shadow-out"));
-  assert.ok(projectStep?.args.includes("--policy-comparison-out"));
-  assert.ok(projectStep?.args.includes("--reviewer-packet-out"));
-  assert.ok(projectStep?.args.includes("--evidence-preview-out"));
-  const reviewerPacketStep = plan.steps.find((step) => step.label === "reviewer packet");
-  assert.ok(reviewerPacketStep?.args.includes("--evidence-preview-out"));
-  assert.ok(reviewerPacketStep?.args.includes(path.join(workspaceRoot, "artifacts", "v2-wc01-evidence-preview-lab-cnn-com-standard-20260610T171112", "cnn.com", "Wc01V2EvidencePreviewPacket.json")));
+  assert.equal(plan.steps.some((step) => step.script.startsWith("v2:wc01-")), false);
 });
 
 test("builds full scan lab plans with the full scan-core profile", () => {

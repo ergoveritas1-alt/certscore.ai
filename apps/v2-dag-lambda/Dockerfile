@@ -1,41 +1,65 @@
-FROM mcr.microsoft.com/playwright:v1.58.2-noble AS build
+# syntax=docker/dockerfile:1.7
+
+ARG CERTSCORE_LAMBDA_RUNTIME_BASE=lambda-runtime-base
+
+FROM node:22-bookworm-slim AS build
 
 WORKDIR /workspace
-ENV CI=1 \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV CI=1
 
 RUN corepack enable && corepack prepare pnpm@10.6.3 --activate
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY apps/v2-dag-lambda/package.json ./apps/v2-dag-lambda/package.json
+COPY packages/certscore-contracts/package.json ./packages/certscore-contracts/package.json
+COPY packages/certscore-mcp/package.json ./packages/certscore-mcp/package.json
+COPY packages/certscore-report-adapter/package.json ./packages/certscore-report-adapter/package.json
+COPY packages/certscore-review-engine/package.json ./packages/certscore-review-engine/package.json
+COPY packages/certscore-scan-core/package.json ./packages/certscore-scan-core/package.json
+COPY packages/certscore-sdk/package.json ./packages/certscore-sdk/package.json
+COPY packages/certscore-vendor-resolver/package.json ./packages/certscore-vendor-resolver/package.json
+COPY packages/db/package.json ./packages/db/package.json
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/ui/package.json ./packages/ui/package.json
+COPY packages/validation-shared/package.json ./packages/validation-shared/package.json
+COPY packages/web-bot-auth/package.json ./packages/web-bot-auth/package.json
+
+RUN --mount=type=cache,id=wc01-v2-dag-lambda-pnpm-store,target=/pnpm/store \
+  pnpm config set store-dir /pnpm/store \
+  && pnpm install --frozen-lockfile
+
 COPY packages ./packages
-COPY apps/v2-dag-lambda ./apps/v2-dag-lambda
+COPY apps/v2-dag-lambda/src ./apps/v2-dag-lambda/src
+COPY apps/v2-dag-lambda/tsconfig.json ./apps/v2-dag-lambda/tsconfig.json
+COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./apps/v2-dag-lambda/runtime-bootstrap.mjs
 
-RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @certscore/contracts build
-RUN pnpm --filter @certscore/vendor-resolver build
-RUN pnpm --filter @certscore/review-engine build
-RUN pnpm --filter @certscore/report-adapter build
-RUN pnpm --filter @certscore/scan-core build
-RUN pnpm --filter @website-signal-risk-scanner/v2-dag-lambda build
-RUN pnpm --filter @website-signal-risk-scanner/v2-dag-lambda --prod deploy --legacy /lambda
-RUN rm -rf /lambda/src \
+RUN pnpm --filter @website-signal-risk-scanner/v2-dag-lambda bundle
+RUN --mount=type=cache,id=wc01-v2-dag-lambda-pnpm-store,target=/pnpm/store \
+  pnpm --filter @website-signal-risk-scanner/v2-dag-lambda --prod deploy --legacy /lambda-deps
+RUN mkdir -p /lambda/node_modules \
   && mkdir -p /lambda/src \
-  && cp /workspace/apps/v2-dag-lambda/dist/apps/v2-dag-lambda/src/handler.js /lambda/src/handler.js
-RUN for package_name in contracts vendor-resolver review-engine report-adapter scan-core; do \
-    package_dir="/lambda/node_modules/@certscore/${package_name}"; \
-    source_dir="/workspace/packages/certscore-${package_name}/dist"; \
-    if [ -d "$package_dir" ] && [ -d "$source_dir" ]; then \
-      rm -rf "${package_dir}/dist"; \
-      cp -R "$source_dir" "${package_dir}/dist"; \
-    fi; \
-  done
+  && cp /workspace/apps/v2-dag-lambda/dist-bundle/src/handler.js /lambda/src/handler.js \
+  && cp -R /lambda-deps/node_modules/playwright /lambda/node_modules/playwright \
+  && cp -R /lambda-deps/node_modules/playwright-core /lambda/node_modules/playwright-core
 
-FROM mcr.microsoft.com/playwright:v1.58.2-noble
+FROM node:22-bookworm-slim AS lambda-runtime-base
 
 WORKDIR /var/task
+ARG CERTSCORE_LAMBDA_BROWSER_PACKAGE=chromium
+ARG CERTSCORE_LAMBDA_BROWSER_EXECUTABLE=/usr/bin/chromium
 ENV NODE_ENV=production \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    CERTSCORE_CHROMIUM_EXECUTABLE_PATH=${CERTSCORE_LAMBDA_BROWSER_EXECUTABLE} \
     CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR=/tmp/certscore-v2-dag-lambda
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ${CERTSCORE_LAMBDA_BROWSER_PACKAGE} \
+    fonts-liberation \
+  && rm -rf /var/lib/apt/lists/* /tmp/*
+
+FROM ${CERTSCORE_LAMBDA_RUNTIME_BASE} AS runtime
+
+WORKDIR /var/task
 
 COPY --from=build /lambda ./
 COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./runtime-bootstrap.mjs

@@ -2186,37 +2186,6 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     });
   }
 
-  const cpraEvidence =
-    input.runtimeArtifacts?.cpraCbaOptOutEvidence && typeof input.runtimeArtifacts.cpraCbaOptOutEvidence === "object"
-      ? (input.runtimeArtifacts.cpraCbaOptOutEvidence as Record<string, unknown>)
-      : input.runtimeArtifacts?.cpra_cba_opt_out_evidence && typeof input.runtimeArtifacts.cpra_cba_opt_out_evidence === "object"
-        ? (input.runtimeArtifacts.cpra_cba_opt_out_evidence as Record<string, unknown>)
-        : null;
-  if (cpraEvidence && cpraEvidence.suppressorApplied === null) {
-    const severity = cpraEvidence.findingSeverity === "critical" || cpraEvidence.findingSeverity === "high" ? "high" : "medium";
-    candidates.push({
-      categoryId: "rights_request_mechanisms",
-      description:
-        "Cross-context behavioral advertising vendors were observed during the homepage runtime scan, but a CPRA-specific opt-out mechanism was not confirmed in footer or persistent chrome.",
-      fallbackEvidence: {
-        ...cpraEvidence,
-        signalKey: "privacy.cpra_cba_opt_out_missing",
-        signalLabel: "CPRA CBA opt-out missing",
-        signalValue: true,
-        unifiedFindingId: "cpra_cba_opt_out_missing"
-      },
-      id: "runtime-derived-signal-privacy.cpra_cba_opt_out_missing",
-      linkedValidationFinding: null,
-      observedValue: typeof cpraEvidence.optOutUiResult === "string" ? cpraEvidence.optOutUiResult : null,
-      severity,
-      signalKey: "privacy.cpra_cba_opt_out_missing",
-      signalLabel: "CPRA CBA opt-out missing",
-      signalSource: "runtime_artifact_signal",
-      sourceType: "signal",
-      title: "CPRA CBA opt-out missing"
-    });
-  }
-
   const consentControlSignalKey = "privacy.consent_control_not_reopenable";
   const consentControlSignalLabel = "Consent controls may be hard to revisit";
   const consentControlSignalValue = getHybridDerivedSignalValue(input.runtimeArtifacts, consentControlSignalKey);

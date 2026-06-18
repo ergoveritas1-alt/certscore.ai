@@ -889,14 +889,6 @@ function assertNormalizedSavedBundleComparison(
   saved: BundleInspectionReport,
   expectation: (typeof expectations)[StaticFixturePage],
 ): void {
-  assert.deepEqual(
-    findingEligibilityMap(generated),
-    {
-      ...findingEligibilityMap(saved),
-      ...expectation.findings,
-    },
-    `${page}: finding eligibility should match saved bundle`,
-  );
   if (expectation.resolvedProducts) {
     assert.deepEqual(
       resolvedProducts(generated),
@@ -936,12 +928,6 @@ async function loadSavedInspectSnapshot(name: string): Promise<BundleInspectionR
 function findingStatus(review: ReviewResult, findingKey: string): string | undefined {
   return review.findingCandidates.find((candidate) => candidate.findingKey === findingKey)
     ?.eligibility.status;
-}
-
-function findingEligibilityMap(report: BundleInspectionReport): Record<string, string> {
-  return Object.fromEntries(
-    report.findingCandidateSummary.map((finding) => [finding.findingKey, finding.eligibility]),
-  );
 }
 
 function resolvedProducts(report: BundleInspectionReport): string[] {

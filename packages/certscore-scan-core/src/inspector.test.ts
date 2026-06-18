@@ -108,32 +108,15 @@ test("summarizes cookie classification", async () => {
   assert.deepEqual(report.cookieClassification.cookiesLinkedToJourneys, ["IDE", "_ga"]);
 });
 
-test("summarizes finding candidates without promoting site-owned infrastructure", async () => {
+test("summarizes scanner traceability without review-engine findings", async () => {
   const report = await inspectBundle(calibrationBundle());
-  const findings = new Map(
-    report.findingCandidateSummary.map((finding) => [finding.findingKey, finding]),
-  );
 
-  assert.equal(findings.get("pre_consent_tracking_detected")?.eligibility, "eligible");
-  assert.equal(findings.get("third_party_cookie_pre_consent")?.eligibility, "eligible");
-  assert.equal(findings.get("vendor_associated_cookie_pre_consent")?.eligibility, "eligible");
-
-  const unresolved = findings.get("unresolved_collection_endpoint_review_signal");
-  assert.equal(unresolved?.eligibility, "eligible");
-  assert.deepEqual(unresolved?.sourceJourneyIds, ["journey_endpoint_unknown"]);
-  assert.equal(
-    unresolved?.sourceJourneyIds.includes("journey_endpoint_site_owned"),
-    false,
-  );
-  assert.equal(
-    unresolved?.sourceJourneyIds.includes("journey_endpoint_google_consent"),
-    false,
-  );
-  assert.equal(report.evidenceExcerptSummary.evidenceExcerptsTotal > 0, true);
-  assert.equal(report.evidenceExcerptSummary.evidenceExcerptsByKind.network_request > 0, true);
-  assert.equal(report.evidenceExcerptSummary.evidenceExcerptsByKind.cookie_set > 0, true);
-  assert.equal(report.evidenceExcerptSummary.findingCandidatesWithExcerpts > 0, true);
-  assert.equal(report.evidenceExcerptSummary.eligibleFindingCandidatesWithExcerpts > 0, true);
+  assert.equal(report.vendorResolution.resolvedVendors.length, 3);
+  assert.equal(report.traceabilitySummary.vendorObservationsWithEvidenceRefs, 0);
+  assert.equal(report.traceabilitySummary.vendorObservationsMissingEvidenceRefs, 3);
+  assert.equal(report.traceabilitySummary.journeysWithRawEventRefs > 0, true);
+  assert.equal(report.journeySummary.unresolvedEndpointJourneys.length, 1);
+  assert.equal(report.journeySummary.unresolvedEndpointJourneys[0]?.journeyId, "journey_endpoint_unknown");
 });
 
 test("formats text sections and deterministic JSON-compatible output", async () => {
@@ -147,8 +130,9 @@ test("formats text sections and deterministic JSON-compatible output", async () 
   assert.equal(text.includes("Journey summary"), true);
   assert.equal(text.includes("Cookie classification"), true);
   assert.equal(text.includes("Google endpoint subtype summary"), true);
-  assert.equal(text.includes("Evidence excerpts"), true);
-  assert.equal(text.includes("Finding candidates"), true);
+  assert.equal(text.includes("Traceability"), true);
+  assert.equal(text.includes("Evidence excerpts"), false);
+  assert.equal(text.includes("Finding candidates"), false);
   assert.equal(text.includes("secret-token"), false);
   assert.equal(JSON.stringify(report), JSON.stringify(reportAgain));
 });

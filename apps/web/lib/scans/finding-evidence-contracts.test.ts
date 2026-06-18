@@ -32,7 +32,6 @@ test("registry defines contracts for the high-risk finding set", () => {
     [
       "analytics_cookies_before_consent",
       "cookie_disclosure_gap",
-      "cpra_cba_opt_out_missing",
       "cross_domain_identifier_sharing_observed",
 	      "dark_pattern_consent_signals_detected",
 	      "fingerprinting_observed",
@@ -1435,72 +1434,6 @@ test("new runtime contracts require concrete retained evidence shapes", () => {
     "pass_strong"
   );
 
-  assert.equal(
-    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
-      cpra_cba_opt_out_evidence: {
-        advertisingSharingVendors: ["Meta Pixel"],
-        choice_controls_inspected: true,
-        opt_out_control_found: false,
-        policy_cba_language: "full_cba_language"
-      }
-    })?.status,
-    "pass_strong"
-  );
-
-  assert.equal(
-    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
-      directAdvertisingSharingVendors: ["The Trade Desk"],
-      choiceControlsInspected: true,
-      optOutUiResult: "absent",
-      policyCbaLanguage: "full_cba_language",
-      suppressorApplied: null,
-      limitation: "homepage_only"
-    })?.status,
-    "pass_strong"
-  );
-
-  assert.equal(
-    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
-      cpra_cba_opt_out_evidence: {
-        advertisingSharingVendors: ["Meta Pixel"],
-        choice_controls_inspected: true,
-        opt_out_control_found: true,
-        opt_out_ui_result: "partial_no_icon",
-        policy_cba_language: "full_cba_language"
-      }
-    })?.status,
-    "pass_strong"
-  );
-
-  assert.equal(
-    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
-      cpra_cba_opt_out_evidence: {
-        directAdvertisingSharingVendors: ["AppNexus / Xandr", "Criteo"],
-        choice_controls_inspected: true,
-        opt_out_control_found: false,
-        opt_out_ui_result: "absent",
-        policy_cba_language: "absent",
-        scan_origin_geo: null,
-        suppressor_applied: null
-      }
-    })?.externalSurfacingEligibility,
-    "audit_only"
-  );
-
-  assert.equal(
-    evaluateFindingEvidenceContractForRawEvidence("cpra_cba_opt_out_missing", {
-      cpra_cba_opt_out_evidence: {
-        advertisingSharingVendors: ["Meta Pixel"],
-        choice_controls_inspected: true,
-        opt_out_control_found: false,
-        opt_out_ui_result: "absent",
-        policy_cba_language: "absent",
-        scan_origin_geo: null,
-        suppressor_applied: null
-      }
-    })?.externalSurfacingEligibility,
-    "audit_only"
-  );
 });
 
 test("sensitive, video, and fingerprinting contracts stay evidence-only", () => {

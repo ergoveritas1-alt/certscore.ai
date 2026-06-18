@@ -5,10 +5,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { canonicalEvidenceBundleSchema, type CanonicalEvidenceBundle, type ConsentFlowScenario, type ScreenshotArtifact } from "@certscore/contracts";
-import { projectReviewResultToV2ReportDraft } from "@certscore/report-adapter";
-import { reviewEvidenceBundle } from "@certscore/review-engine";
 import {
-  buildConsentFlowComparisonsFromEvidence,
   chromiumLaunchArgs,
   isAwsLambdaRuntime,
   lambdaChromiumSingleProcessEnabled,
@@ -499,10 +496,7 @@ export async function runLocalV2DagLambdaArtifactChain(
   await mkdir(artifactRoot, { recursive: true });
 
   const bundle = await runLocalV2DagLambdaScanBundle(payload, {
-    allowedConsentFlowScenarios: options.allowedConsentFlowScenarios,
     artifactRoot,
-    externalBaselinePlanning: options.externalBaselinePlanning,
-    forceAllowedScenarioPlanning: options.forceAllowedScenarioPlanning,
     phaseLabelPrefix: options.phaseLabelPrefix,
     phaseTimings,
     preConsentScreenshotMode: options.preConsentScreenshotMode ?? scanTuning.preConsentScreenshotMode,
@@ -522,10 +516,7 @@ export async function runLocalV2DagLambdaArtifactChain(
 async function runLocalV2DagLambdaScanBundle(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
-    allowedConsentFlowScenarios?: ConsentFlowScenario[];
     artifactRoot: string;
-    externalBaselinePlanning?: "enrich" | "reuse_only";
-    forceAllowedScenarioPlanning?: boolean;
     phaseLabelPrefix?: string;
     phaseTimings: LocalV2DagLambdaPhaseTiming[];
     preConsentScreenshotMode?: "always" | "selective" | "never";
@@ -533,28 +524,15 @@ async function runLocalV2DagLambdaScanBundle(
   }
 ) {
   return timeLambdaPhase(options.phaseTimings, phaseLabel(options.phaseLabelPrefix, "scan"), () => runScan({
-    allowedConsentFlowScenarios: options.allowedConsentFlowScenarios,
     browserReuseMode: "single",
-    consentFlowActionFinalSettleMs: effectiveActionFinalSettleMs(payload, options.scanTuning),
-    consentFlowActionSearchDeadlineMs: effectiveActionSearchDeadlineMs(payload),
-    consentFlowDeadlineMs: effectiveConsentFlowDeadlineMs(payload, options.scanTuning),
-    consentFlowExternalBaselinePlanning: options.externalBaselinePlanning ?? "enrich",
-    consentFlowForceAllowedScenarioPlanning: options.forceAllowedScenarioPlanning,
-    consentFlowOneTrustHiddenActionMode: effectiveOneTrustHiddenActionMode(payload),
-    consentFlowPreActionObservationMs: effectivePreActionObservationMs(payload),
-    consentActionRecipe: payload.coordinatorPlanSummary?.actionRecipe,
-    consentFlowScreenshotMode: options.scanTuning.consentFlowScreenshotMode,
     outDir: options.artifactRoot,
     policyOutputGraceMs: 1_000,
     policyPlanningDeadlineMs: 1_500,
     postConsentFlowsEnabled: false,
     preConsentScreenshotMode: options.preConsentScreenshotMode,
     preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
-    privacyControlUrls: payload.debugOverrides?.privacyControlUrls,
     profile: payload.profile,
-    scenarioConcurrency: effectiveScenarioConcurrency(payload, options.scanTuning),
     scenarioPlanningMode: "planned_parallel",
-    scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
     url: payload.targetUrl
   }));
 }
@@ -575,23 +553,11 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   const scanArtifactPath = path.join(artifactRoot, "CanonicalEvidenceBundle.json");
   await timeLambdaPhase(phaseTimings, "scan_artifact_write", () => writeJson(scanArtifactPath, bundle));
 
-  const review = await timeLambdaPhase(phaseTimings, "review", () => reviewEvidenceBundle(bundle));
-  const reviewPath = path.join(artifactRoot, "ReviewResult.json");
-  await timeLambdaPhase(phaseTimings, "review_write", () => writeJson(reviewPath, review));
-
-  const projection = await timeLambdaPhase(phaseTimings, "projection", async () =>
-    projectReviewResultToV2ReportDraft({ bundle, review })
-  );
-  const projectionPath = path.join(artifactRoot, "V2ReportProjectionDraft.json");
-  await timeLambdaPhase(phaseTimings, "projection_write", () => writeJson(projectionPath, projection));
-
   const manifestPath = path.join(artifactRoot, "LocalV2DagLambdaManifest.json");
   const pointers = artifactPointersFromS3Keys({
     bucket: requireArtifactBucket(),
     keyPrefix: artifactKeyPrefix(payload),
     manifestFileName: "LocalV2DagLambdaManifest.json",
-    projectionFileName: "V2ReportProjectionDraft.json",
-    reviewFileName: "ReviewResult.json",
     scanArtifactFileName: "CanonicalEvidenceBundle.json"
   });
   const auxiliaryArtifacts = await timeLambdaPhase(phaseTimings, "auxiliary_upload", () => uploadAuxiliaryArtifactFiles({
@@ -612,8 +578,6 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     manifestPath,
     payload,
     pointers,
-    projectionPath,
-    reviewPath,
     scanArtifactPath,
     s3Client: input.s3Client
   }));
@@ -654,7 +618,6 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
 
   const strongWebMdMode = isStrongWebMdEvidenceMode(payload, scanTuning);
   const coordinatorBundle = await runLocalV2DagLambdaScanBundle(payload, {
-    allowedConsentFlowScenarios: [],
     artifactRoot,
     phaseLabelPrefix: "coordinator",
     phaseTimings,
@@ -1010,7 +973,7 @@ export function mergeLocalV2DagLambdaShardBundles(input: {
     derivedRuntimeSignals: mergeDerivedRuntimeSignals(bundles),
     runtimeCoverage: mergeRuntimeCoverage(bundles)
   };
-  merged.consentFlowComparisons = mergeShardConsentFlowComparisons(bundles, merged);
+  merged.consentFlowComparisons = mergeShardConsentFlowComparisons(bundles);
   return canonicalEvidenceBundleSchema.parse(merged);
 }
 
@@ -1027,18 +990,8 @@ function selectDiagnosticScreenshot(screenshots: ScreenshotArtifact[]): Screensh
 
 function mergeShardConsentFlowComparisons(
   bundles: CanonicalEvidenceBundle[],
-  merged: CanonicalEvidenceBundle,
 ): CanonicalEvidenceBundle["consentFlowComparisons"] {
-  return dedupeByField([
-    ...bundles.flatMap((bundle) => bundle.consentFlowComparisons),
-    ...buildConsentFlowComparisonsFromEvidence({
-      consentActionAttempts: merged.consentActionAttempts,
-      consentFlowObservations: merged.consentFlowObservations,
-      cookieEvents: merged.cookieEvents,
-      networkEvents: merged.networkEvents,
-      normalizedVendorObservations: merged.normalizedVendorObservations
-    })
-  ], "comparisonId");
+  return dedupeByField(bundles.flatMap((bundle) => bundle.consentFlowComparisons), "comparisonId");
 }
 
 function dedupeByEventId<T extends { eventId?: string }>(items: T[]): T[] {
@@ -1269,16 +1222,12 @@ function boundedIntegerEnv(
 export function artifactPointersFromPaths(input: {
   artifactRoot: string;
   manifestPath: string;
-  projectionPath: string;
-  reviewPath: string;
   scanArtifactPath: string;
   workspaceRoot?: string;
 }): LocalV2DagLambdaArtifactPointers {
   const workspaceRoot = input.workspaceRoot ?? process.cwd();
   return {
     manifestUri: fileUri(input.manifestPath, workspaceRoot),
-    reportAdapterArtifactUri: fileUri(input.projectionPath, workspaceRoot),
-    reviewArtifactUri: fileUri(input.reviewPath, workspaceRoot),
     scanArtifactUri: fileUri(input.scanArtifactPath, workspaceRoot)
   };
 }
@@ -1287,15 +1236,11 @@ export function artifactPointersFromS3Keys(input: {
   bucket: string;
   keyPrefix: string;
   manifestFileName: string;
-  projectionFileName: string;
-  reviewFileName: string;
   scanArtifactFileName: string;
 }): LocalV2DagLambdaArtifactPointers {
   const prefix = input.keyPrefix.replace(/^\/+|\/+$/g, "");
   return {
     manifestUri: s3Uri(input.bucket, `${prefix}/${input.manifestFileName}`),
-    reportAdapterArtifactUri: s3Uri(input.bucket, `${prefix}/${input.projectionFileName}`),
-    reviewArtifactUri: s3Uri(input.bucket, `${prefix}/${input.reviewFileName}`),
     scanArtifactUri: s3Uri(input.bucket, `${prefix}/${input.scanArtifactFileName}`)
   };
 }
@@ -1344,9 +1289,7 @@ async function artifactObjectMetadata(filePath: string) {
 const CORE_ARTIFACT_FILE_NAMES = new Set([
   "CanonicalEvidenceBundle.json",
   "LambdaArtifactMirrorManifest.json",
-  "LocalV2DagLambdaManifest.json",
-  "ReviewResult.json",
-  "V2ReportProjectionDraft.json"
+  "LocalV2DagLambdaManifest.json"
 ]);
 
 export async function uploadAuxiliaryArtifactFiles(input: {
@@ -1403,17 +1346,13 @@ export async function uploadArtifactFiles(input: {
   manifestPath: string;
   payload: LocalV2DagLambdaDispatchPayload;
   pointers: LocalV2DagLambdaArtifactPointers;
-  projectionPath: string;
-  reviewPath: string;
   s3Client?: S3PutClient;
   scanArtifactPath: string;
 }): Promise<LocalV2DagLambdaArtifactMetadata> {
   const s3Client = input.s3Client ?? new S3Client({ region: input.payload.awsRegion });
   const artifacts = [
     { field: "manifestUri" as const, path: input.manifestPath },
-    { field: "scanArtifactUri" as const, path: input.scanArtifactPath },
-    { field: "reviewArtifactUri" as const, path: input.reviewPath },
-    { field: "reportAdapterArtifactUri" as const, path: input.projectionPath }
+    { field: "scanArtifactUri" as const, path: input.scanArtifactPath }
   ];
   const uploaded = await Promise.all(artifacts.map(async (artifact) => {
     const uri = input.pointers[artifact.field];
@@ -1545,56 +1484,16 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
 
   try {
     payload = parseLocalV2DagLambdaDispatchPayload(event);
-    const effectiveMode = payload.orchestrationMode ?? defaultLambdaOrchestrationMode();
     const workspaceRoot = options.workspaceRoot ?? process.cwd();
     const artifactRoot = buildLocalV2DagLambdaArtifactRoot({
       scanId: payload.scanId,
       workspaceRoot
     });
-    if (effectiveMode === "worker") {
-      if (!POST_CONSENT_FLOW_SCANNING_ENABLED) {
-        throw new Error("Post-consent consent-flow Lambda worker scanning is deferred from the production scanner.");
-      }
-      const workerLane = payload.workerLane;
-      if (!workerLane) {
-        throw new Error("Local v2 DAG Lambda worker mode requires workerLane.");
-      }
-      await writePlannerHintUsageArtifact({
-        artifactRoot,
-        payload,
-        workerLane
-      });
-      const artifactResult = options.runArtifactChain
-      ? await options.runArtifactChain(payload, { artifactRoot })
-      : await runLocalV2DagLambdaArtifactChain(payload, {
-        allowedConsentFlowScenarios: consentScenariosForWorkerLane(workerLane),
-        artifactRoot,
-        externalBaselinePlanning: "reuse_only",
-        forceAllowedScenarioPlanning: true,
-        phaseLabelPrefix: workerLane,
-        preConsentScreenshotMode: "never",
-        s3Client: options.s3Client,
-        workspaceRoot
-      });
-      return {
-        artifactMetadata: artifactResult.artifactMetadata,
-        artifactPointers: artifactResult.artifactPointers,
-        phaseTimings: artifactResult.phaseTimings,
-        scanId: payload.scanId,
-        status: "completed" as const,
-        workerLane
-      };
+    if (payload.orchestrationMode === "worker") {
+      throw new Error("Post-consent consent-flow Lambda worker scanning is disabled for the GDPR/ePrivacy core scanner.");
     }
     const runArtifactChain = options.runArtifactChain ?? ((dispatchPayload, runOptions) =>
-      effectiveMode === "sharded"
-        ? runLocalV2DagLambdaShardedArtifactChain(dispatchPayload, {
-          ...runOptions,
-          lambdaClient: options.lambdaClient,
-          s3Client: options.s3Client,
-          s3GetClient: options.s3GetClient,
-          workspaceRoot
-        })
-        : runLocalV2DagLambdaArtifactChain(dispatchPayload, { ...runOptions, s3Client: options.s3Client, workspaceRoot }));
+      runLocalV2DagLambdaArtifactChain(dispatchPayload, { ...runOptions, s3Client: options.s3Client, workspaceRoot }));
     const artifactResult = await runArtifactChain(payload, { artifactRoot });
     const result = buildLocalV2DagLambdaResultMessage({
       artifactMetadata: artifactResult.artifactMetadata,
@@ -1641,10 +1540,6 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     });
     return result;
   }
-}
-
-function defaultLambdaOrchestrationMode(): "single" | "sharded" {
-  return process.env.CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE === "sharded" ? "sharded" : "single";
 }
 
 function consentScenariosForWorkerLane(workerLane: LocalV2DagLambdaWorkerLane): ConsentFlowScenario[] {

@@ -34,11 +34,7 @@ import {
   upsertUsageCounter,
   updateDomainLatestScan
 } from "./repository";
-import {
-  buildQueuedFullScanConfig,
-  requiresFreshScanForCaliforniaRuntime,
-  type QueuedFullScanCaliforniaPrivacyConfig
-} from "./full-scan-config";
+import { buildQueuedFullScanConfig } from "./full-scan-config";
 import {
   normalizeLocalV2DagRunViaLambda,
   normalizeLocalV2DagScanProfile,
@@ -56,6 +52,7 @@ import {
 import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-simulated-dispatch";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
+import { upsertOrganizationSettings } from "../settings/repository";
 
 export type CreateFullScanActionState = {
   error: string | null;
@@ -66,7 +63,6 @@ const initialState: CreateFullScanActionState = {
 };
 
 type QueueFullScanInput = {
-  californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   domainContext?: {
     activeScanExists: boolean;
     domain: {
@@ -116,6 +112,26 @@ function getCurrentMonthWindow(now = new Date()) {
   };
 }
 
+function shouldPersistLastScanFrom(input: QueueFullScanInput) {
+  return Boolean(input.submittedByUserId) && (input.scanType ?? "full") !== "scheduled";
+}
+
+async function persistLastScanFrom(input: QueueFullScanInput, scanFrom: ScanFrom) {
+  if (!shouldPersistLastScanFrom(input)) {
+    return;
+  }
+
+  await upsertOrganizationSettings(input.organizationId, {
+    default_scan_from: scanFrom
+  }).catch((error) => {
+    console.error("[web] failed to persist last scan location", {
+      error: error instanceof Error ? error.message : String(error),
+      organizationId: input.organizationId,
+      scanFrom
+    });
+  });
+}
+
 export async function queueFullScanForDomain(input: QueueFullScanInput): Promise<{
   error: string | null;
   reusedExistingScan?: boolean;
@@ -151,12 +167,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     };
   }
 
-  const bypassRecentScanReuse =
-    Boolean(input.bypassRecentScanReuse) ||
-    requiresFreshScanForCaliforniaRuntime({
-      californiaPrivacy: input.californiaPrivacy,
-      scanFrom
-    });
+  const bypassRecentScanReuse = Boolean(input.bypassRecentScanReuse);
 
   const logRequest = (details: {
     errorCode?: string | null;
@@ -183,7 +194,6 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       requestedUrl: domainRecord.domain.normalizedUrl,
       requestContext: {
         bypassRecentScanReuse,
-        californiaPrivacy: input.californiaPrivacy ?? null,
         enforceCooldown: Boolean(input.enforceCooldown),
         enforceMonthlyUsageLimit: Boolean(input.enforceMonthlyUsageLimit),
         planCode: input.planCode,
@@ -242,6 +252,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
           organizationId: input.organizationId,
           scanId: recentScan.id
         });
+        await persistLastScanFrom(input, scanFrom);
 
         return {
           error: null,
@@ -418,7 +429,6 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     return null;
   });
   const scanConfig = buildQueuedFullScanConfig({
-    californiaPrivacy: input.californiaPrivacy,
     hostname: domainRecord.domain.hostname,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
@@ -471,6 +481,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     scanId: scan.id,
     status: "queued"
   });
+  await persistLastScanFrom(input, scanFrom);
 
   try {
     await insertQueuedFullScanEvent({
@@ -511,7 +522,6 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         githubRunId: input.provenance?.githubRunId ?? null,
         githubWorkflow: input.provenance?.githubWorkflow ?? null,
         provenance: input.provenance ?? null,
-        californiaPrivacy: scanConfig.californiaPrivacy ?? null,
         localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
         localV2DagLambdaDispatch
       },
@@ -672,7 +682,6 @@ export async function createFullScanAction(
     planCode: dashboardContext.organization.plan,
     submittedByUserId: dashboardContext.user.id,
     bypassRecentScanReuse: forceNewScan,
-    californiaPrivacy: null,
     enforceMonthlyUsageLimit: true,
     localV2DagScanProfile,
     localV2DagRunViaLambda,

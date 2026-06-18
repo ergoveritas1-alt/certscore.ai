@@ -79,6 +79,16 @@ If WC01 starts consuming a new WS01 field, add or update a runtime contract fixt
 
 For CertScore v2, artifact contracts must stay typed, bounded, display-safe where projected, and covered by focused fixtures/tests. Do not carry raw cookies, raw request/response bodies, sensitive query values, unbounded DOM/policy text, or raw Nano reasoning into reviewer, report-adapter, or web-facing artifacts.
 
+### Scan reliability and evidence quality
+
+For GDPR/ePrivacy scan-quality work, start by auditing retained evidence, normalized concerns, concern policy, and unified finding projection before changing display code. Missing, downgraded, or unclear findings should be traced to the first broken point in the evidence pipeline.
+
+Preserve evidence quality over deploy speed or runtime size. Full Chromium remains the default browser runtime for scanner/validation paths unless the user explicitly approves a browser-runtime change after an evidence-quality review.
+
+Do not remove or downsample evidence artifacts, screenshots, browser traces, consent-flow proof, runtime diagnostics, or policy-surface context as a deploy optimization unless the change includes an explicit quality assessment and focused tests/fixtures showing GDPR/ePrivacy evidence is not degraded.
+
+When a GDPR/ePrivacy signal is missing, prefer one of these fixes in order: upstream WS01 observed evidence capture, the WC01 typed evidence contract/fixture, WC01 normalized concern construction, WC01 concern policy, then unified finding/checklist projection. Do not create display-only fallbacks for missing evidence.
+
 ### Canonical classification registries
 
 Use canonical tracker, vendor, CMP, and domain classification registries for classification logic. Do not create feature-specific, regulation-specific, or display-specific vendor/domain registries unless the user explicitly approves a new canonical registry.
@@ -166,7 +176,7 @@ WC01/
 - **Auth:** Better Auth (email/password + Google OAuth), Nodemailer for Gmail SMTP
 - **Database:** PostgreSQL (raw SQL via `pg` package; no ORM)
 - **Storage:** AWS S3-compatible (AWS SDK v3 + presigned URLs)
-- **Browser automation:** Playwright 1.51 (Chromium) — used by validation worker
+- **Browser automation:** Playwright (Chromium) — used by validation worker
 - **LLM integration:** OpenAI API (configurable models; default `gpt-5.4-nano` / `gpt-5.4-nano`)
 - **Validation / Schema:** Zod
 - **Testing:** Node.js built-in test runner (`node --test`) executed through `tsx`

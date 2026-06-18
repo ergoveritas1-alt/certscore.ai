@@ -34,7 +34,6 @@ import {
   hasSensitiveSessionReplaySurfaceCooccurrenceArtifact,
   hasPreconsentSequenceEvidence,
   hasStrongAccessibilitySupportPathMissingEvidence,
-  hasStrongCpraCbaOptOutMissingEvidence,
   hasStrongFingerprintingEvidence,
   hasStrongPreconsentRuntimeEvidence,
   hasStrongSaleSharingControlsMissingEvidence,
@@ -1514,17 +1513,10 @@ function isSaleSharingControlsMissingConcern(
   return concern.suggestedUnifiedFindingId === "sale_sharing_controls_missing";
 }
 
-function isCpraCbaOptOutMissingConcern(
-  concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
-) {
-  return concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing";
-}
-
 function isCcpaCpraDeferredConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
-  return concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing" ||
-    concern.suggestedUnifiedFindingId === "sale_sharing_controls_missing" ||
+  return concern.suggestedUnifiedFindingId === "sale_sharing_controls_missing" ||
     concern.suggestedUnifiedFindingId === "do_not_sell_sharing_disclosure_conflict";
 }
 
@@ -2534,22 +2526,6 @@ export function deriveConcernPolicy(input: {
     };
   }
 
-  if (isCpraCbaOptOutMissingConcern(input.concern) && !hasStrongCpraCbaOptOutMissingEvidence(input.rawEvidence)) {
-    const contractFlags = findingEvidenceContractDecision?.negativeEvidenceFlags ?? [];
-    const missingChoiceScope = contractFlags.includes("missing_privacy_choice_control_search_scope") ||
-      !contractFlags.includes("missing_cpra_relevant_opt_out_context");
-    return {
-      allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "audit_only",
-      negativeEvidenceFlags: [
-        ...negativeEvidenceFlags,
-        ...(missingChoiceScope ? ["missing_privacy_choice_control_search_scope"] : []),
-        "missing_cpra_relevant_opt_out_context"
-      ] as NormalizedConcernNegativeEvidenceFlag[],
-      promotionEligibility: "internal_only"
-    };
-  }
-
   if (isBlockingOverlayConcern(input.concern) && !hasMaterialScanBlockingOverlayEvidence(input.rawEvidence)) {
     return {
       allowedNarrativeTier: "weak",
@@ -3001,19 +2977,6 @@ export function deriveConcernPolicy(input: {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_policy_side_evidence"],
-      promotionEligibility: "internal_only"
-    };
-  }
-
-  if (
-    isCpraCbaOptOutMissingConcern(input.concern) &&
-    input.concern.originType !== "validation_rule" &&
-    !hasStrongCpraCbaOptOutMissingEvidence(input.rawEvidence)
-  ) {
-    return {
-      allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "audit_only",
-      negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_runtime_request_url_evidence"],
       promotionEligibility: "internal_only"
     };
   }

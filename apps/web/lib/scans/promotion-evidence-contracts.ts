@@ -8,7 +8,7 @@ import {
   hasConcreteSanitizedNetworkEvidence
 } from "./sanitized-network-evidence";
 import { isPromotionGradePreconsentRequestRow } from "./preconsent-public-evidence";
-import { evaluateCaliforniaSaleShareRuntimeCoherence } from "./california-sale-share-runtime-coherence";
+import { evaluateSaleShareRuntimeCoherence } from "./sale-share-runtime-coherence";
 
 type ContractDecision = {
   allowedNarrativeTier: "weak" | "moderate" | "strong";
@@ -1233,12 +1233,49 @@ function hasBlockingContradictionMetaSignal(rawEvidence: Record<string, unknown>
   );
 }
 
+function getStringValue(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  for (const key of keys) {
+    if (typeof record?.[key] === "string" && record[key].trim().length > 0) {
+      return record[key].trim();
+    }
+  }
+  return null;
+}
+
+function normalizeEvidenceToken(value: string | null | undefined) {
+  return value?.trim().toLowerCase().replace(/[\s-]+/g, "_") ?? null;
+}
+
+function isClassifiedNonEssentialPreconsentRequestRow(row: Record<string, unknown>) {
+  if (isPromotionGradePreconsentRequestRow(row)) {
+    return true;
+  }
+
+  const requestUrl = getStringValue(row, ["requestUrl", "request_url", "url", "representativeUrl", "representative_url", "urlSample", "url_sample"]);
+  const essentiality = normalizeEvidenceToken(getStringValue(row, ["essentiality", "classificationEssentiality", "classification_essentiality"]));
+  const classification = normalizeEvidenceToken(getStringValue(row, ["classification", "purpose"]));
+  const runtimePhase = normalizeEvidenceToken(getStringValue(row, ["runtimePhase", "runtime_phase", "phase", "timingStatus", "timing_status", "timingEvidence", "timing_evidence"]));
+  const serviceClass = normalizeEvidenceToken(getStringValue(row, ["serviceClass", "service_class", "requestClass", "request_class"]));
+
+  return Boolean(
+    requestUrl &&
+      isConcreteHttpEvidenceUrl(requestUrl) &&
+      (essentiality === "non_essential" || classification === "non_essential") &&
+      (!runtimePhase || runtimePhase === "pre_consent" || runtimePhase === "before_consent" || runtimePhase === "before_consent_request") &&
+      serviceClass !== "service_classified" &&
+      serviceClass !== "necessary" &&
+      serviceClass !== "functional" &&
+      serviceClass !== "infrastructure" &&
+      serviceClass !== "static_asset"
+  );
+}
+
 function getPreconsentClassifiedNonEssentialRequests(rawEvidence: Record<string, unknown> | null | undefined, input: { minConfidence?: number } = {}) {
   return getObjectArrayValues(rawEvidence, [
     "requestPurposeClassificationConfidence",
     "request_purpose_classification_confidence"
   ]).filter((row) => {
-    if (!isPromotionGradePreconsentRequestRow(row)) {
+    if (!isClassifiedNonEssentialPreconsentRequestRow(row)) {
       return false;
     }
     if (typeof input.minConfidence !== "number") {
@@ -1967,7 +2004,7 @@ export function hasStrongSaleSharingControlsMissingEvidence(rawEvidence: Record<
     "directSaleShareOrTargetedAdvertisingRequestUrls",
     "direct_sale_share_or_targeted_advertising_request_urls"
   ]);
-  const runtimeCoherence = evaluateCaliforniaSaleShareRuntimeCoherence({
+  const runtimeCoherence = evaluateSaleShareRuntimeCoherence({
     advertisingSharingVendors: runtimeVendors,
     policySaleShareAdmissionObserved: getBooleanValue(rawEvidence, [
       "policySaleShareAdmissionObserved",
@@ -1997,99 +2034,6 @@ export function hasStrongSaleSharingControlsMissingEvidence(rawEvidence: Record<
     missingChoicePath &&
       reviewerVisibleAnchor &&
       (policyAnchorSupportsBehavior || disclosureSignals || policyTextSupportsBehavior || runtimeSupportsBehavior)
-  );
-}
-
-export function hasStrongCpraCbaOptOutMissingEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (!rawEvidence) {
-    return false;
-  }
-  const cpraEvidence = getRecordValue(rawEvidence, ["cpraCbaOptOutEvidence", "cpra_cba_opt_out_evidence"]);
-  const directAdvertisingVendors = getStringArrayValues(rawEvidence, [
-    "directAdvertisingSharingVendors",
-    "direct_advertising_sharing_vendors",
-    "advertisingSharingVendors",
-    "advertising_sharing_vendors"
-  ]);
-  const nestedDirectAdvertisingVendors = getStringArrayValues(cpraEvidence, [
-    "directAdvertisingSharingVendors",
-    "direct_advertising_sharing_vendors",
-    "advertisingSharingVendors",
-    "advertising_sharing_vendors"
-  ]);
-  const saleShareRequestUrls = [
-    ...getStringArrayValues(rawEvidence, [
-      "runtimeRequestUrls",
-      "runtime_request_urls",
-      "saleShareRequestUrls",
-      "sale_share_request_urls",
-      "directSaleShareOrTargetedAdvertisingRequestUrls",
-      "direct_sale_share_or_targeted_advertising_request_urls"
-    ]),
-    ...getStringArrayValues(cpraEvidence, [
-      "runtimeRequestUrls",
-      "runtime_request_urls",
-      "saleShareRequestUrls",
-      "sale_share_request_urls",
-      "directSaleShareOrTargetedAdvertisingRequestUrls",
-      "direct_sale_share_or_targeted_advertising_request_urls"
-    ])
-  ];
-  const runtimeCoherence = evaluateCaliforniaSaleShareRuntimeCoherence({
-    advertisingSharingVendors: [...directAdvertisingVendors, ...nestedDirectAdvertisingVendors],
-    policySnippets: getStringArrayValues(cpraEvidence, [
-      "policyCbaLanguage",
-      "policy_cba_language"
-    ]),
-    saleShareRequestUrls,
-    targetedAdvertisingSignalsObserved: getBooleanValue(rawEvidence, [
-      "targetedAdvertisingSignalsObserved",
-      "targeted_advertising_signals_observed"
-    ])
-  });
-  const optOutUiResult =
-    getStringArrayValues(cpraEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ??
-    getStringArrayValues(rawEvidence, ["optOutUiResult", "opt_out_ui_result"])[0] ??
-    null;
-  const policyCbaLanguage =
-    getStringArrayValues(cpraEvidence, ["policyCbaLanguage", "policy_cba_language"])[0] ??
-    getStringArrayValues(rawEvidence, ["policyCbaLanguage", "policy_cba_language"])[0] ??
-    null;
-  const scanOriginGeo =
-    getStringArrayValues(cpraEvidence, ["scanOriginGeo", "scan_origin_geo"])[0] ??
-    getStringArrayValues(rawEvidence, ["scanOriginGeo", "scan_origin_geo"])[0] ??
-    null;
-  const suppressorApplied =
-    getStringArrayValues(cpraEvidence, ["suppressorApplied", "suppressor_applied"])[0] ??
-    getStringArrayValues(rawEvidence, ["suppressorApplied", "suppressor_applied"])[0] ??
-    null;
-  const choiceControlsInspected =
-    cpraEvidence?.choiceControlsInspected === true ||
-    cpraEvidence?.choice_controls_inspected === true ||
-    rawEvidence.choiceControlsInspected === true ||
-    rawEvidence.choice_controls_inspected === true ||
-    getStringArrayValues(rawEvidence, ["privacyChoiceSearchUrls", "privacy_choice_search_urls", "gpcOptOutDiscoveryAttemptUrls", "gpc_opt_out_discovery_attempt_urls"]).length > 0;
-  const vendorThresholdMet =
-    directAdvertisingVendors.length >= 1 ||
-    nestedDirectAdvertisingVendors.length >= 1;
-  const missingOrPartialControl =
-    optOutUiResult === "absent" ||
-    optOutUiResult === "generic_do_not_sell" ||
-    optOutUiResult === "partial_no_icon";
-  const cpraRelevantContext =
-    Boolean(policyCbaLanguage && policyCbaLanguage !== "absent") ||
-    optOutUiResult === "generic_do_not_sell" ||
-    optOutUiResult === "partial_no_icon" ||
-    /\b(?:ca|california)\b/i.test(scanOriginGeo ?? "") ||
-    getStringArrayValues(rawEvidence, ["privacyChoiceSearchUrls", "privacy_choice_search_urls", "gpcOptOutDiscoveryAttemptUrls", "gpc_opt_out_discovery_attempt_urls"]).length > 0;
-
-  return (
-    vendorThresholdMet &&
-    runtimeCoherence.runtimeThirdPartyAdtechObserved &&
-    choiceControlsInspected &&
-    missingOrPartialControl &&
-    cpraRelevantContext &&
-    !suppressorApplied
   );
 }
 

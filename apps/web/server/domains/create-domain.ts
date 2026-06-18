@@ -14,7 +14,6 @@ import { getPlanLimits } from "../plans/get-plan-limits";
 import { queueFullScanForDomain } from "../scans/create-full-scan";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { getAdminScanThrottleMs } from "../../lib/scan-access";
-import type { QueuedFullScanCaliforniaPrivacyConfig } from "../scans/full-scan-config";
 import {
   normalizeLocalV2DagRunViaLambda,
   normalizeLocalV2DagScanProfile,
@@ -34,7 +33,6 @@ const initialState: CreateDomainActionState = {
 export async function createOrQueueDomainScan(input: {
   allowExistingDomainRescan?: boolean;
   bypassRecentScanReuse?: boolean;
-  californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   domain: string;
   localV2DagLambdaDebugOverrides?: import("../scans/local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
@@ -105,7 +103,6 @@ export async function createOrQueueDomainScan(input: {
       enforceMonthlyUsageLimit: true,
       provenance: input.provenance,
       bypassRecentScanReuse: input.bypassRecentScanReuse,
-      californiaPrivacy: input.californiaPrivacy,
       localV2DagScanProfile: input.localV2DagScanProfile,
       localV2DagRunViaLambda: input.localV2DagRunViaLambda,
       scanFrom: input.scanFrom,
@@ -173,7 +170,6 @@ export async function createOrQueueDomainScan(input: {
     submittedByUserId: dashboardContext.user.id,
     enforceMonthlyUsageLimit: true,
     bypassRecentScanReuse: input.bypassRecentScanReuse,
-    californiaPrivacy: input.californiaPrivacy,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
@@ -216,7 +212,6 @@ export async function createDomainAction(
         domain: item.domain,
         allowExistingDomainRescan: true,
         bypassRecentScanReuse: forceNewScan,
-        californiaPrivacy: null,
         localV2DagScanProfile,
         localV2DagRunViaLambda,
         scanFrom

@@ -4,6 +4,28 @@ on:
   push:
     branches:
       - main
+    paths:
+      - ".dockerignore"
+      - ".github/workflows/web-aws-ecs-deploy.yml"
+      - "apps/web/**"
+      - "packages/certscore-contracts/**"
+      - "packages/certscore-vendor-resolver/**"
+      - "packages/db/**"
+      - "packages/shared/**"
+      - "packages/ui/**"
+      - "packages/validation-shared/**"
+      - "scripts/apply-db-migrations.mjs"
+      - "scripts/insert-integration-api-key.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "turbo.json"
+      - "!apps/web/**/*.test.ts"
+      - "!apps/web/**/*.test.tsx"
+      - "!apps/web/**/*.spec.ts"
+      - "!apps/web/**/*.spec.tsx"
+      - "!apps/web/scripts/**"
   workflow_dispatch:
 
 concurrency:
@@ -28,6 +50,46 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Report deploy-triggering changes
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && -n "${{ github.event.before }}" ]]; then
+            base_ref="${{ github.event.before }}"
+          else
+            base_ref="$(git rev-parse HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+          fi
+          if ! git cat-file -e "${base_ref}^{commit}" 2>/dev/null; then
+            base_ref="$(git rev-parse HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+          fi
+
+          echo "Deploy trigger: public web"
+          echo "Base ref: ${base_ref}"
+          echo "Head ref: ${GITHUB_SHA}"
+          echo
+          echo "Changed files considered by this deploy:"
+          git diff --name-only "${base_ref}" "${GITHUB_SHA}" | sed 's/^/  - /'
+          echo
+          echo "Deploy categories:"
+          git diff --name-only "${base_ref}" "${GITHUB_SHA}" | awk '
+            /^apps\/web\// { web=1 }
+            /^apps\/web\/scripts\// { web_scripts=1 }
+            /^apps\/web\/.*\.(test|spec)\.(ts|tsx)$/ { tests=1 }
+            /^packages\/(shared|ui|db|validation-shared|certscore-contracts|certscore-vendor-resolver)\// { pkg=1 }
+            /^scripts\/(apply-db-migrations|insert-integration-api-key)\.mjs$/ { ops=1 }
+            /^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|turbo\.json|\.dockerignore)$/ { build=1 }
+            /^\.github\/workflows\/web-aws-ecs-deploy\.yml$/ { workflow=1 }
+            END {
+              if (web) print "  - web source"
+              if (web_scripts) print "  - web script-only change"
+              if (tests) print "  - web test-only change"
+              if (pkg) print "  - web runtime package"
+              if (ops) print "  - web operational script"
+              if (build) print "  - build/dependency config"
+              if (workflow) print "  - deploy workflow"
+            }
+          '
 
       - name: Validate deploy configuration
         run: |
@@ -46,6 +108,9 @@ jobs:
       - name: Login to Amazon ECR
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -84,7 +149,12 @@ jobs:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
           WEB_IMAGE="${REGISTRY}/${ECR_WEB_REPOSITORY}"
-          docker build \
+          WEB_CACHE="${WEB_IMAGE}:buildcache"
+          docker buildx build \
+            --provenance=false \
+            --sbom=false \
+            --cache-from "type=registry,ref=${WEB_CACHE}" \
+            --cache-to "type=registry,ref=${WEB_CACHE},mode=max" \
             -f apps/web/Dockerfile \
             --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
             --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
@@ -92,9 +162,8 @@ jobs:
             --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
             -t "${WEB_IMAGE}:${GITHUB_SHA}" \
             -t "${WEB_IMAGE}:latest" \
+            --push \
             .
-          docker push "${WEB_IMAGE}:${GITHUB_SHA}"
-          docker push "${WEB_IMAGE}:latest"
 
       - name: Force ECS deployments
         run: |

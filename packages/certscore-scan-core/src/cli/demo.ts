@@ -1,8 +1,7 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import type { ScanProfile } from "@certscore/contracts";
-import { reviewEvidenceBundle } from "@certscore/review-engine";
 import { runScan } from "../index.js";
 
 void main();
@@ -23,12 +22,9 @@ async function main(): Promise<void> {
     profile: args.profile ?? "tiny",
     outDir,
   });
-  const review = await reviewEvidenceBundle(bundle);
-  const reviewPath = path.join(outDir, "ReviewResult.json");
-  await writeFile(reviewPath, `${JSON.stringify(review, null, 2)}\n`);
 
   console.log(`Wrote ${path.join(outDir, "CanonicalEvidenceBundle.json")}`);
-  console.log(`Wrote ${reviewPath}`);
+  console.log(`Scan ID: ${bundle.scanId}`);
 }
 
 function parseArgs(argv: string[]): {

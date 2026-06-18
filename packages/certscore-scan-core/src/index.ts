@@ -28,14 +28,16 @@ import {
   classifyCookieEvents,
   summarizeObservedJourneys,
 } from "./journey-builder.js";
-import { createOpenAiNanoConsentUiAssistProviderFromEnv } from "./nano-consent-ui-assist-provider.js";
 import { createOpenAiNanoPolicyAssistProviderFromEnv } from "./nano-policy-assist-provider.js";
 import { getScanProfile } from "./profiles.js";
 import { policySurfaceScannerPlaceholder } from "./scanners/placeholders.js";
-import { consentFlowRuntimeScanner } from "./scanners/consent-flow-runtime-scanner.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
 import { chromiumLaunchOptions } from "./playwright-runtime.js";
+
+type ConsentFlowRuntimeScanner = typeof import("./scanners/consent-flow-runtime-scanner.js").consentFlowRuntimeScanner;
+type ConsentFlowRuntimeInput = Parameters<ConsentFlowRuntimeScanner>[0];
+type ConsentFlowRuntimeResult = Awaited<ReturnType<ConsentFlowRuntimeScanner>>;
 
 export {
   chromiumLaunchArgs,
@@ -114,15 +116,24 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const consentFlowEnabled = profileConsentFlowEnabled && input.postConsentFlowsEnabled === true;
   const plannedParallel = input.scenarioPlanningMode === "planned_parallel";
   const leanPreConsent = plannedParallel || input.captureReplay === true;
-  const nanoPolicyAssistProvider = createOpenAiNanoPolicyAssistProviderFromEnv();
-  const nanoConsentUiAssistProvider = createOpenAiNanoConsentUiAssistProviderFromEnv();
-  if (!nanoPolicyAssistProvider?.classifyLinks || !nanoConsentUiAssistProvider?.classifyControls) {
-    await phaseRecorder.record("nano_assist_provider", "failed", {
+  const nanoPolicyAssistProvider = policySurfaceEnabled ? createOpenAiNanoPolicyAssistProviderFromEnv() : undefined;
+  const nanoConsentUiAssistProvider = consentFlowEnabled
+    ? (await import("./nano-consent-ui-assist-provider.js")).createOpenAiNanoConsentUiAssistProviderFromEnv()
+    : undefined;
+  if (policySurfaceEnabled && !nanoPolicyAssistProvider?.classifyLinks) {
+    await phaseRecorder.record("nano_policy_assist_provider", "failed", {
       reason: "missing_openai_api_key_or_provider",
     });
-    throw new Error("Nano assist is mandatory for all CertScore v2 scan profiles. Set OPENAI_API_KEY before running tiny, quick, consent, policy, standard, or full profiles.");
+    throw new Error("Nano policy assist is required for CertScore v2 policy-surface profiles. Set OPENAI_API_KEY before running policy, standard, or full profiles.");
   }
-  await phaseRecorder.record("nano_assist_provider", "completed");
+  await phaseRecorder.record("nano_policy_assist_provider", policySurfaceEnabled ? "completed" : "skipped");
+  if (consentFlowEnabled && !nanoConsentUiAssistProvider?.classifyControls) {
+    await phaseRecorder.record("nano_consent_assist_provider", "failed", {
+      reason: "missing_openai_api_key_or_provider",
+    });
+    throw new Error("Nano consent UI assist is required for CertScore v2 consent-flow profiles. Set OPENAI_API_KEY before enabling post-consent flow scans.");
+  }
+  await phaseRecorder.record("nano_consent_assist_provider", consentFlowEnabled ? "completed" : "skipped");
   const artifactWriter = await createArtifactWriter(outDir);
   await phaseRecorder.record("artifact_writer", "completed", { outDir });
   const useSingleBrowser = input.browserReuseMode === "single" && (preConsentEnabled || policySurfaceEnabled);
@@ -438,10 +449,15 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     cookieEvents,
     cookieSnapshots,
     enabledModules: scanProfile.enabledModules,
-    modulesRun,
-    networkEvents,
-    normalizedVendorObservations,
-    observedJourneys,
+  modulesRun,
+  networkEvents,
+  normalizedVendorObservations,
+  observedJourneys,
+  consentUiObservations: [
+    ...preConsentResult.consentUiObservations,
+    ...(consentFlowResult?.consentUiObservations ?? []),
+  ],
+  cmpRuntimeObservations: preConsentResult.cmpRuntimeObservations,
   });
 
   const bundle = canonicalEvidenceBundleSchema.parse({
@@ -536,40 +552,11 @@ export async function handler(event: {
 export { scanProfiles } from "./profiles.js";
 export { buildObservedJourneys, summarizeObservedJourneys } from "./journey-builder.js";
 export { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
-export { buildConsentFlowComparisonsFromEvidence, consentFlowRuntimeScanner } from "./scanners/consent-flow-runtime-scanner.js";
 export {
   policySurfaceScannerPlaceholder,
 } from "./scanners/placeholders.js";
 export { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
 export { createOpenAiNanoPolicyAssistProvider, createOpenAiNanoPolicyAssistProviderFromEnv } from "./nano-policy-assist-provider.js";
-export {
-  formatConsentFlowReplayValidationMarkdown,
-  formatReplayEvidenceReportMarkdown,
-  replayConsentFlowEvidenceCorpus,
-  validateConsentFlowReplayCorpus,
-  type ConsentFlowReplayManifest,
-  type ConsentFlowReplayMode,
-  type ConsentSurfaceType,
-  type ReplayActionCandidateType,
-  type ReplayClassificationDelta,
-  type ReplayEvidenceActionCandidate,
-  type ReplayEvidenceReport,
-  type ReplayEvidenceScenarioReport,
-  type ReplayEvidenceSiteReport,
-  type ReplayFailureReason,
-  type ReplayReadinessSummary,
-  type ReplayNetworkPhaseSummary,
-  type ReplayNetworkVendorSummary,
-  type ReplayProviderDetectionSignal,
-  type ConsentFlowReplayValidationEntry,
-  type ConsentFlowReplayValidationInput,
-  type ConsentFlowReplayValidationResult,
-} from "./consent-flow-replay-runner.js";
-export {
-  buildConsentScenarioShadowCompareArtifact,
-  formatConsentScenarioShadowCompareMarkdown,
-  type ConsentScenarioShadowSiteInput,
-} from "./consent-scenario-shadow-compare.js";
 
 type ScanPhaseStatus = "completed" | "failed" | "skipped" | "started";
 
@@ -632,6 +619,8 @@ function sanitizePhaseDetail(detail: Record<string, unknown> | undefined): Recor
 }
 
 export function deriveRuntimeCoverageSummary(input: {
+  cmpRuntimeObservations?: CmpRuntimeObservation[];
+  consentUiObservations?: ConsentUiObservation[];
   cookieEvents: CookieEvent[];
   cookieSnapshots: CookieSnapshot[];
   enabledModules: string[];
@@ -694,6 +683,10 @@ export function deriveRuntimeCoverageSummary(input: {
   if (silentEmpty) {
     limitationKeys.push("silent_empty_runtime_completed");
   }
+  if (cmpRuntimeObservedWithoutActionableConsentSurface(input)) {
+    limitationKeys.push("cmp_runtime_without_actionable_surface");
+    notes.push("CMP runtime evidence was observed, but no actionable consent surface or first-layer controls were retained in bounded capture.");
+  }
 
   const coverageStatus: RuntimeCoverageSummary["coverageStatus"] =
     silentEmpty || (!hasRuntimeEvidence && limitationKeys.length > 0)
@@ -710,6 +703,22 @@ export function deriveRuntimeCoverageSummary(input: {
     silentEmpty,
     notes,
   };
+}
+
+function cmpRuntimeObservedWithoutActionableConsentSurface(input: {
+  cmpRuntimeObservations?: CmpRuntimeObservation[];
+  consentUiObservations?: ConsentUiObservation[];
+}) {
+  if ((input.cmpRuntimeObservations ?? []).length === 0) {
+    return false;
+  }
+  return !(input.consentUiObservations ?? []).some((observation) =>
+    observation.acceptControlObserved ||
+    observation.rejectControlObserved ||
+    observation.managePreferencesControlObserved ||
+    observation.controls.length > 0 ||
+    observation.visibleChoiceLabels.length > 0
+  );
 }
 
 function preConsentPartialIsScreenshotOnly(errors: string[]) {
@@ -807,8 +816,9 @@ function nowIso(startedAtMs: number): string {
 }
 
 async function runConsentFlowWithHeadedRetry(
-  input: Parameters<typeof consentFlowRuntimeScanner>[0],
-): Promise<Awaited<ReturnType<typeof consentFlowRuntimeScanner>>> {
+  input: ConsentFlowRuntimeInput,
+): Promise<ConsentFlowRuntimeResult> {
+  const { consentFlowRuntimeScanner } = await import("./scanners/consent-flow-runtime-scanner.js");
   const firstAttempt = await consentFlowRuntimeScanner(input);
   if (!shouldRetryConsentFlowWithHeaded(firstAttempt)) {
     return firstAttempt;
@@ -845,7 +855,7 @@ function shouldRetryPreConsentWithHeaded(
 }
 
 function shouldRetryConsentFlowWithHeaded(
-  result: Awaited<ReturnType<typeof consentFlowRuntimeScanner>>,
+  result: ConsentFlowRuntimeResult,
 ) {
   if (result.moduleRun.status !== "failed") {
     return false;

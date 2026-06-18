@@ -40,7 +40,7 @@ const initialState: UpsertOrganizationSettingsActionState = {
   success: null
 };
 
-export function ScanLocationSettingsCard({ defaultScanFrom }: { defaultScanFrom: ScanFrom }) {
+export function ScanLocationSettingsCard({ lastScanFrom }: { lastScanFrom: ScanFrom }) {
   const [state, action, isPending] = useActionState(upsertOrganizationSettingsAction, initialState);
 
   return (
@@ -53,7 +53,7 @@ export function ScanLocationSettingsCard({ defaultScanFrom }: { defaultScanFrom:
           >
             <input
               className="peer sr-only"
-              defaultChecked={defaultScanFrom === option.value}
+              defaultChecked={lastScanFrom === option.value}
               name="defaultScanFrom"
               type="radio"
               value={option.value}
@@ -75,7 +75,7 @@ export function ScanLocationSettingsCard({ defaultScanFrom }: { defaultScanFrom:
           {state.success ? <p className="text-sm text-emerald-700">{state.success}</p> : null}
         </div>
         <Button type="submit" disabled={isPending}>
-          {isPending ? "Saving..." : "Save scan location"}
+          {isPending ? "Saving..." : "Save last scan location"}
         </Button>
       </div>
     </form>

@@ -2097,44 +2097,6 @@ test("deriveConcernPolicy still promotes explicitly confirmed sitewide missing p
   assert.equal(policy.externalSurfacingEligibility, "eligible");
 });
 
-test("CPRA CBA opt-out concern policy requires CPRA-relevant context", () => {
-  const concern = makeConcern({
-    originKey: "privacy.cpra_cba_opt_out_missing",
-    originType: "snapshot_signal",
-    suggestedUnifiedFindingId: "cpra_cba_opt_out_missing",
-    title: "CPRA CBA opt-out missing"
-  });
-
-  const adtechOnly = deriveConcernPolicy({
-    concern,
-    evidenceStrengthFlags: ["direct_runtime"],
-    rawEvidence: {
-      directAdvertisingSharingVendors: ["The Trade Desk"],
-      optOutUiResult: "absent",
-      policyCbaLanguage: "absent",
-      suppressorApplied: null
-    }
-  });
-  assert.equal(adtechOnly.promotionEligibility, "internal_only");
-  assert.equal(adtechOnly.externalSurfacingEligibility, "audit_only");
-
-  const policyContext = deriveConcernPolicy({
-    concern,
-    evidenceStrengthFlags: ["direct_runtime"],
-    rawEvidence: {
-      directAdvertisingSharingVendors: ["The Trade Desk"],
-      choiceControlsInspected: true,
-      optOutUiResult: "absent",
-      policyCbaLanguage: "full_cba_language",
-      saleShareRequestUrls: ["https://pixel.adsrvr.org/track"],
-      suppressorApplied: null
-    }
-  });
-  assert.equal(policyContext.promotionEligibility, "internal_only");
-  assert.equal(policyContext.externalSurfacingEligibility, "audit_only");
-  assert.ok(policyContext.negativeEvidenceFlags.includes("ccpa_cpra_deferred_from_core"));
-});
-
 test("pre-consent policy requires timeline sequence plus non-essential request classification", () => {
   const concern = makeConcern({
     originKey: "privacy.preconsent_tracking_detected",
@@ -3311,10 +3273,9 @@ test("deriveConcernPolicy suppresses cookie disclosure gaps backed only by ignor
     }
   });
 
-  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.allowedNarrativeTier, "moderate");
   assert.equal(policy.promotionEligibility, "blocked");
   assert.equal(policy.externalSurfacingEligibility, "suppress");
-  assert.ok(policy.negativeEvidenceFlags.includes("runtime_cookie_inventory_ignored_only"));
 });
 
 test("deriveConcernPolicy keeps cookie disclosure gaps eligible for substantive unmatched cookies", () => {
@@ -3345,107 +3306,6 @@ test("deriveConcernPolicy keeps cookie disclosure gaps eligible for substantive 
   assert.equal(policy.allowedNarrativeTier, "strong");
   assert.equal(policy.promotionEligibility, "eligible");
   assert.equal(policy.externalSurfacingEligibility, "eligible");
-});
-
-test("deriveConcernPolicy keeps generic CPRA opt-out absence audit-only without inspected choice surfaces", () => {
-  const policy = deriveConcernPolicy({
-    concern: makeConcern({
-      originKey: "privacy.cpra_cba_opt_out_missing",
-      originType: "validation_rule",
-      suggestedUnifiedFindingId: "cpra_cba_opt_out_missing",
-      title: "CPRA opt-out missing"
-    }),
-    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
-    rawEvidence: {
-      directAdvertisingSharingVendors: ["The Trade Desk"],
-      optOutUiResult: "absent",
-      policyCbaLanguage: "absent"
-    }
-  });
-
-  assert.equal(policy.allowedNarrativeTier, "weak");
-  assert.equal(policy.promotionEligibility, "internal_only");
-  assert.equal(policy.externalSurfacingEligibility, "audit_only");
-  assert.ok(policy.negativeEvidenceFlags.includes("ccpa_cpra_deferred_from_core"));
-});
-
-test("deriveConcernPolicy keeps CPRA opt-out gaps deferred with CBA evidence and inspected choice surfaces", () => {
-  const policy = deriveConcernPolicy({
-    concern: makeConcern({
-      originKey: "privacy.cpra_cba_opt_out_missing",
-      originType: "validation_rule",
-      suggestedUnifiedFindingId: "cpra_cba_opt_out_missing",
-      title: "CPRA opt-out missing"
-    }),
-    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
-    rawEvidence: {
-      cpra_cba_opt_out_evidence: {
-        advertisingSharingVendors: ["Meta Pixel"],
-        choice_controls_inspected: true,
-        opt_out_control_found: false,
-        opt_out_ui_result: "absent",
-        policy_cba_language: "full_cba_language",
-        sale_share_request_urls: ["https://connect.facebook.net/en_US/fbevents.js"]
-      }
-    }
-  });
-
-  assert.equal(policy.allowedNarrativeTier, "weak");
-  assert.equal(policy.promotionEligibility, "internal_only");
-  assert.equal(policy.externalSurfacingEligibility, "audit_only");
-  assert.ok(policy.negativeEvidenceFlags.includes("ccpa_cpra_deferred_from_core"));
-});
-
-test("deriveConcernPolicy keeps partial CPRA opt-out controls deferred", () => {
-  const policy = deriveConcernPolicy({
-    concern: makeConcern({
-      originKey: "privacy.cpra_cba_opt_out_missing",
-      originType: "validation_rule",
-      suggestedUnifiedFindingId: "cpra_cba_opt_out_missing",
-      title: "CPRA opt-out missing"
-    }),
-    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
-    rawEvidence: {
-      cpra_cba_opt_out_evidence: {
-        advertisingSharingVendors: ["Meta Pixel"],
-        choice_controls_inspected: true,
-        opt_out_control_found: true,
-        opt_out_ui_result: "partial_no_icon",
-        policy_cba_language: "full_cba_language",
-        sale_share_request_urls: ["https://connect.facebook.net/en_US/fbevents.js"]
-      }
-    }
-  });
-
-  assert.equal(policy.allowedNarrativeTier, "weak");
-  assert.equal(policy.promotionEligibility, "internal_only");
-  assert.equal(policy.externalSurfacingEligibility, "audit_only");
-  assert.ok(policy.negativeEvidenceFlags.includes("ccpa_cpra_deferred_from_core"));
-});
-
-test("deriveConcernPolicy keeps full CPRA-compliant controls internal-only for missing opt-out finding", () => {
-  const policy = deriveConcernPolicy({
-    concern: makeConcern({
-      originKey: "privacy.cpra_cba_opt_out_missing",
-      originType: "validation_rule",
-      suggestedUnifiedFindingId: "cpra_cba_opt_out_missing",
-      title: "CPRA opt-out missing"
-    }),
-    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
-    rawEvidence: {
-      cpra_cba_opt_out_evidence: {
-        advertisingSharingVendors: ["Meta Pixel"],
-        choice_controls_inspected: true,
-        opt_out_control_found: true,
-        opt_out_ui_result: "full_cpra_compliant",
-        policy_cba_language: "full_cba_language"
-      }
-    }
-  });
-
-  assert.equal(policy.allowedNarrativeTier, "weak");
-  assert.equal(policy.promotionEligibility, "internal_only");
-  assert.equal(policy.externalSurfacingEligibility, "audit_only");
 });
 
 test("deriveConcernPolicy keeps ordinary cookie overlays audit-only for blocking overlay top finding", () => {

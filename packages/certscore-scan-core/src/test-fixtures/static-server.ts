@@ -50,6 +50,12 @@ export type StaticFixturePage =
   | "policy-do-not-sell-link"
   | "policy-footer-privacy-delayed"
   | "policy-global-footer-delayed"
+  | "policy-gold-caltech-common-path"
+  | "policy-gold-ford-secondary-only"
+  | "policy-gold-ikea-common-path"
+  | "policy-gold-latimes-secondary-only"
+  | "policy-gold-nvidia-secondary-only"
+  | "policy-gold-privacy-duplicates"
   | "policy-external-choice-platform"
   | "policy-footer-privacy"
   | "policy-gpc-disclosure-late"
@@ -129,6 +135,12 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-do-not-sell-link": "policy-do-not-sell",
   "policy-footer-privacy-delayed": "policy-footer-privacy-delayed",
   "policy-global-footer-delayed": "policy-global-footer-delayed",
+  "policy-gold-caltech-common-path": "policy-gold-caltech-common-path",
+  "policy-gold-ford-secondary-only": "policy-gold-ford-secondary-only",
+  "policy-gold-ikea-common-path": "policy-gold-ikea-common-path",
+  "policy-gold-latimes-secondary-only": "policy-gold-latimes-secondary-only",
+  "policy-gold-nvidia-secondary-only": "policy-gold-nvidia-secondary-only",
+  "policy-gold-privacy-duplicates": "policy-gold-privacy-duplicates",
   "policy-external-choice-platform": "policy-external-choice",
   "policy-footer-privacy": "policy-footer-privacy",
   "policy-gpc-disclosure-late": "policy-gpc-late",
@@ -731,6 +743,12 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-external-choice-platform": `<a href="/privacy-control/onetrust/choices">Your Privacy Choices</a>`,
     "policy-footer-privacy-delayed": `<span id="delayed-footer-anchor"></span><script>setTimeout(() => { document.getElementById("delayed-footer-anchor").outerHTML = '<a href="/policies/privacy">Privacy Policy</a>'; }, 250);</script>`,
     "policy-global-footer-delayed": `<span id="delayed-global-footer"></span><script>setTimeout(() => { document.getElementById("delayed-global-footer").outerHTML = '<a href="/policies/privacy">Privacy Policy</a><a href="/policies/cookies">Cookie Policy</a><a href="/privacy-center">Privacy Center</a><a href="/do-not-sell-or-share">Do Not Sell or Share My Personal Information</a>'; }, 250);</script>`,
+    "policy-gold-caltech-common-path": `<a href="/about">About Caltech</a><a href="/terms">Terms</a>`,
+    "policy-gold-ford-secondary-only": `<a href="/accessibility">Accessibility</a><a href="/terms">Terms</a>`,
+    "policy-gold-ikea-common-path": `<a href="/terms">Terms</a><a href="/accessibility">Accessibility</a>`,
+    "policy-gold-latimes-secondary-only": `<a href="/gift-subscription-terms">Gift Subscription Terms</a><a href="/subscriber-terms-and-conditions">Subscriber Terms and Conditions</a><a href="/b2b/ai-technology">AI Technology</a>`,
+    "policy-gold-nvidia-secondary-only": `<a href="/en-us/ai-data-science/">AI Data Science</a><a href="/en-eu/gtc/pricing/?nvid=fixture">GTC Pricing</a>`,
+    "policy-gold-privacy-duplicates": `<a href="/privacy-policy">Privacy Policy</a><a href="/privacy-policy/">Privacy Policy</a>`,
     "policy-footer-privacy": `<a href="/policies/privacy">Privacy Policy</a>`,
     "policy-gpc-disclosure-late": `<a href="/policies/gpc-late">Privacy Policy</a>`,
     "policy-gpc-disclosure": `<a href="/policies/gpc">Privacy Notice</a>`,
@@ -788,6 +806,42 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/privacy-policy": {
       title: "Privacy Policy",
       body: "Effective date: May 1, 2026. We describe cookies, analytics, advertising, and privacy choices for visitors.",
+    },
+    "/privacy-policy/": {
+      title: "Privacy Policy",
+      body: "Effective date: May 1, 2026. We describe cookies, analytics, advertising, and privacy choices for visitors.",
+    },
+    "/privacy-notice": {
+      title: "Privacy Notice",
+      body: "Caltech Privacy Notice. We describe the personal information we collect, the purposes for processing, cookies, analytics, and privacy contact information.",
+    },
+    "/help/privacy": {
+      title: "Privacy Policy",
+      body: "Ford Privacy Policy. We explain how we collect, use, disclose, and retain personal information. We use cookies and analytics, and privacy choices are available.",
+    },
+    "/global/en/legal/privacy-cookie-statement": {
+      title: "Privacy and Cookie Statement",
+      body: "IKEA Privacy and Cookie Statement. We use cookies, analytics, advertising identifiers, and similar technologies. Cookie settings and privacy choices are available.",
+    },
+    "/global/en/legal/privacy-cookie-statement/": {
+      title: "Privacy and Cookie Statement",
+      body: "IKEA Privacy and Cookie Statement. We use cookies, analytics, advertising identifiers, and similar technologies. Cookie settings and privacy choices are available.",
+    },
+    "/en-us/about-nvidia/privacy-policy": {
+      title: "NVIDIA Privacy Policy",
+      body: "NVIDIA Privacy Policy. We describe personal data collection, cookies, analytics, advertising, privacy choices, and contact information.",
+    },
+    "/en-us/about-nvidia/privacy-policy/": {
+      title: "NVIDIA Privacy Policy",
+      body: "NVIDIA Privacy Policy. We describe personal data collection, cookies, analytics, advertising, privacy choices, and contact information.",
+    },
+    "/en-us/about-nvidia/privacy-center": {
+      title: "NVIDIA Privacy Center",
+      body: "NVIDIA Privacy Center. Visitors can manage privacy choices and cookie preferences.",
+    },
+    "/en-us/about-nvidia/privacy-center/": {
+      title: "NVIDIA Privacy Center",
+      body: "NVIDIA Privacy Center. Visitors can manage privacy choices and cookie preferences.",
     },
     "/policies/rights-only": {
       title: "Privacy Policy",
@@ -863,6 +917,30 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "AI Disclosures",
       body: "Artificial intelligence features may summarize account content. Some output may include AI-generated content and automated decision support for internal operations.",
     },
+    "/b2b/ai-technology": {
+      title: "AI Technology",
+      body: "AI technology information for advertisers and newsroom partners.",
+    },
+    "/en-us/ai-data-science": {
+      title: "AI Data Science",
+      body: "NVIDIA AI data science product information.",
+    },
+    "/en-us/ai-data-science/": {
+      title: "AI Data Science",
+      body: "NVIDIA AI data science product information.",
+    },
+    "/en-eu/gtc/pricing/": {
+      title: "GTC Pricing",
+      body: "Conference pricing and registration terms.",
+    },
+    "/gift-subscription-terms": {
+      title: "Gift Subscription Terms",
+      body: "Gift subscription terms for this fixture publisher.",
+    },
+    "/subscriber-terms-and-conditions": {
+      title: "Subscriber Terms and Conditions",
+      body: "Subscriber terms and conditions for this fixture publisher.",
+    },
     "/policies/onetrust-shell": {
       title: "WBD Privacy Center b2c",
       body: "Processing Error. Close Privacy Center. Our Privacy Approach Privacy Policy Terms of Use Cookie Settings. OneTrust NoticeApi LoadNotices shell.",
@@ -874,10 +952,6 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/policies/onetrust-final-shell": {
       title: "en-us | WBD Privacy Center",
       body: "Processing Error. Close Privacy Center. Nested OneTrust NoticeApi LoadNotices shell.",
-    },
-    "/california-privacy-notice": {
-      title: "California Privacy Notice",
-      body: "California Privacy Notice. California residents may access, delete, correct, and opt out of sale or share of personal information.",
     },
     "/accessibility": {
       title: "Accessibility Statement",

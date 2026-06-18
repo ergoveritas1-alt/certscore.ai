@@ -188,7 +188,6 @@ export async function POST(request: Request) {
 
       const anonymousScan = await createAnonymousFullScan({
         bypassRecentScanReuse: forceNewScan,
-        californiaPrivacy: null,
         hostname: firstDomain.hostname,
         localV2DagLambdaDebugOverrides,
         localV2DagScanProfile,
@@ -249,7 +248,6 @@ export async function POST(request: Request) {
         createOrQueueDomainScan({
           allowExistingDomainRescan: true,
           bypassRecentScanReuse: forceNewScan,
-          californiaPrivacy: null,
           domain: item.normalizedUrl,
           localV2DagScanProfile,
           localV2DagRunViaLambda,

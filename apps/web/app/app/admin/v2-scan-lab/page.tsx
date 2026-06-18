@@ -5,7 +5,6 @@ import { V2ScanLabPendingOverlay, V2ScanLabSubmitControl } from "./v2-scan-lab-s
 import { V2PriorityIssuesCarousel, type V2PriorityRegulatoryGap } from "./v2-priority-issues-carousel";
 import { V2RegulatoryReviewBeta } from "./v2-regulatory-review-beta";
 import { submitV2ScanLabAction } from "./actions";
-import type { CaliforniaPrivacyCoverageChecklistItem } from "../../../../lib/scans/california-privacy-coverage-checklist";
 import type { GdprEprivacyCoverageChecklistItem } from "../../../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveRegulatoryCoverageScore } from "../../../../lib/scans/regulatory-coverage-score";
 import {
@@ -95,10 +94,7 @@ export default async function AdminV2ScanLabPage({ searchParams }: V2ScanLabPage
           <StatusCard title="No Saved Artifacts" tone="muted">
             <p>{result.message}</p>
             <pre className="mt-4 overflow-x-auto rounded-lg bg-slate-950 p-4 text-xs text-slate-100">
-{`pnpm v2:scan --url <url> --profile tiny --out ./artifacts/<domain>
-pnpm v2:review --bundle ./artifacts/<domain>/CanonicalEvidenceBundle.json --out ./artifacts/<domain>/ReviewResult.json
-pnpm v2:project --bundle ./artifacts/<domain>/CanonicalEvidenceBundle.json --review ./artifacts/<domain>/ReviewResult.json --out ./artifacts/<domain>/V2ReportProjectionDraft.json
-pnpm v2:wc01-evidence-preview ...`}
+{`pnpm v2:scan --url <url> --profile tiny --out ./artifacts/<domain>`}
             </pre>
           </StatusCard>
         </div>
@@ -151,7 +147,6 @@ function ScanLabModelView({
       />
       <LegacyStyleReportOverview model={model} />
       <V2RegulatoryReviewBeta
-        californiaPrivacyItems={model.regulatoryReviewChecklist.californiaPrivacyItems as CaliforniaPrivacyCoverageChecklistItem[]}
         gdprEprivacyItems={model.regulatoryReviewChecklist.gdprEprivacyItems as GdprEprivacyCoverageChecklistItem[]}
       />
     </div>
@@ -715,7 +710,7 @@ function buildRegulatoryGapFindings(model: V2ScanLabModel): V2PriorityRegulatory
 function regulatoryGapFromItem(input: {
   framework: V2PriorityRegulatoryGap["framework"];
   idPrefix: string;
-  item: GdprEprivacyCoverageChecklistItem | CaliforniaPrivacyCoverageChecklistItem;
+  item: GdprEprivacyCoverageChecklistItem;
 }): V2PriorityRegulatoryGap {
   return {
     body: input.item.criticalEvidence.statusBasis || input.item.note || input.item.explanation,

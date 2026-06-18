@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -7,6 +7,7 @@ import { createArtifactWriter } from "./artifact-writer.js";
 import {
   type PolicyNanoAssistProvider,
   policySurfaceScanner,
+  wwwFallbackUrlForPolicyFetch,
 } from "./scanners/policy-surface-scanner.js";
 import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixtures/static-server.js";
 
@@ -288,6 +289,96 @@ test("policySurfaceScanner falls back to common paths when Nano declines observe
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
 });
 
+test("policySurfaceScanner gold corpus retains core GDPR policy surfaces through bounded fallback", async () => {
+  const cases = [
+    {
+      page: "policy-gold-ford-secondary-only",
+      expectedSurfaceType: "privacy_policy",
+      expectedPath: "/help/privacy",
+    },
+    {
+      page: "policy-gold-ikea-common-path",
+      expectedSurfaceType: "cookie_policy",
+      expectedPath: "/global/en/legal/privacy-cookie-statement",
+    },
+    {
+      page: "policy-gold-nvidia-secondary-only",
+      expectedSurfaceType: "privacy_policy",
+      expectedPath: "/en-us/about-nvidia/privacy-policy",
+    },
+    {
+      page: "policy-gold-latimes-secondary-only",
+      expectedSurfaceType: "privacy_policy",
+      expectedPath: "/privacy-policy",
+    },
+    {
+      page: "policy-gold-caltech-common-path",
+      expectedSurfaceType: "privacy_policy",
+      expectedPath: "/privacy-notice",
+    },
+  ] as const;
+
+  for (const fixture of cases) {
+    await withPolicyScan(fixture.page, async ({ result, baseUrl }) => {
+      const fallbackObservations = result.policySurfaceObservations.filter((observation) =>
+        observation.discoveryMethod === "guessed_common_path"
+      );
+      const retained = result.policySurfaceObservations.find((observation) =>
+        observation.status === "fetched" &&
+        observation.surfaceType === fixture.expectedSurfaceType &&
+        observation.normalizedUrl === `${baseUrl}${fixture.expectedPath}`
+      );
+
+      assert.ok(retained, `${fixture.page} should retain ${fixture.expectedPath}`);
+      assert.ok((retained.textExcerpt?.length ?? 0) > 80, `${fixture.page} should retain usable policy text`);
+      assert.ok(fallbackObservations.length <= 8, `${fixture.page} should keep common-path fallback bounded`);
+      assert.equal(
+        result.moduleRun.timingBreakdown?.some((timing) => timing.label === "common-path policy fetch group"),
+        true,
+        `${fixture.page} should record fallback timing diagnostics`,
+      );
+      const diagnostics = await readPolicyCaptureDiagnostics(result);
+      assert.equal(diagnostics.corePolicySurfaceRetained, true);
+      assert.equal(diagnostics.commonPathFallbackUsed, true);
+      assert.ok(diagnostics.coreSurfaceTypes.includes(fixture.expectedSurfaceType));
+      assert.ok(diagnostics.observedCandidateCount >= 1);
+      assert.ok(diagnostics.fetchedCount >= 1);
+      assert.ok(diagnostics.policyCaptureDurationMs >= 0);
+    });
+  }
+});
+
+test("policySurfaceScanner does not let secondary-only surfaces satisfy core GDPR policy availability", async () => {
+  await withPolicyScan("policy-gold-latimes-secondary-only", async ({ result }) => {
+    const fetchedBeforeFallback = result.policySurfaceObservations.filter((observation) =>
+      observation.status === "fetched" &&
+      observation.discoveryMethod !== "guessed_common_path"
+    );
+    const secondaryOnlyTypes = new Set(fetchedBeforeFallback.map((observation) => observation.surfaceType));
+    const fallbackPrivacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.discoveryMethod === "guessed_common_path" &&
+      observation.surfaceType === "privacy_policy"
+    );
+
+    assert.deepEqual([...secondaryOnlyTypes].sort(), ["ai_disclosure", "terms"]);
+    assert.ok(fallbackPrivacy);
+  });
+});
+
+test("policySurfaceScanner dedupes slash variants before applying common-path fallback cap", async () => {
+  await withPolicyScan("policy-gold-ford-secondary-only", async ({ result, baseUrl }) => {
+    const commonPathUrls = result.policySurfaceObservations
+      .filter((observation) => observation.discoveryMethod === "guessed_common_path")
+      .map((observation) => observation.normalizedUrl ?? observation.url);
+
+    assert.ok(commonPathUrls.length <= 8);
+    assert.equal(commonPathUrls.includes(`${baseUrl}/help/privacy`), true);
+    assert.equal(commonPathUrls.includes(`${baseUrl}/help/privacy/`), false);
+    assert.equal(new Set(commonPathUrls.map((value) => value.replace(/\/$/, ""))).size, commonPathUrls.length);
+  });
+});
+
 test("policySurfaceScanner preserves failed policy link attempts without marking them observed", async () => {
   await withPolicyScan("policy-broken-link", async ({ result }) => {
     const broken = result.policySurfaceObservations.find((observation) =>
@@ -298,6 +389,20 @@ test("policySurfaceScanner preserves failed policy link attempts without marking
     assert.equal(broken?.httpStatus, 404);
     assert.equal(broken?.evidenceRefs.length, 0);
   });
+});
+
+test("policy surface fetch fallback only maps apex HTTPS URLs to same-site www URLs", () => {
+  assert.equal(
+    wwwFallbackUrlForPolicyFetch("https://caltech.edu/privacy-notice"),
+    "https://www.caltech.edu/privacy-notice",
+  );
+  assert.equal(
+    wwwFallbackUrlForPolicyFetch("https://caltech.edu/privacy-notice?source=footer#rights"),
+    "https://www.caltech.edu/privacy-notice?source=footer#rights",
+  );
+  assert.equal(wwwFallbackUrlForPolicyFetch("https://www.caltech.edu/privacy-notice"), null);
+  assert.equal(wwwFallbackUrlForPolicyFetch("https://privacy.caltech.edu/notice"), null);
+  assert.equal(wwwFallbackUrlForPolicyFetch("http://caltech.edu/privacy-notice"), null);
 });
 
 test("policySurfaceScanner records mock Nano link ranking and topic extraction metadata", async () => {
@@ -608,6 +713,23 @@ function observedSurface(
     observation.surfaceType === surfaceType &&
     (observation.status === "observed" || observation.status === "fetched"),
   );
+}
+
+async function readPolicyCaptureDiagnostics(
+  result: Awaited<ReturnType<typeof policySurfaceScanner>>,
+): Promise<{
+  corePolicySurfaceRetained: boolean;
+  coreSurfaceTypes: string[];
+  observedCandidateCount: number;
+  commonPathFallbackUsed: boolean;
+  fetchedCount: number;
+  failedCandidateCount: number;
+  winningSurfaceUrls: string[];
+  policyCaptureDurationMs: number;
+}> {
+  const ref = result.artifactRefs.find((artifactRef) => artifactRef.artifactId === "policy_surface_capture_diagnostics");
+  assert.ok(ref?.path, "policy capture diagnostics artifact should be retained");
+  return JSON.parse(await readFile(ref.path, "utf8"));
 }
 
 function createDefaultMockNanoPolicyAssistProvider(): PolicyNanoAssistProvider {

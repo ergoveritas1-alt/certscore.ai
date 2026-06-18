@@ -123,6 +123,10 @@ export async function policySurfaceScanner(
   const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
   const artifactRefs: ArtifactRef[] = [];
   const observations: PolicySurfaceObservation[] = [];
+  let staticCandidateCount = 0;
+  let renderedCandidateCount = 0;
+  let observedCandidateCount = 0;
+  let commonPathFallbackUsed = false;
 
   try {
     const homepage = await recordPolicyTiming(
@@ -133,6 +137,7 @@ export async function policySurfaceScanner(
     );
     if (!homepage.ok) {
       const fallbackCandidates = commonPathCandidatesFor(input.normalizedUrl, 0);
+      commonPathFallbackUsed = true;
       const fallbackResults = await fetchRankedPolicyCandidates({
         input,
         timingBreakdown,
@@ -143,6 +148,15 @@ export async function policySurfaceScanner(
       observations.push(...fallbackResults.observations);
       artifactRefs.push(...fallbackResults.artifactRefs);
       if (observations.length > 0) {
+        artifactRefs.push(await writePolicyCaptureDiagnostics({
+          input,
+          moduleStartedAtMs,
+          staticCandidateCount,
+          renderedCandidateCount,
+          observedCandidateCount,
+          commonPathFallbackUsed,
+          observations,
+        }));
         return {
           moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
           policySurfaceObservations: observations,
@@ -174,6 +188,7 @@ export async function policySurfaceScanner(
         ...extractControlCandidates(input.normalizedUrl, candidateHtml, homepageText),
       ]),
     );
+    staticCandidateCount = staticCandidates.length;
     const fastStaticCoverage = input.discoveryMode === "fast" && hasFastStaticPolicyCoverage(staticCandidates);
     const renderedCandidates = fastStaticCoverage
       ? await recordPolicyTiming(
@@ -188,6 +203,7 @@ export async function policySurfaceScanner(
         "Optional browser-rendered footer/header policy link discovery.",
         () => extractRenderedCandidates(input, moduleStartedAtMs),
       );
+    renderedCandidateCount = renderedCandidates.length;
     const linkCandidates = fastStaticCoverage
       ? staticCandidates
       : await recordPolicyTiming(
@@ -199,9 +215,11 @@ export async function policySurfaceScanner(
           ...renderedCandidates,
         ]),
       );
+    observedCandidateCount = linkCandidates.length;
+    const commonPathCandidates = commonPathCandidatesFor(input.normalizedUrl, linkCandidates.length);
     const initialCandidates = linkCandidates.length > 0
       ? linkCandidates
-      : commonPathCandidatesFor(input.normalizedUrl, linkCandidates.length);
+      : commonPathCandidates;
     let rankedCandidates = input.discoveryMode === "fast"
       ? await recordPolicyTiming(
         timingBreakdown,
@@ -226,7 +244,6 @@ export async function policySurfaceScanner(
     if (rankedCandidates.length === 0 && linkCandidates.length > 0) {
       rankedCandidates = deterministicFetchFallback(linkCandidates);
       if (rankedCandidates.length === 0) {
-        const commonPathCandidates = commonPathCandidatesFor(input.normalizedUrl, linkCandidates.length);
         rankedCandidates = await recordPolicyTiming(
           timingBreakdown,
           "Nano common-path ranking",
@@ -236,6 +253,7 @@ export async function policySurfaceScanner(
             commonPathCandidates,
           ),
         );
+        commonPathFallbackUsed = true;
         if (rankedCandidates.length === 0) {
           rankedCandidates = deterministicFetchFallback(commonPathCandidates);
         }
@@ -258,6 +276,20 @@ export async function policySurfaceScanner(
     });
     observations.push(...policyResults.observations);
     artifactRefs.push(...policyResults.artifactRefs);
+
+    if (linkCandidates.length > 0 && !hasRetainedCorePolicyOrControlSurface(observations) && commonPathCandidates.length > 0) {
+      commonPathFallbackUsed = true;
+      const commonPathResults = await fetchPolicyCandidateGroup({
+        input,
+        timingBreakdown,
+        moduleStartedAtMs,
+        rankedCandidates: deterministicCommonPathFetchFallback(commonPathCandidates),
+        labelPrefix: "common-path policy",
+      });
+      observations.push(...commonPathResults.observations);
+      artifactRefs.push(...commonPathResults.artifactRefs);
+    }
+
     const secondaryCandidates = mergeSupplementalPolicyCandidates(
       [],
       dedupeCandidates(policyResults.secondaryCandidates),
@@ -276,6 +308,16 @@ export async function policySurfaceScanner(
       artifactRefs.push(...secondaryResults.artifactRefs);
     }
 
+    artifactRefs.push(await writePolicyCaptureDiagnostics({
+      input,
+      moduleStartedAtMs,
+      staticCandidateCount,
+      renderedCandidateCount,
+      observedCandidateCount,
+      commonPathFallbackUsed,
+      observations,
+    }));
+
     return {
       moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
       policySurfaceObservations: observations,
@@ -288,6 +330,53 @@ export async function policySurfaceScanner(
       artifactRefs,
     };
   }
+}
+
+async function writePolicyCaptureDiagnostics(input: {
+  input: PolicySurfaceScannerInput;
+  moduleStartedAtMs: number;
+  staticCandidateCount: number;
+  renderedCandidateCount: number;
+  observedCandidateCount: number;
+  commonPathFallbackUsed: boolean;
+  observations: PolicySurfaceObservation[];
+}): Promise<ArtifactRef> {
+  const fetchedObservations = input.observations.filter((observation) => observation.status === "fetched");
+  const coreSurfaces = fetchedObservations.filter((observation) =>
+    isCorePolicyOrControlSurface(observation) &&
+    !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
+  );
+  const path = await input.input.artifactWriter.writeJsonArtifact("PolicySurfaceCaptureDiagnostics.json", {
+    artifactVersion: "policy_surface_capture_diagnostics.v1",
+    sourceScanner: SOURCE_SCANNER,
+    generatedAt: new Date().toISOString(),
+    normalizedUrl: input.input.normalizedUrl,
+    corePolicySurfaceRetained: coreSurfaces.length > 0,
+    coreSurfaceTypes: uniqueStrings(coreSurfaces.map((observation) => observation.surfaceType)),
+    observedCandidateCount: input.observedCandidateCount,
+    staticCandidateCount: input.staticCandidateCount,
+    renderedCandidateCount: input.renderedCandidateCount,
+    commonPathFallbackUsed: input.commonPathFallbackUsed,
+    fetchedCount: fetchedObservations.length,
+    failedCandidateCount: input.observations.filter((observation) => observation.status === "failed").length,
+    winningSurfaceUrls: coreSurfaces
+      .map((observation) => observation.normalizedUrl ?? observation.url)
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .slice(0, 8),
+    policyCaptureDurationMs: Date.now() - input.moduleStartedAtMs,
+  });
+  return {
+    artifactId: "policy_surface_capture_diagnostics",
+    artifactType: "json",
+    path,
+    createdAt: new Date().toISOString(),
+    sourceScanner: SOURCE_SCANNER,
+    scenario: SCENARIO,
+    sensitivity: "internal_only",
+    redactionStatus: "internal_only",
+    relatedEventIds: [],
+    label: "Policy surface capture diagnostics",
+  };
 }
 
 interface ProcessPolicyCandidateInput {
@@ -810,9 +899,28 @@ function commonPathCandidatesFor(baseUrl: string, startIndex: number): PolicySur
   const paths = [
     "/privacy",
     "/privacy-policy",
+    "/privacy-policy/",
     "/privacy-notice",
+    "/en-us/about-nvidia/privacy-policy",
+    "/en-us/about-nvidia/privacy-policy/",
+    "/en-us/about-nvidia/privacy-center",
+    "/en-us/about-nvidia/privacy-center/",
+    "/help/privacy",
+    "/help/privacy/",
     "/legal/privacy",
     "/legal/privacy/",
+    "/legal/privacy-cookie-statement",
+    "/legal/privacy-cookie-statement/",
+    "/global/en/legal/privacy-cookie-statement",
+    "/global/en/legal/privacy-cookie-statement/",
+    "/customer-service/privacy-policy",
+    "/customer-service/privacy-policy/",
+    "/us/en/customer-service/privacy-policy",
+    "/us/en/customer-service/privacy-policy/",
+    "/global/en/customer-service/privacy-policy",
+    "/global/en/customer-service/privacy-policy/",
+    "/us/en-us/privacy",
+    "/us/en-us/privacy.html",
     "/cookie-policy",
     "/cookies-policy",
     "/cookie-notice",
@@ -827,13 +935,7 @@ function commonPathCandidatesFor(baseUrl: string, startIndex: number): PolicySur
     "/your-privacy-choices",
     "/yourprivacychoices",
     "/privacy/your-privacy-choices",
-    "/do-not-sell",
-    "/do-not-sell-or-share",
-    "/privacy#do-not-sell",
     "/privacy#your-privacy-choices",
-    "/california-privacy-notice",
-    "/privacy/california-privacy-notice",
-    "/notice-at-collection",
     "/terms",
     "/accessibility",
   ];
@@ -874,6 +976,92 @@ function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): Polic
     .slice(0, MAX_CANDIDATES_TO_FETCH);
 }
 
+function deterministicCommonPathFetchFallback(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {
+  return dedupeCommonPathCandidates(candidates)
+    .filter((candidate) =>
+      candidate.fetchable &&
+      candidate.deterministicSurfaceType !== "unknown" &&
+      candidate.deterministicScore >= 0.5,
+    )
+    .sort((left, right) =>
+      commonPathPriority(left) - commonPathPriority(right) ||
+      surfacePriority(left.deterministicSurfaceType) - surfacePriority(right.deterministicSurfaceType) ||
+      right.deterministicScore - left.deterministicScore ||
+      left.normalizedUrl.localeCompare(right.normalizedUrl),
+    )
+    .slice(0, MAX_CANDIDATES_TO_FETCH);
+}
+
+function dedupeCommonPathCandidates(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {
+  const selected = new Map<string, PolicySurfaceCandidate>();
+  for (const candidate of candidates) {
+    const key = commonPathCandidateKey(candidate.normalizedUrl);
+    const existing = selected.get(key);
+    if (!existing || candidate.deterministicScore > existing.deterministicScore) {
+      selected.set(key, candidate);
+    }
+  }
+  return [...selected.values()];
+}
+
+function commonPathCandidateKey(value: string): string {
+  try {
+    const parsed = new URL(value);
+    parsed.hash = "";
+    parsed.search = "";
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return parsed.toString();
+  } catch {
+    return value.replace(/[?#].*$/, "").replace(/\/+$/, "") || "/";
+  }
+}
+
+function commonPathPriority(candidate: PolicySurfaceCandidate): number {
+  const path = safeUrlPath(candidate.normalizedUrl);
+  if (/\/global\/[^/]+\/legal\/privacy-cookie-statement\/?$/.test(path)) {
+    return 0;
+  }
+  if (/\/legal\/privacy-cookie-statement\/?$/.test(path)) {
+    return 1;
+  }
+  if (path === "/privacy" || path === "/privacy/") {
+    return 2;
+  }
+  if (path === "/privacy-policy" || path === "/privacy-policy/") {
+    return 3;
+  }
+  if (path === "/privacy-notice" || path === "/privacy-notice/") {
+    return 4;
+  }
+  if (path === "/en-us/about-nvidia/privacy-policy" || path === "/en-us/about-nvidia/privacy-policy/") {
+    return 5;
+  }
+  if (path === "/help/privacy" || path === "/help/privacy/") {
+    return 6;
+  }
+  if (path === "/legal/privacy" || path === "/legal/privacy/") {
+    return 7;
+  }
+  if (/cookie/.test(path)) {
+    return 8;
+  }
+  if (/terms/.test(path)) {
+    return 20;
+  }
+  if (/privacy-choices/.test(path)) {
+    return 50;
+  }
+  return 10;
+}
+
+function safeUrlPath(value: string): string {
+  try {
+    return new URL(value).pathname.replace(/\/+$/, "") || "/";
+  } catch {
+    return value;
+  }
+}
+
 function hasFastStaticPolicyCoverage(candidates: PolicySurfaceCandidate[]): boolean {
   const fetchable = deterministicFetchFallback(candidates);
   if (fetchable.length === 0) {
@@ -889,7 +1077,7 @@ function hasFastStaticPolicyCoverage(candidates: PolicySurfaceCandidate[]): bool
 }
 
 function policyFetchLimit(input: PolicySurfaceScannerInput): number {
-  return input.discoveryMode === "fast" ? 4 : MAX_CANDIDATES_TO_FETCH;
+  return input.discoveryMode === "fast" ? 6 : MAX_CANDIDATES_TO_FETCH;
 }
 
 function mergeSupplementalPolicyCandidates(
@@ -924,12 +1112,36 @@ function mergeSupplementalPolicyCandidates(
 
   for (const candidate of supplements) {
     selected.set(candidateKey(candidate), candidate);
-    if (selected.size >= limit) {
-      break;
-    }
   }
 
   return [...selected.values()].slice(0, limit);
+}
+
+function hasRetainedCorePolicyOrControlSurface(observations: PolicySurfaceObservation[]): boolean {
+  return observations.some((observation) =>
+    (observation.status === "fetched" || observation.status === "observed") &&
+    isCorePolicyOrControlSurface(observation) &&
+    !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
+  );
+}
+
+function isCorePolicyOrControlSurface(observation: Pick<PolicySurfaceObservation, "surfaceType">): boolean {
+  return [
+    "privacy_policy",
+    "cookie_policy",
+    "cookie_settings",
+    "consent_preferences",
+    "your_privacy_choices",
+  ].includes(observation.surfaceType);
+}
+
+function isStateSpecificPrivacyPath(value: string): boolean {
+  const path = safeUrlPath(value).toLowerCase();
+  return /california|state-privacy|do-not-sell|notice-at-collection/.test(path);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return values.filter((value, index) => values.indexOf(value) === index);
 }
 
 function highValueSecondaryCandidatesFromPolicyPage(
@@ -1132,7 +1344,7 @@ function classifySurface(value: string): {
     ["notice_at_collection", [/notice at collection/i]],
     ["california_notice", [/california privacy/i, /state privacy rights/i, /state privacy policy/i, /state-privacy-policy/i, /about-state-privacy-policy/i]],
     ["cookie_settings", [/cookie settings/i, /cookie preferences/i, /manage preferences/i, /cookie consent/i]],
-    ["cookie_policy", [/cookie policy/i, /cookies\b/i]],
+    ["cookie_policy", [/cookie policy/i, /cookie statement/i, /privacy-cookie-statement/i, /cookies\b/i]],
     ["privacy_policy", [/privacy policy/i, /privacy notice/i, /privacy\b/i]],
     ["ai_disclosure", [/\bai\b/i, /artificial intelligence/i]],
     ["accessibility_statement", [/accessibility/i]],
@@ -1580,7 +1792,25 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-async function fetchText(url: string, timeoutMs: number): Promise<{ ok: boolean; status?: number; text: string }> {
+type FetchTextResult = { ok: boolean; status?: number; text: string };
+
+async function fetchText(url: string, timeoutMs: number): Promise<FetchTextResult> {
+  const startedAtMs = Date.now();
+  const primary = await fetchTextOnce(url, timeoutMs);
+  if (primary.ok || primary.status !== undefined) {
+    return primary;
+  }
+
+  const fallbackUrl = wwwFallbackUrlForPolicyFetch(url);
+  if (!fallbackUrl) {
+    return primary;
+  }
+
+  const remainingTimeoutMs = Math.max(500, timeoutMs - (Date.now() - startedAtMs));
+  return fetchTextOnce(fallbackUrl, remainingTimeoutMs);
+}
+
+async function fetchTextOnce(url: string, timeoutMs: number): Promise<FetchTextResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Math.max(500, timeoutMs));
   try {
@@ -1598,6 +1828,23 @@ async function fetchText(url: string, timeoutMs: number): Promise<{ ok: boolean;
     return { ok: false, text: "" };
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+export function wwwFallbackUrlForPolicyFetch(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.hostname.startsWith("www.")) {
+      return null;
+    }
+    const labels = parsed.hostname.split(".").filter(Boolean);
+    if (labels.length !== 2) {
+      return null;
+    }
+    parsed.hostname = `www.${parsed.hostname}`;
+    return parsed.toString();
+  } catch {
+    return null;
   }
 }
 

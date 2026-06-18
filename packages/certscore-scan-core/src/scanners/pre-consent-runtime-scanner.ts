@@ -363,6 +363,17 @@ export async function preConsentRuntimeScanner(
       ]));
     let consentObservation = initialConsentObservation;
     let domText = initialDomText;
+    if (
+      consentObservation.basis.includes("bounded_capture_timeout_or_failure") &&
+      domText.trim().length > 0
+    ) {
+      consentObservation = buildConsentUiObservationFromEvidence({
+        scanStartedAtMs: input.scanStartedAtMs,
+        text: domText,
+        controls: [],
+        fallbackBasis: ["bounded_capture_timeout_or_failure", "dom_text_fallback_after_consent_ui_timeout"],
+      });
+    }
 
     for (const script of scripts) {
       scriptEvents.push(script);
@@ -1488,6 +1499,20 @@ async function detectConsentUi(
   })()`).catch((): ConsentUiObservation["controls"] => {
     return [];
   });
+  return buildConsentUiObservationFromEvidence({
+    scanStartedAtMs,
+    text,
+    controls,
+  });
+}
+
+function buildConsentUiObservationFromEvidence(input: {
+  controls: ConsentUiObservation["controls"];
+  fallbackBasis?: string[];
+  scanStartedAtMs: number;
+  text: string;
+}): ConsentUiObservation {
+  const { controls, fallbackBasis = [], scanStartedAtMs, text } = input;
   const normalized = text.toLowerCase();
   const keywords = [
     "cookie",
@@ -1510,9 +1535,10 @@ async function detectConsentUi(
     observedAtMs: elapsed(scanStartedAtMs),
     likelyPresent,
     basis: likelyPresent ? [
+      ...fallbackBasis,
       ...matched.map((keyword) => `keyword:${keyword}`),
       ...controlBasis,
-    ] : ["insufficient_banner_keywords"],
+    ] : [...fallbackBasis, "insufficient_banner_keywords"],
     textExcerpt: text.slice(0, 2_000),
     layerInspected: controls.length > 0 ? "first_layer" : "unknown",
     visibleChoiceLabels,

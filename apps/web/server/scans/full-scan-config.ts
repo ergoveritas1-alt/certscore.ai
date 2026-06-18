@@ -2,7 +2,6 @@ import {
   buildSharedFullScanConfig,
   getScanFromDefinition,
   normalizeScanFrom,
-  type SharedCaliforniaPrivacyScanConfig,
   type SharedCrawlSeedHint,
   type SharedPriorDocumentSource,
   type SharedPriorScanAccelerationConfig,
@@ -28,7 +27,6 @@ export const QUEUED_FULL_SCAN_POST_403_POLICY = {
 };
 
 export type BuildQueuedFullScanConfigInput = {
-  californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   env?: LocalV2DagScanEnv;
   hostname: string;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
@@ -41,8 +39,6 @@ export type BuildQueuedFullScanConfigInput = {
   scanFrom?: ScanFrom;
   source: string;
 };
-
-export type QueuedFullScanCaliforniaPrivacyConfig = SharedCaliforniaPrivacyScanConfig;
 
 export type QueuedFullScanPriorScanAcceleration = {
   crawlSeedHints: SharedCrawlSeedHint[];
@@ -81,56 +77,14 @@ function buildCanonicalLegalSurfaceHints(input: { normalizedUrl: string }): Shar
   }));
 }
 
-function normalizeQueuedCaliforniaPrivacyConfig(
-  config: QueuedFullScanCaliforniaPrivacyConfig | null | undefined,
-  input?: { scanFrom?: ScanFrom }
-): QueuedFullScanCaliforniaPrivacyConfig | undefined {
-  const scanFrom = normalizeScanFrom(input?.scanFrom);
-  const shouldRunBoundedCaliforniaGpcPass =
-    scanFrom === "california" ||
-    config?.exercisePrivacyChoicePath === true ||
-    config?.forceGpcVerification === true;
-
-  if (!config && !shouldRunBoundedCaliforniaGpcPass) {
-    return undefined;
-  }
-
-  const normalized: QueuedFullScanCaliforniaPrivacyConfig = {};
-
-  if (
-    config?.exercisePrivacyChoicePath === true ||
-    (config?.exercisePrivacyChoicePath !== false && scanFrom === "california")
-  ) {
-    normalized.exercisePrivacyChoicePath = true;
-  }
-
-  if (config?.forceGpcVerification === true || (config?.forceGpcVerification !== false && shouldRunBoundedCaliforniaGpcPass)) {
-    normalized.forceGpcVerification = true;
-  }
-
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
-}
-
-export function requiresFreshScanForCaliforniaRuntime(input: {
-  californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
-  scanFrom?: ScanFrom;
-}) {
-  const californiaPrivacy = normalizeQueuedCaliforniaPrivacyConfig(input.californiaPrivacy, {
-    scanFrom: input.scanFrom
-  });
-  return Boolean(californiaPrivacy?.exercisePrivacyChoicePath || californiaPrivacy?.forceGpcVerification);
-}
-
 export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput): SharedScanConfig {
   const scanFrom = normalizeScanFrom(input.scanFrom);
   const scanFromDefinition = getScanFromDefinition(scanFrom);
-  const californiaPrivacy = normalizeQueuedCaliforniaPrivacyConfig(input.californiaPrivacy, { scanFrom });
   const crawlSeedHints = [
     ...(input.priorScanAcceleration?.crawlSeedHints ?? []),
     ...buildCanonicalLegalSurfaceHints({ normalizedUrl: input.normalizedUrl })
   ];
   return applyLocalV2DagScanConfig(buildSharedFullScanConfig({
-    ...(californiaPrivacy ? { californiaPrivacy } : {}),
     ...(crawlSeedHints.length > 0 || input.priorScanAcceleration
       ? {
           execution: {

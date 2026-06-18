@@ -525,3 +525,106 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     await rm(outDir, { recursive: true, force: true });
   }
 });
+
+test("materializeLocalV2DagScanDetail marks failed pre-consent runtime counts as not retained", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/runtime-failed-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-18T18:50:42.000Z",
+      cookieEvents: [],
+      modulesRun: [
+        {
+          moduleName: "preConsentRuntimeScanner",
+          status: "failed",
+          startedAt: "2026-06-18T18:50:33.000Z",
+          completedAt: "2026-06-18T18:50:34.000Z",
+          durationMs: 1000,
+          evidenceRefs: [],
+          errors: ["page.goto: net::ERR_HTTP2_PROTOCOL_ERROR"]
+        }
+      ],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "net_1",
+          eventType: "network_request",
+          hostname: "ford.com",
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: false,
+          url: "https://ford.com/"
+        }
+      ],
+      normalizedUrl: "https://ford.com/",
+      policySurfaceObservations: [
+        {
+          confidence: 0.8,
+          discoveryMethod: "guessed_common_path",
+          observationId: "privacy",
+          status: "fetched",
+          surfaceType: "privacy_policy",
+          textExcerpt: "Ford privacy policy.",
+          url: "https://ford.com/privacy"
+        }
+      ],
+      runtimeCoverage: {
+        coverageStatus: "limited_partial",
+        fallbackModesUsed: [],
+        limitationKeys: ["pre_consent_runtime_failed"],
+        notes: [],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 1,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 0
+        },
+        silentEmpty: false
+      },
+      scanId: "runtime-failed-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      startedAt: "2026-06-18T18:50:33.000Z",
+      url: "https://ford.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "ford.com",
+        scanConfigJson: {
+          hostname: "ford.com",
+          normalizedUrl: "https://ford.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    assert.ok(detail.snapshot);
+    assert.ok(detail.runtimeArtifacts);
+    assert.equal(detail.snapshot.runtime_counts_retained, false);
+    assert.equal(detail.runtimeArtifacts.runtime_counts_retained, false);
+    assert.deepEqual(detail.snapshot.runtime_limitation_keys, ["pre_consent_runtime_failed"]);
+    assert.equal(detail.snapshot.third_party_request_count, 0);
+    assert.equal(detail.snapshot.cookies_before_consent_count, 0);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});

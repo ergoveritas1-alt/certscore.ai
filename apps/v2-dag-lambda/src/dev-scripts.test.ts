@@ -19,11 +19,30 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(buildScript, /Unsupported local v2 DAG Lambda image region/);
   assert.match(buildScript, /--provenance=false/);
   assert.match(buildScript, /--sbom=false/);
+  assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_TAG/);
+  assert.match(buildScript, /push_runtime_base="\$\{CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE:-false\}"/);
+  assert.match(buildScript, /use_runtime_base="\$\{CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE:-true\}"/);
+  assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_BUILD_CACHE_TAG/);
+  assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_CACHE_TAG/);
+  assert.match(buildScript, /--target lambda-runtime-base/);
+  assert.match(buildScript, /CERTSCORE_LAMBDA_RUNTIME_BASE=\$\{runtime_base_image_uri\}/);
+  assert.match(buildScript, /--cache-from "type=registry,ref=\$\{runtime_base_cache_image_uri\}"/);
+  assert.match(buildScript, /--cache-to "type=registry,ref=\$\{runtime_base_cache_image_uri\},mode=max"/);
+  assert.match(buildScript, /Runtime base image not found: \$\{runtime_base_image_uri\}/);
+  assert.match(buildScript, /Routine scanner deploys reuse this prebuilt Chromium base by default/);
+  assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE=true \$0/);
+  assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE=false \$0/);
+  assert.match(buildScript, /runtime_base_action="reused-existing"/);
+  assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_ACTION=\$\{runtime_base_action\}/);
+  assert.match(buildScript, /--cache-from "type=registry,ref=\$\{build_cache_image_uri\}"/);
+  assert.match(buildScript, /--cache-to "type=registry,ref=\$\{build_cache_image_uri\},mode=max"/);
   assert.match(setupScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
   assert.match(setupScript, /eu-central-1\) location_env_prefix="EU_DE"/);
   assert.match(setupScript, /eu-west-1\) location_env_prefix="EU_IE"/);
   assert.match(setupScript, /us-west-2\) location_env_prefix="US_WEST"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_\$\{location_env_prefix\}_RESULT_QUEUE_URL/);
+  assert.match(setupScript, /CERTSCORE_CHROMIUM_EXECUTABLE_PATH: "\/usr\/bin\/chromium"/);
+  assert.doesNotMatch(setupScript, /PLAYWRIGHT_BROWSERS_PATH/);
 });
 
 test("dev image setup uses local names and refuses non-dev resource names", async () => {
@@ -48,16 +67,59 @@ test("dev image setup uses local names and refuses non-dev resource names", asyn
   assert.doesNotMatch(setupScript, /certscore-prod|production/);
 });
 
-test("Dockerfile uses Playwright image and the local Lambda runtime bootstrap", async () => {
+test("Dockerfile uses slim Node image, system Chromium, and the local Lambda runtime bootstrap", async () => {
   const dockerfile = await readRepoFile("apps/v2-dag-lambda/Dockerfile");
   const bootstrap = await readRepoFile("apps/v2-dag-lambda/runtime-bootstrap.mjs");
 
-  assert.match(dockerfile, /mcr\.microsoft\.com\/playwright:v1\.58\.2-noble/);
+  assert.match(dockerfile, /# syntax=docker\/dockerfile:1\.7/);
+  assert.match(dockerfile, /ARG CERTSCORE_LAMBDA_RUNTIME_BASE=lambda-runtime-base/);
+  assert.match(dockerfile, /FROM node:22-bookworm-slim AS build/);
+  assert.match(dockerfile, /FROM node:22-bookworm-slim AS lambda-runtime-base/);
+  assert.match(dockerfile, /FROM \$\{CERTSCORE_LAMBDA_RUNTIME_BASE\} AS runtime/);
+  assert.match(dockerfile, /FROM node:22-bookworm-slim/);
+  assert.match(dockerfile, /COPY \.npmrc package\.json pnpm-lock\.yaml pnpm-workspace\.yaml tsconfig\.base\.json \.\//);
+  assert.match(dockerfile, /COPY apps\/v2-dag-lambda\/package\.json \.\/apps\/v2-dag-lambda\/package\.json/);
+  assert.match(dockerfile, /COPY packages\/certscore-scan-core\/package\.json \.\/packages\/certscore-scan-core\/package\.json/);
+  assert.match(dockerfile, /--mount=type=cache,id=wc01-v2-dag-lambda-pnpm-store,target=\/pnpm\/store/);
+  assert.match(dockerfile, /pnpm install --frozen-lockfile/);
+  assert.match(dockerfile, /COPY packages \.\/packages/);
+  assert.match(dockerfile, /COPY apps\/v2-dag-lambda\/src \.\/apps\/v2-dag-lambda\/src/);
+  assert.match(dockerfile, /COPY apps\/v2-dag-lambda\/tsconfig\.json \.\/apps\/v2-dag-lambda\/tsconfig\.json/);
+  assert.match(dockerfile, /pnpm --filter @website-signal-risk-scanner\/v2-dag-lambda bundle/);
+  assert.match(dockerfile, /\/lambda-deps/);
+  assert.match(dockerfile, /dist-bundle\/src\/handler\.js/);
+  assert.match(dockerfile, /cp -R \/lambda-deps\/node_modules\/playwright \/lambda\/node_modules\/playwright/);
+  assert.match(dockerfile, /cp -R \/lambda-deps\/node_modules\/playwright-core \/lambda\/node_modules\/playwright-core/);
+  assert.match(dockerfile, /apt-get install -y --no-install-recommends/);
+  assert.match(dockerfile, /chromium/);
+  assert.match(dockerfile, /ARG CERTSCORE_LAMBDA_BROWSER_PACKAGE=chromium/);
+  assert.match(dockerfile, /ARG CERTSCORE_LAMBDA_BROWSER_EXECUTABLE=\/usr\/bin\/chromium/);
+  assert.match(dockerfile, /CERTSCORE_CHROMIUM_EXECUTABLE_PATH=\$\{CERTSCORE_LAMBDA_BROWSER_EXECUTABLE\}/);
   assert.match(dockerfile, /runtime-bootstrap\.mjs/);
-  assert.match(dockerfile, /PLAYWRIGHT_BROWSERS_PATH=\/ms-playwright/);
+  assert.doesNotMatch(dockerfile, /playwright install chromium/);
+  assert.doesNotMatch(dockerfile, /PLAYWRIGHT_BROWSERS_PATH=\/ms-playwright/);
+  assert.doesNotMatch(dockerfile, /COPY --from=build \/ms-playwright/);
+  assert.doesNotMatch(dockerfile, /@certscore\/scan-core\/dist\/cli/);
   assert.match(dockerfile, /CMD \["src\/handler\.handler"\]/);
   assert.match(bootstrap, /AWS_LAMBDA_RUNTIME_API/);
   assert.match(bootstrap, /runtime\/invocation\/next/);
+});
+
+test("local Lambda zip packages the bundled handler with only Playwright runtime deps", async () => {
+  const packageJson = await readRepoFile("apps/v2-dag-lambda/package.json");
+  const zipScript = await readRepoFile("scripts/local-v2-dag-lambda/build-dev-zip.sh");
+
+  assert.match(packageJson, /"bundle": "esbuild src\/handler\.ts --bundle --platform=node --target=node22 --format=cjs --outfile=dist-bundle\/src\/handler\.js --external:playwright --minify --tsconfig=\.\.\/\.\.\/tsconfig\.base\.json"/);
+  assert.match(packageJson, /"esbuild": "\^0\.27\.3"/);
+  assert.match(packageJson, /"clean": "rm -rf dist dist-bundle"/);
+  assert.match(zipScript, /deps_dir="\$\{work_dir\}\/deps"/);
+  assert.match(zipScript, /pnpm --filter @website-signal-risk-scanner\/v2-dag-lambda bundle/);
+  assert.match(zipScript, /--prod deploy --legacy "\$deps_dir"/);
+  assert.match(zipScript, /dist-bundle\/src\/handler\.js/);
+  assert.match(zipScript, /node_modules\/playwright"/);
+  assert.match(zipScript, /node_modules\/playwright-core"/);
+  assert.doesNotMatch(zipScript, /@certscore\/scan-core\/dist\/cli/);
+  assert.doesNotMatch(zipScript, /certscore-\$\{package_name\}\/dist/);
 });
 
 test("handler keeps Lambda outputs artifact-only and non-production", async () => {

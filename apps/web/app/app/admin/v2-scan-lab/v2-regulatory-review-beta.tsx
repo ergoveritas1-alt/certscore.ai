@@ -2,11 +2,9 @@
 
 import { GdprEprivacyCoverageChecklistCard } from "../../../../components/scans/gdpr-eprivacy-coverage-checklist-card";
 import { RegulatoryChecklistSection } from "../../../../components/scans/regulatory-checklist-section";
-import type { CaliforniaPrivacyCoverageChecklistItem } from "../../../../lib/scans/california-privacy-coverage-checklist";
 import type { GdprEprivacyCoverageChecklistItem } from "../../../../lib/scans/gdpr-eprivacy-coverage-checklist";
 
 type V2RegulatoryReviewBetaProps = {
-  californiaPrivacyItems: CaliforniaPrivacyCoverageChecklistItem[];
   gdprEprivacyItems: GdprEprivacyCoverageChecklistItem[];
 };
 

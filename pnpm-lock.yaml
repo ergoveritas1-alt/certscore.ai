@@ -40,12 +40,6 @@ importers:
       '@certscore/contracts':
         specifier: workspace:*
         version: link:../../packages/certscore-contracts
-      '@certscore/report-adapter':
-        specifier: workspace:*
-        version: link:../../packages/certscore-report-adapter
-      '@certscore/review-engine':
-        specifier: workspace:*
-        version: link:../../packages/certscore-review-engine
       '@certscore/scan-core':
         specifier: workspace:*
         version: link:../../packages/certscore-scan-core
@@ -53,14 +47,17 @@ importers:
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.0
+      esbuild:
+        specifier: ^0.27.3
+        version: 0.27.3
 
   apps/validation-worker:
     dependencies:
       '@aws-sdk/client-sqs':
-        specifier: ^3.922.0
+        specifier: 3.1069.0
         version: 3.1069.0
       '@axe-core/playwright':
-        specifier: ^4.10.1
+        specifier: 4.11.2
         version: 4.11.2(playwright-core@1.58.2)
       '@website-signal-risk-scanner/db':
         specifier: workspace:*
@@ -75,10 +72,10 @@ importers:
         specifier: workspace:*
         version: link:../../packages/web-bot-auth
       playwright:
-        specifier: ^1.51.1
+        specifier: 1.58.2
         version: 1.58.2
       zod:
-        specifier: ^3.24.2
+        specifier: 3.25.76
         version: 3.25.76
 
   apps/web:
@@ -98,12 +95,6 @@ importers:
       '@certscore/contracts':
         specifier: workspace:*
         version: link:../../packages/certscore-contracts
-      '@certscore/report-adapter':
-        specifier: workspace:*
-        version: link:../../packages/certscore-report-adapter
-      '@certscore/review-engine':
-        specifier: workspace:*
-        version: link:../../packages/certscore-review-engine
       '@website-signal-risk-scanner/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -209,9 +200,6 @@ importers:
       '@certscore/contracts':
         specifier: workspace:*
         version: link:../certscore-contracts
-      '@certscore/review-engine':
-        specifier: workspace:*
-        version: link:../certscore-review-engine
       '@certscore/vendor-resolver':
         specifier: workspace:*
         version: link:../certscore-vendor-resolver
@@ -222,6 +210,9 @@ importers:
         specifier: ^7.4.2
         version: 7.4.2
     devDependencies:
+      '@certscore/review-engine':
+        specifier: workspace:*
+        version: link:../certscore-review-engine
       '@types/node':
         specifier: ^24.0.0
         version: 24.12.0

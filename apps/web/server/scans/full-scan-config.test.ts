@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
-import { buildQueuedFullScanConfig, requiresFreshScanForCaliforniaRuntime } from "./full-scan-config";
+import { buildQueuedFullScanConfig } from "./full-scan-config";
 import {
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   applyLocalV2DagScanConfig,
@@ -133,119 +133,6 @@ test("queued full-scan config carries prior scan acceleration only as execution 
   assert.equal(Object.hasOwn(config, "signals"), false);
 });
 
-test("queued full-scan config carries explicit California privacy runtime flags without evidence shortcuts", () => {
-  const defaultConfig = buildQueuedFullScanConfig({
-    hostname: "example.com",
-    maxPages: 3,
-    normalizedUrl: "https://example.com/",
-    profile: "homepage",
-    source: "california-cohort-validation"
-  });
-
-  assert.equal(Object.hasOwn(defaultConfig, "californiaPrivacy"), false);
-
-  const californiaGeoConfig = buildQueuedFullScanConfig({
-    hostname: "example.com",
-    maxPages: 3,
-    normalizedUrl: "https://example.com/",
-    profile: "homepage",
-    scanFrom: "california",
-    source: "manual-dashboard"
-  });
-
-  assert.deepEqual(californiaGeoConfig.californiaPrivacy, {
-    exercisePrivacyChoicePath: true,
-    forceGpcVerification: true
-  });
-  assert.equal(
-    requiresFreshScanForCaliforniaRuntime({
-      scanFrom: "california"
-    }),
-    true
-  );
-  assert.equal(
-    requiresFreshScanForCaliforniaRuntime({
-      scanFrom: "eu_ie"
-    }),
-    false
-  );
-
-  const config = buildQueuedFullScanConfig({
-    californiaPrivacy: {
-      exercisePrivacyChoicePath: true,
-      forceGpcVerification: true
-    },
-    hostname: "example.com",
-    maxPages: 3,
-    normalizedUrl: "https://example.com/",
-    profile: "homepage",
-    source: "california-cohort-validation"
-  });
-
-  assert.deepEqual(config.californiaPrivacy, {
-    exercisePrivacyChoicePath: true,
-    forceGpcVerification: true
-  });
-  assert.equal(Object.hasOwn(config, "findings"), false);
-  assert.equal(Object.hasOwn(config, "signals"), false);
-});
-
-test("queued full-scan config keeps post-opt-out interaction explicit", () => {
-  const config = buildQueuedFullScanConfig({
-    californiaPrivacy: {
-      forceGpcVerification: true
-    },
-    hostname: "example.com",
-    maxPages: 3,
-    normalizedUrl: "https://example.com/",
-    profile: "homepage",
-    source: "california-cohort-validation"
-  });
-
-  assert.deepEqual(config.californiaPrivacy, {
-    forceGpcVerification: true
-  });
-});
-
-test("queued full-scan config keeps default scans out of California deep-check runtime", () => {
-  const config = buildQueuedFullScanConfig({
-    hostname: "example.com",
-    maxPages: 3,
-    normalizedUrl: "https://example.com/",
-    profile: "homepage",
-    source: "manual-dashboard"
-  });
-
-  assert.equal(config.californiaPrivacy, undefined);
-});
-
-test("queued full-scan config honors explicit California runtime suppression flags", () => {
-  const config = buildQueuedFullScanConfig({
-    californiaPrivacy: {
-      exercisePrivacyChoicePath: false,
-      forceGpcVerification: false
-    },
-    hostname: "example.com",
-    maxPages: 3,
-    normalizedUrl: "https://example.com/",
-    profile: "homepage",
-    scanFrom: "california",
-    source: "operator"
-  });
-
-  assert.equal(config.californiaPrivacy, undefined);
-  assert.equal(
-    requiresFreshScanForCaliforniaRuntime({
-      californiaPrivacy: {
-        exercisePrivacyChoicePath: false,
-        forceGpcVerification: false
-      },
-      scanFrom: "california"
-    }),
-    false
-  );
-});
-
 test("localhost scan configs use the local v2 planned-parallel DAG processor only", () => {
   const config = applyLocalV2DagScanConfig(
     {
@@ -333,10 +220,6 @@ test("v2 DAG Lambda run flag defaults on only when Lambda handoff is fully confi
 
 test("queued full-scan config emits v2 DAG metadata on localhost without evidence shortcuts", () => {
   const config = buildQueuedFullScanConfig({
-    californiaPrivacy: {
-      exercisePrivacyChoicePath: true,
-      forceGpcVerification: true
-    },
     env: {
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       NODE_ENV: "development"
@@ -354,10 +237,7 @@ test("queued full-scan config emits v2 DAG metadata on localhost without evidenc
   assert.equal(v2DagParallel?.profile, "standard");
   assert.equal(v2DagParallel?.scenarioPlanningMode, "planned_parallel");
   assert.equal(v2DagParallel?.postConsentFlowsEnabled, false);
-  assert.deepEqual(config.californiaPrivacy, {
-    exercisePrivacyChoicePath: true,
-    forceGpcVerification: true
-  });
+  assert.equal(Object.hasOwn(config, "californiaPrivacy"), false);
   assert.ok(config.execution?.crawlSeedHints?.some((hint) => hint.source === "canonical_legal_surface_hint"));
   assert.equal(Object.hasOwn(config, "findings"), false);
   assert.equal(Object.hasOwn(config, "signals"), false);

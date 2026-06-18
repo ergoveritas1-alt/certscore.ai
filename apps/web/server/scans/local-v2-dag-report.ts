@@ -734,6 +734,15 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
   ));
   const consentSurfaceLikelyPresent = Boolean(cmpVendorName ?? bundle.derivedRuntimeSignals?.consentBannerLikelyPresent);
   const firstLayerConsentChoices = summarizeFirstLayerConsentChoices(bundle);
+  const runtimeCoverageStatus = bundle.runtimeCoverage?.coverageStatus ?? null;
+  const runtimeLimitationKeys = bundle.runtimeCoverage?.limitationKeys ?? [];
+  const runtimeObservationCounts = bundle.runtimeCoverage?.observationCounts;
+  const meaningfulRuntimeSignalsRetained =
+    (runtimeObservationCounts?.thirdPartyRequests ?? 0) > 0 ||
+    (runtimeObservationCounts?.cookiesBeforeConsent ?? 0) > 0 ||
+    preconsentCookies.length > 0 ||
+    (runtimeObservationCounts?.normalizedVendors ?? 0) > 0;
+  const runtimeCountsRetained = runtimeCoverageStatus === "usable" || meaningfulRuntimeSignalsRetained;
   const policySurfaces = dedupePolicySurfaces(
     bundle.policySurfaceObservations ?? [],
     bundle.normalizedUrl ?? bundle.url ?? (requestedHost ? `https://${requestedHost}/` : null)
@@ -743,15 +752,22 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
   const privacySurface = policySurfaces.find((row) => row.surface.surfaceType === "privacy_policy");
   const termsSurface = policySurfaces.find((row) => row.surface.surfaceType === "terms");
   const cookieSurface = policySurfaces.find((row) => row.surface.surfaceType === "cookie_policy");
-  const thirdPartyRequestCount =
-    bundle.runtimeCoverage?.observationCounts.thirdPartyRequests ?? thirdPartyRequests.length;
-  const cookiesBeforeConsentCount =
-    bundle.runtimeCoverage?.observationCounts.cookiesBeforeConsent ?? preconsentCookies.length;
+  const thirdPartyRequestCount = Math.max(
+    bundle.runtimeCoverage?.observationCounts.thirdPartyRequests ?? 0,
+    thirdPartyRequests.length
+  );
+  const cookiesBeforeConsentCount = Math.max(
+    bundle.runtimeCoverage?.observationCounts.cookiesBeforeConsent ?? 0,
+    preconsentCookies.length
+  );
   const vendorCategoryCounts = vendorRows.reduce<Record<string, number>>((counts, vendor) => {
     counts[vendor.vendorCategory] = (counts[vendor.vendorCategory] ?? 0) + 1;
     return counts;
   }, {});
   const score =
+    !runtimeCountsRetained
+      ? 55
+      :
     thirdPartyRequestCount > 0 || cookiesBeforeConsentCount > 0
       ? Math.max(35, Math.min(72, 82 - Math.min(24, Math.round(thirdPartyRequestCount / 8)) - Math.min(18, cookiesBeforeConsentCount)))
       : 88;
@@ -966,6 +982,12 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
     session_replay_evidence_summary: sessionReplayEvidenceSummary,
     policyDisclosureSummary: policySurfaceSummary,
     policy_disclosure_summary: policySurfaceSummary,
+    runtimeCoverageStatus,
+    runtime_coverage_status: runtimeCoverageStatus,
+    runtimeCountsRetained,
+    runtime_counts_retained: runtimeCountsRetained,
+    runtimeLimitationKeys,
+    runtime_limitation_keys: runtimeLimitationKeys,
     thirdPartyRequestCount: thirdPartyRequestCount,
     thirdPartyRequestDomains: thirdPartyDomains,
     third_party_request_count: thirdPartyRequestCount,
@@ -1007,6 +1029,9 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
     privacy_policy_present: Boolean(privacySurface),
     privacy_score: score,
     registered_domain: rootDomain,
+    runtime_counts_retained: runtimeCountsRetained,
+    runtime_coverage_status: runtimeCoverageStatus,
+    runtime_limitation_keys: runtimeLimitationKeys,
     third_party_cookie_count: preconsentCookies.filter((event) => event.cookieParty === "third_party" || event.thirdParty === true).length,
     third_party_cookie_set_before_consent: preconsentCookies.length > 0,
     third_party_request_count: thirdPartyRequestCount,

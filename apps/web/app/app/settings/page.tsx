@@ -145,13 +145,13 @@ export default async function SettingsPage() {
 
       <Card className="border border-slate-200 bg-white">
         <CardHeader>
-          <CardTitle>Default scan location</CardTitle>
+          <CardTitle>Last scan location</CardTitle>
           <p className="text-sm text-slate-600">
-            Choose the Lambda region preselected when logged-in users start a scan.
+            CertScore preselects this location for your next scan and updates it after each successful scan request.
           </p>
         </CardHeader>
         <CardContent>
-          <ScanLocationSettingsCard defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"} />
+          <ScanLocationSettingsCard lastScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"} />
         </CardContent>
       </Card>
 

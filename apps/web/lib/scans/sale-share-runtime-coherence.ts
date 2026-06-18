@@ -4,7 +4,7 @@ type VendorEndpointRule = {
   endpointPattern: RegExp;
 };
 
-export type CaliforniaSaleShareApplicabilityBasis =
+export type SaleShareApplicabilityBasis =
   | "runtime_vendor_request_url_coherent"
   | "runtime_request_url_only"
   | "policy_sale_share_admission"
@@ -12,7 +12,7 @@ export type CaliforniaSaleShareApplicabilityBasis =
   | "vendor_request_url_mismatch"
   | "no_runtime_sale_share_evidence";
 
-export type CaliforniaSaleShareRuntimeCoherence = {
+export type SaleShareRuntimeCoherence = {
   coherentRequestUrls: string[];
   incoherentVendors: string[];
   knownMappedVendors: string[];
@@ -21,7 +21,7 @@ export type CaliforniaSaleShareRuntimeCoherence = {
   policySaleShareAdmissionObserved: boolean;
   runtimeThirdPartyAdtechObserved: boolean;
   runtimeVendorRequestUrlCoherence: "coherent" | "mismatch" | "not_required" | "not_evaluable";
-  saleShareApplicabilityBasis: CaliforniaSaleShareApplicabilityBasis;
+  saleShareApplicabilityBasis: SaleShareApplicabilityBasis;
   saleShareApplicabilityObserved: boolean | null;
   targetedAdvertisingSignalsObserved: boolean | null;
 };
@@ -117,14 +117,14 @@ function hasExplicitSaleSharePolicyAdmission(snippets: string[]) {
   );
 }
 
-export function evaluateCaliforniaSaleShareRuntimeCoherence(input: {
+export function evaluateSaleShareRuntimeCoherence(input: {
   advertisingSharingVendors: string[];
   policySaleShareAdmissionObserved?: boolean | null;
   policySaleShareAdmissionConfidence?: string | null;
   policySnippets?: string[];
   saleShareRequestUrls: string[];
   targetedAdvertisingSignalsObserved?: boolean | null;
-}): CaliforniaSaleShareRuntimeCoherence {
+}): SaleShareRuntimeCoherence {
   const vendors = uniqueStrings(input.advertisingSharingVendors);
   const requestUrls = uniqueStrings(input.saleShareRequestUrls);
   const policySnippets = input.policySnippets ?? [];
@@ -171,7 +171,7 @@ export function evaluateCaliforniaSaleShareRuntimeCoherence(input: {
       : rawTargetedSignal === false
         ? false
         : null;
-  const saleShareApplicabilityBasis: CaliforniaSaleShareApplicabilityBasis = runtimeThirdPartyAdtechObserved && allMappedVendorsCoherent
+  const saleShareApplicabilityBasis: SaleShareApplicabilityBasis = runtimeThirdPartyAdtechObserved && allMappedVendorsCoherent
     ? "runtime_vendor_request_url_coherent"
     : runtimeThirdPartyAdtechObserved
       ? "runtime_request_url_only"

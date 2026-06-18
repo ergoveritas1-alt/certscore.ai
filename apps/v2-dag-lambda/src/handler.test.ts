@@ -215,8 +215,6 @@ test("handler emits a validated completed SQS result without production findings
       },
       artifactPointers: {
         manifestUri: "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json",
-        reportAdapterArtifactUri: "s3://certscore-dev-artifacts/v2/scan-local-1/V2ReportProjectionDraft.json",
-        reviewArtifactUri: "s3://certscore-dev-artifacts/v2/scan-local-1/ReviewResult.json",
         scanArtifactUri: "s3://certscore-dev-artifacts/v2/scan-local-1/CanonicalEvidenceBundle.json"
       },
       phaseTimings: [{ durationMs: 123, label: "scan", status: "completed" }]
@@ -246,7 +244,7 @@ test("handler emits a validated completed SQS result without production findings
   assert.deepEqual(parsed.phaseTimings, [{ durationMs: 123, label: "scan", status: "completed" }]);
 });
 
-test("handler worker mode fails closed while post-consent flow scanning is deferred", async () => {
+test("handler worker mode fails closed while post-consent flow scanning is disabled", async () => {
   let sentMessages = 0;
   const result = await handler(validPayload({
     orchestrationMode: "worker",
@@ -266,18 +264,46 @@ test("handler worker mode fails closed while post-consent flow scanning is defer
 
   assert.equal(result.status, "failed");
   assert.equal(result.workerLane, "accept_gpc");
-  assert.match(result.error?.message ?? "", /deferred from the production scanner/);
+  assert.match(result.error?.message ?? "", /disabled for the GDPR\/ePrivacy core scanner/);
   assert.equal(sentMessages, 0);
 });
 
-test("sharded bundle merge synthesizes cross-worker accept versus reject comparison", () => {
+test("sharded bundle merge preserves existing consent comparisons without synthesizing new ones", () => {
+  const existingComparison = {
+    comparisonId: "consent_comparison_existing",
+    comparedScenarios: "after_reject_vs_after_accept",
+    comparableMeasurement: {
+      comparable: false,
+      reason: "worker_comparison_retained",
+      preActionWindow: {
+        completedAtMs: 1,
+        consentStateAtEnd: "post_reject",
+        cookieEventCount: 0,
+        networkEventCount: 0,
+        scenario: "reject_all_flow",
+        startedAtMs: 0
+      },
+      postActionWindow: {
+        completedAtMs: 1,
+        consentStateAtEnd: "post_accept",
+        cookieEventCount: 0,
+        networkEventCount: 0,
+        scenario: "accept_all_flow",
+        startedAtMs: 0
+      }
+    },
+    confidence: 0.25,
+    sourceModulesPresent: ["consentFlowRuntimeScanner"],
+    sourceModulesRequired: ["consentFlowRuntimeScanner"]
+  } as const;
   const merged = mergeLocalV2DagLambdaShardBundles({
     base: canonicalBundleFixture("scan-local-1"),
     scanId: "scan-local-1",
     workerBundles: [
       canonicalBundleFixture("scan-local-1_accept_gpc", {
         consentActionAttempts: [actionAttempt("accept_all_flow", "accept_all", false)],
-        consentFlowObservations: [consentObservation("accept_all_flow")]
+        consentFlowObservations: [consentObservation("accept_all_flow")],
+        consentFlowComparisons: [existingComparison]
       }),
       canonicalBundleFixture("scan-local-1_reject_manage", {
         consentActionAttempts: [actionAttempt("reject_all_flow", "reject_all", false)],
@@ -290,10 +316,9 @@ test("sharded bundle merge synthesizes cross-worker accept versus reject compari
     candidate.comparedScenarios === "after_reject_vs_after_accept"
   );
   assert.ok(comparison);
-  assert.equal(comparison.comparisonId, "consent_comparison_after_reject_vs_after_accept");
+  assert.equal(comparison.comparisonId, "consent_comparison_existing");
   assert.equal(comparison.comparableMeasurement?.comparable, false);
-  assert.match(comparison.comparableMeasurement?.reason ?? "", /reject_all_not_confidently_executed/);
-  assert.match(comparison.comparableMeasurement?.reason ?? "", /accept_all_not_confidently_executed/);
+  assert.equal(comparison.comparableMeasurement?.reason, "worker_comparison_retained");
 });
 
 test("sharded bundle merge retains exactly one diagnostic screenshot", () => {
@@ -320,8 +345,6 @@ test("artifact uploader returns durable metadata for all v2 JSON artifacts", asy
   const tmp = await mkdtemp(path.join(os.tmpdir(), "certscore-v2-lambda-test-"));
   const files = {
     manifestPath: path.join(tmp, "LocalV2DagLambdaManifest.json"),
-    projectionPath: path.join(tmp, "V2ReportProjectionDraft.json"),
-    reviewPath: path.join(tmp, "ReviewResult.json"),
     scanArtifactPath: path.join(tmp, "CanonicalEvidenceBundle.json")
   };
   await Promise.all(Object.entries(files).map(([name, filePath]) => writeFile(filePath, JSON.stringify({ name }), "utf8")));
@@ -329,8 +352,6 @@ test("artifact uploader returns durable metadata for all v2 JSON artifacts", asy
     bucket: "certscore-v2-local-artifacts",
     keyPrefix: "v2-dag-lambda/local/scan-local-1",
     manifestFileName: "LocalV2DagLambdaManifest.json",
-    projectionFileName: "V2ReportProjectionDraft.json",
-    reviewFileName: "ReviewResult.json",
     scanArtifactFileName: "CanonicalEvidenceBundle.json"
   });
   const puts: Array<{ bucket: string | undefined; key: string | undefined }> = [];
@@ -350,11 +371,14 @@ test("artifact uploader returns durable metadata for all v2 JSON artifacts", asy
     }
   });
 
-  assert.equal(puts.length, 4);
+  assert.equal(puts.length, 2);
   assert.ok(puts.every((put) => put.bucket === "certscore-v2-local-artifacts"));
   assert.ok(puts.some((put) => put.key?.endsWith("/CanonicalEvidenceBundle.json")));
+  assert.ok(puts.some((put) => put.key?.endsWith("/LocalV2DagLambdaManifest.json")));
   assert.equal(typeof metadata.scanArtifactUri?.sha256, "string");
   assert.ok((metadata.scanArtifactUri?.sizeBytes ?? 0) > 0);
+  assert.equal(metadata.reviewArtifactUri, undefined);
+  assert.equal(metadata.reportAdapterArtifactUri, undefined);
 });
 
 test("auxiliary uploader returns durable metadata for bounded internal JSON artifacts", async () => {

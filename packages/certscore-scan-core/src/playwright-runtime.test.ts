@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  chromiumExecutablePath,
   chromiumLaunchArgs,
   chromiumLaunchOptions,
   isAwsLambdaRuntime,
@@ -43,6 +44,17 @@ test("can disable single-process Chromium mode inside Lambda for quality A/B run
 test("builds Chromium launch options without changing headless intent", () => {
   assert.deepEqual(chromiumLaunchOptions({ env: {}, headless: true }), {
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    headless: true
+  });
+});
+
+test("can launch with an explicit Chromium executable path for slim runtime images", () => {
+  const env = { CERTSCORE_CHROMIUM_EXECUTABLE_PATH: " /usr/bin/chromium " };
+
+  assert.equal(chromiumExecutablePath(env), "/usr/bin/chromium");
+  assert.deepEqual(chromiumLaunchOptions({ env, headless: true }), {
+    args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    executablePath: "/usr/bin/chromium",
     headless: true
   });
 });

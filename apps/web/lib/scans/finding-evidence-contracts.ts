@@ -44,7 +44,6 @@ export type EvidenceRequirementType =
   | "ignoredRuntimeCookieInventoryOnly"
   | "privacyChoiceControlSearchScope"
   | "advertisingSharingRuntimeEvidence"
-  | "cpraRelevantOptOutContext"
   | "crossDomainIdentifierEvidence"
   | "videoContentSurfaceEvidence"
   | "videoTrackingRuntimeEvidence"
@@ -128,7 +127,6 @@ const REQUIREMENT_DESCRIPTIONS: Record<EvidenceRequirementType, string> = {
   ignoredRuntimeCookieInventoryOnly: "Runtime cookie inventory contains only operational cookies ignored by disclosure-gap promotion.",
   privacyChoiceControlSearchScope: "Retained search evidence shows privacy-choice or opt-out controls were inspected.",
   advertisingSharingRuntimeEvidence: "Runtime evidence identifies advertising, retargeting, RTB, or cross-context sharing vendors.",
-  cpraRelevantOptOutContext: "Policy, UI, or scan-origin evidence establishes California/CPRA-relevant opt-out context.",
   crossDomainIdentifierEvidence: "Runtime evidence shows the same identifier-like value across multiple external destinations.",
   videoContentSurfaceEvidence: "A video-content page or media title was retained for the same-page observation.",
   videoTrackingRuntimeEvidence: "Runtime evidence identifies video-page tracking requests or vendors.",
@@ -440,34 +438,6 @@ export const FINDING_EVIDENCE_CONTRACTS = [
       ftc: false
     },
     notes: "Moderate runtime RTB surfacing does not imply pre-consent RTB without a consent timeline."
-  },
-  {
-    findingId: "cpra_cba_opt_out_missing",
-    unifiedFindingIds: ["cpra_cba_opt_out_missing"],
-    requiredForStrong: [
-      req("advertisingSharingRuntimeEvidence"),
-      req("privacyChoiceControlSearchScope"),
-      req("cpraRelevantOptOutContext"),
-      req("coverageNotMateriallyBlocked")
-    ],
-    requiredForGood: [
-      req("advertisingSharingRuntimeEvidence"),
-      req("privacyChoiceControlSearchScope"),
-      req("cpraRelevantOptOutContext")
-    ],
-    downgradeIf: [
-      { ifMissing: "advertisingSharingRuntimeEvidence", to: "audit_only", reason: "Opt-out missing findings require retained advertising/sharing runtime evidence." },
-      { ifMissing: "privacyChoiceControlSearchScope", to: "audit_only", reason: "Opt-out missing findings require retained evidence that privacy-choice controls were inspected." },
-      { ifMissing: "cpraRelevantOptOutContext", to: "audit_only", reason: "CPRA CBA opt-out findings require California/CPRA-relevant opt-out context, not ad-vendor evidence alone." }
-    ],
-    suppressIf: [],
-    projectionEligibility: {
-      executive: { requiresContractPass: true, minimumTier: "strong" },
-      gdprEprivacy: false,
-      ccpaCpra: { requiresContractPass: true, minimumTier: "strong" },
-      ftc: { requiresContractPass: true, minimumTier: "strong" }
-    },
-    notes: "CertScore may interpret an opt-out gap only after scanner/validation retain advertising/sharing evidence, control-search scope, and California/CPRA-relevant context."
   },
   {
     findingId: "cross_domain_identifier_sharing_observed",
@@ -1334,25 +1304,6 @@ function hasAdvertisingSharingRuntimeEvidence(rawEvidence: Record<string, unknow
   );
 }
 
-function hasCpraRelevantOptOutContext(rawEvidence: Record<string, unknown> | null | undefined) {
-  const cpraEvidence = getObjectValue(rawEvidence, ["cpraCbaOptOutEvidence", "cpra_cba_opt_out_evidence"]);
-  const policyCbaLanguage = String(
-    cpraEvidence?.policyCbaLanguage ?? cpraEvidence?.policy_cba_language ?? rawEvidence?.policyCbaLanguage ?? rawEvidence?.policy_cba_language ?? ""
-  );
-  const optOutUiResult = String(
-    cpraEvidence?.optOutUiResult ?? cpraEvidence?.opt_out_ui_result ?? rawEvidence?.optOutUiResult ?? rawEvidence?.opt_out_ui_result ?? ""
-  );
-  const scanOriginGeo = String(
-    cpraEvidence?.scanOriginGeo ?? cpraEvidence?.scan_origin_geo ?? rawEvidence?.scanOriginGeo ?? rawEvidence?.scan_origin_geo ?? ""
-  );
-
-  return (
-    (policyCbaLanguage.length > 0 && policyCbaLanguage !== "absent") ||
-    (optOutUiResult.length > 0 && optOutUiResult !== "absent") ||
-    /\b(?:ca|california)\b/i.test(scanOriginGeo)
-  );
-}
-
 function hasCrossDomainIdentifierEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
   const rows = getObjectArrayValues(rawEvidence, ["crossDomainIdentifierSharingEvidence", "cross_domain_identifier_sharing_evidence"]);
   const destinations = getStringArrayValues(rawEvidence, [
@@ -1540,8 +1491,6 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
       return hasPrivacyChoiceControlSearchScope(rawEvidence);
     case "advertisingSharingRuntimeEvidence":
       return hasAdvertisingSharingRuntimeEvidence(rawEvidence);
-    case "cpraRelevantOptOutContext":
-      return hasCpraRelevantOptOutContext(rawEvidence);
     case "crossDomainIdentifierEvidence":
       return hasCrossDomainIdentifierEvidence(rawEvidence);
     case "videoContentSurfaceEvidence":
@@ -1600,8 +1549,6 @@ function downgradeFlag(type: EvidenceRequirementType) {
       return "missing_privacy_choice_control_search_scope";
     case "advertisingSharingRuntimeEvidence":
       return "missing_runtime_request_url_evidence";
-    case "cpraRelevantOptOutContext":
-      return "missing_cpra_relevant_opt_out_context";
     case "crossDomainIdentifierEvidence":
     case "videoTrackingRuntimeEvidence":
     case "fingerprintingRuntimeEvidence":

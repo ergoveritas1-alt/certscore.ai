@@ -1316,7 +1316,7 @@ test("ExecutiveSummaryCard hides review lenses when viewer access disallows them
   assert.match(html, /Analytics/);
   assert.match(html, /Session replay/);
   assert.match(html, /first observed at 1.2s/);
-  assert.match(html, /End of scan @ 12s/);
+  assert.match(html, /Scan end @ 12s/);
   assert.doesNotMatch(html, /Captured/);
   assert.doesNotMatch(html, /Runtime/);
   assert.doesNotMatch(html, /Review lenses/);
@@ -2154,7 +2154,8 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
   );
 
   assert.match(html, /Action Needed/);
-  assert.match(html, /Benchmark: Web portal \/ News &amp; Media \/ Internet services/);
+  assert.match(html, /Benchmark: Web portal/);
+  assert.doesNotMatch(html, /Benchmark: Web portal \/ News &amp; Media \/ Internet services/);
   assert.doesNotMatch(html, /Score note:/);
   assert.doesNotMatch(html, /132 3rd-party requests/);
   assert.match(html, /\+124 above expected for Web portal \/ News &amp; Media \/ Internet services/);
@@ -2508,27 +2509,8 @@ test("ExecutiveSummaryCard keeps four or more top findings in an expandable top-
   assert.match(html, /Automated accessibility issues observed/);
 });
 
-test("ExecutiveSummaryCard renders GDPR and CCPA gap-observed checklist rows as top findings", () => {
+test("ExecutiveSummaryCard renders GDPR gap-observed checklist rows as top findings", () => {
   const regulatoryGapFindings = buildRegulatoryGapTopFindings({
-    californiaPrivacyArea: {
-      id: "california_ccpa_cpra",
-      title: "California privacy",
-      rows: [
-        {
-          assessmentStatus: "gap_observed",
-          evidenceRefs: ["ccpa-row-ref"],
-          id: "do_not_sell_share_availability",
-          label: "Do Not Sell or Share availability",
-          note: "No retained privacy choice path was confirmed."
-        },
-        {
-          assessmentStatus: "checked",
-          id: "privacy_notice_availability",
-          label: "Privacy notice availability",
-          note: "Observed privacy notice."
-        }
-      ]
-    },
     gdprEprivacyArea: {
       id: "gdpr_eprivacy",
       title: "GDPR / ePrivacy",
@@ -2589,14 +2571,11 @@ test("ExecutiveSummaryCard renders GDPR and CCPA gap-observed checklist rows as 
   assert.doesNotMatch(html, />high<span/);
   assert.doesNotMatch(html, /Regulatory gap/);
   assert.doesNotMatch(html, /Regulatory checklist gap/);
-  assert.match(html, /Do Not Sell or Share availability/);
   assert.match(html, /Pre-consent third-party tracking/);
-  assert.match(html, /data-finding-icon=\"privacy-choice\"/);
   assert.match(html, /data-finding-icon=\"arrow-transfer\"/);
   assert.doesNotMatch(html, /GDPR\/ePrivacy potential concern: Pre-consent third-party tracking/);
-  assert.match(html, /No retained privacy choice path was confirmed/);
+  assert.match(html, /Advertising and analytics requests were observed before consent/);
   assert.match(html, /not a legal conclusion/);
-  assert.doesNotMatch(html, /Privacy notice availability/);
   assert.doesNotMatch(html, /Runtime vendor disclosure mismatch/);
 });
 

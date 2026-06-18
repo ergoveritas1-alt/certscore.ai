@@ -303,7 +303,7 @@ test("extracts bounded CMP runtime snapshot from canonical bundle", async () => 
   assert.equal(timing?.rows.some((row) => row.key === "wc01_shadow"), false);
 });
 
-test("projects focused production regulatory review checklist rows from typed canonical bundle evidence", async () => {
+test("keeps v2 regulatory review checklist projection disabled for canonical bundle artifacts", async () => {
   const workspaceRoot = await makeWorkspace();
   await writeArtifact(
     workspaceRoot,
@@ -346,18 +346,7 @@ test("projects focused production regulatory review checklist rows from typed ca
 
   assert.equal(result.status, "ready");
   const checklist = result.status === "ready" ? result.model.regulatoryReviewChecklist : null;
-  assert.equal(
-    checklist?.californiaPrivacyItems.find((row) => row.id === "privacy_notice_availability")?.status,
-    "observed",
-  );
-  assert.equal(
-    checklist?.californiaPrivacyItems.find((row) => row.id === "targeted_advertising_signals")?.status,
-    "not_testable",
-  );
-  assert.equal(
-    checklist?.gdprEprivacyItems.find((row) => row.id === "consent_surface_observed")?.status,
-    "Not testable",
-  );
+  assert.deepEqual(checklist?.gdprEprivacyItems, []);
 });
 
 test("surfaces failed runtime modules as coverage limitations", async () => {

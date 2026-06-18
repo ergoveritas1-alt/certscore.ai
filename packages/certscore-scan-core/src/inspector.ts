@@ -1,14 +1,12 @@
 import {
   type CanonicalEvidenceBundle,
   type CookieEvent,
-  type FindingCandidate,
   type NetworkEvent,
   type NormalizedVendorObservation,
   type ObservedBehavior,
   type ObservedJourney,
   canonicalEvidenceBundleSchema,
 } from "@certscore/contracts";
-import { reviewEvidenceBundle } from "@certscore/review-engine";
 
 const attributionStatuses = [
   "resolved",
@@ -73,9 +71,7 @@ export interface BundleInspectionReport {
   consentFlowSummary: ConsentFlowInspectionSummary;
   policySurfaceSummary: PolicySurfaceInspectionSummary;
   googleEndpointSubtypeSummary: Record<string, number>;
-  findingCandidateSummary: FindingInspectionItem[];
   traceabilitySummary: TraceabilityInspectionSummary;
-  evidenceExcerptSummary: EvidenceExcerptInspectionSummary;
   coverageLimitations: string[];
 }
 
@@ -116,17 +112,6 @@ export interface JourneyInspectionItem {
   confidence: number;
 }
 
-export interface FindingInspectionItem {
-  findingKey: string;
-  eligibility: string;
-  confidence: number;
-  relatedVendors: string[];
-  sourceJourneyIds: string[];
-  sourceEvidenceRefCount: number;
-  evidenceExcerptIds: string[];
-  coverageLimitations: string[];
-}
-
 export interface TraceabilityInspectionSummary {
   vendorObservationsWithEvidenceRefs: number;
   vendorObservationsMissingEvidenceRefs: number;
@@ -134,23 +119,6 @@ export interface TraceabilityInspectionSummary {
   vendorObservationsMissingMatchSources: number;
   journeysWithRawEventRefs: number;
   journeysMissingRawEventRefs: number;
-  findingCandidatesWithSourceEvidenceRefs: number;
-  findingCandidatesMissingSourceEvidenceRefs: number;
-  eligibleFindingCandidatesWithSourceEvidenceRefs: number;
-  eligibleFindingCandidatesMissingSourceEvidenceRefs: number;
-}
-
-export interface EvidenceExcerptInspectionSummary {
-  evidenceExcerptsTotal: number;
-  evidenceExcerptsByKind: Record<string, number>;
-  excerptsWithArtifactRefs: number;
-  excerptsMissingSourceEvent: number;
-  excerptsInternalOnly: number;
-  excerptsRedacted: number;
-  findingCandidatesWithExcerpts: number;
-  findingCandidatesMissingExcerpts: number;
-  eligibleFindingCandidatesWithExcerpts: number;
-  eligibleFindingCandidatesMissingExcerpts: number;
 }
 
 export interface ConsentFlowInspectionSummary {
@@ -220,15 +188,12 @@ export interface PolicySurfaceInspectionSummary {
   policyExcerptCount: number;
   nanoAssistCount: number;
   nanoUncertaintyCount: number;
-  policyRuntimeAlignmentCandidateStatus?: string;
-  policyRuntimeAlignmentMatchedCriteria: string[];
 }
 
 export async function inspectBundle(
   bundleInput: CanonicalEvidenceBundle,
 ): Promise<BundleInspectionReport> {
   const bundle = canonicalEvidenceBundleSchema.parse(bundleInput);
-  const review = await reviewEvidenceBundle(bundle);
 
   return {
     scanId: bundle.scanId,
@@ -302,22 +267,13 @@ export async function inspectBundle(
     },
     cookieClassification: cookieClassification(bundle.cookieEvents, bundle.observedJourneys),
     consentFlowSummary: consentFlowSummary(bundle),
-    policySurfaceSummary: policySurfaceSummary(bundle, review.findingCandidates),
+    policySurfaceSummary: policySurfaceSummary(bundle),
     googleEndpointSubtypeSummary: fixedCountMap(
       googleEndpointSubtypes,
       endpointSubtypeValues(bundle),
     ),
-    findingCandidateSummary: review.findingCandidates
-      .map((candidate) => findingItem(candidate, bundle.observedJourneys))
-      .sort((left, right) => left.findingKey.localeCompare(right.findingKey)),
-    traceabilitySummary: traceabilitySummary(
-      bundle,
-      review.findingCandidates,
-    ),
-    evidenceExcerptSummary: evidenceExcerptSummary(review.findingCandidates, review.evidenceExcerpts),
-    coverageLimitations: review.coverageLimitations
-      .map((limitation) => limitation.limitationKey)
-      .sort(),
+    traceabilitySummary: traceabilitySummary(bundle),
+    coverageLimitations: [],
   };
 }
 
@@ -387,7 +343,6 @@ export function formatInspectionReportText(report: BundleInspectionReport): stri
   lines.push(`  AI disclosure observed: ${report.policySurfaceSummary.aiDisclosureObserved}`);
   lines.push(`  policy excerpts: ${report.policySurfaceSummary.policyExcerptCount}`);
   lines.push(`  Nano assists: ${report.policySurfaceSummary.nanoAssistCount} uncertainty=${report.policySurfaceSummary.nanoUncertaintyCount}`);
-  lines.push(`  runtime alignment: ${report.policySurfaceSummary.policyRuntimeAlignmentCandidateStatus ?? "none"} criteria=${formatStringList(report.policySurfaceSummary.policyRuntimeAlignmentMatchedCriteria)}`);
   lines.push("");
   lines.push("Google endpoint subtype summary");
   lines.push(`  ${formatCounts(report.googleEndpointSubtypeSummary)}`);
@@ -399,29 +354,6 @@ export function formatInspectionReportText(report: BundleInspectionReport): stri
   lines.push(`  vendor observations missing match sources: ${report.traceabilitySummary.vendorObservationsMissingMatchSources}`);
   lines.push(`  journeys with raw event refs: ${report.traceabilitySummary.journeysWithRawEventRefs}`);
   lines.push(`  journeys missing raw event refs: ${report.traceabilitySummary.journeysMissingRawEventRefs}`);
-  lines.push(`  finding candidates with source refs: ${report.traceabilitySummary.findingCandidatesWithSourceEvidenceRefs}`);
-  lines.push(`  finding candidates missing source refs: ${report.traceabilitySummary.findingCandidatesMissingSourceEvidenceRefs}`);
-  lines.push(`  eligible finding candidates with source refs: ${report.traceabilitySummary.eligibleFindingCandidatesWithSourceEvidenceRefs}`);
-  lines.push(`  eligible finding candidates missing source refs: ${report.traceabilitySummary.eligibleFindingCandidatesMissingSourceEvidenceRefs}`);
-  lines.push("");
-  lines.push("Evidence excerpts");
-  lines.push(`  total: ${report.evidenceExcerptSummary.evidenceExcerptsTotal}`);
-  lines.push(`  by kind: ${formatCounts(report.evidenceExcerptSummary.evidenceExcerptsByKind)}`);
-  lines.push(`  with artifacts: ${report.evidenceExcerptSummary.excerptsWithArtifactRefs}`);
-  lines.push(`  missing source event: ${report.evidenceExcerptSummary.excerptsMissingSourceEvent}`);
-  lines.push(`  redacted: ${report.evidenceExcerptSummary.excerptsRedacted}`);
-  lines.push(`  internal-only: ${report.evidenceExcerptSummary.excerptsInternalOnly}`);
-  lines.push(`  finding candidates with excerpts: ${report.evidenceExcerptSummary.findingCandidatesWithExcerpts}`);
-  lines.push(`  finding candidates missing excerpts: ${report.evidenceExcerptSummary.findingCandidatesMissingExcerpts}`);
-  lines.push(`  eligible finding candidates with excerpts: ${report.evidenceExcerptSummary.eligibleFindingCandidatesWithExcerpts}`);
-  lines.push(`  eligible finding candidates missing excerpts: ${report.evidenceExcerptSummary.eligibleFindingCandidatesMissingExcerpts}`);
-  lines.push("");
-  lines.push("Finding candidates");
-  for (const finding of report.findingCandidateSummary) {
-    lines.push(
-      `  ${finding.findingKey}: ${finding.eligibility} confidence=${finding.confidence.toFixed(2)} vendors=${formatStringList(finding.relatedVendors)} journeys=${formatStringList(finding.sourceJourneyIds)} limitations=${formatStringList(finding.coverageLimitations)}`,
-    );
-  }
   return `${lines.join("\n")}\n`;
 }
 
@@ -598,63 +530,9 @@ function consentFlowSummary(bundle: CanonicalEvidenceBundle): ConsentFlowInspect
   };
 }
 
-function findingItem(
-  finding: FindingCandidate,
-  journeys: ObservedJourney[],
-): FindingInspectionItem {
-  const eventIds = new Set(
-    finding.sourceEvidenceRefs.flatMap((ref) => ref.eventId ? [ref.eventId] : []),
-  );
-  return {
-    findingKey: finding.findingKey,
-    eligibility: finding.eligibility.status,
-    confidence: finding.confidence,
-    relatedVendors: uniqueSorted(
-      finding.relatedVendors.map((vendor) => vendor.product ?? vendor.vendor),
-    ),
-    sourceJourneyIds: journeys
-      .filter((journey) =>
-        journey.eventRefs.some((ref) => eventIds.has(ref.eventId)) ||
-        journey.evidenceRefs.some((ref) => ref.eventId && eventIds.has(ref.eventId)),
-      )
-      .map((journey) => journey.journeyId)
-      .sort(),
-    sourceEvidenceRefCount: finding.sourceEvidenceRefs.length,
-    evidenceExcerptIds: [...finding.evidenceExcerptIds].sort(),
-    coverageLimitations: finding.coverageLimitations
-      .map((limitation) => limitation.limitationKey)
-      .sort(),
-  };
-}
-
-function evidenceExcerptSummary(
-  findings: FindingCandidate[],
-  excerpts: Array<{ evidenceKind: string; artifactRefs: unknown[]; sourceEventId?: string; sensitivity: string }>,
-): EvidenceExcerptInspectionSummary {
-  const eligibleFindings = findings.filter((finding) => finding.eligibility.status === "eligible");
-  return {
-    evidenceExcerptsTotal: excerpts.length,
-    evidenceExcerptsByKind: sortedCountMap(excerpts.map((excerpt) => excerpt.evidenceKind)),
-    excerptsWithArtifactRefs: excerpts.filter((excerpt) => excerpt.artifactRefs.length > 0).length,
-    excerptsMissingSourceEvent: excerpts.filter((excerpt) => !excerpt.sourceEventId).length,
-    excerptsInternalOnly: excerpts.filter((excerpt) => excerpt.sensitivity === "internal_only").length,
-    excerptsRedacted: excerpts.filter((excerpt) => excerpt.sensitivity === "redacted").length,
-    findingCandidatesWithExcerpts: findings.filter((finding) => finding.evidenceExcerptIds.length > 0).length,
-    findingCandidatesMissingExcerpts: findings.filter((finding) => finding.evidenceExcerptIds.length === 0).length,
-    eligibleFindingCandidatesWithExcerpts: eligibleFindings.filter((finding) => finding.evidenceExcerptIds.length > 0).length,
-    eligibleFindingCandidatesMissingExcerpts: eligibleFindings.filter((finding) => finding.evidenceExcerptIds.length === 0).length,
-  };
-}
-
-function policySurfaceSummary(
-  bundle: CanonicalEvidenceBundle,
-  findings: FindingCandidate[],
-): PolicySurfaceInspectionSummary {
+function policySurfaceSummary(bundle: CanonicalEvidenceBundle): PolicySurfaceInspectionSummary {
   const observed = bundle.policySurfaceObservations.filter((observation) =>
     observation.status === "observed" || observation.status === "fetched",
-  );
-  const policyRuntimeAlignment = findings.find((finding) =>
-    finding.findingKey === "policy_runtime_vendor_alignment_review_signal",
   );
 
   return {
@@ -710,16 +588,10 @@ function policySurfaceSummary(
     nanoUncertaintyCount: bundle.policySurfaceObservations.reduce((count, observation) =>
       count + observation.assistMetadata.filter((metadata) => metadata.uncertaintyNotes.length > 0).length,
     0),
-    policyRuntimeAlignmentCandidateStatus: policyRuntimeAlignment?.eligibility.status,
-    policyRuntimeAlignmentMatchedCriteria: [...(policyRuntimeAlignment?.matchedCriteria ?? [])].sort(),
   };
 }
 
-function traceabilitySummary(
-  bundle: CanonicalEvidenceBundle,
-  findingCandidates: FindingCandidate[],
-): TraceabilityInspectionSummary {
-  const eligibleCandidates = findingCandidates.filter((candidate) => candidate.eligibility.status === "eligible");
+function traceabilitySummary(bundle: CanonicalEvidenceBundle): TraceabilityInspectionSummary {
   return {
     vendorObservationsWithEvidenceRefs: bundle.normalizedVendorObservations.filter((vendor) =>
       vendor.matchedEvidenceRefs.length > 0,
@@ -735,18 +607,6 @@ function traceabilitySummary(
     ).length,
     journeysWithRawEventRefs: bundle.observedJourneys.filter((journey) => journey.eventRefs.length > 0).length,
     journeysMissingRawEventRefs: bundle.observedJourneys.filter((journey) => journey.eventRefs.length === 0).length,
-    findingCandidatesWithSourceEvidenceRefs: findingCandidates.filter((candidate) =>
-      candidate.sourceEvidenceRefs.length > 0,
-    ).length,
-    findingCandidatesMissingSourceEvidenceRefs: findingCandidates.filter((candidate) =>
-      candidate.sourceEvidenceRefs.length === 0,
-    ).length,
-    eligibleFindingCandidatesWithSourceEvidenceRefs: eligibleCandidates.filter((candidate) =>
-      candidate.sourceEvidenceRefs.length > 0,
-    ).length,
-    eligibleFindingCandidatesMissingSourceEvidenceRefs: eligibleCandidates.filter((candidate) =>
-      candidate.sourceEvidenceRefs.length === 0,
-    ).length,
   };
 }
 

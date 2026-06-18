@@ -45,7 +45,7 @@ test("runCalibration records one failed URL without stopping the batch", async (
     assert.equal(summary.results[0]?.modulesRun.some((moduleRun) => moduleRun.moduleName === "policySurfaceScanner"), true);
     assert.equal(summary.results[0]?.consent.controlsObservedByType.reject_all, 1);
     assert.equal(summary.results[0]?.policy.policySurfacesObserved, 1);
-    assert.equal(summary.results[0]?.review.findingCandidateCounts.eligible > 0, true);
+    assert.equal(summary.results[0]?.policy.vendorMentions.includes("Google Analytics"), true);
 
     const json = JSON.parse(await readFile(path.join(tempRoot, "calibration-summary.json"), "utf8")) as typeof summary;
     assert.deepEqual(json, summary);

@@ -109,6 +109,10 @@ function isProtectedRouteInterruption(interruption: ExecutiveScanInterruption) {
   return /protected route/i.test(`${interruption.label} ${interruption.details.join(" ")}`);
 }
 
+function formatBenchmarkHeaderIndustry(industry: string) {
+  return industry.split("/")[0]?.trim() || industry;
+}
+
 function getPostureClasses(posture: ExecutiveDisplayState) {
   if (posture === "Scan not representative") {
     return "border-slate-300 bg-slate-100/90 text-slate-950";
@@ -2952,7 +2956,16 @@ function CompactSnapshotSurfaceRow(input: { detail?: string | null; label: strin
             <CompactChevronRightIcon />
           </span>
         </summary>
-        <p className="mt-1 break-words text-xs leading-5 text-slate-500">{input.detail}</p>
+        <p
+          className="mt-1 overflow-hidden break-words text-xs leading-5 text-slate-500"
+          style={{
+            WebkitBoxOrient: "vertical",
+            WebkitLineClamp: 3,
+            display: "-webkit-box",
+          }}
+        >
+          {input.detail}
+        </p>
       </details>
     );
   }
@@ -2978,10 +2991,14 @@ function ExecutiveSignalSnapshotPane(input: {
   trackerFootprintTitle?: string | null;
   trackerFootprintRichDetails: Array<{ key: string; node: React.ReactNode }>;
   trackerFootprintTipText?: string | null;
+  runtimeMetricsReliable?: boolean;
 }) {
-  const trackerDetailLabel = input.trackerFootprintDetailLabel ?? "0 vendors, 0 domains";
+  const runtimeMetricsReliable = input.runtimeMetricsReliable !== false;
+  const trackerDetailLabel = runtimeMetricsReliable
+    ? input.trackerFootprintDetailLabel ?? "0 vendors, 0 domains"
+    : "Runtime not retained";
   const cookieOnlyRuntimeNote =
-    input.trackerFootprintRichDetails.length === 0 && input.beforeConsentCookieCount > 0
+    runtimeMetricsReliable && input.trackerFootprintRichDetails.length === 0 && input.beforeConsentCookieCount > 0
       ? `${input.beforeConsentCookieCount} ${input.beforeConsentCookieCount === 1 ? "cookie was" : "cookies were"} observed before consent; no third-party tracker vendor or domain was resolved for this scan.`
       : null;
   return (
@@ -2991,7 +3008,7 @@ function ExecutiveSignalSnapshotPane(input: {
       </div>
       <CompactSnapshotPanel title="Consent platform">
         <div className="flex items-center gap-2">
-          {input.cmpStatusAvailable ? (
+          {runtimeMetricsReliable && input.cmpStatusAvailable ? (
             <VendorBrandChip
               category="cmp"
               className="h-6 w-6 rounded-full p-0"
@@ -3003,7 +3020,9 @@ function ExecutiveSignalSnapshotPane(input: {
             <CompactWarningBadgeIcon />
           )}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-slate-950">{input.cmpDisplayName}</p>
+            <p className="truncate text-sm font-semibold text-slate-950">
+              {runtimeMetricsReliable ? input.cmpDisplayName : "Consent platform not testable"}
+            </p>
           </div>
         </div>
       </CompactSnapshotPanel>
@@ -3018,6 +3037,11 @@ function ExecutiveSignalSnapshotPane(input: {
             </span>
           </summary>
           <div className="mt-3 max-h-[13.25rem] space-y-1.5 overflow-y-auto pr-1">
+            {!runtimeMetricsReliable ? (
+              <p className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                Pre-consent runtime collection failed before reliable tracker, request, cookie, or consent-platform observations were retained.
+              </p>
+            ) : null}
             {input.trackerFootprintTipText ? (
               <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
                 {input.trackerFootprintTipText}
@@ -3033,13 +3057,13 @@ function ExecutiveSignalSnapshotPane(input: {
                 {input.domainTruncationNote}
               </p>
             ) : null}
-            {input.trackerFootprintRichDetails.length > 0 ? (
+            {runtimeMetricsReliable && input.trackerFootprintRichDetails.length > 0 ? (
               input.trackerFootprintRichDetails.map((item) => <React.Fragment key={item.key}>{item.node}</React.Fragment>)
-            ) : (
+            ) : runtimeMetricsReliable ? (
               <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
                 No third-party tracker vendors or domains were resolved in this scan.
               </p>
-            )}
+            ) : null}
           </div>
         </details>
       </CompactSnapshotPanel>
@@ -3169,7 +3193,7 @@ function ExecutiveTimelinePane(input: {
         <div className="absolute bottom-3 left-2 right-3 flex items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-700 bg-white shadow-sm" aria-hidden="true" />
           <span className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white shadow-sm">
-            End of scan @ {formatTimelineOffset(durationMs)}
+            Scan end @ {formatTimelineOffset(durationMs)}
           </span>
         </div>
       </div>
@@ -4771,6 +4795,7 @@ export function ExecutiveSummaryCard(input: {
   pagesScanned?: number | null;
   policyEnrichmentCount?: number | null;
   policySurfaces?: ExecutivePolicySurface[] | null;
+  runtimeMetricsReliable?: boolean;
   scanInterruptions?: ExecutiveScanInterruption[] | null;
   showFingerprintingSnapshot?: boolean;
   showReviewLenses?: boolean;
@@ -4867,6 +4892,7 @@ export function ExecutiveSummaryCard(input: {
         ? `Showing ${thirdPartyDomains.length} of ${input.thirdPartyDomains.length} observed domains.`
       : null;
   const policySurfaces = input.policySurfaces ?? [];
+  const runtimeMetricsReliable = input.runtimeMetricsReliable !== false;
   const policySurfaceLabelsByUrl = buildPolicySurfaceSharedUrlLabels(policySurfaces);
   const scanInterruptions = input.scanInterruptions ?? [];
   const visibleScanInterruptions = input.showProtectedRouteInterruptions
@@ -4874,7 +4900,9 @@ export function ExecutiveSummaryCard(input: {
     : scanInterruptions.filter((interruption) => !isProtectedRouteInterruption(interruption));
   const displayState: ExecutiveDisplayState = isScanNotRepresentative
     ? "Scan not representative"
-    : deriveExecutiveDisplayState({
+    : !runtimeMetricsReliable
+      ? "Limited review"
+      : deriveExecutiveDisplayState({
         beforeConsentCookieCount: input.beforeConsentCookieCount,
         coverageLevel: input.coverageLevel,
         domainBenchmark: input.domainBenchmark,
@@ -4884,9 +4912,9 @@ export function ExecutiveSummaryCard(input: {
         scanOutcome: input.scanOutcome,
         thirdPartyDomains: input.thirdPartyDomains,
         thirdPartyRequestCount: input.thirdPartyRequestCount,
-        topFindingCount: displayedTopFindings.length,
-        vendorCount: vendorEvidence.length
-      });
+          topFindingCount: displayedTopFindings.length,
+          vendorCount: vendorEvidence.length
+        });
   const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
   const trackerFootprintTipText = uniqueStrings([
     hasMeaningfulInterruption
@@ -4900,6 +4928,7 @@ export function ExecutiveSummaryCard(input: {
   const retainedFindingCount = Math.max(input.topFindings.length, input.allFindings?.length ?? 0);
   const policyEnrichmentCount = input.policyEnrichmentCount ?? 0;
   const hasMaterialRetainedCoverage =
+    runtimeMetricsReliable &&
     (pagesScanned > 0 || input.status === "completed") &&
     (input.thirdPartyRequestCount >= 20 || vendorEvidence.length >= 2 || policyEnrichmentCount >= 2) &&
     retainedFindingCount >= 3;
@@ -4914,6 +4943,7 @@ export function ExecutiveSummaryCard(input: {
   const hasIncompleteCoverageNotice =
     !hasProtectedRouteOnlyPartialCoverage &&
     (
+      !runtimeMetricsReliable ||
       (displayState === "Limited review" && !hasMaterialRetainedCoverage) ||
       hasHardCoverageLimit ||
       (!hasMaterialRetainedCoverage &&
@@ -4976,12 +5006,12 @@ export function ExecutiveSummaryCard(input: {
           </span>
           {input.domainBenchmark ? (
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
-              Benchmark: {input.domainBenchmark.industry}
+              Benchmark: {formatBenchmarkHeaderIndustry(input.domainBenchmark.industry)}
             </span>
           ) : null}
       </summary>
       <div
-        className="grid min-w-0 items-stretch gap-5 px-3.5 pb-6 pt-1 lg:grid-cols-[minmax(0,1fr)_minmax(30rem,1.08fr)] lg:px-5"
+        className="grid min-w-0 items-stretch gap-5 px-3.5 pb-6 pt-1 lg:px-5 min-[1000px]:grid-cols-[minmax(20.5rem,1fr)_31rem]"
         data-executive-summary-layout
       >
         <div className="min-w-0 flex flex-col gap-5 lg:min-h-0">
@@ -5028,13 +5058,13 @@ export function ExecutiveSummaryCard(input: {
                     />
                     <BenchmarkMetricCard
                       label="Third-party requests"
-                      actualValue={input.thirdPartyRequestCount}
+                      actualValue={runtimeMetricsReliable ? input.thirdPartyRequestCount : null}
                       benchmarkValue={input.domainBenchmark?.expectedThirdPartyRequests ?? null}
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                     />
                     <BenchmarkMetricCard
                       label="Cookies pre-consent"
-                      actualValue={input.beforeConsentCookieCount}
+                      actualValue={runtimeMetricsReliable ? input.beforeConsentCookieCount : null}
                       benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                       note={cookieCountMismatchNote}
@@ -5131,7 +5161,7 @@ export function ExecutiveSummaryCard(input: {
           </div>
         </div>
 
-        <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,0.58fr)_minmax(13rem,0.42fr)]">
+        <div className="grid min-w-0 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(11rem,0.85fr)] min-[1000px]:w-[31rem] min-[1000px]:grid-cols-[17.5rem_12.75rem]">
           <div
             className="min-w-0 space-y-3 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]"
             data-executive-snapshot-pane
@@ -5162,6 +5192,7 @@ export function ExecutiveSummaryCard(input: {
                 trackerFootprintTitle={trackerFootprintLabels.title}
                 trackerFootprintRichDetails={trackerFootprintRichDetails}
                 trackerFootprintTipText={trackerFootprintTipText}
+                runtimeMetricsReliable={runtimeMetricsReliable}
               />
             )}
           </div>

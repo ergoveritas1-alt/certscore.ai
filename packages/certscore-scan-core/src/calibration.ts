@@ -65,8 +65,6 @@ export interface CalibrationSiteSummary {
     failedSurfaceTypes: Record<string, number>;
     discoveryMethods: Record<string, number>;
     vendorMentions: string[];
-    policyRuntimeAlignmentCandidateStatus?: string;
-    policyRuntimeAlignmentMatchedCriteria: string[];
     preferenceControlLinks: string[];
   };
   runtime: {
@@ -74,12 +72,7 @@ export interface CalibrationSiteSummary {
     unresolvedMeaningfulEndpoints: string[];
     purposeCounts: Record<string, number>;
   };
-  review: {
-    findingCandidateCounts: Record<string, number>;
-    eligibleFindingKeys: string[];
-    evidenceExcerptCount: number;
-    coverageLimitations: string[];
-  };
+  coverageLimitations: string[];
 }
 
 export interface CalibrationModuleRunSummary {
@@ -172,7 +165,7 @@ export function formatCalibrationSummaryMarkdown(summary: CalibrationSummary): s
   lines.push(`Preference-center traversal: ${formatPreferenceCenterAggregate(summary.results)}`);
   lines.push(`Policy surface statuses: ${formatCounts(mergeCountMaps(summary.results.map((result) => result.policy.policySurfaceStatusCounts)))}`);
   lines.push(`Policy surface types: ${formatCounts(mergeCountMaps(summary.results.map((result) => result.policy.surfaceTypes)))}`);
-  lines.push(`Coverage limitations: ${formatCounts(countStringValues(summary.results.flatMap((result) => result.review.coverageLimitations)))}`);
+  lines.push(`Coverage limitations: ${formatCounts(countStringValues(summary.results.flatMap((result) => result.coverageLimitations)))}`);
   lines.push("");
 
   for (const result of summary.results) {
@@ -193,16 +186,12 @@ export function formatCalibrationSummaryMarkdown(summary: CalibrationSummary): s
     lines.push(`Policy failed surface types: ${formatCounts(result.policy.failedSurfaceTypes)}`);
     lines.push(`Policy discovery methods: ${formatCounts(result.policy.discoveryMethods)}`);
     lines.push(`Policy vendor mentions: ${formatList(unique(result.policy.vendorMentions))}`);
-    lines.push(`Policy/runtime alignment: ${result.policy.policyRuntimeAlignmentCandidateStatus ?? "none"} criteria=${formatList(result.policy.policyRuntimeAlignmentMatchedCriteria)}`);
     lines.push(`Consent controls: ${formatCounts(result.consent.controlsObservedByType)}`);
     lines.push(`Consent attempts: ${formatAttempts(result.consent.actionAttempts)}`);
     lines.push(`Preference-center traversal: ${formatPreferenceCenter(result)}`);
     lines.push(`Consent deltas: ${formatComparisons(result.consent.comparisons)}`);
     lines.push(`Needs calibration: ${formatList(needsCalibration(result))}`);
-    lines.push(`Finding candidates: ${formatCounts(result.review.findingCandidateCounts)}`);
-    lines.push(`Eligible findings: ${formatList(result.review.eligibleFindingKeys)}`);
-    lines.push(`Evidence excerpts: ${result.review.evidenceExcerptCount}`);
-    lines.push(`Coverage limitations: ${formatList(result.review.coverageLimitations)}`);
+    lines.push(`Coverage limitations: ${formatList(result.coverageLimitations)}`);
     lines.push("");
   }
 
@@ -262,8 +251,6 @@ function summaryForBundle(
       failedSurfaceTypes: inspection.policySurfaceSummary.failedSurfaceTypes,
       discoveryMethods: inspection.policySurfaceSummary.discoveryMethods,
       vendorMentions: inspection.policySurfaceSummary.vendorMentions,
-      policyRuntimeAlignmentCandidateStatus: inspection.policySurfaceSummary.policyRuntimeAlignmentCandidateStatus,
-      policyRuntimeAlignmentMatchedCriteria: inspection.policySurfaceSummary.policyRuntimeAlignmentMatchedCriteria,
       preferenceControlLinks: inspection.policySurfaceSummary.preferenceControlLinks,
     },
     runtime: {
@@ -275,17 +262,7 @@ function summaryForBundle(
         .sort(),
       purposeCounts: inspection.vendorResolution.purposeCounts,
     },
-    review: {
-      findingCandidateCounts: sortedCountMap(
-        inspection.findingCandidateSummary.map((finding) => finding.eligibility),
-      ),
-      eligibleFindingKeys: inspection.findingCandidateSummary
-        .filter((finding) => finding.eligibility === "eligible")
-        .map((finding) => finding.findingKey)
-        .sort(),
-      evidenceExcerptCount: inspection.evidenceExcerptSummary.evidenceExcerptsTotal,
-      coverageLimitations: inspection.coverageLimitations,
-    },
+    coverageLimitations: inspection.coverageLimitations,
   };
 }
 
@@ -326,7 +303,6 @@ function failedSummary(url: string, outDir: string, error: unknown): Calibration
       failedSurfaceTypes: {},
       discoveryMethods: {},
       vendorMentions: [],
-      policyRuntimeAlignmentMatchedCriteria: [],
       preferenceControlLinks: [],
     },
     runtime: {
@@ -334,12 +310,7 @@ function failedSummary(url: string, outDir: string, error: unknown): Calibration
       unresolvedMeaningfulEndpoints: [],
       purposeCounts: {},
     },
-    review: {
-      findingCandidateCounts: {},
-      eligibleFindingKeys: [],
-      evidenceExcerptCount: 0,
-      coverageLimitations: [],
-    },
+    coverageLimitations: [],
   };
 }
 
@@ -462,7 +433,7 @@ function needsCalibration(result: CalibrationSiteSummary): string[] {
   if (result.consent.actionAttempts.some((attempt) => attempt.attempted && !attempt.succeeded)) {
     needs.push("consent_action_execution");
   }
-  if (result.review.coverageLimitations.length > 0) {
+  if (result.coverageLimitations.length > 0) {
     needs.push("coverage_limitations");
   }
   return needs;

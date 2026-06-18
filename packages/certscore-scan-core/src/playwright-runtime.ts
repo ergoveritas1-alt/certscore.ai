@@ -9,6 +9,10 @@ export function lambdaChromiumSingleProcessEnabled(env: NodeJS.ProcessEnv = proc
   return value !== "false" && value !== "0" && value !== "off";
 }
 
+export function chromiumExecutablePath(env: NodeJS.ProcessEnv = process.env) {
+  return env.CERTSCORE_CHROMIUM_EXECUTABLE_PATH?.trim() || undefined;
+}
+
 export function chromiumLaunchArgs(input: { env?: NodeJS.ProcessEnv } = {}) {
   const baseArgs = ["--no-sandbox", "--disable-dev-shm-usage"];
   const env = input.env;
@@ -33,8 +37,11 @@ export function chromiumLaunchArgs(input: { env?: NodeJS.ProcessEnv } = {}) {
 }
 
 export function chromiumLaunchOptions(input: { headless: boolean; env?: NodeJS.ProcessEnv }): LaunchOptions {
+  const executablePath = chromiumExecutablePath(input.env);
+
   return {
     args: chromiumLaunchArgs({ env: input.env }),
+    ...(executablePath ? { executablePath } : {}),
     headless: input.headless
   };
 }

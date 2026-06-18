@@ -2671,11 +2671,16 @@ function deriveExecutivePolicySurfaces(
         pageUrl
       };
     })
+    .filter((surface) => !isCaliforniaSpecificExecutivePolicySurface(surface))
     .filter((surface) => surface.pageUrl || surface.details.length > 0);
   return [
     ...enrichedSurfaces,
     ...deriveSnapshotPolicySurfaceFallbacks(snapshot, enrichedSurfaces, runtimeArtifacts)
   ];
+}
+
+function isCaliforniaSpecificExecutivePolicySurface(surface: ExecutivePolicySurface) {
+  return /california|ccpa|cpra/i.test(`${surface.pageUrl ?? ""} ${surface.pageLabel}`);
 }
 
 function pushUniqueInterruption(
@@ -5891,11 +5896,7 @@ function buildBetaArea(
       (matchedFindingRefs.length > 0
         ? row.matchedStatus ?? "review_signal"
         : null) ??
-      (index === 0 && seed.id === "california-cipa" && lens?.findings.length
-        ? "litigation_risk_signal"
-        : index === 0
-          ? normalizeBetaStatusFromLens(lens)
-          : "not_testable");
+      (index === 0 ? normalizeBetaStatusFromLens(lens) : "not_testable");
     return {
       ...row,
       evidenceRefs:
@@ -6020,24 +6021,6 @@ function buildBetaRegulatoryChecklistAreas(
         ["vendor_alignment", "Vendor disclosure alignment", "Runtime vendors must be compared with retained public disclosures through normalized scanner findings.", "near_term_supported"],
         ["post_opt_out", "Post-opt-out tracking behavior", "Before/after tracking comparison requires a confirmed opt-out or reject action.", "near_term_supported"],
         ["control_accessibility", "Privacy control accessibility", "Basic accessibility signals on privacy controls are eligible when retained.", "currently_supported"]
-      ])
-    },
-    {
-      id: "california-cipa",
-      lensAcronym: "CCPA / CPRA / CIPA",
-      navLabel: "California Tracking Litigation (CIPA)",
-      title: "California Tracking Litigation (CIPA)",
-      subtitle: "Session replay, chat widgets, pixels, behavioral analytics, and sensitive-form tracking signals.",
-      summary: "CertScore reviews public-web signals commonly associated with California website tracking claims. These are litigation-risk review signals, not legal conclusions.",
-      rows: betaRows([
-        ["session_replay", "Session replay / behavioral recording", "Session replay libraries, behavioral recording scripts, or collection endpoints are litigation-risk review signals when retained.", "currently_supported"],
-        ["chat_widget", "Chat widget / support widget tracking", "Third-party chat or support widget tracking requires retained runtime vendor evidence.", "near_term_supported"],
-        ["pixels_analytics", "Third-party pixels and analytics", "Pixels, analytics, adtech, and cross-site measurement vendors are reviewed from retained runtime evidence.", "currently_supported"],
-        ["input_monitoring", "Keystroke or input-monitoring indicators", "Input or interaction-capture indicators require retained script behavior or vendor-category evidence.", "near_term_supported"],
-        ["sensitive_form_tracking", "Sensitive form with third-party tracking", "Sensitive form context plus third-party tracking must be retained together.", "near_term_supported"],
-        ["tracking_before_notice", "Tracking before clear notice or consent", "Pre-notice or pre-choice tracking is reviewed from retained timing evidence.", "currently_supported"],
-        ["vendor_alignment", "Vendor disclosure alignment", "Runtime tracking vendors must be compared with retained public policy or cookie disclosures.", "near_term_supported"],
-        ["post_refusal", "Post-refusal tracking persistence", "Post-refusal persistence requires a confirmed reject or opt-out action and retained after-state tracking evidence.", "near_term_supported"]
       ])
     },
     {
@@ -6372,6 +6355,7 @@ export function SharedScanDetailView({
   });
   const executivePolicySurfaces = deriveExecutivePolicySurfaces(scanRecord.policyEnrichment, scanRecord.snapshot, runtimeArtifacts);
   const executiveScanInterruptions = deriveExecutiveScanInterruptions(scanRecord.snapshot, scanRecord.events);
+  const executiveRuntimeMetricsReliable = scanRecord.snapshot?.runtime_counts_retained !== false;
   const executiveCoverageLevel =
     scanRecord.snapshot && hasMaterialHomepageAccessLimitation(scanRecord.snapshot)
       ? typeof scanRecord.snapshot.coverage_level === "string"
@@ -6636,6 +6620,7 @@ export function SharedScanDetailView({
             pagesScanned={getFiniteNumber(scanRecord.snapshot?.pages_scanned) ?? scanRecord.scan.pagesScanned}
             policyEnrichmentCount={scanRecord.policyEnrichment.length}
             policySurfaces={executivePolicySurfaces}
+            runtimeMetricsReliable={executiveRuntimeMetricsReliable}
             scanInterruptions={executiveScanInterruptions}
             showFingerprintingSnapshot={signalSnapshotVisibility?.showFingerprinting ?? true}
             showReviewLenses={canViewSignalSnapshotReviewLenses}

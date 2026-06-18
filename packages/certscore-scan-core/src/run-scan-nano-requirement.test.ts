@@ -5,20 +5,20 @@ import path from "node:path";
 import test from "node:test";
 import { runScan } from "./index.js";
 
-test("runScan escalates before tiny scan when Nano credentials are missing", async () => {
+test("runScan escalates before policy scan when Nano policy credentials are missing", async () => {
   const previousOpenAiApiKey = process.env.OPENAI_API_KEY;
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-nano-required-"));
-  const outDir = path.join(tempRoot, "tiny-out");
+  const outDir = path.join(tempRoot, "policy-out");
   delete process.env.OPENAI_API_KEY;
 
   try {
     await assert.rejects(
       () => runScan({
         url: "https://example.com",
-        profile: "tiny",
+        profile: "policy",
         outDir,
       }),
-      /Nano assist is mandatory for all CertScore v2 scan profiles/,
+      /Nano policy assist is required for CertScore v2 policy-surface profiles/,
     );
     await assert.rejects(() => stat(path.join(outDir, "CanonicalEvidenceBundle.json")));
   } finally {

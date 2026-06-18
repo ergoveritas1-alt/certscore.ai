@@ -55,6 +55,6 @@ export async function upsertOrganizationSettingsAction(
   revalidatePath("/app/settings");
   return {
     error: null,
-    success: "Settings saved."
+    success: "Last scan location saved."
   };
 }

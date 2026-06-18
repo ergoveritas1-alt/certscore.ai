@@ -7,11 +7,7 @@ import { ensureValidationRunForManualScan } from "../validation/repository";
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
 import { setPreviewDomainLatestScan } from "../preview-scan/db";
 import { createQueuedFullScan, insertQueuedFullScanEvent, loadPriorScanAccelerationCandidate } from "./repository";
-import {
-  buildQueuedFullScanConfig,
-  requiresFreshScanForCaliforniaRuntime,
-  type QueuedFullScanCaliforniaPrivacyConfig
-} from "./full-scan-config";
+import { buildQueuedFullScanConfig } from "./full-scan-config";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
@@ -39,7 +35,6 @@ type ScanQueueProvenance = {
 
 export async function createAnonymousFullScan(input: {
   bypassRecentScanReuse?: boolean;
-  californiaPrivacy?: QueuedFullScanCaliforniaPrivacyConfig | null;
   hostname: string;
   localV2DagLambdaDebugOverrides?: import("./local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
@@ -50,12 +45,7 @@ export async function createAnonymousFullScan(input: {
 }) {
   const scanFrom = normalizeScanFrom(input.scanFrom);
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
-  const bypassRecentScanReuse =
-    Boolean(input.bypassRecentScanReuse) ||
-    requiresFreshScanForCaliforniaRuntime({
-      californiaPrivacy: input.californiaPrivacy,
-      scanFrom
-    });
+  const bypassRecentScanReuse = Boolean(input.bypassRecentScanReuse);
 
   if (!bypassRecentScanReuse) {
     const recentScan = await findRecentCompletedScanForDomain({
@@ -143,7 +133,6 @@ export async function createAnonymousFullScan(input: {
     return null;
   });
   const scanConfig = buildQueuedFullScanConfig({
-    californiaPrivacy: input.californiaPrivacy,
     hostname: input.hostname,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
@@ -182,7 +171,6 @@ export async function createAnonymousFullScan(input: {
     requestedUrl: input.normalizedUrl,
     requestContext: {
       bypassRecentScanReuse,
-      californiaPrivacy: scanConfig.californiaPrivacy ?? null,
       localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
       pagesRequested,
       provenance: input.provenance ?? null,

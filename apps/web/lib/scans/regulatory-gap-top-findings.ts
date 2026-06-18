@@ -26,7 +26,6 @@ export type RegulatoryGapTopFindingArea = {
 };
 
 export type RegulatoryGapTopFindingInput = {
-  californiaPrivacyArea?: RegulatoryGapTopFindingArea | null;
   gdprEprivacyArea?: RegulatoryGapTopFindingArea | null;
 };
 
@@ -44,13 +43,6 @@ const GDPR_CONFIG: RegulatoryGapAreaConfig = {
   priorityBase: 140
 };
 
-const CALIFORNIA_CONFIG: RegulatoryGapAreaConfig = {
-  idPrefix: "california_ccpa_cpra",
-  labelPrefix: "CCPA/CPRA",
-  lawLabel: "CCPA/CPRA",
-  priorityBase: 150
-};
-
 const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([
   "pre_consent_cookies_storage",
   "pre_consent_third_party_tracking"
@@ -58,7 +50,6 @@ const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([
 
 export function buildRegulatoryGapTopFindings(input: RegulatoryGapTopFindingInput): CertScoreFinding[] {
   return [
-    ...findingsForArea(input.californiaPrivacyArea, CALIFORNIA_CONFIG),
     ...findingsForArea(input.gdprEprivacyArea, GDPR_CONFIG)
   ];
 }

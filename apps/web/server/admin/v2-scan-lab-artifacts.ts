@@ -4,10 +4,7 @@ import path from "node:path";
 import {
   canonicalEvidenceBundleSchema,
   type CanonicalEvidenceBundle,
-  type ReviewResult,
 } from "@certscore/contracts";
-import { regulatoryReviewToProductionChecklistModel, type V2RegulatoryReviewChecklistModel } from "@certscore/report-adapter";
-import { reviewEvidenceBundle } from "@certscore/review-engine";
 
 export type V2ScanLabProfile = "tiny" | "standard" | "policy" | "consent" | "full";
 
@@ -63,8 +60,38 @@ export type V2ScanLabModel = {
   runtimeSnapshot: V2ScanLabRuntimeSnapshot;
   visualSnapshot: V2ScanLabVisualSnapshot;
   timing: V2ScanLabTimingSummary;
-  regulatoryReviewChecklist: V2RegulatoryReviewChecklistModel;
+  regulatoryReviewChecklist: V2ScanLabRegulatoryChecklistModel;
   diagnostics: string[];
+};
+
+export type V2ScanLabRegulatoryChecklistModel = {
+  gdprEprivacyItems: unknown[];
+};
+
+type V2RegulatoryReviewChecklistModel = {
+  californiaPrivacyItems: any[];
+  gdprEprivacyItems: any[];
+};
+
+type ReviewResult = {
+  findingCandidates: Array<{
+    findingKey: string;
+    sourceEvidenceRefs?: Array<{
+      eventId?: string;
+      eventType?: string;
+      label?: string;
+      url?: string;
+    }>;
+  }>;
+  regulatoryReview?: {
+    areas: Array<{
+      rows: Array<{
+        evidenceRefs?: string[];
+        id: string;
+        sourceFindingKeys: string[];
+      }>;
+    }>;
+  };
 };
 
 export type V2ScanLabBenchmarkSummary = {
@@ -818,12 +845,6 @@ async function buildModel(input: {
   const canonicalEvidenceBundle = selectedMatches.find((match) => match.kind === "canonicalEvidenceBundle")?.parsed;
   const canonicalEvidenceBundleFull = selectedMatches.find((match) => match.kind === "canonicalEvidenceBundle")?.canonicalEvidenceBundle;
   const scanLabTiming = selectedMatches.find((match) => match.kind === "scanLabTiming")?.parsed;
-  const reviewResult = canonicalEvidenceBundleFull ? await reviewEvidenceBundle(canonicalEvidenceBundleFull) : null;
-  const regulatoryReviewChecklist = enrichRegulatoryChecklistTrace({
-    bundle: canonicalEvidenceBundleFull,
-    checklist: regulatoryReviewToProductionChecklistModel(reviewResult?.regulatoryReview),
-    reviewResult,
-  });
   const queueItems = extractQueueItems(evidencePreview ?? reviewerPacket);
   const shadowRows = extractProjectionRows(reportProjection);
   const familySummaries = buildFamilySummaries(queueItems, shadowRows);
@@ -879,7 +900,9 @@ async function buildModel(input: {
       ? canonicalEvidenceBundle.visualSnapshot as V2ScanLabVisualSnapshot
       : unavailableVisualSnapshot(),
     timing,
-    regulatoryReviewChecklist,
+    regulatoryReviewChecklist: {
+      gdprEprivacyItems: [],
+    },
     diagnostics: buildDiagnostics(evidencePreview, reviewerPacket, canonicalEvidenceBundle),
   };
 }

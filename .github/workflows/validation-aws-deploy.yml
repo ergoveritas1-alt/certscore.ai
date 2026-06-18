@@ -5,20 +5,51 @@ on:
     branches:
       - main
     paths:
+      - ".dockerignore"
       - ".github/workflows/validation-aws-deploy.yml"
-      - "apps/web/**"
       - "apps/validation-worker/**"
+      - "apps/web/lib/scans/**"
+      - "apps/web/server/scans/**"
+      - "apps/web/package.json"
       - "infra/aws/validation/**"
       - "packages/db/**"
       - "packages/shared/**"
-      - "packages/ui/**"
       - "packages/validation-shared/**"
+      - "packages/web-bot-auth/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "tsconfig.base.json"
       - "turbo.json"
+      - "!apps/validation-worker/**/*.test.ts"
+      - "!apps/validation-worker/**/*.spec.ts"
+      - "!apps/validation-worker/scripts/**"
+      - "!apps/web/**/*.test.ts"
+      - "!apps/web/**/*.test.tsx"
+      - "!apps/web/**/*.spec.ts"
+      - "!apps/web/**/*.spec.tsx"
   workflow_dispatch:
+    inputs:
+      use_runtime_base:
+        description: "Use the prebuilt validation worker runtime base image."
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+      push_runtime_base:
+        description: "Build and push the validation worker runtime base before the app image."
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      runtime_base_tag:
+        description: "Validation worker runtime base tag to use or publish."
+        required: false
+        default: "validation-worker-runtime-base"
 
 concurrency:
   group: validation-aws-production
@@ -39,10 +70,67 @@ jobs:
       ECS_WORKER_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_WORKER_SERVICE }}
       ECS_WORKER_CONTAINER_NAME: ${{ vars.AWS_VALIDATION_ECS_WORKER_CONTAINER || 'validation-worker' }}
       ECS_WORKER_LOG_GROUP: ${{ vars.AWS_VALIDATION_ECS_WORKER_LOG_GROUP }}
+      VALIDATION_WORKER_USE_RUNTIME_BASE: ${{ github.event.inputs.use_runtime_base || vars.VALIDATION_WORKER_USE_RUNTIME_BASE || 'true' }}
+      VALIDATION_WORKER_PUSH_RUNTIME_BASE: ${{ github.event.inputs.push_runtime_base || vars.VALIDATION_WORKER_PUSH_RUNTIME_BASE || 'false' }}
+      VALIDATION_WORKER_RUNTIME_BASE_TAG: ${{ github.event.inputs.runtime_base_tag || vars.VALIDATION_WORKER_RUNTIME_BASE_TAG || 'validation-worker-runtime-base' }}
+      VALIDATION_WORKER_RUNTIME_BASE_CACHE_TAG: ${{ vars.VALIDATION_WORKER_RUNTIME_BASE_CACHE_TAG || 'validation-worker-runtime-base-cache' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Report deploy-triggering changes
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && -n "${{ github.event.before }}" ]]; then
+            base_ref="${{ github.event.before }}"
+          else
+            base_ref="$(git rev-parse HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+          fi
+          if ! git cat-file -e "${base_ref}^{commit}" 2>/dev/null; then
+            base_ref="$(git rev-parse HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+          fi
+
+          echo "Deploy trigger: validation worker"
+          echo "Base ref: ${base_ref}"
+          echo "Head ref: ${GITHUB_SHA}"
+          echo
+          echo "Changed files considered by this deploy:"
+          git diff --name-only "${base_ref}" "${GITHUB_SHA}" | sed 's/^/  - /'
+          echo
+          echo "Deploy categories:"
+          git diff --name-only "${base_ref}" "${GITHUB_SHA}" | awk '
+            /^apps\/validation-worker\// { worker=1 }
+            /^apps\/validation-worker\/scripts\// { worker_scripts=1 }
+            /^apps\/validation-worker\/.*\.(test|spec)\.ts$/ { worker_tests=1 }
+            /^apps\/web\/lib\/scans\// || /^apps\/web\/server\/scans\// { surfacing=1 }
+            /^apps\/web\/.*\.(test|spec)\.(ts|tsx)$/ { web_tests=1 }
+            /^packages\/(shared|db|validation-shared|web-bot-auth)\// { pkg=1 }
+            /^infra\/aws\/validation\// { infra=1 }
+            /^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|turbo\.json|\.dockerignore)$/ { build=1 }
+            /^\.github\/workflows\/validation-aws-deploy\.yml$/ { workflow=1 }
+            END {
+              if (worker) print "  - validation worker source"
+              if (worker_scripts) print "  - validation worker script-only change"
+              if (worker_tests) print "  - validation worker test-only change"
+              if (surfacing) print "  - web scan/finding surfacing dependency"
+              if (web_tests) print "  - web scan/finding test-only change"
+              if (pkg) print "  - validation runtime package"
+              if (infra) print "  - validation infrastructure"
+              if (build) print "  - build/dependency config"
+              if (workflow) print "  - deploy workflow"
+            }
+          '
+
+          {
+            echo "VALIDATION_DEPLOY_BASE_REF=${base_ref}"
+            if git diff --name-only "${base_ref}" "${GITHUB_SHA}" | grep -Eq '^(apps/validation-worker/Dockerfile|apps/validation-worker/package\.json|pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml|\.npmrc)$'; then
+              echo "VALIDATION_RUNTIME_INPUTS_CHANGED=1"
+            else
+              echo "VALIDATION_RUNTIME_INPUTS_CHANGED=0"
+            fi
+          } >> "${GITHUB_ENV}"
 
       - name: Validate deploy configuration
         run: |
@@ -60,6 +148,9 @@ jobs:
       - name: Login to Amazon ECR
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -81,22 +172,88 @@ jobs:
       - name: Run validation pipeline tests
         run: pnpm test:scan-pipeline
 
-      - name: Build and push validation worker image
+      - name: Resolve validation worker runtime base mode
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
           WORKER_IMAGE="${REGISTRY}/${ECR_WORKER_REPOSITORY}"
-          docker build \
+          WORKER_RUNTIME_BASE_IMAGE="${WORKER_IMAGE}:${VALIDATION_WORKER_RUNTIME_BASE_TAG}"
+          WORKER_RUNTIME_BASE_CACHE="${WORKER_IMAGE}:${VALIDATION_WORKER_RUNTIME_BASE_CACHE_TAG}"
+
+          echo "VALIDATION_WORKER_IMAGE=${WORKER_IMAGE}" >> "${GITHUB_ENV}"
+          echo "VALIDATION_WORKER_RUNTIME_BASE_IMAGE=${WORKER_RUNTIME_BASE_IMAGE}" >> "${GITHUB_ENV}"
+          echo "VALIDATION_WORKER_RUNTIME_BASE_CACHE=${WORKER_RUNTIME_BASE_CACHE}" >> "${GITHUB_ENV}"
+
+          echo "Validation worker runtime base mode:"
+          echo "  use_runtime_base=${VALIDATION_WORKER_USE_RUNTIME_BASE}"
+          echo "  push_runtime_base=${VALIDATION_WORKER_PUSH_RUNTIME_BASE}"
+          echo "  runtime_base_image=${WORKER_RUNTIME_BASE_IMAGE}"
+          echo "  runtime_inputs_changed=${VALIDATION_RUNTIME_INPUTS_CHANGED:-unknown}"
+
+          if [[ "${VALIDATION_WORKER_USE_RUNTIME_BASE}" != "true" && "${VALIDATION_WORKER_USE_RUNTIME_BASE}" != "false" ]]; then
+            echo "VALIDATION_WORKER_USE_RUNTIME_BASE must be true or false."
+            exit 1
+          fi
+          if [[ "${VALIDATION_WORKER_PUSH_RUNTIME_BASE}" != "true" && "${VALIDATION_WORKER_PUSH_RUNTIME_BASE}" != "false" ]]; then
+            echo "VALIDATION_WORKER_PUSH_RUNTIME_BASE must be true or false."
+            exit 1
+          fi
+
+          if [[ "${VALIDATION_WORKER_USE_RUNTIME_BASE}" == "true" && "${VALIDATION_WORKER_PUSH_RUNTIME_BASE}" != "true" ]]; then
+            if ! docker buildx imagetools inspect "${WORKER_RUNTIME_BASE_IMAGE}" >/dev/null 2>&1; then
+              echo "Missing validation worker runtime base image: ${WORKER_RUNTIME_BASE_IMAGE}"
+              echo "Bootstrap it with workflow_dispatch push_runtime_base=true, or set VALIDATION_WORKER_USE_RUNTIME_BASE=false for a one-off full image build."
+              exit 1
+            fi
+          fi
+
+          if [[ "${VALIDATION_RUNTIME_INPUTS_CHANGED:-0}" == "1" && "${VALIDATION_WORKER_USE_RUNTIME_BASE}" == "true" && "${VALIDATION_WORKER_PUSH_RUNTIME_BASE}" != "true" ]]; then
+            echo "Validation worker runtime inputs changed, but push_runtime_base is false."
+            echo "Re-run with workflow_dispatch push_runtime_base=true so Playwright/Chromium/runtime dependencies are rebuilt intentionally."
+            exit 1
+          fi
+
+      - name: Build and push validation worker runtime base
+        if: ${{ env.VALIDATION_WORKER_PUSH_RUNTIME_BASE == 'true' }}
+        run: |
+          docker buildx build \
+            --provenance=false \
+            --sbom=false \
+            --target validation-worker-runtime-base \
+            --cache-from "type=registry,ref=${VALIDATION_WORKER_RUNTIME_BASE_CACHE}" \
+            --cache-to "type=registry,ref=${VALIDATION_WORKER_RUNTIME_BASE_CACHE},mode=max" \
             -f apps/validation-worker/Dockerfile \
+            -t "${VALIDATION_WORKER_RUNTIME_BASE_IMAGE}" \
+            --push \
+            .
+
+      - name: Build and push validation worker image
+        run: |
+          WORKER_IMAGE="${VALIDATION_WORKER_IMAGE}"
+          WORKER_CACHE="${WORKER_IMAGE}:buildcache"
+          runtime_base_args=()
+          if [[ "${VALIDATION_WORKER_USE_RUNTIME_BASE}" == "true" ]]; then
+            runtime_base_args+=(--build-arg "VALIDATION_WORKER_RUNTIME_BASE=${VALIDATION_WORKER_RUNTIME_BASE_IMAGE}")
+            echo "Using prebuilt validation worker runtime base: ${VALIDATION_WORKER_RUNTIME_BASE_IMAGE}"
+          else
+            echo "Building validation worker runtime base inside this image build."
+          fi
+
+          docker buildx build \
+            --provenance=false \
+            --sbom=false \
+            --cache-from "type=registry,ref=${WORKER_CACHE}" \
+            --cache-to "type=registry,ref=${WORKER_CACHE},mode=max" \
+            -f apps/validation-worker/Dockerfile \
+            "${runtime_base_args[@]}" \
             --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
             --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
             --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
             --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
             -t "${WORKER_IMAGE}:${GITHUB_SHA}" \
             -t "${WORKER_IMAGE}:latest" \
+            --push \
             .
-          docker push "${WORKER_IMAGE}:${GITHUB_SHA}"
-          docker push "${WORKER_IMAGE}:latest"
 
       - name: Force ECS deployments
         run: |

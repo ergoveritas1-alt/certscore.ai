@@ -9,13 +9,8 @@ import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary
 import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homepage-reason";
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
-import {
-  summarizeLegacyChangeEvents,
-  type LegacyScanEventRow
-} from "../changes/legacy-change-events";
 import { deriveDisplayCreatedAt } from "./display-state";
 import {
-  loadOrganizationScanLegacyEvents,
   loadOrganizationScanPageData,
   isMissingComplianceChangeEventsTable,
   type OrganizationChangeSummaryRow as ChangeSummaryRow,
@@ -415,16 +410,6 @@ async function loadOrganizationScans(
       throw new Error(`Failed to load organization scans: ${changeSummariesError.message}`);
     }
 
-    const legacyEvents: LegacyScanEventRow[] = await loadOrganizationScanLegacyEvents(organizationId, summaryScanIds);
-
-    for (const [scanId, summary] of summarizeLegacyChangeEvents(legacyEvents)) {
-      changeMap.set(scanId, {
-        addedCount: summary.addedCount,
-        removedCount: summary.removedCount,
-        changedCount: summary.changedCount,
-        trackerDetectedCount: summary.trackerDetectedCount
-      });
-    }
   } else {
     for (const event of changeSummaries) {
       const bucket = changeMap.get(event.scan_id_current) ?? {

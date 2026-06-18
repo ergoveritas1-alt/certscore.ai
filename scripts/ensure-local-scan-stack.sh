@@ -15,8 +15,6 @@ SKIP_SCANNER="${SKIP_SCANNER:-0}"
 SKIP_VALIDATION_WORKER="${SKIP_VALIDATION_WORKER:-0}"
 STATUS_ONLY="${STATUS_ONLY:-0}"
 ALLOW_SUDO_POSTGRES_REPAIR="${ALLOW_SUDO_POSTGRES_REPAIR:-1}"
-CHECK_V2_SCAN_LAB_DEEP="${CHECK_V2_SCAN_LAB_DEEP:-1}"
-V2_SCAN_LAB_PROBE_TIMEOUT_MS="${V2_SCAN_LAB_PROBE_TIMEOUT_MS:-20000}"
 
 mkdir -p "${LOG_DIR}"
 
@@ -645,29 +643,6 @@ ensure_web_final() {
   log "final web app HTTP checks passed"
 }
 
-ensure_v2_scan_lab_deep_probe() {
-  local log_start
-
-  if [[ "${CHECK_V2_SCAN_LAB_DEEP}" != "1" ]]; then
-    log "skipping deep v2 scan-lab probe because CHECK_V2_SCAN_LAB_DEEP=${CHECK_V2_SCAN_LAB_DEEP}"
-    return 0
-  fi
-
-  log_start="$(web_log_size)"
-  log "running deep v2 scan-lab artifact/model probe (timeout: ${V2_SCAN_LAB_PROBE_TIMEOUT_MS}ms)"
-  if ! pnpm v2:scan-lab-artifact-render-smoke -- --url webmd.com --profile full --timeout-ms "${V2_SCAN_LAB_PROBE_TIMEOUT_MS}"; then
-    tail -180 "${LOG_DIR}/web.log" >&2 || true
-    fail "deep v2 scan-lab artifact/model probe failed"
-  fi
-
-  if web_log_has_fatal_errors_since "${log_start}"; then
-    web_log_since "${log_start}" >&2 || true
-    fail "web log recorded fatal errors during deep v2 scan-lab probe"
-  fi
-
-  log "deep v2 scan-lab probe passed"
-}
-
 ensure_validation_worker() {
   local pattern="@website-signal-risk-scanner/validation-worker dev|--env-file=../web/.env.local --enable-source-maps --import tsx --watch ./src/index.ts"
 
@@ -758,13 +733,11 @@ log "running runtime checks"
 pnpm --filter @website-signal-risk-scanner/web check-runtime
 pnpm --filter @website-signal-risk-scanner/validation-worker check-runtime
 ensure_web_final
-ensure_v2_scan_lab_deep_probe
 
 log "scan stack is ready"
 log "web: http://localhost:${WEB_PORT}"
 log "v2 scan lab: http://localhost:${WEB_PORT}/app/admin/v2-scan-lab"
 log "v2 DAG smoke: pnpm v2:scan-lab-localhost-smoke"
-log "v2 scan-lab artifact smoke: pnpm v2:scan-lab-artifact-render-smoke"
 log "v2 DAG WebMD URL: http://localhost:${WEB_PORT}/app/admin/v2-scan-lab?profile=full&url=webmd.com&consentDag=yes"
 log "storage: http://127.0.0.1:${STORAGE_PORT}"
 log "logs: ${LOG_DIR}/web.log, ${LOG_DIR}/validation-worker.log, ${LOG_DIR}/minio.log, ${LOG_DIR}/ws01-scanner.log"
