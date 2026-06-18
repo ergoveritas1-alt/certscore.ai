@@ -41,7 +41,7 @@ function isResidentialGeoQueueEnabled() {
 }
 
 export function getResidentialGeoQueueUnavailableReason(scanFrom: ScanFrom) {
-  if (scanFrom === "default" || isResidentialGeoQueueEnabled()) {
+  if (scanFrom === "default" || scanFrom === "eu_de" || scanFrom === "eu_ie" || scanFrom === "california" || isResidentialGeoQueueEnabled()) {
     return null;
   }
 

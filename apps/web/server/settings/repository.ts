@@ -1,8 +1,10 @@
 "use server";
 
 import { queryOne } from "@website-signal-risk-scanner/db";
+import type { ScanFrom } from "@website-signal-risk-scanner/shared";
 
 export type OrganizationSettingsRow = {
+  default_scan_from: ScanFrom | null;
   default_scan_frequency: string | null;
   fintech_sourcing_search_terms: unknown;
   organization_id: string;
@@ -12,6 +14,7 @@ export type OrganizationSettingsRow = {
 };
 
 const ORGANIZATION_SETTINGS_COLUMNS = [
+  "default_scan_from",
   "default_scan_frequency",
   "fintech_sourcing_search_terms",
   "show_signal_snapshot_review_lenses",
@@ -32,6 +35,7 @@ export async function loadOrganizationSettings(organizationId: string): Promise<
   try {
     return await queryOne<OrganizationSettingsRow>(
       `select organization_id,
+              default_scan_from,
               default_scan_frequency,
               fintech_sourcing_search_terms,
               show_signal_snapshot_review_lenses,
@@ -69,6 +73,7 @@ export async function upsertOrganizationSettings(
        on conflict (organization_id) do update
          set ${updateAssignments.join(", ")}
        returning organization_id,
+                 default_scan_from,
                  default_scan_frequency,
                  fintech_sourcing_search_terms,
                  show_signal_snapshot_review_lenses,

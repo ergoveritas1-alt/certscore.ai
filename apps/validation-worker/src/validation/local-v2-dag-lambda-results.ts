@@ -29,6 +29,7 @@ export type LocalV2DagLambdaResultPollerOptions = {
   enabled: boolean;
   pollMs: number;
   queueUrl?: string;
+  queueUrls?: Array<string | null | undefined>;
   targetEnvironment: LambdaTargetEnvironment;
 };
 
@@ -44,6 +45,19 @@ function parseQueueRegion(queueUrl: string) {
   } catch {
     return "eu-central-1";
   }
+}
+
+function configuredQueueUrls(options: LocalV2DagLambdaResultPollerOptions) {
+  return [
+    ...(options.queueUrls ?? []),
+    options.queueUrl
+  ].reduce<string[]>((queueUrls, queueUrl) => {
+    const normalized = typeof queueUrl === "string" && queueUrl.trim().length > 0 ? queueUrl.trim() : null;
+    if (normalized && !queueUrls.includes(normalized)) {
+      queueUrls.push(normalized);
+    }
+    return queueUrls;
+  }, []);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -240,28 +254,43 @@ async function pollOnce(input: {
 }
 
 export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResultPollerOptions) {
-  if (!options.enabled || !options.queueUrl) {
+  const queueUrls = configuredQueueUrls(options);
+  if (!options.enabled || queueUrls.length === 0) {
     console.info("[validation-worker] v2 DAG Lambda result poller disabled", {
       enabled: options.enabled,
-      queueConfigured: Boolean(options.queueUrl)
+      queueConfigured: queueUrls.length > 0
     });
     return null;
   }
 
-  const client = new SQSClient({ region: parseQueueRegion(options.queueUrl) });
+  const clients = new Map<string, SQSClient>();
   let stopped = false;
 
   async function loop() {
     while (!stopped) {
       try {
-        const result = await pollOnce({
-          client,
-          queueUrl: options.queueUrl as string,
-          targetEnvironment: options.targetEnvironment
-        });
-        if (result.received === 0) {
-          continue;
-        }
+        const results = await Promise.all(queueUrls.map((queueUrl) => {
+          const queueRegion = parseQueueRegion(queueUrl);
+          let client = clients.get(queueRegion);
+          if (!client) {
+            client = new SQSClient({ region: queueRegion });
+            clients.set(queueRegion, client);
+          }
+          return pollOnce({
+            client,
+            queueUrl,
+            targetEnvironment: options.targetEnvironment
+          });
+        }));
+        const result = results.reduce(
+          (total, item) => ({
+            failed: total.failed + item.failed,
+            handled: total.handled + item.handled,
+            received: total.received + item.received
+          }),
+          { failed: 0, handled: 0, received: 0 }
+        );
+        void result;
       } catch (error) {
         console.error("[validation-worker] v2 DAG Lambda result poll failed", {
           error: error instanceof Error ? error.message : String(error)
@@ -273,7 +302,8 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
 
   console.info("[validation-worker] v2 DAG Lambda result poller started", {
     pollMs: options.pollMs,
-    queueRegion: parseQueueRegion(options.queueUrl),
+    queueRegions: queueUrls.map(parseQueueRegion),
+    queueCount: queueUrls.length,
     targetEnvironment: options.targetEnvironment
   });
   void loop();

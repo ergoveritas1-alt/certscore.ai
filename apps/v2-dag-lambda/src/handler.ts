@@ -15,7 +15,9 @@ import {
   runScan
 } from "@certscore/scan-core";
 
-export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1";
+export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
+export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)[number];
+export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1" satisfies LocalV2DagLambdaAwsRegion;
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
 export const LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
@@ -24,7 +26,7 @@ export const POST_CONSENT_FLOW_SCANNING_ENABLED = false;
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
-  awsRegion: typeof LOCAL_V2_DAG_LAMBDA_AWS_REGION;
+  awsRegion: LocalV2DagLambdaAwsRegion;
   callbackCorrelationId: string;
   contractVersion: typeof LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION;
   functionName: string;
@@ -282,13 +284,30 @@ function requireString(record: Record<string, unknown>, field: string) {
   return value;
 }
 
+function parseAwsRegion(value: unknown): LocalV2DagLambdaAwsRegion {
+  if (typeof value === "string" && LOCAL_V2_DAG_LAMBDA_AWS_REGIONS.includes(value as LocalV2DagLambdaAwsRegion)) {
+    return value as LocalV2DagLambdaAwsRegion;
+  }
+  throw new Error("Local v2 DAG Lambda dispatch must target eu-central-1, eu-west-1, or us-west-2.");
+}
+
+function parseQueueRegion(queueUrl: string): LocalV2DagLambdaAwsRegion {
+  try {
+    const hostname = new URL(queueUrl).hostname;
+    const match = hostname.match(/^sqs\.([a-z0-9-]+)\.amazonaws\.com$/);
+    return parseAwsRegion(match?.[1]);
+  } catch {
+    return LOCAL_V2_DAG_LAMBDA_AWS_REGION;
+  }
+}
+
 export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2DagLambdaDispatchPayload {
   const record = asRecord(typeof event === "string" ? JSON.parse(event) : event);
   const coordinatorPlanSummary = parseCoordinatorPlanSummary(record.coordinatorPlanSummary);
   const debugOverrides = parseDebugOverrides(record.debugOverrides);
   const payload: LocalV2DagLambdaDispatchPayload = {
     artifactOnly: true,
-    awsRegion: LOCAL_V2_DAG_LAMBDA_AWS_REGION,
+    awsRegion: parseAwsRegion(record.awsRegion),
     callbackCorrelationId: requireString(record, "callbackCorrelationId"),
     contractVersion: LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
     functionName: requireString(record, "functionName"),
@@ -324,9 +343,6 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   }
   if (record.resultHandoff !== "sqs") {
     throw new Error("Local v2 DAG Lambda dispatch must hand results back through SQS.");
-  }
-  if (record.awsRegion !== LOCAL_V2_DAG_LAMBDA_AWS_REGION) {
-    throw new Error("Local v2 DAG Lambda dispatch must target eu-central-1.");
   }
   if (record.vpcMode !== "none") {
     throw new Error("Local v2 DAG Lambda dispatch must run outside a VPC.");
@@ -594,6 +610,7 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   }));
   const artifactMetadata = await timeLambdaPhase(phaseTimings, "core_artifact_upload", () => uploadArtifactFiles({
     manifestPath,
+    payload,
     pointers,
     projectionPath,
     reviewPath,
@@ -686,12 +703,13 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   );
   const workerBundles = await timeLambdaPhase(phaseTimings, "worker_bundle_download", () =>
     Promise.all(workerResults.map((result) =>
-      readWorkerBundleFromArtifactResult(result, { s3GetClient: options.s3GetClient })
+      readWorkerBundleFromArtifactResult(result, { awsRegion: payload.awsRegion, s3GetClient: options.s3GetClient })
     ))
   );
   await timeLambdaPhase(phaseTimings, "worker_auxiliary_mirror", () =>
     mirrorWorkerArtifactsIntoFinalArtifactRoot({
       artifactRoot,
+      awsRegion: payload.awsRegion,
       s3GetClient: options.s3GetClient,
       workerResults
     })
@@ -759,7 +777,7 @@ async function invokeLocalV2DagLambdaWorkers(input: {
   parentScanId: string;
   workerLanes: LocalV2DagLambdaWorkerLane[];
 }): Promise<LocalV2DagLambdaShardResult[]> {
-  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion });
   return Promise.all(input.workerLanes.map(async (workerLane) => {
     const workerPayload: LocalV2DagLambdaDispatchPayload = {
       ...input.parentPayload,
@@ -857,14 +875,14 @@ function parsePhaseTimings(value: unknown): LocalV2DagLambdaPhaseTiming[] {
 
 async function readWorkerBundleFromArtifactResult(
   result: LocalV2DagLambdaShardResult,
-  options: { s3GetClient?: S3GetClient }
+  options: { awsRegion?: LocalV2DagLambdaAwsRegion; s3GetClient?: S3GetClient }
 ) {
   const uri = result.artifactPointers?.scanArtifactUri;
   if (!uri) {
     throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} did not include a scan artifact pointer.`);
   }
   const { bucket, key } = parseS3Uri(uri);
-  const s3Client = options.s3GetClient ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const s3Client = options.s3GetClient ?? new S3Client({ region: options.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION });
   const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const body = await streamToBuffer(response.Body);
   const expected = result.artifactMetadata?.scanArtifactUri;
@@ -877,10 +895,11 @@ async function readWorkerBundleFromArtifactResult(
 
 export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
   artifactRoot: string;
+  awsRegion?: LocalV2DagLambdaAwsRegion;
   s3GetClient?: S3GetClient;
   workerResults: LocalV2DagLambdaShardResult[];
 }) {
-  const s3Client = input.s3GetClient ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const s3Client = input.s3GetClient ?? new S3Client({ region: input.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION });
   await Promise.all(input.workerResults.map(async (result) => {
     const manifestUri = result.artifactPointers?.manifestUri;
     if (!manifestUri) {
@@ -1347,7 +1366,7 @@ export async function uploadAuxiliaryArtifactFiles(input: {
 
   const bucket = requireArtifactBucket();
   const prefix = artifactKeyPrefix(input.payload).replace(/^\/+|\/+$/g, "");
-  const s3Client = input.s3Client ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const s3Client = input.s3Client ?? new S3Client({ region: input.payload.awsRegion });
   return Promise.all(fileNames.map(async (fileName) => {
     const object = await artifactObjectMetadata(path.join(input.artifactRoot, fileName));
     const key = `${prefix}/auxiliary/${fileName}`;
@@ -1382,13 +1401,14 @@ function auxiliaryContentType(fileName: string) {
 
 export async function uploadArtifactFiles(input: {
   manifestPath: string;
+  payload: LocalV2DagLambdaDispatchPayload;
   pointers: LocalV2DagLambdaArtifactPointers;
   projectionPath: string;
   reviewPath: string;
   s3Client?: S3PutClient;
   scanArtifactPath: string;
 }): Promise<LocalV2DagLambdaArtifactMetadata> {
-  const s3Client = input.s3Client ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const s3Client = input.s3Client ?? new S3Client({ region: input.payload.awsRegion });
   const artifacts = [
     { field: "manifestUri" as const, path: input.manifestPath },
     { field: "scanArtifactUri" as const, path: input.scanArtifactPath },
@@ -1512,7 +1532,7 @@ export async function sendLocalV2DagLambdaResultMessage(input: {
   queueUrl: string;
   sqsClient?: SqsSendClient;
 }) {
-  const sqsClient = input.sqsClient ?? new SQSClient({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const sqsClient = input.sqsClient ?? new SQSClient({ region: parseQueueRegion(input.queueUrl) });
   await sqsClient.send(new SendMessageCommand({
     MessageBody: JSON.stringify(input.message),
     QueueUrl: input.queueUrl

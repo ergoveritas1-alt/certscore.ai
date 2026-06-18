@@ -1,4 +1,5 @@
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
+import type { ScanFrom } from "@website-signal-risk-scanner/shared";
 import type { LocalV2DagScanProfile } from "../scans/local-v2-dag-scan-config";
 import { getPreviewScanAvailability } from "./preview-scan-availability";
 import { createPreviewScanRecord, findOrCreateAnonymousPreviewDomain } from "./preview-scan-repository";
@@ -8,6 +9,7 @@ export async function createPreviewScan(input: {
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagRunViaLambda?: boolean | null;
   normalizedUrl: string;
+  scanFrom?: ScanFrom;
 }) {
   getPreviewScanAvailability();
 
@@ -17,7 +19,8 @@ export async function createPreviewScan(input: {
     hostname: domain.hostname,
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
-    normalizedUrl: domain.normalized_url
+    normalizedUrl: domain.normalized_url,
+    scanFrom: input.scanFrom
   });
 
   await enqueueNanoSignalEnrichmentJob(scan.id).catch((error) => {

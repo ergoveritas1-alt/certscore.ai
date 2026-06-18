@@ -5,6 +5,7 @@ import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getDashboardContext } from "../../../server/auth";
 import { getOrganizationDomains } from "../../../server/domains/get-organization-domains";
 import { withServerTiming } from "../../../server/performance/log-server-timing";
+import { getOrganizationSettings } from "../../../server/settings/get-organization-settings";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -52,7 +53,12 @@ function formatScheduled(value: string | null, dueNow: boolean) {
 
 export default async function DomainsPage() {
   const { organization } = await withServerTiming("app.domains.context", () => getDashboardContext());
-  const domains = await withServerTiming("app.domains.primary_data", () => getOrganizationDomains(organization.id));
+  const [domains, organizationSettings] = await withServerTiming("app.domains.primary_data", () =>
+    Promise.all([
+      getOrganizationDomains(organization.id),
+      getOrganizationSettings(organization.id)
+    ])
+  );
 
   return (
     <div className="space-y-8">
@@ -62,7 +68,7 @@ export default async function DomainsPage() {
             <CardTitle>Add a website</CardTitle>
           </CardHeader>
           <CardContent>
-            <AddDomainForm planCode={organization.plan} />
+            <AddDomainForm defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"} planCode={organization.plan} />
           </CardContent>
         </Card>
       </div>

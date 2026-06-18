@@ -1,12 +1,14 @@
-import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
+import { normalizeScanFrom, type ScanFrom, type SharedScanConfig } from "@website-signal-risk-scanner/shared";
 
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 export const LOCAL_V2_DAG_SCAN_PROFILE = "standard";
 export const LOCAL_V2_DAG_SCAN_PROFILES = ["standard", "tiny"] as const;
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1";
+export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
 
 export type LocalV2DagScanProfile = (typeof LOCAL_V2_DAG_SCAN_PROFILES)[number];
+export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)[number];
 export type LocalV2DagLambdaTargetEnvironment = "local" | "production";
 export type LocalV2DagLambdaDebugOverrides = {
   actionFinalSettleMs?: number;
@@ -20,11 +22,20 @@ export type LocalV2DagLambdaDebugOverrides = {
 
 export type LocalV2DagScanEnv = {
   CERTSCORE_V2_DAG_LAMBDA_ENABLED?: string;
+  CERTSCORE_V2_DAG_LAMBDA_EU_DE_ENABLED?: string;
+  CERTSCORE_V2_DAG_LAMBDA_EU_DE_FUNCTION_NAME?: string;
+  CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL?: string;
+  CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED?: string;
+  CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME?: string;
+  CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL?: string;
   CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME?: string;
   CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE?: string;
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL?: string;
   CERTSCORE_V2_DAG_LAMBDA_SIMULATED?: string;
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV?: string;
+  CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED?: string;
+  CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME?: string;
+  CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL?: string;
   NEXT_PUBLIC_APP_URL?: string;
   NODE_ENV?: string;
 };
@@ -62,7 +73,7 @@ export function shouldUseLocalV2DagSimulatedLambda(env: LocalV2DagScanEnv = proc
   return env.CERTSCORE_V2_DAG_LAMBDA_SIMULATED === "true" && shouldUseLocalV2DagScanTool(env);
 }
 
-function getSqsQueueRegion(queueUrl: string | null) {
+export function getSqsQueueRegion(queueUrl: string | null) {
   if (!queueUrl) {
     return null;
   }
@@ -70,13 +81,52 @@ function getSqsQueueRegion(queueUrl: string | null) {
   try {
     const hostname = new URL(queueUrl).hostname;
     const match = hostname.match(/^sqs\.([a-z0-9-]+)\.amazonaws\.com$/);
-    return match?.[1] ?? null;
+    const region = match?.[1] ?? null;
+    return isLocalV2DagLambdaAwsRegion(region) ? region : region;
   } catch {
     return null;
   }
 }
 
-export function normalizeLocalV2DagRunViaLambda(value: unknown, env: LocalV2DagScanEnv = process.env) {
+export function isLocalV2DagLambdaAwsRegion(value: unknown): value is LocalV2DagLambdaAwsRegion {
+  return typeof value === "string" && LOCAL_V2_DAG_LAMBDA_AWS_REGIONS.includes(value as LocalV2DagLambdaAwsRegion);
+}
+
+export function getLocalV2DagLambdaAwsRegionForScanFrom(value: unknown): LocalV2DagLambdaAwsRegion {
+  const scanFrom = normalizeScanFrom(value);
+  if (scanFrom === "eu_ie") {
+    return "eu-west-1";
+  }
+  if (scanFrom === "california") {
+    return "us-west-2";
+  }
+  return "eu-central-1";
+}
+
+function lambdaRegionEnv(input: { env: LocalV2DagScanEnv; scanFrom?: ScanFrom }) {
+  const scanFrom = normalizeScanFrom(input.scanFrom);
+  if (scanFrom === "eu_ie") {
+    return {
+      enabled: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED ?? input.env.CERTSCORE_V2_DAG_LAMBDA_ENABLED,
+      functionName: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME ?? input.env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME,
+      resultQueueUrl: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL ?? input.env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL
+    };
+  }
+  if (scanFrom === "california") {
+    return {
+      enabled: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED,
+      functionName: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME,
+      resultQueueUrl: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL
+    };
+  }
+  return {
+    enabled: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_DE_ENABLED ?? input.env.CERTSCORE_V2_DAG_LAMBDA_ENABLED,
+    functionName: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_DE_FUNCTION_NAME ?? input.env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME,
+    resultQueueUrl: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL ?? input.env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL
+  };
+}
+
+export function normalizeLocalV2DagRunViaLambda(value: unknown, env: LocalV2DagScanEnv = process.env, scanFrom?: ScanFrom) {
   if (value === true || value === "true" || value === "1" || value === "on") {
     return true;
   }
@@ -84,16 +134,17 @@ export function normalizeLocalV2DagRunViaLambda(value: unknown, env: LocalV2DagS
     return false;
   }
 
-  const resultQueueUrl = compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL);
+  const regionEnv = lambdaRegionEnv({ env, scanFrom });
+  const resultQueueUrl = compactEnvValue(regionEnv.resultQueueUrl);
   if (shouldUseLocalV2DagSimulatedLambda(env)) {
-    return env.CERTSCORE_V2_DAG_LAMBDA_ENABLED === "true" &&
-      Boolean(compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME));
+    return regionEnv.enabled === "true" &&
+      Boolean(compactEnvValue(regionEnv.functionName));
   }
 
-  return env.CERTSCORE_V2_DAG_LAMBDA_ENABLED === "true" &&
-    Boolean(compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME)) &&
+  return regionEnv.enabled === "true" &&
+    Boolean(compactEnvValue(regionEnv.functionName)) &&
     Boolean(resultQueueUrl) &&
-    getSqsQueueRegion(resultQueueUrl) === LOCAL_V2_DAG_LAMBDA_AWS_REGION;
+    getSqsQueueRegion(resultQueueUrl) === getLocalV2DagLambdaAwsRegionForScanFrom(scanFrom);
 }
 
 export function getLocalV2DagLambdaTargetEnvironment(
@@ -102,12 +153,16 @@ export function getLocalV2DagLambdaTargetEnvironment(
   return env.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV === "production" ? "production" : "local";
 }
 
-export function getLocalV2DagLambdaConfiguration(env: LocalV2DagScanEnv = process.env) {
+export function getLocalV2DagLambdaConfiguration(env: LocalV2DagScanEnv = process.env, scanFrom?: ScanFrom, options: { forceSimulatedLocalLambda?: boolean } = {}) {
   const missing: string[] = [];
-  const enabled = env.CERTSCORE_V2_DAG_LAMBDA_ENABLED === "true";
-  const functionName = compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME);
-  const resultQueueUrl = compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL);
-  const simulatedLocalLambda = shouldUseLocalV2DagSimulatedLambda(env);
+  const region = getLocalV2DagLambdaAwsRegionForScanFrom(scanFrom);
+  const regionEnv = lambdaRegionEnv({ env, scanFrom });
+  const simulatedLocalLambda = options.forceSimulatedLocalLambda || shouldUseLocalV2DagSimulatedLambda(env);
+  const enabled = simulatedLocalLambda ? true : regionEnv.enabled === "true";
+  const functionName = simulatedLocalLambda
+    ? compactEnvValue(regionEnv.functionName) ?? "local-v2-dag-lambda-simulator"
+    : compactEnvValue(regionEnv.functionName);
+  const resultQueueUrl = simulatedLocalLambda ? null : compactEnvValue(regionEnv.resultQueueUrl);
 
   if (!enabled) {
     missing.push("CERTSCORE_V2_DAG_LAMBDA_ENABLED=true");
@@ -117,12 +172,12 @@ export function getLocalV2DagLambdaConfiguration(env: LocalV2DagScanEnv = proces
   }
   if (!resultQueueUrl && !simulatedLocalLambda) {
     missing.push("CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL");
-  } else if (resultQueueUrl && !simulatedLocalLambda && getSqsQueueRegion(resultQueueUrl) !== LOCAL_V2_DAG_LAMBDA_AWS_REGION) {
-    missing.push(`CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL region ${LOCAL_V2_DAG_LAMBDA_AWS_REGION}`);
+  } else if (resultQueueUrl && !simulatedLocalLambda && getSqsQueueRegion(resultQueueUrl) !== region) {
+    missing.push(`CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL region ${region}`);
   }
 
   return {
-    awsRegion: LOCAL_V2_DAG_LAMBDA_AWS_REGION,
+    awsRegion: region,
     contractVersion: LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
     enabled,
     functionName,
@@ -135,8 +190,8 @@ export function getLocalV2DagLambdaConfiguration(env: LocalV2DagScanEnv = proces
   };
 }
 
-export function assertLocalV2DagLambdaConfigured(env: LocalV2DagScanEnv = process.env) {
-  const config = getLocalV2DagLambdaConfiguration(env);
+export function assertLocalV2DagLambdaConfigured(env: LocalV2DagScanEnv = process.env, scanFrom?: ScanFrom, options: { forceSimulatedLocalLambda?: boolean } = {}) {
+  const config = getLocalV2DagLambdaConfiguration(env, scanFrom, options);
   if (config.missing.length > 0) {
     throw new Error(`Lambda v2 DAG scanning is not configured: ${config.missing.join(", ")}`);
   }
@@ -151,14 +206,22 @@ export function applyLocalV2DagScanConfig(
     lambdaDebugOverrides?: LocalV2DagLambdaDebugOverrides | null;
     profile?: LocalV2DagScanProfile | null;
     runViaLambda?: boolean | null;
+    scanFrom?: ScanFrom | null;
   } = {}
 ): SharedScanConfig {
+  const shouldForceSimulatedLocalLambda = options.runViaLambda === false && shouldUseLocalV2DagScanTool(env);
+
   if (!shouldUseLocalV2DagScanTool(env) && options.runViaLambda !== true) {
     return config;
   }
 
   const profile = normalizeLocalV2DagScanProfile(options.profile);
-  const lambdaConfig = options.runViaLambda ? assertLocalV2DagLambdaConfigured(env) : null;
+  const lambdaConfig =
+    options.runViaLambda || shouldForceSimulatedLocalLambda
+      ? assertLocalV2DagLambdaConfigured(env, options.scanFrom ?? undefined, {
+          forceSimulatedLocalLambda: shouldForceSimulatedLocalLambda
+        })
+      : null;
 
   return {
     ...config,
@@ -195,6 +258,7 @@ export function applyLocalV2DagScanConfig(
               resultHandoff: "sqs",
               resultQueueUrl: lambdaConfig.resultQueueUrl,
               scannerRuntime: "certscore-v2-dag-parallel-path",
+              simulatedLocalLambda: lambdaConfig.simulatedLocalLambda,
               targetEnvironment: lambdaConfig.targetEnvironment,
               vpcMode: lambdaConfig.vpcMode
             }

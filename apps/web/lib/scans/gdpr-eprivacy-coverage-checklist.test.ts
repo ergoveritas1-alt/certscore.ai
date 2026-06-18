@@ -120,6 +120,7 @@ test("deriveGdprEprivacyCoverageChecklist omits deferred low-confidence producti
   const rowIds = new Set(items.map((item) => item.id));
 
   assert.equal(rowIds.has("marketing_consent_checkbox_observed"), false);
+  assert.equal(rowIds.has("collection_surface_observed"), false);
   assert.equal(rowIds.has("privacy_notice_near_collection_surface"), false);
   assert.equal(rowIds.has("newsletter_marketing_signup_observed"), false);
   assert.equal(rowIds.has("embedded_content_disclosure_alignment"), false);

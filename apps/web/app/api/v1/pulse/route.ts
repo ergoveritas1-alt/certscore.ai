@@ -213,8 +213,7 @@ function parseGptPulseWaitSeconds(url: URL) {
 }
 
 function getRequestedScanFrom(url: URL) {
-  const scanFrom = normalizeScanFrom(url.searchParams.get("scanFrom") ?? url.searchParams.get("geo"));
-  return (scanFrom === "california" ? "default" : scanFrom) satisfies ScanFrom;
+  return normalizeScanFrom(url.searchParams.get("scanFrom") ?? url.searchParams.get("geo")) satisfies ScanFrom;
 }
 
 function requiredScopesForPulseRequest(input: { hasUrl: boolean; hasScanId: boolean; hasJobId: boolean }): IntegrationApiKeyScope[] {

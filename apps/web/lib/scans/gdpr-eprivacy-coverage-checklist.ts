@@ -220,15 +220,6 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
-    id: "collection_surface_observed",
-    label: "Collection surface observed",
-    explanation: "Whether a form, input, newsletter, account, checkout, contact, or other collection surface was retained in public-web evidence.",
-    findingIds: ["sensitive_collection_surface_observed"],
-    defaultFindingStatus: "Observed",
-    notObservedText: "No public-web collection surface finding was surfaced in this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
     id: "privacy_notice_availability",
     label: "Privacy notice availability",
     explanation: "Whether a reachable privacy notice or privacy policy surface was retained for the scanned site.",

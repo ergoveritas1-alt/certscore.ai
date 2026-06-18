@@ -12,6 +12,7 @@ import {
 } from "../../server/plans/get-plan-limits";
 import { withServerTiming } from "../../server/performance/log-server-timing";
 import { getOrganizationScans } from "../../server/scans/get-organization-scans";
+import { getOrganizationSettings } from "../../server/settings/get-organization-settings";
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -30,11 +31,12 @@ function formatDate(value: string | null) {
 export default async function DashboardPage() {
   const { organization, profile, user } = await withServerTiming("app.dashboard.context", () => getDashboardContext());
   const adminRescanCooldownMs = isPlatformAdminEmail(user.email) ? getAdminScanThrottleMs() : undefined;
-  const [basePlanLimits, manualRescanLimitOverride, recentScans] = await withServerTiming("app.dashboard.primary_data", () =>
+  const [basePlanLimits, manualRescanLimitOverride, recentScans, organizationSettings] = await withServerTiming("app.dashboard.primary_data", () =>
     Promise.all([
       getPlanLimits(organization.plan),
       getOrganizationManualRescanLimitOverride(organization.id),
-      getOrganizationScans(organization.id, 100)
+      getOrganizationScans(organization.id, 100),
+      getOrganizationSettings(organization.id)
     ])
   );
   const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
@@ -85,11 +87,16 @@ export default async function DashboardPage() {
           <CardTitle>Add domain(s) to scan</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 pt-0 pb-3">
-          <AddDomainForm planCode={organization.plan} />
+          <AddDomainForm defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"} planCode={organization.plan} />
         </CardContent>
       </Card>
 
-      <OverviewScanHistoryCard planCode={organization.plan} rescanCooldownMs={adminRescanCooldownMs} scans={recentScans} />
+      <OverviewScanHistoryCard
+        defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
+        planCode={organization.plan}
+        rescanCooldownMs={adminRescanCooldownMs}
+        scans={recentScans}
+      />
     </div>
   );
 }

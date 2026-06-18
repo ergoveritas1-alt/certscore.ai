@@ -10,16 +10,20 @@ async function readRepoFile(relativePath: string) {
   return readFile(path.join(repoRoot, relativePath), "utf8");
 }
 
-test("dev image scripts refuse non-eu-central-1 AWS regions", async () => {
+test("dev image scripts allow the approved Lambda scan regions", async () => {
   const buildScript = await readRepoFile("scripts/local-v2-dag-lambda/build-push-dev-image.sh");
   const setupScript = await readRepoFile("scripts/local-v2-dag-lambda/setup-dev-aws-image.sh");
 
   assert.match(buildScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
-  assert.match(buildScript, /Refusing to build\/push local v2 DAG Lambda image outside eu-central-1/);
+  assert.match(buildScript, /eu-central-1\|eu-west-1\|us-west-2/);
+  assert.match(buildScript, /Unsupported local v2 DAG Lambda image region/);
   assert.match(buildScript, /--provenance=false/);
   assert.match(buildScript, /--sbom=false/);
   assert.match(setupScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
-  assert.match(setupScript, /Refusing to create local v2 DAG Lambda resources outside eu-central-1/);
+  assert.match(setupScript, /eu-central-1\) location_env_prefix="EU_DE"/);
+  assert.match(setupScript, /eu-west-1\) location_env_prefix="EU_IE"/);
+  assert.match(setupScript, /us-west-2\) location_env_prefix="US_WEST"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_\$\{location_env_prefix\}_RESULT_QUEUE_URL/);
 });
 
 test("dev image setup uses local names and refuses non-dev resource names", async () => {

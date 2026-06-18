@@ -48,21 +48,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks policy-dependent rows not t
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained empty collection inventory as not observed", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      collectionSurfaceSummary: {
-        collectionSurfaceCount: 0,
-        collectionSurfacesObserved: false
-      }
-    }
-  });
-
-  assert.equal(outcomes.collection_surface_observed?.status, "Not observed");
-  assert.equal(outcomes.collection_surface_observed?.criticalEvidence.retainedEvidence.collectionSurfaceCount, 0);
-});
-
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes structured Article 13 disclosure signals", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

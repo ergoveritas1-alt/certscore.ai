@@ -121,6 +121,64 @@ test("getLocalV2DagReportInput ignores Lambda events that would enable productio
   assert.equal(input?.scanArtifactUri, null);
 });
 
+test("shouldAttemptLocalV2DagLambdaResultRefresh gates stale in-flight Lambda scans", async () => {
+  const { shouldAttemptLocalV2DagLambdaResultRefresh } = await loadLocalV2DagReport();
+  const nowMs = Date.parse("2026-06-17T13:14:20.000Z");
+  const baseScan = makeScanRecord().scan;
+
+  assert.equal(
+    shouldAttemptLocalV2DagLambdaResultRefresh(makeScanRecord({
+      scan: {
+        ...baseScan,
+        completedAt: null,
+        startedAt: "2026-06-17T13:13:50.000Z",
+        status: "running"
+      }
+    }), nowMs),
+    true
+  );
+
+  assert.equal(
+    shouldAttemptLocalV2DagLambdaResultRefresh(makeScanRecord({
+      scan: {
+        ...baseScan,
+        completedAt: null,
+        startedAt: "2026-06-17T13:14:05.000Z",
+        status: "running"
+      }
+    }), nowMs),
+    false
+  );
+
+  assert.equal(shouldAttemptLocalV2DagLambdaResultRefresh(makeScanRecord(), nowMs), false);
+  assert.equal(
+    shouldAttemptLocalV2DagLambdaResultRefresh(makeScanRecord({
+      events: [
+        {
+          createdAt: "2026-06-17T13:14:02.000Z",
+          eventType: "v2_lambda_result.received",
+          id: "event-1",
+          message: "Local v2 DAG Lambda returned a completed artifact-only result.",
+          metadataJson: {
+            artifactOnly: true,
+            artifactPointers: {
+              scanArtifactUri: "s3://bucket/key.json"
+            },
+            processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+            productionFindingIntegration: false
+          }
+        }
+      ],
+      scan: {
+        ...baseScan,
+        completedAt: null,
+        status: "running"
+      }
+    }), nowMs),
+    false
+  );
+});
+
 test("dedupePolicySurfaces collapses equivalent privacy URLs before report projection", async () => {
   const { dedupePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([

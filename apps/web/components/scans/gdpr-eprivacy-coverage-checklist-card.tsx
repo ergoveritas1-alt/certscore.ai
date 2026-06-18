@@ -85,12 +85,6 @@ const REPORT_ROW_GROUPS = [
     ]
   },
   {
-    title: "Collection Surfaces",
-    rowIds: [
-      "collection_surface_observed"
-    ]
-  },
-  {
     title: "GDPR Transparency",
     rowIds: [
       "privacy_notice_availability",
@@ -133,8 +127,7 @@ const POSITIVE_WHEN_OBSERVED_ROW_IDS = new Set([
 ]);
 
 const NEUTRAL_WHEN_OBSERVED_ROW_IDS = new Set([
-  "cmp_framework_signal_observed",
-  "collection_surface_observed"
+  "cmp_framework_signal_observed"
 ]);
 
 const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([

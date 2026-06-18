@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { RescanDomainForm } from "./rescan-domain-form";
+import type { ServerScanFrom } from "./scan-from-select";
 
 type ScanViewActionsProps = {
   alternateHref?: string | null;
   alternateLabel?: string | null;
   canRescan: boolean;
   cooldownMessage?: string | null;
+  defaultScanFrom?: ServerScanFrom;
   domainId?: string | null;
   rescanDisabled?: boolean;
 };
@@ -19,6 +21,7 @@ export function ScanViewActions({
   alternateLabel,
   canRescan,
   cooldownMessage = null,
+  defaultScanFrom = "eu_ie",
   domainId = null,
   rescanDisabled = false
 }: ScanViewActionsProps) {
@@ -28,6 +31,7 @@ export function ScanViewActions({
         <RescanDomainForm
           compact
           cooldownMessage={cooldownMessage}
+          defaultScanFrom={defaultScanFrom}
           disabled={rescanDisabled}
           domainId={domainId}
           showLabel

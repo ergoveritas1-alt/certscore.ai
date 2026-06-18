@@ -4,18 +4,21 @@ import { formatScanFromLabel, getScanFromDefinition, normalizeScanFrom } from ".
 
 test("normalizes scan-from values", () => {
   assert.equal(normalizeScanFrom("default"), "default");
+  assert.equal(normalizeScanFrom("eu_de"), "eu_de");
+  assert.equal(normalizeScanFrom("eu_ie"), "eu_ie");
   assert.equal(normalizeScanFrom("california"), "california");
-  assert.equal(normalizeScanFrom("eu"), "eu");
-  assert.equal(normalizeScanFrom("uk"), "uk");
-  assert.equal(normalizeScanFrom("unknown"), "default");
-  assert.equal(normalizeScanFrom(null), "default");
+  assert.equal(normalizeScanFrom("eu"), "eu_de");
+  assert.equal(normalizeScanFrom("uk"), "eu_ie");
+  assert.equal(normalizeScanFrom("unknown"), "eu_ie");
+  assert.equal(normalizeScanFrom(null), "eu_ie");
 });
 
 test("formats scan-from labels and geo targets", () => {
   assert.equal(formatScanFromLabel("california"), "California");
-  assert.deepEqual(getScanFromDefinition("eu").requestedGeo, {
+  assert.equal(formatScanFromLabel("eu_ie"), "EU-IR");
+  assert.deepEqual(getScanFromDefinition("eu_de").requestedGeo, {
     countryCode: "DE",
-    provider: "decodo-residential",
-    regionCode: null
+    provider: "aws-default",
+    regionCode: "eu-central-1"
   });
 });

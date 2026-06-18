@@ -17,7 +17,8 @@ import { absoluteUrl } from "../../../../lib/seo";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
 import {
   getLocalV2DagReportInput,
-  materializeLocalV2DagScanDetail
+  materializeLocalV2DagScanDetail,
+  tryRefreshLocalV2DagLambdaResult
 } from "../../../../server/scans/local-v2-dag-report";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 
@@ -92,10 +93,14 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const { scanId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const recentScanReused = resolvedSearchParams.recentScanReused === "1";
-  const scanRecord = await getAnonymousScanById(scanId);
+  let scanRecord = await getAnonymousScanById(scanId);
 
   if (!scanRecord) {
     notFound();
+  }
+
+  if (await tryRefreshLocalV2DagLambdaResult(scanRecord)) {
+    scanRecord = await getAnonymousScanById(scanId) ?? scanRecord;
   }
 
   const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);

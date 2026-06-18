@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import { AdminSettingsCard } from "../../../components/settings/admin-settings-card";
 import { ApiKeysCard } from "../../../components/settings/api-keys-card";
 import { EmailVerificationCard } from "../../../components/settings/email-verification-card";
+import { ScanLocationSettingsCard } from "../../../components/settings/scan-location-settings-card";
 import { SCAN_ACCESS, formatScanThrottleIntervalLabel } from "../../../lib/scan-access";
 import { isPlatformAdminEmail } from "../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../server/auth";
@@ -73,7 +74,7 @@ export default async function SettingsPage() {
     isPlatformAdmin ? getSystemHealth() : Promise.resolve(null),
     userProviders.includes("password") ? getBetterAuthVerificationStatus(user.betterAuthUserId ?? user.id) : Promise.resolve(null),
     isPlatformAdmin ? listIntegrationApiKeysForOrganization(organization.id) : Promise.resolve([]),
-    isPlatformAdmin ? getOrganizationSettings(organization.id) : Promise.resolve(null)
+    getOrganizationSettings(organization.id)
   ]);
   const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
   const scanUsage = await getDashboardScanUsage({
@@ -139,6 +140,18 @@ export default async function SettingsPage() {
               .
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-slate-200 bg-white">
+        <CardHeader>
+          <CardTitle>Default scan location</CardTitle>
+          <p className="text-sm text-slate-600">
+            Choose the Lambda region preselected when logged-in users start a scan.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <ScanLocationSettingsCard defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"} />
         </CardContent>
       </Card>
 

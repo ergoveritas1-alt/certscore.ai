@@ -16,6 +16,7 @@ type DomainScanFormProps = {
   allowLocalExtensionScan?: boolean;
   buttonLabel?: string;
   compact?: boolean;
+  defaultScanFrom?: ServerScanFrom;
   helperText?: string;
   inputLabel?: string;
   inputPlaceholder?: string;
@@ -255,6 +256,7 @@ export function DomainScanForm({
   allowLocalExtensionScan = false,
   buttonLabel = "Start full scan",
   compact = false,
+  defaultScanFrom = "eu_ie",
   emptySubmitDomain = "",
   helperText,
   inputLabel = "Website domain",
@@ -272,17 +274,17 @@ export function DomainScanForm({
   const [freshRescan, setFreshRescan] = useState(true);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
-  const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
+  const [scanFrom, setScanFrom] = useState<ScanFrom>(defaultScanFrom);
   const isSubmittingRef = useRef(false);
   const scanProgress = useScanProgressClock(isSubmitting);
 
   useEffect(() => {
     if (!allowLocalExtensionScan && scanFrom === "local_extension") {
-      setScanFrom("default");
+      setScanFrom(defaultScanFrom);
       setLocalExtensionStatus(null);
       setShowExtensionInstructions(false);
     }
-  }, [allowLocalExtensionScan, scanFrom]);
+  }, [allowLocalExtensionScan, defaultScanFrom, scanFrom]);
 
   function resetValidationState() {
     setErrorMessage(null);

@@ -1,4 +1,4 @@
-export const SCAN_FROM_VALUES = ["default", "california", "eu", "uk"] as const;
+export const SCAN_FROM_VALUES = ["default", "eu_de", "eu_ie", "california"] as const;
 
 export type ScanFrom = (typeof SCAN_FROM_VALUES)[number];
 
@@ -15,12 +15,12 @@ export type ScanFromDefinition = {
   value: ScanFrom;
 };
 
-export const DEFAULT_SCAN_FROM = "default" satisfies ScanFrom;
+export const DEFAULT_SCAN_FROM = "eu_ie" satisfies ScanFrom;
 
 export const SCAN_FROM_DEFINITIONS = {
   default: {
-    description: "Default CertScore scan",
-    label: "Cloud",
+    description: "Legacy default CertScore scan",
+    label: "Default",
     requestedGeo: {
       countryCode: null,
       provider: "aws-default",
@@ -28,39 +28,45 @@ export const SCAN_FROM_DEFINITIONS = {
     },
     value: "default"
   },
+  eu_de: {
+    description: "Frankfurt Lambda scanner",
+    label: "EU-DE",
+    requestedGeo: {
+      countryCode: "DE",
+      provider: "aws-default",
+      regionCode: "eu-central-1"
+    },
+    value: "eu_de"
+  },
+  eu_ie: {
+    description: "Dublin Lambda scanner",
+    label: "EU-IR",
+    requestedGeo: {
+      countryCode: "IE",
+      provider: "aws-default",
+      regionCode: "eu-west-1"
+    },
+    value: "eu_ie"
+  },
   california: {
-    description: "Residential exit",
+    description: "US-West Lambda scanner",
     label: "California",
     requestedGeo: {
       countryCode: "US",
-      provider: "decodo-residential",
-      regionCode: "CA"
+      provider: "aws-default",
+      regionCode: "us-west-2"
     },
     value: "california"
-  },
-  eu: {
-    description: "EU non-UK residential exit",
-    label: "EU",
-    requestedGeo: {
-      countryCode: "DE",
-      provider: "decodo-residential",
-      regionCode: null
-    },
-    value: "eu"
-  },
-  uk: {
-    description: "United Kingdom residential exit",
-    label: "UK",
-    requestedGeo: {
-      countryCode: "GB",
-      provider: "decodo-residential",
-      regionCode: null
-    },
-    value: "uk"
   }
 } as const satisfies Record<ScanFrom, ScanFromDefinition>;
 
 export function normalizeScanFrom(value: unknown): ScanFrom {
+  if (value === "eu") {
+    return "eu_de";
+  }
+  if (value === "uk") {
+    return "eu_ie";
+  }
   return typeof value === "string" && SCAN_FROM_VALUES.includes(value as ScanFrom)
     ? (value as ScanFrom)
     : DEFAULT_SCAN_FROM;

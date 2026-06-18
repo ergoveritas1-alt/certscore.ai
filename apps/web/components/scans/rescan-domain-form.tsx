@@ -4,7 +4,7 @@ import { Button } from "@website-signal-risk-scanner/ui";
 import { useActionState, useState } from "react";
 import { rescanDomainAction } from "../../server/scans/rescan-domain";
 import type { CreateFullScanActionState } from "../../server/scans/create-full-scan";
-import { ScanFromSelect } from "./scan-from-select";
+import { ScanFromSelect, type ServerScanFrom } from "./scan-from-select";
 import {
   ScanSubmitProgressBar,
   normalizeLocalV2ScanProfile,
@@ -20,11 +20,12 @@ type RescanDomainFormProps = {
   cooldownMessage?: string | null;
   disabled?: boolean;
   domainId: string;
+  defaultScanFrom?: ServerScanFrom;
   compact?: boolean;
   showLabel?: boolean;
 };
 
-export function RescanDomainForm({ cooldownMessage = null, compact = false, disabled = false, domainId, showLabel = false }: RescanDomainFormProps) {
+export function RescanDomainForm({ cooldownMessage = null, compact = false, defaultScanFrom = "eu_ie", disabled = false, domainId, showLabel = false }: RescanDomainFormProps) {
   const [state, action, isPending] = useActionState(rescanDomainAction, initialState);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const scanProgress = useScanProgressClock(isPending);
@@ -43,6 +44,7 @@ export function RescanDomainForm({ cooldownMessage = null, compact = false, disa
           includeScanFromOptions={false}
           localV2ScanProfileValue={localV2ScanProfile}
           onLocalV2ScanProfileChange={(value) => setLocalV2ScanProfile(normalizeLocalV2ScanProfile(value))}
+          value={defaultScanFrom}
           variant="icon"
         />
         <Button

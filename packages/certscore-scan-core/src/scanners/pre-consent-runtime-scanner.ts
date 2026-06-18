@@ -300,15 +300,66 @@ export async function preConsentRuntimeScanner(
       `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation, network-idle, and settle windows.`,
     );
 
+    const consentUiWaitTimeoutMs = fastWait ? 900 : 3_500;
+    const consentUiCaptureTimeoutMs = fastWait ? 1_800 : 5_500;
     const [storageSnapshot, scripts, frames, apiAccesses, initialConsentObservation, collectionSurfaceObservations, initialDomText] =
       await recordTiming(timingBreakdown, "page evidence capture", "Storage, scripts, iframes, browser API access, collection surfaces, consent UI, and DOM text capture.", () => Promise.all([
-        captureStorageSnapshot(page, input.scanStartedAtMs, input.normalizedUrl),
-        captureScriptEvents(page, input.scanStartedAtMs, firstPartyHostname),
-        captureIframeEvents(page, input.scanStartedAtMs, firstPartyHostname),
-        captureBrowserApiAccessEvents(page, input.scanStartedAtMs, input.normalizedUrl),
-        detectConsentUi(page, input.scanStartedAtMs),
-        captureCollectionSurfaceObservations(page, input.scanStartedAtMs, input.normalizedUrl),
-        page.locator("body").innerText({ timeout: 2_000 }).catch(() => ""),
+        recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: storage snapshot",
+          "Local/session storage key inventory before consent.",
+          1_500,
+          () => captureStorageSnapshot(page, input.scanStartedAtMs, input.normalizedUrl),
+          () => emptyStorageSnapshot(input.scanStartedAtMs, input.normalizedUrl),
+        ),
+        recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: script inventory",
+          "DOM script element inventory before consent.",
+          1_500,
+          () => captureScriptEvents(page, input.scanStartedAtMs, firstPartyHostname),
+          () => [],
+        ),
+        recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: iframe inventory",
+          "DOM iframe inventory before consent.",
+          1_500,
+          () => captureIframeEvents(page, input.scanStartedAtMs, firstPartyHostname),
+          () => [],
+        ),
+        recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: browser API access",
+          "Captured browser API access probes for entropy/fingerprinting review.",
+          1_500,
+          () => captureBrowserApiAccessEvents(page, input.scanStartedAtMs, input.normalizedUrl),
+          () => [],
+        ),
+        recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: consent UI",
+          "First-layer consent surface/control text and affordance inventory.",
+          consentUiCaptureTimeoutMs,
+          () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs),
+          () => emptyConsentUiObservation(input.scanStartedAtMs),
+        ),
+        recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: collection surfaces",
+          "Bounded public form/input collection surface inventory.",
+          1_500,
+          () => captureCollectionSurfaceObservations(page, input.scanStartedAtMs, input.normalizedUrl),
+          () => [],
+        ),
+        recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: body text",
+          "Bounded visible body text capture for first-layer consent and policy hints.",
+          2_500,
+          () => page.locator("body").innerText({ timeout: 2_000 }).catch(() => ""),
+          () => "",
+        ),
       ]));
     let consentObservation = initialConsentObservation;
     let domText = initialDomText;
@@ -704,6 +755,46 @@ async function recordTiming<T>(
   }
 }
 
+async function recordBoundedTiming<T>(
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
+  label: string,
+  detail: string,
+  timeoutMs: number,
+  run: () => Promise<T>,
+  fallback: () => T,
+): Promise<T> {
+  const startedAtMs = Date.now();
+  let outcome = "completed";
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      run(),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+          outcome = "timed_out";
+          resolve(fallback());
+        }, timeoutMs);
+      }),
+    ]);
+  } catch {
+    outcome = "failed";
+    return fallback();
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    const outcomeDetail =
+      outcome === "completed"
+        ? detail
+        : `${detail} (${outcome === "timed_out" ? `timed out after ${timeoutMs}ms` : "failed; fallback evidence retained"}).`;
+    timingBreakdown.push({
+      label,
+      detail: outcomeDetail,
+      durationMs: Date.now() - startedAtMs,
+    });
+  }
+}
+
 function recordInstantTiming(
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
   label: string,
@@ -722,6 +813,39 @@ function errorMessage(error: unknown): string {
 
 function isContextClosedError(error: unknown): boolean {
   return /target page, context or browser has been closed|browser has been closed|context has been closed/i.test(errorMessage(error));
+}
+
+function emptyStorageSnapshot(scanStartedAtMs: number, url: string): StorageSnapshot {
+  return {
+    artifactId: "storage_snapshot_pre_consent",
+    capturedAtMs: elapsed(scanStartedAtMs),
+    consentStateAtTime: "pre_consent",
+    url,
+    localStorage: {},
+    sessionStorage: {},
+    localStorageKeys: [],
+    sessionStorageKeys: [],
+    valuesRedacted: true,
+    evidenceRefs: [],
+  };
+}
+
+function emptyConsentUiObservation(scanStartedAtMs: number): ConsentUiObservation {
+  return {
+    observationId: "consent_ui_pre_consent",
+    observedAtMs: elapsed(scanStartedAtMs),
+    likelyPresent: false,
+    basis: ["bounded_capture_timeout_or_failure"],
+    textExcerpt: "",
+    layerInspected: "unknown",
+    visibleChoiceLabels: [],
+    acceptControlObserved: false,
+    rejectControlObserved: false,
+    managePreferencesControlObserved: false,
+    controls: [],
+    evidenceRefs: [],
+    confidence: 0.4,
+  };
 }
 
 function resolverInputForEvent(
@@ -1174,6 +1298,7 @@ async function captureBrowserApiAccessEvents(
 async function detectConsentUi(
   page: Page,
   scanStartedAtMs: number,
+  waitForControlTimeoutMs = 3_500,
 ): Promise<ConsentUiObservation> {
   await page.waitForFunction(String.raw`(() => {
     const consentLabelPattern =
@@ -1221,9 +1346,9 @@ async function detectConsentUi(
       const actionType = actionFor(label);
       return isVisible(element) && isFirstLayerPosition(element) && consentLabelPattern.test(label) && actionType !== "other";
     });
-  })()`, { timeout: 3_500 }).catch(() => undefined);
+  })()`, { timeout: waitForControlTimeoutMs }).catch(() => undefined);
 
-  const text = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => "");
+  const text = await page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
   const controls = await page.evaluate<ConsentUiObservation["controls"]>(String.raw`(() => {
     const consentLabelPattern =
       /cookie|privacy|choice|choices|consent|preference|preferences|settings|options|accept|agree|allow|reject|decline|deny|refuse|necessary|essential|purpose|purposes|save|confirm/i;

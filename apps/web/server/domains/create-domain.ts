@@ -68,6 +68,9 @@ export async function createOrQueueDomainScan(input: {
     loadDomainOrganizationAndSettings(dashboardContext.organization.id)
   ]);
   const organizationSettings = organizationSettingsAndOrg.settings;
+  const defaultScanFrom = normalizeScanFrom(
+    input.scanFrom ?? (organizationSettings as { default_scan_from?: ScanFrom | null } | null)?.default_scan_from
+  );
 
   const { hostname, normalizedUrl } = parsedInput.data;
   const dnsStatus = await checkDomainDns(hostname);
@@ -175,7 +178,7 @@ export async function createOrQueueDomainScan(input: {
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     provenance: input.provenance,
-    scanFrom: input.scanFrom,
+    scanFrom: defaultScanFrom,
     scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
     source: "new-domain-overview"
   });
@@ -194,8 +197,8 @@ export async function createDomainAction(
   const domainInput = String(formData.get("domain") ?? "");
   const forceNewScan = formData.get("forceNewScan") === "true";
   const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
-  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"));
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
+  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom);
   const parsedBatch = parseDomainBatchInput(domainInput);
 
   if (parsedBatch.valid.length === 0) {

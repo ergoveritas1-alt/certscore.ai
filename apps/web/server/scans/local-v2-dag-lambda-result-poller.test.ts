@@ -89,6 +89,64 @@ test("SQS poller validates and deletes completed and failed local v2 DAG message
   assert.deepEqual(deleted, ["receipt-1", "receipt-2"]);
 });
 
+test("SQS poller drains configured regional result queues", async () => {
+  const receivedQueueUrls: string[] = [];
+  const deletedQueueUrls: string[] = [];
+  const observedS3Regions: string[] = [];
+  const sqsClient = {
+    async send(command: ReceiveMessageCommand | DeleteMessageCommand) {
+      if (command instanceof ReceiveMessageCommand) {
+        receivedQueueUrls.push(String(command.input.QueueUrl));
+        return {
+          $metadata: {},
+          Messages: [
+            {
+              Body: buildResultMessage({ scanId: `scan-${receivedQueueUrls.length}` }),
+              MessageId: `message-${receivedQueueUrls.length}`,
+              ReceiptHandle: `receipt-${receivedQueueUrls.length}`
+            }
+          ]
+        };
+      }
+
+      deletedQueueUrls.push(String(command.input.QueueUrl));
+      return { $metadata: {} };
+    }
+  };
+
+  const result = await pollLocalV2DagLambdaResultQueue({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/de-results",
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
+      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/usw-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
+    },
+    handleMessage: async (rawMessage, options) => {
+      const regionProvider = (options?.s3Client as { config?: { region?: () => Promise<string> } } | undefined)?.config?.region;
+      if (regionProvider) {
+        observedS3Regions.push(await regionProvider());
+      }
+      return ingestLocalV2DagLambdaResultMessage(rawMessage, options);
+    },
+    sqsClient,
+    waitTimeSeconds: 0
+  });
+
+  assert.deepEqual(result, {
+    deleted: 3,
+    failed: 0,
+    handled: 3,
+    received: 3
+  });
+  assert.deepEqual(receivedQueueUrls, [
+    "https://sqs.eu-central-1.amazonaws.com/123/de-results",
+    "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
+    "https://sqs.us-west-2.amazonaws.com/123/usw-results"
+  ]);
+  assert.deepEqual(deletedQueueUrls, receivedQueueUrls);
+  assert.deepEqual(observedS3Regions, ["eu-central-1", "eu-west-1", "us-west-2"]);
+});
+
 test("SQS poller rejects wrong environment/processor/contract and does not delete", async () => {
   const deleted: string[] = [];
   const sqsClient = {

@@ -8,6 +8,7 @@ import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import type { OrganizationScanListItem } from "../../server/scans/get-organization-scans";
 import { FreshRescanBadge } from "../scans/fresh-rescan-badge";
 import { RescanDomainForm } from "../scans/rescan-domain-form";
+import type { ServerScanFrom } from "../scans/scan-from-select";
 import { PendingButtonLink } from "../ui/pending-link";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
@@ -99,12 +100,13 @@ function getPrimaryBadgeLabel(scan: OrganizationScanListItem) {
 }
 
 type OverviewScanHistoryCardProps = {
+  defaultScanFrom?: ServerScanFrom;
   planCode: PlanCode;
   rescanCooldownMs?: number;
   scans: OrganizationScanListItem[];
 };
 
-export function OverviewScanHistoryCard({ planCode, rescanCooldownMs, scans }: OverviewScanHistoryCardProps) {
+export function OverviewScanHistoryCard({ defaultScanFrom = "eu_ie", planCode, rescanCooldownMs, scans }: OverviewScanHistoryCardProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_SCAN_HISTORY_PAGE_SIZE);
   const scanGroups = useMemo(
@@ -325,6 +327,7 @@ export function OverviewScanHistoryCard({ planCode, rescanCooldownMs, scans }: O
                             <RescanDomainForm
                               compact
                               cooldownMessage={cooldownMessage}
+                              defaultScanFrom={defaultScanFrom}
                               disabled={!rescanAvailability.allowed}
                               domainId={group.domainId}
                               showLabel

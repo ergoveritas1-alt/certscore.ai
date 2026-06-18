@@ -8,10 +8,13 @@ repository_name="${CERTSCORE_V2_DAG_LAMBDA_ECR_REPOSITORY:-${prefix}-lambda}"
 image_tag="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_TAG:-dev}"
 platform="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_PLATFORM:-linux/amd64}"
 
-if [[ "$region" != "eu-central-1" ]]; then
-  echo "Refusing to build/push local v2 DAG Lambda image outside eu-central-1." >&2
-  exit 1
-fi
+case "$region" in
+  eu-central-1|eu-west-1|us-west-2) ;;
+  *)
+    echo "Unsupported local v2 DAG Lambda image region: ${region}. Use eu-central-1, eu-west-1, or us-west-2." >&2
+    exit 1
+    ;;
+esac
 
 account_id="$(aws sts get-caller-identity --query Account --output text)"
 repository_uri="${account_id}.dkr.ecr.${region}.amazonaws.com/${repository_name}"

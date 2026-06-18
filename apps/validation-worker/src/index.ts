@@ -48,6 +48,11 @@ function bootstrapValidationWorker() {
     enabled: env.CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED,
     pollMs: env.CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS * 1000,
     queueUrl: env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL,
+    queueUrls: [
+      env.CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL,
+      env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL,
+      env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL
+    ],
     targetEnvironment: env.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV
   });
   void startValidationDispatcher({

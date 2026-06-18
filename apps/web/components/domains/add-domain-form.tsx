@@ -4,7 +4,7 @@ import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useActionState, useEffect, useState } from "react";
 import { clearPendingScanStarted, markPendingScanStarted } from "../analytics/data-layer-events";
 import { createDomainAction, type CreateDomainActionState } from "../../server/domains/create-domain";
-import { ScanFromSelect, type ScanFrom } from "../scans/scan-from-select";
+import { ScanFromSelect, type ScanFrom, type ServerScanFrom } from "../scans/scan-from-select";
 import {
   ScanSubmitProgressBar,
   normalizeLocalV2ScanProfile,
@@ -17,14 +17,15 @@ const initialState: CreateDomainActionState = {
 };
 
 type AddDomainFormProps = {
+  defaultScanFrom?: ServerScanFrom;
   planCode: string;
 };
 
-export function AddDomainForm({ planCode }: AddDomainFormProps) {
+export function AddDomainForm({ defaultScanFrom = "eu_ie", planCode }: AddDomainFormProps) {
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
   const [freshRescan, setFreshRescan] = useState(true);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
-  const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
+  const [scanFrom, setScanFrom] = useState<ScanFrom>(defaultScanFrom);
   const scanProgress = useScanProgressClock(isPending);
 
   useEffect(() => {

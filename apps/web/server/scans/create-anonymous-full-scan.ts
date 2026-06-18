@@ -18,9 +18,10 @@ import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
   dispatchLocalV2DagLambdaScan,
+  isLocalV2DagLambdaIntentSimulated,
   summarizeLocalV2DagLambdaDispatchForEvent
 } from "./local-v2-dag-lambda-dispatch";
-import { shouldUseLocalV2DagSimulatedLambda, type LocalV2DagScanProfile } from "./local-v2-dag-scan-config";
+import type { LocalV2DagScanProfile } from "./local-v2-dag-scan-config";
 import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-simulated-dispatch";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
@@ -251,6 +252,7 @@ export async function createAnonymousFullScan(input: {
   }
 
   if (localV2DagLambdaDispatch) {
+    const simulatedLocalLambda = isLocalV2DagLambdaIntentSimulated(scanConfig);
     await insertQueuedFullScanEvent({
       domainId: domain.id,
       eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
@@ -261,7 +263,7 @@ export async function createAnonymousFullScan(input: {
     });
 
     try {
-      const dispatchResult = await (shouldUseLocalV2DagSimulatedLambda()
+      const dispatchResult = await (simulatedLocalLambda
         ? dispatchLocalV2DagSimulatedLambdaScan
         : dispatchLocalV2DagLambdaScan)({
         localCallbackUrl: null,
@@ -271,7 +273,7 @@ export async function createAnonymousFullScan(input: {
       await insertQueuedFullScanEvent({
         domainId: domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
-        message: shouldUseLocalV2DagSimulatedLambda()
+        message: simulatedLocalLambda
           ? "Local simulated Lambda completed the v2 DAG artifact-only scan invocation."
           : "AWS Lambda accepted the local v2 DAG artifact-only scan invocation.",
         metadataJson: {
@@ -279,7 +281,7 @@ export async function createAnonymousFullScan(input: {
           invocationRequestId: dispatchResult.invocationRequestId,
           invocationStatusCode: dispatchResult.invocationStatusCode,
           invocationType: dispatchResult.invocationType,
-          simulatedLocalLambda: shouldUseLocalV2DagSimulatedLambda(),
+          simulatedLocalLambda,
           productionFindingIntegration: false
         },
         organizationId: null,

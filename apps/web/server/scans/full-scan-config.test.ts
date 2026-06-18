@@ -165,7 +165,7 @@ test("queued full-scan config carries explicit California privacy runtime flags 
   );
   assert.equal(
     requiresFreshScanForCaliforniaRuntime({
-      scanFrom: "default"
+      scanFrom: "eu_ie"
     }),
     false
   );
@@ -310,7 +310,7 @@ test("v2 DAG Lambda run flag defaults on only when Lambda handoff is fully confi
     normalizeLocalV2DagRunViaLambda(undefined, {
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-results"
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-results"
     }),
     true
   );
@@ -325,7 +325,7 @@ test("v2 DAG Lambda run flag defaults on only when Lambda handoff is fully confi
     normalizeLocalV2DagRunViaLambda("false", {
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-results"
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-results"
     }),
     false
   );
@@ -392,7 +392,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
       CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       NODE_ENV: "development"
@@ -413,7 +413,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
   assert.equal(v2DagParallel?.postConsentFlowsEnabled, false);
   assert.deepEqual(v2DagLambda, {
     artifactOnly: true,
-    awsRegion: "eu-central-1",
+    awsRegion: "eu-west-1",
     callbackCorrelationId: "scan_id",
     contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
     dispatchState: "pending_dispatch",
@@ -423,13 +423,93 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     resultHandoff: "sqs",
-    resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
+    resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
     scannerRuntime: "certscore-v2-dag-parallel-path",
+    simulatedLocalLambda: false,
     targetEnvironment: "local",
     vpcMode: "none"
   });
   assert.equal(Object.hasOwn(config, "findings"), false);
   assert.equal(Object.hasOwn(config, "signals"), false);
+});
+
+test("queued full-scan config uses location-specific Lambda functions and result queues", () => {
+  const env = {
+    CERTSCORE_V2_DAG_LAMBDA_EU_DE_ENABLED: "true",
+    CERTSCORE_V2_DAG_LAMBDA_EU_DE_FUNCTION_NAME: "certscore-v2-dag-de",
+    CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-de-results",
+    CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED: "true",
+    CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME: "certscore-v2-dag-ie",
+    CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results",
+    CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED: "true",
+    CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME: "certscore-v2-dag-usw",
+    CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-usw-results",
+    NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+    NODE_ENV: "development"
+  } as const;
+  const build = (scanFrom: "eu_de" | "eu_ie" | "california") =>
+    buildQueuedFullScanConfig({
+      env,
+      hostname: "example.com",
+      localV2DagRunViaLambda: true,
+      maxPages: 3,
+      normalizedUrl: "https://example.com/",
+      profile: "homepage",
+      scanFrom,
+      source: "manual-dashboard"
+    }).execution?.v2DagLambda as Record<string, unknown> | undefined;
+
+  assert.deepEqual(
+    ["eu_de", "eu_ie", "california"].map((scanFrom) => {
+      const v2DagLambda = build(scanFrom as "eu_de" | "eu_ie" | "california");
+      return {
+        awsRegion: v2DagLambda?.awsRegion,
+        functionName: v2DagLambda?.functionName,
+        resultQueueUrl: v2DagLambda?.resultQueueUrl
+      };
+    }),
+    [
+      {
+        awsRegion: "eu-central-1",
+        functionName: "certscore-v2-dag-de",
+        resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-de-results"
+      },
+      {
+        awsRegion: "eu-west-1",
+        functionName: "certscore-v2-dag-ie",
+        resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results"
+      },
+      {
+        awsRegion: "us-west-2",
+        functionName: "certscore-v2-dag-usw",
+        resultQueueUrl: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-usw-results"
+      }
+    ]
+  );
+});
+
+test("queued full-scan config routes Lambda-off localhost scans through the simulated Lambda intent", () => {
+  const config = buildQueuedFullScanConfig({
+    env: {
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      NODE_ENV: "development"
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: false,
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    scanFrom: "california",
+    source: "manual-dashboard"
+  });
+  const v2DagLambda = config.execution?.v2DagLambda as Record<string, unknown> | undefined;
+
+  assert.equal(config.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
+  assert.equal(v2DagLambda?.awsRegion, "us-west-2");
+  assert.equal(v2DagLambda?.functionName, "local-v2-dag-lambda-simulator");
+  assert.equal(v2DagLambda?.resultQueueUrl, "local://certscore-v2-dag-lambda-simulated-results");
+  assert.equal(v2DagLambda?.simulatedLocalLambda, true);
+  assert.equal(v2DagLambda?.productionFindingIntegration, false);
 });
 
 test("queued full-scan Lambda v2 DAG dispatch fails closed when queue region is stale", () => {
@@ -450,7 +530,7 @@ test("queued full-scan Lambda v2 DAG dispatch fails closed when queue region is 
         profile: "homepage",
         source: "manual-dashboard"
       }),
-    /CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL region eu-central-1/
+    /CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL region eu-west-1/
   );
 });
 
@@ -460,7 +540,7 @@ test("queued full-scan config can dispatch v2 DAG Lambda outside localhost when 
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
       CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-prod-results",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-prod-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "production",
       NEXT_PUBLIC_APP_URL: "https://certscore.ai",
       NODE_ENV: "production"

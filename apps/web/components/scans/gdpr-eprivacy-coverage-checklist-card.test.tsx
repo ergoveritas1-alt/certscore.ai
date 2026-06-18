@@ -128,16 +128,6 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
   );
   assert.equal(
     getAssessmentDirection(makeChecklistItem({
-      assessmentStatus: "checked",
-      evidenceState: "observed",
-      id: "collection_surface_observed",
-      label: "Collection surface observed",
-      status: "Observed"
-    })),
-    "neutral_signal"
-  );
-  assert.equal(
-    getAssessmentDirection(makeChecklistItem({
       assessmentStatus: "review_signal",
       evidenceState: "observed",
       id: "analytics_vendor_observed",

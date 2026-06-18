@@ -45,7 +45,10 @@ const workerEnvSchema = z.object({
   SCANNER_CRAWLER_NAME: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),
   SCANNER_CRAWLER_PUBLIC_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   VALIDATION_CRAWLER_PUBLIC_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
+  CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
+  CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
+  CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: z.preprocess(
     emptyStringToUndefined,
     z.enum(["local", "production"]).default("local")

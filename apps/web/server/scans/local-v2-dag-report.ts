@@ -74,6 +74,45 @@ export function isLocalV2DagReport(scanRecord: ScanDetailResponse) {
   return Boolean(getLocalV2DagReportInput(scanRecord));
 }
 
+export function shouldAttemptLocalV2DagLambdaResultRefresh(scanRecord: ScanDetailResponse, nowMs = Date.now()) {
+  const input = getLocalV2DagReportInput(scanRecord);
+  if (!input || input.scanArtifactUri) {
+    return false;
+  }
+  if (scanRecord.scan.status !== "queued" && scanRecord.scan.status !== "running" && scanRecord.scan.status !== "processing") {
+    return false;
+  }
+
+  const startedAtMs = Date.parse(scanRecord.scan.startedAt ?? scanRecord.scan.createdAt ?? "");
+  if (!Number.isFinite(startedAtMs)) {
+    return false;
+  }
+
+  return nowMs - startedAtMs >= 25_000;
+}
+
+export async function tryRefreshLocalV2DagLambdaResult(scanRecord: ScanDetailResponse) {
+  if (!shouldAttemptLocalV2DagLambdaResultRefresh(scanRecord)) {
+    return false;
+  }
+
+  try {
+    const { pollLocalV2DagLambdaResultQueue } = await import("./local-v2-dag-lambda-result-poller");
+    const result = await pollLocalV2DagLambdaResultQueue({
+      maxMessages: 10,
+      visibilityTimeoutSeconds: 30,
+      waitTimeSeconds: 1
+    });
+    return result.handled > 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL")) {
+      console.warn("[web] local v2 DAG Lambda result refresh skipped", { error: message });
+    }
+    return false;
+  }
+}
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }

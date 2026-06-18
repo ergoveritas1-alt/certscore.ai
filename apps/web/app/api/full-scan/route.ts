@@ -58,8 +58,7 @@ function parseForceNewScan(value: unknown) {
 }
 
 function normalizePublicScanFrom(value: unknown): ScanFrom {
-  const scanFrom = normalizeScanFrom(value);
-  return scanFrom === "california" ? "default" : scanFrom;
+  return normalizeScanFrom(value);
 }
 
 function parseLocalV2DagLambdaDebugOverrides(value: unknown): LocalV2DagLambdaDebugOverrides | null {
@@ -108,13 +107,15 @@ export async function POST(request: Request) {
     const payload = await request.json();
     const forceNewScan = parseForceNewScan(payload?.forceNewScan);
     const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);
+    const scanFrom = normalizePublicScanFrom(payload?.scanFrom ?? payload?.geo);
     const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(
-      payload?.localV2RunViaLambda ?? payload?.localV2DagRunViaLambda ?? payload?.v2RunViaLambda
+      payload?.localV2RunViaLambda ?? payload?.localV2DagRunViaLambda ?? payload?.v2RunViaLambda,
+      process.env,
+      scanFrom
     );
     const localV2DagLambdaDebugOverrides = parseLocalV2DagLambdaDebugOverrides(
       payload?.localV2DagLambdaDebugOverrides ?? payload?.v2LambdaDebugOverrides
     );
-    const scanFrom = normalizePublicScanFrom(payload?.scanFrom ?? payload?.geo);
     const provenance = getScanRequestProvenance(request);
     const rawDomain = typeof payload?.domain === "string" ? payload.domain : "";
     const parsedBatch = parseDomainBatchInput(rawDomain);
@@ -206,7 +207,8 @@ export async function POST(request: Request) {
           hostname: firstDomain.hostname,
           localV2DagScanProfile,
           localV2DagRunViaLambda,
-          normalizedUrl: firstDomain.normalizedUrl
+          normalizedUrl: firstDomain.normalizedUrl,
+          scanFrom
         });
 
         return {

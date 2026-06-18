@@ -49,9 +49,22 @@ test("handler validates local v2 DAG Lambda dispatch contract", () => {
   const parsed = parseLocalV2DagLambdaDispatchPayload(validPayload());
 
   assert.equal(parsed.scanId, "scan-local-1");
+  assert.equal(parsed.awsRegion, "eu-central-1");
   assert.equal(parsed.artifactOnly, true);
   assert.equal(parsed.productionFindingIntegration, false);
   assert.equal(parsed.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
+});
+
+test("handler accepts the approved regional Lambda dispatch targets", () => {
+  assert.equal(parseLocalV2DagLambdaDispatchPayload(validPayload({ awsRegion: "eu-central-1" })).awsRegion, "eu-central-1");
+  assert.equal(parseLocalV2DagLambdaDispatchPayload(validPayload({
+    awsRegion: "eu-west-1",
+    resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results"
+  })).awsRegion, "eu-west-1");
+  assert.equal(parseLocalV2DagLambdaDispatchPayload(validPayload({
+    awsRegion: "us-west-2",
+    resultQueueUrl: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-usw-results"
+  })).awsRegion, "us-west-2");
 });
 
 test("handler exposes bounded Lambda runtime diagnostics for quality A/B runs", () => {
@@ -166,7 +179,7 @@ test("handler parses bounded per-dispatch Lambda debug overrides", () => {
   assert.equal(parsed.strongEvidenceMode, "webmd");
 });
 
-test("handler rejects wrong contract, processor, region, VPC, or production-integration flags", () => {
+test("handler rejects wrong contract, processor, unsupported region, VPC, or production-integration flags", () => {
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ contractVersion: "wrong" })),
     /contract version/
@@ -177,7 +190,7 @@ test("handler rejects wrong contract, processor, region, VPC, or production-inte
   );
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ awsRegion: "us-east-1" })),
-    /eu-central-1/
+    /eu-central-1, eu-west-1, or us-west-2/
   );
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ vpcMode: "private" })),
@@ -324,6 +337,7 @@ test("artifact uploader returns durable metadata for all v2 JSON artifacts", asy
 
   const metadata = await uploadArtifactFiles({
     ...files,
+    payload: validPayload(),
     pointers,
     s3Client: {
       async send(command: PutObjectCommand) {

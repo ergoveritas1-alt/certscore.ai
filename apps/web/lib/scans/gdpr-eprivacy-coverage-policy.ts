@@ -1761,81 +1761,6 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
   return null;
 }
 
-function deriveCollectionSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
-  const summary = getObject(input.runtimeArtifacts, ["collectionSurfaceSummary", "collection_surface_summary"]);
-  const inventoryRetained = getBoolean(summary, ["inventoryRetained", "inventory_retained"]);
-  const collectionSurfaceCount =
-    getNumber(summary, ["collectionSurfaceCount", "collection_surface_count"]) ??
-    getNumber(input.runtimeArtifacts, ["collection_surface_count", "collectionSurfaceCount"]);
-  const observed =
-    getBoolean(summary, ["collectionSurfacesObserved", "collection_surfaces_observed"]) === true ||
-    getBoolean(input.runtimeArtifacts, ["collection_surface_observed", "collectionSurfaceObserved"]) === true ||
-    (collectionSurfaceCount !== null && collectionSurfaceCount > 0);
-  const surfaceTypes = getStringArray(summary, ["surfaceTypes", "surface_types"]);
-  const labels = getStringArray(summary, ["labels"]);
-
-  if (observed) {
-    return makeOutcome(
-      "collection_surface_observed",
-      "Observed",
-      "A public-web collection surface was retained in pre-consent scanner evidence.",
-      [
-        collectionSurfaceCount !== null ? `Collection surface count: ${collectionSurfaceCount}` : null,
-        ...surfaceTypes.map((type) => `Surface type: ${type}`).slice(0, 5)
-      ].filter((value): value is string => Boolean(value)),
-      {
-        retainedEvidence: {
-          collectionSurfaceCount,
-          fieldTypes: getStringArray(summary, ["fieldTypes", "field_types"]),
-          hasEmailField: getBoolean(summary, ["hasEmailField", "has_email_field"]),
-          hasSensitiveFieldHint: getBoolean(summary, ["hasSensitiveFieldHint", "has_sensitive_field_hint"]),
-          labels: compactArray(labels, 8),
-          surfaceTypes
-        }
-      }
-    );
-  }
-
-  if (inventoryRetained === true || (summary && collectionSurfaceCount === 0)) {
-    return makeOutcome(
-      "collection_surface_observed",
-      "Not observed",
-      "Pre-consent collection-surface inventory completed for the tested page and did not retain a form, input, or similar collection surface.",
-      ["Evidence: retained pre-consent collection-surface inventory"],
-      {
-        retainedEvidence: {
-          collectionSurfaceCount: collectionSurfaceCount ?? 0,
-          inventoryRetained: true
-        }
-      }
-    );
-  }
-
-  if (hasRuntimeCapture(input)) {
-    return makeOutcome(
-      "collection_surface_observed",
-      "Not testable",
-      "Runtime capture completed, but this scan did not retain the pre-consent collection-surface inventory required to evaluate public collection surfaces.",
-      ["Missing evidence: pre-consent collection-surface inventory"],
-      {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "scanner.collectionSurfaceObservations",
-            "bounded pre-consent form/input collection surface inventory",
-            inventoryRetained === false ? "not retained" : "missing",
-            "Required to evaluate whether public collection surfaces were observed without inferring from screenshots."
-          )
-        ],
-        retainedEvidence: {
-          inventoryRetained: inventoryRetained ?? false
-        }
-      }
-    );
-  }
-
-  return null;
-}
-
 function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const consentAuditEntry = getEventMetadata(input.events, "consent_audit_entry");
@@ -5136,7 +5061,6 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveConsentChoiceQualityOutcome(input),
     derivePostRejectOutcome(input),
     derivePreferenceWithdrawalOutcome(input),
-    deriveCollectionSurfaceOutcome(input),
     ...derivePolicyDisclosureOutcomes(input),
     deriveSensitiveSurfaceOutcome(input),
     deriveSessionReplayFingerprintingOutcome(input),

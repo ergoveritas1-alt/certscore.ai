@@ -26,10 +26,12 @@ function getStatusTone(status: string): "success" | "warning" {
 
 function getScanFromMarkerInput(value: string | undefined) {
   switch (value) {
+    case "eu_de":
     case "eu":
-      return { flag: "🇪🇺" };
+      return { flag: "🇩🇪" };
+    case "eu_ie":
     case "uk":
-      return { flag: "🇬🇧" };
+      return { flag: "🇮🇪" };
     case "california":
       return { flag: "california" };
     case "local_extension":

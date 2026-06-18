@@ -1,9 +1,10 @@
 import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
 import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
 import {
-  LOCAL_V2_DAG_LAMBDA_AWS_REGION,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  isLocalV2DagLambdaAwsRegion,
+  type LocalV2DagLambdaAwsRegion,
   type LocalV2DagLambdaDebugOverrides,
   type LocalV2DagLambdaTargetEnvironment,
   type LocalV2DagScanProfile
@@ -19,7 +20,7 @@ export const LOCAL_V2_DAG_LAMBDA_RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.fa
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
-  awsRegion: typeof LOCAL_V2_DAG_LAMBDA_AWS_REGION;
+  awsRegion: LocalV2DagLambdaAwsRegion;
   callbackCorrelationId: string;
   contractVersion: typeof LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION;
   functionName: string;
@@ -40,7 +41,7 @@ export type LocalV2DagLambdaDispatchPayload = {
 };
 
 export type LocalV2DagLambdaDispatchSummary = {
-  awsRegion: typeof LOCAL_V2_DAG_LAMBDA_AWS_REGION;
+  awsRegion: LocalV2DagLambdaAwsRegion;
   contractVersion: typeof LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION;
   dispatchRequested: boolean;
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
@@ -145,6 +146,19 @@ function requireString(value: unknown, field: string): string {
   return normalized;
 }
 
+function requireAwsRegion(value: unknown): LocalV2DagLambdaAwsRegion {
+  if (!isLocalV2DagLambdaAwsRegion(value)) {
+    throw new Error("Local v2 DAG Lambda dispatch target AWS region is not supported.");
+  }
+  return value;
+}
+
+export function isLocalV2DagLambdaIntentSimulated(
+  config: SharedScanConfig | Record<string, unknown> | null | undefined
+) {
+  return asRecord(getLambdaIntent(config)).simulatedLocalLambda === true;
+}
+
 export function summarizeLocalV2DagLambdaDispatchForEvent(
   config: SharedScanConfig | Record<string, unknown> | null | undefined
 ): LocalV2DagLambdaDispatchSummary | null {
@@ -154,7 +168,7 @@ export function summarizeLocalV2DagLambdaDispatchForEvent(
   }
 
   return {
-    awsRegion: LOCAL_V2_DAG_LAMBDA_AWS_REGION,
+    awsRegion: requireAwsRegion(intent.awsRegion),
     contractVersion: LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
     dispatchRequested: true,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
@@ -191,13 +205,11 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
   if (intent.contractVersion !== LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION) {
     throw new Error("Local v2 DAG Lambda dispatch contract version is not supported.");
   }
-  if (intent.awsRegion !== LOCAL_V2_DAG_LAMBDA_AWS_REGION) {
-    throw new Error("Local v2 DAG Lambda dispatch must target eu-central-1.");
-  }
+  const awsRegion = requireAwsRegion(intent.awsRegion);
 
   return {
     artifactOnly: true,
-    awsRegion: LOCAL_V2_DAG_LAMBDA_AWS_REGION,
+    awsRegion,
     callbackCorrelationId: input.scanId,
     contractVersion: LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
     functionName: requireString(intent.functionName, "functionName"),

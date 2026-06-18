@@ -2,6 +2,7 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 import {
   PREVIEW_SCAN_EVENT_TYPES,
   type PreviewScanPayload,
+  type ScanFrom,
   type ScanSnapshot,
   type ScanStatus,
   type ScanType,
@@ -63,6 +64,7 @@ export function buildPreviewScanInitialConfig(input: {
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagRunViaLambda?: boolean | null;
   normalizedUrl: string;
+  scanFrom?: ScanFrom;
 }): SharedScanConfig {
   return applyLocalV2DagScanConfig({
     hostname: input.hostname,
@@ -77,7 +79,8 @@ export function buildPreviewScanInitialConfig(input: {
     processor: "live-preview-v1"
   }, input.env, {
     profile: input.localV2DagScanProfile,
-    runViaLambda: input.localV2DagRunViaLambda
+    runViaLambda: input.localV2DagRunViaLambda,
+    scanFrom: input.scanFrom
   });
 }
 
@@ -262,12 +265,14 @@ export async function createPreviewScanRecord(input: {
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagRunViaLambda?: boolean | null;
   normalizedUrl: string;
+  scanFrom?: ScanFrom;
 }) {
   const initialConfig = buildPreviewScanInitialConfig({
     hostname: input.hostname,
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
-    normalizedUrl: input.normalizedUrl
+    normalizedUrl: input.normalizedUrl,
+    scanFrom: input.scanFrom
   });
   const queueMetadata = getPreviewScanQueueMetadata();
 

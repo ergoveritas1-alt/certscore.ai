@@ -16,6 +16,7 @@ import { getDashboardContext } from "../../../../../server/auth";
 import { getScanById } from "../../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../../server/scans/persist-report-finding-count";
 import { isScanWithinReuseWindow } from "../../../../../server/scans/recent-scan-reuse";
+import { getOrganizationSettings } from "../../../../../server/settings/get-organization-settings";
 import { mapUnifiedPacketsForJsonView } from "./findings";
 
 type ScanJsonPageProps = {
@@ -57,11 +58,14 @@ function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
 export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
   const [{ scanId }, { organization, user }] = await Promise.all([params, getDashboardContext()]);
   const adminRescanCooldownMs = isPlatformAdminEmail(user.email) ? getAdminScanThrottleMs() : undefined;
-  const scanRecord = await getScanById({
-    organizationId: organization.id,
-    scanId,
-    viewerEmail: user.email
-  });
+  const [scanRecord, organizationSettings] = await Promise.all([
+    getScanById({
+      organizationId: organization.id,
+      scanId,
+      viewerEmail: user.email
+    }),
+    getOrganizationSettings(organization.id)
+  ]);
 
   if (!scanRecord) {
     notFound();
@@ -133,6 +137,7 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
           alternateLabel="report-view"
           canRescan={showRescan}
           cooldownMessage={rescanCooldownMessage}
+          defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
           domainId={scanRecord.scan.domainId}
           rescanDisabled={Boolean(rescanAvailability && !rescanAvailability.allowed)}
         />

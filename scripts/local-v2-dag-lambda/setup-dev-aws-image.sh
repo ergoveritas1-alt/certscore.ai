@@ -11,10 +11,15 @@ artifact_bucket="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET:-${prefix}-artifacts-
 artifact_prefix="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX:-v2-dag-lambda/local}"
 memory_size="${CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-2048}"
 
-if [[ "$region" != "eu-central-1" ]]; then
-  echo "Refusing to create local v2 DAG Lambda resources outside eu-central-1." >&2
-  exit 1
-fi
+case "$region" in
+  eu-central-1) location_env_prefix="EU_DE" ;;
+  eu-west-1) location_env_prefix="EU_IE" ;;
+  us-west-2) location_env_prefix="US_WEST" ;;
+  *)
+    echo "Unsupported local v2 DAG Lambda region: ${region}. Use eu-central-1, eu-west-1, or us-west-2." >&2
+    exit 1
+    ;;
+esac
 
 if [[ -z "$image_uri" ]]; then
   cat >&2 <<EOF
@@ -239,6 +244,9 @@ Created/updated local v2 DAG Lambda image resources:
   CERTSCORE_V2_DAG_LAMBDA_ENABLED=true
   CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME=${function_name}
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL=${queue_url}
+  CERTSCORE_V2_DAG_LAMBDA_${location_env_prefix}_ENABLED=true
+  CERTSCORE_V2_DAG_LAMBDA_${location_env_prefix}_FUNCTION_NAME=${function_name}
+  CERTSCORE_V2_DAG_LAMBDA_${location_env_prefix}_RESULT_QUEUE_URL=${queue_url}
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV=local
   CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET=${artifact_bucket}
   CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX=${artifact_prefix}

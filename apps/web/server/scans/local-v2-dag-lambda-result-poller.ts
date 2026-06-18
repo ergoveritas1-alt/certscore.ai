@@ -18,8 +18,8 @@ import {
   type LocalV2DagLambdaResultMessage
 } from "./local-v2-dag-lambda-dispatch";
 import {
-  LOCAL_V2_DAG_LAMBDA_AWS_REGION,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  getSqsQueueRegion,
   getLocalV2DagLambdaTargetEnvironment,
   type LocalV2DagLambdaTargetEnvironment
 } from "./local-v2-dag-scan-config";
@@ -42,8 +42,12 @@ type MirroredLambdaArtifact = {
 };
 
 export type LocalV2DagLambdaResultPollerEnv = {
+  [key: string]: string | undefined;
+  CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL?: string;
+  CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL?: string;
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL?: string;
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV?: string;
+  CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL?: string;
 };
 
 export type LocalV2DagLambdaPollResult = {
@@ -55,6 +59,20 @@ export type LocalV2DagLambdaPollResult = {
 
 function compactEnvValue(value: string | undefined) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+export function getConfiguredLocalV2DagLambdaResultQueueUrls(env: LocalV2DagLambdaResultPollerEnv = process.env) {
+  return [
+    compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL),
+    compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL),
+    compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL),
+    compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL)
+  ].reduce<string[]>((queueUrls, queueUrl) => {
+    if (queueUrl && !queueUrls.includes(queueUrl)) {
+      queueUrls.push(queueUrl);
+    }
+    return queueUrls;
+  }, []);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -136,7 +154,7 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
   const mirrorStartedAt = Date.now();
   const outDir = localV2DagArtifactRoot(input.parsedMessage.scanId, input.workspaceRoot);
   await mkdir(outDir, { recursive: true });
-  const s3Client = input.s3Client ?? new S3Client({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
+  const s3Client = input.s3Client ?? new S3Client({});
   const artifacts = [
     { field: "manifestUri" as const, fileName: "LocalV2DagLambdaManifest.json", uri: pointers.manifestUri },
     { field: "scanArtifactUri" as const, fileName: "CanonicalEvidenceBundle.json", uri: pointers.scanArtifactUri },
@@ -414,49 +432,62 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
   handleMessage?: typeof handleLocalV2DagLambdaResultMessage;
   maxMessages?: number;
   queueUrl?: string;
+  s3Client?: S3GetClient;
   sqsClient?: SqsPollClient;
   visibilityTimeoutSeconds?: number;
   waitTimeSeconds?: number;
 } = {}): Promise<LocalV2DagLambdaPollResult> {
   const env = input.env ?? process.env;
-  const queueUrl = compactEnvValue(input.queueUrl ?? env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL);
-  if (!queueUrl) {
-    throw new Error("Local v2 DAG Lambda result polling requires CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL.");
+  const queueUrls = input.queueUrl
+    ? [input.queueUrl]
+    : getConfiguredLocalV2DagLambdaResultQueueUrls(env);
+  if (queueUrls.length === 0) {
+    throw new Error("Local v2 DAG Lambda result polling requires CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL or regional result queue URLs.");
   }
 
   const expectedTargetEnvironment =
     input.expectedTargetEnvironment ?? getLocalV2DagLambdaTargetEnvironment(env);
-  const sqsClient = input.sqsClient ?? new SQSClient({ region: LOCAL_V2_DAG_LAMBDA_AWS_REGION });
-  const response = await sqsClient.send(new ReceiveMessageCommand({
-    MaxNumberOfMessages: Math.min(Math.max(input.maxMessages ?? 10, 1), 10),
-    QueueUrl: queueUrl,
-    VisibilityTimeout: input.visibilityTimeoutSeconds ?? 30,
-    WaitTimeSeconds: Math.min(Math.max(input.waitTimeSeconds ?? 10, 0), 20)
-  })) as ReceiveMessageCommandOutput;
-  const messages = response.Messages ?? [];
   const result: LocalV2DagLambdaPollResult = {
     deleted: 0,
     failed: 0,
     handled: 0,
-    received: messages.length
+    received: 0
   };
   const handleMessage = input.handleMessage ?? handleLocalV2DagLambdaResultMessage;
 
-  for (const message of messages) {
-    try {
-      await handleMessage(messageBody(message), { expectedTargetEnvironment });
-      await sqsClient.send(new DeleteMessageCommand({
-        QueueUrl: queueUrl,
-        ReceiptHandle: getReceiptHandle(message)
-      }));
-      result.deleted += 1;
-      result.handled += 1;
-    } catch (error) {
-      result.failed += 1;
-      console.error("[web] local v2 DAG Lambda result message rejected", {
-        error: error instanceof Error ? error.message : String(error),
-        messageId: message.MessageId ?? null
-      });
+  for (const queueUrl of queueUrls) {
+    const queueRegion = getSqsQueueRegion(queueUrl) ?? "eu-west-1";
+    const sqsClient = input.sqsClient ?? new SQSClient({ region: queueRegion });
+    const s3Client = input.s3Client ?? new S3Client({ region: queueRegion });
+    const response = await sqsClient.send(new ReceiveMessageCommand({
+      MaxNumberOfMessages: Math.min(Math.max(input.maxMessages ?? 10, 1), 10),
+      QueueUrl: queueUrl,
+      VisibilityTimeout: input.visibilityTimeoutSeconds ?? 30,
+      WaitTimeSeconds: Math.min(Math.max(input.waitTimeSeconds ?? 10, 0), 20)
+    })) as ReceiveMessageCommandOutput;
+    const messages = response.Messages ?? [];
+    result.received += messages.length;
+
+    for (const message of messages) {
+      try {
+        await handleMessage(messageBody(message), {
+          expectedTargetEnvironment,
+          s3Client
+        });
+        await sqsClient.send(new DeleteMessageCommand({
+          QueueUrl: queueUrl,
+          ReceiptHandle: getReceiptHandle(message)
+        }));
+        result.deleted += 1;
+        result.handled += 1;
+      } catch (error) {
+        result.failed += 1;
+        console.error("[web] local v2 DAG Lambda result message rejected", {
+          error: error instanceof Error ? error.message : String(error),
+          messageId: message.MessageId ?? null,
+          queueRegion: getSqsQueueRegion(queueUrl)
+        });
+      }
     }
   }
 

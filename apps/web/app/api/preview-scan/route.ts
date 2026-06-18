@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { previewScanRequestSchema } from "@website-signal-risk-scanner/shared";
+import { normalizeScanFrom, previewScanRequestSchema } from "@website-signal-risk-scanner/shared";
 import { checkDomainDns } from "../../../server/domains/domain-dns";
 import {
   normalizeLocalV2DagRunViaLambda,
@@ -23,8 +23,11 @@ export async function POST(request: Request) {
 
     const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);
     const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(
-      payload?.localV2RunViaLambda ?? payload?.localV2DagRunViaLambda ?? payload?.v2RunViaLambda
+      payload?.localV2RunViaLambda ?? payload?.localV2DagRunViaLambda ?? payload?.v2RunViaLambda,
+      process.env,
+      normalizeScanFrom(payload?.scanFrom ?? payload?.geo)
     );
+    const scanFrom = normalizeScanFrom(payload?.scanFrom ?? payload?.geo);
     const dnsStatus = await checkDomainDns(result.data.hostname);
 
     if (!dnsStatus.exists) {
@@ -41,7 +44,8 @@ export async function POST(request: Request) {
       hostname: result.data.hostname,
       localV2DagScanProfile,
       localV2DagRunViaLambda,
-      normalizedUrl: result.data.normalizedUrl
+      normalizedUrl: result.data.normalizedUrl,
+      scanFrom
     });
 
     return NextResponse.json(

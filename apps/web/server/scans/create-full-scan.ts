@@ -42,7 +42,6 @@ import {
 import {
   normalizeLocalV2DagRunViaLambda,
   normalizeLocalV2DagScanProfile,
-  shouldUseLocalV2DagSimulatedLambda,
   type LocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
 import {
@@ -51,6 +50,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
   dispatchLocalV2DagLambdaScan,
+  isLocalV2DagLambdaIntentSimulated,
   summarizeLocalV2DagLambdaDispatchForEvent
 } from "./local-v2-dag-lambda-dispatch";
 import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-simulated-dispatch";
@@ -537,6 +537,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   }
 
   if (localV2DagLambdaDispatch) {
+    const simulatedLocalLambda = isLocalV2DagLambdaIntentSimulated(scanConfig);
     await insertQueuedFullScanEvent({
       domainId: domainRecord.domain.id,
       eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
@@ -547,7 +548,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     });
 
     try {
-      const dispatchResult = await (shouldUseLocalV2DagSimulatedLambda()
+      const dispatchResult = await (simulatedLocalLambda
         ? dispatchLocalV2DagSimulatedLambdaScan
         : dispatchLocalV2DagLambdaScan)({
         localCallbackUrl: null,
@@ -557,7 +558,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       await insertQueuedFullScanEvent({
         domainId: domainRecord.domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
-        message: shouldUseLocalV2DagSimulatedLambda()
+        message: simulatedLocalLambda
           ? "Local simulated Lambda completed the v2 DAG artifact-only scan invocation."
           : "AWS Lambda accepted the local v2 DAG artifact-only scan invocation.",
         metadataJson: {
@@ -565,7 +566,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
           invocationRequestId: dispatchResult.invocationRequestId,
           invocationStatusCode: dispatchResult.invocationStatusCode,
           invocationType: dispatchResult.invocationType,
-          simulatedLocalLambda: shouldUseLocalV2DagSimulatedLambda(),
+          simulatedLocalLambda,
           productionFindingIntegration: false
         },
         organizationId: input.organizationId,
@@ -648,8 +649,8 @@ export async function createFullScanAction(
   const domainId = String(formData.get("domainId") ?? "").trim();
   const forceNewScan = formData.get("forceNewScan") === "true";
   const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
-  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"));
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
+  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom);
 
   const fullScanQueueAvailability = await getFullScanQueueAvailability({ scanFrom });
 

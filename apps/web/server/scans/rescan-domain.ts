@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
 import { getAdminScanThrottleMs } from "../../lib/scan-access";
+import { normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { getDashboardContext } from "../auth";
 import { queueFullScanForDomain, type CreateFullScanActionState } from "./create-full-scan";
@@ -30,7 +31,8 @@ export async function rescanDomainAction(
   const dashboardContext = await getDashboardContext();
   const domainId = String(formData.get("domainId") ?? "").trim();
   const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
-  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"));
+  const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
+  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom);
 
   if (domainId.length === 0) {
     return {
@@ -47,6 +49,7 @@ export async function rescanDomainAction(
     enforceMonthlyUsageLimit: true,
     localV2DagScanProfile,
     localV2DagRunViaLambda,
+    scanFrom,
     scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
     source: "manual-rescan"
   });

@@ -156,6 +156,7 @@ export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput)
   }), input.env, {
     lambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     profile: input.localV2DagScanProfile,
-    runViaLambda: input.localV2DagRunViaLambda
+    runViaLambda: input.localV2DagRunViaLambda,
+    scanFrom
   });
 }
