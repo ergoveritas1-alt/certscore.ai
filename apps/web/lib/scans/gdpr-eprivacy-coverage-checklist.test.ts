@@ -94,7 +94,7 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
   });
 
   assert.deepEqual(
-    items.slice(0, 9).map((item) => item.id),
+    items.slice(0, 11).map((item) => item.id),
     [
       "consent_surface_observed",
       "reject_all_path_availability",
@@ -102,9 +102,11 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
       "cookie_notice_policy_availability",
       "pre_consent_cookies_storage",
       "pre_consent_third_party_tracking",
+      "advertising_retargeting_vendor_signal_observed",
       "analytics_vendor_observed",
       "session_replay_fingerprinting_review",
-      "device_identification_fingerprinting_signal_observed"
+      "device_identification_fingerprinting_signal_observed",
+      "embedded_content_pre_consent"
     ]
   );
 });
@@ -120,7 +122,6 @@ test("deriveGdprEprivacyCoverageChecklist omits deferred low-confidence producti
   assert.equal(rowIds.has("marketing_consent_checkbox_observed"), false);
   assert.equal(rowIds.has("privacy_notice_near_collection_surface"), false);
   assert.equal(rowIds.has("newsletter_marketing_signup_observed"), false);
-  assert.equal(rowIds.has("embedded_content_pre_consent"), false);
   assert.equal(rowIds.has("embedded_content_disclosure_alignment"), false);
   assert.equal(rowIds.has("analytics_disclosure_alignment"), false);
 });
@@ -822,7 +823,7 @@ test("deriveGdprEprivacyCoverageChecklist demotes endpoint-only cross-border gap
   assert.deepEqual(row.criticalEvidence.projectedFindings, []);
 });
 
-test("deriveGdprEprivacyCoverageChecklist words runtime vendor disclosure gaps as matching gaps, not legal conclusions", () => {
+test("deriveGdprEprivacyCoverageChecklist does not surface broad runtime vendor disclosure alignment row", () => {
   const finding = makeFinding("policy_behavior_conflict", "Policy/behavior conflict", "audit_only");
   finding.evidence = {
     ...finding.evidence,
@@ -859,81 +860,7 @@ test("deriveGdprEprivacyCoverageChecklist words runtime vendor disclosure gaps a
     unifiedFindings: [finding]
   });
 
-  const row = byId(items, "runtime_vendor_disclosure_alignment");
-  assert.equal(row.label, "Runtime vendor vs disclosure alignment");
-  assert.equal(row.status, "Gap observed");
-  assert.match(row.explanation, /not clearly matched by name or known domain alias/i);
-  assert.doesNotMatch(row.explanation, /violates|noncompliant|undisclosed/i);
-  assert.equal(
-    row.criticalEvidence.retainedEvidence.selectedEvidenceArtifactId,
-    "runtimeVendorDisclosureEvidence.strongestUsableMismatch"
-  );
-  assert.equal(row.criticalEvidence.retainedEvidence.selectedEvidenceStrength, "strong");
-  assert.match(
-    String(row.criticalEvidence.retainedEvidence.selectedEvidenceReason),
-    /usable direct runtime-vendor disclosure comparison row/i
-  );
-});
-
-test("deriveGdprEprivacyCoverageChecklist emphasizes material runtime vendors over CMP and bot infrastructure", () => {
-  const finding = makeFinding("cookie_disclosure_gap", "Runtime vendor disclosure mismatch", "surface", [], {
-    entities: {
-      findingSubtype: ["runtime_vendor_not_disclosed"],
-      runtimeVendorDisclosureEvidence: [
-        JSON.stringify({
-          coverageStatus: "usable",
-          directVsInferred: "direct",
-          evidenceConfidence: "moderate",
-          matchedVendorDisclosureCount: 0,
-          mismatchRationale:
-            "TikTok Pixel was not clearly matched in retained disclosure evidence; OneTrust and Cloudflare bot management were retained as infrastructure context.",
-          observedRuntimeVendors: ["TikTok Pixel", "OneTrust", "Cloudflare bot management / __cf_bm"],
-          policySurfacesSearched: [
-            {
-              matchedVendorNames: [],
-              reached: true,
-              searchedTerms: ["TikTok Pixel", "OneTrust", "__cf_bm"],
-              snippet: "We use privacy and cookie technologies.",
-              unmatchedVendorNames: ["TikTok Pixel", "OneTrust", "Cloudflare bot management / __cf_bm"],
-              url: "https://example.test/privacy"
-            }
-          ],
-          unmatchedRuntimeDomains: ["analytics.tiktok.com", "cdn.cookielaw.org"],
-          unmatchedRuntimeVendors: ["TikTok Pixel", "OneTrust", "Cloudflare bot management / __cf_bm"],
-          unmatchedVendorDisclosureCount: 3
-        })
-      ]
-    }
-  });
-
-  const items = deriveGdprEprivacyCoverageChecklist({
-    coverageLimited: false,
-    scanCompleted: true,
-    unifiedFindings: [finding]
-  });
-
-  const row = byId(items, "runtime_vendor_disclosure_alignment");
-  assert.equal(row.status, "Gap observed");
-  assert.match(row.explanation, /TikTok Pixel/i);
-  assert.doesNotMatch(row.explanation, /OneTrust|Cloudflare bot management|__cf_bm/i);
-});
-
-test("deriveGdprEprivacyCoverageChecklist keeps CCPA do-not-sell conflicts out of GDPR runtime disclosure row", () => {
-  const finding = makeFinding(
-    "do_not_sell_sharing_disclosure_conflict",
-    "Do Not Sell/Share disclosure conflict"
-  );
-
-  const items = deriveGdprEprivacyCoverageChecklist({
-    coverageLimited: false,
-    scanCompleted: true,
-    unifiedFindings: [finding]
-  });
-
-  const row = byId(items, "runtime_vendor_disclosure_alignment");
-  assert.equal(row.label, "Runtime vendor vs disclosure alignment");
-  assert.equal(row.status, "Not observed");
-  assert.equal(row.assessmentStatus, "checked");
+  assert.equal(items.some((item) => item.id === "runtime_vendor_disclosure_alignment"), false);
 });
 
 test("deriveGdprEprivacyCoverageChecklist treats missing findings as not testable when public-web coverage is limited", () => {
@@ -1137,77 +1064,6 @@ test("deriveGdprEprivacyCoverageChecklist carries pre-consent timing from covera
   assert.match(trackingRow.evidenceRefs.join(" "), /478ms after scan start/);
 });
 
-test("deriveGdprEprivacyCoverageChecklist marks audit-only projected context as insufficient evidence", () => {
-  const items = deriveGdprEprivacyCoverageChecklist({
-    coverageLimited: false,
-    scanCompleted: true,
-    unifiedFindings: [
-      makeFinding("missing_technical_disclosure", "Technical disclosure missing", "audit_only")
-    ]
-  });
-
-  const row = byId(items, "runtime_vendor_disclosure_alignment");
-  assert.equal(row.status, "Insufficient evidence");
-  assert.equal(row.assessmentStatus, "coverage_limitation");
-  assert.equal(row.evidenceState, "observed");
-  assert.match(row.criticalEvidence.statusBasis, /No usable direct vendor-disclosure mismatch row was retained/i);
-  assert.doesNotMatch(row.criticalEvidence.statusBasis, /Canonical unified finding/i);
-  assert.deepEqual(row.evidenceRefs, [
-    "Technical disclosure missing",
-    "Evidence flag: direct_runtime",
-    "Evidence strength: direct runtime"
-  ]);
-});
-
-test("deriveGdprEprivacyCoverageChecklist explains limited runtime vendor disclosure evidence without gap projection", () => {
-  const items = deriveGdprEprivacyCoverageChecklist({
-    coverageLimited: false,
-    scanCompleted: true,
-    unifiedFindings: [
-      makeFinding("cookie_disclosure_gap", "Cookie disclosure gap", "audit_only", [], {
-        entities: {
-          findingSubtype: ["runtime_vendor_not_disclosed"],
-          runtimeVendorDisclosureEvidence: [
-            JSON.stringify({
-              coverageStatus: "unknown",
-              directVsInferred: "inferred",
-              evidenceConfidence: "limited",
-              matchedVendorDisclosureCount: 0,
-              mismatchRationale:
-                "Runtime cookies were observed, but one or more non-essential runtime cookies could not be matched to retained cookie-policy disclosure rows or category disclosures.",
-              observedRuntimeDomains: [],
-              observedRuntimeVendors: [],
-              policySurfacesSearched: [],
-              unmatchedRuntimeDomains: [],
-              unmatchedRuntimeVendors: [],
-              unmatchedVendorDisclosureCount: 0
-            })
-          ],
-          unmatched_cookie_names: ["_cs_c", "_cs_id", "_cs_s"]
-        },
-        flags: [
-          "explicit_policy_snippet_retained",
-          "contradiction_runtime_artifact_retained",
-          "disclosureMismatchExplained"
-        ]
-      })
-    ]
-  });
-
-  const row = byId(items, "runtime_vendor_disclosure_alignment");
-  assert.equal(row.status, "Insufficient evidence");
-  assert.equal(row.assessmentStatus, "coverage_limitation");
-  assert.equal(row.evidenceState, "observed");
-  assert.equal(row.criticalEvidence.retainedEvidence.selectedEvidenceArtifactId, "runtimeVendorDisclosureEvidence.limited");
-  assert.equal(row.criticalEvidence.retainedEvidence.selectedEvidenceStrength, "limited");
-  assert.match(
-    row.criticalEvidence.statusBasis,
-    /Runtime vendor disclosure evidence was retained, but no usable direct vendor comparison row was retained/i
-  );
-  assert.doesNotMatch(row.criticalEvidence.statusBasis, /Missing or incomplete evidence|searched policy surfaces/i);
-  assert.doesNotMatch(row.criticalEvidence.statusBasis, /Canonical unified finding/i);
-});
-
 test("deriveGdprEprivacyCoverageChecklist treats support-only sensitive surface context as a review signal", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
@@ -1384,7 +1240,7 @@ test("deriveGdprEprivacyCoverageChecklist does not map general accessibility fin
   ]);
 });
 
-test("deriveGdprEprivacyCoverageChecklist treats direct runtime vendor disclosure mismatch as a gap", () => {
+test("deriveGdprEprivacyCoverageChecklist ignores direct runtime vendor disclosure mismatch for removed alignment row", () => {
   const finding = makeFinding("policy_behavior_conflict", "Policy/behavior conflict", "audit_only");
   finding.evidence = {
     ...finding.evidence,
@@ -1424,14 +1280,10 @@ test("deriveGdprEprivacyCoverageChecklist treats direct runtime vendor disclosur
     unifiedFindings: [finding]
   });
 
-  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Gap observed");
-  assert.deepEqual(
-    byId(items, "runtime_vendor_disclosure_alignment").criticalEvidence.missingOrIncompleteSourceSignals,
-    []
-  );
+  assert.equal(items.some((item) => item.id === "runtime_vendor_disclosure_alignment"), false);
 });
 
-test("deriveGdprEprivacyCoverageChecklist treats retained vendors and policy surfaces without comparison as review signal", () => {
+test("deriveGdprEprivacyCoverageChecklist ignores retained vendors and policy surfaces for removed alignment row", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     coverageOutcomes: {
@@ -1450,32 +1302,20 @@ test("deriveGdprEprivacyCoverageChecklist treats retained vendors and policy sur
     scanCompleted: true,
     unifiedFindings: []
   });
-  const row = byId(items, "runtime_vendor_disclosure_alignment");
-
-  assert.equal(row.status, "Review signal");
-  assert.equal(row.assessmentStatus, "review_signal");
-  assert.equal(row.evidenceState, "observed");
-  assert.deepEqual(row.criticalEvidence.projectedFindings, []);
-  assert.equal(
-    row.criticalEvidence.statusBasis,
-    "Runtime vendors and policy surfaces were retained, but no canonical vendor-disclosure comparison artifact was retained. Manual review is needed to determine disclosure alignment."
-  );
-  assert.deepEqual(row.criticalEvidence.retainedEvidence.missingEvidenceNeeded, [
-    "Usable runtime-vendor disclosure comparison with searched policy surfaces, matched/unmatched vendors, confidence, and rationale."
-  ]);
+  assert.equal(items.some((item) => item.id === "runtime_vendor_disclosure_alignment"), false);
 });
 
-test("deriveGdprEprivacyCoverageChecklist does not gap vendor disclosure alignment without runtime vendors", () => {
+test("deriveGdprEprivacyCoverageChecklist does not include removed vendor disclosure alignment row", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     scanCompleted: true,
     unifiedFindings: []
   });
 
-  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Not observed");
+  assert.equal(items.some((item) => item.id === "runtime_vendor_disclosure_alignment"), false);
 });
 
-test("deriveGdprEprivacyCoverageChecklist treats runtime vendors without policy surface as not testable", () => {
+test("deriveGdprEprivacyCoverageChecklist ignores runtime vendors without policy surface for removed alignment row", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     coverageOutcomes: {
@@ -1495,11 +1335,10 @@ test("deriveGdprEprivacyCoverageChecklist treats runtime vendors without policy 
     unifiedFindings: []
   });
 
-  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Not testable");
-  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").assessmentStatus, "coverage_limitation");
+  assert.equal(items.some((item) => item.id === "runtime_vendor_disclosure_alignment"), false);
 });
 
-test("deriveGdprEprivacyCoverageChecklist treats usable matched vendor disclosure comparison as checked", () => {
+test("deriveGdprEprivacyCoverageChecklist ignores usable matched vendor disclosure comparison for removed alignment row", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     coverageOutcomes: {
@@ -1545,14 +1384,10 @@ test("deriveGdprEprivacyCoverageChecklist treats usable matched vendor disclosur
     scanCompleted: true,
     unifiedFindings: []
   });
-  const row = byId(items, "runtime_vendor_disclosure_alignment");
-
-  assert.equal(row.status, "Observed");
-  assert.equal(row.assessmentStatus, "checked");
-  assert.equal(row.evidenceState, "observed");
+  assert.equal(items.some((item) => item.id === "runtime_vendor_disclosure_alignment"), false);
 });
 
-test("deriveGdprEprivacyCoverageChecklist treats partial runtime vendor disclosure mismatch as a gap", () => {
+test("deriveGdprEprivacyCoverageChecklist ignores partial runtime vendor disclosure mismatch for removed alignment row", () => {
   const finding = makeFinding("policy_behavior_conflict", "Policy/behavior conflict", "audit_only");
   finding.evidence = {
     ...finding.evidence,
@@ -1603,11 +1438,7 @@ test("deriveGdprEprivacyCoverageChecklist treats partial runtime vendor disclosu
     unifiedFindings: [finding]
   });
 
-  assert.equal(byId(items, "runtime_vendor_disclosure_alignment").status, "Gap observed");
-  assert.deepEqual(
-    byId(items, "runtime_vendor_disclosure_alignment").criticalEvidence.missingOrIncompleteSourceSignals,
-    []
-  );
+  assert.equal(items.some((item) => item.id === "runtime_vendor_disclosure_alignment"), false);
 });
 
 test("deriveGdprEprivacyCoverageChecklist carries canonical source refs into checklist evidence refs", () => {

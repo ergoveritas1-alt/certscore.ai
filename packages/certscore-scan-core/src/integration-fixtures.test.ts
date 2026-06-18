@@ -78,6 +78,11 @@ const routeFulfillers: FixtureRouteFulfiller[] = [
     body: pixelBody(),
   },
   {
+    urlPattern: /^https:\/\/www\.youtube\.com\//i,
+    contentType: "text/html",
+    body: "<!doctype html><title>Fixture embed</title><p>Embedded video fixture</p>",
+  },
+  {
     urlPattern: /^https:\/\/cm\.g\.doubleclick\.net\/pixel\b/i,
     contentType: "image/gif",
     body: pixelBody(),
@@ -114,7 +119,7 @@ const routeFulfillers: FixtureRouteFulfiller[] = [
   },
 ];
 
-const expectations: Record<StaticFixturePage, {
+const expectations: Partial<Record<StaticFixturePage, {
   savedBundle?: string;
   findings: Record<string, "eligible" | "not_eligible" | "deferred">;
   resolvedProducts?: string[];
@@ -124,7 +129,7 @@ const expectations: Record<StaticFixturePage, {
   siteOwnedInfrastructureEndpointCount?: number;
   cookieClassification?: Partial<Record<keyof BundleInspectionReport["cookieClassification"], string[]>>;
   requiredJourneyBehaviors?: string[];
-}> = {
+}>> = {
   "akamai-security-cookie": {
     savedBundle: "akamai-security-cookie",
     findings: {
@@ -429,6 +434,48 @@ test("region-coded endpoint fixture projects bounded geography into cross-border
   }
 });
 
+test("pre-consent runtime scanner retains embedded-content and browser API probe evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-runtime-signals-"));
+  try {
+    const embeddedBundle = await scanFixturePage(
+      server.urlFor("embedded-third-party-iframe"),
+      path.join(tempRoot, "embedded-third-party-iframe"),
+      "fast",
+      "never",
+    );
+    assert.equal(
+      embeddedBundle.iframeEvents.some((event) =>
+        event.consentStateAtTime === "pre_consent" &&
+        event.frameUrl === "https://www.youtube.com/embed/certscore-fixture"
+      ),
+      true,
+      "scanner should retain pre-consent third-party embedded iframe evidence",
+    );
+
+    const fingerprintingBundle = await scanFixturePage(
+      server.urlFor("fingerprinting-api-probe"),
+      path.join(tempRoot, "fingerprinting-api-probe"),
+      "fast",
+      "never",
+    );
+    const browserApiEvents = fingerprintingBundle.runtimeTimeline.filter((event) =>
+      event.eventType === "browser_api_access"
+    );
+    assert.equal(browserApiEvents.length >= 2, true, "scanner should retain browser API access events");
+    assert.equal(
+      browserApiEvents.some((event) =>
+        event.evidenceRefs.some((ref) => ref.label?.includes("HTMLCanvasElement.toDataURL"))
+      ),
+      true,
+      "scanner should retain canvas API access evidence",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("planned pre-consent baseline skips screenshots when no consent surface is observed", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-selective-screenshot-"));
@@ -460,7 +507,12 @@ test("planned pre-consent baseline skips screenshots when no consent surface is 
   }
 });
 
-async function scanFixturePage(url: string, outDir: string): Promise<CanonicalEvidenceBundle> {
+async function scanFixturePage(
+  url: string,
+  outDir: string,
+  waitMode: "full" | "fast" = "full",
+  screenshotMode: "always" | "selective" | "never" = "always",
+): Promise<CanonicalEvidenceBundle> {
   const startedAtMs = Date.now();
   const scanProfile = getScanProfile("quick");
   const artifactWriter = await createArtifactWriter(outDir);
@@ -468,9 +520,11 @@ async function scanFixturePage(url: string, outDir: string): Promise<CanonicalEv
     url,
     normalizedUrl: url,
     scanStartedAtMs: startedAtMs,
-    internalBudgetMs: scanProfile.internalBudgetMs,
+    internalBudgetMs: waitMode === "fast" ? 6_000 : scanProfile.internalBudgetMs,
     artifactWriter,
     routeFulfillers,
+    waitMode,
+    screenshotMode,
   });
   assert.equal(scanResult.moduleRun.status, "completed", scanResult.moduleRun.errors.join("; "));
 

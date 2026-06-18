@@ -6,6 +6,8 @@ export type StaticFixturePage =
   | "clarity-f-collection"
   | "cmp-cookie"
   | "demdex-id"
+  | "embedded-third-party-iframe"
+  | "fingerprinting-api-probe"
   | "consent-accept-only-activation"
   | "consent-analytics-cookie-persists"
   | "consent-ambiguous-controls"
@@ -41,6 +43,7 @@ export type StaticFixturePage =
   | "gtm-library-only"
   | "newrelic-performance-monitoring"
   | "policy-ai-disclosure"
+  | "policy-article13-long"
   | "policy-ambiguous-choices"
   | "policy-broken-link"
   | "policy-cookie-link"
@@ -53,7 +56,10 @@ export type StaticFixturePage =
   | "policy-gpc-disclosure"
   | "policy-generic-links"
   | "policy-link-aria-title"
+  | "policy-onetrust-index-json"
+  | "policy-onetrust-notice-json"
   | "policy-privacy-center-link"
+  | "policy-retention-rights-only"
   | "policy-state-privacy-rights-link"
   | "policy-cmp-preference-control"
   | "policy-no-links"
@@ -79,6 +85,8 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "clarity-f-collection": "clarity-f-page",
   "cmp-cookie": "consent-cookie",
   "demdex-id": "demdex-id",
+  "embedded-third-party-iframe": "embedded-third-party-iframe",
+  "fingerprinting-api-probe": "fingerprinting-api-probe",
   "consent-accept-only-activation": "consent-accept-only",
   "consent-analytics-cookie-persists": "consent-analytics-cookie-persists",
   "consent-ambiguous-controls": "consent-ambiguous-controls",
@@ -114,6 +122,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "gtm-library-only": "gtm-page",
   "newrelic-performance-monitoring": "newrelic-monitoring",
   "policy-ai-disclosure": "policy-ai",
+  "policy-article13-long": "policy-article13-long",
   "policy-ambiguous-choices": "policy-ambiguous-choices",
   "policy-broken-link": "policy-broken-link",
   "policy-cookie-link": "policy-cookie-link",
@@ -126,7 +135,10 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-gpc-disclosure": "policy-gpc",
   "policy-generic-links": "policy-generic-links",
   "policy-link-aria-title": "policy-link-aria-title",
+  "policy-onetrust-index-json": "policy-onetrust-index-json",
+  "policy-onetrust-notice-json": "policy-onetrust-notice-json",
   "policy-privacy-center-link": "policy-privacy-center",
+  "policy-retention-rights-only": "policy-retention-rights-only",
   "policy-state-privacy-rights-link": "policy-state-rights",
   "policy-cmp-preference-control": "policy-cmp-preference-control",
   "policy-no-links": "policy-no-links",
@@ -220,6 +232,99 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     response.setHeader("Set-Cookie", "OptanonConsent=fixture-redacted; Path=/; SameSite=Lax");
     response.writeHead(200, { "Content-Type": "image/gif" });
     response.end(onePixelGif);
+    return;
+  }
+
+  if (url.pathname === "/onetrust/notice-shell.json") {
+    response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({
+      languages: [
+        {
+          code: "en-us",
+          isDefault: true,
+          policyUrl: "/onetrust/notice-shell-en-us.json",
+        },
+      ],
+    }));
+    return;
+  }
+
+  if (url.pathname === "/onetrust/notice-shell-en-us.json") {
+    response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({
+      notices: [{
+        title: "Privacy Policy",
+        content: [
+          "<h1>Privacy Policy</h1>",
+          "<p>The controller for this service can be contacted at privacy@example.test.</p>",
+          "<p>We process personal data to provide services, personalize content, measure performance, prevent fraud, and operate customer support.</p>",
+          "<p>We rely on consent, contract, legal obligation, and legitimate interests as legal bases for processing.</p>",
+          "<p>Recipients include processors, service providers, analytics providers, advertising partners, and affiliates.</p>",
+          "<p>We retain personal data only as long as necessary for the purposes described or as required by law.</p>",
+          "<p>You may exercise rights to access, rectification, erasure, restriction, portability, and objection.</p>",
+          "<p>We may transfer personal data outside the European Economic Area using adequacy decisions or standard contractual clauses.</p>",
+          "<p>Our data protection officer can be reached through the privacy office, and you may complain to a supervisory authority.</p>",
+        ].join(" "),
+      }],
+    }));
+    return;
+  }
+
+  if (url.pathname === "/onetrust/index-manifest.json") {
+    response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({
+      languages: {
+        de: { policyUrl: "/onetrust/index-de.json" },
+        "en-us": { policyUrl: "/onetrust/index-en-us.json" },
+      },
+    }));
+    return;
+  }
+
+  if (url.pathname === "/onetrust/index-en-us.json") {
+    response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({
+      notices: {
+        index: {
+          content: [
+            "<p>Our Privacy Policy explains what information we process.</p>",
+            "<table><tr><td>English (U.S.)</td><td><a href=\"/policies/onetrust-final-shell\">Privacy Policy</a></td></tr></table>",
+          ].join(" "),
+        },
+      },
+    }));
+    return;
+  }
+
+  if (url.pathname === "/onetrust/final-manifest.json") {
+    response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({
+      languages: {
+        "en-us": { policyUrl: "/onetrust/final-en-us.json" },
+      },
+    }));
+    return;
+  }
+
+  if (url.pathname === "/onetrust/final-en-us.json") {
+    response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify({
+      notices: {
+        final: {
+          content: [
+            "<h1>Warner Bros. Discovery Privacy Policy</h1>",
+            "<p>Controllers List. The controller for this service can be contacted at privacy@example.test.</p>",
+            "<p>We process personal data to provide services, personalize content, measure performance, and operate customer support.</p>",
+            "<p>We rely on consent, contract, legal obligation, and legitimate interests as legal bases for processing.</p>",
+            "<p>Recipients include processors, service providers, analytics providers, advertising partners, and affiliates.</p>",
+            "<p>We retain personal data only as long as necessary for the purposes described or as required by law.</p>",
+            "<p>You may exercise rights to access, rectification, erasure, restriction, portability, and objection.</p>",
+            "<p>We may transfer personal data outside the European Economic Area using adequacy decisions or standard contractual clauses.</p>",
+            "<p>Our data protection officer can be reached through the privacy office, and you may complain to a supervisory authority.</p>",
+          ].join(" "),
+        },
+      },
+    }));
     return;
   }
 
@@ -331,6 +436,33 @@ function bodyMarkup(caseName: StaticFixturePage): string {
   }
   if (caseName === "demdex-id") {
     return `<img alt="" src="https://dpm.demdex.net/id?d_orgid=fixture">`;
+  }
+  if (caseName === "embedded-third-party-iframe") {
+    return `<iframe title="Embedded video" src="https://www.youtube.com/embed/certscore-fixture"></iframe>`;
+  }
+  if (caseName === "fingerprinting-api-probe") {
+    return `<script>
+      window.__fixtureFingerprintingProbeRan = false;
+      setTimeout(() => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 16;
+        canvas.height = 16;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.fillText("CertScore", 1, 10);
+          ctx.getImageData(0, 0, 1, 1);
+        }
+        canvas.toDataURL();
+        const glCanvas = document.createElement("canvas");
+        const gl = glCanvas.getContext("webgl");
+        if (gl) {
+          gl.getParameter(gl.VERSION);
+        }
+        navigator.plugins;
+        window.__fixtureFingerprintingProbeRan = true;
+        document.body.setAttribute("data-fingerprinting-probe-ran", "true");
+      }, 25);
+    </script>`;
   }
   if (caseName === "newrelic-performance-monitoring") {
     return `<img alt="" src="https://bam.nr-data.net/1/browser/fixture">`;
@@ -591,6 +723,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
 function policyHomeMarkup(caseName: StaticFixturePage): string {
   const links: Record<string, string> = {
     "policy-ai-disclosure": `<a href="/policies/ai">AI disclosures</a>`,
+    "policy-article13-long": `<a href="/policies/article13-long">Privacy Policy</a>`,
     "policy-ambiguous-choices": `<a href="/privacy-choices">Your Choices</a>`,
     "policy-broken-link": `<a href="/policies/missing-privacy">Privacy Policy</a>`,
     "policy-cookie-link": `<a href="/policies/cookies">Cookie Policy</a>`,
@@ -604,10 +737,13 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-generic-links": `<a href="/products">Products</a><a href="/about">About us</a>`,
     "policy-link-aria-title": `<a href="/policies/privacy" aria-label="Privacy Policy" title="Privacy Policy"></a>`,
     "policy-privacy-center-link": `<a href="/privacy-center">Privacy Center</a>`,
+    "policy-retention-rights-only": `<a href="/policies/rights-only">Privacy Policy</a>`,
     "policy-state-privacy-rights-link": `<a href="/state-privacy-rights">State Privacy Rights</a>`,
     "policy-cmp-preference-control": `<button id="ot-sdk-btn" type="button" aria-label="Cookie Settings">Cookie Settings</button>`,
     "policy-no-links": "",
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
+    "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,
+    "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
     "policy-privacy-choices-link": `<a href="/privacy-choices">Your Privacy Choices</a>`,
     "policy-session-replay-disclosure": `<a href="/policies/session-replay">Privacy Notice</a>`,
     "policy-vendor-mentions": `<a href="/policies/vendors">Privacy Policy</a>`,
@@ -629,6 +765,22 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Privacy Policy",
       body: "Last updated: May 1, 2026. We use cookies for analytics and advertising. Our service providers include Google Analytics and Meta for measurement and advertising. You may contact privacy@example.test with questions.",
     },
+    "/policies/article13-long": {
+      title: "Privacy Policy",
+      body: [
+        "Privacy Policy. We use personal data to provide services, personalize content, measure performance, and improve security.",
+        "You can contact the controller at privacy@example.test or by writing to the privacy team.",
+        "Filler section one describes product operations, account preferences, support workflows, website diagnostics, and other neutral site functionality in deliberately verbose language so the later Article 13 sections are not adjacent to the opening privacy notice text.",
+        "Filler section two repeats neutral operational context about pages, public content, help center links, service availability, communications, preferences, and account administration without adding the disclosure keywords needed by the test.",
+        "Filler section three adds more bounded but non-sensitive text to force the scanner to retain a policy excerpt longer than one thousand characters while still staying far below full-policy retention.",
+        "We rely on consent, contract, legal obligation, and legitimate interests as lawful bases for processing depending on context.",
+        "Recipients include service providers, processors, analytics providers, advertising partners, and affiliates that help us operate the service.",
+        "We retain personal data only as long as necessary for the purposes described in this notice or as required by law.",
+        "You may exercise rights to access, rectification, erasure, restriction, portability, and objection by contacting the privacy team.",
+        "We may transfer personal data outside the European Economic Area using adequacy decisions or standard contractual clauses.",
+        "You may complain to a supervisory authority, and our data protection officer can be contacted through the privacy office.",
+      ].join(" "),
+    },
     "/privacy": {
       title: "Privacy Policy",
       body: "Last updated: May 1, 2026. We use cookies for analytics and advertising. Our service providers include Google Analytics and Meta for measurement and advertising.",
@@ -636,6 +788,10 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/privacy-policy": {
       title: "Privacy Policy",
       body: "Effective date: May 1, 2026. We describe cookies, analytics, advertising, and privacy choices for visitors.",
+    },
+    "/policies/rights-only": {
+      title: "Privacy Policy",
+      body: "Privacy Policy. You have the right to access, delete, erase, rectify, restrict, port, or object to certain processing of your personal data. Contact privacy@example.test to exercise your rights.",
     },
     "/policies/cookies": {
       title: "Cookie Policy",
@@ -707,6 +863,18 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "AI Disclosures",
       body: "Artificial intelligence features may summarize account content. Some output may include AI-generated content and automated decision support for internal operations.",
     },
+    "/policies/onetrust-shell": {
+      title: "WBD Privacy Center b2c",
+      body: "Processing Error. Close Privacy Center. Our Privacy Approach Privacy Policy Terms of Use Cookie Settings. OneTrust NoticeApi LoadNotices shell.",
+    },
+    "/policies/onetrust-index-shell": {
+      title: "WBD Privacy Center b2c",
+      body: "Processing Error. Close Privacy Center. Our Privacy Approach Privacy Policy Terms of Use Cookie Settings. OneTrust NoticeApi LoadNotices index shell.",
+    },
+    "/policies/onetrust-final-shell": {
+      title: "en-us | WBD Privacy Center",
+      body: "Processing Error. Close Privacy Center. Nested OneTrust NoticeApi LoadNotices shell.",
+    },
     "/california-privacy-notice": {
       title: "California Privacy Notice",
       body: "California Privacy Notice. California residents may access, delete, correct, and opt out of sale or share of personal information.",
@@ -723,6 +891,54 @@ function policyDocumentHtml(pathname: string): string | undefined {
   const doc = docs[pathname];
   if (!doc) {
     return undefined;
+  }
+  if (pathname === "/policies/onetrust-shell") {
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(doc.title)}</title>
+    <script>window.OneTrust = { NoticeApi: { LoadNotices() {} } }; OneTrust.NoticeApi.LoadNotices(["/onetrust/notice-shell.json"], true, "en-us", "false");</script>
+  </head>
+  <body>
+    <main>
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+    </main>
+  </body>
+</html>`;
+  }
+  if (pathname === "/policies/onetrust-index-shell") {
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(doc.title)}</title>
+    <script>window.OneTrust = { NoticeApi: { LoadNotices() {} } }; OneTrust.NoticeApi.LoadNotices(["/onetrust/index-manifest.json"], true, "en-us", "false");</script>
+  </head>
+  <body>
+    <main>
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+    </main>
+  </body>
+</html>`;
+  }
+  if (pathname === "/policies/onetrust-final-shell") {
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(doc.title)}</title>
+    <script>window.OneTrust = { NoticeApi: { LoadNotices() {} } }; OneTrust.NoticeApi.LoadNotices(["/onetrust/final-manifest.json"], true, "en-us", "false");</script>
+  </head>
+  <body>
+    <main>
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+    </main>
+  </body>
+</html>`;
   }
   if (pathname === "/policies/webmd-like-privacy") {
     return `<!doctype html>

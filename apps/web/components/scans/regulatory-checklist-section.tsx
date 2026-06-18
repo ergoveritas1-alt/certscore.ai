@@ -18,6 +18,7 @@ type RegulatoryChecklistTab = {
 
 type RegulatoryChecklistSectionProps = {
   headingLabel?: string;
+  headingTrailing?: ReactNode;
   showAdvancedEvidenceToggle?: boolean;
   tabs: RegulatoryChecklistTab[];
 };
@@ -35,7 +36,7 @@ function TabLabel({ tab, useShortLabel = false }: { tab: RegulatoryChecklistTab;
   );
 }
 
-export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnostics", showAdvancedEvidenceToggle = false, tabs }: RegulatoryChecklistSectionProps) {
+export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnostics", headingTrailing, showAdvancedEvidenceToggle = false, tabs }: RegulatoryChecklistSectionProps) {
   const [activeTabId, setActiveTabId] = useState(tabs[0]?.id ?? "");
   const [expandAllAdvancedEvidence, setExpandAllAdvancedEvidence] = useState(false);
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null;
@@ -58,6 +59,7 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
     }
   ].filter((group) => group.tabs.length > 0);
   const activeInMenu = activeTab ? menuGroups.some((group) => group.tabs.some((tab) => tab.id === activeTab.id)) : false;
+  const hasMultipleTabChoices = visibleTabs.length + menuGroups.reduce((sum, group) => sum + group.tabs.length, 0) > 1;
 
   if (!activeTab) {
     return null;
@@ -70,12 +72,15 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">{headingLabel}</p>
-              <span className="inline-flex shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
-                Beta
-              </span>
               <ApplicabilityAssumptionsNote />
             </div>
           </div>
+          {headingTrailing ? (
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 lg:justify-end">
+              {headingTrailing}
+            </div>
+          ) : null}
+          {hasMultipleTabChoices ? (
           <div className="flex max-w-full flex-wrap items-center gap-2 pb-1 lg:justify-end lg:pb-0">
             <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-100/80 p-1 shadow-inner shadow-slate-200/60">
               {showAdvancedEvidenceToggle ? (
@@ -164,9 +169,10 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
               ) : null}
             </div>
           </div>
+          ) : null}
         </div>
       </div>
-      <div className="-mt-px [&>*]:rounded-t-none">
+      <div className="[&>*]:border-t-0 [&>*]:rounded-t-none">
         <RegulatoryChecklistAdvancedEvidenceProvider value={{ expandAllAdvancedEvidence }}>
           {activeTab.content}
         </RegulatoryChecklistAdvancedEvidenceProvider>

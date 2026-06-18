@@ -19,7 +19,7 @@ import {
 } from "./promotion-evidence-contracts";
 import { evaluateTopFindingEligibility, type TopFindingEligibilityDecision } from "./top-finding-eligibility";
 import { evaluateCookieRetentionReview, COOKIE_RETENTION_THRESHOLDS } from "./cookie-retention-review";
-import { evaluateRuntimeVendorDisclosureEvidence, getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
+import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { getConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
 import { getConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
 import { buildPromotionGradePreconsentRequests, inferDirectEndpointVendorFromUrl } from "./preconsent-public-evidence";
@@ -495,9 +495,6 @@ function mapExecutiveConfidence(
     return lifecycleEvidence?.coverageStatus === "usable" ? "good" : "moderate";
   }
   if (findingId === "policy_behavior_contradiction_detected") {
-    if (hasPolicyRuntimeDisclosureSpecificityReviewContext(packet) && !hasPolicyBehaviorExecutivePromotionEvidence(packet)) {
-      return "moderate";
-    }
     if (!isSpecificPolicyRuntimeContradiction(packet)) {
       return "good";
     }
@@ -1387,16 +1384,6 @@ function getRetainedPolicyDisclosureEvaluation(packet: UnifiedFindingDisplayPack
     getFirstEntityJsonObject(packet, "runtime_policy_disclosure_evidence");
 }
 
-function hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet: UnifiedFindingDisplayPacket) {
-  if (retainedPolicyDisclosureStatesNoGap(packet)) {
-    return false;
-  }
-  return evaluateRuntimeVendorDisclosureEvidence(
-    { runtimeVendorDisclosureEvidence: getEntityJsonObjects(packet, "runtimeVendorDisclosureEvidence") },
-    "policy_behavior_conflict"
-  ).disposition === "eligible";
-}
-
 function retainedPolicyDisclosureStatesNoGap(packet: UnifiedFindingDisplayPacket) {
   const policyEvidence = getRetainedPolicyDisclosureEvaluation(packet);
   if (!policyEvidence) {
@@ -1414,43 +1401,6 @@ function retainedPolicyDisclosureStatesNoGap(packet: UnifiedFindingDisplayPacket
   return evaluated && relevantDisclosureFound && disclosureGapObserved === false;
 }
 
-function hasPolicyRuntimeDisclosureSpecificityReviewContext(packet: UnifiedFindingDisplayPacket) {
-  if (hasPolicyBehaviorExecutivePromotionEvidence(packet)) {
-    return false;
-  }
-  const policyEvidence = getRetainedPolicyDisclosureEvaluation(packet);
-  const policyEvidenceEvaluated = policyEvidence
-    ? getRecordBoolean(policyEvidence, ["evaluated"]) === true ||
-      getRecordBoolean(policyEvidence, ["relevantDisclosureFound", "relevant_disclosure_found"]) === true
-    : false;
-  const hasPolicyAnchor =
-    policyEvidenceEvaluated ||
-    packet.confidenceInputs.hasPolicyTextEvidence ||
-    getEntityUrlValues(packet, /policy.*url|privacy.*url|cookie.*url/i).length > 0 ||
-    (packet.evidence?.snippets ?? []).length > 0;
-  const runtimeDomains = uniqueStrings([
-    ...getEntityValues(packet, /runtimeDomains|runtime_domains|thirdPartyDomains|third_party_domains/i),
-    ...getPacketRuntimeRequestUrls(packet).flatMap((url) => {
-      try {
-        return [new URL(url).hostname];
-      } catch {
-        return [];
-      }
-    })
-  ]);
-  const runtimeVendors = uniqueStrings(getEntityValues(packet, /runtimeVendors|runtime_vendors|vendor/i));
-  const hasRuntimeAnchor =
-    packet.confidenceInputs.hasDirectRuntimeEvidence ||
-    getPacketRuntimeRequestUrls(packet).length > 0 ||
-    runtimeDomains.length > 0 ||
-    runtimeVendors.length > 0;
-  const hasRelevantBroadDisclosure =
-    !policyEvidence ||
-    getRecordBoolean(policyEvidence, ["relevantDisclosureFound", "relevant_disclosure_found"]) !== false;
-
-  return hasPolicyAnchor && hasRuntimeAnchor && hasRelevantBroadDisclosure;
-}
-
 function hasCompletePolicyRuntimeConflictEvidence(packet: UnifiedFindingDisplayPacket) {
   return Boolean(
     isSpecificPolicyRuntimeContradiction(packet) &&
@@ -1460,13 +1410,13 @@ function hasCompletePolicyRuntimeConflictEvidence(packet: UnifiedFindingDisplayP
 }
 
 function hasPolicyBehaviorExecutivePromotionEvidence(packet: UnifiedFindingDisplayPacket) {
-  return hasCompletePolicyRuntimeConflictEvidence(packet) || hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet);
+  return hasCompletePolicyRuntimeConflictEvidence(packet);
 }
 
 function shouldBlockGenericPolicyRuntimeAlignmentProjection(packet: UnifiedFindingDisplayPacket) {
   const policyEvidence = getRetainedPolicyDisclosureEvaluation(packet);
   if (!policyEvidence) {
-    return !hasPolicyBehaviorExecutivePromotionEvidence(packet) && !hasPolicyRuntimeDisclosureSpecificityReviewContext(packet);
+    return !hasPolicyBehaviorExecutivePromotionEvidence(packet);
   }
 
   const evaluated = getRecordBoolean(policyEvidence, ["evaluated"]) === true;
@@ -1480,10 +1430,10 @@ function shouldBlockGenericPolicyRuntimeAlignmentProjection(packet: UnifiedFindi
   ]);
 
   if (evaluated && relevantDisclosureFound && disclosureGapObserved === false) {
-    return !hasPolicyBehaviorExecutivePromotionEvidence(packet) && !hasPolicyRuntimeDisclosureSpecificityReviewContext(packet);
+    return !hasPolicyBehaviorExecutivePromotionEvidence(packet);
   }
 
-  return !hasPolicyBehaviorExecutivePromotionEvidence(packet) && !hasPolicyRuntimeDisclosureSpecificityReviewContext(packet);
+  return !hasPolicyBehaviorExecutivePromotionEvidence(packet);
 }
 
 function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof typeof CERT_SCORE_FINDING_REGISTRY> {
@@ -1498,12 +1448,7 @@ function getMappedFindingIds(packet: UnifiedFindingDisplayPacket): Array<keyof t
     primary === "policy_behavior_contradiction_detected" &&
     packet.unifiedFindingId === "policy_behavior_conflict" &&
     !isSpecificPolicyRuntimeContradiction(packet) &&
-    !evaluatePolicyRuntimeConflictPresentation(packet).complete &&
-    !hasPolicyRuntimeDisclosureSpecificityReviewContext(packet) &&
-    evaluateRuntimeVendorDisclosureEvidence(
-      { runtimeVendorDisclosureEvidence: getEntityJsonObjects(packet, "runtimeVendorDisclosureEvidence") },
-      "policy_behavior_conflict"
-    ).disposition !== "eligible"
+    !evaluatePolicyRuntimeConflictPresentation(packet).complete
   ) {
     return [];
   }
@@ -4368,7 +4313,7 @@ function attachRuntimeVendorDisclosureDetails(
   if (findingId !== "cookie_disclosure_gap" && findingId !== "policy_behavior_contradiction_detected") {
     return;
   }
-  if (findingId === "policy_behavior_contradiction_detected" && !hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet)) {
+  if (findingId === "policy_behavior_contradiction_detected") {
     return;
   }
 
@@ -4394,50 +4339,6 @@ function attachRuntimeVendorDisclosureDetails(
     coverageStatus: runtimeVendorDisclosureEvidence[0]?.coverageStatus ?? "unknown",
     evidenceConfidence: runtimeVendorDisclosureEvidence[0]?.evidenceConfidence ?? "limited",
     directVsInferred: runtimeVendorDisclosureEvidence[0]?.directVsInferred ?? "mixed"
-  };
-}
-
-function attachPolicyRuntimeAlignmentReviewDetails(
-  details: CertScoreFindingEvidenceDetails,
-  packet: UnifiedFindingDisplayPacket,
-  findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
-) {
-  if (findingId !== "policy_behavior_contradiction_detected" || !hasPolicyRuntimeDisclosureSpecificityReviewContext(packet)) {
-    return;
-  }
-  if (hasCompletePolicyRuntimeConflictEvidence(packet) || hasEligiblePolicyRuntimeVendorDisclosureEvidence(packet)) {
-    return;
-  }
-
-  const runtimeRequestUrls = getPacketRuntimeRequestUrls(packet).slice(0, 8);
-  const runtimeDomains = uniqueStrings([
-    ...getEntityValues(packet, /runtimeDomains|runtime_domains|thirdPartyDomains|third_party_domains/i),
-    ...runtimeRequestUrls.flatMap((url) => {
-      try {
-        return [new URL(url).hostname];
-      } catch {
-        return [];
-      }
-    })
-  ]).slice(0, 12);
-  const runtimeVendors = uniqueStrings(getEntityValues(packet, /runtimeVendors|runtime_vendors|vendor/i)).slice(0, 12);
-  const missingBridgeEvidence = [
-    "explicit_vendor_or_domain_unmatched_search_result",
-    "specific_policy_claim_to_runtime_anchor_bridge"
-  ];
-  if (retainedPolicyDisclosureStatesNoGap(packet)) {
-    missingBridgeEvidence.push("packet_disclosure_gap_observed_false");
-  }
-
-  details.policyRuntimeAlignmentReview = {
-    reviewTier: "disclosure_specificity_review",
-    summary:
-      "Substantial third-party runtime activity and retained disclosure context were observed, but the packet does not retain a specific unmatched-vendor disclosure bridge.",
-    ...(getRetainedPolicyDisclosureEvaluation(packet) ? { policyEvidence: getRetainedPolicyDisclosureEvaluation(packet) ?? undefined } : {}),
-    ...(runtimeVendors.length > 0 ? { runtimeVendors } : {}),
-    ...(runtimeDomains.length > 0 ? { runtimeDomains } : {}),
-    ...(runtimeRequestUrls.length > 0 ? { runtimeRequestUrls } : {}),
-    missingBridgeEvidence
   };
 }
 
@@ -4576,7 +4477,6 @@ function buildExecutiveEvidenceDetails(
     }
   }
   attachRuntimeVendorDisclosureDetails(details, packet, findingId);
-  attachPolicyRuntimeAlignmentReviewDetails(details, packet, findingId);
   if (evidenceSnippets.length > 0) {
     details.evidenceSnippets = evidenceSnippets;
   }
@@ -4995,18 +4895,6 @@ function buildExecutiveShortSummary(
     if (evidenceDetails?.policyRuntimeAlignmentReview) {
       return "CertScore observed substantial third-party advertising/tracking activity and retained public disclosure context covering cookies, vendors, advertisers, analytics, or targeted advertising. Manual review should confirm whether the full cookie, CMP, vendor, and privacy disclosures adequately cover the observed runtime vendor ecosystem.";
     }
-    const runtimeVendorDisclosure = evidenceDetails?.runtimeVendorDisclosure as Record<string, unknown> | undefined;
-    if (runtimeVendorDisclosure) {
-      const unmatchedVendors = Array.isArray(runtimeVendorDisclosure.unmatchedVendors)
-        ? runtimeVendorDisclosure.unmatchedVendors.filter((value): value is string => typeof value === "string")
-        : [];
-      const unmatchedDomains = Array.isArray(runtimeVendorDisclosure.unmatchedDomains)
-        ? runtimeVendorDisclosure.unmatchedDomains.filter((value): value is string => typeof value === "string")
-        : [];
-      const examples = unmatchedVendors.length > 0 ? unmatchedVendors : unmatchedDomains;
-      const exampleText = examples[0] ? ` including ${examples.slice(0, 2).join(", ")}` : "";
-      return `Runtime third-party vendors or domains${exampleText} were not clearly reflected in retained public disclosure evidence. Review policy, cookie, CMP, and downstream-sharing disclosures against the retained runtime evidence.`;
-    }
     const conflict = evidenceDetails?.policyRuntimeConflict;
     const runtimeEvent = conflict ? getPolicyRuntimeRepresentativeEvent(conflict) : null;
     if (conflict?.policyAnchor.snippet && runtimeEvent && evaluatePolicyRuntimeConflictPresentation(packet).complete) {
@@ -5018,18 +4906,6 @@ function buildExecutiveShortSummary(
 
   if (findingId === "cookie_disclosure_gap") {
     const evidenceDetails = buildExecutiveEvidenceDetails(packet, findingId);
-    const runtimeVendorDisclosure = evidenceDetails?.runtimeVendorDisclosure as Record<string, unknown> | undefined;
-    if (runtimeVendorDisclosure) {
-      const unmatchedVendors = Array.isArray(runtimeVendorDisclosure.unmatchedVendors)
-        ? runtimeVendorDisclosure.unmatchedVendors.filter((value): value is string => typeof value === "string")
-        : [];
-      const unmatchedDomains = Array.isArray(runtimeVendorDisclosure.unmatchedDomains)
-        ? runtimeVendorDisclosure.unmatchedDomains.filter((value): value is string => typeof value === "string")
-        : [];
-      const examples = unmatchedVendors.length > 0 ? unmatchedVendors : unmatchedDomains;
-      const exampleText = examples[0] ? ` including ${examples.slice(0, 2).join(", ")}` : "";
-      return `Runtime cookie or storage vendors/domains${exampleText} were not clearly reflected in retained cookie, CMP, or privacy disclosure evidence. This may warrant disclosure alignment review.`;
-    }
   }
 
   return packet.summary;
@@ -5067,9 +4943,7 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
       findingId === "policy_behavior_contradiction_detected"
         ? isSpecificPolicyRuntimeContradiction(packet)
           ? "Policy/runtime behavior conflict"
-          : hasPolicyRuntimeDisclosureSpecificityReviewContext(packet) && !hasPolicyBehaviorExecutivePromotionEvidence(packet)
-            ? "Runtime vendor disclosure specificity review"
-            : definition.label
+          : definition.label
         : findingId === "long_lived_cookie_retention_review"
           ? evaluateCookieRetentionReview({ cookieRetentionEvidence: getEntityJsonObjects(packet, "cookieRetentionEvidence") }).label
         : definition.label,
@@ -5083,10 +4957,6 @@ function buildExecutiveFinding(packet: UnifiedFindingDisplayPacket, findingId: k
     directVsInferred: findingId === "long_lived_cookie_retention_review"
       ? "direct"
       : findingId === "consent_preference_reopen_control_not_observed"
-        ? "inferred"
-      : findingId === "policy_behavior_contradiction_detected" &&
-          hasPolicyRuntimeDisclosureSpecificityReviewContext(packet) &&
-          !hasPolicyBehaviorExecutivePromotionEvidence(packet)
         ? "inferred"
       : mapVerificationStateToDirectness(packet.presentationDecision.verificationState),
     ...(evidenceDetails ? { evidenceDetails } : {}),
@@ -5219,8 +5089,7 @@ export function projectExecutiveFindingsFromUnifiedPackets(
     }
     if (
       finding.id === "policy_behavior_contradiction_detected" &&
-      (finding.evidenceDetails?.policyRuntimeAlignmentReview ||
-        finding.label === "Runtime vendor disclosure specificity review")
+      finding.evidenceDetails?.policyRuntimeAlignmentReview
     ) {
       return false;
     }

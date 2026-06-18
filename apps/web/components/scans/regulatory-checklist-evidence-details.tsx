@@ -17,6 +17,12 @@ type ResultTraceEvent = {
   vendorLabel?: string;
 };
 
+type ResultExplanationRow = {
+  detail: string;
+  label: string;
+  tone: "good" | "info" | "warn" | "bad";
+};
+
 type CorrectionGuidance = {
   kind: "none" | "steps";
   message?: string;
@@ -123,6 +129,33 @@ function formatHumanTimeMs(value: unknown) {
     return `${Math.round(numeric)}ms`;
   }
   return `${(numeric / 1000).toFixed(numeric < 10000 ? 1 : 0)}s`;
+}
+
+function getFirstNumberFromKeys(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  if (!record) {
+    return null;
+  }
+  for (const key of keys) {
+    const value = getNumber(record[key]);
+    if (value !== null) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function formatFirstObservedSuffix(value: unknown) {
+  const formatted = formatHumanTimeMs(value);
+  return formatted ? `; first observed ${formatted} after scan start` : "";
+}
+
+function formatObservedListLine(label: string, values: string[], firstObservedMs: unknown, limit = 3) {
+  if (values.length === 0) {
+    return null;
+  }
+  const selected = values.slice(0, limit);
+  const suffix = values.length > limit ? `, +${values.length - limit} more` : "";
+  return `${label}: ${selected.join(", ")}${suffix}${formatFirstObservedSuffix(firstObservedMs)}.`;
 }
 
 function formatTraceValue(value: unknown, maxLength = 140): string | null {
@@ -264,6 +297,29 @@ function getRowSpecificEvidenceRows(parsed: Record<string, unknown> | null, reta
   if (smokingGunRows.length > 0) {
     return smokingGunRows;
   }
+  const firstVendorObservedMs = getFirstNumberFromKeys(retainedEvidence, [
+    "firstObservedMs",
+    "first_observed_ms",
+    "firstSeenMs",
+    "first_seen_ms",
+    "firstRuntimeVendorObservedMs",
+    "first_runtime_vendor_observed_ms",
+    "firstAdvertisingRetargetingVendorObservedMs",
+    "first_advertising_retargeting_vendor_observed_ms",
+    "firstAnalyticsVendorObservedMs",
+    "first_analytics_vendor_observed_ms",
+    "firstEmbeddedContentObservedMs",
+    "first_embedded_content_observed_ms"
+  ]);
+  const article13Signal = getRecord(retainedEvidence.article13Signal);
+  const article13EvidenceText = getString(article13Signal?.evidenceText) ?? getString(article13Signal?.evidence_text);
+  if (article13EvidenceText) {
+    const policySurfaceSummary = getRecord(retainedEvidence.policySurfaceSummary);
+    return uniqueStrings([
+      `Matched disclosure snippet: ${truncateTraceText(article13EvidenceText, 180)}`,
+      formatArrayLine("policyUrls", getStringArray(policySurfaceSummary?.privacyPolicyUrls ?? policySurfaceSummary?.privacy_policy_urls), 2)
+    ].filter((row): row is string => Boolean(row))).slice(0, 3);
+  }
 
   if (family === "notice_surface" || /privacy notice/.test(coverageArea)) {
     rows.push(
@@ -299,10 +355,44 @@ function getRowSpecificEvidenceRows(parsed: Record<string, unknown> | null, reta
     );
   } else if (family === "adtech_sharing_runtime" || /advertising/.test(coverageArea)) {
     rows.push(
+      formatObservedListLine(
+        "Advertising/retargeting vendors observed",
+        [
+          ...getStringArray(retainedEvidence.advertisingRetargetingVendors),
+          ...getStringArray(retainedEvidence.advertisingSharingVendors)
+        ],
+        firstVendorObservedMs
+      ),
       formatScalarLine("targetedAdvertisingSignalsObserved", retainedEvidence.targetedAdvertisingSignalsObserved),
       formatScalarLine("runtimeVendorRequestUrlCoherence", retainedEvidence.runtimeVendorRequestUrlCoherence),
-      formatArrayLine("advertisingSharingVendors", getStringArray(retainedEvidence.advertisingSharingVendors)),
       formatArrayLine("saleShareRequestUrls", getStringArray(retainedEvidence.saleShareRequestUrls))
+    );
+  } else if (/analytics vendor|analytics.*observed|measurement vendor/.test(coverageArea)) {
+    rows.push(
+      formatObservedListLine(
+        "Analytics vendors observed",
+        getStringArray(retainedEvidence.analyticsVendors),
+        firstVendorObservedMs
+      ),
+      formatScalarLine("analyticsVendorCount", retainedEvidence.analyticsVendorCount)
+    );
+  } else if (/embedded.*third-party|embedded.*content|third-party embedded/.test(coverageArea)) {
+    rows.push(
+      formatObservedListLine(
+        "Embedded third-party content observed",
+        getStringArray(retainedEvidence.embeddedContentHosts),
+        firstVendorObservedMs
+      ),
+      formatScalarLine("embeddedContentObservationCount", retainedEvidence.embeddedContentObservationCount)
+    );
+  } else if (/session replay|behavioral analytics/.test(coverageArea)) {
+    const sessionReplayEvidence = getRecord(retainedEvidence.sessionReplayEvidence);
+    rows.push(
+      formatObservedListLine(
+        "Session replay vendors observed",
+        getStringArray(sessionReplayEvidence?.vendors),
+        getFirstNumberFromKeys(sessionReplayEvidence, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"])
+      )
     );
   } else if (family === "rights_methods" || /rights/.test(coverageArea)) {
     rows.push(
@@ -515,23 +605,122 @@ function buildSmokingGunTraceEvent(record: Record<string, unknown>, coverageArea
   return { chips, detail, rawDetails, stage, status, title, vendorLabel: vendorLabel ?? undefined };
 }
 
-function getResultTraceConclusion(parsed: Record<string, unknown>, retainedEvidence: Record<string, unknown> | null) {
+function formatFriendlySmokingGun(record: Record<string, unknown>, coverageArea: string) {
+  const subject = getPrimaryTraceSubject(record);
+  const consentState = getString(record.consentState);
+  const timing = formatHumanTimeMs(record.timestampMs) ?? formatHumanTimeMs(record.capturedAtMs);
+  const purpose = getString(record.cookiePurpose) ?? getString(record.purpose) ?? getString(record.endpointCategory);
+  const party = getString(record.cookieParty);
+  const host = getString(record.host) ?? getString(record.cookieDomain);
+  const beforeConsent = /pre[_ -]?consent/i.test(consentState ?? "") || /before consent|pre-consent/i.test(coverageArea);
+  const details = [
+    host ? `on ${host}` : null,
+    purpose ? `for ${purpose.replace(/_/g, " ")}` : null,
+    party ? `as ${party.replace(/_/g, " ")}` : null,
+    timing ? `${timing} after scan start` : null
+  ].filter((part): part is string => Boolean(part));
+  return `${subject} was observed${beforeConsent ? " before consent" : ""}${details.length > 0 ? ` (${details.join(", ")})` : ""}.`;
+}
+
+function cleanEvidenceRef(value: string) {
+  return value
+    .replace(/^Evidence flag:\s*/i, "")
+    .replace(/^Evidence:\s*/i, "")
+    .replace(/[_:]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getFriendlyEvidenceRows(
+  parsed: Record<string, unknown>,
+  retainedEvidence: Record<string, unknown> | null,
+  evidenceRefs: string[]
+) {
   const coverageArea = getString(parsed.coverageArea) ?? "this row";
+  const smokingGunRows = getSmokingGunEvidenceRecords(retainedEvidence)
+    .map((record) => formatFriendlySmokingGun(record, coverageArea));
+  if (smokingGunRows.length > 0) {
+    return uniqueStrings(smokingGunRows).slice(0, 3);
+  }
+
+  const highlights = uniqueStrings(getStringArray(retainedEvidence?.evidenceHighlights)
+    .map((value) => truncateTraceText(value.replace(/"/g, ""), 150)));
+  if (highlights.length > 0) {
+    return highlights.slice(0, 3);
+  }
+
+  const rowSpecificRows = getRowSpecificEvidenceRows(parsed, retainedEvidence)
+    .map((value) => truncateTraceText(value.replace(/"/g, ""), 150));
+  if (rowSpecificRows.length > 0) {
+    const onlyBasisFallback = rowSpecificRows.every((value) => /^statusBasis\s*:/i.test(value));
+    if (onlyBasisFallback && evidenceRefs.length > 0) {
+      return uniqueStrings(evidenceRefs.map(cleanEvidenceRef).filter(Boolean)).slice(0, 3);
+    }
+    return rowSpecificRows.slice(0, 3);
+  }
+
+  return uniqueStrings(evidenceRefs.map(cleanEvidenceRef).filter(Boolean)).slice(0, 3);
+}
+
+function getFriendlyMissingEvidenceRows(parsed: Record<string, unknown>) {
+  const missingSignals = Array.isArray(parsed.missingOrIncompleteSourceSignals)
+    ? parsed.missingOrIncompleteSourceSignals.map(getRecord).filter((signal): signal is Record<string, unknown> => Boolean(signal))
+    : [];
+  return missingSignals.slice(0, 3).map((signal) => {
+    const field = getString(signal.field) ?? "Required evidence";
+    const whyNeeded = getString(signal.whyNeeded);
+    return whyNeeded
+      ? `${field}: ${truncateTraceText(whyNeeded, 150)}`
+      : `${field} was missing or incomplete.`;
+  });
+}
+
+function getResultExplanationRows(input: RegulatoryChecklistEvidenceDetailsProps): ResultExplanationRow[] {
+  const parsed = getParsedEvidence(input.jsonPayload);
+  const retainedEvidence = getRetainedEvidence(input.jsonPayload);
+  if (!parsed) {
+    return [];
+  }
+
   const assessmentStatus = getString(parsed.assessmentStatus);
   const status = getString(parsed.status);
-  const firstSmokingGun = getSmokingGunEvidenceRecords(retainedEvidence)[0];
-  const subject = firstSmokingGun ? getPrimaryTraceSubject(firstSmokingGun) : null;
-  const purpose = firstSmokingGun ? getString(firstSmokingGun.cookiePurpose) ?? getString(firstSmokingGun.purpose) ?? getString(firstSmokingGun.endpointCategory) : null;
-  const consentState = firstSmokingGun ? getString(firstSmokingGun.consentState) : null;
-  const result = formatResultStatus(assessmentStatus ?? status);
+  const statusBasis = getString(parsed.statusBasis);
+  const traceStatus = resultTraceStatusFromParsed(parsed);
+  const resultTone: ResultExplanationRow["tone"] =
+    traceStatus === "fail" ? "bad" :
+      traceStatus === "warn" ? "warn" :
+        traceStatus === "pass" ? "good" :
+          "info";
+  const evidenceRows = getFriendlyEvidenceRows(parsed, retainedEvidence, getStringArray(input.evidenceRefs));
+  const missingRows = getFriendlyMissingEvidenceRows(parsed);
+  const rows: ResultExplanationRow[] = [
+  ];
 
-  if (subject && /gap_observed/i.test(assessmentStatus ?? "")) {
-    return `CertScore rated this as ${result} because ${subject}${purpose ? ` ${purpose.replace(/_/g, " ")}` : ""} evidence appeared${/pre[_ -]?consent/i.test(consentState ?? "") ? " before any consent action was recorded" : " in the retained scan evidence"}.`;
+  if (statusBasis) {
+    rows.push({
+      detail: truncateTraceText(statusBasis, 220),
+      label: "Basis",
+      tone: resultTone === "bad" ? "bad" : resultTone === "warn" ? "warn" : "info"
+    });
   }
-  if (subject) {
-    return `CertScore rated ${coverageArea} as ${result} using the retained signal for ${subject}.`;
+
+  if (evidenceRows.length > 0) {
+    rows.push({
+      detail: evidenceRows.join(" "),
+      label: evidenceRows.length === 1 ? "Evidence used" : "Evidence used",
+      tone: "info"
+    });
   }
-  return `CertScore rated ${coverageArea} as ${result} after evaluating the retained gate values and evidence for this scan row.`;
+
+  if (missingRows.length > 0) {
+    rows.push({
+      detail: missingRows.join(" "),
+      label: "Limits",
+      tone: "warn"
+    });
+  }
+
+  return rows.slice(0, 4);
 }
 
 function getResultTraceEvents(input: RegulatoryChecklistEvidenceDetailsProps): ResultTraceEvent[] {
@@ -902,6 +1091,34 @@ function stageAccentClass(status: ResultTraceEvent["status"]) {
   }
 }
 
+function explanationRowClass(tone: ResultExplanationRow["tone"]) {
+  switch (tone) {
+    case "good":
+      return "border-emerald-200 bg-emerald-50/50";
+    case "bad":
+      return "border-rose-200 bg-rose-50/50";
+    case "warn":
+      return "border-amber-200 bg-amber-50/50";
+    case "info":
+    default:
+      return "border-slate-200 bg-white";
+  }
+}
+
+function explanationLabelClass(tone: ResultExplanationRow["tone"]) {
+  switch (tone) {
+    case "good":
+      return "text-emerald-800";
+    case "bad":
+      return "text-rose-800";
+    case "warn":
+      return "text-amber-900";
+    case "info":
+    default:
+      return "text-slate-500";
+  }
+}
+
 export function RegulatoryChecklistCorrectionSteps({
   defaultOpen = false,
   jsonPayload,
@@ -946,85 +1163,27 @@ export function RegulatoryChecklistActiveTrace({
   defaultOpen?: boolean;
 }) {
   const parsed = getParsedEvidence(jsonPayload);
-  const retainedEvidence = getRetainedEvidence(jsonPayload);
-  const events = getResultTraceEvents({ evidenceRefs, jsonPayload });
-  if (!parsed || events.length === 0) {
+  const explanationRows = getResultExplanationRows({ evidenceRefs, jsonPayload });
+  if (!parsed || explanationRows.length === 0) {
     return null;
   }
-  const resultStatus = formatResultStatus(getString(parsed.assessmentStatus) ?? getString(parsed.status));
-  const conclusion = getResultTraceConclusion(parsed, retainedEvidence);
-  const primaryEvents = events.slice(0, 5);
-  const moreEvents = events.slice(5);
 
   return (
     <details className="mt-1 rounded-md border border-slate-200 bg-white" open={defaultOpen || undefined}>
       <summary className="cursor-pointer px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-        Why this result? <span className="text-slate-700">{resultStatus}</span>
+        Why this result?
       </summary>
       <div className="max-h-[50vh] overflow-y-auto border-t border-slate-200 bg-slate-50/60 px-2.5 py-2">
-        <p className="mb-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs leading-5 text-slate-700">
-          {conclusion}
-        </p>
-        <ol className="space-y-1.5">
-          {primaryEvents.map((event, index) => (
-            <li
-              className={`rounded-md border border-l-4 border-slate-200 bg-white px-2.5 py-1.5 ${stageAccentClass(event.status)}`}
-              key={`${index}:${event.stage}:${event.title}`}
-            >
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">{event.stage}</span>
-                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${resultTraceStatusClass(event.status)}`}>
-                  {resultTraceStatusLabel(event.status)}
-                </span>
-                {event.vendorLabel ? (
-                  <VendorBrandChip
-                    className="py-0.5 text-[10px]"
-                    label={event.vendorLabel}
-                    suffix="vendor"
-                  />
-                ) : null}
-              </div>
-              <p className="mt-1 text-xs leading-5 text-slate-800">{event.title}</p>
-              {event.detail ? <p className="text-[11px] leading-5 text-slate-500">{event.detail}</p> : null}
-              {event.chips.length > 0 ? (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {event.chips.map((chip) => (
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600" key={chip}>
-                      {chip}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              {event.rawDetails.length > 0 ? (
-                <details className="mt-1">
-                  <summary className="cursor-pointer text-[11px] font-medium text-slate-500">Raw trace details</summary>
-                  <p className="mt-1 break-words font-mono text-[11px] leading-5 text-slate-500">{event.rawDetails.join(" · ")}</p>
-                </details>
-              ) : null}
-            </li>
+        <dl className="space-y-1.5">
+          {explanationRows.map((row) => (
+            <div className={`rounded-md border px-2.5 py-1.5 ${explanationRowClass(row.tone)}`} key={`${row.label}:${row.detail}`}>
+              <dt className={`text-[10px] font-semibold uppercase tracking-[0.1em] ${explanationLabelClass(row.tone)}`}>
+                {row.label}
+              </dt>
+              <dd className="mt-1 text-xs leading-5 text-slate-800">{row.detail}</dd>
+            </div>
           ))}
-        </ol>
-        {moreEvents.length > 0 ? (
-          <details className="mt-2 rounded-md border border-slate-200 bg-white">
-            <summary className="cursor-pointer px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-              More trace events
-            </summary>
-            <ol className="max-h-48 space-y-1.5 overflow-y-auto border-t border-slate-200 px-2.5 py-2">
-              {moreEvents.map((event, index) => (
-                <li className="text-xs leading-5 text-slate-700" key={`${index}:${event.stage}:${event.title}`}>
-                  <span className={`mr-2 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${resultTraceStatusClass(event.status)}`}>
-                    {resultTraceStatusLabel(event.status)}
-                  </span>
-                  <span className="font-semibold text-slate-600">{event.stage}:</span>{" "}
-                  <span>{event.title}</span>
-                  {event.rawDetails.length > 0 ? (
-                    <span className="mt-1 block break-words font-mono text-[11px] text-slate-500">{event.rawDetails.join(" · ")}</span>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          </details>
-        ) : null}
+        </dl>
       </div>
     </details>
   );

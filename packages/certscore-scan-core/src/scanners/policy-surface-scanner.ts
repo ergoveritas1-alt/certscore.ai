@@ -15,7 +15,7 @@ const MAX_CANDIDATES_TO_FETCH = 8;
 const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 3;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
-const MAX_EXCERPT_CHARS = 520;
+const MAX_EXCERPT_CHARS = 6_000;
 
 export interface PolicySurfaceScannerInput {
   url: string;
@@ -407,7 +407,11 @@ async function processPolicyCandidate({
   }
 
   const title = titleFromHtml(fetched.text);
-  const visibleText = htmlToVisibleText(fetched.text);
+  const visibleText = await resolvePolicyVisibleText({
+    html: fetched.text,
+    baseUrl: candidate.normalizedUrl,
+    timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
+  });
   const deterministic = extractPolicyFacts(visibleText);
   const excerpt = boundedExcerpt(visibleText, prioritizedExcerptKeywords(deterministic));
   const excerptId = `policy_excerpt_${stableHash(candidate.normalizedUrl)}`;
@@ -473,6 +477,27 @@ async function processPolicyCandidate({
       visibleText,
     ),
   };
+}
+
+async function resolvePolicyVisibleText(input: {
+  html: string;
+  baseUrl: string;
+  timeoutMs: number;
+}): Promise<string> {
+  const visibleText = htmlToVisibleText(input.html);
+  const oneTrustText = await extractOneTrustNoticeText({
+    html: input.html,
+    baseUrl: input.baseUrl,
+    timeoutMs: input.timeoutMs,
+    depth: 0,
+  });
+  if (oneTrustText && oneTrustText.length > visibleText.length * 2) {
+    return oneTrustText;
+  }
+  if (oneTrustText && /processing error|privacy center.*error/i.test(visibleText)) {
+    return oneTrustText;
+  }
+  return visibleText;
 }
 
 function moduleRun(
@@ -1166,7 +1191,7 @@ function extractPolicyFacts(text: string): {
     ["processing_purposes", /purpose|why we process|use your (?:personal )?(?:data|information)|process(?:ing)? (?:your )?(?:personal )?(?:data|information)/i, "processing purposes"],
     ["legal_basis", /legal basis|lawful basis|legitimate interests?|contractual necessity|public interest|vital interests?/i, "legal basis"],
     ["recipients_or_vendor_categories", /recipients|service providers|processors|partners|third parties|third-party/i, "recipients"],
-    ["data_subject_rights", /right to access|right to delete|right to erasure|right to rectification|right to object|data subject rights|exercise your rights/i, "data subject rights"],
+    ["data_subject_rights", /right to access|right to delete|right to erasure|right to rectification|right to object|data subject rights|exercise (?:your )?rights/i, "data subject rights"],
     ["international_transfers", /international transfer|transfer (?:your )?(?:personal )?(?:data|information).{0,80}(?:outside|to)|standard contractual clauses|adequacy decision/i, "international transfers"],
     ["dpo_contact", /data protection officer|\bdpo\b/i, "DPO"],
     ["supervisory_authority", /supervisory authority|data protection authority|lodge a complaint|complain to (?:a )?(?:regulator|authority)/i, "supervisory authority"],
@@ -1243,17 +1268,60 @@ function article13SignalsFromText(text: string): PolicySurfaceObservation["artic
     disclosureType: PolicySurfaceObservation["article13DisclosureSignals"][number]["disclosureType"];
     pattern: RegExp;
     partialPattern?: RegExp;
+    excerptPatterns: RegExp[];
   }> = [
-    { disclosureType: "controller_contact", pattern: /(?:controller|privacy@|contact us|data protection officer|\bdpo\b)/i },
-    { disclosureType: "processing_purposes", pattern: /(?:purpose|why we process|use your (?:personal )?(?:data|information)|process(?:ing)? (?:your )?(?:personal )?(?:data|information))/i },
-    { disclosureType: "legal_basis", pattern: /(?:legal basis|lawful basis|legitimate interests?|contractual necessity|public interest|vital interests?)/i },
-    { disclosureType: "recipients_or_vendor_categories", pattern: /(?:recipients|service providers|processors|partners|third parties|third-party)/i },
-    { disclosureType: "data_retention", pattern: /(?:retain|retention|storage period|as long as necessary|kept for|keep your (?:personal )?(?:data|information))/i },
-    { disclosureType: "data_subject_rights", pattern: /(?:right to access|right to delete|right to erasure|right to rectification|right to object|data subject rights|exercise your rights)/i },
-    { disclosureType: "international_transfers", pattern: /(?:international transfer|standard contractual clauses|adequacy decision|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))/i, partialPattern: /transfer (?:your )?(?:personal )?(?:data|information)/i },
-    { disclosureType: "dpo_contact", pattern: /(?:data protection officer|\bdpo\b)/i },
-    { disclosureType: "supervisory_authority", pattern: /(?:supervisory authority|data protection authority|lodge a complaint|complain to (?:a )?(?:regulator|authority))/i },
-    { disclosureType: "automated_decision_making_or_profiling", pattern: /(?:automated decision|solely automated|profiling|meaningful information about the logic)/i },
+    {
+      disclosureType: "controller_contact",
+      pattern: /(?:data controller|controller|privacy@|contact (?:us|our privacy team)|privacy office|data protection officer|\bdpo\b)/i,
+      excerptPatterns: [/data controller/i, /controller/i, /privacy@/i, /privacy office/i, /data protection officer/i, /\bdpo\b/i],
+    },
+    {
+      disclosureType: "processing_purposes",
+      pattern: /(?:purpose(?:s)? (?:of|for|we|to)|why we process|we (?:use|process) (?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|provide (?:our )?services|personalize (?:content|services|experience))/i,
+      excerptPatterns: [/purpose(?:s)? (?:of|for|we|to)/i, /why we process/i, /we (?:use|process) (?:your )?(?:personal )?(?:data|information) (?:to|for)/i, /(?:use|processing) of (?:your )?(?:personal )?(?:data|information)/i, /provide (?:our )?services/i, /personalize (?:content|services|experience)/i],
+    },
+    {
+      disclosureType: "legal_basis",
+      pattern: /(?:legal basis|lawful basis|legitimate interests?|consent|performance of (?:a )?contract|contractual necessity|legal obligation|public task|public interest|vital interests?)/i,
+      excerptPatterns: [/legal basis/i, /lawful basis/i, /legitimate interests?/i, /consent/i, /performance of (?:a )?contract/i, /contractual necessity/i, /legal obligation/i, /public task/i, /public interest/i, /vital interests?/i],
+    },
+    {
+      disclosureType: "recipients_or_vendor_categories",
+      pattern: /(?:recipients|service providers|processors|vendors?|partners|affiliates|third parties|third-party|advertising partners?|analytics providers?)/i,
+      excerptPatterns: [/recipients/i, /service providers/i, /processors/i, /vendors?/i, /partners/i, /affiliates/i, /third parties/i, /third-party/i, /advertising partners?/i, /analytics providers?/i],
+    },
+    {
+      disclosureType: "data_retention",
+      pattern: /(?:retention period|retention criteria|storage period|retain.{0,80}(?:as long as necessary|required by law|for the purposes|until|unless)|keep your (?:personal )?(?:data|information).{0,80}(?:as long as necessary|required by law|for)|stored for|kept for|as long as necessary|delete (?:it|them|the data|personal data|personal information) after)/i,
+      partialPattern: /(?:retain|retention|keep your (?:personal )?(?:data|information))/i,
+      excerptPatterns: [/retention period/i, /retention criteria/i, /storage period/i, /retain.{0,80}(?:as long as necessary|required by law|for the purposes|until|unless)/i, /keep your (?:personal )?(?:data|information).{0,80}(?:as long as necessary|required by law|for)/i, /stored for/i, /kept for/i, /as long as necessary/i, /delete (?:it|them|the data|personal data|personal information) after/i, /retain/i, /retention/i],
+    },
+    {
+      disclosureType: "data_subject_rights",
+      pattern: /(?:right to (?:access|delete|erase|erasure|rectif|object|restrict|port)|rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)|data subject rights|exercise (?:your )?rights)/i,
+      excerptPatterns: [/right to (?:access|delete|erase|erasure|rectif|object|restrict|port)/i, /rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)/i, /data subject rights/i, /exercise (?:your )?rights/i],
+    },
+    {
+      disclosureType: "international_transfers",
+      pattern: /(?:international transfer|cross-border transfer|standard contractual clauses|adequacy decision|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield)/i,
+      partialPattern: /transfer (?:your )?(?:personal )?(?:data|information)/i,
+      excerptPatterns: [/international transfer/i, /cross-border transfer/i, /standard contractual clauses/i, /adequacy decision/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /third countr(?:y|ies)/i, /data privacy framework/i, /\bdpf\b/i, /privacy shield/i, /transfer (?:your )?(?:personal )?(?:data|information)/i],
+    },
+    {
+      disclosureType: "dpo_contact",
+      pattern: /(?:data protection officer|\bdpo\b|data protection contact)/i,
+      excerptPatterns: [/data protection officer/i, /\bdpo\b/i, /data protection contact/i],
+    },
+    {
+      disclosureType: "supervisory_authority",
+      pattern: /(?:supervisory authority|data protection authority|lodge a complaint|complain to (?:a )?(?:regulator|authority)|\bico\b|\bcnil\b|\bdpc\b)/i,
+      excerptPatterns: [/supervisory authority/i, /data protection authority/i, /lodge a complaint/i, /complain to (?:a )?(?:regulator|authority)/i, /\bico\b/i, /\bcnil\b/i, /\bdpc\b/i],
+    },
+    {
+      disclosureType: "automated_decision_making_or_profiling",
+      pattern: /(?:automated decision|solely automated|profiling|meaningful information about the logic)/i,
+      excerptPatterns: [/automated decision/i, /solely automated/i, /profiling/i, /meaningful information about the logic/i],
+    },
   ];
   return rules.flatMap((rule) => {
     const status = rule.pattern.test(text)
@@ -1265,7 +1333,9 @@ function article13SignalsFromText(text: string): PolicySurfaceObservation["artic
       ? [{
           disclosureType: rule.disclosureType,
           status,
-          evidenceText: boundedExcerpt(text, [rule.disclosureType.replace(/_/g, " ")]).slice(0, 320),
+          evidenceText: boundedExcerptForPatterns(text, status === "partial" && rule.partialPattern
+            ? [rule.partialPattern, ...rule.excerptPatterns]
+            : rule.excerptPatterns).slice(0, 320),
           confidence: status === "observed" ? 0.78 : 0.62,
           source: "deterministic" as const,
         }]
@@ -1285,6 +1355,229 @@ function mergeArticle13DisclosureSignals(
     }
   }
   return [...byType.values()].slice(0, 12);
+}
+
+async function extractOneTrustNoticeText(input: {
+  html: string;
+  baseUrl: string;
+  timeoutMs: number;
+  depth: number;
+}): Promise<string | null> {
+  if (input.depth > 2) {
+    return null;
+  }
+
+  const noticeUrls = extractOneTrustNoticeUrls(input.html, input.baseUrl).slice(0, 4);
+  for (const noticeUrl of noticeUrls) {
+    const fetched = await fetchText(noticeUrl, input.timeoutMs);
+    if (!fetched.ok || !fetched.text.trim()) {
+      continue;
+    }
+    const payload = parseJsonObject(fetched.text);
+    if (!payload) {
+      continue;
+    }
+
+    const policyUrls = extractOneTrustPolicyUrls(payload, noticeUrl).slice(0, 2);
+    for (const policyUrl of policyUrls) {
+      const policy = await fetchText(policyUrl, input.timeoutMs);
+      if (!policy.ok || !policy.text.trim()) {
+        continue;
+      }
+      const policyPayload = parseJsonObject(policy.text);
+      if (policyPayload) {
+        const nestedPolicyUrls = extractOneTrustPolicyUrls(policyPayload, policyUrl)
+          .filter((nestedUrl) => nestedUrl !== policyUrl)
+          .slice(0, 2);
+        for (const nestedPolicyUrl of nestedPolicyUrls) {
+          const nestedPolicy = await fetchText(nestedPolicyUrl, input.timeoutMs);
+          if (!nestedPolicy.ok || !nestedPolicy.text.trim()) {
+            continue;
+          }
+          const nestedPayload = parseJsonObject(nestedPolicy.text);
+          if (nestedPayload) {
+            const nestedUrls = extractOneTrustPolicyUrls(nestedPayload, nestedPolicyUrl);
+            const nestedText = extractOneTrustNoticePayloadText(nestedPayload);
+            if (nestedText && nestedText.length > 500 && nestedUrls.length === 0) {
+              return nestedText;
+            }
+          }
+          const nestedNoticeText = await extractOneTrustNoticeText({
+            html: nestedPolicy.text,
+            baseUrl: nestedPolicyUrl,
+            timeoutMs: input.timeoutMs,
+            depth: input.depth + 1,
+          });
+          if (nestedNoticeText && nestedNoticeText.length > 500) {
+            return nestedNoticeText;
+          }
+        }
+
+        const policyText = extractOneTrustNoticePayloadText(policyPayload);
+        if (policyText && policyText.length > 500) {
+          return policyText;
+        }
+      }
+
+      const nestedText = await extractOneTrustNoticeText({
+        html: policy.text,
+        baseUrl: policyUrl,
+        timeoutMs: input.timeoutMs,
+        depth: input.depth + 1,
+      });
+      if (nestedText && nestedText.length > 500) {
+        return nestedText;
+      }
+
+      const visibleText = htmlToVisibleText(policy.text);
+      if (visibleText.length > 500 && !/processing error|privacy center.*error/i.test(visibleText)) {
+        return visibleText;
+      }
+    }
+
+    const directText = extractOneTrustNoticePayloadText(payload);
+    if (directText && directText.length > 500) {
+      return directText;
+    }
+  }
+
+  return null;
+}
+
+function extractOneTrustNoticeUrls(html: string, baseUrl: string): string[] {
+  const urls: string[] = [];
+  const directPattern = /https?:\/\/privacyportal-cdn\.onetrust\.com\/[^"'<>\s)]+?\.json/gi;
+  let directMatch: RegExpExecArray | null;
+  while ((directMatch = directPattern.exec(html))) {
+    urls.push(directMatch[0] ?? "");
+  }
+
+  const loadNoticePattern = /OneTrust\.NoticeApi\.LoadNotices\s*\(\s*(\[[\s\S]*?\])/gi;
+  let loadNoticeMatch: RegExpExecArray | null;
+  while ((loadNoticeMatch = loadNoticePattern.exec(html))) {
+    const rawUrls = parseJsonArrayOfStrings(loadNoticeMatch[1] ?? "");
+    urls.push(...rawUrls);
+  }
+
+  return unique(urls
+    .map((url) => normalizeUrl(url, baseUrl))
+    .filter((url): url is string => Boolean(url)));
+}
+
+function extractOneTrustPolicyUrls(payload: unknown, baseUrl: string): string[] {
+  const urls = new Set<string>();
+  const contentLinks: string[] = [];
+
+  function visit(value: unknown, keyHint = ""): void {
+    if (typeof value === "string") {
+      if (keyHint === "policyUrl") {
+        const normalized = normalizeUrl(value, baseUrl);
+        if (normalized) {
+          urls.add(normalized);
+        }
+      }
+      if (/<a\b/i.test(value)) {
+        contentLinks.push(...extractPolicyLinksFromHtml(value, baseUrl));
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item, keyHint);
+      }
+      return;
+    }
+    if (isPlainObject(value)) {
+      for (const [key, child] of Object.entries(value)) {
+        visit(child, key);
+      }
+    }
+  }
+
+  visit(payload);
+  for (const link of contentLinks) {
+    urls.add(link);
+  }
+
+  return [...urls].sort((left, right) => oneTrustPolicyUrlPriority(left) - oneTrustPolicyUrlPriority(right));
+}
+
+function extractOneTrustNoticePayloadText(payload: unknown): string | null {
+  const contentBlocks: string[] = [];
+
+  function visit(value: unknown, keyHint = ""): void {
+    if (typeof value === "string") {
+      if (keyHint === "content" || /<p\b|<h[1-6]\b|<section\b|<article\b|<li\b/i.test(value)) {
+        contentBlocks.push(value);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        visit(item, keyHint);
+      }
+      return;
+    }
+    if (isPlainObject(value)) {
+      for (const [key, child] of Object.entries(value)) {
+        visit(child, key);
+      }
+    }
+  }
+
+  visit(payload);
+  const text = htmlToVisibleText(contentBlocks.join(" "));
+  return text.length > 0 ? text : null;
+}
+
+function extractPolicyLinksFromHtml(html: string, baseUrl: string): string[] {
+  const links: Array<{ url: string; text: string }> = [];
+  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = anchorPattern.exec(html))) {
+    const href = attr(match[1] ?? "", "href");
+    const url = href ? normalizeUrl(href, baseUrl) : undefined;
+    if (!url) {
+      continue;
+    }
+    links.push({ url, text: htmlToVisibleText(match[2] ?? "") });
+  }
+  return links
+    .filter((link) => /privacy policy|privacy notice|policycenter\/b2c|privacy-notices/i.test(`${link.text} ${link.url}`))
+    .sort((left, right) => oneTrustPolicyUrlPriority(`${left.text} ${left.url}`) - oneTrustPolicyUrlPriority(`${right.text} ${right.url}`))
+    .map((link) => link.url);
+}
+
+function oneTrustPolicyUrlPriority(value: string): number {
+  if (/(?:\/|-)(?:en-us|en_us)(?:[./?#_-]|$)|\/b2c\/en-us\b/i.test(value)) {
+    return 0;
+  }
+  if (/(?:\/|-)en(?:[./?#_-]|$)|privacy policy/i.test(value)) {
+    return 1;
+  }
+  if (/\/b2c\b|privacy notice|privacy-notices/i.test(value)) {
+    return 2;
+  }
+  return 5;
+}
+
+function parseJsonObject(value: string): unknown | null {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonArrayOfStrings(value: string): string[] {
+  const parsed = parseJsonObject(value);
+  return Array.isArray(parsed)
+    ? parsed.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 async function fetchText(url: string, timeoutMs: number): Promise<{ ok: boolean; status?: number; text: string }> {
@@ -1313,6 +1606,18 @@ function boundedExcerpt(text: string, keywords: string[]): string {
   const lower = normalized.toLowerCase();
   const keyword = keywords.find((item) => lower.includes(item.toLowerCase()));
   const index = keyword ? Math.max(0, lower.indexOf(keyword.toLowerCase()) - 180) : 0;
+  return normalized.slice(index, index + MAX_EXCERPT_CHARS);
+}
+
+function boundedExcerptForPatterns(text: string, patterns: RegExp[]): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const matchIndex = patterns
+    .map((pattern) => {
+      pattern.lastIndex = 0;
+      return normalized.search(pattern);
+    })
+    .find((index) => index >= 0);
+  const index = matchIndex === undefined ? 0 : Math.max(0, matchIndex - 180);
   return normalized.slice(index, index + MAX_EXCERPT_CHARS);
 }
 

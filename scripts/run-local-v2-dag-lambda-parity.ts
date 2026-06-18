@@ -15,7 +15,7 @@ type Args = {
   debugOverrides: Record<string, unknown> | null;
   functionName: string;
   outPath: string;
-  profile: "full" | "tiny";
+  profile: "full" | "standard" | "tiny";
   scanId: string;
   targetUrl: string;
   variantLabel: string | null;
@@ -404,7 +404,7 @@ function parseArgs(argv: string[]): Args {
     } else if (arg === "--out") {
       args.outPath = requiredValue(argv, ++index, arg);
     } else if (arg === "--profile") {
-      args.profile = requiredValue(argv, ++index, arg) === "tiny" ? "tiny" : "full";
+      args.profile = normalizeProfile(requiredValue(argv, ++index, arg));
     } else if (arg === "--scan-id") {
       args.scanId = requiredValue(argv, ++index, arg);
     } else if (arg === "--target-url") {
@@ -427,7 +427,7 @@ function printUsage() {
     "",
     "Options:",
     "  --target-url <url>       Site to scan. Default: https://www.webmd.com/",
-    "  --profile <profile>      full or tiny. Default: full",
+    "  --profile <profile>      full, standard, or tiny. Default: full",
     "  --scan-id <id>           Stable scan ID. Default: local-lambda-parity-<uuid>",
     "  --artifact-dir <path>    Artifact base directory. Default: artifacts/local-v2-dag-lambda-parity",
     "  --out <path>             Summary JSON path. Default: artifacts/local-v2-dag-lambda-parity/latest.json",
@@ -442,6 +442,13 @@ function printUsage() {
 
 function normalizeTargetUrl(value: string) {
   return /^https?:\/\//i.test(value) ? value : `https://${value.replace(/^\/+/, "")}`;
+}
+
+function normalizeProfile(value: string): Args["profile"] {
+  if (value === "tiny" || value === "standard" || value === "full") {
+    return value;
+  }
+  return "full";
 }
 
 function parseJsonObjectArg(value: string, flag: string): Record<string, unknown> {

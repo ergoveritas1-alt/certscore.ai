@@ -23,6 +23,7 @@ export type LocalV2DagScanEnv = {
   CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME?: string;
   CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE?: string;
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL?: string;
+  CERTSCORE_V2_DAG_LAMBDA_SIMULATED?: string;
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV?: string;
   NEXT_PUBLIC_APP_URL?: string;
   NODE_ENV?: string;
@@ -57,6 +58,24 @@ function compactEnvValue(value: string | undefined) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+export function shouldUseLocalV2DagSimulatedLambda(env: LocalV2DagScanEnv = process.env) {
+  return env.CERTSCORE_V2_DAG_LAMBDA_SIMULATED === "true" && shouldUseLocalV2DagScanTool(env);
+}
+
+function getSqsQueueRegion(queueUrl: string | null) {
+  if (!queueUrl) {
+    return null;
+  }
+
+  try {
+    const hostname = new URL(queueUrl).hostname;
+    const match = hostname.match(/^sqs\.([a-z0-9-]+)\.amazonaws\.com$/);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeLocalV2DagRunViaLambda(value: unknown, env: LocalV2DagScanEnv = process.env) {
   if (value === true || value === "true" || value === "1" || value === "on") {
     return true;
@@ -65,9 +84,16 @@ export function normalizeLocalV2DagRunViaLambda(value: unknown, env: LocalV2DagS
     return false;
   }
 
+  const resultQueueUrl = compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL);
+  if (shouldUseLocalV2DagSimulatedLambda(env)) {
+    return env.CERTSCORE_V2_DAG_LAMBDA_ENABLED === "true" &&
+      Boolean(compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME));
+  }
+
   return env.CERTSCORE_V2_DAG_LAMBDA_ENABLED === "true" &&
     Boolean(compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME)) &&
-    Boolean(compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL));
+    Boolean(resultQueueUrl) &&
+    getSqsQueueRegion(resultQueueUrl) === LOCAL_V2_DAG_LAMBDA_AWS_REGION;
 }
 
 export function getLocalV2DagLambdaTargetEnvironment(
@@ -81,6 +107,7 @@ export function getLocalV2DagLambdaConfiguration(env: LocalV2DagScanEnv = proces
   const enabled = env.CERTSCORE_V2_DAG_LAMBDA_ENABLED === "true";
   const functionName = compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME);
   const resultQueueUrl = compactEnvValue(env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL);
+  const simulatedLocalLambda = shouldUseLocalV2DagSimulatedLambda(env);
 
   if (!enabled) {
     missing.push("CERTSCORE_V2_DAG_LAMBDA_ENABLED=true");
@@ -88,8 +115,10 @@ export function getLocalV2DagLambdaConfiguration(env: LocalV2DagScanEnv = proces
   if (!functionName) {
     missing.push("CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME");
   }
-  if (!resultQueueUrl) {
+  if (!resultQueueUrl && !simulatedLocalLambda) {
     missing.push("CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL");
+  } else if (resultQueueUrl && !simulatedLocalLambda && getSqsQueueRegion(resultQueueUrl) !== LOCAL_V2_DAG_LAMBDA_AWS_REGION) {
+    missing.push(`CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL region ${LOCAL_V2_DAG_LAMBDA_AWS_REGION}`);
   }
 
   return {
@@ -99,7 +128,8 @@ export function getLocalV2DagLambdaConfiguration(env: LocalV2DagScanEnv = proces
     functionName,
     missing,
     orchestrationMode: env.CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE === "sharded" ? "sharded" as const : "single" as const,
-    resultQueueUrl,
+    resultQueueUrl: resultQueueUrl ?? (simulatedLocalLambda ? "local://certscore-v2-dag-lambda-simulated-results" : null),
+    simulatedLocalLambda,
     targetEnvironment: getLocalV2DagLambdaTargetEnvironment(env),
     vpcMode: "none" as const
   };

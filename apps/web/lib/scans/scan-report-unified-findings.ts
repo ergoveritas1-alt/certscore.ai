@@ -42,7 +42,6 @@ import {
 import { normalizePolicySnippet } from "./policy-snippet-normalization";
 import { isPromotionGradePreconsentRequestRow } from "./preconsent-public-evidence";
 import { evaluateConsentSurfaceGate } from "./promotion-evidence-contracts";
-import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import {
   buildReviewFindings,
   buildSectionReviewIssues,
@@ -1452,39 +1451,6 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       signalSource: "runtime_artifact_signal",
       sourceType: "signal",
       title: "Policy/runtime alignment review"
-    });
-  }
-
-  const runtimeVendorDisclosureEvidence = getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts);
-  if (runtimeVendorDisclosureEvidence.length > 0) {
-    const unmatchedVendors = uniqueStrings(runtimeVendorDisclosureEvidence.flatMap((row) => row.unmatchedRuntimeVendors));
-    const surfaceUrls = uniqueStrings(
-      runtimeVendorDisclosureEvidence.flatMap((row) => row.policySurfacesSearched.map((surface) => surface.url))
-    );
-    candidates.push({
-      categoryId: "policy_clarity_consistency_review",
-      description:
-        "Retained runtime vendor evidence was compared with retained public policy disclosure surfaces for vendor-specific alignment review.",
-      fallbackEvidence: {
-        runtimeVendorDisclosureEvidence,
-        runtimeEvidenceArtifacts: ["scan_runtime_artifacts.runtime_vendor_disclosure_evidence"],
-        signalKey: "context.policy_behavior_conflict_detected",
-        signalLabel: "Runtime vendor disclosure alignment review",
-        signalValue: true,
-        sourceUrls: surfaceUrls,
-        unifiedFindingId: "policy_behavior_conflict"
-      },
-      id: `runtime-derived-signal-context.runtime_vendor_disclosure.${unmatchedVendors.join(".") || "review"}`,
-      linkedValidationFinding: null,
-      observedValue: unmatchedVendors.length > 0
-        ? `Unmatched runtime vendors: ${unmatchedVendors.slice(0, 4).join(", ")}`
-        : "Runtime vendor disclosure comparison retained",
-      severity: unmatchedVendors.length > 0 ? "medium" : "low",
-      signalKey: "context.policy_behavior_conflict_detected",
-      signalLabel: "Runtime vendor disclosure alignment review",
-      signalSource: "runtime_artifact_signal",
-      sourceType: "signal",
-      title: "Runtime vendor disclosure alignment review"
     });
   }
 

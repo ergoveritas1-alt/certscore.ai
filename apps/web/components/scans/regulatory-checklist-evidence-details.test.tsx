@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RegulatoryChecklistActiveTrace, RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 
-test("RegulatoryChecklistActiveTrace renders a friendly result trace with gate values", () => {
+test("RegulatoryChecklistActiveTrace renders a concise end-user result explanation", () => {
   const html = renderToStaticMarkup(
     createElement(RegulatoryChecklistActiveTrace, {
       evidenceRefs: ["Cookie consent state: pre-consent"],
@@ -43,23 +43,24 @@ test("RegulatoryChecklistActiveTrace renders a friendly result trace with gate v
 
   assert.match(html, /Why this result/);
   assert.match(html, /max-h-\[50vh\]/);
-  assert.match(html, /Gap Observed/);
-  assert.match(html, /CertScore rated this as Gap Observed/);
-  assert.match(html, /Scan started/);
-  assert.match(html, /Before consent/);
-  assert.match(html, /x_vendor was observed 482ms after scan start/);
-  assert.match(html, /Advertising/);
-  assert.match(html, /Third Party/);
-  assert.match(html, /Gate decision/);
-  assert.match(html, /Failed/);
-  assert.match(html, /preConsentRuntimeScanner/);
-  assert.match(html, /coverage_policy/);
+  assert.doesNotMatch(html, /Gap Observed/);
+  assert.doesNotMatch(html, /CertScore rated this as Gap Observed/);
+  assert.doesNotMatch(html, /after evaluating the retained gate values and evidence/);
+  assert.match(html, /Basis/);
+  assert.match(html, /Evidence used/);
+  assert.match(html, /x_vendor was observed before consent/);
+  assert.match(html, /advertising/);
+  assert.match(html, /third party/);
   assert.match(html, /x_vendor/);
-  assert.match(html, /eventId=cookie_1/);
-  assert.match(html, /Raw trace details/);
+  assert.doesNotMatch(html, /Scan started/);
+  assert.doesNotMatch(html, /Gate decision/);
+  assert.doesNotMatch(html, /preConsentRuntimeScanner/);
+  assert.doesNotMatch(html, /coverage_policy/);
+  assert.doesNotMatch(html, /eventId=cookie_1/);
+  assert.doesNotMatch(html, /Raw trace details/);
 });
 
-test("RegulatoryChecklistActiveTrace scrolls retained refs without more-count copy", () => {
+test("RegulatoryChecklistActiveTrace keeps checked explanations short", () => {
   const html = renderToStaticMarkup(
     createElement(RegulatoryChecklistActiveTrace, {
       evidenceRefs: ["ref_one", "ref_two", "ref_three", "ref_four", "ref_five", "ref_six"],
@@ -75,13 +76,73 @@ test("RegulatoryChecklistActiveTrace scrolls retained refs without more-count co
   );
 
   assert.match(html, /Why this result/);
-  assert.match(html, /More trace events/);
+  assert.doesNotMatch(html, /Checked/);
   assert.match(html, /max-h-\[50vh\]/);
-  assert.match(html, /max-h-48/);
   assert.match(html, /overflow-y-auto/);
-  assert.match(html, /ref_one/);
-  assert.match(html, /ref_six/);
+  assert.match(html, /Privacy notice evidence was retained/);
+  assert.match(html, /ref one/);
+  assert.doesNotMatch(html, /Why this result\?\s*<span[^>]*>Checked/);
+  assert.doesNotMatch(html, /<dt[^>]*>Result<\/dt>/);
+  assert.doesNotMatch(html, /Checked: evidence was observed/);
+  assert.doesNotMatch(html, /ref_four/);
+  assert.doesNotMatch(html, /ref_six/);
+  assert.doesNotMatch(html, /More trace events/);
+  assert.doesNotMatch(html, /Raw trace details/);
   assert.doesNotMatch(html, /more retained refs/);
+});
+
+test("RegulatoryChecklistActiveTrace shows first-observed timing for embedded vendor evidence", () => {
+  const html = renderToStaticMarkup(
+    createElement(RegulatoryChecklistActiveTrace, {
+      evidenceRefs: ["Embedded host: youtube.com"],
+      jsonPayload: JSON.stringify({
+        assessmentStatus: "checked",
+        coverageArea: "Embedded third-party content loaded before consent",
+        evidenceState: "observed",
+        retainedEvidence: {
+          embeddedContentHosts: ["youtube.com"],
+          embeddedContentObservationCount: 1,
+          firstEmbeddedContentObservedMs: 928
+        },
+        status: "Observed",
+        statusBasis: "Concrete third-party embedded content was retained before consent in iframe/runtime evidence."
+      })
+    })
+  );
+
+  assert.match(html, /Why this result/);
+  assert.match(html, /Embedded third-party content observed: youtube\.com; first observed 928ms after scan start/);
+  assert.match(html, /Concrete third-party embedded content was retained before consent/);
+});
+
+test("RegulatoryChecklistActiveTrace shows Article 13 row-specific retained snippets", () => {
+  const html = renderToStaticMarkup(
+    createElement(RegulatoryChecklistActiveTrace, {
+      evidenceRefs: ["Evidence: Retention disclosure"],
+      jsonPayload: JSON.stringify({
+        assessmentStatus: "checked",
+        coverageArea: "Retention disclosure observed",
+        evidenceState: "observed",
+        retainedEvidence: {
+          article13Signal: {
+            disclosureType: "data_retention",
+            evidenceText: "We retain personal data only as long as necessary for the purposes described in this notice.",
+            source: "deterministic",
+            status: "observed"
+          },
+          policySurfaceSummary: {
+            privacyPolicyUrls: ["https://example.test/privacy"]
+          }
+        },
+        status: "Observed",
+        statusBasis: "Retention disclosure evidence was retained in public policy-surface evidence."
+      })
+    })
+  );
+
+  assert.match(html, /Matched disclosure snippet/);
+  assert.match(html, /retain personal data only as long as necessary/);
+  assert.match(html, /https:\/\/example\.test\/privacy/);
 });
 
 test("RegulatoryChecklistEvidenceDetails renders compact retained evidence ahead of audit JSON", () => {

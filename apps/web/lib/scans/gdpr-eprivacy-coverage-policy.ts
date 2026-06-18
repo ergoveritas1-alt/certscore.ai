@@ -1,7 +1,4 @@
-import {
-  getRuntimeVendorDisclosureEvidence,
-  runtimeVendorDisclosureRowHasPromotionCategory
-} from "./runtime-vendor-disclosure";
+import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
 
 export type GdprEprivacyCoverageOutcomeStatus =
@@ -891,6 +888,58 @@ function hasRuntimeCapture(input: GdprEprivacyCoveragePolicyInput) {
   );
 }
 
+function getEmbeddedContentEvidenceSummary(input: GdprEprivacyCoveragePolicyInput) {
+  const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  return (
+    getObject(hybrid, ["embeddedContentSummary", "embedded_content_summary"]) ??
+    getObject(input.runtimeArtifacts, ["embeddedContentSummary", "embedded_content_summary"])
+  );
+}
+
+function getSessionReplayEvidenceSummary(input: GdprEprivacyCoveragePolicyInput) {
+  const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  return (
+    getObject(hybrid, ["sessionReplayEvidenceSummary", "session_replay_evidence_summary"]) ??
+    getObject(input.runtimeArtifacts, ["sessionReplayEvidenceSummary", "session_replay_evidence_summary"])
+  );
+}
+
+function getFingerprintingEvidenceSummary(input: GdprEprivacyCoveragePolicyInput) {
+  const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  return (
+    getObject(hybrid, ["fingerprintingEvidenceSummary", "fingerprinting_evidence_summary"]) ??
+    getObject(input.runtimeArtifacts, ["fingerprintingEvidenceSummary", "fingerprinting_evidence_summary"])
+  );
+}
+
+function hasEmbeddedContentRuntimeCoverage(input: GdprEprivacyCoveragePolicyInput) {
+  const summary = getEmbeddedContentEvidenceSummary(input);
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const iframeSummary = getObject(hybridRuntimeEvidence, ["iframeSummary", "iframe_summary"]);
+  return (
+    getBoolean(summary, ["coverageRetained", "coverage_retained"]) === true ||
+    Boolean(iframeSummary)
+  );
+}
+
+function hasSessionReplayRuntimeCoverage(input: GdprEprivacyCoveragePolicyInput) {
+  const summary = getSessionReplayEvidenceSummary(input);
+  return (
+    getBoolean(summary, ["coverageRetained", "coverage_retained"]) === true ||
+    getNumber(summary, ["artifactCount", "artifact_count"]) !== null
+  );
+}
+
+function hasFingerprintingRuntimeCoverage(input: GdprEprivacyCoveragePolicyInput) {
+  const summary = getFingerprintingEvidenceSummary(input);
+  return (
+    getBoolean(summary, ["coverageRetained", "coverage_retained", "apiProbeRetained", "api_probe_retained"]) === true ||
+    getNumber(summary, ["artifactCount", "artifact_count"]) !== null ||
+    getObjectArray(input.runtimeArtifacts, ["fingerprintingRuntimeEvidence", "fingerprinting_runtime_evidence"]).length > 0 ||
+    getObjectArray(getHybridRuntimeEvidence(input.runtimeArtifacts), ["fingerprintingRuntimeEvidence", "fingerprinting_runtime_evidence"]).length > 0
+  );
+}
+
 function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const consentControlLifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
@@ -1122,8 +1171,8 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
   if (cookiesBeforeConsentCount !== null && cookiesBeforeConsentCount > 0) {
     return makeOutcome(
       "pre_consent_cookies_storage",
-      "Not observed",
-      "Cookie/storage inventory retained before-consent observations, but scanner did not classify the retained examples as eligible non-essential cookie/storage evidence for this row.",
+      "Observed",
+      "Cookie/storage inventory retained before-consent observations. CertScore reports this as an observed runtime signal; whether the storage is essential or creates a regulatory gap remains review context.",
       [
         firstObservedMsRef,
         `Observed before-consent cookie/storage count: ${cookiesBeforeConsentCount}`,
@@ -1134,6 +1183,7 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
           cookiesBeforeConsentCount,
           cookiesSeenCount,
           eligibleNonEssentialCookieStorageFindingProjected: false,
+          observedRuntimeSignalOnly: true,
           ...preconsentTimingEvidence,
           storageSummaryRetained: Boolean(storageSummary)
         }
@@ -1157,6 +1207,158 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
           ...preconsentTimingEvidence,
           runtimeCaptureCompleted: hasRuntimeCapture(input),
           storageSummaryRetained: Boolean(storageSummary)
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveCmpFrameworkSignalOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const consentSummary = getObject(hybridRuntimeEvidence, ["consentSummary", "consent_summary"]);
+  const cmpVendorName = getString(input.snapshot, ["cmp_vendor_name", "cmpVendorName"]) ??
+    getString(input.runtimeArtifacts, ["cmp_vendor_name", "cmpVendorName"]);
+  const cmpSignals = getStringArray(input.runtimeArtifacts, [
+    "cmp_runtime_signal_labels",
+    "cmpRuntimeSignalLabels"
+  ]);
+  const cmpObserved =
+    Boolean(cmpVendorName) ||
+    cmpSignals.length > 0 ||
+    getBoolean(input.runtimeArtifacts, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true ||
+    getBoolean(hybridRuntimeEvidence, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true ||
+    getBoolean(consentSummary, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true;
+
+  if (cmpObserved) {
+    return makeOutcome(
+      "cmp_framework_signal_observed",
+      "Observed",
+      cmpVendorName
+        ? `A consent-management framework signal was retained: ${cmpVendorName}.`
+        : "A consent-management framework or CMP runtime signal was retained in the tested context.",
+      [
+        cmpVendorName ? `CMP: ${cmpVendorName}` : null,
+        ...cmpSignals.map((signal) => `CMP signal: ${signal}`).slice(0, 5),
+        "Evidence: pre-consent CMP runtime observation"
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          cmpFrameworkSignalObserved: true,
+          cmpRuntimeSignalLabels: compactArray(cmpSignals, 8),
+          cmpVendorName
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "cmp_framework_signal_observed",
+      "Not observed",
+      "Runtime consent/CMP checks completed for the tested context and did not retain a CMP framework signal.",
+      ["Evidence: runtime capture completed"],
+      {
+        retainedEvidence: {
+          cmpFrameworkSignalObserved: false,
+          runtimeCaptureCompleted: true
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const consentSummary = getObject(hybridRuntimeEvidence, ["consentSummary", "consent_summary"]);
+  const firstLayerChoices = getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
+  const policyDisclosureSummary = getPolicyDisclosureSummary(input.runtimeArtifacts);
+  const policySurfaceUrls = [
+    ...getStringArray(input.runtimeArtifacts, ["cookiePolicyUrls", "cookie_policy_urls", "cookieNoticeUrls", "cookie_notice_urls"]),
+    ...getStringArray(policyDisclosureSummary, ["cookiePolicyUrls", "cookie_policy_urls", "policySurfaceUrls", "policy_surface_urls", "privacyPolicyUrls", "privacy_policy_urls"])
+  ];
+  const policySurfaceText = [
+    getString(policyDisclosureSummary, ["retainedCookiePolicyTextExcerpt", "retained_cookie_policy_text_excerpt"]),
+    getString(policyDisclosureSummary, ["retainedPrivacyPolicyTextExcerpt", "retained_privacy_policy_text_excerpt"])
+  ].filter(Boolean).join("\n");
+  const policySurfaceAvailable =
+    getBoolean(input.snapshot, ["cookie_policy_present", "cookiePolicyPresent"]) === true ||
+    getBoolean(input.runtimeArtifacts, ["cookiePolicyPresent", "cookie_policy_present"]) === true ||
+    getBoolean(policyDisclosureSummary, ["cookiePolicyPresent", "cookie_policy_present"]) === true ||
+    policySurfaceUrls.some((url) => /cookie|preference|privacy[-_ ]?center|settings/i.test(url)) ||
+    /cookie (policy|notice|declaration|table|settings)|privacy choices|manage cookies|cookie preference/i.test(policySurfaceText);
+  const bannerOnlyCookieNotice =
+    getBoolean(input.runtimeArtifacts, ["cookieNoticeObserved", "cookie_notice_observed"]) === true ||
+    getBoolean(hybridRuntimeEvidence, ["cookieNoticeObserved", "cookie_notice_observed"]) === true ||
+    getBoolean(consentSummary, ["cookieNoticeObserved", "cookie_notice_observed", "bannerPresent", "banner_present"]) === true ||
+    getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent"]) === true ||
+    getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]).some((label) => /cookies?/i.test(label));
+  const storageSummary = getHybridStorageSummary(input.runtimeArtifacts);
+  const cookiesBeforeConsentCount = getNumber(storageSummary, ["cookiesBeforeConsentCount", "cookies_before_consent_count"]) ?? 0;
+  const preConsentRuntimeEvidence =
+    cookiesBeforeConsentCount > 0 ||
+    getBoolean(input.snapshot, ["first_party_cookie_set_before_consent", "third_party_cookie_set_before_consent", "preconsent_tracking_detected"]) === true ||
+    getStringArray(input.runtimeArtifacts, [
+      "preconsent_tracker_vendors",
+      "consent_baseline_tracker_vendor_names",
+      "tracker_vendors",
+      "advertising_retargeting_vendor_names",
+      "analytics_vendor_names"
+    ]).length > 0;
+
+  if (policySurfaceAvailable) {
+    return makeOutcome(
+      "cookie_notice_policy_availability",
+      "Observed",
+      "A cookie policy, cookie notice, cookie settings, or durable cookie disclosure surface was retained in the tested context.",
+      [
+        "Evidence: cookie policy or cookie disclosure surface retained",
+        ...policySurfaceUrls.map((url) => `Policy URL: ${url}`).slice(0, 2)
+      ],
+      {
+        retainedEvidence: {
+          cookieNoticeObserved: true,
+          cookiePolicyPresent: true,
+          cookiePolicyUrls: compactArray(policySurfaceUrls, 4)
+        }
+      }
+    );
+  }
+
+  if (bannerOnlyCookieNotice) {
+    return makeOutcome(
+      "cookie_notice_policy_availability",
+      "Review signal",
+      "A first-layer cookie/consent banner was retained, but no durable cookie policy, cookie notice, settings, declaration, or cookie table surface was retained. Manual review should confirm whether cookie disclosure is available outside the banner.",
+      ["Evidence: cookie or consent banner retained", "Missing evidence: durable cookie policy/notice surface"],
+      {
+        retainedEvidence: {
+          bannerOnlyCookieNotice: true,
+          cookieNoticeObserved: true,
+          cookiePolicyPresent: false,
+          preConsentRuntimeEvidence
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input) || input.policyEnrichmentCount !== null) {
+    return makeOutcome(
+      "cookie_notice_policy_availability",
+      preConsentRuntimeEvidence ? "Gap observed" : "Not observed",
+      preConsentRuntimeEvidence
+        ? "Pre-consent cookie/tracking evidence was retained, but no cookie notice, cookie policy, cookie-settings, declaration, or cookie table disclosure surface was retained."
+        : "Runtime and policy-surface checks did not retain a cookie notice, cookie policy, cookie-settings, declaration, or cookie table disclosure surface.",
+      ["Evidence: retained runtime/policy surface checks"],
+      {
+        retainedEvidence: {
+          cookieNoticeObserved: false,
+          cookiePolicyPresent: false,
+          preConsentRuntimeEvidence,
+          runtimeCaptureCompleted: hasRuntimeCapture(input)
         }
       }
     );
@@ -1251,6 +1453,389 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
   return null;
 }
 
+function rowHasVendorCategory(row: Record<string, unknown>, categories: string[]) {
+  const category = getString(row, ["category", "vendorCategory", "vendor_category", "purpose"]);
+  return Boolean(category && categories.includes(category));
+}
+
+function getRuntimeRowObservedMs(rows: Record<string, unknown>[], runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const timelineMarkers = getHybridTimelineMarkers(runtimeArtifacts);
+  const navigationStartMs = getNumber(timelineMarkers, ["navigationStartMs", "navigation_start_ms"]);
+  return getSortedUniqueMs(rows.map((row) =>
+    getRuntimeObservedMs(row, [
+      "firstSeenMs",
+      "first_seen_ms",
+      "firstObservedMs",
+      "first_observed_ms",
+      "firstObservedAtMs",
+      "first_observed_at_ms",
+      "observedAtMs",
+      "observed_at_ms",
+      "timestampMs",
+      "timestamp_ms",
+      "tsMs",
+      "ts_ms"
+    ], navigationStartMs)
+  ));
+}
+
+function deriveAdvertisingRetargetingVendorSignalOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const vendorSummary = getObject(hybridRuntimeEvidence, ["vendorSummary", "vendor_summary"]);
+  const vendorCategoryCounts = getObject(vendorSummary, ["vendorCategoryCounts", "vendor_category_counts"]);
+  const adCategories = ["advertising", "retargeting", "adtech", "marketing"];
+  const requestRows = getObjectArray(hybridRuntimeEvidence, [
+    "requestPurposeClassificationConfidence",
+    "request_purpose_classification_confidence"
+  ]);
+  const advertisingRequestRows = requestRows.filter((row) => rowHasVendorCategory(row, adCategories));
+  const observedMs = getRuntimeRowObservedMs(advertisingRequestRows, input.runtimeArtifacts);
+  const categoryCount = adCategories.reduce((sum, category) => sum + (getNumber(vendorCategoryCounts, [category]) ?? 0), 0);
+  const requestCategoryCount = advertisingRequestRows.length;
+  const advertisingVendors = getStringArray(input.runtimeArtifacts, [
+    "advertising_retargeting_vendor_names",
+    "advertisingRetargetingVendorNames",
+    "adtech_vendor_names",
+    "adtechVendorNames"
+  ]);
+  const advertisingVendorCount =
+    getNumber(input.runtimeArtifacts, ["advertising_retargeting_vendor_count", "advertisingRetargetingVendorCount"]) ??
+    Math.max(categoryCount, requestCategoryCount, advertisingVendors.length);
+
+  if (advertisingVendorCount > 0 || advertisingVendors.length > 0) {
+    return makeOutcome(
+      "advertising_retargeting_vendor_signal_observed",
+      "Review signal",
+      "Advertising, retargeting, or adtech vendor evidence was retained in the pre-consent/public-web runtime context. Manual review should confirm purpose and consent relevance.",
+      [
+        advertisingVendorCount > 0 ? `Advertising/retargeting vendor/category count: ${advertisingVendorCount}` : null,
+        ...advertisingVendors.map((vendor) => `Advertising/retargeting vendor: ${vendor}`).slice(0, 5),
+        "Evidence: retained runtime vendor summary"
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          advertisingRetargetingVendorCount: advertisingVendorCount,
+          advertisingRetargetingVendorObservedMs: compactArray(observedMs, 6),
+          advertisingRetargetingVendors: compactArray(advertisingVendors, 8),
+          firstAdvertisingRetargetingVendorObservedMs: observedMs[0] ?? null,
+          observedRuntimeSignalOnly: true
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input) || vendorSummary) {
+    return makeOutcome(
+      "advertising_retargeting_vendor_signal_observed",
+      "Not observed",
+      "Runtime vendor checks completed for the tested context and did not retain an advertising, retargeting, or adtech vendor classification.",
+      ["Evidence: retained runtime vendor summary"],
+      {
+        retainedEvidence: {
+          advertisingRetargetingVendorCount: 0,
+          runtimeCaptureCompleted: hasRuntimeCapture(input)
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveAnalyticsVendorObservedOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const vendorSummary = getObject(hybridRuntimeEvidence, ["vendorSummary", "vendor_summary"]);
+  const vendorCategoryCounts = getObject(vendorSummary, ["vendorCategoryCounts", "vendor_category_counts"]);
+  const analyticsCount =
+    getNumber(vendorCategoryCounts, ["analytics", "measurement"]) ??
+    getObjectArray(hybridRuntimeEvidence, [
+      "requestPurposeClassificationConfidence",
+      "request_purpose_classification_confidence"
+    ]).filter((row) => getString(row, ["category", "vendorCategory", "vendor_category"]) === "analytics").length;
+  const analyticsRequestRows = getObjectArray(hybridRuntimeEvidence, [
+    "requestPurposeClassificationConfidence",
+    "request_purpose_classification_confidence"
+  ]).filter((row) =>
+    ["analytics", "measurement"].includes(getString(row, ["category", "vendorCategory", "vendor_category"]) ?? "")
+  );
+  const observedMs = getRuntimeRowObservedMs(analyticsRequestRows, input.runtimeArtifacts);
+  const analyticsVendors = getStringArray(input.runtimeArtifacts, [
+    "analytics_vendor_names",
+    "analyticsVendorNames"
+  ]);
+
+  if (analyticsCount > 0 || analyticsVendors.length > 0) {
+    return makeOutcome(
+      "analytics_vendor_observed",
+      "Review signal",
+      "Analytics or measurement vendor evidence was retained in the pre-consent/public-web runtime context. Manual review should confirm purpose and consent relevance.",
+      [
+        analyticsCount > 0 ? `Analytics vendor/category count: ${analyticsCount}` : null,
+        ...analyticsVendors.map((vendor) => `Analytics vendor: ${vendor}`).slice(0, 5)
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          analyticsVendorCount: analyticsCount,
+          analyticsVendorObservedMs: compactArray(observedMs, 6),
+          firstAnalyticsVendorObservedMs: observedMs[0] ?? null,
+          analyticsVendors: compactArray(analyticsVendors, 8)
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input) || vendorSummary) {
+    return makeOutcome(
+      "analytics_vendor_observed",
+      "Not observed",
+      "Runtime vendor checks completed for the tested context and did not retain an analytics or measurement vendor classification.",
+      ["Evidence: retained runtime vendor summary"],
+      {
+        retainedEvidence: {
+          analyticsVendorCount: 0,
+          runtimeCaptureCompleted: hasRuntimeCapture(input)
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+const EMBEDDED_CONTENT_HOST_PATTERNS = [
+  /(^|\.)youtube(?:-nocookie)?\.com$/i,
+  /(^|\.)youtu\.be$/i,
+  /(^|\.)vimeo\.com$/i,
+  /(^|\.)google\.[a-z.]+$/i,
+  /(^|\.)googleapis\.com$/i,
+  /(^|\.)openstreetmap\.org$/i,
+  /(^|\.)spotify\.com$/i,
+  /(^|\.)soundcloud\.com$/i,
+  /(^|\.)twitter\.com$/i,
+  /(^|\.)x\.com$/i,
+  /(^|\.)instagram\.com$/i,
+  /(^|\.)facebook\.com$/i,
+  /(^|\.)tiktok\.com$/i,
+  /(^|\.)linkedin\.com$/i,
+  /(^|\.)typeform\.com$/i,
+  /(^|\.)calendly\.com$/i,
+  /(^|\.)hubspot(?:usercontent)?\.com$/i
+];
+
+function getHostnameFromMaybeUrl(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return value.replace(/^https?:\/\//i, "").replace(/\/.*$/g, "").replace(/^www\./i, "").toLowerCase() || null;
+  }
+}
+
+function isLikelyCmpLocatorFrame(row: Record<string, unknown>) {
+  const text = [
+    getString(row, ["frameName", "frame_name"]),
+    getString(row, ["frameUrl", "frame_url", "url"]),
+    getString(row, ["hostname"])
+  ].filter(Boolean).join(" ");
+  return /about:blank|__tcfapiLocator|__uspapiLocator|__pb_locator__|onetrust|optanon|sourcepoint|privacy-center|consent/i.test(text);
+}
+
+function isKnownEmbeddedThirdPartyFrame(row: Record<string, unknown>) {
+  if (isLikelyCmpLocatorFrame(row)) {
+    return false;
+  }
+  const frameUrl = getString(row, ["frameUrl", "frame_url", "url"]);
+  const hostname = getHostnameFromMaybeUrl(getString(row, ["hostname"]) ?? frameUrl);
+  const thirdParty = getBoolean(row, ["thirdParty", "third_party"]) === true;
+  const preConsent = getBoolean(row, ["preConsent", "pre_consent"]) !== false &&
+    getString(row, ["consentStateAtTime", "consent_state_at_time", "runtimePhase", "runtime_phase"]) !== "post_consent";
+  const pathText = frameUrl ?? "";
+  const knownHost = Boolean(hostname && EMBEDDED_CONTENT_HOST_PATTERNS.some((pattern) => pattern.test(hostname)));
+  const knownEmbedPath = /\/embed\/|\/plugins\/|\/maps\/embed|\/widgets?\//i.test(pathText);
+  return preConsent && thirdParty && knownHost && (knownEmbedPath || !/google\.[a-z.]+$/i.test(hostname ?? ""));
+}
+
+function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const embeddedSummary = getEmbeddedContentEvidenceSummary(input);
+  const iframeSummary = getObject(hybridRuntimeEvidence, ["iframeSummary", "iframe_summary"]);
+  const iframeRows = [
+    ...getObjectArray(iframeSummary, ["iframeEvents", "iframe_events"]),
+    ...getObjectArray(input.runtimeArtifacts, ["iframeEvents", "iframe_events"])
+  ];
+  const embeddedRows = iframeRows.filter(isKnownEmbeddedThirdPartyFrame);
+  const summaryObservations = getObjectArray(embeddedSummary, ["observations"]);
+  const summaryObserved = getBoolean(embeddedSummary, ["embeddedContentObserved", "embedded_content_observed"]) === true ||
+    (getNumber(embeddedSummary, ["embeddedContentObservationCount", "embedded_content_observation_count"]) ?? 0) > 0 ||
+    summaryObservations.length > 0;
+  const preConsentIframeCount =
+    getNumber(iframeSummary, ["preConsentIframeCount", "pre_consent_iframe_count"]) ??
+    iframeRows.filter((row) => getBoolean(row, ["preConsent", "pre_consent"]) === true).length;
+  const embeddedHosts = uniqueStrings([
+    ...embeddedRows.map((row) =>
+      getHostnameFromMaybeUrl(getString(row, ["hostname"]) ?? getString(row, ["frameUrl", "frame_url", "url"]))
+    ),
+    ...getStringArray(embeddedSummary, ["embeddedContentHosts", "embedded_content_hosts"]),
+    ...summaryObservations.map((row) =>
+      getHostnameFromMaybeUrl(getString(row, ["hostname"]) ?? getString(row, ["frameUrl", "frame_url", "requestUrl", "request_url", "url"]))
+    )
+  ]);
+  const observedMs = getSortedUniqueMs([
+    ...getRuntimeRowObservedMs([...embeddedRows, ...summaryObservations], input.runtimeArtifacts),
+    getRuntimeObservedMs(embeddedSummary, [
+      "firstEmbeddedContentObservedMs",
+      "first_embedded_content_observed_ms",
+      "firstObservedMs",
+      "first_observed_ms",
+      "firstSeenMs",
+      "first_seen_ms",
+      "observedAtMs",
+      "observed_at_ms"
+    ], getNumber(getHybridTimelineMarkers(input.runtimeArtifacts), ["navigationStartMs", "navigation_start_ms"]))
+  ]);
+
+  if (embeddedRows.length > 0 || summaryObserved) {
+    return makeOutcome(
+      "embedded_content_pre_consent",
+      "Observed",
+      "Concrete third-party embedded content was retained before consent in iframe/runtime evidence.",
+      [
+        `Embedded third-party content observations: ${Math.max(embeddedRows.length, summaryObservations.length)}`,
+        ...embeddedHosts.map((host) => `Embedded host: ${host}`).slice(0, 5),
+        "Evidence: retained pre-consent embedded-content observations"
+      ],
+      {
+        retainedEvidence: {
+          embeddedContentHosts: compactArray(embeddedHosts, 8),
+          embeddedContentObservedMs: compactArray(observedMs, 6),
+          embeddedContentObservationCount:
+            getNumber(embeddedSummary, ["embeddedContentObservationCount", "embedded_content_observation_count"]) ??
+            Math.max(embeddedRows.length, summaryObservations.length),
+          firstEmbeddedContentObservedMs: observedMs[0] ?? null,
+          observedRuntimeSignalOnly: true
+        }
+      }
+    );
+  }
+
+  if (hasEmbeddedContentRuntimeCoverage(input)) {
+    return makeOutcome(
+      "embedded_content_pre_consent",
+      "Not observed",
+      "Iframe/runtime checks completed for the tested context and did not retain a concrete third-party embedded-content iframe before consent.",
+      ["Evidence: retained pre-consent embedded-content inventory"],
+      {
+        retainedEvidence: {
+          embeddedContentObservationCount: 0,
+          preConsentIframeCount: preConsentIframeCount ?? 0,
+          runtimeCaptureCompleted: hasRuntimeCapture(input)
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "embedded_content_pre_consent",
+      "Not testable",
+      "Runtime capture completed, but the retained scanner context did not include row-specific embedded-content iframe/request inventory.",
+      ["Evidence gap: embedded-content inventory not retained"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "runtimeArtifacts.embeddedContentSummary",
+            "row-specific embedded-content iframe/request inventory",
+            "missing",
+            "Required to determine whether third-party embedded content loaded before consent."
+          )
+        ],
+        retainedEvidence: {
+          runtimeCaptureCompleted: true
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveCollectionSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const summary = getObject(input.runtimeArtifacts, ["collectionSurfaceSummary", "collection_surface_summary"]);
+  const inventoryRetained = getBoolean(summary, ["inventoryRetained", "inventory_retained"]);
+  const collectionSurfaceCount =
+    getNumber(summary, ["collectionSurfaceCount", "collection_surface_count"]) ??
+    getNumber(input.runtimeArtifacts, ["collection_surface_count", "collectionSurfaceCount"]);
+  const observed =
+    getBoolean(summary, ["collectionSurfacesObserved", "collection_surfaces_observed"]) === true ||
+    getBoolean(input.runtimeArtifacts, ["collection_surface_observed", "collectionSurfaceObserved"]) === true ||
+    (collectionSurfaceCount !== null && collectionSurfaceCount > 0);
+  const surfaceTypes = getStringArray(summary, ["surfaceTypes", "surface_types"]);
+  const labels = getStringArray(summary, ["labels"]);
+
+  if (observed) {
+    return makeOutcome(
+      "collection_surface_observed",
+      "Observed",
+      "A public-web collection surface was retained in pre-consent scanner evidence.",
+      [
+        collectionSurfaceCount !== null ? `Collection surface count: ${collectionSurfaceCount}` : null,
+        ...surfaceTypes.map((type) => `Surface type: ${type}`).slice(0, 5)
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          collectionSurfaceCount,
+          fieldTypes: getStringArray(summary, ["fieldTypes", "field_types"]),
+          hasEmailField: getBoolean(summary, ["hasEmailField", "has_email_field"]),
+          hasSensitiveFieldHint: getBoolean(summary, ["hasSensitiveFieldHint", "has_sensitive_field_hint"]),
+          labels: compactArray(labels, 8),
+          surfaceTypes
+        }
+      }
+    );
+  }
+
+  if (inventoryRetained === true || (summary && collectionSurfaceCount === 0)) {
+    return makeOutcome(
+      "collection_surface_observed",
+      "Not observed",
+      "Pre-consent collection-surface inventory completed for the tested page and did not retain a form, input, or similar collection surface.",
+      ["Evidence: retained pre-consent collection-surface inventory"],
+      {
+        retainedEvidence: {
+          collectionSurfaceCount: collectionSurfaceCount ?? 0,
+          inventoryRetained: true
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "collection_surface_observed",
+      "Not testable",
+      "Runtime capture completed, but this scan did not retain the pre-consent collection-surface inventory required to evaluate public collection surfaces.",
+      ["Missing evidence: pre-consent collection-surface inventory"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanner.collectionSurfaceObservations",
+            "bounded pre-consent form/input collection surface inventory",
+            inventoryRetained === false ? "not retained" : "missing",
+            "Required to evaluate whether public collection surfaces were observed without inferring from screenshots."
+          )
+        ],
+        retainedEvidence: {
+          inventoryRetained: inventoryRetained ?? false
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
 function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const consentAuditEntry = getEventMetadata(input.events, "consent_audit_entry");
@@ -1264,7 +1849,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const skipNegativeReasons = getStringArray(consentAuditEntry, ["consentInteractionSkipNegativeReasonCodes"]);
   const diagnosticNegativeReasons = getStringArray(rejectDiagnostic, ["negativeReasonCodes"]);
   const visibleRejectLabels = getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"])
-    .filter((label) => /\b(?:decline|reject|refuse|deny|opt[-\s]?out)\b/i.test(label));
+    .filter((label) => /\b(?:decline|reject|refuse|deny|opt[-\s]?out|necessary only|only necessary|essential only|only essential|essential cookies only|accept essential|accept necessary)\b/i.test(label));
   const rejectAvailability = getString(rejectPath, [
     "availability",
     "status",
@@ -1471,6 +2056,36 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
           completeRejectPathAvailable: false,
           rejectButtonCount,
           rejectInteractionSucceeded: false
+        }
+      }
+    );
+  }
+
+  if (
+    getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
+    getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true
+  ) {
+    return makeOutcome(
+      "reject_all_path_availability",
+      "Not observed",
+      "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer reject, decline, or equivalent refusal control. CertScore does not infer reject availability from screenshot pixels.",
+      [
+        "Evidence: consent surface observed",
+        "Result: no structured first-layer reject/equivalent control retained"
+      ],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanner.firstLayerConsentChoices.visibleChoiceLabels",
+            "structured first-layer accept/reject/preference control labels",
+            getRawValue(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]) ?? "missing",
+            "Required to evaluate reject option availability without post-consent flow automation or screenshot-only inference."
+          )
+        ],
+        retainedEvidence: {
+          consentSurfaceObserved: true,
+          rejectControlObserved: false,
+          rejectPathAvailabilityEvidenceRetained: false
         }
       }
     );
@@ -2533,177 +3148,331 @@ function derivePreferenceWithdrawalOutcome(input: GdprEprivacyCoveragePolicyInpu
   );
 }
 
-function deriveVendorDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput) {
-  const trackerVendorCount = getNumber(input.snapshot, ["tracker_vendor_count", "tracker_count_total"]) ??
-    getStringArray(input.runtimeArtifacts, ["preconsent_tracker_vendors", "tracker_vendors"]).length;
-  const hasPolicySurface =
-    getBoolean(input.snapshot, ["privacy_policy_present"]) === true ||
-    getBoolean(input.snapshot, ["cookie_policy_present"]) === true;
-  const disclosureEvidence = getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts);
-  const unmatchedCount = disclosureEvidence.reduce(
-    (sum, row) => sum + Math.max(row.unmatchedRuntimeVendors.length, row.unmatchedRuntimeDomains.length),
-    0
-  );
-  const isUsableDisclosureComparison = (row: (typeof disclosureEvidence)[number]) => {
-    const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
-    const observedRuntimeCount = row.observedRuntimeVendors.length + row.observedRuntimeDomains.length;
-    const directOrModerate =
-      row.directVsInferred !== "inferred" &&
-      (row.directVsInferred === "direct" || row.evidenceConfidence === "moderate" || row.evidenceConfidence === "strong");
-    const searchedPolicySurfaces = row.policySurfacesSearched.filter((surface) =>
-      surface.reached &&
-      Boolean(surface.url) &&
-      Boolean(surface.snippet) &&
-      (surface.searchedTerms?.length ?? 0) > 0
-    );
-    const searchedMatchedNames = searchedPolicySurfaces.flatMap((surface) => surface.matchedVendorNames ?? []);
-    const searchedUnmatchedNames = searchedPolicySurfaces.flatMap((surface) => surface.unmatchedVendorNames ?? []);
-    const matchedEvidenceRetained = row.matchedVendorDisclosureCount > 0 || searchedMatchedNames.length > 0;
-    const unmatchedEvidenceRetained = unmatchedRuntimeCount > 0 && (row.unmatchedVendorDisclosureCount > 0 || searchedUnmatchedNames.length > 0);
-    const comparisonHasVendorDisposition = matchedEvidenceRetained || unmatchedEvidenceRetained;
-    return (
-      row.coverageStatus === "usable" &&
-      directOrModerate &&
-      observedRuntimeCount > 0 &&
-      searchedPolicySurfaces.length > 0 &&
-      comparisonHasVendorDisposition &&
-      Boolean(row.mismatchRationale)
-    );
-  };
-  const hasUsableDirectDisclosureMismatch = disclosureEvidence.some((row) => {
-    const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
-    return (
-      isUsableDisclosureComparison(row) &&
-      unmatchedRuntimeCount > 0 &&
-      row.unmatchedVendorDisclosureCount > 0 &&
-      runtimeVendorDisclosureRowHasPromotionCategory(row)
-    );
-  });
-  const hasUsableMatchedDisclosureComparison = disclosureEvidence.some((row) => {
-    const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
-    return isUsableDisclosureComparison(row) && unmatchedRuntimeCount === 0 && row.matchedVendorDisclosureCount > 0;
-  });
-  const strongestDisclosureMismatch = disclosureEvidence
-    .filter((row) => {
-      const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
-      return (
-        isUsableDisclosureComparison(row) &&
-        unmatchedRuntimeCount > 0 &&
-        row.unmatchedVendorDisclosureCount > 0 &&
-        runtimeVendorDisclosureRowHasPromotionCategory(row)
-      );
-    })
-    .sort((left, right) => {
-      const confidenceScore = (value: string) => value === "strong" ? 3 : value === "moderate" ? 2 : 1;
-      return (
-        confidenceScore(right.evidenceConfidence) - confidenceScore(left.evidenceConfidence) ||
-        (right.unmatchedRuntimeVendors.length + right.unmatchedRuntimeDomains.length) -
-          (left.unmatchedRuntimeVendors.length + left.unmatchedRuntimeDomains.length)
-      );
-    })[0] ?? null;
-  const strongestUnmatchedVendors = strongestDisclosureMismatch
-    ? compactArray(strongestDisclosureMismatch.unmatchedRuntimeVendors, 8)
-    : [];
-  const strongestMismatchCopy = strongestUnmatchedVendors.length > 0
-    ? `Observed runtime vendors such as ${formatInlineList(strongestUnmatchedVendors)} were not clearly matched by name or known domain alias in retained policy or cookie disclosure surfaces.`
-    : "Runtime vendor disclosure comparison evidence retained observed runtime vendors that were not clearly matched in reviewed disclosure surfaces.";
+type PolicyDisclosureRowConfig = {
+  disclosureType?: string;
+  label: string;
+  rowId: string;
+  signalKeys: string[];
+  textPattern: RegExp;
+};
 
-  if (trackerVendorCount > 0 && !hasPolicySurface) {
-    return makeOutcome(
-      "runtime_vendor_disclosure_alignment",
-      "Not testable",
-      "Runtime vendors were observed, but no privacy or cookie policy surface was retained, so disclosure alignment cannot be evaluated.",
-      [`Runtime vendor count: ${trackerVendorCount}`],
-      {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "scanSnapshots.privacy_policy_present or scanSnapshots.cookie_policy_present",
-            true,
-            hasPolicySurface,
-            "Required to compare observed runtime vendors against public disclosure surfaces.",
-            "CertScore"
-          )
-        ],
-        retainedEvidence: {
-          cookiePolicyPresent: getBoolean(input.snapshot, ["cookie_policy_present"]),
-          privacyPolicyPresent: getBoolean(input.snapshot, ["privacy_policy_present"]),
-          runtimeVendorCount: trackerVendorCount
-        }
-      }
-    );
+const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
+  {
+    rowId: "privacy_notice_availability",
+    label: "Privacy notice",
+    signalKeys: ["privacyPolicyPresent", "privacy_policy_present"],
+    textPattern: /privacy policy|privacy notice|privacy center/i
+  },
+  {
+    rowId: "controller_contact_disclosure",
+    label: "Controller/contact disclosure",
+    disclosureType: "controller_contact",
+    signalKeys: ["controllerContactDisclosureObserved", "controller_contact_disclosure_observed"],
+    textPattern: /data controller|controller|privacy contact|contact us|privacy office|privacy team|data protection/i
+  },
+  {
+    rowId: "processing_purposes_disclosure",
+    label: "Processing purposes disclosure",
+    disclosureType: "processing_purposes",
+    signalKeys: ["processingPurposesDisclosureObserved", "processing_purposes_disclosure_observed"],
+    textPattern: /purpose(?:s)? (?:of|for|we|to)|we (?:use|process) (?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|provide (?:our )?services|personalize (?:content|services|experience)/i
+  },
+  {
+    rowId: "legal_basis_disclosure_observed",
+    label: "Legal basis disclosure",
+    disclosureType: "legal_basis",
+    signalKeys: ["legalBasisDisclosureObserved", "legal_basis_disclosure_observed"],
+    textPattern: /legal basis|legitimate interest|consent|contract|legal obligation|vital interests|public task/i
+  },
+  {
+    rowId: "recipients_vendor_categories_disclosure",
+    label: "Recipients/vendor categories disclosure",
+    disclosureType: "recipients_or_vendor_categories",
+    signalKeys: ["recipientsVendorCategoriesDisclosureObserved", "recipients_vendor_categories_disclosure_observed"],
+    textPattern: /recipient|third part|service provider|vendor|partner|affiliate|advertising partner|analytics provider/i
+  },
+  {
+    rowId: "retention_disclosure_observed",
+    label: "Retention disclosure",
+    disclosureType: "data_retention",
+    signalKeys: ["retentionDisclosureObserved", "retention_disclosure_observed"],
+    textPattern: /retention period|retention criteria|storage period|retain.{0,80}(?:as long as necessary|required by law|for the purposes|until|unless)|keep your.{0,80}(?:as long as necessary|required by law|for)|stored for|kept for|as long as necessary/i
+  },
+  {
+    rowId: "data_subject_rights_disclosure",
+    label: "Data subject rights disclosure",
+    disclosureType: "data_subject_rights",
+    signalKeys: ["dataSubjectRightsDisclosureObserved", "data_subject_rights_disclosure_observed"],
+    textPattern: /your rights|data subject rights|access|delete|erasure|correct|rectif|portability|object|restrict/i
+  },
+  {
+    rowId: "international_transfers_disclosure",
+    label: "International transfer disclosure",
+    disclosureType: "international_transfers",
+    signalKeys: ["internationalTransfersDisclosureObserved", "international_transfers_disclosure_observed"],
+    textPattern: /international transfer|transfer.*outside|outside.*(?:eea|european economic area|eu|european union|uk|united kingdom)|(?:eea|european economic area|eu|european union|uk|united kingdom).*outside|standard contractual|contractual clauses|sccs?|adequacy|cross-border|data transfer framework|dpf|privacy shield|third countr(?:y|ies)|foreign countr(?:y|ies)|global(?:ly)? transfer/i
+  },
+  {
+    rowId: "dpo_contact_point_disclosure",
+    label: "DPO/contact point disclosure",
+    disclosureType: "dpo_contact",
+    signalKeys: ["dpoContactPointDisclosureObserved", "dpo_contact_point_disclosure_observed"],
+    textPattern: /data protection officer|dpo|privacy office|data protection contact/i
+  },
+  {
+    rowId: "supervisory_authority_complaint_disclosure",
+    label: "Supervisory authority complaint disclosure",
+    disclosureType: "supervisory_authority",
+    signalKeys: ["supervisoryAuthorityComplaintDisclosureObserved", "supervisory_authority_complaint_disclosure_observed"],
+    textPattern: /supervisory authority|data protection authority|complain|complaint|ico|cnil|dpc/i
+  },
+  {
+    rowId: "automated_decision_making_profiling_disclosure",
+    label: "Automated decision-making/profiling disclosure",
+    disclosureType: "automated_decision_making_or_profiling",
+    signalKeys: ["automatedDecisionMakingProfilingDisclosureObserved", "automated_decision_making_profiling_disclosure_observed"],
+    textPattern: /automated decision|automated processing|profiling/i
+  }
+];
+
+function getPolicyDisclosureSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return getObject(runtimeArtifacts, ["policyDisclosureSummary", "policy_disclosure_summary"]);
+}
+
+function getPolicyDisclosureText(summary: Record<string, unknown> | null | undefined) {
+  return getString(summary, ["retainedPrivacyPolicyTextExcerpt", "retained_privacy_policy_text_excerpt"]) ?? "";
+}
+
+function getPolicyArticle13DisclosureSignals(summary: Record<string, unknown> | null | undefined) {
+  return getObjectArray(summary, ["article13DisclosureSignals", "article13_disclosure_signals"]);
+}
+
+function getPolicyArticle13DisclosureSignal(
+  summary: Record<string, unknown> | null | undefined,
+  disclosureType: string | undefined
+) {
+  if (!disclosureType) {
+    return null;
   }
 
-  if (trackerVendorCount > 0 && hasPolicySurface && disclosureEvidence.length === 0) {
-    return makeOutcome(
-      "runtime_vendor_disclosure_alignment",
-      "Review signal",
-      "Runtime vendors and policy surfaces were retained, but no canonical vendor-disclosure comparison artifact was retained. Manual review is needed to determine disclosure alignment.",
-      [`Runtime vendor count: ${trackerVendorCount}`],
-      {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "runtimeVendorDisclosureEvidence",
-            "one or more canonical vendor-disclosure comparison rows",
-            disclosureEvidence.length,
-            "Usable runtime-vendor disclosure comparison with searched policy surfaces, matched/unmatched vendors, confidence, and rationale."
-          )
-        ],
-        retainedEvidence: {
-          hasPolicySurface,
-          runtimeVendorCount: trackerVendorCount
-        }
-      }
-    );
-  }
+  return getPolicyArticle13DisclosureSignals(summary).find((signal) =>
+    getString(signal, ["disclosureType", "disclosure_type"]) === disclosureType
+  ) ?? null;
+}
 
-  if (trackerVendorCount > 0 && hasPolicySurface) {
+function getPolicyObservedTopics(summary: Record<string, unknown> | null | undefined) {
+  return getStringArray(summary, ["observedTopics", "observed_topics"]);
+}
+
+function policyTextMatchEvidence(text: string, pattern: RegExp) {
+  if (!text) {
+    return null;
+  }
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const match = normalized.match(pattern);
+  if (!match?.index && match?.index !== 0) {
+    return null;
+  }
+  const start = Math.max(0, match.index - 180);
+  return normalized.slice(start, start + 420);
+}
+
+function policySurfaceIsThinOrErrored(summary: Record<string, unknown> | null | undefined) {
+  if (!summary) {
+    return false;
+  }
+  const charCount = getNumber(summary, ["privacyPolicyTextCharacterCount", "privacy_policy_text_character_count"]) ?? 0;
+  return getBoolean(summary, ["processingErrorObserved", "processing_error_observed"]) === true || charCount < 1_000;
+}
+
+function hasWeakPrivacyNoticeAttribution(summary: Record<string, unknown> | null | undefined) {
+  if (!summary) {
+    return false;
+  }
+  if (getBoolean(summary, ["keyPageGuessedOnly", "key_page_guessed_only", "privacyPolicyGuessedOnly", "privacy_policy_guessed_only"]) === true) {
+    return true;
+  }
+  const presentationDecision = getObject(summary, ["presentationDecision", "presentation_decision"]);
+  const statusText = [
+    getString(summary, ["presentationDecisionStatus", "presentation_decision_status"]),
+    getString(presentationDecision, ["status"]),
+    getString(summary, ["presentationDecision", "presentation_decision"]),
+    getString(summary, ["discoveryMethod", "discovery_method"]),
+    getString(summary, ["stopReason", "stop_reason"]),
+    getString(summary, ["source", "source_kind"])
+  ].join(" ");
+  return /guessed_only|common_path_guess|guessed path|fallback guess/i.test(statusText);
+}
+
+function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, config: PolicyDisclosureRowConfig) {
+  const summary = getPolicyDisclosureSummary(input.runtimeArtifacts);
+  const privacyPolicyPresent =
+    getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true ||
+    getBoolean(input.snapshot, ["privacy_policy_present", "privacyPolicyPresent"]) === true;
+  const text = getPolicyDisclosureText(summary);
+  const directSignal = getBoolean(summary, config.signalKeys);
+  const article13Signal = getPolicyArticle13DisclosureSignal(summary, config.disclosureType);
+  const article13SignalStatus = getString(article13Signal, ["status"]);
+  const article13SignalObserved = article13SignalStatus === "observed";
+  const article13SignalPartial = article13SignalStatus === "partial";
+  const topicObserved =
+    config.disclosureType !== undefined &&
+    getPolicyObservedTopics(summary).includes(config.disclosureType);
+  const textMatchEvidence = policyTextMatchEvidence(text, config.textPattern);
+  const observed =
+    directSignal === true ||
+    article13SignalObserved ||
+    Boolean(textMatchEvidence);
+
+  if (observed || (config.rowId === "privacy_notice_availability" && privacyPolicyPresent)) {
+    if (config.rowId === "privacy_notice_availability" && hasWeakPrivacyNoticeAttribution(summary)) {
+      return makeOutcome(
+        config.rowId,
+        "Review signal",
+        "A privacy-policy surface was retained, but the retained attribution was weak or guessed. Manual review should confirm this is the site privacy notice.",
+        [
+          "Evidence: privacy policy surface retained with weak attribution",
+          ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+        ],
+        {
+          retainedEvidence: {
+            article13Signal,
+            policySurfaceSummary: summary,
+            signalObserved: "partial"
+          }
+        }
+      );
+    }
+    const effectiveArticle13Signal = article13Signal ?? (textMatchEvidence && config.disclosureType
+      ? {
+          disclosureType: config.disclosureType,
+          evidenceText: textMatchEvidence,
+          source: "wc01_retained_policy_text_match",
+          status: "observed"
+        }
+      : null);
     return makeOutcome(
-      "runtime_vendor_disclosure_alignment",
-      hasUsableDirectDisclosureMismatch ? "Gap observed" : hasUsableMatchedDisclosureComparison ? "Observed" : unmatchedCount > 0 ? "Insufficient evidence" : "Not observed",
-      hasUsableDirectDisclosureMismatch
-        ? strongestMismatchCopy
-        : hasUsableMatchedDisclosureComparison
-          ? "Runtime vendor disclosure comparison evidence was retained, and observed runtime vendors were matched in retained disclosure surfaces."
-        : unmatchedCount > 0
-          ? "Runtime vendor disclosure comparison evidence was retained, but no eligible disclosure-alignment finding was projected."
-        : "Runtime vendor disclosure comparison evidence was retained, and no eligible disclosure-alignment finding was projected.",
+      config.rowId,
+      "Observed",
+      `${config.label} evidence was retained in public policy-surface evidence.`,
       [
-        `Runtime vendor count: ${trackerVendorCount}`,
-        `Disclosure comparison rows: ${disclosureEvidence.length}`,
-        unmatchedCount > 0 ? `Unmatched runtime vendor/domain count: ${unmatchedCount}` : null
+        config.rowId === "privacy_notice_availability" ? "Evidence: privacy policy surface retained" : `Evidence: ${config.label}`,
+        textMatchEvidence ? `Excerpt: ${textMatchEvidence}` : null,
+        ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
       ].filter((value): value is string => Boolean(value)),
       {
-        missingOrIncompleteSourceSignals: unmatchedCount > 0
-          ? hasUsableDirectDisclosureMismatch
-            ? []
-            : [
-                sourceGap(
-                  "CertScore.unifiedFindings.runtimeVendorDisclosureAlignmentFinding",
-                  "eligible projected unified finding when unmatched vendor evidence satisfies policy gates",
-                  "missing",
-                  "Required to classify retained vendor-disclosure mismatch evidence as a canonical review signal.",
-                  "CertScore"
-                )
-              ]
-          : [],
         retainedEvidence: {
-          coverageStatus: strongestDisclosureMismatch?.coverageStatus,
-          directVsInferred: strongestDisclosureMismatch?.directVsInferred,
-          disclosureComparisonRows: disclosureEvidence.length,
-          evidenceConfidence: strongestDisclosureMismatch?.evidenceConfidence,
-          hasPolicySurface,
-          mismatchRationale: strongestDisclosureMismatch?.mismatchRationale,
-          policySurfaceCount: strongestDisclosureMismatch?.policySurfacesSearched.length,
-          runtimeVendorDisclosureEvidence: disclosureEvidence,
-          runtimeVendorCount: trackerVendorCount,
-          strongestUnmatchedRuntimeVendors: strongestUnmatchedVendors,
-          unmatchedRuntimeVendorOrDomainCount: unmatchedCount
+          article13Signal: effectiveArticle13Signal,
+          policySurfaceSummary: summary,
+          signalObserved: true
         }
       }
     );
   }
 
-  return null;
+  if (article13SignalPartial || topicObserved) {
+    return makeOutcome(
+      config.rowId,
+      "Review signal",
+      article13SignalPartial
+        ? `${config.label} was partially observed in retained public policy-surface evidence and needs review.`
+        : `${config.label} was indicated by retained policy topics, but no row-specific disclosure evidence was retained. Manual review is needed.`,
+      [
+        article13SignalPartial ? `Evidence: partial ${config.label}` : `Evidence: policy topic mentions ${config.disclosureType}`,
+        getString(article13Signal, ["evidenceText", "evidence_text"])
+          ? `Excerpt: ${getString(article13Signal, ["evidenceText", "evidence_text"])}`
+          : null,
+        ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          article13Signal,
+          policySurfaceSummary: summary,
+          signalObserved: "partial"
+        }
+      }
+    );
+  }
+
+  if (!privacyPolicyPresent) {
+    return makeOutcome(
+      config.rowId,
+      "Not testable",
+      `No privacy-policy surface was retained, so ${config.label.toLowerCase()} could not be evaluated.`,
+      ["Missing evidence: privacy policy surface"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanner.policySurfaceObservations.privacy_policy",
+            "reachable retained privacy policy surface",
+            "missing",
+            `Required to evaluate ${config.label.toLowerCase()}.`
+          )
+        ],
+        retainedEvidence: { policySurfaceSummary: summary }
+      }
+    );
+  }
+
+  if (policySurfaceIsThinOrErrored(summary)) {
+    return makeOutcome(
+      config.rowId,
+      "Review signal",
+      `A privacy-policy surface was retained, but extracted text was thin or errored and no structured ${config.label.toLowerCase()} signal was retained. Manual review is needed.`,
+      ["Evidence: privacy policy surface retained", "Limitation: thin or errored policy extraction"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanner.policySurfaceObservations.privacy_policy.textExcerpt",
+            "usable retained privacy policy text for Article 13 disclosure review",
+            text ? `${text.length} characters` : "missing",
+            `Required to evaluate ${config.label.toLowerCase()}.`
+          )
+        ],
+        retainedEvidence: {
+          article13Signal,
+          policySurfaceSummary: summary,
+          signalObserved: false
+        }
+      }
+    );
+  }
+
+  if (config.rowId === "international_transfers_disclosure") {
+    return makeOutcome(
+      config.rowId,
+      "Review signal",
+      "A privacy-policy surface was retained, but no row-specific international transfer disclosure signal was retained. Manual review is needed before treating this as a potential transparency gap.",
+      ["Evidence: retained privacy policy text reviewed", "Missing evidence: row-specific international transfer disclosure signal"],
+      {
+        retainedEvidence: {
+          article13Signal,
+          policySurfaceSummary: summary,
+          signalObserved: false
+        }
+      }
+    );
+  }
+
+  return makeOutcome(
+    config.rowId,
+    config.rowId === "automated_decision_making_profiling_disclosure" ? "Not observed" : "Gap observed",
+    config.rowId === "automated_decision_making_profiling_disclosure"
+      ? `${config.label} was not observed in retained privacy-policy evidence.`
+      : `${config.label} was expected for Article 13 transparency review but was not observed in retained privacy-policy evidence.`,
+    ["Evidence: retained privacy policy text reviewed"],
+    {
+      retainedEvidence: {
+        article13Signal,
+        policySurfaceSummary: summary,
+        signalObserved: false
+      }
+    }
+  );
+}
+
+function derivePolicyDisclosureOutcomes(input: GdprEprivacyCoveragePolicyInput) {
+  return POLICY_DISCLOSURE_ROWS.map((config) => derivePolicyDisclosureOutcome(input, config));
 }
 
 function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
@@ -3398,7 +4167,7 @@ function buildBrowserDeviceEntropyReviewEvidence(input: GdprEprivacyCoveragePoli
     entropyLinkedToIdentifier === true ||
     (deviceDataLikeRequestCount ?? 0) > 0;
 
-  if (rows.length === 0 && signals.length === 0 && !summary) {
+  if (rows.length === 0 && signals.length === 0 && !strongCorroboratorObserved) {
     return null;
   }
 
@@ -3512,18 +4281,116 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
     );
   }
 
-  if (hasRuntimeCapture(input) || sessionReplayCount !== null) {
+  if (hasSessionReplayRuntimeCoverage(input) || hasFingerprintingRuntimeCoverage(input) || sessionReplayCount !== null) {
     return makeOutcome(
       "session_replay_fingerprinting_review",
       "Not observed",
       "Runtime vendor/fingerprinting checks completed for the tested context, and no eligible replay or fingerprinting finding was projected.",
-      ["Evidence: runtime capture completed"],
+      ["Evidence: retained session replay / fingerprinting coverage summary"],
       {
         retainedEvidence: {
           fingerprintingObserved: false,
+          fingerprintingRuntimeCoverageRetained: hasFingerprintingRuntimeCoverage(input),
           runtimeCaptureCompleted: hasRuntimeCapture(input),
           sessionReplayCount: sessionReplayCount ?? 0,
+          sessionReplayRuntimeCoverageRetained: hasSessionReplayRuntimeCoverage(input),
           sessionReplayObserved: false
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "session_replay_fingerprinting_review",
+      "Not testable",
+      "Runtime capture completed, but the retained scanner context did not include row-specific session replay or fingerprinting coverage evidence.",
+      ["Evidence gap: session replay / fingerprinting coverage not retained"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "runtimeArtifacts.sessionReplayEvidenceSummary",
+            "row-specific session replay evidence summary",
+            "missing",
+            "Required to determine whether session replay or behavioral analytics was inspected and absent."
+          ),
+          sourceGap(
+            "runtimeArtifacts.fingerprintingEvidenceSummary",
+            "row-specific browser API / fingerprinting evidence summary",
+            "missing",
+            "Required to determine whether device-identification or fingerprinting signals were inspected and absent."
+          )
+        ],
+        retainedEvidence: {
+          runtimeCaptureCompleted: true
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveDeviceFingerprintingSignalOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const browserDeviceEntropyEvidence = buildBrowserDeviceEntropyReviewEvidence(input);
+  const fingerprintingObserved =
+    getBoolean(input.snapshot, ["fingerprinting_or_identity_vendor_detected", "fingerprinting_detected"]) === true ||
+    Boolean(browserDeviceEntropyEvidence);
+
+  if (fingerprintingObserved) {
+    return makeOutcome(
+      "device_identification_fingerprinting_signal_observed",
+      "Review signal",
+      "Browser/device entropy, fingerprinting, or identifier-like device collection evidence was retained for review.",
+      [
+        "Fingerprinting or device-identification signal observed",
+        ...getStringArray(browserDeviceEntropyEvidence, ["hosts"]).map((host) => `Observed host: ${host}`).slice(0, 3)
+      ],
+      {
+        retainedEvidence: {
+          browserDeviceEntropyEvidence,
+          fingerprintingObserved: true
+        }
+      }
+    );
+  }
+
+  if (hasFingerprintingRuntimeCoverage(input)) {
+    return makeOutcome(
+      "device_identification_fingerprinting_signal_observed",
+      "Not observed",
+      "Runtime fingerprinting/device-identification checks completed for the tested context and did not retain an eligible signal.",
+      ["Evidence: retained fingerprinting/browser API coverage summary"],
+      {
+        retainedEvidence: {
+          fingerprintingObserved: false,
+          fingerprintingRuntimeCoverageRetained: true,
+          runtimeCaptureCompleted: hasRuntimeCapture(input),
+          runtimeEvidenceRetained: Boolean(hybridRuntimeEvidence)
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input) || Boolean(hybridRuntimeEvidence)) {
+    return makeOutcome(
+      "device_identification_fingerprinting_signal_observed",
+      "Not testable",
+      "Runtime capture completed, but the retained scanner context did not include row-specific browser API or fingerprinting coverage evidence.",
+      ["Evidence gap: fingerprinting/browser API coverage not retained"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "runtimeArtifacts.fingerprintingEvidenceSummary",
+            "row-specific browser API / fingerprinting evidence summary",
+            "missing",
+            "Required to determine whether device-identification or fingerprinting signals were inspected and absent."
+          )
+        ],
+        retainedEvidence: {
+          runtimeCaptureCompleted: hasRuntimeCapture(input),
+          runtimeEvidenceRetained: Boolean(hybridRuntimeEvidence)
         }
       }
     );
@@ -3565,15 +4432,37 @@ function deriveSessionReplayBeforeConsentOutcome(input: GdprEprivacyCoveragePoli
     );
   }
 
-  if (hasRuntimeCapture(input)) {
+  if (hasSessionReplayRuntimeCoverage(input)) {
     return makeOutcome(
       "session_replay_before_consent",
       "Not observed",
       "Runtime capture completed for the tested context, and no pre-consent session replay collection signal was retained.",
-      ["Evidence: runtime capture completed"],
+      ["Evidence: retained session replay coverage summary"],
       {
         retainedEvidence: {
           sessionReplayObserved: false
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "session_replay_before_consent",
+      "Not testable",
+      "Runtime capture completed, but the retained scanner context did not include row-specific session replay coverage evidence.",
+      ["Evidence gap: session replay coverage not retained"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "runtimeArtifacts.sessionReplayEvidenceSummary",
+            "row-specific session replay evidence summary",
+            "missing",
+            "Required to determine whether session replay collection happened before consent."
+          )
+        ],
+        retainedEvidence: {
+          runtimeCaptureCompleted: true
         }
       }
     );
@@ -3593,15 +4482,32 @@ function deriveSessionReplayDisclosureAlignmentOutcome(input: GdprEprivacyCovera
   const vendorDisclosed = getBoolean(sessionReplayEvidence, ["vendorDisclosed", "vendor_disclosed"]) === true;
 
   if (!observed) {
-    return hasRuntimeCapture(input)
+    return hasSessionReplayRuntimeCoverage(input)
       ? makeOutcome(
           "session_replay_disclosure_alignment",
           "Not observed",
           "No session replay runtime signal was retained, so no session replay disclosure mismatch was observed.",
-          ["Evidence: runtime capture completed"],
+          ["Evidence: retained session replay coverage summary"],
           { retainedEvidence: { sessionReplayObserved: false } }
         )
-      : null;
+      : hasRuntimeCapture(input)
+        ? makeOutcome(
+            "session_replay_disclosure_alignment",
+            "Not testable",
+            "Runtime capture completed, but the retained scanner context did not include row-specific session replay coverage evidence.",
+            ["Evidence gap: session replay coverage not retained"],
+            {
+              missingOrIncompleteSourceSignals: [
+                sessionReplayMissingEvidence(
+                  "runtimeArtifacts.sessionReplayEvidenceSummary",
+                  "Required to determine whether a session replay disclosure-alignment comparison is applicable.",
+                  "missing"
+                )
+              ],
+              retainedEvidence: { runtimeCaptureCompleted: true }
+            }
+          )
+        : null;
   }
 
   if (vendorDisclosureGap) {
@@ -3688,15 +4594,36 @@ function deriveSessionReplaySensitiveSurfaceOutcome(input: GdprEprivacyCoverageP
     );
   }
 
-  if (hasRuntimeCapture(input)) {
+  if (hasSessionReplayRuntimeCoverage(input)) {
     return makeOutcome(
       "session_replay_sensitive_surface",
       "Not observed",
       "Runtime capture completed for the tested context, and no sensitive-surface session replay signal was retained.",
-      ["Evidence: runtime capture completed"],
+      ["Evidence: retained session replay coverage summary"],
       {
         retainedEvidence: {
           sessionReplayObserved: false
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "session_replay_sensitive_surface",
+      "Not testable",
+      "Runtime capture completed, but the retained scanner context did not include row-specific session replay coverage evidence.",
+      ["Evidence gap: session replay coverage not retained"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sessionReplayMissingEvidence(
+            "runtimeArtifacts.sessionReplayEvidenceSummary",
+            "Required to determine whether session replay overlapped with sensitive collection surfaces.",
+            "missing"
+          )
+        ],
+        retainedEvidence: {
+          runtimeCaptureCompleted: true
         }
       }
     );
@@ -4194,19 +5121,27 @@ function evaluateConsentControlAccessibility(input: {
 export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCoveragePolicyInput) {
   const policyCoverageContext = derivePolicyCoverageContext({
     events: input.events,
-    policyEnrichmentCount: input.policyEnrichmentCount
+    policyEnrichmentCount: input.policyEnrichmentCount,
+    runtimeArtifacts: input.runtimeArtifacts
   });
   const outcomes = [
     deriveConsentSurfaceOutcome(input),
+    deriveCmpFrameworkSignalOutcome(input),
+    deriveCookieNoticePolicyAvailabilityOutcome(input),
     derivePreConsentCookieStorageOutcome(input),
     derivePreConsentThirdPartyTrackingOutcome(input),
+    deriveAdvertisingRetargetingVendorSignalOutcome(input),
+    deriveAnalyticsVendorObservedOutcome(input),
     deriveRejectPathOutcome(input),
     deriveConsentChoiceQualityOutcome(input),
     derivePostRejectOutcome(input),
     derivePreferenceWithdrawalOutcome(input),
-    deriveVendorDisclosureOutcome(input),
+    deriveCollectionSurfaceOutcome(input),
+    ...derivePolicyDisclosureOutcomes(input),
     deriveSensitiveSurfaceOutcome(input),
     deriveSessionReplayFingerprintingOutcome(input),
+    deriveDeviceFingerprintingSignalOutcome(input),
+    deriveEmbeddedThirdPartyContentPreConsentOutcome(input),
     deriveSessionReplayBeforeConsentOutcome(input),
     deriveSessionReplayDisclosureAlignmentOutcome(input),
     deriveSessionReplaySensitiveSurfaceOutcome(input),
@@ -4225,10 +5160,7 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     return byRow;
   }
 
-  for (const rowId of [
-    "runtime_vendor_disclosure_alignment",
-    "cross_border_endpoint_review"
-  ]) {
+  for (const rowId of ["cross_border_endpoint_review"]) {
     const existing = byRow[rowId];
     if (existing && (existing.status === "Gap observed" || existing.status === "Observed")) {
       continue;

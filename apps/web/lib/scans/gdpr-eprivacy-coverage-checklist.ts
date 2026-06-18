@@ -6,12 +6,7 @@ import type {
   GdprEprivacyCoverageSourceSignalGap
 } from "./gdpr-eprivacy-coverage-policy";
 import { buildRegulatoryChecklistEvidenceHighlights } from "./regulatory-checklist-evidence-highlights";
-import {
-  getRuntimeVendorDisclosureEvidence,
-  runtimeVendorDisclosureNameHasMaterialCategory,
-  runtimeVendorDisclosureNameIsLowerRiskInfrastructure,
-  runtimeVendorDisclosureRowHasPromotionCategory
-} from "./runtime-vendor-disclosure";
+import { runtimeVendorDisclosureRowHasPromotionCategory } from "./runtime-vendor-disclosure";
 
 export type GdprEprivacyCoverageChecklistStatus =
   | "Observed"
@@ -159,8 +154,22 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
+    id: "advertising_retargeting_vendor_signal_observed",
+    label: "Advertising / retargeting vendor signal observed",
+    explanation: "Whether advertising, retargeting, or adtech vendor signals were observed in retained pre-consent/public-web runtime evidence.",
+    findingIds: [
+      "adtech_cookie_pre_consent",
+      "preconsent_tracking",
+      "pre_consent_tracking_detected",
+      "third_party_tracking_pre_consent"
+    ],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No advertising, retargeting, or adtech vendor signal was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
     id: "analytics_vendor_observed",
-    label: "Analytics vendor observed",
+    label: "Analytics vendor signal observed",
     explanation: "Whether analytics or measurement vendors were observed in retained pre-consent/public-web runtime evidence.",
     findingIds: [
       "analytics_cookie_pre_consent",
@@ -202,6 +211,15 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
+    id: "embedded_content_pre_consent",
+    label: "Embedded third-party content loaded before consent",
+    explanation: "Whether concrete third-party embedded content, such as video, map, social, chat, scheduling, or form embeds, loaded before a recorded consent action.",
+    findingIds: [],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No concrete third-party embedded-content iframe or embed surface was retained before consent.",
+    requiresPublicWebCoverage: true
+  },
+  {
     id: "collection_surface_observed",
     label: "Collection surface observed",
     explanation: "Whether a form, input, newsletter, account, checkout, contact, or other collection surface was retained in public-web evidence.",
@@ -235,22 +253,6 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     findingIds: ["retention_disclosure_present"],
     defaultFindingStatus: "Observed",
     notObservedText: "No canonical retention disclosure evidence was retained for this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
-    id: "runtime_vendor_disclosure_alignment",
-    label: "Runtime vendor vs disclosure alignment",
-    explanation: "Whether observed runtime vendors were clearly matched by name or known domain alias in reviewed public privacy/cookie disclosures.",
-    findingIds: [
-      "cookie_disclosure_gap",
-      "missing_technical_disclosure",
-      "policy_behavior_conflict",
-      "policy_behavior_contradiction_detected",
-      "session_replay_undisclosed",
-      "third_party_recipient_disclosure_missing"
-    ],
-    defaultFindingStatus: "Review signal",
-    notObservedText: "No runtime vendor disclosure-alignment finding was surfaced in this scan context.",
     requiresPublicWebCoverage: true
   },
   {
@@ -534,8 +536,6 @@ function getMissingEvidenceNeeded(input: {
       return "Post-choice consent-flow automation is deferred from the production core scanner; use retained evidence only as analyst review context.";
     case "preference_withdrawal_control":
       return "Cookie preference center, cookie-category controls, or consent-withdrawal control tied to GDPR/ePrivacy cookie consent.";
-    case "runtime_vendor_disclosure_alignment":
-      return "Usable runtime-vendor disclosure comparison with searched policy surfaces, matched/unmatched vendors, confidence, and rationale.";
     case "sensitive_surfaces_third_party_tracking":
       return "Eligible sensitive field plus direct or moderate-confidence same-context third-party tracking correlation.";
     case "cross_border_endpoint_review":
@@ -569,39 +569,6 @@ function selectChecklistEvidenceArtifact(input: {
     selectedEvidenceStrength,
     weakerArtifactsIgnored
   });
-
-  if (input.rowId === "runtime_vendor_disclosure_alignment") {
-    const retainedVendorDisclosureRows = getRetainedVendorDisclosureRows(input.retained);
-    if (hasUsableVendorDisclosureMismatchEvidence({
-      assessmentStatus: "checked",
-      criticalEvidence: input.criticalEvidence,
-      evidenceRefs: [],
-      evidenceState: "observed",
-      explanation: "",
-      id: input.rowId,
-      label: "",
-      note: "",
-      status: input.status,
-      tone: "neutral"
-    })) {
-      weakerArtifactsIgnored.push({
-        artifactId: "runtimeVendorDisclosureEvidence.coverage_unknown",
-        reason: "Weaker coverage-unknown rows are not selected when a usable direct vendor-disclosure mismatch row is retained."
-      });
-      return selection(
-        "runtimeVendorDisclosureEvidence.strongestUsableMismatch",
-        "strong",
-        "Selected the usable direct runtime-vendor disclosure comparison row with observed vendors, unmatched vendors/domains, searched policy surfaces, confidence, and mismatch rationale."
-      );
-    }
-    return selection(
-      retainedVendorDisclosureRows.length > 0 ? "runtimeVendorDisclosureEvidence.limited" : "runtimeVendorDisclosureEvidence.missing",
-      retainedVendorDisclosureRows.length > 0 || input.status === "Insufficient evidence" || input.status === "Review signal" ? "limited" : "missing",
-      retainedVendorDisclosureRows.length > 0
-        ? "Runtime vendor disclosure evidence was retained, but no usable direct vendor comparison row was retained."
-        : "No usable direct vendor-disclosure mismatch row was retained for gap-level projection."
-    );
-  }
 
   if (input.rowId === "preference_withdrawal_control") {
     if (retainedEvidenceHasCookieConsentWithdrawal(input.retained)) {
@@ -1054,7 +1021,6 @@ function normalizeFindingStatus(
 ): Exclude<GdprEprivacyCoverageChecklistStatus, "Not observed" | "Not testable" | "Out of scope"> {
   if (
     findings.some((finding) =>
-      isRuntimeVendorDisclosureAlignmentGapEvidence(definition.id, finding) ||
       isCrossBorderDisclosureGapEvidence(definition.id, finding) ||
       isSensitiveSurfaceGapEvidence(definition.id, finding)
     )
@@ -1089,54 +1055,6 @@ function isCrossBorderDisclosureGapEvidence(rowId: string, finding: UnifiedFindi
   return entities.crossBorderDisclosureGapBasis?.some((value) => value === "transfer_endpoint_runtime_vendor_not_disclosed") === true;
 }
 
-function isRuntimeVendorDisclosureAlignmentGapEvidence(rowId: string, finding: UnifiedFindingDisplayPacket) {
-  if (
-    rowId !== "runtime_vendor_disclosure_alignment" ||
-    !(
-      finding.unifiedFindingId === "policy_behavior_conflict" ||
-      finding.unifiedFindingId === "policy_behavior_contradiction_detected" ||
-      finding.unifiedFindingId === "cookie_disclosure_gap"
-    )
-  ) {
-    return false;
-  }
-
-  const entities = finding.evidence?.entities ?? {};
-  const subtypes = entities.findingSubtype ?? [];
-  const hasRuntimeVendorNotDisclosedSubtype = Array.isArray(subtypes) &&
-    subtypes.some((subtype) => subtype === "runtime_vendor_not_disclosed");
-  const disclosureRows = getRuntimeVendorDisclosureEvidence(entities);
-  return (
-    hasRuntimeVendorNotDisclosedSubtype &&
-    disclosureRows.some((row) => {
-      const unmatchedRuntimeCount = row.unmatchedRuntimeVendors.length + row.unmatchedRuntimeDomains.length;
-      const observedRuntimeCount = row.observedRuntimeVendors.length + row.observedRuntimeDomains.length;
-      const reachedPolicySurfaces = row.policySurfacesSearched.filter((surface) =>
-        surface.reached && Boolean(surface.url) && Boolean(surface.snippet)
-      ).length;
-      return (
-        row.coverageStatus === "usable" &&
-        row.directVsInferred !== "inferred" &&
-        observedRuntimeCount > 0 &&
-        unmatchedRuntimeCount > 0 &&
-        row.unmatchedVendorDisclosureCount > 0 &&
-        reachedPolicySurfaces > 0
-      );
-    })
-  );
-}
-
-function isRuntimeVendorDisclosureAlignmentEvidence(rowId: string, finding: UnifiedFindingDisplayPacket) {
-  return (
-    rowId === "runtime_vendor_disclosure_alignment" &&
-    finding.unifiedFindingId === "policy_behavior_conflict" &&
-    (
-      finding.evidence?.entities?.findingSubtype?.includes("runtime_vendor_not_disclosed") ||
-      (finding.evidence?.entities?.runtimeVendorDisclosureEvidence?.length ?? 0) > 0
-    )
-  );
-}
-
 function isSensitiveSurfaceReviewEvidence(rowId: string, finding: UnifiedFindingDisplayPacket) {
   return (
     rowId === "sensitive_surfaces_third_party_tracking" &&
@@ -1156,10 +1074,7 @@ function isFindingPresentationStatusSufficientForCoverageRow(rowId: string, find
     return true;
   }
 
-  return (
-    isRuntimeVendorDisclosureAlignmentEvidence(rowId, finding) ||
-    isSensitiveSurfaceReviewEvidence(rowId, finding)
-  );
+  return isSensitiveSurfaceReviewEvidence(rowId, finding);
 }
 
 function getSessionReplayEvidenceFromOutcome(outcome: GdprEprivacyCoverageOutcome | undefined) {
@@ -1695,59 +1610,6 @@ function specializeChecklistRow(input: {
         "Footer privacy/ad-choice and vendor opt-out links were observed, but CertScore did not confirm a GDPR/ePrivacy cookie preference center or consent-withdrawal control.",
       label: input.definition.label,
       status: "Review signal" as const
-    };
-  }
-
-  if (input.definition.id === "runtime_vendor_disclosure_alignment" && input.status === "Gap observed") {
-    const coverageRetainedEvidence = getRecordValue(input.coverageOutcome?.criticalEvidence.retainedEvidence);
-    const retainedDisclosureRows = Array.isArray(coverageRetainedEvidence?.runtimeVendorDisclosureEvidence)
-      ? coverageRetainedEvidence.runtimeVendorDisclosureEvidence.filter(
-          (row): row is Record<string, unknown> => Boolean(row) && typeof row === "object" && !Array.isArray(row)
-        )
-      : [];
-    const disclosureRows = getFindingEntityRows(input.findings, ["runtimeVendorDisclosureEvidence"]);
-    const comparisonRows = disclosureRows.length > 0 ? disclosureRows : retainedDisclosureRows;
-    const unmatched = getCanonicalVendors(disclosureRows.flatMap((row) => {
-      const unmatchedRuntimeVendors = Array.isArray(row.unmatchedRuntimeVendors)
-        ? row.unmatchedRuntimeVendors
-        : Array.isArray(row.unmatched_runtime_vendors)
-          ? row.unmatched_runtime_vendors
-          : [];
-      return unmatchedRuntimeVendors.filter((value): value is string => typeof value === "string");
-    })).slice(0, 8);
-    const retainedUnmatched = getCanonicalVendors(comparisonRows.flatMap((row) => {
-      const unmatchedRuntimeVendors = Array.isArray(row.unmatchedRuntimeVendors)
-        ? row.unmatchedRuntimeVendors
-        : Array.isArray(row.unmatched_runtime_vendors)
-          ? row.unmatched_runtime_vendors
-          : [];
-      return unmatchedRuntimeVendors.filter((value): value is string => typeof value === "string");
-    })).slice(0, 8);
-    const rawVisibleUnmatched = unmatched.length > 0 ? unmatched : retainedUnmatched;
-    const materialVisibleUnmatched = rawVisibleUnmatched.filter(runtimeVendorDisclosureNameHasMaterialCategory);
-    const visibleUnmatched = materialVisibleUnmatched.length > 0
-      ? materialVisibleUnmatched
-      : rawVisibleUnmatched.filter((value) => !runtimeVendorDisclosureNameIsLowerRiskInfrastructure(value));
-    const observed = getCanonicalVendors(comparisonRows.flatMap((row) => {
-      const observedRuntimeVendors = Array.isArray(row.observedRuntimeVendors)
-        ? row.observedRuntimeVendors
-        : Array.isArray(row.observed_runtime_vendors)
-          ? row.observed_runtime_vendors
-          : [];
-      return observedRuntimeVendors.filter((value): value is string => typeof value === "string");
-    }));
-    const disclosedGoogleAnalytics = observed.includes("Google Analytics") && !unmatched.includes("Google Analytics");
-    const extractionQualityNote = hasLimitedDisclosureSnippetEvidence(input.findings)
-      ? " Reviewed disclosure surfaces were reached, but retained snippets appear limited; verify full policy/cookie disclosure coverage during manual review."
-      : "";
-    return {
-      evidenceRefs: input.evidenceRefs,
-      explanation:
-        visibleUnmatched.length > 0
-          ? `Observed runtime vendors such as ${formatVendorPhrase(visibleUnmatched)} were not clearly matched by name or known domain alias in retained policy or cookie disclosure surfaces.${extractionQualityNote}`
-          : `${disclosedGoogleAnalytics ? "Google Analytics appears disclosed, but s" : "S"}everal observed runtime vendors were not clearly matched by name or known domain alias in retained public privacy / cookie disclosures.${extractionQualityNote}`,
-      label: input.definition.label,
-      status: "Gap observed" as const
     };
   }
 
@@ -2492,20 +2354,6 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
         : "Reject-path availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. Footer privacy/ad-choice controls were observed, but they do not establish an accept/reject consent surface.",
       "no_confirmed_first_layer_gdpr_eprivacy_consent_banner_or_reject_state",
       "not_testable"
-    );
-  }
-
-  if (
-    item.id === "runtime_vendor_disclosure_alignment" &&
-    item.status === "Gap observed" &&
-    !hasUsableVendorDisclosureMismatchEvidence(item)
-  ) {
-    return addDeducibilityDemotion(
-      item,
-      "Review signal",
-      "Runtime vendors and policy surfaces were retained, but the row did not retain a usable direct vendor-disclosure mismatch artifact sufficient for a gap.",
-      "missing_usable_direct_vendor_disclosure_mismatch_artifact",
-      "observed"
     );
   }
 

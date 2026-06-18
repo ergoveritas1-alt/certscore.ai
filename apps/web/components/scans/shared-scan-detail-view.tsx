@@ -25,7 +25,8 @@ import {
   ExecutiveSummaryCard,
   buildRegulatoryLensesFromUnifiedPackets,
   type ExecutivePolicySurface,
-  type ExecutiveScanInterruption
+  type ExecutiveScanInterruption,
+  type ExecutiveTimelineEvent
 } from "./executive-summary-card";
 import { FindingsSection } from "./findings-section";
 import { FullScanProgressCard } from "./full-scan-progress-card";
@@ -36,7 +37,10 @@ import {
   type BetaRegulatoryChecklistRow,
   type BetaRegulatoryChecklistStatus
 } from "./beta-regulatory-checklist-card";
-import { GdprEprivacyCoverageChecklistCard } from "./gdpr-eprivacy-coverage-checklist-card";
+import {
+  GdprEprivacyCoverageChecklistCard,
+  GdprEprivacyCoverageSummaryPills
+} from "./gdpr-eprivacy-coverage-checklist-card";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
@@ -143,6 +147,8 @@ import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary
 import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
+import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
+import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import {
   formatCollectionEndpointType,
@@ -584,6 +590,152 @@ function getHybridRuntimeSummaryRows(runtimeArtifacts: Record<string, unknown> |
       value: mediaSummary?.autoplayVideoObserved === true || mediaSummary?.autoplayAudioObserved === true
     }
   ];
+}
+
+function firstTimelineMs(...values: unknown[]) {
+  const numbers = values
+    .flatMap((value) => (Array.isArray(value) ? value : [value]))
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0)
+    .sort((left, right) => left - right);
+
+  return numbers[0] ?? null;
+}
+
+function firstTimelineMsFromRows(
+  rows: Record<string, unknown>[],
+  predicate: (row: Record<string, unknown>) => boolean
+) {
+  return firstTimelineMs(
+    rows
+      .filter(predicate)
+      .map((row) =>
+        firstTimelineMs(
+          row.timestampMs,
+          row.timestamp_ms,
+          row.tsMs,
+          row.ts_ms,
+          row.firstObservedAtMs,
+          row.first_observed_at_ms,
+          row.firstObservedMs,
+          row.first_observed_ms,
+          row.observedAtMs,
+          row.observed_at_ms,
+          row.firstSeenMs,
+          row.first_seen_ms
+        )
+      )
+  );
+}
+
+function buildExecutiveTimelineEvents(
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+): ExecutiveTimelineEvent[] {
+  const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
+  if (!hybrid) {
+    return [];
+  }
+
+  const timelineMarkers = getRecord(hybrid.timelineMarkers) ?? getRecord(hybrid.timeline_markers);
+  const requestRows = [
+    ...getRecordObjectArray(hybrid, "requestPurposeClassificationConfidence"),
+    ...getRecordObjectArray(hybrid, "request_purpose_classification_confidence"),
+    ...getRecordObjectArray(hybrid, "requestObservations"),
+    ...getRecordObjectArray(hybrid, "request_observations")
+  ];
+  const embeddedSummary = getRecord(hybrid.embeddedContentSummary) ?? getRecord(hybrid.embedded_content_summary);
+  const iframeSummary = getRecord(hybrid.iframeSummary) ?? getRecord(hybrid.iframe_summary);
+  const embeddedRows = [
+    ...getRecordObjectArray(embeddedSummary, "observations"),
+    ...getRecordObjectArray(iframeSummary, "iframeEvents"),
+    ...getRecordObjectArray(iframeSummary, "iframe_events")
+  ];
+  const sessionReplaySummary =
+    getRecord(hybrid.sessionReplayEvidenceSummary) ?? getRecord(hybrid.session_replay_evidence_summary);
+  const fingerprintRows = [
+    ...getRecordObjectArray(hybrid, "fingerprintingRuntimeEvidence"),
+    ...getRecordObjectArray(hybrid, "fingerprinting_runtime_evidence")
+  ];
+  const events: ExecutiveTimelineEvent[] = [];
+  const pushEvent = (event: ExecutiveTimelineEvent) => {
+    if (!Number.isFinite(event.atMs) || event.atMs < 0) {
+      return;
+    }
+    if (events.some((existing) => existing.label === event.label)) {
+      return;
+    }
+    events.push(event);
+  };
+
+  pushEvent({
+    atMs: firstTimelineMs(timelineMarkers?.firstCmpVisibleMs, timelineMarkers?.first_cmp_visible_ms) ?? -1,
+    label: "Consent banner",
+    tone: "emerald"
+  });
+  pushEvent({
+    atMs:
+      firstTimelineMs(
+        timelineMarkers?.firstNonEssentialRequestMs,
+        timelineMarkers?.first_non_essential_request_ms,
+        timelineMarkers?.firstThirdPartyRequestMs,
+        timelineMarkers?.first_third_party_request_ms,
+        timelineMarkers?.firstRequestMs,
+        timelineMarkers?.first_request_ms
+      ) ?? -1,
+    label: "3P request",
+    tone: "amber"
+  });
+  pushEvent({
+    atMs:
+      firstTimelineMs(
+        timelineMarkers?.firstTrackingCookieSetMs,
+        timelineMarkers?.first_tracking_cookie_set_ms,
+        timelineMarkers?.firstCookieWriteMs,
+        timelineMarkers?.first_cookie_write_ms
+      ) ?? -1,
+    label: "Cookie/storage",
+    tone: "amber"
+  });
+  pushEvent({
+    atMs:
+      firstTimelineMsFromRows(requestRows, (row) =>
+        /advertising|adtech|retargeting|marketing/i.test(
+          String(row.category ?? row.vendorCategory ?? row.vendor_category ?? row.classification ?? "")
+        )
+      ) ?? -1,
+    label: "Ad vendor",
+    tone: "rose"
+  });
+  pushEvent({
+    atMs:
+      firstTimelineMsFromRows(requestRows, (row) =>
+        /analytics|measurement/i.test(String(row.category ?? row.vendorCategory ?? row.vendor_category ?? ""))
+      ) ?? -1,
+    label: "Analytics",
+    tone: "sky"
+  });
+  pushEvent({
+    atMs:
+      firstTimelineMs(
+        sessionReplaySummary?.firstSeenMs,
+        sessionReplaySummary?.first_seen_ms,
+        sessionReplaySummary?.firstObservedMs,
+        sessionReplaySummary?.first_observed_ms
+      ) ?? -1,
+    label: "Session replay",
+    tone: "rose"
+  });
+  pushEvent({
+    atMs: firstTimelineMsFromRows(fingerprintRows, () => true) ?? -1,
+    label: "Fingerprinting",
+    tone: "rose"
+  });
+  pushEvent({
+    atMs: firstTimelineMsFromRows(embeddedRows, (row) => row.preConsent !== false && row.pre_consent !== false) ?? -1,
+    label: "Embedded content",
+    tone: "amber"
+  });
+
+  return events.sort((left, right) => left.atMs - right.atMs).slice(0, 8);
 }
 
 function getPolicyField(record: Record<string, unknown> | null | undefined, ...keys: string[]) {
@@ -6168,7 +6320,7 @@ export function SharedScanDetailView({
     notice: requestedExecutiveAccessLimitationNotice,
     topExecutiveFindings: executiveFindingsProjection.topFindings
   });
-  const executiveDisplayedScore = deriveExecutiveDisplayedScore({
+  const legacyExecutiveDisplayedScore = deriveExecutiveDisplayedScore({
     findings: allExecutiveFindings,
     previewMode,
     snapshot,
@@ -6263,6 +6415,12 @@ export function SharedScanDetailView({
     scanCompleted: scanRecord.scan.status === "completed",
     unifiedFindings: findingEvidenceDiagnostics
   });
+  const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(gdprEprivacyCoverageChecklist);
+  const gdprEprivacyCoverageScore = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: reportableGdprEprivacyCoverageChecklist
+  });
+  const executiveDisplayedScore = gdprEprivacyCoverageScore.score ?? legacyExecutiveDisplayedScore;
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {
       id: "gdpr_eprivacy",
@@ -6279,12 +6437,7 @@ export function SharedScanDetailView({
       ];
   const topExecutiveFindings = executiveAccessLimitationNotice
     ? [executiveAccessLimitationNotice.finding]
-    : [
-        ...regulatoryGapTopFindings,
-        ...executiveFindingsProjection.topFindings.filter(
-          (finding) => !regulatoryGapTopFindingIds.has(finding.id)
-        )
-      ];
+    : regulatoryGapTopFindings;
   const scanCalibrationSummary = buildScanCalibrationSummary({
     accessLimitationNotice: executiveAccessNoticeCardProps,
     beforeConsentCookieCount: cookiesBeforeConsentCount,
@@ -6338,10 +6491,12 @@ export function SharedScanDetailView({
   );
   const gdprEprivacyExecutiveLens =
     executiveRegulatoryLenses.find((lens) => lens.acronym === "GDPR / ePrivacy") ?? null;
+  const scanDurationMs = getRuntimeArtifactNumber(scanRecord.runtimeArtifacts, "local_v2_dag_scan_core_duration_ms");
+  const executiveTimelineEvents = buildExecutiveTimelineEvents(scanRecord.runtimeArtifacts);
   const scanTimeLabel = formatScanTimeLabel({
     completedAt: scanRecord.scan.completedAt,
     createdAt: scanRecord.scan.createdAt,
-    durationMs: getRuntimeArtifactNumber(scanRecord.runtimeArtifacts, "local_v2_dag_scan_core_duration_ms"),
+    durationMs: scanDurationMs,
     startedAt: scanRecord.scan.startedAt
   });
 
@@ -6387,6 +6542,11 @@ export function SharedScanDetailView({
         }
         statusLabel={isIncompleteScanCoverage ? "Limited" : undefined}
         statusTone={isIncompleteScanCoverage ? "info" : undefined}
+        leadingBadges={showRegulatoryChecklistSection ? (
+          <span className="inline-flex shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+            Beta
+          </span>
+        ) : null}
         scanFromLabel={scanRecord.scan.scanFromLabel}
         scanFromValue={scanRecord.scan.scanFromValue}
         status={scanRecord.scan.status}
@@ -6459,7 +6619,9 @@ export function SharedScanDetailView({
             regulatoryRisk={scanRecord.regulatoryRisk}
             resolvedVendorNames={executiveResolvedVendorNames}
             score={executiveDisplayedScore}
+            scanDurationMs={scanDurationMs}
             scanOutcome={typeof scanRecord.snapshot?.scan_outcome === "string" ? scanRecord.snapshot.scan_outcome : null}
+            scanTimelineEvents={executiveTimelineEvents}
             sessionReplayVendorNames={certScoreSummary.sessionReplayVendorNames}
             status={scanRecord.scan.status}
             thirdPartyRequestCount={executiveThirdPartyRequestCount}
@@ -6484,6 +6646,7 @@ export function SharedScanDetailView({
           {showRegulatoryChecklistSection ? (
             <RegulatoryChecklistSection
               headingLabel="GDPR / ePrivacy Evidence Review"
+              headingTrailing={<GdprEprivacyCoverageSummaryPills items={reportableGdprEprivacyCoverageChecklist} />}
               showAdvancedEvidenceToggle
               tabs={[
                 {

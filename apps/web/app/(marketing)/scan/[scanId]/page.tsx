@@ -12,6 +12,7 @@ import {
   hasPendingBrowserExtensionNormalization,
   hasPendingPostCompletionFindingWork
 } from "../../../../lib/scans/scan-auto-refresh";
+import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
 import { absoluteUrl } from "../../../../lib/seo";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
 import {
@@ -119,6 +120,17 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     status: scanRecord.scan.status
   });
   const publicScanDomainLabel = getPublicScanDomainLabel(displayScanRecord.scan.domainHostname);
+  const visualEvidenceArtifacts = getVisualEvidenceArtifacts(displayScanRecord.runtimeArtifacts).sort((left, right) => {
+    const leftPriority = left.captureStep === "initial_load" ? 0 : 1;
+    const rightPriority = right.captureStep === "initial_load" ? 0 : 1;
+    return leftPriority - rightPriority;
+  });
+  const visualEvidenceArtifact =
+    visualEvidenceArtifacts.find((artifact) => artifact.status === "available" && artifact.key) ?? null;
+  const visualEvidenceStatus = visualEvidenceArtifact?.status ?? visualEvidenceArtifacts[0]?.status ?? null;
+  const visualEvidenceHref = visualEvidenceArtifact
+    ? `/api/scans/${displayScanRecord.scan.id}/visual-evidence/${encodeURIComponent(visualEvidenceArtifact.id)}`
+    : null;
 
   return (
     <main className="min-h-screen bg-white">
@@ -141,6 +153,8 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
                 <ShareReportActions
                   domainLabel={publicScanDomainLabel}
                   scanId={displayScanRecord.scan.id}
+                  visualEvidenceHref={visualEvidenceHref}
+                  visualEvidenceStatus={visualEvidenceStatus}
                 />
                 <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                   <DomainScanForm

@@ -25,11 +25,11 @@ export function ExecutiveTopFindingsCarousel({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex items-end justify-between gap-4">
         <div>
           <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Top findings</p>
-          <h2 data-testid="executive-findings-heading" className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-[2.2rem]">
+          <h2 data-testid="executive-findings-heading" className="text-[1.3rem] font-semibold tracking-tight text-slate-950 lg:text-[1.87rem]">
             {heading}
           </h2>
         </div>

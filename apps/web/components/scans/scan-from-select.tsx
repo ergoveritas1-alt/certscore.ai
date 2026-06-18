@@ -102,9 +102,9 @@ export function ScanFromSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
-  const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(false);
+  const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(true);
   const [uncontrolledLocalV2ScanProfile, setUncontrolledLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
-  const [uncontrolledLocalV2RunViaLambda, setUncontrolledLocalV2RunViaLambda] = useState(false);
+  const [uncontrolledLocalV2RunViaLambda, setUncontrolledLocalV2RunViaLambda] = useState(true);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);

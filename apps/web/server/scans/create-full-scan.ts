@@ -42,6 +42,7 @@ import {
 import {
   normalizeLocalV2DagRunViaLambda,
   normalizeLocalV2DagScanProfile,
+  shouldUseLocalV2DagSimulatedLambda,
   type LocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
 import {
@@ -52,6 +53,7 @@ import {
   dispatchLocalV2DagLambdaScan,
   summarizeLocalV2DagLambdaDispatchForEvent
 } from "./local-v2-dag-lambda-dispatch";
+import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-simulated-dispatch";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
 
@@ -545,7 +547,9 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     });
 
     try {
-      const dispatchResult = await dispatchLocalV2DagLambdaScan({
+      const dispatchResult = await (shouldUseLocalV2DagSimulatedLambda()
+        ? dispatchLocalV2DagSimulatedLambdaScan
+        : dispatchLocalV2DagLambdaScan)({
         localCallbackUrl: null,
         scanConfig,
         scanId: scan.id
@@ -553,12 +557,15 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       await insertQueuedFullScanEvent({
         domainId: domainRecord.domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
-        message: "AWS Lambda accepted the local v2 DAG artifact-only scan invocation.",
+        message: shouldUseLocalV2DagSimulatedLambda()
+          ? "Local simulated Lambda completed the v2 DAG artifact-only scan invocation."
+          : "AWS Lambda accepted the local v2 DAG artifact-only scan invocation.",
         metadataJson: {
           ...localV2DagLambdaDispatch,
           invocationRequestId: dispatchResult.invocationRequestId,
           invocationStatusCode: dispatchResult.invocationStatusCode,
           invocationType: dispatchResult.invocationType,
+          simulatedLocalLambda: shouldUseLocalV2DagSimulatedLambda(),
           productionFindingIntegration: false
         },
         organizationId: input.organizationId,

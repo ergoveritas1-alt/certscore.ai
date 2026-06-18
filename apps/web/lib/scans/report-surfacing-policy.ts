@@ -13,10 +13,6 @@ import {
   deriveFingerprintEvidenceTier,
   hasStrongFingerprintingEvidence
 } from "./promotion-evidence-contracts";
-import {
-  evaluateRuntimeVendorDisclosureEvidence,
-  runtimeVendorDisclosureHasPromotionCategory
-} from "./runtime-vendor-disclosure";
 
 export const REPORT_SURFACING_POLICY_VERSION = "v1";
 
@@ -1734,16 +1730,6 @@ function hasCookieDisclosureGapBacking(packet: UnifiedFindingPacket) {
     packet.concernContext?.negativeEvidenceFlags.includes("blocked_or_interstitial_evidence_observed")
   ) {
     return false;
-  }
-
-  const vendorDisclosureReview = evaluateRuntimeVendorDisclosureEvidence({
-    runtimeVendorDisclosureEvidence: getEvidenceEntityValuesForKeys(packet, ["runtimeVendorDisclosureEvidence"])
-  });
-  if (
-    vendorDisclosureReview.disposition === "eligible" &&
-    runtimeVendorDisclosureHasPromotionCategory(vendorDisclosureReview.evidence)
-  ) {
-    return true;
   }
 
   const urls = [...(packet.evidence?.pageUrls ?? []), ...(packet.evidence?.sourceUrls ?? [])];

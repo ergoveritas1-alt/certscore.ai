@@ -42,7 +42,6 @@ const CUSTOMER_LABELS: Record<string, string> = {
   pre_consent_third_party_tracking: "Third-party tracking before consent",
   preference_withdrawal_control: "Post-choice consent controls",
   reject_all_path_availability: "Decline / reject option availability",
-  runtime_vendor_disclosure_alignment: "Runtime vendor disclosure mismatch",
   sensitive_surfaces_third_party_tracking: "Sensitive forms with third-party tracking",
   session_replay_after_refusal: "Session replay after refusal / opt-out",
   session_replay_before_consent: "Session replay before consent",
@@ -248,15 +247,6 @@ function getPostRejectVendors(item: GdprEprivacyCoverageChecklistItem | null) {
   ]).slice(0, 8);
 }
 
-function getUnmatchedRuntimeVendors(item: GdprEprivacyCoverageChecklistItem | null) {
-  return uniqueStrings([
-    ...getEntityStrings(item, ["unmatchedRuntimeVendors"]),
-    ...getRuntimeVendorDisclosureRows(item).flatMap((row) =>
-      getStringArray(row, ["unmatchedRuntimeVendors", "unmatched_runtime_vendors"])
-    )
-  ]).slice(0, 8);
-}
-
 function getSessionReplayVendors(item: GdprEprivacyCoverageChecklistItem | null) {
   return uniqueStrings([
     ...getEntityStrings(item, ["sessionReplayRuntimeVendors", "session_replay_runtime_vendors", "relatedVendors"]),
@@ -369,22 +359,6 @@ export function deriveGdprEprivacyEvidenceCard(item: GdprEprivacyCoverageCheckli
         whatCertScoreObserved: defaultObserved,
         whyThisMatters: "Users may need a persistent way to revisit or withdraw consent choices."
       };
-    case "runtime_vendor_disclosure_alignment":
-      return {
-        ...common,
-        evidenceType: ["Policy text comparison", "Vendor disclosure comparison", "Runtime browser scan"],
-        humanVerificationSteps: [
-          "Review privacy and cookie disclosures for observed material vendors and purposes.",
-          "Confirm vendor aliases and domains before treating a mismatch as final."
-        ],
-        policyDisclosureComparison: getUnmatchedRuntimeVendors(item).length > 0
-          ? `Unmatched runtime vendors: ${getUnmatchedRuntimeVendors(item).join(", ")}.`
-          : "Runtime vendor disclosure comparison evidence was retained.",
-        whatCertScoreObserved: getUnmatchedRuntimeVendors(item).length > 0
-          ? `Observed runtime vendors were not clearly matched in reviewed disclosures: ${getUnmatchedRuntimeVendors(item).join(", ")}.`
-          : defaultObserved,
-        whyThisMatters: "Privacy and cookie disclosures are more useful when material runtime vendors and purposes are clearly identifiable."
-      };
     case "session_replay_fingerprinting_review":
       return {
         ...common,
@@ -441,7 +415,6 @@ export function deriveGdprEprivacyReviewSummary(
   const rejectPath = getRow(items, "reject_all_path_availability");
   const postRejectTracking = getRow(items, "post_reject_tracking_reduction");
   const preferenceControl = getRow(items, "preference_withdrawal_control");
-  const vendorDisclosure = getRow(items, "runtime_vendor_disclosure_alignment");
   const sensitiveSurface = getRow(items, "sensitive_surfaces_third_party_tracking");
   const sessionReplay = getRow(items, "session_replay_fingerprinting_review");
   const sessionReplayBeforeConsent = getRow(items, "session_replay_before_consent");
@@ -549,19 +522,6 @@ export function deriveGdprEprivacyReviewSummary(
         : "CertScore did not find a visible post-choice Cookie Settings, Privacy Preferences, or equivalent withdrawal control in the tested context.",
       headline: "Post-choice consent controls may be hard to revisit",
       id: "post_choice_controls_hard_to_revisit"
-    });
-  }
-
-  const unmatchedRuntimeVendors = getUnmatchedRuntimeVendors(vendorDisclosure);
-  const disclosureRows = getRuntimeVendorDisclosureRows(vendorDisclosure);
-  const disclosureUsableOrDirect =
-    disclosureRows.some((row) => getString(row, ["coverageStatus", "coverage_status"]) === "usable") ||
-    hasEvidenceFlag(vendorDisclosure, /direct_runtime|contradiction_runtime_artifact_retained/);
-  if (rowIs(vendorDisclosure, "Review signal") && unmatchedRuntimeVendors.length > 0 && disclosureUsableOrDirect) {
-    addBullet(bullets, {
-      copy: `CertScore observed runtime vendors that were not clearly matched by name or known domain alias in reviewed disclosures: ${unmatchedRuntimeVendors.join(", ")}.`,
-      headline: "Observed runtime vendors were not clearly matched in reviewed disclosures",
-      id: "runtime_vendor_disclosure_review"
     });
   }
 

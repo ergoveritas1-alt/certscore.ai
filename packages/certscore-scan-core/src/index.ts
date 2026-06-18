@@ -468,6 +468,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       ...preConsentResult.consentUiObservations,
       ...(consentFlowResult?.consentUiObservations ?? []),
     ],
+    collectionSurfaceObservations: preConsentResult.collectionSurfaceObservations,
     consentInteractionEvents: consentFlowResult?.consentInteractionEvents ?? [],
     consentFlowObservations: consentFlowResult?.consentFlowObservations ?? [],
     consentActionCandidates: consentFlowResult?.consentActionCandidates ?? [],
@@ -883,6 +884,7 @@ function emptyPreConsentResult(startedAt: string): {
   scriptEvents: CanonicalEvidenceBundle["scriptEvents"];
   iframeEvents: IframeEvent[];
   consentUiObservations: ConsentUiObservation[];
+  collectionSurfaceObservations: CanonicalEvidenceBundle["collectionSurfaceObservations"];
   cmpRuntimeObservations: CmpRuntimeObservation[];
   screenshots: ScreenshotArtifact[];
   domSnapshots: DomSnapshotArtifact[];
@@ -907,6 +909,7 @@ function emptyPreConsentResult(startedAt: string): {
     scriptEvents: [],
     iframeEvents: [],
     consentUiObservations: [],
+    collectionSurfaceObservations: [],
     cmpRuntimeObservations: [],
     screenshots: [],
     domSnapshots: [],

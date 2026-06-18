@@ -20,7 +20,7 @@ test("policySurfaceScanner discovers footer privacy links and bounded policy fac
     assert.deepEqual(privacy?.mentionedVendors.sort(), ["Google Analytics", "Meta"]);
     assert.equal(privacy?.observedTopics.includes("analytics"), true);
     assert.equal(privacy?.observedTopics.includes("advertising"), true);
-    assert.ok((privacy?.textExcerpt?.length ?? 0) <= 520);
+    assert.ok((privacy?.textExcerpt?.length ?? 0) <= 6_000);
     assert.equal(privacy?.sourceScanner, "policy_surface");
     assert.equal(privacy?.consentStateAtTime, "not_applicable");
   });
@@ -76,7 +76,7 @@ test("policySurfaceScanner anchors bounded excerpts on high-value detected polic
     assert.equal(privacy?.status, "fetched");
     assert.equal(privacy?.observedTopics.includes("global_privacy_control"), true);
     assert.match(privacy?.textExcerpt ?? "", /Global Privacy Control/);
-    assert.ok((privacy?.textExcerpt?.length ?? 0) <= 520);
+    assert.ok((privacy?.textExcerpt?.length ?? 0) <= 6_000);
   });
 });
 
@@ -319,7 +319,7 @@ test("policySurfaceScanner records mock Nano link ranking and topic extraction m
       };
     },
     async extractTopics(input) {
-      assert.ok(input.excerpt.length <= 520);
+      assert.ok(input.excerpt.length <= 6_000);
       if (input.surfaceType !== "your_privacy_choices") {
         return {
           assistId: input.assistId,
@@ -423,6 +423,144 @@ test("policySurfaceScanner retains Nano Article 13 disclosure signals as bounded
       signal.source === "nano"
     ), true);
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
+test("policySurfaceScanner gives Nano enough bounded text for distant Article 13 disclosures", async () => {
+  let nanoExcerpt = "";
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    ...createDefaultMockNanoPolicyAssistProvider(),
+    async extractTopics(input) {
+      nanoExcerpt = input.excerpt;
+      return {
+        assistId: input.assistId,
+        observedTopics: ["data_retention", "data_subject_rights", "international_transfers"],
+        article13DisclosureSignals: [
+          {
+            disclosureType: "data_retention",
+            status: "observed",
+            evidenceText: "We retain personal data only as long as necessary.",
+            confidence: 0.91,
+            source: "nano",
+          },
+          {
+            disclosureType: "data_subject_rights",
+            status: "observed",
+            evidenceText: "You may exercise rights to access, rectification, erasure, restriction, portability, and objection.",
+            confidence: 0.9,
+            source: "nano",
+          },
+          {
+            disclosureType: "international_transfers",
+            status: "observed",
+            evidenceText: "We may transfer personal data outside the European Economic Area using standard contractual clauses.",
+            confidence: 0.89,
+            source: "nano",
+          },
+        ],
+        mentionedControls: [],
+        mentionedPurposes: [],
+        mentionedRights: ["access", "erasure", "objection"],
+        mentionedVendors: [],
+        confidence: 0.9,
+      };
+    },
+  };
+
+  await withPolicyScan("policy-article13-long", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.ok((privacy?.textExcerpt?.length ?? 0) > 1_000);
+    assert.ok((privacy?.textExcerpt?.length ?? 0) <= 6_000);
+    assert.ok(nanoExcerpt.length > 1_000);
+    assert.match(nanoExcerpt, /standard contractual clauses/i);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "data_retention" &&
+      signal.status === "observed"
+    ), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "data_subject_rights" &&
+      signal.status === "observed"
+    ), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "international_transfers" &&
+      signal.status === "observed"
+    ), true);
+    assert.match(
+      privacy?.article13DisclosureSignals.find((signal) => signal.disclosureType === "legal_basis")?.evidenceText ?? "",
+      /lawful bases|legitimate interests/i,
+    );
+    assert.match(
+      privacy?.article13DisclosureSignals.find((signal) => signal.disclosureType === "data_retention")?.evidenceText ?? "",
+      /retain personal data only as long as necessary/i,
+    );
+    assert.match(
+      privacy?.article13DisclosureSignals.find((signal) => signal.disclosureType === "international_transfers")?.evidenceText ?? "",
+      /standard contractual clauses|European Economic Area/i,
+    );
+  }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
+test("policySurfaceScanner does not classify deletion rights alone as retention disclosure", async () => {
+  await withPolicyScan("policy-retention-rights-only", async ({ result }) => {
+    const article13Signals = result.policySurfaceObservations.flatMap((observation) =>
+      observation.surfaceType === "privacy_policy" ? observation.article13DisclosureSignals : []
+    );
+    const retention = article13Signals.find((signal) => signal.disclosureType === "data_retention");
+    const rights = article13Signals.find((signal) => signal.disclosureType === "data_subject_rights");
+
+    assert.equal(retention, undefined);
+    assert.equal(rights?.status, "observed");
+    assert.match(rights?.evidenceText ?? "", /right to access, delete, erase/i);
+  }, { enableNanoPolicyAssist: true });
+});
+
+test("policySurfaceScanner resolves OneTrust notice JSON when privacy page is an error shell", async () => {
+  await withPolicyScan("policy-onetrust-notice-json", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(privacy?.status, "fetched");
+    assert.doesNotMatch(privacy?.textExcerpt ?? "", /^Processing Error/i);
+    assert.match(privacy?.textExcerpt ?? "", /legal bases for processing/i);
+    assert.match(privacy?.textExcerpt ?? "", /standard contractual clauses/i);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "controller_contact" &&
+      signal.status === "observed"
+    ), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "legal_basis" &&
+      signal.status === "observed"
+    ), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "data_retention" &&
+      signal.status === "observed"
+    ), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "data_subject_rights" &&
+      signal.status === "observed"
+    ), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "international_transfers" &&
+      signal.status === "observed"
+    ), true);
+  }, { enableNanoPolicyAssist: true });
+});
+
+test("policySurfaceScanner follows OneTrust index JSON to the final privacy notice", async () => {
+  await withPolicyScan("policy-onetrust-index-json", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(privacy?.status, "fetched");
+    assert.doesNotMatch(privacy?.textExcerpt ?? "", /^Processing Error/i);
+    assert.match(privacy?.textExcerpt ?? "", /standard contractual clauses/i);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "legal_basis" &&
+      signal.status === "observed"
+    ), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "data_subject_rights" &&
+      signal.status === "observed"
+    ), true);
+  }, { enableNanoPolicyAssist: true });
 });
 
 interface ScanContext {

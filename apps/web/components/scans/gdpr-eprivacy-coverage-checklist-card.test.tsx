@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { GdprEprivacyCoverageChecklistCard } from "./gdpr-eprivacy-coverage-checklist-card";
+import {
+  GdprEprivacyCoverageChecklistCard,
+  GdprEprivacyCoverageSummaryPills,
+  getAssessmentDirection
+} from "./gdpr-eprivacy-coverage-checklist-card";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 
 function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
@@ -69,7 +73,14 @@ function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
   };
 }
 
-function makeChecklistItem(overrides: Partial<GdprEprivacyCoverageChecklistItem>): GdprEprivacyCoverageChecklistItem {
+type ChecklistItemOverride = Partial<Omit<GdprEprivacyCoverageChecklistItem, "criticalEvidence">> & {
+  criticalEvidence?: Partial<GdprEprivacyCoverageChecklistItem["criticalEvidence"]> & {
+    retainedEvidence?: Record<string, unknown>;
+  };
+};
+
+function makeChecklistItem(overrides: ChecklistItemOverride): GdprEprivacyCoverageChecklistItem {
+  const { criticalEvidence: criticalEvidenceOverride, ...itemOverrides } = overrides;
   const id = overrides.id ?? "accessibility_consent_controls";
   const label = overrides.label ?? "Accessibility of consent controls";
   const status = overrides.status ?? "Not observed";
@@ -87,10 +98,10 @@ function makeChecklistItem(overrides: Partial<GdprEprivacyCoverageChecklistItem>
       projectedFindings: [],
       retainedEvidence: {
         status,
-        ...(overrides.criticalEvidence?.retainedEvidence ?? {})
+        ...(criticalEvidenceOverride?.retainedEvidence ?? {})
       },
       statusBasis: "Test row basis",
-      ...(overrides.criticalEvidence ?? {})
+      ...(criticalEvidenceOverride ?? {})
     },
     evidenceRefs: [],
     evidenceState: overrides.evidenceState ?? "not_observed",
@@ -100,11 +111,214 @@ function makeChecklistItem(overrides: Partial<GdprEprivacyCoverageChecklistItem>
     note: overrides.note ?? "Test row note.",
     status,
     tone: overrides.tone ?? "neutral",
-    ...overrides
+    ...itemOverrides
   };
 }
 
-test("GdprEprivacyCoverageChecklistCard renders specific session replay timing copy", () => {
+test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessment direction", () => {
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      evidenceState: "observed",
+      id: "cmp_framework_signal_observed",
+      label: "Consent framework / CMP signal observed",
+      status: "Observed"
+    })),
+    "neutral_signal"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      evidenceState: "observed",
+      id: "collection_surface_observed",
+      label: "Collection surface observed",
+      status: "Observed"
+    })),
+    "neutral_signal"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "review_signal",
+      evidenceState: "observed",
+      id: "analytics_vendor_observed",
+      label: "Analytics vendor signal observed",
+      status: "Review signal"
+    })),
+    "review_signal"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          analyticsVendorCount: 1,
+          analyticsVendors: ["Google Analytics"]
+        }
+      },
+      evidenceState: "observed",
+      id: "analytics_vendor_observed",
+      label: "Analytics vendor signal observed",
+      status: "Review signal"
+    })),
+    "potential_concern"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "gap_observed",
+      evidenceState: "observed",
+      id: "advertising_retargeting_vendor_signal_observed",
+      label: "Advertising / retargeting vendor signal observed",
+      status: "Gap observed"
+    })),
+    "potential_concern"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          advertisingRetargetingVendorCount: 1,
+          advertisingRetargetingVendors: ["Google Ads / DoubleClick"]
+        }
+      },
+      evidenceState: "observed",
+      id: "advertising_retargeting_vendor_signal_observed",
+      label: "Advertising / retargeting vendor signal observed",
+      status: "Review signal"
+    })),
+    "potential_concern"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      evidenceState: "observed",
+      id: "advertising_retargeting_vendor_signal_observed",
+      label: "Advertising / retargeting vendor signal observed",
+      status: "Observed"
+    })),
+    "review_signal"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      evidenceState: "not_observed",
+      id: "pre_consent_third_party_tracking",
+      label: "Pre-consent third-party tracking observed",
+      status: "Not observed"
+    })),
+    "positive_signal"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      criticalEvidence: {
+        retainedEvidence: {
+          cookiesBeforeConsentCount: 4,
+          observedRuntimeSignalOnly: true
+        }
+      },
+      evidenceState: "observed",
+      id: "pre_consent_cookies_storage",
+      label: "Pre-consent cookies/storage observed",
+      status: "Observed"
+    })),
+    "review_signal"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      criticalEvidence: {
+        retainedEvidence: {
+          advertisingCookieStorageObserved: true,
+          cookiesBeforeConsentCount: 1
+        }
+      },
+      evidenceState: "observed",
+      id: "pre_consent_cookies_storage",
+      label: "Pre-consent cookies/storage observed",
+      status: "Observed"
+    })),
+    "potential_concern"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      criticalEvidence: {
+        retainedEvidence: {
+          cookiesBeforeConsentCount: 2,
+          essentialStorageOnly: true
+        }
+      },
+      evidenceState: "observed",
+      id: "pre_consent_cookies_storage",
+      label: "Pre-consent cookies/storage observed",
+      status: "Observed"
+    })),
+    "neutral_signal"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      criticalEvidence: {
+        retainedEvidence: {
+          deviceIdentificationPurpose: "security and fraud prevention"
+        }
+      },
+      evidenceState: "observed",
+      id: "device_identification_fingerprinting_signal_observed",
+      label: "Device identification / fingerprinting signal observed",
+      status: "Observed"
+    })),
+    "neutral_signal"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      criticalEvidence: {
+        retainedEvidence: {
+          fingerprintingPurpose: "cross-site advertising identity graph"
+        }
+      },
+      evidenceState: "observed",
+      id: "device_identification_fingerprinting_signal_observed",
+      label: "Device identification / fingerprinting signal observed",
+      status: "Observed"
+    })),
+    "potential_concern"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      criticalEvidence: {
+        retainedEvidence: {
+          embeddedContentHosts: ["fonts.googleapis.com"]
+        }
+      },
+      evidenceState: "observed",
+      id: "embedded_content_pre_consent",
+      label: "Embedded third-party content loaded before consent",
+      status: "Observed"
+    })),
+    "review_signal"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "checked",
+      criticalEvidence: {
+        retainedEvidence: {
+          embeddedContentHosts: ["imasdk.googleapis.com"]
+        }
+      },
+      evidenceState: "observed",
+      id: "embedded_content_pre_consent",
+      label: "Embedded third-party content loaded before consent",
+      status: "Observed"
+    })),
+    "review_signal"
+  );
+});
+
+test("GdprEprivacyCoverageChecklistCard renders concise session replay evidence copy", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -112,19 +326,377 @@ test("GdprEprivacyCoverageChecklistCard renders specific session replay timing c
     })
   );
 
-  assert.match(html, /not observed pre-consent in retained evidence/i);
-  assert.match(html, /<details class="group\/gdpr-summary rounded-lg border border-slate-200 bg-white">/);
-  assert.match(html, /GDPR \/ ePrivacy review summary/);
-  assert.match(html, /max-w-4xl truncate text-sm/);
+  assert.match(
+    html,
+    /Session replay or behavioral analytics signals were observed: Microsoft Clarity, Hotjar, and Contentsquare\./
+  );
+  assert.match(html, /Review summary/);
+  assert.match(html, /GDPR\/ePrivacy score is weighted from evidence-gated checklist rows/);
+  assert.doesNotMatch(html, /group\/gdpr-summary/);
   assert.match(html, /Microsoft Clarity, Hotjar, and Contentsquare/);
-  assert.match(html, />Before consent</);
-  assert.match(html, />Disclosure alignment</);
-  assert.match(html, /Session replay collection was retained before a recorded consent action/);
+  assert.doesNotMatch(html, />Before consent</);
+  assert.doesNotMatch(html, />Disclosure alignment</);
+  assert.match(html, /aria-label="Toggle evidence packet for Session replay \/ behavioral analytics"/);
+  assert.match(html, /aria-label="Toggle correction steps for Session replay \/ behavioral analytics"/);
+  assert.doesNotMatch(html, /Session replay collection was retained before a recorded consent action/);
   assert.match(html, />Observed</);
-  assert.match(html, />Review signal</);
+  assert.match(html, /aria-label="Potential concern"/);
+  assert.doesNotMatch(html, /Non-essential cookies or browser storage were observed before a recorded consent action/);
   assert.doesNotMatch(html, /aria-label="Jurisdiction unverified"/);
   assert.doesNotMatch(html, /GDPR\/ePrivacy can depend on EU\/EEA presence, targeting, or monitoring/);
   assert.doesNotMatch(html, /signals require review from the retained runtime evidence/i);
+});
+
+test("GdprEprivacyCoverageChecklistCard preserves first-seen timing in concise runtime rationale", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "gap_observed",
+          criticalEvidence: {
+            retainedEvidence: {
+              preconsent_tracker_vendor_evidence: [
+                {
+                  category: "tracking",
+                  firstSeenMs: 521,
+                  preConsent: true,
+                  vendor: "Quantcast Measure"
+                },
+                {
+                  category: "advertising_measurement",
+                  firstSeenMs: 521,
+                  preConsent: true,
+                  vendor: "Google Ads / DoubleClick"
+                }
+              ],
+              preconsent_tracker_vendors: [
+                "Quantcast Measure",
+                "Google Ads / DoubleClick",
+                "BrightLine"
+              ]
+            },
+            statusBasis:
+              "Tracking requests observed before consent: Quantcast Measure, Google Ads / DoubleClick, and BrightLine; first seen 521ms after scan start. Consent action was not recorded before these requests."
+          },
+          evidenceState: "observed",
+          id: "pre_consent_third_party_tracking",
+          label: "Pre-consent third-party tracking observed",
+          note:
+            "Tracking requests observed before consent: Quantcast Measure, Google Ads / DoubleClick, and BrightLine; first seen 521ms after scan start. Consent action was not recorded before these requests.",
+          status: "Gap observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(
+    html,
+    /Pre-consent tracking evidence was retained before consent: Quantcast Measure \(tracking, 521ms\), Google Ads \/ DoubleClick \(advertising measurement, 521ms\), and BrightLine; first seen 521ms after scan start; no consent action was recorded first\./
+  );
+  assert.doesNotMatch(html, /Why this result/);
+  assert.doesNotMatch(html, /Evidence summary/);
+});
+
+test("GdprEprivacyCoverageChecklistCard reads canonical pre-consent timing fields", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              concreteTrackerEvidenceRetained: true,
+              firstPreconsentThirdPartyTrackingObservedMs: 2944,
+              firstPreconsentThirdPartyTrackingObservationBasis: "runtime_third_party_request_timing",
+              preconsentThirdPartyTrackingTimedObservationCount: 1
+            },
+            statusBasis: "Runtime third-party request timing was retained before any recorded consent action."
+          },
+          evidenceState: "observed",
+          id: "pre_consent_third_party_tracking",
+          label: "Pre-consent third-party tracking observed",
+          status: "Review signal"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(
+    html,
+    /Tracking-classified third-party requests fired before any recorded consent action; first seen 2944ms after scan start/
+  );
+});
+
+test("GdprEprivacyCoverageChecklistCard combines advertising basis and retained evidence into one compact note", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              preconsent_tracker_vendor_evidence: [
+                {
+                  category: "tracking",
+                  firstSeenMs: 521,
+                  preConsent: true,
+                  vendor: "Quantcast Measure"
+                },
+                {
+                  category: "advertising_measurement",
+                  firstSeenMs: 521,
+                  preConsent: true,
+                  vendor: "Google Ads / DoubleClick"
+                }
+              ],
+              preconsent_tracker_vendors: [
+                "Quantcast Measure",
+                "Google Ads / DoubleClick",
+                "BrightLine"
+              ]
+            },
+            statusBasis:
+              "Selected the strongest retained canonical coverage evidence available for this row."
+          },
+          evidenceState: "observed",
+          id: "advertising_retargeting_vendor_signal_observed",
+          label: "Advertising / retargeting vendor signal observed",
+          note:
+            "Advertising or retargeting vendor signals were observed; first seen 521ms after scan start; before any recorded consent action.",
+          status: "Review signal"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(
+    html,
+    /Advertising\/retargeting evidence was retained before consent: Google Ads \/ DoubleClick \(advertising measurement, 521ms\); first seen 521ms after scan start; no consent action was recorded first\./
+  );
+  assert.doesNotMatch(html, /Why this result/);
+  assert.doesNotMatch(html, /Evidence summary/);
+  assert.doesNotMatch(html, />Basis</);
+  assert.doesNotMatch(html, />Evidence used</);
+});
+
+test("GdprEprivacyCoverageChecklistCard starts evidence and correction cards hidden behind row tool buttons", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "gap_observed",
+          evidenceState: "observed",
+          id: "pre_consent_third_party_tracking",
+          label: "Pre-consent third-party tracking observed",
+          status: "Gap observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /aria-label="Toggle evidence packet for Pre-consent third-party tracking observed"/);
+  assert.match(html, /aria-label="Toggle correction steps for Pre-consent third-party tracking observed"/);
+  assert.doesNotMatch(html, />Evidence packet</);
+  assert.doesNotMatch(html, />Correction steps</);
+});
+
+test("GdprEprivacyCoverageChecklistCard renders policy excerpts in monospace with word-safe truncation", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            retainedEvidence: {
+              article13Signal: {
+                disclosureType: "data_retention",
+                evidenceText:
+                  "ccount records for as long as needed to provide services, meet legal obligations, resolve disputes, enforce agreements, support security reviews, and document choices made by users across our websites and mobile applications.",
+                source: "deterministic",
+                status: "observed"
+              }
+            },
+            statusBasis: "Retention disclosure evidence was retained in public policy-surface evidence."
+          },
+          evidenceState: "observed",
+          id: "retention_disclosure",
+          label: "Retention disclosure observed",
+          status: "Observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /font-mono text-\[0\.86em\] italic text-slate-700/);
+  assert.match(html, /Policy text included matching disclosure evidence/);
+  assert.match(
+    html,
+    /<span class="font-mono text-\[0\.86em\] italic text-slate-700">&quot;records for as long as needed/
+  );
+  assert.doesNotMatch(
+    html,
+    /<span class="font-mono text-\[0\.86em\] italic text-slate-700">&quot;ccount records/
+  );
+  assert.match(html, /\.\.\.\[more in evidence packet\]&quot;<\/span>/);
+  assert.doesNotMatch(html, /docum\.\.\.&quot;<\/span>/);
+});
+
+test("GdprEprivacyCoverageChecklistCard makes policy gap decisions inferable from descriptor and packet", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "gap_observed",
+          criticalEvidence: {
+            retainedEvidence: {
+              policySurfaceSummary: {
+                privacyPolicyTextCharacterCount: 6240,
+                privacyPolicyUrls: ["https://example.test/privacy"]
+              },
+              signalObserved: false
+            },
+            statusBasis:
+              "International transfer disclosure was expected for Article 13 transparency review but was not observed in retained privacy-policy evidence."
+          },
+          evidenceState: "observed",
+          id: "international_transfers_disclosure",
+          label: "International transfer disclosure observed",
+          status: "Gap observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /Potential gap from retained policy-surface evidence/);
+  assert.match(html, /International transfer disclosure was expected/);
+  assert.match(html, /structured signalObserved=false retained/);
+});
+
+test("GdprEprivacyCoverageChecklistCard makes not-testable decisions inferable from missing source signals", () => {
+  const item = makeChecklistItem({
+    assessmentStatus: "coverage_limitation",
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: [
+        {
+          actual: "missing",
+          expected: "reachable retained privacy policy surface",
+          field: "scanner.policySurfaceObservations.privacy_policy",
+          source: "scanner",
+          whyNeeded: "Required to evaluate legal basis disclosure."
+        }
+      ],
+      retainedEvidence: {
+        policySurfaceSummary: {}
+      },
+      statusBasis: "No privacy-policy surface was retained, so legal basis disclosure could not be evaluated."
+    },
+    evidenceState: "not_testable",
+    id: "legal_basis_disclosure_observed",
+    label: "Legal basis disclosure observed",
+    status: "Not testable"
+  });
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [item],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /Not testable from retained policy-surface evidence/);
+  assert.match(html, /expected reachable retained privacy policy surface; retained missing/);
+});
+
+test("GdprEprivacyCoverageChecklistCard does not use observed runtime wording for not-testable rows", () => {
+  const item = makeChecklistItem({
+    assessmentStatus: "coverage_limitation",
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: [
+        {
+          actual: "preConsentRuntimeScanner failed",
+          expected: "usable pre-consent runtime evidence",
+          field: "scanner.preConsentRuntime",
+          source: "scanner",
+          whyNeeded: "Required to evaluate pre-consent tracking."
+        }
+      ],
+      retainedEvidence: {
+        status: "Not testable"
+      },
+      statusBasis: "The runtime scanner failed before row-specific pre-consent tracking evidence could be retained."
+    },
+    evidenceState: "not_testable",
+    id: "pre_consent_third_party_tracking",
+    label: "Pre-consent third-party tracking observed",
+    status: "Not testable"
+  });
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [item],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /Not testable from retained source-signal coverage evidence/);
+  assert.match(html, /expected usable pre-consent runtime evidence; retained preConsentRuntimeScanner failed/);
+  assert.doesNotMatch(html, /Tracking-classified third-party requests fired before any recorded consent action/);
+});
+
+test("GdprEprivacyCoverageSummaryPills summarizes row decisions instead of evidence labels", () => {
+  const items = [
+    makeChecklistItem({
+      assessmentStatus: "checked",
+      evidenceState: "observed",
+      id: "privacy_notice_availability",
+      label: "Privacy notice availability",
+      status: "Observed"
+    }),
+    makeChecklistItem({
+      assessmentStatus: "checked",
+      evidenceState: "observed",
+      id: "cmp_framework_signal_observed",
+      label: "Consent framework / CMP signal observed",
+      status: "Observed"
+    }),
+    makeChecklistItem({
+      assessmentStatus: "review_signal",
+      evidenceState: "observed",
+      id: "analytics_vendor_observed",
+      label: "Analytics vendor signal observed",
+      status: "Review signal"
+    }),
+    makeChecklistItem({
+      assessmentStatus: "gap_observed",
+      evidenceState: "observed",
+      id: "pre_consent_third_party_tracking",
+      label: "Pre-consent third-party tracking observed",
+      status: "Gap observed"
+    })
+  ];
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageSummaryPills, { items })
+  );
+
+  assert.match(html, /potential concerns/);
+  assert.match(html, /review signals/);
+  assert.match(html, /positive signals/);
+  assert.match(html, /neutral signals/);
+  assert.doesNotMatch(html, /potential gaps/);
+  assert.doesNotMatch(html, />partial</);
+  assert.doesNotMatch(html, />observed</);
 });
 
 test("GdprEprivacyCoverageChecklistCard renders debug confidence metadata", () => {
@@ -175,8 +747,7 @@ test("GdprEprivacyCoverageChecklistCard avoids duplicate observed wording for no
     })
   );
 
-  assert.match(html, /No eligible evidence for controller\/contact disclosure was observed in the tested context/);
-  assert.match(html, /No eligible evidence for privacy notice was observed in the tested context/);
+  assert.match(html, /Not observed in retained scanner evidence/);
   assert.doesNotMatch(html, /observed was observed/i);
   assert.doesNotMatch(html, /availability was observed/i);
 });
@@ -401,7 +972,7 @@ test("GdprEprivacyCoverageChecklistCard uses persistence wording without reducti
     })
   );
 
-  assert.match(html, /Non-essential tracking was still observed after the recorded reject action/i);
+  assert.match(html, /Potential gap from retained scanner evidence; Test row basis/i);
   assert.doesNotMatch(html, /did not materially decrease/i);
 });
 

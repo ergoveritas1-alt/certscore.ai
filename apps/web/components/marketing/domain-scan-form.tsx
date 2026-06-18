@@ -269,9 +269,9 @@ export function DomainScanForm({
   const [localExtensionStatus, setLocalExtensionStatus] = useState<Bx01Status | null>(null);
   const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [freshRescan, setFreshRescan] = useState(false);
+  const [freshRescan, setFreshRescan] = useState(true);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
-  const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(false);
+  const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
   const [scanFrom, setScanFrom] = useState<ScanFrom>("default");
   const isSubmittingRef = useRef(false);
   const scanProgress = useScanProgressClock(isSubmitting);

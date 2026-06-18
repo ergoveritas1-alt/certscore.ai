@@ -1263,7 +1263,7 @@ test("ExecutiveSummaryCard explains interruption-backed limited coverage only wh
   assert.doesNotMatch(withInterruption, /Coverage was limited by site protections/);
   assert.doesNotMatch(withInterruption, /Findings shown here are based on retained observable evidence/);
   assert.doesNotMatch(withInterruption, /1 interruption event retained/);
-  assert.match(withInterruption, /Captcha\/security challenge/);
+  assert.doesNotMatch(withInterruption, /Captcha\/security challenge/);
   assert.match(withInterruption, /Observed footprint may be incomplete because site protections interrupted runtime collection/);
   assert.doesNotMatch(withoutInterruption, /Coverage was limited by site protections/);
 });
@@ -1283,6 +1283,13 @@ test("ExecutiveSummaryCard hides review lenses when viewer access disallows them
     preConsentVendorNames: [],
     requestedHost: "example.com",
     resolvedVendorNames: [],
+    scanDurationMs: 12000,
+    scanTimelineEvents: [
+      { atMs: 1200, label: "Consent banner", tone: "emerald" },
+      { atMs: 2400, label: "Ad vendor", tone: "rose" },
+      { atMs: 3600, label: "Analytics", tone: "sky" },
+      { atMs: 5200, label: "Session replay", tone: "rose" }
+    ],
     score: 72,
     sessionReplayVendorNames: [],
     showReviewLenses: false,
@@ -1301,6 +1308,17 @@ test("ExecutiveSummaryCard hides review lenses when viewer access disallows them
   }));
 
   assert.match(html, /Signal snapshot/);
+  assert.match(html, /data-executive-timeline-pane/);
+  assert.match(html, /Scan Timeline/);
+  assert.match(html, /Scan start @ 0s/);
+  assert.match(html, /Consent banner/);
+  assert.match(html, /Ad vendor/);
+  assert.match(html, /Analytics/);
+  assert.match(html, /Session replay/);
+  assert.match(html, /first observed at 1.2s/);
+  assert.match(html, /End of scan @ 12s/);
+  assert.doesNotMatch(html, /Captured/);
+  assert.doesNotMatch(html, /Runtime/);
   assert.doesNotMatch(html, /Review lenses/);
   assert.match(html, /Consent platform/);
   assert.match(html, /h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700/);
@@ -1380,7 +1398,9 @@ test("ExecutiveSummaryCard renders real vendor logo lookups in vendor badges", (
 
   assert.doesNotMatch(html, /Vendor mix/);
   assert.match(html, /Tracker footprint/);
-  assert.match(html, /View observed vendors and domains/);
+  assert.doesNotMatch(html, /View observed vendors and domains/);
+  assert.match(html, /Tracker footprint \(9\)/);
+  assert.match(html, /5 vendors, 4 domains/);
   assert.match(html, /OneTrust/);
   assert.match(html, /Google Ads/);
   assert.match(html, /\/vendor-logos\/onetrust\.png/);
@@ -1389,6 +1409,41 @@ test("ExecutiveSummaryCard renders real vendor logo lookups in vendor badges", (
   assert.match(html, /\/vendor-logos\/magnite\.png/);
   assert.match(html, /\/vendor-logos\/hotjar\.png/);
   assert.doesNotMatch(html, /cmp · 2 req/);
+});
+
+test("ExecutiveSummaryCard distinguishes cookie-only runtime observations from tracker footprint", () => {
+  const html = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
+    accessLimitationNotice: null,
+    allFindings: [],
+    beforeConsentCookieCount: 4,
+    domainBenchmark: null,
+    finalHost: "cnn.com",
+    fingerprintReasons: [],
+    fingerprintLabel: "None detected",
+    fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+    landedOnDifferentHost: false,
+    lastScannedAt: "2026-06-17T14:10:00.000Z",
+    policySurfaces: [],
+    posture: "Clear",
+    preConsentVendorNames: [],
+    requestedHost: "cnn.com",
+    resolvedVendorNames: [],
+    score: 72,
+    sessionReplayVendorNames: [],
+    thirdPartyRequestCount: 0,
+    thirdPartyDomains: [],
+    topFindings: [],
+    topObservedEntities: [],
+    trackerSummary: "No meaningful third-party footprint observed",
+    unifiedFindings: [],
+    unresolvedVendorHosts: [],
+    vendorCategoryCounts: {}
+  }));
+
+  assert.match(html, /Tracker footprint/);
+  assert.match(html, /0 vendors, 0 domains/);
+  assert.match(html, /4 cookies were observed before consent/);
+  assert.match(html, /No third-party tracker vendors or domains were resolved/);
 });
 
 test("ExecutiveSummaryCard renders logo badges for observed tracker vendors and domains", () => {
@@ -1429,14 +1484,15 @@ test("ExecutiveSummaryCard renders logo badges for observed tracker vendors and 
     vendorCategoryCounts: {}
   }));
 
-  assert.match(html, /View observed vendors and domains/);
+  assert.doesNotMatch(html, /View observed vendors and domains/);
   assert.doesNotMatch(html, />Observed vendors and domains</);
   assert.match(html, /\/vendor-logos\/doubleverify\.png/);
   assert.match(html, /\/vendor-logos\/google\.png/);
   assert.match(html, /\/vendor-logos\/magnite\.png/);
   assert.match(html, /\/vendor-logos\/facebook\.png/);
   assert.match(html, /\/vendor-logos\/onetrust\.png/);
-  assert.match(html, /16 total: 6 vendors, 10 domain/);
+  assert.match(html, /Tracker footprint \(16\)/);
+  assert.match(html, /6 vendors, 10 domains/);
   assert.doesNotMatch(html, /13 more\.\.\./);
   assert.match(html, /\/vendor-logos\/adobe\.png/);
   assert.match(html, /\/vendor-logos\/jwplayer\.png/);
@@ -1535,8 +1591,8 @@ test("ExecutiveSummaryCard shows protected-route interruptions for admin diagnos
     })
   );
 
-  assert.match(html, /Protected route encountered/);
-  assert.match(html, /Homepage findings are based on observable public-page evidence/);
+  assert.doesNotMatch(html, /Protected route encountered/);
+  assert.doesNotMatch(html, /Homepage findings are based on observable public-page evidence/);
 });
 
 test("ExecutiveSummaryCard qualifies incomplete protected-route scans when homepage evidence is retained", () => {
@@ -1655,10 +1711,10 @@ test("ExecutiveSummaryCard renders limited review for latimes-style interrupted 
 
   assert.match(html, /Limited review/);
   assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
-  assert.match(html, /Runtime coverage was limited by site protections/);
+  assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
   assert.doesNotMatch(html, /CertScore did not confirm a headline homepage issue from retained evidence/);
   assert.doesNotMatch(html, /Observed vendor and request counts may be incomplete/);
-  assert.match(html, /This scan has incomplete coverage/);
+  assert.doesNotMatch(html, /This scan has incomplete coverage/);
   assert.match(html, /No headline homepage issue was confirmed from retained evidence/);
   assert.match(html, /Observed footprint may be incomplete because site protections interrupted runtime collection/);
   assert.match(html, /\+26 above expected for Media \/ publisher sites/);
@@ -1786,7 +1842,7 @@ test("ExecutiveSummaryCard surfaces under-observed ecosystem coverage diagnostic
   );
 
   assert.match(html, /Limited review/);
-  assert.match(html, /Runtime coverage was limited by site protections/);
+  assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
   assert.doesNotMatch(html, /Likely incomplete ecosystem/);
   assert.doesNotMatch(html, /Coverage diagnostic: Observed request volume was unusually low for this benchmark/);
   assert.doesNotMatch(html, /Observed vendor and request counts may be incomplete/);
@@ -1957,8 +2013,8 @@ test("ExecutiveSummaryCard treats interruption-only scans as coverage limited wi
   );
 
   assert.match(html, /Limited review/);
-  assert.match(html, /Runtime coverage was limited by site protections/);
-  assert.match(html, /This scan has incomplete coverage/);
+  assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
+  assert.doesNotMatch(html, /This scan has incomplete coverage/);
   assert.match(html, /No headline homepage issue was confirmed from retained evidence/);
   assert.doesNotMatch(html, /View evidence/);
   assert.doesNotMatch(html, /Audit finding/);
@@ -2050,11 +2106,11 @@ test("ExecutiveSummaryCard renders score-only ADA accessibility as audit-only wi
     })
   );
 
-  assert.match(html, /DOJ \/ ADA accessibility/);
-  assert.match(html, /Audit-only/);
+  assert.doesNotMatch(html, /DOJ \/ ADA accessibility/);
+  assert.doesNotMatch(html, /Audit-only/);
   const adaStart = html.indexOf("DOJ / ADA accessibility");
   const financialStart = html.indexOf("Financial &amp; commercial claims");
-  assert.ok(adaStart >= 0);
+  assert.equal(adaStart, -1);
   const adaMarkup = html.slice(adaStart, financialStart > adaStart ? financialStart : undefined);
   assert.doesNotMatch(adaMarkup, /Not applicable/);
   assert.doesNotMatch(adaMarkup, />88</);
@@ -2100,9 +2156,9 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
   assert.match(html, /Action Needed/);
   assert.match(html, /Benchmark: Web portal \/ News &amp; Media \/ Internet services/);
   assert.doesNotMatch(html, /Score note:/);
-  assert.match(html, /132 3rd-party requests/);
+  assert.doesNotMatch(html, /132 3rd-party requests/);
   assert.match(html, /\+124 above expected for Web portal \/ News &amp; Media \/ Internet services/);
-  assert.match(html, /20 cookies before consent/);
+  assert.doesNotMatch(html, /20 cookies before consent/);
   assert.match(html, /\+16 above expected for Web portal \/ News &amp; Media \/ Internet services/);
   assert.doesNotMatch(html, /Scanned Apr/);
   assert.ok(html.indexOf("Action Needed") < html.indexOf("Benchmark: Web portal"));
@@ -2304,8 +2360,8 @@ test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of
     })
   );
 
-  assert.match(html, /Financial &amp; commercial claims/);
-  assert.match(html, /Simulated or hypothetical performance language surfaced without nearby disclosure\./);
+  assert.doesNotMatch(html, /Financial &amp; commercial claims/);
+  assert.doesNotMatch(html, /Simulated or hypothetical performance language surfaced without nearby disclosure\./);
 });
 
 test("ExecutiveSummaryCard links mapped findings to registry interpretation context", () => {
@@ -2383,13 +2439,13 @@ test("ExecutiveSummaryCard links mapped findings to registry interpretation cont
     })
   );
 
-  assert.match(html, /Regulatory review context/);
+  assert.doesNotMatch(html, /Regulatory review context/);
   assert.match(html, /Consent timing: tracking before recorded choice/);
   assert.match(html, /Evidence details/);
   assert.match(html, /M7 4L13 10L7 16/);
   assert.doesNotMatch(html, /M8 4 4 12l4 8/);
-  assert.match(html, /Learn how this finding is interpreted/);
-  assert.doesNotMatch(html, /Learn how CertScore interprets this finding/);
+  assert.doesNotMatch(html, /Learn how this finding is interpreted/);
+  assert.match(html, /Learn more/);
   assert.match(html, /href="\/findings\/pre_consent_tracking_detected"/);
   assert.match(
     html,
@@ -2445,8 +2501,8 @@ test("ExecutiveSummaryCard keeps four or more top findings in an expandable top-
   assert.match(html, /data-executive-top-findings-list="true"/);
   assert.match(html, /data-executive-snapshot-pane="true"/);
   assert.doesNotMatch(html, /max-h-\[38\.375rem\]/);
-  assert.doesNotMatch(html, /overflow-y-auto/);
-  assert.match(html, /Tracking started before consent/);
+  assert.match(html, /overflow-y-auto/);
+  assert.match(html, /Third-party tracking observed before recorded consent/);
   assert.match(html, /Non-essential tracking continued after reject/);
   assert.match(html, /Session replay service signal observed/);
   assert.match(html, /Automated accessibility issues observed/);
@@ -2528,10 +2584,16 @@ test("ExecutiveSummaryCard renders GDPR and CCPA gap-observed checklist rows as 
   );
 
   assert.match(html, /Top findings/);
-  assert.match(html, /Regulatory gap/);
-  assert.equal(html.match(/Regulatory checklist gap/g)?.length, 2);
-  assert.match(html, /CCPA\/CPRA gap observed: Do Not Sell or Share availability/);
-  assert.match(html, /GDPR\/ePrivacy gap observed: Pre-consent third-party tracking/);
+  assert.doesNotMatch(html, />Regulatory gap</);
+  assert.doesNotMatch(html, />Regulatory checklist gap</);
+  assert.doesNotMatch(html, />high<span/);
+  assert.doesNotMatch(html, /Regulatory gap/);
+  assert.doesNotMatch(html, /Regulatory checklist gap/);
+  assert.match(html, /Do Not Sell or Share availability/);
+  assert.match(html, /Pre-consent third-party tracking/);
+  assert.match(html, /data-finding-icon=\"privacy-choice\"/);
+  assert.match(html, /data-finding-icon=\"arrow-transfer\"/);
+  assert.doesNotMatch(html, /GDPR\/ePrivacy potential concern: Pre-consent third-party tracking/);
   assert.match(html, /No retained privacy choice path was confirmed/);
   assert.match(html, /not a legal conclusion/);
   assert.doesNotMatch(html, /Privacy notice availability/);
@@ -2582,11 +2644,10 @@ test("ExecutiveSummaryCard renders directional finding-density context for surfa
     })
   );
 
-  assert.match(html, /critical/);
-  assert.match(html, /Consent timing/);
-  assert.match(html, /Evidence quality: Good evidence/);
+  assert.doesNotMatch(html, /critical/);
+  assert.doesNotMatch(html, />Consent timing</);
+  assert.doesNotMatch(html, /Evidence quality: Good evidence/);
   assert.doesNotMatch(html, /<span[^>]*>\s*Good evidence\s*<\/span>/);
-  assert.match(html, /Manual review is still needed for purpose, consent state, exemptions, and configuration/);
   assert.match(html, /Seen on ~18% of scanned top sites/);
   assert.match(html, /Seen on ~9% of scanned top sites/);
   assert.match(html, /directional market context/);
@@ -2681,8 +2742,9 @@ test("ExecutiveSummaryCard renders display criticality independently from confid
     })
   );
 
-  assert.match(html, /medium/);
-  assert.match(html, /Strong evidence/);
+  assert.match(html, /Session replay service signal observed/);
+  assert.doesNotMatch(html, />medium</);
+  assert.doesNotMatch(html, /Strong evidence/);
   assert.doesNotMatch(html, /Evidence details/);
   assert.doesNotMatch(html, /\{\} JSON evidence|&quot;severity&quot;: &quot;high&quot;/);
 });
@@ -2905,9 +2967,9 @@ test("ExecutiveSummaryCard renders compact reject-path JSON evidence", () => {
 
   assert.match(html, /postRejectNonEssentialRequests/);
   assert.match(html, /evidenceVersion/);
-  assert.match(html, /postRejectEvidence/);
+  assert.doesNotMatch(html, /postRejectEvidence/);
   assert.match(html, /rejectSuppressionOutcome/);
-  assert.match(html, /policyEvidence/);
+  assert.doesNotMatch(html, /policyEvidence/);
   assert.match(html, /ms_after_reject/);
   assert.match(html, /reject_reduced_some_tracking_but_nonessential_vendor_persisted/);
   assert.doesNotMatch(html, /why_non_essential/);
@@ -3156,8 +3218,9 @@ test("ExecutiveSummaryCard explains executive and finding cookie count differenc
     })
   );
 
-  assert.match(html, /Cookies before consent/);
-  assert.match(html, /15 cookies before consent/);
+  assert.match(html, /Cookies pre-consent/);
+  assert.doesNotMatch(html, /Cookies before consent/);
+  assert.doesNotMatch(html, /15 cookies before consent/);
   assert.match(html, /Executive metric includes all retained cookie timing records; this finding shows the subset attributed to tracking\/storage evidence\./);
   assert.match(html, /trackingCookieWritesBeforeConsent/);
   assert.match(html, /totalUniqueCookiesObserved/);
@@ -3388,7 +3451,8 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
   );
 
   assert.doesNotMatch(html, /13 third-party domains observed; 1 classified tracker vendor identified\./);
-  assert.match(html, /14 total: 1 vendor, 13 domain/);
+  assert.match(html, /Tracker footprint \(14\)/);
+  assert.match(html, /1 vendor, 13 domains/);
   assert.doesNotMatch(html, /11 more\.\.\./);
   assert.doesNotMatch(html, /1 vendor names and 13 third-party domains/);
   assert.doesNotMatch(html, /ads 1/);
@@ -3425,7 +3489,8 @@ test("ExecutiveSummaryCard uses domain-only tracker expand copy when no classifi
   );
 
   assert.doesNotMatch(html, /1 third-party domain observed; no classified tracker vendors identified\./);
-  assert.match(html, /View observed third-party domain/);
+  assert.match(html, /Tracker footprint \(1\)/);
+  assert.match(html, /0 vendors, 1 domain/);
   assert.doesNotMatch(html, /View observed vendors and domains/);
 });
 
@@ -3532,7 +3597,8 @@ test("ExecutiveSummaryCard labels truncated observed domain lists", () => {
   );
 
   assert.doesNotMatch(html, /11 third-party domains observed; no classified tracker vendors identified\./);
-  assert.match(html, /11 total: 0 vendors, 11 domain/);
+  assert.match(html, /Tracker footprint \(11\)/);
+  assert.match(html, /0 vendors, 11 domains/);
   assert.doesNotMatch(html, /8 more\.\.\./);
   assert.match(html, /observed-10\.example/);
   assert.match(html, /observed-11\.example/);
@@ -3569,7 +3635,7 @@ test("ExecutiveSummaryCard keeps vendor-and-domain tracker expand copy when clas
   );
 
   assert.doesNotMatch(html, /3 third-party domains observed; 2 classified tracker vendors identified\./);
-  assert.match(html, /View observed vendors and domains/);
+  assert.doesNotMatch(html, /View observed vendors and domains/);
   assert.doesNotMatch(html, /analytics 1/);
 });
 
@@ -3751,7 +3817,7 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
     })
   );
 
-  assert.match(html, /Accessibility issue detected/);
+  assert.doesNotMatch(html, /Accessibility issue detected/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
   assert.doesNotMatch(html, /Primary concerns:/);
   assert.match(
@@ -3759,9 +3825,10 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
     /Review the affected elements with keyboard navigation and screen-reader checks\. Confirm that labels, focus order, accessible names, instructions, and error states match the intended user flow/
   );
   assert.doesNotMatch(html, /Next step: review affected text\/background color pairs/);
-  assert.match(html, /Automated accessibility signals are the main review area\./);
+  assert.doesNotMatch(html, /Automated accessibility signals are the main review area\./);
   assert.doesNotMatch(html, /1 third-party domain observed; no classified tracker vendors identified\./);
-  assert.match(html, /View observed third-party domain/);
+  assert.match(html, /Tracker footprint \(1\)/);
+  assert.match(html, /0 vendors, 1 domain/);
   assert.doesNotMatch(html, /View observed vendors and domains/);
   assert.equal(
     (html.match(/1 third-party domain observed; no classified tracker vendors identified\./g) ?? []).length,
@@ -3815,13 +3882,13 @@ test("ExecutiveSummaryCard keeps regulatory cookie copy aligned with canonical c
     })
   );
 
-  assert.match(html, /Consent and pre-consent tracking risk is the main issue\./);
+  assert.doesNotMatch(html, /Consent and pre-consent tracking risk is the main issue\./);
   assert.doesNotMatch(html, /CCPA \/ CPRA/);
-  assert.match(html, /<span class="block text-xl font-semibold tracking-tight text-slate-900">70<\/span>/);
+  assert.doesNotMatch(html, /<span class="block text-xl font-semibold tracking-tight text-slate-900">70<\/span>/);
   assert.doesNotMatch(html, /Third-party collection and disclosure posture drives this score\./);
-  assert.match(html, /FTC/);
-  assert.match(html, /Pre-consent tracking and third-party collection should be reviewed for consumer-protection context\./);
-  assert.match(html, /64 cookie timing records were retained before consent; vendor\/category attribution was not retained\./);
+  assert.doesNotMatch(html, /FTC/);
+  assert.doesNotMatch(html, /Pre-consent tracking and third-party collection should be reviewed for consumer-protection context\./);
+  assert.doesNotMatch(html, /64 cookie timing records were retained before consent; vendor\/category attribution was not retained\./);
   assert.doesNotMatch(html, /64 classified cookie records were observed before consent\./);
   assert.doesNotMatch(html, /64 cookies were observed before consent\./);
 });
@@ -3877,6 +3944,7 @@ test("ExecutiveSummaryCard assigns distinct themed icons to sensitive-data and a
 
   assert.match(html, /data-finding-icon=\"shield-network\"/);
   assert.match(html, /data-finding-icon=\"accessibility-figure\"/);
+  assert.match(html, /data-finding-icon=\"shield-network\" class=\"mt-0\.5 flex h-5 w-5/);
 });
 
 test("ExecutiveSummaryCard assigns unique icons across top findings with shared preferred icons", () => {
@@ -4080,7 +4148,7 @@ test("ExecutiveSummaryCard scopes the hero copy when scan coverage is thin", () 
     })
   );
 
-  assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
+  assert.doesNotMatch(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
   assert.doesNotMatch(html, /Coverage note:/);
   assert.match(html, /Automated homepage findings/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
@@ -4124,7 +4192,7 @@ test("ExecutiveSummaryCard scopes the hero copy when the scan outcome shows bloc
     })
   );
 
-  assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
+  assert.doesNotMatch(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
   assert.doesNotMatch(html, /Coverage note:/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
@@ -4168,7 +4236,7 @@ test("ExecutiveSummaryCard scopes the hero copy when coverage level is limited p
     })
   );
 
-  assert.match(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
+  assert.doesNotMatch(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
   assert.doesNotMatch(html, /Coverage note:/);
   assert.doesNotMatch(html, /Immediate privacy and consent issues detected/);
 });
@@ -4216,7 +4284,7 @@ test("ExecutiveSummaryCard names financial claims in limited-coverage hero copy"
     })
   );
 
-  assert.match(html, /Limited scan coverage surfaced possible financial-claims concerns/);
+  assert.doesNotMatch(html, /Limited scan coverage surfaced possible financial-claims concerns/);
   assert.doesNotMatch(html, /Limited scan coverage surfaced possible homepage privacy concerns/);
 });
 
@@ -4257,7 +4325,7 @@ test("ExecutiveSummaryCard switches to host-resolution scope language when the r
     })
   );
 
-  assert.match(html, /Requested domain resolved to a different host during this scan/);
+  assert.doesNotMatch(html, /Requested domain resolved to a different host during this scan/);
   assert.doesNotMatch(html, /Scope note:/);
   assert.match(html, /Observed on landed host/);
   assert.doesNotMatch(html, /Limited scan coverage surfaced possible homepage privacy concerns/);

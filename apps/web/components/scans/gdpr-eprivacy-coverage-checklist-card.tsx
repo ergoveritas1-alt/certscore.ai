@@ -4,16 +4,15 @@ import React from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { useRegulatoryChecklistAdvancedEvidence } from "./regulatory-checklist-advanced-evidence-context";
-import { RegulatoryChecklistActiveTrace, RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
+import { RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import type {
-  GdprEprivacyCoverageChecklistItem,
-  GdprEprivacyCoverageChecklistStatus,
-  RegulatoryAssessmentStatus
+  GdprEprivacyCoverageChecklistItem
 } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import {
   deriveGdprEprivacyReviewSummary,
 } from "../../lib/scans/gdpr-eprivacy-review-summary";
+import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
 import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
 
 type GdprEprivacyCoverageChecklistCardProps = {
@@ -22,7 +21,6 @@ type GdprEprivacyCoverageChecklistCardProps = {
     ratingLabel: string;
     score: number | null;
     summary?: string;
-    toneClass: string;
   } | null;
   items: GdprEprivacyCoverageChecklistItem[];
   showDebugConfidenceImprovements?: boolean;
@@ -30,7 +28,39 @@ type GdprEprivacyCoverageChecklistCardProps = {
 };
 
 type EvidenceLabel = "Observed" | "Not observed" | "Potential gap" | "Partial" | "Not testable";
-type DirectionLabel = "Positive signal" | "Neutral signal" | "Review signal" | "Potential concern" | "Technical limitation";
+type AssessmentDirection =
+  | "positive_signal"
+  | "neutral_signal"
+  | "review_signal"
+  | "potential_concern"
+  | "technical_limitation";
+type RowToolState = Partial<Record<"correction" | "evidence", boolean>>;
+
+const DIRECTION_UI: Record<AssessmentDirection, {
+  icon: "alert" | "check" | "equal" | "flag" | "info" | "slash";
+  label: "Positive signal" | "Neutral signal" | "Review signal" | "Potential concern" | "Technical limitation";
+}> = {
+  positive_signal: {
+    icon: "check",
+    label: "Positive signal"
+  },
+  neutral_signal: {
+    icon: "equal",
+    label: "Neutral signal"
+  },
+  review_signal: {
+    icon: "flag",
+    label: "Review signal"
+  },
+  potential_concern: {
+    icon: "alert",
+    label: "Potential concern"
+  },
+  technical_limitation: {
+    icon: "slash",
+    label: "Technical limitation"
+  }
+};
 
 const REPORT_ROW_GROUPS = [
   {
@@ -47,9 +77,11 @@ const REPORT_ROW_GROUPS = [
     rowIds: [
       "pre_consent_cookies_storage",
       "pre_consent_third_party_tracking",
+      "advertising_retargeting_vendor_signal_observed",
       "analytics_vendor_observed",
       "session_replay_fingerprinting_review",
-      "device_identification_fingerprinting_signal_observed"
+      "device_identification_fingerprinting_signal_observed",
+      "embedded_content_pre_consent"
     ]
   },
   {
@@ -70,19 +102,22 @@ const REPORT_ROW_GROUPS = [
       "data_subject_rights_disclosure",
       "international_transfers_disclosure"
     ]
-  },
-  {
-    title: "Alignment",
-    rowIds: [
-      "runtime_vendor_disclosure_alignment"
-    ]
   }
 ] as const;
 
-const EXPECTED_DISCLOSURE_OR_CONTROL_ROW_IDS = new Set([
+const RISK_SIGNAL_ROW_IDS = new Set([
+  "pre_consent_cookies_storage",
+  "pre_consent_third_party_tracking",
+  "advertising_retargeting_vendor_signal_observed",
+  "analytics_vendor_observed",
+  "session_replay_fingerprinting_review",
+  "device_identification_fingerprinting_signal_observed",
+  "embedded_content_pre_consent"
+]);
+
+const POSITIVE_WHEN_OBSERVED_ROW_IDS = new Set([
   "consent_surface_observed",
   "reject_all_path_availability",
-  "cmp_framework_signal_observed",
   "cookie_notice_policy_availability",
   "privacy_notice_availability",
   "controller_contact_disclosure",
@@ -97,21 +132,14 @@ const EXPECTED_DISCLOSURE_OR_CONTROL_ROW_IDS = new Set([
   "automated_decision_making_profiling_disclosure"
 ]);
 
-const RISK_SIGNAL_ROW_IDS = new Set([
-  "pre_consent_cookies_storage",
-  "pre_consent_third_party_tracking",
-  "analytics_vendor_observed",
-  "session_replay_fingerprinting_review",
-  "device_identification_fingerprinting_signal_observed"
+const NEUTRAL_WHEN_OBSERVED_ROW_IDS = new Set([
+  "cmp_framework_signal_observed",
+  "collection_surface_observed"
 ]);
 
-const DEFERRED_NON_PRODUCTION_ROW_IDS = new Set([
-  "consent_choice_quality",
-  "post_reject_tracking_reduction",
-  "preference_withdrawal_control",
-  "sensitive_surfaces_third_party_tracking",
-  "cross_border_endpoint_review",
-  "accessibility_consent_controls"
+const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([
+  "pre_consent_cookies_storage",
+  "pre_consent_third_party_tracking"
 ]);
 
 function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): EvidenceLabel {
@@ -130,68 +158,218 @@ function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): EvidenceLabe
   return "Not observed";
 }
 
-function getDirectionLabel(item: GdprEprivacyCoverageChecklistItem): DirectionLabel {
+function retainedBoolean(item: GdprEprivacyCoverageChecklistItem, keys: string[]) {
+  return keys.some((key) => item.criticalEvidence.retainedEvidence[key] === true);
+}
+
+function retainedNumber(item: GdprEprivacyCoverageChecklistItem, keys: string[]) {
+  for (const key of keys) {
+    const value = item.criticalEvidence.retainedEvidence[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function retainedText(item: GdprEprivacyCoverageChecklistItem) {
+  return JSON.stringify(
+    item.criticalEvidence.retainedEvidence,
+    (_key, value) => typeof value === "bigint" ? value.toString() : value
+  ).toLowerCase();
+}
+
+function evidenceMentions(item: GdprEprivacyCoverageChecklistItem, pattern: RegExp) {
+  return pattern.test([
+    item.explanation,
+    item.note,
+    item.criticalEvidence.statusBasis,
+    item.evidenceRefs.join(" "),
+    retainedText(item)
+  ].join(" ").toLowerCase());
+}
+
+function hasHighConfidenceStorageConcern(item: GdprEprivacyCoverageChecklistItem) {
+  return retainedBoolean(item, [
+    "eligibleNonEssentialCookieStorageFindingProjected",
+    "nonEssentialCookieStorageObserved",
+    "non_essential_cookie_storage_observed",
+    "thirdPartyCookieStorageObserved",
+    "third_party_cookie_storage_observed",
+    "advertisingCookieStorageObserved",
+    "analyticsCookieStorageObserved",
+    "sessionReplayCookieStorageObserved",
+    "deviceIdentificationStorageObserved"
+  ]);
+}
+
+function hasStrictlyNecessaryStorageOnly(item: GdprEprivacyCoverageChecklistItem) {
+  return retainedBoolean(item, [
+    "strictlyNecessaryStorageOnly",
+    "strictly_necessary_storage_only",
+    "essentialStorageOnly",
+    "essential_storage_only",
+    "securityStorageOnly",
+    "security_storage_only",
+    "sessionStorageOnly",
+    "session_storage_only"
+  ]) || (
+    evidenceMentions(item, /\b(strictly necessary|essential|security|fraud|bot|session only)\b/i) &&
+    !hasHighConfidenceStorageConcern(item)
+  );
+}
+
+function hasHighConfidenceAdvertisingConcern(item: GdprEprivacyCoverageChecklistItem) {
+  const count = retainedNumber(item, [
+    "advertisingRetargetingVendorCount",
+    "advertising_retargeting_vendor_count",
+    "adtechVendorCount",
+    "adtech_vendor_count"
+  ]);
+  return (count !== null && count > 0) ||
+    evidenceMentions(item, /\b(advertis(?:ing|er)|adtech|retarget|remarket|doubleclick|google ads|meta pixel|facebook pixel|pixel)\b/i);
+}
+
+function hasHighConfidenceAnalyticsConcern(item: GdprEprivacyCoverageChecklistItem) {
+  const count = retainedNumber(item, ["analyticsVendorCount", "analytics_vendor_count"]);
+  if (evidenceMentions(item, /\b(limited use|strictly necessary|essential analytics|aggregate only)\b/i)) {
+    return false;
+  }
+  return (count !== null && count > 0) ||
+    evidenceMentions(item, /\b(analytics|measurement|google analytics|ga4|gtag|adobe analytics|matomo|mixpanel|amplitude)\b/i);
+}
+
+function getDeviceIdentificationDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
+  if (evidenceMentions(item, /\b(fraud|security|bot|abuse prevention|authentication)\b/i)) {
+    return "neutral_signal";
+  }
+  if (evidenceMentions(item, /\b(fingerprint|device id|device identification|cross[- ]site|identity graph|advertis(?:ing|er)|retarget|probabilistic)\b/i)) {
+    return "potential_concern";
+  }
+  return "review_signal";
+}
+
+function getEmbeddedContentDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
+  const text = retainedText(item);
+  if (/\b(fonts\.googleapis\.com|fonts\.gstatic\.com)\b/i.test(text) && !/\b(youtube|vimeo|maps|facebook|instagram|tiktok|linkedin|typeform|calendly|hubspot|chat|widget|iframe|embed)\b/i.test(text)) {
+    return "review_signal";
+  }
+  if (/\b(youtube|vimeo|maps|openstreetmap|spotify|soundcloud|facebook|instagram|tiktok|linkedin|typeform|calendly|hubspot|chat|widget|iframe|embed)\b/i.test(text)) {
+    return "potential_concern";
+  }
+  return "review_signal";
+}
+
+function hasPreConsentRuntimeExpectation(item: GdprEprivacyCoverageChecklistItem) {
+  return retainedBoolean(item, [
+    "preConsentCookiesObserved",
+    "pre_consent_cookies_observed",
+    "preConsentStorageObserved",
+    "pre_consent_storage_observed",
+    "preConsentTrackingObserved",
+    "pre_consent_tracking_observed",
+    "preConsentThirdPartyTrackingObserved",
+    "pre_consent_third_party_tracking_observed",
+    "advertisingVendorObserved",
+    "advertising_vendor_observed",
+    "analyticsVendorObserved",
+    "analytics_vendor_observed"
+  ]);
+}
+
+function hasConsentSurfaceExpectation(item: GdprEprivacyCoverageChecklistItem) {
+  return retainedBoolean(item, [
+    "consentSurfaceObserved",
+    "consent_surface_observed",
+    "cmpSignalObserved",
+    "cmp_signal_observed",
+    "bannerObserved",
+    "banner_observed"
+  ]);
+}
+
+function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
+  switch (item.id) {
+    case "pre_consent_cookies_storage":
+      if (hasHighConfidenceStorageConcern(item)) {
+        return "potential_concern";
+      }
+      if (hasStrictlyNecessaryStorageOnly(item)) {
+        return "neutral_signal";
+      }
+      return "review_signal";
+    case "pre_consent_third_party_tracking":
+      return "potential_concern";
+    case "advertising_retargeting_vendor_signal_observed":
+      return hasHighConfidenceAdvertisingConcern(item) ? "potential_concern" : "review_signal";
+    case "analytics_vendor_observed":
+      return hasHighConfidenceAnalyticsConcern(item) ? "potential_concern" : "review_signal";
+    case "session_replay_fingerprinting_review":
+      return "potential_concern";
+    case "device_identification_fingerprinting_signal_observed":
+      return getDeviceIdentificationDirection(item);
+    case "embedded_content_pre_consent":
+      return getEmbeddedContentDirection(item);
+    default:
+      if (NEUTRAL_WHEN_OBSERVED_ROW_IDS.has(item.id)) {
+        return "neutral_signal";
+      }
+      if (POSITIVE_WHEN_OBSERVED_ROW_IDS.has(item.id)) {
+        return "positive_signal";
+      }
+      return RISK_SIGNAL_ROW_IDS.has(item.id) ? "review_signal" : "neutral_signal";
+  }
+}
+
+export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
   const evidenceLabel = getEvidenceLabel(item);
   if (evidenceLabel === "Not testable") {
-    return "Technical limitation";
+    return "technical_limitation";
   }
   if (evidenceLabel === "Potential gap" || item.assessmentStatus === "gap_observed") {
-    return "Potential concern";
-  }
-  if (evidenceLabel === "Partial" || item.assessmentStatus === "review_signal") {
-    return "Review signal";
+    return "potential_concern";
   }
   if (evidenceLabel === "Observed") {
-    return RISK_SIGNAL_ROW_IDS.has(item.id) ? "Review signal" : "Positive signal";
+    return getObservedAssessmentDirection(item);
   }
-  return EXPECTED_DISCLOSURE_OR_CONTROL_ROW_IDS.has(item.id) ? "Review signal" : "Neutral signal";
+  if (evidenceLabel === "Partial" || item.assessmentStatus === "review_signal") {
+    return "review_signal";
+  }
+
+  if (POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS.has(item.id)) {
+    return "positive_signal";
+  }
+  if (item.id === "reject_all_path_availability" && hasConsentSurfaceExpectation(item)) {
+    return "potential_concern";
+  }
+  if (
+    (
+      item.id === "consent_surface_observed" ||
+      item.id === "cookie_notice_policy_availability"
+    ) &&
+    hasPreConsentRuntimeExpectation(item)
+  ) {
+    return "potential_concern";
+  }
+  if (item.id === "cmp_framework_signal_observed" && hasPreConsentRuntimeExpectation(item)) {
+    return "review_signal";
+  }
+  return "neutral_signal";
 }
 
 function getEvidenceLabelBadgeClasses(label: EvidenceLabel) {
   switch (label) {
     case "Observed":
-      return "border-emerald-200 bg-emerald-50 text-emerald-900";
+      return "border-slate-200 bg-white text-slate-700";
     case "Potential gap":
-      return "border-rose-200 bg-rose-50 text-rose-800";
+      return "border-slate-200 bg-white text-slate-700";
     case "Partial":
-      return "border-indigo-200 bg-indigo-50 text-indigo-800";
+      return "border-slate-200 bg-white text-slate-700";
     case "Not testable":
       return "border-slate-300 bg-slate-100 text-slate-700";
     case "Not observed":
     default:
       return "border-slate-200 bg-white text-slate-600";
-  }
-}
-
-function getDirectionBadgeClasses(label: DirectionLabel) {
-  switch (label) {
-    case "Positive signal":
-      return "border-emerald-200 bg-emerald-50 text-emerald-900";
-    case "Potential concern":
-      return "border-rose-200 bg-rose-50 text-rose-800";
-    case "Review signal":
-      return "border-amber-200 bg-amber-50 text-amber-900";
-    case "Technical limitation":
-      return "border-slate-300 bg-slate-100 text-slate-700";
-    case "Neutral signal":
-    default:
-      return "border-slate-200 bg-slate-50 text-slate-700";
-  }
-}
-
-function getAssessmentBadgeClasses(status: RegulatoryAssessmentStatus) {
-  switch (status) {
-    case "gap_observed":
-      return "border-amber-200 bg-amber-50 text-amber-900";
-    case "review_signal":
-      return "border-indigo-200 bg-indigo-50 text-indigo-900";
-    case "coverage_limitation":
-      return "border-violet-200 bg-violet-50 text-violet-700";
-    case "not_applicable":
-      return "border-slate-200 bg-white text-slate-600";
-    case "checked":
-    default:
-      return "border-emerald-200 bg-emerald-50 text-emerald-900";
   }
 }
 
@@ -230,34 +408,6 @@ function DebugConfidenceSummary({
   );
 }
 
-function RegulatorySubcheckStrip({ item }: { item: GdprEprivacyCoverageChecklistItem }) {
-  const subchecks = item.subchecks ?? [];
-  if (subchecks.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="grid gap-1.5 rounded-md border border-slate-200 bg-slate-50 p-2 sm:grid-cols-2">
-      {subchecks.map((subcheck) => (
-        <div key={subcheck.id} className="min-w-0 rounded-md border border-slate-200 bg-white px-2 py-1.5">
-          <div className="flex min-w-0 items-center justify-between gap-2">
-            <span className="truncate text-xs font-medium text-slate-700">{subcheck.label}</span>
-            <span
-              className={cn(
-                "inline-flex shrink-0 whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em]",
-                getAssessmentBadgeClasses(subcheck.assessmentStatus)
-              )}
-            >
-              {subcheck.status}
-            </span>
-          </div>
-          <p className="mt-1 max-h-8 overflow-hidden text-[11px] leading-4 text-slate-500">{subcheck.note}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function hasScannerCoverageGap(item: GdprEprivacyCoverageChecklistItem) {
   if (item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation") {
     return false;
@@ -285,7 +435,7 @@ function ChecklistRowSummaryStrip({ items }: { items: GdprEprivacyCoverageCheckl
   const summary = getChecklistRowSummary(items);
   const entries = [
     {
-      className: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      className: "border-slate-200 bg-white text-slate-700",
       count: items.filter((item) => getEvidenceLabel(item) === "Observed").length,
       label: "Observed",
     },
@@ -295,12 +445,12 @@ function ChecklistRowSummaryStrip({ items }: { items: GdprEprivacyCoverageCheckl
       label: "Not observed",
     },
     {
-      className: "border-indigo-200 bg-indigo-50 text-indigo-800",
+      className: "border-slate-200 bg-white text-slate-700",
       count: items.filter((item) => getEvidenceLabel(item) === "Partial").length,
       label: "Partial",
     },
     {
-      className: "border-rose-200 bg-rose-50 text-rose-800",
+      className: "border-slate-200 bg-white text-slate-700",
       count: items.filter((item) => getEvidenceLabel(item) === "Potential gap").length + summary.coverageMissing,
       label: "Gaps / limits",
     },
@@ -318,70 +468,55 @@ function ChecklistRowSummaryStrip({ items }: { items: GdprEprivacyCoverageCheckl
   );
 }
 
-function getCoverageIconMeta(status: GdprEprivacyCoverageChecklistStatus) {
-  switch (status) {
-    case "Observed":
+function getCoverageIconMeta(direction: AssessmentDirection) {
+  switch (direction) {
+    case "positive_signal":
       return {
         className: "border-emerald-200 bg-emerald-50 text-emerald-700",
         icon: "check" as const,
-        label: "Checked",
-        tooltip: "Automated evidence was retained for this coverage area in the tested public-web context."
+        label: "Positive signal",
+        tooltip: "Retained evidence is a positive signal for this row. This is not a compliance determination."
       };
-    case "Not observed":
+    case "neutral_signal":
       return {
-        className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-        icon: "check" as const,
-        label: "Checked",
-        tooltip: "The scan retained enough context for this row and did not observe an eligible issue. This is not a compliance determination."
+        className: "border-sky-200 bg-sky-50/70 text-sky-600",
+        icon: "equal" as const,
+        label: "Neutral signal",
+        tooltip: "Retained evidence is useful context for this row, but is not inherently positive or concerning."
       };
-    case "Gap observed":
+    case "potential_concern":
       return {
         className: "border-rose-200 bg-rose-50 text-rose-700",
         icon: "alert" as const,
-        label: "Needs review",
-        tooltip: "Canonical evidence projected a gap for this row. Review the retained evidence before drawing conclusions."
+        label: "Potential concern",
+        tooltip: "Retained evidence increases review priority for this row. Review the evidence before drawing conclusions."
       };
-      case "Review signal":
-      case "Not confirmed":
-        return {
-          className: "border-indigo-200 bg-indigo-50 text-indigo-700",
-        icon: "flag" as const,
-        label: "Needs review",
-        tooltip: "Canonical evidence projected a review signal. This needs human review, not automatic pass/fail treatment."
-      };
-    case "Insufficient evidence":
+    case "review_signal":
       return {
-        className: "border-violet-200 bg-violet-50 text-violet-700",
-        icon: "question" as const,
-        label: "Needs evidence",
-        tooltip: "Some canonical evidence exists, but required source signals or report projection gates are incomplete."
+        className: "border-amber-200 bg-amber-50 text-amber-700",
+        icon: "flag" as const,
+        label: "Review signal",
+        tooltip: "Retained evidence is context-dependent and needs human review, not automatic pass/fail treatment."
       };
-    case "Not testable":
+    case "technical_limitation":
       return {
         className: "border-slate-300 bg-slate-100 text-slate-600",
         icon: "slash" as const,
-        label: "Not testable",
+        label: "Technical limitation",
         tooltip: "The retained public-web scan context did not support testing this coverage area."
-      };
-    case "Out of scope":
-      return {
-        className: "border-slate-200 bg-white text-slate-500",
-        icon: "dash" as const,
-        label: "Out of scope",
-        tooltip: "This coverage area is outside the automated public-web scan context."
       };
     default:
       return {
         className: "border-slate-200 bg-white text-slate-600",
-        icon: "question" as const,
+        icon: "info" as const,
         label: "Review",
         tooltip: "Review the retained evidence for this coverage area."
       };
   }
 }
 
-function CoverageStatusGlyph({ status }: { status: GdprEprivacyCoverageChecklistStatus }) {
-  const meta = getCoverageIconMeta(status);
+function CoverageStatusGlyph({ direction }: { direction: AssessmentDirection }) {
+  const meta = getCoverageIconMeta(direction);
   return (
     <span className="group/coverage-icon relative inline-flex">
       <span
@@ -436,10 +571,20 @@ function CoverageStatusIcon({ icon }: { icon: ReturnType<typeof getCoverageIconM
     );
   }
 
-  if (icon === "dash") {
+  if (icon === "equal") {
     return (
       <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
-        <path d="M5.5 10h9" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        <path d="M6.4 8.2h7.2M6.4 11.8h7.2" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      </svg>
+    );
+  }
+
+  if (icon === "info") {
+    return (
+      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+        <circle cx="10" cy="10" r="6.8" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M10 9.2v4.2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+        <path d="M10 6.5h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
       </svg>
     );
   }
@@ -485,91 +630,85 @@ function getDisplayEvidenceRefs(item: GdprEprivacyCoverageChecklistItem) {
   return item.evidenceRefs.map(humanizeEvidenceToken).slice(0, 6);
 }
 
-function getGdprSummaryTitle(input: {
-  items: GdprEprivacyCoverageChecklistItem[];
-  ratingLabel: string;
-  score: number | null;
-  toneClass?: string;
-}) {
-  const ratingBucket = typeof input.score === "number" ? Math.max(0, Math.min(5, input.score / 20)) : 0;
-  const observedCount = input.items.filter((item) => getEvidenceLabel(item) === "Observed").length;
-  const gapCount = input.items.filter((item) => getEvidenceLabel(item) === "Potential gap").length;
-  const partialCount = input.items.filter((item) => getEvidenceLabel(item) === "Partial").length;
-  const notTestableCount = input.items.filter((item) => getEvidenceLabel(item) === "Not testable").length;
+export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivacyCoverageChecklistItem[] }) {
+  const directionCounts = items.reduce<Record<AssessmentDirection, number>>((counts, item) => {
+    const direction = getAssessmentDirection(item);
+    counts[direction] += 1;
+    return counts;
+  }, {
+    neutral_signal: 0,
+    positive_signal: 0,
+    potential_concern: 0,
+    review_signal: 0,
+    technical_limitation: 0
+  });
   const statusSummary = [
     {
       className: "border-rose-200 bg-rose-50 text-rose-700",
-      count: gapCount,
+      count: directionCounts.potential_concern,
       icon: "alert" as const,
-      label: "potential gaps"
+      label: "potential concerns"
     },
     {
-      className: "border-indigo-200 bg-indigo-50 text-indigo-700",
-      count: partialCount,
+      className: "border-amber-200 bg-amber-50 text-amber-700",
+      count: directionCounts.review_signal,
       icon: "flag" as const,
-      label: "partial"
+      label: "review signals"
     },
     {
       className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-      count: observedCount,
+      count: directionCounts.positive_signal,
       icon: "check" as const,
-      label: "observed"
+      label: "positive signals"
+    },
+    {
+      className: "border-sky-200 bg-sky-50 text-sky-700",
+      count: directionCounts.neutral_signal,
+      icon: "equal" as const,
+      label: "neutral signals"
     },
     {
       className: "border-slate-300 bg-slate-100 text-slate-600",
-      count: notTestableCount,
+      count: directionCounts.technical_limitation,
       icon: "slash" as const,
-      label: "not testable"
+      label: "technical limits"
     }
   ].filter((item) => item.count > 0);
 
   return (
-    <div className="grid w-full grid-cols-1 items-start gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(16rem,1fr)]">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-          <p className="text-base font-semibold tracking-normal text-slate-950">GDPR / ePrivacy</p>
-          <span className="shrink-0 whitespace-nowrap text-sm font-semibold tracking-normal text-slate-950">
-            Score: <span className="text-[1.3rem] leading-none">{input.score ?? "—"}</span>
-            {typeof input.score === "number" ? <span className="text-[0.8rem] font-medium text-slate-500">/100</span> : null}
+    <>
+      {statusSummary.map((item) => (
+        <span key={item.label} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50/80 px-2 py-1">
+          <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", item.className)}>
+            <CoverageStatusIcon icon={item.icon} />
           </span>
-        </div>
-        <span
-          className={cn(
-            "mt-1.5 inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]",
-            input.toneClass ?? "border-slate-200 bg-slate-50 text-slate-600"
-          )}
-        >
-          {input.ratingLabel}
+          <span className="whitespace-nowrap text-[11px] font-medium text-slate-600">
+            <span className="font-semibold text-slate-950">{item.count}</span> {item.label}
+          </span>
         </span>
-        <div className="mt-2 flex w-full max-w-[11rem] items-center gap-1.5">
-          {Array.from({ length: 5 }, (_, index) => {
-            const segmentFill = Math.max(0, Math.min(1, ratingBucket - index));
-            return (
-              <span
-                key={index}
-                className="relative h-2 flex-1 overflow-hidden rounded-full border border-slate-200 bg-slate-100"
-              >
-                <span
-                  className={cn("absolute inset-y-0 left-0 rounded-full", input.toneClass ?? "bg-slate-400")}
-                  style={{ width: `${segmentFill * 100}%` }}
-                />
-              </span>
-            );
-          })}
-        </div>
-      </div>
-      <div className="flex min-w-0 flex-wrap items-center gap-2.5 self-center rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2">
-        {statusSummary.map((item) => (
-          <span key={item.label} className="inline-flex items-center gap-2 rounded-full bg-white px-2.5 py-1 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.55)]">
-            <span className={cn("inline-flex h-7 w-7 items-center justify-center rounded-full border", item.className)}>
-              <CoverageStatusIcon icon={item.icon} />
-            </span>
-            <span className="whitespace-nowrap text-xs font-medium text-slate-600">
-              <span className="font-semibold text-slate-950">{item.count}</span> {item.label}
-            </span>
+      ))}
+    </>
+  );
+}
+
+function getGdprSummaryTitle(input: {
+  items: GdprEprivacyCoverageChecklistItem[];
+  summary: string;
+}) {
+  return (
+    <div className="w-full space-y-2">
+      <details className="group rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2">
+        <summary className="flex cursor-pointer list-none items-center gap-2 marker:hidden [&::-webkit-details-marker]:hidden">
+          <ScanReportDisclosureIcon className="h-4 w-4 rounded-[0.375rem] [&_svg]:h-2.5 [&_svg]:w-2.5" />
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            Review summary
           </span>
-        ))}
-      </div>
+          <span className="min-w-0 flex-1 truncate text-xs font-normal leading-5 text-slate-600 group-open:hidden">
+            {input.summary}
+          </span>
+        </summary>
+        <p className="mt-2 pl-6 text-xs font-normal leading-5 text-slate-600">{input.summary}</p>
+      </details>
     </div>
   );
 }
@@ -584,15 +723,33 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
     }
 
   if (item.id === "pre_consent_cookies_storage") {
-    return item.status === "Gap observed"
-      ? "Non-essential cookies or browser storage were observed before a recorded consent action."
-      : "No eligible non-essential cookies or browser storage were observed before a recorded consent action.";
+    return item.status === "Observed" || item.status === "Gap observed"
+      ? "Cookies or browser storage were observed before a recorded consent action. Purpose and essentiality remain review context unless high-confidence non-essential evidence is retained."
+      : "No eligible pre-consent cookies or browser storage were observed before a recorded consent action.";
   }
 
   if (item.id === "pre_consent_third_party_tracking") {
-    return item.status === "Gap observed"
+    return item.status === "Observed" || item.status === "Review signal" || item.status === "Gap observed"
       ? "Analytics, advertising, cross-site measurement, or similar third-party requests were observed before recorded consent."
       : "No eligible third-party tracking requests were observed before recorded consent.";
+  }
+
+  if (item.id === "advertising_retargeting_vendor_signal_observed") {
+    return item.status === "Observed" || item.status === "Review signal"
+      ? "Advertising, retargeting, or adtech vendor evidence was observed in the retained pre-consent runtime context."
+      : "No advertising, retargeting, or adtech vendor signal was observed in the retained runtime context.";
+  }
+
+  if (item.id === "analytics_vendor_observed") {
+    return item.status === "Observed" || item.status === "Review signal"
+      ? "Analytics or measurement vendor evidence was observed in the retained runtime context."
+      : "No analytics or measurement vendor signal was observed in the retained runtime context.";
+  }
+
+  if (item.id === "embedded_content_pre_consent") {
+    return item.status === "Observed" || item.status === "Review signal"
+      ? "Concrete third-party embedded content was observed before a recorded consent action."
+      : "No concrete third-party embedded content was observed before a recorded consent action.";
   }
 
   if (item.id === "reject_all_path_availability") {
@@ -619,14 +776,6 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
       : item.status === "Not observed"
         ? "No way to reopen or change consent preferences after the initial choice was observed."
         : "Post-choice consent preference controls require review from the retained lifecycle evidence.";
-  }
-
-  if (item.id === "runtime_vendor_disclosure_alignment") {
-    return item.status === "Gap observed" || item.status === "Review signal"
-      ? "Observed runtime vendors were not clearly matched in the reviewed public privacy/cookie disclosures."
-      : item.status === "Not observed"
-        ? "No runtime vendor disclosure-alignment issue was observed in the tested context."
-        : "Runtime vendor disclosure alignment was reviewed from retained policy and runtime evidence.";
   }
 
   if (item.id === "sensitive_surfaces_third_party_tracking") {
@@ -713,6 +862,522 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
   }
 }
 
+function getChecklistRowRationale(item: GdprEprivacyCoverageChecklistItem) {
+  return truncateSentence(
+    getSpecificChecklistRowRationale(item) ??
+      getEvidenceBackedFallbackRationale(item),
+    320
+  );
+}
+
+export function getGdprEprivacyCoverageChecklistRowRationaleForAudit(item: GdprEprivacyCoverageChecklistItem) {
+  return getChecklistRowRationale(item);
+}
+
+function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistItem) {
+  const evidence = getRetainedEvidenceRecord(item);
+  const vendorPhrase = formatList(getEvidenceVendorNames(item).slice(0, 4));
+  const firstSeenMs = getFirstEvidenceMs(item);
+  const evidenceLabel = getEvidenceLabel(item);
+
+  if (evidenceLabel === "Not testable") {
+    return null;
+  }
+
+  if (item.id === "pre_consent_third_party_tracking") {
+    if (evidenceLabel === "Not observed") {
+      return "No tracking-classified third-party request was observed before a recorded consent action.";
+    }
+    const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
+      fallbackFirstSeenMs: firstSeenMs,
+      item,
+      lead: "Pre-consent tracking evidence was retained",
+      rowKind: "tracking"
+    });
+    if (canonicalSummary) {
+      return canonicalSummary;
+    }
+    return joinRationaleParts([
+      vendorPhrase
+        ? `Tracking-classified third-party requests fired before any recorded consent action: ${vendorPhrase}`
+        : "Tracking-classified third-party requests fired before any recorded consent action",
+      formatFirstSeenPhrase(firstSeenMs)
+    ]);
+  }
+
+  if (item.id === "pre_consent_cookies_storage") {
+    const storageNames = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, [
+        "preConsentCookieExamples",
+        "pre_consent_cookie_examples",
+        "cookieNames",
+        "cookie_names",
+        "storageKeys",
+        "storage_keys"
+      ]),
+      ...getNestedRecordStrings(evidence.preConsentCookieExamples, ["name", "cookieName", "cookie_name", "key"]),
+      ...getNestedRecordStrings(evidence.concreteStorageArtifacts, ["name", "cookieName", "cookie_name", "key"])
+    ]).slice(0, 4);
+    const storagePhrase = formatList(storageNames);
+    if (evidenceLabel === "Not observed") {
+      return "No eligible cookie or browser-storage write was observed before a recorded consent action.";
+    }
+    return joinRationaleParts([
+      storagePhrase
+        ? `Cookie/storage writes were observed before any recorded consent action: ${storagePhrase}`
+        : "Cookie/storage writes were observed before any recorded consent action",
+      vendorPhrase ? `associated vendors include ${vendorPhrase}` : null,
+      formatFirstSeenPhrase(firstSeenMs)
+    ]);
+  }
+
+  if (item.id === "advertising_retargeting_vendor_signal_observed") {
+    if (evidenceLabel === "Not observed") {
+      return "No advertising, retargeting, or adtech vendor signal was observed in retained runtime evidence.";
+    }
+    const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
+      fallbackFirstSeenMs: firstSeenMs,
+      item,
+      lead: "Advertising/retargeting evidence was retained",
+      rowKind: "advertising"
+    });
+    if (canonicalSummary) {
+      return canonicalSummary;
+    }
+    return joinRationaleParts([
+      vendorPhrase
+        ? `Advertising or retargeting vendor signals were observed: ${vendorPhrase}`
+        : "Advertising or retargeting vendor signals were observed",
+      formatFirstSeenPhrase(firstSeenMs),
+      getPreConsentQualifier(item)
+    ]);
+  }
+
+  if (item.id === "analytics_vendor_observed") {
+    if (evidenceLabel === "Not observed") {
+      return "No analytics or measurement vendor signal was observed in retained runtime evidence.";
+    }
+    const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
+      fallbackFirstSeenMs: firstSeenMs,
+      item,
+      lead: "Analytics/measurement evidence was retained",
+      rowKind: "analytics"
+    });
+    if (canonicalSummary) {
+      return canonicalSummary;
+    }
+    return joinRationaleParts([
+      vendorPhrase
+        ? `Analytics or measurement vendor signals were observed: ${vendorPhrase}`
+        : "Analytics or measurement vendor signals were observed",
+      formatFirstSeenPhrase(firstSeenMs),
+      getPreConsentQualifier(item)
+    ]);
+  }
+
+  if (item.id === "session_replay_fingerprinting_review") {
+    const replayEvidence = getRecord(evidence.sessionReplayEvidence);
+    const replayVendors = formatList(getStringArray(replayEvidence?.vendors).slice(0, 4));
+    const replayFirstSeenMs = getFirstNumberFromRecord(replayEvidence, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]);
+    if (evidenceLabel === "Not observed") {
+      return "No eligible session replay or behavioral-recording vendor was observed in retained runtime evidence.";
+    }
+    return joinRationaleParts([
+      replayVendors
+        ? `Session replay or behavioral analytics signals were observed: ${replayVendors}`
+        : "Session replay or behavioral analytics signals were observed",
+      formatFirstSeenPhrase(replayFirstSeenMs ?? firstSeenMs),
+      replayEvidence?.preConsentObserved === true ? "before any recorded consent action" : null
+    ]);
+  }
+
+  if (item.id === "device_identification_fingerprinting_signal_observed") {
+    const fingerprintReasons = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["fingerprintingReasons", "fingerprinting_reasons", "reasons"]),
+      ...getStringArrayFromEvidenceKeys(getRecord(evidence.browserDeviceEntropyEvidence) ?? {}, ["reasons", "signals", "vendors"])
+    ]).slice(0, 4);
+    const reasonPhrase = formatList(fingerprintReasons);
+    if (evidenceLabel === "Not observed") {
+      return "No eligible device-identification or fingerprinting signal was observed in retained runtime evidence.";
+    }
+    return joinRationaleParts([
+      reasonPhrase
+        ? `Device-identification or fingerprinting-like signals were observed: ${reasonPhrase}`
+        : "Device-identification or fingerprinting-like signals were observed",
+      formatFirstSeenPhrase(firstSeenMs)
+    ]);
+  }
+
+  if (item.id === "embedded_content_pre_consent") {
+    const hosts = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["embeddedContentHosts", "embedded_content_hosts", "embeddedHosts", "embedded_hosts"]),
+      ...getNestedRecordStrings(evidence.embeddedContentObservations, ["host", "hostname", "domain"])
+    ]).slice(0, 4);
+    const hostPhrase = formatList(hosts);
+    if (evidenceLabel === "Not observed") {
+      return "No eligible third-party embedded content was observed before a recorded consent action.";
+    }
+    return joinRationaleParts([
+      hostPhrase
+        ? `Third-party embedded content loaded before any recorded consent action: ${hostPhrase}`
+        : "Third-party embedded content loaded before any recorded consent action",
+      formatFirstSeenPhrase(firstSeenMs)
+    ]);
+  }
+
+  if (item.id === "reject_all_path_availability") {
+    const labels = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["rejectButtonLabels", "reject_button_labels", "refusalControlLabels", "refusal_control_labels", "buttonLabels", "button_labels"]),
+      ...extractQuotedButtonLabels(item.criticalEvidence.statusBasis)
+    ]).slice(0, 3);
+    if (evidenceLabel === "Observed") {
+      return labels.length > 0
+        ? `A first-layer refusal path was observed: ${formatList(labels)}. This confirms availability, not post-click behavior.`
+        : "A first-layer refusal path was observed. This confirms availability, not post-click behavior.";
+    }
+    if (evidenceLabel === "Potential gap") {
+      return "A first-layer reject-all or equivalent refusal path was expected from the observed consent surface but was not retained.";
+    }
+  }
+
+  const article13Snippet = getArticle13Snippet(evidence);
+  if (article13Snippet) {
+    return `${getArticle13RationalePrefix(item)}: ${article13Snippet}`;
+  }
+
+  return null;
+}
+
+function getArticle13RationalePrefix(item: GdprEprivacyCoverageChecklistItem) {
+  if (getEvidenceLabel(item) === "Partial") {
+    return "Policy evidence was retained, but the matched disclosure text was incomplete or ambiguous";
+  }
+  if (getEvidenceLabel(item) === "Potential gap") {
+    return "Scanner expected this transparency disclosure but did not retain a clear match";
+  }
+  if (getEvidenceLabel(item) === "Not observed") {
+    return "Scanner did not retain a clear matching transparency disclosure";
+  }
+  return "Policy text included matching disclosure evidence";
+}
+
+function getArticle13Snippet(evidence: Record<string, unknown>) {
+  const article13Signal = getRecord(evidence.article13Signal);
+  const text = getString(article13Signal?.evidenceText) ?? getString(article13Signal?.evidence_text);
+  return text ? `"${truncateWholeWord(cleanPolicyExcerptStart(text), 180, "...[more in evidence packet]")}"` : null;
+}
+
+function getStrongestEvidenceDetail(item: GdprEprivacyCoverageChecklistItem) {
+  const evidence = getRetainedEvidenceRecord(item);
+  const highlights = getStringArrayFromEvidenceKeys(evidence, ["evidenceHighlights", "evidence_highlights"]);
+  if (highlights.length > 0) {
+    return cleanEvidenceText(highlights[0] ?? "");
+  }
+  const vendorPhrase = formatList(getEvidenceVendorNames(item).slice(0, 4));
+  const firstSeenMs = getFirstEvidenceMs(item);
+  if (vendorPhrase) {
+    return joinRationaleParts([`observed vendors include ${vendorPhrase}`, formatFirstSeenPhrase(firstSeenMs)]);
+  }
+  if (item.criticalEvidence.statusBasis) {
+    return cleanEvidenceText(item.criticalEvidence.statusBasis);
+  }
+  return null;
+}
+
+function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistItem) {
+  const evidence = getRetainedEvidenceRecord(item);
+  const evidenceLabel = getEvidenceLabel(item);
+  const source = getRetainedEvidenceSourceSummary(item);
+  const statusBasis = item.criticalEvidence.statusBasis ? cleanEvidenceText(item.criticalEvidence.statusBasis) : null;
+  const strongestDetail = getStrongestEvidenceDetail(item);
+  const missingEvidence = getMissingEvidenceSummary(item);
+  const policySurface = getPolicySurfaceSummaryDetail(evidence);
+  const projectedFindings = getProjectedFindingSummary(evidence);
+  const signalState = getSignalObservedSummary(evidence);
+
+  if (evidenceLabel === "Not testable") {
+    return joinRationaleParts([
+      `Not testable from retained ${source}`,
+      missingEvidence ?? statusBasis,
+      policySurface
+    ]);
+  }
+
+  if (evidenceLabel === "Potential gap") {
+    return joinRationaleParts([
+      `Potential gap from retained ${source}`,
+      strongestDetail ?? statusBasis,
+      projectedFindings,
+      signalState
+    ]);
+  }
+
+  if (evidenceLabel === "Partial") {
+    return joinRationaleParts([
+      `Partial support from retained ${source}`,
+      strongestDetail ?? statusBasis,
+      missingEvidence,
+      policySurface
+    ]);
+  }
+
+  if (evidenceLabel === "Observed") {
+    return joinRationaleParts([
+      `Observed from retained ${source}`,
+      strongestDetail ?? statusBasis,
+      projectedFindings,
+      policySurface
+    ]);
+  }
+
+  return joinRationaleParts([
+    `Not observed in retained ${source}`,
+    strongestDetail ?? statusBasis,
+    missingEvidence,
+    signalState
+  ]);
+}
+
+function getRetainedEvidenceSourceSummary(item: GdprEprivacyCoverageChecklistItem) {
+  const evidence = getRetainedEvidenceRecord(item);
+  if (getRecord(evidence.policySurfaceSummary)) {
+    return "policy-surface evidence";
+  }
+  if (getRecord(evidence.sessionReplayEvidence) || getRecord(evidence.browserDeviceEntropyEvidence) || getEvidenceVendorNames(item).length > 0) {
+    return "runtime evidence";
+  }
+  if (getStringArrayFromEvidenceKeys(evidence, ["projectedFindings", "projected_findings"]).length > 0 || item.criticalEvidence.projectedFindings.length > 0) {
+    return "unified finding projection evidence";
+  }
+  if (item.criticalEvidence.missingOrIncompleteSourceSignals.length > 0) {
+    return "source-signal coverage evidence";
+  }
+  return "scanner evidence";
+}
+
+function getMissingEvidenceSummary(item: GdprEprivacyCoverageChecklistItem) {
+  const missing = item.criticalEvidence.missingOrIncompleteSourceSignals.slice(0, 2).flatMap((signal) => {
+    const expected = getEvidenceValueSummary(signal.expected);
+    const actual = getEvidenceValueSummary(signal.actual);
+    return expected ? [`expected ${expected}${actual ? `; retained ${actual}` : ""}`] : [];
+  });
+  return missing.length > 0 ? `Missing or incomplete source signal: ${missing.join("; ")}` : null;
+}
+
+function getEvidenceValueSummary(value: unknown) {
+  if (typeof value === "string") {
+    return cleanEvidenceText(value);
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0 ? `${value.length} retained value${value.length === 1 ? "" : "s"}` : "";
+  }
+  if (value && typeof value === "object") {
+    return "structured value";
+  }
+  return "";
+}
+
+function getPolicySurfaceSummaryDetail(evidence: Record<string, unknown>) {
+  const summary = getRecord(evidence.policySurfaceSummary);
+  if (!summary) {
+    return null;
+  }
+  const urls = uniqueStrings([
+    ...getStringArrayFromEvidenceKeys(summary, ["privacyPolicyUrls", "privacy_policy_urls"]),
+    ...getStringArrayFromEvidenceKeys(summary, ["cookiePolicyUrls", "cookie_policy_urls"])
+  ]).slice(0, 2);
+  const urlPhrase = formatList(urls);
+  const textCount = getFirstNumberFromRecord(summary, [
+    "privacyPolicyTextCharacterCount",
+    "privacy_policy_text_character_count",
+    "retainedTextCharacterCount",
+    "retained_text_character_count"
+  ]);
+  const guessedOnly = getFirstBooleanFromRecord(summary, [
+    "keyPageGuessedOnly",
+    "key_page_guessed_only",
+    "privacyPolicyGuessedOnly",
+    "privacy_policy_guessed_only"
+  ]);
+  return joinRationaleParts([
+    urlPhrase ? `policy surface: ${urlPhrase}` : "policy surface retained",
+    typeof textCount === "number" ? `${Math.round(textCount)} policy-text characters retained` : null,
+    guessedOnly === true ? "policy attribution was guessed/weak" : null
+  ]);
+}
+
+function getProjectedFindingSummary(evidence: Record<string, unknown>) {
+  const projected = getStringArrayFromEvidenceKeys(evidence, ["projectedFindings", "projected_findings"]);
+  const projectedObjects = getNestedRecordStrings(evidence.projectedFindings ?? evidence.projected_findings, ["label", "id"]).slice(0, 3);
+  const previews = getNestedRecordStrings(evidence.projectedFindingPreview, ["label", "id"]).slice(0, 3);
+  const findingEntities = getNestedRecordStrings(evidence.findingEntities, ["id", "label"]).slice(0, 3);
+  const phrase = formatList(uniqueStrings([...projected, ...projectedObjects, ...previews, ...findingEntities]).slice(0, 3));
+  return phrase ? `projected finding evidence: ${phrase}` : null;
+}
+
+function getSignalObservedSummary(evidence: Record<string, unknown>) {
+  const signalObserved = evidence.signalObserved ?? evidence.signal_observed;
+  if (signalObserved === true) {
+    return "structured signalObserved=true retained";
+  }
+  if (signalObserved === false) {
+    return "structured signalObserved=false retained";
+  }
+  if (signalObserved === "partial") {
+    return "structured signalObserved=partial retained";
+  }
+  return null;
+}
+
+type CanonicalRuntimeEvidenceKind = "advertising" | "analytics" | "tracking";
+
+type CanonicalRuntimeEvidenceEntry = {
+  category: string | null;
+  firstSeenMs: number | null;
+  preConsent: boolean | null;
+  vendor: string;
+};
+
+function getCanonicalRuntimeEvidenceSummary(input: {
+  fallbackFirstSeenMs: number | null;
+  item: GdprEprivacyCoverageChecklistItem;
+  lead: string;
+  rowKind: CanonicalRuntimeEvidenceKind;
+}) {
+  const entries = getCanonicalRuntimeEvidenceEntries(input.item);
+  const matchingEntries = entries.filter((entry) => canonicalEntryMatchesKind(entry, input.rowKind));
+  const primaryEntries = (
+    input.rowKind === "tracking" ? entries :
+      matchingEntries.length > 0 ? matchingEntries :
+        entries
+  ).slice(0, 4);
+  if (primaryEntries.length === 0) {
+    return null;
+  }
+  const firstSeenMs = minNumber([
+    input.fallbackFirstSeenMs,
+    ...primaryEntries.map((entry) => entry.firstSeenMs)
+  ]);
+  const preConsentObserved = primaryEntries.some((entry) => entry.preConsent === true) || getPreConsentQualifier(input.item) !== null;
+  return joinRationaleParts([
+    `${input.lead}${preConsentObserved ? " before consent" : ""}: ${formatCanonicalRuntimeEvidenceEntries(primaryEntries)}`,
+    formatFirstSeenPhrase(firstSeenMs),
+    preConsentObserved ? "no consent action was recorded first" : null
+  ]);
+}
+
+function getCanonicalRuntimeEvidenceEntries(item: GdprEprivacyCoverageChecklistItem): CanonicalRuntimeEvidenceEntry[] {
+  const evidence = getRetainedEvidenceRecord(item);
+  const rowEntries = uniqueCanonicalRuntimeEvidenceEntries([
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.preconsent_tracker_vendor_evidence),
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.preConsentTrackerVendorEvidence),
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.advertisingRetargetingVendorEvidence),
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.analyticsVendorEvidence),
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.findingEntities),
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.representativeRequests),
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.representative_requests)
+  ]);
+  const rowVendors = new Set(rowEntries.map((entry) => entry.vendor.toLowerCase()));
+  const vendorListEntries = getEvidenceVendorNames(item)
+    .filter((vendor) => !rowVendors.has(vendor.toLowerCase()))
+    .map((vendor) => ({
+      category: null,
+      firstSeenMs: null,
+      preConsent: null,
+      vendor
+    }));
+  return uniqueCanonicalRuntimeEvidenceEntries([...rowEntries, ...vendorListEntries]);
+}
+
+function getCanonicalRuntimeEvidenceEntriesFromRows(value: unknown): CanonicalRuntimeEvidenceEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    const record = getRecord(entry);
+    if (!record) {
+      return [];
+    }
+    const vendor = getFirstStringFromRecord(record, [
+      "vendor",
+      "vendorName",
+      "vendor_name",
+      "matchedVendorName",
+      "matched_vendor_name",
+      "name"
+    ]);
+    if (!vendor) {
+      return [];
+    }
+    return [{
+      category: getFirstStringFromRecord(record, ["category", "vendorCategory", "vendor_category", "purpose", "classification"]),
+      firstSeenMs: getFirstNumberFromRecord(record, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms"]),
+      preConsent: getFirstBooleanFromRecord(record, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]),
+      vendor
+    }];
+  });
+}
+
+function canonicalEntryMatchesKind(entry: CanonicalRuntimeEvidenceEntry, kind: CanonicalRuntimeEvidenceKind) {
+  const text = `${entry.vendor} ${entry.category ?? ""}`.toLowerCase();
+  if (kind === "advertising") {
+    return /\b(ad|ads|adtech|advertis|retarget|remarket|doubleclick|pixel|measurement)\b/i.test(text);
+  }
+  if (kind === "analytics") {
+    return /\b(analytics|measurement|metrics|stats|tag manager|gtm|google analytics)\b/i.test(text);
+  }
+  return /\b(track|tracking|advertis|analytics|measurement|retarget|cross[- ]site)\b/i.test(text);
+}
+
+function formatCanonicalRuntimeEvidenceEntries(entries: CanonicalRuntimeEvidenceEntry[]) {
+  return formatList(entries.map((entry) => {
+    const details = [
+      entry.category ? formatEvidenceCategory(entry.category) : null,
+      entry.firstSeenMs !== null ? `${Math.round(entry.firstSeenMs)}ms` : null
+    ].filter(Boolean);
+    return details.length > 0 ? `${entry.vendor} (${details.join(", ")})` : entry.vendor;
+  })) ?? "";
+}
+
+function uniqueCanonicalRuntimeEvidenceEntries(entries: CanonicalRuntimeEvidenceEntry[]) {
+  const seen = new Set<string>();
+  return entries.filter((entry) => {
+    const key = `${entry.vendor.toLowerCase()}|${entry.category ?? ""}|${entry.firstSeenMs ?? ""}|${entry.preConsent ?? ""}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function getFirstStringFromRecord(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = getString(record[key]);
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getFirstBooleanFromRecord(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "boolean") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function formatEvidenceCategory(value: string) {
+  return value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function getChecklistSentenceSubject(label: string) {
   const cleanedLabel = label
     .replace(/\s+observed$/i, "")
@@ -730,6 +1395,254 @@ function getRetainedEvidenceRecord(item: GdprEprivacyCoverageChecklistItem) {
   return evidence && typeof evidence === "object" && !Array.isArray(evidence)
     ? evidence as Record<string, unknown>
     : {};
+}
+
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function getString(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0).map((entry) => entry.trim())
+    : [];
+}
+
+function getStringArrayFromEvidenceKeys(evidence: Record<string, unknown>, keys: string[]) {
+  return uniqueStrings(keys.flatMap((key) => getStringArray(evidence[key])));
+}
+
+function getNestedRecordStrings(value: unknown, keys: string[]) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    const record = getRecord(entry);
+    if (!record) {
+      return [];
+    }
+    return keys.flatMap((key) => {
+      const stringValue = getString(record[key]);
+      return stringValue ? [stringValue] : [];
+    });
+  });
+}
+
+function getEvidenceVendorNames(item: GdprEprivacyCoverageChecklistItem) {
+  const evidence = getRetainedEvidenceRecord(item);
+  return uniqueStrings([
+    ...getStringArrayFromEvidenceKeys(evidence, [
+      "advertisingRetargetingVendors",
+      "advertising_retargeting_vendors",
+      "advertisingSharingVendors",
+      "analyticsVendors",
+      "analytics_vendors",
+      "thirdPartyTrackingVendors",
+      "third_party_tracking_vendors",
+      "preconsent_tracker_vendors",
+      "preConsentTrackerVendors",
+      "runtime_vendors",
+      "runtimeVendors",
+      "vendors"
+    ]),
+    ...getNestedRecordStrings(evidence.preconsent_tracker_vendor_evidence, ["vendor", "vendorName", "vendor_name", "matched_vendor_name"]),
+    ...getNestedRecordStrings(evidence.findingEntities, ["vendor", "vendorName", "vendor_name", "matched_vendor_name"])
+  ]);
+}
+
+function getFirstEvidenceMs(item: GdprEprivacyCoverageChecklistItem) {
+  const evidence = getRetainedEvidenceRecord(item);
+  const direct = getFirstNumberFromRecord(evidence, [
+    "firstObservedMs",
+    "first_observed_ms",
+    "firstSeenMs",
+    "first_seen_ms",
+    "firstRuntimeVendorObservedMs",
+    "first_runtime_vendor_observed_ms",
+    "firstPreConsentTrackingRequestMs",
+    "first_pre_consent_tracking_request_ms",
+    "firstPreconsentThirdPartyTrackingObservedMs",
+    "first_preconsent_third_party_tracking_observed_ms",
+    "firstPreConsentThirdPartyTrackingObservedMs",
+    "first_pre_consent_third_party_tracking_observed_ms",
+    "firstPreconsentCookieOrStorageObservedMs",
+    "first_preconsent_cookie_or_storage_observed_ms",
+    "firstPreConsentCookieOrStorageObservedMs",
+    "first_pre_consent_cookie_or_storage_observed_ms",
+    "firstAdvertisingRetargetingVendorObservedMs",
+    "first_advertising_retargeting_vendor_observed_ms",
+    "firstAnalyticsVendorObservedMs",
+    "first_analytics_vendor_observed_ms",
+    "firstEmbeddedContentObservedMs",
+    "first_embedded_content_observed_ms"
+  ]);
+  const nested = getFirstNumberFromRows([
+    evidence.preconsent_tracker_vendor_evidence,
+    evidence.representativeRequests,
+    evidence.representative_requests,
+    evidence.embeddedContentObservations,
+    evidence.embedded_content_observations,
+    evidence.preConsentCookieExamples,
+    evidence.pre_consent_cookie_examples
+  ]);
+  const textMs = getFirstMsFromText([
+    item.criticalEvidence.statusBasis,
+    item.note,
+    item.explanation,
+    ...getStringArrayFromEvidenceKeys(evidence, ["evidenceHighlights", "evidence_highlights"])
+  ]);
+  return minNumber([direct, nested, textMs]);
+}
+
+function getFirstNumberFromRecord(record: Record<string, unknown> | null, keys: string[]) {
+  if (!record) {
+    return null;
+  }
+  return minNumber(keys.map((key) => {
+    const value = record[key];
+    return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+  }));
+}
+
+function getFirstNumberFromRows(values: unknown[]) {
+  const numbers = values.flatMap((value) => Array.isArray(value) ? value : []).flatMap((entry) => {
+    const record = getRecord(entry);
+    return record ? [getFirstNumberFromRecord(record, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms"])] : [];
+  });
+  return minNumber(numbers);
+}
+
+function getFirstMsFromText(values: Array<string | null | undefined>) {
+  const numbers = values.flatMap((value) => {
+    if (!value) {
+      return [];
+    }
+    return [...value.matchAll(/(\d+(?:\.\d+)?)\s*ms\b/gi)].map((match) => Number(match[1])).filter((number) => Number.isFinite(number) && number >= 0);
+  });
+  return minNumber(numbers);
+}
+
+function minNumber(values: Array<number | null | undefined>) {
+  const numbers = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0);
+  return numbers.length > 0 ? Math.min(...numbers) : null;
+}
+
+function formatFirstSeenPhrase(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `first seen ${Math.round(value)}ms after scan start`
+    : null;
+}
+
+function getConsentActionQualifier(item: GdprEprivacyCoverageChecklistItem) {
+  return /consent action was not recorded|before consent action|before any recorded consent/i.test([
+    item.criticalEvidence.statusBasis,
+    item.note,
+    item.explanation
+  ].join(" "))
+    ? "before any recorded consent action"
+    : null;
+}
+
+function getPreConsentQualifier(item: GdprEprivacyCoverageChecklistItem) {
+  return /pre[- ]consent|before consent|before any recorded consent/i.test([
+    item.criticalEvidence.statusBasis,
+    item.note,
+    item.explanation,
+    retainedText(item)
+  ].join(" "))
+    ? "before any recorded consent action"
+    : null;
+}
+
+function extractQuotedButtonLabels(value: string | null | undefined) {
+  if (!value) {
+    return [];
+  }
+  return [...value.matchAll(/[“"']([^“"']{2,60}?)(?:[”"'])/g)].map((match) => match[1] ?? "").filter(Boolean);
+}
+
+function formatList(values: string[]) {
+  const uniqueValues = uniqueStrings(values.map((value) => cleanEvidenceText(value)).filter(Boolean));
+  if (uniqueValues.length === 0) {
+    return null;
+  }
+  if (uniqueValues.length === 1) {
+    return uniqueValues[0] ?? null;
+  }
+  if (uniqueValues.length === 2) {
+    return `${uniqueValues[0]} and ${uniqueValues[1]}`;
+  }
+  return `${uniqueValues.slice(0, -1).join(", ")}, and ${uniqueValues.at(-1)}`;
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function joinRationaleParts(parts: Array<string | null | undefined>) {
+  const cleanParts = uniqueStrings(parts.flatMap((part) => {
+    const cleaned = part ? cleanEvidenceText(part).replace(/[.;]\s*$/g, "") : "";
+    return cleaned ? [cleaned] : [];
+  }));
+  if (cleanParts.length === 0) {
+    return "";
+  }
+  return `${cleanParts.join("; ")}.`;
+}
+
+function cleanEvidenceText(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:])/g, "$1")
+    .trim();
+}
+
+function cleanPolicyExcerptStart(value: string) {
+  const raw = value.trim();
+  const startsWithUnsafeFragment =
+    /^[.…]{1,3}[\p{L}\p{N}]/u.test(raw) ||
+    /^[\p{Ll}\p{N}]/u.test(raw);
+  const cleaned = cleanEvidenceText(raw.replace(/^[.…\s]+/u, "").replace(/^[^\p{L}\p{N}]+/u, ""));
+  if (!startsWithUnsafeFragment) {
+    return cleaned;
+  }
+  const firstWordBoundary = cleaned.search(/\s/u);
+  return firstWordBoundary > 0 ? cleaned.slice(firstWordBoundary).trimStart() : cleaned;
+}
+
+function truncateSentence(value: string, maxLength: number) {
+  const cleaned = cleanEvidenceText(value);
+  return truncateWholeWord(cleaned, maxLength);
+}
+
+function truncateWholeWord(value: string, maxLength: number, suffix = "...") {
+  const cleaned = cleanEvidenceText(value);
+  if (cleaned.length <= maxLength) {
+    return cleaned;
+  }
+  const hardLimit = Math.max(1, maxLength - suffix.length);
+  const clipped = cleaned.slice(0, hardLimit).trimEnd();
+  const lastSpace = clipped.lastIndexOf(" ");
+  const wordSafeClip = lastSpace > Math.floor(hardLimit * 0.6)
+    ? clipped.slice(0, lastSpace)
+    : clipped;
+  return `${wordSafeClip.replace(/[,:;.!?]+$/g, "").trimEnd()}${suffix}`;
+}
+
+function renderRationaleText(value: string) {
+  return value.split(/("[^"]+")/g).map((part, index) => {
+    if (part.startsWith("\"") && part.endsWith("\"")) {
+      return (
+        <span className="font-mono text-[0.86em] italic text-slate-700" key={`${index}:${part}`}>
+          {part}
+        </span>
+      );
+    }
+    return <React.Fragment key={`${index}:${part}`}>{part}</React.Fragment>;
+  });
 }
 
 function getStringArrayFromRetainedEvidence(item: GdprEprivacyCoverageChecklistItem, key: string) {
@@ -774,7 +1687,6 @@ function getGdprReviewedAreas(items: GdprEprivacyCoverageChecklistItem[]) {
     rowIds.has("reject_all_path_availability") ? "refusal path availability" : null,
     rowIds.has("post_reject_tracking_reduction") ? "deferred refusal-path tracking evidence" : null,
     rowIds.has("preference_withdrawal_control") ? "withdrawal or preference-control evidence" : null,
-    rowIds.has("runtime_vendor_disclosure_alignment") ? "runtime vendor disclosure alignment" : null,
     rowIds.has("sensitive_surfaces_third_party_tracking") ? "sensitive-surface tracking context" : null,
     rowIds.has("session_replay_fingerprinting_review") ||
       rowIds.has("session_replay_before_consent") ||
@@ -790,6 +1702,60 @@ function getGdprReviewedAreas(items: GdprEprivacyCoverageChecklistItem[]) {
   return areas.length > 0 ? areas.join(", ") : "the available GDPR/ePrivacy checklist rows";
 }
 
+function RowToolButton({
+  active,
+  icon,
+  label,
+  onClick
+}: {
+  active: boolean;
+  icon: "correction" | "evidence";
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-label={label}
+      aria-pressed={active}
+      className={cn(
+        "group/tool inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition",
+        active
+          ? icon === "evidence"
+            ? "border-sky-300 bg-sky-50 text-sky-700 shadow-sm"
+            : "border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm"
+          : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800"
+      )}
+      title={label}
+      type="button"
+      onClick={onClick}
+    >
+      {icon === "evidence" ? <EvidenceToolIcon /> : <CorrectionToolIcon />}
+    </button>
+  );
+}
+
+function EvidenceToolIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+      <path d="M5.2 2.8h6.1l3.5 3.5v10.9H5.2V2.8Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.7" />
+      <path d="M11.2 2.9v3.6h3.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
+      <path d="m8 9-1.5 1.5L8 12" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="m12 9 1.5 1.5L12 12" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
+      <path d="M10.6 8.6 9.4 12.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function CorrectionToolIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+      <path d="M12.7 3.2a4.2 4.2 0 0 0 4.1 4.1l-8.6 8.6a2.2 2.2 0 0 1-3.1 0l-1-1a2.2 2.2 0 0 1 0-3.1l8.6-8.6Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <path d="m5.5 12.5 2 2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+      <path d="M12.6 3.2 16.8 7.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
 function ChecklistRows({
   expandAllAdvancedEvidence,
   items,
@@ -799,11 +1765,26 @@ function ChecklistRows({
   items: GdprEprivacyCoverageChecklistItem[];
   showDebugConfidenceImprovements: boolean;
 }) {
+  const [openToolsByRow, setOpenToolsByRow] = React.useState<Record<string, RowToolState>>({});
+  const toggleRowTool = (rowId: string, tool: keyof RowToolState) => {
+    setOpenToolsByRow((current) => ({
+      ...current,
+      [rowId]: {
+        ...current[rowId],
+        [tool]: !current[rowId]?.[tool]
+      }
+    }));
+  };
+
   return (
     <div className="divide-y divide-slate-200">
       {items.map((item) => {
         const evidenceLabel = getEvidenceLabel(item);
-        const directionLabel = getDirectionLabel(item);
+        const assessmentDirection = getAssessmentDirection(item);
+        const rowRationale = getChecklistRowRationale(item);
+        const rowToolState = openToolsByRow[item.id] ?? {};
+        const evidenceOpen = expandAllAdvancedEvidence || Boolean(rowToolState.evidence);
+        const correctionOpen = expandAllAdvancedEvidence || Boolean(rowToolState.correction);
         return (
           <div
             key={item.id}
@@ -811,10 +1792,10 @@ function ChecklistRows({
           >
             <div className="min-w-0 space-y-2">
               <div className="flex items-start gap-3">
-                <CoverageStatusGlyph status={item.status} />
-                <div className="min-w-0 space-y-2">
-                  <p className="font-medium text-slate-950">{item.label}</p>
-                  <div className="flex flex-wrap items-center gap-1.5">
+                <CoverageStatusGlyph direction={assessmentDirection} />
+                <div className="min-w-0 space-y-1.5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <p className="min-w-0 font-medium text-slate-950">{item.label}</p>
                     <span
                       className={cn(
                         "inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.1em]",
@@ -823,41 +1804,62 @@ function ChecklistRows({
                     >
                       {evidenceLabel}
                     </span>
-                    <span
-                      className={cn(
-                        "inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
-                        getDirectionBadgeClasses(directionLabel)
-                      )}
-                    >
-                      {directionLabel}
-                    </span>
                   </div>
                   <DebugConfidenceSummary item={item} showImprovements={showDebugConfidenceImprovements} />
                 </div>
               </div>
-              <p className="mt-1 text-xs leading-5 text-slate-500 md:hidden">{getScanContextNote(item)}</p>
             </div>
             <div className="min-w-0 space-y-1">
-              <p className="hidden text-sm leading-6 text-slate-600 md:block">{getScanContextNote(item)}</p>
-              {item.limitation ? <p className="text-xs leading-5 text-slate-500">{item.limitation}</p> : null}
-              <RegulatorySubcheckStrip item={item} />
-              <RegulatoryChecklistActiveTrace
-                defaultOpen={expandAllAdvancedEvidence}
-                evidenceRefs={getDisplayEvidenceRefs(item)}
-                jsonPayload={stringifyEvidenceJson(item)}
-              />
-              <details className="mt-1 rounded-md border border-slate-200 bg-white" open={expandAllAdvancedEvidence || undefined}>
-                <summary className="cursor-pointer px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                  Evidence packet
-                </summary>
-                <div className="max-h-[50vh] overflow-y-auto">
-                  <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />
+              <div className="hidden items-start gap-2 md:flex">
+                <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                  <RowToolButton
+                    active={evidenceOpen}
+                    icon="evidence"
+                    label={`Toggle evidence packet for ${item.label}`}
+                    onClick={() => toggleRowTool(item.id, "evidence")}
+                  />
+                  <RowToolButton
+                    active={correctionOpen}
+                    icon="correction"
+                    label={`Toggle correction steps for ${item.label}`}
+                    onClick={() => toggleRowTool(item.id, "correction")}
+                  />
                 </div>
-              </details>
-              <RegulatoryChecklistCorrectionSteps
-                defaultOpen={expandAllAdvancedEvidence}
-                jsonPayload={stringifyEvidenceJson(item)}
-              />
+                <p className="line-clamp-2 min-w-0 text-sm leading-6 text-slate-600">{renderRationaleText(rowRationale)}</p>
+              </div>
+              <div className="flex items-start gap-2 md:hidden">
+                <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                  <RowToolButton
+                    active={evidenceOpen}
+                    icon="evidence"
+                    label={`Toggle evidence packet for ${item.label}`}
+                    onClick={() => toggleRowTool(item.id, "evidence")}
+                  />
+                  <RowToolButton
+                    active={correctionOpen}
+                    icon="correction"
+                    label={`Toggle correction steps for ${item.label}`}
+                    onClick={() => toggleRowTool(item.id, "correction")}
+                  />
+                </div>
+                <p className="line-clamp-2 min-w-0 text-xs leading-5 text-slate-500">{renderRationaleText(rowRationale)}</p>
+              </div>
+              {evidenceOpen ? (
+                <details className="mt-2 rounded-md border border-slate-200 bg-white" open>
+                  <summary className="cursor-pointer px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+                    Evidence packet
+                  </summary>
+                  <div className="max-h-[50vh] overflow-y-auto">
+                    <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />
+                  </div>
+                </details>
+              ) : null}
+              {correctionOpen ? (
+                <RegulatoryChecklistCorrectionSteps
+                  defaultOpen
+                  jsonPayload={stringifyEvidenceJson(item)}
+                />
+              ) : null}
             </div>
           </div>
         );
@@ -874,8 +1876,7 @@ export function GdprEprivacyCoverageChecklistCard({
   showSummaryStrip = true
 }: GdprEprivacyCoverageChecklistCardProps) {
   const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
-  const nonDeferredItems = items.filter((item) => !DEFERRED_NON_PRODUCTION_ROW_IDS.has(item.id));
-  const reportItems = nonDeferredItems.length > 0 ? nonDeferredItems : items;
+  const reportItems = getReportableGdprEprivacyCoverageItems(items);
   const itemsById = new Map(reportItems.map((item) => [item.id, item]));
   const groupedRowIds = new Set<string>(REPORT_ROW_GROUPS.flatMap((group) => [...group.rowIds]));
   const groupedSections = REPORT_ROW_GROUPS.map((group) => ({
@@ -884,8 +1885,6 @@ export function GdprEprivacyCoverageChecklistCard({
   })).filter((group) => group.items.length > 0);
   const additionalItems = reportItems.filter((item) => !groupedRowIds.has(item.id));
   const checklistScore = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: reportItems });
-  const gdprScore = checklistScore.score;
-  const gdprRatingLabel = checklistScore.ratingLabel;
   const reviewSummary = deriveGdprEprivacyReviewSummary(reportItems);
   const gdprSectionSummary =
     getGdprSectionSummary({
@@ -898,31 +1897,16 @@ export function GdprEprivacyCoverageChecklistCard({
 
   return (
     <CollapsibleSectionCard
+      collapsible={false}
       defaultOpen={defaultOpen}
+      showChevron={false}
       title={getGdprSummaryTitle({
         items: reportItems,
-        ratingLabel: gdprRatingLabel,
-        score: gdprScore,
-        toneClass: checklistScore.toneClass
+        summary: gdprSectionSummary
       })}
-      contentClassName="space-y-4"
+      contentClassName="space-y-3 px-4 pb-4"
+      summaryClassName="px-4 py-4"
     >
-      <details className="group/gdpr-summary rounded-lg border border-slate-200 bg-white">
-        <summary className="flex cursor-pointer list-none items-start gap-3 px-4 pb-3 pt-4 marker:hidden group-open/gdpr-summary:pb-0 [&::-webkit-details-marker]:hidden">
-          <ScanReportDisclosureIcon className="mt-0.5 group-open/gdpr-summary:rotate-90" />
-          <span className="min-w-0 flex-1">
-            <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-              GDPR / ePrivacy review summary
-            </span>
-            <span className="mt-1 block max-w-4xl truncate text-sm leading-6 text-slate-600 group-open/gdpr-summary:hidden">
-              {gdprSectionSummary}
-            </span>
-          </span>
-        </summary>
-        <div className="px-4 pb-4 pl-12 pt-1">
-          <p className="max-w-4xl text-sm leading-6 text-slate-600">{gdprSectionSummary}</p>
-        </div>
-      </details>
       {showSummaryStrip ? <ChecklistRowSummaryStrip items={reportItems} /> : null}
       {groupedSections.map((group) => (
         <div key={group.title} className="overflow-hidden rounded-lg border border-slate-200">

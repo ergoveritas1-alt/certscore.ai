@@ -356,8 +356,39 @@ export const consentUiObservationSchema = z.object({
   likelyPresent: z.boolean(),
   basis: z.array(z.string()),
   textExcerpt: z.string().optional(),
+  layerInspected: z.enum(["first_layer", "unknown"]).optional(),
+  visibleChoiceLabels: z.array(z.string().max(120)).default([]),
+  acceptControlObserved: z.boolean().default(false),
+  rejectControlObserved: z.boolean().default(false),
+  managePreferencesControlObserved: z.boolean().default(false),
+  controls: z.array(z.object({
+    label: z.string().max(120),
+    actionType: z.enum(["accept_all", "reject_all", "manage_preferences", "save_preferences", "other"]),
+    tagName: z.string().max(32).optional(),
+    role: z.string().max(64).optional(),
+    selectorHint: z.string().max(160).optional(),
+    visible: z.boolean().default(true),
+  })).default([]),
   evidenceRefs: z.array(evidenceRefSchema).default([]),
   confidence: confidenceSchema,
+});
+
+export const collectionSurfaceObservationSchema = z.object({
+  observationId: z.string(),
+  observedAtMs: z.number().int().nonnegative(),
+  sourceScanner: z.string(),
+  scenario: z.string(),
+  consentStateAtTime: consentStateSchema,
+  pageUrl: z.string(),
+  surfaceType: z.enum(["search", "newsletter", "contact", "account", "checkout", "generic_form", "other"]),
+  controlCount: z.number().int().nonnegative(),
+  fieldTypes: z.array(z.string()).default([]),
+  labels: z.array(z.string()).default([]),
+  hasEmailField: z.boolean().default(false),
+  hasSensitiveFieldHint: z.boolean().default(false),
+  evidenceRefs: z.array(evidenceRefSchema).default([]),
+  confidence: confidenceSchema,
+  directVsInferred: directVsInferredSchema,
 });
 
 export const consentInteractionEventSchema = runtimeEvidenceEventSchema.extend({
@@ -1358,6 +1389,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   scriptEvents: z.array(scriptEventSchema),
   iframeEvents: z.array(iframeEventSchema),
   consentUiObservations: z.array(consentUiObservationSchema),
+  collectionSurfaceObservations: z.array(collectionSurfaceObservationSchema).default([]),
   consentInteractionEvents: z.array(consentInteractionEventSchema).default([]),
   consentFlowObservations: z.array(consentFlowObservationSchema).default([]),
   consentActionCandidates: z.array(consentActionCandidateSchema).default([]),
@@ -1522,6 +1554,7 @@ export type StorageSnapshot = z.infer<typeof storageSnapshotSchema>;
 export type ScriptEvent = z.infer<typeof scriptEventSchema>;
 export type IframeEvent = z.infer<typeof iframeEventSchema>;
 export type ConsentUiObservation = z.infer<typeof consentUiObservationSchema>;
+export type CollectionSurfaceObservation = z.infer<typeof collectionSurfaceObservationSchema>;
 export type ConsentInteractionEvent = z.infer<typeof consentInteractionEventSchema>;
 export type ConsentFlowScenario = z.infer<typeof consentFlowScenarioSchema>;
 export type ConsentScenarioPlanningMode = z.infer<typeof consentScenarioPlanningModeSchema>;

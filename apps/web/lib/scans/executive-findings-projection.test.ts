@@ -1916,7 +1916,7 @@ test("generic policy runtime alignment review with no runtime anchor is not proj
   );
 });
 
-test("policy runtime disclosure mismatch promotes only with retained unmatched evidence and rationale", () => {
+test("policy runtime disclosure mismatch does not promote broad vendor-disclosure alignment", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("policy_behavior_conflict", {
       confidenceBand: "high",
@@ -1995,13 +1995,8 @@ test("policy runtime disclosure mismatch promotes only with retained unmatched e
 
   const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
 
-  assert.ok(finding);
-  assert.equal(finding.label, "Policy/runtime alignment review");
-  assert.equal(finding.confidence, "good");
-  assert.equal(finding.severity, "medium");
-  assert.match(finding.shortSummary, /Criteo/);
-  assert.match(finding.shortSummary, /not clearly reflected/);
-  assert.ok(projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"));
+  assert.equal(finding, undefined);
+  assert.equal(projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"), false);
 });
 
 test("policy runtime disclosure mismatch downgrades when disclosureGapObserved is false", () => {
@@ -2077,11 +2072,7 @@ test("policy runtime disclosure mismatch downgrades when disclosureGapObserved i
   ]);
 
   const finding = projection.findings.find((item) => item.id === "policy_behavior_contradiction_detected");
-  assert.ok(finding);
-  assert.equal(finding.label, "Runtime vendor disclosure specificity review");
-  assert.equal(finding.confidence, "moderate");
-  assert.equal(finding.directVsInferred, "inferred");
-  assert.doesNotMatch(finding.shortSummary, /not clearly reflected/i);
+  assert.equal(finding, undefined);
   assert.equal(projection.topFindings.some((item) => item.id === "policy_behavior_contradiction_detected"), false);
 });
 

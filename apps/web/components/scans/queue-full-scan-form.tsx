@@ -25,7 +25,7 @@ type QueueFullScanFormProps = {
 export function QueueFullScanForm({ domainId, disabled = false, unavailableReason = null }: QueueFullScanFormProps) {
   const [state, action, isPending] = useActionState(createFullScanAction, initialState);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
-  const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(false);
+  const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
   const scanProgress = useScanProgressClock(isPending);
   const isDisabled = disabled || isPending;
   const errorMessage = state.error ?? unavailableReason;

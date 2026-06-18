@@ -39,7 +39,17 @@ function getEventMetadata(event: PolicyCoverageEvent) {
 export function derivePolicyCoverageContext(input: {
   events?: PolicyCoverageEvent[];
   policyEnrichmentCount?: number | null;
+  runtimeArtifacts?: Record<string, unknown> | null;
 }): PolicyCoverageContext {
+  const policyDisclosureSummary = getRecord(input.runtimeArtifacts?.policyDisclosureSummary) ??
+    getRecord(input.runtimeArtifacts?.policy_disclosure_summary);
+  const summaryPrivacyPolicyPresent =
+    policyDisclosureSummary?.privacyPolicyPresent === true ||
+    policyDisclosureSummary?.privacy_policy_present === true;
+  const summaryPolicyTextCharacterCount = getNumber(policyDisclosureSummary, [
+    "privacyPolicyTextCharacterCount",
+    "privacy_policy_text_character_count"
+  ]);
   const enrichmentEvents = (input.events ?? [])
     .filter((event) => event.eventType === "signals.nano_doc_enrichment_completed")
     .sort((left, right) => {
@@ -53,21 +63,31 @@ export function derivePolicyCoverageContext(input: {
     .map(getEventMetadata)
     .filter((event): event is Record<string, unknown> => Boolean(event));
   const latestEvent = enrichmentEvents[0] ?? null;
-  const policyDocumentCount =
+  const eventPolicyDocumentCount =
     getNumber(latestEvent, ["policyDocumentCount", "policy_document_count"]) ??
     (typeof input.policyEnrichmentCount === "number" ? input.policyEnrichmentCount : null);
-  const policyEnrichmentCount =
+  const eventPolicyEnrichmentCount =
     getNumber(latestEvent, ["policyEnrichmentCount", "policy_enrichment_count"]) ??
     (typeof input.policyEnrichmentCount === "number" ? input.policyEnrichmentCount : null);
+  const policyDocumentCount = summaryPrivacyPolicyPresent
+    ? Math.max(eventPolicyDocumentCount ?? 0, 1)
+    : eventPolicyDocumentCount;
+  const policyEnrichmentCount = summaryPrivacyPolicyPresent
+    ? Math.max(eventPolicyEnrichmentCount ?? 0, 1)
+    : eventPolicyEnrichmentCount;
   const documentSourceCount = getNumber(latestEvent, ["documentSourceCount", "document_source_count"]);
-  const extractionCharacterCount = getNumber(latestEvent, [
+  const eventExtractionCharacterCount = getNumber(latestEvent, [
     "freshExtractionCharacterCount",
     "fresh_extraction_character_count"
   ]);
+  const extractionCharacterCount = summaryPolicyTextCharacterCount !== null && summaryPolicyTextCharacterCount > 0
+    ? summaryPolicyTextCharacterCount
+    : eventExtractionCharacterCount;
   const noPolicyDocuments =
     policyDocumentCount !== null && policyDocumentCount <= 0 &&
     policyEnrichmentCount !== null && policyEnrichmentCount <= 0;
   const thinPolicyExtraction =
+    !summaryPrivacyPolicyPresent &&
     policyDocumentCount !== null &&
     policyDocumentCount > 0 &&
     extractionCharacterCount !== null &&

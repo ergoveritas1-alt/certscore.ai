@@ -432,6 +432,28 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
   assert.equal(Object.hasOwn(config, "signals"), false);
 });
 
+test("queued full-scan Lambda v2 DAG dispatch fails closed when queue region is stale", () => {
+  assert.throws(
+    () =>
+      buildQueuedFullScanConfig({
+        env: {
+          CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+          CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
+          CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+          NODE_ENV: "development"
+        },
+        hostname: "example.com",
+        localV2DagRunViaLambda: true,
+        maxPages: 3,
+        normalizedUrl: "https://example.com/",
+        profile: "homepage",
+        source: "manual-dashboard"
+      }),
+    /CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL region eu-central-1/
+  );
+});
+
 test("queued full-scan config can dispatch v2 DAG Lambda outside localhost when explicitly enabled", () => {
   const config = buildQueuedFullScanConfig({
     env: {

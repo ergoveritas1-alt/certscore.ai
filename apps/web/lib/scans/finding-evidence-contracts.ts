@@ -19,7 +19,7 @@ import {
 } from "./promotion-evidence-contracts";
 import type { UnifiedFindingPacket } from "./unified-findings";
 import { hasConcreteCookieRetentionReviewEvidence } from "./cookie-retention-review";
-import { evaluateRuntimeVendorDisclosureEvidence, getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
+import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 
 export type EvidenceRequirementType =
   | "consentTimelineSequence"
@@ -1525,10 +1525,7 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
     case "conflictBridge":
       return hasConflictBridge(rawEvidence);
     case "policyBehaviorContradictionEvidence":
-      return (
-        evaluatePolicyBehaviorContradictionEvidence(rawEvidence).eligible ||
-        evaluateRuntimeVendorDisclosureEvidence(rawEvidence, "policy_behavior_conflict").disposition === "eligible"
-      );
+      return evaluatePolicyBehaviorContradictionEvidence(rawEvidence).eligible;
     case "negativeEvidenceSearchScope":
       return hasNegativeEvidenceSearchScope(rawEvidence);
     case "sessionReplayVendorEvidence":

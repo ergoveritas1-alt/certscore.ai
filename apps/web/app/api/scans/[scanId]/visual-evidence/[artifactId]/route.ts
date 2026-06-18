@@ -5,7 +5,11 @@ import { getVisualEvidenceArtifacts } from "../../../../../../lib/scans/visual-e
 import { isPlatformAdminEmail } from "../../../../../../server/admin/platform-admin";
 import { getCurrentUser } from "../../../../../../server/auth";
 import { bootstrapAppUserSession } from "../../../../../../server/bootstrap-user";
-import { getScanById } from "../../../../../../server/scans/get-scan-by-id";
+import { getAnonymousScanById, getScanById } from "../../../../../../server/scans/get-scan-by-id";
+import {
+  getLocalV2DagReportInput,
+  materializeLocalV2DagScanDetail
+} from "../../../../../../server/scans/local-v2-dag-report";
 import { createSignedStorageUrl, getStorageBucketName } from "../../../../../../server/storage/s3";
 
 export const runtime = "nodejs";
@@ -60,30 +64,70 @@ async function getLocalDevVisualEvidenceResponse(input: { contentType: string | 
   return null;
 }
 
+async function getLocalV2DagVisualEvidenceResponse(input: { contentType: string | null; key: string }) {
+  if (!input.key.startsWith("local-v2-dag-scans/") || !isSafeStorageKey(input.key)) {
+    return null;
+  }
+
+  const candidateRoots = [
+    process.cwd(),
+    path.resolve(process.cwd(), ".."),
+    path.resolve(process.cwd(), "../..")
+  ];
+
+  for (const root of candidateRoots) {
+    try {
+      const objectPath = path.join(root, "artifacts", input.key);
+      const body = await readFile(objectPath);
+      return new NextResponse(body, {
+        headers: {
+          "Cache-Control": "private, no-store",
+          "Content-Type": input.contentType ?? "image/png"
+        }
+      });
+    } catch {
+      // Try the next plausible workspace root before falling back.
+    }
+  }
+
+  return null;
+}
+
 export async function GET(_request: Request, context: RouteContext) {
   const [{ artifactId, scanId }, user] = await Promise.all([context.params, getCurrentUser()]);
-  if (!user) {
-    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  let scanRecord = await getAnonymousScanById(scanId);
+  if (!scanRecord && user) {
+    const { membership, organization } = await bootstrapAppUserSession(user);
+    if (!canViewVisualEvidence({ isPlatformAdmin: isPlatformAdminEmail(user.email), role: membership.role })) {
+      return NextResponse.json({ error: "Admin or advanced access required." }, { status: 403 });
+    }
+    scanRecord = await getScanById({
+      organizationId: organization.id,
+      scanId,
+      viewerEmail: user.email
+    });
   }
-
-  const { membership, organization } = await bootstrapAppUserSession(user);
-  if (!canViewVisualEvidence({ isPlatformAdmin: isPlatformAdminEmail(user.email), role: membership.role })) {
-    return NextResponse.json({ error: "Admin or advanced access required." }, { status: 403 });
-  }
-
-  const scanRecord = await getScanById({
-    organizationId: organization.id,
-    scanId,
-    viewerEmail: user.email
-  });
 
   if (!scanRecord) {
     return NextResponse.json({ error: "Scan not found." }, { status: 404 });
   }
 
-  const artifact = getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts).find((candidate) => candidate.id === decodeURIComponent(artifactId));
+  const displayScanRecord =
+    getLocalV2DagReportInput(scanRecord) && scanRecord.scan.status === "completed"
+      ? await materializeLocalV2DagScanDetail(scanRecord)
+      : scanRecord;
+
+  const artifact = getVisualEvidenceArtifacts(displayScanRecord.runtimeArtifacts).find((candidate) => candidate.id === decodeURIComponent(artifactId));
   if (!artifact || artifact.status !== "available" || !artifact.key) {
     return NextResponse.json({ error: "Visual evidence is unavailable." }, { status: 404 });
+  }
+
+  const localV2Response = await getLocalV2DagVisualEvidenceResponse({
+    contentType: artifact.mimeType,
+    key: artifact.key
+  });
+  if (localV2Response) {
+    return localV2Response;
   }
 
   const localDevResponse = await getLocalDevVisualEvidenceResponse({

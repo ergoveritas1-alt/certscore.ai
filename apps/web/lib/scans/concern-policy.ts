@@ -8,7 +8,6 @@ import type {
   NormalizedConcernPromotionEligibility
 } from "./normalized-concerns";
 import { evaluateCookieRetentionReview } from "./cookie-retention-review";
-import { evaluateRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { evaluateConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
 import { evaluateConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
 import {
@@ -2322,52 +2321,25 @@ export function deriveConcernPolicy(input: {
     };
   }
   if (suggestedUnifiedFindingId === "cookie_disclosure_gap") {
-    const review = evaluateRuntimeVendorDisclosureEvidence(input.rawEvidence, "cookie_disclosure_gap");
-    if (review.evidence.length > 0) {
-      const hasSubstantiveCookieGap =
-        getBooleanEvidence(input.rawEvidence, ["disclosureMismatchExplained", "disclosure_mismatch_explained"]) === true &&
-        getEvidenceUrlCandidates(input.rawEvidence).length > 0 &&
-        getStringArrayValues(input.rawEvidence, [
-          "unmatched_cookie_names",
-          "unmatchedCookieNames",
-          "runtime_cookie_names",
-          "runtimeCookieNames"
-        ]).some((name) => !/^(awsalbcors?|optanon|onetrust|cookieconsent)/i.test(name));
-      return {
-        allowedNarrativeTier:
-          (review.disposition === "eligible" && review.confidence === "strong") || hasSubstantiveCookieGap
-            ? "strong"
-            : "moderate",
-        externalSurfacingEligibility: hasSubstantiveCookieGap
-          ? "eligible"
-          : review.disposition === "eligible"
-            ? "eligible"
-            : review.disposition,
-        negativeEvidenceFlags: hasSubstantiveCookieGap
-          ? []
-          : review.negativeEvidenceFlags as NormalizedConcernNegativeEvidenceFlag[],
-        promotionEligibility: hasSubstantiveCookieGap
-          ? "eligible"
-          : review.disposition === "eligible"
-            ? "eligible"
-            : review.disposition === "audit_only"
-              ? "internal_only"
-              : "blocked"
-      };
-    }
+    const hasSubstantiveCookieGap =
+      getBooleanEvidence(input.rawEvidence, ["disclosureMismatchExplained", "disclosure_mismatch_explained"]) === true &&
+      getEvidenceUrlCandidates(input.rawEvidence).length > 0 &&
+      getStringArrayValues(input.rawEvidence, [
+        "unmatched_cookie_names",
+        "unmatchedCookieNames",
+        "runtime_cookie_names",
+        "runtimeCookieNames"
+      ]).some((name) => !/^(awsalbcors?|optanon|onetrust|cookieconsent)/i.test(name));
+    return {
+      allowedNarrativeTier: hasSubstantiveCookieGap ? "strong" : "moderate",
+      externalSurfacingEligibility: hasSubstantiveCookieGap ? "eligible" : "suppress",
+      negativeEvidenceFlags: hasSubstantiveCookieGap
+        ? []
+        : ["missing_policy_runtime_alignment_bridge"],
+      promotionEligibility: hasSubstantiveCookieGap ? "eligible" : "blocked"
+    };
   }
   if (suggestedUnifiedFindingId === "policy_behavior_conflict" || suggestedUnifiedFindingId === "policy_behavior_contradiction_detected") {
-    const review = evaluateRuntimeVendorDisclosureEvidence(input.rawEvidence, "policy_behavior_conflict");
-    if (review.evidence.length > 0) {
-      return {
-        allowedNarrativeTier: review.disposition === "eligible" && review.confidence === "strong" ? "strong" : "moderate",
-        externalSurfacingEligibility: review.disposition === "eligible" ? "eligible" : review.disposition,
-        negativeEvidenceFlags: review.negativeEvidenceFlags as NormalizedConcernNegativeEvidenceFlag[],
-        promotionEligibility:
-          review.disposition === "eligible" ? "eligible" : review.disposition === "audit_only" ? "internal_only" : "blocked"
-      };
-    }
-
     const contractDecision = evaluatePolicyBehaviorConflictContract(input.rawEvidence);
     if (contractDecision?.promotionEligibility === "eligible") {
       return {

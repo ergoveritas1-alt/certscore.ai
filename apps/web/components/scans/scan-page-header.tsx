@@ -7,6 +7,7 @@ type ScanPageHeaderProps = {
   actionsPlacement?: "end" | "belowTitle";
   autoRefresh?: ReactNode;
   createdAtLabel?: ReactNode;
+  leadingBadges?: ReactNode;
   scanFromLabel?: ReactNode;
   scanFromValue?: string;
   statusLabel?: string;
@@ -53,6 +54,7 @@ export function ScanPageHeader({
   actionsPlacement = "end",
   autoRefresh,
   createdAtLabel,
+  leadingBadges,
   scanFromLabel,
   scanFromValue,
   status,
@@ -67,6 +69,7 @@ export function ScanPageHeader({
       <div className="min-w-0 flex-1 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="min-w-0 text-3xl font-semibold tracking-tight">{title}</h1>
+          {leadingBadges}
           <Badge tone={statusTone ?? getStatusTone(status)}>{statusLabel ?? formatStatus(status)}</Badge>
           {scanFromLabel ? (
             <span aria-label={`Scan source: ${scanFromLabel}`} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-sm shadow-slate-200/50" title={`Scan source: ${scanFromLabel}`}>

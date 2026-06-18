@@ -149,7 +149,7 @@ export function createOpenAiNanoPolicyAssistProvider(
         apiKey: options.apiKey,
         model,
         system:
-          "You extract policy-surface topics, Article 13 disclosure signals, and vendor/control mentions from a bounded excerpt. Return JSON only. Use only the supplied excerpt and metadata. Do not infer legal compliance, do not invent vendors, and do not add topics or Article 13 signals unsupported by the text. Article 13 signals are evidence labels only, not legal conclusions. Use status observed when the excerpt clearly contains the disclosure and partial when it contains a vague or incomplete hint. Mark AI topics only when the excerpt describes artificial-intelligence features, AI-generated content, automated decisions, or a policy/disclosure about AI use; do not mark AI merely because the letters AI appear in navigation, branding, or unrelated words.",
+          "You extract policy-surface topics, Article 13 disclosure signals, and vendor/control mentions from a bounded excerpt. Return JSON only. Use only the supplied excerpt and metadata. Do not infer legal compliance, do not invent vendors, and do not add topics or Article 13 signals unsupported by the text. Article 13 signals are evidence labels only, not legal conclusions. For each Article 13 signal, evidenceText must be a row-specific phrase or sentence copied from the supplied excerpt that directly supports that disclosure type. Use status observed only when the excerpt clearly contains that disclosure. Use partial when the excerpt contains only a vague, incomplete, or indirect hint. For legal_basis, observed requires legal/lawful basis language or a GDPR basis such as consent, contract, legitimate interests, legal obligation, vital interests, public task, or public interest. For data_retention, observed requires retention period, retention criteria, storage-period, kept-for, or as-long-as-necessary language; deletion or erasure rights alone are data_subject_rights, not data_retention. For international_transfers, observed requires cross-border, outside EEA/EU/UK, third-country, adequacy, standard contractual clauses, data privacy framework, DPF, or similar safeguard language; generic transfer wording alone is partial. Mark AI topics only when the excerpt describes artificial-intelligence features, AI-generated content, automated decisions, or a policy/disclosure about AI use; do not mark AI merely because the letters AI appear in navigation, branding, or unrelated words.",
         user: {
           surfaceUrl: input.surfaceUrl,
           surfaceType: input.surfaceType,
@@ -174,7 +174,7 @@ export function createOpenAiNanoPolicyAssistProvider(
             uncertaintyNotes: ["optional"],
           },
         },
-        maxCompletionTokens: 700,
+        maxCompletionTokens: 1200,
       });
       return normalizeTopicExtraction(input, parsed);
     },

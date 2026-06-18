@@ -1,0 +1,15 @@
+import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
+
+const DEFERRED_NON_PRODUCTION_ROW_IDS = new Set([
+  "consent_choice_quality",
+  "post_reject_tracking_reduction",
+  "preference_withdrawal_control",
+  "sensitive_surfaces_third_party_tracking",
+  "cross_border_endpoint_review",
+  "accessibility_consent_controls"
+]);
+
+export function getReportableGdprEprivacyCoverageItems(items: GdprEprivacyCoverageChecklistItem[]) {
+  const nonDeferredItems = items.filter((item) => !DEFERRED_NON_PRODUCTION_ROW_IDS.has(item.id));
+  return nonDeferredItems.length > 0 ? nonDeferredItems : items;
+}

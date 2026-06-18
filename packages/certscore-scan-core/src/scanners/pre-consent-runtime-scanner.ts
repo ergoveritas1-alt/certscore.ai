@@ -1,5 +1,6 @@
 import {
   type CmpRuntimeObservation,
+  type CollectionSurfaceObservation,
   type CookieEvent,
   type CookieSnapshot,
   type DomSnapshotArtifact,
@@ -16,7 +17,7 @@ import {
 } from "@certscore/contracts";
 import { resolveEndpointGeography, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import { writeFile } from "node:fs/promises";
-import { chromium, type Browser, type Page, type Request, type Response, type Route } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import {
   classifyCookieParty,
@@ -70,6 +71,7 @@ export interface PreConsentRuntimeScannerResult {
   scriptEvents: ScriptEvent[];
   iframeEvents: IframeEvent[];
   consentUiObservations: ConsentUiObservation[];
+  collectionSurfaceObservations: CollectionSurfaceObservation[];
   cmpRuntimeObservations: CmpRuntimeObservation[];
   screenshots: ScreenshotArtifact[];
   domSnapshots: DomSnapshotArtifact[];
@@ -89,6 +91,7 @@ export async function preConsentRuntimeScanner(
   const cookieEvents: CookieEvent[] = [];
   const scriptEvents: ScriptEvent[] = [];
   const iframeEvents: IframeEvent[] = [];
+  const browserApiAccessEvents: RuntimeEvidenceEvent[] = [];
   const vendorResolverInputs: VendorResolverInput[] = [];
   const runtimeErrors: string[] = [];
   const requestIds = new WeakMap<Request, string>();
@@ -108,6 +111,12 @@ export async function preConsentRuntimeScanner(
   });
   const page = context.newPage;
   const browserContext = context.newContext;
+  await recordTiming(
+    timingBreakdown,
+    "browser api probe install",
+    "Install bounded pre-consent browser API access probes for entropy/fingerprinting review.",
+    () => installBrowserApiAccessProbe(browserContext),
+  );
 
   for (const fulfiller of input.routeFulfillers ?? []) {
     await browserContext.route(fulfiller.urlPattern, async (route: Route) => {
@@ -291,14 +300,18 @@ export async function preConsentRuntimeScanner(
       `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation, network-idle, and settle windows.`,
     );
 
-    const [storageSnapshot, scripts, frames, consentObservation, domText] =
-      await recordTiming(timingBreakdown, "page evidence capture", "Storage, scripts, iframes, consent UI, and DOM text capture.", () => Promise.all([
+    const [storageSnapshot, scripts, frames, apiAccesses, initialConsentObservation, collectionSurfaceObservations, initialDomText] =
+      await recordTiming(timingBreakdown, "page evidence capture", "Storage, scripts, iframes, browser API access, collection surfaces, consent UI, and DOM text capture.", () => Promise.all([
         captureStorageSnapshot(page, input.scanStartedAtMs, input.normalizedUrl),
         captureScriptEvents(page, input.scanStartedAtMs, firstPartyHostname),
         captureIframeEvents(page, input.scanStartedAtMs, firstPartyHostname),
+        captureBrowserApiAccessEvents(page, input.scanStartedAtMs, input.normalizedUrl),
         detectConsentUi(page, input.scanStartedAtMs),
+        captureCollectionSurfaceObservations(page, input.scanStartedAtMs, input.normalizedUrl),
         page.locator("body").innerText({ timeout: 2_000 }).catch(() => ""),
       ]));
+    let consentObservation = initialConsentObservation;
+    let domText = initialDomText;
 
     for (const script of scripts) {
       scriptEvents.push(script);
@@ -313,6 +326,7 @@ export async function preConsentRuntimeScanner(
     }
 
     iframeEvents.push(...frames);
+    browserApiAccessEvents.push(...apiAccesses);
     for (const frame of frames) {
       if (frame.frameUrl) {
         vendorResolverInputs.push({
@@ -442,6 +456,26 @@ export async function preConsentRuntimeScanner(
         pagePhase: "network_idle",
         consentStateAtTime: "pre_consent",
       });
+      if (consentObservation.likelyPresent && consentObservation.controls.length === 0) {
+        const recapturedConsentObservation = await recordTiming(
+          timingBreakdown,
+          "consent UI control recapture",
+          "Bounded post-screenshot recapture of first-layer consent controls without interaction.",
+          () => detectConsentUi(page, input.scanStartedAtMs),
+        );
+        if (recapturedConsentObservation.controls.length > 0) {
+          consentObservation = {
+            ...recapturedConsentObservation,
+            basis: [...new Set([
+              ...consentObservation.basis,
+              ...recapturedConsentObservation.basis,
+              "recapture:post_screenshot_first_layer_controls",
+            ])],
+            confidence: Math.max(consentObservation.confidence, recapturedConsentObservation.confidence),
+          };
+          domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
+        }
+      }
     } else {
       recordInstantTiming(
         timingBreakdown,
@@ -483,7 +517,7 @@ export async function preConsentRuntimeScanner(
         evidenceRefs: [],
         errors: [...runtimeErrors, ...screenshotErrors],
       },
-      runtimeTimeline: [...networkEvents, ...networkResponseEvents, ...cookieEvents, ...scriptEvents, ...iframeEvents],
+      runtimeTimeline: [...networkEvents, ...networkResponseEvents, ...cookieEvents, ...scriptEvents, ...iframeEvents, ...browserApiAccessEvents],
       networkEvents,
       networkResponseEvents,
       cookieEvents,
@@ -492,6 +526,7 @@ export async function preConsentRuntimeScanner(
       scriptEvents,
       iframeEvents,
       consentUiObservations: [consentObservation],
+      collectionSurfaceObservations,
       cmpRuntimeObservations,
       screenshots,
       domSnapshots: [domSnapshot],
@@ -518,6 +553,7 @@ export async function preConsentRuntimeScanner(
       scriptEvents,
       iframeEvents,
       consentUiObservations: [],
+      collectionSurfaceObservations: [],
       cmpRuntimeObservations: [],
       screenshots: [],
       domSnapshots: [],
@@ -1008,11 +1044,325 @@ async function captureIframeEvents(
   });
 }
 
+async function installBrowserApiAccessProbe(browserContext: BrowserContext): Promise<void> {
+  await browserContext.addInitScript({
+    content: `(() => {
+      const globalTarget = window;
+      const accesses = Array.isArray(globalTarget.__certscoreBrowserApiAccesses)
+        ? globalTarget.__certscoreBrowserApiAccesses
+        : [];
+      globalTarget.__certscoreBrowserApiAccesses = accesses;
+      globalTarget.__certscoreBrowserApiProbeInstalled = true;
+      globalTarget.__certscoreBrowserApiProbeErrors = [];
+      const record = (apiName, category) => {
+        if (accesses.length >= 60 || accesses.some((entry) => entry.apiName === apiName)) {
+          return;
+        }
+        accesses.push({
+          apiName,
+          category,
+          timestampMs: Math.max(0, Math.round(performance.now())),
+        });
+      };
+      const recordError = (label, error) => {
+        try {
+          globalTarget.__certscoreBrowserApiProbeErrors.push(label + ":" + String(error && error.message ? error.message : error));
+        } catch {}
+      };
+      const wrapMethod = (target, methodName, apiName, category) => {
+        try {
+          const descriptor = target ? Object.getOwnPropertyDescriptor(target, methodName) : undefined;
+          if (!descriptor || typeof descriptor.value !== "function" || !descriptor.configurable) {
+            return;
+          }
+          const original = descriptor.value;
+          Object.defineProperty(target, methodName, {
+            ...descriptor,
+            value: function wrappedBrowserApiAccess(...args) {
+              record(apiName, category);
+              return original.apply(this, args);
+            },
+          });
+        } catch (error) {
+          recordError(apiName, error);
+        }
+      };
+      const wrapGetter = (target, propertyName, apiName, category) => {
+        try {
+          const descriptor = target ? Object.getOwnPropertyDescriptor(target, propertyName) : undefined;
+          if (!descriptor || typeof descriptor.get !== "function" || !descriptor.configurable) {
+            return;
+          }
+          const original = descriptor.get;
+          Object.defineProperty(target, propertyName, {
+            ...descriptor,
+            get: function wrappedBrowserApiGetter() {
+              record(apiName, category);
+              return original.call(this);
+            },
+          });
+        } catch (error) {
+          recordError(apiName, error);
+        }
+      };
+
+      wrapMethod(window.HTMLCanvasElement && window.HTMLCanvasElement.prototype, "toDataURL", "HTMLCanvasElement.toDataURL", "canvas");
+      wrapMethod(window.HTMLCanvasElement && window.HTMLCanvasElement.prototype, "toBlob", "HTMLCanvasElement.toBlob", "canvas");
+      wrapMethod(window.CanvasRenderingContext2D && window.CanvasRenderingContext2D.prototype, "getImageData", "CanvasRenderingContext2D.getImageData", "canvas");
+      wrapMethod(window.WebGLRenderingContext && window.WebGLRenderingContext.prototype, "getParameter", "WebGLRenderingContext.getParameter", "webgl");
+      wrapMethod(window.WebGL2RenderingContext && window.WebGL2RenderingContext.prototype, "getParameter", "WebGL2RenderingContext.getParameter", "webgl");
+      wrapMethod(window.AudioContext && window.AudioContext.prototype, "createOscillator", "AudioContext.createOscillator", "audio");
+      wrapMethod(window.OfflineAudioContext && window.OfflineAudioContext.prototype, "startRendering", "OfflineAudioContext.startRendering", "audio");
+      wrapGetter(window.Navigator && window.Navigator.prototype, "plugins", "Navigator.plugins", "plugins");
+      wrapGetter(window.Navigator && window.Navigator.prototype, "mimeTypes", "Navigator.mimeTypes", "plugins");
+
+      try {
+        const userAgentData = navigator.userAgentData;
+        if (userAgentData && typeof userAgentData.getHighEntropyValues === "function") {
+          const original = userAgentData.getHighEntropyValues.bind(userAgentData);
+          userAgentData.getHighEntropyValues = (hints) => {
+            record("NavigatorUAData.getHighEntropyValues:" + hints.slice(0, 8).join(","), "high_entropy_client_hints");
+            return original(hints);
+          };
+        }
+      } catch (error) {
+        recordError("NavigatorUAData.getHighEntropyValues", error);
+      }
+    })();`
+  });
+}
+
+async function captureBrowserApiAccessEvents(
+  page: Page,
+  scanStartedAtMs: number,
+  normalizedUrl: string,
+): Promise<RuntimeEvidenceEvent[]> {
+  const rows = await page.evaluate(() => {
+    const globalTarget = window as unknown as {
+      __certscoreBrowserApiAccesses?: Array<{ apiName: string; category: string; timestampMs: number }>;
+    };
+    return globalTarget.__certscoreBrowserApiAccesses ?? [];
+  }).catch(() => []);
+  const hostname = getHostname(normalizedUrl) ?? undefined;
+  const registrableDomain = getRegistrableDomain(hostname) ?? undefined;
+
+  return rows.slice(0, 60).map((row, index) => ({
+    eventId: nextId("browser_api"),
+    eventType: "browser_api_access",
+    timestampMs: Math.max(0, elapsed(scanStartedAtMs) - Math.max(0, rows.length - index - 1)),
+    sourceScanner: SOURCE_SCANNER,
+    scenario: SCENARIO,
+    consentStateAtTime: "pre_consent",
+    pagePhase: "dom_content_loaded",
+    url: normalizedUrl,
+    hostname,
+    registrableDomain,
+    firstParty: true,
+    thirdParty: false,
+    evidenceRefs: [{
+      refId: `browser_api_${index}`,
+      eventType: "browser_api_access",
+      label: `Browser API access: ${row.apiName}`,
+      excerpt: row.category,
+      url: normalizedUrl,
+    }],
+    confidence: 0.82,
+    directVsInferred: "direct",
+  }));
+}
+
 async function detectConsentUi(
   page: Page,
   scanStartedAtMs: number,
 ): Promise<ConsentUiObservation> {
+  await page.waitForFunction(String.raw`(() => {
+    const consentLabelPattern =
+      /cookie|privacy|choice|choices|consent|preference|preferences|settings|options|accept|agree|allow|reject|decline|deny|refuse|necessary|essential|purpose|purposes/i;
+    const actionFor = (label) => {
+      const normalized = label.replace(/\s+/g, " ").trim().toLowerCase();
+      if (/^(?:accept all|allow all|accept cookies|i agree|agree and continue)$/.test(normalized) || /\baccept all\b/.test(normalized)) {
+        return "accept_all";
+      }
+      if (/reject all|decline all|deny all|refuse all|only necessary|necessary only|only essential|essential only|essential cookies only|accept essential|accept necessary/i.test(normalized)) {
+        return "reject_all";
+      }
+      if (/show purposes|manage|preferences|settings|choices|customi[sz]e|options|privacy center/i.test(normalized)) {
+        return "manage_preferences";
+      }
+      if (/save|confirm|apply/.test(normalized)) {
+        return "save_preferences";
+      }
+      return "other";
+    };
+    const isVisible = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.visibility !== "hidden" &&
+        style.display !== "none" &&
+        element.getAttribute("aria-hidden") !== "true" &&
+        Number.parseFloat(style.opacity || "1") > 0.05
+      );
+    };
+    const isFirstLayerPosition = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
+    };
+    return Array.from(document.querySelectorAll("button, [role='button'], a, input[type='button'], input[type='submit']")).some((element) => {
+      const label = (
+        element.getAttribute("aria-label") ||
+        element.getAttribute("title") ||
+        (element instanceof HTMLInputElement ? element.value : "") ||
+        element.textContent ||
+        ""
+      ).replace(/\s+/g, " ").trim();
+      const actionType = actionFor(label);
+      return isVisible(element) && isFirstLayerPosition(element) && consentLabelPattern.test(label) && actionType !== "other";
+    });
+  })()`, { timeout: 3_500 }).catch(() => undefined);
+
   const text = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => "");
+  const controls = await page.evaluate<ConsentUiObservation["controls"]>(String.raw`(() => {
+    const consentLabelPattern =
+      /cookie|privacy|choice|choices|consent|preference|preferences|settings|options|accept|agree|allow|reject|decline|deny|refuse|necessary|essential|purpose|purposes|save|confirm/i;
+    const actionFor = (label) => {
+      const normalized = label.replace(/\s+/g, " ").trim().toLowerCase();
+      if (/^(?:accept all|allow all|accept cookies|i agree|agree and continue)$/.test(normalized) || /\baccept all\b/.test(normalized)) {
+        return "accept_all";
+      }
+      if (
+        /reject all|decline all|deny all|refuse all|only necessary|necessary only|only essential|essential only|essential cookies only|accept essential|accept necessary/i.test(normalized)
+      ) {
+        return "reject_all";
+      }
+      if (/show purposes|manage|preferences|settings|choices|customi[sz]e|options|privacy center/i.test(normalized)) {
+        return "manage_preferences";
+      }
+      if (/save|confirm|apply/.test(normalized)) {
+        return "save_preferences";
+      }
+      return "other";
+    };
+    const labelFor = (element) => {
+      const aria = element.getAttribute("aria-label");
+      const title = element.getAttribute("title");
+      const value = element instanceof HTMLInputElement ? element.value : null;
+      const textContent = element.textContent;
+      return (aria || title || value || textContent || "").replace(/\s+/g, " ").trim();
+    };
+    const selectorHintFor = (element) => {
+      const id = element.getAttribute("id");
+      const dataTestId = element.getAttribute("data-testid");
+      const className = typeof element.getAttribute("class") === "string"
+        ? element.getAttribute("class")?.split(/\s+/).filter(Boolean).slice(0, 3).join(".")
+        : null;
+      if (id) return "#" + id;
+      if (dataTestId) return '[data-testid="' + dataTestId + '"]';
+      if (className) return element.tagName.toLowerCase() + "." + className;
+      return element.tagName.toLowerCase();
+    };
+    const isVisible = (element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.visibility !== "hidden" &&
+        style.display !== "none" &&
+        element.getAttribute("aria-hidden") !== "true" &&
+        Number.parseFloat(style.opacity || "1") > 0.05
+      );
+    };
+    const isFirstLayerPosition = (element) => {
+      const rect = element.getBoundingClientRect();
+      return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
+    };
+    const isPotentialCustomControl = (element) => {
+      const role = (element.getAttribute("role") || "").toLowerCase();
+      const tabIndex = element.getAttribute("tabindex");
+      const className = element.getAttribute("class") || "";
+      const id = element.getAttribute("id") || "";
+      return (
+        role === "button" ||
+        role === "link" ||
+        tabIndex === "0" ||
+        element.hasAttribute("onclick") ||
+        /\b(?:btn|button|choice|option|preference|purpose)\b/i.test(className) ||
+        /(?:btn|button|choice|option|preference|purpose)/i.test(id)
+      );
+    };
+    const directCandidates = Array.from(document.querySelectorAll("button, [role='button'], a, input[type='button'], input[type='submit']"));
+    const textCandidates = Array.from(document.querySelectorAll("body *")).filter((element) => {
+      if (directCandidates.includes(element)) {
+        return false;
+      }
+      if (element.querySelector("button, [role='button'], a, input[type='button'], input[type='submit']")) {
+        return false;
+      }
+      if (!isPotentialCustomControl(element)) {
+        return false;
+      }
+      const label = labelFor(element);
+      if (!label || label.length > 140 || !consentLabelPattern.test(label)) {
+        return false;
+      }
+      const actionType = actionFor(label);
+      if (actionType === "other") {
+        return false;
+      }
+      if (
+        actionType === "manage_preferences" &&
+        !/(cookie|privacy|consent|purpose|preference|choice|show purposes|^settings$|^options$)/i.test(label)
+      ) {
+        return false;
+      }
+      return !Array.from(element.children).some((child) => {
+        const childLabel = labelFor(child);
+        return childLabel && childLabel !== label && consentLabelPattern.test(childLabel);
+      });
+    });
+    const candidates = [...directCandidates, ...textCandidates];
+    const seen = new Set();
+    return candidates.flatMap((element) => {
+      if (!isVisible(element)) {
+        return [];
+      }
+      const label = labelFor(element).slice(0, 120);
+      if (!label || !consentLabelPattern.test(label)) {
+        return [];
+      }
+      const actionType = actionFor(label);
+      if (actionType === "other") {
+        return [];
+      }
+      if (
+        actionType === "manage_preferences" &&
+        !/(cookie|privacy|consent|purpose|preference|choice|show purposes|^settings$|^options$)/i.test(label)
+      ) {
+        return [];
+      }
+      if (!isFirstLayerPosition(element)) {
+        return [];
+      }
+      const dedupeKey = actionType + ":" + label.toLowerCase();
+      if (seen.has(dedupeKey)) {
+        return [];
+      }
+      seen.add(dedupeKey);
+      return [{
+        actionType,
+        label,
+        role: element.getAttribute("role") || undefined,
+        selectorHint: selectorHintFor(element),
+        tagName: element.tagName.toLowerCase(),
+        visible: true,
+      }];
+    }).slice(0, 12);
+  })()`).catch((): ConsentUiObservation["controls"] => {
+    return [];
+  });
   const normalized = text.toLowerCase();
   const keywords = [
     "cookie",
@@ -1024,15 +1374,126 @@ async function detectConsentUi(
     "manage preferences",
   ];
   const matched = keywords.filter((keyword) => normalized.includes(keyword));
+  const visibleChoiceLabels = controls.map((control) => control.label);
+  const acceptControlObserved = controls.some((control) => control.actionType === "accept_all");
+  const rejectControlObserved = controls.some((control) => control.actionType === "reject_all");
+  const managePreferencesControlObserved = controls.some((control) => control.actionType === "manage_preferences");
+  const controlBasis = controls.map((control) => `control:${control.actionType}:${control.label}`);
+  const likelyPresent = matched.length >= 2 || controls.length > 0;
   return {
     observationId: "consent_ui_pre_consent",
     observedAtMs: elapsed(scanStartedAtMs),
-    likelyPresent: matched.length >= 2,
-    basis: matched.length >= 2 ? matched.map((keyword) => `keyword:${keyword}`) : ["insufficient_banner_keywords"],
+    likelyPresent,
+    basis: likelyPresent ? [
+      ...matched.map((keyword) => `keyword:${keyword}`),
+      ...controlBasis,
+    ] : ["insufficient_banner_keywords"],
     textExcerpt: text.slice(0, 2_000),
+    layerInspected: controls.length > 0 ? "first_layer" : "unknown",
+    visibleChoiceLabels,
+    acceptControlObserved,
+    rejectControlObserved,
+    managePreferencesControlObserved,
+    controls,
     evidenceRefs: [],
-    confidence: matched.length >= 2 ? 0.72 : 0.5,
+    confidence: controls.length > 0 ? 0.86 : matched.length >= 2 ? 0.72 : 0.5,
   };
+}
+
+function classifyCollectionSurface(input: {
+  fieldTypes: string[];
+  labels: string[];
+}): CollectionSurfaceObservation["surfaceType"] {
+  const haystack = `${input.fieldTypes.join(" ")} ${input.labels.join(" ")}`.toLowerCase();
+  if (/search/.test(haystack)) {
+    return "search";
+  }
+  if (/newsletter|subscribe|email updates|sign up/.test(haystack)) {
+    return "newsletter";
+  }
+  if (/contact|message|support/.test(haystack)) {
+    return "contact";
+  }
+  if (/login|sign in|account|register|password/.test(haystack)) {
+    return "account";
+  }
+  if (/checkout|payment|billing|shipping|cart/.test(haystack)) {
+    return "checkout";
+  }
+  return input.fieldTypes.length > 0 ? "generic_form" : "other";
+}
+
+async function captureCollectionSurfaceObservations(
+  page: Page,
+  scanStartedAtMs: number,
+  pageUrl: string,
+): Promise<CollectionSurfaceObservation[]> {
+  const rows = await page.evaluate(() => {
+    const textFor = (element: Element) => {
+      const labels = new Set<string>();
+      const id = element.getAttribute("id");
+      const ariaLabel = element.getAttribute("aria-label");
+      const placeholder = element.getAttribute("placeholder");
+      const name = element.getAttribute("name");
+      const type = element.getAttribute("type");
+      const role = element.getAttribute("role");
+      if (ariaLabel) labels.add(ariaLabel);
+      if (placeholder) labels.add(placeholder);
+      if (name) labels.add(name);
+      if (type) labels.add(type);
+      if (role) labels.add(role);
+      if (id) {
+        document.querySelectorAll(`label[for="${CSS.escape(id)}"]`).forEach((label) => {
+          const text = label.textContent?.trim();
+          if (text) labels.add(text);
+        });
+      }
+      const closestLabel = element.closest("label")?.textContent?.trim();
+      if (closestLabel) labels.add(closestLabel);
+      return [...labels].map((label) => label.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 6);
+    };
+    return [...document.querySelectorAll("input, textarea, select")]
+      .filter((element) => {
+        const input = element as HTMLInputElement;
+        const type = (input.getAttribute("type") || "").toLowerCase();
+        return !["hidden", "submit", "button", "reset", "image"].includes(type);
+      })
+      .slice(0, 40)
+      .map((element, index) => {
+        const input = element as HTMLInputElement;
+        const form = element.closest("form");
+        const formText = form?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160);
+        return {
+          fieldType: (input.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase(),
+          index,
+          labels: [...new Set([...textFor(element), ...(formText ? [formText] : [])])].slice(0, 8),
+        };
+      });
+  }).catch(() => []);
+
+  return rows.slice(0, 25).map((row, index) => {
+    const labels = row.labels.map((label) => label.slice(0, 120)).filter(Boolean);
+    const fieldTypes = [...new Set([row.fieldType].filter(Boolean))];
+    const surfaceType = classifyCollectionSurface({ fieldTypes, labels });
+    const haystack = labels.join(" ").toLowerCase();
+    return {
+      observationId: `collection_surface_pre_consent_${index}`,
+      observedAtMs: elapsed(scanStartedAtMs),
+      sourceScanner: SOURCE_SCANNER,
+      scenario: SCENARIO,
+      consentStateAtTime: "pre_consent",
+      pageUrl,
+      surfaceType,
+      controlCount: 1,
+      fieldTypes,
+      labels,
+      hasEmailField: fieldTypes.includes("email") || /email|e-mail/.test(haystack),
+      hasSensitiveFieldHint: /health|medical|password|ssn|social security|credit card|card number|birth|date of birth/.test(haystack),
+      evidenceRefs: [],
+      confidence: labels.length > 0 ? 0.82 : 0.68,
+      directVsInferred: "direct",
+    };
+  });
 }
 
 function isHttpUrl(url: string): boolean {

@@ -267,7 +267,10 @@ function withLocalV2DagOutDir(scanConfigJson: Record<string, unknown> | null, ou
   return config;
 }
 
-export async function recordLocalV2DagLambdaResultEvent(parsedMessage: LocalV2DagLambdaResultMessage) {
+export async function recordLocalV2DagLambdaResultEvent(
+  parsedMessage: LocalV2DagLambdaResultMessage,
+  options: { s3Client?: S3GetClient; workspaceRoot?: string } = {}
+) {
   const { query, queryOne } = await import("@website-signal-risk-scanner/db");
   const context = await queryOne<{
     domainId: string | null;
@@ -287,7 +290,11 @@ export async function recordLocalV2DagLambdaResultEvent(parsedMessage: LocalV2Da
     throw new Error(`Cannot record local v2 DAG Lambda result for unknown scan ${parsedMessage.scanId}.`);
   }
 
-  const artifactMirror = await mirrorLocalV2DagLambdaArtifacts({ parsedMessage });
+  const artifactMirror = await mirrorLocalV2DagLambdaArtifacts({
+    parsedMessage,
+    s3Client: options.s3Client,
+    workspaceRoot: options.workspaceRoot
+  });
   if (artifactMirror) {
     await query(
       `update scans
@@ -387,10 +394,17 @@ export async function recordLocalV2DagLambdaResultEvent(parsedMessage: LocalV2Da
 
 export async function handleLocalV2DagLambdaResultMessage(
   rawMessage: unknown,
-  options: { expectedTargetEnvironment?: LocalV2DagLambdaTargetEnvironment } = {}
+  options: {
+    expectedTargetEnvironment?: LocalV2DagLambdaTargetEnvironment;
+    s3Client?: S3GetClient;
+    workspaceRoot?: string;
+  } = {}
 ) {
   const ingestion = ingestLocalV2DagLambdaResultMessage(rawMessage, options);
-  await recordLocalV2DagLambdaResultEvent(ingestion.parsedMessage);
+  await recordLocalV2DagLambdaResultEvent(ingestion.parsedMessage, {
+    s3Client: options.s3Client,
+    workspaceRoot: options.workspaceRoot
+  });
   return ingestion;
 }
 

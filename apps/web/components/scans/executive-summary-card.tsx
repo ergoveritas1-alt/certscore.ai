@@ -99,6 +99,12 @@ export type ExecutiveScanInterruption = {
   label: string;
 };
 
+export type ExecutiveTimelineEvent = {
+  atMs: number;
+  label: string;
+  tone?: "amber" | "emerald" | "rose" | "sky" | "slate";
+};
+
 function isProtectedRouteInterruption(interruption: ExecutiveScanInterruption) {
   return /protected route/i.test(`${interruption.label} ${interruption.details.join(" ")}`);
 }
@@ -217,18 +223,17 @@ function getRecognizedCmpBrand(cmpVendorName: string | null | undefined) {
   return RECOGNIZED_CMP_BRANDS.find((brand) => normalized.includes(brand.key)) ?? null;
 }
 
-function formatTrackerFootprintCountLabel(input: {
+function formatTrackerFootprintLabels(input: {
   domainCount: number;
   vendorCount: number;
 }) {
   const total = input.domainCount + input.vendorCount;
-  if (total === 0) {
-    return null;
-  }
-
   const vendorLabel = `${input.vendorCount} ${input.vendorCount === 1 ? "vendor" : "vendors"}`;
-  const domainLabel = `${input.domainCount} domain`;
-  return `${total} total: ${vendorLabel}, ${domainLabel}`;
+  const domainLabel = `${input.domainCount} ${input.domainCount === 1 ? "domain" : "domains"}`;
+  return {
+    detail: `${vendorLabel}, ${domainLabel}`,
+    title: total > 0 ? `Tracker footprint (${total})` : "Tracker footprint",
+  };
 }
 
 function getPolicyDisclosureType(label: string) {
@@ -281,54 +286,6 @@ function getRepresentativeVendorsFromFindings(findings: CertScoreFinding[]) {
       return match?.[1] ? splitInlineVendorList(match[1]) : [];
     })
   );
-}
-
-function getEvidenceConfidenceLabel(confidence: CertScoreFinding["confidence"]) {
-  if (confidence === "strong") {
-    return "Strong evidence";
-  }
-  if (confidence === "good") {
-    return "Good evidence";
-  }
-  return "Review evidence";
-}
-
-function getFindingTypeLabel(finding: CertScoreFinding) {
-  const label = `${finding.id} ${finding.label} ${finding.section}`.toLowerCase();
-
-  if (isRegulatoryGapTopFinding(finding)) {
-    return "Regulatory gap";
-  }
-  if (label.includes("session_recording") || label.includes("session replay")) {
-    return "Session replay";
-  }
-  if (label.includes("fingerprint")) {
-    return "Fingerprinting";
-  }
-  if (label.includes("accessibility") || label.includes("wcag") || label.includes("keyboard") || label.includes("screen reader")) {
-    return "Accessibility";
-  }
-  if (label.includes("cookie")) {
-    return "Cookie behavior";
-  }
-  if (label.includes("consent") || label.includes("reject") || label.includes("pre_consent") || label.includes("pre-consent")) {
-    return "Consent timing";
-  }
-  if (label.includes("third_party") || label.includes("third-party") || label.includes("sharing") || label.includes("tracker")) {
-    return "Third-party sharing";
-  }
-  if (label.includes("policy") || label.includes("disclosure") || label.includes("privacy rights")) {
-    return "Disclosure / policy";
-  }
-  if (label.includes("dark pattern") || label.includes("interface") || label.includes("choice")) {
-    return "Consumer interface";
-  }
-
-  return "Review signal";
-}
-
-function isRegulatoryGapTopFinding(finding: CertScoreFinding) {
-  return finding.id.startsWith("regulatory_gap__");
 }
 
 function getRecommendedNextStep(finding: CertScoreFinding) {
@@ -2682,30 +2639,22 @@ function BenchmarkMetricCard(input: {
     input.label === "Third-party requests"
       ? "3rd-party requests"
       : input.label;
-  const actualLabel =
-    actualValue === null
-      ? "No value retained"
-      : input.label === "Overall score"
-        ? `${actualValue}/100 overall score`
-        : `${actualValue} ${displayLabel.toLowerCase()}`;
-
   return (
-    <div className={`relative overflow-visible rounded-[1.1rem] border border-slate-200 px-3.5 py-2.5 ${tone.card}`}>
+    <div className={`relative overflow-visible rounded-[1.1rem] border border-slate-200 px-3.5 py-2 ${tone.card}`}>
       <div className="flex items-start justify-between gap-3">
         <p className="whitespace-nowrap text-[9px] uppercase tracking-[0.13em] text-slate-500">
           {displayLabel}
         </p>
-        <span className="inline-flex items-center gap-1">
-          <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
-          {benchmarkTooltip ? <InfoTip align="end" placement="bottom" text={benchmarkTooltip} /> : null}
-        </span>
       </div>
       <div className="mt-2">
-        <div className="flex items-end gap-1">
+        <div className="flex items-end gap-1.5">
           <span className={`text-[2.15rem] font-semibold leading-none tracking-tight ${tone.value}`}>{actualValue ?? "—"}</span>
           {input.maxValue ? <span className="pb-0.5 text-[1.35rem] leading-none text-slate-500">/100</span> : null}
+          <span className="pb-1">
+            <span className="sr-only">{benchmarkValue !== null ? `Expected ${benchmarkValue}` : "Expected benchmark unavailable"}</span>
+            {benchmarkTooltip ? <InfoTip align="start" placement="bottom" text={benchmarkTooltip} /> : null}
+          </span>
         </div>
-        <p className="mt-0.5 text-[11px] leading-4 text-slate-600">{actualLabel}</p>
       </div>
       <div className="mt-3 space-y-1">
         <div className={`relative h-2 rounded-full ${tone.rail}`}>
@@ -2720,7 +2669,7 @@ function BenchmarkMetricCard(input: {
             />
           ) : null}
         </div>
-        <div className={`h-2 text-[10px] ${deltaClassName}`} aria-hidden="true" />
+        <div className={`h-1.5 text-[10px] ${deltaClassName}`} aria-hidden="true" />
       </div>
     </div>
   );
@@ -2951,6 +2900,278 @@ function NotScoredSnapshotPane() {
         <p className="mt-2 text-sm leading-6 text-slate-600">
           Re-run the scan when the site is available, or try a different scan context if the retained screenshot still does not show the normal public site.
         </p>
+      </div>
+    </div>
+  );
+}
+
+function CompactSnapshotPanel(input: { children: React.ReactNode; title: React.ReactNode }) {
+  return (
+    <div className="rounded-[1.05rem] border border-slate-200 bg-white px-3 py-2">
+      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{input.title}</p>
+      {input.children}
+    </div>
+  );
+}
+
+function CompactChevronDownIcon() {
+  return (
+    <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
+      <path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function CompactChevronRightIcon() {
+  return (
+    <svg aria-hidden="true" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
+      <path d="m7.5 5 5 5-5 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function CompactWarningBadgeIcon() {
+  return (
+    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700" aria-hidden="true">
+      <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none">
+        <path d="M10 3.4 18 16H2L10 3.4Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
+        <path d="M10 7.2v4.2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+        <path d="M10 14.2h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" />
+      </svg>
+    </span>
+  );
+}
+
+function CompactSnapshotSurfaceRow(input: { detail?: string | null; label: string }) {
+  if (input.detail) {
+    return (
+      <details className="group/snapshot-surface rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-1.5">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
+          <span className="min-w-0 truncate text-sm font-medium text-slate-700">{input.label}</span>
+          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition group-open/snapshot-surface:rotate-90">
+            <CompactChevronRightIcon />
+          </span>
+        </summary>
+        <p className="mt-1 break-words text-xs leading-5 text-slate-500">{input.detail}</p>
+      </details>
+    );
+  }
+
+  return (
+    <div className="mb-1.5 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-xs font-medium text-slate-700 last:mb-0">
+      <span>{input.label}</span>
+      <CompactChevronRightIcon />
+    </div>
+  );
+}
+
+function ExecutiveSignalSnapshotPane(input: {
+  beforeConsentCookieCount: number;
+  cmpDisplayName: string;
+  cmpStatusAvailable: boolean;
+  cmpVendorName?: string | null;
+  domainTruncationNote?: string | null;
+  policySurfaceLabelsByUrl: Map<string, string[]>;
+  policySurfaces: ExecutivePolicySurface[];
+  recognizedCmpLabel?: string | null;
+  trackerFootprintDetailLabel?: string | null;
+  trackerFootprintTitle?: string | null;
+  trackerFootprintRichDetails: Array<{ key: string; node: React.ReactNode }>;
+  trackerFootprintTipText?: string | null;
+}) {
+  const trackerDetailLabel = input.trackerFootprintDetailLabel ?? "0 vendors, 0 domains";
+  const cookieOnlyRuntimeNote =
+    input.trackerFootprintRichDetails.length === 0 && input.beforeConsentCookieCount > 0
+      ? `${input.beforeConsentCookieCount} ${input.beforeConsentCookieCount === 1 ? "cookie was" : "cookies were"} observed before consent; no third-party tracker vendor or domain was resolved for this scan.`
+      : null;
+  return (
+    <>
+      <div className="space-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
+      </div>
+      <CompactSnapshotPanel title="Consent platform">
+        <div className="flex items-center gap-2">
+          {input.cmpStatusAvailable ? (
+            <VendorBrandChip
+              category="cmp"
+              className="h-6 w-6 rounded-full p-0"
+              hideLabel
+              label={input.recognizedCmpLabel ?? input.cmpVendorName ?? "Unknown CMP"}
+              showMeta={false}
+            />
+          ) : (
+            <CompactWarningBadgeIcon />
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-950">{input.cmpDisplayName}</p>
+          </div>
+        </div>
+      </CompactSnapshotPanel>
+      <CompactSnapshotPanel title={input.trackerFootprintTitle ?? "Tracker footprint"}>
+        <details className="group/tracker-footprint">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 marker:hidden [&::-webkit-details-marker]:hidden">
+            <span className="inline-flex min-w-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.16em] text-slate-500">
+              <span className="truncate">{trackerDetailLabel}</span>
+            </span>
+            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition group-open/tracker-footprint:rotate-180">
+              <CompactChevronDownIcon />
+            </span>
+          </summary>
+          <div className="mt-3 max-h-[13.25rem] space-y-1.5 overflow-y-auto pr-1">
+            {input.trackerFootprintTipText ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
+                {input.trackerFootprintTipText}
+              </p>
+            ) : null}
+            {cookieOnlyRuntimeNote ? (
+              <p className="rounded-xl border border-sky-100 bg-sky-50 px-3 py-2 text-xs leading-5 text-slate-600">
+                {cookieOnlyRuntimeNote}
+              </p>
+            ) : null}
+            {input.domainTruncationNote ? (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+                {input.domainTruncationNote}
+              </p>
+            ) : null}
+            {input.trackerFootprintRichDetails.length > 0 ? (
+              input.trackerFootprintRichDetails.map((item) => <React.Fragment key={item.key}>{item.node}</React.Fragment>)
+            ) : (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                No third-party tracker vendors or domains were resolved in this scan.
+              </p>
+            )}
+          </div>
+        </details>
+      </CompactSnapshotPanel>
+      <CompactSnapshotPanel title="Policy surfaces">
+        <div className="space-y-1.5">
+          {input.policySurfaces.length > 0 ? (
+            input.policySurfaces.map((surface) => {
+              const sharedLabels = surface.pageUrl ? input.policySurfaceLabelsByUrl.get(surface.pageUrl) ?? [] : [];
+              const detailParts = [
+                surface.pageUrl,
+                surface.pageUrl && sharedLabels.length > 1
+                  ? `This URL is shared by ${formatInlineList(sharedLabels)}.`
+                  : null,
+                ...surface.details
+              ].filter(Boolean);
+              return (
+                <CompactSnapshotSurfaceRow
+                  detail={detailParts.join(" ")}
+                  key={`${surface.pageLabel}:${surface.pageUrl ?? "unknown"}`}
+                  label={surface.pageLabel}
+                />
+              );
+            })
+          ) : (
+            <CompactSnapshotSurfaceRow
+              detail="No policy-surface observations were retained for this scan."
+              label="Policy surface detail unavailable"
+            />
+          )}
+        </div>
+      </CompactSnapshotPanel>
+    </>
+  );
+}
+
+function formatTimelineOffset(ms: number) {
+  const safeMs = Math.max(0, Math.round(ms));
+  if (safeMs < 1000) {
+    return `${safeMs}ms`;
+  }
+  const seconds = safeMs / 1000;
+  return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)}s`;
+}
+
+function getTimelineToneClasses(tone: ExecutiveTimelineEvent["tone"] = "slate") {
+  switch (tone) {
+    case "amber":
+      return "border-amber-200 bg-amber-50/82 text-amber-950";
+    case "emerald":
+      return "border-emerald-200 bg-emerald-50/82 text-emerald-950";
+    case "rose":
+      return "border-rose-200 bg-rose-50/82 text-rose-950";
+    case "sky":
+      return "border-sky-200 bg-sky-50/82 text-sky-950";
+    default:
+      return "border-slate-200 bg-white text-slate-800";
+  }
+}
+
+function getTimelineDotClasses(tone: ExecutiveTimelineEvent["tone"] = "slate") {
+  switch (tone) {
+    case "amber":
+      return "border-amber-200 bg-amber-400 shadow-[0_0_0_3px_rgba(254,243,199,0.9)]";
+    case "emerald":
+      return "border-emerald-200 bg-emerald-400 shadow-[0_0_0_3px_rgba(209,250,229,0.9)]";
+    case "rose":
+      return "border-rose-200 bg-rose-400 shadow-[0_0_0_3px_rgba(255,228,230,0.9)]";
+    case "sky":
+      return "border-sky-200 bg-sky-400 shadow-[0_0_0_3px_rgba(224,242,254,0.9)]";
+    default:
+      return "border-slate-200 bg-slate-400 shadow-[0_0_0_3px_rgba(226,232,240,0.9)]";
+  }
+}
+
+function buildPositionedTimelineEvents(input: { durationMs: number; events: ExecutiveTimelineEvent[] }) {
+  const sorted = input.events
+    .filter((event) => Number.isFinite(event.atMs) && event.atMs >= 0)
+    .sort((left, right) => left.atMs - right.atMs)
+    .slice(0, 8);
+  let lastTop = 0;
+  return sorted.map((event, index) => {
+    const rawTop = input.durationMs > 0 ? (event.atMs / input.durationMs) * 100 : 50;
+    const minTop = index === 0 ? 17 : lastTop + 12;
+    const maxTop = Math.max(minTop, 82 - Math.max(0, sorted.length - index - 1) * 7);
+    const top = Math.min(Math.max(rawTop, minTop), maxTop);
+    lastTop = top;
+    return { ...event, top };
+  });
+}
+
+function ExecutiveTimelinePane(input: {
+  durationMs?: number | null;
+  events?: ExecutiveTimelineEvent[] | null;
+}) {
+  const events = input.events ?? [];
+  const maxEventMs = events.reduce((max, event) => Math.max(max, event.atMs), 0);
+  const durationMs = Math.max(0, Math.round(input.durationMs ?? maxEventMs));
+  const positionedEvents = buildPositionedTimelineEvents({
+    durationMs: Math.max(1, durationMs),
+    events
+  });
+
+  return (
+    <div className="min-w-0 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]" data-executive-timeline-pane>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan Timeline</p>
+      <div className="relative mt-3 min-h-[17rem] overflow-hidden rounded-[1.05rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] px-3 py-3 shadow-inner shadow-slate-100/70">
+        <div className="absolute bottom-5 left-[1.15rem] top-5 w-px bg-gradient-to-b from-slate-200 via-slate-300 to-slate-200" aria-hidden="true" />
+        <div className="absolute left-2 right-3 top-3 flex items-center gap-2">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-300 bg-white shadow-sm" aria-hidden="true" />
+          <span className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-700 shadow-sm">
+            Scan start @ 0s
+          </span>
+        </div>
+        {positionedEvents.map((event) => (
+          <div
+            className="absolute left-2 right-3 flex items-center gap-2"
+            key={`${event.label}:${event.atMs}`}
+            title={`${event.label} first observed at ${formatTimelineOffset(event.atMs)}`}
+            style={{ top: `${event.top}%` }}
+          >
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full border ${getTimelineDotClasses(event.tone)}`} aria-hidden="true" />
+            <span className={`min-w-0 flex-1 truncate rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase leading-4 tracking-[0.08em] shadow-sm ${getTimelineToneClasses(event.tone)}`}>
+              {event.label}
+            </span>
+          </div>
+        ))}
+        <div className="absolute bottom-3 left-2 right-3 flex items-center gap-2">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-700 bg-white shadow-sm" aria-hidden="true" />
+          <span className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white shadow-sm">
+            End of scan @ {formatTimelineOffset(durationMs)}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -3271,9 +3492,48 @@ type FindingTitleIconKey =
   | "policy-sync"
   | "document-clarity"
   | "ad-exchange"
+  | "analytics-chart"
   | "default-circle";
 
+function getRegulatoryGapRowId(findingId: string) {
+  const marker = "__";
+  if (!findingId.startsWith("regulatory_gap__")) {
+    return null;
+  }
+  const markerIndex = findingId.indexOf(marker, "regulatory_gap__".length);
+  return markerIndex >= 0 ? findingId.slice(markerIndex + marker.length) : null;
+}
+
 function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKey[] {
+  const regulatoryGapRowId = getRegulatoryGapRowId(findingId);
+  if (regulatoryGapRowId) {
+    switch (regulatoryGapRowId) {
+      case "pre_consent_third_party_tracking":
+        return ["arrow-transfer", "pulse-tracking", "ad-exchange"];
+      case "pre_consent_cookies_storage":
+        return ["cookie-storage", "ad-exchange", "pulse-tracking"];
+      case "reject_all_path_availability":
+        return ["hidden-choice", "privacy-choice", "circle-x"];
+      case "cookie_notice_policy_availability":
+        return ["document-clarity", "cookie-storage", "policy-sync"];
+      case "advertising_retargeting_vendor_signal_observed":
+        return ["ad-exchange", "arrow-transfer", "pulse-tracking"];
+      case "analytics_vendor_observed":
+        return ["analytics-chart", "pulse-tracking", "device-telemetry"];
+      case "session_replay_fingerprinting_review":
+        return ["video-capture", "shield-video", "device-telemetry"];
+      case "device_identification_fingerprinting_signal_observed":
+        return ["browser-fingerprint", "fingerprint", "device-telemetry"];
+      case "embedded_content_pre_consent":
+        return ["globe-link", "chain-link", "arrow-transfer"];
+      case "sale_share_control":
+      case "do_not_sell_share_availability":
+        return ["privacy-choice", "ad-exchange", "shield-balance"];
+      default:
+        return ["document-clarity", "warning-triangle", "default-circle"];
+    }
+  }
+
   switch (findingId) {
     case "pre_consent_tracking_detected":
       return ["pulse-tracking", "arrow-transfer", "ad-exchange"];
@@ -3370,7 +3630,7 @@ function assignUniqueFindingTitleIconKeys(findings: CertScoreFinding[]) {
 }
 
 function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingTitleIconKey }) {
-  const common = "h-4 w-4";
+  const common = "h-3 w-3";
   const iconKey = input.iconKey ?? getFindingTitleIconKey(input.finding.id);
 
   if (iconKey === "pulse-tracking") {
@@ -3481,6 +3741,17 @@ function FindingTitleIcon(input: { finding: CertScoreFinding; iconKey?: FindingT
         <path d="M5 8h8.5M10.5 4 14 8l-3.5 4M19 16h-8.5M13.5 12 10 16l3.5 4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         <circle cx="5" cy="8" r="1.4" fill="currentColor" />
         <circle cx="19" cy="16" r="1.4" fill="currentColor" />
+      </svg>
+    );
+  }
+
+  if (iconKey === "analytics-chart") {
+    return (
+      <svg viewBox="0 0 24 24" className={`${common} text-slate-700`} aria-hidden="true">
+        <path d="M5 18.5h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <rect x="6.5" y="11.5" width="2.8" height="5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.7" />
+        <rect x="10.6" y="8" width="2.8" height="8.5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.7" />
+        <rect x="14.7" y="5.5" width="2.8" height="11" rx="1" fill="none" stroke="currentColor" strokeWidth="1.7" />
       </svg>
     );
   }
@@ -4483,7 +4754,9 @@ export function ExecutiveSummaryCard(input: {
   regulatoryRisk?: RegulatoryRiskAssessment | null;
   resolvedVendorNames: string[];
   score: number | null;
+  scanDurationMs?: number | null;
   scanOutcome?: string | null;
+  scanTimelineEvents?: ExecutiveTimelineEvent[] | null;
   status?: string | null;
   sessionReplayVendorNames: string[];
   thirdPartyRequestCount: number;
@@ -4571,7 +4844,7 @@ export function ExecutiveSummaryCard(input: {
   const trackerFootprintAllDetails = trackerFootprintExpandLabel
     ? uniqueStrings([...vendorEvidence, ...topObservedEntityLabels, ...thirdPartyDomains])
     : [];
-  const trackerFootprintCountLabel = formatTrackerFootprintCountLabel({
+  const trackerFootprintLabels = formatTrackerFootprintLabels({
     domainCount: input.thirdPartyDomains.length,
     vendorCount: allObservedVendorNames.length
   });
@@ -4690,7 +4963,7 @@ export function ExecutiveSummaryCard(input: {
     <section className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
       <details className="group/executive-summary" data-testid="executive-summary-details" open>
         <summary
-          className="flex min-h-[4.75rem] cursor-pointer list-none flex-wrap items-center gap-3 px-6 py-4 marker:hidden [&::-webkit-details-marker]:hidden lg:px-8"
+          className="flex min-h-[4.75rem] cursor-pointer list-none flex-wrap items-center gap-3 px-3.5 py-4 marker:hidden [&::-webkit-details-marker]:hidden lg:px-5"
           data-testid="executive-summary-toggle"
         >
           <ScanReportDisclosureIcon className="group-open/executive-summary:rotate-90" />
@@ -4706,27 +4979,29 @@ export function ExecutiveSummaryCard(input: {
               Benchmark: {input.domainBenchmark.industry}
             </span>
           ) : null}
-        </summary>
+      </summary>
       <div
-        className="grid min-w-0 items-stretch gap-6 px-6 pb-6 pt-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.9fr)] lg:px-8"
+        className="grid min-w-0 items-stretch gap-5 px-3.5 pb-6 pt-1 lg:grid-cols-[minmax(0,1fr)_minmax(30rem,1.08fr)] lg:px-5"
         data-executive-summary-layout
       >
         <div className="min-w-0 flex flex-col gap-5 lg:min-h-0">
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div className="space-y-3">
-              <div className="space-y-2">
-                <h2
-                  data-testid="executive-headline"
-                  className="max-w-3xl text-[2rem] font-semibold leading-tight tracking-tight text-slate-950 lg:text-[2.5rem]"
-                >
-                  {narrativePresentation.headline}
-                </h2>
-                {isScanNotRepresentative ? (
+              {input.accessLimitationNotice || isScanNotRepresentative ? (
+                <div className="space-y-2">
+                  <h2
+                    data-testid="executive-headline"
+                    className="max-w-3xl text-[2rem] font-semibold leading-tight tracking-tight text-slate-950 lg:text-[2.5rem]"
+                  >
+                    {narrativePresentation.headline}
+                  </h2>
+                  {isScanNotRepresentative ? (
                   <p className="max-w-3xl text-sm leading-6 text-slate-600">
                     CertScore captured a maintenance, unavailable, blocked, placeholder, wrong-site, blank, or otherwise non-representative page instead of the normal public site. Scores, regulatory projections, and substantive findings are withheld for this scan.
                   </p>
-                ) : null}
-              </div>
+                  ) : null}
+                </div>
+              ) : null}
               {input.accessLimitationNotice ? null : isScanNotRepresentative ? (
                 <NotScoredHeroMetrics />
               ) : input.lightweightHeroMetrics && input.lightweightHeroMetrics.length > 0 ? (
@@ -4758,7 +5033,7 @@ export function ExecutiveSummaryCard(input: {
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}
                     />
                     <BenchmarkMetricCard
-                      label="Cookies before consent"
+                      label="Cookies pre-consent"
                       actualValue={input.beforeConsentCookieCount}
                       benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}
@@ -4774,7 +5049,7 @@ export function ExecutiveSummaryCard(input: {
               <div className="flex items-end justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Top findings</p>
-                  <h2 data-testid="executive-findings-heading" className="text-2xl font-semibold tracking-tight text-slate-950 lg:text-[2.2rem]">
+                  <h2 data-testid="executive-findings-heading" className="text-[1.3rem] font-semibold tracking-tight text-slate-950 lg:text-[1.87rem]">
                     {narrativePresentation.findingsHeading}
                   </h2>
                 </div>
@@ -4805,7 +5080,6 @@ export function ExecutiveSummaryCard(input: {
                 const criticalityBadge = display.criticality;
                 const cardTone = getFindingCardTone(finding, index === 0, criticalityBadge);
                 const regulatoryMappingIds = getFindingRegulatoryFilterIds(finding);
-                const isRegulatoryGap = isRegulatoryGapTopFinding(finding);
                 return (
                 <div
                   key={finding.id}
@@ -4815,31 +5089,6 @@ export function ExecutiveSummaryCard(input: {
                   <div className={`h-1 w-full ${cardTone.band}`} />
                   <div className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
-                      {getFindingTypeLabel(finding)}
-                    </span>
-                    {isRegulatoryGap ? (
-                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-800">
-                        Regulatory checklist gap
-                      </span>
-                    ) : null}
-                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${cardTone.severityBadge}`}>
-                      {criticalityBadge}
-                      <InfoTip
-                        align="start"
-                        placement="bottom"
-                        text={
-                          <>
-                            Evidence quality: {getEvidenceConfidenceLabel(finding.confidence)}.{" "}
-                            {getPublicReportConfidenceDefinition({
-                              confidence: finding.confidence,
-                              findingId: finding.id,
-                              section: finding.section
-                            })}
-                          </>
-                        }
-                      />
-                    </span>
                     {densityBenchmark ? (
                       <span
                         aria-label={`${densityBenchmark.contextLabel}: ${densityBenchmark.tooltip}`}
@@ -4855,10 +5104,10 @@ export function ExecutiveSummaryCard(input: {
                       </span>
                     ) : null}
                   </div>
-                  <div className="mt-2.5 flex items-start gap-2.5">
+                  <div className={densityBenchmark ? "mt-2.5 flex items-start gap-2" : "flex items-start gap-2"}>
                       <div
                         data-finding-icon={iconKey}
-                        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50"
+                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50"
                       >
                       <FindingTitleIcon finding={finding} iconKey={iconKey} />
                     </div>
@@ -4882,220 +5131,44 @@ export function ExecutiveSummaryCard(input: {
           </div>
         </div>
 
-        <div
-          className="min-w-0 space-y-4 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]"
-          data-executive-snapshot-pane
-        >
-          {isScanNotRepresentative ? (
-            <NotScoredSnapshotPane />
-          ) : input.accessLimitationNotice ? (
-            <>
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan coverage</p>
-                <p className="text-sm leading-6 text-slate-600">
-                  This run was blocked before it established a trustworthy public browsing path, so normal privacy findings were not retained.
-                </p>
-              </div>
-              <AccessLimitationDetails notice={input.accessLimitationNotice} />
-            </>
-          ) : (
-            <>
-              <div className="space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Signal snapshot</p>
-              </div>
-              <div className="space-y-3">
-                {input.showReviewLenses !== false ? (
-                  <details id="review-lenses" className="group/review-lenses scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Review lenses</span>
-                      <ScanReportDisclosureIcon className="group-open/review-lenses:rotate-90" />
-                    </summary>
-                    <div className="mt-3 hidden space-y-3 group-open/review-lenses:block">
-                      {hasIncompleteCoverageNotice ? (
-                        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-950">
-                          This scan has incomplete coverage. Treat missing or low-confidence results as unresolved until a complete rescan confirms them.
-                        </p>
-                      ) : null}
-                      <div className="space-y-3">
-                        {productionRegulatoryLenses.map((lens) => (
-                          <details
-                            key={lens.acronym}
-                            id={getRegulatoryLensAnchor(lens.acronym)}
-                            className="group scroll-mt-24 rounded-xl border border-slate-200 bg-slate-50/75 px-3 py-3"
-                          >
-                            <summary className="relative grid cursor-pointer list-none grid-cols-[1fr_auto] gap-x-3 gap-y-2">
-                              <span className="min-w-0 self-start">
-                                <span className="flex flex-wrap items-center gap-2">
-                                  <span className="text-sm font-semibold text-slate-900">{lens.acronym}</span>
-                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${lens.toneClass}`}>
-                                    {lens.ratingLabel}
-                                  </span>
-                                </span>
-                              </span>
-                              <span className="shrink-0 self-start text-right">
-                                <span className="block text-xl font-semibold tracking-tight text-slate-900">{lens.score ?? "—"}</span>
-                                {typeof lens.score === "number" ? (
-                                  <RegulatoryRatingBar score={lens.score} toneClass={lens.toneClass} />
-                                ) : null}
-                              </span>
-                              <span className="col-span-2 min-w-0 pr-6 text-xs leading-5 text-slate-600">{lens.summary}</span>
-                              <ScanReportDisclosureIcon className="absolute bottom-0 right-0" />
-                            </summary>
-                            <div className="mt-3 border-t border-slate-200 pt-3">
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{lens.detailTitle}</p>
-                              <div className="mt-2 space-y-2">
-                                {lens.findings.length > 0 ? (
-                                  lens.findings.map((item) => (
-                                    <RegulatoryLensFindingCard
-                                      key={`${lens.acronym}-${item.id}-${item.label}`}
-                                      finding={item}
-                                    lens={lens}
-                                  />
-                                ))
-                              ) : (
-                                <span className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700">
-                                  No top-level issue mapped here
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </details>
-                      ))}
-                    </div>
-                  </div>
-                </details>
-                ) : null}
-                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Consent platform</p>
-                  <div className="mt-3 flex items-center gap-3">
-                    {cmpStatusAvailable ? (
-                      <VendorBrandChip
-                        category="cmp"
-                        className="shrink-0"
-                        hideLabel
-                        label={recognizedCmpBrand?.label ?? input.cmpVendorName ?? "Unknown CMP"}
-                        showMeta={false}
-                      />
-                    ) : (
-                      <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700" aria-hidden="true">
-                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none">
-                          <path
-                            d="M10 3.4 18 16H2L10 3.4Z"
-                            stroke="currentColor"
-                            strokeLinejoin="round"
-                            strokeWidth="1.8"
-                          />
-                          <path d="M10 7.2v4.2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-                          <path d="M10 14.2h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" />
-                        </svg>
-                      </span>
-                    )}
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{cmpDisplayName}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                  <p className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    Tracker footprint
-                    {trackerFootprintTipText ? (
-                      <InfoTip
-                        align="end"
-                        placement="bottom"
-                        text={trackerFootprintTipText}
-                      />
-                    ) : null}
+        <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,0.58fr)_minmax(13rem,0.42fr)]">
+          <div
+            className="min-w-0 space-y-3 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]"
+            data-executive-snapshot-pane
+          >
+            {isScanNotRepresentative ? (
+              <NotScoredSnapshotPane />
+            ) : input.accessLimitationNotice ? (
+              <>
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan coverage</p>
+                  <p className="text-sm leading-6 text-slate-600">
+                    This run was blocked before it established a trustworthy public browsing path, so normal privacy findings were not retained.
                   </p>
-                  <DetailDisclosure
-                    defaultOpen={false}
-                    summary={trackerFootprintExpandLabel}
-                    summaryMeta={trackerFootprintCountLabel ? (
-                      <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                        {trackerFootprintCountLabel}
-                      </span>
-                    ) : null}
-                    richItems={trackerFootprintRichDetails}
-                    itemDisplay="brand"
-                    items={[]}
-                    scrollable={trackerFootprintRichDetails.length > 10}
-                    truncationNote={domainTruncationNote}
-                  />
                 </div>
-                {policySurfaces.length > 0 ? (
-                  <div id="policy-surfaces" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Policy Surfaces</p>
-                    <div className="mt-3 space-y-2">
-                      {policySurfaces.map((surface) => (
-                        <details key={`${surface.pageLabel}:${surface.pageUrl ?? "unknown"}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
-                            <span>{surface.pageLabel}</span>
-                            <ScanReportDisclosureIcon />
-                          </summary>
-                          <div className="mt-3 space-y-2 text-xs leading-5 text-slate-600">
-                            {surface.pageUrl ? <p className="break-words font-medium text-slate-800">{surface.pageUrl}</p> : null}
-                            {surface.pageUrl && (policySurfaceLabelsByUrl.get(surface.pageUrl)?.length ?? 0) > 1 ? (
-                              <p>
-                                This URL is shared by {formatInlineList(policySurfaceLabelsByUrl.get(surface.pageUrl) ?? [])}.
-                              </p>
-                            ) : null}
-                            {surface.details.length > 0 ? (
-                              <ul className="space-y-1">
-                                {surface.details.map((detail) => (
-                                  <li key={detail}>{detail}</li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p>No additional policy details were retained for this surface.</p>
-                            )}
-                          </div>
-                        </details>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {input.showScanInterruptionSnapshot !== false && visibleScanInterruptions.length > 0 ? (
-                  <div id="fingerprinting" className="scroll-mt-24 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Scan Interruption</p>
-                    <div className="mt-3 space-y-2">
-                      {visibleScanInterruptions.map((event) => (
-                        <details key={`${event.label}:${event.details.join("|")}`} className="group rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5">
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-medium text-slate-700">
-                            <span>{event.label}</span>
-                            <ScanReportDisclosureIcon />
-                          </summary>
-                          <div className="mt-3 space-y-1.5 text-xs leading-5 text-slate-600">
-                            {event.details.length > 0 ? (
-                              event.details.map((detail) => <p key={detail}>{detail}</p>)
-                            ) : (
-                              <p>No additional interruption details were retained.</p>
-                            )}
-                          </div>
-                        </details>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {shouldShowFingerprintSnapshot ? (
-                  <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Fingerprinting</p>
-                    <p className="mt-2 text-sm font-medium text-slate-900">
-                      {hasProbableFingerprintingFinding ? "Probable fingerprinting detected" : "No probable fingerprinting detected"}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-800">
-                      {hasProbableFingerprintingFinding
-                        ? input.fingerprintNarrative
-                        : "Minor fingerprinting indicators retained for review."}
-                    </p>
-                    <DetailDisclosure
-                      summary={`${fingerprintEvidence.length} fingerprint indicators retained`}
-                      title="Fingerprint evidence"
-                      items={fingerprintEvidence}
-                    />
-                  </div>
-                ) : null}
-              </div>
-            </>
-          )}
+                <AccessLimitationDetails notice={input.accessLimitationNotice} />
+              </>
+            ) : (
+              <ExecutiveSignalSnapshotPane
+                beforeConsentCookieCount={input.beforeConsentCookieCount}
+                cmpDisplayName={cmpDisplayName}
+                cmpStatusAvailable={cmpStatusAvailable}
+                cmpVendorName={input.cmpVendorName}
+                domainTruncationNote={domainTruncationNote}
+                policySurfaceLabelsByUrl={policySurfaceLabelsByUrl}
+                policySurfaces={policySurfaces}
+                recognizedCmpLabel={recognizedCmpBrand?.label}
+                trackerFootprintDetailLabel={trackerFootprintLabels.detail}
+                trackerFootprintTitle={trackerFootprintLabels.title}
+                trackerFootprintRichDetails={trackerFootprintRichDetails}
+                trackerFootprintTipText={trackerFootprintTipText}
+              />
+            )}
+          </div>
+          <ExecutiveTimelinePane
+            durationMs={input.scanDurationMs}
+            events={input.scanTimelineEvents}
+          />
         </div>
       </div>
       </details>

@@ -168,6 +168,56 @@ function normalizePolicyPageType(surfaceType: string) {
   return surfaceType === "terms" ? "terms_of_service" : surfaceType;
 }
 
+type LocalV2PolicySurface = NonNullable<CanonicalEvidenceBundle["policySurfaceObservations"]>[number];
+
+function canonicalPolicySurfaceUrl(surface: LocalV2PolicySurface, fallbackBaseUrl: string | null) {
+  const rawUrl = firstString(surface.normalizedUrl, surface.url);
+  if (!rawUrl) {
+    return null;
+  }
+
+  try {
+    const parsed = fallbackBaseUrl ? new URL(rawUrl, fallbackBaseUrl) : new URL(rawUrl);
+    parsed.hash = "";
+    parsed.hostname = parsed.hostname.replace(/^www\./i, "").toLowerCase();
+    parsed.pathname = parsed.pathname.replace(/\/+$/g, "") || "/";
+    return parsed.toString();
+  } catch {
+    return rawUrl.replace(/^https?:\/\/www\./i, "https://").replace(/\/+$/g, "");
+  }
+}
+
+function policySurfaceDeduplicationKey(surface: LocalV2PolicySurface, fallbackBaseUrl: string | null) {
+  const pageType = normalizePolicyPageType(surface.surfaceType);
+  const canonicalUrl = canonicalPolicySurfaceUrl(surface, fallbackBaseUrl);
+  return canonicalUrl ? `${pageType}:${canonicalUrl.toLowerCase()}` : `${pageType}:${surface.observationId ?? ""}`;
+}
+
+function policySurfaceEvidenceWeight(surface: LocalV2PolicySurface, pageUrl: string | null) {
+  return [
+    pageUrl && !pageUrl.startsWith("/") ? 10 : 0,
+    typeof surface.confidence === "number" ? surface.confidence : 0,
+    firstString(surface.textExcerpt)?.length ?? 0,
+    (surface.observedTopics ?? []).length,
+    (surface.mentionedControls ?? []).length
+  ].reduce((sum, value) => sum + value, 0);
+}
+
+export function dedupePolicySurfaces(surfaces: readonly LocalV2PolicySurface[], fallbackBaseUrl: string | null) {
+  const retained = new Map<string, { pageUrl: string | null; surface: LocalV2PolicySurface }>();
+
+  for (const surface of surfaces) {
+    const pageUrl = canonicalPolicySurfaceUrl(surface, fallbackBaseUrl);
+    const key = policySurfaceDeduplicationKey(surface, fallbackBaseUrl);
+    const existing = retained.get(key);
+    if (!existing || policySurfaceEvidenceWeight(surface, pageUrl) > policySurfaceEvidenceWeight(existing.surface, existing.pageUrl)) {
+      retained.set(key, { pageUrl, surface });
+    }
+  }
+
+  return [...retained.values()];
+}
+
 function requestUrl(row: Record<string, unknown>) {
   return firstString(row.normalizedUrl, row.requestUrl, row.url);
 }
@@ -285,6 +335,301 @@ function buildVendorEvidence(bundle: CanonicalEvidenceBundle) {
   }).filter((vendor) => vendor.vendorCategory !== "cmp");
 }
 
+function vendorRowsForCategories(
+  vendors: ReturnType<typeof buildVendorEvidence>,
+  categories: string[]
+) {
+  const categorySet = new Set(categories);
+  return vendors.filter((vendor) => categorySet.has(vendor.vendorCategory));
+}
+
+function sanitizeIframeEvents(bundle: CanonicalEvidenceBundle, rootDomain: string | null) {
+  return (bundle.iframeEvents ?? []).slice(0, 75).map((event) => {
+    const frameUrl = firstString(event.frameUrl);
+    const hostname = hostnameFromUrl(frameUrl);
+    return {
+      consentStateAtTime: event.consentStateAtTime,
+      frameName: firstString(event.frameName),
+      frameUrl,
+      hostname,
+      preConsent: event.consentStateAtTime === "pre_consent",
+      thirdParty: hostname ? !sameSite(hostname, rootDomain) : false,
+      timestampMs: event.timestampMs
+    };
+  });
+}
+
+const EMBEDDED_CONTENT_HOST_PATTERNS = [
+  /(^|\.)youtube(?:-nocookie)?\.com$/i,
+  /(^|\.)youtu\.be$/i,
+  /(^|\.)vimeo\.com$/i,
+  /(^|\.)google\.[a-z.]+$/i,
+  /(^|\.)googleapis\.com$/i,
+  /(^|\.)openstreetmap\.org$/i,
+  /(^|\.)spotify\.com$/i,
+  /(^|\.)soundcloud\.com$/i,
+  /(^|\.)twitter\.com$/i,
+  /(^|\.)x\.com$/i,
+  /(^|\.)instagram\.com$/i,
+  /(^|\.)facebook\.com$/i,
+  /(^|\.)tiktok\.com$/i,
+  /(^|\.)linkedin\.com$/i,
+  /(^|\.)typeform\.com$/i,
+  /(^|\.)calendly\.com$/i,
+  /(^|\.)hubspot(?:usercontent)?\.com$/i
+];
+
+const EMBEDDED_CONTENT_PATH_PATTERN = /\/embed\/|\/plugins\/|\/maps\/embed|\/widgets?\//i;
+const SESSION_REPLAY_URL_PATTERN =
+  /clarity\.ms|hotjar\.com|hotjar\.io|fullstory\.com|logrocket\.com|mouseflow\.com|contentsquare\.(?:com|net)|smartlook\.com|inspectlet\.com|luckyorange\.com|quantummetric\.com|sessioncam\.com/i;
+const SESSION_REPLAY_VENDOR_PATTERN =
+  /microsoft clarity|clarity|hotjar|fullstory|logrocket|mouseflow|contentsquare|smartlook|inspectlet|lucky orange|quantum metric|sessioncam/i;
+
+function isKnownEmbeddedContentUrl(url: string | null | undefined, hostnameFallback?: string | null) {
+  const hostname = hostnameFromUrl(url) ?? hostnameFallback ?? null;
+  if (!hostname || !EMBEDDED_CONTENT_HOST_PATTERNS.some((pattern) => pattern.test(hostname))) {
+    return false;
+  }
+  return EMBEDDED_CONTENT_PATH_PATTERN.test(url ?? "") || !/(^|\.)google\.[a-z.]+$/i.test(hostname);
+}
+
+function summarizeEmbeddedContentEvidence(
+  preconsentIframeEvents: ReturnType<typeof sanitizeIframeEvents>,
+  preconsentRequests: CanonicalEvidenceBundle["networkEvents"],
+) {
+  const iframeObservations = preconsentIframeEvents
+    .filter((event) => event.thirdParty && isKnownEmbeddedContentUrl(event.frameUrl, event.hostname))
+    .map((event) => ({
+      evidenceType: "iframe",
+      frameUrl: event.frameUrl,
+      hostname: event.hostname,
+      timestampMs: event.timestampMs
+    }));
+  const networkObservations = (preconsentRequests ?? [])
+    .filter((event) => event.thirdParty === true || event.isThirdParty === true)
+    .filter((event) => isKnownEmbeddedContentUrl(requestUrl(event), event.hostname ?? null))
+    .map((event) => ({
+      evidenceType: "network_request",
+      hostname: event.hostname ?? hostnameFromUrl(requestUrl(event)),
+      requestUrl: requestUrl(event),
+      timestampMs: event.timestampMs
+    }));
+  const observations = [...iframeObservations, ...networkObservations].slice(0, 25);
+
+  return {
+    coverageRetained: true,
+    embeddedContentHosts: uniqueStrings(observations.map((event) => event.hostname)),
+    embeddedContentObservationCount: observations.length,
+    embeddedContentObserved: observations.length > 0,
+    iframeObservationCount: iframeObservations.length,
+    networkObservationCount: networkObservations.length,
+    observations
+  };
+}
+
+function browserApiAccessRows(bundle: CanonicalEvidenceBundle) {
+  return (bundle.runtimeTimeline ?? [])
+    .filter((event) => event.eventType === "browser_api_access")
+    .map((event) => {
+      const ref = event.evidenceRefs?.[0];
+      const apiName = firstString(ref?.label)?.replace(/^Browser API access:\s*/i, "") ?? "browser_api_access";
+      const category = firstString(ref?.excerpt) ?? "browser_api";
+      return {
+        apiName,
+        category,
+        consentStateAtTime: event.consentStateAtTime,
+        fingerprintAttributeCategories: [category],
+        highEntropySignals: [apiName],
+        host: event.hostname ?? hostnameFromUrl(event.url),
+        preConsent: event.consentStateAtTime === "pre_consent",
+        timestampMs: event.timestampMs
+      };
+    });
+}
+
+function browserApiProbeInstalled(bundle: CanonicalEvidenceBundle) {
+  return (bundle.modulesRun ?? []).some((moduleRun) =>
+    (moduleRun.timingBreakdown ?? []).some((timing) =>
+      timing.label === "browser api probe install"
+    )
+  );
+}
+
+function summarizeFingerprintingEvidence(bundle: CanonicalEvidenceBundle) {
+  const rows = browserApiAccessRows(bundle);
+  const apiProbeRetained = browserApiProbeInstalled(bundle) || rows.length > 0;
+  return {
+    apiProbeRetained,
+    artifactCount: rows.length,
+    coverageRetained: apiProbeRetained,
+    fingerprintAttributeCategories: uniqueStrings(rows.flatMap((row) => row.fingerprintAttributeCategories)),
+    fingerprintingObserved: rows.length > 0,
+    highEntropySignals: uniqueStrings(rows.flatMap((row) => row.highEntropySignals)).slice(0, 12),
+    hosts: uniqueStrings(rows.map((row) => row.host)),
+    preConsentObserved: rows.some((row) => row.preConsent)
+  };
+}
+
+function isSessionReplayRequestRow(row: Record<string, unknown>) {
+  const vendor = firstString(row.vendorName, row.vendor);
+  const url = requestUrl(row);
+  const category = firstString(row.category, row.vendorCategory);
+  return (
+    category === "session_replay" ||
+    SESSION_REPLAY_VENDOR_PATTERN.test(vendor ?? "") ||
+    SESSION_REPLAY_URL_PATTERN.test(url ?? "")
+  );
+}
+
+function summarizeSessionReplayEvidence(
+  vendorRows: ReturnType<typeof buildVendorEvidence>,
+  preconsentRequests: CanonicalEvidenceBundle["networkEvents"],
+  requestPurposeRows: Array<Record<string, unknown>>,
+) {
+  const sessionReplayVendors = vendorRowsForCategories(vendorRows, ["session_replay"])
+    .filter((vendor) => SESSION_REPLAY_VENDOR_PATTERN.test(vendor.vendorName) || vendor.vendorCategory === "session_replay");
+  const requestRows = [
+    ...(preconsentRequests ?? []).filter(isSessionReplayRequestRow),
+    ...requestPurposeRows.filter(isSessionReplayRequestRow)
+  ] as Array<Record<string, unknown>>;
+  const requestUrls = uniqueStrings(requestRows.map((row) => requestUrl(row)));
+  const vendors = uniqueStrings([
+    ...sessionReplayVendors.map((vendor) => vendor.vendorName),
+    ...requestRows.map((row) => firstString(row.vendorName, row.vendor))
+  ]).filter((vendor) => SESSION_REPLAY_VENDOR_PATTERN.test(vendor));
+  const firstSeenMs = firstNumber(...requestRows.map((row) => firstNumber(row.timestampMs, row.tsMs)));
+  const observed = vendors.length > 0 || requestUrls.length > 0;
+
+  return {
+    artifactCount: Math.max(vendors.length, requestUrls.length),
+    collectionEndpointObserved: requestUrls.some((url) => /\/collect|\/events?|\/track|\/ingest|clarity\.ms\/collect/i.test(url)),
+    consentStates: observed ? ["pre_consent"] : [],
+    coverageRetained: true,
+    firstSeenMs,
+    libraryOnly: observed && requestUrls.every((url) => /(?:script|tag|recorder|hotjar|fullstory|logrocket|clarity\.ms\/tag)/i.test(url)),
+    preConsentObserved: observed,
+    requestUrls: requestUrls.slice(0, 10),
+    vendors: vendors.slice(0, 10)
+  };
+}
+
+export function summarizePolicySurfaces(
+  policySurfaces: ReturnType<typeof dedupePolicySurfaces>,
+  rootDomain: string | null
+) {
+  const privacySurfaces = policySurfaces.filter((row) => row.surface.surfaceType === "privacy_policy");
+  const article13Surfaces = privacySurfaces.filter((row) => !isGenericThirdPartyPrivacySurface(row, rootDomain));
+  const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
+  const observedTopics = uniqueStrings(article13Surfaces.flatMap((row) => row.surface.observedTopics ?? []));
+  const article13DisclosureSignals = article13Surfaces.flatMap((row) =>
+    (row.surface.article13DisclosureSignals ?? []).map((signal) => ({
+      confidence: signal.confidence,
+      disclosureType: signal.disclosureType,
+      evidenceText: firstString(signal.evidenceText),
+      source: signal.source,
+      status: signal.status,
+      surfaceUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url
+    }))
+  );
+  const mentionedControls = uniqueStrings(policySurfaces.flatMap((row) => row.surface.mentionedControls ?? []));
+  const processingErrorObserved = /processing error|privacy center.*error/i.test(text);
+  return {
+    article13DisclosureSignals,
+    article13DisclosureTypesObserved: uniqueStrings(article13DisclosureSignals
+      .filter((signal) => signal.status === "observed")
+      .map((signal) => signal.disclosureType)),
+    article13DisclosureTypesPartial: uniqueStrings(article13DisclosureSignals
+      .filter((signal) => signal.status === "partial")
+      .map((signal) => signal.disclosureType)),
+    mentionedControls,
+    observedTopics,
+    policySurfaceCount: policySurfaces.length,
+    privacyPolicyPresent: article13Surfaces.length > 0,
+    privacyPolicyTextCharacterCount: text.length,
+    privacyPolicyUrls: uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
+    processingErrorObserved,
+    retainedPrivacyPolicyTextExcerpt: text.slice(0, 1_000)
+  };
+}
+
+function isGenericThirdPartyPrivacySurface(
+  row: ReturnType<typeof dedupePolicySurfaces>[number],
+  rootDomain: string | null
+) {
+  const hostname = hostnameFromUrl(row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url);
+  if (!hostname || sameSite(hostname, rootDomain)) {
+    return false;
+  }
+
+  return [
+    "policies.google.com",
+    "privacy.google.com",
+    "privacy.truste.com",
+    "trustarc.com",
+    "privacy.trustarc.com",
+    "www.trustarc.com"
+  ].includes(hostname);
+}
+
+function summarizeCollectionSurfaces(bundle: CanonicalEvidenceBundle) {
+  const inventoryRetained = Array.isArray(bundle.collectionSurfaceObservations);
+  const observations = (bundle.collectionSurfaceObservations ?? []).slice(0, 25);
+  const surfaceTypes = uniqueStrings(observations.map((row) => row.surfaceType));
+  return {
+    collectionSurfaceCount: observations.length,
+    collectionSurfacesObserved: observations.length > 0,
+    fieldTypes: uniqueStrings(observations.flatMap((row) => row.fieldTypes ?? [])),
+    hasEmailField: observations.some((row) => row.hasEmailField),
+    hasSensitiveFieldHint: observations.some((row) => row.hasSensitiveFieldHint),
+    inventoryRetained,
+    labels: uniqueStrings(observations.flatMap((row) => row.labels ?? [])).slice(0, 12),
+    surfaceTypes
+  };
+}
+
+function summarizeFirstLayerConsentChoices(bundle: CanonicalEvidenceBundle) {
+  const observation = (bundle.consentUiObservations ?? []).find((row) => row.likelyPresent) ??
+    (bundle.consentUiObservations ?? [])[0] ??
+    null;
+  const controls = (observation?.controls ?? []).filter((control) => control.visible !== false);
+  const visibleChoiceLabels = uniqueStrings([
+    ...(observation?.visibleChoiceLabels ?? []),
+    ...controls.map((control) => control.label)
+  ]).slice(0, 12);
+  const acceptLabels = uniqueStrings(controls
+    .filter((control) => control.actionType === "accept_all")
+    .map((control) => control.label));
+  const rejectLabels = uniqueStrings(controls
+    .filter((control) => control.actionType === "reject_all")
+    .map((control) => control.label));
+  const preferenceLabels = uniqueStrings(controls
+    .filter((control) => control.actionType === "manage_preferences")
+    .map((control) => control.label));
+
+  if (!observation) {
+    return null;
+  }
+
+  return {
+    acceptControlObserved: observation.acceptControlObserved === true || acceptLabels.length > 0,
+    acceptLabels,
+    capturedBeforeInteraction: true,
+    controls: controls.slice(0, 12).map((control) => ({
+      actionType: control.actionType,
+      label: control.label,
+      role: control.role,
+      selectorHint: control.selectorHint,
+      tagName: control.tagName
+    })),
+    layerInspected: observation.layerInspected ?? (visibleChoiceLabels.length > 0 ? "first_layer" : "unknown"),
+    managePreferencesControlObserved: observation.managePreferencesControlObserved === true || preferenceLabels.length > 0,
+    preferenceLabels,
+    rejectControlObserved: observation.rejectControlObserved === true || rejectLabels.length > 0,
+    rejectLabels,
+    visibleChoiceLabels
+  };
+}
+
 function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: CanonicalEvidenceBundle): ScanDetailResponse {
   const requestedHost = scanRecord.scan.domainHostname ?? hostnameFromUrl(bundle.normalizedUrl ?? bundle.url);
   const rootDomain = registrableDomain(requestedHost);
@@ -298,12 +643,26 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
   const preconsentCookies = cookieEvents.filter((event) => event.consentStateAtTime === "pre_consent");
   const cookieNames = uniqueStrings(cookieEvents.map((event) => cookieName(event)));
   const preconsentCookieNames = uniqueStrings(preconsentCookies.map((event) => cookieName(event)));
+  const advertisingRetargetingVendors = vendorRowsForCategories(vendorRows, ["advertising", "retargeting", "adtech", "marketing"]);
+  const analyticsVendors = vendorRowsForCategories(vendorRows, ["analytics", "measurement"]);
+  const iframeEvents = sanitizeIframeEvents(bundle, rootDomain);
+  const preconsentIframeEvents = iframeEvents.filter((event) => event.preConsent);
   const cmp = bundle.cmpRuntimeObservations?.[0] ?? null;
   const cmpVendorName = firstString(cmp?.product, cmp?.vendor, cmp?.entity);
-  const policySurfaces = bundle.policySurfaceObservations ?? [];
-  const privacySurface = policySurfaces.find((surface) => surface.surfaceType === "privacy_policy");
-  const termsSurface = policySurfaces.find((surface) => surface.surfaceType === "terms");
-  const cookieSurface = policySurfaces.find((surface) => surface.surfaceType === "cookie_policy");
+  const cmpSignalLabels = uniqueStrings((cmp?.signals ?? []).map((signal) =>
+    firstString(signal.matchedValueRedacted, signal.matchedField, signal.signalType)
+  ));
+  const consentSurfaceLikelyPresent = Boolean(cmpVendorName ?? bundle.derivedRuntimeSignals?.consentBannerLikelyPresent);
+  const firstLayerConsentChoices = summarizeFirstLayerConsentChoices(bundle);
+  const policySurfaces = dedupePolicySurfaces(
+    bundle.policySurfaceObservations ?? [],
+    bundle.normalizedUrl ?? bundle.url ?? (requestedHost ? `https://${requestedHost}/` : null)
+  );
+  const policySurfaceSummary = summarizePolicySurfaces(policySurfaces, rootDomain);
+  const collectionSurfaceSummary = summarizeCollectionSurfaces(bundle);
+  const privacySurface = policySurfaces.find((row) => row.surface.surfaceType === "privacy_policy");
+  const termsSurface = policySurfaces.find((row) => row.surface.surfaceType === "terms");
+  const cookieSurface = policySurfaces.find((row) => row.surface.surfaceType === "cookie_policy");
   const thirdPartyRequestCount =
     bundle.runtimeCoverage?.observationCounts.thirdPartyRequests ?? thirdPartyRequests.length;
   const cookiesBeforeConsentCount =
@@ -343,6 +702,10 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
     })
     .filter((row) => row !== null) as Array<Record<string, unknown>>)
     .slice(0, 25);
+  const embeddedContentSummary = summarizeEmbeddedContentEvidence(preconsentIframeEvents, preconsentRequests);
+  const fingerprintingRuntimeEvidence = browserApiAccessRows(bundle);
+  const fingerprintingEvidenceSummary = summarizeFingerprintingEvidence(bundle);
+  const sessionReplayEvidenceSummary = summarizeSessionReplayEvidence(vendorRows, preconsentRequests, requestPurposeRows);
   const cookieWriteObservations = cookieEvents.map((event) => ({
     beforeConsent: event.consentStateAtTime === "pre_consent",
     category: event.cookiePurpose ?? "unknown",
@@ -359,10 +722,21 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
   }));
   const hybridRuntimeEvidence = {
     consentSummary: {
-      bannerPresent: Boolean(cmpVendorName ?? bundle.derivedRuntimeSignals?.consentBannerLikelyPresent),
+      bannerPresent: consentSurfaceLikelyPresent,
       firstVisibleMs: cmp?.observedAtMs ?? null,
+      cmpFrameworkSignalObserved: Boolean(cmpVendorName),
+      cmpRuntimeSignalLabels: cmpSignalLabels,
+      cookieNoticeObserved: consentSurfaceLikelyPresent,
       requestsBeforeAnyConsentAction: preconsentRequests.length > 0
     },
+    cookieNoticeObserved: consentSurfaceLikelyPresent,
+    cmpFrameworkSignalObserved: Boolean(cmpVendorName),
+    cmpRuntimeSignalLabels: cmpSignalLabels,
+    ...(firstLayerConsentChoices ? {
+      firstLayerConsentChoices,
+      first_layer_consent_choices: firstLayerConsentChoices
+    } : {}),
+    cookieWriteObservations,
     networkSummary: {
       preConsentRequestCount: preconsentRequests.length,
       preConsentThirdPartyRequestCount: preconsentRequests.length,
@@ -386,6 +760,20 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
       preConsent: true,
       vendor: vendor.vendorName
     })),
+    embeddedContentSummary,
+    embedded_content_summary: embeddedContentSummary,
+    fingerprintingEvidenceSummary,
+    fingerprinting_evidence_summary: fingerprintingEvidenceSummary,
+    fingerprintingRuntimeEvidence,
+    fingerprinting_runtime_evidence: fingerprintingRuntimeEvidence,
+    iframeSummary: {
+      frameHostnames: uniqueStrings(preconsentIframeEvents.map((event) => event.hostname)),
+      iframeEvents: preconsentIframeEvents,
+      preConsentIframeCount: preconsentIframeEvents.length,
+      thirdPartyPreConsentIframeCount: preconsentIframeEvents.filter((event) => event.thirdParty).length
+    },
+    sessionReplayEvidenceSummary,
+    session_replay_evidence_summary: sessionReplayEvidenceSummary,
     storageSummary: {
       cookiesBeforeConsentCount,
       cookiesSeenCount: cookieNames.length,
@@ -399,6 +787,8 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
       timelineConfidence: "direct_v2_runtime"
     },
     vendorSummary: {
+      advertisingRetargetingVendors: uniqueStrings(advertisingRetargetingVendors.map((vendor) => vendor.vendorName)),
+      analyticsVendors: uniqueStrings(analyticsVendors.map((vendor) => vendor.vendorName)),
       normalizedVendors: uniqueStrings(vendorRows.map((vendor) => vendor.vendorName)),
       preConsentVendorCount: vendorRows.length,
       rawThirdPartyDomains: thirdPartyDomains,
@@ -412,47 +802,119 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
     consent_baseline_tracker_evidence_urls: preconsentRequestUrls,
     consent_baseline_tracker_vendor_names: uniqueStrings(vendorRows.map((vendor) => vendor.vendorName)),
     consent_preconsent_violation_count: Math.max(preconsentRequests.length, vendorRows.length),
+    collection_surface_count: collectionSurfaceSummary.collectionSurfaceCount,
+    collection_surface_observed: collectionSurfaceSummary.collectionSurfacesObserved,
+    collectionSurfaceSummary,
+    collection_surface_summary: collectionSurfaceSummary,
     consentActionableChoiceObserved: Boolean(cmpVendorName),
-    consentSurfaceObserved: Boolean(cmpVendorName),
+    consentSurfaceObserved: consentSurfaceLikelyPresent,
     consent_actionable_choice_observed: Boolean(cmpVendorName),
-    consent_surface_observed: Boolean(cmpVendorName),
+    consent_surface_observed: consentSurfaceLikelyPresent,
+    cookieNoticeObserved: consentSurfaceLikelyPresent,
+    cookie_notice_observed: consentSurfaceLikelyPresent,
+    ...(cookieSurface ? { cookiePolicyPresent: true, cookie_policy_present: true } : {}),
+    ...(cmpVendorName ? {
+      cmpFrameworkSignalObserved: true,
+      cmpRuntimeSignalLabels: cmpSignalLabels,
+      cmp_framework_signal_observed: true,
+      cmp_runtime_signal_labels: cmpSignalLabels,
+      cmp_vendor_name: cmpVendorName
+    } : {}),
+    ...(firstLayerConsentChoices ? {
+      firstLayerConsentChoices,
+      first_layer_consent_choices: firstLayerConsentChoices,
+      rejectPathDepthAndAvailability: {
+        completeRejectPathAvailable: firstLayerConsentChoices.rejectControlObserved,
+        completeRejectPathDetected: firstLayerConsentChoices.rejectControlObserved,
+        firstLayerConsentChoices,
+        layerInspected: firstLayerConsentChoices.layerInspected,
+        rejectAvailableOnFirstLayer: firstLayerConsentChoices.rejectControlObserved,
+        rejectEquivalentFound: firstLayerConsentChoices.rejectControlObserved,
+        visibleRejectLabels: firstLayerConsentChoices.rejectLabels
+      },
+      reject_path_depth_and_availability: {
+        complete_reject_path_available: firstLayerConsentChoices.rejectControlObserved,
+        complete_reject_path_detected: firstLayerConsentChoices.rejectControlObserved,
+        first_layer_consent_choices: firstLayerConsentChoices,
+        layer_inspected: firstLayerConsentChoices.layerInspected,
+        reject_available_on_first_layer: firstLayerConsentChoices.rejectControlObserved,
+        reject_equivalent_found: firstLayerConsentChoices.rejectControlObserved,
+        visible_reject_labels: firstLayerConsentChoices.rejectLabels
+      }
+    } : {}),
     consentTimeline: hybridRuntimeEvidence.timelineMarkers,
     consent_timeline: hybridRuntimeEvidence.timelineMarkers,
+    advertising_retargeting_vendor_count: advertisingRetargetingVendors.length,
+    advertising_retargeting_vendor_names: uniqueStrings(advertisingRetargetingVendors.map((vendor) => vendor.vendorName)),
+    analytics_vendor_count: analyticsVendors.length,
+    analytics_vendor_names: uniqueStrings(analyticsVendors.map((vendor) => vendor.vendorName)),
     domainVendorRegistry: vendorRows.map((vendor) => ({
       endpointHostname: vendor.scriptHost,
       vendorCategory: vendor.vendorCategory,
       vendorName: vendor.vendorName
     })),
+    embeddedContentSummary,
+    embedded_content_summary: embeddedContentSummary,
+    fingerprintingEvidenceSummary,
+    fingerprinting_evidence_summary: fingerprintingEvidenceSummary,
+    fingerprintingRuntimeEvidence,
+    fingerprinting_runtime_evidence: fingerprintingRuntimeEvidence,
     hybridRuntimeEvidence: hybridRuntimeEvidence,
     hybrid_runtime_evidence: hybridRuntimeEvidence,
+    iframeEvents,
+    iframe_events: iframeEvents,
     initial_cookie_count: cookieNames.length,
     initial_cookie_domains: uniqueStrings(cookieEvents.map((event) => event.cookieDomain ?? event.hostname)),
     initial_cookie_names: cookieNames,
+    cookies_before_consent_count: cookiesBeforeConsentCount,
+    cookieWriteObservations,
+    cookie_write_observations: cookieWriteObservations,
     key_page_discovery_summary: {
       pageSummaries: [privacySurface, termsSurface, cookieSurface]
-        .filter((surface): surface is NonNullable<typeof surface> => Boolean(surface))
-        .map((surface) => ({
-          bestCandidateUrl: surface.normalizedUrl ?? surface.url,
+        .filter((row): row is NonNullable<typeof row> => Boolean(row))
+        .map(({ pageUrl, surface }) => ({
+          bestCandidateUrl: pageUrl ?? surface.normalizedUrl ?? surface.url,
           pageType: surface.surfaceType,
-          successfulUrl: surface.normalizedUrl ?? surface.url,
+          successfulUrl: pageUrl ?? surface.normalizedUrl ?? surface.url,
           surfaceDetected: true,
           surfaceState: "linked_and_verified"
         }))
     },
     requestPurposeClassificationConfidence: requestPurposeRows,
     request_purpose_classification_confidence: requestPurposeRows,
+    sessionReplayEvidenceSummary,
+    session_replay_evidence_summary: sessionReplayEvidenceSummary,
+    policyDisclosureSummary: policySurfaceSummary,
+    policy_disclosure_summary: policySurfaceSummary,
     thirdPartyRequestCount: thirdPartyRequestCount,
     thirdPartyRequestDomains: thirdPartyDomains,
     third_party_request_count: thirdPartyRequestCount,
-    third_party_request_domains: thirdPartyDomains
+    third_party_request_domains: thirdPartyDomains,
+    visual_evidence_artifacts: (bundle.screenshots ?? []).flatMap((screenshot) => {
+      if (screenshot.artifactId !== "screenshot_pre_consent") {
+        return [];
+      }
+      return [{
+        capture_step: "initial_load",
+        consent_state: screenshot.consentStateAtTime ?? "pre_consent",
+        final_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
+        id: "local_v2:screenshot_pre_consent",
+        interaction_state: "none",
+        key: `local-v2-dag-scans/${scanRecord.scan.id}/screenshot-pre-consent.png`,
+        mime_type: "image/png",
+        page_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
+        status: "available"
+      }];
+    })
   };
   const snapshot = {
     ...(scanRecord.snapshot ?? {}),
     certscore_overall: score,
     consent_maturity_score: Math.max(0, score - 5),
     consent_score: Math.max(0, score - 10),
-    cookie_banner_present: Boolean(cmpVendorName ?? bundle.derivedRuntimeSignals?.consentBannerLikelyPresent),
+    cookie_banner_present: consentSurfaceLikelyPresent,
     cookie_count_total: cookieNames.length,
+    cookies_before_consent_count: cookiesBeforeConsentCount,
     data_collection_risk_score: Math.min(100, Math.max(20, thirdPartyRequestCount)),
     domain: requestedHost,
     final_effective_url: bundle.normalizedUrl ?? bundle.url,
@@ -477,12 +939,12 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
     ...(cookieSurface ? { cookie_policy_present: true } : {}),
     ...(termsSurface ? { terms_of_service_present: true } : {})
   };
-  const policyEnrichmentRows = policySurfaces.map((surface) => ({
+  const policyEnrichmentRows = policySurfaces.map(({ pageUrl, surface }) => ({
     id: `local-v2-${surface.observationId}`,
     pageType: normalizePolicyPageType(surface.surfaceType),
-    pageUrl: surface.normalizedUrl ?? surface.url,
+    pageUrl: pageUrl ?? surface.normalizedUrl ?? surface.url,
     page_type: normalizePolicyPageType(surface.surfaceType),
-    page_url: surface.normalizedUrl ?? surface.url,
+    page_url: pageUrl ?? surface.normalizedUrl ?? surface.url,
     policyActionableFlags: surface.mentionedControls ?? [],
     policyMentions: (surface.observedTopics ?? []).map((topic) => ({ topic })),
     policySummaryShort: surface.textExcerpt ?? `${policySurfaceLabel(surface.surfaceType)} retained by local v2 DAG scan.`,

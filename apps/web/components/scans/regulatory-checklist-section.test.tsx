@@ -107,6 +107,26 @@ test("RegulatoryChecklistSection renders tab badges inside the More menu", () =>
   assert.match(html, /Alpha/);
 });
 
+test("RegulatoryChecklistSection omits tab controls for single-tab report sections", () => {
+  const html = renderToStaticMarkup(createElement(RegulatoryChecklistSection, {
+    headingLabel: "GDPR / ePrivacy Evidence Review",
+    showAdvancedEvidenceToggle: true,
+    tabs: [
+      {
+        content: createElement("div", null, "GDPR checklist"),
+        id: "gdpr-eprivacy",
+        label: "GDPR / ePrivacy",
+        shortLabel: "GDPR/ePrivacy"
+      }
+    ]
+  }));
+
+  assert.match(html, /GDPR \/ ePrivacy Evidence Review/);
+  assert.match(html, /GDPR checklist/);
+  assert.doesNotMatch(html, /Expand all/);
+  assert.doesNotMatch(html, />GDPR\/ePrivacy</);
+});
+
 test("RegulatoryChecklistSection can override the heading label", () => {
   const html = renderToStaticMarkup(createElement(RegulatoryChecklistSection, {
     headingLabel: "Regulatory Diagnostics",

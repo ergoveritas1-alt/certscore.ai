@@ -54,3 +54,33 @@ test("detects thin retained policy extraction from latest enrichment event", () 
   assert.equal(context.weakPolicyEvidenceReason, "thin_policy_extraction");
   assert.match(getWeakPolicyEvidenceLimitation(context) ?? "", /very small amount of text/);
 });
+
+test("canonical policy disclosure summary prevents stale no-document limitation", () => {
+  const context = derivePolicyCoverageContext({
+    events: [
+      {
+        createdAt: "2026-06-07T22:00:00.000Z",
+        eventType: "signals.nano_doc_enrichment_completed",
+        metadataJson: {
+          documentSourceCount: 0,
+          freshExtractionCharacterCount: 0,
+          policyDocumentCount: 0,
+          policyEnrichmentCount: 0
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4200,
+        privacyPolicyUrls: ["https://example.test/privacy"]
+      }
+    }
+  });
+
+  assert.equal(context.policyDocumentCount, 1);
+  assert.equal(context.policyEnrichmentCount, 1);
+  assert.equal(context.extractionCharacterCount, 4200);
+  assert.equal(context.weakPolicyEvidence, false);
+  assert.equal(getWeakPolicyEvidenceLimitation(context), null);
+});
