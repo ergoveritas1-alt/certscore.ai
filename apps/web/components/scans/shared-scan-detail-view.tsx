@@ -6455,6 +6455,14 @@ export function SharedScanDetailView({
     framework: "gdpr_eprivacy",
     rows: reportableGdprEprivacyCoverageChecklist
   });
+  const consentSurfaceCoverageItem = gdprEprivacyCoverageChecklist.find((item) => item.id === "consent_surface_observed");
+  const executiveCookieBannerPresent =
+    scanRecord.snapshot?.cookie_banner_present === true ||
+    consentSurfaceCoverageItem?.status === "Observed"
+      ? true
+      : typeof scanRecord.snapshot?.cookie_banner_present === "boolean"
+        ? scanRecord.snapshot.cookie_banner_present
+        : null;
   const executiveDisplayedScore = gdprEprivacyCoverageScore.score ?? legacyExecutiveDisplayedScore;
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {
@@ -6639,7 +6647,7 @@ export function SharedScanDetailView({
             coverageMicrocards={coverageMicrocards}
             coverageLevel={executiveCoverageLevel}
             cmpVendorName={typeof scanRecord.snapshot?.cmp_vendor_name === "string" ? scanRecord.snapshot.cmp_vendor_name : null}
-            cookieBannerPresent={typeof scanRecord.snapshot?.cookie_banner_present === "boolean" ? scanRecord.snapshot.cookie_banner_present : null}
+            cookieBannerPresent={executiveCookieBannerPresent}
             domainBenchmark={scanRecord.domainBenchmark}
             externalCoverageContextAvailable={Boolean(fallbackEvidence)}
             finalHost={certScoreSummary.finalHost}

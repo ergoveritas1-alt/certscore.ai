@@ -6,6 +6,9 @@ region="${AWS_REGION:-eu-central-1}"
 prefix="${CERTSCORE_V2_DAG_LAMBDA_DEV_PREFIX:-certscore-v2-dag-local}"
 repository_name="${CERTSCORE_V2_DAG_LAMBDA_ECR_REPOSITORY:-${prefix}-lambda}"
 image_tag="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_TAG:-dev}"
+build_git_sha="${BUILD_GIT_SHA:-$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || true)}"
+build_image_tag="${BUILD_IMAGE_TAG:-${image_tag}}"
+scanner_runtime_version="${SCANNER_RUNTIME_VERSION:-certscore-v2-dag-parallel-path}"
 platform="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_PLATFORM:-linux/amd64}"
 runtime_base_tag="${CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_TAG:-runtime-base}"
 push_runtime_base="${CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE:-false}"
@@ -89,6 +92,9 @@ docker buildx build \
   --provenance=false \
   --sbom=false \
   "${runtime_base_build_args[@]}" \
+  --build-arg "BUILD_GIT_SHA=${build_git_sha}" \
+  --build-arg "BUILD_IMAGE_TAG=${build_image_tag}" \
+  --build-arg "SCANNER_RUNTIME_VERSION=${scanner_runtime_version}" \
   --cache-from "type=registry,ref=${build_cache_image_uri}" \
   --cache-to "type=registry,ref=${build_cache_image_uri},mode=max" \
   -f "${repo_root}/apps/v2-dag-lambda/Dockerfile" \
@@ -102,6 +108,9 @@ Built and pushed local v2 DAG Lambda image:
   CERTSCORE_V2_DAG_LAMBDA_IMAGE_URI=${image_uri}
   CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_IMAGE_URI=${runtime_base_image_uri}
   CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_ACTION=${runtime_base_action}
+  BUILD_GIT_SHA=${build_git_sha}
+  BUILD_IMAGE_TAG=${build_image_tag}
+  SCANNER_RUNTIME_VERSION=${scanner_runtime_version}
   CERTSCORE_V2_DAG_LAMBDA_BUILD_CACHE_IMAGE_URI=${build_cache_image_uri}
   CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_CACHE_IMAGE_URI=${runtime_base_cache_image_uri}
 EOF

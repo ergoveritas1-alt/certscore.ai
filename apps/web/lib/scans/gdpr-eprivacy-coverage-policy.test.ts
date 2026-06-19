@@ -1303,6 +1303,81 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats banner-only cookie notice 
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /did not include a structured first-layer reject/i);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes flags first-layer accept-only cookie consent as a reject-option gap", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        consentSummary: {
+          bannerPresent: true,
+          textSnippet:
+            "Our use of cookies and other technologies. We and our partners process data to store and/or access information on a device, select advertising, and measure content performance."
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerConsentChoices: {
+          acceptVisibleOnFirstLayer: true,
+          capturedBeforeInteraction: true,
+          rejectVisibleOnFirstLayer: false,
+          visibleChoiceLabels: ["Accept All", "Show Purposes"]
+        },
+        layerInspected: "first_layer",
+        rejectAvailableOnFirstLayer: false
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+  const outcome = outcomes.reject_all_path_availability;
+  assert.equal(outcome?.status, "Gap observed");
+  assert.match(outcome?.limitation ?? "", /no same-layer reject, decline, refuse, or continue-without-accepting option/i);
+  assert.match(outcome?.limitation ?? "", /first-layer availability signal only/i);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.acceptControlObserved, true);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.rejectControlObserved, false);
+  assert.deepEqual(outcome?.criticalEvidence.retainedEvidence.visibleChoiceLabels, ["Accept All", "Show Purposes"]);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats no banner and no non-essential activity as neutral for reject option", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "browser_runtime_capture",
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        networkSummary: {
+          preConsentThirdPartyRequestCount: 0
+        },
+        storageSummary: {
+          cookiesBeforeConsentCount: 0,
+          cookiesSeenCount: 0
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: false,
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed"
+      }
+    },
+    snapshot: {
+      cookie_banner_present: false,
+      preconsent_tracking_detected: false
+    }
+  });
+
+  const outcome = outcomes.reject_all_path_availability;
+  assert.equal(outcome?.status, "Not observed");
+  assert.match(outcome?.limitation ?? "", /no non-essential cookie\/tracking activity was observed/i);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.preconsentCookieOrTrackingActivityObserved, false);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes observes durable cookie policy surfaces and flags missing surfaces with pre-consent runtime evidence", () => {
   const observed = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -1337,6 +1412,34 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes observes durable cookie policy su
   });
 
   assert.equal(gap.cookie_notice_policy_availability?.status, "Gap observed");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats retained cookie topics in privacy policy as durable cookie disclosure", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        observedTopics: ["cookies", "advertising"],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 2200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "We use identifiers and similar technologies to remember choices and measure services."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.cookie_notice_policy_availability?.status, "Observed");
+  assert.equal(
+    outcomes.cookie_notice_policy_availability?.criticalEvidence.retainedEvidence.cookiePolicyPresent,
+    true
+  );
+  assert.deepEqual(
+    outcomes.cookie_notice_policy_availability?.criticalEvidence.retainedEvidence.observedPolicyTopics,
+    ["cookies", "advertising"]
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks analytics and device fingerprinting absent after runtime capture", () => {

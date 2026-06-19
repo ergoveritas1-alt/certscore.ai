@@ -1,6 +1,8 @@
+import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { NextResponse } from "next/server";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { getVisualEvidenceArtifacts } from "../../../../../../lib/scans/visual-evidence";
 import { isPlatformAdminEmail } from "../../../../../../server/admin/platform-admin";
 import { getCurrentUser } from "../../../../../../server/auth";
@@ -36,6 +38,39 @@ function isSafeStorageKey(value: string) {
 
 function isSafeStorageBucket(value: string) {
   return /^[a-z0-9][a-z0-9.-]{1,62}$/.test(value) && !value.includes("..");
+}
+
+function isLocalV2DagLambdaArtifact(input: { bucket: string | null | undefined; key: string }) {
+  return Boolean(
+    input.bucket &&
+    input.bucket.includes("v2-dag-local-artifacts") &&
+    input.key.startsWith("v2-dag-lambda/")
+  );
+}
+
+function inferS3ArtifactRegion(bucket: string) {
+  const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-2)(?:-|$)/);
+  return match?.[1] ?? "eu-central-1";
+}
+
+async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {
+  if (!body) {
+    throw new Error("Visual evidence artifact did not include a body.");
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+  if (body instanceof Readable) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+  if (typeof body === "object" && "transformToByteArray" in body && typeof body.transformToByteArray === "function") {
+    return Buffer.from(await body.transformToByteArray());
+  }
+  throw new Error("Unsupported visual evidence artifact response body.");
 }
 
 async function getLocalDevVisualEvidenceResponse(input: { contentType: string | null; key: string }) {
@@ -138,6 +173,31 @@ async function getLocalV2DagVisualEvidenceResponse(input: { contentType: string 
   return null;
 }
 
+async function getLocalV2DagLambdaS3VisualEvidenceResponse(input: {
+  bucket: string | null | undefined;
+  contentType: string | null;
+  key: string;
+}) {
+  if (!isSafeStorageKey(input.key) || !input.bucket || !isSafeStorageBucket(input.bucket) || !isLocalV2DagLambdaArtifact(input)) {
+    return null;
+  }
+
+  try {
+    const response = await new S3Client({ region: inferS3ArtifactRegion(input.bucket) }).send(
+      new GetObjectCommand({ Bucket: input.bucket, Key: input.key })
+    );
+    const body = await streamToBuffer(response.Body);
+    return new NextResponse(body, {
+      headers: {
+        "Cache-Control": "private, no-store",
+        "Content-Type": input.contentType ?? response.ContentType ?? "image/png"
+      }
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(_request: Request, context: RouteContext) {
   const [{ artifactId, scanId }, user] = await Promise.all([context.params, getCurrentUser()]);
   let scanRecord = await getAnonymousScanById(scanId);
@@ -190,6 +250,15 @@ export async function GET(_request: Request, context: RouteContext) {
   });
   if (localDevResponse) {
     return localDevResponse;
+  }
+
+  const localV2DagLambdaS3Response = await getLocalV2DagLambdaS3VisualEvidenceResponse({
+    bucket: artifact.bucket,
+    contentType: artifact.mimeType,
+    key: artifact.key
+  });
+  if (localV2DagLambdaS3Response) {
+    return localV2DagLambdaS3Response;
   }
 
   const signedUrl = await createSignedStorageUrl(artifact.key, 300, artifact.bucket ?? undefined);

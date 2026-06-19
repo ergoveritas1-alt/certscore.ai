@@ -68,6 +68,7 @@ export type StaticFixturePage =
   | "policy-retention-rights-only"
   | "policy-state-privacy-rights-link"
   | "policy-cmp-preference-control"
+  | "policy-manage-cookies-footer-control"
   | "policy-no-links"
   | "policy-notice-at-collection-link"
   | "policy-privacy-choices-link"
@@ -153,6 +154,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-retention-rights-only": "policy-retention-rights-only",
   "policy-state-privacy-rights-link": "policy-state-rights",
   "policy-cmp-preference-control": "policy-cmp-preference-control",
+  "policy-manage-cookies-footer-control": "policy-manage-cookies-footer-control",
   "policy-no-links": "policy-no-links",
   "policy-notice-at-collection-link": "policy-notice-at-collection",
   "policy-privacy-choices-link": "policy-privacy-choices",
@@ -758,6 +760,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-retention-rights-only": `<a href="/policies/rights-only">Privacy Policy</a>`,
     "policy-state-privacy-rights-link": `<a href="/state-privacy-rights">State Privacy Rights</a>`,
     "policy-cmp-preference-control": `<button id="ot-sdk-btn" type="button" aria-label="Cookie Settings">Cookie Settings</button>`,
+    "policy-manage-cookies-footer-control": `<main><p>News homepage</p></main><footer><button id="manage-cookies" type="button">Manage Cookies+</button></footer>`,
     "policy-no-links": "",
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,

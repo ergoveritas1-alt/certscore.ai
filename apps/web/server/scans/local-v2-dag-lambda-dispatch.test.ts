@@ -185,6 +185,9 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
       scanId: "scan-local-1",
+      scannerGitSha: "abc123scanner",
+      scannerImageTag: "scanner-image:abc123scanner",
+      scannerRuntimeVersion: "v2-dag-runtime.1",
       status: "completed",
       targetEnvironment: "local"
     })
@@ -197,6 +200,9 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
   assert.equal(parsed.productionFindingIntegration, false);
   assert.equal(parsed.artifactOnly, true);
   assert.equal(parsed.artifactPointers?.manifestUri, "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json");
+  assert.equal(parsed.scannerGitSha, "abc123scanner");
+  assert.equal(parsed.scannerImageTag, "scanner-image:abc123scanner");
+  assert.equal(parsed.scannerRuntimeVersion, "v2-dag-runtime.1");
   assert.deepEqual(parsed.phaseTimings, [{ durationMs: 42, label: "core_artifact_upload", status: "completed" }]);
 });
 

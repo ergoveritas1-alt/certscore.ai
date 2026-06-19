@@ -610,6 +610,98 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
   }
 });
 
+test("materializeLocalV2DagScanDetail does not surface pre-consent error-shell screenshots", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/visual-error-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-17T13:14:02.000Z",
+      consentUiObservations: [
+        {
+          basis: ["bounded_capture_timeout_or_failure", "dom_text_fallback_after_consent_ui_timeout"],
+          confidence: 0.5,
+          likelyPresent: false,
+          observationId: "consent_ui_pre_consent",
+          textExcerpt: "Unknown Error",
+          visibleChoiceLabels: []
+        }
+      ],
+      cookieEvents: [],
+      modulesRun: [],
+      networkEvents: [],
+      normalizedUrl: "https://cnn.com/",
+      policySurfaceObservations: [],
+      runtimeTimeline: [],
+      scanId: "visual-error-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 4827,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "network_idle",
+          path: "/tmp/certscore-v2/visual-error-fixture/screenshot-pre-consent.png",
+          url: "https://edition.cnn.com/"
+        }
+      ],
+      startedAt: "2026-06-17T13:13:50.000Z",
+      url: "https://cnn.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      events: [
+        {
+          createdAt: "2026-06-17T13:14:02.000Z",
+          eventType: "v2_lambda_result.received",
+          id: "event-visual-error-1",
+          message: "Local v2 DAG Lambda returned a completed artifact-only result.",
+          metadataJson: {
+            artifactOnly: true,
+            artifactPointers: {
+              scanArtifactUri: "s3://certscore-v2-dag-local-artifacts-eu-west-1-199536052647/v2-dag-lambda/local/visual-error-fixture/CanonicalEvidenceBundle.json"
+            },
+            processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+            productionFindingIntegration: false
+          }
+        }
+      ],
+      scan: {
+        ...makeScanRecord().scan,
+        id: "bc290424-9974-414e-ad48-558e1a2b469e",
+        scanConfigJson: {
+          hostname: "cnn.com",
+          normalizedUrl: "https://cnn.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const visualArtifacts = detail.runtimeArtifacts?.visual_evidence_artifacts as Array<Record<string, unknown>> | undefined;
+    assert.equal(visualArtifacts?.[0]?.status, "capture_failed");
+    assert.equal(visualArtifacts?.[0]?.key, null);
+    assert.equal(visualArtifacts?.[0]?.status_reason, "pre_consent_error_shell_captured");
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail marks failed pre-consent runtime counts as not retained", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

@@ -602,6 +602,43 @@ test("GdprEprivacyCoverageChecklistCard renders policy excerpts in monospace wit
   assert.doesNotMatch(html, /docum\.\.\.&quot;<\/span>/);
 });
 
+test("GdprEprivacyCoverageChecklistCard explains international transfer evidence as transparency-only", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            retainedEvidence: {
+              article13Signal: {
+                disclosureType: "international_transfers",
+                evidenceText:
+                  "or confirmed that all data recipients will provide an adequate level of data protection, in particular by entering into standard contractual clauses or relying on another approved safeguard.",
+                source: "deterministic",
+                status: "observed"
+              }
+            },
+            statusBasis: "International transfer disclosure evidence was retained in public policy-surface evidence."
+          },
+          evidenceState: "observed",
+          id: "international_transfers_disclosure",
+          label: "International transfer disclosure observed",
+          status: "Observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /Policy text includes international-transfer\/safeguards disclosure/);
+  assert.match(html, /transparency signal only/);
+  assert.match(html, /does not validate the sufficiency of the transfer mechanism/);
+  assert.match(html, /adequate level of data protection/);
+  assert.match(html, /standard contractual clauses/);
+  assert.doesNotMatch(html, /Policy text included matching disclosure evidence/);
+});
+
 test("GdprEprivacyCoverageChecklistCard makes policy gap decisions inferable from descriptor and packet", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {

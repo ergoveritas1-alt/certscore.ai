@@ -204,6 +204,12 @@ test("handler rejects wrong contract, processor, unsupported region, VPC, or pro
 
 test("handler emits a validated completed SQS result without production findings", async () => {
   const sentBodies: string[] = [];
+  const previousBuildGitSha = process.env.BUILD_GIT_SHA;
+  const previousBuildImageTag = process.env.BUILD_IMAGE_TAG;
+  const previousScannerRuntimeVersion = process.env.SCANNER_RUNTIME_VERSION;
+  process.env.BUILD_GIT_SHA = "abc123scanner";
+  process.env.BUILD_IMAGE_TAG = "scanner-image:abc123scanner";
+  process.env.SCANNER_RUNTIME_VERSION = "v2-dag-runtime.1";
   const result = await handler(validPayload(), {
     now: () => new Date("2026-06-15T18:00:00.000Z"),
     runArtifactChain: async () => ({
@@ -227,9 +233,27 @@ test("handler emits a validated completed SQS result without production findings
       }
     }
   });
+  if (previousBuildGitSha === undefined) {
+    delete process.env.BUILD_GIT_SHA;
+  } else {
+    process.env.BUILD_GIT_SHA = previousBuildGitSha;
+  }
+  if (previousBuildImageTag === undefined) {
+    delete process.env.BUILD_IMAGE_TAG;
+  } else {
+    process.env.BUILD_IMAGE_TAG = previousBuildImageTag;
+  }
+  if (previousScannerRuntimeVersion === undefined) {
+    delete process.env.SCANNER_RUNTIME_VERSION;
+  } else {
+    process.env.SCANNER_RUNTIME_VERSION = previousScannerRuntimeVersion;
+  }
 
   assert.equal(result.status, "completed");
   assert.equal(result.productionFindingIntegration, false);
+  assert.equal(result.scannerGitSha, "abc123scanner");
+  assert.equal(result.scannerImageTag, "scanner-image:abc123scanner");
+  assert.equal(result.scannerRuntimeVersion, "v2-dag-runtime.1");
   assert.equal(Object.hasOwn(result, "findings"), false);
   assert.equal(Object.hasOwn(result, "checklistRows"), false);
   assert.equal(Object.hasOwn(result, "score"), false);
@@ -241,6 +265,9 @@ test("handler emits a validated completed SQS result without production findings
   assert.equal(parsed.productionFindingIntegration, false);
   assert.equal(parsed.artifactPointers?.manifestUri, "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json");
   assert.equal(parsed.artifactMetadata?.manifestUri?.sizeBytes, 10);
+  assert.equal(parsed.scannerGitSha, "abc123scanner");
+  assert.equal(parsed.scannerImageTag, "scanner-image:abc123scanner");
+  assert.equal(parsed.scannerRuntimeVersion, "v2-dag-runtime.1");
   assert.deepEqual(parsed.phaseTimings, [{ durationMs: 123, label: "scan", status: "completed" }]);
 });
 

@@ -98,7 +98,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   {
     id: "reject_all_path_availability",
     label: "Reject option observed",
-    explanation: "Whether a reject-all or equivalent refusal path was available from the observed consent surface.",
+    explanation: "Whether a first-layer reject, decline, refuse, or continue-without-accepting option was observed on the retained consent surface.",
     findingIds: [
       "accept_only_banner",
       "dismiss_without_reject",

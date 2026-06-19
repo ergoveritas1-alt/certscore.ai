@@ -780,7 +780,7 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
 
   if (item.id === "reject_all_path_availability") {
     return item.status === "Observed"
-      ? "A reject-all or equivalent refusal path was observed from the consent surface."
+      ? "A reject-all or equivalent refusal path was observed from structured consent-surface evidence."
       : item.status === "Gap observed"
         ? "A reject-all or equivalent refusal path was not observed as equally available from the consent surface."
         : "Reject-path availability was not resolved from the retained consent-surface evidence.";
@@ -1061,8 +1061,8 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     ]).slice(0, 3);
     if (evidenceLabel === "Observed") {
       return labels.length > 0
-        ? `A first-layer refusal path was observed: ${formatList(labels)}. This confirms availability, not post-click behavior.`
-        : "A first-layer refusal path was observed. This confirms availability, not post-click behavior.";
+        ? `A refusal path was observed from structured consent-control evidence: ${formatList(labels)}. This confirms availability, not post-click behavior.`
+        : "A refusal path was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
     }
     if (evidenceLabel === "Potential gap") {
       return "A first-layer reject-all or equivalent refusal path was expected from the observed consent surface but was not retained.";
@@ -1086,6 +1086,9 @@ function getArticle13RationalePrefix(item: GdprEprivacyCoverageChecklistItem) {
   }
   if (getEvidenceLabel(item) === "Not observed") {
     return "Scanner did not retain a clear matching transparency disclosure";
+  }
+  if (item.id === "international_transfers_disclosure") {
+    return "Policy text includes international-transfer/safeguards disclosure. This is a transparency signal only and does not validate the sufficiency of the transfer mechanism";
   }
   return "Policy text included matching disclosure evidence";
 }

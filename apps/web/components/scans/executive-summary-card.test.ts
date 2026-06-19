@@ -215,6 +215,32 @@ test("buildRegulatoryLenses leads GDPR summary with consent timing when no first
   assert.equal(gdprLens?.summary, "Consent and pre-consent tracking risk is the main issue.");
 });
 
+test("buildRegulatoryLenses does not call zero-footprint cookie evidence pre-consent tracking", () => {
+  const lenses = buildRegulatoryLenses(
+    [
+      makeFinding("cookie_disclosure_gap", "Cookie notice / cookie policy availability", {
+        severity: "medium",
+        shortSummary: "Cookie/storage evidence was retained, but no durable cookie settings surface was retained."
+      })
+    ],
+    {
+      beforeConsentCookieCount: 14,
+      thirdPartyRequestCount: 0
+    },
+    {
+      unifiedContext: {
+        beforeConsentCookieCount: 14,
+        cookieBannerPresent: true,
+        hasTrackingConcern: true,
+        thirdPartyRequestCount: 0
+      }
+    }
+  );
+
+  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
+  assert.equal(gdprLens?.summary, "Consent and pre-consent cookie/storage evidence are the main issue.");
+});
+
 test("buildRegulatoryLenses keeps pre-consent tracking out of FTC unless paired with choice or disclosure context", () => {
   const lenses = buildRegulatoryLenses(
     [
@@ -1144,6 +1170,31 @@ test("benchmark score explanation leads with unconfirmed banner plus pre-consent
   );
 });
 
+test("benchmark score explanation does not claim advertising tracking without vendor context", () => {
+  const explanation = deriveBenchmarkScoreExplanation({
+    benchmark: {
+      confidence: "medium",
+      estimatedRankLabel: "Typical",
+      expectedCookiesBeforeConsent: 2,
+      expectedOverallScore: 72,
+      expectedThirdPartyRequests: 24,
+      industry: "SaaS / web application",
+      rationale: "Matched to a SaaS benchmark."
+    },
+    cookieBannerPresent: false,
+    findings: [
+      makeFinding("third_party_cookie_pre_consent", "Third-party cookies before consent", {
+        shortSummary: "cookie activity before consent"
+      })
+    ],
+    score: 61,
+    vendorNames: []
+  });
+
+  assert.doesNotMatch(explanation ?? "", /advertising\/analytics storage and tracking were observed/i);
+  assert.doesNotMatch(explanation ?? "", /Consent and pre-consent tracking risk is the main issue/i);
+});
+
 test("benchmark score explanation treats tiny negative deltas as near benchmark", () => {
   const explanation = deriveBenchmarkScoreExplanation({
     benchmark: {
@@ -1541,7 +1592,7 @@ test("ExecutiveSummaryCard hides protected-route interruptions for non-admin vie
     })
   );
 
-  assert.match(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
+  assert.match(html, /data-testid="executive-posture-badge"[^>]*>Complete</);
   assert.doesNotMatch(html, /Protected route encountered/);
   assert.doesNotMatch(html, /Homepage findings are based on observable public-page evidence/);
   assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
@@ -1710,7 +1761,7 @@ test("ExecutiveSummaryCard renders limited review for latimes-style interrupted 
   );
 
   assert.match(html, /Limited review/);
-  assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
+  assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Complete</);
   assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
   assert.doesNotMatch(html, /CertScore did not confirm a headline homepage issue from retained evidence/);
   assert.doesNotMatch(html, /Observed vendor and request counts may be incomplete/);
@@ -1764,7 +1815,7 @@ test("ExecutiveSummaryCard keeps clean well-covered scans clear", () => {
     })
   );
 
-  assert.match(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
+  assert.match(html, /data-testid="executive-posture-badge"[^>]*>Complete</);
   assert.doesNotMatch(html, /Limited review/);
   assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
   assert.doesNotMatch(html, /This scan has incomplete coverage/);
@@ -1847,7 +1898,7 @@ test("ExecutiveSummaryCard surfaces under-observed ecosystem coverage diagnostic
   assert.doesNotMatch(html, /Coverage diagnostic: Observed request volume was unusually low for this benchmark/);
   assert.doesNotMatch(html, /Observed vendor and request counts may be incomplete/);
   assert.doesNotMatch(html, /tracking was missed|blocked trackers detected|non-compliant|hidden tracking/i);
-  assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Clear</);
+  assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Complete</);
 });
 
 test("ExecutiveSummaryCard suppresses broad incomplete warning when partial coverage still retained substantial findings", () => {

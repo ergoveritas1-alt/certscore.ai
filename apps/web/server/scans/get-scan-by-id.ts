@@ -80,6 +80,10 @@ import {
 import { getFullScanUrlscanSupplement } from "./urlscan-supplement";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveBrowserScanCanonicalMaterializationFromStoredSignalRows } from "../browser-scans/canonical-materialization";
+import {
+  buildScanExecutionProvenance,
+  type ScanExecutionProvenanceRecord
+} from "./scan-execution-provenance";
 
 export type ScanDetailRecord = {
   id: string;
@@ -97,6 +101,7 @@ export type ScanDetailRecord = {
   startedAt: string | null;
   completedAt: string | null;
   errorMessage: string | null;
+  provenance: ScanExecutionProvenanceRecord;
 };
 
 export type ScanEventRecord = {
@@ -1389,7 +1394,14 @@ async function loadScanDetailRecord(input: {
       createdAt: displayCreatedAt,
       startedAt: displayState.startedAt,
       completedAt: displayState.completedAt,
-      errorMessage: scanRow.error_message
+      errorMessage: scanRow.error_message,
+      provenance: buildScanExecutionProvenance({
+        events: normalizedEvents,
+        runtimeArtifacts: reportRuntimeArtifacts,
+        scanConfig: scanRow.scan_config_json,
+        scanFromLabel: scanFromDisplay.label,
+        scanFromValue: scanFromDisplay.value
+      })
     } satisfies ScanDetailRecord,
     snapshot: normalizedSnapshot ? (normalizedSnapshot satisfies Exclude<ScanSnapshotRecord, null>) : null,
     runtimeArtifacts: reportRuntimeArtifacts

@@ -598,7 +598,7 @@ function isPrivacyChoiceSurfaceOnly(lifecycle: Record<string, unknown> | null) {
 }
 
 const SIMPLE_COOKIE_NOTICE_TEXT_PATTERN =
-  /\b(?:uses?|use|using)\s+cookies?\b|\bcookie\s+notice\b|\bcookie\s+consent\b|\bcookie\s+(?:settings|preferences|choices|center)\b|\bmanage\s+cookies\b/i;
+  /\b(?:uses?|use|using)\s+(?:of\s+)?cookies?\b|\bcookie\s+notice\b|\bcookie\s+consent\b|\bcookie\s+(?:settings|preferences|choices|center)\b|\bmanage\s+cookies\b/i;
 const SIMPLE_ACCEPT_LABEL_PATTERN = /\b(?:accept|accept all|allow|agree|i accept)\b/i;
 const SIMPLE_REJECT_LABEL_PATTERN = /\b(?:decline|decline all|reject|reject all|deny|refuse|necessary only|essential only)\b/i;
 const LEGAL_PRIVACY_NOTICE_GATE_TEXT_PATTERN =
@@ -1399,10 +1399,14 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
     getString(policyDisclosureSummary, ["retainedCookiePolicyTextExcerpt", "retained_cookie_policy_text_excerpt"]),
     getString(policyDisclosureSummary, ["retainedPrivacyPolicyTextExcerpt", "retained_privacy_policy_text_excerpt"])
   ].filter(Boolean).join("\n");
+  const policySurfaceTopics = getStringArray(policyDisclosureSummary, ["observedTopics", "observed_topics"]);
+  const policySurfaceControls = getStringArray(policyDisclosureSummary, ["mentionedControls", "mentioned_controls"]);
   const policySurfaceAvailable =
     getBoolean(input.snapshot, ["cookie_policy_present", "cookiePolicyPresent"]) === true ||
     getBoolean(input.runtimeArtifacts, ["cookiePolicyPresent", "cookie_policy_present"]) === true ||
     getBoolean(policyDisclosureSummary, ["cookiePolicyPresent", "cookie_policy_present"]) === true ||
+    policySurfaceTopics.some((topic) => /cookies?|cookie_notice|cookie_policy|consent_withdrawal/i.test(topic)) ||
+    policySurfaceControls.some((control) => /cookie|consent_withdrawal/i.test(control)) ||
     policySurfaceUrls.some((url) => /cookie|preference|privacy[-_ ]?center|settings/i.test(url)) ||
     /cookie (policy|notice|declaration|table|settings)|privacy choices|manage cookies|cookie preference/i.test(policySurfaceText);
   const bannerOnlyCookieNotice =
@@ -1437,7 +1441,9 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
         retainedEvidence: {
           cookieNoticeObserved: true,
           cookiePolicyPresent: true,
-          cookiePolicyUrls: compactArray(policySurfaceUrls, 4)
+          cookiePolicyUrls: compactArray(policySurfaceUrls, 4),
+          observedPolicyControls: compactArray(policySurfaceControls, 6),
+          observedPolicyTopics: compactArray(policySurfaceTopics, 6)
         }
       }
     );
@@ -1574,6 +1580,34 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
   }
 
   return null;
+}
+
+function hasObservedPreconsentCookieOrTrackingActivity(input: GdprEprivacyCoveragePolicyInput) {
+  const storageSummary = getHybridStorageSummary(input.runtimeArtifacts);
+  const networkSummary = getHybridNetworkSummary(input.runtimeArtifacts);
+  const cookiesBeforeConsentCount =
+    getNumber(storageSummary, ["cookiesBeforeConsentCount", "cookies_before_consent_count"]) ??
+    (getBoolean(input.snapshot, ["first_party_cookie_set_before_consent", "third_party_cookie_set_before_consent"]) === true
+      ? 1
+      : 0);
+  const thirdPartyRequestCount =
+    getNumber(networkSummary, ["preConsentThirdPartyRequestCount", "pre_consent_third_party_request_count"]) ??
+    getNumber(input.snapshot, ["third_party_request_count", "third_party_requests_count"]) ??
+    0;
+  const trackerVendors = getStringArray(input.runtimeArtifacts, [
+    "preconsent_tracker_vendors",
+    "consent_baseline_tracker_vendor_names",
+    "tracker_vendors",
+    "advertising_retargeting_vendor_names",
+    "analytics_vendor_names"
+  ]);
+
+  return (
+    cookiesBeforeConsentCount > 0 ||
+    thirdPartyRequestCount > 0 ||
+    trackerVendors.length > 0 ||
+    getBoolean(input.snapshot, ["preconsent_tracking_detected", "tracking_before_consent_detected"]) === true
+  );
 }
 
 function rowHasVendorCategory(row: Record<string, unknown>, categories: string[]) {
@@ -2028,6 +2062,12 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     rejectAvailability === "reject_available_first_layer";
   const firstLayerGdprBannerConfirmed = getExplicitFirstLayerGdprConsentBannerConfirmed(input);
   const noticeGateEvidence = getFirstLayerNoticeGateEvidence(input);
+  const firstLayerChoiceEvidence = getFirstLayerConsentChoiceEvidence(input);
+  const firstLayerAcceptWithoutRejectObserved =
+    firstLayerChoiceEvidence.bannerLikeSurfaceObserved &&
+    firstLayerChoiceEvidence.cookieNoticeTextObserved &&
+    firstLayerChoiceEvidence.acceptControlObserved &&
+    !firstLayerChoiceEvidence.rejectControlObserved;
   
   if (noticeGateEvidence.gateObserved) {
     return makeOutcome(
@@ -2056,7 +2096,53 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     );
   }
 
+  if (firstLayerAcceptWithoutRejectObserved) {
+    return makeOutcome(
+      "reject_all_path_availability",
+      "Gap observed",
+      "A first-layer GDPR/ePrivacy cookie consent surface was retained with an accept option and non-essential cookie/purpose text, but no same-layer reject, decline, refuse, or continue-without-accepting option was retained. This is a first-layer availability signal only; CertScore did not run a consent flow.",
+      [
+        "Evidence: retained first-layer consent controls",
+        ...firstLayerChoiceEvidence.visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
+        firstLayerChoiceEvidence.layerInspected ? `Layer inspected: ${firstLayerChoiceEvidence.layerInspected}` : null
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          acceptControlObserved: true,
+          firstLayerCookieConsentBannerObserved: true,
+          gdprEprivacyConsentSurfaceObserved: "confirmed",
+          layerInspected: firstLayerChoiceEvidence.layerInspected,
+          rejectControlObserved: false,
+          visibleChoiceLabels: firstLayerChoiceEvidence.visibleChoiceLabels
+        }
+      }
+    );
+  }
+
   if (firstLayerGdprBannerConfirmed === false) {
+    if (
+      !firstLayerChoiceEvidence.bannerLikeSurfaceObserved &&
+      !hasObservedPreconsentCookieOrTrackingActivity(input)
+    ) {
+      return makeOutcome(
+        "reject_all_path_availability",
+        "Not observed",
+        "No first-layer GDPR/ePrivacy consent banner was retained, and no non-essential cookie/tracking activity was observed in the tested context. Reject-option availability is therefore treated as neutral for this scan.",
+        [
+          "Evidence: no confirmed first-layer cookie consent banner",
+          "Evidence: no retained non-essential cookie/tracking activity"
+        ],
+        {
+          retainedEvidence: {
+            firstLayerCookieConsentBannerObserved: false,
+            gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+            preconsentCookieOrTrackingActivityObserved: false,
+            reason: "no_banner_and_no_nonessential_activity"
+          }
+        }
+      );
+    }
+
     return makeOutcome(
       "reject_all_path_availability",
       "Not confirmed",

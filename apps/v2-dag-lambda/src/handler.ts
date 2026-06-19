@@ -82,6 +82,9 @@ export type LocalV2DagLambdaResultMessage = {
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
   scanId: string;
+  scannerGitSha?: string;
+  scannerImageTag?: string;
+  scannerRuntimeVersion?: string;
   status: "completed" | "failed";
   targetEnvironment: "local" | "production";
 };
@@ -1443,6 +1446,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   status: "completed" | "failed";
 }): LocalV2DagLambdaResultMessage {
+  const scannerBuildProvenance = buildScannerBuildProvenance();
   return {
     artifactOnly: true,
     ...(input.artifactMetadata ? { artifactMetadata: input.artifactMetadata } : {}),
@@ -1454,8 +1458,26 @@ export function buildLocalV2DagLambdaResultMessage(input: {
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     scanId: input.payload.scanId,
+    ...scannerBuildProvenance,
     status: input.status,
     targetEnvironment: input.payload.targetEnvironment
+  };
+}
+
+function boundedEnvString(name: string, maxLength: number) {
+  const value = process.env[name]?.trim();
+  return value ? value.slice(0, maxLength) : null;
+}
+
+function buildScannerBuildProvenance() {
+  const scannerGitSha = boundedEnvString("BUILD_GIT_SHA", 80);
+  const scannerImageTag = boundedEnvString("BUILD_IMAGE_TAG", 160);
+  const scannerRuntimeVersion = boundedEnvString("SCANNER_RUNTIME_VERSION", 80);
+
+  return {
+    ...(scannerGitSha ? { scannerGitSha } : {}),
+    ...(scannerImageTag ? { scannerImageTag } : {}),
+    ...(scannerRuntimeVersion ? { scannerRuntimeVersion } : {})
   };
 }
 

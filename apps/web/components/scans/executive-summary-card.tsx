@@ -129,6 +129,10 @@ function getPostureClasses(posture: ExecutiveDisplayState) {
   return "border-emerald-200 bg-emerald-50/90 text-emerald-950";
 }
 
+function getExecutiveBadgeLabel(displayState: ExecutiveDisplayState) {
+  return displayState === "Clear" ? "Complete" : displayState;
+}
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -1656,6 +1660,8 @@ export function buildRegulatoryLenses(
   const noConfirmedCookieBannerWithPreConsentTracking =
     options?.unifiedContext?.cookieBannerPresent === false &&
     (hasTrackingConcern || hasPreConsentCookieConcern);
+  const hasThirdPartyTrackingFootprint = thirdPartyRequestCount > 0;
+  const hasPreConsentTrackingRisk = hasThirdPartyTrackingFootprint && (hasTrackingConcern || hasPreConsentCookieConcern);
   const hasConsentConcern =
     findingIds.has("consent_dark_patterns_detected") ||
     findingIds.has("asymmetric_consent_ui") ||
@@ -1918,10 +1924,16 @@ export function buildRegulatoryLenses(
       findings: privacyTrackingNotes,
       ratingLabel: gdprDisplay.tone.label,
       score: gdprDisplay.score,
-      summary: noConfirmedCookieBannerWithPreConsentTracking
+      summary: noConfirmedCookieBannerWithPreConsentTracking && hasPreConsentTrackingRisk
         ? "Consent and pre-consent tracking risk is the main issue."
-        : hasTrackingConcern || hasPreConsentCookieConcern
+        : noConfirmedCookieBannerWithPreConsentTracking && hasPreConsentCookieConcern
+        ? "Consent and pre-consent cookie/storage evidence are the main issue."
+        : hasPreConsentTrackingRisk
         ? "Consent and pre-consent tracking risk is the main issue."
+        : hasPreConsentCookieConcern
+        ? "Consent and pre-consent cookie/storage evidence are the main issue."
+        : hasTrackingConcern
+        ? "Consent and retained privacy evidence should be reviewed."
         : sensitiveTrackingFinding
         ? "Sensitive-data collection and tracking exposure are the main issue."
         : "No major consent-triggering issue surfaced in the top findings.",
@@ -2699,8 +2711,9 @@ export function deriveBenchmarkScoreExplanation(input: {
     findingIds.has("third_party_cookie_pre_consent") ||
     findingIds.has("analytics_cookie_pre_consent") ||
     findingIds.has("adtech_cookie_pre_consent");
+  const hasObservedTrackingVendorContext = (input.vendorNames ?? []).length > 0;
 
-  if (input.cookieBannerPresent === false && (hasPreConsentTrackingFinding || hasPreConsentStorageFinding)) {
+  if (input.cookieBannerPresent === false && hasObservedTrackingVendorContext && (hasPreConsentTrackingFinding || hasPreConsentStorageFinding)) {
     return "Consent and pre-consent tracking risk is the main issue. CertScore did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface.";
   }
   const drivers = [
@@ -3143,11 +3156,16 @@ function buildPositionedTimelineEvents(input: { durationMs: number; events: Exec
     .filter((event) => Number.isFinite(event.atMs) && event.atMs >= 0)
     .sort((left, right) => left.atMs - right.atMs)
     .slice(0, 8);
+  const firstEventTop = 17;
+  const lastEventTop = 68;
+  const minGap = sorted.length > 1
+    ? Math.min(12, Math.max(7, (lastEventTop - firstEventTop) / (sorted.length - 1)))
+    : 0;
   let lastTop = 0;
   return sorted.map((event, index) => {
     const rawTop = input.durationMs > 0 ? (event.atMs / input.durationMs) * 100 : 50;
-    const minTop = index === 0 ? 17 : lastTop + 12;
-    const maxTop = Math.max(minTop, 82 - Math.max(0, sorted.length - index - 1) * 7);
+    const minTop = index === 0 ? firstEventTop : lastTop + minGap;
+    const maxTop = Math.max(minTop, lastEventTop - Math.max(0, sorted.length - index - 1) * minGap);
     const top = Math.min(Math.max(rawTop, minTop), maxTop);
     lastTop = top;
     return { ...event, top };
@@ -5002,7 +5020,7 @@ export function ExecutiveSummaryCard(input: {
             data-testid="executive-posture-badge"
             className={`rounded-full border px-3 py-1 text-xs font-medium ${getPostureClasses(displayState)}`}
           >
-            {displayState}
+            {getExecutiveBadgeLabel(displayState)}
           </span>
           {input.domainBenchmark ? (
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">

@@ -189,7 +189,10 @@ export async function policySurfaceScanner(
       ]),
     );
     staticCandidateCount = staticCandidates.length;
-    const fastStaticCoverage = input.discoveryMode === "fast" && hasFastStaticPolicyCoverage(staticCandidates);
+    const fastStaticCoverage =
+      input.discoveryMode === "fast" &&
+      hasFastStaticPolicyCoverage(staticCandidates) &&
+      hasStaticPreferenceControlCoverage(staticCandidates);
     const renderedCandidates = fastStaticCoverage
       ? await recordPolicyTiming(
         timingBreakdown,
@@ -1076,6 +1079,18 @@ function hasFastStaticPolicyCoverage(candidates: PolicySurfaceCandidate[]): bool
     ));
 }
 
+function hasStaticPreferenceControlCoverage(candidates: PolicySurfaceCandidate[]): boolean {
+  return candidates.some((candidate) =>
+    candidate.observationOnly &&
+    candidate.mayLeadToConsentControls &&
+    (
+      candidate.deterministicSurfaceType === "cookie_settings" ||
+      candidate.deterministicSurfaceType === "consent_preferences" ||
+      candidate.deterministicSurfaceType === "your_privacy_choices"
+    )
+  );
+}
+
 function policyFetchLimit(input: PolicySurfaceScannerInput): number {
   return input.discoveryMode === "fast" ? 6 : MAX_CANDIDATES_TO_FETCH;
 }
@@ -1343,7 +1358,7 @@ function classifySurface(value: string): {
     ["your_privacy_choices", [/your privacy choices/i, /privacy choices/i, /your choices/i, /ad choices/i, /adchoices/i]],
     ["notice_at_collection", [/notice at collection/i]],
     ["california_notice", [/california privacy/i, /state privacy rights/i, /state privacy policy/i, /state-privacy-policy/i, /about-state-privacy-policy/i]],
-    ["cookie_settings", [/cookie settings/i, /cookie preferences/i, /manage preferences/i, /cookie consent/i]],
+    ["cookie_settings", [/cookie settings/i, /cookie preferences/i, /manage cookies\+?/i, /manage preferences/i, /cookie consent/i]],
     ["cookie_policy", [/cookie policy/i, /cookie statement/i, /privacy-cookie-statement/i, /cookies\b/i]],
     ["privacy_policy", [/privacy policy/i, /privacy notice/i, /privacy\b/i]],
     ["ai_disclosure", [/\bai\b/i, /artificial intelligence/i]],
@@ -1362,13 +1377,13 @@ function classifySurface(value: string): {
 function isPreferenceControlSurface(surfaceType: PolicySurfaceObservation["surfaceType"], value: string): boolean {
   return surfaceType === "consent_preferences" ||
     surfaceType === "cookie_settings" ||
-    /manage preferences|preference center|privacy center|privacy settings|cookie settings|cookie preferences|ad choices|your choices/i.test(value);
+    /manage cookies\+?|manage preferences|preference center|privacy center|privacy settings|cookie settings|cookie preferences|ad choices|your choices/i.test(value);
 }
 
 function isObservationOnlyPreferenceControl(surfaceType: PolicySurfaceObservation["surfaceType"], value: string): boolean {
   return surfaceType === "consent_preferences" ||
     surfaceType === "cookie_settings" ||
-    /manage preferences|preference center|privacy center|privacy settings|cookie settings|cookie preferences/i.test(value);
+    /manage cookies\+?|manage preferences|preference center|privacy center|privacy settings|cookie settings|cookie preferences/i.test(value);
 }
 
 function extractPolicyFacts(text: string): {

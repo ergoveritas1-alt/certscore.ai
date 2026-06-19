@@ -27,13 +27,14 @@ test("policySurfaceScanner discovers footer privacy links and bounded policy fac
   });
 });
 
-test("policySurfaceScanner fast mode skips rendered discovery and Nano link ranking when static links are sufficient", async () => {
+test("policySurfaceScanner fast mode keeps rendered discovery when static links lack cookie settings controls", async () => {
   await withPolicyScan("policy-footer-privacy", async ({ result }) => {
     const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
     const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
 
     assert.equal(privacy?.status, "fetched");
-    assert.equal(labels.includes("rendered discovery skipped"), true);
+    assert.equal(labels.includes("rendered discovery"), true);
+    assert.equal(labels.includes("rendered discovery skipped"), false);
     assert.equal(labels.includes("deterministic link ranking"), true);
     assert.equal(labels.includes("Nano link ranking"), false);
   }, {
@@ -191,6 +192,19 @@ test("policySurfaceScanner records preference center controls as observation-onl
     assert.equal(settings?.clickable, true);
     assert.equal(settings?.mayLeadToConsentControls, true);
     assert.equal(settings?.evidenceRefs.length, 0);
+  });
+});
+
+test("policySurfaceScanner records footer Manage Cookies+ controls as cookie settings", async () => {
+  await withPolicyScan("policy-manage-cookies-footer-control", async ({ result, baseUrl }) => {
+    const settings = observedSurface(result.policySurfaceObservations, "cookie_settings");
+
+    assert.equal(settings?.status, "observed");
+    assert.match(settings?.linkText ?? "", /Manage Cookies\+/);
+    assert.equal(settings?.normalizedUrl, `${baseUrl}/f/policy-manage-cookies-footer-control`);
+    assert.equal(settings?.fetchable, false);
+    assert.equal(settings?.clickable, true);
+    assert.equal(settings?.mayLeadToConsentControls, true);
   });
 });
 

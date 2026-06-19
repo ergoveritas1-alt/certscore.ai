@@ -60,6 +60,12 @@ RUN apt-get update \
 FROM ${CERTSCORE_LAMBDA_RUNTIME_BASE} AS runtime
 
 WORKDIR /var/task
+ARG BUILD_GIT_SHA=""
+ARG BUILD_IMAGE_TAG=""
+ARG SCANNER_RUNTIME_VERSION="certscore-v2-dag-parallel-path"
+ENV BUILD_GIT_SHA="${BUILD_GIT_SHA}" \
+    BUILD_IMAGE_TAG="${BUILD_IMAGE_TAG}" \
+    SCANNER_RUNTIME_VERSION="${SCANNER_RUNTIME_VERSION}"
 
 COPY --from=build /lambda ./
 COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./runtime-bootstrap.mjs

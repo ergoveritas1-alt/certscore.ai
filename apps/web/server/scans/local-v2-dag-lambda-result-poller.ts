@@ -402,6 +402,9 @@ export async function recordLocalV2DagLambdaResultEvent(
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
       resultStatus: parsedMessage.status,
+      ...(parsedMessage.scannerGitSha ? { scannerGitSha: parsedMessage.scannerGitSha } : {}),
+      ...(parsedMessage.scannerImageTag ? { scannerImageTag: parsedMessage.scannerImageTag } : {}),
+      ...(parsedMessage.scannerRuntimeVersion ? { scannerRuntimeVersion: parsedMessage.scannerRuntimeVersion } : {}),
       targetEnvironment: parsedMessage.targetEnvironment,
       v2ArtifactsRemainInternal: true,
       ...(parsedMessage.error ? { error: parsedMessage.error } : {})

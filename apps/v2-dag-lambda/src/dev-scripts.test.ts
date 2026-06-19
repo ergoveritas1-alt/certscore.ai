@@ -26,6 +26,9 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_CACHE_TAG/);
   assert.match(buildScript, /--target lambda-runtime-base/);
   assert.match(buildScript, /CERTSCORE_LAMBDA_RUNTIME_BASE=\$\{runtime_base_image_uri\}/);
+  assert.match(buildScript, /--build-arg "BUILD_GIT_SHA=\$\{build_git_sha\}"/);
+  assert.match(buildScript, /--build-arg "BUILD_IMAGE_TAG=\$\{build_image_tag\}"/);
+  assert.match(buildScript, /--build-arg "SCANNER_RUNTIME_VERSION=\$\{scanner_runtime_version\}"/);
   assert.match(buildScript, /--cache-from "type=registry,ref=\$\{runtime_base_cache_image_uri\}"/);
   assert.match(buildScript, /--cache-to "type=registry,ref=\$\{runtime_base_cache_image_uri\},mode=max"/);
   assert.match(buildScript, /Runtime base image not found: \$\{runtime_base_image_uri\}/);
@@ -94,6 +97,12 @@ test("Dockerfile uses slim Node image, system Chromium, and the local Lambda run
   assert.match(dockerfile, /chromium/);
   assert.match(dockerfile, /ARG CERTSCORE_LAMBDA_BROWSER_PACKAGE=chromium/);
   assert.match(dockerfile, /ARG CERTSCORE_LAMBDA_BROWSER_EXECUTABLE=\/usr\/bin\/chromium/);
+  assert.match(dockerfile, /ARG BUILD_GIT_SHA=""/);
+  assert.match(dockerfile, /ARG BUILD_IMAGE_TAG=""/);
+  assert.match(dockerfile, /ARG SCANNER_RUNTIME_VERSION="certscore-v2-dag-parallel-path"/);
+  assert.match(dockerfile, /BUILD_GIT_SHA="\$\{BUILD_GIT_SHA\}"/);
+  assert.match(dockerfile, /BUILD_IMAGE_TAG="\$\{BUILD_IMAGE_TAG\}"/);
+  assert.match(dockerfile, /SCANNER_RUNTIME_VERSION="\$\{SCANNER_RUNTIME_VERSION\}"/);
   assert.match(dockerfile, /CERTSCORE_CHROMIUM_EXECUTABLE_PATH=\$\{CERTSCORE_LAMBDA_BROWSER_EXECUTABLE\}/);
   assert.match(dockerfile, /runtime-bootstrap\.mjs/);
   assert.doesNotMatch(dockerfile, /playwright install chromium/);

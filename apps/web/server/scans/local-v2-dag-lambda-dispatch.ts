@@ -95,6 +95,9 @@ export type LocalV2DagLambdaResultMessage = {
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
   scanId: string;
+  scannerGitSha?: string;
+  scannerImageTag?: string;
+  scannerRuntimeVersion?: string;
   status: LocalV2DagLambdaResultStatus;
   targetEnvironment: LocalV2DagLambdaTargetEnvironment;
 };
@@ -402,6 +405,18 @@ export function parseLocalV2DagLambdaResultMessage(
   const phaseTimings = parsePhaseTimings(record.phaseTimings);
   if (phaseTimings) {
     parsed.phaseTimings = phaseTimings;
+  }
+  const scannerGitSha = stringValue(record.scannerGitSha);
+  if (scannerGitSha) {
+    parsed.scannerGitSha = scannerGitSha.slice(0, 80);
+  }
+  const scannerImageTag = stringValue(record.scannerImageTag);
+  if (scannerImageTag) {
+    parsed.scannerImageTag = scannerImageTag.slice(0, 160);
+  }
+  const scannerRuntimeVersion = stringValue(record.scannerRuntimeVersion);
+  if (scannerRuntimeVersion) {
+    parsed.scannerRuntimeVersion = scannerRuntimeVersion.slice(0, 80);
   }
   if (errorMessage) {
     parsed.error = {

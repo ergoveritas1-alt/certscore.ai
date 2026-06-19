@@ -29,7 +29,6 @@ export type ScanProgressEstimate = {
 export function ScanSubmitProgressBar({
   active,
   compact = false,
-  labelPrefix = "v2",
   nowMs,
   progressEstimate,
   profileValue = "standard",
@@ -37,7 +36,6 @@ export function ScanSubmitProgressBar({
 }: {
   active: boolean;
   compact?: boolean;
-  labelPrefix?: string;
   nowMs: number;
   progressEstimate?: ScanProgressEstimate;
   profileValue?: string;
@@ -69,7 +67,7 @@ export function ScanSubmitProgressBar({
   return (
     <div className={compact ? "rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm" : "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"}>
       <div className={compact ? "flex items-center justify-between gap-3 text-xs font-medium text-slate-600" : "flex items-center justify-between gap-3 text-sm font-medium text-slate-700"}>
-        <span className="min-w-0 truncate">{labelPrefix} {estimate.modeLabel}: {progressPhase}</span>
+        <span className="min-w-0 truncate">{progressPhase}</span>
         <span className="shrink-0">{progressValue}% complete | {elapsedSeconds}s elapsed</span>
       </div>
       <div className={compact ? "mt-2 h-2 overflow-hidden rounded-full bg-slate-200" : "mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200"}>
@@ -142,13 +140,15 @@ export function LocalV2DagScanProgressCard({
     <section aria-live="polite" className="rounded-3xl border border-sky-200 bg-white p-5 shadow-[0_18px_60px_-32px_rgba(14,165,233,0.45)]">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-600">CertScore v2 DAG scan in progress</p>
-          <p className="text-sm leading-6 text-slate-600">
-            Running the artifact-only CertScore v2 parallel-path scanner.
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-600">Scan in progress</p>
         </div>
-        <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
-          {profileValue === "tiny" ? "Tiny" : "Core"}
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
+          <span aria-hidden="true" className="relative h-3.5 w-3">
+            <span className="absolute left-0 top-0 h-px w-3 rounded-full bg-current" />
+            <span className="absolute bottom-0 left-0 h-px w-3 rounded-full bg-current" />
+            <span className="absolute left-[3px] top-[2px] h-2.5 w-1.5 rounded-full border-x border-current" />
+          </span>
+          Scanning...
         </span>
       </div>
       <ScanSubmitProgressBar
@@ -201,7 +201,7 @@ export function describeScanProgressPhase(input: {
     return "capturing page evidence";
   }
   if (ratio < 0.74) {
-    return "checking policy surfaces";
+    return "checking policies";
   }
   if (ratio < 1.05) {
     return "reviewing signals";

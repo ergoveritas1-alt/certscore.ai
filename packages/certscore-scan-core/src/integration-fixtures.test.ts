@@ -476,6 +476,85 @@ test("pre-consent runtime scanner retains embedded-content and browser API probe
   }
 });
 
+test("pre-consent runtime scanner retains first-layer accept and reject controls without interaction", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-simple-accept-reject"),
+      path.join(tempRoot, "consent-simple-accept-reject"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.layerInspected, "first_layer");
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /\baccept all\b/i.test(label)),
+      true,
+      "scanner should retain visible first-layer accept label",
+    );
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /\breject all\b/i.test(label)),
+      true,
+      "scanner should retain visible first-layer reject label",
+    );
+    assert.equal(
+      observation?.controls.some((control) => control.actionType === "accept_all"),
+      true,
+      "scanner should classify the first-layer accept control",
+    );
+    assert.equal(
+      observation?.controls.some((control) => control.actionType === "reject_all"),
+      true,
+      "scanner should classify the first-layer reject control",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner retains first-layer accept-only consent surface as no reject observed", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-no-reject-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-no-reject"),
+      path.join(tempRoot, "consent-no-reject"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.layerInspected, "first_layer");
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /\baccept all\b/i.test(label)),
+      true,
+      "scanner should retain visible first-layer accept label",
+    );
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /\b(?:reject|decline|refuse)\b/i.test(label)),
+      false,
+      "scanner should not invent a reject label for accept-only banners",
+    );
+    assert.equal(
+      observation?.controls.some((control) => control.actionType === "reject_all"),
+      false,
+      "scanner should not classify a reject control when none is visible",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("planned pre-consent baseline skips screenshots when no consent surface is observed", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-selective-screenshot-"));

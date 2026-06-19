@@ -79,7 +79,7 @@ test("v2 scan lab progress describes the visible scan phase", () => {
   assert.equal(describeScanProgressPhase({
     elapsedMs: 16_000,
     estimatedDurationMs: 26_000,
-  }), "checking policy surfaces");
+  }), "checking policies");
   assert.equal(describeScanProgressPhase({
     elapsedMs: 22_000,
     estimatedDurationMs: 26_000,

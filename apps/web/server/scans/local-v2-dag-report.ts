@@ -118,6 +118,32 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function getStringArray(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+}
+
+function isPreConsentErrorShellScreenshot(bundle: CanonicalEvidenceBundle, screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number]) {
+  if (screenshot.artifactId !== "screenshot_pre_consent") {
+    return false;
+  }
+
+  return (bundle.consentUiObservations ?? []).some((observation) => {
+    const textExcerpt = getString(observation.textExcerpt)?.toLowerCase() ?? "";
+    const basis = getStringArray(observation.basis);
+    return (
+      observation.likelyPresent === false &&
+      /^(?:unknown error|access denied|forbidden|internal server error|service unavailable)$/i.test(textExcerpt) &&
+      (
+        basis.includes("bounded_capture_timeout_or_failure") ||
+        basis.includes("dom_text_fallback_after_consent_ui_timeout")
+      )
+    );
+  });
+}
+
 function hostnameFromUrl(value: string | null | undefined) {
   if (!value) {
     return null;
@@ -1039,6 +1065,7 @@ function buildMaterializedLocalV2Detail(
       if (screenshot.artifactId !== "screenshot_pre_consent") {
         return [];
       }
+      const capturedErrorShell = isPreConsentErrorShellScreenshot(bundle, screenshot);
       const storagePointer = localV2ScreenshotStoragePointer({
         scanArtifactUri: options.scanArtifactUri,
         scanId: scanRecord.scan.id,
@@ -1051,10 +1078,11 @@ function buildMaterializedLocalV2Detail(
         final_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
         id: "local_v2:screenshot_pre_consent",
         interaction_state: "none",
-        key: storagePointer.key,
+        key: capturedErrorShell ? null : storagePointer.key,
         mime_type: "image/png",
         page_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
-        status: "available"
+        status: capturedErrorShell ? "capture_failed" : "available",
+        status_reason: capturedErrorShell ? "pre_consent_error_shell_captured" : null
       }];
     })
   };
