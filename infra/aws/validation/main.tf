@@ -660,6 +660,7 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "ecr:CompleteLayerUpload",
           "ecr:DescribeImages",
           "ecr:DescribeRepositories",
+          "ecr:GetDownloadUrlForLayer",
           "ecr:InitiateLayerUpload",
           "ecr:PutImage",
           "ecr:UploadLayerPart"
@@ -677,6 +678,7 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "ecs:DescribeTaskDefinition",
           "ecs:DescribeTasks",
           "ecs:ListTasks",
+          "ecs:RegisterTaskDefinition",
           "ecs:RunTask",
           "ecs:UpdateService"
         ]
