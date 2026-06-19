@@ -204,6 +204,15 @@ pnpm typecheck
 # Clean build artifacts (Turbo)
 pnpm clean
 
+# Fast change-aware preflight gate
+pnpm preflight:fast
+
+# Fast deploy-all gate for web, validation/DB, and all v2 Lambda scanner regions
+pnpm preflight:all
+
+# Full local preflight confidence gate
+pnpm preflight:full
+
 # Dev mode — web only (parallel via Turbo)
 pnpm dev
 
@@ -398,7 +407,29 @@ pnpm --filter @certscore/report-adapter typecheck
 
 ### Pre-ship verification
 
-Before shipping changes, run:
+For deployment-bound changes, prefer the fast local gate before commit/push:
+
+```bash
+pnpm preflight:fast
+```
+
+`preflight:fast` is change-aware and runs only the deploy-targeted checks implied by the diff against `origin/main`, plus staged and unstaged local changes. Use `PREDEPLOY_BASE_REF=<ref>` or `-- --base <ref>` when comparing against a different deployed SHA.
+
+When the user says **deploy all**, use the fast deploy-all gate before committing or pushing:
+
+```bash
+pnpm preflight:all
+```
+
+In this repo, **deploy all** means the public web app, validation worker/DB-related code paths, production DB migration workflow when migrations changed, and the v2 DAG Lambda scanner images in all three approved scanner regions: `eu-central-1`, `eu-west-1`, and `us-west-2`. Treat those as the canonical Lambda scanner regions unless the user explicitly approves a region change.
+
+Use the full local gate when the change touches shared build infrastructure, broad dependency surfaces, release-critical scan behavior, or when you need maximum local confidence before pushing:
+
+```bash
+pnpm preflight:full
+```
+
+For manual verification outside the preflight scripts, run:
 
 ```bash
 pnpm turbo run typecheck
@@ -470,6 +501,7 @@ Do not use local production DB tunnels, ECS Exec, or copied secrets for routine 
 - Create a commit with a clear message.
 - Push the branch to GitHub instead of deploying an uncommitted working tree directly to any production host.
 - Prefer Git-based deploy promotion through the connected AWS ECS deployment workflows, but verify which runtime is actually serving `certscore.ai` before claiming production is updated.
+- For a user request phrased as "deploy all", run `pnpm preflight:all` first, then deploy through the canonical paths: GitHub/AWS ECS for web and validation worker, `.github/workflows/prod-db-migrate.yml` for production DB migrations when migration files changed, and the local v2 DAG Lambda image deploy helpers for each approved scanner region (`eu-central-1`, `eu-west-1`, `us-west-2`). Preview deploy orchestration first with `pnpm deploy:all -- --plan` or `pnpm deploy:all -- --dry-run` when checking scope. Scanner deploys reuse prebuilt Lambda runtime-base images by default; rebuild and push the scanner runtime base only when explicitly requested with `--push-runtime-base`.
 
 ## Runtime and deployment topology
 

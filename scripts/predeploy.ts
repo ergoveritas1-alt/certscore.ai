@@ -1,0 +1,326 @@
+import { spawn } from "node:child_process";
+
+type Check = {
+  key: string;
+  label: string;
+  command: string[];
+};
+
+type Target = {
+  key: string;
+  label: string;
+  matches: (file: string) => boolean;
+  checks: Check[];
+};
+
+type Args = {
+  allTargets: boolean;
+  baseRef: string | null;
+  mode: "fast" | "full";
+};
+
+const ROOT_FULL_CHECKS: Check[] = [
+  {
+    key: "deploy-topology",
+    label: "deployment topology check",
+    command: ["pnpm", "ops:check:deploy"]
+  },
+  {
+    key: "workspace-typecheck",
+    label: "workspace typecheck",
+    command: ["pnpm", "turbo", "run", "typecheck"]
+  },
+  {
+    key: "workspace-build",
+    label: "workspace build",
+    command: ["pnpm", "turbo", "run", "build"]
+  },
+  {
+    key: "validation-scan-pipeline",
+    label: "validation scan pipeline",
+    command: ["pnpm", "test:scan-pipeline"]
+  },
+  {
+    key: "lambda-typecheck",
+    label: "v2 DAG Lambda typecheck",
+    command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "typecheck"]
+  },
+  {
+    key: "lambda-tests",
+    label: "v2 DAG Lambda tests",
+    command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "test"]
+  }
+];
+
+const TARGETS: Target[] = [
+  {
+    key: "web",
+    label: "public web",
+    matches: (file) =>
+      isGlobalBuildInput(file) ||
+      file === ".dockerignore" ||
+      file === ".github/workflows/web-aws-ecs-deploy.yml" ||
+      file.startsWith("apps/web/") ||
+      file.startsWith("packages/certscore-contracts/") ||
+      file.startsWith("packages/certscore-vendor-resolver/") ||
+      file.startsWith("packages/db/") ||
+      file.startsWith("packages/shared/") ||
+      file.startsWith("packages/ui/") ||
+      file.startsWith("packages/validation-shared/"),
+    checks: [
+      {
+        key: "web-typecheck",
+        label: "public web typecheck",
+        command: ["pnpm", "--filter", "@website-signal-risk-scanner/web", "typecheck"]
+      }
+    ]
+  },
+  {
+    key: "validation-worker",
+    label: "validation worker",
+    matches: (file) =>
+      isGlobalBuildInput(file) ||
+      file === ".dockerignore" ||
+      file === ".github/workflows/validation-aws-deploy.yml" ||
+      file.startsWith("apps/validation-worker/") ||
+      file.startsWith("apps/web/lib/scans/") ||
+      file.startsWith("apps/web/server/scans/") ||
+      file.startsWith("infra/aws/validation/") ||
+      file.startsWith("packages/db/") ||
+      file.startsWith("packages/shared/") ||
+      file.startsWith("packages/validation-shared/") ||
+      file.startsWith("packages/web-bot-auth/"),
+    checks: [
+      {
+        key: "validation-worker-typecheck",
+        label: "validation worker typecheck",
+        command: ["pnpm", "--filter", "@website-signal-risk-scanner/validation-worker", "typecheck"]
+      },
+      {
+        key: "validation-scan-pipeline",
+        label: "validation scan pipeline",
+        command: ["pnpm", "test:scan-pipeline"]
+      }
+    ]
+  },
+  {
+    key: "v2-dag-lambda",
+    label: "v2 DAG Lambda",
+    matches: (file) =>
+      isGlobalBuildInput(file) ||
+      file.startsWith("apps/v2-dag-lambda/") ||
+      file.startsWith("scripts/local-v2-dag-lambda/") ||
+      file === ".github/workflows/v2-regulatory-gold-corpus.yml",
+    checks: [
+      {
+        key: "lambda-typecheck",
+        label: "v2 DAG Lambda typecheck",
+        command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "typecheck"]
+      },
+      {
+        key: "lambda-tests",
+        label: "v2 DAG Lambda tests",
+        command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "test"]
+      }
+    ]
+  },
+  {
+    key: "db",
+    label: "database package and migrations",
+    matches: (file) =>
+      isGlobalBuildInput(file) ||
+      file.startsWith("packages/db/") ||
+      file === "scripts/apply-db-migrations.ts" ||
+      file === "scripts/apply-db-migrations.mjs" ||
+      file === ".github/workflows/prod-db-migrate.yml",
+    checks: [
+      {
+        key: "db-typecheck",
+        label: "database package typecheck",
+        command: ["pnpm", "--filter", "@website-signal-risk-scanner/db", "typecheck"]
+      }
+    ]
+  }
+];
+
+function isGlobalBuildInput(file: string) {
+  return [
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "tsconfig.base.json",
+    "turbo.json"
+  ].includes(file);
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+
+  if (args.mode === "full") {
+    await runChecks(ROOT_FULL_CHECKS);
+    return;
+  }
+
+  const changedFiles = await collectChangedFiles(args.baseRef);
+  if (changedFiles.length === 0) {
+    console.log("No changed files detected; fast predeploy has nothing to run.");
+    return;
+  }
+
+  console.log("Fast predeploy changed files:");
+  for (const file of changedFiles) {
+    console.log(`  - ${file}`);
+  }
+
+  const selectedTargets = args.allTargets
+    ? TARGETS
+    : TARGETS.filter((target) => changedFiles.some(target.matches));
+  if (selectedTargets.length === 0) {
+    console.log("No deploy-targeted changes detected; fast predeploy has nothing to run.");
+    return;
+  }
+
+  console.log("");
+  console.log(`${args.allTargets ? "Fast deploy-all" : "Fast predeploy"} targets: ${selectedTargets.map((target) => target.label).join(", ")}`);
+
+  const checks = dedupeChecks(selectedTargets.flatMap((target) => target.checks));
+  await runChecks(checks);
+}
+
+function parseArgs(argv: string[]): Args {
+  let baseRef: string | null = process.env.PREDEPLOY_BASE_REF ?? "origin/main";
+  let mode: Args["mode"] = "fast";
+  let allTargets = false;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--") {
+      continue;
+    }
+    if (arg === "--full") {
+      mode = "full";
+      continue;
+    }
+    if (arg === "--fast") {
+      mode = "fast";
+      continue;
+    }
+    if (arg === "--all") {
+      allTargets = true;
+      continue;
+    }
+    if (arg === "--base") {
+      const value = argv[index + 1];
+      if (!value) {
+        throw new Error("--base requires a git ref");
+      }
+      baseRef = value;
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--base=")) {
+      baseRef = arg.slice("--base=".length);
+      continue;
+    }
+    throw new Error(`Unknown argument: ${arg}`);
+  }
+
+  return { allTargets, baseRef, mode };
+}
+
+async function collectChangedFiles(baseRef: string | null) {
+  const files = new Set<string>();
+
+  if (baseRef && await gitRefExists(baseRef)) {
+    const mergeBase = await git(["merge-base", baseRef, "HEAD"]);
+    addLines(files, await git(["diff", "--name-only", `${mergeBase.trim()}..HEAD`]));
+  }
+
+  addLines(files, await git(["diff", "--name-only"]));
+  addLines(files, await git(["diff", "--name-only", "--cached"]));
+  addLines(files, await git(["ls-files", "--others", "--exclude-standard"]));
+
+  return [...files].filter(Boolean).sort();
+}
+
+async function gitRefExists(ref: string) {
+  const result = await run(["git", "cat-file", "-e", `${ref}^{commit}`], { quiet: true, reject: false });
+  return result.exitCode === 0;
+}
+
+async function git(args: string[]) {
+  const result = await run(["git", ...args], { quiet: true });
+  return result.stdout;
+}
+
+function addLines(target: Set<string>, text: string) {
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed) {
+      target.add(trimmed);
+    }
+  }
+}
+
+function dedupeChecks(checks: Check[]) {
+  const seen = new Set<string>();
+  const deduped: Check[] = [];
+  for (const check of checks) {
+    if (seen.has(check.key)) {
+      continue;
+    }
+    seen.add(check.key);
+    deduped.push(check);
+  }
+  return deduped;
+}
+
+async function runChecks(checks: Check[]) {
+  for (const check of checks) {
+    console.log("");
+    console.log(`> ${check.label}`);
+    console.log(`$ ${check.command.join(" ")}`);
+    await run(check.command, { quiet: false });
+  }
+}
+
+function run(command: string[], options: { quiet?: boolean; reject?: boolean } = {}) {
+  const [bin, ...args] = command;
+  if (!bin) {
+    throw new Error("Missing command");
+  }
+
+  return new Promise<{ exitCode: number; stdout: string }>((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    const child = spawn(bin, args, {
+      stdio: options.quiet ? ["ignore", "pipe", "pipe"] : "inherit"
+    });
+
+    if (child.stdout) {
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString();
+      });
+    }
+    if (child.stderr) {
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+    }
+
+    child.on("error", reject);
+    child.on("close", (exitCode) => {
+      const code = exitCode ?? 1;
+      if (code !== 0 && options.reject !== false) {
+        reject(new Error(`${command.join(" ")} failed with exit code ${code}${stderr ? `\n${stderr}` : ""}`));
+        return;
+      }
+      resolve({ exitCode: code, stdout });
+    });
+  });
+}
+
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exit(1);
+});
