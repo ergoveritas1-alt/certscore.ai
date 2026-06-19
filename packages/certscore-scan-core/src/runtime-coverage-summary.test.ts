@@ -246,6 +246,89 @@ test("runtime coverage stays usable when CMP and actionable first-layer controls
   assert.deepEqual(summary.limitationKeys, []);
 });
 
+test("runtime coverage keeps privacy-choice controls actionable while post-consent flows are disabled", () => {
+  const summary = deriveRuntimeCoverageSummary({
+    cmpRuntimeObservations: [{
+      observationId: "cmp_runtime_vendor_onetrust",
+      observedAtMs: 1200,
+      sourceScanner: "pre_consent_runtime",
+      scenario: "fresh_pre_consent",
+      consentStateAtTime: "pre_consent",
+      vendorObservationId: "vendor_onetrust",
+      entity: "OneTrust, LLC",
+      vendor: "OneTrust",
+      product: "OneTrust CMP",
+      signals: [],
+      evidenceRefs: [],
+      confidence: 0.95,
+      directVsInferred: "direct",
+    }],
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 1300,
+      likelyPresent: true,
+      basis: ["control:do_not_sell_share:Your Privacy Choices"],
+      textExcerpt: "Your Privacy Choices",
+      layerInspected: "first_layer",
+      visibleChoiceLabels: ["Your Privacy Choices"],
+      acceptControlObserved: false,
+      rejectControlObserved: false,
+      managePreferencesControlObserved: true,
+      controls: [{
+        actionType: "do_not_sell_share",
+        label: "Your Privacy Choices",
+        selectorHint: "button",
+        tagName: "button",
+        visible: true,
+      }],
+      evidenceRefs: [],
+      confidence: 0.86,
+    }],
+    cookieEvents: [],
+    cookieSnapshots: [],
+    enabledModules: ["preConsentRuntimeScanner", "consentFlowRuntimeScanner"],
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "completed",
+      startedAt,
+      completedAt: "2026-01-01T00:00:01.000Z",
+      durationMs: 1000,
+      evidenceRefs: [],
+      errors: [],
+    }, {
+      moduleName: "consentFlowRuntimeScanner",
+      status: "not_testable",
+      startedAt,
+      completedAt: startedAt,
+      durationMs: 0,
+      evidenceRefs: [],
+      errors: ["Post-consent consent-flow runtime is intentionally disabled for WC01 scanner runs."],
+    }],
+    networkEvents: [{
+      eventId: "net_1",
+      eventType: "network_request",
+      timestampMs: 100,
+      sourceScanner: "pre_consent_runtime",
+      consentStateAtTime: "pre_consent",
+      pagePhase: "initial_navigation",
+      url: "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+      hostname: "cdn.cookielaw.org",
+      firstParty: false,
+      thirdParty: true,
+      evidenceRefs: [],
+      confidence: 0.95,
+      directVsInferred: "direct",
+    }],
+    normalizedVendorObservations: [],
+    observedJourneys: [],
+  });
+
+  assert.equal(summary.coverageStatus, "limited_partial");
+  assert.deepEqual(summary.limitationKeys, ["post_consent_flow_runtime_disabled"]);
+  assert.doesNotMatch(summary.notes.join("\n"), /no actionable consent surface/);
+  assert.match(summary.notes.join("\n"), /intentionally disabled/);
+});
+
 test("runtime coverage is not applicable when pre-consent runtime is out of profile", () => {
   const summary = deriveRuntimeCoverageSummary({
     cookieEvents: [],

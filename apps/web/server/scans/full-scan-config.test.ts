@@ -368,6 +368,55 @@ test("queued full-scan config uses location-specific Lambda functions and result
   );
 });
 
+test("queued full-scan config keeps Lambda-on scans on real regional AWS even when simulator env is set", () => {
+  const config = buildQueuedFullScanConfig({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME: "certscore-v2-dag-ie",
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results",
+      CERTSCORE_V2_DAG_LAMBDA_SIMULATED: "true",
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      NODE_ENV: "development"
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: true,
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    scanFrom: "eu_ie",
+    source: "manual-dashboard"
+  });
+  const v2DagLambda = config.execution?.v2DagLambda as Record<string, unknown> | undefined;
+
+  assert.equal(v2DagLambda?.awsRegion, "eu-west-1");
+  assert.equal(v2DagLambda?.functionName, "certscore-v2-dag-ie");
+  assert.equal(v2DagLambda?.resultQueueUrl, "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results");
+  assert.equal(v2DagLambda?.simulatedLocalLambda, false);
+});
+
+test("queued full-scan config fails closed instead of simulating Lambda-on Ireland scans", () => {
+  assert.throws(
+    () =>
+      buildQueuedFullScanConfig({
+        env: {
+          CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+          CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
+          CERTSCORE_V2_DAG_LAMBDA_SIMULATED: "true",
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+          NODE_ENV: "development"
+        },
+        hostname: "example.com",
+        localV2DagRunViaLambda: true,
+        maxPages: 3,
+        normalizedUrl: "https://example.com/",
+        profile: "homepage",
+        scanFrom: "eu_ie",
+        source: "manual-dashboard"
+      }),
+    /CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL/
+  );
+});
+
 test("queued full-scan config routes Lambda-off localhost scans through the simulated Lambda intent", () => {
   const config = buildQueuedFullScanConfig({
     env: {

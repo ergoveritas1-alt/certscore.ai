@@ -171,7 +171,7 @@ async function main() {
   try {
     process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = "3008";
     process.env.AWS_LAMBDA_FUNCTION_NAME = args.functionName;
-    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "certscore-v2-dag-local-parity-artifacts";
+    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = process.env.S3_BUCKET ?? "scan-artifacts";
     process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR = artifactBaseDir;
     process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX = "v2-dag-lambda/local-parity";
     process.env.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS ??= "true";

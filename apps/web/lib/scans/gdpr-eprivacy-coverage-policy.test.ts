@@ -88,6 +88,54 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes structured Article 13 di
   assert.equal(outcomes.international_transfers_disclosure?.status, "Review signal");
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes sanitizes and prefers Ireland-relevant policy disclosure snippets", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            disclosureType: "controller_contact",
+            evidenceText:
+              "\\r\\n</td><td><p>United States</p></td></tr></tbody></table><p><b>II. Your Privacy Globally</b></p><p>The data controller of your personal information is the McDonald's entity in the jurisdiction where your personal information is collected.</p>",
+            source: "deterministic",
+            status: "observed"
+          },
+          {
+            disclosureType: "controller_contact",
+            evidenceText:
+              "<p>McDonald’s Restaurants of Ireland Limited is the data controller for Ireland users. You may contact the Local Data Protection Office or McDonald’s Global Data Protection Officer.</p>",
+            source: "deterministic",
+            status: "observed"
+          },
+          {
+            disclosureType: "data_retention",
+            evidenceText:
+              "<p><a href=\"#top\"><span>Back to Top</span></a></p><h3>9. Retention</h3><p>McDonald’s will only retain personal information for the duration of time needed for the purposes described in this notice.</p>",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://mcdonalds.com/ie/en-ie/privacy-policy/full.html"],
+        retainedPrivacyPolicyTextExcerpt: "Privacy notice text."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  const controllerText = retainedArticle13Signal(outcomes.controller_contact_disclosure!)?.evidenceText ?? "";
+  const retentionText = retainedArticle13Signal(outcomes.retention_disclosure_observed!)?.evidenceText ?? "";
+  assert.match(controllerText, /McDonald’s Restaurants of Ireland Limited/);
+  assert.doesNotMatch(controllerText, /^United States/i);
+  assert.doesNotMatch(controllerText, /<[^>]+>|\\r|\\n/i);
+  assert.match(retentionText, /^9\. Retention/i);
+  assert.doesNotMatch(retentionText, /Back to Top|<[^>]+>/i);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes detects common international transfer disclosure wording from retained policy text", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -1326,12 +1374,105 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks analytics and device finger
     outcomes.advertising_retargeting_vendor_signal_observed?.criticalEvidence.retainedEvidence.advertisingRetargetingVendorCount,
     1
   );
+  assert.deepEqual(
+    outcomes.advertising_retargeting_vendor_signal_observed?.criticalEvidence.retainedEvidence.advertisingRetargetingEvidenceCauses,
+    [
+      {
+        bucket: "advertising",
+        category: "advertising",
+        vendor: "Google Ads / DoubleClick"
+      }
+    ]
+  );
   assert.equal(outcomes.analytics_vendor_observed?.status, "Not observed");
   assert.equal(outcomes.analytics_vendor_observed?.criticalEvidence.retainedEvidence.analyticsVendorCount, 0);
   assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Not observed");
   assert.equal(
     outcomes.device_identification_fingerprinting_signal_observed?.criticalEvidence.retainedEvidence.fingerprintingObserved,
     false
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat Akamai security or RUM evidence as adtech", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      advertisingRetargetingVendorNames: ["Akamai Bot Manager / Edge"],
+      advertising_retargeting_vendor_count: 1,
+      analyticsVendorNames: ["Akamai mPulse"],
+      consent_baseline_tracker_vendor_names: ["Akamai Bot Manager / Edge", "Akamai mPulse"],
+      fingerprintingEvidenceSummary: {
+        coverageRetained: true,
+        hosts: ["Akamai Bot Manager / Edge"]
+      },
+      hybridRuntimeEvidence: {
+        fingerprintingEvidenceSummary: {
+          coverageRetained: true,
+          hosts: ["Akamai Bot Manager / Edge"]
+        },
+        requestPurposeClassificationConfidence: [
+          {
+            category: "advertising",
+            runtimePhase: "pre_consent",
+            representativeUrl: "https://www.mcdonalds.com/_abck",
+            vendorName: "Akamai Bot Manager / Edge"
+          },
+          {
+            category: "analytics",
+            runtimePhase: "pre_consent",
+            representativeUrl: "https://c.go-mpulse.net/boomerang/config.js",
+            vendorName: "Akamai mPulse"
+          }
+        ],
+        vendorSummary: {
+          vendorCategoryCounts: {
+            advertising: 1,
+            analytics: 1
+          }
+        }
+      }
+    },
+    snapshot: {
+      fingerprinting_detected: true,
+      preconsent_tracking_detected: true,
+      tracker_vendor_count: 2
+    }
+  });
+
+  assert.equal(outcomes.pre_consent_third_party_tracking?.status, "Review signal");
+  assert.equal(outcomes.advertising_retargeting_vendor_signal_observed?.status, "Not observed");
+  assert.equal(
+    outcomes.advertising_retargeting_vendor_signal_observed?.criticalEvidence.retainedEvidence.advertisingRetargetingVendorCount,
+    0
+  );
+  assert.deepEqual(
+    outcomes.advertising_retargeting_vendor_signal_observed?.criticalEvidence.retainedEvidence.advertisingRetargetingEvidenceCauses,
+    []
+  );
+  assert.deepEqual(
+    outcomes.advertising_retargeting_vendor_signal_observed?.criticalEvidence.retainedEvidence.preconsentPurposeRiskMix,
+    {
+      advertising: [],
+      retargeting: [],
+      marketingAnalytics: [],
+      performanceRum: ["Akamai mPulse"],
+      securityBotMitigation: ["Akamai Bot Manager / Edge"],
+      cdnEdgeDelivery: [],
+      functional: [],
+      sessionReplay: [],
+      unknown: []
+    }
+  );
+  assert.equal(outcomes.analytics_vendor_observed?.status, "Review signal");
+  assert.deepEqual(
+    outcomes.analytics_vendor_observed?.criticalEvidence.retainedEvidence.performanceRumVendors,
+    ["Akamai mPulse"]
+  );
+  assert.match(outcomes.analytics_vendor_observed?.limitation ?? "", /Performance\/RUM analytics evidence/i);
+  assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Review signal");
+  assert.match(
+    outcomes.device_identification_fingerprinting_signal_observed?.limitation ?? "",
+    /Security\/bot-detection telemetry/i
   );
 });
 

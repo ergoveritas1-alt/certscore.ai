@@ -349,6 +349,45 @@ function parseS3Uri(uri: string) {
   };
 }
 
+function localV2ScreenshotStoragePointer(input: {
+  scanArtifactUri?: string | null;
+  scanId: string;
+  screenshotPath: string;
+}): { bucket: string | null; key: string } {
+  const screenshotPath = input.screenshotPath.trim();
+  if (screenshotPath.startsWith("s3://")) {
+    const { bucket, key } = parseS3Uri(screenshotPath);
+    return { bucket, key };
+  }
+
+  const normalizedPath = screenshotPath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const localV2Index = normalizedPath.indexOf("local-v2-dag-scans/");
+  if (localV2Index >= 0) {
+    return { bucket: null, key: normalizedPath.slice(localV2Index) };
+  }
+
+  if (input.scanArtifactUri) {
+    try {
+      const { bucket, key } = parseS3Uri(input.scanArtifactUri);
+      const fileName = path.posix.basename(normalizedPath);
+      if (fileName && fileName !== "." && fileName !== "/") {
+        return {
+          bucket,
+          key: `${path.posix.dirname(key)}/auxiliary/${fileName}`
+        };
+      }
+    } catch {
+      // Fall through to the legacy local artifact key below.
+    }
+  }
+
+  const fileName = path.posix.basename(normalizedPath) || "screenshot-pre-consent.png";
+  return {
+    bucket: null,
+    key: `local-v2-dag-scans/${input.scanId}/${fileName}`
+  };
+}
+
 export function inferS3ArtifactRegion(bucket: string) {
   const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-2)(?:-|$)/);
   const region = match?.[1] ?? null;
@@ -710,7 +749,11 @@ function summarizeFirstLayerConsentChoices(bundle: CanonicalEvidenceBundle) {
   };
 }
 
-function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: CanonicalEvidenceBundle): ScanDetailResponse {
+function buildMaterializedLocalV2Detail(
+  scanRecord: ScanDetailResponse,
+  bundle: CanonicalEvidenceBundle,
+  options: { scanArtifactUri?: string | null } = {}
+): ScanDetailResponse {
   const requestedHost = scanRecord.scan.domainHostname ?? hostnameFromUrl(bundle.normalizedUrl ?? bundle.url);
   const rootDomain = registrableDomain(requestedHost);
   const networkEvents = bundle.networkEvents ?? [];
@@ -996,13 +1039,19 @@ function buildMaterializedLocalV2Detail(scanRecord: ScanDetailResponse, bundle: 
       if (screenshot.artifactId !== "screenshot_pre_consent") {
         return [];
       }
+      const storagePointer = localV2ScreenshotStoragePointer({
+        scanArtifactUri: options.scanArtifactUri,
+        scanId: scanRecord.scan.id,
+        screenshotPath: screenshot.path
+      });
       return [{
+        bucket: storagePointer.bucket,
         capture_step: "initial_load",
         consent_state: screenshot.consentStateAtTime ?? "pre_consent",
         final_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
         id: "local_v2:screenshot_pre_consent",
         interaction_state: "none",
-        key: `local-v2-dag-scans/${scanRecord.scan.id}/screenshot-pre-consent.png`,
+        key: storagePointer.key,
         mime_type: "image/png",
         page_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
         status: "available"
@@ -1127,5 +1176,5 @@ export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResp
   const bundle = localBundle ?? (input.scanArtifactUri
     ? await readLocalV2DagBundleFromS3(input.scanArtifactUri)
     : null);
-  return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle) : scanRecord;
+  return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle, { scanArtifactUri: input.scanArtifactUri }) : scanRecord;
 }

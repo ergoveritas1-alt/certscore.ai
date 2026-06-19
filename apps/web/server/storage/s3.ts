@@ -6,11 +6,11 @@ import { checkStorageBucketExists, getS3Client, getStorageBucketName, putStorage
 
 export { checkStorageBucketExists, getS3Client, getStorageBucketName, putStorageObject };
 
-export async function createSignedStorageUrl(key: string, expiresInSeconds = 3600) {
+export async function createSignedStorageUrl(key: string, expiresInSeconds = 3600, bucket = getStorageBucketName()) {
   return getSignedUrl(
     getS3Client(),
     new GetObjectCommand({
-      Bucket: getStorageBucketName(),
+      Bucket: bucket,
       Key: key
     }),
     {

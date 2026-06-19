@@ -402,6 +402,35 @@ async function loadUnverifiedHomepageReview() {
   }).deriveUnverifiedHomepageReview;
 }
 
+async function loadDeriveExecutivePolicySurfaces() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { deriveExecutivePolicySurfaces?: unknown })
+      .deriveExecutivePolicySurfaces
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    deriveExecutivePolicySurfaces: (
+      policyEnrichments: Array<Record<string, unknown>>,
+      snapshot?: Record<string, unknown> | null,
+      runtimeArtifacts?: Record<string, unknown> | null
+    ) => Array<{ details: string[]; pageLabel: string; pageUrl: string | null }>;
+  }).deriveExecutivePolicySurfaces;
+}
+
 async function loadExecutiveAccessLimitationNotice() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -772,6 +801,75 @@ test("review evidence export exposes sensitive-surface packet fields without imp
   assert.deepEqual(sensitiveSurface.thirdPartyDomains, ["analytics.example"]);
   assert.equal(sensitiveSurface.rawValuesRetained, false);
   assert.equal(sensitiveSurface.payloadExposureObserved, false);
+});
+
+test("deriveExecutivePolicySurfaces disambiguates multiple privacy policy URLs", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "consumer-health-policy",
+      page_type: "privacy_policy",
+      page_url: "https://mcdonalds.com/us/en-us/consumer-health-data-privacy-policy.html",
+      policy_summary_short: "Consumer health data privacy policy retained.",
+      policy_mentions: [{ topic: "data_subject_rights" }]
+    },
+    {
+      id: "privacy-overview",
+      page_type: "privacy_policy",
+      page_url: "https://mcdonalds.com/us/en-us/privacy-overview.html",
+      policy_summary_short: "Privacy overview retained.",
+      policy_mentions: [{ topic: "international_transfers" }]
+    }
+  ]);
+
+  assert.deepEqual(
+    surfaces.map((surface) => surface.pageLabel),
+    ["Consumer Health Data Privacy Policy", "Privacy Overview"]
+  );
+  assert.equal(surfaces.every((surface) => surface.pageUrl), true);
+});
+
+test("deriveExecutivePolicySurfaces keeps generic label when there is only one privacy policy URL", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "privacy-policy",
+      page_type: "privacy_policy",
+      page_url: "https://example.com/privacy-policy",
+      policy_summary_short: "Privacy policy retained."
+    }
+  ]);
+
+  assert.deepEqual(
+    surfaces.map((surface) => surface.pageLabel),
+    ["Privacy policy"]
+  );
+});
+
+test("deriveExecutivePolicySurfaces disambiguates terms policy subpages", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "terms",
+      page_type: "terms_of_service",
+      page_url: "https://mcdonalds.com/ie/en-ie/terms-and-conditions.html",
+      policy_summary_short: "Terms and conditions retained."
+    },
+    {
+      id: "modern-slavery",
+      page_type: "terms_of_service",
+      page_url: "https://mcdonalds.com/ie/en-ie/terms-and-conditions/modern-slavery-act.html",
+      policy_summary_short: "Modern slavery statement retained."
+    }
+  ]);
+
+  assert.deepEqual(
+    surfaces.map((surface) => surface.pageLabel),
+    ["Terms And Conditions", "Modern Slavery Statement"]
+  );
 });
 
 test("buildScanReportUnifiedFindings surfaces page-attributed privacy-rights paths as review evidence", async () => {

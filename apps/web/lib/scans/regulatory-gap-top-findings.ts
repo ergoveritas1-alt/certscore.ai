@@ -71,8 +71,7 @@ function findingsForArea(
         label: row.label,
         section: "Privacy & Tracking",
         defaultSurfacePriority: config.priorityBase - index,
-        whyItMatters:
-          `${config.lawLabel} coverage projected this row as a potential concern from retained checklist evidence. This is a high-priority review signal, not a legal conclusion.`,
+        whyItMatters: getRegulatoryGapWhyItMatters(row, config),
         remediation:
           "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed.",
         confidence: "good",
@@ -108,6 +107,19 @@ function getRegulatoryGapTopFindingSummary(row: RegulatoryGapTopFindingRow, conf
     return summary.trim();
   }
   return `${config.lawLabel} evidence projected this row as a potential concern from retained checklist evidence.`;
+}
+
+function getRegulatoryGapWhyItMatters(row: RegulatoryGapTopFindingRow, config: RegulatoryGapAreaConfig) {
+  if (isReviewOnlyRow(row)) {
+    return `${config.lawLabel} coverage retained this row for timing review from checklist evidence. This evidence is retained for review and is not a legal conclusion.`;
+  }
+  return `${config.lawLabel} coverage projected this row as a potential concern from retained checklist evidence. This is a high-priority review signal, not a legal conclusion.`;
+}
+
+function isReviewOnlyRow(row: RegulatoryGapTopFindingRow) {
+  return row.assessmentStatus === "review_signal" ||
+    row.status === "Review signal" ||
+    row.statusLabel === "Review signal";
 }
 
 function isPotentialConcernCoverageRow(row: RegulatoryGapTopFindingRow) {
@@ -150,7 +162,7 @@ function getEvidenceLabel(row: RegulatoryGapTopFindingRow) {
     return "Potential gap";
   }
   if (row.status === "Insufficient evidence" || row.status === "Not confirmed" || row.status === "Review signal") {
-    return row.evidenceState === "observed" && isRiskSignalRow(row.id) ? "Observed" : "Partial";
+    return "Partial";
   }
   if (isObservedRow(row)) {
     return "Observed";

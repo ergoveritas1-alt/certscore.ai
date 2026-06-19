@@ -2559,6 +2559,57 @@ function getSnapshotPolicySurfaceLabel(pageType: "privacy_policy" | "terms_of_se
   }
 }
 
+function titleCasePolicyPathSegment(value: string) {
+  const normalized = value
+    .replace(/\.(?:html?|php|aspx?)$/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (/^modern slavery act$/i.test(normalized) || /^modern slavery statement$/i.test(normalized)) {
+    return "Modern Slavery Statement";
+  }
+
+  return normalized
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function deriveSpecificPolicySurfaceLabel(surface: ExecutivePolicySurface) {
+  if (!surface.pageUrl) {
+    return surface.pageLabel;
+  }
+
+  try {
+    const parsed = new URL(surface.pageUrl);
+    const pathSegments = parsed.pathname.split("/").filter(Boolean);
+    const candidate = [...pathSegments].reverse()
+      .map(titleCasePolicyPathSegment)
+      .find((segment) => /privacy|cookie|terms|conditions|notice|rights|overview|modern slavery/i.test(segment));
+
+    return candidate && candidate.length > 3 ? candidate : surface.pageLabel;
+  } catch {
+    return surface.pageLabel;
+  }
+}
+
+function disambiguatePolicySurfaceLabels(surfaces: ExecutivePolicySurface[]) {
+  const labelCounts = new Map<string, number>();
+  for (const surface of surfaces) {
+    labelCounts.set(surface.pageLabel, (labelCounts.get(surface.pageLabel) ?? 0) + 1);
+  }
+
+  return surfaces.map((surface) => {
+    if ((labelCounts.get(surface.pageLabel) ?? 0) <= 1) {
+      return surface;
+    }
+
+    const pageLabel = deriveSpecificPolicySurfaceLabel(surface);
+    return pageLabel === surface.pageLabel ? surface : { ...surface, pageLabel };
+  });
+}
+
 function getRuntimeKeyPageDiscoverySummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return getRecord(runtimeArtifacts?.key_page_discovery_summary) ?? getRecord(runtimeArtifacts?.keyPageDiscoverySummary);
 }
@@ -2625,7 +2676,7 @@ function deriveSnapshotPolicySurfaceFallbacks(
     .filter((surface) => !existingLabels.has(surface.pageLabel.toLowerCase()));
 }
 
-function deriveExecutivePolicySurfaces(
+export function deriveExecutivePolicySurfaces(
   policyEnrichments: Array<Record<string, unknown>>,
   snapshot?: Record<string, unknown> | null,
   runtimeArtifacts?: Record<string, unknown> | null
@@ -2673,10 +2724,10 @@ function deriveExecutivePolicySurfaces(
     })
     .filter((surface) => !isCaliforniaSpecificExecutivePolicySurface(surface))
     .filter((surface) => surface.pageUrl || surface.details.length > 0);
-  return [
+  return disambiguatePolicySurfaceLabels([
     ...enrichedSurfaces,
     ...deriveSnapshotPolicySurfaceFallbacks(snapshot, enrichedSurfaces, runtimeArtifacts)
-  ];
+  ]);
 }
 
 function isCaliforniaSpecificExecutivePolicySurface(surface: ExecutivePolicySurface) {

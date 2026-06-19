@@ -30,7 +30,7 @@ import {
 } from "./journey-builder.js";
 import { createOpenAiNanoPolicyAssistProviderFromEnv } from "./nano-policy-assist-provider.js";
 import { getScanProfile } from "./profiles.js";
-import { policySurfaceScannerPlaceholder } from "./scanners/placeholders.js";
+import { consentFlowRuntimeScannerPlaceholder, policySurfaceScannerPlaceholder } from "./scanners/placeholders.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
 import { chromiumLaunchOptions } from "./playwright-runtime.js";
@@ -104,6 +104,12 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const scanId = `scan_${startedAtMs}_${safeHostname(normalizedUrl)}`;
   const outDir = input.outDir ?? path.join(process.cwd(), "artifacts", scanId);
   const phaseRecorder = createScanPhaseRecorder(outDir, startedAtMs);
+  if (input.postConsentFlowsEnabled === true) {
+    await phaseRecorder.record("consent_flow_runtime", "skipped", {
+      reason: "post_consent_flows_intentionally_disabled",
+    });
+    throw new Error("Post-consent consent-flow runtime is intentionally disabled for WC01 scanner runs.");
+  }
   await phaseRecorder.record("scan_start", "started", {
     captureReplay: input.captureReplay === true,
     profile: scanProfile.profileId,
@@ -113,7 +119,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const preConsentEnabled = scanProfile.enabledModules.includes("preConsentRuntimeScanner");
   const policySurfaceEnabled = scanProfile.enabledModules.includes("policySurfaceScanner");
   const profileConsentFlowEnabled = scanProfile.enabledModules.includes("consentFlowRuntimeScanner");
-  const consentFlowEnabled = profileConsentFlowEnabled && input.postConsentFlowsEnabled === true;
+  const consentFlowEnabled = false;
   const plannedParallel = input.scenarioPlanningMode === "planned_parallel";
   const leanPreConsent = plannedParallel || input.captureReplay === true;
   const nanoPolicyAssistProvider = policySurfaceEnabled ? createOpenAiNanoPolicyAssistProviderFromEnv() : undefined;
@@ -369,9 +375,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     vendorObservations: normalizedVendorObservations.length,
   });
   const now = new Date().toISOString();
+  const consentFlowDisabledReason = "Post-consent consent-flow runtime is intentionally disabled for WC01 scanner runs; first-layer controls and policy surfaces are retained without clicking.";
   const modulesRun = [
     ...(preConsentEnabled ? [preConsentResult.moduleRun] : []),
-    ...(consentFlowResult ? [consentFlowResult.moduleRun] : []),
+    ...(consentFlowResult
+      ? [consentFlowResult.moduleRun]
+      : profileConsentFlowEnabled
+        ? [consentFlowRuntimeScannerPlaceholder(now, consentFlowDisabledReason)]
+        : []),
     vendorResolverModuleRun,
     ...(policySurfaceResult
       ? [policySurfaceResult.moduleRun]
@@ -553,9 +564,16 @@ export { scanProfiles } from "./profiles.js";
 export { buildObservedJourneys, summarizeObservedJourneys } from "./journey-builder.js";
 export { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 export {
+  consentFlowRuntimeScannerPlaceholder,
   policySurfaceScannerPlaceholder,
 } from "./scanners/placeholders.js";
 export { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
+export {
+  replayConsentFlowEvidenceCorpus,
+  validateConsentFlowReplayCorpus,
+  type ReplayEvidenceReport,
+  type ReplayEvidenceSiteReport,
+} from "./consent-flow-replay-runner.js";
 export { createOpenAiNanoPolicyAssistProvider, createOpenAiNanoPolicyAssistProviderFromEnv } from "./nano-policy-assist-provider.js";
 
 type ScanPhaseStatus = "completed" | "failed" | "skipped" | "started";
@@ -687,6 +705,10 @@ export function deriveRuntimeCoverageSummary(input: {
     limitationKeys.push("cmp_runtime_without_actionable_surface");
     notes.push("CMP runtime evidence was observed, but no actionable consent surface or first-layer controls were retained in bounded capture.");
   }
+  if (postConsentFlowRuntimeDisabled(input)) {
+    limitationKeys.push("post_consent_flow_runtime_disabled");
+    notes.push("Post-consent consent-flow runtime is intentionally disabled; action completion and post-action behavior comparisons are explicit not-testable limitations.");
+  }
 
   const coverageStatus: RuntimeCoverageSummary["coverageStatus"] =
     silentEmpty || (!hasRuntimeEvidence && limitationKeys.length > 0)
@@ -718,6 +740,20 @@ function cmpRuntimeObservedWithoutActionableConsentSurface(input: {
     observation.managePreferencesControlObserved ||
     observation.controls.length > 0 ||
     observation.visibleChoiceLabels.length > 0
+  );
+}
+
+function postConsentFlowRuntimeDisabled(input: {
+  enabledModules: string[];
+  modulesRun: CanonicalEvidenceBundle["modulesRun"];
+}) {
+  if (!input.enabledModules.includes("consentFlowRuntimeScanner")) {
+    return false;
+  }
+  return input.modulesRun.some((moduleRun) =>
+    moduleRun.moduleName === "consentFlowRuntimeScanner" &&
+    moduleRun.status === "not_testable" &&
+    moduleRun.errors.some((error) => /intentionally disabled/i.test(error))
   );
 }
 

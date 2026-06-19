@@ -3,8 +3,8 @@
 import {
   SCAN_EXECUTION_STAGES,
   type ScannerExecutionSummary
-} from "@website-signal-risk-scanner/shared/types/scanner-execution";
-import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared/constants/queue";
+} from "../../../../packages/shared/src/types/scanner-execution";
+import { SCAN_EVENT_TYPES } from "../../../../packages/shared/src/constants/queue";
 import React, { useEffect, useMemo, useState } from "react";
 import { formatMetadataPreview } from "../../lib/scans/activity-feed";
 import { CollapsibleSectionCard } from "./collapsible-section-card";

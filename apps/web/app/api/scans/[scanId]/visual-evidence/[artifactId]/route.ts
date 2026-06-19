@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { getVisualEvidenceArtifacts } from "../../../../../../lib/scans/visual-evidence";
 import { isPlatformAdminEmail } from "../../../../../../server/admin/platform-admin";
@@ -34,6 +34,10 @@ function isSafeStorageKey(value: string) {
   return !path.isAbsolute(value) && !value.split("/").some((part) => part === "..");
 }
 
+function isSafeStorageBucket(value: string) {
+  return /^[a-z0-9][a-z0-9.-]{1,62}$/.test(value) && !value.includes("..");
+}
+
 async function getLocalDevVisualEvidenceResponse(input: { contentType: string | null; key: string }) {
   if (!isLocalStorageEndpoint(process.env.S3_ENDPOINT) || !isSafeStorageKey(input.key)) {
     return null;
@@ -58,6 +62,47 @@ async function getLocalDevVisualEvidenceResponse(input: { contentType: string | 
       });
     } catch {
       // Try the next plausible local dev root before falling back to signed storage.
+    }
+  }
+
+  return null;
+}
+
+async function getLocalFakeS3VisualEvidenceResponse(input: { bucket: string | null | undefined; contentType: string | null; key: string }) {
+  if (!input.bucket || !isSafeStorageBucket(input.bucket) || !isSafeStorageKey(input.key)) {
+    return null;
+  }
+
+  const candidateRoots = [
+    process.cwd(),
+    path.resolve(process.cwd(), ".."),
+    path.resolve(process.cwd(), "../..")
+  ];
+
+  for (const root of candidateRoots) {
+    let artifactDirs: string[];
+    try {
+      artifactDirs = await readdir(path.join(root, "artifacts"));
+    } catch {
+      continue;
+    }
+
+    for (const artifactDir of artifactDirs) {
+      if (!isSafeStorageKey(artifactDir)) {
+        continue;
+      }
+      try {
+        const objectPath = path.join(root, "artifacts", artifactDir, "_fake-s3", input.bucket, input.key);
+        const body = await readFile(objectPath);
+        return new NextResponse(body, {
+          headers: {
+            "Cache-Control": "private, no-store",
+            "Content-Type": input.contentType ?? "application/octet-stream"
+          }
+        });
+      } catch {
+        // Try the next local fake-S3 artifact root before falling back.
+      }
     }
   }
 
@@ -130,6 +175,15 @@ export async function GET(_request: Request, context: RouteContext) {
     return localV2Response;
   }
 
+  const localFakeS3Response = await getLocalFakeS3VisualEvidenceResponse({
+    bucket: artifact.bucket,
+    contentType: artifact.mimeType,
+    key: artifact.key
+  });
+  if (localFakeS3Response) {
+    return localFakeS3Response;
+  }
+
   const localDevResponse = await getLocalDevVisualEvidenceResponse({
     contentType: artifact.mimeType,
     key: artifact.key
@@ -138,7 +192,7 @@ export async function GET(_request: Request, context: RouteContext) {
     return localDevResponse;
   }
 
-  const signedUrl = await createSignedStorageUrl(artifact.key, 300);
+  const signedUrl = await createSignedStorageUrl(artifact.key, 300, artifact.bucket ?? undefined);
   return NextResponse.redirect(signedUrl, {
     headers: {
       "Cache-Control": "private, no-store"

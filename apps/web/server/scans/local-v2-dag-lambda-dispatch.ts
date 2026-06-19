@@ -46,6 +46,7 @@ export type LocalV2DagLambdaDispatchSummary = {
   dispatchRequested: boolean;
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   resultHandoff: "sqs";
+  simulatedLocalLambda: boolean;
   targetEnvironment: LocalV2DagLambdaTargetEnvironment;
   vpcMode: "none";
 };
@@ -173,6 +174,7 @@ export function summarizeLocalV2DagLambdaDispatchForEvent(
     dispatchRequested: true,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     resultHandoff: "sqs",
+    simulatedLocalLambda: intent.simulatedLocalLambda === true,
     targetEnvironment:
       intent.targetEnvironment === "production" ? "production" : "local",
     vpcMode: "none"

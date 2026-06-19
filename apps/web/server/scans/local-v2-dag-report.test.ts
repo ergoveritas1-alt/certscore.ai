@@ -526,6 +526,90 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
   }
 });
 
+test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda artifact URI", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/visual-evidence-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-17T13:14:02.000Z",
+      cookieEvents: [],
+      modulesRun: [],
+      networkEvents: [],
+      normalizedUrl: "https://example.test/",
+      policySurfaceObservations: [],
+      runtimeTimeline: [],
+      scanId: "visual-evidence-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 1200,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "network_idle",
+          path: "/tmp/certscore-v2/visual-evidence-fixture/screenshot-pre-consent.png",
+          url: "https://example.test/"
+        }
+      ],
+      startedAt: "2026-06-17T13:13:50.000Z",
+      url: "https://example.test/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      events: [
+        {
+          createdAt: "2026-06-17T13:14:02.000Z",
+          eventType: "v2_lambda_result.received",
+          id: "event-visual-1",
+          message: "Local v2 DAG Lambda returned a completed artifact-only result.",
+          metadataJson: {
+            artifactOnly: true,
+            artifactPointers: {
+              scanArtifactUri: "s3://ws01-scan-artifacts-199536052647-us-west-1/v2-dag-lambda/local/visual-evidence-fixture/CanonicalEvidenceBundle.json"
+            },
+            processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+            productionFindingIntegration: false
+          }
+        }
+      ],
+      scan: {
+        ...makeScanRecord().scan,
+        id: "5e7bcbc6-aa9f-41de-80da-a04335cc2b6a",
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const visualArtifacts = detail.runtimeArtifacts?.visual_evidence_artifacts as Array<Record<string, unknown>> | undefined;
+    assert.equal(visualArtifacts?.[0]?.bucket, "ws01-scan-artifacts-199536052647-us-west-1");
+    assert.equal(
+      visualArtifacts?.[0]?.key,
+      "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent.png"
+    );
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail marks failed pre-consent runtime counts as not retained", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

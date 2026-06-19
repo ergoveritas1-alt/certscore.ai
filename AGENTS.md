@@ -57,6 +57,8 @@ Do not wire v2 outputs into production report cards, checklist builders, executi
 
 Sensitive-context labels in v2 are review routing metadata only. They must not create stronger findings, customer-facing language, legal conclusions, or production eligibility.
 
+Post-consent consent-flow runtime is intentionally disabled for WC01 scanner runs. Do not run, enable, or add paths that click accept, reject, opt-out, save, or other consent controls against public sites. Consent-flow runtime artifacts may be analyzed only from retained historical/local fixtures; new scanner-quality work should use pre-consent observation, policy-surface discovery, deterministic fixtures, retained replay artifacts, and explicit limitation reporting instead. Consent-flow-dependent review rows are internal review aids only; use them to enhance GDPR/ePrivacy Evidence Review clarity, not as required production scanner coverage.
+
 ### WC01 responsibility boundary
 
 WC01 owns:

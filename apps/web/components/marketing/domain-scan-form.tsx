@@ -509,8 +509,8 @@ export function DomainScanForm({
             autoComplete="url"
             className={
               compact
-                ? "h-12 rounded-[1.2rem] pr-40 text-left text-sm placeholder:text-left"
-                : "h-14 rounded-[1.6rem] pr-32 text-base"
+                ? "h-12 rounded-[1.2rem] border-2 border-sky-500 pr-40 text-left text-sm font-semibold shadow-[0_12px_30px_rgba(14,165,233,0.12)] placeholder:text-left focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
+                : "h-14 rounded-[1.6rem] border-2 border-sky-500 pr-32 text-base font-semibold shadow-[0_14px_34px_rgba(14,165,233,0.12)] focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
             }
             id="domain"
             name="domain"

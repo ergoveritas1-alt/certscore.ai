@@ -143,7 +143,7 @@ function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): EvidenceLabe
     return "Potential gap";
   }
   if (item.status === "Insufficient evidence" || item.status === "Not confirmed" || item.status === "Review signal") {
-    return item.evidenceState === "observed" && RISK_SIGNAL_ROW_IDS.has(item.id) ? "Observed" : "Partial";
+    return "Partial";
   }
   if (item.evidenceState === "observed" || item.status === "Observed") {
     return "Observed";
@@ -182,6 +182,23 @@ function evidenceMentions(item: GdprEprivacyCoverageChecklistItem, pattern: RegE
   ].join(" ").toLowerCase());
 }
 
+function retainedRecord(item: GdprEprivacyCoverageChecklistItem, key: string) {
+  const value = item.criticalEvidence.retainedEvidence[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function retainedPurposeMixHas(item: GdprEprivacyCoverageChecklistItem, keys: string[]) {
+  const mix = retainedRecord(item, "preconsentPurposeRiskMix") ?? retainedRecord(item, "preconsent_purpose_risk_mix");
+  if (!mix) {
+    return null;
+  }
+  return keys.some((key) => Array.isArray(mix[key]) && mix[key].length > 0);
+}
+
+function hasHighRiskPreconsentPurpose(item: GdprEprivacyCoverageChecklistItem) {
+  return retainedPurposeMixHas(item, ["advertising", "retargeting", "marketingAnalytics", "sessionReplay"]);
+}
+
 function hasHighConfidenceStorageConcern(item: GdprEprivacyCoverageChecklistItem) {
   return retainedBoolean(item, [
     "eligibleNonEssentialCookieStorageFindingProjected",
@@ -213,6 +230,10 @@ function hasStrictlyNecessaryStorageOnly(item: GdprEprivacyCoverageChecklistItem
 }
 
 function hasHighConfidenceAdvertisingConcern(item: GdprEprivacyCoverageChecklistItem) {
+  const highRiskPurpose = retainedPurposeMixHas(item, ["advertising", "retargeting"]);
+  if (highRiskPurpose !== null) {
+    return highRiskPurpose;
+  }
   const count = retainedNumber(item, [
     "advertisingRetargetingVendorCount",
     "advertising_retargeting_vendor_count",
@@ -224,6 +245,10 @@ function hasHighConfidenceAdvertisingConcern(item: GdprEprivacyCoverageChecklist
 }
 
 function hasHighConfidenceAnalyticsConcern(item: GdprEprivacyCoverageChecklistItem) {
+  const marketingAnalyticsPurpose = retainedPurposeMixHas(item, ["marketingAnalytics"]);
+  if (marketingAnalyticsPurpose !== null) {
+    return marketingAnalyticsPurpose;
+  }
   const count = retainedNumber(item, ["analyticsVendorCount", "analytics_vendor_count"]);
   if (evidenceMentions(item, /\b(limited use|strictly necessary|essential analytics|aggregate only)\b/i)) {
     return false;
@@ -292,6 +317,9 @@ function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem)
       }
       return "review_signal";
     case "pre_consent_third_party_tracking":
+      if (hasHighRiskPreconsentPurpose(item) === false) {
+        return "review_signal";
+      }
       return "potential_concern";
     case "advertising_retargeting_vendor_signal_observed":
       return hasHighConfidenceAdvertisingConcern(item) ? "potential_concern" : "review_signal";
@@ -326,6 +354,9 @@ export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem):
     return getObservedAssessmentDirection(item);
   }
   if (evidenceLabel === "Partial" || item.assessmentStatus === "review_signal") {
+    if (item.status === "Review signal" && RISK_SIGNAL_ROW_IDS.has(item.id)) {
+      return getObservedAssessmentDirection(item);
+    }
     return "review_signal";
   }
 
@@ -723,13 +754,15 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
 
   if (item.id === "pre_consent_third_party_tracking") {
     return item.status === "Observed" || item.status === "Review signal" || item.status === "Gap observed"
-      ? "Analytics, advertising, cross-site measurement, or similar third-party requests were observed before recorded consent."
+      ? "Third-party runtime activity was retained before recorded consent; purpose classification determines whether it is a review signal or a stronger concern."
       : "No eligible third-party tracking requests were observed before recorded consent.";
   }
 
   if (item.id === "advertising_retargeting_vendor_signal_observed") {
-    return item.status === "Observed" || item.status === "Review signal"
+    return item.status === "Observed"
       ? "Advertising, retargeting, or adtech vendor evidence was observed in the retained pre-consent runtime context."
+      : item.status === "Review signal"
+        ? "Advertising or retargeting classification requires review from retained runtime evidence; security, CDN, bot, and performance/RUM evidence is not enough by itself."
       : "No advertising, retargeting, or adtech vendor signal was observed in the retained runtime context.";
   }
 
@@ -927,6 +960,9 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
   if (item.id === "advertising_retargeting_vendor_signal_observed") {
     if (evidenceLabel === "Not observed") {
       return "No advertising, retargeting, or adtech vendor signal was observed in retained runtime evidence.";
+    }
+    if (item.status === "Review signal" && retainedNumber(item, ["advertisingRetargetingVendorCount", "advertising_retargeting_vendor_count", "adtechVendorCount", "adtech_vendor_count"]) === 0) {
+      return "No advertising, retargeting, or adtech vendor classification was retained; security, CDN, bot, and performance/RUM evidence remains review context only.";
     }
     const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
       fallbackFirstSeenMs: firstSeenMs,

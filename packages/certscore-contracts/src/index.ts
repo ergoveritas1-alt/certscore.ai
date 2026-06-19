@@ -363,7 +363,7 @@ export const consentUiObservationSchema = z.object({
   managePreferencesControlObserved: z.boolean().default(false),
   controls: z.array(z.object({
     label: z.string().max(120),
-    actionType: z.enum(["accept_all", "reject_all", "manage_preferences", "save_preferences", "other"]),
+    actionType: z.enum(["accept_all", "reject_all", "manage_preferences", "save_preferences", "do_not_sell_share", "other"]),
     tagName: z.string().max(32).optional(),
     role: z.string().max(64).optional(),
     selectorHint: z.string().max(160).optional(),

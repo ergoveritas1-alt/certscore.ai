@@ -641,17 +641,17 @@ function policySurfaceScannerImprovement(rowId: string) {
 function consentFlowScannerImprovement(rowId: string) {
   switch (rowId) {
     case "reject_all_path_availability":
-      return "Run consent-flow coverage for reject/decline path evidence";
+      return "Use internal retained/replay review for reject/decline path evidence";
     case "post_reject_tracking_reduction":
-      return "Run consent-flow coverage for before/after reject comparison";
+      return "Use internal retained/replay review for before/after reject comparison";
     case "preference_withdrawal_control":
-      return "Run consent-flow coverage for preference reopening evidence";
+      return "Use internal retained/replay review for preference reopening evidence";
     case "post_opt_out_tracking_behavior":
-      return "Run opt-out flow coverage for post-choice tracking comparison";
+      return "Use internal retained/replay review for post-choice tracking comparison";
     case "gpc_opt_out_signal_handling":
       return "Run GPC-enabled runtime coverage for opt-out signal handling";
     default:
-      return "Run consent-flow coverage and retain bounded interaction evidence";
+      return "Use internal retained/replay review and retain bounded interaction evidence";
   }
 }
 
@@ -679,9 +679,9 @@ function rowSpecificConfidenceImprovements(rowId: string) {
     case "cookie_notice_availability":
       return ["Retain a bounded cookie notice or cookie policy excerpt", "Retain the cookie notice URL and link text"];
     case "reject_all_path_availability":
-      return ["Retain successful reject-path interaction evidence", "Retain whether reject was equally reachable from the first layer"];
+      return ["Retain internal reject-path proof when already available", "Retain visible first-layer reject-path availability without clicking"];
     case "post_reject_tracking_reduction":
-      return ["Capture before/after reject request deltas", "Classify persisted vendors and cookies after reject"];
+      return ["Use retained before/after reject request deltas when already available", "Classify persisted vendors and cookies after reject"];
     case "preference_withdrawal_control":
       return ["Retain evidence that preferences can be reopened after initial choice"];
     case "session_replay_fingerprinting_review":
@@ -701,7 +701,7 @@ function rowSpecificConfidenceImprovements(rowId: string) {
     case "targeted_advertising_signals":
       return ["Retain adtech vendor purpose and third-party request evidence"];
     case "post_opt_out_tracking_behavior":
-      return ["Capture opt-out interaction and post-choice tracking deltas"];
+      return ["Use retained opt-out proof and post-choice tracking deltas when already available"];
     default:
       return ["Retain bounded evidence refs and module coverage for this row"];
   }

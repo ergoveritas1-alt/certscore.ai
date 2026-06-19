@@ -839,6 +839,19 @@ function detectReplayActionCandidates(
 ): ReplayEvidenceActionCandidate[] {
   const candidates: ReplayEvidenceActionCandidate[] = [];
   for (const control of controls) {
+    const label = replayControlLabel(control);
+    const labelClassified = classifyRetainedControlLabelOverride(label);
+    if (labelClassified) {
+      candidates.push({
+        action: labelClassified.action,
+        label: trimForReport(control.labelText || control.ariaLabel || control.title || control.name || label || "captured action candidate", 160),
+        frameContext: control.frameContext,
+        confidence: labelClassified.confidence,
+        reason: labelClassified.reason,
+        sourceScenario,
+      });
+      continue;
+    }
     const actionFromControl = replayActionFromOriginalActionType(control.actionType);
     if (actionFromControl) {
       candidates.push({
@@ -851,14 +864,6 @@ function detectReplayActionCandidates(
       });
       continue;
     }
-    const label = [
-      control.labelText,
-      control.ariaLabel,
-      control.title,
-      control.name,
-      control.href,
-      control.contextTextExcerpt,
-    ].filter((value): value is string => Boolean(value)).join(" ");
     const classified = classifyControlLabel(label, "controls_json");
     const legacyCandidateClassified = classified ?? classifyLegacyCapturedCandidate(control);
     if (classified) {
@@ -899,6 +904,33 @@ function detectReplayActionCandidates(
     }
   }
   return dedupeActionCandidates(candidates);
+}
+
+function replayControlLabel(control: ReplayControlSnapshot): string {
+  return [
+    control.labelText,
+    control.ariaLabel,
+    control.title,
+    control.name,
+    control.href,
+    control.contextTextExcerpt,
+  ].filter((value): value is string => Boolean(value)).join(" ");
+}
+
+function classifyRetainedControlLabelOverride(
+  label: string,
+): { action: ReplayActionCandidateType; confidence: number; reason: string } | undefined {
+  const classified = classifyControlLabel(label, "captured_action_candidate_label_override");
+  if (!classified) {
+    return undefined;
+  }
+  if (classified.action === "do_not_sell_share" || classified.action === "privacy_policy_or_notice_only") {
+    return {
+      ...classified,
+      confidence: Math.min(0.96, classified.confidence + 0.04),
+    };
+  }
+  return undefined;
 }
 
 function replayActionFromOriginalActionType(actionType: string | undefined): ReplayActionCandidateType | undefined {
@@ -962,7 +994,7 @@ function extractControlTexts(frame: ReplayFrameSnapshot): Array<{ label: string;
       labels.push({ label: normalizeVisibleText(label), reason: "html_input_value" });
     }
   }
-  const actionPhrase = text.match(/(?:accept all|reject all|decline all|deny all|manage preferences|cookie settings|privacy settings|save choices|confirm choices|do not sell or share|do not sell my personal information|do not share my personal information|opt out of sale|opt out of sharing|exclude my data|your privacy choices|privacy policy|privacy notice)/gi) ?? [];
+  const actionPhrase = text.match(/(?:accept all|reject all|decline all|deny all|manage preferences|cookie settings|privacy settings|save choices|confirm choices|do not sell or share|do not sell my personal information|do not share my personal information|opt out of sale|opt out of sharing|exclude my data|your privacy choices|privacy policy|privacy notice|cookie policy|cookie notice|cookie information|notice at collection|ca notice at collection)/gi) ?? [];
   for (const phrase of actionPhrase) {
     labels.push({ label: normalizeVisibleText(phrase), reason: "frame_text_phrase" });
   }
@@ -974,7 +1006,7 @@ function classifyControlLabel(label: string, reason: string): { action: ReplayAc
   if (/do not sell|do not share|do not sell or share|your privacy choices|privacy choices|opt out of (?:sale|sharing|targeted advertising)|exclude my data|do not use my data|limit use of my sensitive/.test(normalized)) {
     return { action: "do_not_sell_share", confidence: 0.86, reason };
   }
-  if (/privacy policy|privacy notice|cookie policy|notice at collection/.test(normalized) && !/choice|settings|preference|manage/.test(normalized)) {
+  if (/privacy policy|privacy notice|cookie policy|cookies policy|cookie notice|cookie information|notice at collection/.test(normalized) && !/choice|settings|preference|manage/.test(normalized)) {
     return { action: "privacy_policy_or_notice_only", confidence: 0.82, reason };
   }
   if (/reject all|decline all|deny all|refuse all|necessary only|essential only|disable all|reject/.test(normalized)) {
@@ -1176,6 +1208,90 @@ function dedupePolicySurfaces(surfaces: ReplayPolicySurfaceSummary[]): ReplayPol
     left.surfaceType.localeCompare(right.surfaceType));
 }
 
+interface PolicySourceHintValue {
+  raw: string;
+  normalized: string;
+  url?: string;
+}
+
+function policySurfacesFromRetainedHints(
+  scenarios: ReplayEvidenceScenarioReport[],
+): ReplayPolicySurfaceSummary[] {
+  const surfacesByType = new Map<string, ReplayPolicySurfaceSummary>();
+  for (const hint of collectPolicySourceHintValues(scenarios)) {
+    for (const surfaceType of policySurfaceTypesForHint(hint.normalized)) {
+      const surface = {
+        surfaceType,
+        url: hint.url,
+        normalizedUrl: hint.url,
+        linkText: hint.url ? undefined : trimForReport(hint.raw, 160),
+        status: "observed",
+        fetchable: false,
+        clickable: false,
+        mayLeadToConsentControls: policySurfaceHintMayLeadToControls(surfaceType),
+        observedTopics: [],
+        mentionedVendors: [],
+        mentionedPurposes: [],
+        mentionedRights: [],
+        mentionedControls: [],
+        boundedTextExcerptIds: [],
+        confidence: 0.62,
+      };
+      const existing = surfacesByType.get(surfaceType);
+      if (!existing || (!existing.url && surface.url)) {
+        surfacesByType.set(surfaceType, surface);
+      }
+    }
+  }
+  return [...surfacesByType.values()];
+}
+
+function collectPolicySourceHintValues(
+  scenarios: ReplayEvidenceScenarioReport[],
+): PolicySourceHintValue[] {
+  return scenarios.flatMap((scenario) => [
+    scenario.sourceUrl,
+    ...scenario.actionCandidates.map((candidate) => candidate.frameContext?.frameUrl),
+    ...scenario.actionCandidates.map((candidate) => candidate.label),
+    ...scenario.actionAttemptSummaries.map((attempt) => attempt.frameUrl),
+    ...scenario.actionAttemptSummaries.map((attempt) => attempt.candidateLabelText),
+  ]).filter((value): value is string => Boolean(value)).map((value) => ({
+    raw: value,
+    normalized: normalizePolicyHintValue(value),
+    url: policyHintUrl(value),
+  }));
+}
+
+function policySurfaceTypesForHint(value: string): string[] {
+  const types: string[] = [];
+  if (policyHintLooksLikePrivacyNotice(value)) {
+    types.push("privacy_policy");
+  }
+  if (policyHintLooksLikeCookiePolicy(value)) {
+    types.push("cookie_policy");
+  }
+  if (policyHintLooksLikeNoticeAtCollection(value)) {
+    types.push("notice_at_collection");
+  }
+  if (policyHintLooksLikePrivacyChoices(value)) {
+    types.push("your_privacy_choices");
+  }
+  if (policyHintLooksLikeCookieSettings(value)) {
+    types.push("cookie_settings");
+  }
+  if (policyHintLooksLikeExplicitDoNotSellShare(value)) {
+    types.push("do_not_sell_or_share");
+  }
+  return unique(types);
+}
+
+function policySurfaceHintMayLeadToControls(surfaceType: string): boolean {
+  return surfaceType === "your_privacy_choices" ||
+    surfaceType === "cookie_settings" ||
+    surfaceType === "consent_preferences" ||
+    surfaceType === "do_not_sell_or_share";
+}
+
 function policySurfacePriority(surfaceType: string): number {
   const order = [
     "privacy_policy",
@@ -1256,7 +1372,10 @@ function buildSiteReports(scenarios: ReplayEvidenceScenarioReport[]): ReplayEvid
   return [...groups.entries()].map(([siteId, siteScenarios]) => {
     const providerSignals = dedupeProviderSignals(siteScenarios.flatMap((scenario) => scenario.providerDetectionSignals));
     const actionCandidates = dedupeActionCandidates(siteScenarios.flatMap((scenario) => scenario.actionCandidates));
-    const policySurfaces = dedupePolicySurfaces(siteScenarios.flatMap((scenario) => scenario.policySurfaces));
+    const explicitPolicySurfaces = dedupePolicySurfaces(siteScenarios.flatMap((scenario) => scenario.policySurfaces));
+    const policySurfaces = explicitPolicySurfaces.length > 0
+      ? explicitPolicySurfaces
+      : dedupePolicySurfaces(policySurfacesFromRetainedHints(siteScenarios));
     const detectedProvider = chooseProviderFromScenarioReports(siteScenarios);
     const classificationDelta = mergeClassificationDeltas(siteScenarios.map((scenario) => scenario.classificationDelta));
     const networkVendorSummary = {
@@ -1317,6 +1436,8 @@ function buildRegulatoryCoverageAssessment(input: {
   };
   const preConsentNetworkObserved = input.networkVendorSummary.preConsent.requestCount > 0;
   const thirdPartyPreConsentObserved = input.networkVendorSummary.preConsent.vendors.length > 0;
+  const reviewableEndpointObserved = input.networkVendorSummary.preConsent.endpoints.length > 0;
+  const reviewableRuntimeContextObserved = thirdPartyPreConsentObserved || reviewableEndpointObserved;
   const postRejectTestable = input.consentBehaviorOutcome.postRejectCookieBehavior === "established";
   const postAcceptTestable = input.consentBehaviorOutcome.acceptAllAction === "observed_and_testable" &&
     input.networkVendorSummary.postAccept.requestCount > 0;
@@ -1368,9 +1489,9 @@ function buildRegulatoryCoverageAssessment(input: {
         input.policyEvidenceOutcome.privacyChoicesAvailability === "observed" ? "observed" : "not_observed",
       cookiesStorageBeforeConsent: corpusScenarios.baselinePreConsent ? "testable" : "not_testable",
       thirdPartyTrackingBeforeConsent: preConsentNetworkObserved && thirdPartyPreConsentObserved ? "testable" : corpusScenarios.baselinePreConsent ? "not_observed" : "not_testable",
-      runtimeVendorDisclosureContext: input.policyEvidenceOutcome.policyArtifactStatus === "present" && thirdPartyPreConsentObserved ? "testable" : "not_testable",
+      runtimeVendorDisclosureContext: input.policyEvidenceOutcome.policyArtifactStatus === "present" && reviewableRuntimeContextObserved ? "testable" : "not_testable",
       sessionReplayBehavioralAnalytics: preConsentNetworkObserved ? "testable" : "not_testable",
-      crossBorderEndpointReview: thirdPartyPreConsentObserved ? "testable" : "not_testable",
+      crossBorderEndpointReview: reviewableRuntimeContextObserved ? "testable" : "not_testable",
       consentControlAccessibility: corpusScenarios.accessibilityProbe ? "testable" : "needs_additional_probe",
     },
     corpusScenarios,
@@ -1409,15 +1530,22 @@ function buildPolicyEvidenceOutcome(
     surfaceTypes.has("consent_preferences") ||
     controls.has("cookie_settings") ||
     controls.has("consent_withdrawal");
-  if (sourceUrlHints.privacyNotice || sourceUrlHints.privacyChoices || sourceUrlHints.doNotSellShare) {
+  if (
+    sourceUrlHints.privacyNotice ||
+    sourceUrlHints.cookiePolicy ||
+    sourceUrlHints.noticeAtCollection ||
+    sourceUrlHints.privacyChoices ||
+    sourceUrlHints.doNotSellShare
+  ) {
     notes.push("Policy/control availability includes retained replay target URL hints when policy-surface observations were absent or incomplete.");
   }
   return {
     policyArtifactStatus: policySurfaces.length > 0 || sourceUrlHints.any ? "present" : "missing",
     policySurfaceCount: policySurfaces.length,
     privacyNoticeAvailability: surfaceTypes.has("privacy_policy") || sourceUrlHints.privacyNotice ? "observed" : "not_observed",
-    cookiePolicyAvailability: surfaceTypes.has("cookie_policy") ? "observed" : "not_observed",
-    noticeAtCollectionAvailability: retainedPolicySurfaces.some(policySurfaceLooksLikeNoticeAtCollection) ? "observed" : "not_observed",
+    cookiePolicyAvailability: surfaceTypes.has("cookie_policy") || sourceUrlHints.cookiePolicy ? "observed" : "not_observed",
+    noticeAtCollectionAvailability: retainedPolicySurfaces.some(policySurfaceLooksLikeNoticeAtCollection) ||
+      sourceUrlHints.noticeAtCollection ? "observed" : "not_observed",
     doNotSellShareAvailability: hasDoNotSell ? "observed" : "not_observed",
     privacyChoicesAvailability: hasPrivacyChoices ? "observed" : "not_observed",
     saleShareDisclosureSignals: topics.has("sale_or_share") ? "observed" : "not_observed",
@@ -1435,37 +1563,67 @@ function buildPolicyEvidenceOutcome(
 function buildPolicySourceUrlHints(scenarios: ReplayEvidenceScenarioReport[]): {
   any: boolean;
   privacyNotice: boolean;
+  cookiePolicy: boolean;
+  noticeAtCollection: boolean;
   privacyChoices: boolean;
   doNotSellShare: boolean;
 } {
-  const values = scenarios.flatMap((scenario) => [
-    scenario.sourceUrl,
-    ...scenario.actionCandidates.map((candidate) => candidate.frameContext?.frameUrl),
-    ...scenario.actionAttemptSummaries.map((attempt) => attempt.frameUrl),
-  ]).filter((value): value is string => Boolean(value));
-  const normalized = values.map((value) => {
-    try {
-      const parsed = new URL(value);
-      return `${parsed.pathname} ${parsed.search}`.toLowerCase();
-    } catch {
-      return value.toLowerCase();
-    }
-  });
-  const privacyChoices = normalized.some((value) =>
-    /privacy[-_/ ]?choices|your[-_/ ]?privacy[-_/ ]?choices|privacy\/your-privacy-choices|cookie[-_/ ]?(settings|preferences)|consent[-_/ ]?preferences/.test(value)
-  );
-  const doNotSellShare = privacyChoices || normalized.some((value) =>
-    /do[-_/ ]?not[-_/ ]?(sell|share)|dnsmpi|opt[-_/ ]?out|ccpa/.test(value)
-  );
-  const privacyNotice = normalized.some((value) =>
-    /(^|\/)(privacy|privacy-policy|privacy_notice|privacy-notice|legal\/privacy)(\/|$|\?|#)/.test(value)
-  );
+  const normalized = collectPolicySourceHintValues(scenarios).map((hint) => hint.normalized);
+  const cookiePolicy = normalized.some(policyHintLooksLikeCookiePolicy);
+  const noticeAtCollection = normalized.some(policyHintLooksLikeNoticeAtCollection);
+  const privacyChoices = normalized.some(policyHintLooksLikePrivacyChoices) ||
+    normalized.some(policyHintLooksLikeCookieSettings);
+  const doNotSellShare = privacyChoices || normalized.some(policyHintLooksLikeExplicitDoNotSellShare);
+  const privacyNotice = normalized.some(policyHintLooksLikePrivacyNotice);
   return {
-    any: privacyNotice || privacyChoices || doNotSellShare,
+    any: privacyNotice || cookiePolicy || noticeAtCollection || privacyChoices || doNotSellShare,
     privacyNotice,
+    cookiePolicy,
+    noticeAtCollection,
     privacyChoices,
     doNotSellShare,
   };
+}
+
+function normalizePolicyHintValue(value: string): string {
+  try {
+    const parsed = new URL(value);
+    return [parsed.pathname, parsed.search].filter(Boolean).join(" ").toLowerCase().trim();
+  } catch {
+    return value.toLowerCase().trim();
+  }
+}
+
+function policyHintUrl(value: string): string | undefined {
+  try {
+    return new URL(value).href;
+  } catch {
+    return undefined;
+  }
+}
+
+function policyHintLooksLikePrivacyNotice(value: string): boolean {
+  return /(^|\/)(privacy|privacy[-_/ ]?policy|privacy[-_/ ]?notice|legal\/privacy)(\/|$|\?|#)|\bprivacy (?:policy|notice)\b/.test(value);
+}
+
+function policyHintLooksLikeCookiePolicy(value: string): boolean {
+  return /(^|\/)(cookie|cookies|cookie[-_/ ]?policy|cookie[-_/ ]?notice)(\/|$|\?|#)|\bcookie (?:policy|notice|information)\b|\bcookies policy\b/.test(value);
+}
+
+function policyHintLooksLikeNoticeAtCollection(value: string): boolean {
+  return /notice[-_ ]?at[-_ ]?collection|notice[-_ ]?of[-_ ]?collection|collection[-_ ]?notice|ca notice at collection|california[-_ ]?notice/.test(value);
+}
+
+function policyHintLooksLikePrivacyChoices(value: string): boolean {
+  return /privacy[-_/ ]?choices|your[-_/ ]?privacy[-_/ ]?choices|privacy\/your-privacy-choices/.test(value);
+}
+
+function policyHintLooksLikeCookieSettings(value: string): boolean {
+  return /cookie[-_/ ]?(settings|preferences)|consent[-_/ ]?preferences/.test(value);
+}
+
+function policyHintLooksLikeExplicitDoNotSellShare(value: string): boolean {
+  return /do[-_/ ]?not[-_/ ]?(sell|share)|dnsmpi|opt[-_/ ]?out|ccpa/.test(value);
 }
 
 function policySurfaceRetained(surface: ReplayPolicySurfaceSummary): boolean {

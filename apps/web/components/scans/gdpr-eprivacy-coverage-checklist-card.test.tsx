@@ -180,6 +180,28 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
   );
   assert.equal(
     getAssessmentDirection(makeChecklistItem({
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          advertisingRetargetingVendorCount: 0,
+          preconsentPurposeRiskMix: {
+            advertising: [],
+            retargeting: [],
+            marketingAnalytics: [],
+            performanceRum: ["Akamai mPulse"],
+            securityBotMitigation: ["Akamai Bot Manager / Edge"]
+          }
+        }
+      },
+      evidenceState: "observed",
+      id: "advertising_retargeting_vendor_signal_observed",
+      label: "Advertising / retargeting vendor signal observed",
+      status: "Review signal"
+    })),
+    "review_signal"
+  );
+  assert.equal(
+    getAssessmentDirection(makeChecklistItem({
       assessmentStatus: "checked",
       evidenceState: "observed",
       id: "advertising_retargeting_vendor_signal_observed",
@@ -306,6 +328,45 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
     })),
     "review_signal"
   );
+});
+
+test("GdprEprivacyCoverageChecklistCard does not badge review-only advertising rows as observed", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              advertisingRetargetingEvidenceCauses: [],
+              advertisingRetargetingVendorCount: 0,
+              filteredNonAdvertisingRetargetingVendors: ["Akamai Bot Manager / Edge", "Akamai mPulse"],
+              preconsentPurposeRiskMix: {
+                advertising: [],
+                retargeting: [],
+                marketingAnalytics: [],
+                performanceRum: ["Akamai mPulse"],
+                securityBotMitigation: ["Akamai Bot Manager / Edge"]
+              }
+            },
+            statusBasis:
+              "Runtime vendor checks completed for the tested context and did not retain an advertising, retargeting, or adtech vendor classification."
+          },
+          evidenceState: "observed",
+          id: "advertising_retargeting_vendor_signal_observed",
+          label: "Advertising / retargeting vendor signal observed",
+          status: "Review signal",
+          tone: "review"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, />Partial</);
+  assert.doesNotMatch(html, />Observed</);
+  assert.match(html, /No advertising, retargeting, or adtech vendor classification was retained/);
 });
 
 test("GdprEprivacyCoverageChecklistCard renders concise session replay evidence copy", () => {

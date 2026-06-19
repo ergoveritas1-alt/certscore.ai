@@ -203,12 +203,12 @@ function formatInlineList(values: string[]) {
 
 function compactRecord(record: Record<string, unknown>) {
   return Object.fromEntries(
-    Object.entries(record).filter(([, value]) => {
+    Object.entries(record).filter(([key, value]) => {
       if (value === null || value === undefined) {
         return false;
       }
       if (Array.isArray(value)) {
-        return value.length > 0;
+        return value.length > 0 || key.endsWith("EvidenceCauses");
       }
       return true;
     })
@@ -256,6 +256,121 @@ function getHybridConsentOutcomeSummary(runtimeArtifacts: Record<string, unknown
 
 function getHybridTimelineMarkers(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return getObject(getHybridRuntimeEvidence(runtimeArtifacts), ["timelineMarkers", "timeline_markers"]);
+}
+
+type RuntimePurposeRiskBucket =
+  | "advertising"
+  | "retargeting"
+  | "marketingAnalytics"
+  | "performanceRum"
+  | "securityBotMitigation"
+  | "cdnEdgeDelivery"
+  | "functional"
+  | "sessionReplay"
+  | "unknown";
+
+const HIGH_RISK_RUNTIME_PURPOSES = new Set<RuntimePurposeRiskBucket>([
+  "advertising",
+  "retargeting",
+  "marketingAnalytics",
+  "sessionReplay"
+]);
+
+function getRuntimePurposeRowText(row: Record<string, unknown>) {
+  const category = [
+    getString(row, ["category"]),
+    getString(row, ["vendorCategory", "vendor_category"]),
+    getString(row, ["purpose"]),
+    getString(row, ["vendorPurpose", "vendor_purpose"])
+  ].filter(Boolean).join(" ").toLowerCase();
+  const label = [
+    getString(row, ["name"]),
+    getString(row, ["vendor"]),
+    getString(row, ["vendorName", "vendor_name"]),
+    getString(row, ["product"]),
+    getString(row, ["domain", "host", "hostname"]),
+    getString(row, ["requestUrl", "request_url", "representativeUrl", "representative_url", "url"])
+  ].filter(Boolean).join(" ").toLowerCase();
+  return { category, label };
+}
+
+function classifyRuntimePurposeRisk(row: Record<string, unknown>): RuntimePurposeRiskBucket {
+  const { category, label } = getRuntimePurposeRowText(row);
+  const categoryHas = (pattern: RegExp) => pattern.test(category);
+  const labelHas = (pattern: RegExp) => pattern.test(label);
+
+  if (labelHas(/security|fraud|bot|bot manager|akamai bot|perimeterx|human bot|datadome|forter|cloudflare bot|infrastructure|_abck|bm_sz|ak_bmsc/)) {
+    return "securityBotMitigation";
+  }
+  if (labelHas(/mpulse|go-mpulse|boomerang|performance|rum|real user monitoring|new relic|datadog|sentry/)) {
+    return "performanceRum";
+  }
+  if (labelHas(/cdn|edge|delivery|akamai edge|cloudfront|fastly/)) {
+    return "cdnEdgeDelivery";
+  }
+  if (labelHas(/functional|strictly necessary|necessary|consent_management|cmp|customer_support/)) {
+    return "functional";
+  }
+  if (labelHas(/session_replay|session replay|behavioral_analytics|contentsquare|fullstory|hotjar|logrocket|clarity/) || categoryHas(/session_replay|session replay|behavioral_analytics/)) {
+    return "sessionReplay";
+  }
+  if (labelHas(/retarget|remarket/) || categoryHas(/retarget|remarket/)) {
+    return "retargeting";
+  }
+  if (labelHas(/advertis|adtech|targeting|marketing_pixel|social_pixel|doubleclick|google ads|meta pixel|facebook pixel|linkedin insight|tiktok|reddit pixel/) || categoryHas(/advertis|adtech|targeting|marketing_pixel|social_pixel/)) {
+    return "advertising";
+  }
+  if (labelHas(/google analytics|google tag manager|googletagmanager|adobe analytics|mixpanel|amplitude|posthog|customer_data_platform|marketing analytics/) || categoryHas(/marketing analytics|customer_data_platform/)) {
+    return "marketingAnalytics";
+  }
+  if (categoryHas(/analytics|measurement|performance|rum|real user monitoring/)) {
+    return "performanceRum";
+  }
+  if (categoryHas(/security|fraud|bot|infrastructure/)) {
+    return "securityBotMitigation";
+  }
+  if (categoryHas(/cdn|edge|delivery|functional|strictly necessary|necessary|consent_management|cmp/)) {
+    return "functional";
+  }
+  return "unknown";
+}
+
+function getRuntimePurposeVendor(row: Record<string, unknown>) {
+  return getString(row, ["name"]) ??
+    getString(row, ["vendor", "vendorName", "vendor_name"]) ??
+    getString(row, ["product"]) ??
+    getString(row, ["domain", "host", "hostname"]) ??
+    getString(row, ["requestUrl", "request_url", "representativeUrl", "representative_url", "url"]);
+}
+
+function createPurposeRowFromVendorName(name: string): Record<string, unknown> {
+  return { name };
+}
+
+function buildPreconsentPurposeRiskMix(rows: Record<string, unknown>[]) {
+  const mix: Record<RuntimePurposeRiskBucket, string[]> = {
+    advertising: [],
+    retargeting: [],
+    marketingAnalytics: [],
+    performanceRum: [],
+    securityBotMitigation: [],
+    cdnEdgeDelivery: [],
+    functional: [],
+    sessionReplay: [],
+    unknown: []
+  };
+
+  for (const row of rows) {
+    const bucket = classifyRuntimePurposeRisk(row);
+    const vendor = getRuntimePurposeVendor(row);
+    mix[bucket] = uniqueStrings([...mix[bucket], vendor]).slice(0, 8);
+  }
+
+  return mix;
+}
+
+function hasHighRiskPurpose(mix: Record<RuntimePurposeRiskBucket, string[]>) {
+  return Array.from(HIGH_RISK_RUNTIME_PURPOSES).some((bucket) => mix[bucket].length > 0);
 }
 
 function normalizeRuntimeObservedMs(value: number | null | undefined, navigationStartMs: number | null) {
@@ -1393,13 +1508,20 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
     getNumber(input.snapshot, ["tracker_vendor_count", "tracker_count_total"]) ||
     0;
   const concreteTrackerEvidenceRetained = trackerVendors.length > 0 || trackerEvidenceUrls.length > 0;
+  const preconsentPurposeRiskMix = buildPreconsentPurposeRiskMix([
+    ...trackerVendors.map(createPurposeRowFromVendorName),
+    ...trackerEvidenceUrls.map((url) => ({ url }))
+  ]);
+  const highRiskPurposeRetained = hasHighRiskPurpose(preconsentPurposeRiskMix);
 
   if (preconsentTrackingDetected) {
     return makeOutcome(
       "pre_consent_third_party_tracking",
       concreteTrackerEvidenceRetained ? "Review signal" : "Insufficient evidence",
       concreteTrackerEvidenceRetained
-        ? "Concrete pre-consent tracker vendor or request evidence was retained, but no eligible unified tracking finding was projected for this row. Manual review should confirm whether the retained request sequence supports a GDPR/ePrivacy tracking gap."
+        ? highRiskPurposeRetained
+          ? "Concrete pre-consent tracker vendor or request evidence was retained, but no eligible unified tracking finding was projected for this row. Manual review should confirm whether the retained request sequence supports a GDPR/ePrivacy tracking gap."
+          : "Pre-consent third-party timing evidence was retained, but the retained purpose mix is limited to lower-risk or unresolved infrastructure categories. Manual review should confirm essentiality without treating the evidence as adtech or retargeting by itself."
         : "Pre-consent third-party tracking evidence was retained, but no eligible unified tracking finding was projected for this row.",
       [
         firstObservedMsRef,
@@ -1422,6 +1544,7 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
           concreteTrackerEvidenceRetained,
           ...preconsentTimingEvidence,
           preconsentTrackingDetected,
+          preconsentPurposeRiskMix,
           trackerEvidenceUrls: compactArray(trackerEvidenceUrls, 3),
           trackerVendorCount,
           trackerVendors: compactArray(trackerVendors, 5)
@@ -1458,6 +1581,10 @@ function rowHasVendorCategory(row: Record<string, unknown>, categories: string[]
   return Boolean(category && categories.includes(category));
 }
 
+function rowHasPurposeRisk(row: Record<string, unknown>, buckets: RuntimePurposeRiskBucket[]) {
+  return buckets.includes(classifyRuntimePurposeRisk(row));
+}
+
 function getRuntimeRowObservedMs(rows: Record<string, unknown>[], runtimeArtifacts: Record<string, unknown> | null | undefined) {
   const timelineMarkers = getHybridTimelineMarkers(runtimeArtifacts);
   const navigationStartMs = getNumber(timelineMarkers, ["navigationStartMs", "navigation_start_ms"]);
@@ -1479,6 +1606,35 @@ function getRuntimeRowObservedMs(rows: Record<string, unknown>[], runtimeArtifac
   ));
 }
 
+function buildRuntimePurposeEvidenceCauses(rows: Record<string, unknown>[], buckets: RuntimePurposeRiskBucket[]) {
+  return compactArray(
+    rows
+      .filter((row) => rowHasPurposeRisk(row, buckets))
+      .map((row) => compactRecord({
+        bucket: classifyRuntimePurposeRisk(row),
+        category: getString(row, ["category", "vendorCategory", "vendor_category", "purpose", "vendorPurpose", "vendor_purpose"]),
+        domain: getString(row, ["domain", "host", "hostname"]),
+        firstSeenMs: getNumber(row, [
+          "firstSeenMs",
+          "first_seen_ms",
+          "firstObservedMs",
+          "first_observed_ms",
+          "firstObservedAtMs",
+          "first_observed_at_ms",
+          "observedAtMs",
+          "observed_at_ms",
+          "timestampMs",
+          "timestamp_ms",
+          "tsMs",
+          "ts_ms"
+        ]),
+        representativeUrl: getString(row, ["requestUrl", "request_url", "representativeUrl", "representative_url", "url"]),
+        vendor: getRuntimePurposeVendor(row)
+      })),
+    8
+  );
+}
+
 function deriveAdvertisingRetargetingVendorSignalOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const vendorSummary = getObject(hybridRuntimeEvidence, ["vendorSummary", "vendor_summary"]);
@@ -1488,19 +1644,50 @@ function deriveAdvertisingRetargetingVendorSignalOutcome(input: GdprEprivacyCove
     "requestPurposeClassificationConfidence",
     "request_purpose_classification_confidence"
   ]);
-  const advertisingRequestRows = requestRows.filter((row) => rowHasVendorCategory(row, adCategories));
+  const rawAdvertisingRequestRows = requestRows.filter((row) => rowHasVendorCategory(row, adCategories));
+  const advertisingRequestRows = requestRows.filter((row) => rowHasPurposeRisk(row, ["advertising", "retargeting"]));
   const observedMs = getRuntimeRowObservedMs(advertisingRequestRows, input.runtimeArtifacts);
   const categoryCount = adCategories.reduce((sum, category) => sum + (getNumber(vendorCategoryCounts, [category]) ?? 0), 0);
   const requestCategoryCount = advertisingRequestRows.length;
-  const advertisingVendors = getStringArray(input.runtimeArtifacts, [
+  const rawAdvertisingVendors = getStringArray(input.runtimeArtifacts, [
     "advertising_retargeting_vendor_names",
     "advertisingRetargetingVendorNames",
     "adtech_vendor_names",
     "adtechVendorNames"
   ]);
-  const advertisingVendorCount =
+  const advertisingVendorRows = rawAdvertisingVendors
+    .map(createPurposeRowFromVendorName)
+    .filter((row) => rowHasPurposeRisk(row, ["advertising", "retargeting"]));
+  const advertisingVendors = uniqueStrings([
+    ...advertisingRequestRows.map(getRuntimePurposeVendor),
+    ...advertisingVendorRows.map(getRuntimePurposeVendor)
+  ]);
+  const advertisingEvidenceCauses = buildRuntimePurposeEvidenceCauses([
+    ...requestRows,
+    ...rawAdvertisingVendors.map(createPurposeRowFromVendorName)
+  ], ["advertising", "retargeting"]);
+  const retainedPurposeMix = buildPreconsentPurposeRiskMix([
+    ...requestRows,
+    ...rawAdvertisingVendors.map(createPurposeRowFromVendorName)
+  ]);
+  const filteredNonAdVendors = uniqueStrings([
+    ...rawAdvertisingRequestRows.filter((row) => !rowHasPurposeRisk(row, ["advertising", "retargeting"])).map(getRuntimePurposeVendor),
+    ...rawAdvertisingVendors
+      .map(createPurposeRowFromVendorName)
+      .filter((row) => !rowHasPurposeRisk(row, ["advertising", "retargeting"]))
+      .map(getRuntimePurposeVendor)
+  ]);
+  const fallbackCategoryCount =
+    requestRows.length === 0 && rawAdvertisingVendors.length === 0
+      ? categoryCount
+      : 0;
+  const rawAdvertisingVendorCount =
     getNumber(input.runtimeArtifacts, ["advertising_retargeting_vendor_count", "advertisingRetargetingVendorCount"]) ??
-    Math.max(categoryCount, requestCategoryCount, advertisingVendors.length);
+    0;
+  const advertisingVendorCount =
+    requestRows.length > 0 || rawAdvertisingVendors.length > 0
+      ? Math.max(requestCategoryCount, advertisingVendors.length)
+      : Math.max(fallbackCategoryCount, rawAdvertisingVendorCount);
 
   if (advertisingVendorCount > 0 || advertisingVendors.length > 0) {
     return makeOutcome(
@@ -1515,16 +1702,19 @@ function deriveAdvertisingRetargetingVendorSignalOutcome(input: GdprEprivacyCove
       {
         retainedEvidence: {
           advertisingRetargetingVendorCount: advertisingVendorCount,
+          advertisingRetargetingEvidenceCauses: advertisingEvidenceCauses,
           advertisingRetargetingVendorObservedMs: compactArray(observedMs, 6),
           advertisingRetargetingVendors: compactArray(advertisingVendors, 8),
+          filteredNonAdvertisingRetargetingVendors: compactArray(filteredNonAdVendors, 8),
           firstAdvertisingRetargetingVendorObservedMs: observedMs[0] ?? null,
-          observedRuntimeSignalOnly: true
+          observedRuntimeSignalOnly: true,
+          preconsentPurposeRiskMix: retainedPurposeMix
         }
       }
     );
   }
 
-  if (hasRuntimeCapture(input) || vendorSummary) {
+  if (hasRuntimeCapture(input) || vendorSummary || requestRows.length > 0 || rawAdvertisingVendors.length > 0) {
     return makeOutcome(
       "advertising_retargeting_vendor_signal_observed",
       "Not observed",
@@ -1533,6 +1723,9 @@ function deriveAdvertisingRetargetingVendorSignalOutcome(input: GdprEprivacyCove
       {
         retainedEvidence: {
           advertisingRetargetingVendorCount: 0,
+          advertisingRetargetingEvidenceCauses: [],
+          filteredNonAdvertisingRetargetingVendors: compactArray(filteredNonAdVendors, 8),
+          preconsentPurposeRiskMix: retainedPurposeMix,
           runtimeCaptureCompleted: hasRuntimeCapture(input)
         }
       }
@@ -1546,31 +1739,57 @@ function deriveAnalyticsVendorObservedOutcome(input: GdprEprivacyCoveragePolicyI
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const vendorSummary = getObject(hybridRuntimeEvidence, ["vendorSummary", "vendor_summary"]);
   const vendorCategoryCounts = getObject(vendorSummary, ["vendorCategoryCounts", "vendor_category_counts"]);
-  const analyticsCount =
-    getNumber(vendorCategoryCounts, ["analytics", "measurement"]) ??
-    getObjectArray(hybridRuntimeEvidence, [
-      "requestPurposeClassificationConfidence",
-      "request_purpose_classification_confidence"
-    ]).filter((row) => getString(row, ["category", "vendorCategory", "vendor_category"]) === "analytics").length;
-  const analyticsRequestRows = getObjectArray(hybridRuntimeEvidence, [
+  const requestRows = getObjectArray(hybridRuntimeEvidence, [
     "requestPurposeClassificationConfidence",
     "request_purpose_classification_confidence"
-  ]).filter((row) =>
+  ]);
+  const rawAnalyticsRequestRows = requestRows.filter((row) =>
     ["analytics", "measurement"].includes(getString(row, ["category", "vendorCategory", "vendor_category"]) ?? "")
   );
+  const marketingAnalyticsRequestRows = requestRows.filter((row) => rowHasPurposeRisk(row, ["marketingAnalytics"]));
+  const performanceRumRequestRows = requestRows.filter((row) => rowHasPurposeRisk(row, ["performanceRum"]));
+  const analyticsRequestRows = [...marketingAnalyticsRequestRows, ...performanceRumRequestRows];
   const observedMs = getRuntimeRowObservedMs(analyticsRequestRows, input.runtimeArtifacts);
-  const analyticsVendors = getStringArray(input.runtimeArtifacts, [
+  const rawAnalyticsVendors = getStringArray(input.runtimeArtifacts, [
     "analytics_vendor_names",
     "analyticsVendorNames"
   ]);
+  const marketingAnalyticsVendorRows = rawAnalyticsVendors
+    .map(createPurposeRowFromVendorName)
+    .filter((row) => rowHasPurposeRisk(row, ["marketingAnalytics"]));
+  const performanceRumVendorRows = rawAnalyticsVendors
+    .map(createPurposeRowFromVendorName)
+    .filter((row) => rowHasPurposeRisk(row, ["performanceRum"]));
+  const analyticsVendors = uniqueStrings([
+    ...marketingAnalyticsRequestRows.map(getRuntimePurposeVendor),
+    ...performanceRumRequestRows.map(getRuntimePurposeVendor),
+    ...marketingAnalyticsVendorRows.map(getRuntimePurposeVendor),
+    ...performanceRumVendorRows.map(getRuntimePurposeVendor)
+  ]);
+  const performanceRumVendors = uniqueStrings([
+    ...performanceRumRequestRows.map(getRuntimePurposeVendor),
+    ...performanceRumVendorRows.map(getRuntimePurposeVendor)
+  ]);
+  const retainedPurposeMix = buildPreconsentPurposeRiskMix([
+    ...requestRows,
+    ...rawAnalyticsVendors.map(createPurposeRowFromVendorName)
+  ]);
+  const rawAnalyticsCount = getNumber(vendorCategoryCounts, ["analytics", "measurement"]) ?? 0;
+  const analyticsCount =
+    requestRows.length > 0 || rawAnalyticsVendors.length > 0
+      ? analyticsVendors.length
+      : rawAnalyticsCount;
 
   if (analyticsCount > 0 || analyticsVendors.length > 0) {
     return makeOutcome(
       "analytics_vendor_observed",
       "Review signal",
-      "Analytics or measurement vendor evidence was retained in the pre-consent/public-web runtime context. Manual review should confirm purpose and consent relevance.",
+      performanceRumVendors.length > 0 && marketingAnalyticsRequestRows.length === 0 && marketingAnalyticsVendorRows.length === 0
+        ? "Performance/RUM analytics evidence was retained in the pre-consent/public-web runtime context. Manual review should confirm whether this activity is essential under the applicable consent model."
+        : "Analytics or measurement vendor evidence was retained in the pre-consent/public-web runtime context. Manual review should confirm purpose and consent relevance.",
       [
         analyticsCount > 0 ? `Analytics vendor/category count: ${analyticsCount}` : null,
+        ...performanceRumVendors.map((vendor) => `Performance/RUM vendor: ${vendor}`).slice(0, 5),
         ...analyticsVendors.map((vendor) => `Analytics vendor: ${vendor}`).slice(0, 5)
       ].filter((value): value is string => Boolean(value)),
       {
@@ -1578,13 +1797,15 @@ function deriveAnalyticsVendorObservedOutcome(input: GdprEprivacyCoveragePolicyI
           analyticsVendorCount: analyticsCount,
           analyticsVendorObservedMs: compactArray(observedMs, 6),
           firstAnalyticsVendorObservedMs: observedMs[0] ?? null,
-          analyticsVendors: compactArray(analyticsVendors, 8)
+          analyticsVendors: compactArray(analyticsVendors, 8),
+          performanceRumVendors: compactArray(performanceRumVendors, 8),
+          preconsentPurposeRiskMix: retainedPurposeMix
         }
       }
     );
   }
 
-  if (hasRuntimeCapture(input) || vendorSummary) {
+  if (hasRuntimeCapture(input) || vendorSummary || requestRows.length > 0 || rawAnalyticsVendors.length > 0) {
     return makeOutcome(
       "analytics_vendor_observed",
       "Not observed",
@@ -1593,6 +1814,16 @@ function deriveAnalyticsVendorObservedOutcome(input: GdprEprivacyCoveragePolicyI
       {
         retainedEvidence: {
           analyticsVendorCount: 0,
+          filteredNonMarketingAnalyticsVendors: compactArray(uniqueStrings([
+            ...rawAnalyticsRequestRows
+              .filter((row) => !rowHasPurposeRisk(row, ["marketingAnalytics", "performanceRum"]))
+              .map(getRuntimePurposeVendor),
+            ...rawAnalyticsVendors
+              .map(createPurposeRowFromVendorName)
+              .filter((row) => !rowHasPurposeRisk(row, ["marketingAnalytics", "performanceRum"]))
+              .map(getRuntimePurposeVendor)
+          ]), 8),
+          preconsentPurposeRiskMix: retainedPurposeMix,
           runtimeCaptureCompleted: hasRuntimeCapture(input)
         }
       }
@@ -3180,9 +3411,23 @@ function getPolicyArticle13DisclosureSignal(
     return null;
   }
 
-  return getPolicyArticle13DisclosureSignals(summary).find((signal) =>
+  const candidates = getPolicyArticle13DisclosureSignals(summary).filter((signal) =>
     getString(signal, ["disclosureType", "disclosure_type"]) === disclosureType
-  ) ?? null;
+  );
+  if (candidates.length === 0) {
+    return null;
+  }
+  return candidates
+    .map((signal) => sanitizePolicyArticle13Signal(signal))
+    .sort((left, right) =>
+      scorePolicyDisclosureEvidenceText(
+        getString(right, ["evidenceText", "evidence_text"]) ?? "",
+        disclosureType
+      ) - scorePolicyDisclosureEvidenceText(
+        getString(left, ["evidenceText", "evidence_text"]) ?? "",
+        disclosureType
+      )
+    )[0] ?? null;
 }
 
 function getPolicyObservedTopics(summary: Record<string, unknown> | null | undefined) {
@@ -3193,13 +3438,72 @@ function policyTextMatchEvidence(text: string, pattern: RegExp) {
   if (!text) {
     return null;
   }
-  const normalized = text.replace(/\s+/g, " ").trim();
+  const normalized = cleanPolicyDisclosureEvidenceText(text);
   const match = normalized.match(pattern);
   if (!match?.index && match?.index !== 0) {
     return null;
   }
   const start = Math.max(0, match.index - 180);
-  return normalized.slice(start, start + 420);
+  return cleanPolicyDisclosureEvidenceText(normalized.slice(start, start + 420));
+}
+
+function sanitizePolicyArticle13Signal(signal: Record<string, unknown>) {
+  const evidenceText = getString(signal, ["evidenceText", "evidence_text"]);
+  if (!evidenceText) {
+    return signal;
+  }
+  return {
+    ...signal,
+    evidenceText: cleanPolicyDisclosureEvidenceText(evidenceText)
+  };
+}
+
+function cleanPolicyDisclosureEvidenceText(value: string) {
+  return value
+    .replace(/\\r|\\n|\\t/g, " ")
+    .replace(/\r|\n|\t/g, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;|&#34;/gi, "\"")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&rsquo;|&lsquo;/gi, "'")
+    .replace(/&rdquo;|&ldquo;/gi, "\"")
+    .replace(/\bBack to Top\b/gi, " ")
+    .replace(/\bSkip To Main Content\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:])/g, "$1")
+    .trim();
+}
+
+function scorePolicyDisclosureEvidenceText(value: string, disclosureType: string | undefined) {
+  const text = cleanPolicyDisclosureEvidenceText(value);
+  const lower = text.toLowerCase();
+  let score = Math.min(text.length, 420) / 100;
+  if (/^(united states|u\.s\. department of commerce|cookie policy \||terms & conditions \||accessibility\b)/i.test(text)) {
+    score -= 8;
+  }
+  if (/mcdonald.?s restaurants of ireland limited|data protection commissioner|dataprotection\.ie|data protection officer|local data protection offices|article 6|standard contractual clauses|commission implementing decision \(eu\) 2021\/914/i.test(text)) {
+    score += 6;
+  }
+  if (disclosureType === "legal_basis" && /article 6|legitimate interest|contract|legal obligation|consent/i.test(lower)) {
+    score += 4;
+  }
+  if (disclosureType === "data_retention" && /retention|retain|retained|duration|as long as/i.test(lower)) {
+    score += 4;
+  }
+  if (disclosureType === "international_transfers" && /standard contractual clauses|international transfer|adequate level of protection|commission implementing decision/i.test(lower)) {
+    score += 4;
+  }
+  if (disclosureType === "supervisory_authority" && /data protection commissioner|supervisory authority|complaint/i.test(lower)) {
+    score += 4;
+  }
+  if (/<[^>]+>|\\r|\\n|back to top/i.test(value)) {
+    score -= 2;
+  }
+  return score;
 }
 
 function policySurfaceIsThinOrErrored(summary: Record<string, unknown> | null | undefined) {
@@ -4092,9 +4396,13 @@ function buildBrowserDeviceEntropyReviewEvidence(input: GdprEprivacyCoveragePoli
     entropyLinkedToIdentifier === true ||
     (deviceDataLikeRequestCount ?? 0) > 0;
 
-  if (rows.length === 0 && signals.length === 0 && !strongCorroboratorObserved) {
+  if (rows.length === 0 && signals.length === 0 && hosts.length === 0 && !strongCorroboratorObserved) {
     return null;
   }
+
+  const securityBotTelemetryObserved =
+    hosts.length > 0 &&
+    hosts.every((host) => classifyRuntimePurposeRisk({ host }) === "securityBotMitigation");
 
   return compactRecord({
     deviceDataLikeRequestCount,
@@ -4104,6 +4412,7 @@ function buildBrowserDeviceEntropyReviewEvidence(input: GdprEprivacyCoveragePoli
     highEntropySignals: compactArray(signals, 8),
     hosts: compactArray(hosts, 5),
     knownFingerprintLibraryMatch,
+    securityBotTelemetryObserved: securityBotTelemetryObserved ? true : null,
     strongCorroboratorObserved
   });
 }
@@ -4264,18 +4573,24 @@ function deriveDeviceFingerprintingSignalOutcome(input: GdprEprivacyCoveragePoli
     Boolean(browserDeviceEntropyEvidence);
 
   if (fingerprintingObserved) {
+    const securityBotTelemetryObserved = getBoolean(browserDeviceEntropyEvidence, ["securityBotTelemetryObserved", "security_bot_telemetry_observed"]) === true;
     return makeOutcome(
       "device_identification_fingerprinting_signal_observed",
       "Review signal",
-      "Browser/device entropy, fingerprinting, or identifier-like device collection evidence was retained for review.",
+      securityBotTelemetryObserved
+        ? "Security/bot-detection telemetry with device-identification-like attributes was retained for review. This is preserved as runtime evidence but is not classified as marketing fingerprinting by itself."
+        : "Browser/device entropy, fingerprinting, or identifier-like device collection evidence was retained for review.",
       [
-        "Fingerprinting or device-identification signal observed",
+        securityBotTelemetryObserved
+          ? "Security/bot telemetry signal observed"
+          : "Fingerprinting or device-identification signal observed",
         ...getStringArray(browserDeviceEntropyEvidence, ["hosts"]).map((host) => `Observed host: ${host}`).slice(0, 3)
       ],
       {
         retainedEvidence: {
           browserDeviceEntropyEvidence,
-          fingerprintingObserved: true
+          fingerprintingObserved: true,
+          securityBotTelemetryObserved
         }
       }
     );

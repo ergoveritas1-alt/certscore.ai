@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getAnonymousOpsScanStatus } from "../../../../server/scans/ops-status";
+import { bootstrapAppUserSession } from "../../../../server/bootstrap-user";
+import { getCurrentUser } from "../../../../server/auth";
+import {
+  getAnonymousOpsScanStatus,
+  getOrganizationOpsScanStatus
+} from "../../../../server/scans/ops-status";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -27,7 +32,21 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
     );
   }
 
-  const status = await getAnonymousOpsScanStatus({ includeFindings, scanId });
+  let status = await getAnonymousOpsScanStatus({ includeFindings, scanId });
+
+  if (!status) {
+    const user = await getCurrentUser();
+
+    if (user) {
+      const { organization } = await bootstrapAppUserSession(user);
+      status = await getOrganizationOpsScanStatus({
+        includeFindings,
+        organizationId: organization.id,
+        scanId,
+        viewerEmail: user.email
+      });
+    }
+  }
 
   if (!status) {
     return NextResponse.json(

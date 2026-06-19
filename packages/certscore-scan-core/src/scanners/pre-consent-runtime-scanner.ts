@@ -1313,9 +1313,12 @@ async function detectConsentUi(
 ): Promise<ConsentUiObservation> {
   await page.waitForFunction(String.raw`(() => {
     const consentLabelPattern =
-      /cookie|privacy|choice|choices|consent|preference|preferences|settings|options|accept|agree|allow|reject|decline|deny|refuse|necessary|essential|purpose|purposes/i;
+      /cookie|privacy|choice|choices|consent|preference|preferences|settings|options|accept|agree|allow|reject|decline|deny|refuse|necessary|essential|purpose|purposes|do not sell|do not share|opt[- ]out|targeted advertising/i;
     const actionFor = (label) => {
       const normalized = label.replace(/\s+/g, " ").trim().toLowerCase();
+      if (/do not sell|do not share|do not sell or share|your privacy choices|privacy choices|opt[- ]out|targeted advertising|limit use of (?:my )?sensitive/.test(normalized)) {
+        return "do_not_sell_share";
+      }
       if (/^(?:accept all|allow all|accept cookies|i agree|agree and continue)$/.test(normalized) || /\baccept all\b/.test(normalized)) {
         return "accept_all";
       }
@@ -1362,9 +1365,12 @@ async function detectConsentUi(
   const text = await page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
   const controls = await page.evaluate<ConsentUiObservation["controls"]>(String.raw`(() => {
     const consentLabelPattern =
-      /cookie|privacy|choice|choices|consent|preference|preferences|settings|options|accept|agree|allow|reject|decline|deny|refuse|necessary|essential|purpose|purposes|save|confirm/i;
+      /cookie|privacy|choice|choices|consent|preference|preferences|settings|options|accept|agree|allow|reject|decline|deny|refuse|necessary|essential|purpose|purposes|save|confirm|do not sell|do not share|opt[- ]out|targeted advertising/i;
     const actionFor = (label) => {
       const normalized = label.replace(/\s+/g, " ").trim().toLowerCase();
+      if (/do not sell|do not share|do not sell or share|your privacy choices|privacy choices|opt[- ]out|targeted advertising|limit use of (?:my )?sensitive/.test(normalized)) {
+        return "do_not_sell_share";
+      }
       if (/^(?:accept all|allow all|accept cookies|i agree|agree and continue)$/.test(normalized) || /\baccept all\b/.test(normalized)) {
         return "accept_all";
       }
@@ -1527,7 +1533,9 @@ function buildConsentUiObservationFromEvidence(input: {
   const visibleChoiceLabels = controls.map((control) => control.label);
   const acceptControlObserved = controls.some((control) => control.actionType === "accept_all");
   const rejectControlObserved = controls.some((control) => control.actionType === "reject_all");
-  const managePreferencesControlObserved = controls.some((control) => control.actionType === "manage_preferences");
+  const managePreferencesControlObserved = controls.some((control) =>
+    control.actionType === "manage_preferences" || control.actionType === "do_not_sell_share"
+  );
   const controlBasis = controls.map((control) => `control:${control.actionType}:${control.label}`);
   const likelyPresent = matched.length >= 2 || controls.length > 0;
   return {

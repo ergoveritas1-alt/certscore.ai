@@ -7,6 +7,8 @@ import {
   type ReplayEvidenceSiteReport,
 } from "../packages/certscore-scan-core/src/index.js";
 
+type ReplayPolicySurfaceSummary = ReplayEvidenceSiteReport["policySurfaces"][number];
+
 type LaneId =
   | "cmp_first_layer_accept_reject"
   | "post_reject_tracking"
@@ -47,6 +49,7 @@ interface GoldCorpusCoverageReport {
     evidenceReportPath?: string;
     outDir?: string;
     minimumSitesPerLane: number;
+    consentFlowsDisabled?: boolean;
   };
   summary: {
     evaluatedSites: number;
@@ -98,7 +101,9 @@ interface CoverageQualitySummary {
 }
 
 interface ActionProofReviewSummary {
+  consentFlowsDisabled: boolean;
   cmpRegressionRiskCells: number;
+  disabledCmpActionNotTestableCells: number;
   cmpRegressionRiskSites: Array<{
     siteId: string;
     sourceUrl?: string;
@@ -106,6 +111,7 @@ interface ActionProofReviewSummary {
     notes: string[];
   }>;
   privacyOptOutNotTestableCells: number;
+  disabledPrivacyOptOutNotTestableCells: number;
   privacyOptOutNotTestableSites: Array<{
     siteId: string;
     sourceUrl?: string;
@@ -227,6 +233,13 @@ const laneDefinitions: LaneDefinition[] = [
   },
 ];
 
+const consentActionLaneIds = new Set<LaneId>([
+  "cmp_first_layer_accept_reject",
+  "post_reject_tracking",
+  "post_accept_behavior",
+  "privacy_opt_out",
+]);
+
 void main();
 
 async function main(): Promise<void> {
@@ -239,18 +252,20 @@ async function main(): Promise<void> {
   const evidenceReport = args.evidenceReportPath
     ? JSON.parse(await readFile(args.evidenceReportPath, "utf8")) as ReplayEvidenceReport
     : await replayConsentFlowEvidenceCorpus({ corpusDir: args.corpusDir });
+  const refreshedEvidenceReport = refreshDerivedCoverageForCurrentPolicy(evidenceReport);
   const baselineReport = args.baselinePath
     ? await readCoverageBaseline(args.baselinePath, {
       minimumSitesPerLane: args.minimumSitesPerLane,
     })
     : undefined;
 
-  const report = buildGoldCorpusCoverageReport(evidenceReport, {
+  const report = buildGoldCorpusCoverageReport(refreshedEvidenceReport, {
     baselinePath: args.baselinePath,
     corpusDir: args.corpusDir,
     evidenceReportPath: args.evidenceReportPath,
     outDir: args.outDir,
     minimumSitesPerLane: args.minimumSitesPerLane,
+    consentFlowsDisabled: args.consentFlowsDisabled,
   }, baselineReport);
 
   const markdown = renderGoldCorpusCoverageMarkdown(report);
@@ -273,6 +288,249 @@ async function main(): Promise<void> {
   }
 }
 
+function refreshDerivedCoverageForCurrentPolicy(evidenceReport: ReplayEvidenceReport): ReplayEvidenceReport {
+  return {
+    ...evidenceReport,
+    sites: evidenceReport.sites.map((site) => {
+      const explicitPolicySurfaces = dedupePolicySurfaces(site.policySurfaces);
+      const policySurfaces = explicitPolicySurfaces.length > 0
+        ? explicitPolicySurfaces
+        : dedupePolicySurfaces(policySurfacesFromRetainedHintsForSite(site));
+      const siteWithPolicySurfaces = { ...site, policySurfaces };
+      const policyEvidenceOutcome = refreshPolicyEvidenceOutcome(siteWithPolicySurfaces);
+      const preConsent = site.networkVendorSummary.preConsent;
+      const reviewableRuntimeContextObserved = preConsent.vendors.length > 0 || preConsent.endpoints.length > 0;
+      return {
+        ...site,
+        policySurfaces,
+        policyEvidenceOutcome,
+        coverageAssessment: {
+          ...site.coverageAssessment,
+          ccpaCpra: {
+            ...site.coverageAssessment.ccpaCpra,
+            privacyNoticeAvailability: policyEvidenceOutcome.privacyNoticeAvailability === "observed"
+              ? "observed"
+              : site.coverageAssessment.ccpaCpra.privacyNoticeAvailability,
+            doNotSellShareAvailability: policyEvidenceOutcome.doNotSellShareAvailability === "observed"
+              ? "observed"
+              : site.coverageAssessment.ccpaCpra.doNotSellShareAvailability,
+            privacyChoicesAvailability: policyEvidenceOutcome.privacyChoicesAvailability === "observed"
+              ? "observed"
+              : site.coverageAssessment.ccpaCpra.privacyChoicesAvailability,
+          },
+          gdprEprivacy: {
+            ...site.coverageAssessment.gdprEprivacy,
+            postChoiceConsentControls: policyEvidenceOutcome.consentWithdrawalSignals === "observed" ||
+              policyEvidenceOutcome.privacyChoicesAvailability === "observed"
+              ? "observed"
+              : site.coverageAssessment.gdprEprivacy.postChoiceConsentControls,
+            runtimeVendorDisclosureContext: policyEvidenceOutcome.policyArtifactStatus === "present" && reviewableRuntimeContextObserved
+              ? "testable"
+              : site.coverageAssessment.gdprEprivacy.runtimeVendorDisclosureContext,
+            crossBorderEndpointReview: reviewableRuntimeContextObserved
+              ? "testable"
+              : site.coverageAssessment.gdprEprivacy.crossBorderEndpointReview,
+          },
+        },
+      };
+    }),
+  };
+}
+
+function refreshPolicyEvidenceOutcome(site: ReplayEvidenceSiteReport): ReplayEvidenceSiteReport["policyEvidenceOutcome"] {
+  const hints = policySourceHintsForSite(site);
+  const outcome = { ...site.policyEvidenceOutcome, policySurfaceCount: site.policySurfaces.length };
+  if (hints.any && outcome.policyArtifactStatus === "missing") {
+    outcome.policyArtifactStatus = "present";
+    outcome.notes = [
+      ...outcome.notes,
+      "Policy/control availability includes retained source URL or label hints from replay evidence.",
+    ];
+  }
+  if (hints.privacyNotice) {
+    outcome.privacyNoticeAvailability = "observed";
+  }
+  if (hints.cookiePolicy) {
+    outcome.cookiePolicyAvailability = "observed";
+  }
+  if (hints.noticeAtCollection) {
+    outcome.noticeAtCollectionAvailability = "observed";
+  }
+  if (hints.privacyChoices) {
+    outcome.privacyChoicesAvailability = "observed";
+    outcome.consentWithdrawalSignals = "observed";
+  }
+  if (hints.doNotSellShare) {
+    outcome.doNotSellShareAvailability = "observed";
+  }
+  return outcome;
+}
+
+function policySurfacesFromRetainedHintsForSite(site: ReplayEvidenceSiteReport): ReplayPolicySurfaceSummary[] {
+  const surfacesByType = new Map<string, ReplayPolicySurfaceSummary>();
+  for (const hint of collectPolicySourceHintValuesForSite(site)) {
+    for (const surfaceType of policySurfaceTypesForHint(hint.normalized)) {
+      const surface = {
+        surfaceType,
+        url: hint.url,
+        normalizedUrl: hint.url,
+        linkText: hint.url ? undefined : trimForReport(hint.raw, 160),
+        status: "observed",
+        fetchable: false,
+        clickable: false,
+        mayLeadToConsentControls: policySurfaceHintMayLeadToControls(surfaceType),
+        observedTopics: [],
+        mentionedVendors: [],
+        mentionedPurposes: [],
+        mentionedRights: [],
+        mentionedControls: [],
+        boundedTextExcerptIds: [],
+        confidence: 0.62,
+      };
+      const existing = surfacesByType.get(surfaceType);
+      if (!existing || (!existing.url && surface.url)) {
+        surfacesByType.set(surfaceType, surface);
+      }
+    }
+  }
+  return [...surfacesByType.values()];
+}
+
+function dedupePolicySurfaces(surfaces: ReplayPolicySurfaceSummary[]): ReplayPolicySurfaceSummary[] {
+  const seen = new Set<string>();
+  const deduped: ReplayPolicySurfaceSummary[] = [];
+  for (const surface of surfaces) {
+    const key = [surface.surfaceType, surface.normalizedUrl ?? surface.url ?? "", surface.linkText ?? ""].join("|");
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduped.push(surface);
+    }
+  }
+  return deduped;
+}
+
+function policySurfaceTypesForHint(value: string): string[] {
+  const types: string[] = [];
+  if (policyHintLooksLikePrivacyNotice(value)) {
+    types.push("privacy_policy");
+  }
+  if (policyHintLooksLikeCookiePolicy(value)) {
+    types.push("cookie_policy");
+  }
+  if (policyHintLooksLikeNoticeAtCollection(value)) {
+    types.push("notice_at_collection");
+  }
+  if (policyHintLooksLikePrivacyChoices(value)) {
+    types.push("your_privacy_choices");
+  }
+  if (policyHintLooksLikeCookieSettings(value)) {
+    types.push("cookie_settings");
+  }
+  if (policyHintLooksLikeExplicitDoNotSellShare(value)) {
+    types.push("do_not_sell_or_share");
+  }
+  return [...new Set(types)];
+}
+
+function policySurfaceHintMayLeadToControls(surfaceType: string): boolean {
+  return surfaceType === "your_privacy_choices" ||
+    surfaceType === "cookie_settings" ||
+    surfaceType === "consent_preferences" ||
+    surfaceType === "do_not_sell_or_share";
+}
+
+function policySourceHintsForSite(site: ReplayEvidenceSiteReport): {
+  any: boolean;
+  privacyNotice: boolean;
+  cookiePolicy: boolean;
+  noticeAtCollection: boolean;
+  privacyChoices: boolean;
+  doNotSellShare: boolean;
+} {
+  const values = collectPolicySourceHintValuesForSite(site).map((hint) => hint.normalized);
+  const cookiePolicy = values.some(policyHintLooksLikeCookiePolicy);
+  const noticeAtCollection = values.some(policyHintLooksLikeNoticeAtCollection);
+  const privacyChoices = values.some(policyHintLooksLikePrivacyChoices) ||
+    values.some(policyHintLooksLikeCookieSettings);
+  const doNotSellShare = privacyChoices || values.some(policyHintLooksLikeExplicitDoNotSellShare);
+  const privacyNotice = values.some(policyHintLooksLikePrivacyNotice);
+  return {
+    any: privacyNotice || cookiePolicy || noticeAtCollection || privacyChoices || doNotSellShare,
+    privacyNotice,
+    cookiePolicy,
+    noticeAtCollection,
+    privacyChoices,
+    doNotSellShare,
+  };
+}
+
+function collectPolicySourceHintValuesForSite(site: ReplayEvidenceSiteReport): Array<{
+  raw: string;
+  normalized: string;
+  url?: string;
+}> {
+  return [
+    site.sourceUrl,
+    ...site.actionCandidates.map((candidate) => candidate.label),
+    ...site.actionCandidates.map((candidate) => candidate.frameContext?.frameUrl),
+    ...site.scenarios.flatMap((scenario) => [
+      scenario.sourceUrl,
+      ...scenario.actionCandidates.map((candidate) => candidate.label),
+      ...scenario.actionCandidates.map((candidate) => candidate.frameContext?.frameUrl),
+    ]),
+  ].filter((value): value is string => Boolean(value)).map((value) => ({
+    raw: value,
+    normalized: normalizePolicyHintValue(value),
+    url: policyHintUrl(value),
+  }));
+}
+
+function normalizePolicyHintValue(value: string): string {
+  try {
+    const parsed = new URL(value);
+    return [parsed.pathname, parsed.search].filter(Boolean).join(" ").toLowerCase().trim();
+  } catch {
+    return value.toLowerCase().trim();
+  }
+}
+
+function policyHintUrl(value: string): string | undefined {
+  try {
+    return new URL(value).href;
+  } catch {
+    return undefined;
+  }
+}
+
+function policyHintLooksLikePrivacyNotice(value: string): boolean {
+  return /(^|\/)(privacy|privacy[-_/ ]?policy|privacy[-_/ ]?notice|legal\/privacy)(\/|$|\?|#)|\bprivacy (?:policy|notice)\b/.test(value);
+}
+
+function policyHintLooksLikeCookiePolicy(value: string): boolean {
+  return /(^|\/)(cookie|cookies|cookie[-_/ ]?policy|cookie[-_/ ]?notice)(\/|$|\?|#)|\bcookie (?:policy|notice|information)\b|\bcookies policy\b/.test(value);
+}
+
+function policyHintLooksLikeNoticeAtCollection(value: string): boolean {
+  return /notice[-_ ]?at[-_ ]?collection|notice[-_ ]?of[-_ ]?collection|collection[-_ ]?notice|ca notice at collection|california[-_ ]?notice/.test(value);
+}
+
+function policyHintLooksLikePrivacyChoices(value: string): boolean {
+  return /privacy[-_/ ]?choices|your[-_/ ]?privacy[-_/ ]?choices|privacy\/your-privacy-choices/.test(value);
+}
+
+function policyHintLooksLikeCookieSettings(value: string): boolean {
+  return /cookie[-_/ ]?(settings|preferences)|consent[-_/ ]?preferences/.test(value);
+}
+
+function policyHintLooksLikeExplicitDoNotSellShare(value: string): boolean {
+  return /do[-_/ ]?not[-_/ ]?(sell|share)|dnsmpi|opt[-_/ ]?out|ccpa/.test(value);
+}
+
+function trimForReport(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
 function buildGoldCorpusCoverageReport(
   evidenceReport: ReplayEvidenceReport,
   input: GoldCorpusCoverageReport["input"],
@@ -289,6 +547,9 @@ function buildGoldCorpusCoverageReport(
     const minimumSites = input.minimumSitesPerLane > 0 && definition.id !== "no_go_or_non_representative"
       ? input.minimumSitesPerLane
       : definition.minimumSites;
+    const effectiveMinimumSites = input.consentFlowsDisabled && consentActionLaneIds.has(definition.id)
+      ? 0
+      : minimumSites;
     const coveredSites = evidenceReport.sites
       .filter((site) => siteCoversLane(site, definition.id))
       .map((site) => ({
@@ -296,12 +557,12 @@ function buildGoldCorpusCoverageReport(
         sourceUrl: site.sourceUrl,
         reason: laneReason(site, definition.id),
       }));
-    const missingSites = Math.max(0, minimumSites - coveredSites.length);
+    const missingSites = Math.max(0, effectiveMinimumSites - coveredSites.length);
     const status: LaneCoverage["status"] = missingSites === 0 ? "pass" : "gap";
     return {
       id: definition.id,
       label: definition.label,
-      minimumSites,
+      minimumSites: effectiveMinimumSites,
       coveredSites,
       missingSites,
       status,
@@ -372,8 +633,8 @@ function buildCoverageQualitySummary(
   const consentBehaviorCounts: Record<string, number> = {};
   const policyEvidenceCounts: Record<string, number> = {};
   const lanesBySite = new Map(report.siteLaneMatrix.map((site) => [site.siteId, site.lanes]));
-  const opportunities = buildCoverageOpportunitySummary(evidenceReport, lanesBySite);
-  const actionProofReview = buildActionProofReviewSummary(evidenceReport, lanesBySite);
+  const opportunities = buildCoverageOpportunitySummary(evidenceReport, lanesBySite, report.input.consentFlowsDisabled === true);
+  const actionProofReview = buildActionProofReviewSummary(evidenceReport, lanesBySite, report.input.consentFlowsDisabled === true);
 
   const siteStatusCounts = evidenceReport.sites.map((site) => {
     const siteCounts = createCoverageValueCounts();
@@ -427,6 +688,7 @@ function buildCoverageQualitySummary(
 function buildCoverageOpportunitySummary(
   evidenceReport: ReplayEvidenceReport,
   lanesBySite: Map<string, LaneId[]>,
+  consentFlowsDisabled: boolean,
 ): CoverageOpportunitySummary {
   const groups = new Map<string, CoverageOpportunityGroup>();
   const siteTotals = new Map<string, {
@@ -448,7 +710,7 @@ function buildCoverageOpportunitySummary(
       regressionRisk: 0,
     });
     for (const issue of collectCoverageIssues(site.coverageAssessment)) {
-      const classification = classifyCoverageIssue(site, lanes, issue);
+      const classification = classifyCoverageIssue(site, lanes, issue, { consentFlowsDisabled });
       const groupKey = `${issue.path}\u0000${issue.status}\u0000${classification.bucket}\u0000${classification.reasonCode}`;
       const group = groups.get(groupKey) ?? {
         path: issue.path,
@@ -522,6 +784,7 @@ function createOpportunityStatusCounts(): Record<CoverageOpportunityStatus, Reco
 function buildActionProofReviewSummary(
   evidenceReport: ReplayEvidenceReport,
   lanesBySite: Map<string, LaneId[]>,
+  consentFlowsDisabled: boolean,
 ): ActionProofReviewSummary {
   const cmpFields = [
     "acceptAction",
@@ -532,40 +795,53 @@ function buildActionProofReviewSummary(
   const cmpRegressionRiskSites: ActionProofReviewSummary["cmpRegressionRiskSites"] = [];
   const privacyOptOutNotTestableSites: ActionProofReviewSummary["privacyOptOutNotTestableSites"] = [];
   let cmpRegressionRiskCells = 0;
+  let disabledCmpActionNotTestableCells = 0;
   let privacyOptOutNotTestableCells = 0;
+  let disabledPrivacyOptOutNotTestableCells = 0;
 
   for (const site of evidenceReport.sites) {
     const lanes = lanesBySite.get(site.siteId) ?? [];
     if (siteHasCmpSurface(site, lanes)) {
       const fields = cmpFields.filter((field) => site.coverageAssessment.gdprEprivacy[field] === "not_testable");
       if (fields.length > 0) {
-        cmpRegressionRiskCells += fields.length;
-        cmpRegressionRiskSites.push({
+        if (consentFlowsDisabled) {
+          disabledCmpActionNotTestableCells += fields.length;
+        } else {
+          cmpRegressionRiskCells += fields.length;
+          cmpRegressionRiskSites.push({
+            siteId: site.siteId,
+            sourceUrl: site.sourceUrl,
+            fields: [...fields],
+            notes: site.consentBehaviorOutcome.notes,
+          });
+        }
+      }
+    }
+    if (site.coverageAssessment.ccpaCpra.privacyOptOutBehavior === "not_testable") {
+      if (consentFlowsDisabled) {
+        disabledPrivacyOptOutNotTestableCells += 1;
+      } else {
+        privacyOptOutNotTestableCells += 1;
+        privacyOptOutNotTestableSites.push({
           siteId: site.siteId,
           sourceUrl: site.sourceUrl,
-          fields: [...fields],
+          optOutAction: site.consentBehaviorOutcome.optOutAction,
+          postOptOutPrivacyBehavior: site.consentBehaviorOutcome.postOptOutPrivacyBehavior,
           notes: site.consentBehaviorOutcome.notes,
         });
       }
     }
-    if (site.coverageAssessment.ccpaCpra.privacyOptOutBehavior === "not_testable") {
-      privacyOptOutNotTestableCells += 1;
-      privacyOptOutNotTestableSites.push({
-        siteId: site.siteId,
-        sourceUrl: site.sourceUrl,
-        optOutAction: site.consentBehaviorOutcome.optOutAction,
-        postOptOutPrivacyBehavior: site.consentBehaviorOutcome.postOptOutPrivacyBehavior,
-        notes: site.consentBehaviorOutcome.notes,
-      });
-    }
   }
 
   return {
+    consentFlowsDisabled,
     cmpRegressionRiskCells,
+    disabledCmpActionNotTestableCells,
     cmpRegressionRiskSites: cmpRegressionRiskSites.sort((left, right) =>
       (left.sourceUrl ?? left.siteId).localeCompare(right.sourceUrl ?? right.siteId),
     ),
     privacyOptOutNotTestableCells,
+    disabledPrivacyOptOutNotTestableCells,
     privacyOptOutNotTestableSites: privacyOptOutNotTestableSites.sort((left, right) =>
       (left.sourceUrl ?? left.siteId).localeCompare(right.sourceUrl ?? right.siteId),
     ),
@@ -642,6 +918,7 @@ function classifyCoverageIssue(
     path: string;
     status: CoverageOpportunityStatus;
   },
+  options: { consentFlowsDisabled: boolean },
 ): {
   bucket: CoverageOpportunityBucket;
   reasonCode: string;
@@ -651,6 +928,10 @@ function classifyCoverageIssue(
   const hasPolicySurface = lanes.includes("policy_surface_merge") ||
     site.policyEvidenceOutcome.policyArtifactStatus === "present" ||
     site.policyEvidenceOutcome.privacyNoticeAvailability === "observed";
+  const hasRuntimeEndpointContext =
+    site.networkVendorSummary.preConsent.requestCount > 0 ||
+    site.networkVendorSummary.preConsent.endpoints.length > 0 ||
+    site.networkVendorSummary.preConsent.vendors.length > 0;
   const hasCmpSurface = siteHasCmpSurface(site, lanes);
   const hasConsentSurface = hasCmpSurface ||
     site.consentBehaviorOutcome.privacyChoicesSurface === "observed";
@@ -702,6 +983,13 @@ function classifyCoverageIssue(
   }
 
   if (isConsentActionPath(pathTail)) {
+    if (options.consentFlowsDisabled) {
+      return {
+        bucket: "expected_limitation",
+        reasonCode: "consent_flow_runtime_intentionally_disabled",
+        suggestedAction: "Keep as an explicit limitation; do not run post-consent consent flows or patch around missing action proof.",
+      };
+    }
     if (hasCmpSurface) {
       return {
         bucket: "regression_risk",
@@ -717,6 +1005,13 @@ function classifyCoverageIssue(
   }
 
   if (/privacyOptOutBehavior/i.test(pathTail) || /doNotSellShareAvailability|privacyChoicesAvailability/i.test(pathTail)) {
+    if (options.consentFlowsDisabled && /privacyOptOutBehavior/i.test(pathTail)) {
+      return {
+        bucket: "expected_limitation",
+        reasonCode: "privacy_opt_out_runtime_intentionally_disabled",
+        suggestedAction: "Retain observed privacy-choice surfaces, but keep post-opt-out behavior not testable while consent-flow runtime is disabled.",
+      };
+    }
     if (hasPolicySurface) {
       return {
         bucket: "candidate_improvement",
@@ -733,6 +1028,17 @@ function classifyCoverageIssue(
 
   if (isPolicyDisclosurePath(pathTail)) {
     if (issue.status === "not_testable") {
+      if (
+        /runtimeVendorDisclosureContext|crossBorderEndpointReview/i.test(pathTail) &&
+        hasPolicySurface &&
+        !hasRuntimeEndpointContext
+      ) {
+        return {
+          bucket: "expected_limitation",
+          reasonCode: "policy_surface_without_runtime_endpoint_context",
+          suggestedAction: "Keep as explicit limitation unless a non-clicking pre-consent runtime probe retains endpoint or vendor context.",
+        };
+      }
       if (hasPolicySurface) {
         return {
           bucket: "candidate_improvement",
@@ -799,10 +1105,12 @@ function buildBaselineComparison(
     const baselineLane = baselineLaneById.get(lane.id);
     const baselineCovered = baselineLane?.coveredSites.length ?? 0;
     const deltaCovered = lane.coveredSites.length - baselineCovered;
-    if (baselineLane?.status === "pass" && lane.status === "gap") {
+    if (baselineLane?.status === "pass" && lane.status === "gap" && !(current.input.consentFlowsDisabled && consentActionLaneIds.has(lane.id))) {
       regressions.push(`${lane.id} moved from pass to gap.`);
     } else if (deltaCovered < 0) {
-      warnings.push(`${lane.id} covered ${Math.abs(deltaCovered)} fewer site(s) than baseline.`);
+      if (!(current.input.consentFlowsDisabled && consentActionLaneIds.has(lane.id))) {
+        warnings.push(`${lane.id} covered ${Math.abs(deltaCovered)} fewer site(s) than baseline.`);
+      }
     }
     return {
       id: lane.id,
@@ -1065,6 +1373,7 @@ function renderGoldCorpusCoverageMarkdown(report: GoldCorpusCoverageReport): str
     `- Lanes with gaps: ${report.summary.lanesWithGaps}`,
     `- Quality status: ${report.summary.qualityStatus}`,
     `- Ready: ${report.summary.ready ? "yes" : "no"}`,
+    `- Consent-flow runtime: ${report.input.consentFlowsDisabled ? "intentionally disabled; action-completion lanes reported as expected limitations" : "enabled/retained evidence mode"}`,
     `- Coverage counters: ${formatCoverageValueCounts(report.quality.coverageAssessmentCounts)}`,
     `- Primary coverage counters: ${formatCoverageValueCounts(report.quality.primaryCoverageAssessmentCounts)}`,
     `- Primary quality scope: ${report.quality.primaryScope.includedSites} included, ${report.quality.primaryScope.excludedNoGoSites} no-go/non-representative controls excluded`,
@@ -1153,7 +1462,9 @@ function renderGoldCorpusCoverageMarkdown(report: GoldCorpusCoverageReport): str
     "## Action Proof Review",
     "",
     `- CMP regression-risk cells: ${report.quality.actionProofReview.cmpRegressionRiskCells}`,
+    `- CMP disabled-mode not-testable cells: ${report.quality.actionProofReview.disabledCmpActionNotTestableCells}`,
     `- Privacy opt-out not-testable cells: ${report.quality.actionProofReview.privacyOptOutNotTestableCells}`,
+    `- Privacy opt-out disabled-mode not-testable cells: ${report.quality.actionProofReview.disabledPrivacyOptOutNotTestableCells}`,
     "",
     "### CMP Action-Proof Risks",
     "",
@@ -1283,6 +1594,7 @@ function parseArgs(argv: string[]): {
   failOnQualityRegression: boolean;
   format: "text" | "json";
   minimumSitesPerLane: number;
+  consentFlowsDisabled: boolean;
   outDir?: string;
 } {
   const parsed = {
@@ -1290,6 +1602,7 @@ function parseArgs(argv: string[]): {
     failOnQualityRegression: false,
     format: "text" as const,
     minimumSitesPerLane: 3,
+    consentFlowsDisabled: false,
   } as {
     baselinePath?: string;
     corpusDir?: string;
@@ -1298,6 +1611,7 @@ function parseArgs(argv: string[]): {
     failOnQualityRegression: boolean;
     format: "text" | "json";
     minimumSitesPerLane: number;
+    consentFlowsDisabled: boolean;
     outDir?: string;
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -1328,6 +1642,8 @@ function parseArgs(argv: string[]): {
       parsed.failOnGap = true;
     } else if (key === "--fail-on-quality-regression") {
       parsed.failOnQualityRegression = true;
+    } else if (key === "--consent-flows-disabled") {
+      parsed.consentFlowsDisabled = true;
     }
   }
   return parsed;
@@ -1341,6 +1657,7 @@ function printUsage(): void {
   console.error([
     "Usage:",
     "  pnpm v2:replay-gold-coverage --evidence-report artifacts/.../ReplayEvidenceReport.json --out artifacts/...",
+    "  pnpm v2:replay-gold-coverage --evidence-report artifacts/.../ReplayEvidenceReport.json --out artifacts/... --consent-flows-disabled",
     "  pnpm v2:replay-gold-coverage --evidence-report artifacts/.../ReplayEvidenceReport.json --baseline artifacts/.../ReplayEvidenceReport.json --fail-on-gap --fail-on-quality-regression",
     "  pnpm v2:replay-gold-coverage --corpus artifacts/replay-corpus --out artifacts/...",
   ].join("\n"));

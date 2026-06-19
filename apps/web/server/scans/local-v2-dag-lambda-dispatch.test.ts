@@ -93,6 +93,7 @@ test("summarizes Lambda dispatch intent without exposing function or queue names
     dispatchRequested: true,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     resultHandoff: "sqs",
+    simulatedLocalLambda: false,
     targetEnvironment: "local",
     vpcMode: "none"
   });

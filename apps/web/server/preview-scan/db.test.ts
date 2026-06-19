@@ -65,9 +65,53 @@ test("preview scan initial config marks Lambda v2 DAG dispatch when configured",
   assert.equal(v2DagLambda?.targetEnvironment, "local");
   assert.equal(v2DagLambda?.vpcMode, "none");
   assert.equal(v2DagLambda?.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
+  assert.equal(v2DagLambda?.simulatedLocalLambda, false);
   assert.equal(v2DagLambda?.productionFindingIntegration, false);
   assert.equal(Object.hasOwn(config, "findings"), false);
   assert.equal(Object.hasOwn(config, "signals"), false);
+});
+
+test("preview scan initial config keeps Lambda-on scans on real regional AWS even when simulator env is set", () => {
+  const config = buildPreviewScanInitialConfig({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME: "certscore-v2-dag-ie",
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results",
+      CERTSCORE_V2_DAG_LAMBDA_SIMULATED: "true",
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      NODE_ENV: "development"
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: true,
+    normalizedUrl: "https://example.com/",
+    scanFrom: "eu_ie"
+  });
+  const v2DagLambda = config.execution?.v2DagLambda as Record<string, unknown> | undefined;
+
+  assert.equal(v2DagLambda?.awsRegion, "eu-west-1");
+  assert.equal(v2DagLambda?.functionName, "certscore-v2-dag-ie");
+  assert.equal(v2DagLambda?.resultQueueUrl, "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results");
+  assert.equal(v2DagLambda?.simulatedLocalLambda, false);
+});
+
+test("preview scan initial config fails closed instead of simulating Lambda-on Ireland scans", () => {
+  assert.throws(
+    () =>
+      buildPreviewScanInitialConfig({
+        env: {
+          CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+          CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
+          CERTSCORE_V2_DAG_LAMBDA_SIMULATED: "true",
+          NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+          NODE_ENV: "development"
+        },
+        hostname: "example.com",
+        localV2DagRunViaLambda: true,
+        normalizedUrl: "https://example.com/",
+        scanFrom: "eu_ie"
+      }),
+    /CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL/
+  );
 });
 
 test("preview scan initial config honors requested Lambda scan location", () => {

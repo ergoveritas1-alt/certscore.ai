@@ -301,6 +301,58 @@ test("evidence replay recovers captured action candidates from action type and l
   }
 });
 
+test("evidence replay lets unambiguous privacy opt-out labels override stale captured action types", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-captured-optout-replay-"));
+  try {
+    const manifestPath = await writeSyntheticReplayBundle(tempRoot, "captured-optout.test", "privacy_opt_out_flow", {
+      controls: [
+        {
+          actionType: "accept_all",
+          controlIndex: 0,
+          labelText: "Do Not Sell or Share My Personal Information",
+          normalizedLabel: "do not sell or share my personal information",
+          role: "nano_assisted_ui_classification",
+          tagName: "candidate",
+        },
+      ],
+      frames: [{
+        frameIndex: 0,
+        frameKind: "main_frame",
+        frameUrl: "https://captured-optout.test/privacy/your-privacy-choices",
+        htmlExcerpt: "<main>Your Privacy Choices</main>",
+        textExcerpt: "Your Privacy Choices",
+      }],
+      originalEvidence: {
+        actionCandidates: [{
+          actionType: "accept_all",
+          labelText: "Do Not Sell or Share My Personal Information",
+          confidence: 0.82,
+        }],
+      },
+    });
+
+    const report = await replayConsentFlowEvidenceCorpus({ manifestPaths: [manifestPath] });
+    const site = report.sites.find((entry) => entry.siteId === "captured-optout.test");
+    const optOutCandidate = site?.actionCandidates.find((candidate) =>
+      candidate.label === "Do Not Sell or Share My Personal Information"
+    );
+
+    assert.equal(optOutCandidate?.action, "do_not_sell_share");
+    assert.equal(optOutCandidate?.reason, "captured_action_candidate_label_override");
+    assert.equal(
+      site?.actionCandidates.some((candidate) =>
+        candidate.action === "accept" &&
+        candidate.label === "Do Not Sell or Share My Personal Information"
+      ),
+      false,
+    );
+    assert.equal(site?.consentBehaviorOutcome.acceptAllAction, "not_observed_not_testable");
+    assert.equal(site?.consentBehaviorOutcome.optOutAction, "observed_not_testable");
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("evidence replay summarizes privacy opt-out separately from CMP reject", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-privacy-outcome-"));
   try {
@@ -482,7 +534,13 @@ test("evidence replay includes policy-scan surfaces for local coverage analysis"
     const report = await replayConsentFlowEvidenceCorpus({ manifestPaths: [manifestPath] });
     const site = report.sites.find((entry) => entry.siteId === "policy-corpus.test");
 
-    assert.equal(site?.policySurfaces.length, 2);
+    assert.equal((site?.policySurfaces.length ?? 0) >= 2, true);
+    assert.equal(site?.policySurfaces.some((surface) =>
+      surface.normalizedUrl === "https://policy-corpus.test/privacy"
+    ), true);
+    assert.equal(site?.policySurfaces.some((surface) =>
+      surface.normalizedUrl === "https://policy-corpus.test/privacy-choices"
+    ), true);
     assert.equal(site?.policyEvidenceOutcome.policyArtifactStatus, "present");
     assert.equal(site?.policyEvidenceOutcome.privacyNoticeAvailability, "observed");
     assert.equal(site?.policyEvidenceOutcome.noticeAtCollectionAvailability, "observed");
@@ -536,6 +594,161 @@ test("evidence replay uses retained target URL hints for privacy choice availabi
     assert.equal(site?.policyEvidenceOutcome.privacyChoicesAvailability, "observed");
     assert.equal(site?.coverageAssessment.ccpaCpra.privacyOptOutBehavior, "not_testable");
     assert.match(site?.policyEvidenceOutcome.notes.join("\n") ?? "", /target URL hints/);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("evidence replay uses retained privacy control labels as deep policy hints without clicking", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-label-hints-"));
+  try {
+    const manifestPath = await writeSyntheticReplayBundle(tempRoot, "label-hints.test", "baseline_pre_consent", {
+      frames: [{
+        frameIndex: 0,
+        frameKind: "main_frame",
+        frameUrl: "https://label-hints.test/",
+        htmlExcerpt: "<footer><a>Privacy Policy</a><button>Your Privacy Choices</button></footer>",
+        textExcerpt: "Privacy Policy Your Privacy Choices",
+      }],
+      originalEvidence: {
+        actionCandidates: [{
+          actionType: "manage_preferences",
+          labelText: "Privacy Policy",
+          confidence: 0.84,
+        }, {
+          actionType: "manage_preferences",
+          labelText: "Your Privacy Choices",
+          confidence: 0.88,
+        }],
+      },
+    });
+
+    const report = await replayConsentFlowEvidenceCorpus({ manifestPaths: [manifestPath] });
+    const site = report.sites.find((entry) => entry.siteId === "label-hints.test");
+
+    assert.equal(site?.policyEvidenceOutcome.policyArtifactStatus, "present");
+    assert.equal(site?.policyEvidenceOutcome.privacyNoticeAvailability, "observed");
+    assert.equal(site?.policyEvidenceOutcome.doNotSellShareAvailability, "observed");
+    assert.equal(site?.policyEvidenceOutcome.privacyChoicesAvailability, "observed");
+    assert.equal(site?.coverageAssessment.gdprEprivacy.postChoiceConsentControls, "observed");
+    assert.equal(site?.coverageAssessment.gdprEprivacy.acceptAction, "not_testable");
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("evidence replay classifies direct policy URL and cookie or collection labels as surface hints", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-direct-policy-hints-"));
+  try {
+    const manifestPath = await writeSyntheticReplayBundle(tempRoot, "direct-policy-hints.test", "baseline_pre_consent", {
+      urlPath: "/privacy",
+      frames: [{
+        frameIndex: 0,
+        frameKind: "main_frame",
+        frameUrl: "https://direct-policy-hints.test/privacy",
+        htmlExcerpt: "<main>Privacy Policy Cookie Information CA notice at collection</main>",
+        textExcerpt: "Privacy Policy Cookie Information CA notice at collection",
+      }],
+      originalEvidence: {
+        actionCandidates: [{
+          actionType: "manage_preferences",
+          labelText: "Cookie Information",
+          confidence: 0.86,
+        }, {
+          actionType: "manage_preferences",
+          labelText: "CA notice at collection",
+          confidence: 0.84,
+        }],
+      },
+    });
+
+    const report = await replayConsentFlowEvidenceCorpus({ manifestPaths: [manifestPath] });
+    const site = report.sites.find((entry) => entry.siteId === "direct-policy-hints.test");
+    const surfaceTypes = new Set(site?.policySurfaces.map((surface) => surface.surfaceType) ?? []);
+
+    assert.equal(site?.policyEvidenceOutcome.policyArtifactStatus, "present");
+    assert.equal(surfaceTypes.has("privacy_policy"), true);
+    assert.equal(surfaceTypes.has("cookie_policy"), true);
+    assert.equal(surfaceTypes.has("notice_at_collection"), true);
+    assert.equal(site?.policyEvidenceOutcome.privacyNoticeAvailability, "observed");
+    assert.equal(site?.policyEvidenceOutcome.cookiePolicyAvailability, "observed");
+    assert.equal(site?.policyEvidenceOutcome.noticeAtCollectionAvailability, "observed");
+    assert.equal(site?.coverageAssessment.ccpaCpra.noticeAtCollection, "observed");
+    assert.equal(site?.coverageAssessment.ccpaCpra.privacyNoticeAvailability, "observed");
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("evidence replay materializes direct privacy-choice targets as retained policy surfaces", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-direct-privacy-choice-surfaces-"));
+  try {
+    const manifestPath = await writeSyntheticReplayBundle(tempRoot, "privacy-choice-surfaces.test", "baseline_pre_consent", {
+      urlPath: "/privacy/your-privacy-choices",
+      frames: [{
+        frameIndex: 0,
+        frameKind: "main_frame",
+        frameUrl: "https://privacy-choice-surfaces.test/privacy/your-privacy-choices",
+        htmlExcerpt: "<main>Your Privacy Choices</main>",
+        textExcerpt: "Your Privacy Choices",
+      }],
+    });
+
+    const report = await replayConsentFlowEvidenceCorpus({ manifestPaths: [manifestPath] });
+    const site = report.sites.find((entry) => entry.siteId === "privacy-choice-surfaces.test");
+    const surfaceTypes = new Set(site?.policySurfaces.map((surface) => surface.surfaceType) ?? []);
+
+    assert.equal(surfaceTypes.has("privacy_policy"), true);
+    assert.equal(surfaceTypes.has("your_privacy_choices"), true);
+    assert.equal(site?.policyEvidenceOutcome.policySurfaceCount, site?.policySurfaces.length);
+    assert.equal(site?.policyEvidenceOutcome.privacyNoticeAvailability, "observed");
+    assert.equal(site?.policyEvidenceOutcome.privacyChoicesAvailability, "observed");
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("evidence replay treats retained unresolved endpoints as testable GDPR endpoint review context", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-endpoint-review-"));
+  try {
+    const manifestPath = await writeSyntheticReplayBundle(tempRoot, "endpoint-review.test", "baseline_pre_consent", {
+      frames: [{
+        frameIndex: 0,
+        frameKind: "main_frame",
+        frameUrl: "https://endpoint-review.test/privacy",
+        htmlExcerpt: "<main>Privacy Policy</main>",
+        textExcerpt: "Privacy Policy",
+      }],
+      harUrls: [
+        "https://endpoint-review.test/privacy",
+        "https://collector.unresolved-example.net/pixel.js",
+      ],
+      policySurfaceObservations: [{
+        surfaceType: "privacy_policy",
+        normalizedUrl: "https://endpoint-review.test/privacy",
+        linkText: "Privacy Policy",
+        status: "fetched",
+        fetchable: true,
+        observedTopics: ["cookies", "third_party_disclosures"],
+        mentionedVendors: [],
+        mentionedPurposes: [],
+        mentionedRights: [],
+        mentionedControls: [],
+        boundedTextExcerptIds: ["policy_excerpt_endpoint_review"],
+        confidence: 0.9,
+      }],
+    });
+
+    const report = await replayConsentFlowEvidenceCorpus({ manifestPaths: [manifestPath] });
+    const site = report.sites.find((entry) => entry.siteId === "endpoint-review.test");
+
+    assert.deepEqual(site?.networkVendorSummary.preConsent.vendors, []);
+    assert.equal(site?.networkVendorSummary.preConsent.endpoints.some((endpoint) =>
+      endpoint.includes("collector.unresolved-example.net")
+    ), true);
+    assert.equal(site?.coverageAssessment.gdprEprivacy.thirdPartyTrackingBeforeConsent, "not_observed");
+    assert.equal(site?.coverageAssessment.gdprEprivacy.runtimeVendorDisclosureContext, "testable");
+    assert.equal(site?.coverageAssessment.gdprEprivacy.crossBorderEndpointReview, "testable");
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }

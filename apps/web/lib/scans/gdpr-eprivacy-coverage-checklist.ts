@@ -83,6 +83,8 @@ export type GdprEprivacyCoverageChecklistInput = {
   unifiedFindings: UnifiedFindingDisplayPacket[];
 };
 
+type ProjectedGdprFinding = NonNullable<GdprEprivacyCoverageChecklistInput["projectedFindings"]>[number];
+
 const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   {
     id: "consent_surface_observed",
@@ -1227,6 +1229,177 @@ function getPreconsentTrackingVendors(findings: UnifiedFindingDisplayPacket[]) {
   ]);
 }
 
+function getRecordRows(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  if (!record) {
+    return [];
+  }
+
+  return keys.flatMap((key) => {
+    const value = record[key];
+    return Array.isArray(value)
+      ? value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+      : [];
+  });
+}
+
+function getProjectedFindingEntityRows(findings: ProjectedGdprFinding[], keys: string[]) {
+  return findings.flatMap((finding) => {
+    const evidenceDetails = finding.evidenceDetails && typeof finding.evidenceDetails === "object"
+      ? finding.evidenceDetails as Record<string, unknown>
+      : null;
+    return getRecordRows(evidenceDetails, keys);
+  });
+}
+
+function getPreconsentTrackingRows(input: {
+  findings: UnifiedFindingDisplayPacket[];
+  projectedFindings?: ProjectedGdprFinding[];
+}) {
+  const keys = [
+    "preconsent_tracker_vendor_evidence",
+    "representativeRequests",
+    "runtimeVendorEvidence",
+    "vendors"
+  ];
+  return [
+    ...getFindingEntityRows(input.findings, keys),
+    ...getProjectedFindingEntityRows(input.projectedFindings ?? [], keys)
+  ];
+}
+
+type PreconsentPurposeBucket = "advertising" | "analytics" | "performance" | "security" | "functional" | "session_replay" | "unknown";
+
+function normalizePreconsentPurposeBucket(row: Record<string, unknown>): PreconsentPurposeBucket {
+  const category = [
+    getStringValue(row.category),
+    getStringValue(row.vendorCategory),
+    getStringValue(row.vendor_category),
+    getStringValue(row.purpose),
+    getStringValue(row.vendorPurpose),
+    getStringValue(row.vendor_purpose)
+  ].filter(Boolean).join(" ").toLowerCase();
+  const label = [
+    getStringValue(row.name),
+    getStringValue(row.vendor),
+    getStringValue(row.vendorName),
+    getStringValue(row.vendor_name),
+    getStringValue(row.product),
+    getStringValue(row.requestUrl),
+    getStringValue(row.request_url),
+    getStringValue(row.representativeUrl),
+    getStringValue(row.representative_url),
+    getStringValue(row.url)
+  ].filter(Boolean).join(" ").toLowerCase();
+  const categoryHas = (pattern: RegExp) => pattern.test(category);
+  const labelHas = (pattern: RegExp) => pattern.test(label);
+  const haystack = `${category} ${label}`;
+
+  if (labelHas(/security|fraud|bot|bot manager|akamai bot|perimeterx|human bot|datadome|forter|cloudflare bot|infrastructure|_abck|bm_sz|ak_bmsc/)) {
+    return "security";
+  }
+  if (labelHas(/performance|rum|real user monitoring|mpulse|go-mpulse|boomerang|new relic|datadog|sentry/)) {
+    return "performance";
+  }
+  if (labelHas(/functional|strictly necessary|necessary|consent_management|cmp|customer_support|cdn|delivery/)) {
+    return "functional";
+  }
+  if (labelHas(/session_replay|session replay|behavioral_analytics|contentsquare|fullstory|hotjar|logrocket|clarity/) || categoryHas(/session_replay|session replay|behavioral_analytics/)) {
+    return "session_replay";
+  }
+  if (labelHas(/advertis|retarget|adtech|targeting|marketing_pixel|social_pixel|doubleclick|google ads|meta pixel|facebook pixel|linkedin insight|tiktok|reddit pixel/) || categoryHas(/advertis|retarget|adtech|targeting|marketing_pixel|social_pixel/)) {
+    return "advertising";
+  }
+  if (categoryHas(/security|fraud|bot|bot manager|akamai bot|perimeterx|human bot|datadome|forter|cloudflare bot|infrastructure/)) {
+    return "security";
+  }
+  if (categoryHas(/performance|rum|real user monitoring|mpulse|go-mpulse|new relic|datadog|sentry/)) {
+    return "performance";
+  }
+  if (labelHas(/analytics|measurement|product_analytics|customer_data_platform|google analytics|google tag manager|googletagmanager|adobe analytics|mixpanel|amplitude|posthog/) || categoryHas(/analytics|measurement|product_analytics|customer_data_platform/)) {
+    return "analytics";
+  }
+  if (categoryHas(/functional|strictly necessary|necessary|consent_management|cmp|customer_support|cdn|delivery/)) {
+    return "functional";
+  }
+  return "unknown";
+}
+
+function getPreconsentPurposeMix(input: {
+  findings: UnifiedFindingDisplayPacket[];
+  projectedFindings?: ProjectedGdprFinding[];
+}) {
+  const rows = getPreconsentTrackingRows(input);
+  const mix = new Map<PreconsentPurposeBucket, string[]>();
+  for (const row of rows) {
+    const bucket = normalizePreconsentPurposeBucket(row);
+    const vendor = getCanonicalVendors([
+      getStringValue(row.name),
+      getStringValue(row.vendor),
+      getStringValue(row.vendorName),
+      getStringValue(row.vendor_name),
+      getStringValue(row.product),
+      getStringValue(row.representativeUrl),
+      getStringValue(row.representative_url),
+      getStringValue(row.requestUrl),
+      getStringValue(row.request_url),
+      getStringValue(row.url)
+    ])[0];
+    mix.set(bucket, uniqueEntityStrings([...(mix.get(bucket) ?? []), vendor]));
+  }
+  return mix;
+}
+
+function buildPreconsentTrackingExplanation(input: {
+  findings: UnifiedFindingDisplayPacket[];
+  projectedFindings?: ProjectedGdprFinding[];
+}) {
+  const purposeMix = getPreconsentPurposeMix(input);
+  const vendorFallback = getPreconsentTrackingVendors(input.findings).slice(0, 8);
+  const advertisingVendors = purposeMix.get("advertising") ?? [];
+  const sessionReplayVendors = purposeMix.get("session_replay") ?? [];
+  const analyticsVendors = purposeMix.get("analytics") ?? [];
+  const performanceVendors = purposeMix.get("performance") ?? [];
+  const securityVendors = purposeMix.get("security") ?? [];
+  const unknownVendors = purposeMix.get("unknown") ?? [];
+  const functionalVendors = purposeMix.get("functional") ?? [];
+
+  if (advertisingVendors.length > 0 || sessionReplayVendors.length > 0) {
+    const vendors = uniqueEntityStrings([...advertisingVendors, ...sessionReplayVendors]).slice(0, 8);
+    return `Advertising/retargeting or behavioral-tracking requests fired before a recorded consent choice${vendors.length > 0 ? `, including ${formatVendorPhrase(vendors)}` : ""}. This is a consent timing/enforcement gap when supported by the retained request evidence.`;
+  }
+
+  if (analyticsVendors.length > 0) {
+    const vendors = uniqueEntityStrings([...analyticsVendors, ...performanceVendors]).slice(0, 8);
+    return `Analytics or performance-measurement requests fired before a recorded consent choice${vendors.length > 0 ? `, including ${formatVendorPhrase(vendors)}` : ""}. Review whether the retained evidence reflects non-essential measurement rather than strictly necessary site operation.`;
+  }
+
+  if (performanceVendors.length > 0 || securityVendors.length > 0 || functionalVendors.length > 0) {
+    const vendors = uniqueEntityStrings([...securityVendors, ...performanceVendors, ...functionalVendors]).slice(0, 8);
+    return `Security/performance vendor activity was observed before a recorded consent choice${vendors.length > 0 ? `, including ${formatVendorPhrase(vendors)}` : ""}. This preserves the timing evidence without classifying the activity as advertising or retargeting.`;
+  }
+
+  if (unknownVendors.length > 0) {
+    return `Third-party vendor activity with unresolved purpose was observed before a recorded consent choice, including ${formatVendorPhrase(unknownVendors.slice(0, 8))}. Review purpose and essentiality before treating it as advertising or retargeting.`;
+  }
+
+  return `Third-party vendor activity was observed before a recorded consent choice${vendorFallback.length > 0 ? `, including ${formatVendorPhrase(vendorFallback)}` : ""}. Review retained request categories before treating it as advertising or retargeting.`;
+}
+
+function hasHighRiskPreconsentTrackingPurpose(input: {
+  findings: UnifiedFindingDisplayPacket[];
+  projectedFindings?: ProjectedGdprFinding[];
+}) {
+  if (getPreconsentTrackingRows(input).length === 0) {
+    return true;
+  }
+  const purposeMix = getPreconsentPurposeMix(input);
+  return (
+    (purposeMix.get("advertising")?.length ?? 0) > 0 ||
+    (purposeMix.get("session_replay")?.length ?? 0) > 0 ||
+    (purposeMix.get("analytics")?.length ?? 0) > 0
+  );
+}
+
 function getPreconsentStorageSummary(findings: UnifiedFindingDisplayPacket[]) {
   const rows = getFindingEntityRows(findings, [
     "preconsent_cookie_evidence",
@@ -1511,6 +1684,7 @@ function specializeChecklistRow(input: {
   definition: ChecklistRowDefinition;
   evidenceRefs: string[];
   findings: UnifiedFindingDisplayPacket[];
+  projectedFindings?: ProjectedGdprFinding[];
   status: GdprEprivacyCoverageChecklistStatus;
   coverageOutcome?: GdprEprivacyCoverageOutcome;
 }) {
@@ -1549,13 +1723,18 @@ function specializeChecklistRow(input: {
     }
 
   if (input.definition.id === "pre_consent_third_party_tracking" && input.status === "Gap observed") {
-    const vendors = getPreconsentTrackingVendors(input.findings).slice(0, 8);
+    const highRiskPurposeRetained = hasHighRiskPreconsentTrackingPurpose({
+      findings: input.findings,
+      projectedFindings: input.projectedFindings
+    });
     return {
       evidenceRefs: input.evidenceRefs,
-      explanation:
-        `Advertising and analytics requests fired before a recorded consent choice${vendors.length > 0 ? `, including ${formatVendorPhrase(vendors)}` : ""}. This is a consent timing/enforcement gap even when a consent banner and reject path are present.`,
+      explanation: buildPreconsentTrackingExplanation({
+        findings: input.findings,
+        projectedFindings: input.projectedFindings
+      }),
       label: input.definition.label,
-      status: "Gap observed" as const
+      status: highRiskPurposeRetained ? "Gap observed" as const : "Review signal" as const
     };
   }
 
@@ -2537,6 +2716,7 @@ export function deriveGdprEprivacyCoverageChecklist(
         definition,
         evidenceRefs,
         findings: matchingFindings,
+        projectedFindings: matchingProjectedFindings,
         status
       });
       return buildChecklistItem({
@@ -2571,6 +2751,7 @@ export function deriveGdprEprivacyCoverageChecklist(
         definition,
         evidenceRefs,
         findings: [],
+        projectedFindings: matchingProjectedFindings,
         status
       });
       return buildChecklistItem({
@@ -2598,6 +2779,7 @@ export function deriveGdprEprivacyCoverageChecklist(
         definition,
         evidenceRefs: coverageOutcome.evidenceRefs,
         findings: [],
+        projectedFindings: [],
         status: coverageOutcome.status
       });
       return buildChecklistItem({

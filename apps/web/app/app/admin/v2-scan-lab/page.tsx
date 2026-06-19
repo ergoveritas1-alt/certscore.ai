@@ -172,7 +172,7 @@ function ScanPrompt({
   const showStatusMessage = (scanStatus === "failed" || scanStatus === "invalid") && displayScanMessage.length > 0;
   const compact = variant === "compact";
   return (
-    <Card className={`overflow-visible border-slate-200 bg-white shadow-sm ${compact ? "rounded-2xl" : "rounded-[1.25rem]"}`}>
+    <Card className={`overflow-visible border-2 border-sky-500 bg-white shadow-[0_14px_34px_rgba(14,165,233,0.12)] ${compact ? "rounded-2xl" : "rounded-[1.25rem]"}`}>
       <CardContent className="space-y-4 p-0">
         <form action={submitV2ScanLabAction} className="group/scan-form relative">
           <div className={`flex flex-row items-center gap-0 ${compact ? "min-h-12" : "min-h-16"}`}>
@@ -180,7 +180,7 @@ function ScanPrompt({
               <span className="sr-only">URL or domain</span>
               <input
                 className={`w-full min-w-0 border-0 bg-white text-slate-950 outline-none placeholder:text-slate-400 focus:ring-0 ${
-                  compact ? "h-12 rounded-2xl px-4 text-sm" : "h-16 rounded-[1.25rem] px-6 text-lg"
+                  compact ? "h-12 rounded-2xl px-4 text-sm font-semibold" : "h-16 rounded-[1.25rem] px-6 text-lg font-semibold"
                 }`}
                 name="url"
                 placeholder="Enter another site"

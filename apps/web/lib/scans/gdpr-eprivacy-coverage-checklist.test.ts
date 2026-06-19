@@ -1498,6 +1498,112 @@ test("deriveGdprEprivacyCoverageChecklist retains executive evidence highlights 
   ]);
 });
 
+test("deriveGdprEprivacyCoverageChecklist does not describe security and performance vendors as advertising", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    projectedFindings: [
+      {
+        evidenceDetails: {
+          vendors: [
+            {
+              category: "security",
+              firstSeenMs: 210,
+              name: "Akamai Bot Manager / Edge",
+              preConsent: true,
+              representativeUrl: "https://www.mcdonalds.com/_abck"
+            },
+            {
+              category: "performance_monitoring",
+              firstSeenMs: 240,
+              name: "Akamai mPulse",
+              preConsent: true,
+              representativeUrl: "https://c.go-mpulse.net/boomerang/config.js"
+            }
+          ]
+        } as Record<string, unknown>,
+        id: "preconsent_tracking",
+        label: "Pre-consent tracking"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "pre_consent_third_party_tracking");
+  assert.match(row.explanation, /Security\/performance vendor activity was observed/i);
+  assert.match(row.explanation, /Akamai Bot Manager \/ Edge/i);
+  assert.match(row.explanation, /Akamai mPulse/i);
+  assert.doesNotMatch(row.explanation, /Advertising and analytics|Advertising\/retargeting/i);
+});
+
+test("deriveGdprEprivacyCoverageChecklist does not let generic advertising categories override Akamai security evidence", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    projectedFindings: [
+      {
+        evidenceDetails: {
+          vendors: [
+            {
+              category: "advertising",
+              firstSeenMs: 1733,
+              name: "Akamai Bot Manager / Edge",
+              preConsent: true,
+              representativeUrl: "https://www.mcdonalds.com/_abck"
+            }
+          ]
+        } as Record<string, unknown>,
+        id: "preconsent_tracking",
+        label: "Pre-consent tracking"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "pre_consent_third_party_tracking");
+  assert.equal(row.label, "Pre-consent third-party tracking observed");
+  assert.equal(row.status, "Review signal");
+  assert.match(row.explanation, /Security\/performance vendor activity was observed/i);
+  assert.match(row.explanation, /Akamai Bot Manager \/ Edge/i);
+  assert.doesNotMatch(row.explanation, /Advertising\/retargeting/i);
+});
+
+test("deriveGdprEprivacyCoverageChecklist keeps advertising phrasing when adtech evidence is retained", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    projectedFindings: [
+      {
+        evidenceDetails: {
+          vendors: [
+            {
+              category: "advertising",
+              firstSeenMs: 311,
+              name: "Google Ads / DoubleClick",
+              preConsent: true,
+              representativeUrl: "https://googleads.g.doubleclick.net/pagead/id"
+            },
+            {
+              category: "performance_monitoring",
+              firstSeenMs: 330,
+              name: "Akamai mPulse",
+              preConsent: true,
+              representativeUrl: "https://c.go-mpulse.net/boomerang/config.js"
+            }
+          ]
+        } as Record<string, unknown>,
+        id: "preconsent_tracking",
+        label: "Pre-consent tracking"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "pre_consent_third_party_tracking");
+  assert.match(row.explanation, /Advertising\/retargeting or behavioral-tracking requests fired/i);
+  assert.match(row.explanation, /Google Ads \/ DoubleClick/i);
+});
+
 test("deriveGdprEprivacyCoverageChecklist keeps pre-consent tracking highlights focused on timing evidence", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,

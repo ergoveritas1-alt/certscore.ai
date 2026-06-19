@@ -2,7 +2,7 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
-import { getAnonymousScanById } from "./get-scan-by-id";
+import { getAnonymousScanById, getScanById } from "./get-scan-by-id";
 import { asAccessPostureClass, buildOpsInterruptionSummary } from "./ops-interruption-summary";
 import { OPS_SCAN_STATUS_FINDING_IDS } from "./ops-status-finding-ids";
 
@@ -92,7 +92,7 @@ function buildUnknownReportReadiness() {
   };
 }
 
-async function loadOpsScanStatusCore(scanId: string) {
+async function loadOpsScanStatusCore(input: { organizationId: string | null; scanId: string }) {
   const [scan, events, snapshot] = await Promise.all([
     queryOne<OpsScanStatusRow>(
       `select s.id,
@@ -115,8 +115,8 @@ async function loadOpsScanStatusCore(scanId: string) {
          from scans s
          left join domains d on d.id = s.domain_id
         where s.id = $1
-          and s.organization_id is null`,
-      [scanId],
+          and s.organization_id is not distinct from $2::uuid`,
+      [input.scanId, input.organizationId],
       { readOnly: true }
     ),
     query<OpsScanEventRow>(
@@ -125,7 +125,7 @@ async function loadOpsScanStatusCore(scanId: string) {
         where scan_id = $1
         order by created_at desc
         limit 12`,
-      [scanId],
+      [input.scanId],
       { readOnly: true }
     ).then((result) => result.rows),
     queryOne<OpsSnapshotRow>(
@@ -155,7 +155,7 @@ async function loadOpsScanStatusCore(scanId: string) {
               total_signals
          from scan_snapshots
         where scan_id = $1`,
-      [scanId],
+      [input.scanId],
       { readOnly: true }
     )
   ]);
@@ -243,25 +243,20 @@ async function loadOpsScanStatusCore(scanId: string) {
   };
 }
 
-export async function getAnonymousOpsScanStatus(input: { includeFindings?: boolean; scanId: string }) {
-  const core = await loadOpsScanStatusCore(input.scanId);
+type OpsScanStatusCore = NonNullable<Awaited<ReturnType<typeof loadOpsScanStatusCore>>>;
+type OpsScanStatusScanRecord = NonNullable<Awaited<ReturnType<typeof getAnonymousScanById>>>;
 
-  if (!core) {
-    return null;
-  }
+function buildOpsStatusWithoutFindings(core: OpsScanStatusCore) {
+  const { scannerRuntime: _scannerRuntime, ...publicCore } = core;
+  return {
+    ...publicCore,
+    findingCounts: buildEmptyFindingCounts(),
+    reportReadiness: buildUnknownReportReadiness(),
+    topFindings: []
+  };
+}
 
-  if (!input.includeFindings) {
-    const { scannerRuntime: _scannerRuntime, ...publicCore } = core;
-    return {
-      ...publicCore,
-      findingCounts: buildEmptyFindingCounts(),
-      reportReadiness: buildUnknownReportReadiness(),
-      topFindings: []
-    };
-  }
-
-  const scanRecord = await getAnonymousScanById(input.scanId);
-
+function buildOpsStatusWithFindings(core: OpsScanStatusCore, scanRecord: OpsScanStatusScanRecord | null) {
   if (!scanRecord) {
     return {
       ...core,
@@ -299,4 +294,47 @@ export async function getAnonymousOpsScanStatus(input: { includeFindings?: boole
       severity: finding.severity
     }))
   };
+}
+
+export async function getAnonymousOpsScanStatus(input: { includeFindings?: boolean; scanId: string }) {
+  const core = await loadOpsScanStatusCore({ organizationId: null, scanId: input.scanId });
+
+  if (!core) {
+    return null;
+  }
+
+  if (!input.includeFindings) {
+    return buildOpsStatusWithoutFindings(core);
+  }
+
+  const scanRecord = await getAnonymousScanById(input.scanId);
+  return buildOpsStatusWithFindings(core, scanRecord);
+}
+
+export async function getOrganizationOpsScanStatus(input: {
+  includeFindings?: boolean;
+  organizationId: string;
+  scanId: string;
+  viewerEmail?: string | null;
+}) {
+  const core = await loadOpsScanStatusCore({
+    organizationId: input.organizationId,
+    scanId: input.scanId
+  });
+
+  if (!core) {
+    return null;
+  }
+
+  if (!input.includeFindings) {
+    return buildOpsStatusWithoutFindings(core);
+  }
+
+  const scanRecord = await getScanById({
+    organizationId: input.organizationId,
+    scanId: input.scanId,
+    viewerEmail: input.viewerEmail
+  });
+
+  return buildOpsStatusWithFindings(core, scanRecord);
 }

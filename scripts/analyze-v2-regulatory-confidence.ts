@@ -1381,7 +1381,7 @@ const DEBUG_CONFIDENCE_ROW_EXPECTATIONS: Array<{
     rowId: "cookie_notice_availability",
   },
   {
-    expectedSuggestions: ["Run consent-flow coverage for reject/decline path evidence"],
+    expectedSuggestions: ["Use internal retained/replay review for reject/decline path evidence"],
     rowId: "reject_all_path_availability",
   },
   {

@@ -82,7 +82,7 @@ test("maps review-engine regulatory rows into production regulatory checklist ca
   assert.equal(postOptOutTracking?.debugConfidence.score, 7);
   assert.ok(
     postOptOutTracking?.debugConfidence.improveConfidence.includes(
-      "Capture opt-out interaction and post-choice tracking deltas",
+      "Use retained opt-out proof and post-choice tracking deltas when already available",
     ),
   );
 });
@@ -254,9 +254,9 @@ test("debug confidence suggestions are row-aware for missing scanner coverage", 
   const rejectPath = checklist.gdprEprivacyItems.find((item) => item.id === "reject_all_path_availability");
   assert.equal(rejectPath?.debugConfidence.score, 1);
   assert.deepEqual(rejectPath?.debugConfidence.improveConfidence, [
-    "Run consent-flow coverage for reject/decline path evidence",
-    "Retain successful reject-path interaction evidence",
-    "Retain whether reject was equally reachable from the first layer",
+    "Use internal retained/replay review for reject/decline path evidence",
+    "Retain internal reject-path proof when already available",
+    "Retain visible first-layer reject-path availability without clicking",
   ]);
 
   const doNotSellShare = checklist.californiaPrivacyItems.find((item) => item.id === "do_not_sell_share_availability");

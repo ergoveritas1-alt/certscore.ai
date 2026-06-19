@@ -136,11 +136,6 @@ export function normalizeLocalV2DagRunViaLambda(value: unknown, env: LocalV2DagS
 
   const regionEnv = lambdaRegionEnv({ env, scanFrom });
   const resultQueueUrl = compactEnvValue(regionEnv.resultQueueUrl);
-  if (shouldUseLocalV2DagSimulatedLambda(env)) {
-    return regionEnv.enabled === "true" &&
-      Boolean(compactEnvValue(regionEnv.functionName));
-  }
-
   return regionEnv.enabled === "true" &&
     Boolean(compactEnvValue(regionEnv.functionName)) &&
     Boolean(resultQueueUrl) &&
@@ -153,11 +148,16 @@ export function getLocalV2DagLambdaTargetEnvironment(
   return env.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV === "production" ? "production" : "local";
 }
 
-export function getLocalV2DagLambdaConfiguration(env: LocalV2DagScanEnv = process.env, scanFrom?: ScanFrom, options: { forceSimulatedLocalLambda?: boolean } = {}) {
+export function getLocalV2DagLambdaConfiguration(
+  env: LocalV2DagScanEnv = process.env,
+  scanFrom?: ScanFrom,
+  options: { allowSimulatedLocalLambda?: boolean; forceSimulatedLocalLambda?: boolean } = {}
+) {
   const missing: string[] = [];
   const region = getLocalV2DagLambdaAwsRegionForScanFrom(scanFrom);
   const regionEnv = lambdaRegionEnv({ env, scanFrom });
-  const simulatedLocalLambda = options.forceSimulatedLocalLambda || shouldUseLocalV2DagSimulatedLambda(env);
+  const simulatedLocalLambda = options.forceSimulatedLocalLambda ||
+    (options.allowSimulatedLocalLambda === true && shouldUseLocalV2DagSimulatedLambda(env));
   const enabled = simulatedLocalLambda ? true : regionEnv.enabled === "true";
   const functionName = simulatedLocalLambda
     ? compactEnvValue(regionEnv.functionName) ?? "local-v2-dag-lambda-simulator"
@@ -190,7 +190,11 @@ export function getLocalV2DagLambdaConfiguration(env: LocalV2DagScanEnv = proces
   };
 }
 
-export function assertLocalV2DagLambdaConfigured(env: LocalV2DagScanEnv = process.env, scanFrom?: ScanFrom, options: { forceSimulatedLocalLambda?: boolean } = {}) {
+export function assertLocalV2DagLambdaConfigured(
+  env: LocalV2DagScanEnv = process.env,
+  scanFrom?: ScanFrom,
+  options: { allowSimulatedLocalLambda?: boolean; forceSimulatedLocalLambda?: boolean } = {}
+) {
   const config = getLocalV2DagLambdaConfiguration(env, scanFrom, options);
   if (config.missing.length > 0) {
     throw new Error(`Lambda v2 DAG scanning is not configured: ${config.missing.join(", ")}`);
@@ -219,6 +223,7 @@ export function applyLocalV2DagScanConfig(
   const lambdaConfig =
     options.runViaLambda || shouldForceSimulatedLocalLambda
       ? assertLocalV2DagLambdaConfigured(env, options.scanFrom ?? undefined, {
+          allowSimulatedLocalLambda: shouldForceSimulatedLocalLambda,
           forceSimulatedLocalLambda: shouldForceSimulatedLocalLambda
         })
       : null;
