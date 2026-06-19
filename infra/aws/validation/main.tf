@@ -738,7 +738,7 @@ resource "aws_ecs_task_definition" "web" {
       name        = "validation-scheduler"
       image       = "${aws_ecr_repository.worker.repository_url}:${var.image_tag}"
       essential   = true
-      command     = ["pnpm", "--filter", "@website-signal-risk-scanner/validation-worker", "start:scheduler"]
+      command     = ["node", "--enable-source-maps", "./apps/validation-worker/dist/apps/validation-worker/src/validation/run-scheduler.js"]
       environment = local.worker_container_environment
       secrets     = local.worker_container_secrets
       logConfiguration = {
@@ -774,7 +774,6 @@ resource "aws_ecs_task_definition" "worker" {
       name        = "validation-worker"
       image       = "${aws_ecr_repository.worker.repository_url}:${var.image_tag}"
       essential   = true
-      command     = ["pnpm", "--filter", "@website-signal-risk-scanner/validation-worker", "start"]
       environment = local.worker_container_environment
       secrets     = local.worker_container_secrets
       logConfiguration = {
