@@ -35,7 +35,9 @@ COPY packages/web-bot-auth/package.json ./packages/web-bot-auth/package.json
 
 RUN --mount=type=cache,id=wc01-web-pnpm-store,target=/pnpm/store \
   pnpm config set store-dir /pnpm/store \
-  && pnpm install --frozen-lockfile --filter @website-signal-risk-scanner/web...
+  && pnpm install --frozen-lockfile \
+    --filter @website-signal-risk-scanner/web... \
+    --filter @certscore/vendor-resolver...
 
 COPY apps/web ./apps/web
 COPY packages/shared ./packages/shared
