@@ -129,6 +129,7 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
           <ScanStatusAutoRefresh
             pendingBrowserExtensionNormalization={pendingBrowserExtensionNormalization}
             pendingPostCompletionWork={pendingPostCompletionWork}
+            scanId={scanRecord.scan.id}
             status={scanRecord.scan.status}
           />
         </div>

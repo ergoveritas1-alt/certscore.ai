@@ -142,9 +142,9 @@ export function LocalV2DagScanProgressCard({
     <section aria-live="polite" className="rounded-3xl border border-sky-200 bg-white p-5 shadow-[0_18px_60px_-32px_rgba(14,165,233,0.45)]">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-600">Local v2 DAG scan in progress</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-600">CertScore v2 DAG scan in progress</p>
           <p className="text-sm leading-6 text-slate-600">
-            Running the artifact-only CertScore v2 parallel-path scanner for localhost testing.
+            Running the artifact-only CertScore v2 parallel-path scanner.
           </p>
         </div>
         <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">

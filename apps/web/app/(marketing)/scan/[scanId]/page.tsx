@@ -147,6 +147,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
             <ScanStatusAutoRefresh
               pendingBrowserExtensionNormalization={pendingBrowserExtensionNormalization}
               pendingPostCompletionWork={pendingPostCompletionWork}
+              scanId={displayScanRecord.scan.id}
               silent={Boolean(localV2DagReportInput)}
               status={displayScanRecord.scan.status}
             />

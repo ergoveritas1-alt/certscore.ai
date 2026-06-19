@@ -6,6 +6,7 @@ import React, { useEffect, useRef } from "react";
 type ScanStatusAutoRefreshProps = {
   pendingBrowserExtensionNormalization?: boolean;
   pendingPostCompletionWork?: boolean;
+  scanId?: string;
   silent?: boolean;
   status: string;
 };
@@ -23,6 +24,7 @@ export function shouldAutoRefreshScanStatus(input: ScanStatusAutoRefreshProps) {
 export function ScanStatusAutoRefresh({
   pendingBrowserExtensionNormalization = false,
   pendingPostCompletionWork = false,
+  scanId,
   silent = false,
   status
 }: ScanStatusAutoRefreshProps) {
@@ -44,7 +46,7 @@ export function ScanStatusAutoRefresh({
 
   return (
     <>
-      {typeof window !== "undefined" ? <ScanStatusRefreshEffect shouldRefresh={shouldRefresh} /> : null}
+      {typeof window !== "undefined" ? <ScanStatusRefreshEffect scanId={scanId} shouldRefresh={shouldRefresh} status={status} /> : null}
       {silent ? null : (
         <p className="text-sm text-slate-500">
           Refreshing status automatically while this scan is {statusLabel}.
@@ -54,7 +56,27 @@ export function ScanStatusAutoRefresh({
   );
 }
 
-function ScanStatusRefreshEffect({ shouldRefresh }: { shouldRefresh: boolean }) {
+export function isTerminalScanStatus(status: string | null | undefined) {
+  return (
+    status === "completed" ||
+    status === "completed_limited" ||
+    status === "failed" ||
+    status === "canceled" ||
+    status === "cancelled" ||
+    status === "expired" ||
+    status === "rate_limited"
+  );
+}
+
+function ScanStatusRefreshEffect({
+  scanId,
+  shouldRefresh,
+  status
+}: {
+  scanId?: string;
+  shouldRefresh: boolean;
+  status: string;
+}) {
   const router = useRouter();
   const lastInteractionAtRef = useRef(Date.now());
   const AUTO_REFRESH_INTERACTION_GRACE_MS = 12_000;
@@ -101,6 +123,52 @@ function ScanStatusRefreshEffect({ shouldRefresh }: { shouldRefresh: boolean }) 
       window.clearInterval(intervalId);
     };
   }, [router, shouldRefresh]);
+
+  useEffect(() => {
+    if (!shouldRefresh || !scanId || isTerminalScanStatus(status)) {
+      return;
+    }
+
+    let disposed = false;
+    let inFlight = false;
+
+    const pollTerminalStatus = async () => {
+      if (disposed || inFlight || document.visibilityState !== "visible" || !navigator.onLine) {
+        return;
+      }
+
+      inFlight = true;
+      try {
+        const response = await fetch(`/api/scan-status/${encodeURIComponent(scanId)}?includeFindings=0`, {
+          cache: "no-store"
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json() as { scan?: { status?: unknown } };
+        const nextStatus = typeof payload.scan?.status === "string" ? payload.scan.status : null;
+        if (!disposed && isTerminalScanStatus(nextStatus)) {
+          window.location.reload();
+        }
+      } catch {
+        // Ignore transient status polling failures; the router refresh loop keeps retrying.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void pollTerminalStatus();
+    const intervalId = window.setInterval(() => {
+      void pollTerminalStatus();
+    }, 2500);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, [scanId, shouldRefresh, status]);
 
   return null;
 }
