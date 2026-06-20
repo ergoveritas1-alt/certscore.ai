@@ -1115,7 +1115,7 @@ export function buildLocalV2DagLambdaScanTuning(env: NodeJS.ProcessEnv = process
       min: 500
     }),
     scenarioConcurrency: boundedIntegerEnv(env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY, {
-      defaultValue: 2,
+      defaultValue: 1,
       max: 4,
       min: 1
     }),
@@ -1127,7 +1127,7 @@ function scenarioResourceModeEnv(value: string | undefined): "normal" | "lean" |
   if (value === "normal" || value === "lean" || value === "cmp_safe") {
     return value;
   }
-  return "normal";
+  return "cmp_safe";
 }
 
 function consentFlowScreenshotModeEnv(value: string | undefined): "auto" | "none" {

@@ -296,6 +296,10 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     awsRegion: "eu-west-1",
     callbackCorrelationId: "scan_id",
     contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
+    debugOverrides: {
+      scenarioConcurrency: 1,
+      scenarioResourceMode: "cmp_safe"
+    },
     dispatchState: "pending_dispatch",
     functionName: "certscore-v2-dag-dev",
     localOnly: true,
@@ -492,6 +496,10 @@ test("queued full-scan config can dispatch v2 DAG Lambda outside localhost when 
   assert.equal(v2DagLambda?.localOnly, false);
   assert.equal(v2DagLambda?.targetEnvironment, "production");
   assert.equal(v2DagLambda?.productionFindingIntegration, false);
+  assert.deepEqual(v2DagLambda?.debugOverrides, {
+    scenarioConcurrency: 1,
+    scenarioResourceMode: "cmp_safe"
+  });
 });
 
 test("queued full-scan Lambda option fails closed when AWS handoff env is missing", () => {

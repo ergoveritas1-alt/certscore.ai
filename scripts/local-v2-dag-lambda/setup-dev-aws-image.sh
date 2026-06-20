@@ -9,7 +9,7 @@ role_name="${CERTSCORE_V2_DAG_LAMBDA_ROLE_NAME:-${prefix}-role}"
 image_uri="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_URI:-${1:-}}"
 artifact_bucket="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET:-}"
 artifact_prefix="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX:-v2-dag-lambda/local}"
-memory_size="${CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-2048}"
+memory_size="${CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-3008}"
 
 case "$region" in
   eu-central-1) location_env_prefix="EU_DE" ;;
@@ -179,20 +179,29 @@ const variables = {
   CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET: process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET,
   CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX: process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX,
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
-  CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE: process.env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE?.trim() || "normal",
   CERTSCORE_CHROMIUM_EXECUTABLE_PATH: "/usr/bin/chromium"
 };
 
-for (const key of [
-  "CERTSCORE_V2_DAG_LAMBDA_ACTION_FINAL_SETTLE_MS",
-  "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS",
-  "CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE",
-  "CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE",
-  "CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE",
-  "CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_MODE",
-  "CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS",
-  "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY"
-]) {
+const conservativeDefaults = {
+  CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS: "true",
+  CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE: "none",
+  CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE: "webmd",
+  CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
+  CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_MODE: "always",
+  CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS: "5000",
+  CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY: "1",
+  CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE: "cmp_safe"
+};
+
+for (const [key, defaultValue] of Object.entries(conservativeDefaults)) {
+  if (process.env[key] && String(process.env[key]).trim()) {
+    variables[key] = String(process.env[key]).trim();
+  } else {
+    variables[key] = defaultValue;
+  }
+}
+
+for (const key of ["CERTSCORE_V2_DAG_LAMBDA_ACTION_FINAL_SETTLE_MS"]) {
   if (process.env[key] && String(process.env[key]).trim()) {
     variables[key] = String(process.env[key]).trim();
   } else if (existing[key] && String(existing[key]).trim()) {

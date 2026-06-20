@@ -1050,6 +1050,140 @@ test("materializeLocalV2DagScanDetail promotes retained full-viewport visual err
   }
 });
 
+test("materializeLocalV2DagScanDetail resolves mirrored Lambda screenshot paths for visual error shells", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const scanId = "cnn-lambda-visual-error-shell-fixture";
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/lambda-visual-error-shell-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "screenshot-pre-consent.png"), syntheticPngHeader(1366, 900, 6_925));
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-20T16:45:20.000Z",
+      consentUiObservations: [
+        {
+          basis: ["bounded_capture_timeout_or_failure", "dom_text_fallback_after_consent_ui_timeout"],
+          confidence: 0.5,
+          likelyPresent: false,
+          observationId: "consent_ui_pre_consent",
+          textExcerpt: "Unknown Error",
+          visibleChoiceLabels: []
+        }
+      ],
+      cookieEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          domain: ".cnn.com",
+          firstParty: true,
+          name: "OptanonConsent",
+          timestampMs: 1200,
+          valueHash: "first-party-cookie"
+        }
+      ],
+      modulesRun: [],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "cnn.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 100,
+          url: "https://cnn.com/"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.cnn.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 400,
+          url: "https://www.cnn.com/"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "edition.cnn.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 900,
+          url: "https://edition.cnn.com/"
+        }
+      ],
+      normalizedUrl: "https://cnn.com/",
+      policySurfaceObservations: [],
+      runtimeCoverage: {
+        coverageStatus: "limited_partial",
+        fallbackModesUsed: [],
+        limitationKeys: ["pre_consent_runtime_partial"],
+        notes: [],
+        observationCounts: {
+          cookieEvents: 14,
+          cookiesBeforeConsent: 4,
+          networkEvents: 3,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 0
+        },
+        silentEmpty: false
+      },
+      runtimeTimeline: [],
+      scanId,
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 4827,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "network_idle",
+          path: `/tmp/certscore-v2-dag-lambda/${scanId}/screenshot-pre-consent.png`,
+          url: "https://edition.cnn.com/"
+        }
+      ],
+      startedAt: "2026-06-20T16:44:35.000Z",
+      url: "https://cnn.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "cnn.com",
+        scanConfigJson: {
+          hostname: "cnn.com",
+          normalizedUrl: "https://cnn.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const scanNoGoAssessment = detail.runtimeArtifacts?.scan_no_go_assessment as Record<string, unknown> | undefined;
+    const visualArtifacts = detail.runtimeArtifacts?.visual_evidence_artifacts as Array<Record<string, unknown>> | undefined;
+
+    assert.equal(scanNoGoAssessment?.decision, "no_go");
+    assert.deepEqual(scanNoGoAssessment?.reasonCodes, ["retained_visual_error_shell", "scan_no_go_corroborated"]);
+    assert.equal(visualArtifacts?.[0]?.status, "capture_failed");
+    assert.equal(visualArtifacts?.[0]?.status_reason, "pre_consent_error_shell_captured");
+    assert.equal(detail.snapshot?.homepage_fetch_status, "blocked");
+    assert.equal(detail.snapshot?.coverage_level, "limited_none");
+    assert.equal(detail.scan.pagesScanned, 0);
+    assert.equal(detail.signals.length, 0);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail does not promote missing screenshots when runtime evidence was retained", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

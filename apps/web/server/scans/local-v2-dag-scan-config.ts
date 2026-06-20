@@ -20,6 +20,11 @@ export type LocalV2DagLambdaDebugOverrides = {
   strongEvidenceMode?: "webmd";
 };
 
+export const LOCAL_V2_DAG_LAMBDA_CONSERVATIVE_PRECONSENT_DEFAULTS = {
+  scenarioConcurrency: 1,
+  scenarioResourceMode: "cmp_safe"
+} satisfies LocalV2DagLambdaDebugOverrides;
+
 export type LocalV2DagScanEnv = {
   CERTSCORE_V2_DAG_LAMBDA_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_EU_DE_ENABLED?: string;
@@ -203,6 +208,13 @@ export function assertLocalV2DagLambdaConfigured(
   return config;
 }
 
+function lambdaDebugOverridesForDispatch(overrides?: LocalV2DagLambdaDebugOverrides | null) {
+  return {
+    ...LOCAL_V2_DAG_LAMBDA_CONSERVATIVE_PRECONSENT_DEFAULTS,
+    ...(overrides ?? {})
+  } satisfies LocalV2DagLambdaDebugOverrides;
+}
+
 export function applyLocalV2DagScanConfig(
   config: SharedScanConfig,
   env?: LocalV2DagScanEnv,
@@ -255,7 +267,7 @@ export function applyLocalV2DagScanConfig(
               contractVersion: lambdaConfig.contractVersion,
               dispatchState: "pending_dispatch",
               functionName: lambdaConfig.functionName,
-              ...(options.lambdaDebugOverrides ? { debugOverrides: options.lambdaDebugOverrides } : {}),
+              debugOverrides: lambdaDebugOverridesForDispatch(options.lambdaDebugOverrides),
               localOnly: lambdaConfig.targetEnvironment === "local",
               orchestrationMode: lambdaConfig.orchestrationMode,
               processor: LOCAL_V2_DAG_SCAN_PROCESSOR,

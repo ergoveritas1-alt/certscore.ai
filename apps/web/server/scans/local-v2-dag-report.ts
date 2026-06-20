@@ -164,6 +164,7 @@ function readPngDimensions(filePath: string): { height: number; width: number } 
 function isLikelyRetainedVisualErrorShell(input: {
   bundle: CanonicalEvidenceBundle;
   lowRuntimeActivity: boolean;
+  localOutDir?: string | null;
   screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number] | null;
 }) {
   const screenshotPath = getString(input.screenshot?.path);
@@ -174,32 +175,56 @@ function isLikelyRetainedVisualErrorShell(input: {
     return false;
   }
 
-  try {
-    const fileSize = statSync(screenshotPath).size;
-    const dimensions = readPngDimensions(screenshotPath);
-    const runtimeCounts = input.bundle.runtimeCoverage?.observationCounts;
-    const noMeaningfulRuntime =
-      (runtimeCounts?.thirdPartyRequests ?? 0) === 0 &&
-      (runtimeCounts?.normalizedVendors ?? 0) === 0 &&
-      (input.bundle.normalizedVendorObservations ?? []).length === 0;
-    const noConsentSurface = !(input.bundle.consentUiObservations ?? []).some((observation) =>
-      observation.likelyPresent === true ||
-      (observation.visibleChoiceLabels ?? []).length > 0 ||
-      (observation.controls ?? []).length > 0
-    );
-
-    return Boolean(
-      dimensions &&
-      dimensions.width >= 900 &&
-      dimensions.height >= 600 &&
-      fileSize > 256 &&
-      fileSize <= 25_000 &&
-      noMeaningfulRuntime &&
-      noConsentSurface
-    );
-  } catch {
+  const runtimeCounts = input.bundle.runtimeCoverage?.observationCounts;
+  const noMeaningfulRuntime =
+    (runtimeCounts?.thirdPartyRequests ?? 0) === 0 &&
+    (runtimeCounts?.normalizedVendors ?? 0) === 0 &&
+    (input.bundle.normalizedVendorObservations ?? []).length === 0;
+  const noConsentSurface = !(input.bundle.consentUiObservations ?? []).some((observation) =>
+    observation.likelyPresent === true ||
+    (observation.visibleChoiceLabels ?? []).length > 0 ||
+    (observation.controls ?? []).length > 0
+  );
+  if (!noMeaningfulRuntime || !noConsentSurface) {
     return false;
   }
+
+  const errorShellTextObserved = (input.bundle.consentUiObservations ?? []).some((observation) => {
+    const textExcerpt = getString(observation.textExcerpt)?.toLowerCase() ?? "";
+    return observation.likelyPresent === false &&
+      /^(?:unknown error|internal server error|service unavailable)$/i.test(textExcerpt);
+  });
+  const candidatePaths = uniqueStrings([
+    screenshotPath,
+    input.localOutDir ? path.join(input.localOutDir, path.basename(screenshotPath)) : null
+  ]);
+
+  for (const candidatePath of candidatePaths) {
+    try {
+      const fileSize = statSync(candidatePath).size;
+      const dimensions = readPngDimensions(candidatePath);
+      if (
+        dimensions &&
+        dimensions.width >= 900 &&
+        dimensions.height >= 600 &&
+        fileSize > 256 &&
+        fileSize <= 25_000
+      ) {
+        return true;
+      }
+    } catch {
+      // Try the next candidate path.
+    }
+  }
+
+  if (errorShellTextObserved) {
+    return Boolean(
+      input.bundle.screenshots?.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent") &&
+      input.lowRuntimeActivity
+    );
+  }
+
+  return false;
 }
 
 function hostnameFromUrl(value: string | null | undefined) {
@@ -951,6 +976,7 @@ function localV2VisualCapture(bundle: CanonicalEvidenceBundle) {
 function buildLocalV2ScanNoGoAssessment(input: {
   bundle: CanonicalEvidenceBundle;
   consentSurfaceLikelyPresent: boolean;
+  localOutDir?: string | null;
   runtimeActivityObserved: boolean;
   lowRuntimeActivity: boolean;
 }) {
@@ -966,6 +992,7 @@ function buildLocalV2ScanNoGoAssessment(input: {
   const visualCaptureFailed = screenshotPlaceholderUsed && (pageContextClosed || visualCapture.failureReason === "placeholder_used");
   const retainedVisualErrorShell = isLikelyRetainedVisualErrorShell({
     bundle: input.bundle,
+    localOutDir: input.localOutDir,
     lowRuntimeActivity: input.lowRuntimeActivity,
     screenshot
   });
@@ -1054,7 +1081,7 @@ function buildLocalV2ScanNoGoAssessment(input: {
 function buildMaterializedLocalV2Detail(
   scanRecord: ScanDetailResponse,
   bundle: CanonicalEvidenceBundle,
-  options: { scanArtifactUri?: string | null } = {}
+  options: { localOutDir?: string | null; scanArtifactUri?: string | null } = {}
 ): ScanDetailResponse {
   const requestedHost = scanRecord.scan.domainHostname ?? hostnameFromUrl(bundle.normalizedUrl ?? bundle.url);
   const rootDomain = registrableDomain(requestedHost);
@@ -1098,6 +1125,7 @@ function buildMaterializedLocalV2Detail(
   const localV2NoGo = buildLocalV2ScanNoGoAssessment({
     bundle,
     consentSurfaceLikelyPresent,
+    localOutDir: options.localOutDir,
     runtimeActivityObserved: preconsentCookies.length > 0 || vendorRows.length > 0 || networkEvents.length > 3 || cookieEvents.length > 0,
     lowRuntimeActivity: networkEvents.length <= 3 && thirdPartyRequests.length === 0 && vendorRows.length === 0
   });
@@ -1564,5 +1592,8 @@ export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResp
   const bundle = localBundle ?? (input.scanArtifactUri
     ? await readLocalV2DagBundleFromS3(input.scanArtifactUri)
     : null);
-  return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle, { scanArtifactUri: input.scanArtifactUri }) : scanRecord;
+  return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle, {
+    localOutDir: shouldReadLocalOutDir ? input.outDir : null,
+    scanArtifactUri: input.scanArtifactUri
+  }) : scanRecord;
 }

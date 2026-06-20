@@ -46,6 +46,10 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
     awsRegion: "eu-west-1",
     callbackCorrelationId: "scan-local-1",
     contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
+    debugOverrides: {
+      scenarioConcurrency: 1,
+      scenarioResourceMode: "cmp_safe"
+    },
     functionName: "certscore-v2-dag-dev",
     hostname: "example.com",
     localCallbackUrl: null,
@@ -80,6 +84,7 @@ test("builds local Lambda dispatch payload with bounded debug overrides", () => 
   assert.deepEqual(payload.debugOverrides, {
     actionSearchDeadlineMs: 12_000,
     preActionObservationMs: 5_000,
+    scenarioConcurrency: 1,
     scenarioResourceMode: "cmp_safe",
     strongEvidenceMode: "webmd"
   });
