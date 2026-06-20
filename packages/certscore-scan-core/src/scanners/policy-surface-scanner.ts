@@ -156,6 +156,7 @@ export async function policySurfaceScanner(
           observedCandidateCount,
           commonPathFallbackUsed,
           observations,
+          candidates: fallbackCandidates,
         }));
         return {
           moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
@@ -186,6 +187,7 @@ export async function policySurfaceScanner(
       async () => dedupeCandidates([
         ...extractCandidates(input.normalizedUrl, candidateHtml, homepageText),
         ...extractControlCandidates(input.normalizedUrl, candidateHtml, homepageText),
+        ...extractEmbeddedConsentConfigCandidates(input.normalizedUrl, candidateHtml, homepageText),
       ]),
     );
     staticCandidateCount = staticCandidates.length;
@@ -319,6 +321,7 @@ export async function policySurfaceScanner(
       observedCandidateCount,
       commonPathFallbackUsed,
       observations,
+      candidates: linkCandidates,
     }));
 
     return {
@@ -343,6 +346,7 @@ async function writePolicyCaptureDiagnostics(input: {
   observedCandidateCount: number;
   commonPathFallbackUsed: boolean;
   observations: PolicySurfaceObservation[];
+  candidates?: PolicySurfaceCandidate[];
 }): Promise<ArtifactRef> {
   const fetchedObservations = input.observations.filter((observation) => observation.status === "fetched");
   const coreSurfaces = fetchedObservations.filter((observation) =>
@@ -362,6 +366,7 @@ async function writePolicyCaptureDiagnostics(input: {
     commonPathFallbackUsed: input.commonPathFallbackUsed,
     fetchedCount: fetchedObservations.length,
     failedCandidateCount: input.observations.filter((observation) => observation.status === "failed").length,
+    candidateSummary: summarizePolicyCandidates(input.candidates ?? []),
     winningSurfaceUrls: coreSurfaces
       .map((observation) => observation.normalizedUrl ?? observation.url)
       .filter((value, index, values) => values.indexOf(value) === index)
@@ -663,17 +668,23 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string): 
     if (!href) {
       continue;
     }
-    const normalizedUrl = normalizeUrl(href, baseUrl);
-    if (!normalizedUrl || !isFetchablePolicyUrl(baseUrl, normalizedUrl)) {
-      continue;
-    }
     const linkText = htmlToVisibleText(match[2] ?? "").slice(0, 160);
     const attributeText = [attr(attrs, "aria-label"), attr(attrs, "title")].filter(Boolean).join(" ");
-    const candidateText = normalizeWhitespace(`${linkText} ${attributeText}`).slice(0, 220) || normalizedUrl;
-    const surroundingTextExcerpt = surroundingText(visibleText, linkText);
+    const candidateText = normalizeWhitespace(`${linkText} ${attributeText}`).slice(0, 220) || href;
+    const normalizedUrl = normalizeUrl(href, baseUrl);
+    if (!normalizedUrl) {
+      continue;
+    }
     const deterministic = classifySurface(`${candidateText} ${normalizedUrl}`);
+    const placeholderHref = isPlaceholderHref(href);
+    const fetchable = !placeholderHref && isFetchablePolicyUrl(baseUrl, normalizedUrl);
+    const preferenceControl = isPreferenceControlSurface(deterministic.surfaceType, candidateText);
+    if (!fetchable && !preferenceControl) {
+      continue;
+    }
+    const surroundingTextExcerpt = surroundingText(visibleText, linkText);
     const domLocation = domLocationFor(html, match.index);
-    const observationOnly = isObservationOnlyPreferenceControl(deterministic.surfaceType, candidateText);
+    const observationOnly = !fetchable || isObservationOnlyPreferenceControl(deterministic.surfaceType, candidateText);
     candidates.push({
       candidateId: `policy_candidate_${index++}`,
       url: href,
@@ -682,9 +693,9 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string): 
       surroundingTextExcerpt,
       domLocation,
       sameOrigin: sameOrigin(baseUrl, normalizedUrl),
-      fetchable: true,
+      fetchable,
       clickable: true,
-      mayLeadToConsentControls: observationOnly,
+      mayLeadToConsentControls: observationOnly || preferenceControl,
       observationOnly,
       deterministicSurfaceType: deterministic.surfaceType,
       deterministicScore: deterministic.score,
@@ -748,6 +759,46 @@ function extractControlCandidates(baseUrl: string, html: string, visibleText: st
           ? "header_link"
           : "page_text_link",
     });
+  }
+  return candidates;
+}
+
+function extractEmbeddedConsentConfigCandidates(baseUrl: string, html: string, visibleText: string): PolicySurfaceCandidate[] {
+  const candidates: PolicySurfaceCandidate[] = [];
+  const patterns = [
+    /consentLinkTitle\s*:\s*\{[^}]*\ben\s*:\s*["']([^"']*manage cookies\+?[^"']*)["'][^}]*\}/gi,
+    /["']consentLinkTitle["']\s*:\s*\{[^}]*["']en["']\s*:\s*["']([^"']*manage cookies\+?[^"']*)["'][^}]*\}/gi,
+  ];
+  let index = 0;
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(html))) {
+      const label = normalizeWhitespace(match[1] ?? "").slice(0, 160);
+      if (!label) {
+        continue;
+      }
+      const deterministic = classifySurface(label);
+      if (deterministic.surfaceType !== "cookie_settings") {
+        continue;
+      }
+      candidates.push({
+        candidateId: `policy_embedded_consent_candidate_${index++}`,
+        url: baseUrl,
+        normalizedUrl: baseUrl,
+        linkText: label,
+        surroundingTextExcerpt: surroundingText(visibleText, label),
+        domLocation: "body",
+        sameOrigin: true,
+        fetchable: false,
+        clickable: false,
+        mayLeadToConsentControls: true,
+        observationOnly: true,
+        deterministicSurfaceType: deterministic.surfaceType,
+        deterministicScore: deterministic.score,
+        deterministicKeywordMatches: deterministic.keywords,
+        discoveryMethod: "page_text_link",
+      });
+    }
   }
   return candidates;
 }
@@ -967,7 +1018,7 @@ function commonPathCandidatesFor(baseUrl: string, startIndex: number): PolicySur
 function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {
   return candidates
     .filter((candidate) =>
-      candidate.fetchable &&
+      (candidate.fetchable || candidate.observationOnly) &&
       candidate.deterministicSurfaceType !== "unknown" &&
       candidate.deterministicScore >= 0.5,
     )
@@ -1148,6 +1199,41 @@ function isCorePolicyOrControlSurface(observation: Pick<PolicySurfaceObservation
     "consent_preferences",
     "your_privacy_choices",
   ].includes(observation.surfaceType);
+}
+
+function summarizePolicyCandidates(candidates: PolicySurfaceCandidate[]): Array<{
+  clickable: boolean;
+  discoveryMethod: PolicySurfaceCandidate["discoveryMethod"];
+  domLocation: PolicySurfaceCandidate["domLocation"];
+  fetchable: boolean;
+  linkText: string;
+  mayLeadToConsentControls: boolean;
+  normalizedUrl: string;
+  observationOnly: boolean;
+  surfaceType: PolicySurfaceObservation["surfaceType"];
+}> {
+  return candidates
+    .filter((candidate) =>
+      candidate.deterministicSurfaceType !== "unknown" &&
+      candidate.deterministicScore >= 0.5,
+    )
+    .sort((left, right) =>
+      surfacePriority(left.deterministicSurfaceType) - surfacePriority(right.deterministicSurfaceType) ||
+      right.deterministicScore - left.deterministicScore ||
+      left.normalizedUrl.localeCompare(right.normalizedUrl),
+    )
+    .slice(0, 20)
+    .map((candidate) => ({
+      clickable: candidate.clickable,
+      discoveryMethod: candidate.discoveryMethod,
+      domLocation: candidate.domLocation,
+      fetchable: candidate.fetchable,
+      linkText: candidate.linkText.slice(0, 160),
+      mayLeadToConsentControls: candidate.mayLeadToConsentControls,
+      normalizedUrl: candidate.normalizedUrl,
+      observationOnly: candidate.observationOnly,
+      surfaceType: candidate.deterministicSurfaceType,
+    }));
 }
 
 function isStateSpecificPrivacyPath(value: string): boolean {
@@ -1945,6 +2031,11 @@ function normalizeUrl(href: string, baseUrl: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isPlaceholderHref(href: string): boolean {
+  const trimmed = href.trim();
+  return trimmed === "#" || /^javascript:/i.test(trimmed);
 }
 
 function isFetchablePolicyUrl(baseUrl: string, url: string): boolean {

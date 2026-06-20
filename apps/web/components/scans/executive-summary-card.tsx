@@ -1925,11 +1925,11 @@ export function buildRegulatoryLenses(
       ratingLabel: gdprDisplay.tone.label,
       score: gdprDisplay.score,
       summary: noConfirmedCookieBannerWithPreConsentTracking && hasPreConsentTrackingRisk
-        ? "Consent and pre-consent tracking risk is the main issue."
+        ? "First-layer reject availability and pre-consent third-party activity are the main review items."
         : noConfirmedCookieBannerWithPreConsentTracking && hasPreConsentCookieConcern
         ? "Consent and pre-consent cookie/storage evidence are the main issue."
         : hasPreConsentTrackingRisk
-        ? "Consent and pre-consent tracking risk is the main issue."
+        ? "Pre-consent third-party activity is the main review item."
         : hasPreConsentCookieConcern
         ? "Consent and pre-consent cookie/storage evidence are the main issue."
         : hasTrackingConcern
@@ -2714,7 +2714,7 @@ export function deriveBenchmarkScoreExplanation(input: {
   const hasObservedTrackingVendorContext = (input.vendorNames ?? []).length > 0;
 
   if (input.cookieBannerPresent === false && hasObservedTrackingVendorContext && (hasPreConsentTrackingFinding || hasPreConsentStorageFinding)) {
-    return "Consent and pre-consent tracking risk is the main issue. CertScore did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface.";
+    return "First-layer reject availability and pre-consent third-party activity are the main review items. CertScore did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface.";
   }
   const drivers = [
     hasPreConsentTrackingFinding
@@ -3546,6 +3546,17 @@ function getRegulatoryGapRowId(findingId: string) {
   return markerIndex >= 0 ? findingId.slice(markerIndex + marker.length) : null;
 }
 
+type RegulatoryTopFindingConcernKind = "potential_concern" | "potential_gap";
+
+function getRegulatoryTopFindingConcernKind(finding: CertScoreFinding): RegulatoryTopFindingConcernKind | null {
+  if (!finding.id.startsWith("regulatory_gap__")) {
+    return null;
+  }
+  const details = finding.evidenceDetails?.policyEvidenceDetails;
+  const kind = typeof details?.regulatoryConcernKind === "string" ? details.regulatoryConcernKind : null;
+  return kind === "potential_gap" || kind === "potential_concern" ? kind : null;
+}
+
 function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKey[] {
   const regulatoryGapRowId = getRegulatoryGapRowId(findingId);
   if (regulatoryGapRowId) {
@@ -3560,6 +3571,8 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
         return ["document-clarity", "cookie-storage", "policy-sync"];
       case "advertising_retargeting_vendor_signal_observed":
         return ["ad-exchange", "arrow-transfer", "pulse-tracking"];
+      case "retargeting_behavioral_advertising_signal_observed":
+        return ["arrow-transfer", "pulse-tracking", "ad-exchange"];
       case "analytics_vendor_observed":
         return ["analytics-chart", "pulse-tracking", "device-telemetry"];
       case "session_replay_fingerprinting_review":
@@ -3668,6 +3681,33 @@ function assignUniqueFindingTitleIconKeys(findings: CertScoreFinding[]) {
       used.add(selectedKey);
       return [finding.id, selectedKey] as const;
     })
+  );
+}
+
+function RegulatoryTopFindingConcernIcon({ kind }: { kind: RegulatoryTopFindingConcernKind }) {
+  const label = kind === "potential_gap" ? "Potential gap" : "Potential concern";
+  const toneClass = kind === "potential_gap"
+    ? "border-rose-200 bg-rose-50 text-rose-700"
+    : "border-amber-200 bg-amber-50 text-amber-700";
+  return (
+    <span
+      aria-label={label}
+      className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${toneClass}`}
+      title={label}
+    >
+      {kind === "potential_gap" ? (
+        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 20 20">
+          <path d="M10 4.2 17 16H3L10 4.2Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="M10 8.2v3.8M10 14.8h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        </svg>
+      ) : (
+        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 20 20">
+          <circle cx="10" cy="10" r="6.8" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M10 6.8v4.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+          <path d="M10 14.2h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" />
+        </svg>
+      )}
+    </span>
   );
 }
 
@@ -4844,7 +4884,6 @@ export function ExecutiveSummaryCard(input: {
   const displayedTopFindings = isScanNotRepresentative
     ? (nonRepresentativeScanFinding ? [nonRepresentativeScanFinding] : [])
     : availableTopFindings;
-  const topFindingIconKeys = assignUniqueFindingTitleIconKeys(displayedTopFindings);
   const regulatoryFindingInput =
     Array.isArray(input.allFindings) && input.allFindings.length > 0 ? input.allFindings : input.topFindings;
   const cookieCountMismatchNote = getCookieCountMismatchNote({
@@ -5122,12 +5161,12 @@ export function ExecutiveSummaryCard(input: {
                 heading={narrativePresentation.findingsHeading}
               >
               {displayedTopFindings.map((finding, index) => {
-                const iconKey = topFindingIconKeys.get(finding.id) ?? getFindingTitleIconKey(finding.id);
                 const densityBenchmark = getFindingDensityBenchmark(finding.id);
                 const display = getPublicReportFindingDisplayForCertFinding(finding);
                 const criticalityBadge = display.criticality;
                 const cardTone = getFindingCardTone(finding, index === 0, criticalityBadge);
                 const regulatoryMappingIds = getFindingRegulatoryFilterIds(finding);
+                const regulatoryConcernKind = getRegulatoryTopFindingConcernKind(finding);
                 return (
                 <div
                   key={finding.id}
@@ -5153,15 +5192,12 @@ export function ExecutiveSummaryCard(input: {
                     ) : null}
                   </div>
                   <div className={densityBenchmark ? "mt-2.5 flex items-start gap-2" : "flex items-start gap-2"}>
-                      <div
-                        data-finding-icon={iconKey}
-                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-50"
-                      >
-                      <FindingTitleIcon finding={finding} iconKey={iconKey} />
+                    <div className="flex min-w-0 items-start gap-1.5">
+                      {regulatoryConcernKind ? <RegulatoryTopFindingConcernIcon kind={regulatoryConcernKind} /> : null}
+                      <p data-testid="executive-finding-label" className="pt-0.5 text-[17px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">
+                        {display.title}
+                      </p>
                     </div>
-                    <p data-testid="executive-finding-label" className="pt-0.5 text-[17px] font-semibold leading-5 tracking-[-0.02em] text-slate-950">
-                      {display.title}
-                    </p>
                   </div>
                   <FindingDetailDisclosure finding={finding} />
                 </div>

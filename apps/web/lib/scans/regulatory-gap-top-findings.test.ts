@@ -88,6 +88,14 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
         {
           assessmentStatus: "review_signal",
           evidenceState: "observed",
+          id: "retargeting_behavioral_advertising_signal_observed",
+          label: "Retargeting / behavioral advertising signal observed",
+          note: "Behavioral advertising evidence was retained for purpose review.",
+          status: "Review signal"
+        },
+        {
+          assessmentStatus: "review_signal",
+          evidenceState: "observed",
           id: "analytics_vendor_observed",
           label: "Low-specificity analytics review",
           note: "Vendor purpose requires review."
@@ -98,12 +106,26 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
 
   assert.deepEqual(findings.map((finding) => finding.id), [
     "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking",
-    "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
     "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
     "regulatory_gap__gdpr_eprivacy__cookie_notice_policy_availability",
+    "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
     "regulatory_gap__gdpr_eprivacy__advertising_retargeting_vendor_signal_observed",
-    "regulatory_gap__gdpr_eprivacy__analytics_vendor_observed"
+    "regulatory_gap__gdpr_eprivacy__analytics_vendor_observed",
+    "regulatory_gap__gdpr_eprivacy__retargeting_behavioral_advertising_signal_observed"
   ]);
+  assert.deepEqual(
+    findings.map((finding) => finding.evidenceDetails?.policyEvidenceDetails?.regulatoryConcernKind),
+    [
+      "potential_gap",
+      "potential_gap",
+      "potential_gap",
+      "potential_concern",
+      "potential_concern",
+      "potential_concern",
+      "potential_concern"
+    ]
+  );
+  assert.equal(findings.at(-1)?.label, "Retargeting / behavioral advertising signal observed");
   assert.equal(findings[0]?.label, "Pre-consent third-party tracking");
   assert.equal(findings[0]?.severity, "high");
   assert.equal(findings[0]?.section, "Privacy & Tracking");

@@ -69,6 +69,8 @@ export type StaticFixturePage =
   | "policy-state-privacy-rights-link"
   | "policy-cmp-preference-control"
   | "policy-manage-cookies-footer-control"
+  | "policy-manage-cookies-footer-anchor"
+  | "policy-manage-cookies-embedded-config"
   | "policy-no-links"
   | "policy-notice-at-collection-link"
   | "policy-privacy-choices-link"
@@ -155,6 +157,8 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-state-privacy-rights-link": "policy-state-rights",
   "policy-cmp-preference-control": "policy-cmp-preference-control",
   "policy-manage-cookies-footer-control": "policy-manage-cookies-footer-control",
+  "policy-manage-cookies-footer-anchor": "policy-manage-cookies-footer-anchor",
+  "policy-manage-cookies-embedded-config": "policy-manage-cookies-embedded-config",
   "policy-no-links": "policy-no-links",
   "policy-notice-at-collection-link": "policy-notice-at-collection",
   "policy-privacy-choices-link": "policy-privacy-choices",
@@ -761,6 +765,8 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-state-privacy-rights-link": `<a href="/state-privacy-rights">State Privacy Rights</a>`,
     "policy-cmp-preference-control": `<button id="ot-sdk-btn" type="button" aria-label="Cookie Settings">Cookie Settings</button>`,
     "policy-manage-cookies-footer-control": `<main><p>News homepage</p></main><footer><button id="manage-cookies" type="button">Manage Cookies+</button></footer>`,
+    "policy-manage-cookies-footer-anchor": `<main><p>News homepage</p></main><footer><a href="#" id="manage-cookies">Manage Cookies</a></footer>`,
+    "policy-manage-cookies-embedded-config": `<main><p>News homepage</p></main><script>window.CONSENT_CONFIG={consentLinkTitle:{en:"Manage Cookies+"},privacyCenterLinkTitle:{en:"Privacy Policy"}};</script>`,
     "policy-no-links": "",
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,

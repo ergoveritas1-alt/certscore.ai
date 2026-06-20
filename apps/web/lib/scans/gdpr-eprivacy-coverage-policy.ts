@@ -267,6 +267,7 @@ type RuntimePurposeRiskBucket =
   | "cdnEdgeDelivery"
   | "functional"
   | "sessionReplay"
+  | "tagManagement"
   | "unknown";
 
 const HIGH_RISK_RUNTIME_PURPOSES = new Set<RuntimePurposeRiskBucket>([
@@ -281,7 +282,8 @@ function getRuntimePurposeRowText(row: Record<string, unknown>) {
     getString(row, ["category"]),
     getString(row, ["vendorCategory", "vendor_category"]),
     getString(row, ["purpose"]),
-    getString(row, ["vendorPurpose", "vendor_purpose"])
+    getString(row, ["vendorPurpose", "vendor_purpose"]),
+    ...getStringArray(row, ["regulatoryRelevance", "regulatory_relevance"])
   ].filter(Boolean).join(" ").toLowerCase();
   const label = [
     getString(row, ["name"]),
@@ -311,16 +313,22 @@ function classifyRuntimePurposeRisk(row: Record<string, unknown>): RuntimePurpos
   if (labelHas(/functional|strictly necessary|necessary|consent_management|cmp|customer_support/)) {
     return "functional";
   }
+  if (labelHas(/google tag manager|googletagmanager|\bgtm\b/) || categoryHas(/tag[_ -]?management|tag[_ -]?manager/)) {
+    return "tagManagement";
+  }
   if (labelHas(/session_replay|session replay|behavioral_analytics|contentsquare|fullstory|hotjar|logrocket|clarity/) || categoryHas(/session_replay|session replay|behavioral_analytics/)) {
     return "sessionReplay";
   }
-  if (labelHas(/retarget|remarket/) || categoryHas(/retarget|remarket/)) {
+  if (
+    labelHas(/retarget|remarket|identity sync|idsync|audience|meta pixel|facebook pixel|linkedin insight|tiktok pixel|pinterest tag/) ||
+    categoryHas(/retarget|remarket|cross_site_tracking|identity_resolution|audience_management|audience_segmentation|audience_matching|profile_activation/)
+  ) {
     return "retargeting";
   }
   if (labelHas(/advertis|adtech|targeting|marketing_pixel|social_pixel|doubleclick|google ads|meta pixel|facebook pixel|linkedin insight|tiktok|reddit pixel/) || categoryHas(/advertis|adtech|targeting|marketing_pixel|social_pixel/)) {
     return "advertising";
   }
-  if (labelHas(/google analytics|google tag manager|googletagmanager|adobe analytics|mixpanel|amplitude|posthog|customer_data_platform|marketing analytics/) || categoryHas(/marketing analytics|customer_data_platform/)) {
+  if (labelHas(/google analytics|adobe analytics|mixpanel|amplitude|posthog|customer_data_platform|marketing analytics/) || categoryHas(/marketing analytics|customer_data_platform/)) {
     return "marketingAnalytics";
   }
   if (categoryHas(/analytics|measurement|performance|rum|real user monitoring/)) {
@@ -357,6 +365,7 @@ function buildPreconsentPurposeRiskMix(rows: Record<string, unknown>[]) {
     cdnEdgeDelivery: [],
     functional: [],
     sessionReplay: [],
+    tagManagement: [],
     unknown: []
   };
 
@@ -1673,25 +1682,27 @@ function deriveAdvertisingRetargetingVendorSignalOutcome(input: GdprEprivacyCove
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const vendorSummary = getObject(hybridRuntimeEvidence, ["vendorSummary", "vendor_summary"]);
   const vendorCategoryCounts = getObject(vendorSummary, ["vendorCategoryCounts", "vendor_category_counts"]);
-  const adCategories = ["advertising", "retargeting", "adtech", "marketing"];
+  const adCategories = ["advertising", "adtech", "marketing"];
   const requestRows = getObjectArray(hybridRuntimeEvidence, [
     "requestPurposeClassificationConfidence",
     "request_purpose_classification_confidence"
   ]);
   const rawAdvertisingRequestRows = requestRows.filter((row) => rowHasVendorCategory(row, adCategories));
-  const advertisingRequestRows = requestRows.filter((row) => rowHasPurposeRisk(row, ["advertising", "retargeting"]));
+  const advertisingRequestRows = requestRows.filter((row) => rowHasPurposeRisk(row, ["advertising"]));
   const observedMs = getRuntimeRowObservedMs(advertisingRequestRows, input.runtimeArtifacts);
   const categoryCount = adCategories.reduce((sum, category) => sum + (getNumber(vendorCategoryCounts, [category]) ?? 0), 0);
   const requestCategoryCount = advertisingRequestRows.length;
   const rawAdvertisingVendors = getStringArray(input.runtimeArtifacts, [
-    "advertising_retargeting_vendor_names",
-    "advertisingRetargetingVendorNames",
+    "advertising_vendor_names",
+    "advertisingVendorNames",
     "adtech_vendor_names",
-    "adtechVendorNames"
+    "adtechVendorNames",
+    "advertising_retargeting_vendor_names",
+    "advertisingRetargetingVendorNames"
   ]);
   const advertisingVendorRows = rawAdvertisingVendors
     .map(createPurposeRowFromVendorName)
-    .filter((row) => rowHasPurposeRisk(row, ["advertising", "retargeting"]));
+    .filter((row) => rowHasPurposeRisk(row, ["advertising"]));
   const advertisingVendors = uniqueStrings([
     ...advertisingRequestRows.map(getRuntimePurposeVendor),
     ...advertisingVendorRows.map(getRuntimePurposeVendor)
@@ -1699,16 +1710,16 @@ function deriveAdvertisingRetargetingVendorSignalOutcome(input: GdprEprivacyCove
   const advertisingEvidenceCauses = buildRuntimePurposeEvidenceCauses([
     ...requestRows,
     ...rawAdvertisingVendors.map(createPurposeRowFromVendorName)
-  ], ["advertising", "retargeting"]);
+  ], ["advertising"]);
   const retainedPurposeMix = buildPreconsentPurposeRiskMix([
     ...requestRows,
     ...rawAdvertisingVendors.map(createPurposeRowFromVendorName)
   ]);
   const filteredNonAdVendors = uniqueStrings([
-    ...rawAdvertisingRequestRows.filter((row) => !rowHasPurposeRisk(row, ["advertising", "retargeting"])).map(getRuntimePurposeVendor),
+    ...rawAdvertisingRequestRows.filter((row) => !rowHasPurposeRisk(row, ["advertising"])).map(getRuntimePurposeVendor),
     ...rawAdvertisingVendors
       .map(createPurposeRowFromVendorName)
-      .filter((row) => !rowHasPurposeRisk(row, ["advertising", "retargeting"]))
+      .filter((row) => !rowHasPurposeRisk(row, ["advertising"]))
       .map(getRuntimePurposeVendor)
   ]);
   const fallbackCategoryCount =
@@ -1716,6 +1727,7 @@ function deriveAdvertisingRetargetingVendorSignalOutcome(input: GdprEprivacyCove
       ? categoryCount
       : 0;
   const rawAdvertisingVendorCount =
+    getNumber(input.runtimeArtifacts, ["advertising_vendor_count", "advertisingVendorCount"]) ??
     getNumber(input.runtimeArtifacts, ["advertising_retargeting_vendor_count", "advertisingRetargetingVendorCount"]) ??
     0;
   const advertisingVendorCount =
@@ -1727,14 +1739,17 @@ function deriveAdvertisingRetargetingVendorSignalOutcome(input: GdprEprivacyCove
     return makeOutcome(
       "advertising_retargeting_vendor_signal_observed",
       "Review signal",
-      "Advertising, retargeting, or adtech vendor evidence was retained in the pre-consent/public-web runtime context. Manual review should confirm purpose and consent relevance.",
+      "Advertising infrastructure vendor evidence was retained in the pre-consent/public-web runtime context. Manual review should confirm purpose and consent relevance.",
       [
-        advertisingVendorCount > 0 ? `Advertising/retargeting vendor/category count: ${advertisingVendorCount}` : null,
-        ...advertisingVendors.map((vendor) => `Advertising/retargeting vendor: ${vendor}`).slice(0, 5),
+        advertisingVendorCount > 0 ? `Advertising vendor/category count: ${advertisingVendorCount}` : null,
+        ...advertisingVendors.map((vendor) => `Advertising vendor: ${vendor}`).slice(0, 5),
         "Evidence: retained runtime vendor summary"
       ].filter((value): value is string => Boolean(value)),
       {
         retainedEvidence: {
+          advertisingVendorCount,
+          advertisingVendorObservedMs: compactArray(observedMs, 6),
+          advertisingVendors: compactArray(advertisingVendors, 8),
           advertisingRetargetingVendorCount: advertisingVendorCount,
           advertisingRetargetingEvidenceCauses: advertisingEvidenceCauses,
           advertisingRetargetingVendorObservedMs: compactArray(observedMs, 6),
@@ -1752,14 +1767,113 @@ function deriveAdvertisingRetargetingVendorSignalOutcome(input: GdprEprivacyCove
     return makeOutcome(
       "advertising_retargeting_vendor_signal_observed",
       "Not observed",
-      "Runtime vendor checks completed for the tested context and did not retain an advertising, retargeting, or adtech vendor classification.",
+      "Runtime vendor checks completed for the tested context and did not retain an advertising infrastructure vendor classification.",
       ["Evidence: retained runtime vendor summary"],
       {
         retainedEvidence: {
+          advertisingVendorCount: 0,
           advertisingRetargetingVendorCount: 0,
           advertisingRetargetingEvidenceCauses: [],
           filteredNonAdvertisingRetargetingVendors: compactArray(filteredNonAdVendors, 8),
           preconsentPurposeRiskMix: retainedPurposeMix,
+          runtimeCaptureCompleted: hasRuntimeCapture(input)
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveRetargetingBehavioralAdvertisingOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const vendorSummary = getObject(hybridRuntimeEvidence, ["vendorSummary", "vendor_summary"]);
+  const vendorCategoryCounts = getObject(vendorSummary, ["vendorCategoryCounts", "vendor_category_counts"]);
+  const requestRows = getObjectArray(hybridRuntimeEvidence, [
+    "requestPurposeClassificationConfidence",
+    "request_purpose_classification_confidence"
+  ]);
+  const rawRetargetingRequestRows = requestRows.filter((row) => rowHasVendorCategory(row, ["retargeting"]));
+  const retargetingRequestRows = requestRows.filter((row) => rowHasPurposeRisk(row, ["retargeting"]));
+  const observedMs = getRuntimeRowObservedMs(retargetingRequestRows, input.runtimeArtifacts);
+  const rawRetargetingVendors = getStringArray(input.runtimeArtifacts, [
+    "retargeting_behavioral_advertising_vendor_names",
+    "retargetingBehavioralAdvertisingVendorNames",
+    "retargeting_vendor_names",
+    "retargetingVendorNames"
+  ]);
+  const retargetingVendorRows = rawRetargetingVendors
+    .map(createPurposeRowFromVendorName)
+    .filter((row) => rowHasPurposeRisk(row, ["retargeting"]));
+  const retargetingVendors = uniqueStrings([
+    ...retargetingRequestRows.map(getRuntimePurposeVendor),
+    ...retargetingVendorRows.map(getRuntimePurposeVendor)
+  ]);
+  const retargetingEvidenceCauses = buildRuntimePurposeEvidenceCauses([
+    ...requestRows,
+    ...rawRetargetingVendors.map(createPurposeRowFromVendorName)
+  ], ["retargeting"]);
+  const retainedPurposeMix = buildPreconsentPurposeRiskMix([
+    ...requestRows,
+    ...rawRetargetingVendors.map(createPurposeRowFromVendorName)
+  ]);
+  const filteredNonRetargetingVendors = uniqueStrings([
+    ...rawRetargetingRequestRows.filter((row) => !rowHasPurposeRisk(row, ["retargeting"])).map(getRuntimePurposeVendor),
+    ...rawRetargetingVendors
+      .map(createPurposeRowFromVendorName)
+      .filter((row) => !rowHasPurposeRisk(row, ["retargeting"]))
+      .map(getRuntimePurposeVendor)
+  ]);
+  const fallbackCategoryCount =
+    requestRows.length === 0 && rawRetargetingVendors.length === 0
+      ? getNumber(vendorCategoryCounts, ["retargeting"]) ?? 0
+      : 0;
+  const rawRetargetingVendorCount =
+    getNumber(input.runtimeArtifacts, ["retargeting_behavioral_advertising_vendor_count", "retargetingBehavioralAdvertisingVendorCount"]) ??
+    getNumber(input.runtimeArtifacts, ["retargeting_vendor_count", "retargetingVendorCount"]) ??
+    0;
+  const retargetingVendorCount =
+    requestRows.length > 0 || rawRetargetingVendors.length > 0
+      ? Math.max(retargetingRequestRows.length, retargetingVendors.length)
+      : Math.max(fallbackCategoryCount, rawRetargetingVendorCount);
+
+  if (retargetingVendorCount > 0 || retargetingVendors.length > 0) {
+    return makeOutcome(
+      "retargeting_behavioral_advertising_signal_observed",
+      "Review signal",
+      "Retargeting or behavioral advertising evidence was retained in the pre-consent/public-web runtime context. Manual review should confirm whether the retained signal reflects cross-site profiling, audience matching, identity sync, or remarketing.",
+      [
+        retargetingVendorCount > 0 ? `Retargeting/behavioral advertising vendor count: ${retargetingVendorCount}` : null,
+        ...retargetingVendors.map((vendor) => `Retargeting/behavioral advertising vendor: ${vendor}`).slice(0, 5),
+        "Evidence: retained runtime vendor summary"
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          filteredNonRetargetingBehavioralAdvertisingVendors: compactArray(filteredNonRetargetingVendors, 8),
+          firstRetargetingBehavioralAdvertisingVendorObservedMs: observedMs[0] ?? null,
+          observedRuntimeSignalOnly: true,
+          preconsentPurposeRiskMix: retainedPurposeMix,
+          retargetingBehavioralAdvertisingEvidenceCauses: retargetingEvidenceCauses,
+          retargetingBehavioralAdvertisingVendorCount: retargetingVendorCount,
+          retargetingBehavioralAdvertisingVendorObservedMs: compactArray(observedMs, 6),
+          retargetingBehavioralAdvertisingVendors: compactArray(retargetingVendors, 8)
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input) || vendorSummary || requestRows.length > 0 || rawRetargetingVendors.length > 0) {
+    return makeOutcome(
+      "retargeting_behavioral_advertising_signal_observed",
+      "Not observed",
+      "Runtime vendor checks completed for the tested context and did not retain a retargeting or behavioral advertising vendor classification.",
+      ["Evidence: retained runtime vendor summary"],
+      {
+        retainedEvidence: {
+          filteredNonRetargetingBehavioralAdvertisingVendors: compactArray(filteredNonRetargetingVendors, 8),
+          preconsentPurposeRiskMix: retainedPurposeMix,
+          retargetingBehavioralAdvertisingEvidenceCauses: [],
+          retargetingBehavioralAdvertisingVendorCount: 0,
           runtimeCaptureCompleted: hasRuntimeCapture(input)
         }
       }
@@ -1922,6 +2036,55 @@ function isKnownEmbeddedThirdPartyFrame(row: Record<string, unknown>) {
   return preConsent && thirdParty && knownHost && (knownEmbedPath || !/google\.[a-z.]+$/i.test(hostname ?? ""));
 }
 
+function classifyEmbeddedContentPurpose(hostname: string | null | undefined, url?: string | null) {
+  const text = `${hostname ?? ""} ${url ?? ""}`.toLowerCase();
+  if (/imasdk\.googleapis\.com|ima3\.js|googletagservices\.com|gampad|doubleclick\.net|googleads\.g\.doubleclick\.net|brightline\.tv|freewheel|ad[-.]tech|video.*ad|ad.*video/.test(text)) {
+    return "videoAdSdk";
+  }
+  if (/fonts\.googleapis\.com|fonts\.gstatic\.com|typekit\.net|use\.typekit\.net/.test(text)) {
+    return "fontStaticResource";
+  }
+  if (/youtube(?:-nocookie)?\.com|youtu\.be|vimeo\.com|spotify\.com|soundcloud\.com/.test(text)) {
+    return "mediaEmbed";
+  }
+  if (/maps\/embed|google\.[a-z.]+\/maps|openstreetmap\.org/.test(text)) {
+    return "mapEmbed";
+  }
+  if (/facebook\.com|instagram\.com|tiktok\.com|linkedin\.com|twitter\.com|x\.com/.test(text)) {
+    return "socialEmbed";
+  }
+  if (/typeform\.com|calendly\.com|hubspot(?:usercontent)?\.com|chat|widget/.test(text)) {
+    return "formOrChatWidget";
+  }
+  return "otherEmbeddedContent";
+}
+
+function buildEmbeddedContentPurposeBuckets(rows: Record<string, unknown>[], hosts: string[]) {
+  const buckets: Record<string, string[]> = {
+    fontStaticResource: [],
+    formOrChatWidget: [],
+    mapEmbed: [],
+    mediaEmbed: [],
+    otherEmbeddedContent: [],
+    socialEmbed: [],
+    videoAdSdk: []
+  };
+  for (const row of rows) {
+    const url = getString(row, ["frameUrl", "frame_url", "requestUrl", "request_url", "url"]);
+    const host = getHostnameFromMaybeUrl(getString(row, ["hostname", "host", "domain"]) ?? url);
+    if (!host) {
+      continue;
+    }
+    const bucket = classifyEmbeddedContentPurpose(host, url);
+    buckets[bucket] = uniqueStrings([...(buckets[bucket] ?? []), host]);
+  }
+  for (const host of hosts) {
+    const bucket = classifyEmbeddedContentPurpose(host);
+    buckets[bucket] = uniqueStrings([...(buckets[bucket] ?? []), host]);
+  }
+  return buckets;
+}
+
 function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const embeddedSummary = getEmbeddedContentEvidenceSummary(input);
@@ -1949,7 +2112,7 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
   ]);
   const observedMs = getSortedUniqueMs([
     ...getRuntimeRowObservedMs([...embeddedRows, ...summaryObservations], input.runtimeArtifacts),
-    getRuntimeObservedMs(embeddedSummary, [
+      getRuntimeObservedMs(embeddedSummary, [
       "firstEmbeddedContentObservedMs",
       "first_embedded_content_observed_ms",
       "firstObservedMs",
@@ -1960,6 +2123,8 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
       "observed_at_ms"
     ], getNumber(getHybridTimelineMarkers(input.runtimeArtifacts), ["navigationStartMs", "navigation_start_ms"]))
   ]);
+  const retainedPurposeBuckets = getObject(embeddedSummary, ["embeddedContentPurposeBuckets", "embedded_content_purpose_buckets"]) ??
+    buildEmbeddedContentPurposeBuckets([...embeddedRows, ...summaryObservations], embeddedHosts);
 
   if (embeddedRows.length > 0 || summaryObserved) {
     return makeOutcome(
@@ -1978,6 +2143,7 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
           embeddedContentObservationCount:
             getNumber(embeddedSummary, ["embeddedContentObservationCount", "embedded_content_observation_count"]) ??
             Math.max(embeddedRows.length, summaryObservations.length),
+          embeddedContentPurposeBuckets: retainedPurposeBuckets,
           firstEmbeddedContentObservedMs: observedMs[0] ?? null,
           observedRuntimeSignalOnly: true
         }
@@ -5457,6 +5623,7 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     derivePreConsentCookieStorageOutcome(input),
     derivePreConsentThirdPartyTrackingOutcome(input),
     deriveAdvertisingRetargetingVendorSignalOutcome(input),
+    deriveRetargetingBehavioralAdvertisingOutcome(input),
     deriveAnalyticsVendorObservedOutcome(input),
     deriveRejectPathOutcome(input),
     deriveConsentChoiceQualityOutcome(input),

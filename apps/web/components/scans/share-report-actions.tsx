@@ -242,16 +242,6 @@ export function ShareReportActions({
             <VisualEvidenceIcon />
             <IconTooltip label="View captured image" />
           </a>
-        ) : visualEvidenceStatus ? (
-          <span
-            aria-label={getVisualEvidenceUnavailableLabel(visualEvidenceStatus)}
-            className={disabledIconActionClassName()}
-            role="img"
-            title={getVisualEvidenceUnavailableLabel(visualEvidenceStatus)}
-          >
-            <VisualEvidenceIcon />
-            <IconTooltip label={getVisualEvidenceUnavailableLabel(visualEvidenceStatus)} />
-          </span>
         ) : null}
       </div>
       {copyState === "failed" ? (

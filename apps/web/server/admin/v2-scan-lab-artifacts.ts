@@ -1147,7 +1147,7 @@ function buildVisualSnapshotPreview(bundle: Record<string, unknown>): V2ScanLabV
   const relativePath = relativeToWorkspace(rawPath);
   return {
     status: "observed",
-    href: `/app/admin/v2-scan-lab/screenshot?path=${encodeURIComponent(relativePath)}`,
+    href: null,
     label: stringValue(screenshot?.label) ?? "Pre-consent screenshot",
     path: relativePath,
   };

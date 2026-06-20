@@ -999,6 +999,22 @@ export const screenshotArtifactSchema = z.object({
   consentStateAtTime: consentStateSchema,
 });
 
+export const visualCaptureStatusSchema = z.enum(["available", "unavailable", "failed", "placeholder"]);
+export const visualCaptureFailureReasonSchema = z.enum([
+  "page_closed",
+  "screenshot_timeout",
+  "browser_crash",
+  "placeholder_used",
+  "skipped_by_mode",
+  "unknown",
+]);
+export const visualCaptureSummarySchema = z.object({
+  status: visualCaptureStatusSchema,
+  failureReason: visualCaptureFailureReasonSchema.optional(),
+  artifactRefs: z.array(artifactRefSchema).default([]),
+  notes: z.array(z.string().max(240)).default([]),
+});
+
 export const domSnapshotArtifactSchema = z.object({
   artifactId: z.string(),
   capturedAtMs: z.number().int().nonnegative(),
@@ -1403,6 +1419,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   observedJourneys: z.array(observedJourneySchema).default([]),
   derivedRuntimeSignals: derivedRuntimeSignalsSchema,
   runtimeCoverage: runtimeCoverageSummarySchema.optional(),
+  visualCapture: visualCaptureSummarySchema.optional(),
   artifactRefs: z.array(artifactRefSchema),
   scannerVersion: z.string(),
   schemaVersion: z.string(),
@@ -1573,6 +1590,7 @@ export type ConsentScenarioShadowCompareArtifact = z.infer<typeof consentScenari
 export type ConsentActionRecipeResearchArtifact = z.infer<typeof consentActionRecipeResearchArtifactSchema>;
 export type JourneyPhaseDelta = z.infer<typeof journeyPhaseDeltaSchema>;
 export type ScreenshotArtifact = z.infer<typeof screenshotArtifactSchema>;
+export type VisualCaptureSummary = z.infer<typeof visualCaptureSummarySchema>;
 export type DomSnapshotArtifact = z.infer<typeof domSnapshotArtifactSchema>;
 export type PolicySurfaceObservation = z.infer<typeof policySurfaceObservationSchema>;
 export type NormalizedVendorObservation = z.infer<

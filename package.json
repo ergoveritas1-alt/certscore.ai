@@ -103,7 +103,6 @@
     "v2:local-dag-lambda-parity-cohort": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=apps/web/.env.local --import tsx ./scripts/run-local-v2-dag-lambda-parity-cohort.ts",
     "v2:local-dag-lambda-parity": "PLAYWRIGHT_BROWSERS_PATH= TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=apps/web/.env.local --import tsx ./scripts/run-local-v2-dag-lambda-parity.ts",
     "v2:local-dag-lambda-quality": "node --import tsx ./scripts/compare-local-v2-dag-lambda-quality.ts",
-    "v2:scan-lab-localhost-smoke": "node --import tsx ./scripts/smoke-v2-scan-lab-localhost.ts",
     "v2:replay-gold-coverage": "node --import tsx ./scripts/verify-v2-replay-gold-corpus.ts",
     "v2:replay-gold-quality": "node --import tsx ./scripts/verify-v2-replay-gold-corpus.ts",
     "v2:regulatory-gold-corpus-fixtures": "node --import tsx ./scripts/build-v2-regulatory-gold-corpus-stage3-fixtures.ts --fail-on-missing",

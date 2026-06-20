@@ -103,18 +103,6 @@ export default async function AdminOverviewPage() {
       <div className="grid gap-6 xl:grid-cols-4">
         <Card className="border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle>WC01 v2 Scan Lab</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-slate-600">
-              Internal artifact-backed scan/results lab for visualizing saved v2 reviewer packets and evidence previews by URL.
-            </p>
-            <PendingButtonLink href="/app/admin/v2-scan-lab" idleContent="Open v2 scan lab" pendingContent="Opening..." variant="secondary" />
-          </CardContent>
-        </Card>
-
-        <Card className="border-slate-200 bg-white">
-          <CardHeader>
             <CardTitle>Recent Users</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">

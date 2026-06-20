@@ -1487,12 +1487,59 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks analytics and device finger
       }
     ]
   );
+  assert.equal(outcomes.retargeting_behavioral_advertising_signal_observed?.status, "Not observed");
+  assert.equal(
+    outcomes.retargeting_behavioral_advertising_signal_observed?.criticalEvidence.retainedEvidence
+      .retargetingBehavioralAdvertisingVendorCount,
+    0
+  );
   assert.equal(outcomes.analytics_vendor_observed?.status, "Not observed");
   assert.equal(outcomes.analytics_vendor_observed?.criticalEvidence.retainedEvidence.analyticsVendorCount, 0);
   assert.equal(outcomes.device_identification_fingerprinting_signal_observed?.status, "Not observed");
   assert.equal(
     outcomes.device_identification_fingerprinting_signal_observed?.criticalEvidence.retainedEvidence.fingerprintingObserved,
     false
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes separates behavioral retargeting from generic advertising", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        requestPurposeClassificationConfidence: [
+          {
+            category: "advertising",
+            regulatoryRelevance: ["advertising", "cross_site_tracking", "identity_resolution"],
+            runtimePhase: "pre_consent",
+            vendorName: "Meta Pixel"
+          }
+        ],
+        vendorSummary: {
+          vendorCategoryCounts: {
+            advertising: 1
+          }
+        }
+      }
+    },
+    snapshot: {
+      session_replay_tool_detected: false,
+      session_replay_tracker_count: 0
+    }
+  });
+
+  assert.equal(outcomes.advertising_retargeting_vendor_signal_observed?.status, "Not observed");
+  assert.equal(outcomes.retargeting_behavioral_advertising_signal_observed?.status, "Review signal");
+  assert.deepEqual(
+    outcomes.retargeting_behavioral_advertising_signal_observed?.criticalEvidence.retainedEvidence
+      .retargetingBehavioralAdvertisingEvidenceCauses,
+    [
+      {
+        bucket: "retargeting",
+        category: "advertising",
+        vendor: "Meta Pixel"
+      }
+    ]
   );
 });
 
@@ -1641,6 +1688,43 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
   assert.equal(
     embeddedOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.firstEmbeddedContentObservedMs,
     928
+  );
+
+  const mixedPurposeEmbeddedOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          embeddedContentObserved: true,
+          observations: [
+            {
+              hostname: "imasdk.googleapis.com",
+              requestUrl: "https://imasdk.googleapis.com/js/sdkloader/ima3.js",
+              timestampMs: 412
+            },
+            {
+              hostname: "fonts.googleapis.com",
+              requestUrl: "https://fonts.googleapis.com/css2?family=Inter",
+              timestampMs: 430
+            }
+          ]
+        }
+      }
+    }
+  });
+
+  assert.equal(mixedPurposeEmbeddedOutcomes.embedded_content_pre_consent?.status, "Observed");
+  assert.deepEqual(
+    mixedPurposeEmbeddedOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentPurposeBuckets,
+    {
+      fontStaticResource: ["fonts.googleapis.com"],
+      formOrChatWidget: [],
+      mapEmbed: [],
+      mediaEmbed: [],
+      otherEmbeddedContent: [],
+      socialEmbed: [],
+      videoAdSdk: ["imasdk.googleapis.com"]
+    }
   );
 
   const cmpLocatorOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({

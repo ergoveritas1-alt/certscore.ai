@@ -94,7 +94,7 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
   });
 
   assert.deepEqual(
-    items.slice(0, 11).map((item) => item.id),
+    items.slice(0, 12).map((item) => item.id),
     [
       "consent_surface_observed",
       "reject_all_path_availability",
@@ -103,6 +103,7 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
       "pre_consent_cookies_storage",
       "pre_consent_third_party_tracking",
       "advertising_retargeting_vendor_signal_observed",
+      "retargeting_behavioral_advertising_signal_observed",
       "analytics_vendor_observed",
       "session_replay_fingerprinting_review",
       "device_identification_fingerprinting_signal_observed",
@@ -2180,4 +2181,50 @@ test("deriveGdprEprivacyReviewSummary composes simple-cookie-notice reject persi
     summary.bullets.filter((bullet) => bullet.id === "post_choice_controls_hard_to_revisit").length,
     1
   );
+});
+
+test("deriveGdprEprivacyReviewSummary separates partial concerns from review signals", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      pre_consent_third_party_tracking: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: pre-consent tracking"],
+        limitation: "Pre-consent third-party tracking was retained.",
+        rowId: "pre_consent_third_party_tracking",
+        status: "Gap observed"
+      }),
+      advertising_retargeting_vendor_signal_observed: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: advertising vendor"],
+        limitation: "Advertising infrastructure evidence was retained.",
+        rowId: "advertising_retargeting_vendor_signal_observed",
+        status: "Review signal",
+        retainedEvidence: {
+          advertisingVendorCount: 1,
+          advertisingVendors: ["Google IMA"]
+        }
+      }),
+      retargeting_behavioral_advertising_signal_observed: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: retargeting vendor"],
+        limitation: "Retargeting evidence was retained.",
+        rowId: "retargeting_behavioral_advertising_signal_observed",
+        status: "Review signal",
+        retainedEvidence: {
+          retargetingBehavioralAdvertisingVendorCount: 1,
+          retargetingBehavioralAdvertisingVendors: ["Meta Pixel"]
+        }
+      }),
+      consent_choice_quality: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: consent quality"],
+        limitation: "Consent choice quality requires review.",
+        rowId: "consent_choice_quality",
+        status: "Review signal"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const summary = deriveGdprEprivacyReviewSummary(items);
+
+  assert.equal(summary.priorityReviewText, "1 gap observed, 2 partial concerns, 1 review signal.");
 });

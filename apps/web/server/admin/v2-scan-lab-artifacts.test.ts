@@ -282,11 +282,8 @@ test("extracts bounded CMP runtime snapshot from canonical bundle", async () => 
   const visualSnapshot = result.status === "ready" ? result.model.visualSnapshot : null;
   assert.equal(visualSnapshot?.status, "observed");
   assert.equal(visualSnapshot?.label, "Pre-consent screenshot");
-  assert.match(visualSnapshot?.href ?? "", /^\/app\/admin\/v2-scan-lab\/screenshot\?path=/);
-  assert.match(
-    decodeURIComponent(new URL(`http://localhost${visualSnapshot?.href ?? ""}`).searchParams.get("path") ?? ""),
-    /artifacts\/v2-calibration-lab-cnn-com-tiny\/cnn\.com\/screenshot-pre-consent\.png$/,
-  );
+  assert.equal(visualSnapshot?.href, null);
+  assert.match(visualSnapshot?.path ?? "", /artifacts\/v2-calibration-lab-cnn-com-tiny\/cnn\.com\/screenshot-pre-consent\.png$/);
   const timing = result.status === "ready" ? result.model.timing : null;
   assert.equal(timing?.status, "observed");
   assert.equal(timing?.totalDurationMs, 9300);
@@ -662,8 +659,6 @@ test("does not import production report, executive, scoring, or shared scan deta
   const fs = await import("node:fs/promises");
   const sources = await Promise.all([
     fs.readFile(new URL("./v2-scan-lab-artifacts.ts", import.meta.url), "utf8"),
-    fs.readFile(new URL("../../app/app/admin/v2-scan-lab/page.tsx", import.meta.url), "utf8"),
-    fs.readFile(new URL("../../app/app/admin/v2-scan-lab/v2-scan-lab-explorer.tsx", import.meta.url), "utf8"),
   ]);
   const importLines = sources.flatMap((source) =>
     source.split("\n").filter((line) => line.trim().startsWith("import "))

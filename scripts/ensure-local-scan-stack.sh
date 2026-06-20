@@ -736,8 +736,5 @@ ensure_web_final
 
 log "scan stack is ready"
 log "web: http://localhost:${WEB_PORT}"
-log "v2 scan lab: http://localhost:${WEB_PORT}/app/admin/v2-scan-lab"
-log "v2 DAG smoke: pnpm v2:scan-lab-localhost-smoke"
-log "v2 DAG WebMD URL: http://localhost:${WEB_PORT}/app/admin/v2-scan-lab?profile=full&url=webmd.com&consentDag=yes"
 log "storage: http://127.0.0.1:${STORAGE_PORT}"
 log "logs: ${LOG_DIR}/web.log, ${LOG_DIR}/validation-worker.log, ${LOG_DIR}/minio.log, ${LOG_DIR}/ws01-scanner.log"

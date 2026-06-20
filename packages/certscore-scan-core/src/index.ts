@@ -17,12 +17,13 @@ import {
   type ScreenshotArtifact,
   type ConsentFlowScenario,
   type StorageSnapshot,
+  type VisualCaptureSummary,
   SCHEMA_VERSION,
   canonicalEvidenceBundleSchema,
 } from "@certscore/contracts";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import { chromium, type Browser } from "playwright";
-import { createArtifactWriter } from "./artifact-writer.js";
+import { createArtifactWriter, type ArtifactWriter } from "./artifact-writer.js";
 import {
   buildObservedJourneys,
   classifyCookieEvents,
@@ -247,6 +248,64 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         status: headedRetryResult.moduleRun.status,
       });
     }
+  }
+  if (preConsentEnabled && shouldAttemptScreenshotOnlyFallback(preConsentResult, input.preConsentScreenshotMode)) {
+    await phaseRecorder.record("pre_consent_screenshot_only_fallback", "started", {
+      reason: preConsentResult.visualCapture.failureReason ?? "missing_pre_consent_screenshot",
+    });
+    const screenshotFallback = await capturePreConsentScreenshotOnlyFallback({
+      artifactWriter,
+      normalizedUrl,
+      scanStartedAtMs: startedAtMs,
+      screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        error: message,
+      };
+    });
+    if ("screenshot" in screenshotFallback) {
+      preConsentResult = {
+        ...preConsentResult,
+        screenshots: [screenshotFallback.screenshot],
+        visualCapture: screenshotFallback.visualCapture,
+        moduleRun: {
+          ...preConsentResult.moduleRun,
+          errors: [
+            ...(preConsentResult.moduleRun.errors ?? []),
+            "Screenshot-only visual fallback retained a pre-consent screenshot after the primary runtime page/context closed.",
+          ],
+        },
+      };
+      await phaseRecorder.record("pre_consent_screenshot_only_fallback", "completed", {
+        artifactId: screenshotFallback.screenshot.artifactId,
+      });
+    } else {
+      preConsentResult = {
+        ...preConsentResult,
+        visualCapture: {
+          ...preConsentResult.visualCapture,
+          notes: uniqueStrings([
+            ...preConsentResult.visualCapture.notes,
+            `Screenshot-only fallback failed: ${screenshotFallback.error.replace(/\s+/g, " ").trim().slice(0, 180)}`,
+          ]),
+        },
+        moduleRun: {
+          ...preConsentResult.moduleRun,
+          errors: [
+            ...(preConsentResult.moduleRun.errors ?? []),
+            `Screenshot-only visual fallback failed: ${screenshotFallback.error}`,
+          ],
+        },
+      };
+      await phaseRecorder.record("pre_consent_screenshot_only_fallback", "failed", {
+        error: screenshotFallback.error,
+      });
+    }
+  } else {
+    await phaseRecorder.record("pre_consent_screenshot_only_fallback", "skipped", {
+      reason: preConsentEnabled ? "not_needed" : "pre_consent_runtime_disabled",
+    });
   }
   await phaseRecorder.record("policy_surface_for_replay", input.captureReplay && policySurfaceEnabled && !plannedParallel ? "started" : "skipped");
   let policySurfaceSettled = input.captureReplay && policySurfaceEnabled && !plannedParallel
@@ -515,6 +574,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     observedJourneys,
     derivedRuntimeSignals,
     runtimeCoverage,
+    visualCapture: preConsentResult.visualCapture,
     artifactRefs: [
       ...preConsentResult.screenshots.map((artifact) => ({
         artifactId: artifact.artifactId,
@@ -771,6 +831,89 @@ function uniqueStrings<T extends string>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
+function shouldAttemptScreenshotOnlyFallback(
+  result: Awaited<ReturnType<typeof preConsentRuntimeScanner>>,
+  screenshotMode: RunScanInput["preConsentScreenshotMode"],
+) {
+  if (screenshotMode === "never" || result.screenshots.length > 0) {
+    return false;
+  }
+  if (result.visualCapture.status === "available" || result.visualCapture.status === "placeholder") {
+    return false;
+  }
+  const retainedEvidence =
+    result.networkEvents.length > 0 ||
+    result.networkResponseEvents.length > 0 ||
+    result.cookieEvents.length > 0 ||
+    result.vendorResolverInputs.length > 0 ||
+    result.collectionSurfaceObservations.length > 0;
+  if (!retainedEvidence) {
+    return false;
+  }
+  const errorText = [
+    result.visualCapture.failureReason,
+    ...result.visualCapture.notes,
+    ...(result.moduleRun.errors ?? []),
+  ].join("\n");
+  return /page_closed|target page, context or browser has been closed|page\.goto|page\/context closed/i.test(errorText);
+}
+
+async function capturePreConsentScreenshotOnlyFallback(input: {
+  artifactWriter: ArtifactWriter;
+  normalizedUrl: string;
+  scanStartedAtMs: number;
+  screenshotTimeoutMs?: number;
+}): Promise<{ screenshot: ScreenshotArtifact; visualCapture: VisualCaptureSummary }> {
+  const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
+  const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
+  try {
+    const context = await browser.newContext({
+      ignoreHTTPSErrors: true,
+      viewport: { width: 1366, height: 900 },
+    });
+    try {
+      const page = await context.newPage();
+      await page.goto(input.normalizedUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: Math.max(2_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 10_000)),
+      });
+      await page.waitForLoadState("networkidle", { timeout: 1_000 }).catch(() => undefined);
+      await page.screenshot({
+        fullPage: false,
+        path: screenshotPath,
+        timeout: Math.max(1_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 5_000)),
+      });
+      return {
+        screenshot: {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: Date.now() - input.scanStartedAtMs,
+          path: screenshotPath,
+          url: page.url(),
+          pagePhase: "dom_content_loaded",
+          consentStateAtTime: "pre_consent",
+        },
+        visualCapture: {
+          status: "available",
+          artifactRefs: [{
+            artifactId: "screenshot_pre_consent",
+            artifactType: "screenshot",
+            path: screenshotPath,
+            label: "Pre-consent screenshot",
+            sensitivity: "safe",
+            redactionStatus: "not_needed",
+            relatedEventIds: [],
+          }],
+          notes: ["Screenshot retained by an independent screenshot-only fallback after the primary runtime page/context closed."],
+        },
+      };
+    } finally {
+      await context.close().catch(() => undefined);
+    }
+  } finally {
+    await browser.close().catch(() => undefined);
+  }
+}
+
 function normalizeUrl(url: string): string {
   const parsed = new URL(url);
   if (!parsed.pathname) {
@@ -933,6 +1076,7 @@ function emptyPreConsentResult(startedAt: string): {
   collectionSurfaceObservations: CanonicalEvidenceBundle["collectionSurfaceObservations"];
   cmpRuntimeObservations: CmpRuntimeObservation[];
   screenshots: ScreenshotArtifact[];
+  visualCapture: VisualCaptureSummary;
   domSnapshots: DomSnapshotArtifact[];
   vendorResolverInputs: Parameters<typeof resolveVendorObservations>[0];
 } {
@@ -958,6 +1102,12 @@ function emptyPreConsentResult(startedAt: string): {
     collectionSurfaceObservations: [],
     cmpRuntimeObservations: [],
     screenshots: [],
+    visualCapture: {
+      status: "unavailable",
+      failureReason: "skipped_by_mode",
+      artifactRefs: [],
+      notes: ["Pre-consent runtime scanner was not run."],
+    },
     domSnapshots: [],
     vendorResolverInputs: [],
   };

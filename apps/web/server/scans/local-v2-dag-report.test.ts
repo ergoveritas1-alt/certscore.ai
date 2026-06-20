@@ -22,6 +22,16 @@ async function loadLocalV2DagReport() {
   return import("./local-v2-dag-report");
 }
 
+function syntheticPngHeader(width: number, height: number, byteSize = 1024) {
+  const buffer = Buffer.alloc(byteSize);
+  Buffer.from("89504e470d0a1a0a", "hex").copy(buffer, 0);
+  buffer.writeUInt32BE(13, 8);
+  buffer.write("IHDR", 12, "ascii");
+  buffer.writeUInt32BE(width, 16);
+  buffer.writeUInt32BE(height, 20);
+  return buffer;
+}
+
 function makeScanRecord(overrides: Partial<ScanDetailResponse> = {}): ScanDetailResponse {
   return {
     events: [],
@@ -600,6 +610,561 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
       visualArtifacts?.[0]?.key,
       "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent.png"
     );
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail promotes retained access-denied pages to scan no-go", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/no-go-access-denied-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-17T13:14:02.000Z",
+      consentUiObservations: [
+        {
+          basis: ["dom_text_fallback_after_consent_ui_timeout"],
+          confidence: 0.9,
+          likelyPresent: false,
+          observationId: "consent_ui_pre_consent",
+          textExcerpt: "Access to this site has been denied.",
+          visibleChoiceLabels: []
+        }
+      ],
+      cookieEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          domain: ".latimes.com",
+          firstParty: true,
+          httpOnly: true,
+          name: "_abck",
+          sameSite: "Lax",
+          secure: true,
+          timestampMs: 700,
+          valueHash: "blocked-page-cookie"
+        }
+      ],
+      modulesRun: [],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "static.latimes.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 650,
+          url: "https://static.latimes.com/error.css"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "bot-manager.example",
+          isThirdParty: true,
+          thirdParty: true,
+          timestampMs: 790,
+          url: "https://bot-manager.example/fingerprint.js"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "bot-manager.example",
+          isThirdParty: true,
+          thirdParty: true,
+          timestampMs: 820,
+          url: "https://bot-manager.example/collect"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "static.latimes.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 940,
+          url: "https://static.latimes.com/error.js"
+        }
+      ],
+      normalizedVendorObservations: [
+        {
+          confidence: 0.92,
+          evidenceRefs: [],
+          observedEventIds: [],
+          product: "Bot Manager",
+          purposes: ["security"],
+          vendor: "Example Bot Manager"
+        }
+      ],
+      normalizedUrl: "https://www.latimes.com/",
+      policySurfaceObservations: [],
+      runtimeCoverage: {
+        coverageStatus: "limited_none",
+        fallbackModesUsed: ["dom_text_fallback_after_consent_ui_timeout"],
+        limitationKeys: ["access_denied_page"],
+        notes: ["Access denied page captured before consent/runtime evidence was retained."],
+        observationCounts: {
+          cookiesBeforeConsent: 1,
+          normalizedVendors: 1,
+          thirdPartyRequests: 2
+        }
+      },
+      runtimeTimeline: [],
+      scanId: "latimes-no-go-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 1200,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "network_idle",
+          path: "/tmp/certscore-v2/latimes-no-go-fixture/screenshot-pre-consent.png",
+          url: "https://www.latimes.com/"
+        }
+      ],
+      startedAt: "2026-06-17T13:13:50.000Z",
+      url: "https://latimes.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "latimes.com",
+        scanConfigJson: {
+          hostname: "latimes.com",
+          normalizedUrl: "https://latimes.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const scanNoGoAssessment = detail.runtimeArtifacts?.scan_no_go_assessment as Record<string, unknown> | undefined;
+    const visualAccessReview = detail.runtimeArtifacts?.visual_access_review as Record<string, unknown> | undefined;
+
+    assert.equal(scanNoGoAssessment?.decision, "no_go");
+    assert.equal(scanNoGoAssessment?.scanNoGoConfidence, 0.95);
+    assert.deepEqual(scanNoGoAssessment?.reasonCodes, ["access_denied_or_forbidden_page", "scan_no_go_corroborated"]);
+    assert.equal(visualAccessReview?.go_no_go, "NO_GO");
+    assert.equal(visualAccessReview?.page_state, "access_blocked");
+    assert.equal(detail.snapshot?.homepage_fetch_status, "blocked");
+    assert.equal(detail.snapshot?.blocked_flag, true);
+    assert.equal(detail.snapshot?.coverage_level, "limited_none");
+    assert.equal(detail.snapshot?.pages_scanned, 0);
+    assert.equal(detail.snapshot?.runtime_counts_retained, false);
+    assert.equal(detail.snapshot?.third_party_request_count, 0);
+    assert.equal(detail.snapshot?.tracking_before_consent_detected, false);
+    assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_none");
+    assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, false);
+    assert.equal(detail.scan.pagesScanned, 0);
+    assert.equal(detail.signals.some((signal) => signal.key === "tracking_before_consent_detected"), false);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail promotes 1x1 screenshot placeholders to scan no-go", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/no-go-placeholder-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-19T23:05:28.000Z",
+      consentUiObservations: [
+        {
+          basis: ["insufficient_banner_keywords"],
+          confidence: 0.5,
+          likelyPresent: false,
+          observationId: "consent_ui_pre_consent",
+          textExcerpt: "",
+          visibleChoiceLabels: []
+        }
+      ],
+      cookieEvents: [],
+      modulesRun: [
+        {
+          moduleName: "preConsentRuntimeScanner",
+          status: "partial",
+          errors: [
+            "Observation settle ended early because the page/context closed: page.waitForTimeout: Target page, context or browser has been closed",
+            "Full-page screenshot failed: page.screenshot: Target page, context or browser has been closed",
+            "Viewport screenshot fallback failed: page.screenshot: Target page, context or browser has been closed",
+            "1x1 screenshot placeholder used after screenshot capture failures."
+          ]
+        }
+      ],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.latimes.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 700,
+          url: "https://www.latimes.com/"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.latimes.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 780,
+          url: "https://www.latimes.com/favicon.ico"
+        }
+      ],
+      normalizedUrl: "https://www.latimes.com/",
+      policySurfaceObservations: [],
+      runtimeCoverage: {
+        coverageStatus: "limited_partial",
+        fallbackModesUsed: [],
+        limitationKeys: ["pre_consent_runtime_partial"],
+        notes: [],
+        observationCounts: {
+          cookiesBeforeConsent: 0,
+          normalizedVendors: 0,
+          thirdPartyRequests: 0
+        }
+      },
+      runtimeTimeline: [],
+      scanId: "latimes-placeholder-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 3273,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "network_idle",
+          path: "/tmp/certscore-v2/latimes-placeholder-fixture/screenshot-pre-consent.png",
+          url: "https://www.latimes.com/"
+        }
+      ],
+      startedAt: "2026-06-19T23:05:21.000Z",
+      url: "https://latimes.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "latimes.com",
+        scanConfigJson: {
+          hostname: "latimes.com",
+          normalizedUrl: "https://latimes.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const scanNoGoAssessment = detail.runtimeArtifacts?.scan_no_go_assessment as Record<string, unknown> | undefined;
+    const visualAccessReview = detail.runtimeArtifacts?.visual_access_review as Record<string, unknown> | undefined;
+
+    assert.equal(scanNoGoAssessment?.decision, "no_go");
+    assert.deepEqual(scanNoGoAssessment?.reasonCodes, ["visual_capture_failed_or_placeholder", "scan_no_go_corroborated"]);
+    assert.equal(visualAccessReview?.go_no_go, "NO_GO");
+    assert.equal(visualAccessReview?.page_state, "capture_failed");
+    assert.equal(detail.snapshot?.homepage_fetch_status, "blocked");
+    assert.equal(detail.snapshot?.block_page_classification, "capture_failed");
+    assert.equal(detail.snapshot?.stop_reason_code, "homepage_visual_capture_failed");
+    assert.equal(detail.snapshot?.stop_reason_label, "Homepage capture failed");
+    assert.equal(detail.snapshot?.coverage_level, "limited_none");
+    assert.equal(detail.snapshot?.pages_scanned, 0);
+    assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_none");
+    assert.equal(detail.scan.pagesScanned, 0);
+    assert.equal(detail.signals.length, 0);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail promotes retained full-viewport visual error shells to scan no-go", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/no-go-visual-error-shell-"));
+  const screenshotPath = path.join(outDir, "screenshot-pre-consent.png");
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(screenshotPath, syntheticPngHeader(1366, 900, 9_000));
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-20T00:11:28.000Z",
+      consentUiObservations: [
+        {
+          basis: ["insufficient_banner_keywords"],
+          confidence: 0.5,
+          likelyPresent: false,
+          observationId: "consent_ui_pre_consent",
+          textExcerpt: "",
+          visibleChoiceLabels: []
+        }
+      ],
+      cookieEvents: [],
+      modulesRun: [
+        {
+          moduleName: "preConsentRuntimeScanner",
+          status: "partial",
+          errors: [
+            "Cookie capture unavailable because the page/context closed: browserContext.cookies: Target page, context or browser has been closed"
+          ]
+        }
+      ],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.latimes.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 100,
+          url: "https://www.latimes.com/"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.latimes.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 600,
+          url: "https://www.latimes.com/favicon.ico"
+        }
+      ],
+      normalizedUrl: "https://www.latimes.com/",
+      policySurfaceObservations: [],
+      runtimeCoverage: {
+        coverageStatus: "limited_partial",
+        fallbackModesUsed: [],
+        limitationKeys: ["pre_consent_runtime_partial"],
+        notes: [],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 2,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 0
+        },
+        silentEmpty: false
+      },
+      runtimeTimeline: [],
+      scanId: "latimes-visual-error-shell-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 2565,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "dom_content_loaded",
+          path: screenshotPath,
+          url: "https://www.latimes.com/"
+        }
+      ],
+      startedAt: "2026-06-20T00:11:21.000Z",
+      url: "https://latimes.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "latimes.com",
+        scanConfigJson: {
+          hostname: "latimes.com",
+          normalizedUrl: "https://latimes.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const scanNoGoAssessment = detail.runtimeArtifacts?.scan_no_go_assessment as Record<string, unknown> | undefined;
+    const visualAccessReview = detail.runtimeArtifacts?.visual_access_review as Record<string, unknown> | undefined;
+
+    assert.equal(scanNoGoAssessment?.decision, "no_go");
+    assert.deepEqual(scanNoGoAssessment?.reasonCodes, ["retained_visual_error_shell", "scan_no_go_corroborated"]);
+    assert.equal(visualAccessReview?.go_no_go, "NO_GO");
+    assert.equal(visualAccessReview?.page_state, "visual_error_shell");
+    assert.equal(detail.snapshot?.homepage_fetch_status, "blocked");
+    assert.equal(detail.snapshot?.coverage_level, "limited_none");
+    assert.equal(detail.snapshot?.pages_scanned, 0);
+    assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_none");
+    assert.equal(detail.scan.pagesScanned, 0);
+    assert.equal(detail.signals.length, 0);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail does not promote missing screenshots when runtime evidence was retained", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/missing-screenshot-retained-runtime-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-19T23:06:52.000Z",
+      consentUiObservations: [],
+      cookieEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          domain: ".nvidia.com",
+          firstParty: true,
+          name: "visitor_id",
+          sameSite: "Lax",
+          timestampMs: 1800,
+          valueHash: "cookie-hash"
+        }
+      ],
+      modulesRun: [
+        {
+          moduleName: "preConsentRuntimeScanner",
+          status: "failed",
+          errors: [
+            "page.goto: Target page, context or browser has been closed during navigation to https://nvidia.com/"
+          ]
+        },
+        {
+          moduleName: "policySurfaceScanner",
+          status: "completed",
+          errors: []
+        }
+      ],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "nvidia.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 100,
+          url: "https://nvidia.com/"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "assets.adobedtm.com",
+          isThirdParty: true,
+          thirdParty: true,
+          timestampMs: 900,
+          url: "https://assets.adobedtm.com/launch.js"
+        }
+      ],
+      normalizedUrl: "https://nvidia.com/",
+      normalizedVendorObservations: [
+        {
+          confidence: 0.91,
+          evidenceRefs: [],
+          observedEventIds: [],
+          product: "Adobe Experience Platform Launch",
+          purposes: ["analytics"],
+          vendor: "Adobe"
+        }
+      ],
+      observedJourneys: [
+        {
+          journeyId: "journey_1",
+          journeyType: "homepage_load",
+          status: "observed",
+          evidenceRefs: []
+        }
+      ],
+      policySurfaceObservations: [
+        {
+          confidence: 0.8,
+          discoveryMethod: "homepage_link",
+          observationId: "privacy",
+          status: "fetched",
+          surfaceType: "privacy_policy",
+          textExcerpt: "Privacy Policy",
+          url: "https://www.nvidia.com/privacy-policy"
+        }
+      ],
+      runtimeCoverage: {
+        coverageStatus: "limited_partial",
+        fallbackModesUsed: [],
+        limitationKeys: ["pre_consent_runtime_failed"],
+        notes: [],
+        observationCounts: {
+          cookiesBeforeConsent: 1,
+          normalizedVendors: 1,
+          thirdPartyRequests: 1
+        }
+      },
+      runtimeTimeline: [],
+      scanId: "nvidia-missing-screenshot-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [],
+      startedAt: "2026-06-19T23:06:49.000Z",
+      url: "https://nvidia.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "nvidia.com",
+        scanConfigJson: {
+          hostname: "nvidia.com",
+          normalizedUrl: "https://nvidia.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const scanNoGoAssessment = detail.runtimeArtifacts?.scan_no_go_assessment as Record<string, unknown> | undefined;
+
+    assert.equal(scanNoGoAssessment, undefined);
+    assert.equal(detail.runtimeArtifacts?.visual_access_review, undefined);
+    assert.equal(detail.snapshot?.homepage_fetch_status, "success");
+    assert.equal(detail.snapshot?.blocked_flag, undefined);
+    assert.equal(detail.snapshot?.third_party_request_count, 1);
+    assert.equal(detail.snapshot?.cookies_before_consent_count, 1);
+    assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_partial");
+    assert.equal(detail.scan.pagesScanned, 1);
+    assert.ok(detail.signals.length > 0);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

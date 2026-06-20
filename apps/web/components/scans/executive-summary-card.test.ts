@@ -176,7 +176,7 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
   const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
   const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
 
-  assert.equal(gdprLens?.summary, "Consent and pre-consent tracking risk is the main issue.");
+  assert.equal(gdprLens?.summary, "Pre-consent third-party activity is the main review item.");
   assert.equal(gdprLens?.ratingLabel, "Needs work");
   assert.equal(cpraLens?.summary, "Third-party collection and disclosure posture drives this score.");
   assert.equal(ftcLens?.summary, "Choice architecture and disclosure clarity are the main FTC-style concerns.");
@@ -212,7 +212,7 @@ test("buildRegulatoryLenses leads GDPR summary with consent timing when no first
   );
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  assert.equal(gdprLens?.summary, "Consent and pre-consent tracking risk is the main issue.");
+  assert.equal(gdprLens?.summary, "First-layer reject availability and pre-consent third-party activity are the main review items.");
 });
 
 test("buildRegulatoryLenses does not call zero-footprint cookie evidence pre-consent tracking", () => {
@@ -445,7 +445,7 @@ test("buildRegulatoryLenses treats pre-consent cookie findings as GDPR tracking 
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
 
-  assert.equal(gdprLens?.summary, "Consent and pre-consent tracking risk is the main issue.");
+  assert.equal(gdprLens?.summary, "Pre-consent third-party activity is the main review item.");
   assert.notEqual(gdprLens?.summary, "No major consent-triggering issue surfaced in the top findings.");
 });
 
@@ -466,7 +466,7 @@ test("buildRegulatoryLenses treats pre-consent cookie counts as regulatory track
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
   const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
 
-  assert.equal(gdprLens?.summary, "Consent and pre-consent tracking risk is the main issue.");
+  assert.equal(gdprLens?.summary, "Pre-consent third-party activity is the main review item.");
   assert.equal(cpraLens?.summary, "Third-party collection and disclosure posture drives this score.");
   assert.notEqual(gdprLens?.summary, "No major consent-triggering issue surfaced in the top findings.");
   assert.notEqual(cpraLens?.summary, "No strong sale/share-style signal surfaced in the top findings.");
@@ -1166,7 +1166,7 @@ test("benchmark score explanation leads with unconfirmed banner plus pre-consent
 
   assert.equal(
     explanation,
-    "Consent and pre-consent tracking risk is the main issue. CertScore did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface."
+    "First-layer reject availability and pre-consent third-party activity are the main review items. CertScore did not confirm a first-layer GDPR/ePrivacy cookie consent banner, while advertising/analytics storage and tracking were observed before any recorded consent choice. Footer privacy/ad-choice controls were observed, but they do not establish a GDPR/ePrivacy accept/reject consent surface."
   );
 });
 
@@ -2575,6 +2575,14 @@ test("ExecutiveSummaryCard renders GDPR gap-observed checklist rows as top findi
         },
         {
           assessmentStatus: "review_signal",
+          evidenceState: "observed",
+          id: "retargeting_behavioral_advertising_signal_observed",
+          label: "Retargeting / behavioral advertising signal observed",
+          note: "Behavioral advertising evidence was retained for purpose review.",
+          status: "Review signal"
+        },
+        {
+          assessmentStatus: "review_signal",
           id: "runtime_vendor_disclosure_alignment",
           label: "Runtime vendor disclosure mismatch",
           note: "Review signal only."
@@ -2623,7 +2631,14 @@ test("ExecutiveSummaryCard renders GDPR gap-observed checklist rows as top findi
   assert.doesNotMatch(html, /Regulatory gap/);
   assert.doesNotMatch(html, /Regulatory checklist gap/);
   assert.match(html, /Pre-consent third-party tracking/);
-  assert.match(html, /data-finding-icon=\"arrow-transfer\"/);
+  assert.match(html, /Retargeting \/ behavioral advertising signal observed/);
+  assert.doesNotMatch(html, /data-finding-icon=/);
+  assert.match(html, /aria-label="Potential gap"/);
+  assert.match(html, /aria-label="Potential concern"/);
+  assert.ok(
+    html.indexOf("Pre-consent third-party tracking") <
+      html.indexOf("Retargeting / behavioral advertising signal observed")
+  );
   assert.doesNotMatch(html, /GDPR\/ePrivacy potential concern: Pre-consent third-party tracking/);
   assert.match(html, /Advertising and analytics requests were observed before consent/);
   assert.match(html, /not a legal conclusion/);
@@ -3923,7 +3938,7 @@ test("ExecutiveSummaryCard keeps regulatory cookie copy aligned with canonical c
   assert.doesNotMatch(html, /64 cookies were observed before consent\./);
 });
 
-test("ExecutiveSummaryCard assigns distinct themed icons to sensitive-data and accessibility top findings", () => {
+test("ExecutiveSummaryCard omits generic title icons from sensitive-data and accessibility top findings", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -3972,12 +3987,12 @@ test("ExecutiveSummaryCard assigns distinct themed icons to sensitive-data and a
     })
   );
 
-  assert.match(html, /data-finding-icon=\"shield-network\"/);
-  assert.match(html, /data-finding-icon=\"accessibility-figure\"/);
-  assert.match(html, /data-finding-icon=\"shield-network\" class=\"mt-0\.5 flex h-5 w-5/);
+  assert.match(html, /Sensitive input surface with third-party tracking context/);
+  assert.match(html, /Automated accessibility issues observed/);
+  assert.doesNotMatch(html, /data-finding-icon=/);
 });
 
-test("ExecutiveSummaryCard assigns unique icons across top findings with shared preferred icons", () => {
+test("ExecutiveSummaryCard omits generic title icons across top findings with shared preferred icons", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -4014,12 +4029,13 @@ test("ExecutiveSummaryCard assigns unique icons across top findings with shared 
     })
   );
 
-  const iconKeys = [...html.matchAll(/data-finding-icon="([^"]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(iconKeys, ["pulse-tracking", "circle-x", "privacy-choice"]);
-  assert.equal(new Set(iconKeys).size, iconKeys.length);
+  assert.match(html, /Third-party tracking observed before recorded consent/);
+  assert.match(html, /Non-essential tracking continued after reject/);
+  assert.match(html, /CPRA opt-out missing for advertising sharing/);
+  assert.doesNotMatch(html, /data-finding-icon=/);
 });
 
-test("ExecutiveSummaryCard assigns specific icons to accessibility and policy runtime findings", () => {
+test("ExecutiveSummaryCard omits generic title icons from accessibility and policy runtime findings", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -4056,12 +4072,13 @@ test("ExecutiveSummaryCard assigns specific icons to accessibility and policy ru
     })
   );
 
-  const iconKeys = [...html.matchAll(/data-finding-icon="([^"]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(iconKeys, ["keyboard-key", "policy-sync", "contrast-circle"]);
-  assert.equal(new Set(iconKeys).size, iconKeys.length);
+  assert.match(html, /Keyboard navigation accessibility issue/);
+  assert.match(html, /Policy\/runtime behavior conflict/);
+  assert.match(html, /Visual contrast accessibility issue/);
+  assert.doesNotMatch(html, /data-finding-icon=/);
 });
 
-test("ExecutiveSummaryCard assigns distinct preferred icons to executive top finding ids", () => {
+test("ExecutiveSummaryCard omits generic title icons across executive top finding ids", () => {
   const topFindings = [
     ...EXECUTIVE_SUMMARY_TOP_FINDING_IDS
       .filter((id) => id !== "scan_quality_visual_no_go")
@@ -4100,12 +4117,9 @@ test("ExecutiveSummaryCard assigns distinct preferred icons to executive top fin
     })
   );
 
-  const iconKeys = [...html.matchAll(/data-finding-icon="([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(iconKeys.length, topFindings.length);
-  assert.equal(new Set(iconKeys).size, iconKeys.length);
-  assert.doesNotMatch(iconKeys.join(" "), /default-circle/);
-  assert.match(iconKeys.join(" "), /document-clarity/);
-  assert.match(iconKeys.join(" "), /fingerprint/);
+  assert.match(html, /Disclosure clarity remains weak/);
+  assert.doesNotMatch(html, /data-finding-icon=/);
+  assert.doesNotMatch(html, /default-circle/);
 });
 
 test("ExecutiveSummaryCard renders a neutral empty state when no headline findings survive filtering", () => {

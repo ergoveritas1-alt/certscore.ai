@@ -208,6 +208,50 @@ test("policySurfaceScanner records footer Manage Cookies+ controls as cookie set
   });
 });
 
+test("policySurfaceScanner records placeholder footer Manage Cookies anchors as cookie settings", async () => {
+  await withPolicyScan("policy-manage-cookies-footer-anchor", async ({ result, baseUrl }) => {
+    const settings = observedSurface(result.policySurfaceObservations, "cookie_settings");
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(settings?.status, "observed");
+    assert.match(settings?.linkText ?? "", /Manage Cookies/);
+    assert.equal(settings?.normalizedUrl, `${baseUrl}/f/policy-manage-cookies-footer-anchor`);
+    assert.equal(settings?.fetchable, false);
+    assert.equal(settings?.clickable, true);
+    assert.equal(settings?.mayLeadToConsentControls, true);
+    assert.equal(
+      diagnostics.candidateSummary.some((candidate) =>
+        candidate.surfaceType === "cookie_settings" &&
+        /Manage Cookies/.test(candidate.linkText) &&
+        candidate.observationOnly === true
+      ),
+      true,
+    );
+  });
+});
+
+test("policySurfaceScanner records embedded consent config Manage Cookies labels as cookie settings", async () => {
+  await withPolicyScan("policy-manage-cookies-embedded-config", async ({ result, baseUrl }) => {
+    const settings = observedSurface(result.policySurfaceObservations, "cookie_settings");
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(settings?.status, "observed");
+    assert.match(settings?.linkText ?? "", /Manage Cookies\+/);
+    assert.equal(settings?.normalizedUrl, `${baseUrl}/f/policy-manage-cookies-embedded-config`);
+    assert.equal(settings?.fetchable, false);
+    assert.equal(settings?.clickable, false);
+    assert.equal(settings?.mayLeadToConsentControls, true);
+    assert.equal(
+      diagnostics.candidateSummary.some((candidate) =>
+        candidate.surfaceType === "cookie_settings" &&
+        /Manage Cookies\+/.test(candidate.linkText) &&
+        candidate.observationOnly === true
+      ),
+      true,
+    );
+  }, { discoveryMode: "fast" });
+});
+
 test("policySurfaceScanner records privacy center links without clicking preference flows", async () => {
   await withPolicyScan("policy-privacy-center-link", async ({ result, baseUrl }) => {
     const center = observedSurface(result.policySurfaceObservations, "consent_preferences");
@@ -738,6 +782,11 @@ async function readPolicyCaptureDiagnostics(
   commonPathFallbackUsed: boolean;
   fetchedCount: number;
   failedCandidateCount: number;
+  candidateSummary: Array<{
+    linkText: string;
+    observationOnly: boolean;
+    surfaceType: string;
+  }>;
   winningSurfaceUrls: string[];
   policyCaptureDurationMs: number;
 }> {

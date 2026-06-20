@@ -35,9 +35,10 @@ type AssessmentDirection =
   | "potential_concern"
   | "technical_limitation";
 type RowToolState = Partial<Record<"correction" | "evidence", boolean>>;
+type CoverageIcon = "alert" | "check" | "circle-alert" | "equal" | "flag" | "info" | "slash";
 
 const DIRECTION_UI: Record<AssessmentDirection, {
-  icon: "alert" | "check" | "equal" | "flag" | "info" | "slash";
+  icon: CoverageIcon;
   label: "Positive signal" | "Neutral signal" | "Review signal" | "Potential concern" | "Technical limitation";
 }> = {
   positive_signal: {
@@ -78,6 +79,7 @@ const REPORT_ROW_GROUPS = [
       "pre_consent_cookies_storage",
       "pre_consent_third_party_tracking",
       "advertising_retargeting_vendor_signal_observed",
+      "retargeting_behavioral_advertising_signal_observed",
       "analytics_vendor_observed",
       "session_replay_fingerprinting_review",
       "device_identification_fingerprinting_signal_observed",
@@ -103,6 +105,7 @@ const RISK_SIGNAL_ROW_IDS = new Set([
   "pre_consent_cookies_storage",
   "pre_consent_third_party_tracking",
   "advertising_retargeting_vendor_signal_observed",
+  "retargeting_behavioral_advertising_signal_observed",
   "analytics_vendor_observed",
   "session_replay_fingerprinting_review",
   "device_identification_fingerprinting_signal_observed",
@@ -230,18 +233,35 @@ function hasStrictlyNecessaryStorageOnly(item: GdprEprivacyCoverageChecklistItem
 }
 
 function hasHighConfidenceAdvertisingConcern(item: GdprEprivacyCoverageChecklistItem) {
-  const highRiskPurpose = retainedPurposeMixHas(item, ["advertising", "retargeting"]);
+  const highRiskPurpose = retainedPurposeMixHas(item, ["advertising"]);
   if (highRiskPurpose !== null) {
     return highRiskPurpose;
   }
   const count = retainedNumber(item, [
+    "advertisingVendorCount",
+    "advertising_vendor_count",
     "advertisingRetargetingVendorCount",
     "advertising_retargeting_vendor_count",
     "adtechVendorCount",
     "adtech_vendor_count"
   ]);
   return (count !== null && count > 0) ||
-    evidenceMentions(item, /\b(advertis(?:ing|er)|adtech|retarget|remarket|doubleclick|google ads|meta pixel|facebook pixel|pixel)\b/i);
+    evidenceMentions(item, /\b(advertis(?:ing|er)|adtech|doubleclick|google ads|ad serving|ad measurement|ad verification|programmatic)\b/i);
+}
+
+function hasHighConfidenceRetargetingConcern(item: GdprEprivacyCoverageChecklistItem) {
+  const retargetingPurpose = retainedPurposeMixHas(item, ["retargeting"]);
+  if (retargetingPurpose !== null) {
+    return retargetingPurpose;
+  }
+  const count = retainedNumber(item, [
+    "retargetingBehavioralAdvertisingVendorCount",
+    "retargeting_behavioral_advertising_vendor_count",
+    "retargetingVendorCount",
+    "retargeting_vendor_count"
+  ]);
+  return (count !== null && count > 0) ||
+    evidenceMentions(item, /\b(retarget|remarket|behavioral advertis|cross-site|cross site|audience|identity sync|idsync|meta pixel|facebook pixel|linkedin insight|tiktok pixel)\b/i);
 }
 
 function hasHighConfidenceAnalyticsConcern(item: GdprEprivacyCoverageChecklistItem) {
@@ -269,6 +289,9 @@ function getDeviceIdentificationDirection(item: GdprEprivacyCoverageChecklistIte
 
 function getEmbeddedContentDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
   const text = retainedText(item);
+  if (/\b(videoAdSdk|video_ad_sdk|imasdk\.googleapis\.com|ima3\.js|gampad|doubleclick\.net|googletagservices\.com|freewheel|brightline\.tv)\b/i.test(text)) {
+    return "potential_concern";
+  }
   if (/\b(fonts\.googleapis\.com|fonts\.gstatic\.com)\b/i.test(text) && !/\b(youtube|vimeo|maps|facebook|instagram|tiktok|linkedin|typeform|calendly|hubspot|chat|widget|iframe|embed)\b/i.test(text)) {
     return "review_signal";
   }
@@ -323,6 +346,8 @@ function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem)
       return "potential_concern";
     case "advertising_retargeting_vendor_signal_observed":
       return hasHighConfidenceAdvertisingConcern(item) ? "potential_concern" : "review_signal";
+    case "retargeting_behavioral_advertising_signal_observed":
+      return hasHighConfidenceRetargetingConcern(item) ? "potential_concern" : "review_signal";
     case "analytics_vendor_observed":
       return hasHighConfidenceAnalyticsConcern(item) ? "potential_concern" : "review_signal";
     case "session_replay_fingerprinting_review":
@@ -492,7 +517,7 @@ function ChecklistRowSummaryStrip({ items }: { items: GdprEprivacyCoverageCheckl
   );
 }
 
-function getCoverageIconMeta(direction: AssessmentDirection) {
+function getCoverageIconMeta(direction: AssessmentDirection, evidenceLabel?: EvidenceLabel) {
   switch (direction) {
     case "positive_signal":
       return {
@@ -509,11 +534,19 @@ function getCoverageIconMeta(direction: AssessmentDirection) {
         tooltip: "Retained evidence is useful context for this row, but is not inherently positive or concerning."
       };
     case "potential_concern":
+      if (evidenceLabel !== "Potential gap") {
+        return {
+          className: "border-amber-200 bg-amber-50 text-amber-700",
+          icon: "circle-alert" as const,
+          label: "Potential concern",
+          tooltip: "Retained evidence increases review priority for this row. Review the evidence before drawing conclusions."
+        };
+      }
       return {
         className: "border-rose-200 bg-rose-50 text-rose-700",
         icon: "alert" as const,
-        label: "Potential concern",
-        tooltip: "Retained evidence increases review priority for this row. Review the evidence before drawing conclusions."
+        label: "Potential gap",
+        tooltip: "Retained evidence suggests an expected control, disclosure, or runtime behavior may be missing. Review the evidence before drawing conclusions."
       };
     case "review_signal":
       return {
@@ -539,8 +572,14 @@ function getCoverageIconMeta(direction: AssessmentDirection) {
   }
 }
 
-function CoverageStatusGlyph({ direction }: { direction: AssessmentDirection }) {
-  const meta = getCoverageIconMeta(direction);
+function CoverageStatusGlyph({
+  direction,
+  evidenceLabel
+}: {
+  direction: AssessmentDirection;
+  evidenceLabel: EvidenceLabel;
+}) {
+  const meta = getCoverageIconMeta(direction, evidenceLabel);
   return (
     <span className="group/coverage-icon relative inline-flex">
       <span
@@ -560,7 +599,7 @@ function CoverageStatusGlyph({ direction }: { direction: AssessmentDirection }) 
   );
 }
 
-function CoverageStatusIcon({ icon }: { icon: ReturnType<typeof getCoverageIconMeta>["icon"] }) {
+function CoverageStatusIcon({ icon }: { icon: CoverageIcon }) {
   if (icon === "check") {
     return (
       <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
@@ -574,6 +613,16 @@ function CoverageStatusIcon({ icon }: { icon: ReturnType<typeof getCoverageIconM
       <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
         <path d="M10 4.2 17 16H3L10 4.2Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
         <path d="M10 8.2v3.8M10 14.8h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      </svg>
+    );
+  }
+
+  if (icon === "circle-alert") {
+    return (
+      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+        <circle cx="10" cy="10" r="6.8" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M10 6.8v4.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+        <path d="M10 14.2h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.2" />
       </svg>
     );
   }
@@ -655,45 +704,79 @@ function getDisplayEvidenceRefs(item: GdprEprivacyCoverageChecklistItem) {
 }
 
 export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivacyCoverageChecklistItem[] }) {
-  const directionCounts = items.reduce<Record<AssessmentDirection, number>>((counts, item) => {
+  const summaryCounts = items.reduce<{
+    gapsObserved: number;
+    neutralSignals: number;
+    partialConcerns: number;
+    positiveSignals: number;
+    reviewSignals: number;
+    technicalLimits: number;
+  }>((counts, item) => {
     const direction = getAssessmentDirection(item);
-    counts[direction] += 1;
+    if (direction === "technical_limitation") {
+      counts.technicalLimits += 1;
+      return counts;
+    }
+    if (direction === "positive_signal") {
+      counts.positiveSignals += 1;
+      return counts;
+    }
+    if (direction === "neutral_signal") {
+      counts.neutralSignals += 1;
+      return counts;
+    }
+    if (item.assessmentStatus === "gap_observed" || item.status === "Gap observed") {
+      counts.gapsObserved += 1;
+      return counts;
+    }
+    if (direction === "potential_concern") {
+      counts.partialConcerns += 1;
+      return counts;
+    }
+    counts.reviewSignals += 1;
     return counts;
   }, {
-    neutral_signal: 0,
-    positive_signal: 0,
-    potential_concern: 0,
-    review_signal: 0,
-    technical_limitation: 0
+    gapsObserved: 0,
+    neutralSignals: 0,
+    partialConcerns: 0,
+    positiveSignals: 0,
+    reviewSignals: 0,
+    technicalLimits: 0
   });
   const statusSummary = [
     {
       className: "border-rose-200 bg-rose-50 text-rose-700",
-      count: directionCounts.potential_concern,
+      count: summaryCounts.gapsObserved,
       icon: "alert" as const,
-      label: "potential concerns"
+      label: "gaps observed"
+    },
+    {
+      className: "border-rose-200 bg-rose-50 text-rose-700",
+      count: summaryCounts.partialConcerns,
+      icon: "circle-alert" as const,
+      label: "partial concerns"
     },
     {
       className: "border-amber-200 bg-amber-50 text-amber-700",
-      count: directionCounts.review_signal,
+      count: summaryCounts.reviewSignals,
       icon: "flag" as const,
-      label: "review signals"
+      label: "review"
     },
     {
       className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-      count: directionCounts.positive_signal,
+      count: summaryCounts.positiveSignals,
       icon: "check" as const,
-      label: "positive signals"
+      label: "positive"
     },
     {
       className: "border-sky-200 bg-sky-50 text-sky-700",
-      count: directionCounts.neutral_signal,
+      count: summaryCounts.neutralSignals,
       icon: "equal" as const,
-      label: "neutral signals"
+      label: "neutral"
     },
     {
       className: "border-slate-300 bg-slate-100 text-slate-600",
-      count: directionCounts.technical_limitation,
+      count: summaryCounts.technicalLimits,
       icon: "slash" as const,
       label: "technical limits"
     }
@@ -760,10 +843,16 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
 
   if (item.id === "advertising_retargeting_vendor_signal_observed") {
     return item.status === "Observed"
-      ? "Advertising, retargeting, or adtech vendor evidence was observed in the retained pre-consent runtime context."
+      ? "Advertising infrastructure vendor evidence was observed in the retained pre-consent runtime context."
       : item.status === "Review signal"
-        ? "Advertising or retargeting classification requires review from retained runtime evidence; security, CDN, bot, and performance/RUM evidence is not enough by itself."
-      : "No advertising, retargeting, or adtech vendor signal was observed in the retained runtime context.";
+        ? "Advertising-infrastructure evidence was partially retained before a recorded consent choice. Review retained vendors/domains before treating this as confirmed advertising activity."
+      : "No advertising infrastructure vendor signal was observed in the retained runtime context.";
+  }
+
+  if (item.id === "retargeting_behavioral_advertising_signal_observed") {
+    return item.status === "Observed" || item.status === "Review signal"
+      ? "Retargeting or behavioral-advertising evidence was partially retained before a recorded consent choice. Review retained vendors/domains before treating this as confirmed behavioral advertising or audience activation."
+      : "No retargeting or behavioral advertising vendor signal was observed in the retained runtime context.";
   }
 
   if (item.id === "analytics_vendor_observed") {
@@ -959,15 +1048,17 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
 
   if (item.id === "advertising_retargeting_vendor_signal_observed") {
     if (evidenceLabel === "Not observed") {
-      return "No advertising, retargeting, or adtech vendor signal was observed in retained runtime evidence.";
+      return "No advertising infrastructure vendor signal was observed in retained runtime evidence.";
     }
-    if (item.status === "Review signal" && retainedNumber(item, ["advertisingRetargetingVendorCount", "advertising_retargeting_vendor_count", "adtechVendorCount", "adtech_vendor_count"]) === 0) {
-      return "No advertising, retargeting, or adtech vendor classification was retained; security, CDN, bot, and performance/RUM evidence remains review context only.";
+    if (item.status === "Review signal" && retainedNumber(item, ["advertisingVendorCount", "advertising_vendor_count", "advertisingRetargetingVendorCount", "advertising_retargeting_vendor_count", "adtechVendorCount", "adtech_vendor_count"]) === 0) {
+      return "No advertising infrastructure classification was retained; security, CDN, bot, and performance/RUM evidence remains review context only.";
     }
     const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
       fallbackFirstSeenMs: firstSeenMs,
       item,
-      lead: "Advertising/retargeting evidence was retained",
+      lead: evidenceLabel === "Partial"
+        ? "Advertising-infrastructure evidence was partially retained"
+        : "Advertising infrastructure evidence was retained",
       rowKind: "advertising"
     });
     if (canonicalSummary) {
@@ -975,10 +1066,46 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     }
     return joinRationaleParts([
       vendorPhrase
-        ? `Advertising or retargeting vendor signals were observed: ${vendorPhrase}`
-        : "Advertising or retargeting vendor signals were observed",
+        ? evidenceLabel === "Partial"
+          ? `Advertising-infrastructure evidence was partially retained: ${vendorPhrase}`
+          : `Advertising infrastructure vendor signals were observed: ${vendorPhrase}`
+        : evidenceLabel === "Partial"
+          ? "Advertising-infrastructure evidence was partially retained before a recorded consent choice"
+          : "Advertising infrastructure vendor signals were observed",
       formatFirstSeenPhrase(firstSeenMs),
-      getPreConsentQualifier(item)
+      evidenceLabel === "Partial"
+        ? "review retained vendors/domains before treating this as confirmed advertising activity"
+        : getPreConsentQualifier(item)
+    ]);
+  }
+
+  if (item.id === "retargeting_behavioral_advertising_signal_observed") {
+    if (evidenceLabel === "Not observed") {
+      return "No retargeting or behavioral advertising vendor signal was observed in retained runtime evidence.";
+    }
+    const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
+      fallbackFirstSeenMs: firstSeenMs,
+      item,
+      lead: evidenceLabel === "Partial"
+        ? "Retargeting or behavioral-advertising evidence was partially retained"
+        : "Retargeting/behavioral advertising evidence was retained",
+      rowKind: "retargeting"
+    });
+    if (canonicalSummary) {
+      return canonicalSummary;
+    }
+    return joinRationaleParts([
+      vendorPhrase
+        ? evidenceLabel === "Partial"
+          ? `Retargeting or behavioral-advertising evidence was partially retained: ${vendorPhrase}`
+          : `Retargeting or behavioral advertising vendor signals were observed: ${vendorPhrase}`
+        : evidenceLabel === "Partial"
+          ? "Retargeting or behavioral-advertising evidence was partially retained before a recorded consent choice"
+          : "Retargeting or behavioral advertising vendor signals were observed",
+      formatFirstSeenPhrase(firstSeenMs),
+      evidenceLabel === "Partial"
+        ? "review retained vendors/domains before treating this as confirmed behavioral advertising or audience activation"
+        : getPreConsentQualifier(item)
     ]);
   }
 
@@ -1043,8 +1170,15 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
       ...getNestedRecordStrings(evidence.embeddedContentObservations, ["host", "hostname", "domain"])
     ]).slice(0, 4);
     const hostPhrase = formatList(hosts);
+    const purposeParts = getEmbeddedContentPurposeParts(evidence);
     if (evidenceLabel === "Not observed") {
       return "No eligible third-party embedded content was observed before a recorded consent action.";
+    }
+    if (purposeParts.length > 0) {
+      return joinRationaleParts([
+        `Third-party embedded content loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}. Review retained domains by purpose`,
+        formatFirstSeenPhrase(firstSeenMs)
+      ]);
     }
     return joinRationaleParts([
       hostPhrase
@@ -1264,7 +1398,7 @@ function getSignalObservedSummary(evidence: Record<string, unknown>) {
   return null;
 }
 
-type CanonicalRuntimeEvidenceKind = "advertising" | "analytics" | "tracking";
+type CanonicalRuntimeEvidenceKind = "advertising" | "analytics" | "retargeting" | "tracking";
 
 type CanonicalRuntimeEvidenceEntry = {
   category: string | null;
@@ -1356,10 +1490,13 @@ function getCanonicalRuntimeEvidenceEntriesFromRows(value: unknown): CanonicalRu
 function canonicalEntryMatchesKind(entry: CanonicalRuntimeEvidenceEntry, kind: CanonicalRuntimeEvidenceKind) {
   const text = `${entry.vendor} ${entry.category ?? ""}`.toLowerCase();
   if (kind === "advertising") {
-    return /\b(ad|ads|adtech|advertis|retarget|remarket|doubleclick|pixel|measurement)\b/i.test(text);
+    return /\b(ad|ads|adtech|advertis|doubleclick|measurement|programmatic|verification)\b/i.test(text);
   }
   if (kind === "analytics") {
     return /\b(analytics|measurement|metrics|stats|tag manager|gtm|google analytics)\b/i.test(text);
+  }
+  if (kind === "retargeting") {
+    return /\b(retarget|remarket|behavioral|audience|identity sync|idsync|cross[- ]site|profile activation|meta pixel|facebook pixel|linkedin insight|tiktok pixel|pinterest tag)\b/i.test(text);
   }
   return /\b(track|tracking|advertis|analytics|measurement|retarget|cross[- ]site)\b/i.test(text);
 }
@@ -1463,12 +1600,47 @@ function getNestedRecordStrings(value: unknown, keys: string[]) {
   });
 }
 
+function getEmbeddedContentPurposeParts(evidence: Record<string, unknown>) {
+  const buckets = getRecord(evidence.embeddedContentPurposeBuckets) ?? getRecord(evidence.embedded_content_purpose_buckets);
+  if (!buckets) {
+    return [];
+  }
+  const purposeLabels: Array<[string, string]> = [
+    ["videoAdSdk", "video/ad SDK evidence"],
+    ["mediaEmbed", "media embed evidence"],
+    ["mapEmbed", "map embed evidence"],
+    ["socialEmbed", "social embed evidence"],
+    ["formOrChatWidget", "form/chat widget evidence"],
+    ["fontStaticResource", "lower-risk font/static resource evidence"],
+    ["otherEmbeddedContent", "other embedded content evidence"]
+  ];
+  return purposeLabels.flatMap(([key, label]) => {
+    const hosts = uniqueStrings([
+      ...getStringArray(buckets[key]),
+      ...getStringArray(buckets[toSnakeCase(key)])
+    ]).slice(0, 3);
+    return hosts.length > 0 ? [{ hosts, label }] : [];
+  });
+}
+
+function toSnakeCase(value: string) {
+  return value.replace(/[A-Z]/g, (match) => `_${match.toLowerCase()}`);
+}
+
+function formatEmbeddedPurposeParts(parts: Array<{ hosts: string[]; label: string }>) {
+  return parts.map((part) => `${part.label} (${formatList(part.hosts) ?? "retained host"}`).join("), ") + ")";
+}
+
 function getEvidenceVendorNames(item: GdprEprivacyCoverageChecklistItem) {
   const evidence = getRetainedEvidenceRecord(item);
   return uniqueStrings([
     ...getStringArrayFromEvidenceKeys(evidence, [
       "advertisingRetargetingVendors",
       "advertising_retargeting_vendors",
+      "advertisingVendors",
+      "advertising_vendors",
+      "retargetingBehavioralAdvertisingVendors",
+      "retargeting_behavioral_advertising_vendors",
       "advertisingSharingVendors",
       "analyticsVendors",
       "analytics_vendors",
@@ -1506,6 +1678,10 @@ function getFirstEvidenceMs(item: GdprEprivacyCoverageChecklistItem) {
     "first_pre_consent_cookie_or_storage_observed_ms",
     "firstAdvertisingRetargetingVendorObservedMs",
     "first_advertising_retargeting_vendor_observed_ms",
+    "firstAdvertisingVendorObservedMs",
+    "first_advertising_vendor_observed_ms",
+    "firstRetargetingBehavioralAdvertisingVendorObservedMs",
+    "first_retargeting_behavioral_advertising_vendor_observed_ms",
     "firstAnalyticsVendorObservedMs",
     "first_analytics_vendor_observed_ms",
     "firstEmbeddedContentObservedMs",
@@ -1781,9 +1957,14 @@ function EvidenceToolIcon() {
 function CorrectionToolIcon() {
   return (
     <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
-      <path d="M12.7 3.2a4.2 4.2 0 0 0 4.1 4.1l-8.6 8.6a2.2 2.2 0 0 1-3.1 0l-1-1a2.2 2.2 0 0 1 0-3.1l8.6-8.6Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-      <path d="m5.5 12.5 2 2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-      <path d="M12.6 3.2 16.8 7.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+      <path
+        d="M5.8 2.9 9 6.1 7.1 8 3.9 4.8 2.4 7.4l3.7 3.7 2.4-.6 6.6 6.6a1.8 1.8 0 0 0 2.5-2.5L11 8l.6-2.4-3.7-3.7-2.1 1Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+      <path d="M15 15.2h.1" stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" />
     </svg>
   );
 }
@@ -1824,7 +2005,7 @@ function ChecklistRows({
           >
             <div className="min-w-0 space-y-2">
               <div className="flex items-start gap-3">
-                <CoverageStatusGlyph direction={assessmentDirection} />
+                <CoverageStatusGlyph direction={assessmentDirection} evidenceLabel={evidenceLabel} />
                 <div className="min-w-0 space-y-1.5">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <p className="min-w-0 font-medium text-slate-950">{item.label}</p>

@@ -143,11 +143,7 @@ export function LocalV2DagScanProgressCard({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-600">Scan in progress</p>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
-          <span aria-hidden="true" className="relative h-3.5 w-3">
-            <span className="absolute left-0 top-0 h-px w-3 rounded-full bg-current" />
-            <span className="absolute bottom-0 left-0 h-px w-3 rounded-full bg-current" />
-            <span className="absolute left-[3px] top-[2px] h-2.5 w-1.5 rounded-full border-x border-current" />
-          </span>
+          <ScanWorkingGlyph />
           Scanning...
         </span>
       </div>
@@ -158,6 +154,16 @@ export function LocalV2DagScanProgressCard({
         startedAtMs={startedAtMs}
       />
     </section>
+  );
+}
+
+function ScanWorkingGlyph() {
+  return (
+    <span aria-hidden="true" className="relative h-4 w-4 shrink-0">
+      <span className="absolute inset-0 rounded-full border border-sky-300/70" />
+      <span className="absolute inset-[2px] animate-spin rounded-full border-2 border-sky-200 border-t-sky-700" />
+      <span className="absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full bg-sky-700" />
+    </span>
   );
 }
 

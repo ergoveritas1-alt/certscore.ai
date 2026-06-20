@@ -157,8 +157,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "advertising_retargeting_vendor_signal_observed",
-    label: "Advertising / retargeting vendor signal observed",
-    explanation: "Whether advertising, retargeting, or adtech vendor signals were observed in retained pre-consent/public-web runtime evidence.",
+    label: "Advertising vendor signal observed",
+    explanation: "Whether ad serving, ad measurement, ad verification, programmatic, contextual, or other advertising infrastructure signals were observed in retained pre-consent/public-web runtime evidence.",
     findingIds: [
       "adtech_cookie_pre_consent",
       "preconsent_tracking",
@@ -166,7 +166,21 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
       "third_party_tracking_pre_consent"
     ],
     defaultFindingStatus: "Review signal",
-    notObservedText: "No advertising, retargeting, or adtech vendor signal was retained in this scan context.",
+    notObservedText: "No advertising infrastructure vendor signal was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "retargeting_behavioral_advertising_signal_observed",
+    label: "Retargeting / behavioral advertising signal observed",
+    explanation: "Whether retargeting pixels, remarketing tags, audience-building, cross-site behavioral advertising, identity sync, audience matching, or profile activation signals were observed in retained pre-consent/public-web runtime evidence.",
+    findingIds: [
+      "adtech_cookie_pre_consent",
+      "preconsent_tracking",
+      "pre_consent_tracking_detected",
+      "third_party_tracking_pre_consent"
+    ],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No retargeting or behavioral advertising vendor signal was retained in this scan context.",
     requiresPublicWebCoverage: true
   },
   {
@@ -1267,7 +1281,15 @@ function getPreconsentTrackingRows(input: {
   ];
 }
 
-type PreconsentPurposeBucket = "advertising" | "analytics" | "performance" | "security" | "functional" | "session_replay" | "unknown";
+type PreconsentPurposeBucket =
+  | "advertising"
+  | "analytics"
+  | "performance"
+  | "security"
+  | "functional"
+  | "session_replay"
+  | "tag_management"
+  | "unknown";
 
 function normalizePreconsentPurposeBucket(row: Record<string, unknown>): PreconsentPurposeBucket {
   const category = [
@@ -1303,6 +1325,9 @@ function normalizePreconsentPurposeBucket(row: Record<string, unknown>): Precons
   if (labelHas(/functional|strictly necessary|necessary|consent_management|cmp|customer_support|cdn|delivery/)) {
     return "functional";
   }
+  if (labelHas(/google tag manager|googletagmanager|\bgtm\b/) || categoryHas(/tag[_ -]?management|tag[_ -]?manager/)) {
+    return "tag_management";
+  }
   if (labelHas(/session_replay|session replay|behavioral_analytics|contentsquare|fullstory|hotjar|logrocket|clarity/) || categoryHas(/session_replay|session replay|behavioral_analytics/)) {
     return "session_replay";
   }
@@ -1315,7 +1340,7 @@ function normalizePreconsentPurposeBucket(row: Record<string, unknown>): Precons
   if (categoryHas(/performance|rum|real user monitoring|mpulse|go-mpulse|new relic|datadog|sentry/)) {
     return "performance";
   }
-  if (labelHas(/analytics|measurement|product_analytics|customer_data_platform|google analytics|google tag manager|googletagmanager|adobe analytics|mixpanel|amplitude|posthog/) || categoryHas(/analytics|measurement|product_analytics|customer_data_platform/)) {
+  if (labelHas(/analytics|measurement|product_analytics|customer_data_platform|google analytics|adobe analytics|mixpanel|amplitude|posthog/) || categoryHas(/analytics|measurement|product_analytics|customer_data_platform/)) {
     return "analytics";
   }
   if (categoryHas(/functional|strictly necessary|necessary|consent_management|cmp|customer_support|cdn|delivery/)) {
@@ -1362,6 +1387,7 @@ function buildPreconsentTrackingExplanation(input: {
   const securityVendors = purposeMix.get("security") ?? [];
   const unknownVendors = purposeMix.get("unknown") ?? [];
   const functionalVendors = purposeMix.get("functional") ?? [];
+  const tagManagementVendors = purposeMix.get("tag_management") ?? [];
 
   if (advertisingVendors.length > 0 || sessionReplayVendors.length > 0) {
     const vendors = uniqueEntityStrings([...advertisingVendors, ...sessionReplayVendors]).slice(0, 8);
@@ -1371,6 +1397,10 @@ function buildPreconsentTrackingExplanation(input: {
   if (analyticsVendors.length > 0) {
     const vendors = uniqueEntityStrings([...analyticsVendors, ...performanceVendors]).slice(0, 8);
     return `Analytics or performance-measurement requests fired before a recorded consent choice${vendors.length > 0 ? `, including ${formatVendorPhrase(vendors)}` : ""}. Review whether the retained evidence reflects non-essential measurement rather than strictly necessary site operation.`;
+  }
+
+  if (tagManagementVendors.length > 0) {
+    return `Tag-management infrastructure was observed before a recorded consent choice, including ${formatVendorPhrase(tagManagementVendors.slice(0, 8))}. Review downstream tags before treating this as confirmed analytics, advertising, or retargeting activity.`;
   }
 
   if (performanceVendors.length > 0 || securityVendors.length > 0 || functionalVendors.length > 0) {

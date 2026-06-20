@@ -29,6 +29,8 @@ export type RegulatoryGapTopFindingInput = {
   gdprEprivacyArea?: RegulatoryGapTopFindingArea | null;
 };
 
+type RegulatoryTopFindingConcernKind = "potential_concern" | "potential_gap";
+
 type RegulatoryGapAreaConfig = {
   idPrefix: string;
   labelPrefix: string;
@@ -63,8 +65,19 @@ function findingsForArea(
   }
 
   return area.rows
-    .filter(isPotentialConcernCoverageRow)
-    .map((row, index): CertScoreFinding => {
+    .map((row, index) => ({
+      concernKind: getRegulatoryTopFindingConcernKind(row),
+      index,
+      row
+    }))
+    .filter((entry): entry is { concernKind: RegulatoryTopFindingConcernKind; index: number; row: RegulatoryGapTopFindingRow } =>
+      entry.concernKind !== null
+    )
+    .sort((left, right) => {
+      const kindDelta = getRegulatoryTopFindingConcernRank(left.concernKind) - getRegulatoryTopFindingConcernRank(right.concernKind);
+      return kindDelta !== 0 ? kindDelta : left.index - right.index;
+    })
+    .map(({ concernKind, row }, index): CertScoreFinding => {
       const statusLabel = row.statusLabel ?? humanizeStatus(row.status ?? "gap_observed");
       return {
         id: `regulatory_gap__${config.idPrefix}__${safeId(row.id)}`,
@@ -87,6 +100,7 @@ function findingsForArea(
             rowId: row.id,
             rowLabel: row.label,
             rowNote: row.note ?? null,
+            regulatoryConcernKind: concernKind,
             status: row.status ?? row.statusLabel ?? "gap_observed"
           }
         },
@@ -99,6 +113,10 @@ function findingsForArea(
         shortSummary: getRegulatoryGapTopFindingSummary(row, config)
       };
     });
+}
+
+function getRegulatoryTopFindingConcernRank(kind: RegulatoryTopFindingConcernKind) {
+  return kind === "potential_gap" ? 0 : 1;
 }
 
 function getRegulatoryGapTopFindingSummary(row: RegulatoryGapTopFindingRow, config: RegulatoryGapAreaConfig) {
@@ -123,35 +141,39 @@ function isReviewOnlyRow(row: RegulatoryGapTopFindingRow) {
 }
 
 function isPotentialConcernCoverageRow(row: RegulatoryGapTopFindingRow) {
+  return getRegulatoryTopFindingConcernKind(row) !== null;
+}
+
+function getRegulatoryTopFindingConcernKind(row: RegulatoryGapTopFindingRow): RegulatoryTopFindingConcernKind | null {
   if (row.assessmentStatus === "gap_observed") {
-    return true;
+    return "potential_gap";
   }
   const evidenceLabel = getEvidenceLabel(row);
   if (evidenceLabel === "Not testable") {
-    return false;
+    return null;
   }
   if (evidenceLabel === "Potential gap") {
-    return true;
+    return "potential_gap";
   }
   if (evidenceLabel === "Observed") {
-    return isObservedPotentialConcernRow(row);
+    return isObservedPotentialConcernRow(row) ? "potential_concern" : null;
   }
   if (evidenceLabel === "Partial" || row.assessmentStatus === "review_signal") {
-    return false;
+    return isObservedPotentialConcernRow(row) ? "potential_concern" : null;
   }
   if (POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS.has(row.id)) {
-    return false;
+    return null;
   }
   if (row.id === "reject_all_path_availability" && hasConsentSurfaceExpectation(row)) {
-    return true;
+    return "potential_gap";
   }
   if (
     (row.id === "consent_surface_observed" || row.id === "cookie_notice_policy_availability") &&
     hasPreConsentRuntimeExpectation(row)
   ) {
-    return true;
+    return "potential_gap";
   }
-  return false;
+  return null;
 }
 
 function getEvidenceLabel(row: RegulatoryGapTopFindingRow) {
@@ -174,6 +196,7 @@ function isRiskSignalRow(rowId: string) {
   return rowId === "pre_consent_cookies_storage" ||
     rowId === "pre_consent_third_party_tracking" ||
     rowId === "advertising_retargeting_vendor_signal_observed" ||
+    rowId === "retargeting_behavioral_advertising_signal_observed" ||
     rowId === "analytics_vendor_observed" ||
     rowId === "session_replay_fingerprinting_review" ||
     rowId === "device_identification_fingerprinting_signal_observed" ||
@@ -199,6 +222,8 @@ function isObservedPotentialConcernRow(row: RegulatoryGapTopFindingRow) {
       return true;
     case "advertising_retargeting_vendor_signal_observed":
       return hasHighConfidenceAdvertisingConcern(row);
+    case "retargeting_behavioral_advertising_signal_observed":
+      return true;
     case "analytics_vendor_observed":
       return hasHighConfidenceAnalyticsConcern(row);
     case "session_replay_fingerprinting_review":

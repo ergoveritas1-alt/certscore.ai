@@ -157,7 +157,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       assessmentStatus: "gap_observed",
       evidenceState: "observed",
       id: "advertising_retargeting_vendor_signal_observed",
-      label: "Advertising / retargeting vendor signal observed",
+      label: "Advertising vendor signal observed",
       status: "Gap observed"
     })),
     "potential_concern"
@@ -173,7 +173,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "advertising_retargeting_vendor_signal_observed",
-      label: "Advertising / retargeting vendor signal observed",
+      label: "Advertising vendor signal observed",
       status: "Review signal"
     })),
     "potential_concern"
@@ -195,7 +195,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "advertising_retargeting_vendor_signal_observed",
-      label: "Advertising / retargeting vendor signal observed",
+      label: "Advertising vendor signal observed",
       status: "Review signal"
     })),
     "review_signal"
@@ -205,7 +205,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       assessmentStatus: "checked",
       evidenceState: "observed",
       id: "advertising_retargeting_vendor_signal_observed",
-      label: "Advertising / retargeting vendor signal observed",
+      label: "Advertising vendor signal observed",
       status: "Observed"
     })),
     "review_signal"
@@ -326,7 +326,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       label: "Embedded third-party content loaded before consent",
       status: "Observed"
     })),
-    "review_signal"
+    "potential_concern"
   );
 });
 
@@ -355,7 +355,7 @@ test("GdprEprivacyCoverageChecklistCard does not badge review-only advertising r
           },
           evidenceState: "observed",
           id: "advertising_retargeting_vendor_signal_observed",
-          label: "Advertising / retargeting vendor signal observed",
+          label: "Advertising vendor signal observed",
           status: "Review signal",
           tone: "review"
         })
@@ -366,7 +366,7 @@ test("GdprEprivacyCoverageChecklistCard does not badge review-only advertising r
 
   assert.match(html, />Partial</);
   assert.doesNotMatch(html, />Observed</);
-  assert.match(html, /No advertising, retargeting, or adtech vendor classification was retained/);
+  assert.match(html, /No advertising infrastructure classification was retained/);
 });
 
 test("GdprEprivacyCoverageChecklistCard renders concise session replay evidence copy", () => {
@@ -446,6 +446,9 @@ test("GdprEprivacyCoverageChecklistCard preserves first-seen timing in concise r
     html,
     /Pre-consent tracking evidence was retained before consent: Quantcast Measure \(tracking, 521ms\), Google Ads \/ DoubleClick \(advertising measurement, 521ms\), and BrightLine; first seen 521ms after scan start; no consent action was recorded first\./
   );
+  assert.match(html, /aria-label="Potential gap"/);
+  assert.match(html, /border-rose-200 bg-rose-50 text-rose-700/);
+  assert.match(html, /M10 4\.2 17 16H3L10 4\.2Z/);
   assert.doesNotMatch(html, /Why this result/);
   assert.doesNotMatch(html, /Evidence summary/);
 });
@@ -516,9 +519,9 @@ test("GdprEprivacyCoverageChecklistCard combines advertising basis and retained 
           },
           evidenceState: "observed",
           id: "advertising_retargeting_vendor_signal_observed",
-          label: "Advertising / retargeting vendor signal observed",
+          label: "Advertising vendor signal observed",
           note:
-            "Advertising or retargeting vendor signals were observed; first seen 521ms after scan start; before any recorded consent action.",
+            "Advertising vendor signals were observed; first seen 521ms after scan start; before any recorded consent action.",
           status: "Review signal"
         })
       ],
@@ -528,12 +531,51 @@ test("GdprEprivacyCoverageChecklistCard combines advertising basis and retained 
 
   assert.match(
     html,
-    /Advertising\/retargeting evidence was retained before consent: Google Ads \/ DoubleClick \(advertising measurement, 521ms\); first seen 521ms after scan start; no consent action was recorded first\./
+    /Advertising-infrastructure evidence was partially retained before consent: Google Ads \/ DoubleClick \(advertising measurement, 521ms\); first seen 521ms after scan start; no consent action was recorded first\./
   );
   assert.doesNotMatch(html, /Why this result/);
   assert.doesNotMatch(html, /Evidence summary/);
   assert.doesNotMatch(html, />Basis</);
   assert.doesNotMatch(html, />Evidence used</);
+});
+
+test("GdprEprivacyCoverageChecklistCard separates embedded content purpose buckets", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            retainedEvidence: {
+              embeddedContentHosts: ["imasdk.googleapis.com", "fonts.googleapis.com"],
+              embeddedContentPurposeBuckets: {
+                fontStaticResource: ["fonts.googleapis.com"],
+                videoAdSdk: ["imasdk.googleapis.com"]
+              },
+              firstEmbeddedContentObservedMs: 412
+            },
+            statusBasis:
+              "Concrete third-party embedded content was retained before consent in iframe/runtime evidence."
+          },
+          evidenceState: "observed",
+          id: "embedded_content_pre_consent",
+          label: "Embedded third-party content loaded before consent",
+          status: "Observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(
+    html,
+    /including video\/ad SDK evidence \(imasdk\.googleapis\.com\), lower-risk font\/static resource evidence \(fonts\.googleapis\.com\)\. Review retained domains by purpose/
+  );
+  assert.match(html, /aria-label="Potential concern"/);
+  assert.match(html, /border-amber-200 bg-amber-50 text-amber-700/);
+  assert.match(html, /<circle cx="10" cy="10" r="6\.8"/);
+  assert.doesNotMatch(html, /aria-label="Potential gap"/);
 });
 
 test("GdprEprivacyCoverageChecklistCard starts evidence and correction cards hidden behind row tool buttons", () => {
@@ -761,9 +803,22 @@ test("GdprEprivacyCoverageSummaryPills summarizes row decisions instead of evide
     }),
     makeChecklistItem({
       assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          analyticsVendorCount: 1,
+          analyticsVendors: ["Google Analytics"]
+        }
+      },
       evidenceState: "observed",
       id: "analytics_vendor_observed",
       label: "Analytics vendor signal observed",
+      status: "Review signal"
+    }),
+    makeChecklistItem({
+      assessmentStatus: "review_signal",
+      evidenceState: "observed",
+      id: "consent_choice_quality",
+      label: "Consent choice quality",
       status: "Review signal"
     }),
     makeChecklistItem({
@@ -778,13 +833,20 @@ test("GdprEprivacyCoverageSummaryPills summarizes row decisions instead of evide
     createElement(GdprEprivacyCoverageSummaryPills, { items })
   );
 
-  assert.match(html, /potential concerns/);
-  assert.match(html, /review signals/);
-  assert.match(html, /positive signals/);
-  assert.match(html, /neutral signals/);
+  assert.match(html, /gaps observed/);
+  assert.match(html, /partial concerns/);
+  assert.match(html, /review/);
+  assert.match(html, /positive/);
+  assert.match(html, /neutral/);
+  assert.doesNotMatch(html, /review signals/);
+  assert.doesNotMatch(html, /positive signals/);
+  assert.doesNotMatch(html, /neutral signals/);
+  assert.doesNotMatch(html, /potential concerns/);
   assert.doesNotMatch(html, /potential gaps/);
   assert.doesNotMatch(html, />partial</);
   assert.doesNotMatch(html, />observed</);
+  assert.match(html, /M10 4\.2 17 16H3L10 4\.2Z/);
+  assert.match(html, /<circle cx="10" cy="10" r="6\.8"/);
 });
 
 test("GdprEprivacyCoverageChecklistCard renders debug confidence metadata", () => {

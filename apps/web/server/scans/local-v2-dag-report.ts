@@ -1,6 +1,7 @@
 import "server-only";
 
 import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
+import { readFileSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -144,6 +145,65 @@ function isPreConsentErrorShellScreenshot(bundle: CanonicalEvidenceBundle, scree
   });
 }
 
+function readPngDimensions(filePath: string): { height: number; width: number } | null {
+  try {
+    const header = readFileSync(filePath, { encoding: null, flag: "r" }).subarray(0, 24);
+    const pngSignature = "89504e470d0a1a0a";
+    if (header.length < 24 || header.subarray(0, 8).toString("hex") !== pngSignature) {
+      return null;
+    }
+    return {
+      width: header.readUInt32BE(16),
+      height: header.readUInt32BE(20)
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isLikelyRetainedVisualErrorShell(input: {
+  bundle: CanonicalEvidenceBundle;
+  lowRuntimeActivity: boolean;
+  screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number] | null;
+}) {
+  const screenshotPath = getString(input.screenshot?.path);
+  if (!screenshotPath || input.screenshot?.artifactId !== "screenshot_pre_consent") {
+    return false;
+  }
+  if (!input.lowRuntimeActivity) {
+    return false;
+  }
+
+  try {
+    const fileSize = statSync(screenshotPath).size;
+    const dimensions = readPngDimensions(screenshotPath);
+    const runtimeCounts = input.bundle.runtimeCoverage?.observationCounts;
+    const noMeaningfulRuntime =
+      (runtimeCounts?.thirdPartyRequests ?? 0) === 0 &&
+      (runtimeCounts?.cookiesBeforeConsent ?? 0) === 0 &&
+      (runtimeCounts?.normalizedVendors ?? 0) === 0 &&
+      (input.bundle.cookieEvents ?? []).length === 0 &&
+      (input.bundle.normalizedVendorObservations ?? []).length === 0;
+    const noConsentSurface = !(input.bundle.consentUiObservations ?? []).some((observation) =>
+      observation.likelyPresent === true ||
+      (observation.visibleChoiceLabels ?? []).length > 0 ||
+      (observation.controls ?? []).length > 0
+    );
+
+    return Boolean(
+      dimensions &&
+      dimensions.width >= 900 &&
+      dimensions.height >= 600 &&
+      fileSize > 256 &&
+      fileSize <= 25_000 &&
+      noMeaningfulRuntime &&
+      noConsentSurface
+    );
+  } catch {
+    return false;
+  }
+}
+
 function hostnameFromUrl(value: string | null | undefined) {
   if (!value) {
     return null;
@@ -210,9 +270,11 @@ function purposeToCategory(value: string | null | undefined) {
     case "advertising":
     case "analytics":
     case "session_replay":
-    case "tag_manager":
     case "tracking":
       return value;
+    case "tag_manager":
+    case "tag_management":
+      return "tag_manager";
     case "consent_management":
       return "cmp";
     case "customer_data_platform":
@@ -473,6 +535,7 @@ function buildVendorEvidence(bundle: CanonicalEvidenceBundle) {
       detectionSource: "local_v2_dag_runtime",
       firstPartyOrThirdParty: "third_party",
       matchedSignatureId: vendor.observationId ?? null,
+      regulatoryRelevance: vendor.regulatoryRelevance ?? [],
       scriptHost: evidenceHost,
       vendorCategory: category,
       vendorName
@@ -486,6 +549,32 @@ function vendorRowsForCategories(
 ) {
   const categorySet = new Set(categories);
   return vendors.filter((vendor) => categorySet.has(vendor.vendorCategory));
+}
+
+function uniqueVendorRows(vendors: ReturnType<typeof buildVendorEvidence>) {
+  const selected = new Map<string, ReturnType<typeof buildVendorEvidence>[number]>();
+  for (const vendor of vendors) {
+    selected.set(`${vendor.vendorName}:${vendor.scriptHost ?? ""}:${vendor.vendorCategory}`, vendor);
+  }
+  return [...selected.values()];
+}
+
+function vendorRowsForBehavioralAdvertising(vendors: ReturnType<typeof buildVendorEvidence>) {
+  return vendors.filter((vendor) => {
+    const relevance = vendor.regulatoryRelevance.join(" ").toLowerCase();
+    const label = `${vendor.vendorCategory} ${vendor.vendorName} ${vendor.scriptHost ?? ""}`.toLowerCase();
+    return vendor.vendorCategory === "retargeting" ||
+      /cross_site_tracking|identity_resolution|audience_management|audience_segmentation|audience_matching|profile_activation/.test(relevance) ||
+      /\b(retarget|remarket|audience|identity sync|idsync|pixel|meta pixel|facebook pixel|linkedin insight|tiktok pixel|pinterest tag)\b/.test(label);
+  });
+}
+
+function vendorRowsForAdvertisingInfrastructure(vendors: ReturnType<typeof buildVendorEvidence>) {
+  return vendors.filter((vendor) => {
+    const relevance = vendor.regulatoryRelevance.join(" ").toLowerCase();
+    return vendor.vendorCategory === "advertising" ||
+      /advertising|ad_measurement|ad_verification|brand_safety|programmatic_ads|content_recommendation|video_ad_measurement|audience_measurement|attribution|tv_attribution/.test(relevance);
+  });
 }
 
 function sanitizeIframeEvents(bundle: CanonicalEvidenceBundle, rootDomain: string | null) {
@@ -530,6 +619,50 @@ const SESSION_REPLAY_URL_PATTERN =
 const SESSION_REPLAY_VENDOR_PATTERN =
   /microsoft clarity|clarity|hotjar|fullstory|logrocket|mouseflow|contentsquare|smartlook|inspectlet|lucky orange|quantum metric|sessioncam/i;
 
+function classifyEmbeddedContentPurpose(hostname: string | null | undefined, url?: string | null) {
+  const text = `${hostname ?? ""} ${url ?? ""}`.toLowerCase();
+  if (/imasdk\.googleapis\.com|ima3\.js|googletagservices\.com|gampad|doubleclick\.net|googleads\.g\.doubleclick\.net|brightline\.tv|freewheel|ad[-.]tech|video.*ad|ad.*video/.test(text)) {
+    return "videoAdSdk";
+  }
+  if (/fonts\.googleapis\.com|fonts\.gstatic\.com|typekit\.net|use\.typekit\.net/.test(text)) {
+    return "fontStaticResource";
+  }
+  if (/youtube(?:-nocookie)?\.com|youtu\.be|vimeo\.com|spotify\.com|soundcloud\.com/.test(text)) {
+    return "mediaEmbed";
+  }
+  if (/maps\/embed|google\.[a-z.]+\/maps|openstreetmap\.org/.test(text)) {
+    return "mapEmbed";
+  }
+  if (/facebook\.com|instagram\.com|tiktok\.com|linkedin\.com|twitter\.com|x\.com/.test(text)) {
+    return "socialEmbed";
+  }
+  if (/typeform\.com|calendly\.com|hubspot(?:usercontent)?\.com|chat|widget/.test(text)) {
+    return "formOrChatWidget";
+  }
+  return "otherEmbeddedContent";
+}
+
+function buildEmbeddedContentPurposeBuckets(observations: Array<{ hostname: string | null; frameUrl?: string | null; requestUrl?: string | null }>) {
+  const buckets: Record<string, string[]> = {
+    fontStaticResource: [],
+    formOrChatWidget: [],
+    mapEmbed: [],
+    mediaEmbed: [],
+    otherEmbeddedContent: [],
+    socialEmbed: [],
+    videoAdSdk: []
+  };
+  for (const observation of observations) {
+    const host = observation.hostname;
+    if (!host) {
+      continue;
+    }
+    const bucket = classifyEmbeddedContentPurpose(host, observation.frameUrl ?? observation.requestUrl ?? null);
+    buckets[bucket] = uniqueStrings([...(buckets[bucket] ?? []), host]);
+  }
+  return buckets;
+}
+
 function isKnownEmbeddedContentUrl(url: string | null | undefined, hostnameFallback?: string | null) {
   const hostname = hostnameFromUrl(url) ?? hostnameFallback ?? null;
   if (!hostname || !EMBEDDED_CONTENT_HOST_PATTERNS.some((pattern) => pattern.test(hostname))) {
@@ -560,12 +693,15 @@ function summarizeEmbeddedContentEvidence(
       timestampMs: event.timestampMs
     }));
   const observations = [...iframeObservations, ...networkObservations].slice(0, 25);
+  const embeddedContentPurposeBuckets = buildEmbeddedContentPurposeBuckets(observations);
 
   return {
     coverageRetained: true,
     embeddedContentHosts: uniqueStrings(observations.map((event) => event.hostname)),
     embeddedContentObservationCount: observations.length,
     embeddedContentObserved: observations.length > 0,
+    embeddedContentPurposeBuckets,
+    embedded_content_purpose_buckets: embeddedContentPurposeBuckets,
     iframeObservationCount: iframeObservations.length,
     networkObservationCount: networkObservations.length,
     observations
@@ -775,6 +911,148 @@ function summarizeFirstLayerConsentChoices(bundle: CanonicalEvidenceBundle) {
   };
 }
 
+const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
+  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|security issue was automatically identified|request blocked|bot protection|you(?:'|’)ve been blocked/i;
+const LOCAL_V2_SCREENSHOT_PLACEHOLDER_PATTERN =
+  /1x1 screenshot placeholder used|screenshot placeholder/i;
+const LOCAL_V2_PAGE_CONTEXT_CLOSED_PATTERN =
+  /page\/context closed|target page, context or browser has been closed|page\.screenshot: target page/i;
+
+function boundedTextExcerpt(value: string | null | undefined) {
+  return value ? value.replace(/\s+/g, " ").trim().slice(0, 240) : null;
+}
+
+function collectLocalV2NoGoTextCandidates(bundle: CanonicalEvidenceBundle) {
+  return uniqueStrings([
+    ...(bundle.consentUiObservations ?? []).map((observation) => boundedTextExcerpt(observation.textExcerpt)),
+    ...(bundle.policySurfaceObservations ?? []).map((observation) => boundedTextExcerpt(observation.textExcerpt)),
+    ...(bundle.screenshots ?? []).map((screenshot) => boundedTextExcerpt(screenshot.url))
+  ]);
+}
+
+function collectLocalV2ModuleErrors(bundle: CanonicalEvidenceBundle) {
+  return uniqueStrings((bundle.modulesRun ?? []).flatMap((moduleRun) => moduleRun.errors ?? []));
+}
+
+function localV2VisualCapture(bundle: CanonicalEvidenceBundle) {
+  const visualCapture = isRecord((bundle as { visualCapture?: unknown }).visualCapture)
+    ? (bundle as { visualCapture?: Record<string, unknown> }).visualCapture
+    : null;
+  const status = getString(visualCapture?.status);
+  const failureReason = getString(visualCapture?.failureReason);
+  const notes = Array.isArray(visualCapture?.notes)
+    ? uniqueStrings(visualCapture.notes.map((note) => getString(note)).filter((note): note is string => Boolean(note)))
+    : [];
+  return {
+    failureReason,
+    notes,
+    status
+  };
+}
+
+function buildLocalV2ScanNoGoAssessment(input: {
+  bundle: CanonicalEvidenceBundle;
+  consentSurfaceLikelyPresent: boolean;
+  runtimeActivityObserved: boolean;
+  lowRuntimeActivity: boolean;
+}) {
+  const textCandidates = collectLocalV2NoGoTextCandidates(input.bundle);
+  const matchedText = textCandidates.find((text) => LOCAL_V2_HARD_NO_GO_TEXT_PATTERN.test(text));
+  const moduleErrors = collectLocalV2ModuleErrors(input.bundle);
+  const visualCapture = localV2VisualCapture(input.bundle);
+  const screenshot = (input.bundle.screenshots ?? []).find((item) => item.artifactId === "screenshot_pre_consent") ?? null;
+  const screenshotPlaceholderUsed = visualCapture.status === "placeholder" ||
+    visualCapture.failureReason === "placeholder_used" ||
+    moduleErrors.some((error) => LOCAL_V2_SCREENSHOT_PLACEHOLDER_PATTERN.test(error));
+  const pageContextClosed = moduleErrors.some((error) => LOCAL_V2_PAGE_CONTEXT_CLOSED_PATTERN.test(error));
+  const visualCaptureFailed = screenshotPlaceholderUsed && (pageContextClosed || visualCapture.failureReason === "placeholder_used");
+  const retainedVisualErrorShell = isLikelyRetainedVisualErrorShell({
+    bundle: input.bundle,
+    lowRuntimeActivity: input.lowRuntimeActivity,
+    screenshot
+  });
+  if ((!matchedText && !visualCaptureFailed && !retainedVisualErrorShell) || input.consentSurfaceLikelyPresent) {
+    return null;
+  }
+
+  const primaryReasonCode = matchedText
+    ? "access_denied_or_forbidden_page"
+    : retainedVisualErrorShell
+      ? "retained_visual_error_shell"
+      : "visual_capture_failed_or_placeholder";
+  const visualPageState = matchedText ? "access_blocked" : retainedVisualErrorShell ? "visual_error_shell" : "capture_failed";
+  const evidenceText = matchedText ??
+    (retainedVisualErrorShell
+      ? "The retained pre-consent screenshot appears to be a full-viewport visual error shell with negligible runtime evidence, not the normal public site."
+      : "The pre-consent runtime scanner retained only a 1x1 screenshot placeholder after page/context closure and screenshot capture failures.");
+  const evidenceRefs = [
+    "scan_runtime_artifacts.scan_no_go_assessment",
+    "scan_runtime_artifacts.visual_access_review",
+    screenshot ? "scan_runtime_artifacts.visual_evidence_artifacts" : null
+  ].filter((value): value is string => Boolean(value));
+  const shortExplanation = matchedText
+    ? `The retained initial-load evidence showed an access-denied or forbidden page instead of the normal public site: "${matchedText}"`
+    : evidenceText;
+  const visualAccessReview = {
+    artifact_ref: screenshot ? "local_v2:screenshot_pre_consent" : null,
+    confidence: 0.95,
+    go_no_go: "NO_GO",
+    key_visual_evidence: [evidenceText],
+    page_state: visualPageState,
+    reason_code: primaryReasonCode,
+    short_explanation: shortExplanation,
+    status: "available",
+    version: "visual-access-review-v1"
+  };
+  const scanNoGoAssessment = {
+    status: "available",
+    version: "scan-no-go-assessment-v1",
+    decision: "no_go",
+    scanNoGoConfidence: 0.95,
+    visualScreenshotNoGoConfidence: 0.95,
+    reasonCodes: [primaryReasonCode, "scan_no_go_corroborated"],
+    corroboratorCodes: [
+      matchedText ? "access_block_text_observed" : null,
+      visualCaptureFailed ? "visual_capture_failed" : null,
+      screenshotPlaceholderUsed ? "screenshot_placeholder_used" : null,
+      pageContextClosed ? "page_context_closed" : null,
+      input.lowRuntimeActivity ? "low_runtime_activity" : null,
+      input.runtimeActivityObserved && !input.lowRuntimeActivity ? "runtime_activity_observed_on_block_page" : null,
+      screenshot ? "retained_visual_artifact_available" : null
+    ].filter((value): value is string => Boolean(value)),
+    contradictorCodes: [],
+    supportingSignals: {
+      challengeSignalsDetected: true,
+      consentOrTrackerEvidenceObserved: input.consentSurfaceLikelyPresent,
+      documentStatusBlocked: Boolean(matchedText),
+      domContentLow: true,
+      expectedOriginReached: false,
+      firstPartyIdentityObserved: false,
+      lowRuntimeActivity: input.lowRuntimeActivity,
+      pageContextClosed,
+      retainedVisualErrorShell,
+      runtimeActivityObserved: input.runtimeActivityObserved,
+      retainedVisualArtifactAvailable: Boolean(screenshot),
+      screenshotPlaceholderUsed,
+      visualCaptureFailed,
+      visualCaptureFailureReason: visualCapture.failureReason,
+      visualCaptureStatus: visualCapture.status,
+      visualHardNoGoPageState: true,
+      visualNoGo: true,
+      visualPageState
+    },
+    evidenceRefs
+  };
+
+  return {
+    matchedText: evidenceText,
+    pageState: visualPageState,
+    primaryReasonCode,
+    scanNoGoAssessment,
+    visualAccessReview
+  };
+}
+
 function buildMaterializedLocalV2Detail(
   scanRecord: ScanDetailResponse,
   bundle: CanonicalEvidenceBundle,
@@ -792,7 +1070,13 @@ function buildMaterializedLocalV2Detail(
   const preconsentCookies = cookieEvents.filter((event) => event.consentStateAtTime === "pre_consent");
   const cookieNames = uniqueStrings(cookieEvents.map((event) => cookieName(event)));
   const preconsentCookieNames = uniqueStrings(preconsentCookies.map((event) => cookieName(event)));
-  const advertisingRetargetingVendors = vendorRowsForCategories(vendorRows, ["advertising", "retargeting", "adtech", "marketing"]);
+  const advertisingVendors = vendorRowsForAdvertisingInfrastructure(vendorRows);
+  const retargetingBehavioralAdvertisingVendors = vendorRowsForBehavioralAdvertising(vendorRows);
+  const advertisingRetargetingVendors = uniqueVendorRows([
+    ...advertisingVendors,
+    ...retargetingBehavioralAdvertisingVendors,
+    ...vendorRowsForCategories(vendorRows, ["adtech", "marketing"])
+  ]);
   const analyticsVendors = vendorRowsForCategories(vendorRows, ["analytics", "measurement"]);
   const iframeEvents = sanitizeIframeEvents(bundle, rootDomain);
   const preconsentIframeEvents = iframeEvents.filter((event) => event.preConsent);
@@ -812,6 +1096,23 @@ function buildMaterializedLocalV2Detail(
     preconsentCookies.length > 0 ||
     (runtimeObservationCounts?.normalizedVendors ?? 0) > 0;
   const runtimeCountsRetained = runtimeCoverageStatus === "usable" || meaningfulRuntimeSignalsRetained;
+  const visualCapture = localV2VisualCapture(bundle);
+  const localV2NoGo = buildLocalV2ScanNoGoAssessment({
+    bundle,
+    consentSurfaceLikelyPresent,
+    runtimeActivityObserved: preconsentCookies.length > 0 || vendorRows.length > 0 || networkEvents.length > 3 || cookieEvents.length > 0,
+    lowRuntimeActivity: networkEvents.length <= 3 && cookieEvents.length === 0 && vendorRows.length === 0
+  });
+  const visualCaptureUnavailable = !localV2NoGo &&
+    (visualCapture.status === "failed" || visualCapture.status === "unavailable") &&
+    (bundle.screenshots ?? []).length === 0;
+  const effectiveRuntimeCoverageStatus = localV2NoGo ? "limited_none" : runtimeCoverageStatus;
+  const effectiveRuntimeCountsRetained = localV2NoGo ? false : runtimeCountsRetained;
+  const effectiveRuntimeLimitationKeys = localV2NoGo
+    ? uniqueStrings([...runtimeLimitationKeys, "access_denied_or_forbidden_page"])
+    : visualCaptureUnavailable
+      ? uniqueStrings([...runtimeLimitationKeys, "visual_capture_unavailable"])
+      : runtimeLimitationKeys;
   const policySurfaces = dedupePolicySurfaces(
     bundle.policySurfaceObservations ?? [],
     bundle.normalizedUrl ?? bundle.url ?? (requestedHost ? `https://${requestedHost}/` : null)
@@ -820,7 +1121,10 @@ function buildMaterializedLocalV2Detail(
   const collectionSurfaceSummary = summarizeCollectionSurfaces(bundle);
   const privacySurface = policySurfaces.find((row) => row.surface.surfaceType === "privacy_policy");
   const termsSurface = policySurfaces.find((row) => row.surface.surfaceType === "terms");
-  const cookieSurface = policySurfaces.find((row) => row.surface.surfaceType === "cookie_policy");
+  const cookieSurface = policySurfaces.find((row) =>
+    row.surface.surfaceType === "cookie_policy" ||
+    row.surface.surfaceType === "cookie_settings"
+  );
   const thirdPartyRequestCount = Math.max(
     bundle.runtimeCoverage?.observationCounts.thirdPartyRequests ?? 0,
     thirdPartyRequests.length
@@ -858,6 +1162,7 @@ function buildMaterializedLocalV2Detail(
             firstPartyOrThirdParty: sameSite(hostname, rootDomain) ? "first_party" : "third_party",
             hostname,
             requestUrl: url,
+            regulatoryRelevance: matchedVendor.regulatoryRelevance,
             runtimePhase: "pre_consent",
             tsMs: event.timestampMs,
             vendor: matchedVendor.vendorName,
@@ -923,6 +1228,7 @@ function buildMaterializedLocalV2Detail(
       category: vendor.vendorCategory,
       hostname: vendor.scriptHost,
       preConsent: true,
+      regulatoryRelevance: vendor.regulatoryRelevance,
       vendor: vendor.vendorName
     })),
     embeddedContentSummary,
@@ -952,10 +1258,12 @@ function buildMaterializedLocalV2Detail(
       timelineConfidence: "direct_v2_runtime"
     },
     vendorSummary: {
+      advertisingVendors: uniqueStrings(advertisingVendors.map((vendor) => vendor.vendorName)),
       advertisingRetargetingVendors: uniqueStrings(advertisingRetargetingVendors.map((vendor) => vendor.vendorName)),
       analyticsVendors: uniqueStrings(analyticsVendors.map((vendor) => vendor.vendorName)),
       normalizedVendors: uniqueStrings(vendorRows.map((vendor) => vendor.vendorName)),
       preConsentVendorCount: vendorRows.length,
+      retargetingBehavioralAdvertisingVendors: uniqueStrings(retargetingBehavioralAdvertisingVendors.map((vendor) => vendor.vendorName)),
       rawThirdPartyDomains: thirdPartyDomains,
       vendorCategoryCounts
     }
@@ -963,6 +1271,12 @@ function buildMaterializedLocalV2Detail(
   const runtimeArtifacts = {
     ...(scanRecord.runtimeArtifacts ?? {}),
     local_v2_dag_scan_core_duration_ms: durationMsFromTimestamps(bundle.startedAt, bundle.completedAt),
+    ...(localV2NoGo ? {
+      scanNoGoAssessment: localV2NoGo.scanNoGoAssessment,
+      scan_no_go_assessment: localV2NoGo.scanNoGoAssessment,
+      visualAccessReview: localV2NoGo.visualAccessReview,
+      visual_access_review: localV2NoGo.visualAccessReview
+    } : {}),
     consent_audit_completed: true,
     consent_baseline_tracker_evidence_urls: preconsentRequestUrls,
     consent_baseline_tracker_vendor_names: uniqueStrings(vendorRows.map((vendor) => vendor.vendorName)),
@@ -1009,8 +1323,16 @@ function buildMaterializedLocalV2Detail(
     } : {}),
     consentTimeline: hybridRuntimeEvidence.timelineMarkers,
     consent_timeline: hybridRuntimeEvidence.timelineMarkers,
+    advertising_vendor_count: advertisingVendors.length,
+    advertising_vendor_names: uniqueStrings(advertisingVendors.map((vendor) => vendor.vendorName)),
+    advertisingRetargetingVendorCount: advertisingRetargetingVendors.length,
+    advertisingRetargetingVendorNames: uniqueStrings(advertisingRetargetingVendors.map((vendor) => vendor.vendorName)),
     advertising_retargeting_vendor_count: advertisingRetargetingVendors.length,
     advertising_retargeting_vendor_names: uniqueStrings(advertisingRetargetingVendors.map((vendor) => vendor.vendorName)),
+    retargeting_behavioral_advertising_vendor_count: retargetingBehavioralAdvertisingVendors.length,
+    retargeting_behavioral_advertising_vendor_names: uniqueStrings(retargetingBehavioralAdvertisingVendors.map((vendor) => vendor.vendorName)),
+    retargetingBehavioralAdvertisingVendorCount: retargetingBehavioralAdvertisingVendors.length,
+    retargetingBehavioralAdvertisingVendorNames: uniqueStrings(retargetingBehavioralAdvertisingVendors.map((vendor) => vendor.vendorName)),
     analytics_vendor_count: analyticsVendors.length,
     analytics_vendor_names: uniqueStrings(analyticsVendors.map((vendor) => vendor.vendorName)),
     domainVendorRegistry: vendorRows.map((vendor) => ({
@@ -1051,12 +1373,19 @@ function buildMaterializedLocalV2Detail(
     session_replay_evidence_summary: sessionReplayEvidenceSummary,
     policyDisclosureSummary: policySurfaceSummary,
     policy_disclosure_summary: policySurfaceSummary,
-    runtimeCoverageStatus,
-    runtime_coverage_status: runtimeCoverageStatus,
-    runtimeCountsRetained,
-    runtime_counts_retained: runtimeCountsRetained,
-    runtimeLimitationKeys,
-    runtime_limitation_keys: runtimeLimitationKeys,
+    runtimeCoverageStatus: effectiveRuntimeCoverageStatus,
+    runtime_coverage_status: effectiveRuntimeCoverageStatus,
+    runtimeCountsRetained: effectiveRuntimeCountsRetained,
+    runtime_counts_retained: effectiveRuntimeCountsRetained,
+    runtimeLimitationKeys: effectiveRuntimeLimitationKeys,
+    runtime_limitation_keys: effectiveRuntimeLimitationKeys,
+    visualCaptureFailureReason: visualCapture.failureReason,
+    visualCaptureNotes: visualCapture.notes,
+    visualCaptureStatus: visualCapture.status,
+    visual_capture_failure_reason: visualCapture.failureReason,
+    visual_capture_notes: visualCapture.notes,
+    visual_capture_status: visualCapture.status,
+    visual_capture_technical_limit: visualCaptureUnavailable,
     thirdPartyRequestCount: thirdPartyRequestCount,
     thirdPartyRequestDomains: thirdPartyDomains,
     third_party_request_count: thirdPartyRequestCount,
@@ -1088,35 +1417,68 @@ function buildMaterializedLocalV2Detail(
   };
   const snapshot = {
     ...(scanRecord.snapshot ?? {}),
-    certscore_overall: score,
-    consent_maturity_score: Math.max(0, score - 5),
-    consent_score: Math.max(0, score - 10),
-    cookie_banner_present: consentSurfaceLikelyPresent,
-    cookie_count_total: cookieNames.length,
-    cookies_before_consent_count: cookiesBeforeConsentCount,
-    data_collection_risk_score: Math.min(100, Math.max(20, thirdPartyRequestCount)),
+    certscore_overall: localV2NoGo ? null : score,
+    consent_maturity_score: localV2NoGo ? null : Math.max(0, score - 5),
+    consent_score: localV2NoGo ? null : Math.max(0, score - 10),
+    cookie_banner_present: localV2NoGo ? false : consentSurfaceLikelyPresent,
+    cookie_count_total: localV2NoGo ? 0 : cookieNames.length,
+    cookies_before_consent_count: localV2NoGo ? 0 : cookiesBeforeConsentCount,
+    data_collection_risk_score: localV2NoGo ? null : Math.min(100, Math.max(20, thirdPartyRequestCount)),
     domain: requestedHost,
     final_effective_url: bundle.normalizedUrl ?? bundle.url,
     final_url: bundle.normalizedUrl ?? bundle.url,
-    homepage_fetch_status: "success",
-    legal_coverage_score: score,
-    pages_scanned: Math.max(scanRecord.scan.pagesScanned, 1),
+    ...(localV2NoGo ? {
+      access_posture_class: "early_loss",
+      block_page_classification: localV2NoGo.pageState === "access_blocked"
+        ? "access_denied"
+        : localV2NoGo.pageState === "visual_error_shell"
+          ? "visual_error_shell"
+          : "capture_failed",
+      blocked_flag: true,
+      challenge_suspected: true,
+      coverage_level: "limited_none",
+      homepage_fetch_status: "blocked",
+      scan_outcome: localV2NoGo.pageState === "access_blocked"
+        ? "reachability_blocked_homepage_403"
+        : localV2NoGo.pageState === "visual_error_shell"
+          ? "homepage_visual_error_shell"
+          : "homepage_visual_capture_failed",
+      stop_reason_code: localV2NoGo.pageState === "access_blocked"
+        ? "reachability_blocked_homepage_403"
+        : localV2NoGo.pageState === "visual_error_shell"
+          ? "homepage_visual_error_shell"
+          : "homepage_visual_capture_failed",
+      stop_reason_detail: localV2NoGo.pageState === "access_blocked"
+        ? "The retained initial-load evidence showed an access-denied or forbidden page instead of the normal public site."
+        : localV2NoGo.pageState === "visual_error_shell"
+          ? "The retained initial-load screenshot appeared to be a visual error shell instead of the normal public site."
+          : "The scanner could not retain a usable homepage visual/runtime capture.",
+      stop_reason_label: localV2NoGo.pageState === "access_blocked"
+        ? "Homepage access blocked"
+        : localV2NoGo.pageState === "visual_error_shell"
+          ? "Homepage visual error shell"
+          : "Homepage capture failed"
+    } : {
+      homepage_fetch_status: "success"
+    }),
+    legal_coverage_score: localV2NoGo ? null : score,
+    pages_scanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1),
     partial_scan: true,
-    preconsent_tracking_detected: bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0,
+    preconsent_tracking_detected: localV2NoGo ? false : bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0,
     privacy_policy_present: Boolean(privacySurface),
-    privacy_score: score,
+    privacy_score: localV2NoGo ? null : score,
     registered_domain: rootDomain,
-    runtime_counts_retained: runtimeCountsRetained,
-    runtime_coverage_status: runtimeCoverageStatus,
-    runtime_limitation_keys: runtimeLimitationKeys,
-    third_party_cookie_count: preconsentCookies.filter((event) => event.cookieParty === "third_party" || event.thirdParty === true).length,
-    third_party_cookie_set_before_consent: preconsentCookies.length > 0,
-    third_party_request_count: thirdPartyRequestCount,
-    third_party_script_domain_count: thirdPartyDomains.length,
-    tracker_count_total: Math.max(vendorRows.length, thirdPartyDomains.length),
-    tracker_vendor_count: vendorRows.length,
-    tracking_before_consent_detected: bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0,
-    verified_public_surfaces_count: policySurfaces.length,
+    runtime_counts_retained: effectiveRuntimeCountsRetained,
+    runtime_coverage_status: effectiveRuntimeCoverageStatus,
+    runtime_limitation_keys: effectiveRuntimeLimitationKeys,
+    third_party_cookie_count: localV2NoGo ? 0 : preconsentCookies.filter((event) => event.cookieParty === "third_party" || event.thirdParty === true).length,
+    third_party_cookie_set_before_consent: localV2NoGo ? false : preconsentCookies.length > 0,
+    third_party_request_count: localV2NoGo ? 0 : thirdPartyRequestCount,
+    third_party_script_domain_count: localV2NoGo ? 0 : thirdPartyDomains.length,
+    tracker_count_total: localV2NoGo ? 0 : Math.max(vendorRows.length, thirdPartyDomains.length),
+    tracker_vendor_count: localV2NoGo ? 0 : vendorRows.length,
+    tracking_before_consent_detected: localV2NoGo ? false : bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0,
+    verified_public_surfaces_count: localV2NoGo ? 0 : policySurfaces.length,
     ...(cmpVendorName ? { cmp_vendor_name: cmpVendorName } : {}),
     ...(cookieSurface ? { cookie_policy_present: true } : {}),
     ...(termsSurface ? { terms_of_service_present: true } : {})
@@ -1134,7 +1496,7 @@ function buildMaterializedLocalV2Detail(
     policy_mentions: (surface.observedTopics ?? []).map((topic) => ({ topic })),
     policy_summary_short: surface.textExcerpt ?? `${policySurfaceLabel(surface.surfaceType)} retained by local v2 DAG scan.`
   }));
-  const signalRows = [
+  const signalRows = localV2NoGo ? [] : [
     {
       category: "privacy",
       key: "privacy.preconsent_tracking_detected",
@@ -1184,7 +1546,7 @@ function buildMaterializedLocalV2Detail(
     runtimeArtifacts,
     scan: {
       ...scanRecord.scan,
-      pagesScanned: Math.max(scanRecord.scan.pagesScanned, 1)
+      pagesScanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1)
     },
     signals: materializedSignals,
     snapshot,
