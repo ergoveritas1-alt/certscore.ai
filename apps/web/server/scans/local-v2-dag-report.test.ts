@@ -1328,6 +1328,170 @@ test("materializeLocalV2DagScanDetail does not promote missing screenshots when 
   }
 });
 
+test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable when runtime counts are limited", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/fallback-consent-controls-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-20T19:14:52.000Z",
+      consentUiObservations: [
+        {
+          acceptControlObserved: true,
+          basis: [
+            "keyword:cookie",
+            "keyword:accept all",
+            "control:accept_all:Accept All",
+            "control:reject_all:Reject Optional"
+          ],
+          confidence: 0.86,
+          controls: [
+            {
+              actionType: "reject_all",
+              label: "Reject Optional",
+              role: "button",
+              selectorHint: "button",
+              tagName: "button",
+              visible: true
+            },
+            {
+              actionType: "accept_all",
+              label: "Accept All",
+              role: "button",
+              selectorHint: "button",
+              tagName: "button",
+              visible: true
+            }
+          ],
+          layerInspected: "first_layer",
+          likelyPresent: true,
+          managePreferencesControlObserved: false,
+          observationId: "consent_ui_pre_consent",
+          rejectControlObserved: true,
+          textExcerpt: "NVIDIA and our third-party partners use cookies. Reject Optional Accept All",
+          visibleChoiceLabels: ["Reject Optional", "Accept All"]
+        }
+      ],
+      cookieEvents: [],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: true,
+        journeySummary: { journeyCount: 0 },
+        preConsentTrackingObserved: false,
+        sessionReplayOrBehavioralAnalyticsObserved: false,
+        thirdPartyCookiesPreConsentObserved: false,
+        thirdPartyVendorsObserved: false
+      },
+      modulesRun: [
+        {
+          errors: [
+            "page.goto: Target page, context or browser has been closed",
+            "Visual fallback retained a pre-consent screenshot and bounded consent-surface evidence after the primary runtime page/context closed."
+          ],
+          moduleName: "preConsentRuntimeScanner",
+          status: "failed"
+        }
+      ],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "nvidia.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 100,
+          url: "https://nvidia.com/"
+        }
+      ],
+      normalizedUrl: "https://nvidia.com/",
+      normalizedVendorObservations: [],
+      observedJourneys: [],
+      policySurfaceObservations: [
+        {
+          confidence: 0.8,
+          discoveryMethod: "homepage_link",
+          observationId: "privacy",
+          status: "fetched",
+          surfaceType: "privacy_policy",
+          textExcerpt: "Privacy Policy",
+          url: "https://www.nvidia.com/privacy-policy"
+        }
+      ],
+      runtimeCoverage: {
+        coverageStatus: "limited_partial",
+        fallbackModesUsed: [],
+        limitationKeys: ["pre_consent_runtime_failed"],
+        notes: [],
+        observationCounts: {
+          cookiesBeforeConsent: 0,
+          normalizedVendors: 0,
+          thirdPartyRequests: 0
+        }
+      },
+      runtimeTimeline: [],
+      scanId: "nvidia-fallback-consent-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 5343,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "dom_content_loaded",
+          path: "/tmp/certscore-v2/nvidia-fallback/screenshot-pre-consent.png",
+          url: "https://www.nvidia.com/en-gb/"
+        }
+      ],
+      startedAt: "2026-06-20T19:14:43.000Z",
+      url: "https://nvidia.com/",
+      visualCapture: {
+        artifactRefs: [],
+        notes: ["Screenshot and bounded consent-surface evidence retained by an independent visual fallback after the primary runtime page/context closed."],
+        status: "available"
+      }
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "nvidia.com",
+        scanConfigJson: {
+          hostname: "nvidia.com",
+          normalizedUrl: "https://nvidia.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const firstLayerChoices = detail.runtimeArtifacts?.first_layer_consent_choices as Record<string, unknown> | undefined;
+
+    assert.equal(detail.runtimeArtifacts?.scan_no_go_assessment, undefined);
+    assert.equal(detail.snapshot?.homepage_fetch_status, "success");
+    assert.equal(detail.snapshot?.cookie_banner_present, true);
+    assert.equal(detail.runtimeArtifacts?.consent_surface_observed, true);
+    assert.equal(firstLayerChoices?.rejectControlObserved, true);
+    assert.deepEqual(firstLayerChoices?.rejectLabels, ["Reject Optional"]);
+    assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_partial");
+    assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, false);
+    assert.equal(detail.scan.pagesScanned, 1);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail does not surface pre-consent error-shell screenshots", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

@@ -71,14 +71,32 @@ test("handler exposes bounded Lambda runtime diagnostics for quality A/B runs", 
   const diagnostics = buildLocalV2DagLambdaRuntimeDiagnostics({
     AWS_LAMBDA_FUNCTION_MEMORY_SIZE: "4096",
     AWS_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-local-lambda",
-    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS: "false"
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-IE,en;q=0.9",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-IE",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS: "false",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "Europe/Dublin",
+    CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD: "secret",
+    CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER: "http://proxy.example:8080",
+    CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME: "scanner"
   });
 
   assert.equal(diagnostics.awsLambdaRuntime, true);
+  assert.deepEqual(diagnostics.chromiumContextOptions, {
+    acceptLanguage: "en-IE,en;q=0.9",
+    locale: "en-IE",
+    timezoneId: "Europe/Dublin",
+    userAgent: null,
+    userAgentConfigured: false,
+    viewport: { width: 1366, height: 900 }
+  });
+  assert.equal(diagnostics.chromiumProxyAuthConfigured, true);
+  assert.equal(diagnostics.chromiumProxyConfigured, true);
   assert.equal(diagnostics.chromiumSingleProcessEnabled, false);
   assert.equal(diagnostics.memorySizeMb, 4096);
   assert.equal(diagnostics.chromiumLaunchArgs.includes("--single-process"), false);
   assert.equal(Object.hasOwn(diagnostics, "OPENAI_API_KEY"), false);
+  assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
+  assert.equal(JSON.stringify(diagnostics).includes("proxy.example"), false);
 });
 
 test("handler exposes bounded Lambda scan tuning for quality and speed A/B runs", () => {

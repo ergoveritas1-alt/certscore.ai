@@ -171,6 +171,7 @@ fi
 EXISTING_ENVIRONMENT_JSON="$existing_environment_json" \
 CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET="$artifact_bucket" \
 CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX="$artifact_prefix" \
+CERTSCORE_V2_DAG_LAMBDA_LOCATION_ENV_PREFIX="$location_env_prefix" \
 node >"$environment_json" <<'NODE'
 const { readFileSync } = require("node:fs");
 const existing = JSON.parse(readFileSync(process.env.EXISTING_ENVIRONMENT_JSON, "utf8"));
@@ -183,7 +184,7 @@ const variables = {
 };
 
 const conservativeDefaults = {
-  CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS: "true",
+  CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS: "false",
   CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE: "none",
   CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE: "webmd",
   CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
@@ -193,6 +194,24 @@ const conservativeDefaults = {
   CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE: "cmp_safe"
 };
 
+const regionalContextDefaults = {
+  EU_DE: {
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "de-DE,de;q=0.9,en;q=0.8",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "de-DE",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "Europe/Berlin"
+  },
+  EU_IE: {
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-IE,en;q=0.9",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-IE",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "Europe/Dublin"
+  },
+  US_WEST: {
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-US,en;q=0.9",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-US",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "America/Los_Angeles"
+  }
+}[process.env.CERTSCORE_V2_DAG_LAMBDA_LOCATION_ENV_PREFIX] ?? {};
+
 for (const [key, defaultValue] of Object.entries(conservativeDefaults)) {
   if (process.env[key] && String(process.env[key]).trim()) {
     variables[key] = String(process.env[key]).trim();
@@ -201,7 +220,37 @@ for (const [key, defaultValue] of Object.entries(conservativeDefaults)) {
   }
 }
 
+for (const [key, defaultValue] of Object.entries(regionalContextDefaults)) {
+  if (process.env[key] && String(process.env[key]).trim()) {
+    variables[key] = String(process.env[key]).trim();
+  } else if (existing[key] && String(existing[key]).trim()) {
+    variables[key] = String(existing[key]).trim();
+  } else {
+    variables[key] = defaultValue;
+  }
+}
+
 for (const key of ["CERTSCORE_V2_DAG_LAMBDA_ACTION_FINAL_SETTLE_MS"]) {
+  if (process.env[key] && String(process.env[key]).trim()) {
+    variables[key] = String(process.env[key]).trim();
+  } else if (existing[key] && String(existing[key]).trim()) {
+    variables[key] = String(existing[key]).trim();
+  }
+}
+
+for (const key of [
+  "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT",
+  "CERTSCORE_CHROMIUM_ACCEPT_LANGUAGE",
+  "CERTSCORE_CHROMIUM_LOCALE",
+  "CERTSCORE_CHROMIUM_TIMEZONE_ID",
+  "CERTSCORE_CHROMIUM_USER_AGENT",
+  "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
+  "CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME",
+  "CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD",
+  "CERTSCORE_CHROMIUM_PROXY_SERVER",
+  "CERTSCORE_CHROMIUM_PROXY_USERNAME",
+  "CERTSCORE_CHROMIUM_PROXY_PASSWORD",
+]) {
   if (process.env[key] && String(process.env[key]).trim()) {
     variables[key] = String(process.env[key]).trim();
   } else if (existing[key] && String(existing[key]).trim()) {

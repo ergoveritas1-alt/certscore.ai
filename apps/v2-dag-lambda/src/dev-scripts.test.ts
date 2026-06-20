@@ -43,6 +43,10 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(setupScript, /eu-central-1\) location_env_prefix="EU_DE"/);
   assert.match(setupScript, /eu-west-1\) location_env_prefix="EU_IE"/);
   assert.match(setupScript, /us-west-2\) location_env_prefix="US_WEST"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_LOCATION_ENV_PREFIX="\$location_env_prefix"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-IE,en;q=0\.9"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-IE"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "Europe\/Dublin"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_\$\{location_env_prefix\}_RESULT_QUEUE_URL/);
   assert.match(setupScript, /CERTSCORE_CHROMIUM_EXECUTABLE_PATH: "\/usr\/bin\/chromium"/);
   assert.doesNotMatch(setupScript, /PLAYWRIGHT_BROWSERS_PATH/);
@@ -66,6 +70,11 @@ test("dev image setup uses local names and refuses non-dev resource names", asyn
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS: "5000"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY: "1"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE: "cmp_safe"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT/);
+  assert.match(setupScript, /CERTSCORE_CHROMIUM_ACCEPT_LANGUAGE/);
+  assert.match(setupScript, /CERTSCORE_CHROMIUM_LOCALE/);
+  assert.match(setupScript, /CERTSCORE_CHROMIUM_TIMEZONE_ID/);
+  assert.match(setupScript, /CERTSCORE_CHROMIUM_USER_AGENT/);
   assert.match(setupScript, /s3:GetObject/);
   assert.match(setupScript, /lambda:InvokeFunction/);
   assert.match(setupScript, /--memory-size "\$memory_size"/);

@@ -27,7 +27,7 @@ import {
   getRegistrableDomain,
   getRegistrableDomainFromUrl,
 } from "../domain-utils.js";
-import { chromiumLaunchOptions } from "../playwright-runtime.js";
+import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 
 const SOURCE_SCANNER = "pre_consent_runtime";
@@ -110,10 +110,7 @@ export async function preConsentRuntimeScanner(
     chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }))
   );
   const context = await recordTiming(timingBreakdown, "browser context", "New isolated browser context and page.", async () => {
-    const newContext = await browser.newContext({
-      ignoreHTTPSErrors: true,
-      viewport: { width: 1366, height: 900 },
-    });
+    const newContext = await browser.newContext(chromiumContextOptions());
     const newPage = await newContext.newPage();
     return { newContext, newPage };
   });
@@ -270,6 +267,8 @@ export async function preConsentRuntimeScanner(
   const screenshots: ScreenshotArtifact[] = [];
   const screenshotErrors: string[] = [];
   let earlyScreenshotCaptured = false;
+  const fallbackConsentUiObservations: ConsentUiObservation[] = [];
+  const fallbackDomSnapshots: DomSnapshotArtifact[] = [];
 
   try {
     await recordTiming(timingBreakdown, "page navigation", "Initial navigation until DOMContentLoaded.", () =>
@@ -568,7 +567,7 @@ export async function preConsentRuntimeScanner(
       visualCapture = visualCaptureFromScreenshotSummary(screenshotCapture, screenshotPath);
     }
     if (shouldCaptureScreenshot) {
-      if (shouldRecaptureConsentUiAfterScreenshot(consentObservation)) {
+      if (shouldRecaptureConsentUiAfterScreenshot(consentObservation, domText)) {
         const recapturedConsentObservation = await recordTiming(
           timingBreakdown,
           "consent UI control recapture",
@@ -680,6 +679,12 @@ export async function preConsentRuntimeScanner(
       if (retryCapture) {
         screenshots.push(retryCapture.screenshot);
         visualCapture = retryCapture.visualCapture;
+        if (retryCapture.consentUiObservation) {
+          fallbackConsentUiObservations.push(retryCapture.consentUiObservation);
+        }
+        if (retryCapture.domSnapshot) {
+          fallbackDomSnapshots.push(retryCapture.domSnapshot);
+        }
       }
     }
     return {
@@ -701,12 +706,12 @@ export async function preConsentRuntimeScanner(
       storageSnapshots: [],
       scriptEvents,
       iframeEvents,
-      consentUiObservations: [],
+      consentUiObservations: fallbackConsentUiObservations,
       collectionSurfaceObservations: [],
       cmpRuntimeObservations: [],
       screenshots,
       visualCapture,
-      domSnapshots: [],
+      domSnapshots: fallbackDomSnapshots,
       vendorResolverInputs,
     };
   } finally {
@@ -1394,7 +1399,7 @@ async function captureBrowserApiAccessEvents(
   }));
 }
 
-async function detectConsentUi(
+export async function detectConsentUi(
   page: Page,
   scanStartedAtMs: number,
   waitForControlTimeoutMs = 3_500,
@@ -1656,9 +1661,21 @@ function shouldRecaptureConsentUiAfterTimeout(observation: ConsentUiObservation)
     );
 }
 
-function shouldRecaptureConsentUiAfterScreenshot(observation: ConsentUiObservation): boolean {
+function shouldRecaptureConsentUiAfterScreenshot(observation: ConsentUiObservation, domText = ""): boolean {
+  if (isTerminalVisualErrorShellText(domText)) {
+    return false;
+  }
   return (observation.likelyPresent && observation.controls.length === 0) ||
     shouldRecaptureConsentUiAfterTimeout(observation);
+}
+
+function isTerminalVisualErrorShellText(text: string): boolean {
+  const normalized = text.replace(/\s+/g, " ").trim().toLowerCase();
+  if (!normalized || normalized.length > 500) {
+    return false;
+  }
+  return /^(?:unknown error|access denied|access to this site has been denied|forbidden|internal server error|service unavailable|request blocked)$/i.test(normalized) ||
+    /\b(?:access denied|access to this site has been denied|request blocked|bot protection|forbidden|http 403|403 forbidden)\b/i.test(normalized);
 }
 
 function isStrongerConsentUiObservation(
@@ -2472,17 +2489,19 @@ async function retryPreConsentScreenshotInFreshContext(input: {
   input: PreConsentRuntimeScannerInput;
   screenshotErrors: string[];
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
-}): Promise<{ screenshot: ScreenshotArtifact; visualCapture: VisualCaptureSummary } | null> {
+}): Promise<{
+  screenshot: ScreenshotArtifact;
+  visualCapture: VisualCaptureSummary;
+  consentUiObservation?: ConsentUiObservation;
+  domSnapshot?: DomSnapshotArtifact;
+} | null> {
   const screenshotPath = input.input.artifactWriter.artifactPath("screenshot-pre-consent.png");
   return recordTiming(
     input.timingBreakdown,
     "fresh-context screenshot retry",
     "One bounded screenshot-only retry in a fresh browser context after the primary page/context closed.",
     async () => {
-      const retryContext = await input.browser.newContext({
-        ignoreHTTPSErrors: true,
-        viewport: { width: 1366, height: 900 },
-      });
+      const retryContext = await input.browser.newContext(chromiumContextOptions());
       try {
         for (const fulfiller of input.input.routeFulfillers ?? []) {
           await retryContext.route(fulfiller.urlPattern, async (route: Route) => {
@@ -2513,6 +2532,23 @@ async function retryPreConsentScreenshotInFreshContext(input: {
           Math.max(1_000, Math.min(input.input.screenshotTimeoutMs ?? 5_000, 3_000)),
           input.screenshotErrors,
         );
+        const domText = await retryPage.locator("body").innerText({ timeout: 2_000 }).catch(() => "");
+        const domPath = domText
+          ? await input.input.artifactWriter.writeTextArtifact(
+            "dom-text-pre-consent.txt",
+            domText.slice(0, 100_000),
+          )
+          : undefined;
+        const consentUiObservation = await detectConsentUi(
+          retryPage,
+          input.input.scanStartedAtMs,
+          1_500,
+        ).catch(() => undefined);
+        if (consentUiObservation && domPath) {
+          consentUiObservation.evidenceRefs = [
+            { refId: "dom_text_pre_consent", artifactId: "dom_text_pre_consent", path: domPath },
+          ];
+        }
         return {
           screenshot: {
             artifactId: "screenshot_pre_consent",
@@ -2529,6 +2565,18 @@ async function retryPreConsentScreenshotInFreshContext(input: {
               "Screenshot retained by a fresh-context retry after the primary page/context closed.",
             ]),
           },
+          consentUiObservation,
+          domSnapshot: domPath
+            ? {
+              artifactId: "dom_text_pre_consent",
+              capturedAtMs: elapsed(input.input.scanStartedAtMs),
+              path: domPath,
+              url: retryPage.url(),
+              textExcerpt: domText.slice(0, 2_000),
+              pagePhase: "dom_content_loaded",
+              consentStateAtTime: "pre_consent",
+            }
+            : undefined,
         };
       } finally {
         await retryContext.close().catch(() => undefined);

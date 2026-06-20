@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  chromiumContextOptions,
   chromiumExecutablePath,
   chromiumLaunchArgs,
   chromiumLaunchOptions,
+  chromiumProxyOptions,
   isAwsLambdaRuntime,
   lambdaChromiumSingleProcessEnabled
 } from "./playwright-runtime";
@@ -48,6 +50,31 @@ test("builds Chromium launch options without changing headless intent", () => {
   });
 });
 
+test("builds default Chromium context options for scanner captures", () => {
+  assert.deepEqual(chromiumContextOptions({}), {
+    ignoreHTTPSErrors: true,
+    viewport: { width: 1366, height: 900 }
+  });
+});
+
+test("can configure Chromium context identity for regional Lambda parity runs", () => {
+  const env = {
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: " en-IE,en;q=0.9 ",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: " en-IE ",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: " Europe/Dublin ",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT: " Mozilla/5.0 scanner "
+  };
+
+  assert.deepEqual(chromiumContextOptions(env), {
+    extraHTTPHeaders: { "Accept-Language": "en-IE,en;q=0.9" },
+    ignoreHTTPSErrors: true,
+    locale: "en-IE",
+    timezoneId: "Europe/Dublin",
+    userAgent: "Mozilla/5.0 scanner",
+    viewport: { width: 1366, height: 900 }
+  });
+});
+
 test("can launch with an explicit Chromium executable path for slim runtime images", () => {
   const env = { CERTSCORE_CHROMIUM_EXECUTABLE_PATH: " /usr/bin/chromium " };
 
@@ -55,6 +82,31 @@ test("can launch with an explicit Chromium executable path for slim runtime imag
   assert.deepEqual(chromiumLaunchOptions({ env, headless: true }), {
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
     executablePath: "/usr/bin/chromium",
+    headless: true
+  });
+});
+
+test("can launch Chromium through a configured Lambda proxy", () => {
+  const env = {
+    CERTSCORE_CHROMIUM_EXECUTABLE_PATH: " /usr/bin/chromium ",
+    CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER: " http://proxy.example:8080 ",
+    CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME: " scanner ",
+    CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD: " secret "
+  };
+
+  assert.deepEqual(chromiumProxyOptions(env), {
+    server: "http://proxy.example:8080",
+    username: "scanner",
+    password: "secret"
+  });
+  assert.deepEqual(chromiumLaunchOptions({ env, headless: true }), {
+    args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    executablePath: "/usr/bin/chromium",
+    proxy: {
+      server: "http://proxy.example:8080",
+      username: "scanner",
+      password: "secret"
+    },
     headless: true
   });
 });

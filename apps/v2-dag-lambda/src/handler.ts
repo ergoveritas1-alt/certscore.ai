@@ -1088,15 +1088,64 @@ function uniqueStrings<T extends string>(values: T[]): T[] {
 
 export function buildLocalV2DagLambdaRuntimeDiagnostics(env: NodeJS.ProcessEnv = process.env) {
   const memorySizeMb = Number.parseInt(env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ?? "", 10);
+  const proxyServer = firstTrimmedRuntimeEnv(env, [
+    "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
+    "CERTSCORE_CHROMIUM_PROXY_SERVER",
+  ]);
   return {
     awsLambdaRuntime: isAwsLambdaRuntime(env),
+    chromiumContextOptions: chromiumContextDiagnostics(env),
     chromiumLaunchArgs: chromiumLaunchArgs({ env }),
+    chromiumProxyAuthConfigured: Boolean(firstTrimmedRuntimeEnv(env, [
+      "CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME",
+      "CERTSCORE_CHROMIUM_PROXY_USERNAME",
+      "CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD",
+      "CERTSCORE_CHROMIUM_PROXY_PASSWORD",
+    ])),
+    chromiumProxyConfigured: Boolean(proxyServer),
     chromiumSingleProcessEnabled: lambdaChromiumSingleProcessEnabled(env),
     memorySizeMb: Number.isFinite(memorySizeMb) ? memorySizeMb : null,
     nodeVersion: process.version,
     platform: process.platform,
     architecture: process.arch
   };
+}
+
+function chromiumContextDiagnostics(env: NodeJS.ProcessEnv) {
+  const acceptLanguage = firstTrimmedRuntimeEnv(env, [
+    "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE",
+    "CERTSCORE_CHROMIUM_ACCEPT_LANGUAGE",
+  ]);
+  const locale = firstTrimmedRuntimeEnv(env, [
+    "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE",
+    "CERTSCORE_CHROMIUM_LOCALE",
+  ]);
+  const timezoneId = firstTrimmedRuntimeEnv(env, [
+    "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID",
+    "CERTSCORE_CHROMIUM_TIMEZONE_ID",
+  ]);
+  const userAgent = firstTrimmedRuntimeEnv(env, [
+    "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT",
+    "CERTSCORE_CHROMIUM_USER_AGENT",
+  ]);
+  return {
+    acceptLanguage: acceptLanguage ?? null,
+    locale: locale ?? null,
+    timezoneId: timezoneId ?? null,
+    userAgent: userAgent ? userAgent.slice(0, 240) : null,
+    userAgentConfigured: Boolean(userAgent),
+    viewport: { width: 1366, height: 900 }
+  };
+}
+
+function firstTrimmedRuntimeEnv(env: NodeJS.ProcessEnv, keys: string[]) {
+  for (const key of keys) {
+    const value = env[key]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
 }
 
 export function buildLocalV2DagLambdaScanTuning(env: NodeJS.ProcessEnv = process.env) {

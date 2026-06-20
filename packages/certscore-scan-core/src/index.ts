@@ -32,9 +32,9 @@ import {
 import { createOpenAiNanoPolicyAssistProviderFromEnv } from "./nano-policy-assist-provider.js";
 import { getScanProfile } from "./profiles.js";
 import { consentFlowRuntimeScannerPlaceholder, policySurfaceScannerPlaceholder } from "./scanners/placeholders.js";
-import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
+import { detectConsentUi, preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
-import { chromiumLaunchOptions } from "./playwright-runtime.js";
+import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runtime.js";
 
 type ConsentFlowRuntimeScanner = typeof import("./scanners/consent-flow-runtime-scanner.js").consentFlowRuntimeScanner;
 type ConsentFlowRuntimeInput = Parameters<ConsentFlowRuntimeScanner>[0];
@@ -42,7 +42,9 @@ type ConsentFlowRuntimeResult = Awaited<ReturnType<ConsentFlowRuntimeScanner>>;
 
 export {
   chromiumLaunchArgs,
+  chromiumContextOptions,
   chromiumLaunchOptions,
+  chromiumProxyOptions,
   isAwsLambdaRuntime,
   lambdaChromiumSingleProcessEnabled,
 } from "./playwright-runtime.js";
@@ -267,15 +269,29 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       };
     });
     if ("screenshot" in screenshotFallback) {
+      const fallbackConsentUiObservations = screenshotFallback.consentUiObservation
+        ? [screenshotFallback.consentUiObservation]
+        : [];
+      const fallbackDomSnapshots = screenshotFallback.domSnapshot ? [screenshotFallback.domSnapshot] : [];
       preConsentResult = {
         ...preConsentResult,
         screenshots: [screenshotFallback.screenshot],
         visualCapture: screenshotFallback.visualCapture,
+        consentUiObservations: [
+          ...preConsentResult.consentUiObservations,
+          ...fallbackConsentUiObservations,
+        ],
+        domSnapshots: [
+          ...preConsentResult.domSnapshots,
+          ...fallbackDomSnapshots,
+        ],
         moduleRun: {
           ...preConsentResult.moduleRun,
           errors: [
             ...(preConsentResult.moduleRun.errors ?? []),
-            "Screenshot-only visual fallback retained a pre-consent screenshot after the primary runtime page/context closed.",
+            fallbackConsentUiObservations.length > 0
+              ? "Visual fallback retained a pre-consent screenshot and bounded consent-surface evidence after the primary runtime page/context closed."
+              : "Screenshot-only visual fallback retained a pre-consent screenshot after the primary runtime page/context closed.",
           ],
         },
       };
@@ -860,19 +876,21 @@ function shouldAttemptScreenshotOnlyFallback(
   return /page_closed|target page, context or browser has been closed|page\.goto|page\/context closed/i.test(errorText);
 }
 
-async function capturePreConsentScreenshotOnlyFallback(input: {
+export async function capturePreConsentScreenshotOnlyFallback(input: {
   artifactWriter: ArtifactWriter;
   normalizedUrl: string;
   scanStartedAtMs: number;
   screenshotTimeoutMs?: number;
-}): Promise<{ screenshot: ScreenshotArtifact; visualCapture: VisualCaptureSummary }> {
+}): Promise<{
+  screenshot: ScreenshotArtifact;
+  visualCapture: VisualCaptureSummary;
+  consentUiObservation?: ConsentUiObservation;
+  domSnapshot?: DomSnapshotArtifact;
+}> {
   const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
   const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
   try {
-    const context = await browser.newContext({
-      ignoreHTTPSErrors: true,
-      viewport: { width: 1366, height: 900 },
-    });
+    const context = await browser.newContext(chromiumContextOptions());
     try {
       const page = await context.newPage();
       await page.goto(input.normalizedUrl, {
@@ -885,6 +903,23 @@ async function capturePreConsentScreenshotOnlyFallback(input: {
         path: screenshotPath,
         timeout: Math.max(1_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 5_000)),
       });
+      const domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => "");
+      const domPath = domText
+        ? await input.artifactWriter.writeTextArtifact(
+          "dom-text-pre-consent.txt",
+          domText.slice(0, 100_000),
+        )
+        : undefined;
+      const consentUiObservation = await detectConsentUi(
+        page,
+        input.scanStartedAtMs,
+        1_500,
+      ).catch(() => undefined);
+      if (consentUiObservation && domPath) {
+        consentUiObservation.evidenceRefs = [
+          { refId: "dom_text_pre_consent", artifactId: "dom_text_pre_consent", path: domPath },
+        ];
+      }
       return {
         screenshot: {
           artifactId: "screenshot_pre_consent",
@@ -905,8 +940,24 @@ async function capturePreConsentScreenshotOnlyFallback(input: {
             redactionStatus: "not_needed",
             relatedEventIds: [],
           }],
-          notes: ["Screenshot retained by an independent screenshot-only fallback after the primary runtime page/context closed."],
+          notes: [
+            consentUiObservation
+              ? "Screenshot and bounded consent-surface evidence retained by an independent visual fallback after the primary runtime page/context closed."
+              : "Screenshot retained by an independent screenshot-only fallback after the primary runtime page/context closed.",
+          ],
         },
+        consentUiObservation,
+        domSnapshot: domPath
+          ? {
+            artifactId: "dom_text_pre_consent",
+            capturedAtMs: Date.now() - input.scanStartedAtMs,
+            path: domPath,
+            url: page.url(),
+            textExcerpt: domText.slice(0, 2_000),
+            pagePhase: "dom_content_loaded",
+            consentStateAtTime: "pre_consent",
+          }
+          : undefined,
       };
     } finally {
       await context.close().catch(() => undefined);
