@@ -122,7 +122,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const profileConsentFlowEnabled = scanProfile.enabledModules.includes("consentFlowRuntimeScanner");
   const consentFlowEnabled = false;
   const plannedParallel = input.scenarioPlanningMode === "planned_parallel";
-  const leanPreConsent = plannedParallel || input.captureReplay === true;
+  const leanPreConsent = input.scenarioResourceMode === "lean" ||
+    input.scenarioResourceMode === "cmp_safe" ||
+    input.captureReplay === true;
   const nanoPolicyAssistProvider = policySurfaceEnabled ? createOpenAiNanoPolicyAssistProviderFromEnv() : undefined;
   const nanoConsentUiAssistProvider = consentFlowEnabled
     ? (await import("./nano-consent-ui-assist-provider.js")).createOpenAiNanoConsentUiAssistProviderFromEnv()

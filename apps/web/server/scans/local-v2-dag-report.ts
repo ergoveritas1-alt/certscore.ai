@@ -180,9 +180,7 @@ function isLikelyRetainedVisualErrorShell(input: {
     const runtimeCounts = input.bundle.runtimeCoverage?.observationCounts;
     const noMeaningfulRuntime =
       (runtimeCounts?.thirdPartyRequests ?? 0) === 0 &&
-      (runtimeCounts?.cookiesBeforeConsent ?? 0) === 0 &&
       (runtimeCounts?.normalizedVendors ?? 0) === 0 &&
-      (input.bundle.cookieEvents ?? []).length === 0 &&
       (input.bundle.normalizedVendorObservations ?? []).length === 0;
     const noConsentSurface = !(input.bundle.consentUiObservations ?? []).some((observation) =>
       observation.likelyPresent === true ||
@@ -1101,7 +1099,7 @@ function buildMaterializedLocalV2Detail(
     bundle,
     consentSurfaceLikelyPresent,
     runtimeActivityObserved: preconsentCookies.length > 0 || vendorRows.length > 0 || networkEvents.length > 3 || cookieEvents.length > 0,
-    lowRuntimeActivity: networkEvents.length <= 3 && cookieEvents.length === 0 && vendorRows.length === 0
+    lowRuntimeActivity: networkEvents.length <= 3 && thirdPartyRequests.length === 0 && vendorRows.length === 0
   });
   const visualCaptureUnavailable = !localV2NoGo &&
     (visualCapture.status === "failed" || visualCapture.status === "unavailable") &&

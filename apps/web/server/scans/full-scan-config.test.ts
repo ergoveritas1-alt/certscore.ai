@@ -161,7 +161,7 @@ test("localhost scan configs use the local v2 planned-parallel DAG processor onl
     profile: "standard",
     scenarioConcurrency: 2,
     scenarioPlanningMode: "planned_parallel",
-    scenarioResourceMode: "lean",
+    scenarioResourceMode: "normal",
     tool: "certscore-scan-core"
   });
   assert.equal(Object.hasOwn(config, "findings"), false);

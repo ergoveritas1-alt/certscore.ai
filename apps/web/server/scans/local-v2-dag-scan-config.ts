@@ -243,7 +243,7 @@ export function applyLocalV2DagScanConfig(
         profile,
         scenarioConcurrency: 2,
         scenarioPlanningMode: "planned_parallel",
-        scenarioResourceMode: "lean",
+        scenarioResourceMode: "normal",
         tool: "certscore-scan-core"
       },
       ...(lambdaConfig

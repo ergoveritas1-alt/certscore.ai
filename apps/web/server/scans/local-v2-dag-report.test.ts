@@ -925,7 +925,26 @@ test("materializeLocalV2DagScanDetail promotes retained full-viewport visual err
           visibleChoiceLabels: []
         }
       ],
-      cookieEvents: [],
+      cookieEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          domain: ".latimes.com",
+          firstParty: true,
+          name: "_abck",
+          sameSite: "Lax",
+          timestampMs: 700,
+          valueHash: "blocked-page-cookie"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          domain: ".latimes.com",
+          firstParty: true,
+          name: "bm_sz",
+          sameSite: "Lax",
+          timestampMs: 760,
+          valueHash: "blocked-page-cookie-2"
+        }
+      ],
       modulesRun: [
         {
           moduleName: "preConsentRuntimeScanner",
@@ -961,8 +980,8 @@ test("materializeLocalV2DagScanDetail promotes retained full-viewport visual err
         limitationKeys: ["pre_consent_runtime_partial"],
         notes: [],
         observationCounts: {
-          cookieEvents: 0,
-          cookiesBeforeConsent: 0,
+          cookieEvents: 2,
+          cookiesBeforeConsent: 2,
           networkEvents: 2,
           normalizedVendors: 0,
           observedJourneys: 0,

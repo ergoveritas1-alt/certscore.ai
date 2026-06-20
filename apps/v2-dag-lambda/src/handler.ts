@@ -536,6 +536,7 @@ async function runLocalV2DagLambdaScanBundle(
     preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
     profile: payload.profile,
     scenarioPlanningMode: "planned_parallel",
+    scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
     url: payload.targetUrl
   }));
 }
@@ -1123,10 +1124,10 @@ export function buildLocalV2DagLambdaScanTuning(env: NodeJS.ProcessEnv = process
 }
 
 function scenarioResourceModeEnv(value: string | undefined): "normal" | "lean" | "cmp_safe" {
-  if (value === "normal" || value === "cmp_safe") {
+  if (value === "normal" || value === "lean" || value === "cmp_safe") {
     return value;
   }
-  return "lean";
+  return "normal";
 }
 
 function consentFlowScreenshotModeEnv(value: string | undefined): "auto" | "none" {

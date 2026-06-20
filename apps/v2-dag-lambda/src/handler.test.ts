@@ -96,7 +96,7 @@ test("handler exposes bounded Lambda scan tuning for quality and speed A/B runs"
       preConsentScreenshotMode: "always",
       preConsentScreenshotTimeoutMs: 1500,
       scenarioConcurrency: 3,
-      scenarioResourceMode: "lean"
+      scenarioResourceMode: "normal"
     }
   );
   assert.deepEqual(
@@ -111,7 +111,7 @@ test("handler exposes bounded Lambda scan tuning for quality and speed A/B runs"
       preConsentScreenshotMode: "always",
       preConsentScreenshotTimeoutMs: 500,
       scenarioConcurrency: 4,
-      scenarioResourceMode: "lean"
+      scenarioResourceMode: "normal"
     }
   );
   assert.equal(
@@ -138,7 +138,7 @@ test("handler exposes bounded Lambda scan tuning for quality and speed A/B runs"
       preConsentScreenshotMode: "selective",
       preConsentScreenshotTimeoutMs: 5000,
       scenarioConcurrency: 2,
-      scenarioResourceMode: "lean"
+      scenarioResourceMode: "normal"
     }
   );
 });
