@@ -121,7 +121,7 @@ test("RegulatoryChecklistActiveTrace shows Article 13 row-specific retained snip
       evidenceRefs: ["Evidence: Retention disclosure"],
       jsonPayload: JSON.stringify({
         assessmentStatus: "checked",
-        coverageArea: "Retention disclosure observed",
+        coverageArea: "Retention disclosure",
         evidenceState: "observed",
         retainedEvidence: {
           article13Signal: {

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
+import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 
@@ -37,6 +38,7 @@ function makeScanRecord(overrides: Partial<ScanDetailResponse> = {}): ScanDetail
     events: [],
     pageEvidence: [],
     policyEnrichment: [],
+    policyReviewQueue: [],
     preconsentViolations: [],
     primaryPolicyEnrichment: null,
     runtimeArtifacts: {},
@@ -74,6 +76,7 @@ function makeScanRecord(overrides: Partial<ScanDetailResponse> = {}): ScanDetail
     signals: [],
     snapshot: {},
     trackerVendors: [],
+    validationFindings: [],
     ...overrides
   } as ScanDetailResponse;
 }
@@ -205,6 +208,37 @@ test("shouldAttemptLocalV2DagLambdaResultRefresh gates stale in-flight Lambda sc
     }), nowMs),
     false
   );
+});
+
+test("tryRefreshLocalV2DagLambdaResult throttles repeated page refresh polling", async () => {
+  const {
+    resetLocalV2DagLambdaResultRefreshStateForTest,
+    tryRefreshLocalV2DagLambdaResult
+  } = await loadLocalV2DagReport();
+  resetLocalV2DagLambdaResultRefreshStateForTest();
+
+  const nowMs = Date.parse("2026-06-17T13:14:20.000Z");
+  const baseScan = makeScanRecord().scan;
+  const scanRecord = makeScanRecord({
+    scan: {
+      ...baseScan,
+      completedAt: null,
+      startedAt: "2026-06-17T13:13:50.000Z",
+      status: "running"
+    }
+  });
+  let pollCount = 0;
+  const pollResultQueue = async () => {
+    pollCount += 1;
+    return { handled: 0 };
+  };
+
+  assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs, pollResultQueue }), false);
+  assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs: nowMs + 5_000, pollResultQueue }), false);
+  assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs: nowMs + 31_000, pollResultQueue }), false);
+  assert.equal(pollCount, 2);
+
+  resetLocalV2DagLambdaResultRefreshStateForTest();
 });
 
 test("dedupePolicySurfaces collapses equivalent privacy URLs before report projection", async () => {
@@ -515,9 +549,13 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     const embeddedSummary = hybrid.embeddedContentSummary;
     const sessionReplaySummary = hybrid.sessionReplayEvidenceSummary;
     const fingerprintingSummary = hybrid.fingerprintingEvidenceSummary;
+    const firstLayerConsentChoices = hybrid.firstLayerConsentChoices as Record<string, unknown>;
+    const rejectPath = detail.runtimeArtifacts.rejectPathDepthAndAvailability as Record<string, unknown>;
     assert.ok(embeddedSummary);
     assert.ok(sessionReplaySummary);
     assert.ok(fingerprintingSummary);
+    assert.ok(firstLayerConsentChoices);
+    assert.ok(rejectPath);
 
     assert.equal(embeddedSummary.embeddedContentObserved, true);
     assert.deepEqual(embeddedSummary.embeddedContentHosts, ["youtube.com"]);
@@ -526,6 +564,10 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.equal(fingerprintingSummary.coverageRetained, true);
     assert.equal(fingerprintingSummary.fingerprintingObserved, true);
     assert.deepEqual(fingerprintingSummary.highEntropySignals, ["HTMLCanvasElement.toDataURL"]);
+    assert.equal(firstLayerConsentChoices.rejectControlObserved, false);
+    assert.equal(rejectPath.rejectControlObserved, false);
+    assert.equal(rejectPath.rejectAvailableOnFirstLayer, false);
+    assert.equal(rejectPath.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;
@@ -1184,7 +1226,7 @@ test("materializeLocalV2DagScanDetail resolves mirrored Lambda screenshot paths 
   }
 });
 
-test("materializeLocalV2DagScanDetail does not promote missing screenshots when runtime evidence was retained", async () => {
+test("materializeLocalV2DagScanDetail marks failed pre-consent runtime without screenshots as unreliable", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/missing-screenshot-retained-runtime-"));
@@ -1313,11 +1355,33 @@ test("materializeLocalV2DagScanDetail does not promote missing screenshots when 
     assert.equal(detail.runtimeArtifacts?.visual_access_review, undefined);
     assert.equal(detail.snapshot?.homepage_fetch_status, "success");
     assert.equal(detail.snapshot?.blocked_flag, undefined);
-    assert.equal(detail.snapshot?.third_party_request_count, 1);
-    assert.equal(detail.snapshot?.cookies_before_consent_count, 1);
+    assert.equal(detail.snapshot?.preconsent_tracking_detected, false);
+    assert.equal(detail.snapshot?.tracking_before_consent_detected, false);
+    assert.equal(detail.snapshot?.third_party_cookie_set_before_consent, false);
+    assert.equal(detail.snapshot?.third_party_request_count, 0);
+    assert.equal(detail.snapshot?.cookies_before_consent_count, 0);
+    assert.equal(detail.snapshot?.tracker_vendor_count, 0);
     assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_partial");
+    assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, false);
+    assert.deepEqual(detail.runtimeArtifacts?.consent_baseline_tracker_evidence_urls, []);
+    assert.deepEqual(detail.runtimeArtifacts?.consent_baseline_tracker_vendor_names, []);
+    assert.equal(detail.runtimeArtifacts?.consent_preconsent_violation_count, 0);
+    assert.deepEqual(detail.runtimeArtifacts?.runtime_limitation_keys, [
+      "pre_consent_runtime_failed",
+      "visual_capture_unavailable"
+    ]);
+    assert.equal(detail.snapshot?.runtime_counts_retained, false);
+    assert.deepEqual(detail.snapshot?.runtime_limitation_keys, [
+      "pre_consent_runtime_failed",
+      "visual_capture_unavailable"
+    ]);
     assert.equal(detail.scan.pagesScanned, 1);
-    assert.ok(detail.signals.length > 0);
+    assert.equal(detail.preconsentViolations.length, 0);
+    assert.equal(detail.signals.some((signal) => signal.key === "privacy.preconsent_tracking_detected"), false);
+    assert.equal(detail.signals.some((signal) => signal.key === "tracking_before_consent_detected"), false);
+    assert.equal(detail.trackerVendors.length, 0);
+    const projectedFindings = buildScanReportUnifiedFindingsForScan(detail);
+    assert.equal(projectedFindings.some((finding) => finding.unifiedFindingId === "preconsent_tracking"), false);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;
@@ -1401,10 +1465,29 @@ test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable 
           thirdParty: false,
           timestampMs: 100,
           url: "https://nvidia.com/"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "cdn.optimizely.com",
+          isThirdParty: true,
+          thirdParty: true,
+          timestampMs: 200,
+          url: "https://cdn.optimizely.com/public/example.js"
         }
       ],
       normalizedUrl: "https://nvidia.com/",
-      normalizedVendorObservations: [],
+      normalizedVendorObservations: [
+        {
+          confidence: 0.86,
+          evidenceHostnames: ["cdn.optimizely.com"],
+          evidenceUrls: ["https://cdn.optimizely.com/public/example.js"],
+          matchedDomain: "optimizely.com",
+          observationId: "vendor_optimizely",
+          product: "Optimizely",
+          purposes: ["analytics"],
+          vendor: "Optimizely"
+        }
+      ],
       observedJourneys: [],
       policySurfaceObservations: [
         {
@@ -1424,8 +1507,8 @@ test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable 
         notes: [],
         observationCounts: {
           cookiesBeforeConsent: 0,
-          normalizedVendors: 0,
-          thirdPartyRequests: 0
+          normalizedVendors: 1,
+          thirdPartyRequests: 1
         }
       },
       runtimeTimeline: [],
@@ -1435,6 +1518,7 @@ test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable 
         {
           artifactId: "screenshot_pre_consent",
           capturedAtMs: 5343,
+          captureMethod: "independent_visual_fallback_viewport",
           consentStateAtTime: "pre_consent",
           pagePhase: "dom_content_loaded",
           path: "/tmp/certscore-v2/nvidia-fallback/screenshot-pre-consent.png",
@@ -1445,6 +1529,7 @@ test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable 
       url: "https://nvidia.com/",
       visualCapture: {
         artifactRefs: [],
+        captureMethod: "independent_visual_fallback_viewport",
         notes: ["Screenshot and bounded consent-surface evidence retained by an independent visual fallback after the primary runtime page/context closed."],
         status: "available"
       }
@@ -1481,7 +1566,18 @@ test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable 
     assert.deepEqual(firstLayerChoices?.rejectLabels, ["Reject Optional"]);
     assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_partial");
     assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, false);
+    assert.equal(detail.snapshot?.preconsent_tracking_detected, false);
+    assert.equal(detail.snapshot?.third_party_request_count, 0);
+    assert.equal(detail.runtimeArtifacts?.consent_preconsent_violation_count, 0);
+    assert.deepEqual(detail.runtimeArtifacts?.consent_baseline_tracker_vendor_names, []);
+    assert.equal(detail.runtimeArtifacts?.visual_capture_method, "independent_visual_fallback_viewport");
+    assert.equal(
+      (detail.runtimeArtifacts?.visual_evidence_artifacts as Array<Record<string, unknown>> | undefined)?.[0]?.capture_method,
+      "independent_visual_fallback_viewport",
+    );
     assert.equal(detail.scan.pagesScanned, 1);
+    const projectedFindings = buildScanReportUnifiedFindingsForScan(detail);
+    assert.equal(projectedFindings.some((finding) => finding.unifiedFindingId === "preconsent_tracking"), false);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;
@@ -1674,7 +1770,10 @@ test("materializeLocalV2DagScanDetail marks failed pre-consent runtime counts as
     assert.ok(detail.runtimeArtifacts);
     assert.equal(detail.snapshot.runtime_counts_retained, false);
     assert.equal(detail.runtimeArtifacts.runtime_counts_retained, false);
-    assert.deepEqual(detail.snapshot.runtime_limitation_keys, ["pre_consent_runtime_failed"]);
+    assert.deepEqual(detail.snapshot.runtime_limitation_keys, [
+      "pre_consent_runtime_failed",
+      "visual_capture_unavailable"
+    ]);
     assert.equal(detail.snapshot.third_party_request_count, 0);
     assert.equal(detail.snapshot.cookies_before_consent_count, 0);
   } finally {

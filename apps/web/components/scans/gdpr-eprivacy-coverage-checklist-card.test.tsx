@@ -121,7 +121,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       assessmentStatus: "checked",
       evidenceState: "observed",
       id: "cmp_framework_signal_observed",
-      label: "Consent framework / CMP signal observed",
+      label: "Consent framework / CMP signal",
       status: "Observed"
     })),
     "neutral_signal"
@@ -131,7 +131,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       assessmentStatus: "review_signal",
       evidenceState: "observed",
       id: "analytics_vendor_observed",
-      label: "Analytics vendor signal observed",
+      label: "Analytics vendor signal",
       status: "Review signal"
     })),
     "review_signal"
@@ -147,7 +147,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "analytics_vendor_observed",
-      label: "Analytics vendor signal observed",
+      label: "Analytics vendor signal",
       status: "Review signal"
     })),
     "potential_concern"
@@ -157,7 +157,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       assessmentStatus: "gap_observed",
       evidenceState: "observed",
       id: "advertising_retargeting_vendor_signal_observed",
-      label: "Advertising vendor signal observed",
+      label: "Advertising vendor signal",
       status: "Gap observed"
     })),
     "potential_concern"
@@ -173,7 +173,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "advertising_retargeting_vendor_signal_observed",
-      label: "Advertising vendor signal observed",
+      label: "Advertising vendor signal",
       status: "Review signal"
     })),
     "potential_concern"
@@ -195,7 +195,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "advertising_retargeting_vendor_signal_observed",
-      label: "Advertising vendor signal observed",
+      label: "Advertising vendor signal",
       status: "Review signal"
     })),
     "review_signal"
@@ -205,7 +205,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       assessmentStatus: "checked",
       evidenceState: "observed",
       id: "advertising_retargeting_vendor_signal_observed",
-      label: "Advertising vendor signal observed",
+      label: "Advertising vendor signal",
       status: "Observed"
     })),
     "review_signal"
@@ -215,7 +215,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       assessmentStatus: "checked",
       evidenceState: "not_observed",
       id: "pre_consent_third_party_tracking",
-      label: "Pre-consent third-party tracking observed",
+      label: "Pre-consent third-party tracking",
       status: "Not observed"
     })),
     "positive_signal"
@@ -231,7 +231,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "pre_consent_cookies_storage",
-      label: "Pre-consent cookies/storage observed",
+      label: "Pre-consent cookies/storage",
       status: "Observed"
     })),
     "review_signal"
@@ -247,7 +247,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "pre_consent_cookies_storage",
-      label: "Pre-consent cookies/storage observed",
+      label: "Pre-consent cookies/storage",
       status: "Observed"
     })),
     "potential_concern"
@@ -263,7 +263,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "pre_consent_cookies_storage",
-      label: "Pre-consent cookies/storage observed",
+      label: "Pre-consent cookies/storage",
       status: "Observed"
     })),
     "neutral_signal"
@@ -278,7 +278,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "device_identification_fingerprinting_signal_observed",
-      label: "Device identification / fingerprinting signal observed",
+      label: "Device identification / fingerprinting signal",
       status: "Observed"
     })),
     "neutral_signal"
@@ -293,7 +293,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "device_identification_fingerprinting_signal_observed",
-      label: "Device identification / fingerprinting signal observed",
+      label: "Device identification / fingerprinting signal",
       status: "Observed"
     })),
     "potential_concern"
@@ -355,7 +355,7 @@ test("GdprEprivacyCoverageChecklistCard does not badge review-only advertising r
           },
           evidenceState: "observed",
           id: "advertising_retargeting_vendor_signal_observed",
-          label: "Advertising vendor signal observed",
+          label: "Advertising vendor signal",
           status: "Review signal",
           tone: "review"
         })
@@ -432,7 +432,7 @@ test("GdprEprivacyCoverageChecklistCard preserves first-seen timing in concise r
           },
           evidenceState: "observed",
           id: "pre_consent_third_party_tracking",
-          label: "Pre-consent third-party tracking observed",
+          label: "Pre-consent third-party tracking",
           note:
             "Tracking requests observed before consent: Quantcast Measure, Google Ads / DoubleClick, and BrightLine; first seen 521ms after scan start. Consent action was not recorded before these requests.",
           status: "Gap observed"
@@ -471,7 +471,7 @@ test("GdprEprivacyCoverageChecklistCard reads canonical pre-consent timing field
           },
           evidenceState: "observed",
           id: "pre_consent_third_party_tracking",
-          label: "Pre-consent third-party tracking observed",
+          label: "Pre-consent third-party tracking",
           status: "Review signal"
         })
       ],
@@ -519,7 +519,7 @@ test("GdprEprivacyCoverageChecklistCard combines advertising basis and retained 
           },
           evidenceState: "observed",
           id: "advertising_retargeting_vendor_signal_observed",
-          label: "Advertising vendor signal observed",
+          label: "Advertising vendor signal",
           note:
             "Advertising vendor signals were observed; first seen 521ms after scan start; before any recorded consent action.",
           status: "Review signal"
@@ -587,7 +587,7 @@ test("GdprEprivacyCoverageChecklistCard starts evidence and correction cards hid
           assessmentStatus: "gap_observed",
           evidenceState: "observed",
           id: "pre_consent_third_party_tracking",
-          label: "Pre-consent third-party tracking observed",
+          label: "Pre-consent third-party tracking",
           status: "Gap observed"
         })
       ],
@@ -595,8 +595,8 @@ test("GdprEprivacyCoverageChecklistCard starts evidence and correction cards hid
     })
   );
 
-  assert.match(html, /aria-label="Toggle evidence packet for Pre-consent third-party tracking observed"/);
-  assert.match(html, /aria-label="Toggle correction steps for Pre-consent third-party tracking observed"/);
+  assert.match(html, /aria-label="Toggle evidence packet for Pre-consent third-party tracking"/);
+  assert.match(html, /aria-label="Toggle correction steps for Pre-consent third-party tracking"/);
   assert.doesNotMatch(html, />Evidence packet</);
   assert.doesNotMatch(html, />Correction steps</);
 });
@@ -622,7 +622,7 @@ test("GdprEprivacyCoverageChecklistCard renders policy excerpts in monospace wit
           },
           evidenceState: "observed",
           id: "retention_disclosure",
-          label: "Retention disclosure observed",
+          label: "Retention disclosure",
           status: "Observed"
         })
       ],
@@ -665,7 +665,7 @@ test("GdprEprivacyCoverageChecklistCard explains international transfer evidence
           },
           evidenceState: "observed",
           id: "international_transfers_disclosure",
-          label: "International transfer disclosure observed",
+          label: "International transfer disclosure",
           status: "Observed"
         })
       ],
@@ -701,7 +701,7 @@ test("GdprEprivacyCoverageChecklistCard makes policy gap decisions inferable fro
           },
           evidenceState: "observed",
           id: "international_transfers_disclosure",
-          label: "International transfer disclosure observed",
+          label: "International transfer disclosure",
           status: "Gap observed"
         })
       ],
@@ -734,7 +734,7 @@ test("GdprEprivacyCoverageChecklistCard makes not-testable decisions inferable f
     },
     evidenceState: "not_testable",
     id: "legal_basis_disclosure_observed",
-    label: "Legal basis disclosure observed",
+    label: "Legal basis disclosure",
     status: "Not testable"
   });
   const html = renderToStaticMarkup(
@@ -769,7 +769,7 @@ test("GdprEprivacyCoverageChecklistCard does not use observed runtime wording fo
     },
     evidenceState: "not_testable",
     id: "pre_consent_third_party_tracking",
-    label: "Pre-consent third-party tracking observed",
+    label: "Pre-consent third-party tracking",
     status: "Not testable"
   });
   const html = renderToStaticMarkup(
@@ -798,7 +798,7 @@ test("GdprEprivacyCoverageSummaryPills summarizes row decisions instead of evide
       assessmentStatus: "checked",
       evidenceState: "observed",
       id: "cmp_framework_signal_observed",
-      label: "Consent framework / CMP signal observed",
+      label: "Consent framework / CMP signal",
       status: "Observed"
     }),
     makeChecklistItem({
@@ -811,7 +811,7 @@ test("GdprEprivacyCoverageSummaryPills summarizes row decisions instead of evide
       },
       evidenceState: "observed",
       id: "analytics_vendor_observed",
-      label: "Analytics vendor signal observed",
+      label: "Analytics vendor signal",
       status: "Review signal"
     }),
     makeChecklistItem({
@@ -825,7 +825,7 @@ test("GdprEprivacyCoverageSummaryPills summarizes row decisions instead of evide
       assessmentStatus: "gap_observed",
       evidenceState: "observed",
       id: "pre_consent_third_party_tracking",
-      label: "Pre-consent third-party tracking observed",
+      label: "Pre-consent third-party tracking",
       status: "Gap observed"
     })
   ];
@@ -885,7 +885,7 @@ test("GdprEprivacyCoverageChecklistCard avoids duplicate observed wording for no
       items: [
         makeChecklistItem({
           id: "controller_contact_disclosure",
-          label: "Controller/contact disclosure observed",
+          label: "Controller/contact disclosure",
           status: "Not observed"
         }),
         makeChecklistItem({

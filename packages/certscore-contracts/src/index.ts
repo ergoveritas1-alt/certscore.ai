@@ -993,6 +993,15 @@ export const consentActionRecipeResearchArtifactSchema = z.object({
 export const screenshotArtifactSchema = z.object({
   artifactId: z.string(),
   capturedAtMs: z.number().int().nonnegative(),
+  captureMethod: z.enum([
+    "primary_full_page",
+    "primary_viewport_fallback",
+    "primary_placeholder",
+    "fresh_context_full_page",
+    "fresh_context_viewport_fallback",
+    "fresh_context_placeholder",
+    "independent_visual_fallback_viewport",
+  ]).optional(),
   path: z.string(),
   url: z.string(),
   pagePhase: pagePhaseSchema,
@@ -1011,6 +1020,15 @@ export const visualCaptureFailureReasonSchema = z.enum([
 export const visualCaptureSummarySchema = z.object({
   status: visualCaptureStatusSchema,
   failureReason: visualCaptureFailureReasonSchema.optional(),
+  captureMethod: z.enum([
+    "primary_full_page",
+    "primary_viewport_fallback",
+    "primary_placeholder",
+    "fresh_context_full_page",
+    "fresh_context_viewport_fallback",
+    "fresh_context_placeholder",
+    "independent_visual_fallback_viewport",
+  ]).optional(),
   artifactRefs: z.array(artifactRefSchema).default([]),
   notes: z.array(z.string().max(240)).default([]),
 });

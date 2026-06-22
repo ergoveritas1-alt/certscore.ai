@@ -4,9 +4,12 @@ import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@a
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { chromium } from "playwright";
 import { canonicalEvidenceBundleSchema, type CanonicalEvidenceBundle, type ConsentFlowScenario, type ScreenshotArtifact } from "@certscore/contracts";
 import {
+  chromiumContextOptions,
   chromiumLaunchArgs,
+  chromiumLaunchOptions,
   isAwsLambdaRuntime,
   lambdaChromiumSingleProcessEnabled,
   runScan
@@ -20,6 +23,8 @@ export const LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION = "certscore.v2.lambda-
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 export const LOCAL_V2_DAG_SCANNER_RUNTIME = "certscore-v2-dag-parallel-path";
 export const POST_CONSENT_FLOW_SCANNING_ENABLED = false;
+export const LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_SCREENSHOT_TIMEOUT_MS = 15_000;
+export const LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS = 15_000;
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
@@ -497,6 +502,7 @@ export async function runLocalV2DagLambdaArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
+  await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot));
 
   const bundle = await runLocalV2DagLambdaScanBundle(payload, {
     artifactRoot,
@@ -527,13 +533,14 @@ async function runLocalV2DagLambdaScanBundle(
   }
 ) {
   return timeLambdaPhase(options.phaseTimings, phaseLabel(options.phaseLabelPrefix, "scan"), () => runScan({
-    browserReuseMode: "single",
+    browserReuseMode: "per_module",
     outDir: options.artifactRoot,
     policyOutputGraceMs: 1_000,
     policyPlanningDeadlineMs: 1_500,
     postConsentFlowsEnabled: false,
     preConsentScreenshotMode: options.preConsentScreenshotMode,
     preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
+    preConsentVisualFallbackDeadlineMs: options.scanTuning.preConsentVisualFallbackDeadlineMs,
     profile: payload.profile,
     scenarioPlanningMode: "planned_parallel",
     scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
@@ -600,6 +607,94 @@ function writeJson(filePath: string, value: unknown) {
   return writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+async function writeEgressPreflightArtifact(artifactRoot: string) {
+  const startedAt = Date.now();
+  const egressLabel = firstTrimmedRuntimeEnv(process.env, [
+    "SCAN_EGRESS_LABEL",
+    "CERTSCORE_V2_DAG_LAMBDA_EGRESS_LABEL",
+  ]);
+  const proxyServer = firstTrimmedRuntimeEnv(process.env, [
+    "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
+    "SCAN_PROXY_SERVER",
+    "CERTSCORE_CHROMIUM_PROXY_SERVER",
+  ]);
+  const proxyEnabled = scanProxyEnabledEnv(process.env) && Boolean(proxyServer);
+  const artifact = {
+    artifactVersion: "certscore.v2.lambda-egress-preflight.v1",
+    checkedAt: new Date().toISOString(),
+    durationMs: 0,
+    egressLabel: egressLabel ? egressLabel.slice(0, 80) : null,
+    proxyModeEnabled: proxyEnabled,
+    probeStatus: "skipped" as "available" | "failed" | "skipped",
+    provider: null as string | null,
+    observed: null as null | {
+      asn?: string;
+      country?: string;
+      ip?: string;
+      org?: string;
+      region?: string;
+      timezone?: string;
+    },
+    error: null as null | string
+  };
+
+  if (!proxyEnabled) {
+    artifact.durationMs = Date.now() - startedAt;
+    await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
+    return;
+  }
+
+  let browser;
+  try {
+    browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
+    const context = await browser.newContext(chromiumContextOptions());
+    const page = await context.newPage();
+    const response = await page.goto("https://ipinfo.io/json", {
+      timeout: 7_500,
+      waitUntil: "domcontentloaded"
+    });
+    const text = (await page.locator("body").textContent({ timeout: 2_000 })) ?? "";
+    const parsed = parseEgressProbeResponse(text);
+    artifact.provider = "ipinfo.io";
+    artifact.probeStatus = response && response.ok() && parsed ? "available" : "failed";
+    artifact.observed = parsed;
+    if (!parsed) {
+      artifact.error = `Unexpected egress preflight response: HTTP ${response?.status() ?? 0}`;
+    }
+    await context.close().catch(() => undefined);
+  } catch (error) {
+    artifact.probeStatus = "failed";
+    artifact.error = error instanceof Error ? error.message.slice(0, 240) : "unknown_egress_preflight_error";
+  } finally {
+    await browser?.close().catch(() => undefined);
+    artifact.durationMs = Date.now() - startedAt;
+    await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
+  }
+}
+
+function parseEgressProbeResponse(text: string) {
+  try {
+    const value = JSON.parse(text);
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    const record = value as Record<string, unknown>;
+    const ip = compactString(record.ip);
+    if (!ip) {
+      return null;
+    }
+    return {
+      ip: ip.slice(0, 80),
+      ...(compactString(record.country) ? { country: compactString(record.country)!.slice(0, 24) } : {}),
+      ...(compactString(record.region) ? { region: compactString(record.region)!.slice(0, 80) } : {}),
+      ...(compactString(record.org) ? { org: compactString(record.org)!.slice(0, 160), asn: compactString(record.org)!.split(/\s+/)[0]?.slice(0, 40) } : {}),
+      ...(compactString(record.timezone) ? { timezone: compactString(record.timezone)!.slice(0, 80) } : {})
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function runLocalV2DagLambdaShardedArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
@@ -619,6 +714,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
+  await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot));
 
   const strongWebMdMode = isStrongWebMdEvidenceMode(payload, scanTuning);
   const coordinatorBundle = await runLocalV2DagLambdaScanBundle(payload, {
@@ -1090,7 +1186,13 @@ export function buildLocalV2DagLambdaRuntimeDiagnostics(env: NodeJS.ProcessEnv =
   const memorySizeMb = Number.parseInt(env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ?? "", 10);
   const proxyServer = firstTrimmedRuntimeEnv(env, [
     "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
+    "SCAN_PROXY_SERVER",
     "CERTSCORE_CHROMIUM_PROXY_SERVER",
+  ]);
+  const scanProxyEnabled = scanProxyEnabledEnv(env);
+  const egressLabel = firstTrimmedRuntimeEnv(env, [
+    "SCAN_EGRESS_LABEL",
+    "CERTSCORE_V2_DAG_LAMBDA_EGRESS_LABEL",
   ]);
   return {
     awsLambdaRuntime: isAwsLambdaRuntime(env),
@@ -1102,13 +1204,20 @@ export function buildLocalV2DagLambdaRuntimeDiagnostics(env: NodeJS.ProcessEnv =
       "CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD",
       "CERTSCORE_CHROMIUM_PROXY_PASSWORD",
     ])),
-    chromiumProxyConfigured: Boolean(proxyServer),
+    chromiumProxyConfigured: scanProxyEnabled && Boolean(proxyServer),
     chromiumSingleProcessEnabled: lambdaChromiumSingleProcessEnabled(env),
+    egressLabel: egressLabel ? egressLabel.slice(0, 80) : null,
     memorySizeMb: Number.isFinite(memorySizeMb) ? memorySizeMb : null,
     nodeVersion: process.version,
+    scanProxyEnabled,
     platform: process.platform,
     architecture: process.arch
   };
+}
+
+function scanProxyEnabledEnv(env: NodeJS.ProcessEnv = process.env) {
+  const value = env.SCAN_PROXY_ENABLED?.trim().toLowerCase();
+  return value !== "false" && value !== "0" && value !== "off";
 }
 
 function chromiumContextDiagnostics(env: NodeJS.ProcessEnv) {
@@ -1159,9 +1268,14 @@ export function buildLocalV2DagLambdaScanTuning(env: NodeJS.ProcessEnv = process
     evidenceDiagnosticMode: env.CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE === "webmd" ? "webmd" as const : "off" as const,
     preConsentScreenshotMode: preConsentScreenshotModeEnv(env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_MODE),
     preConsentScreenshotTimeoutMs: boundedIntegerEnv(env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS, {
-      defaultValue: 5_000,
-      max: 5_000,
+      defaultValue: LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_SCREENSHOT_TIMEOUT_MS,
+      max: 15_000,
       min: 500
+    }),
+    preConsentVisualFallbackDeadlineMs: boundedIntegerEnv(env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS, {
+      defaultValue: LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS,
+      max: 30_000,
+      min: 1_000
     }),
     scenarioConcurrency: boundedIntegerEnv(env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY, {
       defaultValue: 1,

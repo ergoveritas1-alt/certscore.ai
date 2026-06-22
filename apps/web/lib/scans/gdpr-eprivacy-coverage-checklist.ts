@@ -88,7 +88,7 @@ type ProjectedGdprFinding = NonNullable<GdprEprivacyCoverageChecklistInput["proj
 const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   {
     id: "consent_surface_observed",
-    label: "Consent banner observed",
+    label: "Consent banner",
     explanation: "Whether an actionable cookie/consent banner or CMP preference surface was observed in the tested context.",
     findingIds: [],
     defaultFindingStatus: "Observed",
@@ -97,7 +97,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "reject_all_path_availability",
-    label: "Reject option observed",
+    label: "Reject option",
     explanation: "Whether a first-layer reject, decline, refuse, or continue-without-accepting option was observed on the retained consent surface.",
     findingIds: [
       "accept_only_banner",
@@ -113,7 +113,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "cmp_framework_signal_observed",
-    label: "Consent framework / CMP signal observed",
+    label: "Consent framework / CMP signal",
     explanation: "Whether a consent-management framework, CMP vendor, or CMP runtime signal was observed in the pre-consent/public-web context.",
     findingIds: ["consent_surface_observed"],
     defaultFindingStatus: "Observed",
@@ -131,7 +131,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "pre_consent_cookies_storage",
-    label: "Pre-consent cookies/storage observed",
+    label: "Pre-consent cookies/storage",
     explanation: "Whether non-essential cookies or browser storage were observed before a recorded consent action.",
     findingIds: [
       "adtech_cookie_pre_consent",
@@ -144,7 +144,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "pre_consent_third_party_tracking",
-    label: "Pre-consent third-party tracking observed",
+    label: "Pre-consent third-party tracking",
     explanation: "Whether analytics, advertising, cross-site measurement, or similar third-party requests were observed before recorded consent.",
     findingIds: [
       "preconsent_tracking",
@@ -157,7 +157,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "advertising_retargeting_vendor_signal_observed",
-    label: "Advertising vendor signal observed",
+    label: "Advertising vendor signal",
     explanation: "Whether ad serving, ad measurement, ad verification, programmatic, contextual, or other advertising infrastructure signals were observed in retained pre-consent/public-web runtime evidence.",
     findingIds: [
       "adtech_cookie_pre_consent",
@@ -171,7 +171,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "retargeting_behavioral_advertising_signal_observed",
-    label: "Retargeting / behavioral advertising signal observed",
+    label: "Retargeting / behavioral advertising signal",
     explanation: "Whether retargeting pixels, remarketing tags, audience-building, cross-site behavioral advertising, identity sync, audience matching, or profile activation signals were observed in retained pre-consent/public-web runtime evidence.",
     findingIds: [
       "adtech_cookie_pre_consent",
@@ -185,7 +185,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "analytics_vendor_observed",
-    label: "Analytics vendor signal observed",
+    label: "Analytics vendor signal",
     explanation: "Whether analytics or measurement vendors were observed in retained pre-consent/public-web runtime evidence.",
     findingIds: [
       "analytics_cookie_pre_consent",
@@ -199,7 +199,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "session_replay_fingerprinting_review",
-    label: "Session replay signal observed",
+    label: "Session replay signal",
     explanation: "Whether session replay, behavioral recording, or behavioral analytics signals were observed in the tested pre-consent/public-web context.",
     findingIds: [
       "possible_session_replay_on_sensitive_input_surface",
@@ -213,7 +213,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "device_identification_fingerprinting_signal_observed",
-    label: "Device identification / fingerprinting signal observed",
+    label: "Device identification / fingerprinting signal",
     explanation: "Whether browser/device entropy, fingerprinting, or identifier-like device collection signals were observed in retained runtime evidence.",
     findingIds: [
       "device_data_collection_detected",
@@ -246,7 +246,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "legal_basis_disclosure_observed",
-    label: "Legal basis disclosure observed",
+    label: "Legal basis disclosure",
     explanation: "Whether retained privacy-policy evidence included a canonical legal-basis disclosure signal.",
     findingIds: ["legal_basis_disclosure_present"],
     defaultFindingStatus: "Observed",
@@ -255,7 +255,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "retention_disclosure_observed",
-    label: "Retention disclosure observed",
+    label: "Retention disclosure",
     explanation: "Whether retained privacy-policy evidence included a data-retention disclosure signal.",
     findingIds: ["retention_disclosure_present"],
     defaultFindingStatus: "Observed",
@@ -332,7 +332,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "controller_contact_disclosure",
-    label: "Controller/contact disclosure observed",
+    label: "Controller/contact disclosure",
     explanation: "Whether retained privacy-policy evidence included a controller, privacy contact, or equivalent contact point.",
     findingIds: ["privacy_contact_path_present"],
     defaultFindingStatus: "Observed",
@@ -341,7 +341,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "processing_purposes_disclosure",
-    label: "Processing purposes disclosure observed",
+    label: "Processing purposes disclosure",
     explanation: "Whether retained privacy-policy evidence described the purposes for processing personal data.",
     findingIds: ["purpose_of_use_disclosure_missing"],
     defaultFindingStatus: "Gap observed",
@@ -363,7 +363,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "data_subject_rights_disclosure",
-    label: "Data subject rights disclosure observed",
+    label: "Data subject rights disclosure",
     explanation: "Whether retained privacy-policy evidence described data subject rights or a rights request path.",
     findingIds: ["privacy_rights_path_present", "missing_dsar_mechanism", "missing_dsar_high_exposure"],
     defaultFindingStatus: "Observed",
@@ -372,7 +372,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "international_transfers_disclosure",
-    label: "International transfer disclosure observed",
+    label: "International transfer disclosure",
     explanation: "Whether retained privacy-policy evidence described international transfers or transfer-relevant endpoint/vendor context.",
     findingIds: [
       "cross_border_endpoint_transfer_review_signal",
@@ -2546,12 +2546,26 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
     (item.status === "Observed" || item.status === "Gap observed" || item.status === "Review signal") &&
     firstLayerGdprBannerConfirmed === false
   ) {
+    const noRejectRetainedWithPreconsentActivity =
+      item.id === "reject_all_path_availability" &&
+      item.status === "Gap observed" &&
+      readRetainedBoolean(retained, [
+        "preconsentCookieOrTrackingActivityObserved",
+        "preconsent_cookie_or_tracking_activity_observed"
+      ]) === true &&
+      readRetainedBoolean(retained, ["rejectControlObserved", "reject_control_observed"]) === false &&
+      getStringValue(retained.reason) === "no_reject_option_retained_with_preconsent_activity";
+
+    if (noRejectRetainedWithPreconsentActivity) {
+      return item;
+    }
+
     return addDeducibilityDemotion(
       item,
       "Not testable",
       item.id === "post_reject_tracking_reduction"
         ? "Post-reject tracking could not be tested because no first-layer GDPR/ePrivacy consent banner and no valid reject action were confirmed. Footer privacy/ad-choice controls were observed, but they do not establish a reject state for comparison."
-        : "Reject-path availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. Footer privacy/ad-choice controls were observed, but they do not establish an accept/reject consent surface.",
+        : "Reject-path availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. CertScore did not retain a place where a reject option could appear, so the missing reject option is treated as part of the missing or unconfirmed consent surface rather than as a standalone reject-path finding.",
       "no_confirmed_first_layer_gdpr_eprivacy_consent_banner_or_reject_state",
       "not_testable"
     );

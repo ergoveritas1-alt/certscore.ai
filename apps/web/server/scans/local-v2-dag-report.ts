@@ -27,6 +27,19 @@ function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+const LOCAL_V2_DAG_RESULT_REFRESH_COOLDOWN_MS = 30_000;
+
+type LocalV2DagLambdaPollResult = {
+  handled: number;
+};
+
+type LocalV2DagLambdaRefreshState = {
+  inFlight: boolean;
+  lastAttemptMs: number;
+};
+
+const localV2DagLambdaRefreshStateByScanId = new Map<string, LocalV2DagLambdaRefreshState>();
+
 function getLocalV2DagLambdaScanArtifactUri(scanRecord: ScanDetailResponse) {
   return scanRecord.events
     .filter((event) => event.eventType === "v2_lambda_result.received")
@@ -93,18 +106,59 @@ export function shouldAttemptLocalV2DagLambdaResultRefresh(scanRecord: ScanDetai
   return nowMs - startedAtMs >= 25_000;
 }
 
-export async function tryRefreshLocalV2DagLambdaResult(scanRecord: ScanDetailResponse) {
-  if (!shouldAttemptLocalV2DagLambdaResultRefresh(scanRecord)) {
+function claimLocalV2DagLambdaResultRefresh(scanId: string, nowMs: number) {
+  const current = localV2DagLambdaRefreshStateByScanId.get(scanId);
+  if (current?.inFlight) {
+    return false;
+  }
+  if (current && nowMs - current.lastAttemptMs < LOCAL_V2_DAG_RESULT_REFRESH_COOLDOWN_MS) {
+    return false;
+  }
+
+  localV2DagLambdaRefreshStateByScanId.set(scanId, {
+    inFlight: true,
+    lastAttemptMs: nowMs
+  });
+  return true;
+}
+
+function releaseLocalV2DagLambdaResultRefresh(scanId: string, nowMs: number) {
+  const current = localV2DagLambdaRefreshStateByScanId.get(scanId);
+  localV2DagLambdaRefreshStateByScanId.set(scanId, {
+    inFlight: false,
+    lastAttemptMs: current?.lastAttemptMs ?? nowMs
+  });
+}
+
+export function resetLocalV2DagLambdaResultRefreshStateForTest() {
+  localV2DagLambdaRefreshStateByScanId.clear();
+}
+
+export async function tryRefreshLocalV2DagLambdaResult(
+  scanRecord: ScanDetailResponse,
+  options: {
+    nowMs?: number;
+    pollResultQueue?: () => Promise<LocalV2DagLambdaPollResult>;
+  } = {}
+) {
+  const nowMs = options.nowMs ?? Date.now();
+  if (!shouldAttemptLocalV2DagLambdaResultRefresh(scanRecord, nowMs)) {
+    return false;
+  }
+  if (!claimLocalV2DagLambdaResultRefresh(scanRecord.scan.id, nowMs)) {
     return false;
   }
 
   try {
-    const { pollLocalV2DagLambdaResultQueue } = await import("./local-v2-dag-lambda-result-poller");
-    const result = await pollLocalV2DagLambdaResultQueue({
-      maxMessages: 10,
-      visibilityTimeoutSeconds: 30,
-      waitTimeSeconds: 1
+    const pollResultQueue = options.pollResultQueue ?? (async () => {
+      const { pollLocalV2DagLambdaResultQueue } = await import("./local-v2-dag-lambda-result-poller");
+      return pollLocalV2DagLambdaResultQueue({
+        maxMessages: 10,
+        visibilityTimeoutSeconds: 30,
+        waitTimeSeconds: 1
+      });
     });
+    const result = await pollResultQueue();
     return result.handled > 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -112,6 +166,8 @@ export async function tryRefreshLocalV2DagLambdaResult(scanRecord: ScanDetailRes
       console.warn("[web] local v2 DAG Lambda result refresh skipped", { error: message });
     }
     return false;
+  } finally {
+    releaseLocalV2DagLambdaResultRefresh(scanRecord.scan.id, Date.now());
   }
 }
 
@@ -963,10 +1019,12 @@ function localV2VisualCapture(bundle: CanonicalEvidenceBundle) {
     : null;
   const status = getString(visualCapture?.status);
   const failureReason = getString(visualCapture?.failureReason);
+  const captureMethod = getString(visualCapture?.captureMethod);
   const notes = Array.isArray(visualCapture?.notes)
     ? uniqueStrings(visualCapture.notes.map((note) => getString(note)).filter((note): note is string => Boolean(note)))
     : [];
   return {
+    captureMethod,
     failureReason,
     notes,
     status
@@ -1115,13 +1173,19 @@ function buildMaterializedLocalV2Detail(
   const runtimeCoverageStatus = bundle.runtimeCoverage?.coverageStatus ?? null;
   const runtimeLimitationKeys = bundle.runtimeCoverage?.limitationKeys ?? [];
   const runtimeObservationCounts = bundle.runtimeCoverage?.observationCounts;
+  const preConsentRuntimeFailed = runtimeLimitationKeys.includes("pre_consent_runtime_failed");
   const meaningfulRuntimeSignalsRetained =
     (runtimeObservationCounts?.thirdPartyRequests ?? 0) > 0 ||
     (runtimeObservationCounts?.cookiesBeforeConsent ?? 0) > 0 ||
     preconsentCookies.length > 0 ||
     (runtimeObservationCounts?.normalizedVendors ?? 0) > 0;
-  const runtimeCountsRetained = runtimeCoverageStatus === "usable" || meaningfulRuntimeSignalsRetained;
   const visualCapture = localV2VisualCapture(bundle);
+  const retainedPreConsentScreenshot = (bundle.screenshots ?? []).some((screenshot) => screenshot.artifactId === "screenshot_pre_consent");
+  const preConsentRuntimeReliable = !preConsentRuntimeFailed || retainedPreConsentScreenshot || visualCapture.status === "available";
+  const runtimeCountsRetained =
+    !preConsentRuntimeFailed &&
+    preConsentRuntimeReliable &&
+    (runtimeCoverageStatus === "usable" || meaningfulRuntimeSignalsRetained);
   const localV2NoGo = buildLocalV2ScanNoGoAssessment({
     bundle,
     consentSurfaceLikelyPresent,
@@ -1136,9 +1200,22 @@ function buildMaterializedLocalV2Detail(
   const effectiveRuntimeCountsRetained = localV2NoGo ? false : runtimeCountsRetained;
   const effectiveRuntimeLimitationKeys = localV2NoGo
     ? uniqueStrings([...runtimeLimitationKeys, "access_denied_or_forbidden_page"])
-    : visualCaptureUnavailable
+    : visualCaptureUnavailable || !preConsentRuntimeReliable
       ? uniqueStrings([...runtimeLimitationKeys, "visual_capture_unavailable"])
       : runtimeLimitationKeys;
+  const consentRuntimeEvidenceReportable = !localV2NoGo && preConsentRuntimeReliable;
+  const runtimeEvidenceReportable = !localV2NoGo && effectiveRuntimeCountsRetained;
+  const retainedFirstLayerConsentChoices = firstLayerConsentChoices ?? {
+    acceptControlObserved: false,
+    acceptLabels: [],
+    capturedBeforeInteraction: true,
+    layerInspected: "unknown",
+    managePreferencesControlObserved: false,
+    preferenceLabels: [],
+    rejectControlObserved: false,
+    rejectLabels: [],
+    visibleChoiceLabels: []
+  };
   const policySurfaces = dedupePolicySurfaces(
     bundle.policySurfaceObservations ?? [],
     bundle.normalizedUrl ?? bundle.url ?? (requestedHost ? `https://${requestedHost}/` : null)
@@ -1228,9 +1305,9 @@ function buildMaterializedLocalV2Detail(
     cookieNoticeObserved: consentSurfaceLikelyPresent,
     cmpFrameworkSignalObserved: Boolean(cmpVendorName),
     cmpRuntimeSignalLabels: cmpSignalLabels,
-    ...(firstLayerConsentChoices ? {
-      firstLayerConsentChoices,
-      first_layer_consent_choices: firstLayerConsentChoices
+    ...(consentRuntimeEvidenceReportable ? {
+      firstLayerConsentChoices: retainedFirstLayerConsentChoices,
+      first_layer_consent_choices: retainedFirstLayerConsentChoices
     } : {}),
     cookieWriteObservations,
     networkSummary: {
@@ -1304,47 +1381,53 @@ function buildMaterializedLocalV2Detail(
       visual_access_review: localV2NoGo.visualAccessReview
     } : {}),
     consent_audit_completed: true,
-    consent_baseline_tracker_evidence_urls: preconsentRequestUrls,
-    consent_baseline_tracker_vendor_names: uniqueStrings(vendorRows.map((vendor) => vendor.vendorName)),
-    consent_preconsent_violation_count: Math.max(preconsentRequests.length, vendorRows.length),
+    consent_baseline_tracker_evidence_urls: runtimeEvidenceReportable ? preconsentRequestUrls : [],
+    consent_baseline_tracker_vendor_names: runtimeEvidenceReportable ? uniqueStrings(vendorRows.map((vendor) => vendor.vendorName)) : [],
+    consent_preconsent_violation_count: runtimeEvidenceReportable ? Math.max(preconsentRequests.length, vendorRows.length) : 0,
     collection_surface_count: collectionSurfaceSummary.collectionSurfaceCount,
     collection_surface_observed: collectionSurfaceSummary.collectionSurfacesObserved,
     collectionSurfaceSummary,
     collection_surface_summary: collectionSurfaceSummary,
-    consentActionableChoiceObserved: Boolean(cmpVendorName),
-    consentSurfaceObserved: consentSurfaceLikelyPresent,
-    consent_actionable_choice_observed: Boolean(cmpVendorName),
-    consent_surface_observed: consentSurfaceLikelyPresent,
-    cookieNoticeObserved: consentSurfaceLikelyPresent,
-    cookie_notice_observed: consentSurfaceLikelyPresent,
+    consentActionableChoiceObserved: consentRuntimeEvidenceReportable ? Boolean(cmpVendorName) : null,
+    consentSurfaceObserved: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
+    consent_actionable_choice_observed: consentRuntimeEvidenceReportable ? Boolean(cmpVendorName) : null,
+    consent_surface_observed: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
+    cookieNoticeObserved: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
+    cookie_notice_observed: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
     ...(cookieSurface ? { cookiePolicyPresent: true, cookie_policy_present: true } : {}),
-    ...(cmpVendorName ? {
+    ...(consentRuntimeEvidenceReportable && cmpVendorName ? {
       cmpFrameworkSignalObserved: true,
       cmpRuntimeSignalLabels: cmpSignalLabels,
       cmp_framework_signal_observed: true,
       cmp_runtime_signal_labels: cmpSignalLabels,
       cmp_vendor_name: cmpVendorName
     } : {}),
-    ...(firstLayerConsentChoices ? {
-      firstLayerConsentChoices,
-      first_layer_consent_choices: firstLayerConsentChoices,
+    ...(consentRuntimeEvidenceReportable ? {
+      firstLayerConsentChoices: retainedFirstLayerConsentChoices,
+      first_layer_consent_choices: retainedFirstLayerConsentChoices,
       rejectPathDepthAndAvailability: {
-        completeRejectPathAvailable: firstLayerConsentChoices.rejectControlObserved,
-        completeRejectPathDetected: firstLayerConsentChoices.rejectControlObserved,
-        firstLayerConsentChoices,
-        layerInspected: firstLayerConsentChoices.layerInspected,
-        rejectAvailableOnFirstLayer: firstLayerConsentChoices.rejectControlObserved,
-        rejectEquivalentFound: firstLayerConsentChoices.rejectControlObserved,
-        visibleRejectLabels: firstLayerConsentChoices.rejectLabels
+        completeRejectPathAvailable: retainedFirstLayerConsentChoices.rejectControlObserved,
+        completeRejectPathDetected: retainedFirstLayerConsentChoices.rejectControlObserved,
+        firstLayerCookieConsentBannerObserved: consentSurfaceLikelyPresent,
+        firstLayerConsentChoices: retainedFirstLayerConsentChoices,
+        gdprEprivacyConsentSurfaceObserved: consentSurfaceLikelyPresent ? "confirmed" : "unconfirmed",
+        layerInspected: retainedFirstLayerConsentChoices.layerInspected,
+        rejectAvailableOnFirstLayer: retainedFirstLayerConsentChoices.rejectControlObserved,
+        rejectEquivalentFound: retainedFirstLayerConsentChoices.rejectControlObserved,
+        rejectControlObserved: retainedFirstLayerConsentChoices.rejectControlObserved,
+        visibleRejectLabels: retainedFirstLayerConsentChoices.rejectLabels
       },
       reject_path_depth_and_availability: {
-        complete_reject_path_available: firstLayerConsentChoices.rejectControlObserved,
-        complete_reject_path_detected: firstLayerConsentChoices.rejectControlObserved,
-        first_layer_consent_choices: firstLayerConsentChoices,
-        layer_inspected: firstLayerConsentChoices.layerInspected,
-        reject_available_on_first_layer: firstLayerConsentChoices.rejectControlObserved,
-        reject_equivalent_found: firstLayerConsentChoices.rejectControlObserved,
-        visible_reject_labels: firstLayerConsentChoices.rejectLabels
+        complete_reject_path_available: retainedFirstLayerConsentChoices.rejectControlObserved,
+        complete_reject_path_detected: retainedFirstLayerConsentChoices.rejectControlObserved,
+        first_layer_cookie_consent_banner_observed: consentSurfaceLikelyPresent,
+        first_layer_consent_choices: retainedFirstLayerConsentChoices,
+        gdpr_eprivacy_consent_surface_observed: consentSurfaceLikelyPresent ? "confirmed" : "unconfirmed",
+        layer_inspected: retainedFirstLayerConsentChoices.layerInspected,
+        reject_available_on_first_layer: retainedFirstLayerConsentChoices.rejectControlObserved,
+        reject_equivalent_found: retainedFirstLayerConsentChoices.rejectControlObserved,
+        reject_control_observed: retainedFirstLayerConsentChoices.rejectControlObserved,
+        visible_reject_labels: retainedFirstLayerConsentChoices.rejectLabels
       }
     } : {}),
     consentTimeline: hybridRuntimeEvidence.timelineMarkers,
@@ -1406,9 +1489,11 @@ function buildMaterializedLocalV2Detail(
     runtimeLimitationKeys: effectiveRuntimeLimitationKeys,
     runtime_limitation_keys: effectiveRuntimeLimitationKeys,
     visualCaptureFailureReason: visualCapture.failureReason,
+    visualCaptureMethod: visualCapture.captureMethod,
     visualCaptureNotes: visualCapture.notes,
     visualCaptureStatus: visualCapture.status,
     visual_capture_failure_reason: visualCapture.failureReason,
+    visual_capture_method: visualCapture.captureMethod,
     visual_capture_notes: visualCapture.notes,
     visual_capture_status: visualCapture.status,
     visual_capture_technical_limit: visualCaptureUnavailable,
@@ -1428,6 +1513,7 @@ function buildMaterializedLocalV2Detail(
       });
       return [{
         bucket: storagePointer.bucket,
+        capture_method: getString((screenshot as { captureMethod?: unknown }).captureMethod) ?? visualCapture.captureMethod ?? null,
         capture_step: "initial_load",
         consent_state: screenshot.consentStateAtTime ?? "pre_consent",
         final_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
@@ -1446,10 +1532,10 @@ function buildMaterializedLocalV2Detail(
     certscore_overall: localV2NoGo ? null : score,
     consent_maturity_score: localV2NoGo ? null : Math.max(0, score - 5),
     consent_score: localV2NoGo ? null : Math.max(0, score - 10),
-    cookie_banner_present: localV2NoGo ? false : consentSurfaceLikelyPresent,
-    cookie_count_total: localV2NoGo ? 0 : cookieNames.length,
-    cookies_before_consent_count: localV2NoGo ? 0 : cookiesBeforeConsentCount,
-    data_collection_risk_score: localV2NoGo ? null : Math.min(100, Math.max(20, thirdPartyRequestCount)),
+    cookie_banner_present: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
+    cookie_count_total: runtimeEvidenceReportable ? cookieNames.length : 0,
+    cookies_before_consent_count: runtimeEvidenceReportable ? cookiesBeforeConsentCount : 0,
+    data_collection_risk_score: runtimeEvidenceReportable ? Math.min(100, Math.max(20, thirdPartyRequestCount)) : null,
     domain: requestedHost,
     final_effective_url: bundle.normalizedUrl ?? bundle.url,
     final_url: bundle.normalizedUrl ?? bundle.url,
@@ -1490,22 +1576,22 @@ function buildMaterializedLocalV2Detail(
     legal_coverage_score: localV2NoGo ? null : score,
     pages_scanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1),
     partial_scan: true,
-    preconsent_tracking_detected: localV2NoGo ? false : bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0,
+    preconsent_tracking_detected: runtimeEvidenceReportable ? bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0 : false,
     privacy_policy_present: Boolean(privacySurface),
     privacy_score: localV2NoGo ? null : score,
     registered_domain: rootDomain,
     runtime_counts_retained: effectiveRuntimeCountsRetained,
     runtime_coverage_status: effectiveRuntimeCoverageStatus,
     runtime_limitation_keys: effectiveRuntimeLimitationKeys,
-    third_party_cookie_count: localV2NoGo ? 0 : preconsentCookies.filter((event) => event.cookieParty === "third_party" || event.thirdParty === true).length,
-    third_party_cookie_set_before_consent: localV2NoGo ? false : preconsentCookies.length > 0,
-    third_party_request_count: localV2NoGo ? 0 : thirdPartyRequestCount,
-    third_party_script_domain_count: localV2NoGo ? 0 : thirdPartyDomains.length,
-    tracker_count_total: localV2NoGo ? 0 : Math.max(vendorRows.length, thirdPartyDomains.length),
-    tracker_vendor_count: localV2NoGo ? 0 : vendorRows.length,
-    tracking_before_consent_detected: localV2NoGo ? false : bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0,
+    third_party_cookie_count: runtimeEvidenceReportable ? preconsentCookies.filter((event) => event.cookieParty === "third_party" || event.thirdParty === true).length : 0,
+    third_party_cookie_set_before_consent: runtimeEvidenceReportable ? preconsentCookies.length > 0 : false,
+    third_party_request_count: runtimeEvidenceReportable ? thirdPartyRequestCount : 0,
+    third_party_script_domain_count: runtimeEvidenceReportable ? thirdPartyDomains.length : 0,
+    tracker_count_total: runtimeEvidenceReportable ? Math.max(vendorRows.length, thirdPartyDomains.length) : 0,
+    tracker_vendor_count: runtimeEvidenceReportable ? vendorRows.length : 0,
+    tracking_before_consent_detected: runtimeEvidenceReportable ? bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0 : false,
     verified_public_surfaces_count: localV2NoGo ? 0 : policySurfaces.length,
-    ...(cmpVendorName ? { cmp_vendor_name: cmpVendorName } : {}),
+    ...(consentRuntimeEvidenceReportable && cmpVendorName ? { cmp_vendor_name: cmpVendorName } : {}),
     ...(cookieSurface ? { cookie_policy_present: true } : {}),
     ...(termsSurface ? { terms_of_service_present: true } : {})
   };
@@ -1522,7 +1608,7 @@ function buildMaterializedLocalV2Detail(
     policy_mentions: (surface.observedTopics ?? []).map((topic) => ({ topic })),
     policy_summary_short: surface.textExcerpt ?? `${policySurfaceLabel(surface.surfaceType)} retained by local v2 DAG scan.`
   }));
-  const signalRows = localV2NoGo ? [] : [
+  const signalRows = (runtimeEvidenceReportable ? [
     {
       category: "privacy",
       key: "privacy.preconsent_tracking_detected",
@@ -1545,13 +1631,21 @@ function buildMaterializedLocalV2Detail(
       value: true,
       valueType: "boolean"
     }
-  ] satisfies ScanDetailResponse["signals"];
-  const existingSignalKeys = new Set(scanRecord.signals.map((signal) => signal.key));
+  ] : []) satisfies ScanDetailResponse["signals"];
+  const unreliableRuntimeSignalKeys = new Set([
+    "privacy.preconsent_tracking_detected",
+    "tracking_before_consent_detected",
+    "third_party_cookie_set_before_consent"
+  ]);
+  const baseSignals = runtimeEvidenceReportable
+    ? scanRecord.signals
+    : scanRecord.signals.filter((signal) => !unreliableRuntimeSignalKeys.has(signal.key));
+  const existingSignalKeys = new Set(baseSignals.map((signal) => signal.key));
   const materializedSignals = [
-    ...scanRecord.signals,
+    ...baseSignals,
     ...signalRows.filter((signal) => !existingSignalKeys.has(signal.key))
   ];
-  const preconsentViolations = vendorRows.map((vendor) => ({
+  const preconsentViolations = runtimeEvidenceReportable ? vendorRows.map((vendor) => ({
     collectionEndpointType: vendor.collectionEndpointType,
     confidence: vendor.confidence,
     detectionSource: vendor.detectionSource,
@@ -1561,13 +1655,15 @@ function buildMaterializedLocalV2Detail(
     scriptHost: vendor.scriptHost,
     vendorCategory: vendor.vendorCategory,
     vendorName: vendor.vendorName
-  }));
+  })) : [];
 
   return {
     ...scanRecord,
     pageEvidence: scanRecord.pageEvidence,
     policyEnrichment: [...scanRecord.policyEnrichment, ...policyEnrichmentRows],
-    preconsentViolations: scanRecord.preconsentViolations.length > 0 ? scanRecord.preconsentViolations : preconsentViolations,
+    preconsentViolations: runtimeEvidenceReportable
+      ? (scanRecord.preconsentViolations.length > 0 ? scanRecord.preconsentViolations : preconsentViolations)
+      : [],
     primaryPolicyEnrichment: scanRecord.primaryPolicyEnrichment ?? policyEnrichmentRows.find((row) => row.pageType === "privacy_policy") ?? policyEnrichmentRows[0] ?? null,
     runtimeArtifacts,
     scan: {
@@ -1576,7 +1672,9 @@ function buildMaterializedLocalV2Detail(
     },
     signals: materializedSignals,
     snapshot,
-    trackerVendors: scanRecord.trackerVendors.length > 0 ? scanRecord.trackerVendors : vendorRows
+    trackerVendors: runtimeEvidenceReportable
+      ? (scanRecord.trackerVendors.length > 0 ? scanRecord.trackerVendors : vendorRows)
+      : []
   };
 }
 

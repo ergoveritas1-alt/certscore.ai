@@ -37,6 +37,19 @@ type ScanSubmitPayload = {
   scanUrl?: string | null;
 };
 
+function parseScanSubmitPayload(raw: string): ScanSubmitPayload {
+  if (!raw.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed as ScanSubmitPayload : {};
+  } catch {
+    return { error: raw.slice(0, 240) };
+  }
+}
+
 type ScanSubmitFailure = {
   code?: string | null;
   destination?: string | null;
@@ -428,7 +441,7 @@ export function DomainScanForm({
         method: "POST"
       });
 
-      const payload = (await response.json()) as ScanSubmitPayload;
+      const payload = parseScanSubmitPayload(await response.text());
       const destination = getScanSubmitDestination(mode, payload);
 
       if (!response.ok) {

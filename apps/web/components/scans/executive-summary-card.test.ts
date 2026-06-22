@@ -2577,7 +2577,7 @@ test("ExecutiveSummaryCard renders GDPR gap-observed checklist rows as top findi
           assessmentStatus: "review_signal",
           evidenceState: "observed",
           id: "retargeting_behavioral_advertising_signal_observed",
-          label: "Retargeting / behavioral advertising signal observed",
+          label: "Retargeting / behavioral advertising signal",
           note: "Behavioral advertising evidence was retained for purpose review.",
           status: "Review signal"
         },
@@ -2631,13 +2631,13 @@ test("ExecutiveSummaryCard renders GDPR gap-observed checklist rows as top findi
   assert.doesNotMatch(html, /Regulatory gap/);
   assert.doesNotMatch(html, /Regulatory checklist gap/);
   assert.match(html, /Pre-consent third-party tracking/);
-  assert.match(html, /Retargeting \/ behavioral advertising signal observed/);
+  assert.match(html, /Retargeting \/ behavioral advertising signal/);
   assert.doesNotMatch(html, /data-finding-icon=/);
   assert.match(html, /aria-label="Potential gap"/);
   assert.match(html, /aria-label="Potential concern"/);
   assert.ok(
     html.indexOf("Pre-consent third-party tracking") <
-      html.indexOf("Retargeting / behavioral advertising signal observed")
+      html.indexOf("Retargeting / behavioral advertising signal")
   );
   assert.doesNotMatch(html, /GDPR\/ePrivacy potential concern: Pre-consent third-party tracking/);
   assert.match(html, /Advertising and analytics requests were observed before consent/);
@@ -3606,7 +3606,7 @@ test("ExecutiveSummaryCard summarizes recognized and unknown consent platforms f
   assert.doesNotMatch(recognizedHtml, /CMP recognized from scan evidence/);
   assert.doesNotMatch(recognizedHtml, /recognized CMP/);
   assert.match(unknownHtml, /Unknown CMP \/ consent banner/);
-  assert.doesNotMatch(unknownHtml, /Consent banner observed; CMP vendor not recognized/);
+  assert.doesNotMatch(unknownHtml, /Consent banner; CMP vendor not recognized/);
   assert.doesNotMatch(unknownHtml, /No working consent banner was retained for this scan/);
 });
 

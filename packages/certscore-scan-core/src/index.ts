@@ -65,6 +65,7 @@ export interface RunScanInput {
   policyOutputGraceMs?: number;
   preConsentScreenshotMode?: "always" | "selective" | "never";
   preConsentScreenshotTimeoutMs?: number;
+  preConsentVisualFallbackDeadlineMs?: number;
   consentFlowScreenshotMode?: "auto" | "none";
   consentFlowDeadlineMs?: number;
   consentFlowActionFinalSettleMs?: number;
@@ -261,6 +262,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       artifactWriter,
       normalizedUrl,
       scanStartedAtMs: startedAtMs,
+      fallbackDeadlineMs: input.preConsentVisualFallbackDeadlineMs,
       screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
     }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -878,6 +880,7 @@ function shouldAttemptScreenshotOnlyFallback(
 
 export async function capturePreConsentScreenshotOnlyFallback(input: {
   artifactWriter: ArtifactWriter;
+  fallbackDeadlineMs?: number;
   normalizedUrl: string;
   scanStartedAtMs: number;
   screenshotTimeoutMs?: number;
@@ -888,33 +891,65 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
   domSnapshot?: DomSnapshotArtifact;
 }> {
   const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
+  const fallbackStartedAtMs = Date.now();
+  const timeoutForStep = (maxMs: number, minMs = 1) => {
+    if (input.fallbackDeadlineMs === undefined) {
+      return maxMs;
+    }
+    const remainingMs = input.fallbackDeadlineMs - (Date.now() - fallbackStartedAtMs);
+    if (remainingMs <= 0) {
+      throw new Error(`Pre-consent visual fallback deadline exhausted after ${Date.now() - fallbackStartedAtMs}ms.`);
+    }
+    return Math.max(minMs, Math.min(maxMs, remainingMs));
+  };
+  const optionalTimeoutForStep = (maxMs: number, minMs = 1) => {
+    try {
+      return timeoutForStep(maxMs, minMs);
+    } catch {
+      return null;
+    }
+  };
   const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
+  const fallbackDeadlineTimer = input.fallbackDeadlineMs === undefined
+    ? undefined
+    : setTimeout(() => {
+      void browser.close().catch(() => undefined);
+    }, input.fallbackDeadlineMs);
   try {
     const context = await browser.newContext(chromiumContextOptions());
     try {
       const page = await context.newPage();
       await page.goto(input.normalizedUrl, {
         waitUntil: "domcontentloaded",
-        timeout: Math.max(2_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 10_000)),
+        timeout: timeoutForStep(Math.max(2_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 15_000))),
       });
-      await page.waitForLoadState("networkidle", { timeout: 1_000 }).catch(() => undefined);
+      const networkIdleTimeoutMs = optionalTimeoutForStep(1_000);
+      if (networkIdleTimeoutMs !== null) {
+        await page.waitForLoadState("networkidle", { timeout: networkIdleTimeoutMs }).catch(() => undefined);
+      }
       await page.screenshot({
         fullPage: false,
         path: screenshotPath,
-        timeout: Math.max(1_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 5_000)),
+        timeout: timeoutForStep(Math.max(1_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 15_000))),
       });
-      const domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => "");
+      const domTextTimeoutMs = optionalTimeoutForStep(2_000);
+      const domText = domTextTimeoutMs === null
+        ? ""
+        : await page.locator("body").innerText({ timeout: domTextTimeoutMs }).catch(() => "");
       const domPath = domText
         ? await input.artifactWriter.writeTextArtifact(
           "dom-text-pre-consent.txt",
           domText.slice(0, 100_000),
         )
         : undefined;
-      const consentUiObservation = await detectConsentUi(
-        page,
-        input.scanStartedAtMs,
-        1_500,
-      ).catch(() => undefined);
+      const consentUiTimeoutMs = optionalTimeoutForStep(1_500);
+      const consentUiObservation = consentUiTimeoutMs === null
+        ? undefined
+        : await detectConsentUi(
+          page,
+          input.scanStartedAtMs,
+          consentUiTimeoutMs,
+        ).catch(() => undefined);
       if (consentUiObservation && domPath) {
         consentUiObservation.evidenceRefs = [
           { refId: "dom_text_pre_consent", artifactId: "dom_text_pre_consent", path: domPath },
@@ -924,6 +959,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
         screenshot: {
           artifactId: "screenshot_pre_consent",
           capturedAtMs: Date.now() - input.scanStartedAtMs,
+          captureMethod: "independent_visual_fallback_viewport",
           path: screenshotPath,
           url: page.url(),
           pagePhase: "dom_content_loaded",
@@ -931,6 +967,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
         },
         visualCapture: {
           status: "available",
+          captureMethod: "independent_visual_fallback_viewport",
           artifactRefs: [{
             artifactId: "screenshot_pre_consent",
             artifactType: "screenshot",
@@ -963,6 +1000,9 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
       await context.close().catch(() => undefined);
     }
   } finally {
+    if (fallbackDeadlineTimer) {
+      clearTimeout(fallbackDeadlineTimer);
+    }
     await browser.close().catch(() => undefined);
   }
 }

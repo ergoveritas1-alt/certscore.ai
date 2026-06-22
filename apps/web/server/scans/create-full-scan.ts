@@ -20,13 +20,14 @@ import {
 } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
-import { SCAN_ACCESS, getAdminScanThrottleMs, getScanThrottleCopy } from "../../lib/scan-access";
+import { getAdminScanThrottleMs, getScanThrottleCopy } from "../../lib/scan-access";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { ensureValidationRunForManualScan } from "../validation/repository";
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 import {
   createQueuedFullScan,
+  failInterruptedLocalV2DagLambdaScansForDomain,
   insertQueuedFullScanEvent,
   loadMonthlyScanUsage,
   loadPriorScanAccelerationCandidate,
@@ -61,6 +62,8 @@ export type CreateFullScanActionState = {
 const initialState: CreateFullScanActionState = {
   error: null
 };
+
+const LOCAL_INTERRUPTED_V2_DAG_CLEANUP_MS = 90_000;
 
 type QueueFullScanInput = {
   domainContext?: {
@@ -99,6 +102,14 @@ type QueueFullScanInput = {
   scanThrottleMs?: number;
   source?: string;
 };
+
+function getManualDashboardScanThrottleMs(userEmail: string): number | undefined {
+  if (process.env.NODE_ENV !== "production") {
+    return 0;
+  }
+
+  return isPlatformAdminEmail(userEmail) ? getAdminScanThrottleMs() : undefined;
+}
 
 function getCurrentMonthWindow(now = new Date()) {
   const year = now.getUTCFullYear();
@@ -148,6 +159,17 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   });
   const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
   const planDefinition = getPlanDefinition(planLimits.planCode);
+  if (process.env.NODE_ENV !== "production" && !input.domainContext) {
+    await failInterruptedLocalV2DagLambdaScansForDomain({
+      domainId: input.domainId,
+      olderThanMs: LOCAL_INTERRUPTED_V2_DAG_CLEANUP_MS
+    }).catch((error) => {
+      console.warn("[web] interrupted local v2 DAG Lambda scan cleanup failed", {
+        domainId: input.domainId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+  }
   const domainRecord = input.domainContext
     ? {
         domain: input.domainContext.domain,
@@ -318,7 +340,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         };
       }
 
-      const throttleMessage = `${getScanThrottleCopy()} For higher-throughput scanning or batch workflows, contact ${SCAN_ACCESS.salesEmail}.`;
+      const throttleMessage = getScanThrottleCopy();
 
       await logRequest({
         errorCode: "rescan_cooldown",
@@ -686,7 +708,7 @@ export async function createFullScanAction(
     localV2DagScanProfile,
     localV2DagRunViaLambda,
     scanFrom,
-    scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
+    scanThrottleMs: getManualDashboardScanThrottleMs(dashboardContext.user.email),
     source: "manual-dashboard"
   });
 

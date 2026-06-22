@@ -2286,9 +2286,10 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   }
 
   if (firstLayerGdprBannerConfirmed === false) {
+    const preconsentCookieOrTrackingActivityObserved = hasObservedPreconsentCookieOrTrackingActivity(input);
     if (
       !firstLayerChoiceEvidence.bannerLikeSurfaceObserved &&
-      !hasObservedPreconsentCookieOrTrackingActivity(input)
+      !preconsentCookieOrTrackingActivityObserved
     ) {
       return makeOutcome(
         "reject_all_path_availability",
@@ -2304,6 +2305,28 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
             gdprEprivacyConsentSurfaceObserved: "unconfirmed",
             preconsentCookieOrTrackingActivityObserved: false,
             reason: "no_banner_and_no_nonessential_activity"
+          }
+        }
+      );
+    }
+
+    if (preconsentCookieOrTrackingActivityObserved) {
+      return makeOutcome(
+        "reject_all_path_availability",
+        "Gap observed",
+        "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain a first-layer reject, decline, refuse, or continue-without-accepting option. This is an initial-page availability signal only; CertScore did not run a consent flow.",
+        [
+          "Evidence: retained pre-consent cookie/tracking activity",
+          "Evidence: no first-layer reject option retained",
+          "Reason: no_confirmed_first_layer_cookie_consent_banner"
+        ],
+        {
+          retainedEvidence: {
+            firstLayerCookieConsentBannerObserved: false,
+            gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+            preconsentCookieOrTrackingActivityObserved: true,
+            reason: "no_reject_option_retained_with_preconsent_activity",
+            rejectControlObserved: false
           }
         }
       );
@@ -3639,7 +3662,7 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
     label: "Automated decision-making/profiling disclosure",
     disclosureType: "automated_decision_making_or_profiling",
     signalKeys: ["automatedDecisionMakingProfilingDisclosureObserved", "automated_decision_making_profiling_disclosure_observed"],
-    textPattern: /automated decision|automated processing|profiling/i
+    textPattern: /automated decision(?:-making| making)?|solely automated (?:processing|decision)|meaningful information about the logic involved|legal or similarly significant effects|similarly significant effects|\bprofiling\b/i
   }
 ];
 
@@ -3794,14 +3817,21 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   const directSignal = getBoolean(summary, config.signalKeys);
   const article13Signal = getPolicyArticle13DisclosureSignal(summary, config.disclosureType);
   const article13SignalStatus = getString(article13Signal, ["status"]);
-  const article13SignalObserved = article13SignalStatus === "observed";
-  const article13SignalPartial = article13SignalStatus === "partial";
+  const requiresExplicitAutomatedDecisionEvidence = config.rowId === "automated_decision_making_profiling_disclosure";
+  const article13SignalEvidenceText = getString(article13Signal, ["evidenceText", "evidence_text"]) ?? "";
+  const article13SignalEvidenceMatches =
+    !requiresExplicitAutomatedDecisionEvidence ||
+    Boolean(policyTextMatchEvidence(article13SignalEvidenceText, config.textPattern));
+  const article13SignalObserved = article13SignalStatus === "observed" && article13SignalEvidenceMatches;
+  const article13SignalPartial =
+    article13SignalStatus === "partial" ||
+    (article13SignalStatus === "observed" && !article13SignalEvidenceMatches);
   const topicObserved =
     config.disclosureType !== undefined &&
     getPolicyObservedTopics(summary).includes(config.disclosureType);
   const textMatchEvidence = policyTextMatchEvidence(text, config.textPattern);
   const observed =
-    directSignal === true ||
+    (directSignal === true && (!requiresExplicitAutomatedDecisionEvidence || Boolean(textMatchEvidence) || article13SignalEvidenceMatches)) ||
     article13SignalObserved ||
     Boolean(textMatchEvidence);
 

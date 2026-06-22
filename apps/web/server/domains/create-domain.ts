@@ -30,6 +30,14 @@ const initialState: CreateDomainActionState = {
   queuedCount: null
 };
 
+function getLocalAwareScanThrottleMs(userEmail: string): number | undefined {
+  if (process.env.NODE_ENV !== "production") {
+    return 0;
+  }
+
+  return isPlatformAdminEmail(userEmail) ? getAdminScanThrottleMs() : undefined;
+}
+
 export async function createOrQueueDomainScan(input: {
   allowExistingDomainRescan?: boolean;
   bypassRecentScanReuse?: boolean;
@@ -106,7 +114,7 @@ export async function createOrQueueDomainScan(input: {
       localV2DagScanProfile: input.localV2DagScanProfile,
       localV2DagRunViaLambda: input.localV2DagRunViaLambda,
       scanFrom: input.scanFrom,
-      scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
+      scanThrottleMs: getLocalAwareScanThrottleMs(dashboardContext.user.email),
       source: "marketing-full-scan"
     });
 
@@ -175,7 +183,7 @@ export async function createOrQueueDomainScan(input: {
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     provenance: input.provenance,
     scanFrom: defaultScanFrom,
-    scanThrottleMs: isPlatformAdminEmail(dashboardContext.user.email) ? getAdminScanThrottleMs() : undefined,
+    scanThrottleMs: getLocalAwareScanThrottleMs(dashboardContext.user.email),
     source: "new-domain-overview"
   });
 

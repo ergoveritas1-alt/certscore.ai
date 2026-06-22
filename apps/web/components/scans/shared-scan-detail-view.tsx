@@ -482,6 +482,12 @@ export function hasIncompleteScanCoverage(scanRecord: Pick<ScanDetailResponse, "
 
   const coverageLevel = typeof snapshot.coverage_level === "string" ? snapshot.coverage_level : null;
   const scanOutcome = typeof snapshot.scan_outcome === "string" ? snapshot.scan_outcome : null;
+  const runtimeLimitationKeys = Array.isArray(snapshot.runtime_limitation_keys)
+    ? snapshot.runtime_limitation_keys.filter((value): value is string => typeof value === "string")
+    : [];
+  const preConsentRuntimeFailedWithoutVisualEvidence =
+    runtimeLimitationKeys.includes("pre_consent_runtime_failed") &&
+    runtimeLimitationKeys.includes("visual_capture_unavailable");
   const pagesScanned = getFiniteNumber(snapshot.pages_scanned) ?? scanRecord.scan.pagesScanned;
   const pagesRequested = scanRecord.scan.pagesRequested;
   const totalSignals = getRecordNumber(snapshot, "total_signals");
@@ -508,6 +514,7 @@ export function hasIncompleteScanCoverage(scanRecord: Pick<ScanDetailResponse, "
   const hasMaterialHomepageLimit = hasMaterialHomepageAccessLimitation(snapshot);
   const hasHardAccessLimitation =
     hasMaterialHomepageLimit ||
+    preConsentRuntimeFailedWithoutVisualEvidence ||
     snapshot.timeout_flag === true ||
     Boolean(scanOutcome && /blocked|captcha|forbidden|timeout|restricted|unknown_access/i.test(scanOutcome));
   const hasProtectedRouteOnlyLimitation =

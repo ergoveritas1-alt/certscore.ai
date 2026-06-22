@@ -3210,7 +3210,7 @@ function ExecutiveTimelinePane(input: {
         ))}
         <div className="absolute bottom-3 left-2 right-3 flex items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-700 bg-white shadow-sm" aria-hidden="true" />
-          <span className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white shadow-sm">
+          <span className="min-w-0 flex-1 rounded-lg border border-[#0f8bd7] bg-[#0f8bd7] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white shadow-sm">
             Scan end @ {formatTimelineOffset(durationMs)}
           </span>
         </div>

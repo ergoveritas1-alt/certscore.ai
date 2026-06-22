@@ -62,6 +62,7 @@ export type StaticFixturePage =
   | "policy-gpc-disclosure"
   | "policy-generic-links"
   | "policy-link-aria-title"
+  | "policy-latimes-footer-surfaces"
   | "policy-onetrust-index-json"
   | "policy-onetrust-notice-json"
   | "policy-privacy-center-link"
@@ -150,6 +151,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-gpc-disclosure": "policy-gpc",
   "policy-generic-links": "policy-generic-links",
   "policy-link-aria-title": "policy-link-aria-title",
+  "policy-latimes-footer-surfaces": "policy-latimes-footer-surfaces",
   "policy-onetrust-index-json": "policy-onetrust-index-json",
   "policy-onetrust-notice-json": "policy-onetrust-notice-json",
   "policy-privacy-center-link": "policy-privacy-center",
@@ -760,6 +762,11 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-gpc-disclosure": `<a href="/policies/gpc">Privacy Notice</a>`,
     "policy-generic-links": `<a href="/products">Products</a><a href="/about">About us</a>`,
     "policy-link-aria-title": `<a href="/policies/privacy" aria-label="Privacy Policy" title="Privacy Policy"></a>`,
+    "policy-latimes-footer-surfaces": [
+      `<a href="/privacy-policy">Privacy Policy</a>`,
+      `<a href="/terms">Terms of Service</a>`,
+      `<a href="/do-not-sell-or-share">Do Not Sell or Share My Personal Information</a>`,
+    ].join(" | "),
     "policy-privacy-center-link": `<a href="/privacy-center">Privacy Center</a>`,
     "policy-retention-rights-only": `<a href="/policies/rights-only">Privacy Policy</a>`,
     "policy-state-privacy-rights-link": `<a href="/state-privacy-rights">State Privacy Rights</a>`,

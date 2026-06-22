@@ -1065,6 +1065,46 @@ export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise
   return { id: data.id };
 }
 
+export async function failInterruptedLocalV2DagLambdaScansForDomain(input: {
+  domainId: string;
+  olderThanMs: number;
+}): Promise<number> {
+  const rows = await query<{ id: string }>(
+    `update scans s
+        set status = 'failed',
+            completed_at = coalesce(s.completed_at, timezone('utc', now())),
+            error_message = coalesce(
+              s.error_message,
+              'Local v2 DAG Lambda dispatch was interrupted before acceptance; start a new localhost scan.'
+            )
+      where s.domain_id = $1
+        and s.status = 'running'
+        and s.started_at is not null
+        and s.started_at < timezone('utc', now()) - ($2::int * interval '1 millisecond')
+        and exists (
+          select 1
+            from scan_events requested
+           where requested.scan_id = s.id
+             and requested.event_type = 'v2_lambda_dispatch.requested'
+        )
+        and not exists (
+          select 1
+            from scan_events accepted
+           where accepted.scan_id = s.id
+             and accepted.event_type in (
+               'v2_lambda_dispatch.accepted',
+               'v2_lambda_result.received',
+               'v2_lambda_result.failed',
+               'v2_lambda_dispatch.failed'
+             )
+        )
+      returning s.id`,
+    [input.domainId, input.olderThanMs]
+  );
+
+  return rows.rows.length;
+}
+
 export async function insertQueuedFullScanEvent(input: {
   domainId: string;
   eventType: string;

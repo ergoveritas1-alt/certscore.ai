@@ -87,6 +87,16 @@ function messageBody(message: Message) {
   return message.Body;
 }
 
+function getManualSmokeResultScanId(rawMessage: unknown) {
+  try {
+    const record = asRecord(typeof rawMessage === "string" ? JSON.parse(rawMessage) : rawMessage);
+    const scanId = typeof record.scanId === "string" ? record.scanId : "";
+    return scanId.startsWith("manual-") || scanId.startsWith("postdeploy-") ? scanId : null;
+  } catch {
+    return null;
+  }
+}
+
 function getReceiptHandle(message: Message) {
   if (!message.ReceiptHandle) {
     throw new Error("Local v2 DAG Lambda result SQS message did not include a receipt handle.");
@@ -472,8 +482,9 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
     result.received += messages.length;
 
     for (const message of messages) {
+      const rawMessage = messageBody(message);
       try {
-        await handleMessage(messageBody(message), {
+        await handleMessage(rawMessage, {
           expectedTargetEnvironment,
           s3Client
         });
@@ -484,6 +495,20 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
         result.deleted += 1;
         result.handled += 1;
       } catch (error) {
+        const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
+        if (manualSmokeScanId) {
+          await sqsClient.send(new DeleteMessageCommand({
+            QueueUrl: queueUrl,
+            ReceiptHandle: getReceiptHandle(message)
+          }));
+          result.deleted += 1;
+          console.warn("[web] ignored manual local v2 DAG Lambda smoke result", {
+            messageId: message.MessageId ?? null,
+            queueRegion: getSqsQueueRegion(queueUrl),
+            scanId: manualSmokeScanId
+          });
+          continue;
+        }
         result.failed += 1;
         console.error("[web] local v2 DAG Lambda result message rejected", {
           error: error instanceof Error ? error.message : String(error),

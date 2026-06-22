@@ -153,6 +153,17 @@ cat >"$permission_policy" <<JSON
       "Effect": "Allow",
       "Action": "lambda:InvokeFunction",
       "Resource": ${lambda_resources_json}
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:AssignPrivateIpAddresses",
+        "ec2:CreateNetworkInterface",
+        "ec2:DeleteNetworkInterface",
+        "ec2:DescribeNetworkInterfaces",
+        "ec2:UnassignPrivateIpAddresses"
+      ],
+      "Resource": "*"
     }
   ]
 }
@@ -189,7 +200,8 @@ const conservativeDefaults = {
   CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE: "webmd",
   CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
   CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_MODE: "always",
-  CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS: "5000",
+  CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS: "15000",
+  CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS: "15000",
   CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY: "1",
   CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE: "cmp_safe"
 };
@@ -250,6 +262,10 @@ for (const key of [
   "CERTSCORE_CHROMIUM_PROXY_SERVER",
   "CERTSCORE_CHROMIUM_PROXY_USERNAME",
   "CERTSCORE_CHROMIUM_PROXY_PASSWORD",
+  "SCAN_PROXY_ENABLED",
+  "SCAN_PROXY_SERVER",
+  "SCAN_EGRESS_LABEL",
+  "CERTSCORE_V2_DAG_LAMBDA_EGRESS_LABEL",
 ]) {
   if (process.env[key] && String(process.env[key]).trim()) {
     variables[key] = String(process.env[key]).trim();

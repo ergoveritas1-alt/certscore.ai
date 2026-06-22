@@ -16,7 +16,13 @@ export function chromiumExecutablePath(env: NodeJS.ProcessEnv = process.env) {
 }
 
 export function chromiumProxyOptions(env: NodeJS.ProcessEnv = process.env): LaunchOptions["proxy"] | undefined {
+  const proxyEnabled = env.SCAN_PROXY_ENABLED?.trim().toLowerCase();
+  if (proxyEnabled === "false" || proxyEnabled === "0" || proxyEnabled === "off") {
+    return undefined;
+  }
+
   const server = env.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER?.trim() ||
+    env.SCAN_PROXY_SERVER?.trim() ||
     env.CERTSCORE_CHROMIUM_PROXY_SERVER?.trim();
   if (!server) {
     return undefined;

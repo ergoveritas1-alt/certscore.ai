@@ -579,7 +579,7 @@ function getPositiveInfrastructureEvidenceGrade(
           ? "verified" as const
           : "weak" as const;
       case "automated_decision_profiling_disclosure_present":
-        return hasPolicyPositiveTopicSnippet(rawEvidence, /automated_decision|automated decision|profiling|solely automated/i)
+        return hasPolicyPositiveTopicSnippet(rawEvidence, /automated_decision|automated decision(?:-making| making)?|solely automated (?:processing|decision)|meaningful information about the logic involved|legal or similarly significant effects|similarly significant effects|\bprofiling\b/i)
           ? "verified" as const
           : "weak" as const;
       case "children_privacy_disclosure_present":

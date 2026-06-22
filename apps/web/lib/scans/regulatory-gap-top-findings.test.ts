@@ -22,7 +22,7 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
           assessmentStatus: "checked",
           evidenceState: "observed",
           id: "pre_consent_cookies_storage",
-          label: "Pre-consent cookies/storage observed",
+          label: "Pre-consent cookies/storage",
           note: "Non-essential storage was retained.",
           criticalEvidence: {
             retainedEvidence: {
@@ -34,7 +34,7 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
           assessmentStatus: "checked",
           evidenceState: "not_observed",
           id: "reject_all_path_availability",
-          label: "Reject option observed",
+          label: "Reject option",
           note: "No reject option was observed while runtime tracking existed.",
           criticalEvidence: {
             retainedEvidence: {
@@ -60,14 +60,14 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
           assessmentStatus: "checked",
           evidenceState: "observed",
           id: "advertising_retargeting_vendor_signal_observed",
-          label: "Advertising / retargeting vendor signal observed",
+          label: "Advertising / retargeting vendor signal",
           note: "A retained adtech vendor signal was observed before consent."
         },
         {
           assessmentStatus: "checked",
           evidenceState: "observed",
           id: "analytics_vendor_observed",
-          label: "Analytics vendor signal observed",
+          label: "Analytics vendor signal",
           note: "Google Analytics was observed before consent."
         },
         {
@@ -89,7 +89,7 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
           assessmentStatus: "review_signal",
           evidenceState: "observed",
           id: "retargeting_behavioral_advertising_signal_observed",
-          label: "Retargeting / behavioral advertising signal observed",
+          label: "Retargeting / behavioral advertising signal",
           note: "Behavioral advertising evidence was retained for purpose review.",
           status: "Review signal"
         },
@@ -125,7 +125,7 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
       "potential_concern"
     ]
   );
-  assert.equal(findings.at(-1)?.label, "Retargeting / behavioral advertising signal observed");
+  assert.equal(findings.at(-1)?.label, "Retargeting / behavioral advertising signal");
   assert.equal(findings[0]?.label, "Pre-consent third-party tracking");
   assert.equal(findings[0]?.severity, "high");
   assert.equal(findings[0]?.section, "Privacy & Tracking");

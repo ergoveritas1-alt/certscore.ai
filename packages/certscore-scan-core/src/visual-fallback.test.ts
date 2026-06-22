@@ -20,7 +20,9 @@ test("visual fallback retains bounded consent-surface evidence with the screensh
     });
 
     assert.equal(result.visualCapture.status, "available");
+    assert.equal(result.visualCapture.captureMethod, "independent_visual_fallback_viewport");
     assert.equal(result.screenshot.artifactId, "screenshot_pre_consent");
+    assert.equal(result.screenshot.captureMethod, "independent_visual_fallback_viewport");
     assert.equal(result.domSnapshot?.artifactId, "dom_text_pre_consent");
     assert.equal(result.consentUiObservation?.likelyPresent, true);
     assert.equal(result.consentUiObservation?.acceptControlObserved, true);

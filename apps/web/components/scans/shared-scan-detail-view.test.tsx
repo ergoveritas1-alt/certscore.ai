@@ -1789,6 +1789,35 @@ test("hasIncompleteScanCoverage keeps warning for partial scans with few retaine
   );
 });
 
+test("hasIncompleteScanCoverage keeps warning when pre-consent runtime failed without visual evidence", async () => {
+  const hasIncompleteScanCoverage = await loadHasIncompleteScanCoverage();
+
+  assert.equal(
+    hasIncompleteScanCoverage({
+      events: [],
+      scan: {
+        pagesRequested: 1,
+        pagesScanned: 1,
+        status: "completed"
+      },
+      snapshot: {
+        coverage_level: "limited_partial",
+        pages_scanned: 1,
+        partial_scan: true,
+        report_finding_count: 4,
+        runtime_counts_retained: false,
+        runtime_limitation_keys: [
+          "pre_consent_runtime_failed",
+          "visual_capture_unavailable"
+        ],
+        total_signals: 42,
+        verified_public_surfaces_count: 2
+      }
+    }),
+    true
+  );
+});
+
 test("selectExecutiveAccessLimitationNotice does not replace retained unified findings", async () => {
   const selectExecutiveAccessLimitationNotice = await loadSelectExecutiveAccessLimitationNotice();
   const notice = {

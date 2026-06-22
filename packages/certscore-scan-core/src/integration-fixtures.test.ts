@@ -586,6 +586,37 @@ test("planned pre-consent baseline skips screenshots when no consent surface is 
   }
 });
 
+test("pre-consent runtime scanner bounds post-screenshot consent recapture", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-recapture-"));
+  try {
+    const url = server.urlFor("policy-footer-privacy");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const recaptureTiming = result.moduleRun.timingBreakdown?.find((entry) =>
+      entry.label === "consent UI control recapture"
+    );
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.ok(recaptureTiming, "expected post-screenshot consent control recapture timing");
+    assert.ok(
+      recaptureTiming.durationMs < 5_000,
+      `post-screenshot consent recapture should stay bounded, saw ${recaptureTiming.durationMs}ms`,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 async function scanFixturePage(
   url: string,
   outDir: string,

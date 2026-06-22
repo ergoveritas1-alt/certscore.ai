@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
+  isFetchablePolicyUrlForPolicySurface,
   type PolicyNanoAssistProvider,
   policySurfaceScanner,
   wwwFallbackUrlForPolicyFetch,
@@ -69,6 +70,35 @@ test("policySurfaceScanner classifies expected policy and control surfaces", asy
       assert.ok(surface, `${page} should observe ${surfaceType} with ${topic}`);
     });
   }
+});
+
+test("policySurfaceScanner treats external terms links as fetchable policy surfaces", () => {
+  const baseUrl = "https://www.nbcnews.com/";
+
+  assert.equal(
+    isFetchablePolicyUrlForPolicySurface(
+      baseUrl,
+      "https://www.nbcuniversal.com/terms-of-service",
+      "terms",
+    ),
+    true,
+  );
+  assert.equal(
+    isFetchablePolicyUrlForPolicySurface(
+      baseUrl,
+      "https://www.nbcuniversal.com/privacy",
+      "privacy_policy",
+    ),
+    true,
+  );
+  assert.equal(
+    isFetchablePolicyUrlForPolicySurface(
+      baseUrl,
+      "https://www.nbcuniversal.com/about",
+      "terms",
+    ),
+    false,
+  );
 });
 
 test("policySurfaceScanner anchors bounded excerpts on high-value detected policy topics", async () => {
@@ -178,6 +208,50 @@ test("policySurfaceScanner retains secondary CCPA and GPC policy surfaces when N
     assert.equal(statePrivacy.observedTopics.includes("global_privacy_control"), true);
     assert.equal(statePrivacy.observedTopics.includes("do_not_sell_or_share"), true);
     assert.match(statePrivacy.textExcerpt ?? "", /Information we collect|opt-out preference signal/);
+  }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
+test("policySurfaceScanner retains footer terms as a secondary policy surface alongside privacy links", async () => {
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    async classifyLinks(input) {
+      const privacy = input.candidates.find((candidate) =>
+        candidate.normalizedUrl.endsWith("/privacy-policy"),
+      );
+      return {
+        assistId: input.assistId,
+        rankedCandidates: privacy
+          ? [{
+            candidateId: privacy.candidateId,
+            likelySurfaceType: "privacy_policy",
+            shouldFetch: true,
+            priorityRank: 1,
+            confidence: 0.94,
+            reason: "Mock Nano under-selected the primary privacy policy only.",
+          }]
+          : [],
+      };
+    },
+  };
+
+  await withPolicyScan("policy-latimes-footer-surfaces", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/privacy-policy` &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.status === "fetched"
+    );
+    const terms = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/terms` &&
+      observation.surfaceType === "terms" &&
+      observation.status === "fetched"
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.ok(privacy);
+    assert.ok(terms);
+    assert.equal(diagnostics.candidateSummary.some((candidate) =>
+      candidate.surfaceType === "terms" &&
+      candidate.normalizedUrl === `${baseUrl}/terms`
+    ), true);
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
 });
 
@@ -356,7 +430,7 @@ test("policySurfaceScanner gold corpus retains core GDPR policy surfaces through
     },
     {
       page: "policy-gold-ikea-common-path",
-      expectedSurfaceType: "cookie_policy",
+      expectedSurfaceType: "privacy_policy",
       expectedPath: "/global/en/legal/privacy-cookie-statement",
     },
     {
@@ -406,6 +480,21 @@ test("policySurfaceScanner gold corpus retains core GDPR policy surfaces through
   }
 });
 
+test("policySurfaceScanner retains IKEA privacy-cookie statement as both privacy and cookie surfaces", async () => {
+  await withPolicyScan("policy-gold-ikea-common-path", async ({ result, baseUrl }) => {
+    const expectedUrl = `${baseUrl}/global/en/legal/privacy-cookie-statement`;
+    const retainedTypes = new Set(result.policySurfaceObservations
+      .filter((observation) =>
+        observation.status === "fetched" &&
+        observation.normalizedUrl === expectedUrl
+      )
+      .map((observation) => observation.surfaceType));
+
+    assert.equal(retainedTypes.has("privacy_policy"), true);
+    assert.equal(retainedTypes.has("cookie_policy"), true);
+  });
+});
+
 test("policySurfaceScanner does not let secondary-only surfaces satisfy core GDPR policy availability", async () => {
   await withPolicyScan("policy-gold-latimes-secondary-only", async ({ result }) => {
     const fetchedBeforeFallback = result.policySurfaceObservations.filter((observation) =>
@@ -422,6 +511,35 @@ test("policySurfaceScanner does not let secondary-only surfaces satisfy core GDP
     assert.deepEqual([...secondaryOnlyTypes].sort(), ["ai_disclosure", "terms"]);
     assert.ok(fallbackPrivacy);
   });
+});
+
+test("policySurfaceScanner retains visible terms links across policy gold corpus", async () => {
+  const cases = [
+    ["policy-gold-caltech-common-path", ["/terms"]],
+    ["policy-gold-ford-secondary-only", ["/terms"]],
+    ["policy-gold-ikea-common-path", ["/terms"]],
+    ["policy-gold-latimes-secondary-only", ["/gift-subscription-terms", "/subscriber-terms-and-conditions"]],
+    ["policy-latimes-footer-surfaces", ["/terms"]],
+  ] as const;
+
+  for (const [page, expectedPaths] of cases) {
+    await withPolicyScan(page, async ({ result, baseUrl }) => {
+      const retainedTermsUrls = new Set(result.policySurfaceObservations
+        .filter((observation) =>
+          observation.surfaceType === "terms" &&
+          observation.status === "fetched"
+        )
+        .map((observation) => observation.normalizedUrl));
+
+      for (const expectedPath of expectedPaths) {
+        assert.equal(
+          retainedTermsUrls.has(`${baseUrl}${expectedPath}`),
+          true,
+          `${page} should retain ${expectedPath} as a terms surface`,
+        );
+      }
+    });
+  }
 });
 
 test("policySurfaceScanner dedupes slash variants before applying common-path fallback cap", async () => {

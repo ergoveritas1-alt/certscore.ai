@@ -221,7 +221,7 @@ test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session r
   assert.equal(row.status, "Observed");
   assert.equal(row.evidenceState, "observed");
   assert.equal(row.assessmentStatus, "checked");
-  assert.equal(row.label, "Session replay signal observed");
+  assert.equal(row.label, "Session replay signal");
   assert.match(row.explanation, /not observed pre-consent in retained evidence/i);
   assert.match(row.explanation, /Microsoft Clarity, Hotjar, and Contentsquare/);
   assert.doesNotMatch(row.explanation, /before consent observed/i);
@@ -265,14 +265,14 @@ test("deriveGdprEprivacyCoverageChecklist labels entropy-only evidence separatel
   assert.equal(row.status, "Not observed");
   assert.equal(row.evidenceState, "not_observed");
   assert.equal(row.assessmentStatus, "checked");
-  assert.equal(row.label, "Session replay signal observed");
+  assert.equal(row.label, "Session replay signal");
   assert.match(row.explanation, /device identification row/i);
 
   const deviceRow = byId(items, "device_identification_fingerprinting_signal_observed");
   assert.equal(deviceRow.status, "Review signal");
   assert.equal(deviceRow.evidenceState, "observed");
   assert.equal(deviceRow.assessmentStatus, "review_signal");
-  assert.equal(deviceRow.label, "Device identification / fingerprinting signal observed");
+  assert.equal(deviceRow.label, "Device identification / fingerprinting signal");
   assert.match(deviceRow.explanation, /Browser\/device entropy review signal/i);
 });
 
@@ -316,7 +316,7 @@ test("deriveGdprEprivacyCoverageChecklist labels retained pre-consent session re
   assert.equal(row.status, "Gap observed");
   assert.equal(row.evidenceState, "observed");
   assert.equal(row.assessmentStatus, "gap_observed");
-  assert.equal(row.label, "Session replay signal observed");
+  assert.equal(row.label, "Session replay signal");
   assert.match(row.explanation, /before a recorded consent action/i);
   assert.equal(row.subchecks, undefined);
   assert.equal(items.some((item) => item.id === "session_replay_before_consent"), false);
@@ -344,7 +344,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps consent surface and post-choice 
   });
 
   const consentSurface = byId(items, "consent_surface_observed");
-  assert.equal(consentSurface.label, "Consent banner observed");
+  assert.equal(consentSurface.label, "Consent banner");
   assert.equal(consentSurface.evidenceState, "observed");
   assert.equal(consentSurface.assessmentStatus, "checked");
   assert.equal(consentSurface.status, "Observed");
@@ -711,6 +711,39 @@ test("deriveGdprEprivacyCoverageChecklist demotes inconsistent consent and rejec
   );
   assert.equal(byId(items, "post_reject_tracking_reduction").status, "Not testable");
   assert.match(byId(items, "post_reject_tracking_reduction").limitation ?? "", /no first-layer GDPR\/ePrivacy consent banner/i);
+});
+
+test("deriveGdprEprivacyCoverageChecklist keeps missing reject as a gap when pre-consent activity is retained", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      reject_all_path_availability: makeCoverageOutcome({
+        evidenceRefs: [
+          "Evidence: retained pre-consent cookie/tracking activity",
+          "Evidence: no first-layer reject option retained"
+        ],
+        limitation:
+          "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain a first-layer reject, decline, refuse, or continue-without-accepting option.",
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          preconsentCookieOrTrackingActivityObserved: true,
+          reason: "no_reject_option_retained_with_preconsent_activity",
+          rejectControlObserved: false
+        },
+        rowId: "reject_all_path_availability",
+        status: "Gap observed"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const rejectPath = byId(items, "reject_all_path_availability");
+  assert.equal(rejectPath.status, "Gap observed");
+  assert.equal(rejectPath.assessmentStatus, "gap_observed");
+  assert.equal(rejectPath.evidenceState, "not_observed");
+  assert.match(rejectPath.limitation ?? "", /did not retain a first-layer reject/i);
 });
 
 test("deriveGdprEprivacyCoverageChecklist does not map generic transfer disclosure findings to cross-border endpoint review", () => {
@@ -1562,7 +1595,7 @@ test("deriveGdprEprivacyCoverageChecklist does not let generic advertising categ
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.label, "Pre-consent third-party tracking observed");
+  assert.equal(row.label, "Pre-consent third-party tracking");
   assert.equal(row.status, "Review signal");
   assert.match(row.explanation, /Security\/performance vendor activity was observed/i);
   assert.match(row.explanation, /Akamai Bot Manager \/ Edge/i);

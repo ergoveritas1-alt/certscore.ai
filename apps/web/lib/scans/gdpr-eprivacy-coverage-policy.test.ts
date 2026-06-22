@@ -185,6 +185,63 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not promote topic-only Artic
   assert.equal(outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved, "partial");
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps financial-incentive text out of automated decision observed", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            disclosureType: "automated_decision_making_or_profiling",
+            evidenceText:
+              "Receive information about the financial incentives that we offer to you. You may opt out of processing for targeted advertising.",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt:
+          "Receive information about the financial incentives that we offer to you. You may opt out of processing for targeted advertising."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Review signal");
+  assert.equal(
+    outcomes.automated_decision_making_profiling_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
+    "partial"
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes observes explicit automated decision disclosure text", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt:
+          "We do not make decisions based solely on automated processing, including profiling, that produce legal or similarly significant effects. You may request meaningful information about the logic involved."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Observed");
+  assert.match(
+    retainedArticle13Signal(outcomes.automated_decision_making_profiling_disclosure!)?.evidenceText ?? "",
+    /solely on automated processing/i
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat deletion rights as retention disclosure", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -1229,6 +1286,41 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes makes reject path not testable wi
   assert.equal(
     outcomes.reject_all_path_availability?.criticalEvidence.retainedEvidence.reason,
     "no_confirmed_first_layer_cookie_consent_banner"
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes calls out missing reject option when pre-consent activity is retained", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        networkSummary: {
+          preConsentThirdPartyRequestCount: 19
+        },
+        storageSummary: {
+          cookiesBeforeConsentCount: 11
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: false,
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+        rejectAvailableOnFirstLayer: false
+      }
+    },
+    snapshot: {
+      cookie_banner_present: false,
+      third_party_request_count: 19
+    }
+  });
+
+  const rejectPath = outcomes.reject_all_path_availability;
+  assert.equal(rejectPath?.status, "Gap observed");
+  assert.match(rejectPath?.limitation ?? "", /did not retain a first-layer reject/i);
+  assert.equal(rejectPath?.criticalEvidence.retainedEvidence.preconsentCookieOrTrackingActivityObserved, true);
+  assert.equal(rejectPath?.criticalEvidence.retainedEvidence.rejectControlObserved, false);
+  assert.equal(
+    rejectPath?.criticalEvidence.retainedEvidence.reason,
+    "no_reject_option_retained_with_preconsent_activity"
   );
 });
 

@@ -105,6 +105,7 @@ test("handler exposes bounded Lambda scan tuning for quality and speed A/B runs"
       CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE: "auto",
       CERTSCORE_V2_DAG_LAMBDA_ACTION_FINAL_SETTLE_MS: "1500",
       CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS: "1500",
+      CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS: "9000",
       CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY: "3"
     }),
     {
@@ -113,6 +114,7 @@ test("handler exposes bounded Lambda scan tuning for quality and speed A/B runs"
       evidenceDiagnosticMode: "off",
       preConsentScreenshotMode: "always",
       preConsentScreenshotTimeoutMs: 1500,
+      preConsentVisualFallbackDeadlineMs: 9000,
       scenarioConcurrency: 3,
       scenarioResourceMode: "cmp_safe"
     }
@@ -128,6 +130,7 @@ test("handler exposes bounded Lambda scan tuning for quality and speed A/B runs"
       evidenceDiagnosticMode: "off",
       preConsentScreenshotMode: "always",
       preConsentScreenshotTimeoutMs: 500,
+      preConsentVisualFallbackDeadlineMs: 15000,
       scenarioConcurrency: 4,
       scenarioResourceMode: "cmp_safe"
     }
@@ -154,7 +157,8 @@ test("handler exposes bounded Lambda scan tuning for quality and speed A/B runs"
       consentFlowScreenshotMode: "none",
       evidenceDiagnosticMode: "webmd",
       preConsentScreenshotMode: "selective",
-      preConsentScreenshotTimeoutMs: 5000,
+      preConsentScreenshotTimeoutMs: 15000,
+      preConsentVisualFallbackDeadlineMs: 15000,
       scenarioConcurrency: 1,
       scenarioResourceMode: "cmp_safe"
     }
@@ -195,6 +199,13 @@ test("handler parses bounded per-dispatch Lambda debug overrides", () => {
     strongEvidenceMode: "webmd"
   });
   assert.equal(parsed.strongEvidenceMode, "webmd");
+});
+
+test("handler keeps Lambda scan modules browser-isolated for runtime stability", async () => {
+  const handlerSource = await readFile(new URL("./handler.ts", import.meta.url), "utf8");
+
+  assert.match(handlerSource, /browserReuseMode:\s*"per_module"/);
+  assert.doesNotMatch(handlerSource, /browserReuseMode:\s*"single"/);
 });
 
 test("handler rejects wrong contract, processor, unsupported region, VPC, or production-integration flags", () => {

@@ -41,7 +41,7 @@ const CUSTOMER_LABELS: Record<string, string> = {
   pre_consent_cookies_storage: "Cookies or storage before consent",
   pre_consent_third_party_tracking: "Third-party tracking before consent",
   preference_withdrawal_control: "Post-choice consent controls",
-  reject_all_path_availability: "Reject option observed",
+  reject_all_path_availability: "Reject option",
   sensitive_surfaces_third_party_tracking: "Sensitive forms with third-party tracking",
   session_replay_after_refusal: "Session replay after refusal / opt-out",
   session_replay_before_consent: "Session replay before consent",

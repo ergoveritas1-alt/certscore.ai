@@ -96,7 +96,10 @@ const REPORT_ROW_GROUPS = [
       "recipients_vendor_categories_disclosure",
       "retention_disclosure_observed",
       "data_subject_rights_disclosure",
-      "international_transfers_disclosure"
+      "international_transfers_disclosure",
+      "dpo_contact_point_disclosure",
+      "supervisory_authority_complaint_disclosure",
+      "automated_decision_making_profiling_disclosure"
     ]
   }
 ] as const;

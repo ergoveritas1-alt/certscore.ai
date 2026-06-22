@@ -313,6 +313,8 @@ export async function policySurfaceScanner(
       artifactRefs.push(...secondaryResults.artifactRefs);
     }
 
+    observations.push(...privacyAliasesForCombinedPrivacyCookieSurfaces(observations));
+
     artifactRefs.push(await writePolicyCaptureDiagnostics({
       input,
       moduleStartedAtMs,
@@ -336,6 +338,39 @@ export async function policySurfaceScanner(
       artifactRefs,
     };
   }
+}
+
+function privacyAliasesForCombinedPrivacyCookieSurfaces(
+  observations: PolicySurfaceObservation[],
+): PolicySurfaceObservation[] {
+  const existingPrivacyUrls = new Set(observations
+    .filter((observation) => observation.surfaceType === "privacy_policy")
+    .map((observation) => observation.normalizedUrl ?? observation.url)
+    .filter(Boolean));
+
+  return observations
+    .filter((observation) =>
+      observation.surfaceType === "cookie_policy" &&
+      combinedPrivacyCookieSurfaceText(observation) &&
+      !existingPrivacyUrls.has(observation.normalizedUrl ?? observation.url),
+    )
+    .map((observation) => ({
+      ...observation,
+      observationId: `${observation.observationId}_privacy_alias`,
+      surfaceType: "privacy_policy" as const,
+      directVsInferred: "mixed" as const,
+    }));
+}
+
+function combinedPrivacyCookieSurfaceText(observation: PolicySurfaceObservation) {
+  const value = [
+    observation.normalizedUrl,
+    observation.url,
+    observation.linkText,
+    observation.title,
+    observation.surroundingTextExcerpt,
+  ].join(" ");
+  return /privacy[-\s&/]+cookie|privacy.*cookie statement|privacy and cookie|privacy & cookie/i.test(value);
 }
 
 async function writePolicyCaptureDiagnostics(input: {
@@ -677,7 +712,7 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string): 
     }
     const deterministic = classifySurface(`${candidateText} ${normalizedUrl}`);
     const placeholderHref = isPlaceholderHref(href);
-    const fetchable = !placeholderHref && isFetchablePolicyUrl(baseUrl, normalizedUrl);
+    const fetchable = !placeholderHref && isFetchablePolicyUrlForPolicySurface(baseUrl, normalizedUrl, deterministic.surfaceType);
     const preferenceControl = isPreferenceControlSurface(deterministic.surfaceType, candidateText);
     if (!fetchable && !preferenceControl) {
       continue;
@@ -736,7 +771,7 @@ function extractControlCandidates(baseUrl: string, html: string, visibleText: st
     }
     const selector = attr(attrs, "id") ? `#${attr(attrs, "id")}` : undefined;
     const domLocation = domLocationFor(html, match.index);
-    const fetchable = Boolean(href) && isFetchablePolicyUrl(baseUrl, normalizedUrl);
+    const fetchable = Boolean(href) && isFetchablePolicyUrlForPolicySurface(baseUrl, normalizedUrl, deterministic.surfaceType);
     candidates.push({
       candidateId: `policy_control_candidate_${index++}`,
       url: href ?? baseUrl,
@@ -909,7 +944,7 @@ async function extractRenderedCandidates(
       if (deterministic.surfaceType === "unknown" || deterministic.score <= 0.2 || !normalizedUrl) {
         return [];
       }
-      const fetchable = Boolean(candidate.href) && isFetchablePolicyUrl(input.normalizedUrl, normalizedUrl);
+      const fetchable = Boolean(candidate.href) && isFetchablePolicyUrlForPolicySurface(input.normalizedUrl, normalizedUrl, deterministic.surfaceType);
       if (!fetchable && !isPreferenceControlSurface(deterministic.surfaceType, candidate.text)) {
         return [];
       }
@@ -1274,6 +1309,7 @@ function isHighValuePolicySupplement(candidate: PolicySurfaceCandidate): boolean
     "cookie_settings",
     "notice_at_collection",
     "california_notice",
+    "terms",
   ].includes(candidate.deterministicSurfaceType);
 }
 
@@ -2035,9 +2071,16 @@ function isPlaceholderHref(href: string): boolean {
   return trimmed === "#" || /^javascript:/i.test(trimmed);
 }
 
-function isFetchablePolicyUrl(baseUrl: string, url: string): boolean {
+export function isFetchablePolicyUrlForPolicySurface(
+  baseUrl: string,
+  url: string,
+  surfaceType?: PolicySurfaceObservation["surfaceType"],
+): boolean {
   if (sameOrigin(baseUrl, url)) {
     return true;
+  }
+  if (surfaceType === "terms") {
+    return /terms|legal|conditions|user-agreement|service-agreement/i.test(url);
   }
   return /privacy|consent|onetrust|cookiebot|didomi|trustarc/i.test(url);
 }

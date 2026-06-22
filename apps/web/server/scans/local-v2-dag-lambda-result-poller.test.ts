@@ -89,6 +89,48 @@ test("SQS poller validates and deletes completed and failed local v2 DAG message
   assert.deepEqual(deleted, ["receipt-1", "receipt-2"]);
 });
 
+test("SQS poller deletes manual smoke results that do not belong to a local scan", async () => {
+  const deleted: string[] = [];
+  const sqsClient = {
+    async send(command: ReceiveMessageCommand | DeleteMessageCommand) {
+      if (command instanceof ReceiveMessageCommand) {
+        return {
+          $metadata: {},
+          Messages: [
+            {
+              Body: buildResultMessage({ scanId: "postdeploy-cnn-eu-ie-proxy-123" }),
+              MessageId: "message-smoke",
+              ReceiptHandle: "receipt-smoke"
+            }
+          ]
+        };
+      }
+
+      deleted.push(String(command.input.ReceiptHandle));
+      return { $metadata: {} };
+    }
+  };
+
+  const result = await pollLocalV2DagLambdaResultQueue({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/local-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
+    },
+    handleMessage: async () => {
+      throw new Error("Cannot record local v2 DAG Lambda result for unknown scan postdeploy-cnn-eu-ie-proxy-123.");
+    },
+    sqsClient
+  });
+
+  assert.deepEqual(result, {
+    deleted: 1,
+    failed: 0,
+    handled: 0,
+    received: 1
+  });
+  assert.deepEqual(deleted, ["receipt-smoke"]);
+});
+
 test("SQS poller drains configured regional result queues", async () => {
   const receivedQueueUrls: string[] = [];
   const deletedQueueUrls: string[] = [];

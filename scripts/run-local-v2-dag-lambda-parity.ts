@@ -6,12 +6,17 @@ import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { InvokeCommand } from "@aws-sdk/client-lambda";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
+  LOCAL_V2_DAG_LAMBDA_AWS_REGIONS,
+  LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_SCREENSHOT_TIMEOUT_MS,
+  LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS,
+  type LocalV2DagLambdaAwsRegion,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   handler
 } from "../apps/v2-dag-lambda/src/handler";
 
 type Args = {
   artifactDir: string;
+  awsRegion: LocalV2DagLambdaAwsRegion;
   debugOverrides: Record<string, unknown> | null;
   functionName: string;
   outPath: string;
@@ -158,17 +163,30 @@ async function main() {
     "CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET",
     "CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR",
     "CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX",
+    "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE",
+    "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE",
     "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS",
+    "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID",
     "CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE",
+    "CERTSCORE_V2_DAG_LAMBDA_EGRESS_LABEL",
     "CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE",
+    "CERTSCORE_V2_DAG_LAMBDA_LOCATION_ENV_PREFIX",
     "CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE",
     "CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_MODE",
     "CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS",
+    "CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS",
+    "CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD",
+    "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
+    "CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME",
     "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY",
-    "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE"
+    "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE",
+    "SCAN_EGRESS_LABEL",
+    "SCAN_PROXY_ENABLED",
+    "SCAN_PROXY_SERVER"
   ]);
 
   try {
+    applyRegionalLambdaParityEnv(args.awsRegion);
     process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = "3008";
     process.env.AWS_LAMBDA_FUNCTION_NAME = args.functionName;
     process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = process.env.S3_BUCKET ?? "scan-artifacts";
@@ -179,13 +197,14 @@ async function main() {
     process.env.CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE = "webmd";
     process.env.CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE = "sharded";
     process.env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_MODE = "always";
-    process.env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS = "5000";
+    process.env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS = String(LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_SCREENSHOT_TIMEOUT_MS);
+    process.env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS = String(LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS);
     process.env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY = "1";
     process.env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE = "cmp_safe";
 
     const payload = {
       artifactOnly: true,
-      awsRegion: "eu-central-1",
+      awsRegion: args.awsRegion,
       callbackCorrelationId: args.scanId,
       contractVersion: LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
       functionName: args.functionName,
@@ -372,6 +391,7 @@ function summarizeShardSummary(value: unknown) {
 function parseArgs(argv: string[]): Args {
   const args: Args = {
     artifactDir: "artifacts/local-v2-dag-lambda-parity",
+    awsRegion: "eu-central-1",
     debugOverrides: {
       actionFinalSettleMs: 8000,
       actionSearchDeadlineMs: 12000,
@@ -395,6 +415,8 @@ function parseArgs(argv: string[]): Args {
       continue;
     } else if (arg === "--artifact-dir") {
       args.artifactDir = requiredValue(argv, ++index, arg);
+    } else if (arg === "--aws-region") {
+      args.awsRegion = normalizeAwsRegion(requiredValue(argv, ++index, arg));
     } else if (arg === "--debug-overrides") {
       args.debugOverrides = parseJsonObjectArg(requiredValue(argv, ++index, arg), arg);
     } else if (arg === "--function-name") {
@@ -427,6 +449,7 @@ function printUsage() {
     "",
     "Options:",
     "  --target-url <url>       Site to scan. Default: https://www.webmd.com/",
+    "  --aws-region <region>    eu-central-1, eu-west-1, or us-west-2. Default: eu-central-1",
     "  --profile <profile>      full, standard, or tiny. Default: full",
     "  --scan-id <id>           Stable scan ID. Default: local-lambda-parity-<uuid>",
     "  --artifact-dir <path>    Artifact base directory. Default: artifacts/local-v2-dag-lambda-parity",
@@ -442,6 +465,13 @@ function printUsage() {
 
 function normalizeTargetUrl(value: string) {
   return /^https?:\/\//i.test(value) ? value : `https://${value.replace(/^\/+/, "")}`;
+}
+
+function normalizeAwsRegion(value: string): LocalV2DagLambdaAwsRegion {
+  if (LOCAL_V2_DAG_LAMBDA_AWS_REGIONS.includes(value as LocalV2DagLambdaAwsRegion)) {
+    return value as LocalV2DagLambdaAwsRegion;
+  }
+  throw new Error(`Unsupported local Lambda parity AWS region: ${value}`);
 }
 
 function normalizeProfile(value: string): Args["profile"] {
@@ -516,6 +546,68 @@ function arrayLength(value: unknown) {
 
 function objectMapKey(bucket: string, key: string) {
   return `${bucket}/${key}`;
+}
+
+function applyRegionalLambdaParityEnv(region: LocalV2DagLambdaAwsRegion) {
+  const prefix = lambdaLocationEnvPrefix(region);
+  process.env.CERTSCORE_V2_DAG_LAMBDA_LOCATION_ENV_PREFIX = prefix;
+
+  const defaults = regionalChromiumDefaults(region);
+  for (const [key, value] of Object.entries(defaults)) {
+    setIfMissing(key, value);
+  }
+
+  copyRegionAlias(prefix, "PROXY_SERVER", "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER");
+  copyRegionAlias(prefix, "PROXY_USERNAME", "CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME");
+  copyRegionAlias(prefix, "PROXY_PASSWORD", "CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD");
+  copyRegionAlias(prefix, "EGRESS_LABEL", "CERTSCORE_V2_DAG_LAMBDA_EGRESS_LABEL");
+  copyRegionAlias(prefix, "EGRESS_LABEL", "SCAN_EGRESS_LABEL");
+  copyRegionAlias(prefix, "SCAN_PROXY_SERVER", "SCAN_PROXY_SERVER");
+}
+
+function lambdaLocationEnvPrefix(region: LocalV2DagLambdaAwsRegion) {
+  if (region === "eu-west-1") {
+    return "EU_IE";
+  }
+  if (region === "us-west-2") {
+    return "US_WEST";
+  }
+  return "EU_DE";
+}
+
+function regionalChromiumDefaults(region: LocalV2DagLambdaAwsRegion): Record<string, string> {
+  if (region === "eu-west-1") {
+    return {
+      CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-IE,en;q=0.9",
+      CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-IE",
+      CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "Europe/Dublin"
+    };
+  }
+  if (region === "us-west-2") {
+    return {
+      CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-US,en;q=0.9",
+      CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-US",
+      CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "America/Los_Angeles"
+    };
+  }
+  return {
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "de-DE,de;q=0.9,en;q=0.8",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "de-DE",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "Europe/Berlin"
+  };
+}
+
+function copyRegionAlias(prefix: string, sourceSuffix: string, targetKey: string) {
+  const sourceValue = process.env[`CERTSCORE_V2_DAG_LAMBDA_${prefix}_${sourceSuffix}`]?.trim();
+  if (sourceValue) {
+    setIfMissing(targetKey, sourceValue);
+  }
+}
+
+function setIfMissing(key: string, value: string) {
+  if (!process.env[key]?.trim()) {
+    process.env[key] = value;
+  }
 }
 
 function captureEnv(keys: string[]) {

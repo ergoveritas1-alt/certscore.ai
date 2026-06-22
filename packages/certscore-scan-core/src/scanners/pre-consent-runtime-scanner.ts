@@ -288,6 +288,7 @@ export async function preConsentRuntimeScanner(
       screenshots.push({
         artifactId: "screenshot_pre_consent",
         capturedAtMs: elapsed(input.scanStartedAtMs),
+        captureMethod: screenshotCapture.captureMethod,
         path: screenshotPath,
         url: page.url(),
         pagePhase: "dom_content_loaded",
@@ -559,6 +560,7 @@ export async function preConsentRuntimeScanner(
       screenshots.push({
         artifactId: "screenshot_pre_consent",
         capturedAtMs: elapsed(input.scanStartedAtMs),
+        captureMethod: screenshotCapture.captureMethod,
         path: screenshotPath,
         url: page.url(),
         pagePhase: "network_idle",
@@ -568,11 +570,13 @@ export async function preConsentRuntimeScanner(
     }
     if (shouldCaptureScreenshot) {
       if (shouldRecaptureConsentUiAfterScreenshot(consentObservation, domText)) {
-        const recapturedConsentObservation = await recordTiming(
+        const recapturedConsentObservation = await recordBoundedTiming(
           timingBreakdown,
           "consent UI control recapture",
           "Bounded post-screenshot recapture of first-layer consent controls without interaction.",
-          () => detectConsentUi(page, input.scanStartedAtMs),
+          fastWait ? 3_000 : 4_000,
+          () => detectConsentUi(page, input.scanStartedAtMs, fastWait ? 1_500 : 2_500),
+          () => consentObservation,
         );
         if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
           consentObservation = mergeConsentUiObservations(
@@ -2430,11 +2434,21 @@ async function capturePreConsentScreenshot(
   screenshotPath: string,
   timeoutMs: number,
   screenshotErrors: string[],
+  captureMethods: {
+    fullPage: NonNullable<VisualCaptureSummary["captureMethod"]>;
+    placeholder: NonNullable<VisualCaptureSummary["captureMethod"]>;
+    viewportFallback: NonNullable<VisualCaptureSummary["captureMethod"]>;
+  } = {
+    fullPage: "primary_full_page",
+    placeholder: "primary_placeholder",
+    viewportFallback: "primary_viewport_fallback",
+  },
 ): Promise<VisualCaptureSummary> {
   try {
     await page.screenshot({ path: screenshotPath, fullPage: true, timeout: timeoutMs });
     return {
       status: "available",
+      captureMethod: captureMethods.fullPage,
       artifactRefs: [],
       notes: ["Full-page pre-consent screenshot retained."],
     };
@@ -2443,10 +2457,11 @@ async function capturePreConsentScreenshot(
     screenshotErrors.push(`Full-page screenshot failed: ${errorMessage}`);
   }
   try {
-    await page.screenshot({ path: screenshotPath, fullPage: false, timeout: Math.max(750, Math.min(timeoutMs, 2_500)) });
+    await page.screenshot({ path: screenshotPath, fullPage: false, timeout: Math.max(2_500, Math.min(timeoutMs, 10_000)) });
     screenshotErrors.push("Viewport screenshot fallback used after full-page screenshot failure.");
     return {
       status: "available",
+      captureMethod: captureMethods.viewportFallback,
       artifactRefs: [],
       notes: ["Viewport pre-consent screenshot retained after full-page screenshot failure."],
     };
@@ -2459,6 +2474,7 @@ async function capturePreConsentScreenshot(
   return {
     status: "placeholder",
     failureReason: "placeholder_used",
+    captureMethod: captureMethods.placeholder,
     artifactRefs: [],
     notes: ["A 1x1 screenshot placeholder was retained after full-page and viewport screenshot capture failed."],
   };
@@ -2471,6 +2487,7 @@ function visualCaptureFromScreenshotSummary(
   return {
     status: summary.status,
     failureReason: summary.failureReason,
+    captureMethod: summary.captureMethod,
     artifactRefs: [{
       artifactId: "screenshot_pre_consent",
       artifactType: "screenshot",
@@ -2524,13 +2541,18 @@ async function retryPreConsentScreenshotInFreshContext(input: {
         const retryPage = await retryContext.newPage();
         await retryPage.goto(input.input.normalizedUrl, {
           waitUntil: "domcontentloaded",
-          timeout: Math.min(input.input.internalBudgetMs, 10_000),
+          timeout: Math.min(input.input.internalBudgetMs, input.input.screenshotTimeoutMs ?? 15_000),
         });
         const capture = await capturePreConsentScreenshot(
           retryPage,
           screenshotPath,
-          Math.max(1_000, Math.min(input.input.screenshotTimeoutMs ?? 5_000, 3_000)),
+          Math.max(1_000, Math.min(input.input.screenshotTimeoutMs ?? 5_000, 15_000)),
           input.screenshotErrors,
+          {
+            fullPage: "fresh_context_full_page",
+            placeholder: "fresh_context_placeholder",
+            viewportFallback: "fresh_context_viewport_fallback",
+          },
         );
         const domText = await retryPage.locator("body").innerText({ timeout: 2_000 }).catch(() => "");
         const domPath = domText
@@ -2553,6 +2575,7 @@ async function retryPreConsentScreenshotInFreshContext(input: {
           screenshot: {
             artifactId: "screenshot_pre_consent",
             capturedAtMs: elapsed(input.input.scanStartedAtMs),
+            captureMethod: capture.captureMethod,
             path: screenshotPath,
             url: retryPage.url(),
             pagePhase: "dom_content_loaded",

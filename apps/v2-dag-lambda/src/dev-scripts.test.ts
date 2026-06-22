@@ -66,8 +66,10 @@ test("dev image setup uses local names and refuses non-dev resource names", asyn
   assert.match(setupScript, /memory_size="\$\{CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-3008\}"/);
   assert.match(setupScript, /between 512 and 10240 MB/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY/);
-  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS: "5000"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS: "15000"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS: "15000"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY: "1"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE: "cmp_safe"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT/);
@@ -81,6 +83,15 @@ test("dev image setup uses local names and refuses non-dev resource names", asyn
   assert.match(setupScript, /OPENAI_API_KEY/);
   assert.match(setupScript, /file:\/\/\$\{environment_json\}/);
   assert.doesNotMatch(setupScript, /certscore-prod|production/);
+});
+
+test("local Lambda parity harness uses the Lambda pre-consent visual budget", async () => {
+  const parityScript = await readRepoFile("scripts/run-local-v2-dag-lambda-parity.ts");
+
+  assert.match(parityScript, /LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_SCREENSHOT_TIMEOUT_MS/);
+  assert.match(parityScript, /LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS/);
+  assert.match(parityScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS/);
+  assert.doesNotMatch(parityScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS = "5000"/);
 });
 
 test("Dockerfile uses slim Node image, system Chromium, and the local Lambda runtime bootstrap", async () => {
