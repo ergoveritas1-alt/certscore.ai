@@ -307,12 +307,13 @@ export async function preConsentRuntimeScanner(
     const settleWaitMs = fastWait ? 350 : 1_000;
     const consentUiWaitTimeoutMs = fastWait ? 1_800 : 3_500;
     const consentUiCaptureTimeoutMs = fastWait ? 3_500 : 5_500;
+    const consentUiBudget = createConsentUiCaptureBudget(fastWait ? 4_500 : 7_000);
     const consentUiObservationPromise = recordBoundedTiming(
       timingBreakdown,
       "page evidence: consent UI",
       "First-layer consent surface/control text and affordance inventory, started before network-idle/settle waits.",
-      consentUiCaptureTimeoutMs,
-      () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs),
+      consentUiBudget.timeoutFor(consentUiCaptureTimeoutMs),
+      () => detectConsentUi(page, input.scanStartedAtMs, Math.min(consentUiWaitTimeoutMs, consentUiBudget.remainingMs())),
       () => emptyConsentUiObservation(input.scanStartedAtMs),
     );
     await recordTiming(
@@ -412,12 +413,13 @@ export async function preConsentRuntimeScanner(
       });
     }
     if (shouldRecaptureConsentUiAfterTimeout(consentObservation, { fastWait })) {
+      const recaptureTimeoutMs = consentUiBudget.timeoutFor(fastWait ? 3_000 : 4_000);
       const recapturedConsentObservation = await recordBoundedTiming(
         timingBreakdown,
         "page evidence: consent UI timeout recapture",
         "Second bounded first-layer consent control inventory after initial fast-path timeout.",
-        fastWait ? 3_000 : 4_000,
-        () => detectConsentUi(page, input.scanStartedAtMs, fastWait ? 1_500 : 2_500),
+        recaptureTimeoutMs,
+        () => detectConsentUi(page, input.scanStartedAtMs, Math.min(fastWait ? 1_500 : 2_500, recaptureTimeoutMs)),
         () => consentObservation,
       );
       if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
@@ -583,12 +585,13 @@ export async function preConsentRuntimeScanner(
         fastWait,
         visualCaptureAvailable: visualCapture.status === "available" || screenshots.length > 0,
       })) {
+        const recaptureTimeoutMs = consentUiBudget.timeoutFor(fastWait ? 3_000 : 4_000);
         const recapturedConsentObservation = await recordBoundedTiming(
           timingBreakdown,
           "consent UI control recapture",
           "Bounded post-screenshot recapture of first-layer consent controls without interaction.",
-          fastWait ? 3_000 : 4_000,
-          () => detectConsentUi(page, input.scanStartedAtMs, fastWait ? 1_500 : 2_500),
+          recaptureTimeoutMs,
+          () => detectConsentUi(page, input.scanStartedAtMs, Math.min(fastWait ? 1_500 : 2_500, recaptureTimeoutMs)),
           () => consentObservation,
         );
         if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
@@ -912,6 +915,10 @@ async function recordBoundedTiming<T>(
   let outcome = "completed";
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    if (timeoutMs <= 0) {
+      outcome = "timed_out";
+      return fallback();
+    }
     return await Promise.race([
       run(),
       new Promise<T>((resolve) => {
@@ -938,6 +945,18 @@ async function recordBoundedTiming<T>(
       durationMs: Date.now() - startedAtMs,
     });
   }
+}
+
+function createConsentUiCaptureBudget(totalMs: number) {
+  const startedAtMs = Date.now();
+  return {
+    remainingMs() {
+      return Math.max(0, totalMs - (Date.now() - startedAtMs));
+    },
+    timeoutFor(requestedMs: number) {
+      return Math.max(0, Math.min(requestedMs, totalMs - (Date.now() - startedAtMs)));
+    },
+  };
 }
 
 function recordInstantTiming(
@@ -1512,7 +1531,7 @@ async function readConsentUiObservation(
   page: Page,
   scanStartedAtMs: number,
 ): Promise<ConsentUiObservation> {
-  const text = await page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
+  const text = await page.evaluate(() => (document.body?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 12_000)).catch(() => "");
   const controls = await page.evaluate<ConsentUiObservation["controls"]>(String.raw`(() => {
     const consentLabelPattern =
       /cookie|privacy|choice|choices|consent|preference|preferences|settings|options|accept|agree|allow|reject|decline|deny|refuse|necessary|essential|purpose|purposes|save|confirm|do not sell|do not share|opt[- ]out|targeted advertising/i;
@@ -1586,36 +1605,54 @@ async function readConsentUiObservation(
       );
     };
     const directCandidates = Array.from(document.querySelectorAll("button, [role='button'], a, input[type='button'], input[type='submit']"));
-    const textCandidates = Array.from(document.querySelectorAll("body *")).filter((element) => {
-      if (directCandidates.includes(element)) {
-        return false;
-      }
-      if (element.querySelector("button, [role='button'], a, input[type='button'], input[type='submit']")) {
-        return false;
-      }
-      if (!isPotentialCustomControl(element)) {
-        return false;
-      }
-      const label = labelFor(element);
-      if (!label || label.length > 140 || !consentLabelPattern.test(label)) {
-        return false;
-      }
-      const actionType = actionFor(label);
-      if (actionType === "other") {
-        return false;
-      }
-      if (
-        actionType === "manage_preferences" &&
-        !/(cookie|privacy|consent|purpose|preference|choice|show purposes|^settings$|^options$)/i.test(label)
-      ) {
-        return false;
-      }
-      return !Array.from(element.children).some((child) => {
-        const childLabel = labelFor(child);
-        return childLabel && childLabel !== label && consentLabelPattern.test(childLabel);
+    const customControlSelectors = [
+      "[role='link']",
+      "[tabindex='0']",
+      "[onclick]",
+      "[id*='button' i]",
+      "[id*='btn' i]",
+      "[id*='choice' i]",
+      "[id*='option' i]",
+      "[id*='preference' i]",
+      "[id*='purpose' i]",
+      "[class*='button' i]",
+      "[class*='btn' i]",
+      "[class*='choice' i]",
+      "[class*='option' i]",
+      "[class*='preference' i]",
+      "[class*='purpose' i]",
+    ].join(",");
+    const directSet = new Set(directCandidates);
+    const textCandidates = Array.from(document.querySelectorAll(customControlSelectors))
+      .filter((element) => !directSet.has(element))
+      .slice(0, 250)
+      .filter((element) => {
+        if (element.querySelector("button, [role='button'], a, input[type='button'], input[type='submit']")) {
+          return false;
+        }
+        if (!isPotentialCustomControl(element)) {
+          return false;
+        }
+        const label = labelFor(element);
+        if (!label || label.length > 140 || !consentLabelPattern.test(label)) {
+          return false;
+        }
+        const actionType = actionFor(label);
+        if (actionType === "other") {
+          return false;
+        }
+        if (
+          actionType === "manage_preferences" &&
+          !/(cookie|privacy|consent|purpose|preference|choice|show purposes|^settings$|^options$)/i.test(label)
+        ) {
+          return false;
+        }
+        return !Array.from(element.children).slice(0, 20).some((child) => {
+          const childLabel = labelFor(child);
+          return childLabel && childLabel !== label && consentLabelPattern.test(childLabel);
+        });
       });
-    });
-    const candidates = [...directCandidates, ...textCandidates];
+    const candidates = [...directCandidates.slice(0, 500), ...textCandidates];
     const seen = new Set();
     return candidates.flatMap((element) => {
       if (!isVisible(element)) {
@@ -2521,11 +2558,13 @@ async function captureSupplementalFullPagePreConsentScreenshot(
   input: PreConsentRuntimeScannerInput,
   options: { timeoutMs: number },
 ): Promise<SupplementalFullPageScreenshotResult | null> {
-  const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-full-page.png");
+  const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-full-page.jpg");
   try {
     await page.screenshot({
       fullPage: true,
       path: screenshotPath,
+      quality: 70,
+      type: "jpeg",
       timeout: options.timeoutMs,
     });
     const screenshot: ScreenshotArtifact = {

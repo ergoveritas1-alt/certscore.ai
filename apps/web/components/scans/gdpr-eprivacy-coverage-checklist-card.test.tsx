@@ -4,7 +4,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   GdprEprivacyCoverageChecklistCard,
-  GdprEprivacyCoverageSummaryPills
+  GdprEprivacyCoverageSummaryPills,
+  getGdprEprivacyCoverageChecklistRowRationaleForAudit
 } from "./gdpr-eprivacy-coverage-checklist-card";
 import { getAssessmentDirection } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -367,6 +368,48 @@ test("GdprEprivacyCoverageChecklistCard does not badge review-only advertising r
   assert.match(html, />Partial concern</);
   assert.doesNotMatch(html, />Observed</);
   assert.match(html, /No advertising infrastructure classification was retained/);
+});
+
+test("GdprEprivacyCoverageChecklistCard describes extraction-limited Article 13 rows as coverage limited", () => {
+  const item = makeChecklistItem({
+    assessmentStatus: "review_signal",
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: [
+        {
+          actual: "842 characters",
+          expected: "2500+ usable retained privacy policy text characters for Article 13 disclosure review",
+          field: "scanner.policySurfaceObservations.privacy_policy.textExcerpt",
+          source: "scanner",
+          whyNeeded: "Required to evaluate processing purposes disclosure."
+        }
+      ],
+      retainedEvidence: {
+        policySurfaceSummary: {
+          policyTextExtractionHealth: {
+            extractedTextLength: 842,
+            minimumTextLengthRequired: 2500,
+            policyTextExtractionStatus: "thin",
+            policyUrlRetained: true
+          }
+        },
+        signalObserved: "not_confirmed_extraction_limited"
+      },
+      statusBasis:
+        "A privacy-policy surface was found, but CertScore did not extract enough usable policy text to confirm this disclosure from retained evidence."
+    },
+    evidenceState: "observed",
+    id: "processing_purposes_disclosure",
+    label: "Processing purposes disclosure",
+    status: "Not confirmed",
+    tone: "review"
+  });
+
+  assert.equal(getAssessmentDirection(item), "technical_limitation");
+  const rationale = getGdprEprivacyCoverageChecklistRowRationaleForAudit(item);
+  assert.match(rationale, /Coverage limited from retained policy-surface evidence/);
+  assert.match(rationale, /policy text extraction thin/);
+  assert.match(rationale, /842 characters retained/);
+  assert.doesNotMatch(rationale, /Partial support from retained/i);
 });
 
 test("GdprEprivacyCoverageChecklistCard renders concise session replay evidence copy", () => {

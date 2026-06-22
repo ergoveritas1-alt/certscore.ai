@@ -391,6 +391,7 @@ function normalizePolicyPageType(surfaceType: string) {
 }
 
 type LocalV2PolicySurface = NonNullable<CanonicalEvidenceBundle["policySurfaceObservations"]>[number];
+const MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 = 2_500;
 
 function canonicalPolicySurfaceUrl(surface: LocalV2PolicySurface, fallbackBaseUrl: string | null) {
   const rawUrl = firstString(surface.normalizedUrl, surface.url);
@@ -908,6 +909,7 @@ export function summarizePolicySurfaces(
   );
   const mentionedControls = uniqueStrings(policySurfaces.flatMap((row) => row.surface.mentionedControls ?? []));
   const processingErrorObserved = /processing error|privacy center.*error/i.test(text);
+  const policyTextExtractionHealth = buildPolicyTextExtractionHealth(article13Surfaces, text, processingErrorObserved);
   return {
     article13DisclosureSignals,
     article13DisclosureTypesObserved: uniqueStrings(article13DisclosureSignals
@@ -919,11 +921,63 @@ export function summarizePolicySurfaces(
     mentionedControls,
     observedTopics,
     policySurfaceCount: policySurfaces.length,
+    policyTextExtractionHealth,
+    policy_text_extraction_health: policyTextExtractionHealth,
     privacyPolicyPresent: article13Surfaces.length > 0,
     privacyPolicyTextCharacterCount: text.length,
     privacyPolicyUrls: uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
     processingErrorObserved,
     retainedPrivacyPolicyTextExcerpt: text.slice(0, 1_000)
+  };
+}
+
+function buildPolicyTextExtractionHealth(
+  article13Surfaces: ReturnType<typeof dedupePolicySurfaces>,
+  text: string,
+  processingErrorObserved: boolean
+) {
+  const policySurfaceObserved = article13Surfaces.length > 0;
+  const policyUrls = uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url));
+  const extractedTextLength = text.length;
+  const statusValues = article13Surfaces.map((row) => row.surface.status);
+  const nanoInvoked = article13Surfaces.some((row) =>
+    (row.surface.assistMetadata ?? []).some((metadata) => metadata.modelAssistProvider === "nano")
+  );
+  const hasFailedSurface = statusValues.some((status) => status === "failed");
+  const hasBlockedSurface = article13Surfaces.some((row) =>
+    row.surface.fetchable === false || row.surface.httpStatus === 401 || row.surface.httpStatus === 403 || row.surface.httpStatus === 429
+  );
+  const policyTextExtractionStatus =
+    !policySurfaceObserved
+      ? "not_attempted"
+      : processingErrorObserved || hasFailedSurface
+        ? "errored"
+        : hasBlockedSurface
+          ? "blocked"
+          : extractedTextLength >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
+            ? "ok"
+            : "thin";
+  const extractionFailureReason =
+    policyTextExtractionStatus === "ok"
+      ? undefined
+      : policyTextExtractionStatus === "not_attempted"
+        ? "privacy_policy_surface_not_observed"
+        : policyTextExtractionStatus === "blocked"
+          ? "privacy_policy_fetch_blocked"
+          : policyTextExtractionStatus === "errored"
+            ? "privacy_policy_text_processing_error"
+            : "privacy_policy_text_below_minimum_length";
+
+  return {
+    extractedTextLength,
+    extractionFailureReason,
+    minimumTextLengthRequired: MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13,
+    nanoInvoked,
+    nanoSkipReason: policyTextExtractionStatus === "ok" || nanoInvoked ? undefined : "policy_text_input_limited",
+    policySurfaceObserved,
+    policyTextExtractionStatus,
+    policyUrlRetained: policyUrls.length > 0,
+    policyUrls
   };
 }
 

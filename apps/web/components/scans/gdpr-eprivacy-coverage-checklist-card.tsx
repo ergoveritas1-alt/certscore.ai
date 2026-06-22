@@ -38,7 +38,7 @@ type CoverageIcon = "alert" | "check" | "circle-alert" | "equal" | "flag" | "inf
 
 const DIRECTION_UI: Record<AssessmentDirection, {
   icon: CoverageIcon;
-  label: "Positive signal" | "Neutral signal" | "Review signal" | "Potential concern" | "Technical limitation";
+  label: "Positive signal" | "Neutral signal" | "Review signal" | "Potential concern" | "Coverage limited";
 }> = {
   positive_signal: {
     icon: "check",
@@ -58,7 +58,7 @@ const DIRECTION_UI: Record<AssessmentDirection, {
   },
   technical_limitation: {
     icon: "slash",
-    label: "Technical limitation"
+    label: "Coverage limited"
   }
 };
 
@@ -273,7 +273,7 @@ function getCoverageIconMeta(direction: AssessmentDirection, evidenceLabel?: Evi
       return {
         className: "border-slate-300 bg-slate-100 text-slate-600",
         icon: "slash" as const,
-        label: "Technical limitation",
+        label: "Coverage limited",
         tooltip: "The retained public-web scan context did not support testing this coverage area."
       };
     default:
@@ -492,7 +492,7 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
       className: "border-slate-300 bg-slate-100 text-slate-600",
       count: summaryCounts.technicalLimits,
       icon: "slash" as const,
-      label: "technical limits"
+      label: "coverage limited"
     }
   ].filter((item) => item.count > 0);
 
@@ -975,6 +975,16 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
   const projectedFindings = getProjectedFindingSummary(evidence);
   const signalState = getSignalObservedSummary(evidence);
 
+  if (policyTextExtractionLimited(item)) {
+    return joinRationaleParts([
+      `Coverage limited from retained ${source}`,
+      statusBasis,
+      getPolicyTextExtractionSummary(evidence),
+      missingEvidence,
+      policySurface
+    ]);
+  }
+
   if (evidenceLabel === "Not testable") {
     return joinRationaleParts([
       `Not testable from retained ${source}`,
@@ -1033,6 +1043,37 @@ function getRetainedEvidenceSourceSummary(item: GdprEprivacyCoverageChecklistIte
     return "source-signal coverage evidence";
   }
   return "scanner evidence";
+}
+
+function policyTextExtractionLimited(item: GdprEprivacyCoverageChecklistItem) {
+  const evidence = getRetainedEvidenceRecord(item);
+  const health = getPolicyTextExtractionHealth(evidence);
+  const status = getString(health?.policyTextExtractionStatus) ?? getString(health?.policy_text_extraction_status);
+  return Boolean(status && status !== "ok");
+}
+
+function getPolicyTextExtractionHealth(evidence: Record<string, unknown>) {
+  const policySurfaceSummary = getRecord(evidence.policySurfaceSummary) ?? getRecord(evidence.policy_surface_summary);
+  return getRecord(evidence.policyTextExtractionHealth) ??
+    getRecord(evidence.policy_text_extraction_health) ??
+    getRecord(policySurfaceSummary?.policyTextExtractionHealth) ??
+    getRecord(policySurfaceSummary?.policy_text_extraction_health);
+}
+
+function getPolicyTextExtractionSummary(evidence: Record<string, unknown>) {
+  const health = getPolicyTextExtractionHealth(evidence);
+  if (!health) {
+    return null;
+  }
+  const status = getString(health.policyTextExtractionStatus) ?? getString(health.policy_text_extraction_status);
+  const extracted = getNumber(health.extractedTextLength ?? health.extracted_text_length);
+  const required = getNumber(health.minimumTextLengthRequired ?? health.minimum_text_length_required);
+  const parts = [
+    status ? `policy text extraction ${status}` : "policy text extraction limited",
+    typeof extracted === "number" ? `${Math.round(extracted)} characters retained` : null,
+    typeof required === "number" ? `${Math.round(required)} required` : null
+  ].filter((part): part is string => Boolean(part));
+  return parts.length > 0 ? parts.join("; ") : null;
 }
 
 function getMissingEvidenceSummary(item: GdprEprivacyCoverageChecklistItem) {
@@ -1286,6 +1327,10 @@ function getRecord(value: unknown) {
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function getStringArray(value: unknown) {

@@ -245,6 +245,15 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
+    id: "policy_text_extraction",
+    label: "Policy text extraction",
+    explanation: "Whether enough usable privacy-policy text was extracted to evaluate individual GDPR Transparency disclosures.",
+    findingIds: [],
+    defaultFindingStatus: "Observed",
+    notObservedText: "Policy text extraction was not confirmed from retained scanner evidence.",
+    requiresPublicWebCoverage: true
+  },
+  {
     id: "legal_basis_disclosure_observed",
     label: "Legal basis disclosure",
     explanation: "Whether retained privacy-policy evidence included a canonical legal-basis disclosure signal.",

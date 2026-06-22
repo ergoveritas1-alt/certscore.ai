@@ -51,6 +51,9 @@ export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): Evide
   if (item.assessmentStatus === "coverage_limitation" || item.evidenceState === "not_testable" || item.status === "Not testable") {
     return "Not testable";
   }
+  if (item.status === "Not confirmed" && retainedPolicyExtractionLimited(item)) {
+    return "Not testable";
+  }
   if (item.status === "Gap observed") {
     return "Potential gap";
   }
@@ -61,6 +64,22 @@ export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): Evide
     return "Observed";
   }
   return "Not observed";
+}
+
+function retainedPolicyExtractionLimited(item: GdprEprivacyCoverageChecklistItem) {
+  const policySurfaceSummary = retainedRecord(item, "policySurfaceSummary") ?? retainedRecord(item, "policy_surface_summary");
+  const health =
+    retainedRecord(item, "policyTextExtractionHealth") ??
+    retainedRecord(item, "policy_text_extraction_health") ??
+    recordValueAsRecord(policySurfaceSummary, "policyTextExtractionHealth") ??
+    recordValueAsRecord(policySurfaceSummary, "policy_text_extraction_health");
+  const status = health?.policyTextExtractionStatus ?? health?.policy_text_extraction_status;
+  return typeof status === "string" && status !== "ok";
+}
+
+function recordValueAsRecord(record: Record<string, unknown> | null, key: string) {
+  const value = record?.[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 function retainedBoolean(item: GdprEprivacyCoverageChecklistItem, keys: string[]) {

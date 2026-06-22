@@ -2317,3 +2317,70 @@ test("deriveGdprEprivacyReviewSummary separates partial concerns from review sig
 
   assert.equal(summary.priorityReviewText, "1 gap observed, 4 partial concerns, 1 review signal.");
 });
+
+test("deriveGdprEprivacyReviewSummary reports thin privacy policy text as a technical limit", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      privacy_notice_availability: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: privacy-policy URL retained"],
+        limitation: "A privacy-policy surface was retained.",
+        retainedEvidence: {
+          policyTextExtractionHealth: {
+            extractedTextLength: 842,
+            minimumTextLengthRequired: 2500,
+            policySurfaceObserved: true,
+            policyTextExtractionStatus: "thin",
+            policyUrlRetained: true
+          }
+        },
+        rowId: "privacy_notice_availability",
+        status: "Observed"
+      }),
+      policy_text_extraction: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: privacy-policy text extraction limited"],
+        limitation:
+          "GDPR Transparency disclosure checks were limited because CertScore found a privacy-policy surface but did not extract enough usable policy text to evaluate individual Article 13 disclosures.",
+        retainedEvidence: {
+          policyTextExtractionHealth: {
+            extractedTextLength: 842,
+            minimumTextLengthRequired: 2500,
+            policySurfaceObserved: true,
+            policyTextExtractionStatus: "thin",
+            policyUrlRetained: true
+          }
+        },
+        rowId: "policy_text_extraction",
+        status: "Not testable"
+      }),
+      legal_basis_disclosure_observed: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: privacy-policy text extraction limited"],
+        limitation:
+          "A privacy-policy surface was found, but CertScore did not extract enough usable policy text to confirm this disclosure from retained evidence.",
+        retainedEvidence: {
+          policyTextExtractionHealth: {
+            extractedTextLength: 842,
+            minimumTextLengthRequired: 2500,
+            policySurfaceObserved: true,
+            policyTextExtractionStatus: "thin",
+            policyUrlRetained: true
+          },
+          signalObserved: "not_confirmed_extraction_limited"
+        },
+        rowId: "legal_basis_disclosure_observed",
+        status: "Not confirmed"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const summary = deriveGdprEprivacyReviewSummary(items);
+  const renderedSummary = JSON.stringify(summary);
+
+  assert.match(renderedSummary, /Policy text extraction limited transparency review/);
+  assert.match(renderedSummary, /did not extract enough usable policy text/);
+  assert.match(summary.coverageText, /technical limit/);
+  assert.doesNotMatch(summary.priorityReviewText, /partial concern/);
+  assert.doesNotMatch(renderedSummary, /legal violation|violates GDPR/i);
+});

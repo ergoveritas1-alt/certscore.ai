@@ -16,6 +16,11 @@ const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 3;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
 const MAX_EXCERPT_CHARS = 6_000;
+const MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS = 40_000;
+const MIN_SUBSTANTIVE_POLICY_TEXT_CHARS = 2_500;
+const MAX_CANONICAL_POLICY_LINK_FETCHES = 2;
+const MAX_POLICY_SURFACE_TEXT_ARTIFACT_CHARS = 256_000;
+const MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS = 1_000_000;
 
 export interface PolicySurfaceScannerInput {
   url: string;
@@ -115,6 +120,10 @@ interface AssistedPolicyFacts extends PolicyFacts {
   assistMetadata: PolicySurfaceObservation["assistMetadata"];
 }
 
+interface PolicySurfaceTextArtifactBudget {
+  remainingChars: number;
+}
+
 export async function policySurfaceScanner(
   input: PolicySurfaceScannerInput,
 ): Promise<PolicySurfaceScannerResult> {
@@ -127,6 +136,9 @@ export async function policySurfaceScanner(
   let renderedCandidateCount = 0;
   let observedCandidateCount = 0;
   let commonPathFallbackUsed = false;
+  const policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget = {
+    remainingChars: MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS,
+  };
 
   try {
     const homepage = await recordPolicyTiming(
@@ -144,6 +156,7 @@ export async function policySurfaceScanner(
         moduleStartedAtMs,
         candidates: fallbackCandidates,
         labelPrefix: "homepage-failed common-path",
+        policySurfaceTextArtifactBudget,
       });
       observations.push(...fallbackResults.observations);
       artifactRefs.push(...fallbackResults.artifactRefs);
@@ -281,6 +294,7 @@ export async function policySurfaceScanner(
       moduleStartedAtMs,
       rankedCandidates,
       labelPrefix: "policy",
+      policySurfaceTextArtifactBudget,
     });
     observations.push(...policyResults.observations);
     artifactRefs.push(...policyResults.artifactRefs);
@@ -293,6 +307,7 @@ export async function policySurfaceScanner(
         moduleStartedAtMs,
         rankedCandidates: deterministicCommonPathFetchFallback(commonPathCandidates),
         labelPrefix: "common-path policy",
+        policySurfaceTextArtifactBudget,
       });
       observations.push(...commonPathResults.observations);
       artifactRefs.push(...commonPathResults.artifactRefs);
@@ -311,6 +326,7 @@ export async function policySurfaceScanner(
         moduleStartedAtMs,
         rankedCandidates: secondaryCandidates,
         labelPrefix: "secondary policy",
+        policySurfaceTextArtifactBudget,
       });
       observations.push(...secondaryResults.observations);
       artifactRefs.push(...secondaryResults.artifactRefs);
@@ -347,7 +363,10 @@ function privacyAliasesForCombinedPrivacyCookieSurfaces(
   observations: PolicySurfaceObservation[],
 ): PolicySurfaceObservation[] {
   const existingPrivacyUrls = new Set(observations
-    .filter((observation) => observation.surfaceType === "privacy_policy")
+    .filter((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      (observation.status === "fetched" || observation.status === "observed")
+    )
     .map((observation) => observation.normalizedUrl ?? observation.url)
     .filter(Boolean));
 
@@ -360,6 +379,7 @@ function privacyAliasesForCombinedPrivacyCookieSurfaces(
     .map((observation) => ({
       ...observation,
       observationId: `${observation.observationId}_privacy_alias`,
+      discoveryMethod: "page_text_link" as const,
       surfaceType: "privacy_policy" as const,
       directVsInferred: "mixed" as const,
     }));
@@ -431,6 +451,7 @@ interface ProcessPolicyCandidateInput {
   moduleStartedAtMs: number;
   candidate: PolicySurfaceCandidate;
   candidateIndex: number;
+  policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
 }
 
 interface ProcessPolicyCandidateResult {
@@ -445,6 +466,7 @@ async function fetchRankedPolicyCandidates(input: {
   moduleStartedAtMs: number;
   candidates: PolicySurfaceCandidate[];
   labelPrefix: string;
+  policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
 }): Promise<{ observations: PolicySurfaceObservation[]; artifactRefs: ArtifactRef[]; secondaryCandidates: PolicySurfaceCandidate[] }> {
   let rankedCandidates = await recordPolicyTiming(
     input.timingBreakdown,
@@ -461,6 +483,7 @@ async function fetchRankedPolicyCandidates(input: {
     moduleStartedAtMs: input.moduleStartedAtMs,
     rankedCandidates,
     labelPrefix: input.labelPrefix,
+    policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
   });
 }
 
@@ -470,6 +493,7 @@ async function fetchPolicyCandidateGroup(input: {
   moduleStartedAtMs: number;
   rankedCandidates: PolicySurfaceCandidate[];
   labelPrefix: string;
+  policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
 }): Promise<{ observations: PolicySurfaceObservation[]; artifactRefs: ArtifactRef[]; secondaryCandidates: PolicySurfaceCandidate[] }> {
   const toFetch = input.rankedCandidates.slice(0, MAX_CANDIDATES_TO_FETCH);
   const policyResults = await recordPolicyTiming(
@@ -485,6 +509,7 @@ async function fetchPolicyCandidateGroup(input: {
         moduleStartedAtMs: input.moduleStartedAtMs,
         candidate,
         candidateIndex,
+        policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
       }),
     ),
   );
@@ -501,6 +526,7 @@ async function processPolicyCandidate({
   moduleStartedAtMs,
   candidate,
   candidateIndex,
+  policySurfaceTextArtifactBudget,
 }: ProcessPolicyCandidateInput): Promise<ProcessPolicyCandidateResult> {
   if (candidate.observationOnly) {
     return {
@@ -545,10 +571,12 @@ async function processPolicyCandidate({
   const visibleText = await resolvePolicyVisibleText({
     html: fetched.text,
     baseUrl: candidate.normalizedUrl,
+    surfaceType: candidate.deterministicSurfaceType,
     timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
   });
   const deterministic = extractPolicyFacts(visibleText);
   const excerpt = boundedExcerpt(visibleText, prioritizedExcerptKeywords(deterministic));
+  const nanoAnalysisExcerpt = boundedPolicyAnalysisExcerpt(visibleText);
   const excerptId = `policy_excerpt_${stableHash(candidate.normalizedUrl)}`;
   const artifactPath = await recordPolicyTiming(
     timingBreakdown,
@@ -568,13 +596,29 @@ async function processPolicyCandidate({
     relatedEventIds: [],
     label: `${candidate.deterministicSurfaceType} excerpt`,
   };
+  const policySurfaceTextArtifactRef = await recordPolicyTiming(
+    timingBreakdown,
+    `policy surface text artifact ${candidateIndex + 1}`,
+    `Write normalized text-only ${candidate.deterministicSurfaceType} policy surface artifact when budget allows.`,
+    () => writePolicySurfaceTextArtifact({
+      artifactWriter: input.artifactWriter,
+      candidate,
+      visibleText,
+      scanStartedAtMs: input.scanStartedAtMs,
+      policySurfaceTextArtifactBudget,
+    }),
+  );
+  const artifactRefs = [
+    artifactRef,
+    ...(policySurfaceTextArtifactRef ? [policySurfaceTextArtifactRef] : []),
+  ];
   const topicAssist = await recordPolicyTiming(
     timingBreakdown,
     `Nano topic extraction ${candidateIndex + 1}`,
     `Extract bounded topics for ${candidate.deterministicSurfaceType} candidate.`,
     () => maybeExtractTopics(input, candidate, {
       title,
-      excerpt,
+      excerpt: nanoAnalysisExcerpt,
       deterministicTopics: deterministic.observedTopics,
     }),
   );
@@ -601,11 +645,11 @@ async function processPolicyCandidate({
         url: candidate.normalizedUrl,
         excerpt,
       }],
-      artifactRefs: [artifactRef],
+      artifactRefs,
       assistMetadata: topicAssist?.assistMetadata ?? [],
       confidence: Math.max(candidate.assisted?.confidence ?? 0, deterministic.confidence),
     }),
-    artifactRefs: [artifactRef],
+    artifactRefs,
     secondaryCandidates: highValueSecondaryCandidatesFromPolicyPage(
       candidate.normalizedUrl,
       `${fetched.text}\n${decodeEmbeddedHtml(fetched.text)}`,
@@ -617,22 +661,86 @@ async function processPolicyCandidate({
 async function resolvePolicyVisibleText(input: {
   html: string;
   baseUrl: string;
+  surfaceType: PolicySurfaceObservation["surfaceType"];
   timeoutMs: number;
 }): Promise<string> {
   const visibleText = htmlToVisibleText(input.html);
+  let bestText = bestPolicyDocumentText(input.html, visibleText);
+
   const oneTrustText = await extractOneTrustNoticeText({
     html: input.html,
     baseUrl: input.baseUrl,
     timeoutMs: input.timeoutMs,
     depth: 0,
   });
-  if (oneTrustText && oneTrustText.length > visibleText.length * 2) {
-    return oneTrustText;
+  if (oneTrustText && policyTextQualityScore(oneTrustText) > policyTextQualityScore(bestText)) {
+    bestText = oneTrustText;
   }
-  if (oneTrustText && /processing error|privacy center.*error/i.test(visibleText)) {
-    return oneTrustText;
+
+  const shouldTryCanonicalPolicyLink =
+    input.surfaceType === "privacy_policy" &&
+    looksLikePrivacyCenterShell(bestText);
+  if (shouldTryCanonicalPolicyLink) {
+    const linkedPolicyText = await fetchBestCanonicalPolicyDocumentText({
+      html: input.html,
+      baseUrl: input.baseUrl,
+      currentText: bestText,
+      timeoutMs: input.timeoutMs,
+    });
+    if (linkedPolicyText && policyTextQualityScore(linkedPolicyText) > policyTextQualityScore(bestText)) {
+      bestText = linkedPolicyText;
+    }
   }
-  return visibleText;
+
+  return bestText;
+}
+
+async function writePolicySurfaceTextArtifact(input: {
+  artifactWriter: ArtifactWriter;
+  candidate: PolicySurfaceCandidate;
+  visibleText: string;
+  scanStartedAtMs: number;
+  policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
+}): Promise<ArtifactRef | undefined> {
+  if (input.policySurfaceTextArtifactBudget.remainingChars <= 0) {
+    return undefined;
+  }
+
+  const normalizedText = normalizeWhitespace(input.visibleText);
+  if (!normalizedText) {
+    return undefined;
+  }
+
+  const maxChars = Math.min(
+    MAX_POLICY_SURFACE_TEXT_ARTIFACT_CHARS,
+    input.policySurfaceTextArtifactBudget.remainingChars,
+  );
+  if (maxChars < 512) {
+    return undefined;
+  }
+  const truncated = normalizedText.length > maxChars;
+  const retainedText = truncated
+    ? `${normalizedText.slice(0, Math.max(0, maxChars - 96)).trimEnd()}\n\n[Policy surface text truncated by CertScore artifact retention budget.]`
+    : normalizedText;
+  input.policySurfaceTextArtifactBudget.remainingChars = Math.max(
+    0,
+    input.policySurfaceTextArtifactBudget.remainingChars - retainedText.length,
+  );
+
+  const artifactId = `policy_surface_text_${stableHash(input.candidate.normalizedUrl)}`;
+  const path = await input.artifactWriter.writeTextArtifact(`${artifactId}.txt`, retainedText);
+  return {
+    artifactId,
+    artifactType: "other",
+    path,
+    observedAtMs: elapsed(input.scanStartedAtMs),
+    sourceScanner: SOURCE_SCANNER,
+    scenario: SCENARIO,
+    sensitivity: "redacted",
+    redactionStatus: "redacted",
+    relatedEventIds: [],
+    label: `${input.candidate.deterministicSurfaceType} normalized text`,
+  };
 }
 
 function moduleRun(
@@ -2005,10 +2113,105 @@ export function wwwFallbackUrlForPolicyFetch(url: string): string | null {
 
 function boundedExcerpt(text: string, keywords: string[]): string {
   const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_EXCERPT_CHARS) {
+    return normalized;
+  }
   const lower = normalized.toLowerCase();
   const keyword = keywords.find((item) => lower.includes(item.toLowerCase()));
   const index = keyword ? Math.max(0, lower.indexOf(keyword.toLowerCase()) - 180) : 0;
   return normalized.slice(index, index + MAX_EXCERPT_CHARS);
+}
+
+function boundedPolicyAnalysisExcerpt(text: string): string {
+  const normalized = normalizeWhitespace(text);
+  if (normalized.length <= MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS) {
+    return normalized;
+  }
+
+  const sections: Array<{ label: string; patterns: RegExp[] }> = [
+    {
+      label: "policy_opening",
+      patterns: [/privacy policy/i, /privacy notice/i, /effective/i, /last updated/i],
+    },
+    {
+      label: "controller_contact",
+      patterns: [/data controller/i, /controller/i, /privacy@/i, /contact (?:us|our privacy team)/i, /privacy office/i, /data protection officer/i, /\bdpo\b/i],
+    },
+    {
+      label: "dpo_contact",
+      patterns: [/data protection officer/i, /\bdpo\b/i, /data protection contact/i, /privacy contact/i],
+    },
+    {
+      label: "processing_purposes",
+      patterns: [/why (?:we|google|the company) (?:collects|uses|processes) data/i, /purpose(?:s)? (?:of|for|we|to)/i, /we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)/i, /provide (?:our )?services/i, /personaliz[ea] (?:content|services|experience)/i],
+    },
+    {
+      label: "legal_basis",
+      patterns: [/legal basis/i, /lawful basis/i, /legitimate interests?/i, /performance of (?:a )?contract/i, /contractual necessity/i, /legal obligation/i, /public task/i, /vital interests?/i],
+    },
+    {
+      label: "recipients_vendor_categories",
+      patterns: [/recipients/i, /service providers/i, /processors/i, /vendors?/i, /partners/i, /affiliates/i, /third parties/i, /third-party/i, /advertising partners?/i, /analytics providers?/i, /sharing your information/i],
+    },
+    {
+      label: "retention",
+      patterns: [/retaining your information/i, /retention period/i, /retention criteria/i, /storage period/i, /retain.{0,80}(?:as long as necessary|required by law|for the purposes|until|unless)/i, /as long as necessary/i],
+    },
+    {
+      label: "data_subject_rights",
+      patterns: [/exporting.*deleting/i, /right to (?:access|delete|erase|erasure|rectif|object|restrict|port)/i, /rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)/i, /data subject rights/i, /exercise (?:your )?rights/i, /privacy controls/i],
+    },
+    {
+      label: "international_transfers",
+      patterns: [/data transfer frameworks/i, /international transfer/i, /cross-border transfer/i, /standard contractual clauses/i, /adequacy decision/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /third countr(?:y|ies)/i, /data privacy framework/i],
+    },
+    {
+      label: "supervisory_authority",
+      patterns: [/supervisory authority/i, /data protection authority/i, /regulator/i, /lodge a complaint/i, /complain to (?:a )?(?:regulator|authority)/i, /cooperation with regulators/i],
+    },
+    {
+      label: "automated_decision_making_or_profiling",
+      patterns: [/automated decision/i, /solely automated/i, /profiling/i, /meaningful information about the logic/i, /automated systems/i],
+    },
+  ];
+
+  const chunks: string[] = [];
+  addPolicyAnalysisChunk(chunks, "policy_opening", normalized.slice(0, 6_000));
+  for (const section of sections) {
+    const chunk = boundedMatchedExcerptForPatterns(normalized, section.patterns)?.slice(0, 4_000);
+    if (chunk) {
+      addPolicyAnalysisChunk(chunks, section.label, chunk);
+    }
+  }
+
+  const packet = uniqueStrings(chunks).join("\n\n");
+  return packet.length > MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS
+    ? packet.slice(0, MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS)
+    : packet;
+}
+
+function addPolicyAnalysisChunk(chunks: string[], label: string, chunk: string): void {
+  const normalized = normalizeWhitespace(chunk);
+  if (!normalized) {
+    return;
+  }
+  chunks.push(`[${label}]\n${normalized}`);
+}
+
+function boundedMatchedExcerptForPatterns(text: string, patterns: RegExp[]): string | undefined {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const matchIndexes = patterns
+    .map((pattern) => {
+      pattern.lastIndex = 0;
+      return normalized.search(pattern);
+    })
+    .filter((index) => index >= 0);
+  const matchIndex = matchIndexes.length > 0 ? Math.min(...matchIndexes) : undefined;
+  if (matchIndex === undefined) {
+    return undefined;
+  }
+  const index = Math.max(0, matchIndex - 500);
+  return normalized.slice(index, index + 4_500);
 }
 
 function boundedExcerptForPatterns(text: string, patterns: RegExp[]): string {
@@ -2021,6 +2224,170 @@ function boundedExcerptForPatterns(text: string, patterns: RegExp[]): string {
     .find((index) => index >= 0);
   const index = matchIndex === undefined ? 0 : Math.max(0, matchIndex - 180);
   return normalized.slice(index, index + MAX_EXCERPT_CHARS);
+}
+
+function bestPolicyDocumentText(html: string, fallbackVisibleText: string): string {
+  const candidates = [
+    ...extractPolicyBodyCandidateTexts(html),
+    htmlToVisibleText(stripPageChromeHtml(html)),
+    fallbackVisibleText,
+  ].filter((text) => text.length > 0);
+  return candidates.reduce((best, candidate) =>
+    policyTextQualityScore(candidate) > policyTextQualityScore(best) + 8 ? candidate : best,
+  candidates[0] ?? fallbackVisibleText);
+}
+
+function extractPolicyBodyCandidateTexts(html: string): string[] {
+  const blocks = [
+    ...extractHtmlBlocks(html, "main"),
+    ...extractHtmlBlocks(html, "article"),
+    ...extractHtmlBlocks(html, "section")
+      .filter((block) => /privacy|policy|notice|legal|rights|data|personal|content|article|main/i.test(block)),
+    ...extractAttributedPolicyBlocks(html),
+  ];
+  return uniqueStrings(blocks.map((block) => htmlToVisibleText(stripPageChromeHtml(block))))
+    .filter((text) => text.length >= 120);
+}
+
+function extractHtmlBlocks(html: string, tagName: string): string[] {
+  const pattern = new RegExp(`<${tagName}\\b[\\s\\S]*?<\\/${tagName}>`, "gi");
+  return Array.from(html.matchAll(pattern), (match) => match[0] ?? "");
+}
+
+function extractAttributedPolicyBlocks(html: string): string[] {
+  const pattern = /<(div|section|article)\b[^>]*(?:id|class|role)=["'][^"']*(?:privacy|policy|notice|legal|article|main|content)[^"']*["'][^>]*>[\s\S]*?<\/\1>/gi;
+  return Array.from(html.matchAll(pattern), (match) => match[0] ?? "");
+}
+
+function stripPageChromeHtml(html: string): string {
+  return html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<svg\b[\s\S]*?<\/svg>/gi, " ")
+    .replace(/<header\b[\s\S]*?<\/header>/gi, " ")
+    .replace(/<nav\b[\s\S]*?<\/nav>/gi, " ")
+    .replace(/<footer\b[\s\S]*?<\/footer>/gi, " ")
+    .replace(/<aside\b[\s\S]*?<\/aside>/gi, " ");
+}
+
+function policyTextQualityScore(text: string): number {
+  const normalized = normalizeWhitespace(text);
+  const lower = normalized.toLowerCase();
+  if (!normalized) {
+    return Number.NEGATIVE_INFINITY;
+  }
+  let score = Math.min(normalized.length, 18_000) / 100;
+  const article13Terms = [
+    "personal data",
+    "personal information",
+    "controller",
+    "legal basis",
+    "lawful basis",
+    "legitimate interests",
+    "retain",
+    "retention",
+    "service providers",
+    "processors",
+    "rights",
+    "access",
+    "erasure",
+    "standard contractual clauses",
+    "supervisory authority",
+    "data protection officer",
+  ];
+  for (const term of article13Terms) {
+    if (lower.includes(term)) {
+      score += 12;
+    }
+  }
+  if (/\b(we|our)\s+(collect|use|process|share|disclose|retain)\b/i.test(normalized)) {
+    score += 35;
+  }
+  if (/privacy\s+(center|preference|choices)|cookie preferences|manage privacy settings/i.test(normalized)) {
+    score -= 25;
+  }
+  if (/repeated (header|footer) noise|global navigation|footer links about/i.test(normalized)) {
+    score -= 80;
+  }
+  if (/processing error|loadnotices|privacy center.*error/i.test(normalized)) {
+    score -= 120;
+  }
+  if (normalized.length < MIN_SUBSTANTIVE_POLICY_TEXT_CHARS) {
+    score -= (MIN_SUBSTANTIVE_POLICY_TEXT_CHARS - normalized.length) / 45;
+  }
+  return score;
+}
+
+function looksLikePrivacyCenterShell(text: string): boolean {
+  const normalized = normalizeWhitespace(text);
+  if (normalized.length < MIN_SUBSTANTIVE_POLICY_TEXT_CHARS) {
+    return /privacy\s+(center|settings|choices)|cookie preferences|manage privacy|processing error/i.test(normalized);
+  }
+  return /processing error|loadnotices|privacy center.*error/i.test(normalized);
+}
+
+async function fetchBestCanonicalPolicyDocumentText(input: {
+  html: string;
+  baseUrl: string;
+  currentText: string;
+  timeoutMs: number;
+}): Promise<string | undefined> {
+  const urls = canonicalPolicyDocumentUrlsFromHtml(input.html, input.baseUrl);
+  let bestText: string | undefined;
+  let bestScore = policyTextQualityScore(input.currentText);
+
+  for (const url of urls.slice(0, MAX_CANONICAL_POLICY_LINK_FETCHES)) {
+    const fetched = await fetchText(url, Math.max(800, Math.min(2_000, input.timeoutMs)));
+    if (!fetched.ok) {
+      continue;
+    }
+    const text = bestPolicyDocumentText(fetched.text, htmlToVisibleText(fetched.text));
+    const score = policyTextQualityScore(text);
+    if (score > bestScore) {
+      bestScore = score;
+      bestText = text;
+    }
+  }
+
+  return bestText;
+}
+
+function canonicalPolicyDocumentUrlsFromHtml(html: string, baseUrl: string): string[] {
+  const anchors: Array<{ url: string; score: number }> = [];
+  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = anchorPattern.exec(html))) {
+    const attrs = match[1] ?? "";
+    const href = attr(attrs, "href");
+    if (!href) {
+      continue;
+    }
+    const normalizedUrl = normalizeUrl(href, baseUrl);
+    if (!normalizedUrl || normalizedUrl === baseUrl) {
+      continue;
+    }
+    const linkText = htmlToVisibleText(match[2] ?? "");
+    const haystack = `${linkText} ${normalizedUrl}`;
+    if (!/privacy\s+(policy|notice|statement)|\/privacy-policy\b|\/privacy-notice\b|\/privacy\b/i.test(haystack)) {
+      continue;
+    }
+    if (/privacy\s+(center|settings|choices)|preference|cookie|do-not-sell|opt-out|unsubscribe/i.test(haystack)) {
+      continue;
+    }
+    if (!isFetchablePolicyUrlForPolicySurface(baseUrl, normalizedUrl, "privacy_policy")) {
+      continue;
+    }
+    let score = 1;
+    if (/privacy\s+policy/i.test(linkText)) score += 4;
+    if (/\/privacy-policy\/?$/i.test(normalizedUrl)) score += 4;
+    if (/\/privacy-notice\/?$/i.test(normalizedUrl)) score += 3;
+    if (sameOrigin(baseUrl, normalizedUrl)) score += 2;
+    anchors.push({ url: normalizedUrl, score });
+  }
+  return uniqueStrings(anchors
+    .sort((a, b) => b.score - a.score)
+    .map((anchor) => anchor.url));
 }
 
 const TOPIC_EXCERPT_KEYWORD_PRIORITY: Array<{

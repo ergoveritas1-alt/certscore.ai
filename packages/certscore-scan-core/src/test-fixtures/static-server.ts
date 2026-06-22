@@ -44,8 +44,10 @@ export type StaticFixturePage =
   | "newrelic-performance-monitoring"
   | "policy-ai-disclosure"
   | "policy-article13-long"
+  | "policy-article13-accordions"
   | "policy-ambiguous-choices"
   | "policy-broken-link"
+  | "policy-canonical-near-privacy-center"
   | "policy-cookie-link"
   | "policy-do-not-sell-link"
   | "policy-footer-privacy-delayed"
@@ -73,6 +75,7 @@ export type StaticFixturePage =
   | "policy-manage-cookies-footer-anchor"
   | "policy-manage-cookies-embedded-config"
   | "policy-no-links"
+  | "policy-noisy-policy-body"
   | "policy-notice-at-collection-link"
   | "policy-privacy-choices-link"
   | "policy-static-core-surfaces"
@@ -134,8 +137,10 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "newrelic-performance-monitoring": "newrelic-monitoring",
   "policy-ai-disclosure": "policy-ai",
   "policy-article13-long": "policy-article13-long",
+  "policy-article13-accordions": "policy-article13-accordions",
   "policy-ambiguous-choices": "policy-ambiguous-choices",
   "policy-broken-link": "policy-broken-link",
+  "policy-canonical-near-privacy-center": "policy-canonical-near-privacy-center",
   "policy-cookie-link": "policy-cookie-link",
   "policy-do-not-sell-link": "policy-do-not-sell",
   "policy-footer-privacy-delayed": "policy-footer-privacy-delayed",
@@ -163,6 +168,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-manage-cookies-footer-anchor": "policy-manage-cookies-footer-anchor",
   "policy-manage-cookies-embedded-config": "policy-manage-cookies-embedded-config",
   "policy-no-links": "policy-no-links",
+  "policy-noisy-policy-body": "policy-noisy-policy-body",
   "policy-notice-at-collection-link": "policy-notice-at-collection",
   "policy-privacy-choices-link": "policy-privacy-choices",
   "policy-static-core-surfaces": "policy-static-core-surfaces",
@@ -746,8 +752,10 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
   const links: Record<string, string> = {
     "policy-ai-disclosure": `<a href="/policies/ai">AI disclosures</a>`,
     "policy-article13-long": `<a href="/policies/article13-long">Privacy Policy</a>`,
+    "policy-article13-accordions": `<a href="/policies/article13-accordions">Privacy Policy</a>`,
     "policy-ambiguous-choices": `<a href="/privacy-choices">Your Choices</a>`,
     "policy-broken-link": `<a href="/policies/missing-privacy">Privacy Policy</a>`,
+    "policy-canonical-near-privacy-center": `<a href="/privacy-center-shell">Privacy Policy</a>`,
     "policy-cookie-link": `<a href="/policies/cookies">Cookie Policy</a>`,
     "policy-do-not-sell-link": `<a href="/do-not-sell-or-share">Do Not Sell or Share My Personal Information</a>`,
     "policy-external-choice-platform": `<a href="/privacy-control/onetrust/choices">Your Privacy Choices</a>`,
@@ -777,6 +785,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-manage-cookies-footer-anchor": `<main><p>News homepage</p></main><footer><a href="#" id="manage-cookies">Manage Cookies</a></footer>`,
     "policy-manage-cookies-embedded-config": `<main><p>News homepage</p></main><script>window.CONSENT_CONFIG={consentLinkTitle:{en:"Manage Cookies+"},privacyCenterLinkTitle:{en:"Privacy Policy"}};</script>`,
     "policy-no-links": "",
+    "policy-noisy-policy-body": `<a href="/policies/noisy-privacy">Privacy Policy</a>`,
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,
     "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
@@ -821,6 +830,20 @@ function policyDocumentHtml(pathname: string): string | undefined {
         "You may exercise rights to access, rectification, erasure, restriction, portability, and objection by contacting the privacy team.",
         "We may transfer personal data outside the European Economic Area using adequacy decisions or standard contractual clauses.",
         "You may complain to a supervisory authority, and our data protection officer can be contacted through the privacy office.",
+      ].join(" "),
+    },
+    "/policies/article13-accordions": {
+      title: "Privacy Policy",
+      body: [
+        "Privacy Policy. This page presents disclosures in expandable sections.",
+        "We collect and process personal data to provide services, improve security, personalize content, and measure performance.",
+        "The controller can be contacted at privacy@example.test and the privacy office handles data protection requests.",
+        "We rely on consent, contract, legal obligation, and legitimate interests as lawful bases for processing depending on context.",
+        "Recipients include service providers, processors, analytics providers, advertising partners, and affiliates that help operate the service.",
+        "We retain personal data only as long as necessary for the purposes described in this notice or as required by law.",
+        "You may exercise rights to access, rectification, erasure, restriction, portability, and objection by contacting the privacy team.",
+        "We may transfer personal data outside the European Economic Area using standard contractual clauses.",
+        "You may complain to a supervisory authority about our handling of personal data.",
       ].join(" "),
     },
     "/privacy": {
@@ -891,6 +914,25 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Privacy Center",
       body: "Privacy Center. Visitors can review privacy settings, manage cookie preferences, and find privacy choices.",
     },
+    "/privacy-center-shell": {
+      title: "Privacy Center",
+      body: "Privacy Center. Visitors can review privacy settings, manage cookie preferences, and find privacy choices.",
+    },
+    "/policies/canonical-privacy": {
+      title: "Canonical Privacy Policy",
+      body: [
+        "Canonical Privacy Policy. We collect and process personal data to provide services, personalize content, measure performance, and improve security.",
+        "You can contact the controller at privacy@example.test or by writing to the privacy team.",
+        "We rely on consent, contract, legal obligation, and legitimate interests as lawful bases for processing depending on context.",
+        "Recipients include service providers, processors, analytics providers, advertising partners, and affiliates that help us operate the service.",
+        "We retain personal data only as long as necessary for the purposes described in this notice or as required by law.",
+        "You may exercise rights to access, rectification, erasure, restriction, portability, and objection by contacting the privacy team.",
+        "We may transfer personal data outside the European Economic Area using adequacy decisions or standard contractual clauses.",
+        "You may complain to a supervisory authority, and our data protection officer can be contacted through the privacy office.",
+        "Additional canonical privacy text repeats ordinary policy context about account preferences, support workflows, website diagnostics, analytics, communications, affiliates, international safeguards, retention schedules, and choices so the retained deterministic excerpt exceeds the minimum usable text threshold for Article 13 review.",
+        "More canonical privacy text describes categories of personal information, sources, purposes, recipients, retention periods, data subject rights, complaint routes, and controller contact details without adding unrelated navigation or footer noise.",
+      ].join(" "),
+    },
     "/privacy-control/onetrust/choices": {
       title: "Your Privacy Choices",
       body: "Your Privacy Choices preference center. This simulated OneTrust control lets visitors opt out of sale or share and manage cookie preferences.",
@@ -931,6 +973,20 @@ function policyDocumentHtml(pathname: string): string | undefined {
         "This neutral policy overview paragraph is intentionally long so the first cookie and advertising terms appear far away from the later opt-out preference signal language used for excerpt anchoring.",
         "Additional neutral text describes account settings, contact methods, service operations, retention, and ordinary website functionality without adding another privacy-control phrase.",
         "Global Privacy Control signals are processed as opt-out preference signals for sale or share and targeted advertising choices.",
+      ].join(" "),
+    },
+    "/policies/noisy-privacy": {
+      title: "Privacy Policy",
+      body: [
+        "Privacy Policy. We collect and process personal data to provide services, personalize content, measure performance, and improve security.",
+        "You can contact the controller at privacy@example.test or by writing to the privacy team.",
+        "We rely on consent, contract, legal obligation, and legitimate interests as lawful bases for processing depending on context.",
+        "Recipients include service providers, processors, analytics providers, advertising partners, and affiliates that help us operate the service.",
+        "We retain personal data only as long as necessary for the purposes described in this notice or as required by law.",
+        "You may exercise rights to access, rectification, erasure, restriction, portability, and objection by contacting the privacy team.",
+        "We may transfer personal data outside the European Economic Area using standard contractual clauses.",
+        "You may complain to a supervisory authority, and our data protection officer can be contacted through the privacy office.",
+        "Additional policy body text repeats categories of personal data, processing purposes, recipients, retention periods, international transfers, rights, complaint channels, privacy office contacts, cookies, analytics, advertising, and security controls so the policy body is long enough for deterministic extraction.",
       ].join(" "),
     },
     "/policies/session-replay": {
@@ -1052,6 +1108,84 @@ function policyDocumentHtml(pathname: string): string | undefined {
       <p><a href="/policies/webmd-like-cookie-policy">Cookie Policy</a></p>
       <p><a href="/policies/webmd-like-state-privacy">State Privacy Policy</a></p>
     </main>
+</body>
+</html>`;
+  }
+  if (pathname === "/privacy-center-shell") {
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(doc.title)}</title>
+  </head>
+  <body>
+    <main class="privacy-center-shell">
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+      <p><a href="/policies/canonical-privacy">Privacy Policy</a></p>
+      <p><a href="/privacy-choices">Your Privacy Choices</a></p>
+    </main>
+  </body>
+</html>`;
+  }
+  if (pathname === "/policies/article13-accordions") {
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(doc.title)}</title>
+  </head>
+  <body>
+    <main class="privacy-policy">
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>Privacy Policy. This page presents disclosures in expandable sections.</p>
+      <details>
+        <summary>Controller and purposes</summary>
+        <p>We collect and process personal data to provide services, improve security, personalize content, and measure performance.</p>
+        <p>The controller can be contacted at privacy@example.test and the privacy office handles data protection requests.</p>
+      </details>
+      <section class="policy-accordion-panel" aria-expanded="false">
+        <h2>Legal bases and recipients</h2>
+        <p>We rely on consent, contract, legal obligation, and legitimate interests as lawful bases for processing depending on context.</p>
+        <p>Recipients include service providers, processors, analytics providers, advertising partners, and affiliates that help operate the service.</p>
+      </section>
+      <details>
+        <summary>Retention, rights, and transfers</summary>
+        <p>We retain personal data only as long as necessary for the purposes described in this notice or as required by law.</p>
+        <p>You may exercise rights to access, rectification, erasure, restriction, portability, and objection by contacting the privacy team.</p>
+        <p>We may transfer personal data outside the European Economic Area using standard contractual clauses.</p>
+        <p>You may complain to a supervisory authority about our handling of personal data.</p>
+      </details>
+    </main>
+  </body>
+</html>`;
+  }
+  if (pathname === "/policies/noisy-privacy") {
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(doc.title)}</title>
+  </head>
+  <body>
+    <header>
+      <p>Global navigation login subscribe sports entertainment weather stocks video newsletter.</p>
+      <p>Repeated header noise repeated header noise repeated header noise repeated header noise repeated header noise.</p>
+    </header>
+    <nav>
+      <a href="/sports">Sports</a>
+      <a href="/weather">Weather</a>
+      <a href="/shopping">Shopping</a>
+      <a href="/videos">Videos</a>
+    </nav>
+    <main class="privacy-policy-content">
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+    </main>
+    <footer>
+      <p>Footer links about careers ads newsletters site map contact help coupons subscriptions.</p>
+      <p>Repeated footer noise repeated footer noise repeated footer noise repeated footer noise repeated footer noise.</p>
+    </footer>
   </body>
 </html>`;
   }

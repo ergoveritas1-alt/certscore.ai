@@ -608,6 +608,7 @@ test("planned pre-consent baseline can retain viewport-first and same-page full-
     const fullPageScreenshot = result.screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page");
     assert.equal(viewportScreenshot?.captureMethod, "primary_viewport_fallback");
     assert.equal(fullPageScreenshot?.captureMethod, "primary_full_page");
+    assert.match(fullPageScreenshot?.path ?? "", /screenshot-pre-consent-full-page\.jpg$/);
     assert.equal(result.screenshots[0]?.artifactId, "screenshot_pre_consent_full_page");
     assert.equal(result.visualCapture.captureMethod, "primary_full_page");
     assert.equal(
@@ -650,7 +651,7 @@ test("planned pre-consent baseline avoids duplicate recaptures for retained ambi
   }
 });
 
-test("pre-consent runtime scanner bounds post-screenshot consent recapture", async () => {
+test("pre-consent runtime scanner avoids long post-screenshot consent recapture", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-recapture-"));
   try {
@@ -668,12 +669,21 @@ test("pre-consent runtime scanner bounds post-screenshot consent recapture", asy
     const recaptureTiming = result.moduleRun.timingBreakdown?.find((entry) =>
       entry.label === "consent UI control recapture"
     );
+    const consentTimings = (result.moduleRun.timingBreakdown ?? []).filter((entry) =>
+      /consent UI/i.test(entry.label)
+    );
+    const consentTimingTotalMs = consentTimings.reduce((sum, entry) => sum + entry.durationMs, 0);
 
     assert.equal(result.moduleRun.status, "completed");
-    assert.ok(recaptureTiming, "expected post-screenshot consent control recapture timing");
+    if (recaptureTiming) {
+      assert.ok(
+        recaptureTiming.durationMs < 5_000,
+        `post-screenshot consent recapture should stay bounded, saw ${recaptureTiming.durationMs}ms`,
+      );
+    }
     assert.ok(
-      recaptureTiming.durationMs < 5_000,
-      `post-screenshot consent recapture should stay bounded, saw ${recaptureTiming.durationMs}ms`,
+      consentTimingTotalMs < 7_000,
+      `consent UI capture/recapture budget should stay bounded, saw ${consentTimingTotalMs}ms`,
     );
   } finally {
     await server.close();

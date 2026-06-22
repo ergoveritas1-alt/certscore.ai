@@ -3700,12 +3700,57 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   }
 ];
 
+const MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 = 2_500;
+
 function getPolicyDisclosureSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return getObject(runtimeArtifacts, ["policyDisclosureSummary", "policy_disclosure_summary"]);
 }
 
 function getPolicyDisclosureText(summary: Record<string, unknown> | null | undefined) {
   return getString(summary, ["retainedPrivacyPolicyTextExcerpt", "retained_privacy_policy_text_excerpt"]) ?? "";
+}
+
+function getPolicyTextExtractionHealth(summary: Record<string, unknown> | null | undefined) {
+  const explicit = getObject(summary, ["policyTextExtractionHealth", "policy_text_extraction_health"]);
+  if (explicit) {
+    return explicit;
+  }
+
+  const privacyPolicyPresent = getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true;
+  const extractedTextLength = getNumber(summary, ["privacyPolicyTextCharacterCount", "privacy_policy_text_character_count"]) ?? 0;
+  const processingErrorObserved = getBoolean(summary, ["processingErrorObserved", "processing_error_observed"]) === true;
+  const policyTextExtractionStatus =
+    !privacyPolicyPresent
+      ? "not_attempted"
+      : processingErrorObserved
+        ? "errored"
+        : extractedTextLength >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
+          ? "ok"
+          : "thin";
+  return {
+    extractedTextLength,
+    extractionFailureReason: policyTextExtractionStatus === "ok"
+      ? undefined
+      : policyTextExtractionStatus === "not_attempted"
+        ? "privacy_policy_surface_not_observed"
+        : policyTextExtractionStatus === "errored"
+          ? "privacy_policy_text_processing_error"
+          : "privacy_policy_text_below_minimum_length",
+    minimumTextLengthRequired: MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13,
+    nanoInvoked: false,
+    nanoSkipReason: policyTextExtractionStatus === "ok" ? undefined : "policy_text_input_limited",
+    policySurfaceObserved: privacyPolicyPresent,
+    policyTextExtractionStatus,
+    policyUrlRetained: getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).length > 0,
+  };
+}
+
+function policyTextExtractionStatus(summary: Record<string, unknown> | null | undefined) {
+  return getString(getPolicyTextExtractionHealth(summary), ["policyTextExtractionStatus", "policy_text_extraction_status"]);
+}
+
+function policyTextExtractionIsOk(summary: Record<string, unknown> | null | undefined) {
+  return policyTextExtractionStatus(summary) === "ok";
 }
 
 function getPolicyArticle13DisclosureSignals(summary: Record<string, unknown> | null | undefined) {
@@ -3825,8 +3870,12 @@ function policySurfaceIsThinOrErrored(summary: Record<string, unknown> | null | 
   if (!summary) {
     return false;
   }
+  const status = policyTextExtractionStatus(summary);
+  if (status) {
+    return status !== "ok";
+  }
   const charCount = getNumber(summary, ["privacyPolicyTextCharacterCount", "privacy_policy_text_character_count"]) ?? 0;
-  return getBoolean(summary, ["processingErrorObserved", "processing_error_observed"]) === true || charCount < 1_000;
+  return getBoolean(summary, ["processingErrorObserved", "processing_error_observed"]) === true || charCount < MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13;
 }
 
 function hasWeakPrivacyNoticeAttribution(summary: Record<string, unknown> | null | undefined) {
@@ -3878,6 +3927,8 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   const privacyPolicyPresent =
     getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true ||
     getBoolean(input.snapshot, ["privacy_policy_present", "privacyPolicyPresent"]) === true;
+  const extractionHealth = getPolicyTextExtractionHealth(summary);
+  const extractionOk = policyTextExtractionIsOk(summary);
   const text = getPolicyDisclosureText(summary);
   const directSignal = getBoolean(summary, config.signalKeys);
   const article13Signal = getPolicyArticle13DisclosureSignal(summary, config.disclosureType);
@@ -3887,14 +3938,17 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   const article13SignalEvidenceMatches =
     !requiresRowSpecificEvidence ||
     Boolean(policyTextMatchEvidence(article13SignalEvidenceText, config.textPattern));
-  const article13SignalObserved = article13SignalStatus === "observed" && article13SignalEvidenceMatches;
+  const article13SignalObserved = extractionOk && article13SignalStatus === "observed" && article13SignalEvidenceMatches;
   const article13SignalPartial =
-    article13SignalStatus === "partial" ||
-    (article13SignalStatus === "observed" && !article13SignalEvidenceMatches);
+    extractionOk && (
+      article13SignalStatus === "partial" ||
+      (article13SignalStatus === "observed" && !article13SignalEvidenceMatches)
+    );
   const topicObserved =
+    extractionOk &&
     config.disclosureType !== undefined &&
     getPolicyObservedTopics(summary).includes(config.disclosureType);
-  const textMatchEvidence = policyTextMatchEvidence(text, config.textPattern);
+  const textMatchEvidence = extractionOk ? policyTextMatchEvidence(text, config.textPattern) : null;
   const observed =
     (directSignal === true && (!requiresRowSpecificEvidence || Boolean(textMatchEvidence) || article13SignalObserved)) ||
     article13SignalObserved ||
@@ -4003,20 +4057,38 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   if (policySurfaceIsThinOrErrored(summary)) {
     return makeOutcome(
       config.rowId,
-      "Review signal",
-      `A privacy-policy surface was retained, but extracted text was thin or errored and no structured ${config.label.toLowerCase()} signal was retained. Manual review is needed.`,
-      ["Evidence: privacy policy surface retained", "Limitation: thin or errored policy extraction"],
+      "Not confirmed",
+      "A privacy-policy surface was found, but CertScore did not extract enough usable policy text to confirm this disclosure from retained evidence.",
+      ["Evidence: privacy policy surface retained", "Limitation: policy text extraction was not usable for Article 13 disclosure review"],
       {
         missingOrIncompleteSourceSignals: [
           sourceGap(
             "scanner.policySurfaceObservations.privacy_policy.textExcerpt",
-            "usable retained privacy policy text for Article 13 disclosure review",
+            `${MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13}+ usable retained privacy policy text characters for Article 13 disclosure review`,
             text ? `${text.length} characters` : "missing",
             `Required to evaluate ${config.label.toLowerCase()}.`
           )
         ],
         retainedEvidence: {
           article13Signal,
+          policyTextExtractionHealth: extractionHealth,
+          policySurfaceSummary: summary,
+          signalObserved: "not_confirmed_extraction_limited"
+        }
+      }
+    );
+  }
+
+  if (!extractionOk && config.rowId !== "privacy_notice_availability") {
+    return makeOutcome(
+      config.rowId,
+      "Not confirmed",
+      "A privacy-policy surface was found, but CertScore did not extract enough usable policy text to confirm this disclosure from retained evidence.",
+      ["Evidence: privacy policy surface retained", "Limitation: policy text extraction was not usable for Article 13 disclosure review"],
+      {
+        retainedEvidence: {
+          article13Signal,
+          policyTextExtractionHealth: extractionHealth,
           policySurfaceSummary: summary,
           signalObserved: false
         }
@@ -4074,7 +4146,68 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
 }
 
 function derivePolicyDisclosureOutcomes(input: GdprEprivacyCoveragePolicyInput) {
-  return POLICY_DISCLOSURE_ROWS.map((config) => derivePolicyDisclosureOutcome(input, config));
+  return [
+    ...POLICY_DISCLOSURE_ROWS.map((config) => derivePolicyDisclosureOutcome(input, config)),
+    derivePolicyTextExtractionOutcome(input),
+  ];
+}
+
+function derivePolicyTextExtractionOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const summary = getPolicyDisclosureSummary(input.runtimeArtifacts);
+  const privacyPolicyPresent =
+    getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true ||
+    getBoolean(input.snapshot, ["privacy_policy_present", "privacyPolicyPresent"]) === true;
+  const health = getPolicyTextExtractionHealth(summary);
+  const status = getString(health, ["policyTextExtractionStatus", "policy_text_extraction_status"]);
+  if (!privacyPolicyPresent) {
+    return makeOutcome(
+      "policy_text_extraction",
+      "Not testable",
+      "No privacy-policy surface was retained, so policy text extraction could not be evaluated.",
+      ["Missing evidence: privacy policy surface"],
+      { retainedEvidence: { policyTextExtractionHealth: health, policySurfaceSummary: summary } }
+    );
+  }
+
+  if (status === "ok") {
+    return makeOutcome(
+      "policy_text_extraction",
+      "Observed",
+      "Enough usable privacy-policy text was extracted to evaluate individual GDPR Transparency disclosures.",
+      [
+        `Evidence: ${getNumber(health, ["extractedTextLength", "extracted_text_length"]) ?? "usable"} policy-text characters retained`,
+        ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+      ],
+      { retainedEvidence: { policyTextExtractionHealth: health, policySurfaceSummary: summary, signalObserved: true } }
+    );
+  }
+
+  return makeOutcome(
+    "policy_text_extraction",
+    "Not testable",
+    "GDPR Transparency disclosure checks were limited because CertScore found a privacy-policy surface but did not extract enough usable policy text to evaluate individual Article 13 disclosures.",
+    [
+      `Limitation: policy text extraction ${status ?? "not usable"}`,
+      `Extracted text: ${getNumber(health, ["extractedTextLength", "extracted_text_length"]) ?? 0} characters`,
+      `Required text: ${getNumber(health, ["minimumTextLengthRequired", "minimum_text_length_required"]) ?? MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13} characters`,
+      ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+    ],
+    {
+      missingOrIncompleteSourceSignals: [
+        sourceGap(
+          "scanner.policySurfaceObservations.privacy_policy.textExcerpt",
+          `${MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13}+ usable retained privacy policy text characters`,
+          `${getNumber(health, ["extractedTextLength", "extracted_text_length"]) ?? 0} characters`,
+          "Required to evaluate individual Article 13 transparency disclosures."
+        )
+      ],
+      retainedEvidence: {
+        policyTextExtractionHealth: health,
+        policySurfaceSummary: summary,
+        signalObserved: "technical_limit"
+      }
+    }
+  );
 }
 
 function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {

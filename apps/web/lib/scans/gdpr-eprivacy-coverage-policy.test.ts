@@ -473,7 +473,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats essential-only first-layer
   assert.match(outcomes.reject_all_path_availability?.evidenceRefs.join(" "), /Essential Cookies Only/);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes degrades thin policy extraction to review instead of technical limitation", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats thin policy extraction as coverage limited", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -490,8 +490,16 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes degrades thin policy extraction t
     }
   });
 
-  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Review signal");
-  assert.equal(outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved, false);
+  assert.equal(outcomes.privacy_notice_availability?.status, "Observed");
+  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
+  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
+  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
+  assert.equal(outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved, "not_confirmed_extraction_limited");
+  assert.equal(
+    (outcomes.policy_text_extraction?.criticalEvidence.retainedEvidence.policyTextExtractionHealth as Record<string, unknown>)?.policyTextExtractionStatus,
+    "errored"
+  );
+  assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /did not extract enough usable policy text/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not emit runtime vendor disclosure alignment for thin policy evidence", () => {

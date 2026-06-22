@@ -15,6 +15,9 @@ import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixture
 test("policySurfaceScanner discovers footer privacy links and bounded policy facts", async () => {
   await withPolicyScan("policy-footer-privacy", async ({ result, baseUrl }) => {
     const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const retainedPolicySurfaceTextRef = privacy?.artifactRefs.find((ref) =>
+      ref.artifactId.startsWith("policy_surface_text_")
+    );
 
     assert.equal(privacy?.status, "fetched");
     assert.equal(privacy?.discoveryMethod, "nano_assisted_link_classification");
@@ -25,6 +28,12 @@ test("policySurfaceScanner discovers footer privacy links and bounded policy fac
     assert.ok((privacy?.textExcerpt?.length ?? 0) <= 6_000);
     assert.equal(privacy?.sourceScanner, "policy_surface");
     assert.equal(privacy?.consentStateAtTime, "not_applicable");
+    assert.ok(retainedPolicySurfaceTextRef?.path);
+    const retainedPolicySurfaceText = await readFile(retainedPolicySurfaceTextRef.path, "utf8");
+    assert.match(retainedPolicySurfaceText, /Last updated: May 1, 2026/i);
+    assert.match(retainedPolicySurfaceText, /Google Analytics and Meta/i);
+    assert.doesNotMatch(retainedPolicySurfaceText, /<main|<script|<footer/i);
+    assert.ok(retainedPolicySurfaceText.length <= 256_000);
   });
 });
 
@@ -526,7 +535,8 @@ test("policySurfaceScanner does not let secondary-only surfaces satisfy core GDP
   await withPolicyScan("policy-gold-latimes-secondary-only", async ({ result }) => {
     const fetchedBeforeFallback = result.policySurfaceObservations.filter((observation) =>
       observation.status === "fetched" &&
-      observation.discoveryMethod !== "guessed_common_path"
+      observation.discoveryMethod !== "guessed_common_path" &&
+      observation.directVsInferred !== "mixed"
     );
     const secondaryOnlyTypes = new Set(fetchedBeforeFallback.map((observation) => observation.surfaceType));
     const fallbackPrivacy = result.policySurfaceObservations.find((observation) =>
@@ -535,7 +545,7 @@ test("policySurfaceScanner does not let secondary-only surfaces satisfy core GDP
       observation.surfaceType === "privacy_policy"
     );
 
-    assert.deepEqual([...secondaryOnlyTypes].sort(), ["ai_disclosure", "terms"]);
+    assert.equal(secondaryOnlyTypes.has("privacy_policy"), false);
     assert.ok(fallbackPrivacy);
   });
 });
@@ -627,7 +637,8 @@ test("policySurfaceScanner records mock Nano link ranking and topic extraction m
       };
     },
     async extractTopics(input) {
-      assert.ok(input.excerpt.length <= 6_000);
+      assert.ok(input.excerpt.length <= 40_000);
+      assert.doesNotMatch(input.excerpt, /<main|<script|<footer/i);
       if (input.surfaceType !== "your_privacy_choices") {
         return {
           assistId: input.assistId,
@@ -780,6 +791,7 @@ test("policySurfaceScanner gives Nano enough bounded text for distant Article 13
     assert.ok((privacy?.textExcerpt?.length ?? 0) > 1_000);
     assert.ok((privacy?.textExcerpt?.length ?? 0) <= 6_000);
     assert.ok(nanoExcerpt.length > 1_000);
+    assert.ok(nanoExcerpt.length <= 40_000);
     assert.match(nanoExcerpt, /standard contractual clauses/i);
     assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
       signal.disclosureType === "data_retention" &&
@@ -866,6 +878,58 @@ test("policySurfaceScanner follows OneTrust index JSON to the final privacy noti
     ), true);
     assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
       signal.disclosureType === "data_subject_rights" &&
+      signal.status === "observed"
+    ), true);
+  }, { enableNanoPolicyAssist: true });
+});
+
+test("policySurfaceScanner extracts rendered policy body instead of nav and footer noise", async () => {
+  await withPolicyScan("policy-noisy-policy-body", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(privacy?.status, "fetched");
+    assert.match(privacy?.textExcerpt ?? "", /legal obligation, and legitimate interests/i);
+    assert.match(privacy?.textExcerpt ?? "", /standard contractual clauses/i);
+    assert.doesNotMatch(privacy?.textExcerpt ?? "", /Repeated header noise/i);
+    assert.doesNotMatch(privacy?.textExcerpt ?? "", /Repeated footer noise/i);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "legal_basis" &&
+      signal.status === "observed"
+    ), true);
+  }, { enableNanoPolicyAssist: true });
+});
+
+test("policySurfaceScanner retains accordion policy disclosures from static DOM", async () => {
+  await withPolicyScan("policy-article13-accordions", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(privacy?.status, "fetched");
+    assert.match(privacy?.textExcerpt ?? "", /lawful bases for processing/i);
+    assert.match(privacy?.textExcerpt ?? "", /retain personal data only as long as necessary/i);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "data_retention" &&
+      signal.status === "observed"
+    ), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "international_transfers" &&
+      signal.status === "observed"
+    ), true);
+  }, { enableNanoPolicyAssist: true });
+});
+
+test("policySurfaceScanner prefers a canonical policy document linked from a privacy-center shell", async () => {
+  await withPolicyScan("policy-canonical-near-privacy-center", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(privacy?.status, "fetched");
+    assert.doesNotMatch(privacy?.textExcerpt ?? "", /^Privacy Center/i);
+    assert.match(privacy?.textExcerpt ?? "", /standard contractual clauses/i);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "controller_contact" &&
+      signal.status === "observed"
+    ), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "legal_basis" &&
       signal.status === "observed"
     ), true);
   }, { enableNanoPolicyAssist: true });

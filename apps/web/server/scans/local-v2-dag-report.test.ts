@@ -450,6 +450,11 @@ test("summarizePolicySurfaces limits Article 13 aggregation to target-relevant p
   assert.deepEqual(summary.observedTopics, ["data_subject_rights"]);
   assert.deepEqual(summary.article13DisclosureTypesObserved, ["data_subject_rights"]);
   assert.equal(summary.privacyPolicyPresent, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "thin");
+  assert.equal(summary.policyTextExtractionHealth.minimumTextLengthRequired, 2500);
+  assert.equal(summary.policyTextExtractionHealth.policySurfaceObserved, true);
+  assert.equal(summary.policyTextExtractionHealth.policyUrlRetained, true);
+  assert.equal(summary.policy_text_extraction_health.policyTextExtractionStatus, "thin");
   assert.doesNotMatch(summary.retainedPrivacyPolicyTextExcerpt, /Google Privacy Policy|Cookie Policy|TrustArc/i);
 });
 
@@ -624,7 +629,7 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
           captureMethod: "primary_full_page",
           consentStateAtTime: "pre_consent",
           pagePhase: "network_idle",
-          path: "/tmp/certscore-v2/visual-evidence-fixture/screenshot-pre-consent-full-page.png",
+          path: "/tmp/certscore-v2/visual-evidence-fixture/screenshot-pre-consent-full-page.jpg",
           url: "https://example.test/"
         },
         {
@@ -684,7 +689,7 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
     assert.equal(visualArtifacts?.[0]?.capture_method, "primary_full_page");
     assert.equal(
       visualArtifacts?.[0]?.key,
-      "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent-full-page.png"
+      "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent-full-page.jpg"
     );
     assert.equal(
       visualArtifacts?.[1]?.key,

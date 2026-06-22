@@ -156,6 +156,22 @@ function getRetainedEvidence(item: GdprEprivacyCoverageChecklistItem | null) {
   return item?.criticalEvidence.retainedEvidence ?? {};
 }
 
+function getRetainedRecord(item: GdprEprivacyCoverageChecklistItem | null, key: string) {
+  return asRecord(getRetainedEvidence(item)[key]);
+}
+
+function getPolicyTextExtractionStatus(item: GdprEprivacyCoverageChecklistItem | null) {
+  const health =
+    getRetainedRecord(item, "policyTextExtractionHealth") ??
+    getRetainedRecord(item, "policy_text_extraction_health");
+  return getString(health, ["policyTextExtractionStatus", "policy_text_extraction_status"]);
+}
+
+function policyTextExtractionLimited(item: GdprEprivacyCoverageChecklistItem | null) {
+  const status = getPolicyTextExtractionStatus(item);
+  return Boolean(status && status !== "ok");
+}
+
 function getFindingEntities(item: GdprEprivacyCoverageChecklistItem | null) {
   return asRecordArray(getRetainedEvidence(item).findingEntities);
 }
@@ -422,6 +438,7 @@ export function deriveGdprEprivacyReviewSummary(
   const sessionReplayDisclosure = getRow(items, "session_replay_disclosure_alignment");
   const sessionReplaySensitiveSurface = getRow(items, "session_replay_sensitive_surface");
   const sessionReplayAfterRefusal = getRow(items, "session_replay_after_refusal");
+  const policyTextExtraction = getRow(items, "policy_text_extraction");
   const bullets: GdprEprivacyReviewSummaryBullet[] = [];
 
   const rejectEvidence = getRetainedEvidence(rejectPath);
@@ -539,9 +556,20 @@ export function deriveGdprEprivacyReviewSummary(
     });
   }
 
+  if (rowIs(policyTextExtraction, "Not testable") && policyTextExtractionLimited(policyTextExtraction)) {
+    addBullet(bullets, {
+      copy: "GDPR Transparency disclosure checks were limited because CertScore found a privacy-policy surface but did not extract enough usable policy text to evaluate individual Article 13 disclosures.",
+      headline: "Policy text extraction limited transparency review",
+      id: "policy_text_extraction_limited"
+    });
+  }
+
   const inScopeRows = items.filter((item) => item.assessmentStatus !== "not_applicable");
   const usableRows = inScopeRows.filter((item) =>
     item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation"
+  ).length;
+  const technicalLimitCount = items.filter((item) =>
+    getAssessmentDirection(item) === "technical_limitation"
   ).length;
   const gapCount = items.filter((item) => item.assessmentStatus === "gap_observed").length;
   const partialConcernCount = items.filter((item) =>
@@ -556,7 +584,7 @@ export function deriveGdprEprivacyReviewSummary(
 
   return {
     bullets,
-    coverageText: `${usableRows} of ${inScopeRows.length} in-scope rows had usable automated evidence.`,
+    coverageText: `${usableRows} of ${inScopeRows.length} in-scope rows had usable automated evidence.${technicalLimitCount > 0 ? ` ${technicalLimitCount} technical limit${technicalLimitCount === 1 ? "" : "s"} recorded.` : ""}`,
     evidenceCards,
     limits: SUMMARY_LIMITS_COPY,
     priorityReviewText: formatPriorityReviewText({ gapCount, partialConcernCount, reviewSignalCount }),

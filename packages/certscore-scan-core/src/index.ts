@@ -552,7 +552,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   cmpRuntimeObservations: preConsentResult.cmpRuntimeObservations,
   });
 
-  const bundle = canonicalEvidenceBundleSchema.parse({
+  const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
     scanId,
     url: input.url,
     normalizedUrl,
@@ -615,7 +615,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     ],
     scannerVersion: "certscore-scan-core-v2-alpha",
     schemaVersion: SCHEMA_VERSION,
-  });
+  }));
 
   await phaseRecorder.record("canonical_bundle_write", "started");
   await artifactWriter.writeJsonArtifact("CanonicalEvidenceBundle.json", bundle);
@@ -631,6 +631,258 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       await phaseRecorder.record("shared_browser_close", "completed");
     }
   }
+}
+
+export function compactCanonicalEvidenceBundleForRetention(
+  bundle: CanonicalEvidenceBundle,
+  maxSerializedBytes = 400 * 1024,
+): CanonicalEvidenceBundle {
+  const typedEventIds = new Set([
+    ...bundle.networkEvents,
+    ...bundle.networkResponseEvents,
+    ...bundle.cookieEvents,
+    ...bundle.scriptEvents,
+    ...bundle.iframeEvents,
+  ].map((event) => event.eventId));
+  const retainedJourneys = bundle.observedJourneys.filter((journey) => !isLowSignalEndpointJourney(journey));
+  let compacted = canonicalEvidenceBundleSchema.parse({
+    ...bundle,
+    runtimeTimeline: bundle.runtimeTimeline
+      .filter((event) => !typedEventIds.has(event.eventId))
+      .map(stripRuntimeEventDiagnostics),
+    networkEvents: bundle.networkEvents.map(stripNetworkEventDiagnostics),
+    networkResponseEvents: bundle.networkResponseEvents.map(stripNetworkResponseDiagnostics),
+    cookieEvents: bundle.cookieEvents.map(stripRuntimeEventDiagnostics),
+    scriptEvents: bundle.scriptEvents.map(stripRuntimeEventDiagnostics),
+    iframeEvents: bundle.iframeEvents.map(stripRuntimeEventDiagnostics),
+    observedJourneys: retainedJourneys,
+    derivedRuntimeSignals: {
+      ...bundle.derivedRuntimeSignals,
+      preConsentTrackingObserved: retainedJourneys.some((journey) =>
+        journey.journeyType === "tracker" ||
+        journey.observedBehaviors.some((behavior) =>
+          [
+            "collection_endpoint_observed",
+            "cookie_set",
+            "cookie_sent",
+            "identifier_parameter_observed",
+            "advertising_click_id_observed",
+            "session_replay_collection_observed",
+          ].includes(behavior),
+        ),
+      ),
+      thirdPartyCookiesPreConsentObserved: retainedJourneys.some(
+        (journey) =>
+          journey.journeyType === "cookie" &&
+          journey.firstObservedConsentState === "pre_consent" &&
+          journey.firstPartyOrThirdParty === "third_party" &&
+          !["consent_management", "security", "infrastructure"].includes(journey.purpose ?? "unknown"),
+      ),
+      sessionReplayOrBehavioralAnalyticsObserved: retainedJourneys.some(
+        (journey) => journey.purpose === "session_replay",
+      ),
+      journeySummary: summarizeObservedJourneys(retainedJourneys),
+    },
+    runtimeCoverage: bundle.runtimeCoverage
+      ? {
+        ...bundle.runtimeCoverage,
+        observationCounts: {
+          ...bundle.runtimeCoverage.observationCounts,
+          observedJourneys: retainedJourneys.length,
+        },
+      }
+      : undefined,
+  });
+
+  if (serializedBytes(compacted) <= maxSerializedBytes) {
+    return compacted;
+  }
+
+  const referencedEventIds = collectReferencedEventIds(compacted);
+  compacted = canonicalEvidenceBundleSchema.parse({
+    ...compacted,
+    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 140),
+    networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 100),
+    scriptEvents: retainPriorityEvents(compacted.scriptEvents, referencedEventIds, 80),
+    iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 40),
+    runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 80),
+  });
+
+  if (serializedBytes(compacted) <= maxSerializedBytes) {
+    return compacted;
+  }
+
+  return canonicalEvidenceBundleSchema.parse({
+    ...compacted,
+    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 80),
+    networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 60),
+    scriptEvents: retainPriorityEvents(compacted.scriptEvents, referencedEventIds, 40),
+    iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 20),
+    runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 40),
+  });
+}
+
+type RetainableRuntimeEvent =
+  | RuntimeEvidenceEvent
+  | NetworkEvent
+  | NetworkResponseEvent
+  | CookieEvent
+  | IframeEvent;
+
+function isLowSignalEndpointJourney(journey: CanonicalEvidenceBundle["observedJourneys"][number]): boolean {
+  if (journey.journeyType !== "endpoint") {
+    return false;
+  }
+  if (journey.attributionStatus !== "site_owned_infrastructure") {
+    return false;
+  }
+  if ((journey.relatedCookies ?? []).length > 0) {
+    return false;
+  }
+  if ((journey.relatedVendors ?? []).length > 0 || (journey.relatedVendorObservationIds ?? []).length > 0) {
+    return false;
+  }
+  return !journey.observedBehaviors.some((behavior) =>
+    [
+      "collection_endpoint_observed",
+      "cookie_set",
+      "cookie_sent",
+      "identifier_parameter_observed",
+      "advertising_click_id_observed",
+      "session_replay_collection_observed",
+      "session_replay_library_observed",
+      "consent_management_observed",
+    ].includes(behavior),
+  );
+}
+
+function stripRuntimeEventDiagnostics<T extends RuntimeEvidenceEvent>(event: T): T {
+  const { initiatorStack: _initiatorStack, ...retained } = event;
+  return retained as T;
+}
+
+function stripNetworkEventDiagnostics(event: NetworkEvent): NetworkEvent {
+  const { initiatorStack: _initiatorStack, ...retained } = event;
+  return retained;
+}
+
+function stripNetworkResponseDiagnostics(event: NetworkResponseEvent): NetworkResponseEvent {
+  const {
+    timing: _timing,
+    sizes: _sizes,
+    cacheHeaders: _cacheHeaders,
+    accessControlHeaders: _accessControlHeaders,
+    initiatorStack: _initiatorStack,
+    ...retained
+  } = event;
+  return {
+    ...retained,
+    cacheHeaders: {},
+    accessControlHeaders: {},
+  };
+}
+
+function collectReferencedEventIds(bundle: CanonicalEvidenceBundle): Set<string> {
+  const ids = new Set<string>();
+  for (const journey of bundle.observedJourneys) {
+    if (journey.entryPointSourceEventId) {
+      ids.add(journey.entryPointSourceEventId);
+    }
+    for (const ref of journey.eventRefs ?? []) {
+      ids.add(ref.eventId);
+    }
+    for (const ref of journey.evidenceRefs ?? []) {
+      if (ref.eventId) {
+        ids.add(ref.eventId);
+      }
+    }
+    for (const ref of journey.relatedEvidenceRefs ?? []) {
+      if (ref.eventId) {
+        ids.add(ref.eventId);
+      }
+    }
+  }
+  for (const vendor of bundle.normalizedVendorObservations) {
+    for (const eventId of vendor.matchedEvidenceIds ?? []) {
+      ids.add(eventId);
+    }
+    for (const ref of vendor.matchedEvidenceRefs ?? []) {
+      if (ref.eventId) {
+        ids.add(ref.eventId);
+      }
+    }
+  }
+  for (const observation of bundle.consentUiObservations) {
+    for (const ref of observation.evidenceRefs ?? []) {
+      if (ref.eventId) {
+        ids.add(ref.eventId);
+      }
+    }
+  }
+  return ids;
+}
+
+function retainPriorityEvents<T extends RetainableRuntimeEvent>(
+  events: T[],
+  referencedEventIds: Set<string>,
+  maxEvents: number,
+): T[] {
+  if (events.length <= maxEvents) {
+    return events;
+  }
+  return [...events]
+    .map((event, index) => ({ event, index, score: retentionPriorityScore(event, referencedEventIds, index, events.length) }))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, maxEvents)
+    .sort((left, right) => left.index - right.index)
+    .map((item) => item.event);
+}
+
+function retentionPriorityScore(
+  event: RetainableRuntimeEvent,
+  referencedEventIds: Set<string>,
+  index: number,
+  total: number,
+): number {
+  let score = 0;
+  if (referencedEventIds.has(event.eventId)) {
+    score += 1_000;
+  }
+  if (event.thirdParty === true || event.firstParty === false) {
+    score += 120;
+  }
+  if ("cookieNamesSent" in event && event.cookieNamesSent.length > 0) {
+    score += 110;
+  }
+  if ("cookieNamesSet" in event && event.cookieNamesSet.length > 0) {
+    score += 110;
+  }
+  if ("setCookieMetadata" in event && event.setCookieMetadata.length > 0) {
+    score += 110;
+  }
+  if ("hasIdentifierLikeParameters" in event && event.hasIdentifierLikeParameters) {
+    score += 100;
+  }
+  if ("hasAdvertisingClickIdParameters" in event && event.hasAdvertisingClickIdParameters) {
+    score += 100;
+  }
+  if ("collectionEndpointObserved" in event && event.collectionEndpointObserved) {
+    score += 100;
+  }
+  if ("isMainFrame" in event && event.isMainFrame) {
+    score += 40;
+  }
+  if (event.eventType === "cookie") {
+    score += 90;
+  }
+  if (index < 12 || index >= total - 6) {
+    score += 10;
+  }
+  return score;
+}
+
+function serializedBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value));
 }
 
 export async function handler(event: {
