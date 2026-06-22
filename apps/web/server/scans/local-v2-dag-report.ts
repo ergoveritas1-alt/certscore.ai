@@ -27,7 +27,8 @@ function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-const LOCAL_V2_DAG_RESULT_REFRESH_COOLDOWN_MS = 30_000;
+const LOCAL_V2_DAG_RESULT_REFRESH_COOLDOWN_MS = 5_000;
+const LOCAL_V2_DAG_RESULT_REFRESH_MIN_SCAN_AGE_MS = 6_000;
 
 type LocalV2DagLambdaPollResult = {
   handled: number;
@@ -71,13 +72,16 @@ export function getLocalV2DagReportInput(scanRecord: ScanDetailResponse) {
   }
 
   const localV2Dag = getRecord(execution, "localV2Dag");
+  const v2DagLambda = getRecord(execution, "v2DagLambda");
   const outDir = getString(localV2Dag?.outDir);
   const scanArtifactUri = getLocalV2DagLambdaScanArtifactUri(scanRecord);
+  const lambdaResultQueueUrl = getString(v2DagLambda?.resultQueueUrl);
   const normalizedUrl = getString(config.normalizedUrl);
   const hostname = getString(config.hostname) ?? scanRecord.scan.domainHostname;
   const profile = getString(v2DagParallel.profile) ?? getString(config.profile) ?? "standard";
 
   return {
+    lambdaResultQueueUrl,
     outDir,
     profile: profile === "tiny" ? "tiny" as LocalV2DagScanProfile : "standard" as LocalV2DagScanProfile,
     scanArtifactUri,
@@ -103,7 +107,7 @@ export function shouldAttemptLocalV2DagLambdaResultRefresh(scanRecord: ScanDetai
     return false;
   }
 
-  return nowMs - startedAtMs >= 25_000;
+  return nowMs - startedAtMs >= LOCAL_V2_DAG_RESULT_REFRESH_MIN_SCAN_AGE_MS;
 }
 
 function claimLocalV2DagLambdaResultRefresh(scanId: string, nowMs: number) {
@@ -152,8 +156,10 @@ export async function tryRefreshLocalV2DagLambdaResult(
   try {
     const pollResultQueue = options.pollResultQueue ?? (async () => {
       const { pollLocalV2DagLambdaResultQueue } = await import("./local-v2-dag-lambda-result-poller");
+      const input = getLocalV2DagReportInput(scanRecord);
       return pollLocalV2DagLambdaResultQueue({
         maxMessages: 10,
+        queueUrl: input?.lambdaResultQueueUrl ?? undefined,
         visibilityTimeoutSeconds: 30,
         waitTimeSeconds: 1
       });
@@ -182,8 +188,17 @@ function getStringArray(value: unknown) {
   return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
 }
 
+function isPreConsentScreenshotArtifact(screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number] | null | undefined) {
+  return screenshot?.artifactId === "screenshot_pre_consent" ||
+    screenshot?.artifactId === "screenshot_pre_consent_full_page";
+}
+
+function preConsentScreenshotRank(screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number]) {
+  return screenshot.artifactId === "screenshot_pre_consent_full_page" ? 0 : 1;
+}
+
 function isPreConsentErrorShellScreenshot(bundle: CanonicalEvidenceBundle, screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number]) {
-  if (screenshot.artifactId !== "screenshot_pre_consent") {
+  if (!isPreConsentScreenshotArtifact(screenshot)) {
     return false;
   }
 
@@ -224,7 +239,7 @@ function isLikelyRetainedVisualErrorShell(input: {
   screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number] | null;
 }) {
   const screenshotPath = getString(input.screenshot?.path);
-  if (!screenshotPath || input.screenshot?.artifactId !== "screenshot_pre_consent") {
+  if (!screenshotPath || !isPreConsentScreenshotArtifact(input.screenshot)) {
     return false;
   }
   if (!input.lowRuntimeActivity) {
@@ -1042,7 +1057,9 @@ function buildLocalV2ScanNoGoAssessment(input: {
   const matchedText = textCandidates.find((text) => LOCAL_V2_HARD_NO_GO_TEXT_PATTERN.test(text));
   const moduleErrors = collectLocalV2ModuleErrors(input.bundle);
   const visualCapture = localV2VisualCapture(input.bundle);
-  const screenshot = (input.bundle.screenshots ?? []).find((item) => item.artifactId === "screenshot_pre_consent") ?? null;
+  const screenshot = (input.bundle.screenshots ?? [])
+    .filter(isPreConsentScreenshotArtifact)
+    .sort((left, right) => preConsentScreenshotRank(left) - preConsentScreenshotRank(right))[0] ?? null;
   const screenshotPlaceholderUsed = visualCapture.status === "placeholder" ||
     visualCapture.failureReason === "placeholder_used" ||
     moduleErrors.some((error) => LOCAL_V2_SCREENSHOT_PLACEHOLDER_PATTERN.test(error));
@@ -1180,7 +1197,7 @@ function buildMaterializedLocalV2Detail(
     preconsentCookies.length > 0 ||
     (runtimeObservationCounts?.normalizedVendors ?? 0) > 0;
   const visualCapture = localV2VisualCapture(bundle);
-  const retainedPreConsentScreenshot = (bundle.screenshots ?? []).some((screenshot) => screenshot.artifactId === "screenshot_pre_consent");
+  const retainedPreConsentScreenshot = (bundle.screenshots ?? []).some(isPreConsentScreenshotArtifact);
   const preConsentRuntimeReliable = !preConsentRuntimeFailed || retainedPreConsentScreenshot || visualCapture.status === "available";
   const runtimeCountsRetained =
     !preConsentRuntimeFailed &&
@@ -1501,8 +1518,11 @@ function buildMaterializedLocalV2Detail(
     thirdPartyRequestDomains: thirdPartyDomains,
     third_party_request_count: thirdPartyRequestCount,
     third_party_request_domains: thirdPartyDomains,
-    visual_evidence_artifacts: (bundle.screenshots ?? []).flatMap((screenshot) => {
-      if (screenshot.artifactId !== "screenshot_pre_consent") {
+    visual_evidence_artifacts: (bundle.screenshots ?? [])
+      .filter(isPreConsentScreenshotArtifact)
+      .sort((left, right) => preConsentScreenshotRank(left) - preConsentScreenshotRank(right))
+      .flatMap((screenshot) => {
+      if (!isPreConsentScreenshotArtifact(screenshot)) {
         return [];
       }
       const capturedErrorShell = isPreConsentErrorShellScreenshot(bundle, screenshot);
@@ -1517,7 +1537,9 @@ function buildMaterializedLocalV2Detail(
         capture_step: "initial_load",
         consent_state: screenshot.consentStateAtTime ?? "pre_consent",
         final_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
-        id: "local_v2:screenshot_pre_consent",
+        id: screenshot.artifactId === "screenshot_pre_consent_full_page"
+          ? "local_v2:screenshot_pre_consent_full_page"
+          : "local_v2:screenshot_pre_consent",
         interaction_state: "none",
         key: capturedErrorShell ? null : storagePointer.key,
         mime_type: "image/png",

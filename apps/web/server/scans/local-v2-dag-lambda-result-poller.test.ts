@@ -189,6 +189,90 @@ test("SQS poller drains configured regional result queues", async () => {
   assert.deepEqual(observedS3Regions, ["eu-central-1", "eu-west-1", "us-west-2"]);
 });
 
+test("SQS poller targets an explicit EU-IR queue instead of unrelated configured queues", async () => {
+  const receivedQueueUrls: string[] = [];
+  const sqsClient = {
+    async send(command: ReceiveMessageCommand | DeleteMessageCommand) {
+      if (command instanceof ReceiveMessageCommand) {
+        receivedQueueUrls.push(String(command.input.QueueUrl));
+        return {
+          $metadata: {},
+          Messages: []
+        };
+      }
+
+      return { $metadata: {} };
+    }
+  };
+
+  const result = await pollLocalV2DagLambdaResultQueue({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/de-results",
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
+      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/usw-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
+    },
+    queueUrl: "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
+    sqsClient,
+    waitTimeSeconds: 20
+  });
+
+  assert.deepEqual(result, {
+    deleted: 0,
+    failed: 0,
+    handled: 0,
+    received: 0
+  });
+  assert.deepEqual(receivedQueueUrls, ["https://sqs.eu-west-1.amazonaws.com/123/ie-results"]);
+});
+
+test("SQS poller drains broad regional queues in parallel", async () => {
+  const receivedQueueUrls: string[] = [];
+  const sqsClient = {
+    async send(command: ReceiveMessageCommand | DeleteMessageCommand) {
+      if (command instanceof ReceiveMessageCommand) {
+        const queueUrl = String(command.input.QueueUrl);
+        receivedQueueUrls.push(queueUrl);
+        if (queueUrl.includes("/de-results")) {
+          await new Promise((resolve) => setTimeout(resolve, 60));
+        }
+        return {
+          $metadata: {},
+          Messages: []
+        };
+      }
+
+      return { $metadata: {} };
+    }
+  };
+
+  const startedAt = performance.now();
+  const result = await pollLocalV2DagLambdaResultQueue({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/de-results",
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
+      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/usw-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
+    },
+    sqsClient,
+    waitTimeSeconds: 0
+  });
+  const elapsedMs = performance.now() - startedAt;
+
+  assert.deepEqual(result, {
+    deleted: 0,
+    failed: 0,
+    handled: 0,
+    received: 0
+  });
+  assert.deepEqual(receivedQueueUrls.sort(), [
+    "https://sqs.eu-central-1.amazonaws.com/123/de-results",
+    "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
+    "https://sqs.us-west-2.amazonaws.com/123/usw-results"
+  ]);
+  assert.ok(elapsedMs < 100, `expected parallel polling to avoid serial queue delay; elapsed=${elapsedMs}`);
+});
+
 test("SQS poller rejects wrong environment/processor/contract and does not delete", async () => {
   const deleted: string[] = [];
   const sqsClient = {
@@ -357,4 +441,5 @@ test("artifact mirror downloads durable Lambda artifacts into the local v2 DAG s
   const manifest = JSON.parse(await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-local-1/LambdaArtifactMirrorManifest.json"), "utf8")) as Record<string, unknown>;
   assert.equal(manifest.productionFindingIntegration, false);
   assert.equal(manifest.artifactOnly, true);
+  assert.equal(typeof manifest.durationMs, "number");
 });

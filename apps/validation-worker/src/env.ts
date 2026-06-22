@@ -57,7 +57,7 @@ const workerEnvSchema = z.object({
     .transform((value) => value !== "0"),
   CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS: z.preprocess(
     emptyStringToUndefined,
-    z.coerce.number().int().min(5).max(300).default(10)
+    z.coerce.number().int().min(1).max(300).default(2)
   ),
   WORKER_CONCURRENCY: z.preprocess(emptyStringToUndefined, z.coerce.number().int().min(1).max(10).default(1)),
   PLAYWRIGHT_BROWSERS_PATH: z.preprocess(emptyStringToUndefined, z.string().min(1).optional()),

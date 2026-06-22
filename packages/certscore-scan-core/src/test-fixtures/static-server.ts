@@ -75,6 +75,7 @@ export type StaticFixturePage =
   | "policy-no-links"
   | "policy-notice-at-collection-link"
   | "policy-privacy-choices-link"
+  | "policy-static-core-surfaces"
   | "policy-session-replay-disclosure"
   | "policy-vendor-mentions"
   | "policy-webmd-like-secondary-surfaces"
@@ -164,6 +165,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-no-links": "policy-no-links",
   "policy-notice-at-collection-link": "policy-notice-at-collection",
   "policy-privacy-choices-link": "policy-privacy-choices",
+  "policy-static-core-surfaces": "policy-static-core-surfaces",
   "policy-session-replay-disclosure": "policy-session-replay",
   "policy-vendor-mentions": "policy-vendors",
   "policy-webmd-like-secondary-surfaces": "policy-webmd-like-secondary",
@@ -779,6 +781,12 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,
     "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
     "policy-privacy-choices-link": `<a href="/privacy-choices">Your Privacy Choices</a>`,
+    "policy-static-core-surfaces": [
+      `<a href="/policies/privacy">Privacy Policy</a>`,
+      `<a href="/policies/cookies">Cookie Policy</a>`,
+      `<a href="/privacy-choices">Your Privacy Choices</a>`,
+      `<a href="/terms">Terms of Service</a>`,
+    ].join(" | "),
     "policy-session-replay-disclosure": `<a href="/policies/session-replay">Privacy Notice</a>`,
     "policy-vendor-mentions": `<a href="/policies/vendors">Privacy Policy</a>`,
     "policy-webmd-like-secondary-surfaces": `<a href="/policies/webmd-like-privacy">Privacy Policy</a>`,

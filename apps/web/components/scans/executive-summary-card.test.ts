@@ -1367,7 +1367,7 @@ test("ExecutiveSummaryCard hides review lenses when viewer access disallows them
   assert.match(html, /Analytics/);
   assert.match(html, /Session replay/);
   assert.match(html, /first observed at 1.2s/);
-  assert.match(html, /Scan end @ 12s/);
+  assert.match(html, /End @ 12s/);
   assert.doesNotMatch(html, /Captured/);
   assert.doesNotMatch(html, /Runtime/);
   assert.doesNotMatch(html, /Review lenses/);

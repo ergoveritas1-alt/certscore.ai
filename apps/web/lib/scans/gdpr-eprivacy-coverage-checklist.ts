@@ -385,8 +385,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "dpo_contact_point_disclosure",
-    label: "DPO/contact point",
-    explanation: "Whether retained privacy-policy evidence identified a DPO, privacy office, or data-protection contact point.",
+    label: "DPO / privacy contact point",
+    explanation: "Whether retained privacy-policy evidence identified a DPO, privacy office, privacy contact, or data-protection contact point.",
     findingIds: ["privacy_contact_path_present"],
     defaultFindingStatus: "Observed",
     notObservedText: "No canonical DPO or data-protection contact point evidence was retained for this scan context.",
@@ -1879,6 +1879,27 @@ function specializeChecklistRow(input: {
   };
 }
 
+function shouldPreferCoverageOutcomeForMissingReject(
+  rowId: string,
+  coverageOutcome: GdprEprivacyCoverageOutcome | undefined
+) {
+  if (
+    rowId !== "reject_all_path_availability" ||
+    (coverageOutcome?.status !== "Gap observed" && coverageOutcome?.status !== "Review signal")
+  ) {
+    return false;
+  }
+
+  const retained = getRecordValue(coverageOutcome.criticalEvidence.retainedEvidence) ?? {};
+  return (
+    readRetainedBoolean(retained, [
+      "preconsentCookieOrTrackingActivityObserved",
+      "preconsent_cookie_or_tracking_activity_observed"
+    ]) === true &&
+    readRetainedBoolean(retained, ["rejectControlObserved", "reject_control_observed"]) === false
+  );
+}
+
 function isFindingEligibleForCoverageRow(rowId: string, finding: UnifiedFindingDisplayPacket) {
   if (rowId === "post_reject_tracking_reduction") {
     return hasConfirmedPostRejectEvidence(finding);
@@ -2548,13 +2569,12 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
   ) {
     const noRejectRetainedWithPreconsentActivity =
       item.id === "reject_all_path_availability" &&
-      item.status === "Gap observed" &&
+      (item.status === "Gap observed" || item.status === "Review signal") &&
       readRetainedBoolean(retained, [
         "preconsentCookieOrTrackingActivityObserved",
         "preconsent_cookie_or_tracking_activity_observed"
       ]) === true &&
-      readRetainedBoolean(retained, ["rejectControlObserved", "reject_control_observed"]) === false &&
-      getStringValue(retained.reason) === "no_reject_option_retained_with_preconsent_activity";
+      readRetainedBoolean(retained, ["rejectControlObserved", "reject_control_observed"]) === false;
 
     if (noRejectRetainedWithPreconsentActivity) {
       return item;
@@ -2747,6 +2767,26 @@ export function deriveGdprEprivacyCoverageChecklist(
       const finding = projectedFindingsById.get(id);
       return finding && isProjectedFindingEligibleForCoverageRow(definition.id, finding) ? [finding] : [];
     });
+
+    if (coverageOutcome && shouldPreferCoverageOutcomeForMissingReject(definition.id, coverageOutcome)) {
+      const specialized = specializeChecklistRow({
+        coverageOutcome,
+        definition,
+        evidenceRefs: coverageOutcome.evidenceRefs,
+        findings: [],
+        projectedFindings: [],
+        status: coverageOutcome.status
+      });
+      return buildChecklistItem({
+        criticalEvidence: coverageOutcome.criticalEvidence,
+        evidenceRefs: specialized.evidenceRefs,
+        explanation: specialized.explanation,
+        id: definition.id,
+        label: specialized.label,
+        limitation: coverageOutcome.limitation,
+        status: specialized.status,
+      });
+    }
 
     if (matchingFindings.length > 0) {
       const status = normalizeFindingStatus(definition, matchingFindings);

@@ -73,7 +73,7 @@ locals {
       { name = "LLM_ENRICHMENT_ENABLED", value = var.llm_enrichment_enabled },
       { name = "PLAYWRIGHT_BROWSERS_PATH", value = var.playwright_browsers_path },
       { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED", value = "1" },
-      { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS", value = "10" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS", value = "2" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV", value = "production" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_de },
       { name = "CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_de },

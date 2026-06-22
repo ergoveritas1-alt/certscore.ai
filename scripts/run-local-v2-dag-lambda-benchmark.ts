@@ -137,14 +137,8 @@ async function waitForArtifact(input: { mode: Mode; scanId: string }) {
   const deadlineAt = Date.now() + 30 * 60_000;
   let lastStatus = "unknown";
   while (Date.now() < deadlineAt) {
-    if (input.mode === "lambda") {
-      await pollLocalV2DagLambdaResultQueue({
-        expectedTargetEnvironment: "local",
-        maxMessages: 10,
-        waitTimeSeconds: 5
-      });
-    }
     const row = await loadScanRow(input.scanId);
+    const targetQueueUrl = localV2DagLambdaResultQueueUrl(row?.scan_config_json);
     if (row) {
       lastStatus = row.status;
       const outDir = localV2DagOutDir(row.scan_config_json);
@@ -154,6 +148,14 @@ async function waitForArtifact(input: { mode: Mode; scanId: string }) {
       if (outDir && await exists(path.join(outDir, "CanonicalEvidenceBundle.json"))) {
         return { outDir, row };
       }
+    }
+    if (input.mode === "lambda") {
+      await pollLocalV2DagLambdaResultQueue({
+        expectedTargetEnvironment: "local",
+        maxMessages: 10,
+        queueUrl: targetQueueUrl ?? undefined,
+        waitTimeSeconds: targetQueueUrl ? 1 : 5
+      });
     }
     await sleep(input.mode === "lambda" ? 1_000 : 5_000);
   }
@@ -198,6 +200,14 @@ function localV2DagOutDir(config: Record<string, unknown> | null | undefined) {
     return null;
   }
   return path.isAbsolute(outDir) ? outDir : path.resolve(process.cwd(), outDir);
+}
+
+function localV2DagLambdaResultQueueUrl(config: Record<string, unknown> | null | undefined) {
+  const execution = asRecord(config?.execution);
+  const v2DagLambda = asRecord(execution.v2DagLambda);
+  return typeof v2DagLambda.resultQueueUrl === "string" && v2DagLambda.resultQueueUrl.trim()
+    ? v2DagLambda.resultQueueUrl.trim()
+    : null;
 }
 
 async function writeBenchmark(args: Args, results: RunResult[]) {

@@ -91,6 +91,17 @@ Do not remove or downsample evidence artifacts, screenshots, browser traces, con
 
 When a GDPR/ePrivacy signal is missing, prefer one of these fixes in order: upstream WS01 observed evidence capture, the WC01 typed evidence contract/fixture, WC01 normalized concern construction, WC01 concern policy, then unified finding/checklist projection. Do not create display-only fallbacks for missing evidence.
 
+### Scan timing triage
+
+When asked why a scan was slow, inspect retained timing artifacts before guessing. For local v2 DAG Lambda scans, start with the scan artifact directory and read:
+
+- `V2ScanCorePhases.json` for scanner-core checkpoints, module start/finish order, and whether policy-surface work overlapped pre-consent runtime.
+- `CanonicalEvidenceBundle.json` `modulesRun[].timingBreakdown` for child timings such as page navigation, early screenshot capture, consent UI capture/recapture, rendered policy discovery, policy fetch groups, vendor resolver, and artifact writes.
+- `LocalV2DagLambdaManifest.json` for Lambda phase timings, scan tuning, runtime diagnostics, target region, proxy/egress, viewport, and artifact upload durations.
+- `LambdaArtifactMirrorManifest.json` and scan events such as `v2_lambda_result.received` for post-Lambda result handoff, SQS polling, artifact mirroring, and WC01 materialization timing.
+
+Report scanner core time separately from post-completion handoff. Call out overlapping lanes explicitly; for example, policy-surface extraction may run in parallel with the pre-consent path, so its duration should not be added to scanner wall time unless the phase checkpoints show it was awaited after pre-consent. Preserve evidence quality when optimizing slow phases such as early screenshot capture or rendered footer/header discovery.
+
 ### Canonical classification registries
 
 Use canonical tracker, vendor, CMP, and domain classification registries for classification logic. Do not create feature-specific, regulation-specific, or display-specific vendor/domain registries unless the user explicitly approves a new canonical registry.

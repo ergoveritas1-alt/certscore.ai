@@ -136,6 +136,34 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes sanitizes and prefers Ireland-rel
   assert.doesNotMatch(retentionText, /Back to Top|<[^>]+>/i);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps generic contact excerpts out of controller observed", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            disclosureType: "controller_contact",
+            evidenceText: "Contact us through the website form for questions about our services.",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "Contact us through the website form for questions about our services."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.controller_contact_disclosure?.status, "Review signal");
+  assert.equal(outcomes.controller_contact_disclosure?.criticalEvidence.retainedEvidence.signalObserved, "partial");
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes detects common international transfer disclosure wording from retained policy text", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -183,6 +211,90 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not promote topic-only Artic
 
   assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Review signal");
   assert.equal(outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved, "partial");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps weak legal basis Article 13 excerpts in review", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            disclosureType: "legal_basis",
+            evidenceText: "We use cookies on this website to improve your experience. You may manage your consent choices.",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "We use cookies on this website to improve your experience. You may manage your consent choices."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Review signal");
+  assert.equal(outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved, "partial");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes requires row-specific recipient/vendor category evidence", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            disclosureType: "recipients_or_vendor_categories",
+            evidenceText: "We may use information to understand and improve how visitors use our website.",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "We may use information to understand and improve how visitors use our website."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Review signal");
+  assert.equal(outcomes.recipients_vendor_categories_disclosure?.criticalEvidence.retainedEvidence.signalObserved, "partial");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats DPO contact as neutral when a privacy contact exists", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            disclosureType: "controller_contact",
+            evidenceText: "The data controller is Example Inc. You can contact us through the website contact form.",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "The data controller is Example Inc. You can contact us through the website contact form."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Not observed");
+  assert.match(outcomes.dpo_contact_point_disclosure?.limitation ?? "", /controller\/contact surface was retained/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps financial-incentive text out of automated decision observed", () => {
@@ -1289,7 +1401,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes makes reject path not testable wi
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes calls out missing reject option when pre-consent activity is retained", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps missing reject partial when no accept control is retained", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -1314,10 +1426,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes calls out missing reject option w
   });
 
   const rejectPath = outcomes.reject_all_path_availability;
-  assert.equal(rejectPath?.status, "Gap observed");
-  assert.match(rejectPath?.limitation ?? "", /did not retain a first-layer reject/i);
+  assert.equal(rejectPath?.status, "Review signal");
+  assert.match(rejectPath?.limitation ?? "", /partial concern/i);
   assert.equal(rejectPath?.criticalEvidence.retainedEvidence.preconsentCookieOrTrackingActivityObserved, true);
   assert.equal(rejectPath?.criticalEvidence.retainedEvidence.rejectControlObserved, false);
+  assert.equal(rejectPath?.criticalEvidence.retainedEvidence.rejectPathAvailabilityEvidenceRetained, false);
   assert.equal(
     rejectPath?.criticalEvidence.retainedEvidence.reason,
     "no_reject_option_retained_with_preconsent_activity"
@@ -1393,6 +1506,55 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats banner-only cookie notice 
   );
   assert.equal(outcomes.reject_all_path_availability?.status, "Not observed");
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /did not include a structured first-layer reject/i);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps missing reject partial when first-layer controls are incomplete", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      cmp_framework_signal_observed: true,
+      cmp_runtime_signal_labels: ["cdn.cookielaw.org", "OptanonConsent"],
+      consent_surface_observed: true,
+      cookie_notice_observed: true,
+      hybridRuntimeEvidence: {
+        consentSummary: {
+          bannerPresent: true,
+          cmpFrameworkSignalObserved: true,
+          cookieNoticeObserved: true
+        },
+        networkSummary: {
+          preConsentThirdPartyRequestCount: 178
+        },
+        storageSummary: {
+          cookiesBeforeConsentCount: 38
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerConsentChoices: {
+          visibleChoiceLabels: []
+        },
+        rejectAvailableOnFirstLayer: false,
+        rejectControlObserved: false
+      }
+    },
+    snapshot: {
+      cmp_vendor_name: "OneTrust CMP",
+      cookie_banner_present: true,
+      third_party_request_count: 178
+    }
+  });
+
+  const outcome = outcomes.reject_all_path_availability;
+  assert.equal(outcome?.status, "Review signal");
+  assert.match(outcome?.limitation ?? "", /partial concern/i);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, true);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.preconsentCookieOrTrackingActivityObserved, true);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.rejectControlObserved, false);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.rejectPathAvailabilityEvidenceRetained, false);
+  assert.equal(
+    outcome?.criticalEvidence.retainedEvidence.reason,
+    "no_reject_option_retained_with_preconsent_activity"
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes flags first-layer accept-only cookie consent as a reject-option gap", () => {
@@ -1702,6 +1864,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat Akamai security or
       cdnEdgeDelivery: [],
       functional: [],
       sessionReplay: [],
+      tagManagement: [],
       unknown: []
     }
   );
@@ -2424,6 +2587,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes surfaces post-accept session repl
   assert.match(outcome?.limitation ?? "", /no pre-consent replay evidence was retained/i);
   assert.deepEqual(outcome?.evidenceRefs, [
     "Session replay signal observed after consent",
+    "First session replay signal: 2410ms after scan start",
     "Runtime vendor: Microsoft Clarity",
     "Consent state: post_accept"
   ]);
@@ -2477,11 +2641,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes declares retained session replay 
 
   const outcome = outcomes.session_replay_fingerprinting_review;
   assert.equal(outcome?.status, "Observed");
-  assert.match(outcome?.limitation ?? "", /no pre-consent replay evidence retained/i);
+  assert.match(outcome?.limitation ?? "", /does not confirm the signal fired before consent/i);
   assert.deepEqual(outcome?.evidenceRefs, [
-    "Session replay signal observed; pre-consent replay not retained",
+    "Session replay signal observed; pre-consent timing not confirmed",
     "Runtime vendor: Microsoft Clarity",
-    "Consent timing: no pre-consent replay evidence retained"
+    "Consent timing: not confirmed as pre-consent"
   ]);
   assert.deepEqual(
     outcome?.criticalEvidence.retainedEvidence.sessionReplayEvidence,
@@ -2580,7 +2744,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 session replay summ
 
   const outcome = outcomes.session_replay_fingerprinting_review;
   const beforeConsentOutcome = outcomes.session_replay_before_consent;
-  assert.equal(outcome?.status, "Observed");
+  assert.equal(outcome?.status, "Review signal");
   assert.equal(beforeConsentOutcome?.status, "Gap observed");
   assert.match(beforeConsentOutcome?.limitation ?? "", /before a recorded consent action/i);
   assert.deepEqual(beforeConsentOutcome?.evidenceRefs, [
@@ -2632,7 +2796,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gaps session replay on sensitive 
     }
   });
 
-  assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Observed");
+  assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Review signal");
   assert.equal(outcomes.session_replay_sensitive_surface?.status, "Gap observed");
   assert.match(outcomes.session_replay_sensitive_surface?.limitation ?? "", /sensitive collection surface/i);
 });
@@ -2688,7 +2852,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes still treats Microsoft Clarity as
     }
   });
 
-  assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Observed");
+  assert.equal(outcomes.session_replay_fingerprinting_review?.status, "Review signal");
   assert.equal(outcomes.session_replay_before_consent?.status, "Gap observed");
   assert.match(outcomes.session_replay_before_consent?.limitation ?? "", /before a recorded consent action/i);
 });

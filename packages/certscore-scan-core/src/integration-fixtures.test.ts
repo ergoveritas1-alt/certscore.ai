@@ -586,6 +586,70 @@ test("planned pre-consent baseline skips screenshots when no consent surface is 
   }
 });
 
+test("planned pre-consent baseline can retain viewport-first and same-page full-page screenshots", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-viewport-screenshot-"));
+  try {
+    const url = server.urlFor("policy-footer-privacy");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      waitMode: "full",
+    });
+
+    assert.equal(result.moduleRun.status, "completed");
+    const viewportScreenshot = result.screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent");
+    const fullPageScreenshot = result.screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page");
+    assert.equal(viewportScreenshot?.captureMethod, "primary_viewport_fallback");
+    assert.equal(fullPageScreenshot?.captureMethod, "primary_full_page");
+    assert.equal(result.screenshots[0]?.artifactId, "screenshot_pre_consent_full_page");
+    assert.equal(result.visualCapture.captureMethod, "primary_full_page");
+    assert.equal(
+      result.visualCapture.notes.some((note) => note.includes("Viewport pre-consent screenshot retained")),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("planned pre-consent baseline avoids duplicate recaptures for retained ambiguous consent surfaces", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-text-backed-consent-"));
+  try {
+    const url = server.urlFor("consent-ambiguous-controls");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const timingLabels = result.moduleRun.timingBreakdown?.map((entry) => entry.label) ?? [];
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(result.consentUiObservations[0]?.likelyPresent, true);
+    assert.equal(result.consentUiObservations[0]?.acceptControlObserved, false);
+    assert.equal(result.consentUiObservations[0]?.rejectControlObserved, false);
+    assert.equal(timingLabels.includes("page evidence: consent UI timeout recapture"), false);
+    assert.equal(timingLabels.includes("consent UI control recapture"), false);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner bounds post-screenshot consent recapture", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-recapture-"));

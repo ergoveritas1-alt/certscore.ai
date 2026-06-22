@@ -2,6 +2,7 @@ import type {
   GdprEprivacyCoverageChecklistItem,
   GdprEprivacyCoverageChecklistStatus
 } from "./gdpr-eprivacy-coverage-checklist";
+import { getAssessmentDirection } from "./gdpr-eprivacy-assessment-direction";
 
 export type GdprEprivacyReviewSummaryBullet = {
   id: string;
@@ -543,9 +544,13 @@ export function deriveGdprEprivacyReviewSummary(
     item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation"
   ).length;
   const gapCount = items.filter((item) => item.assessmentStatus === "gap_observed").length;
-  const partialConcernCount = items.filter(isPartialConcernReviewRow).length;
+  const partialConcernCount = items.filter((item) =>
+    item.assessmentStatus !== "gap_observed" &&
+    item.status !== "Gap observed" &&
+    getAssessmentDirection(item) === "potential_concern"
+  ).length;
   const reviewSignalCount = items.filter((item) =>
-    item.assessmentStatus === "review_signal" && !isPartialConcernReviewRow(item)
+    getAssessmentDirection(item) === "review_signal"
   ).length;
   const evidenceCards = items.map(deriveGdprEprivacyEvidenceCard);
 
@@ -585,23 +590,4 @@ function formatPriorityReviewText(input: {
     `${input.reviewSignalCount} review signal${input.reviewSignalCount === 1 ? "" : "s"}`
   ].filter((part): part is string => Boolean(part));
   return `${parts.join(", ")}.`;
-}
-
-function isPartialConcernReviewRow(item: GdprEprivacyCoverageChecklistItem) {
-  if (item.assessmentStatus !== "review_signal" || item.evidenceState !== "observed") {
-    return false;
-  }
-  const evidenceText = JSON.stringify(item.criticalEvidence.retainedEvidence ?? {});
-  switch (item.id) {
-    case "advertising_retargeting_vendor_signal_observed":
-      return /advertisingVendorCount|advertising_vendor_count|advertisingRetargetingVendorCount|advertising_retargeting_vendor_count|adtechVendorCount|adtech_vendor_count|advertis|adtech|doubleclick|google ads|ad serving|ad measurement|ad verification|programmatic/i.test(evidenceText);
-    case "retargeting_behavioral_advertising_signal_observed":
-      return /retargetingBehavioralAdvertisingVendorCount|retargeting_behavioral_advertising_vendor_count|retargetingVendorCount|retargeting_vendor_count|retarget|remarket|behavioral advertis|cross-site|cross site|audience|identity sync|idsync|meta pixel|facebook pixel|linkedin insight|tiktok pixel/i.test(evidenceText);
-    case "analytics_vendor_observed":
-      return /analyticsVendorCount|analytics_vendor_count|marketingAnalyticsVendorCount|marketing_analytics_vendor_count|google analytics|adobe analytics|mixpanel|amplitude|posthog|analytics|measurement/i.test(evidenceText);
-    case "embedded_content_pre_consent":
-      return /videoAdSdk|video_ad_sdk|imasdk\.googleapis\.com|ima3\.js|gampad|doubleclick\.net|googletagservices\.com|freewheel|brightline\.tv/i.test(evidenceText);
-    default:
-      return false;
-  }
 }

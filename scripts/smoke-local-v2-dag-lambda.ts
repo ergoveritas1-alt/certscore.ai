@@ -67,8 +67,37 @@ async function loadScanEvents(scanId: string) {
   }>;
 }
 
+async function loadLambdaResultQueueUrl(scanId: string) {
+  const result = await query(
+    `select scan_config_json
+       from scans
+      where id = $1
+      limit 1`,
+    [scanId],
+    { readOnly: true }
+  );
+  const config = asRecord(result.rows[0]?.scan_config_json);
+  const execution = asRecord(config.execution);
+  const v2DagLambda = asRecord(execution.v2DagLambda);
+  return typeof v2DagLambda.resultQueueUrl === "string" && v2DagLambda.resultQueueUrl.trim()
+    ? v2DagLambda.resultQueueUrl.trim()
+    : null;
+}
+
 function lambdaEvents(events: Awaited<ReturnType<typeof loadScanEvents>>) {
   return events.filter((event) => event.event_type.startsWith("v2_lambda"));
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function findResultEvent(events: Awaited<ReturnType<typeof loadScanEvents>>) {
+  return events.find((event) => event.event_type === "v2_lambda_result.received") ?? null;
+}
+
+function findFailedResultEvent(events: Awaited<ReturnType<typeof loadScanEvents>>) {
+  return events.find((event) => event.event_type === "v2_lambda_result.failed") ?? null;
 }
 
 async function main() {
@@ -83,18 +112,7 @@ async function main() {
 
   let latestEvents = await loadScanEvents(scanId);
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    await pollLocalV2DagLambdaResultQueue({
-      expectedTargetEnvironment: "local",
-      maxMessages: 10,
-      waitTimeSeconds: Math.min(waitSeconds, 20)
-    });
-    latestEvents = await loadScanEvents(scanId);
-    const localWorkerStarted = latestEvents.find((event) => event.event_type === "full_scan.started");
-    if (localWorkerStarted) {
-      throw new Error(`Local v2 DAG Lambda smoke expected Lambda-only execution, but local worker started scan ${scanId}: ${JSON.stringify(localWorkerStarted.metadata_json)}`);
-    }
-
-    const resultEvent = latestEvents.find((event) => event.event_type === "v2_lambda_result.received");
+    let resultEvent = findResultEvent(latestEvents);
     if (resultEvent) {
       console.log(JSON.stringify({
         baseUrl,
@@ -109,7 +127,40 @@ async function main() {
       return;
     }
 
-    const failedEvent = latestEvents.find((event) => event.event_type === "v2_lambda_result.failed");
+    const existingFailedEvent = findFailedResultEvent(latestEvents);
+    if (existingFailedEvent) {
+      throw new Error(`Local v2 DAG Lambda smoke returned failed result for ${scanId}: ${JSON.stringify(existingFailedEvent.metadata_json)}`);
+    }
+
+    const queueUrl = await loadLambdaResultQueueUrl(scanId);
+    await pollLocalV2DagLambdaResultQueue({
+      expectedTargetEnvironment: "local",
+      maxMessages: 10,
+      queueUrl: queueUrl ?? undefined,
+      waitTimeSeconds: queueUrl ? Math.min(waitSeconds, 2) : Math.min(waitSeconds, 20)
+    });
+    latestEvents = await loadScanEvents(scanId);
+    const localWorkerStarted = latestEvents.find((event) => event.event_type === "full_scan.started");
+    if (localWorkerStarted) {
+      throw new Error(`Local v2 DAG Lambda smoke expected Lambda-only execution, but local worker started scan ${scanId}: ${JSON.stringify(localWorkerStarted.metadata_json)}`);
+    }
+
+    resultEvent = findResultEvent(latestEvents);
+    if (resultEvent) {
+      console.log(JSON.stringify({
+        baseUrl,
+        domain,
+        lambdaDispatchRegion: lambdaEvents(latestEvents).find((event) => event.event_type === "v2_lambda_dispatch.started")?.metadata_json?.awsRegion ?? null,
+        lambdaResultStatus: resultEvent.metadata_json?.resultStatus ?? null,
+        scanFrom,
+        scanId,
+        scanUrl: scan.scanUrl ?? `/scan/${scanId}`,
+        status: "passed"
+      }, null, 2));
+      return;
+    }
+
+    const failedEvent = findFailedResultEvent(latestEvents);
     if (failedEvent) {
       throw new Error(`Local v2 DAG Lambda smoke returned failed result for ${scanId}: ${JSON.stringify(failedEvent.metadata_json)}`);
     }

@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
+import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 import type { ScanDetailResponse } from "./get-scan-by-id";
@@ -99,7 +101,26 @@ test("getLocalV2DagReportInput reads Lambda scan artifact URI from retained resu
           productionFindingIntegration: false
         }
       }
-    ]
+    ],
+    scan: {
+      ...makeScanRecord().scan,
+      scanConfigJson: {
+        hostname: "caltech.edu",
+        normalizedUrl: "https://caltech.edu/",
+        processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+        execution: {
+          v2DagLambda: {
+            resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/ie-results"
+          },
+          v2DagParallel: {
+            artifactOnly: true,
+            localOnly: true,
+            profile: "standard",
+            productionFindingIntegration: false
+          }
+        }
+      }
+    }
   }));
 
   assert.equal(
@@ -108,6 +129,7 @@ test("getLocalV2DagReportInput reads Lambda scan artifact URI from retained resu
   );
   assert.equal(input?.outDir, null);
   assert.equal(input?.profile, "standard");
+  assert.equal(input?.lambdaResultQueueUrl, "https://sqs.eu-west-1.amazonaws.com/123/ie-results");
 });
 
 test("getLocalV2DagReportInput ignores Lambda events that would enable production finding integration", async () => {
@@ -171,13 +193,13 @@ test("shouldAttemptLocalV2DagLambdaResultRefresh gates stale in-flight Lambda sc
 
   assert.equal(
     shouldAttemptLocalV2DagLambdaResultRefresh(makeScanRecord({
-      scan: {
-        ...baseScan,
-        completedAt: null,
-        startedAt: "2026-06-17T13:14:05.000Z",
-        status: "running"
-      }
-    }), nowMs),
+	    scan: {
+	      ...baseScan,
+	      completedAt: null,
+	      startedAt: "2026-06-17T13:14:16.000Z",
+	      status: "running"
+	    }
+	  }), nowMs),
     false
   );
 
@@ -234,8 +256,8 @@ test("tryRefreshLocalV2DagLambdaResult throttles repeated page refresh polling",
   };
 
   assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs, pollResultQueue }), false);
-  assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs: nowMs + 5_000, pollResultQueue }), false);
-  assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs: nowMs + 31_000, pollResultQueue }), false);
+  assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs: nowMs + 4_000, pollResultQueue }), false);
+  assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs: nowMs + 6_000, pollResultQueue }), false);
   assert.equal(pollCount, 2);
 
   resetLocalV2DagLambdaResultRefreshStateForTest();
@@ -597,8 +619,18 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
       schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
       screenshots: [
         {
+          artifactId: "screenshot_pre_consent_full_page",
+          capturedAtMs: 1400,
+          captureMethod: "primary_full_page",
+          consentStateAtTime: "pre_consent",
+          pagePhase: "network_idle",
+          path: "/tmp/certscore-v2/visual-evidence-fixture/screenshot-pre-consent-full-page.png",
+          url: "https://example.test/"
+        },
+        {
           artifactId: "screenshot_pre_consent",
           capturedAtMs: 1200,
+          captureMethod: "primary_viewport_fallback",
           consentStateAtTime: "pre_consent",
           pagePhase: "network_idle",
           path: "/tmp/certscore-v2/visual-evidence-fixture/screenshot-pre-consent.png",
@@ -648,8 +680,14 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
 
     const visualArtifacts = detail.runtimeArtifacts?.visual_evidence_artifacts as Array<Record<string, unknown>> | undefined;
     assert.equal(visualArtifacts?.[0]?.bucket, "ws01-scan-artifacts-199536052647-us-west-1");
+    assert.equal(visualArtifacts?.[0]?.id, "local_v2:screenshot_pre_consent_full_page");
+    assert.equal(visualArtifacts?.[0]?.capture_method, "primary_full_page");
     assert.equal(
       visualArtifacts?.[0]?.key,
+      "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent-full-page.png"
+    );
+    assert.equal(
+      visualArtifacts?.[1]?.key,
       "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent.png"
     );
   } finally {
@@ -809,6 +847,167 @@ test("materializeLocalV2DagScanDetail promotes retained access-denied pages to s
     assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, false);
     assert.equal(detail.scan.pagesScanned, 0);
     assert.equal(detail.signals.some((signal) => signal.key === "tracking_before_consent_detected"), false);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail keeps missing reject actionable when runtime activity was retained", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/missing-reject-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      cmpRuntimeObservations: [
+        {
+          entity: "OneTrust",
+          observedAtMs: 1200,
+          product: "OneTrust",
+          signals: [
+            {
+              matchedField: "script_host",
+              matchedValueRedacted: "cdn.cookielaw.org",
+              signalType: "script"
+            },
+            {
+              matchedField: "cookie_name",
+              matchedValueRedacted: "OptanonConsent",
+              signalType: "cookie"
+            }
+          ],
+          vendor: "OneTrust"
+        }
+      ],
+      completedAt: "2026-06-21T21:53:14.000Z",
+      consentUiObservations: [
+        {
+          acceptControlObserved: false,
+          basis: [
+            "bounded_capture_timeout_or_failure",
+            "dom_text_fallback_after_consent_ui_timeout",
+            "keyword:cookie",
+            "keyword:consent"
+          ],
+          confidence: 0.72,
+          likelyPresent: true,
+          managePreferencesControlObserved: false,
+          observationId: "consent_ui_pre_consent",
+          rejectControlObserved: false,
+          textExcerpt: "We and our partners use cookies on this site to improve our service. Continue",
+          visibleChoiceLabels: []
+        }
+      ],
+      cookieEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          cookieDomain: ".nbcnews.com",
+          cookieName: "OptanonConsent",
+          cookieParty: "first_party",
+          cookiePurpose: "consent_management",
+          operation: "set",
+          thirdParty: false,
+          timestampMs: 1400,
+          url: "https://www.nbcnews.com/"
+        }
+      ],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: true
+      },
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "tags.example.test",
+          isThirdParty: true,
+          thirdParty: true,
+          timestampMs: 1300,
+          url: "https://tags.example.test/pixel.js"
+        }
+      ],
+      normalizedUrl: "https://www.nbcnews.com/",
+      runtimeCoverage: {
+        coverageStatus: "limited_partial",
+        fallbackModesUsed: [],
+        limitationKeys: ["cmp_runtime_without_actionable_surface"],
+        notes: [
+          "CMP runtime evidence was observed, but no actionable consent surface or first-layer controls were retained in bounded capture."
+        ],
+        observationCounts: {
+          cookieEvents: 1,
+          cookiesBeforeConsent: 1,
+          networkEvents: 1,
+          normalizedVendors: 1,
+          observedJourneys: 1,
+          thirdPartyRequests: 1
+        },
+        silentEmpty: false
+      },
+      scanId: "missing-reject-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 900,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "domcontentloaded",
+          path: "/tmp/certscore-v2/missing-reject-fixture/screenshot-pre-consent.png",
+          url: "https://www.nbcnews.com/"
+        }
+      ],
+      startedAt: "2026-06-21T21:53:00.000Z",
+      url: "https://www.nbcnews.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "nbcnews.com",
+        scanConfigJson: {
+          hostname: "nbcnews.com",
+          normalizedUrl: "https://www.nbcnews.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, true);
+    assert.equal(detail.runtimeArtifacts?.consent_surface_observed, true);
+    assert.equal(detail.runtimeArtifacts?.consent_preconsent_violation_count, 1);
+
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      coverageLimited: false,
+      events: detail.events,
+      runtimeArtifacts: detail.runtimeArtifacts,
+      scanCompleted: true,
+      snapshot: detail.snapshot
+    });
+    const checklist = deriveGdprEprivacyCoverageChecklist({
+      coverageLimited: false,
+      coverageOutcomes: outcomes,
+      scanCompleted: true,
+      unifiedFindings: buildScanReportUnifiedFindingsForScan(detail)
+    });
+    const rejectPath = checklist.find((item) => item.id === "reject_all_path_availability");
+
+    assert.equal(rejectPath?.status, "Review signal");
+    assert.equal(rejectPath?.assessmentStatus, "review_signal");
+    assert.notEqual(rejectPath?.evidenceState, "not_testable");
+    assert.match(rejectPath?.limitation ?? "", /partial concern/i);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

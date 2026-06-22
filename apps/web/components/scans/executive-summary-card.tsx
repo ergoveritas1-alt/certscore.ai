@@ -3185,13 +3185,13 @@ function ExecutiveTimelinePane(input: {
   });
 
   return (
-    <div className="min-w-0 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]" data-executive-timeline-pane>
+    <div className="flex min-w-0 flex-col rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]" data-executive-timeline-pane>
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan Timeline</p>
-      <div className="relative mt-3 min-h-[17rem] overflow-hidden rounded-[1.05rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] px-3 py-3 shadow-inner shadow-slate-100/70">
+      <div className="relative mt-3 min-h-[17rem] flex-1 overflow-hidden rounded-[1.05rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] px-3 py-3 shadow-inner shadow-slate-100/70">
         <div className="absolute bottom-5 left-[1.15rem] top-5 w-px bg-gradient-to-b from-slate-200 via-slate-300 to-slate-200" aria-hidden="true" />
         <div className="absolute left-2 right-3 top-3 flex items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-300 bg-white shadow-sm" aria-hidden="true" />
-          <span className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-700 shadow-sm">
+          <span className="min-w-0 flex-1 rounded-lg border-2 border-slate-200 bg-white/95 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-700 shadow-sm">
             Scan start @ 0s
           </span>
         </div>
@@ -3210,8 +3210,8 @@ function ExecutiveTimelinePane(input: {
         ))}
         <div className="absolute bottom-3 left-2 right-3 flex items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-700 bg-white shadow-sm" aria-hidden="true" />
-          <span className="min-w-0 flex-1 rounded-lg border border-[#0f8bd7] bg-[#0f8bd7] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-white shadow-sm">
-            Scan end @ {formatTimelineOffset(durationMs)}
+          <span className="min-w-0 flex-1 rounded-lg border-2 border-[#0f8bd7] bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-950 shadow-sm">
+            End @ {formatTimelineOffset(durationMs)}
           </span>
         </div>
       </div>
@@ -5215,7 +5215,7 @@ export function ExecutiveSummaryCard(input: {
           </div>
         </div>
 
-        <div className="grid min-w-0 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(11rem,0.85fr)] min-[1000px]:w-[31rem] min-[1000px]:grid-cols-[17.5rem_12.75rem]">
+        <div className="grid min-w-0 items-stretch gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(11rem,0.85fr)] min-[1000px]:w-[31rem] min-[1000px]:grid-cols-[17.5rem_12.75rem]">
           <div
             className="min-w-0 space-y-3 rounded-[1.7rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(241,245,249,0.72))] p-3 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.22)]"
             data-executive-snapshot-pane

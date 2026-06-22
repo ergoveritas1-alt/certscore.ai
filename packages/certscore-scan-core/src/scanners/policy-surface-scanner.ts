@@ -194,7 +194,10 @@ export async function policySurfaceScanner(
     const fastStaticCoverage =
       input.discoveryMode === "fast" &&
       hasFastStaticPolicyCoverage(staticCandidates) &&
-      hasStaticPreferenceControlCoverage(staticCandidates);
+      (
+        hasStaticPreferenceControlCoverage(staticCandidates) ||
+        hasStaticCoreSurfaceCoverage(staticCandidates)
+      );
     const renderedCandidates = fastStaticCoverage
       ? await recordPolicyTiming(
         timingBreakdown,
@@ -851,9 +854,10 @@ async function extractRenderedCandidates(
     browser = input.browser ?? await chromium.launch(chromiumLaunchOptions({ headless: true }));
     const context = await browser.newContext(chromiumContextOptions());
     const page = await context.newPage();
+    const navigationTimeoutMs = input.discoveryMode === "fast" ? 4_000 : 8_000;
     await page.goto(input.normalizedUrl, {
       waitUntil: "domcontentloaded",
-      timeout: Math.min(8_000, Math.max(1_000, remainingMs(input, moduleStartedAtMs))),
+      timeout: Math.min(navigationTimeoutMs, Math.max(1_000, remainingMs(input, moduleStartedAtMs))),
     });
     await page.waitForLoadState("networkidle", {
       timeout: Math.min(1_000, Math.max(500, remainingMs(input, moduleStartedAtMs))),
@@ -1172,6 +1176,23 @@ function hasStaticPreferenceControlCoverage(candidates: PolicySurfaceCandidate[]
       candidate.deterministicSurfaceType === "your_privacy_choices"
     )
   );
+}
+
+function hasStaticCoreSurfaceCoverage(candidates: PolicySurfaceCandidate[]): boolean {
+  const fetchable = deterministicFetchFallback(candidates);
+  if (fetchable.length === 0) {
+    return false;
+  }
+  const surfaceTypes = new Set(fetchable.map((candidate) => candidate.deterministicSurfaceType));
+  const hasCookieOrControlSurface =
+    surfaceTypes.has("cookie_policy") ||
+    surfaceTypes.has("consent_preferences") ||
+    surfaceTypes.has("cookie_settings") ||
+    surfaceTypes.has("your_privacy_choices") ||
+    surfaceTypes.has("do_not_sell_or_share");
+  return surfaceTypes.has("privacy_policy") &&
+    surfaceTypes.has("terms") &&
+    hasCookieOrControlSurface;
 }
 
 function policyFetchLimit(input: PolicySurfaceScannerInput): number {

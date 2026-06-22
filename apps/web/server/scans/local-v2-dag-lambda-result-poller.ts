@@ -323,6 +323,11 @@ export async function recordLocalV2DagLambdaResultEvent(
     s3Client: options.s3Client,
     workspaceRoot: options.workspaceRoot
   });
+  const wc01ResultRecordedAt = new Date();
+  const lambdaCompletedAtMs = Date.parse(parsedMessage.completedAt);
+  const lambdaToWc01ResultRecordedMs = Number.isFinite(lambdaCompletedAtMs)
+    ? Math.max(0, wc01ResultRecordedAt.getTime() - lambdaCompletedAtMs)
+    : null;
   if (artifactMirror) {
     await query(
       `update scans
@@ -408,6 +413,13 @@ export async function recordLocalV2DagLambdaResultEvent(
         : null,
       artifactPointers,
       completedAt: parsedMessage.completedAt,
+      handoffTiming: {
+        artifactMirrorDurationMs: artifactMirror?.durationMs ?? null,
+        artifactMirroredAt: artifactMirror ? wc01ResultRecordedAt.toISOString() : null,
+        lambdaCompletedAt: parsedMessage.completedAt,
+        lambdaToWc01ResultRecordedMs,
+        wc01ResultRecordedAt: wc01ResultRecordedAt.toISOString()
+      },
       lambdaPhaseTimings: parsedMessage.phaseTimings ?? [],
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
@@ -468,7 +480,13 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
   };
   const handleMessage = input.handleMessage ?? handleLocalV2DagLambdaResultMessage;
 
-  for (const queueUrl of queueUrls) {
+  const pollQueue = async (queueUrl: string): Promise<LocalV2DagLambdaPollResult> => {
+    const queueResult: LocalV2DagLambdaPollResult = {
+      deleted: 0,
+      failed: 0,
+      handled: 0,
+      received: 0
+    };
     const queueRegion = getSqsQueueRegion(queueUrl) ?? "eu-west-1";
     const sqsClient = input.sqsClient ?? new SQSClient({ region: queueRegion });
     const s3Client = input.s3Client ?? new S3Client({ region: queueRegion });
@@ -479,7 +497,7 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
       WaitTimeSeconds: Math.min(Math.max(input.waitTimeSeconds ?? 10, 0), 20)
     })) as ReceiveMessageCommandOutput;
     const messages = response.Messages ?? [];
-    result.received += messages.length;
+    queueResult.received += messages.length;
 
     for (const message of messages) {
       const rawMessage = messageBody(message);
@@ -492,8 +510,8 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
           QueueUrl: queueUrl,
           ReceiptHandle: getReceiptHandle(message)
         }));
-        result.deleted += 1;
-        result.handled += 1;
+        queueResult.deleted += 1;
+        queueResult.handled += 1;
       } catch (error) {
         const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
         if (manualSmokeScanId) {
@@ -501,7 +519,7 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
             QueueUrl: queueUrl,
             ReceiptHandle: getReceiptHandle(message)
           }));
-          result.deleted += 1;
+          queueResult.deleted += 1;
           console.warn("[web] ignored manual local v2 DAG Lambda smoke result", {
             messageId: message.MessageId ?? null,
             queueRegion: getSqsQueueRegion(queueUrl),
@@ -509,7 +527,7 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
           });
           continue;
         }
-        result.failed += 1;
+        queueResult.failed += 1;
         console.error("[web] local v2 DAG Lambda result message rejected", {
           error: error instanceof Error ? error.message : String(error),
           messageId: message.MessageId ?? null,
@@ -517,6 +535,15 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
         });
       }
     }
+    return queueResult;
+  };
+
+  const queueResults = await Promise.all(queueUrls.map((queueUrl) => pollQueue(queueUrl)));
+  for (const queueResult of queueResults) {
+    result.deleted += queueResult.deleted;
+    result.failed += queueResult.failed;
+    result.handled += queueResult.handled;
+    result.received += queueResult.received;
   }
 
   return result;

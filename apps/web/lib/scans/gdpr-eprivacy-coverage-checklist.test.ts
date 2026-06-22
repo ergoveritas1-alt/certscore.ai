@@ -746,6 +746,39 @@ test("deriveGdprEprivacyCoverageChecklist keeps missing reject as a gap when pre
   assert.match(rejectPath.limitation ?? "", /did not retain a first-layer reject/i);
 });
 
+test("deriveGdprEprivacyCoverageChecklist keeps missing reject as a gap without relying on policy reason strings", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      reject_all_path_availability: makeCoverageOutcome({
+        evidenceRefs: [
+          "Evidence: retained pre-consent cookie/tracking activity",
+          "Evidence: no first-layer reject option retained"
+        ],
+        limitation:
+          "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain a first-layer reject, decline, refuse, or continue-without-accepting option.",
+        retainedEvidence: {
+          consentSurfaceObserved: true,
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          preconsentCookieOrTrackingActivityObserved: true,
+          rejectControlObserved: false
+        },
+        rowId: "reject_all_path_availability",
+        status: "Gap observed"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const rejectPath = byId(items, "reject_all_path_availability");
+  assert.equal(rejectPath.status, "Gap observed");
+  assert.equal(rejectPath.assessmentStatus, "gap_observed");
+  assert.equal(rejectPath.evidenceState, "not_observed");
+  assert.doesNotMatch(rejectPath.limitation ?? "", /not testable/i);
+});
+
 test("deriveGdprEprivacyCoverageChecklist does not map generic transfer disclosure findings to cross-border endpoint review", () => {
   const genericItems = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
@@ -1715,8 +1748,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps pre-consent tracking entity prev
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.match(row.criticalEvidence.statusBasis, /Google Tag Manager/i);
-  assert.match(row.criticalEvidence.statusBasis, /not recorded before these requests/i);
+  assert.match(row.criticalEvidence.statusBasis, /pre-consent request\/vendor timing evidence/i);
   const packet = JSON.stringify(row.criticalEvidence.retainedEvidence.findingEntities);
   assert.match(packet, /Google Tag Manager/);
   assert.doesNotMatch(packet, /runtime_vendor_not_disclosed|consent_governance_disclosure_gap|consentGovernanceDisclosureEvidence/i);
@@ -2246,6 +2278,30 @@ test("deriveGdprEprivacyReviewSummary separates partial concerns from review sig
           retargetingBehavioralAdvertisingVendors: ["Meta Pixel"]
         }
       }),
+      reject_all_path_availability: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: consent banner without reject"],
+        limitation: "Consent surface observed, but structured reject evidence was not retained.",
+        rowId: "reject_all_path_availability",
+        status: "Not observed",
+        retainedEvidence: {
+          consentSurfaceObserved: true,
+          preconsentCookieOrTrackingActivityObserved: true,
+          rejectAvailableOnFirstLayer: false
+        }
+      }),
+      session_replay_fingerprinting_review: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: session replay"],
+        limitation: "Session replay was observed during the scan.",
+        rowId: "session_replay_fingerprinting_review",
+        status: "Observed",
+        retainedEvidence: {
+          sessionReplayEvidence: {
+            firstSeenMs: 5276,
+            preConsentObserved: false,
+            vendors: ["Hotjar"]
+          }
+        }
+      }),
       consent_choice_quality: makeCoverageOutcome({
         evidenceRefs: ["Evidence: consent quality"],
         limitation: "Consent choice quality requires review.",
@@ -2259,5 +2315,5 @@ test("deriveGdprEprivacyReviewSummary separates partial concerns from review sig
 
   const summary = deriveGdprEprivacyReviewSummary(items);
 
-  assert.equal(summary.priorityReviewText, "1 gap observed, 2 partial concerns, 1 review signal.");
+  assert.equal(summary.priorityReviewText, "1 gap observed, 4 partial concerns, 1 review signal.");
 });

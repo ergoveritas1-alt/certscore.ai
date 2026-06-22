@@ -48,6 +48,33 @@ test("policySurfaceScanner fast mode keeps rendered discovery when static links 
   });
 });
 
+test("policySurfaceScanner fast mode skips rendered discovery when static core surfaces are present", async () => {
+  await withPolicyScan("policy-static-core-surfaces", async ({ result, baseUrl }) => {
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const cookie = observedSurface(result.policySurfaceObservations, "cookie_policy");
+    const terms = observedSurface(result.policySurfaceObservations, "terms");
+    const choices = observedSurface(result.policySurfaceObservations, "your_privacy_choices");
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(cookie?.status, "fetched");
+    assert.equal(terms?.status, "fetched");
+    assert.equal(choices?.status, "fetched");
+    assert.equal(terms?.normalizedUrl, `${baseUrl}/terms`);
+    assert.equal(labels.includes("rendered discovery"), false);
+    assert.equal(labels.includes("rendered discovery skipped"), true);
+    assert.equal(labels.includes("deterministic link ranking"), true);
+    assert.equal(labels.includes("Nano link ranking"), false);
+  }, {
+    discoveryMode: "fast",
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run when static core surfaces are complete.");
+      },
+    },
+  });
+});
+
 test("policySurfaceScanner classifies expected policy and control surfaces", async () => {
   const cases = [
     ["policy-cookie-link", "cookie_policy", "cookies"],

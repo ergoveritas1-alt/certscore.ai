@@ -404,6 +404,11 @@ export async function recordLocalV2DagLambdaResult(
     s3Client: options.s3Client,
     workspaceRoot: options.workspaceRoot
   });
+  const wc01ResultRecordedAt = new Date();
+  const lambdaCompletedAtMs = Date.parse(parsedMessage.completedAt);
+  const lambdaToWc01ResultRecordedMs = Number.isFinite(lambdaCompletedAtMs)
+    ? Math.max(0, wc01ResultRecordedAt.getTime() - lambdaCompletedAtMs)
+    : null;
   if (artifactMirror) {
     await query(
       `update scans
@@ -512,6 +517,13 @@ export async function recordLocalV2DagLambdaResult(
           : null,
         artifactPointers: parsedMessage.artifactPointers ?? {},
         completedAt: parsedMessage.completedAt,
+        handoffTiming: {
+          artifactMirrorDurationMs: artifactMirror?.durationMs ?? null,
+          artifactMirroredAt: artifactMirror ? wc01ResultRecordedAt.toISOString() : null,
+          lambdaCompletedAt: parsedMessage.completedAt,
+          lambdaToWc01ResultRecordedMs,
+          wc01ResultRecordedAt: wc01ResultRecordedAt.toISOString()
+        },
         lambdaPhaseTimings: parsedMessage.phaseTimings ?? [],
         processor: PROCESSOR,
         productionFindingIntegration: false,

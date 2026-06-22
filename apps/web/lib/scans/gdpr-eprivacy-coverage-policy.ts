@@ -2313,11 +2313,11 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     if (preconsentCookieOrTrackingActivityObserved) {
       return makeOutcome(
         "reject_all_path_availability",
-        "Gap observed",
-        "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain a first-layer reject, decline, refuse, or continue-without-accepting option. This is an initial-page availability signal only; CertScore did not run a consent flow.",
+        "Review signal",
+        "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer reject, decline, refuse, or continue-without-accepting option. Treat this as a partial concern unless retained first-layer controls also show an accept path without an equally available refusal path.",
         [
           "Evidence: retained pre-consent cookie/tracking activity",
-          "Evidence: no first-layer reject option retained",
+          "Evidence: no structured first-layer reject option retained",
           "Reason: no_confirmed_first_layer_cookie_consent_banner"
         ],
         {
@@ -2326,7 +2326,8 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
             gdprEprivacyConsentSurfaceObserved: "unconfirmed",
             preconsentCookieOrTrackingActivityObserved: true,
             reason: "no_reject_option_retained_with_preconsent_activity",
-            rejectControlObserved: false
+            rejectControlObserved: false,
+            rejectPathAvailabilityEvidenceRetained: false
           }
         }
       );
@@ -2496,6 +2497,30 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
     getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true
   ) {
+    if (hasObservedPreconsentCookieOrTrackingActivity(input)) {
+      return makeOutcome(
+        "reject_all_path_availability",
+        "Review signal",
+        "CertScore retained a consent/CMP surface signal and pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer reject, decline, refuse, or continue-without-accepting option. Treat this as a partial concern unless retained first-layer controls also show an accept path without an equally available refusal path.",
+        [
+          "Evidence: consent surface observed",
+          "Evidence: retained pre-consent cookie/tracking activity",
+          "Evidence: no structured first-layer reject option retained"
+        ],
+        {
+          retainedEvidence: {
+            consentSurfaceObserved: true,
+            firstLayerCookieConsentBannerObserved: false,
+            gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+            preconsentCookieOrTrackingActivityObserved: true,
+            reason: "no_reject_option_retained_with_preconsent_activity",
+            rejectControlObserved: false,
+            rejectPathAvailabilityEvidenceRetained: false
+          }
+        }
+      );
+    }
+
     return makeOutcome(
       "reject_all_path_availability",
       "Not observed",
@@ -3587,6 +3612,15 @@ type PolicyDisclosureRowConfig = {
   textPattern: RegExp;
 };
 
+const LEGAL_BASIS_DISCLOSURE_PATTERN =
+  /(?:legal|lawful)\s+basis|article\s*6|legitimate interests?|legal obligation|vital interests?|public task|performance of (?:a )?contract|contractual necessity|(?:basis for processing|we rely on|based on).{0,120}\bconsent\b|\bconsent\b.{0,120}\b(?:personal data|personal information|processing|lawful|legal basis)\b/i;
+
+const RECIPIENTS_VENDOR_CATEGORIES_DISCLOSURE_PATTERN =
+  /recipient|third[- ]part(?:y|ies)|service providers?|vendors?|processors?|subprocessors?|business partners?|advertising partners?|analytics providers?|payment processors?|hosting providers?|cloud providers?|affiliates?/i;
+
+const CONTROLLER_CONTACT_DISCLOSURE_PATTERN =
+  /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection|contact (?:our )?(?:privacy|data protection)|privacy@/i;
+
 const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   {
     rowId: "privacy_notice_availability",
@@ -3599,7 +3633,7 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
     label: "Controller/contact disclosure",
     disclosureType: "controller_contact",
     signalKeys: ["controllerContactDisclosureObserved", "controller_contact_disclosure_observed"],
-    textPattern: /data controller|controller|privacy contact|contact us|privacy office|privacy team|data protection/i
+    textPattern: CONTROLLER_CONTACT_DISCLOSURE_PATTERN
   },
   {
     rowId: "processing_purposes_disclosure",
@@ -3613,14 +3647,14 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
     label: "Legal basis disclosure",
     disclosureType: "legal_basis",
     signalKeys: ["legalBasisDisclosureObserved", "legal_basis_disclosure_observed"],
-    textPattern: /legal basis|legitimate interest|consent|contract|legal obligation|vital interests|public task/i
+    textPattern: LEGAL_BASIS_DISCLOSURE_PATTERN
   },
   {
     rowId: "recipients_vendor_categories_disclosure",
     label: "Recipients/vendor categories disclosure",
     disclosureType: "recipients_or_vendor_categories",
     signalKeys: ["recipientsVendorCategoriesDisclosureObserved", "recipients_vendor_categories_disclosure_observed"],
-    textPattern: /recipient|third part|service provider|vendor|partner|affiliate|advertising partner|analytics provider/i
+    textPattern: RECIPIENTS_VENDOR_CATEGORIES_DISCLOSURE_PATTERN
   },
   {
     rowId: "retention_disclosure_observed",
@@ -3645,10 +3679,10 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   },
   {
     rowId: "dpo_contact_point_disclosure",
-    label: "DPO/contact point disclosure",
+    label: "DPO / privacy contact point disclosure",
     disclosureType: "dpo_contact",
     signalKeys: ["dpoContactPointDisclosureObserved", "dpo_contact_point_disclosure_observed"],
-    textPattern: /data protection officer|dpo|privacy office|data protection contact/i
+    textPattern: /data protection officer|dpo|privacy office|privacy contact|privacy team|data protection contact/i
   },
   {
     rowId: "supervisory_authority_complaint_disclosure",
@@ -3763,7 +3797,13 @@ function scorePolicyDisclosureEvidenceText(value: string, disclosureType: string
   if (/mcdonald.?s restaurants of ireland limited|data protection commissioner|dataprotection\.ie|data protection officer|local data protection offices|article 6|standard contractual clauses|commission implementing decision \(eu\) 2021\/914/i.test(text)) {
     score += 6;
   }
-  if (disclosureType === "legal_basis" && /article 6|legitimate interest|contract|legal obligation|consent/i.test(lower)) {
+  if (disclosureType === "legal_basis" && LEGAL_BASIS_DISCLOSURE_PATTERN.test(lower)) {
+    score += 4;
+  }
+  if (disclosureType === "recipients_or_vendor_categories" && RECIPIENTS_VENDOR_CATEGORIES_DISCLOSURE_PATTERN.test(lower)) {
+    score += 4;
+  }
+  if (disclosureType === "controller_contact" && CONTROLLER_CONTACT_DISCLOSURE_PATTERN.test(lower)) {
     score += 4;
   }
   if (disclosureType === "data_retention" && /retention|retain|retained|duration|as long as/i.test(lower)) {
@@ -3808,6 +3848,31 @@ function hasWeakPrivacyNoticeAttribution(summary: Record<string, unknown> | null
   return /guessed_only|common_path_guess|guessed path|fallback guess/i.test(statusText);
 }
 
+function policyDisclosureRequiresRowEvidence(rowId: string) {
+  return rowId === "controller_contact_disclosure" ||
+    rowId === "legal_basis_disclosure_observed" ||
+    rowId === "recipients_vendor_categories_disclosure" ||
+    rowId === "automated_decision_making_profiling_disclosure";
+}
+
+function hasRetainedControllerOrPrivacyContactDisclosure(
+  summary: Record<string, unknown> | null | undefined,
+  text: string
+) {
+  const controllerSignal = getPolicyArticle13DisclosureSignal(summary, "controller_contact");
+  const controllerSignalStatus = getString(controllerSignal, ["status"]);
+  const controllerSignalEvidenceText = getString(controllerSignal, ["evidenceText", "evidence_text"]) ?? "";
+  const controllerSignalMatches =
+    controllerSignalStatus === "observed" &&
+    Boolean(policyTextMatchEvidence(controllerSignalEvidenceText, CONTROLLER_CONTACT_DISCLOSURE_PATTERN));
+  return controllerSignalMatches ||
+    (
+      getBoolean(summary, ["controllerContactDisclosureObserved", "controller_contact_disclosure_observed"]) === true &&
+      Boolean(policyTextMatchEvidence(text, CONTROLLER_CONTACT_DISCLOSURE_PATTERN))
+    ) ||
+    Boolean(policyTextMatchEvidence(text, CONTROLLER_CONTACT_DISCLOSURE_PATTERN));
+}
+
 function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, config: PolicyDisclosureRowConfig) {
   const summary = getPolicyDisclosureSummary(input.runtimeArtifacts);
   const privacyPolicyPresent =
@@ -3817,10 +3882,10 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   const directSignal = getBoolean(summary, config.signalKeys);
   const article13Signal = getPolicyArticle13DisclosureSignal(summary, config.disclosureType);
   const article13SignalStatus = getString(article13Signal, ["status"]);
-  const requiresExplicitAutomatedDecisionEvidence = config.rowId === "automated_decision_making_profiling_disclosure";
+  const requiresRowSpecificEvidence = policyDisclosureRequiresRowEvidence(config.rowId);
   const article13SignalEvidenceText = getString(article13Signal, ["evidenceText", "evidence_text"]) ?? "";
   const article13SignalEvidenceMatches =
-    !requiresExplicitAutomatedDecisionEvidence ||
+    !requiresRowSpecificEvidence ||
     Boolean(policyTextMatchEvidence(article13SignalEvidenceText, config.textPattern));
   const article13SignalObserved = article13SignalStatus === "observed" && article13SignalEvidenceMatches;
   const article13SignalPartial =
@@ -3831,7 +3896,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     getPolicyObservedTopics(summary).includes(config.disclosureType);
   const textMatchEvidence = policyTextMatchEvidence(text, config.textPattern);
   const observed =
-    (directSignal === true && (!requiresExplicitAutomatedDecisionEvidence || Boolean(textMatchEvidence) || article13SignalEvidenceMatches)) ||
+    (directSignal === true && (!requiresRowSpecificEvidence || Boolean(textMatchEvidence) || article13SignalObserved)) ||
     article13SignalObserved ||
     Boolean(textMatchEvidence);
 
@@ -3881,15 +3946,25 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     );
   }
 
-  if (article13SignalPartial || topicObserved) {
+  if (
+    article13SignalPartial ||
+    topicObserved ||
+    (directSignal === true && requiresRowSpecificEvidence && !textMatchEvidence && !article13SignalObserved)
+  ) {
     return makeOutcome(
       config.rowId,
       "Review signal",
       article13SignalPartial
         ? `${config.label} was partially observed in retained public policy-surface evidence and needs review.`
-        : `${config.label} was indicated by retained policy topics, but no row-specific disclosure evidence was retained. Manual review is needed.`,
+        : directSignal === true
+          ? `${config.label} was signaled by retained policy-surface extraction, but no row-specific disclosure excerpt matched the stricter evidence gate. Manual review is needed.`
+          : `${config.label} was indicated by retained policy topics, but no row-specific disclosure evidence was retained. Manual review is needed.`,
       [
-        article13SignalPartial ? `Evidence: partial ${config.label}` : `Evidence: policy topic mentions ${config.disclosureType}`,
+        article13SignalPartial
+          ? `Evidence: partial ${config.label}`
+          : directSignal === true
+            ? `Evidence: extractor signaled ${config.label}`
+            : `Evidence: policy topic mentions ${config.disclosureType}`,
         getString(article13Signal, ["evidenceText", "evidence_text"])
           ? `Excerpt: ${getString(article13Signal, ["evidenceText", "evidence_text"])}`
           : null,
@@ -3955,6 +4030,22 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       "Review signal",
       "A privacy-policy surface was retained, but no row-specific international transfer disclosure signal was retained. Manual review is needed before treating this as a potential transparency gap.",
       ["Evidence: retained privacy policy text reviewed", "Missing evidence: row-specific international transfer disclosure signal"],
+      {
+        retainedEvidence: {
+          article13Signal,
+          policySurfaceSummary: summary,
+          signalObserved: false
+        }
+      }
+    );
+  }
+
+  if (config.rowId === "dpo_contact_point_disclosure" && hasRetainedControllerOrPrivacyContactDisclosure(summary, text)) {
+    return makeOutcome(
+      config.rowId,
+      "Not observed",
+      "A controller/contact surface was retained, but no separate DPO, privacy contact point, or data-protection contact point was observed in retained privacy-policy evidence.",
+      ["Evidence: controller/contact disclosure retained", "Missing evidence: DPO, privacy contact point, or data-protection contact point"],
       {
         retainedEvidence: {
           article13Signal,
@@ -4704,7 +4795,9 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
   const browserDeviceEntropyEvidence = buildBrowserDeviceEntropyReviewEvidence(input);
   const sessionReplayVendors = getStringArray(sessionReplayEvidence, ["vendors"]);
   const sessionReplayConsentStates = getStringArray(sessionReplayEvidence, ["consentStates"]);
+  const sessionReplayPreConsentObserved = getBoolean(sessionReplayEvidence, ["preConsentObserved", "pre_consent_observed"]) === true;
   const sessionReplayPostAcceptObserved = getBoolean(sessionReplayEvidence, ["postAcceptObserved"]) === true;
+  const sessionReplayFirstSeenMs = getNumber(sessionReplayEvidence, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]);
   const sessionReplayCount =
     getNumber(input.snapshot, ["session_replay_tracker_count"]) ??
     getNumber(input.snapshot, ["session_replay_count"]);
@@ -4717,23 +4810,34 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
     Boolean(browserDeviceEntropyEvidence);
 
   if (sessionReplayPostAcceptObserved || (sessionReplayObserved && sessionReplayEvidence)) {
+    const sessionReplayTimingRef = typeof sessionReplayFirstSeenMs === "number"
+      ? `First session replay signal: ${Math.round(sessionReplayFirstSeenMs)}ms after scan start`
+      : null;
     return makeOutcome(
       "session_replay_fingerprinting_review",
-      "Observed",
-      sessionReplayPostAcceptObserved
+      sessionReplayPreConsentObserved ? "Review signal" : "Observed",
+      sessionReplayPreConsentObserved
+        ? `Session replay or behavioral analytics were observed before any recorded consent choice${typeof sessionReplayFirstSeenMs === "number" ? `; first seen ${Math.round(sessionReplayFirstSeenMs)}ms after scan start` : ""}.`
+        : sessionReplayPostAcceptObserved
         ? "Session replay or behavioral analytics were retained only after a recorded accept/consent state; no pre-consent replay evidence was retained."
-        : "Session replay or behavioral analytics were retained in runtime evidence, with no pre-consent replay evidence retained for the tested context.",
+        : "Session replay or behavioral analytics were observed during the scan, but retained evidence does not confirm the signal fired before consent.",
       [
-        sessionReplayPostAcceptObserved
+        sessionReplayPreConsentObserved
+          ? "Session replay signal observed before consent"
+          : sessionReplayPostAcceptObserved
           ? "Session replay signal observed after consent"
-          : "Session replay signal observed; pre-consent replay not retained",
+          : "Session replay signal observed; pre-consent timing not confirmed",
+        sessionReplayTimingRef,
         ...sessionReplayVendors.map((vendor) => `Runtime vendor: ${vendor}`),
         ...(
           sessionReplayConsentStates.length > 0
             ? sessionReplayConsentStates.map((state) => `Consent state: ${state}`)
-            : ["Consent timing: no pre-consent replay evidence retained"]
+            : [sessionReplayPreConsentObserved
+                ? "Consent timing: before recorded consent"
+                : "Consent timing: not confirmed as pre-consent"
+              ]
         )
-      ],
+      ].filter((value): value is string => Boolean(value)),
       {
         retainedEvidence: {
           gapCapableRows: [

@@ -4,9 +4,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   GdprEprivacyCoverageChecklistCard,
-  GdprEprivacyCoverageSummaryPills,
-  getAssessmentDirection
+  GdprEprivacyCoverageSummaryPills
 } from "./gdpr-eprivacy-coverage-checklist-card";
+import { getAssessmentDirection } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 
 function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
@@ -364,7 +364,7 @@ test("GdprEprivacyCoverageChecklistCard does not badge review-only advertising r
     })
   );
 
-  assert.match(html, />Partial</);
+  assert.match(html, />Partial concern</);
   assert.doesNotMatch(html, />Observed</);
   assert.match(html, /No advertising infrastructure classification was retained/);
 });
@@ -992,7 +992,7 @@ test("GdprEprivacyCoverageChecklistCard summarizes evaluated and coverage-missin
 
   assert.match(html, /Observed/);
   assert.match(html, /Not observed/);
-  assert.match(html, /Partial/);
+  assert.match(html, /Partial concern/);
   assert.match(html, /Gaps \/ limits/);
   assert.match(html, /<div class="text-lg font-semibold leading-none text-slate-950">2<\/div><div class="mt-1 text-\[10px\] font-semibold uppercase tracking-\[0\.12em\]">Gaps \/ limits<\/div>/);
 });
