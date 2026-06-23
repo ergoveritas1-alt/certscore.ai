@@ -161,6 +161,7 @@ async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {
 }
 
 export async function mirrorLocalV2DagLambdaArtifacts(input: {
+  mirrorAuxiliaryArtifacts?: boolean;
   parsedMessage: LocalV2DagLambdaResultMessage;
   s3Client?: S3GetClient;
   workspaceRoot?: string;
@@ -207,7 +208,7 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
     }));
 
   const manifestArtifact = mirroredArtifacts.find((artifact) => artifact.fileName === "LocalV2DagLambdaManifest.json");
-  if (manifestArtifact) {
+  if (manifestArtifact && input.mirrorAuxiliaryArtifacts !== false) {
     const auxiliaryArtifacts = await mirrorAuxiliaryArtifactsFromLambdaManifest({
       manifestPath: manifestArtifact.localPath,
       outDir,
@@ -236,6 +237,38 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
     mirroredArtifacts,
     outDir
   };
+}
+
+async function mirrorLocalV2DagLambdaAuxiliaryArtifacts(input: {
+  mirror: NonNullable<Awaited<ReturnType<typeof mirrorLocalV2DagLambdaArtifacts>>>;
+  parsedMessage: LocalV2DagLambdaResultMessage;
+  s3Client?: S3GetClient;
+}) {
+  const manifestArtifact = input.mirror.mirroredArtifacts.find((artifact) => artifact.fileName === "LocalV2DagLambdaManifest.json");
+  if (!manifestArtifact) {
+    return input.mirror;
+  }
+
+  const s3Client = input.s3Client ?? new S3Client({});
+  const auxiliaryArtifacts = await mirrorAuxiliaryArtifactsFromLambdaManifest({
+    manifestPath: manifestArtifact.localPath,
+    outDir: input.mirror.outDir,
+    s3Client
+  });
+  input.mirror.mirroredArtifacts.push(...auxiliaryArtifacts);
+  await writeFile(input.mirror.manifestPath, `${JSON.stringify({
+    artifactOnly: true,
+    durationMs: input.mirror.durationMs,
+    fetchedAt: new Date().toISOString(),
+    mirroredArtifacts: input.mirror.mirroredArtifacts,
+    outDir: input.mirror.outDir,
+    processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    productionFindingIntegration: false,
+    scanId: input.parsedMessage.scanId,
+    source: "local-v2-dag-lambda-s3-handoff",
+    targetEnvironment: input.parsedMessage.targetEnvironment
+  }, null, 2)}\n`, "utf8");
+  return input.mirror;
 }
 
 async function mirrorAuxiliaryArtifactsFromLambdaManifest(input: {
@@ -334,6 +367,7 @@ export async function recordLocalV2DagLambdaResultEvent(
   }
 
   const artifactMirror = await mirrorLocalV2DagLambdaArtifacts({
+    mirrorAuxiliaryArtifacts: false,
     parsedMessage,
     s3Client: options.s3Client,
     workspaceRoot: options.workspaceRoot
@@ -354,21 +388,6 @@ export async function recordLocalV2DagLambdaResultEvent(
       ]
     );
   }
-
-  await query(
-    `update scans
-        set completed_at = coalesce(completed_at, $2::timestamptz),
-            error_message = case when $3 = 'failed' then $4 else error_message end,
-            status = case when $3 = 'failed' then 'failed' else 'completed' end
-      where id = $1
-        and status in ('queued', 'running')`,
-    [
-      parsedMessage.scanId,
-      parsedMessage.completedAt,
-      parsedMessage.status,
-      parsedMessage.error?.message ?? null
-    ]
-  );
 
   const eventType =
     parsedMessage.status === "failed"
@@ -393,26 +412,126 @@ export async function recordLocalV2DagLambdaResultEvent(
     ],
     { readOnly: true }
   );
-  if (existingEvent) {
-    return;
+  let resultEventId = existingEvent?.id ?? null;
+
+  if (!existingEvent) {
+    const insertedEvent = await queryOne<{ id: string }>(
+      `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+       values ($1, $2, $3, $4, $5, $6)
+       returning id`,
+      [
+        parsedMessage.scanId,
+        context.domainId,
+        context.organizationId,
+        eventType,
+        parsedMessage.status === "failed"
+          ? "Local v2 DAG Lambda returned a failed artifact-only result."
+          : "Local v2 DAG Lambda returned a completed artifact-only result.",
+        {
+          artifactOnly: true,
+          artifactMetadata: parsedMessage.artifactMetadata ?? {},
+          artifactMirror: artifactMirror
+            ? {
+                durationMs: artifactMirror.durationMs,
+                manifestPath: artifactMirror.manifestPath,
+                mirroredArtifacts: artifactMirror.mirroredArtifacts.map((artifact) => ({
+                  field: artifact.field,
+                  fileName: artifact.fileName,
+                  localPath: artifact.localPath,
+                  sha256: artifact.sha256,
+                  sizeBytes: artifact.sizeBytes,
+                  sourceUri: artifact.sourceUri
+                })),
+                outDir: artifactMirror.outDir
+              }
+            : null,
+          artifactPointers,
+          completedAt: parsedMessage.completedAt,
+          handoffTiming: {
+            artifactMirrorDurationMs: artifactMirror?.durationMs ?? null,
+            artifactMirroredAt: artifactMirror ? wc01ResultRecordedAt.toISOString() : null,
+            lambdaCompletedAt: parsedMessage.completedAt,
+            lambdaToWc01ResultRecordedMs,
+            wc01ResultRecordedAt: wc01ResultRecordedAt.toISOString()
+          },
+          ...(options.consumer
+            ? {
+                sqsConsumer: {
+                  approximateReceiveCount: options.consumer.approximateReceiveCount,
+                  consumerReceivedAt: options.consumer.consumerReceivedAt,
+                  queueRegion: options.consumer.queueRegion,
+                  sentAt: options.consumer.sentAt,
+                  sqsMessageId: options.consumer.sqsMessageId
+                }
+              }
+            : {}),
+          lambdaPhaseTimings: parsedMessage.phaseTimings ?? [],
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          productionFindingIntegration: false,
+          resultStatus: parsedMessage.status,
+          ...(parsedMessage.scannerGitSha ? { scannerGitSha: parsedMessage.scannerGitSha } : {}),
+          ...(parsedMessage.scannerImageTag ? { scannerImageTag: parsedMessage.scannerImageTag } : {}),
+          ...(parsedMessage.scannerRuntimeVersion ? { scannerRuntimeVersion: parsedMessage.scannerRuntimeVersion } : {}),
+          targetEnvironment: parsedMessage.targetEnvironment,
+          v2ArtifactsRemainInternal: true,
+          ...(parsedMessage.error ? { error: parsedMessage.error } : {})
+        }
+      ]
+    );
+    resultEventId = insertedEvent?.id ?? null;
+  } else if (artifactMirror) {
+    await query(
+      `update scan_events
+          set metadata_json = jsonb_set(metadata_json, '{artifactMirror}', $2::jsonb, true)
+        where id = $1
+          and (metadata_json->'artifactMirror' is null or metadata_json->'artifactMirror' = 'null'::jsonb)`,
+      [
+        existingEvent.id,
+        {
+          durationMs: artifactMirror.durationMs,
+          manifestPath: artifactMirror.manifestPath,
+          mirroredArtifacts: artifactMirror.mirroredArtifacts.map((artifact) => ({
+            field: artifact.field,
+            fileName: artifact.fileName,
+            localPath: artifact.localPath,
+            sha256: artifact.sha256,
+            sizeBytes: artifact.sizeBytes,
+            sourceUri: artifact.sourceUri
+          })),
+          outDir: artifactMirror.outDir
+        }
+      ]
+    );
   }
 
   await query(
-    `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
-     values ($1, $2, $3, $4, $5, $6)`,
+    `update scans
+        set completed_at = coalesce(completed_at, $2::timestamptz),
+            error_message = case when $3 = 'failed' then $4 else error_message end,
+            status = case when $3 = 'failed' then 'failed' else 'completed' end
+      where id = $1
+        and status in ('queued', 'running')`,
     [
       parsedMessage.scanId,
-      context.domainId,
-      context.organizationId,
-      eventType,
-      parsedMessage.status === "failed"
-        ? "Local v2 DAG Lambda returned a failed artifact-only result."
-        : "Local v2 DAG Lambda returned a completed artifact-only result.",
-      {
-      artifactOnly: true,
-      artifactMetadata: parsedMessage.artifactMetadata ?? {},
-      artifactMirror: artifactMirror
-        ? {
+      parsedMessage.completedAt,
+      parsedMessage.status,
+      parsedMessage.error?.message ?? null
+    ]
+  );
+  if (artifactMirror) {
+    await mirrorLocalV2DagLambdaAuxiliaryArtifacts({
+      mirror: artifactMirror,
+      parsedMessage,
+      s3Client: options.s3Client
+    });
+    if (resultEventId) {
+      await query(
+        `update scan_events
+            set metadata_json = jsonb_set(metadata_json, '{artifactMirror}', $2::jsonb, true)
+          where id = $1`,
+        [
+          resultEventId,
+          {
             durationMs: artifactMirror.durationMs,
             manifestPath: artifactMirror.manifestPath,
             mirroredArtifacts: artifactMirror.mirroredArtifacts.map((artifact) => ({
@@ -425,40 +544,10 @@ export async function recordLocalV2DagLambdaResultEvent(
             })),
             outDir: artifactMirror.outDir
           }
-        : null,
-      artifactPointers,
-      completedAt: parsedMessage.completedAt,
-      handoffTiming: {
-        artifactMirrorDurationMs: artifactMirror?.durationMs ?? null,
-        artifactMirroredAt: artifactMirror ? wc01ResultRecordedAt.toISOString() : null,
-        lambdaCompletedAt: parsedMessage.completedAt,
-        lambdaToWc01ResultRecordedMs,
-        wc01ResultRecordedAt: wc01ResultRecordedAt.toISOString()
-      },
-      ...(options.consumer
-        ? {
-            sqsConsumer: {
-              approximateReceiveCount: options.consumer.approximateReceiveCount,
-              consumerReceivedAt: options.consumer.consumerReceivedAt,
-              queueRegion: options.consumer.queueRegion,
-              sentAt: options.consumer.sentAt,
-              sqsMessageId: options.consumer.sqsMessageId
-            }
-          }
-        : {}),
-      lambdaPhaseTimings: parsedMessage.phaseTimings ?? [],
-      processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
-      productionFindingIntegration: false,
-      resultStatus: parsedMessage.status,
-      ...(parsedMessage.scannerGitSha ? { scannerGitSha: parsedMessage.scannerGitSha } : {}),
-      ...(parsedMessage.scannerImageTag ? { scannerImageTag: parsedMessage.scannerImageTag } : {}),
-      ...(parsedMessage.scannerRuntimeVersion ? { scannerRuntimeVersion: parsedMessage.scannerRuntimeVersion } : {}),
-      targetEnvironment: parsedMessage.targetEnvironment,
-      v2ArtifactsRemainInternal: true,
-      ...(parsedMessage.error ? { error: parsedMessage.error } : {})
-      }
-    ]
-  );
+        ]
+      );
+    }
+  }
 }
 
 export async function handleLocalV2DagLambdaResultMessage(

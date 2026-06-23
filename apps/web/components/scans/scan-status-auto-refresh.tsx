@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 
 type ScanStatusAutoRefreshProps = {
   pendingBrowserExtensionNormalization?: boolean;
@@ -96,29 +96,7 @@ function ScanStatusRefreshEffect({
   status: string;
 }) {
   const router = useRouter();
-  const lastInteractionAtRef = useRef(Date.now());
-  const AUTO_REFRESH_INTERACTION_GRACE_MS = 12_000;
-  const HARD_RELOAD_AFTER_MS = 15_000;
-
-  useEffect(() => {
-    if (!shouldRefresh) {
-      return;
-    }
-
-    const markInteraction = () => {
-      lastInteractionAtRef.current = Date.now();
-    };
-
-    window.addEventListener("pointerdown", markInteraction, true);
-    window.addEventListener("keydown", markInteraction, true);
-    window.addEventListener("touchstart", markInteraction, true);
-
-    return () => {
-      window.removeEventListener("pointerdown", markInteraction, true);
-      window.removeEventListener("keydown", markInteraction, true);
-      window.removeEventListener("touchstart", markInteraction, true);
-    };
-  }, [shouldRefresh]);
+  const HARD_RELOAD_AFTER_MS = 60_000;
 
   useEffect(() => {
     if (!shouldRefresh) {
@@ -130,13 +108,8 @@ function ScanStatusRefreshEffect({
         return;
       }
 
-      // Avoid interrupting in-flight navigation or other recent user actions.
-      if (Date.now() - lastInteractionAtRef.current < AUTO_REFRESH_INTERACTION_GRACE_MS) {
-        return;
-      }
-
       router.refresh();
-    }, 5000);
+    }, 1000);
 
     return () => {
       window.clearInterval(intervalId);
@@ -150,6 +123,7 @@ function ScanStatusRefreshEffect({
 
     let disposed = false;
     let inFlight = false;
+    let intervalId: number | null = null;
     const hardReloadId = window.setTimeout(() => {
       if (!disposed && document.visibilityState === "visible" && navigator.onLine) {
         window.location.reload();
@@ -174,6 +148,11 @@ function ScanStatusRefreshEffect({
         const payload = await response.json() as unknown;
         const nextStatus = getPolledScanStatus(payload);
         if (!disposed && isTerminalScanStatus(nextStatus)) {
+          disposed = true;
+          window.clearTimeout(hardReloadId);
+          if (intervalId !== null) {
+            window.clearInterval(intervalId);
+          }
           window.location.reload();
         }
       } catch {
@@ -184,14 +163,16 @@ function ScanStatusRefreshEffect({
     };
 
     void pollTerminalStatus();
-    const intervalId = window.setInterval(() => {
+    intervalId = window.setInterval(() => {
       void pollTerminalStatus();
-    }, 2500);
+    }, 1000);
 
     return () => {
       disposed = true;
       window.clearTimeout(hardReloadId);
-      window.clearInterval(intervalId);
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
     };
   }, [router, scanId, shouldRefresh, status]);
 

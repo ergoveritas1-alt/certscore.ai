@@ -65,7 +65,24 @@ test("getPolledScanStatus accepts current and legacy scan status response shapes
 test("ScanStatusAutoRefresh keeps the hard reload fallback wired for stale active scan renders", () => {
   const source = require("node:fs").readFileSync("apps/web/components/scans/scan-status-auto-refresh.tsx", "utf8") as string;
 
-  assert.match(source, /HARD_RELOAD_AFTER_MS = 15_000/);
+  assert.match(source, /HARD_RELOAD_AFTER_MS = 60_000/);
   assert.match(source, /window\.setTimeout/);
   assert.match(source, /window\.location\.reload\(\)/);
+});
+
+test("ScanStatusAutoRefresh does not defer active scan refresh after user interaction", () => {
+  const source = require("node:fs").readFileSync("apps/web/components/scans/scan-status-auto-refresh.tsx", "utf8") as string;
+
+  assert.doesNotMatch(source, /AUTO_REFRESH_INTERACTION_GRACE_MS/);
+  assert.doesNotMatch(source, /pointerdown/);
+  assert.match(source, /router\.refresh\(\);\n    \}, 1000\)/);
+});
+
+test("ScanStatusAutoRefresh hard reloads immediately once status polling sees a terminal result", () => {
+  const source = require("node:fs").readFileSync("apps/web/components/scans/scan-status-auto-refresh.tsx", "utf8") as string;
+  const terminalCheckIndex = source.indexOf("isTerminalScanStatus(nextStatus)");
+  const reloadIndex = source.indexOf("window.location.reload()", terminalCheckIndex);
+
+  assert.ok(terminalCheckIndex >= 0, "expected terminal status branch");
+  assert.ok(reloadIndex > terminalCheckIndex, "expected terminal branch to hard reload the stale scan page");
 });

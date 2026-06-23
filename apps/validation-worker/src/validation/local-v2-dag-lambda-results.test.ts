@@ -115,3 +115,16 @@ test("validation worker Lambda result poller uses a short SQS visibility timeout
   assert.match(source, /VisibilityTimeout:\s*5/);
   assert.doesNotMatch(source, /VisibilityTimeout:\s*30/);
 });
+
+test("validation worker records Lambda result event before marking scan completed", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+  const eventInsertIndex = source.indexOf("insert into scan_events");
+  const scanCompletedIndex = source.indexOf("set completed_at = coalesce");
+
+  assert.ok(eventInsertIndex >= 0, "expected Lambda result event insert");
+  assert.ok(scanCompletedIndex >= 0, "expected scan completion update");
+  assert.ok(
+    eventInsertIndex < scanCompletedIndex,
+    "scan completion must happen after v2_lambda_result.received exists so completed-scan backfill can see evidence"
+  );
+});

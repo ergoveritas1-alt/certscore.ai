@@ -459,3 +459,22 @@ test("artifact mirror downloads durable Lambda artifacts into the local v2 DAG s
   assert.equal(manifest.artifactOnly, true);
   assert.equal(typeof manifest.durationMs, "number");
 });
+
+test("local web poller records Lambda result before marking scan completed", async () => {
+  const source = await readFile("apps/web/server/scans/local-v2-dag-lambda-result-poller.ts", "utf8");
+  const eventInsertIndex = source.indexOf("insert into scan_events");
+  const completionUpdateIndex = source.indexOf("set completed_at = coalesce");
+  const auxiliaryMirrorIndex = source.indexOf("await mirrorLocalV2DagLambdaAuxiliaryArtifacts", completionUpdateIndex);
+
+  assert.ok(eventInsertIndex >= 0, "expected Lambda result event insert");
+  assert.ok(completionUpdateIndex >= 0, "expected scan completion update");
+  assert.ok(auxiliaryMirrorIndex >= 0, "expected deferred auxiliary artifact mirror");
+  assert.ok(
+    eventInsertIndex < completionUpdateIndex,
+    "scan completion must happen after v2_lambda_result.received exists so completed-scan backfill can see evidence"
+  );
+  assert.ok(
+    completionUpdateIndex < auxiliaryMirrorIndex,
+    "auxiliary artifact mirroring must not block report-ready completion"
+  );
+});
