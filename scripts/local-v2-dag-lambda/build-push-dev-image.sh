@@ -87,20 +87,36 @@ EOF
     ;;
 esac
 
-docker buildx build \
-  --platform "$platform" \
-  --provenance=false \
-  --sbom=false \
-  "${runtime_base_build_args[@]}" \
-  --build-arg "BUILD_GIT_SHA=${build_git_sha}" \
-  --build-arg "BUILD_IMAGE_TAG=${build_image_tag}" \
-  --build-arg "SCANNER_RUNTIME_VERSION=${scanner_runtime_version}" \
-  --cache-from "type=registry,ref=${build_cache_image_uri}" \
-  --cache-to "type=registry,ref=${build_cache_image_uri},mode=max" \
-  -f "${repo_root}/apps/v2-dag-lambda/Dockerfile" \
-  -t "$image_uri" \
-  --push \
-  "$repo_root"
+if [[ ${#runtime_base_build_args[@]} -gt 0 ]]; then
+  docker buildx build \
+    --platform "$platform" \
+    --provenance=false \
+    --sbom=false \
+    "${runtime_base_build_args[@]}" \
+    --build-arg "BUILD_GIT_SHA=${build_git_sha}" \
+    --build-arg "BUILD_IMAGE_TAG=${build_image_tag}" \
+    --build-arg "SCANNER_RUNTIME_VERSION=${scanner_runtime_version}" \
+    --cache-from "type=registry,ref=${build_cache_image_uri}" \
+    --cache-to "type=registry,ref=${build_cache_image_uri},mode=max" \
+    -f "${repo_root}/apps/v2-dag-lambda/Dockerfile" \
+    -t "$image_uri" \
+    --push \
+    "$repo_root"
+else
+  docker buildx build \
+    --platform "$platform" \
+    --provenance=false \
+    --sbom=false \
+    --build-arg "BUILD_GIT_SHA=${build_git_sha}" \
+    --build-arg "BUILD_IMAGE_TAG=${build_image_tag}" \
+    --build-arg "SCANNER_RUNTIME_VERSION=${scanner_runtime_version}" \
+    --cache-from "type=registry,ref=${build_cache_image_uri}" \
+    --cache-to "type=registry,ref=${build_cache_image_uri},mode=max" \
+    -f "${repo_root}/apps/v2-dag-lambda/Dockerfile" \
+    -t "$image_uri" \
+    --push \
+    "$repo_root"
+fi
 
 cat <<EOF
 Built and pushed local v2 DAG Lambda image:
