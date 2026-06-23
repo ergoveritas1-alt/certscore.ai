@@ -98,6 +98,7 @@ function ScanStatusRefreshEffect({
   const router = useRouter();
   const lastInteractionAtRef = useRef(Date.now());
   const AUTO_REFRESH_INTERACTION_GRACE_MS = 12_000;
+  const HARD_RELOAD_AFTER_MS = 45_000;
 
   useEffect(() => {
     if (!shouldRefresh) {
@@ -149,6 +150,11 @@ function ScanStatusRefreshEffect({
 
     let disposed = false;
     let inFlight = false;
+    const hardReloadId = window.setTimeout(() => {
+      if (!disposed && document.visibilityState === "visible" && navigator.onLine) {
+        window.location.reload();
+      }
+    }, HARD_RELOAD_AFTER_MS);
 
     const pollTerminalStatus = async () => {
       if (disposed || inFlight || document.visibilityState !== "visible" || !navigator.onLine) {
@@ -189,6 +195,7 @@ function ScanStatusRefreshEffect({
 
     return () => {
       disposed = true;
+      window.clearTimeout(hardReloadId);
       window.clearInterval(intervalId);
     };
   }, [router, scanId, shouldRefresh, status]);
