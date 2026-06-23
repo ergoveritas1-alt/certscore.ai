@@ -2,7 +2,10 @@ import "server-only";
 
 import { queryOne } from "@website-signal-risk-scanner/db";
 import { pollLocalV2DagLambdaResultQueue } from "./local-v2-dag-lambda-result-poller";
-import { getLocalV2DagResultQueueUrl } from "./local-v2-dag-status-handoff-core";
+import {
+  getLocalV2DagLambdaTargetEnvironment,
+  getLocalV2DagResultQueueUrl
+} from "./local-v2-dag-status-handoff-core";
 
 type LocalV2DagHandoffScanRow = {
   scanConfigJson: Record<string, unknown> | null;
@@ -39,8 +42,10 @@ export async function nudgeLocalV2DagLambdaHandoffForScan(input: {
 
   try {
     const result = await pollLocalV2DagLambdaResultQueue({
+      expectedTargetEnvironment: getLocalV2DagLambdaTargetEnvironment(scan.scanConfigJson),
       maxMessages: 10,
       queueUrl,
+      visibilityTimeoutSeconds: 5,
       waitTimeSeconds: 0
     });
     return {

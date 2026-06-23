@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getLocalV2DagResultQueueUrl } from "./local-v2-dag-status-handoff-core";
+import {
+  getLocalV2DagLambdaTargetEnvironment,
+  getLocalV2DagResultQueueUrl
+} from "./local-v2-dag-status-handoff-core";
 
 test("getLocalV2DagResultQueueUrl extracts the scan-specific Lambda result queue", () => {
   assert.equal(
@@ -19,4 +22,18 @@ test("getLocalV2DagResultQueueUrl ignores non-Lambda scan configs", () => {
   assert.equal(getLocalV2DagResultQueueUrl(null), null);
   assert.equal(getLocalV2DagResultQueueUrl({ execution: {} }), null);
   assert.equal(getLocalV2DagResultQueueUrl({ execution: { v2DagLambda: { resultQueueUrl: "" } } }), null);
+});
+
+test("getLocalV2DagLambdaTargetEnvironment follows the scan Lambda config", () => {
+  assert.equal(getLocalV2DagLambdaTargetEnvironment(null), "local");
+  assert.equal(
+    getLocalV2DagLambdaTargetEnvironment({
+      execution: {
+        v2DagLambda: {
+          targetEnvironment: "production"
+        }
+      }
+    }),
+    "production"
+  );
 });

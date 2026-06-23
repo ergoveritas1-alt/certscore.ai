@@ -98,7 +98,7 @@ function ScanStatusRefreshEffect({
   const router = useRouter();
   const lastInteractionAtRef = useRef(Date.now());
   const AUTO_REFRESH_INTERACTION_GRACE_MS = 12_000;
-  const HARD_RELOAD_AFTER_MS = 45_000;
+  const HARD_RELOAD_AFTER_MS = 15_000;
 
   useEffect(() => {
     if (!shouldRefresh) {
@@ -174,12 +174,7 @@ function ScanStatusRefreshEffect({
         const payload = await response.json() as unknown;
         const nextStatus = getPolledScanStatus(payload);
         if (!disposed && isTerminalScanStatus(nextStatus)) {
-          router.refresh();
-          window.setTimeout(() => {
-            if (!disposed) {
-              window.location.reload();
-            }
-          }, 400);
+          window.location.reload();
         }
       } catch {
         // Ignore transient status polling failures; the router refresh loop keeps retrying.

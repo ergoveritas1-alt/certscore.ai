@@ -65,7 +65,7 @@ test("getPolledScanStatus accepts current and legacy scan status response shapes
 test("ScanStatusAutoRefresh keeps the hard reload fallback wired for stale active scan renders", () => {
   const source = require("node:fs").readFileSync("apps/web/components/scans/scan-status-auto-refresh.tsx", "utf8") as string;
 
-  assert.match(source, /HARD_RELOAD_AFTER_MS = 45_000/);
+  assert.match(source, /HARD_RELOAD_AFTER_MS = 15_000/);
   assert.match(source, /window\.setTimeout/);
   assert.match(source, /window\.location\.reload\(\)/);
 });
