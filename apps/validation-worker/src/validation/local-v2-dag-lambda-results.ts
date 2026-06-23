@@ -155,6 +155,29 @@ function messageBody(message: Message) {
   return message.Body;
 }
 
+export function getManualSmokeResultScanId(rawMessage: unknown) {
+  try {
+    const record = asRecord(typeof rawMessage === "string" ? JSON.parse(rawMessage) : rawMessage);
+    const scanId = typeof record.scanId === "string" ? record.scanId : "";
+    return scanId.startsWith("manual-") || scanId.startsWith("postdeploy-") ? scanId : null;
+  } catch {
+    return null;
+  }
+}
+
+export function getLambdaResultTargetEnvironment(rawMessage: unknown): LambdaTargetEnvironment | null {
+  try {
+    const record = asRecord(typeof rawMessage === "string" ? JSON.parse(rawMessage) : rawMessage);
+    return record.targetEnvironment === "production" ? "production" : record.targetEnvironment === "local" ? "local" : null;
+  } catch {
+    return null;
+  }
+}
+
+function isLocalResultQueue(queueUrl: string) {
+  return queueUrl.includes("local-results");
+}
+
 function receiptHandle(message: Message) {
   if (!message.ReceiptHandle) {
     throw new Error("Lambda result SQS message did not include a receipt handle.");
@@ -594,16 +617,18 @@ async function pollOnce(input: {
     ] satisfies MessageSystemAttributeName[],
     MaxNumberOfMessages: 10,
     QueueUrl: input.queueUrl,
-    VisibilityTimeout: 30,
+    VisibilityTimeout: 5,
     WaitTimeSeconds: 10
   }));
   const messages = response.Messages ?? [];
+  let deleted = 0;
   let handled = 0;
   let failed = 0;
 
   for (const message of messages) {
+    const rawMessage = messageBody(message);
     try {
-      const parsed = parseLambdaResultMessage(messageBody(message), input.targetEnvironment);
+      const parsed = parseLambdaResultMessage(rawMessage, input.targetEnvironment);
       await recordLocalV2DagLambdaResult(parsed, {
         consumer: {
           approximateReceiveCount: parseSqsInteger(message.Attributes?.ApproximateReceiveCount),
@@ -617,8 +642,40 @@ async function pollOnce(input: {
         QueueUrl: input.queueUrl,
         ReceiptHandle: receiptHandle(message)
       }));
+      deleted += 1;
       handled += 1;
     } catch (error) {
+      const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
+      if (manualSmokeScanId) {
+        await input.client.send(new DeleteMessageCommand({
+          QueueUrl: input.queueUrl,
+          ReceiptHandle: receiptHandle(message)
+        }));
+        deleted += 1;
+        console.warn("[validation-worker] ignored manual v2 DAG Lambda smoke result", {
+          messageId: message.MessageId ?? null,
+          queueRegion: input.queueRegion,
+          scanId: manualSmokeScanId
+        });
+        continue;
+      }
+      const resultTargetEnvironment = getLambdaResultTargetEnvironment(rawMessage);
+      if (
+        input.targetEnvironment === "local" &&
+        resultTargetEnvironment === "production" &&
+        isLocalResultQueue(input.queueUrl)
+      ) {
+        await input.client.send(new DeleteMessageCommand({
+          QueueUrl: input.queueUrl,
+          ReceiptHandle: receiptHandle(message)
+        }));
+        deleted += 1;
+        console.warn("[validation-worker] deleted production-target v2 DAG Lambda result from local queue", {
+          messageId: message.MessageId ?? null,
+          queueRegion: input.queueRegion
+        });
+        continue;
+      }
       failed += 1;
       console.error("[validation-worker] v2 DAG Lambda result message rejected", {
         error: error instanceof Error ? error.message : String(error),
@@ -629,13 +686,14 @@ async function pollOnce(input: {
 
   if (messages.length > 0) {
     console.info("[validation-worker] v2 DAG Lambda result poll complete", {
+      deleted,
       failed,
       handled,
       received: messages.length
     });
   }
 
-  return { failed, handled, received: messages.length };
+  return { deleted, failed, handled, received: messages.length };
 }
 
 export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResultPollerOptions) {
