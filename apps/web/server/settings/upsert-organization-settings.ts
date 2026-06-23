@@ -4,6 +4,10 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { getDashboardContext } from "../auth";
+import {
+  canUseRestrictedScanOptions,
+  restrictScanFromForUser
+} from "../scans/restricted-scan-options";
 import { upsertOrganizationSettings } from "./repository";
 
 const settingsSchema = z.object({
@@ -25,7 +29,11 @@ export async function upsertOrganizationSettingsAction(
   _previousState: UpsertOrganizationSettingsActionState = initialState,
   formData: FormData
 ): Promise<UpsertOrganizationSettingsActionState> {
-  const { organization } = await getDashboardContext();
+  const { membership, organization, user } = await getDashboardContext();
+  const allowRestrictedScanOptions = canUseRestrictedScanOptions({
+    membershipRole: membership.role,
+    userEmail: user.email
+  });
   const hasDefaultScanFrequency = formData.has("defaultScanFrequency");
   const parsed = settingsSchema.safeParse({
     defaultScanFrom: formData.get("defaultScanFrom") || undefined,
@@ -42,7 +50,14 @@ export async function upsertOrganizationSettingsAction(
   const values = parsed.data;
   try {
     await upsertOrganizationSettings(organization.id, {
-      ...(values.defaultScanFrom ? { default_scan_from: normalizeScanFrom(values.defaultScanFrom) } : {}),
+      ...(values.defaultScanFrom
+        ? {
+            default_scan_from: restrictScanFromForUser({
+              canUseRestrictedScanOptions: allowRestrictedScanOptions,
+              scanFrom: normalizeScanFrom(values.defaultScanFrom)
+            })
+          }
+        : {}),
       ...(hasDefaultScanFrequency ? { default_scan_frequency: values.defaultScanFrequency || null } : {})
     });
   } catch (error) {

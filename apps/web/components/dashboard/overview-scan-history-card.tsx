@@ -100,13 +100,20 @@ function getPrimaryBadgeLabel(scan: OrganizationScanListItem) {
 }
 
 type OverviewScanHistoryCardProps = {
+  allowRestrictedScanOptions?: boolean;
   defaultScanFrom?: ServerScanFrom;
   planCode: PlanCode;
   rescanCooldownMs?: number;
   scans: OrganizationScanListItem[];
 };
 
-export function OverviewScanHistoryCard({ defaultScanFrom = "eu_ie", planCode, rescanCooldownMs, scans }: OverviewScanHistoryCardProps) {
+export function OverviewScanHistoryCard({
+  allowRestrictedScanOptions = false,
+  defaultScanFrom = "eu_ie",
+  planCode,
+  rescanCooldownMs,
+  scans
+}: OverviewScanHistoryCardProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_SCAN_HISTORY_PAGE_SIZE);
   const scanGroups = useMemo(
@@ -325,6 +332,7 @@ export function OverviewScanHistoryCard({ defaultScanFrom = "eu_ie", planCode, r
                         {group.domainId && rescanAvailability ? (
                           <DomainRowActionButton tooltip={rescanAvailability.allowed ? "Re-scan domain" : cooldownMessage ?? "Re-scan unavailable"}>
                             <RescanDomainForm
+                              allowRestrictedScanOptions={allowRestrictedScanOptions}
                               compact
                               cooldownMessage={cooldownMessage}
                               defaultScanFrom={defaultScanFrom}

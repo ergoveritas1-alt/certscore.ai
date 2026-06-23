@@ -5,6 +5,7 @@ import {
   getAnonymousOpsScanStatus,
   getOrganizationOpsScanStatus
 } from "../../../../server/scans/ops-status";
+import { nudgeLocalV2DagLambdaHandoffForScan } from "../../../../server/scans/local-v2-dag-status-handoff";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -33,12 +34,16 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
   }
 
   let status = await getAnonymousOpsScanStatus({ includeFindings, scanId });
+  let organizationId: string | null = null;
+  let viewerEmail: string | null = null;
 
   if (!status) {
     const user = await getCurrentUser();
 
     if (user) {
       const { organization } = await bootstrapAppUserSession(user);
+      organizationId = organization.id;
+      viewerEmail = user.email;
       status = await getOrganizationOpsScanStatus({
         includeFindings,
         organizationId: organization.id,
@@ -56,6 +61,24 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
       },
       { status: 404 }
     );
+  }
+
+  if (status.scan.status === "queued" || status.scan.status === "running" || status.scan.status === "processing") {
+    const handoff = await nudgeLocalV2DagLambdaHandoffForScan({
+      organizationId,
+      scanId
+    });
+
+    if (handoff.handled > 0) {
+      status = organizationId
+        ? await getOrganizationOpsScanStatus({
+            includeFindings,
+            organizationId,
+            scanId,
+            viewerEmail
+          })
+        : await getAnonymousOpsScanStatus({ includeFindings, scanId });
+    }
   }
 
   return NextResponse.json(status, {

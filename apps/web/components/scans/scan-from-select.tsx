@@ -36,6 +36,7 @@ export type ScanFrom = (typeof SCAN_FROM_OPTIONS)[number]["value"];
 export type ServerScanFrom = Exclude<ScanFrom, "local_extension">;
 
 type ScanFromSelectProps = {
+  allowRestrictedScanOptions?: boolean;
   compact?: boolean;
   freshRescanName?: string;
   freshRescanValue?: boolean;
@@ -75,6 +76,7 @@ function SelectedScanFromMarker({ option }: { option: (typeof SCAN_FROM_OPTIONS)
 }
 
 export function ScanFromSelect({
+  allowRestrictedScanOptions = false,
   compact = false,
   freshRescanName = "forceNewScan",
   freshRescanValue,
@@ -101,10 +103,23 @@ export function ScanFromSelect({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const options = includeLocalExtension ? SCAN_FROM_OPTIONS : SCAN_FROM_OPTIONS.filter((option) => option.value !== "local_extension");
+  const options = SCAN_FROM_OPTIONS.filter((option) => {
+    if (!includeLocalExtension && option.value === "local_extension") {
+      return false;
+    }
+    if (!allowRestrictedScanOptions && option.value === "eu_de") {
+      return false;
+    }
+    return true;
+  });
   const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? SCAN_FROM_OPTIONS[0];
+  const selectedValue = selectedOption.value;
   const freshRescan = freshRescanValue ?? uncontrolledFreshRescan;
-  const localV2RunViaLambda = localV2RunViaLambdaValue ?? uncontrolledLocalV2RunViaLambda;
+  const localV2RunViaLambda = allowRestrictedScanOptions
+    ? (localV2RunViaLambdaValue ?? uncontrolledLocalV2RunViaLambda)
+    : true;
+  const showLocalV2RunViaLambdaOption = includeLocalV2ScanProfileOption && allowRestrictedScanOptions;
+  const hasVisibleMenuContent = includeScanFromOptions || includeFreshRescanOption || showLocalV2RunViaLambdaOption;
 
   useEffect(() => {
     setIsMounted(true);
@@ -149,7 +164,7 @@ export function ScanFromSelect({
         ? measuredHeight
         : includeFreshRescanOption
           ? 440
-          : includeLocalV2ScanProfileOption && !includeScanFromOptions
+          : showLocalV2RunViaLambdaOption && !includeScanFromOptions
             ? 190
             : 260;
       const spaceBelow = viewportHeight - anchorBottom - gap - viewportPadding;
@@ -174,7 +189,7 @@ export function ScanFromSelect({
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [includeFreshRescanOption, includeLocalV2ScanProfileOption, includeScanFromOptions, isOpen, variant]);
+  }, [includeFreshRescanOption, includeScanFromOptions, isOpen, showLocalV2RunViaLambdaOption, variant]);
 
   function selectScanFrom(nextValue: ScanFrom) {
     onChange?.(nextValue);
@@ -206,7 +221,7 @@ export function ScanFromSelect({
 
   return (
     <div ref={wrapperRef} className={variant === "icon" ? "relative" : compact ? "relative inline-flex items-center gap-2 text-xs font-medium text-slate-600" : "relative block space-y-1.5"}>
-      <input id={id} name={name} type="hidden" value={value} />
+      <input id={id} name={name} type="hidden" value={selectedValue} />
       {includeLocalV2ScanProfileOption ? (
         <input name={localV2ScanProfileName} type="hidden" value="standard" />
       ) : null}
@@ -219,24 +234,26 @@ export function ScanFromSelect({
           {includeScanFromOptions ? "Scan from" : "Scan options"}
         </span>
       ) : null}
-      <button
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
-        aria-label={includeScanFromOptions ? `Scan from: ${selectedOption.label}` : "Scan options"}
-        className={buttonClassName}
-        onClick={() => setIsOpen((current) => !current)}
-        ref={buttonRef}
-        title={includeScanFromOptions ? `Scan from: ${selectedOption.label}` : "Scan options"}
-        type="button"
-      >
-        <SelectedScanFromMarker option={selectedOption} />
-        {variant === "field" ? <span>{selectedOption.label}</span> : null}
-        {variant === "field" ? (
-          <svg aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 20 20">
-            <path d="m5.5 7.5 4.5 4.5 4.5-4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-          </svg>
-        ) : null}
-      </button>
+      {hasVisibleMenuContent ? (
+        <button
+          aria-expanded={isOpen}
+          aria-haspopup="listbox"
+          aria-label={includeScanFromOptions ? `Scan from: ${selectedOption.label}` : "Scan options"}
+          className={buttonClassName}
+          onClick={() => setIsOpen((current) => !current)}
+          ref={buttonRef}
+          title={includeScanFromOptions ? `Scan from: ${selectedOption.label}` : "Scan options"}
+          type="button"
+        >
+          <SelectedScanFromMarker option={selectedOption} />
+          {variant === "field" ? <span>{selectedOption.label}</span> : null}
+          {variant === "field" ? (
+            <svg aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 20 20">
+              <path d="m5.5 7.5 4.5 4.5 4.5-4.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+            </svg>
+          ) : null}
+        </button>
+      ) : null}
       {isOpen && isMounted
         ? createPortal(
             <div
@@ -249,10 +266,10 @@ export function ScanFromSelect({
                 width: menuPosition?.width ?? (variant === "icon" ? 320 : 288)
               }}
             >
-              {includeFreshRescanOption || includeLocalV2ScanProfileOption ? (
+              {includeFreshRescanOption || showLocalV2RunViaLambdaOption ? (
                 <div className="pb-1">
                   <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
-                  {includeLocalV2ScanProfileOption ? (
+                  {showLocalV2RunViaLambdaOption ? (
                     <label
                       className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
                       title="On uses the selected regional AWS Lambda scanner. Off uses the local Lambda simulator when running on localhost."
@@ -317,7 +334,7 @@ export function ScanFromSelect({
                 </div>
               ) : null}
               {includeScanFromOptions ? (
-                <div className={includeFreshRescanOption || includeLocalV2ScanProfileOption ? "border-t border-slate-200/70 pt-1" : ""}>
+                <div className={includeFreshRescanOption || showLocalV2RunViaLambdaOption ? "border-t border-slate-200/70 pt-1" : ""}>
                   <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Scan from</div>
                   <div role="listbox" aria-label="Scan from">
                     {menuOptions.map((option) => {

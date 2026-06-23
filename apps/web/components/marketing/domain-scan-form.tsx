@@ -14,6 +14,7 @@ import {
 
 type DomainScanFormProps = {
   allowLocalExtensionScan?: boolean;
+  allowRestrictedScanOptions?: boolean;
   buttonLabel?: string;
   compact?: boolean;
   defaultScanFrom?: ServerScanFrom;
@@ -267,6 +268,7 @@ export function getScanSubmitDestination(mode: ScanMode, payload: ScanSubmitPayl
 
 export function DomainScanForm({
   allowLocalExtensionScan = false,
+  allowRestrictedScanOptions = false,
   buttonLabel = "Start full scan",
   compact = false,
   defaultScanFrom = "eu_ie",
@@ -297,7 +299,10 @@ export function DomainScanForm({
       setLocalExtensionStatus(null);
       setShowExtensionInstructions(false);
     }
-  }, [allowLocalExtensionScan, defaultScanFrom, scanFrom]);
+    if (!allowRestrictedScanOptions && scanFrom === "eu_de") {
+      setScanFrom("eu_ie");
+    }
+  }, [allowLocalExtensionScan, allowRestrictedScanOptions, defaultScanFrom, scanFrom]);
 
   function resetValidationState() {
     setErrorMessage(null);
@@ -432,8 +437,8 @@ export function DomainScanForm({
           domain: submittedDomain,
           forceNewScan: mode === "full" ? freshRescan : false,
           localV2ScanProfile,
-          localV2RunViaLambda,
-          scanFrom: scanFrom as ServerScanFrom
+          localV2RunViaLambda: allowRestrictedScanOptions ? localV2RunViaLambda : true,
+          scanFrom: (allowRestrictedScanOptions || scanFrom !== "eu_de" ? scanFrom : "eu_ie") as ServerScanFrom
         }),
         headers: {
           "Content-Type": "application/json"
@@ -539,6 +544,7 @@ export function DomainScanForm({
           {mode === "full" ? (
             <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
               <ScanFromSelect
+                allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
                 freshRescanValue={freshRescan}
                 includeLocalV2ScanProfileOption
@@ -557,6 +563,7 @@ export function DomainScanForm({
           ) : (
             <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
               <ScanFromSelect
+                allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
                 includeLocalV2ScanProfileOption
                 includeScanFromOptions={false}

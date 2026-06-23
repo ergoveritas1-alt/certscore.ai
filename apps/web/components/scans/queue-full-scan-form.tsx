@@ -17,12 +17,18 @@ const initialState: CreateFullScanActionState = {
 };
 
 type QueueFullScanFormProps = {
+  allowRestrictedScanOptions?: boolean;
   domainId: string;
   disabled?: boolean;
   unavailableReason?: string | null;
 };
 
-export function QueueFullScanForm({ domainId, disabled = false, unavailableReason = null }: QueueFullScanFormProps) {
+export function QueueFullScanForm({
+  allowRestrictedScanOptions = false,
+  domainId,
+  disabled = false,
+  unavailableReason = null
+}: QueueFullScanFormProps) {
   const [state, action, isPending] = useActionState(createFullScanAction, initialState);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
@@ -40,6 +46,7 @@ export function QueueFullScanForm({ domainId, disabled = false, unavailableReaso
     <form action={action} className="space-y-3" onSubmit={() => markPendingScanStarted("dashboard")}>
       <input name="domainId" type="hidden" value={domainId} />
       <ScanFromSelect
+        allowRestrictedScanOptions={allowRestrictedScanOptions}
         includeFreshRescanOption
         includeLocalV2ScanProfileOption
         localV2ScanProfileValue={localV2ScanProfile}

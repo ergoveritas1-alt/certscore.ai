@@ -82,11 +82,11 @@ export default async function AdminFintechPage() {
           <CardTitle>Add domain(s) to scan</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 pt-0 pb-3">
-          <AddDomainForm planCode={organization.plan} />
+          <AddDomainForm allowRestrictedScanOptions planCode={organization.plan} />
         </CardContent>
       </Card>
 
-      <OverviewScanHistoryCard planCode={organization.plan} rescanCooldownMs={adminRescanCooldownMs} scans={fintechScans} />
+      <OverviewScanHistoryCard allowRestrictedScanOptions planCode={organization.plan} rescanCooldownMs={adminRescanCooldownMs} scans={fintechScans} />
     </div>
   );
 }

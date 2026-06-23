@@ -6,6 +6,10 @@ import {
   normalizeLocalV2DagScanProfile
 } from "../../../server/scans/local-v2-dag-scan-config";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
+import {
+  restrictLocalV2RunViaLambdaForUser,
+  restrictScanFromForUser
+} from "../../../server/scans/restricted-scan-options";
 
 export async function POST(request: Request) {
   try {
@@ -22,12 +26,18 @@ export async function POST(request: Request) {
     }
 
     const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);
-    const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(
-      payload?.localV2RunViaLambda ?? payload?.localV2DagRunViaLambda ?? payload?.v2RunViaLambda,
-      process.env,
-      normalizeScanFrom(payload?.scanFrom ?? payload?.geo)
-    );
-    const scanFrom = normalizeScanFrom(payload?.scanFrom ?? payload?.geo);
+    const scanFrom = restrictScanFromForUser({
+      canUseRestrictedScanOptions: false,
+      scanFrom: normalizeScanFrom(payload?.scanFrom ?? payload?.geo)
+    });
+    const localV2DagRunViaLambda = restrictLocalV2RunViaLambdaForUser({
+      canUseRestrictedScanOptions: false,
+      localV2DagRunViaLambda: normalizeLocalV2DagRunViaLambda(
+        payload?.localV2RunViaLambda ?? payload?.localV2DagRunViaLambda ?? payload?.v2RunViaLambda,
+        process.env,
+        scanFrom
+      )
+    });
     const dnsStatus = await checkDomainDns(result.data.hostname);
 
     if (!dnsStatus.exists) {

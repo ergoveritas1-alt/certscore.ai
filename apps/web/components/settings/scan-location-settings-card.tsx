@@ -40,20 +40,30 @@ const initialState: UpsertOrganizationSettingsActionState = {
   success: null
 };
 
-export function ScanLocationSettingsCard({ lastScanFrom }: { lastScanFrom: ScanFrom }) {
+export function ScanLocationSettingsCard({
+  allowRestrictedScanOptions = false,
+  lastScanFrom
+}: {
+  allowRestrictedScanOptions?: boolean;
+  lastScanFrom: ScanFrom;
+}) {
   const [state, action, isPending] = useActionState(upsertOrganizationSettingsAction, initialState);
+  const options = allowRestrictedScanOptions
+    ? SCAN_LOCATION_OPTIONS
+    : SCAN_LOCATION_OPTIONS.filter((option) => option.value !== "eu_de");
+  const selectedScanFrom = allowRestrictedScanOptions || lastScanFrom !== "eu_de" ? lastScanFrom : "eu_ie";
 
   return (
     <form action={action} className="space-y-5">
       <div className="grid gap-3 md:grid-cols-3">
-        {SCAN_LOCATION_OPTIONS.map((option) => (
+        {options.map((option) => (
           <label
             className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4 transition has-[:checked]:border-sky-300 has-[:checked]:bg-sky-50/70 hover:border-slate-300"
             key={option.value}
           >
             <input
               className="peer sr-only"
-              defaultChecked={lastScanFrom === option.value}
+              defaultChecked={selectedScanFrom === option.value}
               name="defaultScanFrom"
               type="radio"
               value={option.value}

@@ -17,6 +17,7 @@ const initialState: CreateFullScanActionState = {
 };
 
 type RescanDomainFormProps = {
+  allowRestrictedScanOptions?: boolean;
   cooldownMessage?: string | null;
   disabled?: boolean;
   domainId: string;
@@ -25,7 +26,7 @@ type RescanDomainFormProps = {
   showLabel?: boolean;
 };
 
-export function RescanDomainForm({ cooldownMessage = null, compact = false, defaultScanFrom = "eu_ie", disabled = false, domainId, showLabel = false }: RescanDomainFormProps) {
+export function RescanDomainForm({ allowRestrictedScanOptions = false, cooldownMessage = null, compact = false, defaultScanFrom = "eu_ie", disabled = false, domainId, showLabel = false }: RescanDomainFormProps) {
   const [state, action, isPending] = useActionState(rescanDomainAction, initialState);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const scanProgress = useScanProgressClock(isPending);
@@ -39,6 +40,7 @@ export function RescanDomainForm({ cooldownMessage = null, compact = false, defa
       {errorMessage ? <p className="max-w-sm text-sm text-red-600">{errorMessage}</p> : null}
       <div className="group relative inline-flex items-center gap-1.5">
         <ScanFromSelect
+          allowRestrictedScanOptions={allowRestrictedScanOptions}
           compact
           includeLocalV2ScanProfileOption
           includeScanFromOptions={false}

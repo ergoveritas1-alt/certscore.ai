@@ -11,6 +11,11 @@ import {
   normalizeLocalV2DagRunViaLambda,
   normalizeLocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
+import {
+  canUseRestrictedScanOptions,
+  restrictLocalV2RunViaLambdaForUser,
+  restrictScanFromForUser
+} from "./restricted-scan-options";
 
 const initialState: CreateFullScanActionState = {
   error: null
@@ -31,8 +36,18 @@ export async function rescanDomainAction(
   const dashboardContext = await getDashboardContext();
   const domainId = String(formData.get("domainId") ?? "").trim();
   const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
-  const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
-  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom);
+  const allowRestrictedScanOptions = canUseRestrictedScanOptions({
+    membershipRole: dashboardContext.membership.role,
+    userEmail: dashboardContext.user.email
+  });
+  const scanFrom = restrictScanFromForUser({
+    canUseRestrictedScanOptions: allowRestrictedScanOptions,
+    scanFrom: normalizeScanFrom(formData.get("scanFrom"))
+  });
+  const localV2DagRunViaLambda = restrictLocalV2RunViaLambdaForUser({
+    canUseRestrictedScanOptions: allowRestrictedScanOptions,
+    localV2DagRunViaLambda: normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom)
+  });
 
   if (domainId.length === 0) {
     return {

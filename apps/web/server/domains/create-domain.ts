@@ -19,6 +19,11 @@ import {
   normalizeLocalV2DagScanProfile,
   type LocalV2DagScanProfile
 } from "../scans/local-v2-dag-scan-config";
+import {
+  canUseRestrictedScanOptions,
+  restrictLocalV2RunViaLambdaForUser,
+  restrictScanFromForUser
+} from "../scans/restricted-scan-options";
 
 export type CreateDomainActionState = {
   error: string | null;
@@ -58,6 +63,10 @@ export async function createOrQueueDomainScan(input: {
   scanFrom?: ScanFrom;
 }) {
   const dashboardContext = await getDashboardContext();
+  const allowRestrictedScanOptions = canUseRestrictedScanOptions({
+    membershipRole: dashboardContext.membership.role,
+    userEmail: dashboardContext.user.email
+  });
   const parsedInput = createDomainRequestSchema.safeParse({
     domain: input.domain
   });
@@ -74,9 +83,14 @@ export async function createOrQueueDomainScan(input: {
     loadDomainOrganizationAndSettings(dashboardContext.organization.id)
   ]);
   const organizationSettings = organizationSettingsAndOrg.settings;
-  const defaultScanFrom = normalizeScanFrom(
-    input.scanFrom ?? (organizationSettings as { default_scan_from?: ScanFrom | null } | null)?.default_scan_from
-  );
+  const defaultScanFrom = restrictScanFromForUser({
+    canUseRestrictedScanOptions: allowRestrictedScanOptions,
+    scanFrom: input.scanFrom ?? (organizationSettings as { default_scan_from?: ScanFrom | null } | null)?.default_scan_from
+  });
+  const localV2DagRunViaLambda = restrictLocalV2RunViaLambdaForUser({
+    canUseRestrictedScanOptions: allowRestrictedScanOptions,
+    localV2DagRunViaLambda: input.localV2DagRunViaLambda
+  });
 
   const { hostname, normalizedUrl } = parsedInput.data;
   const dnsStatus = await checkDomainDns(hostname);
@@ -112,8 +126,8 @@ export async function createOrQueueDomainScan(input: {
       provenance: input.provenance,
       bypassRecentScanReuse: input.bypassRecentScanReuse,
       localV2DagScanProfile: input.localV2DagScanProfile,
-      localV2DagRunViaLambda: input.localV2DagRunViaLambda,
-      scanFrom: input.scanFrom,
+      localV2DagRunViaLambda,
+      scanFrom: defaultScanFrom,
       scanThrottleMs: getLocalAwareScanThrottleMs(dashboardContext.user.email),
       source: "marketing-full-scan"
     });
@@ -180,7 +194,7 @@ export async function createOrQueueDomainScan(input: {
     bypassRecentScanReuse: input.bypassRecentScanReuse,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
-    localV2DagRunViaLambda: input.localV2DagRunViaLambda,
+    localV2DagRunViaLambda,
     provenance: input.provenance,
     scanFrom: defaultScanFrom,
     scanThrottleMs: getLocalAwareScanThrottleMs(dashboardContext.user.email),

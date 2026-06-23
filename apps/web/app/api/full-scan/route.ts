@@ -15,6 +15,10 @@ import {
   normalizeLocalV2DagRunViaLambda,
   normalizeLocalV2DagScanProfile
 } from "../../../server/scans/local-v2-dag-scan-config";
+import {
+  restrictLocalV2RunViaLambdaForUser,
+  restrictScanFromForUser
+} from "../../../server/scans/restricted-scan-options";
 import { createPreviewScan } from "../../../server/preview-scan/create-preview-scan";
 import { getFullScanQueueErrorCode } from "./full-scan-errors";
 import { shouldBypassDnsValidationForProductionLoadTest } from "./load-test-intake";
@@ -176,6 +180,14 @@ export async function POST(request: Request) {
 
     if (!user) {
       const firstDomain = intakeDomains[0];
+      const publicScanFrom = restrictScanFromForUser({
+        canUseRestrictedScanOptions: false,
+        scanFrom
+      });
+      const publicLocalV2DagRunViaLambda = restrictLocalV2RunViaLambdaForUser({
+        canUseRestrictedScanOptions: false,
+        localV2DagRunViaLambda
+      });
 
       if (!firstDomain) {
         return NextResponse.json(
@@ -191,10 +203,10 @@ export async function POST(request: Request) {
         hostname: firstDomain.hostname,
         localV2DagLambdaDebugOverrides,
         localV2DagScanProfile,
-        localV2DagRunViaLambda,
+        localV2DagRunViaLambda: publicLocalV2DagRunViaLambda,
         normalizedUrl: firstDomain.normalizedUrl,
         provenance,
-        scanFrom
+        scanFrom: publicScanFrom
       }).catch(async (error) => {
         const message = error instanceof Error ? error.message : String(error);
 
@@ -205,9 +217,9 @@ export async function POST(request: Request) {
         const preview = await createPreviewScan({
           hostname: firstDomain.hostname,
           localV2DagScanProfile,
-          localV2DagRunViaLambda,
+          localV2DagRunViaLambda: publicLocalV2DagRunViaLambda,
           normalizedUrl: firstDomain.normalizedUrl,
-          scanFrom
+          scanFrom: publicScanFrom
         });
 
         return {

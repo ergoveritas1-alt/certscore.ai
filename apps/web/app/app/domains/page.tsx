@@ -5,6 +5,7 @@ import { PendingButtonLink } from "../../../components/ui/pending-link";
 import { getDashboardContext } from "../../../server/auth";
 import { getOrganizationDomains } from "../../../server/domains/get-organization-domains";
 import { withServerTiming } from "../../../server/performance/log-server-timing";
+import { canUseRestrictedScanOptions } from "../../../server/scans/restricted-scan-options";
 import { getOrganizationSettings } from "../../../server/settings/get-organization-settings";
 
 function formatDateTime(value: string | null) {
@@ -52,7 +53,11 @@ function formatScheduled(value: string | null, dueNow: boolean) {
 }
 
 export default async function DomainsPage() {
-  const { organization } = await withServerTiming("app.domains.context", () => getDashboardContext());
+  const { membership, organization, user } = await withServerTiming("app.domains.context", () => getDashboardContext());
+  const allowRestrictedScanOptions = canUseRestrictedScanOptions({
+    membershipRole: membership.role,
+    userEmail: user.email
+  });
   const [domains, organizationSettings] = await withServerTiming("app.domains.primary_data", () =>
     Promise.all([
       getOrganizationDomains(organization.id),
@@ -68,7 +73,11 @@ export default async function DomainsPage() {
             <CardTitle>Add a website</CardTitle>
           </CardHeader>
           <CardContent>
-            <AddDomainForm defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"} planCode={organization.plan} />
+            <AddDomainForm
+              allowRestrictedScanOptions={allowRestrictedScanOptions}
+              defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
+              planCode={organization.plan}
+            />
           </CardContent>
         </Card>
       </div>

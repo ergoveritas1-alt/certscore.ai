@@ -17,11 +17,12 @@ const initialState: CreateDomainActionState = {
 };
 
 type AddDomainFormProps = {
+  allowRestrictedScanOptions?: boolean;
   defaultScanFrom?: ServerScanFrom;
   planCode: string;
 };
 
-export function AddDomainForm({ defaultScanFrom = "eu_ie", planCode }: AddDomainFormProps) {
+export function AddDomainForm({ allowRestrictedScanOptions = false, defaultScanFrom = "eu_ie", planCode }: AddDomainFormProps) {
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
   const [freshRescan, setFreshRescan] = useState(true);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
@@ -50,6 +51,7 @@ export function AddDomainForm({ defaultScanFrom = "eu_ie", planCode }: AddDomain
           />
           <div className="absolute right-[10.6rem] top-1/2 -translate-y-1/2">
             <ScanFromSelect
+              allowRestrictedScanOptions={allowRestrictedScanOptions}
               freshRescanValue={freshRescan}
               includeFreshRescanOption
               includeLocalV2ScanProfileOption

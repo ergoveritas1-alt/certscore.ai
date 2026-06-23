@@ -12,6 +12,7 @@ import { isPlatformAdminEmail } from "../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../server/auth";
 import { withServerTiming } from "../../../server/performance/log-server-timing";
 import { getOrganizationScansPage } from "../../../server/scans/get-organization-scans";
+import { canUseRestrictedScanOptions } from "../../../server/scans/restricted-scan-options";
 import { getOrganizationSettings } from "../../../server/settings/get-organization-settings";
 
 function formatDateTime(value: string | null) {
@@ -110,8 +111,12 @@ type ScansPageProps = {
 };
 
 export default async function ScansPage({ searchParams }: ScansPageProps) {
-  const { organization, user } = await withServerTiming("app.scans.context", () => getDashboardContext());
+  const { membership, organization, user } = await withServerTiming("app.scans.context", () => getDashboardContext());
   const adminRescanCooldownMs = isPlatformAdminEmail(user.email) ? getAdminScanThrottleMs() : undefined;
+  const allowRestrictedScanOptions = canUseRestrictedScanOptions({
+    membershipRole: membership.role,
+    userEmail: user.email
+  });
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const page = normalizePage(resolvedSearchParams.page);
   const pageSize = normalizePageSize(resolvedSearchParams.perPage);
@@ -280,6 +285,7 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                           />
                           {canRescan && scan.domainId && rescanAvailability ? (
                             <RescanDomainForm
+                              allowRestrictedScanOptions={allowRestrictedScanOptions}
                               cooldownMessage={cooldownMessage}
                               defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
                               disabled={!rescanAvailability.allowed}
@@ -398,6 +404,7 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                     {canRescan && scan.domainId && rescanAvailability ? (
                       <div className="mt-4 border-t border-slate-200 pt-4">
                         <RescanDomainForm
+                          allowRestrictedScanOptions={allowRestrictedScanOptions}
                           cooldownMessage={cooldownMessage}
                           defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
                           disabled={!rescanAvailability.allowed}

@@ -51,14 +51,14 @@ const openApiDocument = {
           {
             name: "scanFrom",
             in: "query",
-            description: "Geo execution context for newly queued scans. Existing scans are returned with their recorded context. Alias: geo.",
-            schema: { type: "string", enum: ["eu_de", "eu_ie", "california"], default: "eu_ie" }
+            description: "Geo execution context for newly queued public Pulse scans. Existing scans are returned with their recorded context. Alias: geo.",
+            schema: { type: "string", enum: ["eu_ie", "california"], default: "eu_ie" }
           },
           {
             name: "geo",
             in: "query",
-            description: "Alias for scanFrom. Allowed values: eu_de, eu_ie, california.",
-            schema: { type: "string", enum: ["eu_de", "eu_ie", "california"], default: "eu_ie" }
+            description: "Alias for scanFrom. Allowed values: eu_ie, california.",
+            schema: { type: "string", enum: ["eu_ie", "california"], default: "eu_ie" }
           },
           {
             name: "forceNewScan",

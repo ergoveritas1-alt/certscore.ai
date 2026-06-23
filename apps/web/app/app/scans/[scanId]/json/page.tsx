@@ -16,6 +16,7 @@ import { getDashboardContext } from "../../../../../server/auth";
 import { getScanById } from "../../../../../server/scans/get-scan-by-id";
 import { persistReportFindingCount } from "../../../../../server/scans/persist-report-finding-count";
 import { isScanWithinReuseWindow } from "../../../../../server/scans/recent-scan-reuse";
+import { canUseRestrictedScanOptions } from "../../../../../server/scans/restricted-scan-options";
 import { getOrganizationSettings } from "../../../../../server/settings/get-organization-settings";
 import { mapUnifiedPacketsForJsonView } from "./findings";
 
@@ -56,8 +57,12 @@ function formatRescanCooldownMessage(value: string | null, planCode: PlanCode) {
 }
 
 export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
-  const [{ scanId }, { organization, user }] = await Promise.all([params, getDashboardContext()]);
+  const [{ scanId }, { membership, organization, user }] = await Promise.all([params, getDashboardContext()]);
   const adminRescanCooldownMs = isPlatformAdminEmail(user.email) ? getAdminScanThrottleMs() : undefined;
+  const allowRestrictedScanOptions = canUseRestrictedScanOptions({
+    membershipRole: membership.role,
+    userEmail: user.email
+  });
   const [scanRecord, organizationSettings] = await Promise.all([
     getScanById({
       organizationId: organization.id,
@@ -134,6 +139,7 @@ export default async function ScanJsonPage({ params }: ScanJsonPageProps) {
           />
         </div>
         <ScanViewActions
+          allowRestrictedScanOptions={allowRestrictedScanOptions}
           alternateHref={`/app/scans/${scanRecord.scan.id}`}
           alternateLabel="report-view"
           canRescan={showRescan}

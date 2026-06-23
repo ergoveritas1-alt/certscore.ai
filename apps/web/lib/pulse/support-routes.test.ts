@@ -34,8 +34,8 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
   );
   const scanFromParameter = body.paths["/api/v1/pulse"].get.parameters.find((parameter: { name: string }) => parameter.name === "scanFrom");
   const geoParameter = body.paths["/api/v1/pulse"].get.parameters.find((parameter: { name: string }) => parameter.name === "geo");
-  assert.deepEqual(scanFromParameter.schema.enum, ["eu_de", "eu_ie", "california"]);
-  assert.deepEqual(geoParameter.schema.enum, ["eu_de", "eu_ie", "california"]);
+  assert.deepEqual(scanFromParameter.schema.enum, ["eu_ie", "california"]);
+  assert.deepEqual(geoParameter.schema.enum, ["eu_ie", "california"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["200"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["202"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["400"]);
@@ -253,7 +253,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /24-hour reuse/);
   assert.match(source, /scanFrom/);
   assert.match(source, /geo/);
-  assert.match(source, /`eu_de`, `eu_ie`, or `california`/);
+  assert.match(source, /`eu_ie` or `california`/);
   assert.match(source, /1-minute normalized-domain/);
   assert.match(source, /OpenAPI JSON/);
   assert.match(source, /PULSE_FEEDBACK_EMAIL/);
@@ -306,8 +306,7 @@ test("Pulse agent fallback page documents the fetch failure diagnostic contract"
   assert.match(source, /24 hours/);
   assert.match(source, /scanFrom/);
   assert.match(source, /geo/);
-  assert.match(source, /default<\/code>.*eu<\/code>.*uk<\/code>/s);
-  assert.doesNotMatch(source, /california<\/code>/i);
+  assert.match(source, /eu_ie<\/code>.*california<\/code>/s);
   assert.match(source, /Agent quick start/);
   assert.match(source, /Basic HTTP agents/);
   assert.match(source, /getPulseForUrl/);
@@ -336,7 +335,7 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   assert.match(source, /forceNewScan=true/);
   assert.match(source, /24-hour reuse/);
   assert.match(source, /scanFrom or geo/);
-  assert.match(source, /eu_de, eu_ie, and california/);
+  assert.match(source, /eu_ie and california/);
   assert.match(source, /1-minute normalized-domain/);
   assert.match(source, /Basic HTTP agent quick start/);
   assert.match(source, /OpenAPI \/ GPT Action beta quick start/);

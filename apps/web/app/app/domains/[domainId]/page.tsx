@@ -16,6 +16,7 @@ import { getPlanLimits } from "../../../../server/plans/get-plan-limits";
 import { getDomainMonitoringState } from "../../../../server/scheduling/get-domain-monitoring-state";
 import { getDomainMonitorSiteSetup } from "../../../../server/monitor-site/get-domain-monitor-site-setup";
 import { getQueueAvailability } from "../../../../lib/env";
+import { canUseRestrictedScanOptions } from "../../../../server/scans/restricted-scan-options";
 
 function formatDateTime(value: string | null) {
   if (!value) {
@@ -88,7 +89,11 @@ type DomainDetailPageProps = {
 };
 
 export default async function DomainDetailPage({ params }: DomainDetailPageProps) {
-  const [{ domainId }, { organization }] = await Promise.all([params, getDashboardContext()]);
+  const [{ domainId }, { membership, organization, user }] = await Promise.all([params, getDashboardContext()]);
+  const allowRestrictedScanOptions = canUseRestrictedScanOptions({
+    membershipRole: membership.role,
+    userEmail: user.email
+  });
   const [domainRecord, planLimits, scanHistory, monitoringState, monitorSiteSetup, industries] = await Promise.all([
     getDomainById({
       domainId,
@@ -130,6 +135,7 @@ export default async function DomainDetailPage({ params }: DomainDetailPageProps
         </div>
 
         <QueueFullScanForm
+          allowRestrictedScanOptions={allowRestrictedScanOptions}
           domainId={domainRecordResult.domain.id}
           disabled={!queueAvailability.enabled}
           unavailableReason={queueAvailability.reason}

@@ -3,6 +3,7 @@ import { RescanDomainForm } from "./rescan-domain-form";
 import type { ServerScanFrom } from "./scan-from-select";
 
 type ScanViewActionsProps = {
+  allowRestrictedScanOptions?: boolean;
   alternateHref?: string | null;
   alternateLabel?: string | null;
   canRescan: boolean;
@@ -17,6 +18,7 @@ function getLinkClassName() {
 }
 
 export function ScanViewActions({
+  allowRestrictedScanOptions = false,
   alternateHref,
   alternateLabel,
   canRescan,
@@ -29,6 +31,7 @@ export function ScanViewActions({
     <div className="flex flex-col items-end gap-2 md:pt-0.5">
       {canRescan && domainId ? (
         <RescanDomainForm
+          allowRestrictedScanOptions={allowRestrictedScanOptions}
           compact
           cooldownMessage={cooldownMessage}
           defaultScanFrom={defaultScanFrom}

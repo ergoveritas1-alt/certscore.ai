@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import { restrictScanFromForUser } from "../../../../server/scans/restricted-scan-options";
 import { absoluteUrl } from "../../../../lib/seo";
 import { buildPulseError } from "../../../../lib/pulse/error";
 import {
@@ -213,7 +214,10 @@ function parseGptPulseWaitSeconds(url: URL) {
 }
 
 function getRequestedScanFrom(url: URL) {
-  return normalizeScanFrom(url.searchParams.get("scanFrom") ?? url.searchParams.get("geo")) satisfies ScanFrom;
+  return restrictScanFromForUser({
+    canUseRestrictedScanOptions: false,
+    scanFrom: normalizeScanFrom(url.searchParams.get("scanFrom") ?? url.searchParams.get("geo"))
+  }) satisfies ScanFrom;
 }
 
 function requiredScopesForPulseRequest(input: { hasUrl: boolean; hasScanId: boolean; hasJobId: boolean }): IntegrationApiKeyScope[] {

@@ -11,6 +11,7 @@ import { getDashboardScanUsage } from "../../../server/dashboard/get-dashboard-s
 import { getSystemHealth } from "../../../server/health/get-system-health";
 import { listIntegrationApiKeysForOrganization } from "../../../server/integrations/api-keys";
 import { getOrganizationSettings } from "../../../server/settings/get-organization-settings";
+import { canUseRestrictedScanOptions } from "../../../server/scans/restricted-scan-options";
 import {
   applyManualRescanLimitOverride,
   getOrganizationManualRescanLimitOverride,
@@ -65,8 +66,12 @@ function formatMissingTables(tables: string[]) {
 }
 
 export default async function SettingsPage() {
-  const { organization, profile, user } = await getDashboardContext();
+  const { membership, organization, profile, user } = await getDashboardContext();
   const isPlatformAdmin = isPlatformAdminEmail(user.email);
+  const allowRestrictedScanOptions = canUseRestrictedScanOptions({
+    membershipRole: membership.role,
+    userEmail: user.email
+  });
   const userProviders = user.authProvider.split(",").map((provider) => provider.trim());
   const [basePlanLimits, manualRescanLimitOverride, systemHealth, verificationStatus, apiKeys, organizationSettings] = await Promise.all([
     getPlanLimits(organization.plan),
@@ -151,7 +156,10 @@ export default async function SettingsPage() {
           </p>
         </CardHeader>
         <CardContent>
-          <ScanLocationSettingsCard lastScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"} />
+          <ScanLocationSettingsCard
+            allowRestrictedScanOptions={allowRestrictedScanOptions}
+            lastScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
+          />
         </CardContent>
       </Card>
 

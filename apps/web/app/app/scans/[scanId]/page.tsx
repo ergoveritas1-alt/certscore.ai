@@ -20,6 +20,7 @@ import {
   materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
+import { canUseRestrictedScanOptions } from "../../../../server/scans/restricted-scan-options";
 import { getOrganizationSettings } from "../../../../server/settings/get-organization-settings";
 
 type ScanDetailPageProps = {
@@ -90,6 +91,10 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   const scanDomainLabel = displayScanRecord.scan.domainHostname?.trim() || "Scanned website";
   const isPlatformAdmin = isPlatformAdminEmail(user.email);
   const canUseLocalExtensionScan = isPlatformAdmin;
+  const allowRestrictedScanOptions = canUseRestrictedScanOptions({
+    membershipRole: membership.role,
+    userEmail: user.email
+  });
   const visualEvidenceArtifacts = canViewCapturedImage({ isPlatformAdmin, role: membership.role })
     ? getVisualEvidenceArtifacts(displayScanRecord.runtimeArtifacts).sort((left, right) => {
         const leftPriority = left.captureStep === "initial_load" ? 0 : 1;
@@ -131,6 +136,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
               <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                 <DomainScanForm
                   allowLocalExtensionScan={canUseLocalExtensionScan}
+                  allowRestrictedScanOptions={allowRestrictedScanOptions}
                   buttonLabel="Scan"
                   compact
                   defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}

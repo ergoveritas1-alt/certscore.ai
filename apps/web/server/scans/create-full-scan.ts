@@ -42,6 +42,11 @@ import {
   type LocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
 import {
+  canUseRestrictedScanOptions,
+  restrictLocalV2RunViaLambdaForUser,
+  restrictScanFromForUser
+} from "./restricted-scan-options";
+import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
@@ -681,8 +686,18 @@ export async function createFullScanAction(
   const domainId = String(formData.get("domainId") ?? "").trim();
   const forceNewScan = formData.get("forceNewScan") === "true";
   const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
-  const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
-  const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom);
+  const allowRestrictedScanOptions = canUseRestrictedScanOptions({
+    membershipRole: dashboardContext.membership.role,
+    userEmail: dashboardContext.user.email
+  });
+  const scanFrom = restrictScanFromForUser({
+    canUseRestrictedScanOptions: allowRestrictedScanOptions,
+    scanFrom: normalizeScanFrom(formData.get("scanFrom"))
+  });
+  const localV2DagRunViaLambda = restrictLocalV2RunViaLambdaForUser({
+    canUseRestrictedScanOptions: allowRestrictedScanOptions,
+    localV2DagRunViaLambda: normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom)
+  });
 
   const fullScanQueueAvailability = await getFullScanQueueAvailability({ scanFrom });
 

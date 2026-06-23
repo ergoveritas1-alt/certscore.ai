@@ -3,6 +3,7 @@ import {
   DeleteMessageCommand,
   ReceiveMessageCommand,
   SQSClient,
+  type MessageSystemAttributeName,
   type DeleteMessageCommandOutput,
   type Message,
   type ReceiveMessageCommandOutput
@@ -55,6 +56,14 @@ export type LocalV2DagLambdaPollResult = {
   failed: number;
   handled: number;
   received: number;
+};
+
+type LocalV2DagLambdaResultConsumerMetadata = {
+  approximateReceiveCount: number | null;
+  consumerReceivedAt: string;
+  queueRegion: string;
+  sentAt: string | null;
+  sqsMessageId: string | null;
 };
 
 function compactEnvValue(value: string | undefined) {
@@ -299,7 +308,11 @@ function withLocalV2DagOutDir(scanConfigJson: Record<string, unknown> | null, ou
 
 export async function recordLocalV2DagLambdaResultEvent(
   parsedMessage: LocalV2DagLambdaResultMessage,
-  options: { s3Client?: S3GetClient; workspaceRoot?: string } = {}
+  options: {
+    consumer?: LocalV2DagLambdaResultConsumerMetadata;
+    s3Client?: S3GetClient;
+    workspaceRoot?: string;
+  } = {}
 ) {
   const { query, queryOne } = await import("@website-signal-risk-scanner/db");
   const context = await queryOne<{
@@ -422,6 +435,17 @@ export async function recordLocalV2DagLambdaResultEvent(
         lambdaToWc01ResultRecordedMs,
         wc01ResultRecordedAt: wc01ResultRecordedAt.toISOString()
       },
+      ...(options.consumer
+        ? {
+            sqsConsumer: {
+              approximateReceiveCount: options.consumer.approximateReceiveCount,
+              consumerReceivedAt: options.consumer.consumerReceivedAt,
+              queueRegion: options.consumer.queueRegion,
+              sentAt: options.consumer.sentAt,
+              sqsMessageId: options.consumer.sqsMessageId
+            }
+          }
+        : {}),
       lambdaPhaseTimings: parsedMessage.phaseTimings ?? [],
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
@@ -440,6 +464,7 @@ export async function recordLocalV2DagLambdaResultEvent(
 export async function handleLocalV2DagLambdaResultMessage(
   rawMessage: unknown,
   options: {
+    consumer?: LocalV2DagLambdaResultConsumerMetadata;
     expectedTargetEnvironment?: LocalV2DagLambdaTargetEnvironment;
     s3Client?: S3GetClient;
     workspaceRoot?: string;
@@ -447,10 +472,27 @@ export async function handleLocalV2DagLambdaResultMessage(
 ) {
   const ingestion = ingestLocalV2DagLambdaResultMessage(rawMessage, options);
   await recordLocalV2DagLambdaResultEvent(ingestion.parsedMessage, {
+    consumer: options.consumer,
     s3Client: options.s3Client,
     workspaceRoot: options.workspaceRoot
   });
   return ingestion;
+}
+
+function parseSqsEpochMillis(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+  const millis = Number(value);
+  return Number.isFinite(millis) ? new Date(millis).toISOString() : null;
+}
+
+function parseSqsInteger(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
 }
 
 export async function pollLocalV2DagLambdaResultQueue(input: {
@@ -494,6 +536,10 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
     const s3Client = input.s3Client ?? new S3Client({ region: queueRegion });
     const response = await sqsClient.send(new ReceiveMessageCommand({
       MaxNumberOfMessages: Math.min(Math.max(input.maxMessages ?? 10, 1), 10),
+      MessageSystemAttributeNames: [
+        "ApproximateReceiveCount",
+        "SentTimestamp"
+      ] satisfies MessageSystemAttributeName[],
       QueueUrl: queueUrl,
       VisibilityTimeout: input.visibilityTimeoutSeconds ?? 30,
       WaitTimeSeconds: Math.min(Math.max(input.waitTimeSeconds ?? 10, 0), 20)
@@ -505,6 +551,13 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
       const rawMessage = messageBody(message);
       try {
         await handleMessage(rawMessage, {
+          consumer: {
+            approximateReceiveCount: parseSqsInteger(message.Attributes?.ApproximateReceiveCount),
+            consumerReceivedAt: new Date().toISOString(),
+            queueRegion,
+            sentAt: parseSqsEpochMillis(message.Attributes?.SentTimestamp),
+            sqsMessageId: message.MessageId ?? null
+          },
           expectedTargetEnvironment,
           s3Client
         });
