@@ -212,7 +212,7 @@ export function describeScanProgressPhase(input: {
   if (ratio < 1.05) {
     return "reviewing signals";
   }
-  return "finalizing artifacts";
+  return "finalizing report";
 }
 
 export function estimateScanProgressForOptions(input: {

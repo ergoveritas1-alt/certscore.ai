@@ -174,7 +174,7 @@ test("inferS3ArtifactRegion follows the regional Lambda artifact bucket", async 
   assert.equal(inferS3ArtifactRegion("certscore-v2-dag-local-artifacts"), "eu-central-1");
 });
 
-test("shouldAttemptLocalV2DagLambdaResultRefresh gates stale in-flight Lambda scans", async () => {
+test("shouldAttemptLocalV2DagLambdaResultRefresh keeps web pages out of SQS result ingestion", async () => {
   const { shouldAttemptLocalV2DagLambdaResultRefresh } = await loadLocalV2DagReport();
   const nowMs = Date.parse("2026-06-17T13:14:20.000Z");
   const baseScan = makeScanRecord().scan;
@@ -188,7 +188,7 @@ test("shouldAttemptLocalV2DagLambdaResultRefresh gates stale in-flight Lambda sc
         status: "running"
       }
     }), nowMs),
-    true
+    false
   );
 
   assert.equal(
@@ -232,7 +232,7 @@ test("shouldAttemptLocalV2DagLambdaResultRefresh gates stale in-flight Lambda sc
   );
 });
 
-test("tryRefreshLocalV2DagLambdaResult throttles repeated page refresh polling", async () => {
+test("tryRefreshLocalV2DagLambdaResult does not poll SQS from report pages", async () => {
   const {
     resetLocalV2DagLambdaResultRefreshStateForTest,
     tryRefreshLocalV2DagLambdaResult
@@ -258,7 +258,7 @@ test("tryRefreshLocalV2DagLambdaResult throttles repeated page refresh polling",
   assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs, pollResultQueue }), false);
   assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs: nowMs + 4_000, pollResultQueue }), false);
   assert.equal(await tryRefreshLocalV2DagLambdaResult(scanRecord, { nowMs: nowMs + 6_000, pollResultQueue }), false);
-  assert.equal(pollCount, 2);
+  assert.equal(pollCount, 0);
 
   resetLocalV2DagLambdaResultRefreshStateForTest();
 });

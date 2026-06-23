@@ -27,19 +27,9 @@ function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-const LOCAL_V2_DAG_RESULT_REFRESH_COOLDOWN_MS = 5_000;
-const LOCAL_V2_DAG_RESULT_REFRESH_MIN_SCAN_AGE_MS = 6_000;
-
 type LocalV2DagLambdaPollResult = {
   handled: number;
 };
-
-type LocalV2DagLambdaRefreshState = {
-  inFlight: boolean;
-  lastAttemptMs: number;
-};
-
-const localV2DagLambdaRefreshStateByScanId = new Map<string, LocalV2DagLambdaRefreshState>();
 
 function getLocalV2DagLambdaScanArtifactUri(scanRecord: ScanDetailResponse) {
   return scanRecord.events
@@ -94,48 +84,15 @@ export function isLocalV2DagReport(scanRecord: ScanDetailResponse) {
 }
 
 export function shouldAttemptLocalV2DagLambdaResultRefresh(scanRecord: ScanDetailResponse, nowMs = Date.now()) {
-  const input = getLocalV2DagReportInput(scanRecord);
-  if (!input || input.scanArtifactUri) {
-    return false;
-  }
-  if (scanRecord.scan.status !== "queued" && scanRecord.scan.status !== "running" && scanRecord.scan.status !== "processing") {
-    return false;
-  }
-
-  const startedAtMs = Date.parse(scanRecord.scan.startedAt ?? scanRecord.scan.createdAt ?? "");
-  if (!Number.isFinite(startedAtMs)) {
-    return false;
-  }
-
-  return nowMs - startedAtMs >= LOCAL_V2_DAG_RESULT_REFRESH_MIN_SCAN_AGE_MS;
-}
-
-function claimLocalV2DagLambdaResultRefresh(scanId: string, nowMs: number) {
-  const current = localV2DagLambdaRefreshStateByScanId.get(scanId);
-  if (current?.inFlight) {
-    return false;
-  }
-  if (current && nowMs - current.lastAttemptMs < LOCAL_V2_DAG_RESULT_REFRESH_COOLDOWN_MS) {
-    return false;
-  }
-
-  localV2DagLambdaRefreshStateByScanId.set(scanId, {
-    inFlight: true,
-    lastAttemptMs: nowMs
-  });
-  return true;
-}
-
-function releaseLocalV2DagLambdaResultRefresh(scanId: string, nowMs: number) {
-  const current = localV2DagLambdaRefreshStateByScanId.get(scanId);
-  localV2DagLambdaRefreshStateByScanId.set(scanId, {
-    inFlight: false,
-    lastAttemptMs: current?.lastAttemptMs ?? nowMs
-  });
+  // Lambda result ingestion is owned by the validation worker. Report pages must
+  // not consume SQS messages, or they can hide results until visibility timeout.
+  void scanRecord;
+  void nowMs;
+  return false;
 }
 
 export function resetLocalV2DagLambdaResultRefreshStateForTest() {
-  localV2DagLambdaRefreshStateByScanId.clear();
+  return;
 }
 
 export async function tryRefreshLocalV2DagLambdaResult(
@@ -145,36 +102,11 @@ export async function tryRefreshLocalV2DagLambdaResult(
     pollResultQueue?: () => Promise<LocalV2DagLambdaPollResult>;
   } = {}
 ) {
-  const nowMs = options.nowMs ?? Date.now();
-  if (!shouldAttemptLocalV2DagLambdaResultRefresh(scanRecord, nowMs)) {
-    return false;
-  }
-  if (!claimLocalV2DagLambdaResultRefresh(scanRecord.scan.id, nowMs)) {
-    return false;
-  }
-
-  try {
-    const pollResultQueue = options.pollResultQueue ?? (async () => {
-      const { pollLocalV2DagLambdaResultQueue } = await import("./local-v2-dag-lambda-result-poller");
-      const input = getLocalV2DagReportInput(scanRecord);
-      return pollLocalV2DagLambdaResultQueue({
-        maxMessages: 10,
-        queueUrl: input?.lambdaResultQueueUrl ?? undefined,
-        visibilityTimeoutSeconds: 30,
-        waitTimeSeconds: 1
-      });
-    });
-    const result = await pollResultQueue();
-    return result.handled > 0;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes("CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL")) {
-      console.warn("[web] local v2 DAG Lambda result refresh skipped", { error: message });
-    }
-    return false;
-  } finally {
-    releaseLocalV2DagLambdaResultRefresh(scanRecord.scan.id, Date.now());
-  }
+  // Kept as a compatibility no-op for older callers/tests; the web tier should
+  // only read already-recorded scan state.
+  void scanRecord;
+  void options;
+  return false;
 }
 
 function uniqueStrings(values: Array<string | null | undefined>) {

@@ -7,6 +7,7 @@ import {
   DeleteMessageCommand,
   ReceiveMessageCommand,
   SQSClient,
+  type MessageSystemAttributeName,
   type Message
 } from "@aws-sdk/client-sqs";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
@@ -56,6 +57,14 @@ export type LocalV2DagLambdaResultPollerOptions = {
   queueUrl?: string;
   queueUrls?: Array<string | null | undefined>;
   targetEnvironment: LambdaTargetEnvironment;
+};
+
+type LambdaResultConsumerMetadata = {
+  approximateReceiveCount: number | null;
+  consumerReceivedAt: string;
+  queueRegion: string;
+  sentAt: string | null;
+  sqsMessageId: string | null;
 };
 
 function sleep(ms: number) {
@@ -381,7 +390,11 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
 
 export async function recordLocalV2DagLambdaResult(
   parsedMessage: LambdaResultMessage,
-  options: { s3Client?: S3GetClient; workspaceRoot?: string } = {}
+  options: {
+    consumer?: LambdaResultConsumerMetadata;
+    s3Client?: S3GetClient;
+    workspaceRoot?: string;
+  } = {}
 ) {
   const context = await queryOne<{
     domainId: string | null;
@@ -526,6 +539,17 @@ export async function recordLocalV2DagLambdaResult(
           lambdaToWc01ResultRecordedMs,
           wc01ResultRecordedAt: wc01ResultRecordedAt.toISOString()
         },
+        ...(options.consumer
+          ? {
+              sqsConsumer: {
+                approximateReceiveCount: options.consumer.approximateReceiveCount,
+                consumerReceivedAt: options.consumer.consumerReceivedAt,
+                queueRegion: options.consumer.queueRegion,
+                sentAt: options.consumer.sentAt,
+                sqsMessageId: options.consumer.sqsMessageId
+              }
+            }
+          : {}),
         lambdaPhaseTimings: parsedMessage.phaseTimings ?? [],
         processor: PROCESSOR,
         productionFindingIntegration: false,
@@ -541,12 +565,33 @@ export async function recordLocalV2DagLambdaResult(
   );
 }
 
+function parseSqsEpochMillis(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+  const millis = Number(value);
+  return Number.isFinite(millis) ? new Date(millis).toISOString() : null;
+}
+
+function parseSqsInteger(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
 async function pollOnce(input: {
   client: SQSClient;
   queueUrl: string;
+  queueRegion: string;
   targetEnvironment: LambdaTargetEnvironment;
 }) {
   const response = await input.client.send(new ReceiveMessageCommand({
+    MessageSystemAttributeNames: [
+      "ApproximateReceiveCount",
+      "SentTimestamp"
+    ] satisfies MessageSystemAttributeName[],
     MaxNumberOfMessages: 10,
     QueueUrl: input.queueUrl,
     VisibilityTimeout: 30,
@@ -559,7 +604,15 @@ async function pollOnce(input: {
   for (const message of messages) {
     try {
       const parsed = parseLambdaResultMessage(messageBody(message), input.targetEnvironment);
-      await recordLocalV2DagLambdaResult(parsed);
+      await recordLocalV2DagLambdaResult(parsed, {
+        consumer: {
+          approximateReceiveCount: parseSqsInteger(message.Attributes?.ApproximateReceiveCount),
+          consumerReceivedAt: new Date().toISOString(),
+          queueRegion: input.queueRegion,
+          sentAt: parseSqsEpochMillis(message.Attributes?.SentTimestamp),
+          sqsMessageId: message.MessageId ?? null
+        }
+      });
       await input.client.send(new DeleteMessageCommand({
         QueueUrl: input.queueUrl,
         ReceiptHandle: receiptHandle(message)
@@ -610,6 +663,7 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
           }
           return pollOnce({
             client,
+            queueRegion,
             queueUrl,
             targetEnvironment: options.targetEnvironment
           });

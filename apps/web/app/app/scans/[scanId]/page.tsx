@@ -17,8 +17,7 @@ import { withServerTiming } from "../../../../server/performance/log-server-timi
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
 import {
   getLocalV2DagReportInput,
-  materializeLocalV2DagScanDetail,
-  tryRefreshLocalV2DagLambdaResult
+  materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
 import { getOrganizationSettings } from "../../../../server/settings/get-organization-settings";
@@ -59,17 +58,6 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
 
   if (!scanRecord) {
     notFound();
-  }
-
-  const loadedScanRecord = scanRecord;
-  if (await withServerTiming("app.scan_detail.local_v2_result_refresh", () => tryRefreshLocalV2DagLambdaResult(loadedScanRecord))) {
-    scanRecord = await withServerTiming("app.scan_detail.record_after_local_v2_refresh", () =>
-      getScanById({
-        organizationId: organization.id,
-        scanId,
-        viewerEmail: user.email
-      })
-    ) ?? scanRecord;
   }
 
   const localV2DagReportInput = getLocalV2DagReportInput(scanRecord);
