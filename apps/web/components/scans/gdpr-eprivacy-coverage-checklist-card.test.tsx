@@ -7,7 +7,7 @@ import {
   GdprEprivacyCoverageSummaryPills,
   getGdprEprivacyCoverageChecklistRowRationaleForAudit
 } from "./gdpr-eprivacy-coverage-checklist-card";
-import { getAssessmentDirection } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
+import { getAssessmentDirection, getEvidenceLabel } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 
 function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
@@ -412,6 +412,101 @@ test("GdprEprivacyCoverageChecklistCard describes extraction-limited Article 13 
   assert.doesNotMatch(rationale, /Partial support from retained/i);
 });
 
+test("GdprEprivacyCoverageChecklistCard renders row-specific extraction uncertainty as not confirmed", () => {
+  const rows = [
+    makeChecklistItem({
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          signalObserved: "not_confirmed_row_specific_extraction"
+        }
+      },
+      evidenceState: "observed",
+      id: "legal_basis_disclosure_observed",
+      label: "Legal basis disclosure",
+      status: "Not confirmed",
+      tone: "review"
+    }),
+    makeChecklistItem({
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          signalObserved: "not_confirmed_row_specific_extraction"
+        }
+      },
+      evidenceState: "observed",
+      id: "data_subject_rights_disclosure",
+      label: "Data subject rights disclosure",
+      status: "Not confirmed",
+      tone: "review"
+    }),
+    makeChecklistItem({
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        pipeline: {
+          concernPolicyKey: "gdpr_eprivacy_coverage.dpo_contact_point_disclosure.not_confirmed",
+          projectionStage: "coverage_policy",
+          wc01NormalizedConcernKey: "gdpr_eprivacy.coverage.dpo_contact_point_disclosure",
+          ws01EvidenceRole: "observed runtime signal identification, evidence capture, and logging"
+        }
+      },
+      evidenceState: "observed",
+      id: "dpo_contact_point_disclosure",
+      label: "DPO contact point disclosure",
+      status: "Not confirmed",
+      tone: "review"
+    }),
+    makeChecklistItem({
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          signalObserved: "not_confirmed_row_specific_extraction"
+        }
+      },
+      evidenceState: "observed",
+      id: "supervisory_authority_complaint_disclosure",
+      label: "Supervisory authority complaint disclosure",
+      status: "Not confirmed",
+      tone: "review"
+    })
+  ];
+
+  for (const row of rows) {
+    assert.equal(getEvidenceLabel(row), "Not confirmed");
+    assert.equal(getAssessmentDirection(row), "review_signal");
+  }
+
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: rows,
+      showSummaryStrip: false
+    })
+  );
+
+  assert.equal((html.match(/>Not confirmed</g) ?? []).length, rows.length);
+  assert.doesNotMatch(html, />Partial concern</);
+});
+
+test("GdprEprivacyCoverageChecklistCard keeps substantive automated decision review as partial concern", () => {
+  const row = makeChecklistItem({
+    assessmentStatus: "review_signal",
+    criticalEvidence: {
+      retainedEvidence: {
+        signalObserved: "partial_automated_processing_without_article22_disclosure"
+      }
+    },
+    evidenceState: "observed",
+    id: "automated_decision_making_profiling_disclosure",
+    label: "Automated decision-making / profiling disclosure",
+    status: "Review signal",
+    tone: "review"
+  });
+
+  assert.equal(getEvidenceLabel(row), "Partial concern");
+  assert.equal(getAssessmentDirection(row), "review_signal");
+});
+
 test("GdprEprivacyCoverageChecklistCard renders concise session replay evidence copy", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
@@ -716,12 +811,78 @@ test("GdprEprivacyCoverageChecklistCard explains international transfer evidence
     })
   );
 
-  assert.match(html, /Policy text includes international-transfer\/safeguards disclosure/);
-  assert.match(html, /transparency signal only/);
-  assert.match(html, /does not validate the sufficiency of the transfer mechanism/);
+  assert.match(html, /Policy text included matching international-transfer disclosure evidence/);
   assert.match(html, /adequate level of data protection/);
   assert.match(html, /standard contractual clauses/);
   assert.doesNotMatch(html, /Policy text included matching disclosure evidence/);
+});
+
+test("GdprEprivacyCoverageChecklistCard explains automated-processing partial support without Article 22 overclaim", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              article13Signal: {
+                disclosureType: "automated_decision_making_or_profiling",
+                evidenceText:
+                  "Automated systems and algorithms help recognize patterns, detect abuse, personalize ads, and provide tailored search results.",
+                source: "wc01_retained_policy_text_match",
+                status: "partial"
+              }
+            },
+            statusBasis:
+              "Automated processing or personalization language was observed, but an Article 22-style solely automated decision-making disclosure was not confirmed."
+          },
+          evidenceState: "observed",
+          id: "automated_decision_making_profiling_disclosure",
+          label: "Automated decision-making/profiling disclosure",
+          status: "Review signal"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /Automated processing or personalization language was observed/);
+  assert.match(html, /Article 22-style solely automated decision-making disclosure was not confirmed/);
+  assert.match(html, /Automated systems and algorithms/);
+});
+
+test("GdprEprivacyCoverageChecklistCard explains supervisory-authority partial support", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              article13Signal: {
+                disclosureType: "supervisory_authority",
+                evidenceText:
+                  "We work with regulatory authorities and seek to resolve any complaints about our privacy practices.",
+                source: "deterministic",
+                status: "partial"
+              }
+            },
+            statusBasis: "Supervisory authority complaint disclosure was partially observed in retained public policy-surface evidence."
+          },
+          evidenceState: "observed",
+          id: "supervisory_authority_complaint_disclosure",
+          label: "Supervisory authority complaint disclosure",
+          status: "Review signal"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /Policy text referenced complaints, regulators, or data protection authorities/);
+  assert.match(html, /complete supervisory-authority complaint-right disclosure was not confirmed/);
 });
 
 test("GdprEprivacyCoverageChecklistCard makes policy gap decisions inferable from descriptor and packet", () => {

@@ -2607,13 +2607,32 @@ function disambiguatePolicySurfaceLabels(surfaces: ExecutivePolicySurface[]) {
     labelCounts.set(surface.pageLabel, (labelCounts.get(surface.pageLabel) ?? 0) + 1);
   }
 
-  return surfaces.map((surface) => {
+  const surfacesWithSpecificLabels = surfaces.map((surface) => {
     if ((labelCounts.get(surface.pageLabel) ?? 0) <= 1) {
       return surface;
     }
 
     const pageLabel = deriveSpecificPolicySurfaceLabel(surface);
     return pageLabel === surface.pageLabel ? surface : { ...surface, pageLabel };
+  });
+
+  const specificLabelCounts = new Map<string, number>();
+  for (const surface of surfacesWithSpecificLabels) {
+    specificLabelCounts.set(surface.pageLabel, (specificLabelCounts.get(surface.pageLabel) ?? 0) + 1);
+  }
+
+  const seenSpecificLabels = new Map<string, number>();
+  return surfacesWithSpecificLabels.map((surface) => {
+    if ((specificLabelCounts.get(surface.pageLabel) ?? 0) <= 1) {
+      return surface;
+    }
+
+    const nextIndex = (seenSpecificLabels.get(surface.pageLabel) ?? 0) + 1;
+    seenSpecificLabels.set(surface.pageLabel, nextIndex);
+    return {
+      ...surface,
+      pageLabel: `${surface.pageLabel} ${nextIndex}`
+    };
   });
 }
 

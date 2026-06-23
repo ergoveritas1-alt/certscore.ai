@@ -872,6 +872,42 @@ test("deriveExecutivePolicySurfaces disambiguates terms policy subpages", async 
   );
 });
 
+test("deriveExecutivePolicySurfaces numbers duplicate generic policy labels", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "privacy-one",
+      page_type: "privacy_policy",
+      page_url: "https://example.com/privacy",
+      policy_summary_short: "Privacy surface retained."
+    },
+    {
+      id: "privacy-two",
+      page_type: "privacy_policy",
+      page_url: "https://example.com/intl/en/privacy",
+      policy_summary_short: "Secondary privacy surface retained."
+    },
+    {
+      id: "terms-one",
+      page_type: "terms_of_service",
+      page_url: "https://example.com/terms",
+      policy_summary_short: "Terms surface retained."
+    },
+    {
+      id: "terms-two",
+      page_type: "terms_of_service",
+      page_url: "https://example.com/legal/terms",
+      policy_summary_short: "Secondary terms surface retained."
+    }
+  ]);
+
+  assert.deepEqual(
+    surfaces.map((surface) => surface.pageLabel),
+    ["Privacy 1", "Privacy 2", "Terms 1", "Terms 2"]
+  );
+});
+
 test("buildScanReportUnifiedFindings surfaces page-attributed privacy-rights paths as review evidence", async () => {
   const buildScanReportUnifiedFindings = await loadBuildScanReportUnifiedFindings();
 

@@ -37,6 +37,34 @@ test("policySurfaceScanner discovers footer privacy links and bounded policy fac
   });
 });
 
+test("policySurfaceScanner strips script/config noise before retaining Article 13 policy evidence", async () => {
+  await withPolicyScan("policy-google-script-noise", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const retainedPolicySurfaceTextRef = privacy?.artifactRefs.find((ref) =>
+      ref.artifactId.startsWith("policy_surface_text_")
+    );
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) => signal.disclosureType === "processing_purposes"), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) => signal.disclosureType === "data_subject_rights"), true);
+    assert.doesNotMatch(privacy?.textExcerpt ?? "", /this\.gbar_|Closure Library|Object\.defineProperties|CONFIG:\[\[\[/i);
+    assert.ok(retainedPolicySurfaceTextRef?.path);
+    const retainedPolicySurfaceText = await readFile(retainedPolicySurfaceTextRef.path, "utf8");
+    assert.match(retainedPolicySurfaceText, /This policy explains how we collect, use, retain, share/i);
+    assert.doesNotMatch(retainedPolicySurfaceText, /this\.gbar_|Closure Library|Object\.defineProperties|CONFIG:\[\[\[/i);
+  });
+});
+
+test("policySurfaceScanner does not turn script-only policy pages into Article 13 evidence", async () => {
+  await withPolicyScan("policy-google-script-only", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(privacy?.status, "fetched");
+    assert.deepEqual(privacy?.article13DisclosureSignals, []);
+    assert.deepEqual(privacy?.observedTopics, []);
+  });
+});
+
 test("policySurfaceScanner fast mode keeps rendered discovery when static links lack cookie settings controls", async () => {
   await withPolicyScan("policy-footer-privacy", async ({ result }) => {
     const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
@@ -79,6 +107,50 @@ test("policySurfaceScanner fast mode skips rendered discovery when static core s
     nanoAssistProvider: {
       async classifyLinks() {
         throw new Error("Nano link ranking should not run when static core surfaces are complete.");
+      },
+    },
+  });
+});
+
+test("policySurfaceScanner fast mode keeps rendered discovery for weak static policy shells", async () => {
+  await withPolicyScan("policy-static-legacy-plus-rendered-canonical", async ({ result }) => {
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+
+    assert.equal(labels.includes("rendered discovery"), true);
+    assert.equal(labels.includes("rendered discovery skipped"), false);
+  }, {
+    discoveryMode: "fast",
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run in fast static coverage mode.");
+      },
+    },
+  });
+});
+
+test("policySurfaceScanner follows URL-only policy stubs to retain canonical policy text", async () => {
+  await withPolicyScan("policy-url-stub-canonical", async ({ result, baseUrl }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const retainedPolicySurfaceTextRef = privacy?.artifactRefs.find((ref) =>
+      ref.artifactId.startsWith("policy_surface_text_")
+    );
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.normalizedUrl, `${baseUrl}/policies/canonical-privacy`);
+    assert.ok(privacy?.textExcerpt?.includes("personal data"));
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) => signal.disclosureType === "processing_purposes"), true);
+    assert.equal(privacy?.article13DisclosureSignals.some((signal) => signal.disclosureType === "legal_basis"), true);
+    assert.ok(retainedPolicySurfaceTextRef?.path);
+    const retainedPolicySurfaceText = await readFile(retainedPolicySurfaceTextRef.path, "utf8");
+    assert.match(retainedPolicySurfaceText, /standard contractual clauses/i);
+    assert.doesNotMatch(retainedPolicySurfaceText.trim(), /^https?:\/\//i);
+    assert.equal(labels.some((label) => label.startsWith("policy url-stub follow")), true);
+  }, {
+    discoveryMode: "fast",
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run when deterministic fast discovery can follow URL-only policy stubs.");
       },
     },
   });
@@ -817,6 +889,79 @@ test("policySurfaceScanner gives Nano enough bounded text for distant Article 13
       privacy?.article13DisclosureSignals.find((signal) => signal.disclosureType === "international_transfers")?.evidenceText ?? "",
       /standard contractual clauses|European Economic Area/i,
     );
+  }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
+test("policySurfaceScanner extracts late mature-policy GDPR transparency signals without promoting legal basis", async () => {
+  let nanoExcerpt = "";
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    ...createDefaultMockNanoPolicyAssistProvider(),
+    async extractTopics(input) {
+      nanoExcerpt = input.excerpt;
+      return {
+        assistId: input.assistId,
+        observedTopics: [
+          "controller_contact",
+          "data_retention",
+          "data_subject_rights",
+          "international_transfers",
+          "supervisory_authority",
+          "automated_decision_making_or_profiling",
+        ],
+        article13DisclosureSignals: [],
+        mentionedControls: [],
+        mentionedPurposes: ["personalized ads"],
+        mentionedRights: ["export", "delete"],
+        mentionedVendors: [],
+        confidence: 0.82,
+      };
+    },
+  };
+
+  await withPolicyScan("policy-google-like-late-sections", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const signals = privacy?.article13DisclosureSignals ?? [];
+    const signalFor = (type: string) => signals.find((signal) => signal.disclosureType === type);
+    const sectionHeadings = privacy?.retainedPolicySections?.map((section) => section.heading) ?? [];
+    const sectionEvidence = privacy?.retainedArticle13SectionEvidence ?? [];
+    const sectionEvidenceFor = (type: string) => sectionEvidence.find((evidence) => evidence.coverageArea === type);
+
+    assert.ok(privacy);
+    assert.match(nanoExcerpt, /Retaining your information/i);
+    assert.match(nanoExcerpt, /Data transfers/i);
+    assert.match(nanoExcerpt, /Compliance and cooperation with regulators/i);
+    assert.equal(sectionHeadings.includes("Your privacy controls"), true);
+    assert.equal(sectionHeadings.includes("Exporting and deleting your information"), true);
+    assert.equal(sectionHeadings.includes("Retaining your information"), true);
+    assert.equal(sectionHeadings.includes("Data transfers"), true);
+    assert.equal(sectionHeadings.includes("Compliance and cooperation with regulators"), true);
+    assert.equal(sectionEvidenceFor("data_retention")?.selectedPolicySectionHeading, "Retaining your information");
+    assert.match(sectionEvidenceFor("data_retention")?.selectedPolicySectionExcerpt ?? "", /deleted or anonymized|retained as long as necessary/i);
+    assert.equal(sectionEvidenceFor("data_subject_rights")?.signalObserved, "observed");
+    assert.match(sectionEvidenceFor("data_subject_rights")?.selectedPolicySectionHeading ?? "", /privacy controls|exporting and deleting/i);
+    assert.match(sectionEvidenceFor("data_subject_rights")?.selectedPolicySectionExcerpt ?? "", /update important privacy controls|Google Takeout|delete your information/i);
+    assert.equal(sectionEvidenceFor("international_transfers")?.selectedPolicySectionHeading, "Data transfers");
+    assert.equal(sectionEvidenceFor("supervisory_authority")?.selectedPolicySectionHeading, "Compliance and cooperation with regulators");
+    assert.equal(sectionEvidenceFor("legal_basis")?.signalObserved, "not_confirmed");
+    assert.equal(signalFor("data_retention")?.status, "observed");
+    assert.equal(signalFor("data_retention")?.selectedPolicySectionHeading, "Retaining your information");
+    assert.match(signalFor("data_retention")?.evidenceText ?? "", /deleted or anonymized|retained as long as necessary/i);
+    assert.equal(signalFor("data_subject_rights")?.status, "observed");
+    assert.match(signalFor("data_subject_rights")?.selectedPolicySectionHeading ?? "", /privacy controls|exporting and deleting/i);
+    assert.match(signalFor("data_subject_rights")?.evidenceText ?? "", /privacy controls|activity controls|ad settings|personalization settings|Google Takeout|delete your information|My Activity/i);
+    assert.equal(signalFor("international_transfers")?.status, "observed");
+    assert.equal(signalFor("international_transfers")?.selectedPolicySectionHeading, "Data transfers");
+    assert.match(signalFor("international_transfers")?.evidenceText ?? "", /servers around the world|outside the country where you live|data privacy frameworks/i);
+    assert.equal(signalFor("supervisory_authority")?.status, "partial");
+    assert.equal(signalFor("supervisory_authority")?.selectedPolicySectionHeading, "Compliance and cooperation with regulators");
+    assert.match(signalFor("supervisory_authority")?.evidenceText ?? "", /regulatory authorities|local data protection authorities|formal written complaints/i);
+    assert.equal(signalFor("automated_decision_making_or_profiling")?.status, "partial");
+    assert.equal(signalFor("automated_decision_making_or_profiling")?.selectedPolicySectionHeading, "Automated systems");
+    assert.match(signalFor("automated_decision_making_or_profiling")?.evidenceText ?? "", /automated systems|algorithms|personalized ads/i);
+    assert.equal(signalFor("controller_contact")?.status, "partial");
+    assert.equal(signalFor("controller_contact")?.selectedPolicySectionHeading, "European requirements");
+    assert.match(signalFor("controller_contact")?.evidenceText ?? "", /Google LLC|Google Ireland Limited|contact Google/i);
+    assert.equal(signalFor("legal_basis"), undefined);
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
 });
 

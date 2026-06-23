@@ -3612,14 +3612,49 @@ type PolicyDisclosureRowConfig = {
   textPattern: RegExp;
 };
 
+type PolicySectionChunk = {
+  charEnd?: number;
+  charStart?: number;
+  heading?: string;
+  navPenalty: number;
+  rowMatchScore?: number;
+  sourceUrl: string;
+  substantiveScore: number;
+  text: string;
+};
+
 const LEGAL_BASIS_DISCLOSURE_PATTERN =
-  /(?:legal|lawful)\s+basis|article\s*6|legitimate interests?|legal obligation|vital interests?|public task|performance of (?:a )?contract|contractual necessity|(?:basis for processing|we rely on|based on).{0,120}\bconsent\b|\bconsent\b.{0,120}\b(?:personal data|personal information|processing|lawful|legal basis)\b/i;
+  /(?:legal|lawful)\s+basis|article\s*6|legitimate interests?|legal obligation|when required by law|vital interests?|public task|performance of (?:a )?contract|contractual necessity|(?:basis for processing|we rely on|based on).{0,160}\b(?:consent|contract|legal obligation|legitimate interest)\b|\bwith your consent\b|\bconsent\b.{0,140}\b(?:personal data|personal information|processing|lawful|legal basis)\b/i;
 
 const RECIPIENTS_VENDOR_CATEGORIES_DISCLOSURE_PATTERN =
   /recipient|third[- ]part(?:y|ies)|service providers?|vendors?|processors?|subprocessors?|business partners?|advertising partners?|analytics providers?|payment processors?|hosting providers?|cloud providers?|affiliates?/i;
 
 const CONTROLLER_CONTACT_DISCLOSURE_PATTERN =
-  /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection|contact (?:our )?(?:privacy|data protection)|privacy@/i;
+  /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection(?: office| officer)?|contact (?:our )?(?:privacy|data protection)|contact (?:google|us).{0,80}(?:privacy|data protection)|privacy@/i;
+
+const PROCESSING_PURPOSES_DISCLOSURE_PATTERN =
+  /purpose(?:s)? (?:of|for|we|to)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|provide (?:our )?services|personalize (?:content|ads|advertising|services|experience)|tailored search results|measure (?:performance|advertising)|perform analytics/i;
+
+const RETENTION_DISCLOSURE_PATTERN =
+  /retaining your information|retain(?:ing)? (?:the |your |personal )?(?:data|information)|retained for|deleted or anonymized|deletion|retention periods?|legal purposes|fraud and abuse prevention|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)|delete your information.{0,120}(?:retention|retain|retained|deleted|anonymized)|keep your.{0,100}(?:as long as necessary|required by law|for)|stored for|kept for|how long|expires?|as long as necessary/i;
+
+const DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN =
+  /your rights|data subject rights|right to (?:access|delete|erase|erasure|rectif|object|restrict|port)|rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)|access.{0,80}(?:your )?(?:personal )?(?:data|information)|delete your information|delete.{0,80}(?:your )?(?:personal )?(?:data|information)|erasure|correct (?:your )?(?:personal )?(?:data|information)|rectif|portability|object to|restrict (?:the )?processing|export.{0,80}(?:your )?(?:data|information)|review and update|my activity|google takeout|request to remove content|privacy controls|download a copy/i;
+
+const INTERNATIONAL_TRANSFERS_DISCLOSURE_PATTERN =
+  /data transfers?|international transfer|transfer.*outside|outside.*(?:eea|european economic area|eu|european union|uk|united kingdom|country where you live)|(?:eea|european economic area|eu|european union|uk|united kingdom).*outside|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|data protection laws vary among countries|standard contractual|contractual clauses|sccs?|adequacy|cross-border|data transfer framework|dpf|privacy shield|third countr(?:y|ies)|foreign countr(?:y|ies)|global(?:ly)? transfer|local data protection authorities/i;
+
+const SUPERVISORY_AUTHORITY_DISCLOSURE_PATTERN =
+  /supervisory authority|data protection authority|local data protection authorit(?:y|ies)|lodge a complaint|formal written complaints?|resolve any complaints?|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority|regulatory authorities|regulators?|ico|cnil|dpc/i;
+
+const AUTOMATED_DECISION_PROFILING_DISCLOSURE_PATTERN =
+  /automated decision(?:-making| making)?|solely automated (?:processing|decision)|automated systems?|meaningful information about the logic involved|legal or similarly significant effects|similarly significant effects|\bprofiling\b|personalized ads|personalized advertising|customized search results|tailored search results|tailored|algorithms?|recognize patterns/i;
+
+const ARTICLE_22_AUTOMATED_DECISION_DISCLOSURE_PATTERN =
+  /solely (?:on )?automated (?:processing|decision)|automated decision(?:-making| making)?.{0,160}(?:legal or similarly significant effects|similarly significant effects|meaningful information about the logic involved)|(?:legal or similarly significant effects|similarly significant effects).{0,160}(?:automated decision|solely (?:on )?automated|profiling)/i;
+
+const GENERAL_AUTOMATED_PROCESSING_DISCLOSURE_PATTERN =
+  /automated systems?|personalized ads|personalized advertising|targeted advertising|customized search results|tailored search results|tailored|algorithms?|recognize patterns|\bprofiling\b/i;
 
 const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   {
@@ -3640,7 +3675,7 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
     label: "Processing purposes disclosure",
     disclosureType: "processing_purposes",
     signalKeys: ["processingPurposesDisclosureObserved", "processing_purposes_disclosure_observed"],
-    textPattern: /purpose(?:s)? (?:of|for|we|to)|we (?:use|process) (?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|provide (?:our )?services|personalize (?:content|services|experience)/i
+    textPattern: PROCESSING_PURPOSES_DISCLOSURE_PATTERN
   },
   {
     rowId: "legal_basis_disclosure_observed",
@@ -3661,21 +3696,21 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
     label: "Retention disclosure",
     disclosureType: "data_retention",
     signalKeys: ["retentionDisclosureObserved", "retention_disclosure_observed"],
-    textPattern: /retention period|retention criteria|storage period|retain.{0,80}(?:as long as necessary|required by law|for the purposes|until|unless)|keep your.{0,80}(?:as long as necessary|required by law|for)|stored for|kept for|as long as necessary/i
+    textPattern: RETENTION_DISCLOSURE_PATTERN
   },
   {
     rowId: "data_subject_rights_disclosure",
     label: "Data subject rights disclosure",
     disclosureType: "data_subject_rights",
     signalKeys: ["dataSubjectRightsDisclosureObserved", "data_subject_rights_disclosure_observed"],
-    textPattern: /your rights|data subject rights|access|delete|erasure|correct|rectif|portability|object|restrict/i
+    textPattern: DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN
   },
   {
     rowId: "international_transfers_disclosure",
     label: "International transfer disclosure",
     disclosureType: "international_transfers",
     signalKeys: ["internationalTransfersDisclosureObserved", "international_transfers_disclosure_observed"],
-    textPattern: /international transfer|transfer.*outside|outside.*(?:eea|european economic area|eu|european union|uk|united kingdom)|(?:eea|european economic area|eu|european union|uk|united kingdom).*outside|standard contractual|contractual clauses|sccs?|adequacy|cross-border|data transfer framework|dpf|privacy shield|third countr(?:y|ies)|foreign countr(?:y|ies)|global(?:ly)? transfer/i
+    textPattern: INTERNATIONAL_TRANSFERS_DISCLOSURE_PATTERN
   },
   {
     rowId: "dpo_contact_point_disclosure",
@@ -3689,14 +3724,14 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
     label: "Supervisory authority complaint disclosure",
     disclosureType: "supervisory_authority",
     signalKeys: ["supervisoryAuthorityComplaintDisclosureObserved", "supervisory_authority_complaint_disclosure_observed"],
-    textPattern: /supervisory authority|data protection authority|complain|complaint|ico|cnil|dpc/i
+    textPattern: SUPERVISORY_AUTHORITY_DISCLOSURE_PATTERN
   },
   {
     rowId: "automated_decision_making_profiling_disclosure",
     label: "Automated decision-making/profiling disclosure",
     disclosureType: "automated_decision_making_or_profiling",
     signalKeys: ["automatedDecisionMakingProfilingDisclosureObserved", "automated_decision_making_profiling_disclosure_observed"],
-    textPattern: /automated decision(?:-making| making)?|solely automated (?:processing|decision)|meaningful information about the logic involved|legal or similarly significant effects|similarly significant effects|\bprofiling\b/i
+    textPattern: AUTOMATED_DECISION_PROFILING_DISCLOSURE_PATTERN
   }
 ];
 
@@ -3719,11 +3754,14 @@ function getPolicyTextExtractionHealth(summary: Record<string, unknown> | null |
   const privacyPolicyPresent = getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true;
   const extractedTextLength = getNumber(summary, ["privacyPolicyTextCharacterCount", "privacy_policy_text_character_count"]) ?? 0;
   const processingErrorObserved = getBoolean(summary, ["processingErrorObserved", "processing_error_observed"]) === true;
+  const retainedText = getPolicyDisclosureText(summary);
   const policyTextExtractionStatus =
     !privacyPolicyPresent
       ? "not_attempted"
       : processingErrorObserved
         ? "errored"
+        : looksLikeCodeOrConfigText(retainedText)
+          ? "low_quality_extracted_code_or_config"
         : extractedTextLength >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
           ? "ok"
           : "thin";
@@ -3735,7 +3773,9 @@ function getPolicyTextExtractionHealth(summary: Record<string, unknown> | null |
         ? "privacy_policy_surface_not_observed"
         : policyTextExtractionStatus === "errored"
           ? "privacy_policy_text_processing_error"
-          : "privacy_policy_text_below_minimum_length",
+          : policyTextExtractionStatus === "low_quality_extracted_code_or_config"
+            ? "privacy_policy_text_low_quality_or_non_policy_content"
+            : "privacy_policy_text_below_minimum_length",
     minimumTextLengthRequired: MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13,
     nanoInvoked: false,
     nanoSkipReason: policyTextExtractionStatus === "ok" ? undefined : "policy_text_input_limited",
@@ -3750,7 +3790,11 @@ function policyTextExtractionStatus(summary: Record<string, unknown> | null | un
 }
 
 function policyTextExtractionIsOk(summary: Record<string, unknown> | null | undefined) {
-  return policyTextExtractionStatus(summary) === "ok";
+  if (policyTextExtractionStatus(summary) !== "ok") {
+    return false;
+  }
+  const text = getPolicyDisclosureText(summary);
+  return !looksLikeCodeOrConfigText(text);
 }
 
 function getPolicyArticle13DisclosureSignals(summary: Record<string, unknown> | null | undefined) {
@@ -3771,8 +3815,16 @@ function getPolicyArticle13DisclosureSignal(
   if (candidates.length === 0) {
     return null;
   }
-  return candidates
+  const sanitizedCandidates = candidates
     .map((signal) => sanitizePolicyArticle13Signal(signal))
+    .filter((signal) => isPolicyDisclosureEvidenceUsable(
+      getString(signal, ["evidenceText", "evidence_text"]) ?? "",
+      disclosureType
+    ));
+  if (sanitizedCandidates.length === 0) {
+    return null;
+  }
+  return sanitizedCandidates
     .sort((left, right) =>
       scorePolicyDisclosureEvidenceText(
         getString(right, ["evidenceText", "evidence_text"]) ?? "",
@@ -3784,21 +3836,531 @@ function getPolicyArticle13DisclosureSignal(
     )[0] ?? null;
 }
 
+function getRetainedArticle13SectionEvidence(
+  summary: Record<string, unknown> | null | undefined,
+  disclosureType: string | undefined
+) {
+  if (!disclosureType) {
+    return null;
+  }
+  const candidates = getObjectArray(summary, ["retainedArticle13SectionEvidence", "retained_article13_section_evidence"])
+    .filter((evidence) => getString(evidence, ["coverageArea", "coverage_area"]) === disclosureType)
+    .map((evidence) => ({
+      ...evidence,
+      selectedPolicySectionExcerpt: cleanPolicyDisclosureEvidenceText(
+        getString(evidence, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]) ?? ""
+      )
+    }))
+    .filter((evidence) => rowSpecificSectionEvidenceIsObserved(evidence, disclosureType));
+  return candidates
+    .sort((left, right) =>
+      selectedEvidenceStrengthScore(getString(right, ["selectedEvidenceStrength", "selected_evidence_strength"])) -
+      selectedEvidenceStrengthScore(getString(left, ["selectedEvidenceStrength", "selected_evidence_strength"]))
+    )[0] ?? null;
+}
+
+function selectedEvidenceStrengthScore(value: string | null | undefined) {
+  switch (value) {
+    case "strong":
+      return 3;
+    case "moderate":
+      return 2;
+    default:
+      return 0;
+  }
+}
+
+function selectedEvidenceStrengthIsCreditworthy(value: string | null | undefined) {
+  return value === "strong" || value === "moderate";
+}
+
+function rowSpecificSectionEvidenceIsObserved(evidence: Record<string, unknown>, disclosureType: string | undefined) {
+  const signalObserved = getString(evidence, ["signalObserved", "signal_observed"]);
+  const selectedEvidenceStrength = getString(evidence, ["selectedEvidenceStrength", "selected_evidence_strength"]);
+  const excerpt = getString(evidence, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]) ?? "";
+  if (
+    signalObserved !== "observed" ||
+    !selectedEvidenceStrengthIsCreditworthy(selectedEvidenceStrength) ||
+    !excerpt ||
+    !isPolicyDisclosureEvidenceUsable(excerpt, disclosureType)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function getValidatedRowSpecificPolicyEvidence(
+  summary: Record<string, unknown> | null | undefined,
+  disclosureType: string | undefined
+) {
+  if (!disclosureType || getString(summary, ["policyTextCoverageMode", "policy_text_coverage_mode"]) !== "section_targeted") {
+    return null;
+  }
+
+  const article13Signal = getPolicyArticle13DisclosureSignal(summary, disclosureType);
+  const article13SignalStatus = getString(article13Signal, ["status"]);
+  const article13SelectedStrength = getString(article13Signal, ["selectedEvidenceStrength", "selected_evidence_strength"]);
+  const article13SectionExcerpt = cleanPolicyDisclosureEvidenceText(
+    getString(article13Signal, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]) ??
+    getString(article13Signal, ["evidenceText", "evidence_text"]) ??
+    ""
+  );
+  if (
+    article13SignalStatus === "observed" &&
+    selectedEvidenceStrengthIsCreditworthy(article13SelectedStrength) &&
+    article13SectionExcerpt &&
+    isPolicyDisclosureEvidenceUsable(article13SectionExcerpt, disclosureType)
+  ) {
+    return {
+      article13Signal,
+      evidenceText: article13SectionExcerpt,
+      evidenceType: "article13DisclosureSignals",
+      sectionEvidence: null,
+      selectedEvidenceStrength: article13SelectedStrength,
+      selectedPolicySectionHeading: getString(article13Signal, ["selectedPolicySectionHeading", "selected_policy_section_heading"]),
+      selectedPolicySectionUrl: getString(article13Signal, ["selectedPolicySectionUrl", "selected_policy_section_url"])
+    };
+  }
+
+  const sectionEvidence = getRetainedArticle13SectionEvidence(summary, disclosureType);
+  if (!sectionEvidence) {
+    return null;
+  }
+  return {
+    article13Signal: {
+      disclosureType,
+      evidenceText: getString(sectionEvidence, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]),
+      selectedEvidenceStrength: getString(sectionEvidence, ["selectedEvidenceStrength", "selected_evidence_strength"]),
+      selectedPolicySectionExcerpt: getString(sectionEvidence, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]),
+      selectedPolicySectionHeading: getString(sectionEvidence, ["selectedPolicySectionHeading", "selected_policy_section_heading"]),
+      selectedPolicySectionUrl: getString(sectionEvidence, ["selectedPolicySectionUrl", "selected_policy_section_url"]),
+      source: getString(sectionEvidence, ["evidenceSource", "evidence_source"]) ?? "section_targeted_policy_extraction",
+      status: "observed"
+    },
+    evidenceText: getString(sectionEvidence, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]) ?? "",
+    evidenceType: "retainedArticle13SectionEvidence",
+    sectionEvidence,
+    selectedEvidenceStrength: getString(sectionEvidence, ["selectedEvidenceStrength", "selected_evidence_strength"]),
+    selectedPolicySectionHeading: getString(sectionEvidence, ["selectedPolicySectionHeading", "selected_policy_section_heading"]),
+    selectedPolicySectionUrl: getString(sectionEvidence, ["selectedPolicySectionUrl", "selected_policy_section_url"])
+  };
+}
+
 function getPolicyObservedTopics(summary: Record<string, unknown> | null | undefined) {
   return getStringArray(summary, ["observedTopics", "observed_topics"]);
 }
 
-function policyTextMatchEvidence(text: string, pattern: RegExp) {
+function policyTextMatchEvidence(text: string, pattern: RegExp, disclosureType?: string, sourceUrl = "retained-policy-text") {
   if (!text) {
     return null;
   }
   const normalized = cleanPolicyDisclosureEvidenceText(text);
-  const match = normalized.match(pattern);
-  if (!match?.index && match?.index !== 0) {
+  const chunks = buildPolicySectionChunks(normalized, sourceUrl);
+  const matches = chunks.flatMap((chunk) => {
+    const regex = new RegExp(pattern.source, pattern.flags.includes("g") ? pattern.flags : `${pattern.flags}g`);
+    return [...chunk.text.matchAll(regex)].map((match) => {
+      const index = match.index ?? 0;
+      const start = Math.max(0, index - 180);
+      let excerpt = cleanPolicyDisclosureEvidenceText(chunk.text.slice(start, start + 520));
+      if (chunk.heading && !new RegExp(`^${escapeRegExp(chunk.heading)}\\b`, "i").test(excerpt)) {
+        excerpt = cleanPolicyDisclosureEvidenceText(`${chunk.heading}. ${excerpt}`).slice(0, 620).trimEnd();
+      }
+      return {
+        chunk,
+        excerpt,
+        score: scorePolicyDisclosureEvidenceText(excerpt, disclosureType) +
+          scorePolicySectionChunkForDisclosure(chunk, disclosureType, pattern)
+      };
+    });
+  });
+  if (matches.length === 0) {
     return null;
   }
-  const start = Math.max(0, match.index - 180);
-  return cleanPolicyDisclosureEvidenceText(normalized.slice(start, start + 420));
+
+  const substantiveMatches = matches.filter((match) =>
+    !isNavigationDominatedPolicyChunk(match.chunk) &&
+    isPolicyDisclosureEvidenceUsable(match.excerpt, disclosureType)
+  );
+  const bestMatch = (substantiveMatches.length > 0 ? substantiveMatches : matches)
+    .sort((left, right) => right.score - left.score)[0];
+  if (
+    !bestMatch ||
+    isNavigationDominatedPolicyChunk(bestMatch.chunk) ||
+    !isPolicyDisclosureEvidenceUsable(bestMatch.excerpt, disclosureType)
+  ) {
+    return null;
+  }
+  return bestMatch?.excerpt ?? null;
+}
+
+function buildPolicySectionChunks(text: string, sourceUrl: string): PolicySectionChunk[] {
+  const normalized = cleanPolicyDisclosureEvidenceText(text);
+  if (!normalized) {
+    return [];
+  }
+
+  const headingPattern = policySectionHeadingPattern();
+  const headingMatches = [...normalized.matchAll(headingPattern)]
+    .map((match) => ({
+      heading: cleanPolicyDisclosureEvidenceText(match[1] ?? match[0] ?? ""),
+      index: match.index ?? 0
+    }))
+    .filter((match, index, all) =>
+      match.heading.length > 0 &&
+      (index === 0 || match.index !== all[index - 1]?.index)
+    );
+
+  const chunks: PolicySectionChunk[] = [];
+  if (headingMatches.length >= 1) {
+    for (let index = 0; index < headingMatches.length; index += 1) {
+      const current = headingMatches[index];
+      if (!current) {
+        continue;
+      }
+      const next = headingMatches[index + 1];
+      const chunkStart = current.index;
+      const chunkEnd = next?.index ?? normalized.length;
+      const chunkText = cleanPolicyDisclosureEvidenceText(normalized.slice(chunkStart, chunkEnd));
+      if (chunkText.length < 40) {
+        continue;
+      }
+      chunks.push(createPolicySectionChunk({
+        charEnd: chunkEnd,
+        charStart: chunkStart,
+        heading: current.heading,
+        sourceUrl,
+        text: chunkText
+      }));
+    }
+  }
+
+  for (const chunk of buildSlidingPolicyTextChunks(normalized, sourceUrl)) {
+    chunks.push(chunk);
+  }
+
+  if (chunks.length === 0 || normalized.length < 1_000) {
+    const fallbackText = normalized.slice(0, Math.min(normalized.length, 1_000)).trimEnd();
+    if (fallbackText.length > 0) {
+      chunks.push(createPolicySectionChunk({
+        charEnd: fallbackText.length,
+        charStart: 0,
+        sourceUrl,
+        text: fallbackText
+      }));
+    }
+  }
+
+  return chunks.sort((left, right) =>
+    right.substantiveScore - left.substantiveScore ||
+    left.navPenalty - right.navPenalty ||
+    (left.charStart ?? 0) - (right.charStart ?? 0)
+  );
+}
+
+function policySectionHeadingPattern() {
+  const headings = [
+    "Information Google collects",
+    "Why Google collects data",
+    "Retaining your information",
+    "Data transfers",
+    "Exporting and deleting your information",
+    "Your privacy controls",
+    "Compliance and cooperation with regulatory authorities",
+    "Contact us",
+    "Data controller",
+    "Controller",
+    "Data protection officer",
+    "Privacy office",
+    "Privacy contact",
+    "Legal basis",
+    "Lawful basis",
+    "How we use information",
+    "How we use personal data",
+    "How we share information",
+    "Who we share information with",
+    "Recipients",
+    "Service providers",
+    "Retention",
+    "International transfers",
+    "Transfer of data",
+    "Your rights",
+    "Your choices",
+    "Complaints",
+    "Supervisory authority",
+    "Regulatory authorities",
+    "Automated decision-making",
+    "Automated processing",
+    "Profiling"
+  ];
+  return new RegExp(`(?:^|[.!?]\\s+|\\n+)(${headings.map(escapeRegExp).join("|")})(?:[.:\\-–—]?\\s+)`, "gi");
+}
+
+function buildSlidingPolicyTextChunks(text: string, sourceUrl: string): PolicySectionChunk[] {
+  const chunks: PolicySectionChunk[] = [];
+  const maxChunkChars = 900;
+  const strideChars = 520;
+  for (let start = 0; start < text.length; start += strideChars) {
+    const end = Math.min(text.length, start + maxChunkChars);
+    const sliceStart = start === 0 ? 0 : Math.max(0, text.lastIndexOf(". ", start) + 2 || start);
+    const sliceEnd = end >= text.length ? text.length : Math.max(end, text.indexOf(". ", end));
+    const chunkText = cleanPolicyDisclosureEvidenceText(text.slice(sliceStart, sliceEnd > sliceStart ? sliceEnd + 1 : end));
+    if (chunkText.length < 80) {
+      continue;
+    }
+    chunks.push(createPolicySectionChunk({
+      charEnd: sliceEnd > sliceStart ? sliceEnd + 1 : end,
+      charStart: sliceStart,
+      sourceUrl,
+      text: chunkText
+    }));
+    if (end >= text.length) {
+      break;
+    }
+  }
+  return chunks;
+}
+
+function createPolicySectionChunk(input: {
+  charEnd?: number;
+  charStart?: number;
+  heading?: string;
+  sourceUrl: string;
+  text: string;
+}): PolicySectionChunk {
+  const navPenalty = policyChunkNavigationPenalty(input.text, input.heading);
+  const substantiveScore = policyChunkSubstantiveScore(input.text, input.heading) - navPenalty;
+  return {
+    charEnd: input.charEnd,
+    charStart: input.charStart,
+    heading: input.heading,
+    navPenalty,
+    sourceUrl: input.sourceUrl,
+    substantiveScore,
+    text: input.text
+  };
+}
+
+function policyChunkNavigationPenalty(text: string, heading?: string) {
+  const lower = `${heading ?? ""} ${text}`.toLowerCase();
+  let penalty = 0;
+  const navTerms = lower.match(/\b(?:privacy & terms|overview|privacy policy|terms of service|technologies|faq|introduction|google account)\b/g)?.length ?? 0;
+  const sentenceCount = (text.match(/[.!?](?:\s|$)/g) ?? []).length;
+  const shortLabelCount = lower.match(/\b(?:privacy|terms|overview|faq|technologies|account|help|about)\b/g)?.length ?? 0;
+  if (navTerms >= 4) {
+    penalty += 12;
+  } else if (navTerms >= 2) {
+    penalty += 5;
+  }
+  if (shortLabelCount >= 8 && sentenceCount <= 1) {
+    penalty += 12;
+  }
+  if (/^(?:privacy policy|privacy & terms|overview|technologies|faq|terms of service|introduction)(?:\s+(?:privacy policy|privacy & terms|overview|technologies|faq|terms of service|introduction)){2,}/i.test(text)) {
+    penalty += 16;
+  }
+  if (sentenceCount === 0 && text.length > 160) {
+    penalty += 5;
+  }
+  return penalty;
+}
+
+function policyChunkSubstantiveScore(text: string, heading?: string) {
+  const lower = `${heading ?? ""} ${text}`.toLowerCase();
+  let score = Math.min(text.length, 1_200) / 120;
+  const sentenceCount = (text.match(/[.!?](?:\s|$)/g) ?? []).length;
+  score += Math.min(sentenceCount, 5) * 2;
+  const substantiveTerms = lower.match(/\b(?:collect|use|process|retain|delete|anonymize|export|access|update|correct|transfer|share|contact|complain|object|restrict|personalize|automated|algorithm|recognize|rights|controller|legal basis|lawful basis|service providers|processors|supervisory authority|data protection authority)\b/g)?.length ?? 0;
+  score += Math.min(substantiveTerms, 12);
+  if (heading && policyChunkNavigationPenalty(heading) < 4) {
+    score += 3;
+  }
+  return score;
+}
+
+function scorePolicySectionChunkForDisclosure(
+  chunk: PolicySectionChunk,
+  disclosureType: string | undefined,
+  pattern: RegExp
+) {
+  const lower = `${chunk.heading ?? ""} ${chunk.text}`.toLowerCase();
+  let score = chunk.substantiveScore;
+  pattern.lastIndex = 0;
+  if (chunk.heading) {
+    score += 6;
+  }
+  if (chunk.heading && pattern.test(chunk.heading)) {
+    score += 10;
+  }
+  const hints = disclosureType ? policyDisclosureSectionHints(disclosureType) : [];
+  for (const hint of hints) {
+    if (hint.test(lower)) {
+      score += 4;
+    }
+  }
+  return score;
+}
+
+function policyDisclosureSectionHints(disclosureType: string): RegExp[] {
+  switch (disclosureType) {
+    case "controller_contact":
+      return [/contact/, /controller/, /data protection/, /privacy office/, /privacy contact/, /google llc/];
+    case "processing_purposes":
+      return [/why .*collects? data/, /how we use/, /purpose/, /provide .*services/, /personalize/];
+    case "legal_basis":
+      return [/legal basis/, /lawful basis/, /legitimate interests?/, /consent/, /contract/, /article 6/];
+    case "recipients_or_vendor_categories":
+      return [/share/, /recipients?/, /service providers?/, /processors?/, /partners?/, /affiliates?/];
+    case "data_retention":
+      return [/retaining your information/, /retention/, /retain/, /deleted or anonymized/, /deletion/, /anonymiz/, /legal purposes/, /fraud and abuse prevention/, /kept for/, /how long/];
+    case "data_subject_rights":
+      return [/your rights/, /privacy controls/, /access/, /review/, /update/, /correct/, /delete/, /export/, /download a copy/, /object/, /restrict/, /request/];
+    case "international_transfers":
+      return [/data transfers?/, /servers around the world/, /outside of the country where you live/, /legal frameworks relating to the transfer of data/, /data protection laws vary among countries/, /data privacy framework/, /standard contractual clauses/];
+    case "dpo_contact":
+      return [/data protection officer/, /\bdpo\b/, /privacy office/, /privacy contact/, /data protection contact/];
+    case "supervisory_authority":
+      return [/regulatory authorities/, /local data protection authorities/, /supervisory authority/, /data protection authority/, /formal written complaints?/, /resolve any complaints?/, /complaint/];
+    case "automated_decision_making_or_profiling":
+      return [/automated systems?/, /personalized ads/, /customized search results/, /tailored/, /algorithms?/, /recognize patterns/, /profiling/, /solely automated/, /legal or similarly significant effects/];
+    default:
+      return [];
+  }
+}
+
+function isNavigationDominatedPolicyChunk(chunk: PolicySectionChunk) {
+  return chunk.navPenalty >= 12 && chunk.substantiveScore < 8;
+}
+
+function isPolicyDisclosureEvidenceUsable(value: string, disclosureType: string | undefined) {
+  const text = cleanPolicyDisclosureEvidenceText(value);
+  if (text.length < 35) {
+    return false;
+  }
+  if (looksLikeCodeOrConfigText(text) || !hasMinimumPolicyProseQuality(text)) {
+    return false;
+  }
+  if (isPolicyChromeOrTocExcerpt(text)) {
+    return false;
+  }
+  if (disclosureType === "data_retention" && !hasSubstantiveRetentionDisclosure(text)) {
+    return false;
+  }
+  if (disclosureType === "controller_contact" && !hasSubstantiveControllerContactDisclosure(text)) {
+    return false;
+  }
+  if (disclosureType === "data_subject_rights" && !hasSubstantiveDataSubjectRightsDisclosure(text)) {
+    return false;
+  }
+  return true;
+}
+
+function isPolicyChromeOrTocExcerpt(value: string) {
+  const text = cleanPolicyDisclosureEvidenceText(value);
+  const lower = text.toLowerCase();
+  const sentenceCount = (text.match(/[.!?](?:\s|$)/g) ?? []).length;
+  const chromeTermCount = lower.match(/\b(?:skip to main content|privacy policy|privacy & terms|overview|terms of service|technologies|faq|introduction|google account)\b/g)?.length ?? 0;
+  const substantiveVerbCount = lower.match(/\b(?:collect|use|process|retain|delete|share|transfer|contact|complain|access|correct|object|restrict|personalize)\b/g)?.length ?? 0;
+  const headingSequence =
+    /privacy policy\s+privacy & terms|privacy & terms\s+privacy policy|overview\s+terms of service\s+technologies\s+faq|information google collects\s+why google collects data\s+your privacy controls|terms of service\s+technologies\s+faq/i.test(text);
+  const repeatedShortLabels = lower.match(/\b(?:privacy|terms|overview|faq|technologies|introduction)\b/g)?.length ?? 0;
+  if (headingSequence && sentenceCount <= 1) {
+    return true;
+  }
+  if (chromeTermCount >= 4 && sentenceCount <= 1 && substantiveVerbCount < 3) {
+    return true;
+  }
+  if (repeatedShortLabels >= 7 && sentenceCount <= 1) {
+    return true;
+  }
+  if (/^(?:skip to main content\s+)?(?:privacy policy|privacy & terms|overview|technologies|faq|terms of service|introduction)(?:\s+(?:privacy policy|privacy & terms|overview|technologies|faq|terms of service|introduction)){2,}/i.test(text)) {
+    return substantiveVerbCount >= 3 && sentenceCount >= 2 ? false : true;
+  }
+  return false;
+}
+
+function disclosureEvidenceBodyAfterHeading(value: string, headings: RegExp[]) {
+  let text = cleanPolicyDisclosureEvidenceText(value);
+  text = text.replace(/^(?:privacy policy|privacy & terms|overview|technologies|faq|terms of service|introduction|skip to main content)(?:\s+(?:privacy policy|privacy & terms|overview|technologies|faq|terms of service|introduction))*[.:;\-–—]?\s*/i, "");
+  for (const heading of headings) {
+    text = text.replace(heading, "");
+  }
+  return text.trim();
+}
+
+function hasSubstantiveRetentionDisclosure(value: string) {
+  const body = disclosureEvidenceBodyAfterHeading(value, [
+    /^(?:retaining your information|retention|data retention)[.:;\-–—]?\s*/i
+  ]);
+  const genericStorageOnly =
+    /\b(?:collect|store|storage|cookies?|local storage|databases?|server logs)\b/i.test(body) &&
+    !/\b(?:retain|retained|retention|retention period|how long|delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove|expires?|kept for|as long as|as long as necessary|required by law|legal purposes|fraud and abuse prevention|no longer needed|no engagement period)\b/i.test(body);
+  if (genericStorageOnly) {
+    return false;
+  }
+  return /\b(?:retain|retained|retention|retention period|how long|kept for|as long as|as long as necessary|required by law|legal purposes|fraud and abuse prevention|no longer needed|no engagement period|expires?)\b/i.test(body) ||
+    /\b(?:delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove)\b.{0,120}\b(?:automatically|after|when|once|period|retention|no longer|settings|account|inactive|engagement)\b/i.test(body) ||
+    /\b(?:automatically|after|when|once|period|retention|no longer|settings|account|inactive|engagement)\b.{0,120}\b(?:delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove)\b/i.test(body);
+}
+
+function hasSubstantiveControllerContactDisclosure(value: string) {
+  const body = disclosureEvidenceBodyAfterHeading(value, [
+    /^(?:contact us|data controller|controller|privacy contact|privacy office|data protection officer)[.:;\-–—]?\s*/i
+  ]);
+  return /\b(?:data controller|controller.{0,80}(?:contact|privacy|data protection)|google llc|contact google about privacy questions|contact (?:us|google).{0,120}(?:privacy|data protection)|contact form|privacy office|data protection office|data protection officer|privacy@|postal address|registered address)\b/i.test(body);
+}
+
+function hasSubstantiveDataSubjectRightsDisclosure(value: string) {
+  const body = disclosureEvidenceBodyAfterHeading(value, [
+    /^(?:your rights|data subject rights|privacy controls|exporting and deleting your information)[.:;\-–—]?\s*/i
+  ]);
+  const rightsVerbMatches = body.match(/\b(?:see|access|take it with you|export|download|correct(?:ions?)?|rectif(?:y|ication)|withdraw consent|opt out|object|restrict|eras(?:e|ed|ure)|delete|remove|exercise (?:your )?privacy rights|exercise (?:your )?rights)\b/gi) ?? [];
+  return rightsVerbMatches.length >= 2 ||
+    /\b(?:right to (?:access|delete|erasure|rectification|object|restrict|portability)|rights? to (?:access|delete|erasure|rectification|object|restrict|portability)|exercise (?:your )?(?:privacy )?rights|privacy controls|take it with you|withdraw consent|opt out|download a copy|export (?:your )?(?:data|information)|delete (?:your )?(?:data|information)|erase (?:your )?(?:data|information)|access (?:your )?(?:personal )?(?:data|information)|correct(?:ions?)? (?:to )?(?:your )?(?:personal )?(?:data|information)|request to (?:remove|delete|erase|access|correct))\b/i.test(body);
+}
+
+function looksLikeCodeOrConfigText(value: string) {
+  const text = cleanPolicyDisclosureEvidenceText(value);
+  if (!text) {
+    return false;
+  }
+  const codeSignalCount = [
+    /this\.gbar_/i,
+    /\bCONFIG:\s*\[\[\[/,
+    /Copyright The Closure Library/i,
+    /SPDX-License-Identifier/i,
+    /\b(?:var|const|let)\s+[A-Za-z_$][\w$]*\s*=/,
+    /function\s*\(/,
+    /=>/,
+    /_\.[A-Za-z_$][\w$]*\s*=/,
+    /Object\.definePropert(?:y|ies)/
+  ].reduce((count, pattern) => count + (pattern.test(text) ? 1 : 0), 0);
+  const sentenceCount = naturalPolicySentenceCount(text);
+  const symbolRatio = (text.match(/[{}[\];=<>]/g) ?? []).length / Math.max(text.length, 1);
+  const escapedUrlCount = (text.match(/\\x2f|\\u003c|\\u003e|https?:\\\/\\\//gi) ?? []).length;
+  const minifiedTokenCount = (text.match(/[A-Za-z_$][\w$]{0,8}\s*[=:]\s*\S{40,}/g) ?? []).length;
+  return /\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(text) ||
+    (codeSignalCount >= 2 && sentenceCount < 3) ||
+    (symbolRatio > 0.12 && sentenceCount < 4) ||
+    (escapedUrlCount >= 8 && sentenceCount < 3) ||
+    (minifiedTokenCount >= 2 && sentenceCount < 4);
+}
+
+function hasMinimumPolicyProseQuality(value: string) {
+  const text = cleanPolicyDisclosureEvidenceText(value);
+  if (text.length < 500) {
+    return true;
+  }
+  const totalTokens = text.split(/\s+/).filter(Boolean).length;
+  const alphabeticWordRatio = (text.match(/\b[A-Za-z][A-Za-z'-]{2,}\b/g) ?? []).length / Math.max(totalTokens, 1);
+  const policyTermCount = new Set((text.toLowerCase().match(/\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\b/g) ?? [])).size;
+  return alphabeticWordRatio >= 0.42 && (policyTermCount >= 2 || naturalPolicySentenceCount(text) >= 2);
+}
+
+function naturalPolicySentenceCount(value: string) {
+  return (value.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function sanitizePolicyArticle13Signal(signal: Record<string, unknown>) {
@@ -3839,6 +4401,37 @@ function scorePolicyDisclosureEvidenceText(value: string, disclosureType: string
   if (/^(united states|u\.s\. department of commerce|cookie policy \||terms & conditions \||accessibility\b)/i.test(text)) {
     score -= 8;
   }
+  const boilerplateMatches = lower.match(/\b(?:privacy & terms|overview|technologies|faq|terms of service|privacy policy|introduction)\b/g)?.length ?? 0;
+  if (boilerplateMatches >= 4) {
+    score -= 6;
+  } else if (boilerplateMatches >= 2) {
+    score -= 2;
+  }
+  if (/\b(?:we|you|your|personal data|personal information|retain|transfer|rights|legal basis|controller|data protection|automated)\b/i.test(text)) {
+    score += 2;
+  }
+  if (/\b(?:privacy policy|privacy & terms|overview|faq|terms of service)\b(?:\s+\b(?:privacy policy|privacy & terms|overview|faq|terms of service)\b){2,}/i.test(text)) {
+    score -= 8;
+  }
+  if (/^(?:privacy policy|privacy & terms|overview|technologies|faq|terms of service|introduction)(?:\s+(?:privacy policy|privacy & terms|overview|technologies|faq|terms of service|introduction)){2,}/i.test(text)) {
+    score -= 8;
+  }
+  const repeatedMenuLabels = lower.match(/\b(?:privacy|terms|overview|faq|technologies|introduction)\b/g) ?? [];
+  if (repeatedMenuLabels.length >= 7 && !/[.!?]\s+[A-Z"']/.test(text)) {
+    score -= 6;
+  }
+  const sentenceCount = (text.match(/[.!?](?:\s|$)/g) ?? []).length;
+  if (sentenceCount >= 2) {
+    score += 2;
+  } else if (sentenceCount === 0 && text.length > 140) {
+    score -= 3;
+  }
+  if (/\b(?:retain|delete|export|transfer|process|contact|complain|object|access|correct|review|update|personalize|automated|algorithm|regulator|authority)\b/i.test(text)) {
+    score += 2;
+  }
+  if (/^(?:privacy policy|privacy & terms|overview|technologies|faq|terms of service|introduction)\b/i.test(text) && !/\b(?:we|you|your|our)\b/i.test(text.slice(0, 160))) {
+    score -= 5;
+  }
   if (/mcdonald.?s restaurants of ireland limited|data protection commissioner|dataprotection\.ie|data protection officer|local data protection offices|article 6|standard contractual clauses|commission implementing decision \(eu\) 2021\/914/i.test(text)) {
     score += 6;
   }
@@ -3851,13 +4444,22 @@ function scorePolicyDisclosureEvidenceText(value: string, disclosureType: string
   if (disclosureType === "controller_contact" && CONTROLLER_CONTACT_DISCLOSURE_PATTERN.test(lower)) {
     score += 4;
   }
-  if (disclosureType === "data_retention" && /retention|retain|retained|duration|as long as/i.test(lower)) {
+  if (disclosureType === "processing_purposes" && PROCESSING_PURPOSES_DISCLOSURE_PATTERN.test(lower)) {
     score += 4;
   }
-  if (disclosureType === "international_transfers" && /standard contractual clauses|international transfer|adequate level of protection|commission implementing decision/i.test(lower)) {
+  if (disclosureType === "data_retention" && /retaining your information|retention|retain|retained|deleted or anonymized|duration|as long as|fraud and abuse prevention|legal purposes|how long|kept for|expires?/i.test(lower)) {
     score += 4;
   }
-  if (disclosureType === "supervisory_authority" && /data protection commissioner|supervisory authority|complaint/i.test(lower)) {
+  if (disclosureType === "data_subject_rights" && DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN.test(lower)) {
+    score += 4;
+  }
+  if (disclosureType === "international_transfers" && /data transfers?|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|data protection laws vary among countries|standard contractual clauses|international transfer|adequate level of protection|commission implementing decision/i.test(lower)) {
+    score += 4;
+  }
+  if (disclosureType === "supervisory_authority" && /data protection commissioner|supervisory authority|data protection authorit|regulatory authorit|regulator|complaint/i.test(lower)) {
+    score += 4;
+  }
+  if (disclosureType === "automated_decision_making_or_profiling" && AUTOMATED_DECISION_PROFILING_DISCLOSURE_PATTERN.test(lower)) {
     score += 4;
   }
   if (/<[^>]+>|\\r|\\n|back to top/i.test(value)) {
@@ -3872,10 +4474,37 @@ function policySurfaceIsThinOrErrored(summary: Record<string, unknown> | null | 
   }
   const status = policyTextExtractionStatus(summary);
   if (status) {
-    return status !== "ok";
+    return status !== "ok" || looksLikeCodeOrConfigText(getPolicyDisclosureText(summary));
   }
   const charCount = getNumber(summary, ["privacyPolicyTextCharacterCount", "privacy_policy_text_character_count"]) ?? 0;
-  return getBoolean(summary, ["processingErrorObserved", "processing_error_observed"]) === true || charCount < MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13;
+  return getBoolean(summary, ["processingErrorObserved", "processing_error_observed"]) === true ||
+    looksLikeCodeOrConfigText(getPolicyDisclosureText(summary)) ||
+    charCount < MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13;
+}
+
+function globalExtractionStatusIsDiagnosticOnly(summary: Record<string, unknown> | null | undefined) {
+  const status = policyTextExtractionStatus(summary);
+  if (status === "ok") {
+    return false;
+  }
+  const health = getPolicyTextExtractionHealth(summary);
+  const policyTextQuality = getObject(health, ["policyTextQuality", "policy_text_quality"]);
+  const policySectionCount = getNumber(summary, ["policySectionCount", "policy_section_count"]) ?? 0;
+  return (
+    status === "errored" &&
+    getBoolean(policyTextQuality, ["usable"]) === true &&
+    (getNumber(policyTextQuality, ["codeSignalCount", "code_signal_count"]) ?? 0) === 0 &&
+    policySectionCount > 0 &&
+    getObjectArray(summary, ["retainedPolicySections", "retained_policy_sections"]).length > 0
+  );
+}
+
+function policySurfaceHasSubstantialRetainedText(summary: Record<string, unknown> | null | undefined) {
+  if (!summary || policySurfaceIsThinOrErrored(summary)) {
+    return false;
+  }
+  const charCount = getNumber(summary, ["privacyPolicyTextCharacterCount", "privacy_policy_text_character_count"]) ?? 0;
+  return charCount >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13;
 }
 
 function hasWeakPrivacyNoticeAttribution(summary: Record<string, unknown> | null | undefined) {
@@ -3898,10 +4527,7 @@ function hasWeakPrivacyNoticeAttribution(summary: Record<string, unknown> | null
 }
 
 function policyDisclosureRequiresRowEvidence(rowId: string) {
-  return rowId === "controller_contact_disclosure" ||
-    rowId === "legal_basis_disclosure_observed" ||
-    rowId === "recipients_vendor_categories_disclosure" ||
-    rowId === "automated_decision_making_profiling_disclosure";
+  return rowId !== "privacy_notice_availability";
 }
 
 function hasRetainedControllerOrPrivacyContactDisclosure(
@@ -3913,13 +4539,13 @@ function hasRetainedControllerOrPrivacyContactDisclosure(
   const controllerSignalEvidenceText = getString(controllerSignal, ["evidenceText", "evidence_text"]) ?? "";
   const controllerSignalMatches =
     controllerSignalStatus === "observed" &&
-    Boolean(policyTextMatchEvidence(controllerSignalEvidenceText, CONTROLLER_CONTACT_DISCLOSURE_PATTERN));
+    Boolean(policyTextMatchEvidence(controllerSignalEvidenceText, CONTROLLER_CONTACT_DISCLOSURE_PATTERN, "controller_contact"));
   return controllerSignalMatches ||
     (
       getBoolean(summary, ["controllerContactDisclosureObserved", "controller_contact_disclosure_observed"]) === true &&
-      Boolean(policyTextMatchEvidence(text, CONTROLLER_CONTACT_DISCLOSURE_PATTERN))
+      Boolean(policyTextMatchEvidence(text, CONTROLLER_CONTACT_DISCLOSURE_PATTERN, "controller_contact"))
     ) ||
-    Boolean(policyTextMatchEvidence(text, CONTROLLER_CONTACT_DISCLOSURE_PATTERN));
+    Boolean(policyTextMatchEvidence(text, CONTROLLER_CONTACT_DISCLOSURE_PATTERN, "controller_contact"));
 }
 
 function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, config: PolicyDisclosureRowConfig) {
@@ -3932,27 +4558,54 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   const text = getPolicyDisclosureText(summary);
   const directSignal = getBoolean(summary, config.signalKeys);
   const article13Signal = getPolicyArticle13DisclosureSignal(summary, config.disclosureType);
+  const rowSpecificSectionEvidence = config.rowId === "automated_decision_making_profiling_disclosure"
+    ? null
+    : getValidatedRowSpecificPolicyEvidence(summary, config.disclosureType);
   const article13SignalStatus = getString(article13Signal, ["status"]);
   const requiresRowSpecificEvidence = policyDisclosureRequiresRowEvidence(config.rowId);
   const article13SignalEvidenceText = getString(article13Signal, ["evidenceText", "evidence_text"]) ?? "";
+  const automatedArticle13SignalEvidenceMatches =
+    config.rowId === "automated_decision_making_profiling_disclosure"
+      ? Boolean(policyTextMatchEvidence(article13SignalEvidenceText, ARTICLE_22_AUTOMATED_DECISION_DISCLOSURE_PATTERN, config.disclosureType))
+      : false;
   const article13SignalEvidenceMatches =
     !requiresRowSpecificEvidence ||
-    Boolean(policyTextMatchEvidence(article13SignalEvidenceText, config.textPattern));
+    (
+      config.rowId === "automated_decision_making_profiling_disclosure"
+        ? automatedArticle13SignalEvidenceMatches
+        : Boolean(policyTextMatchEvidence(article13SignalEvidenceText, config.textPattern, config.disclosureType))
+    );
   const article13SignalObserved = extractionOk && article13SignalStatus === "observed" && article13SignalEvidenceMatches;
   const article13SignalPartial =
-    extractionOk && (
-      article13SignalStatus === "partial" ||
-      (article13SignalStatus === "observed" && !article13SignalEvidenceMatches)
-    );
+    extractionOk && article13SignalStatus === "partial";
+  const article13SignalUnmatched =
+    extractionOk && article13SignalStatus === "observed" && !article13SignalEvidenceMatches;
   const topicObserved =
     extractionOk &&
     config.disclosureType !== undefined &&
     getPolicyObservedTopics(summary).includes(config.disclosureType);
-  const textMatchEvidence = extractionOk ? policyTextMatchEvidence(text, config.textPattern) : null;
+  const textMatchEvidence = extractionOk ? policyTextMatchEvidence(text, config.textPattern, config.disclosureType) : null;
+  const automatedArticle22TextMatchEvidence =
+    config.rowId === "automated_decision_making_profiling_disclosure" && extractionOk
+      ? policyTextMatchEvidence(text, ARTICLE_22_AUTOMATED_DECISION_DISCLOSURE_PATTERN, config.disclosureType)
+      : null;
+  const automatedGeneralTextMatchEvidence =
+    config.rowId === "automated_decision_making_profiling_disclosure" && extractionOk
+      ? policyTextMatchEvidence(text, GENERAL_AUTOMATED_PROCESSING_DISCLOSURE_PATTERN, config.disclosureType)
+      : null;
   const observed =
-    (directSignal === true && (!requiresRowSpecificEvidence || Boolean(textMatchEvidence) || article13SignalObserved)) ||
-    article13SignalObserved ||
-    Boolean(textMatchEvidence);
+    config.rowId === "automated_decision_making_profiling_disclosure"
+      ? (
+          (directSignal === true && (Boolean(automatedArticle22TextMatchEvidence) || article13SignalObserved)) ||
+          article13SignalObserved ||
+          Boolean(automatedArticle22TextMatchEvidence)
+        )
+      : (
+          (directSignal === true && (!requiresRowSpecificEvidence || Boolean(textMatchEvidence) || article13SignalObserved)) ||
+          Boolean(rowSpecificSectionEvidence) ||
+          article13SignalObserved ||
+          Boolean(textMatchEvidence)
+        );
 
   if (observed || (config.rowId === "privacy_notice_availability" && privacyPolicyPresent)) {
     if (config.rowId === "privacy_notice_availability" && hasWeakPrivacyNoticeAttribution(summary)) {
@@ -3973,10 +4626,13 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
         }
       );
     }
-    const effectiveArticle13Signal = article13Signal ?? (textMatchEvidence && config.disclosureType
+    const effectiveTextMatchEvidence = config.rowId === "automated_decision_making_profiling_disclosure"
+      ? automatedArticle22TextMatchEvidence
+      : rowSpecificSectionEvidence?.evidenceText ?? textMatchEvidence;
+    const effectiveArticle13Signal = rowSpecificSectionEvidence?.article13Signal ?? article13Signal ?? (effectiveTextMatchEvidence && config.disclosureType
       ? {
           disclosureType: config.disclosureType,
-          evidenceText: textMatchEvidence,
+          evidenceText: effectiveTextMatchEvidence,
           source: "wc01_retained_policy_text_match",
           status: "observed"
         }
@@ -3987,38 +4643,55 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       `${config.label} evidence was retained in public policy-surface evidence.`,
       [
         config.rowId === "privacy_notice_availability" ? "Evidence: privacy policy surface retained" : `Evidence: ${config.label}`,
-        textMatchEvidence ? `Excerpt: ${textMatchEvidence}` : null,
+        effectiveTextMatchEvidence ? `Excerpt: ${effectiveTextMatchEvidence}` : null,
         ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
       ].filter((value): value is string => Boolean(value)),
       {
         retainedEvidence: {
           article13Signal: effectiveArticle13Signal,
           policySurfaceSummary: summary,
+          rowSpecificSectionEvidence: rowSpecificSectionEvidence?.sectionEvidence ?? undefined,
+          selectedEvidenceStrength: rowSpecificSectionEvidence?.selectedEvidenceStrength ?? undefined,
+          selectedPolicySectionHeading: rowSpecificSectionEvidence?.selectedPolicySectionHeading ?? undefined,
+          supportSource: rowSpecificSectionEvidence?.evidenceType ?? undefined,
           signalObserved: true
         }
       }
     );
   }
 
-  if (
-    article13SignalPartial ||
-    topicObserved ||
-    (directSignal === true && requiresRowSpecificEvidence && !textMatchEvidence && !article13SignalObserved)
-  ) {
+  if (config.rowId === "automated_decision_making_profiling_disclosure" && automatedGeneralTextMatchEvidence) {
     return makeOutcome(
       config.rowId,
       "Review signal",
-      article13SignalPartial
-        ? `${config.label} was partially observed in retained public policy-surface evidence and needs review.`
-        : directSignal === true
-          ? `${config.label} was signaled by retained policy-surface extraction, but no row-specific disclosure excerpt matched the stricter evidence gate. Manual review is needed.`
-          : `${config.label} was indicated by retained policy topics, but no row-specific disclosure evidence was retained. Manual review is needed.`,
+      "Automated processing or personalization language was observed, but an Article 22-style solely automated decision-making disclosure was not confirmed.",
       [
-        article13SignalPartial
-          ? `Evidence: partial ${config.label}`
-          : directSignal === true
-            ? `Evidence: extractor signaled ${config.label}`
-            : `Evidence: policy topic mentions ${config.disclosureType}`,
+        "Evidence: automated processing or personalization language",
+        `Excerpt: ${automatedGeneralTextMatchEvidence}`,
+        ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+      ],
+      {
+        retainedEvidence: {
+          article13Signal: {
+            disclosureType: config.disclosureType,
+            evidenceText: automatedGeneralTextMatchEvidence,
+            source: "wc01_retained_policy_text_match",
+            status: "partial"
+          },
+          policySurfaceSummary: summary,
+          signalObserved: "partial_automated_processing_without_article22_disclosure"
+        }
+      }
+    );
+  }
+
+  if (article13SignalPartial) {
+    return makeOutcome(
+      config.rowId,
+      "Review signal",
+      `${config.label} was partially observed in retained public policy-surface evidence and needs review.`,
+      [
+        `Evidence: partial ${config.label}`,
         getString(article13Signal, ["evidenceText", "evidence_text"])
           ? `Excerpt: ${getString(article13Signal, ["evidenceText", "evidence_text"])}`
           : null,
@@ -4029,6 +4702,57 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
           article13Signal,
           policySurfaceSummary: summary,
           signalObserved: "partial"
+        }
+      }
+    );
+  }
+
+  if (
+    article13SignalUnmatched ||
+    topicObserved ||
+    (directSignal === true && requiresRowSpecificEvidence && !textMatchEvidence && !article13SignalObserved)
+  ) {
+    const missingReason = config.rowId === "retention_disclosure_observed"
+      ? "A privacy-policy surface was retained, but retention-period, deletion, anonymization, or data-lifecycle disclosure text was not confidently extracted."
+      : config.rowId === "international_transfers_disclosure"
+        ? "A privacy-policy surface was retained, but row-specific international-transfer disclosure text was not confidently extracted."
+        : "Policy topic signals suggested this area may be covered, but row-specific disclosure text was not retained. Manual review is needed before treating this as observed or as a gap.";
+    return makeOutcome(
+      config.rowId,
+      "Not confirmed",
+      missingReason,
+      [
+        article13SignalUnmatched
+          ? `Evidence: extractor signaled ${config.label} without a row-specific excerpt`
+          : directSignal === true
+            ? `Evidence: extractor signaled ${config.label}`
+            : `Evidence: policy topic mentions ${config.disclosureType}`,
+        getString(article13Signal, ["evidenceText", "evidence_text"])
+          ? `Excerpt: ${getString(article13Signal, ["evidenceText", "evidence_text"])}`
+          : null,
+        ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+      ].filter((value): value is string => Boolean(value)),
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "CertScore.policyDisclosureExtraction.rowSpecificSignal",
+            `row-specific ${config.label.toLowerCase()} evidence`,
+            "not confidently extracted",
+            "Required before treating topic-level policy evidence as observed or as a transparency gap.",
+            "CertScore"
+          )
+        ],
+        retainedEvidence: {
+          article13Signal,
+          policyTextExtractionHealth: extractionHealth,
+          policySurfaceSummary: summary,
+          selectedEvidenceStrength: "limited",
+          signalObserved: "not_confirmed_row_specific_extraction",
+          supportSource: article13SignalUnmatched
+            ? "article13DisclosureSignals"
+            : directSignal === true
+              ? "extractorSignal"
+              : "observedTopics"
         }
       }
     );
@@ -4055,10 +4779,11 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   }
 
   if (policySurfaceIsThinOrErrored(summary)) {
+    const limitation = policyTextExtractionLimitationMessage(summary);
     return makeOutcome(
       config.rowId,
       "Not confirmed",
-      "A privacy-policy surface was found, but CertScore did not extract enough usable policy text to confirm this disclosure from retained evidence.",
+      limitation,
       ["Evidence: privacy policy surface retained", "Limitation: policy text extraction was not usable for Article 13 disclosure review"],
       {
         missingOrIncompleteSourceSignals: [
@@ -4080,10 +4805,11 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   }
 
   if (!extractionOk && config.rowId !== "privacy_notice_availability") {
+    const limitation = policyTextExtractionLimitationMessage(summary);
     return makeOutcome(
       config.rowId,
       "Not confirmed",
-      "A privacy-policy surface was found, but CertScore did not extract enough usable policy text to confirm this disclosure from retained evidence.",
+      limitation,
       ["Evidence: privacy policy surface retained", "Limitation: policy text extraction was not usable for Article 13 disclosure review"],
       {
         retainedEvidence: {
@@ -4099,14 +4825,25 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   if (config.rowId === "international_transfers_disclosure") {
     return makeOutcome(
       config.rowId,
-      "Review signal",
-      "A privacy-policy surface was retained, but no row-specific international transfer disclosure signal was retained. Manual review is needed before treating this as a potential transparency gap.",
+      "Not confirmed",
+      "A privacy-policy surface was retained, but row-specific international-transfer disclosure text was not confidently extracted.",
       ["Evidence: retained privacy policy text reviewed", "Missing evidence: row-specific international transfer disclosure signal"],
       {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "CertScore.policyDisclosureExtraction.rowSpecificSignal",
+            "row-specific international transfer disclosure evidence",
+            "not confidently extracted",
+            "Required before treating a retained privacy-policy surface as observed or as an international-transfer transparency gap.",
+            "CertScore"
+          )
+        ],
         retainedEvidence: {
           article13Signal,
+          policyTextExtractionHealth: extractionHealth,
           policySurfaceSummary: summary,
-          signalObserved: false
+          selectedEvidenceStrength: "limited",
+          signalObserved: "not_confirmed_row_specific_extraction"
         }
       }
     );
@@ -4115,14 +4852,55 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   if (config.rowId === "dpo_contact_point_disclosure" && hasRetainedControllerOrPrivacyContactDisclosure(summary, text)) {
     return makeOutcome(
       config.rowId,
-      "Not observed",
-      "A controller/contact surface was retained, but no separate DPO, privacy contact point, or data-protection contact point was observed in retained privacy-policy evidence.",
+      "Not confirmed",
+      "A controller/contact surface was retained, but no separate DPO, privacy contact point, or data-protection contact point was confidently extracted from retained privacy-policy evidence. Manual review is needed before treating this as a transparency gap.",
       ["Evidence: controller/contact disclosure retained", "Missing evidence: DPO, privacy contact point, or data-protection contact point"],
       {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "CertScore.policyDisclosureExtraction.rowSpecificSignal",
+            "row-specific DPO or privacy contact point evidence",
+            "not confidently extracted",
+            "Required before treating controller/contact evidence as a DPO/privacy-contact disclosure.",
+            "CertScore"
+          )
+        ],
         retainedEvidence: {
           article13Signal,
+          policyTextExtractionHealth: extractionHealth,
           policySurfaceSummary: summary,
-          signalObserved: false
+          selectedEvidenceStrength: "limited",
+          signalObserved: "not_confirmed_row_specific_extraction"
+        }
+      }
+    );
+  }
+
+  if (
+    config.rowId !== "privacy_notice_availability" &&
+    config.rowId !== "automated_decision_making_profiling_disclosure" &&
+    policySurfaceHasSubstantialRetainedText(summary)
+  ) {
+    return makeOutcome(
+      config.rowId,
+      "Not confirmed",
+      "A privacy-policy surface was retained, but row-specific disclosure was not confidently extracted. Manual review is needed before treating this as a transparency gap.",
+      ["Evidence: substantial privacy-policy text retained", `Missing evidence: row-specific ${config.label.toLowerCase()} signal`],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "CertScore.policyDisclosureExtraction.rowSpecificSignal",
+            `row-specific ${config.label.toLowerCase()} evidence`,
+            "not confidently extracted",
+            "Required before treating a mature retained privacy-policy surface as a transparency gap.",
+            "CertScore"
+          )
+        ],
+        retainedEvidence: {
+          article13Signal,
+          policyTextExtractionHealth: extractionHealth,
+          policySurfaceSummary: summary,
+          signalObserved: "not_confirmed_row_specific_extraction"
         }
       }
     );
@@ -4182,10 +4960,30 @@ function derivePolicyTextExtractionOutcome(input: GdprEprivacyCoveragePolicyInpu
     );
   }
 
+  if (globalExtractionStatusIsDiagnosticOnly(summary)) {
+    return makeOutcome(
+      "policy_text_extraction",
+      "Review signal",
+      "Policy text extraction reported a global processing error, but usable section-targeted policy evidence was retained for row-level review.",
+      [
+        `Diagnostic: policy text extraction ${status ?? "not usable"}`,
+        `Retained sections: ${getNumber(summary, ["policySectionCount", "policy_section_count"]) ?? getObjectArray(summary, ["retainedPolicySections", "retained_policy_sections"]).length}`,
+        ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+      ],
+      {
+        retainedEvidence: {
+          policyTextExtractionHealth: health,
+          policySurfaceSummary: summary,
+          signalObserved: "diagnostic_warning_section_evidence_retained"
+        }
+      }
+    );
+  }
+
   return makeOutcome(
     "policy_text_extraction",
     "Not testable",
-    "GDPR Transparency disclosure checks were limited because CertScore found a privacy-policy surface but did not extract enough usable policy text to evaluate individual Article 13 disclosures.",
+    policyTextExtractionLimitationMessage(summary),
     [
       `Limitation: policy text extraction ${status ?? "not usable"}`,
       `Extracted text: ${getNumber(health, ["extractedTextLength", "extracted_text_length"]) ?? 0} characters`,
@@ -4208,6 +5006,14 @@ function derivePolicyTextExtractionOutcome(input: GdprEprivacyCoveragePolicyInpu
       }
     }
   );
+}
+
+function policyTextExtractionLimitationMessage(summary: Record<string, unknown> | null | undefined) {
+  const status = policyTextExtractionStatus(summary);
+  if (status === "low_quality_extracted_code_or_config" || looksLikeCodeOrConfigText(getPolicyDisclosureText(summary))) {
+    return "A privacy-policy surface was found, but the retained text was low-quality or non-policy content, so row-specific disclosure extraction could not be completed.";
+  }
+  return "A privacy-policy surface was found, but CertScore did not extract enough usable policy text to confirm this disclosure from retained evidence.";
 }
 
 function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {

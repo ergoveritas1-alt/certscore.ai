@@ -60,11 +60,15 @@ export type StaticFixturePage =
   | "policy-gold-privacy-duplicates"
   | "policy-external-choice-platform"
   | "policy-footer-privacy"
+  | "policy-google-script-noise"
+  | "policy-google-script-only"
+  | "policy-google-like-late-sections"
   | "policy-gpc-disclosure-late"
   | "policy-gpc-disclosure"
   | "policy-generic-links"
   | "policy-link-aria-title"
   | "policy-latimes-footer-surfaces"
+  | "policy-mature-real-prose"
   | "policy-onetrust-index-json"
   | "policy-onetrust-notice-json"
   | "policy-privacy-center-link"
@@ -79,6 +83,8 @@ export type StaticFixturePage =
   | "policy-notice-at-collection-link"
   | "policy-privacy-choices-link"
   | "policy-static-core-surfaces"
+  | "policy-static-legacy-plus-rendered-canonical"
+  | "policy-url-stub-canonical"
   | "policy-session-replay-disclosure"
   | "policy-vendor-mentions"
   | "policy-webmd-like-secondary-surfaces"
@@ -153,11 +159,15 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-gold-privacy-duplicates": "policy-gold-privacy-duplicates",
   "policy-external-choice-platform": "policy-external-choice",
   "policy-footer-privacy": "policy-footer-privacy",
+  "policy-google-script-noise": "policy-google-script-noise",
+  "policy-google-script-only": "policy-google-script-only",
+  "policy-google-like-late-sections": "policy-google-like-late-sections",
   "policy-gpc-disclosure-late": "policy-gpc-late",
   "policy-gpc-disclosure": "policy-gpc",
   "policy-generic-links": "policy-generic-links",
   "policy-link-aria-title": "policy-link-aria-title",
   "policy-latimes-footer-surfaces": "policy-latimes-footer-surfaces",
+  "policy-mature-real-prose": "policy-mature-real-prose",
   "policy-onetrust-index-json": "policy-onetrust-index-json",
   "policy-onetrust-notice-json": "policy-onetrust-notice-json",
   "policy-privacy-center-link": "policy-privacy-center",
@@ -172,6 +182,8 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-notice-at-collection-link": "policy-notice-at-collection",
   "policy-privacy-choices-link": "policy-privacy-choices",
   "policy-static-core-surfaces": "policy-static-core-surfaces",
+  "policy-static-legacy-plus-rendered-canonical": "policy-static-legacy-plus-rendered-canonical",
+  "policy-url-stub-canonical": "policy-url-stub-canonical",
   "policy-session-replay-disclosure": "policy-session-replay",
   "policy-vendor-mentions": "policy-vendors",
   "policy-webmd-like-secondary-surfaces": "policy-webmd-like-secondary",
@@ -260,6 +272,12 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     response.setHeader("Set-Cookie", "OptanonConsent=fixture-redacted; Path=/; SameSite=Lax");
     response.writeHead(200, { "Content-Type": "image/gif" });
     response.end(onePixelGif);
+    return;
+  }
+
+  if (url.pathname === "/intl/en/policies/privacy-url-stub/") {
+    response.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end(`http://${request.headers.host}/policies/canonical-privacy`);
     return;
   }
 
@@ -768,6 +786,9 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-gold-nvidia-secondary-only": `<a href="/en-us/ai-data-science/">AI Data Science</a><a href="/en-eu/gtc/pricing/?nvid=fixture">GTC Pricing</a>`,
     "policy-gold-privacy-duplicates": `<a href="/privacy-policy">Privacy Policy</a><a href="/privacy-policy/">Privacy Policy</a>`,
     "policy-footer-privacy": `<a href="/policies/privacy">Privacy Policy</a>`,
+    "policy-google-script-noise": `<a href="/policies/google-script-noise">Privacy Policy</a>`,
+    "policy-google-script-only": `<a href="/policies/google-script-only">Privacy Policy</a>`,
+    "policy-google-like-late-sections": `<a href="/policies/google-like-late-sections">Privacy Policy</a>`,
     "policy-gpc-disclosure-late": `<a href="/policies/gpc-late">Privacy Policy</a>`,
     "policy-gpc-disclosure": `<a href="/policies/gpc">Privacy Notice</a>`,
     "policy-generic-links": `<a href="/products">Products</a><a href="/about">About us</a>`,
@@ -777,6 +798,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/terms">Terms of Service</a>`,
       `<a href="/do-not-sell-or-share">Do Not Sell or Share My Personal Information</a>`,
     ].join(" | "),
+    "policy-mature-real-prose": `<a href="/policies/mature-real-prose">Privacy Policy</a>`,
     "policy-privacy-center-link": `<a href="/privacy-center">Privacy Center</a>`,
     "policy-retention-rights-only": `<a href="/policies/rights-only">Privacy Policy</a>`,
     "policy-state-privacy-rights-link": `<a href="/state-privacy-rights">State Privacy Rights</a>`,
@@ -794,6 +816,18 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/policies/privacy">Privacy Policy</a>`,
       `<a href="/policies/cookies">Cookie Policy</a>`,
       `<a href="/privacy-choices">Your Privacy Choices</a>`,
+      `<a href="/terms">Terms of Service</a>`,
+    ].join(" | "),
+    "policy-static-legacy-plus-rendered-canonical": [
+      `<a href="/intl/en/policies/privacy/">Privacy</a>`,
+      `<a href="/intl/en/policies/terms/">Terms</a>`,
+      `<button id="manage-cookies" type="button">Manage cookies</button>`,
+      `<span id="canonical-policy-links"></span>`,
+      `<script>{ const root = document.getElementById("canonical-policy-links"); const links = [["/policies/privacy", "Privacy https://policies.example.test/privacy?hl=en-IE&fg=1"], ["/policies/cookies", "Personalisation and cookies"], ["/terms", "Terms https://policies.example.test/terms?hl=en-IE&fg=1"]]; for (const [href, text] of links) { const anchor = document.createElement("a"); anchor.href = href; anchor.textContent = text; root.appendChild(anchor); } }</script>`,
+    ].join(" | "),
+    "policy-url-stub-canonical": [
+      `<a href="/intl/en/policies/privacy-url-stub/">Privacy</a>`,
+      `<a href="/policies/cookies">Cookie Policy</a>`,
       `<a href="/terms">Terms of Service</a>`,
     ].join(" | "),
     "policy-session-replay-disclosure": `<a href="/policies/session-replay">Privacy Notice</a>`,
@@ -815,6 +849,14 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/policies/privacy": {
       title: "Privacy Policy",
       body: "Last updated: May 1, 2026. We use cookies for analytics and advertising. Our service providers include Google Analytics and Meta for measurement and advertising. You may contact privacy@example.test with questions.",
+    },
+    "/intl/en/policies/privacy/": {
+      title: "Legacy Privacy",
+      body: "Privacy overview. See the current Privacy Policy for details.",
+    },
+    "/intl/en/policies/terms/": {
+      title: "Legacy Terms",
+      body: "Terms overview. See the current Terms for details.",
     },
     "/policies/article13-long": {
       title: "Privacy Policy",
@@ -844,6 +886,53 @@ function policyDocumentHtml(pathname: string): string | undefined {
         "You may exercise rights to access, rectification, erasure, restriction, portability, and objection by contacting the privacy team.",
         "We may transfer personal data outside the European Economic Area using standard contractual clauses.",
         "You may complain to a supervisory authority about our handling of personal data.",
+      ].join(" "),
+    },
+    "/policies/google-script-noise": {
+      title: "Privacy Policy",
+      body: [
+        "Privacy Policy. This policy explains how we collect, use, retain, share, and protect personal information.",
+        "We use personal information to provide services, maintain security, personalize content, measure performance, and improve our products.",
+        "Legal basis. We process personal data with consent, when necessary for a contract, for legitimate interests, and when required by law.",
+        "Recipients include service providers, processors, analytics providers, advertising partners, and affiliates that help operate the service.",
+        "Retention. We retain personal information only as long as necessary for the purposes described in this notice or as required by law.",
+        "Your rights. You have the right to access, delete, rectify, object to, restrict, and port your personal data by contacting the privacy team.",
+        "Transfers. We may process information on servers outside your country using adequacy decisions or standard contractual clauses.",
+        "Contact us. The controller and privacy office can be contacted at privacy@example.test, and you may complain to a supervisory authority.",
+      ].join(" "),
+    },
+    "/policies/google-script-only": {
+      title: "Privacy Policy",
+      body: ";this.gbar_={CONFIG:[[[0,\"www.gstatic.com\",null,\"0\",null,null,0],[]]]};_.z=function(a,b){Object.defineProperties(a,b)};var c=function(){return {privacy:true, rights:Object.keys({access:1})}}; Copyright The Closure Library;",
+    },
+    "/policies/google-like-late-sections": {
+      title: "Privacy Policy",
+      body: [
+        "Privacy Policy - Privacy & Terms. Overview Privacy Policy Terms of Service Technologies FAQ Introduction Information we collect Why we collect data Your privacy controls Sharing your information Keeping your information Exporting and deleting your information Retaining your information Data transfers Compliance and cooperation with regulators.",
+        "This policy explains that we collect information you provide, information created when you use services, and information from partners.",
+        "We use information to provide services, maintain and improve products, protect people from abuse, measure performance, personalize content, and show personalized ads.",
+        "General service information continues here with account settings, product updates, support, communications, security practices, and public documentation. This filler keeps the strongest disclosures away from the opening and navigation text so section-targeted extraction has to find the later policy body.",
+        "More explanatory material describes how people can manage preferences, choose product settings, review saved activity, and understand how services work across devices. This is normal policy prose and not JavaScript configuration.",
+        "Your privacy controls. You can review and update important privacy controls, including activity controls, ad settings, and personalization settings. You can also visit My Activity to review information associated with your account.",
+        "Exporting and deleting your information. You can export a copy of content in your account using Google Takeout, delete your information, remove content, and request that we remove or correct information in certain cases.",
+        "Retaining your information. We retain different types of information for different periods depending on how it is used. Some data is deleted or anonymized automatically, some information is kept until you remove it, and some records are retained as long as necessary for legal purposes, security, fraud, and abuse prevention.",
+        "Data transfers. We maintain servers around the world and may process your information on servers located outside the country where you live. We rely on legal frameworks relating to the transfer of data, including data privacy frameworks and other safeguards where data protection laws vary among countries.",
+        "Compliance and cooperation with regulators. We regularly review this privacy policy and process formal written complaints. We work with regulatory authorities, including local data protection authorities, to resolve unresolved complaints.",
+        "Automated systems. We use automated systems and algorithms to recognize patterns, provide customized search results, tailor services, and show personalized ads. This section does not say decisions are made solely by automated processing with legal or similarly significant effects.",
+        "European requirements. Google LLC and Google Ireland Limited answer questions about this policy. People can contact Google about privacy questions, and the data protection office can route privacy requests to the appropriate team.",
+      ].join(" "),
+    },
+    "/policies/mature-real-prose": {
+      title: "Privacy Policy",
+      body: [
+        "Privacy Policy. We collect personal information that you provide and information created when you use our services.",
+        "We use personal information to provide services, secure accounts, personalize content, measure advertising performance, and improve our products.",
+        "We rely on consent, performance of a contract, legitimate interests, legal obligations, and other lawful bases depending on the processing context.",
+        "We share information with service providers, processors, analytics providers, advertising partners, affiliates, and public authorities when required by law.",
+        "We retain personal data only for as long as necessary for the purposes described in this notice, unless a longer period is required by law.",
+        "You may exercise rights to access, correction, deletion, erasure, portability, restriction, and objection by contacting our privacy team.",
+        "We may transfer personal data outside the European Economic Area using adequacy decisions, standard contractual clauses, or comparable safeguards.",
+        "You may contact our data protection officer and may complain to a supervisory authority if you have concerns about our handling of personal data.",
       ].join(" "),
     },
     "/privacy": {
@@ -1186,6 +1275,38 @@ function policyDocumentHtml(pathname: string): string | undefined {
       <p>Footer links about careers ads newsletters site map contact help coupons subscriptions.</p>
       <p>Repeated footer noise repeated footer noise repeated footer noise repeated footer noise repeated footer noise.</p>
     </footer>
+</body>
+</html>`;
+  }
+  if (pathname === "/policies/google-script-noise") {
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(doc.title)}</title>
+    <script>;this.gbar_={CONFIG:[[[0,"www.gstatic.com",null,"0",null,null,0],[]]]};_.z=function(a,b){Object.defineProperties(a,b)};var noisy=function(){return "privacy rights data"};</script>
+  </head>
+  <body>
+    <main class="privacy-policy">
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+      <pre>;this.gbar_={CONFIG:[[[0,"www.gstatic.com"]]]}; Copyright The Closure Library;</pre>
+    </main>
+  </body>
+</html>`;
+  }
+  if (pathname === "/policies/google-script-only") {
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(doc.title)}</title>
+  </head>
+  <body>
+    <main class="privacy-policy">
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${doc.body}</p>
+    </main>
   </body>
 </html>`;
   }

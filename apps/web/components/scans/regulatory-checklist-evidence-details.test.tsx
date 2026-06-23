@@ -203,6 +203,30 @@ test("RegulatoryChecklistCorrectionSteps gives friendly cookie consent remediati
   assert.match(html, /Rerun the v2 scan/);
 });
 
+test("RegulatoryChecklistCorrectionSteps gives reviewer guidance for not-confirmed policy extraction rows", () => {
+  const html = renderToStaticMarkup(
+    createElement(RegulatoryChecklistCorrectionSteps, {
+      jsonPayload: JSON.stringify({
+        assessmentStatus: "review_signal",
+        coverageArea: "Legal basis disclosure",
+        evidenceState: "observed",
+        pipeline: {
+          concernPolicyKey: "gdpr_eprivacy_coverage.legal_basis_disclosure_observed.not_confirmed"
+        },
+        retainedEvidence: {
+          signalObserved: "not_confirmed_row_specific_extraction"
+        },
+        status: "Not confirmed"
+      })
+    })
+  );
+
+  assert.match(html, /Review the retained privacy-policy surface for the row-specific disclosure/);
+  assert.match(html, /improve scanner extraction or matcher coverage/);
+  assert.match(html, /update the privacy notice or internal review record/);
+  assert.doesNotMatch(html, /Update the affected consent, policy, tag-manager/);
+});
+
 test("RegulatoryChecklistCorrectionSteps gives privacy choices remediation", () => {
   const html = renderToStaticMarkup(
     createElement(RegulatoryChecklistCorrectionSteps, {

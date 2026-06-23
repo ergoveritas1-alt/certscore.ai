@@ -847,6 +847,20 @@ function formatSubjectList(subjects: string[], fallback: string) {
   return `${head}, and ${subjects[subjects.length - 1]}`;
 }
 
+function isPolicyDisclosureNotConfirmed(parsed: Record<string, unknown>, retainedEvidence: Record<string, unknown> | null) {
+  const status = getString(parsed.status) ?? getString(parsed.statusLabel);
+  const assessmentStatus = getString(parsed.assessmentStatus);
+  const signalObserved = retainedEvidence?.signalObserved;
+  const pipeline = getRecord(parsed.pipeline);
+  const concernPolicyKey = getString(pipeline?.concernPolicyKey);
+  return (
+    (status === "Not confirmed" && assessmentStatus === "review_signal") ||
+    signalObserved === "not_confirmed_row_specific_extraction" ||
+    signalObserved === "not_confirmed_policy_disclosure_extraction" ||
+    Boolean(concernPolicyKey?.endsWith(".not_confirmed"))
+  );
+}
+
 function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
   const parsed = getParsedEvidence(jsonPayload);
   if (!parsed) {
@@ -883,6 +897,18 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
 
   const verifyStep = "Rerun the v2 scan and confirm the row changes from a gap/review signal to observed, checked, not observed, or a documented coverage limitation.";
   const evidenceStep = "Keep a short internal record of the changed control, policy surface, or tag-setting rule so the next scan can be reviewed against the same evidence.";
+
+  if (isPolicyDisclosureNotConfirmed(parsed, retainedEvidence)) {
+    return {
+      kind: "steps",
+      steps: [
+        "Review the retained privacy-policy surface for the row-specific disclosure.",
+        "If the disclosure exists, improve scanner extraction or matcher coverage, or add an internal review note.",
+        "If the disclosure is missing, update the privacy notice or internal review record.",
+        "Rerun the scan and confirm the row changes to Observed, Partial support, Not confirmed, or a documented coverage limitation.",
+      ],
+    };
+  }
 
   if (isPositiveOrClearOutcome) {
     const statusText = status ?? assessmentStatus ?? "checked";

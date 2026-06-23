@@ -12,6 +12,7 @@ test("validation worker mirrors completed local Lambda artifacts and auxiliary s
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-worker-v2-mirror-"));
   const auxiliaryBody = Buffer.from(JSON.stringify({ policy: "bounded" }));
   const screenshotBody = Buffer.from("png-body");
+  const fullPageScreenshotBody = Buffer.from("jpeg-body");
   const objects = new Map([
     ["v2/scan-1/LocalV2DagLambdaManifest.json", Buffer.from(JSON.stringify({
       auxiliaryArtifacts: [
@@ -26,6 +27,12 @@ test("validation worker mirrors completed local Lambda artifacts and auxiliary s
           sha256: createHash("sha256").update(screenshotBody).digest("hex"),
           sizeBytes: screenshotBody.byteLength,
           uri: "s3://certscore-v2-dag-local-artifacts-eu-west-1-199536052647/v2/scan-1/auxiliary/screenshot-pre-consent.png"
+        },
+        {
+          fileName: "screenshot-pre-consent-full-page.jpg",
+          sha256: createHash("sha256").update(fullPageScreenshotBody).digest("hex"),
+          sizeBytes: fullPageScreenshotBody.byteLength,
+          uri: "s3://certscore-v2-dag-local-artifacts-eu-west-1-199536052647/v2/scan-1/auxiliary/screenshot-pre-consent-full-page.jpg"
         }
       ]
     }))],
@@ -34,7 +41,8 @@ test("validation worker mirrors completed local Lambda artifacts and auxiliary s
       screenshots: []
     }))],
     ["v2/scan-1/auxiliary/policy-summary.json", auxiliaryBody],
-    ["v2/scan-1/auxiliary/screenshot-pre-consent.png", screenshotBody]
+    ["v2/scan-1/auxiliary/screenshot-pre-consent.png", screenshotBody],
+    ["v2/scan-1/auxiliary/screenshot-pre-consent-full-page.jpg", fullPageScreenshotBody]
   ]);
   const mirror = await mirrorLocalV2DagLambdaArtifacts({
     parsedMessage: {
@@ -62,10 +70,14 @@ test("validation worker mirrors completed local Lambda artifacts and auxiliary s
   });
 
   assert.ok(mirror);
-  assert.equal(mirror.mirroredArtifacts.length, 4);
+  assert.equal(mirror.mirroredArtifacts.length, 5);
   assert.equal(
     await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-1/screenshot-pre-consent.png"), "utf8"),
     "png-body"
+  );
+  assert.equal(
+    await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-1/screenshot-pre-consent-full-page.jpg"), "utf8"),
+    "jpeg-body"
   );
   assert.equal(
     await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-1/policy-summary.json"), "utf8"),

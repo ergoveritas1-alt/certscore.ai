@@ -1034,7 +1034,9 @@ function safeAuxiliaryFileName(fileName: string) {
 function isSupportedAuxiliaryFileName(fileName: string) {
   return path.basename(fileName) === fileName && (
     fileName.endsWith(".json") ||
-    fileName.endsWith(".png")
+    fileName.endsWith(".png") ||
+    fileName.endsWith(".jpg") ||
+    fileName.endsWith(".jpeg")
   );
 }
 
@@ -1505,6 +1507,9 @@ export async function uploadAuxiliaryArtifactFiles(input: {
 function auxiliaryContentType(fileName: string) {
   if (fileName.endsWith(".png")) {
     return "image/png";
+  }
+  if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+    return "image/jpeg";
   }
   return "application/json";
 }

@@ -2,7 +2,7 @@ import type {
   GdprEprivacyCoverageChecklistItem
 } from "./gdpr-eprivacy-coverage-checklist";
 
-export type EvidenceLabel = "Observed" | "Not observed" | "Potential gap" | "Partial concern" | "Not testable";
+export type EvidenceLabel = "Observed" | "Not observed" | "Potential gap" | "Partial concern" | "Not confirmed" | "Not testable";
 export type AssessmentDirection =
   | "positive_signal"
   | "neutral_signal"
@@ -54,6 +54,9 @@ export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): Evide
   if (item.status === "Not confirmed" && retainedPolicyExtractionLimited(item)) {
     return "Not testable";
   }
+  if (item.status === "Not confirmed" && isRowSpecificExtractionNotConfirmed(item)) {
+    return "Not confirmed";
+  }
   if (item.status === "Gap observed") {
     return "Potential gap";
   }
@@ -75,6 +78,21 @@ function retainedPolicyExtractionLimited(item: GdprEprivacyCoverageChecklistItem
     recordValueAsRecord(policySurfaceSummary, "policy_text_extraction_health");
   const status = health?.policyTextExtractionStatus ?? health?.policy_text_extraction_status;
   return typeof status === "string" && status !== "ok";
+}
+
+function isRowSpecificExtractionNotConfirmed(item: GdprEprivacyCoverageChecklistItem) {
+  if (item.assessmentStatus === "review_signal" && item.status === "Not confirmed") {
+    return true;
+  }
+  const signalObserved = item.criticalEvidence.retainedEvidence.signalObserved;
+  if (
+    signalObserved === "not_confirmed_row_specific_extraction" ||
+    signalObserved === "not_confirmed_policy_disclosure_extraction"
+  ) {
+    return true;
+  }
+  const concernPolicyKey = item.criticalEvidence.pipeline?.concernPolicyKey;
+  return typeof concernPolicyKey === "string" && concernPolicyKey.endsWith(".not_confirmed");
 }
 
 function recordValueAsRecord(record: Record<string, unknown> | null, key: string) {
@@ -306,7 +324,7 @@ export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem):
   if (evidenceLabel === "Observed") {
     return getObservedAssessmentDirection(item);
   }
-  if (evidenceLabel === "Partial concern" || item.assessmentStatus === "review_signal") {
+  if (evidenceLabel === "Partial concern" || evidenceLabel === "Not confirmed" || item.assessmentStatus === "review_signal") {
     if (item.status === "Review signal" && RISK_SIGNAL_ROW_IDS.has(item.id)) {
       return getObservedAssessmentDirection(item);
     }

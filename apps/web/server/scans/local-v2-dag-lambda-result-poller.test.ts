@@ -342,6 +342,7 @@ test("artifact mirror downloads durable Lambda artifacts into the local v2 DAG s
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-v2-mirror-test-"));
   const auxiliaryBody = Buffer.from(JSON.stringify({ plannerInputs: { baselineLikelyBannerPresent: true } }));
   const screenshotBody = Buffer.from("not-a-real-png-for-mirror-test");
+  const fullPageScreenshotBody = Buffer.from("not-a-real-jpeg-for-mirror-test");
   const objects = new Map([
     ["v2/scan-local-1/LocalV2DagLambdaManifest.json", Buffer.from(JSON.stringify({
       auxiliaryArtifacts: [
@@ -356,6 +357,12 @@ test("artifact mirror downloads durable Lambda artifacts into the local v2 DAG s
           sha256: createHash("sha256").update(screenshotBody).digest("hex"),
           sizeBytes: screenshotBody.byteLength,
           uri: "s3://certscore-dev-artifacts/v2/scan-local-1/auxiliary/screenshot-pre-consent.png"
+        },
+        {
+          fileName: "screenshot-pre-consent-full-page.jpg",
+          sha256: createHash("sha256").update(fullPageScreenshotBody).digest("hex"),
+          sizeBytes: fullPageScreenshotBody.byteLength,
+          uri: "s3://certscore-dev-artifacts/v2/scan-local-1/auxiliary/screenshot-pre-consent-full-page.jpg"
         }
       ],
       manifest: true
@@ -368,7 +375,8 @@ test("artifact mirror downloads durable Lambda artifacts into the local v2 DAG s
     ["v2/scan-local-1/ReviewResult.json", Buffer.from(JSON.stringify({ review: true }))],
     ["v2/scan-local-1/V2ReportProjectionDraft.json", Buffer.from(JSON.stringify({ rows: [] }))],
     ["v2/scan-local-1/auxiliary/consent_scenario_plan.json", auxiliaryBody],
-    ["v2/scan-local-1/auxiliary/screenshot-pre-consent.png", screenshotBody]
+    ["v2/scan-local-1/auxiliary/screenshot-pre-consent.png", screenshotBody],
+    ["v2/scan-local-1/auxiliary/screenshot-pre-consent-full-page.jpg", fullPageScreenshotBody]
   ]);
   const metadata = Object.fromEntries(
     [
@@ -421,7 +429,7 @@ test("artifact mirror downloads durable Lambda artifacts into the local v2 DAG s
   });
 
   assert.ok(mirror);
-  assert.equal(mirror.mirroredArtifacts.length, 6);
+  assert.equal(mirror.mirroredArtifacts.length, 7);
   assert.equal(
     await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-local-1/CanonicalEvidenceBundle.json"), "utf8"),
     JSON.stringify({
@@ -437,6 +445,10 @@ test("artifact mirror downloads durable Lambda artifacts into the local v2 DAG s
   assert.equal(
     await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-local-1/screenshot-pre-consent.png"), "utf8"),
     "not-a-real-png-for-mirror-test"
+  );
+  assert.equal(
+    await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-local-1/screenshot-pre-consent-full-page.jpg"), "utf8"),
+    "not-a-real-jpeg-for-mirror-test"
   );
   const manifest = JSON.parse(await readFile(path.join(workspaceRoot, "artifacts/local-v2-dag-scans/scan-local-1/LambdaArtifactMirrorManifest.json"), "utf8")) as Record<string, unknown>;
   assert.equal(manifest.productionFindingIntegration, false);

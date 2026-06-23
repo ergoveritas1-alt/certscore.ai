@@ -6,6 +6,7 @@ import { useState } from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
 import { ApplicabilityAssumptionsNote } from "./privacy-law-applicability-context";
 import { RegulatoryChecklistAdvancedEvidenceProvider } from "./regulatory-checklist-advanced-evidence-context";
+import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 
 type RegulatoryChecklistTab = {
   badgeLabel?: string;
@@ -71,6 +72,35 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
+              {showAdvancedEvidenceToggle ? (
+                <button
+                  type="button"
+                  aria-label={expandAllAdvancedEvidence
+                    ? "Collapse all evidence packets and correction steps"
+                    : "Expand all evidence packets and correction steps"}
+                  aria-pressed={expandAllAdvancedEvidence}
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition",
+                    expandAllAdvancedEvidence
+                      ? "border-sky-300 bg-sky-50 text-sky-700 shadow-sm"
+                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800"
+                  )}
+                  title={expandAllAdvancedEvidence
+                    ? "Collapse all evidence packets and correction steps"
+                    : "Expand all evidence packets and correction steps"}
+                  onClick={() => setExpandAllAdvancedEvidence((value) => !value)}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "transition-transform",
+                      expandAllAdvancedEvidence ? "rotate-90" : "rotate-0"
+                    )}
+                  >
+                    <ScanReportDisclosureIcon className="h-4 w-4 rounded-[0.375rem] [&_svg]:h-2.5 [&_svg]:w-2.5" />
+                  </span>
+                </button>
+              ) : null}
               <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">{headingLabel}</p>
               <ApplicabilityAssumptionsNote />
             </div>
@@ -83,21 +113,6 @@ export function RegulatoryChecklistSection({ headingLabel = "Regulatory Diagnost
           {hasMultipleTabChoices ? (
           <div className="flex max-w-full flex-wrap items-center gap-2 pb-1 lg:justify-end lg:pb-0">
             <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-100/80 p-1 shadow-inner shadow-slate-200/60">
-              {showAdvancedEvidenceToggle ? (
-                <button
-                  type="button"
-                  aria-pressed={expandAllAdvancedEvidence}
-                  className={cn(
-                    "rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition",
-                    expandAllAdvancedEvidence
-                      ? "border-sky-700 bg-sky-600 text-white shadow-[0_12px_24px_-14px_rgba(2,132,199,0.9)] ring-1 ring-sky-700"
-                      : "border-sky-200 bg-sky-50 text-sky-700 shadow-sm hover:border-sky-300 hover:bg-white hover:text-sky-900"
-                  )}
-                  onClick={() => setExpandAllAdvancedEvidence((value) => !value)}
-                >
-                  {expandAllAdvancedEvidence ? "Collapse all" : "Expand all"}
-                </button>
-              ) : null}
               {visibleTabs.map((tab) => {
                 const selected = tab.id === activeTab.id;
                 return (

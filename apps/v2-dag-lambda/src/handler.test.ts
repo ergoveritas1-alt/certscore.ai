@@ -443,7 +443,8 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
   await writeFile(path.join(tmp, "consent_scenario_plan.json"), JSON.stringify({ plan: true }), "utf8");
   await writeFile(path.join(tmp, "consent_scenario_execution.json"), JSON.stringify({ execution: true }), "utf8");
   await writeFile(path.join(tmp, "screenshot-pre-consent.png"), "not-json", "utf8");
-  const puts: Array<{ bucket: string | undefined; key: string | undefined }> = [];
+  await writeFile(path.join(tmp, "screenshot-pre-consent-full-page.jpg"), "not-a-real-jpeg", "utf8");
+  const puts: Array<{ bucket: string | undefined; contentType: string | undefined; key: string | undefined }> = [];
   const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   const previousPrefix = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX;
   process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "certscore-v2-local-artifacts";
@@ -456,6 +457,7 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
         async send(command: PutObjectCommand) {
           puts.push({
             bucket: command.input.Bucket,
+            contentType: command.input.ContentType,
             key: command.input.Key
           });
           return { $metadata: {} };
@@ -463,14 +465,19 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
       }
     });
 
-    assert.equal(artifacts.length, 3);
+    assert.equal(artifacts.length, 4);
     assert.deepEqual(artifacts.map((artifact) => artifact.fileName), [
       "consent_scenario_execution.json",
       "consent_scenario_plan.json",
+      "screenshot-pre-consent-full-page.jpg",
       "screenshot-pre-consent.png"
     ]);
     assert.ok(puts.every((put) => put.bucket === "certscore-v2-local-artifacts"));
     assert.ok(puts.every((put) => put.key?.includes("/auxiliary/")));
+    assert.equal(
+      puts.find((put) => put.key?.endsWith("/screenshot-pre-consent-full-page.jpg"))?.contentType,
+      "image/jpeg"
+    );
     assert.ok(artifacts.every((artifact) => artifact.uri.startsWith("s3://certscore-v2-local-artifacts/")));
   } finally {
     if (previousBucket === undefined) {

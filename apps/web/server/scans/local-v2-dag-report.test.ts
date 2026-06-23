@@ -458,6 +458,294 @@ test("summarizePolicySurfaces limits Article 13 aggregation to target-relevant p
   assert.doesNotMatch(summary.retainedPrivacyPolicyTextExcerpt, /Google Privacy Policy|Cookie Policy|TrustArc/i);
 });
 
+test("summarizePolicySurfaces retains substantive policy text beyond navigation chrome", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const navigationChrome = "Privacy Policy Privacy & Terms Overview Technologies FAQ Terms of Service Introduction ".repeat(18);
+  const substantivePolicyText = [
+    "Information we collect. We collect information you provide and information created when you use our services.",
+    "Why we use information. We use personal information to provide services, maintain and improve them, personalize content, measure performance, and prevent abuse.",
+    "Legal basis. We process information with consent, when needed to perform a contract, for legitimate interests, and when required by law.",
+    "Retaining your information. We retain the data we collect for different periods depending on what it is, how we use it, and your settings.",
+    "Data transfers. We maintain servers around the world and information may be processed outside the country where you live."
+  ].join(" ");
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "target-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: `${navigationChrome}${substantivePolicyText}`,
+      observedTopics: ["processing_purposes", "legal_basis", "data_retention", "international_transfers"]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.ok(summary.retainedPrivacyPolicyTextExcerpt.length > 1_000);
+  assert.match(summary.retainedPrivacyPolicyTextExcerpt, /Retaining your information/i);
+  assert.match(summary.retainedPrivacyPolicyTextExcerpt, /Data transfers/i);
+});
+
+test("summarizePolicySurfaces carries row-targeted retained policy section evidence", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "target-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: [
+        "Privacy Policy. Overview Privacy Policy Terms of Service Introduction Information Google collects Why Google collects data.",
+        "Your privacy controls. You can review and update privacy controls, activity controls, ad settings, and personalization settings.",
+        "Exporting and deleting your information. You can export a copy using Google Takeout, delete your information, and request correction.",
+        "Retaining your information. Some data is deleted or anonymized automatically and some records are retained as long as necessary for legal purposes.",
+        "Data transfers. We process information on servers outside the country where you live using data transfer safeguards.",
+        "Compliance and cooperation with regulators. We work with regulatory authorities, including local data protection authorities, to resolve complaints."
+      ].join(" "),
+      observedTopics: ["data_retention", "data_subject_rights", "international_transfers", "supervisory_authority"],
+      retainedPolicySections: [
+        {
+          sourceUrl: "https://example.test/privacy",
+          heading: "Your privacy controls",
+          textExcerpt: "Your privacy controls. You can review and update privacy controls, activity controls, ad settings, and personalization settings.",
+          charStart: 120,
+          charEnd: 255,
+          quality: "partial"
+        },
+        {
+          sourceUrl: "https://example.test/privacy",
+          heading: "Exporting and deleting your information",
+          textExcerpt: "Exporting and deleting your information. You can export a copy using Google Takeout, delete your information, and request correction.",
+          charStart: 256,
+          charEnd: 410,
+          quality: "partial"
+        },
+        {
+          sourceUrl: "https://example.test/privacy",
+          heading: "Retaining your information",
+          textExcerpt: "Retaining your information. Some data is deleted or anonymized automatically and some records are retained as long as necessary for legal purposes.",
+          charStart: 411,
+          charEnd: 570,
+          quality: "partial"
+        },
+        {
+          sourceUrl: "https://example.test/privacy",
+          heading: "Data transfers",
+          textExcerpt: "Data transfers. We process information on servers outside the country where you live using data transfer safeguards.",
+          charStart: 571,
+          charEnd: 690,
+          quality: "partial"
+        },
+        {
+          sourceUrl: "https://example.test/privacy",
+          heading: "Compliance and cooperation with regulators",
+          textExcerpt: "Compliance and cooperation with regulators. We work with regulatory authorities, including local data protection authorities, to resolve complaints.",
+          charStart: 691,
+          charEnd: 840,
+          quality: "partial"
+        }
+      ],
+      retainedArticle13SectionEvidence: [
+        {
+          coverageArea: "data_retention",
+          selectedPolicySectionHeading: "Retaining your information",
+          selectedPolicySectionExcerpt: "Retaining your information. Some data is deleted or anonymized automatically and some records are retained as long as necessary for legal purposes.",
+          selectedPolicySectionUrl: "https://example.test/privacy",
+          evidenceSource: "deterministic",
+          selectedEvidenceStrength: "strong",
+          signalObserved: "observed"
+        },
+        {
+          coverageArea: "data_subject_rights",
+          selectedPolicySectionHeading: "Exporting and deleting your information",
+          selectedPolicySectionExcerpt: "Exporting and deleting your information. You can export a copy using Google Takeout, delete your information, and request correction.",
+          selectedPolicySectionUrl: "https://example.test/privacy",
+          evidenceSource: "deterministic",
+          selectedEvidenceStrength: "strong",
+          signalObserved: "observed"
+        },
+        {
+          coverageArea: "international_transfers",
+          selectedPolicySectionHeading: "Data transfers",
+          selectedPolicySectionExcerpt: "Data transfers. We process information on servers outside the country where you live using data transfer safeguards.",
+          selectedPolicySectionUrl: "https://example.test/privacy",
+          evidenceSource: "deterministic",
+          selectedEvidenceStrength: "strong",
+          signalObserved: "observed"
+        },
+        {
+          coverageArea: "legal_basis",
+          selectedPolicySectionHeading: "Policy body",
+          selectedPolicySectionExcerpt: "Privacy Policy. Overview Privacy Policy Terms of Service.",
+          selectedPolicySectionUrl: "https://example.test/privacy",
+          evidenceSource: "deterministic",
+          selectedEvidenceStrength: "limited",
+          signalObserved: "not_confirmed",
+          extractionLimitation: "section_retained_without_row_specific_disclosure"
+        }
+      ],
+      article13DisclosureSignals: [
+        {
+          disclosureType: "data_retention",
+          status: "observed",
+          evidenceText: "Retaining your information. Some data is deleted or anonymized automatically and some records are retained as long as necessary for legal purposes.",
+          confidence: 0.82,
+          source: "deterministic",
+          selectedPolicySectionHeading: "Retaining your information",
+          selectedPolicySectionExcerpt: "Retaining your information. Some data is deleted or anonymized automatically and some records are retained as long as necessary for legal purposes.",
+          selectedPolicySectionUrl: "https://example.test/privacy",
+          evidenceSource: "deterministic",
+          selectedEvidenceStrength: "strong"
+        }
+      ]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+
+  assert.equal(summary.policyTextCoverageMode, "section_targeted");
+  assert.deepEqual(summary.missingExpectedPolicySections, ["European requirements"]);
+  assert.equal(summary.policySectionCount, 5);
+  assert.equal(summary.retainedPolicySectionHeadings.includes("Retaining your information"), true);
+  assert.equal(summary.retainedPolicySectionHeadings.includes("Data transfers"), true);
+  assert.equal(summary.retainedArticle13SectionEvidence.some((evidence) =>
+    evidence.coverageArea === "legal_basis" &&
+    evidence.signalObserved === "not_confirmed" &&
+    evidence.extractionLimitation === "section_retained_without_row_specific_disclosure"
+  ), true);
+  assert.equal(summary.article13DisclosureSignals[0]?.selectedPolicySectionHeading, "Retaining your information");
+  assert.match(summary.article13DisclosureSignals[0]?.selectedPolicySectionExcerpt ?? "", /retained as long as necessary/i);
+});
+
+test("summarizePolicySurfaces rejects script/config text as Article 13 policy evidence", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const codePolicyText = ";this.gbar_={CONFIG:[[[0,\"www.gstatic.com\",null,\"0\"]]]};_.z=function(a,b){Object.defineProperties(a,b)};var rights=function(){return Object.keys({access:1,delete:1})}; Copyright The Closure Library; ".repeat(40);
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "target-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: codePolicyText,
+      observedTopics: ["data_subject_rights"],
+      article13DisclosureSignals: [
+        {
+          disclosureType: "data_subject_rights",
+          status: "observed",
+          evidenceText: ":!!b};_.z=function(a,b){Object.defineProperties(a,b)}; rights Object access delete export",
+          confidence: 0.9,
+          source: "deterministic"
+        }
+      ]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "low_quality_extracted_code_or_config");
+  assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_text_low_quality_or_non_policy_content");
+  assert.deepEqual(summary.article13DisclosureSignals, []);
+  assert.deepEqual(summary.article13DisclosureTypesObserved, []);
+  assert.equal(summary.discardedArticle13DisclosureSignals.some((signal) =>
+    signal.disclosureType === "data_subject_rights" &&
+    signal.rejectReason === "code_or_non_policy_excerpt"
+  ), true);
+});
+
+test("summarizePolicySurfaces separates weak Article 13 candidates from validated disclosure signals", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "google-like-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: [
+        "We use personal information to provide our services, maintain and improve them, personalize content, and measure performance.",
+        "We share information with service providers and partners that process data on our behalf.",
+        "Privacy Policy - Privacy & Terms - Google Skip to main content Privacy & Terms Overview Privacy Policy Terms of Service Technologies FAQ.",
+        "Introduction Information Google collects Why Google collects data Your privacy controls Sharing your information Keeping your information.",
+        "We use various technologies to collect and store information, including cookies, local storage, databases, and server logs.",
+        "Data transfers. We may process information on servers outside the European Economic Area using standard contractual clauses."
+      ].join(" "),
+      observedTopics: ["controller_contact", "processing_purposes", "recipients_or_vendor_categories", "data_retention", "international_transfers"],
+      article13DisclosureSignals: [
+        {
+          disclosureType: "controller_contact",
+          status: "observed",
+          evidenceText: "Privacy Policy - Privacy & Terms - Google Skip to main content Privacy & Terms Overview Privacy Policy Terms of Service Technologies FAQ.",
+          confidence: 0.82,
+          source: "deterministic"
+        },
+        {
+          disclosureType: "data_retention",
+          status: "partial",
+          evidenceText: "Introduction Information Google collects Why Google collects data Your privacy controls Sharing your information Keeping your information.",
+          confidence: 0.62,
+          source: "deterministic"
+        },
+        {
+          disclosureType: "data_retention",
+          status: "partial",
+          evidenceText: "We use various technologies to collect and store information, including cookies, local storage, databases, and server logs.",
+          confidence: 0.62,
+          source: "deterministic"
+        },
+        {
+          disclosureType: "processing_purposes",
+          status: "observed",
+          evidenceText: "We use personal information to provide our services, maintain and improve them, personalize content, and measure performance.",
+          confidence: 0.78,
+          source: "deterministic"
+        },
+        {
+          disclosureType: "recipients_or_vendor_categories",
+          status: "observed",
+          evidenceText: "We share information with service providers and partners that process data on our behalf.",
+          confidence: 0.78,
+          source: "deterministic"
+        },
+        {
+          disclosureType: "international_transfers",
+          status: "observed",
+          evidenceText: "Data transfers. We may process information on servers outside the European Economic Area using standard contractual clauses.",
+          confidence: 0.78,
+          source: "deterministic"
+        }
+      ]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+
+  assert.deepEqual(
+    summary.article13DisclosureSignals.map((signal) => signal.disclosureType),
+    ["processing_purposes", "recipients_or_vendor_categories", "international_transfers"]
+  );
+  assert.equal(summary.article13DisclosureTypesObserved.includes("controller_contact"), false);
+  assert.equal(summary.article13DisclosureTypesPartial.includes("data_retention"), false);
+  assert.equal(summary.observedPolicyTopicHints.includes("controller_contact"), true);
+  assert.equal(summary.observedPolicyTopicHints.includes("data_retention"), true);
+  assert.equal(summary.discardedArticle13DisclosureSignals.some((signal) =>
+    signal.disclosureType === "controller_contact" &&
+    signal.rejectReason === "page_chrome_or_navigation"
+  ), true);
+  assert.equal(summary.discardedArticle13DisclosureSignals.some((signal) =>
+    signal.disclosureType === "data_retention" &&
+    signal.rejectReason === "table_of_contents_only"
+  ), true);
+  assert.equal(summary.discardedArticle13DisclosureSignals.some((signal) =>
+    signal.disclosureType === "data_retention" &&
+    signal.rejectReason === "generic_storage_not_retention"
+  ), true);
+});
+
 test("materializeLocalV2DagScanDetail projects row-specific runtime signal summaries", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -852,6 +1140,169 @@ test("materializeLocalV2DagScanDetail promotes retained access-denied pages to s
     assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, false);
     assert.equal(detail.scan.pagesScanned, 0);
     assert.equal(detail.signals.some((signal) => signal.key === "tracking_before_consent_detected"), false);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail promotes security block pages even when cookie text resembles consent copy", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/no-go-security-block-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-23T04:37:16.000Z",
+      consentUiObservations: [
+        {
+          basis: ["keyword:cookie", "keyword:cookies"],
+          confidence: 0.62,
+          likelyPresent: true,
+          observationId: "consent_ui_pre_consent",
+          textExcerpt: "Please enable cookies. Sorry, you have been blocked You are unable to access www.ikea.com Why have I been blocked? This website is using a security service to protect itself from online attacks. Cloudflare Ray ID: a100cba4df09f3ce",
+          visibleChoiceLabels: []
+        }
+      ],
+      cookieEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          domain: ".ikea.com",
+          firstParty: true,
+          name: "cf_clearance",
+          sameSite: "Lax",
+          timestampMs: 900,
+          valueHash: "blocked-page-cookie"
+        }
+      ],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: true
+      },
+      modulesRun: [],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.ikea.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 120,
+          url: "https://www.ikea.com/"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.ikea.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 500,
+          url: "https://www.ikea.com/favicon.ico"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.ikea.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 700,
+          url: "https://www.ikea.com/cdn-cgi/challenge-platform/h/b/orchestrate/chl_page/v1"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.ikea.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 760,
+          url: "https://www.ikea.com/cdn-cgi/styles/challenges.css"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.ikea.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 820,
+          url: "https://www.ikea.com/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"
+        }
+      ],
+      normalizedVendorObservations: [],
+      normalizedUrl: "https://www.ikea.com/",
+      policySurfaceObservations: [
+        {
+          normalizedUrl: "https://ikea.com/privacy-policy",
+          status: "failed",
+          surfaceType: "privacy_policy",
+          url: "/privacy-policy"
+        }
+      ],
+      runtimeCoverage: {
+        coverageStatus: "usable",
+        fallbackModesUsed: [],
+        limitationKeys: [],
+        notes: [],
+        observationCounts: {
+          cookieEvents: 1,
+          cookiesBeforeConsent: 1,
+          networkEvents: 5,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 0
+        },
+        silentEmpty: false
+      },
+      runtimeTimeline: [],
+      scanId: "ikea-security-block-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 1986,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "dom_content_loaded",
+          path: "/tmp/certscore-v2/ikea-security-block-fixture/screenshot-pre-consent.png",
+          url: "https://www.ikea.com/"
+        }
+      ],
+      startedAt: "2026-06-23T04:37:03.000Z",
+      url: "https://ikea.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "ikea.com",
+        scanConfigJson: {
+          hostname: "ikea.com",
+          normalizedUrl: "https://ikea.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const scanNoGoAssessment = detail.runtimeArtifacts?.scan_no_go_assessment as Record<string, unknown> | undefined;
+    const visualAccessReview = detail.runtimeArtifacts?.visual_access_review as Record<string, unknown> | undefined;
+
+    assert.equal(scanNoGoAssessment?.decision, "no_go");
+    assert.deepEqual(scanNoGoAssessment?.reasonCodes, ["access_denied_or_forbidden_page", "scan_no_go_corroborated"]);
+    assert.equal(visualAccessReview?.go_no_go, "NO_GO");
+    assert.equal(visualAccessReview?.page_state, "access_blocked");
+    assert.equal(detail.snapshot?.homepage_fetch_status, "blocked");
+    assert.equal(detail.snapshot?.blocked_flag, true);
+    assert.equal(detail.snapshot?.coverage_level, "limited_none");
+    assert.equal(detail.snapshot?.pages_scanned, 0);
+    assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, false);
+    assert.equal(detail.scan.pagesScanned, 0);
+    assert.equal(detail.signals.length, 0);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

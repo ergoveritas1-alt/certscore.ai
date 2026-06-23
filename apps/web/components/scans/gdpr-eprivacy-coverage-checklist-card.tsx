@@ -111,6 +111,8 @@ function getEvidenceLabelBadgeClasses(label: EvidenceLabel) {
       return "border-slate-200 bg-white text-slate-700";
     case "Partial concern":
       return "border-slate-200 bg-white text-slate-700";
+    case "Not confirmed":
+      return "border-slate-200 bg-white text-slate-700";
     case "Not testable":
       return "border-slate-300 bg-slate-100 text-slate-700";
     case "Not observed":
@@ -214,13 +216,18 @@ function ChecklistRowSummaryStrip({ items }: { items: GdprEprivacyCoverageCheckl
     },
     {
       className: "border-slate-200 bg-white text-slate-700",
+      count: items.filter((item) => getEvidenceLabel(item) === "Not confirmed").length,
+      label: "Not confirmed",
+    },
+    {
+      className: "border-slate-200 bg-white text-slate-700",
       count: items.filter((item) => getEvidenceLabel(item) === "Potential gap").length + summary.coverageMissing,
       label: "Gaps / limits",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:grid-cols-5">
       {entries.map((entry) => (
         <div key={entry.label} className={cn("rounded-md border px-3 py-2", entry.className)}>
           <div className="text-lg font-semibold leading-none text-slate-950">{entry.count}</div>
@@ -926,17 +933,32 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
 }
 
 function getArticle13RationalePrefix(item: GdprEprivacyCoverageChecklistItem) {
+  if (
+    item.id === "automated_decision_making_profiling_disclosure" &&
+    getEvidenceLabel(item) === "Partial concern"
+  ) {
+    return "Automated processing or personalization language was observed, but an Article 22-style solely automated decision-making disclosure was not confirmed";
+  }
+  if (
+    item.id === "supervisory_authority_complaint_disclosure" &&
+    getEvidenceLabel(item) === "Partial concern"
+  ) {
+    return "Policy text referenced complaints, regulators, or data protection authorities, but a complete supervisory-authority complaint-right disclosure was not confirmed";
+  }
+  if (item.id === "international_transfers_disclosure") {
+    return "Policy text included matching international-transfer disclosure evidence";
+  }
   if (getEvidenceLabel(item) === "Partial concern") {
     return "Policy evidence was retained, but the matched disclosure text was incomplete or ambiguous";
+  }
+  if (getEvidenceLabel(item) === "Not confirmed") {
+    return "Policy evidence was retained, but row-specific disclosure was not confirmed from the retained extraction";
   }
   if (getEvidenceLabel(item) === "Potential gap") {
     return "Scanner expected this transparency disclosure but did not retain a clear match";
   }
   if (getEvidenceLabel(item) === "Not observed") {
     return "Scanner did not retain a clear matching transparency disclosure";
-  }
-  if (item.id === "international_transfers_disclosure") {
-    return "Policy text includes international-transfer/safeguards disclosure. This is a transparency signal only and does not validate the sufficiency of the transfer mechanism";
   }
   return "Policy text included matching disclosure evidence";
 }
@@ -1005,6 +1027,15 @@ function getEvidenceBackedFallbackRationale(item: GdprEprivacyCoverageChecklistI
   if (evidenceLabel === "Partial concern") {
     return joinRationaleParts([
       `Partial support from retained ${source}`,
+      strongestDetail ?? statusBasis,
+      missingEvidence,
+      policySurface
+    ]);
+  }
+
+  if (evidenceLabel === "Not confirmed") {
+    return joinRationaleParts([
+      `Not confirmed from retained ${source}`,
       strongestDetail ?? statusBasis,
       missingEvidence,
       policySurface
@@ -1738,6 +1769,9 @@ function ChecklistRows({
   showDebugConfidenceImprovements: boolean;
 }) {
   const [openToolsByRow, setOpenToolsByRow] = React.useState<Record<string, RowToolState>>({});
+  React.useEffect(() => {
+    setOpenToolsByRow({});
+  }, [expandAllAdvancedEvidence]);
   const toggleRowTool = (rowId: string, tool: keyof RowToolState) => {
     setOpenToolsByRow((current) => ({
       ...current,
