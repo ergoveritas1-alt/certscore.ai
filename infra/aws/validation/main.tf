@@ -29,7 +29,7 @@ locals {
   }
   v2_dag_lambda_queue_urls = {
     for key, region in local.v2_dag_lambda_regions :
-    key => "https://sqs.${region}.amazonaws.com/${data.aws_caller_identity.current.account_id}/certscore-v2-dag-local-results"
+    key => "https://sqs.${region}.amazonaws.com/${data.aws_caller_identity.current.account_id}/certscore-v2-dag-local-production-results"
   }
   v2_dag_lambda_artifact_object_arns = [
     for region in values(local.v2_dag_lambda_regions) :
@@ -576,7 +576,7 @@ resource "aws_iam_role_policy" "task_exec" {
         ]
         Resource = [
           for region in values(local.v2_dag_lambda_regions) :
-          "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:certscore-v2-dag-local-results"
+          "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:certscore-v2-dag-local-production-results"
         ]
       },
       {
