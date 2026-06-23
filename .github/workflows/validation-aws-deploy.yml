@@ -74,6 +74,8 @@ jobs:
       VALIDATION_WORKER_PUSH_RUNTIME_BASE: ${{ github.event.inputs.push_runtime_base || vars.VALIDATION_WORKER_PUSH_RUNTIME_BASE || 'false' }}
       VALIDATION_WORKER_RUNTIME_BASE_TAG: ${{ github.event.inputs.runtime_base_tag || vars.VALIDATION_WORKER_RUNTIME_BASE_TAG || 'validation-worker-runtime-base' }}
       VALIDATION_WORKER_RUNTIME_BASE_CACHE_TAG: ${{ vars.VALIDATION_WORKER_RUNTIME_BASE_CACHE_TAG || 'validation-worker-runtime-base-cache' }}
+      VALIDATION_WORKER_LAMBDA_RESULT_POLL_ENABLED: "1"
+      VALIDATION_WORKER_LAMBDA_RESULT_POLL_SECONDS: "2"
 
     steps:
       - name: Checkout
@@ -270,7 +272,25 @@ jobs:
               | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
               | .containerDefinitions = (.containerDefinitions | map(
                   if .name == env.ECS_WORKER_CONTAINER_NAME
-                  then .image = "\(env.VALIDATION_WORKER_IMAGE):\(env.GITHUB_SHA)" | del(.command)
+                  then .image = "\(env.VALIDATION_WORKER_IMAGE):\(env.GITHUB_SHA)"
+                    | del(.command)
+                    | .environment = (
+                        (.environment // [])
+                        | map(select(
+                            .name != "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED"
+                            and .name != "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS"
+                          ))
+                        + [
+                            {
+                              "name": "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED",
+                              "value": env.VALIDATION_WORKER_LAMBDA_RESULT_POLL_ENABLED
+                            },
+                            {
+                              "name": "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS",
+                              "value": env.VALIDATION_WORKER_LAMBDA_RESULT_POLL_SECONDS
+                            }
+                          ]
+                      )
                   else .
                   end
                 ))' > /tmp/validation-worker-task-definition.json
