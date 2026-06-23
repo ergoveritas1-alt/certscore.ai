@@ -1150,6 +1150,182 @@ test("materializeLocalV2DagScanDetail promotes retained access-denied pages to s
   }
 });
 
+test("materializeLocalV2DagScanDetail treats Vercel security checkpoint as scan-level no-go", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/vercel-checkpoint-no-go-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "screenshot-pre-consent.png"), syntheticPngHeader(1366, 900, 16_672));
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-23T14:59:04.472Z",
+      consentUiObservations: [
+        {
+          acceptControlObserved: false,
+          basis: [
+            "bounded_capture_timeout_or_failure",
+            "dom_text_fallback_after_consent_ui_timeout",
+            "insufficient_banner_keywords"
+          ],
+          confidence: 0.5,
+          controls: [],
+          layerInspected: "unknown",
+          likelyPresent: false,
+          managePreferencesControlObserved: false,
+          observationId: "consent_ui_pre_consent",
+          observedAtMs: 44746,
+          rejectControlObserved: false,
+          textExcerpt:
+            "Wir überprüfen Ihren Browser\n\nVercel Sicherheitskontrollpunkt\n\n|\n\nfra1::1782226738-6uaer6kpJr2r8BVOQq1yMdHRP0Z12W8K",
+          visibleChoiceLabels: []
+        }
+      ],
+      cookieEvents: [],
+      modulesRun: [
+        {
+          completedAt: "2026-06-23T14:59:04.052Z",
+          durationMs: 45809,
+          errors: [],
+          evidenceRefs: [],
+          moduleName: "preConsentRuntimeScanner",
+          startedAt: "2026-06-23T14:58:18.243Z",
+          status: "completed"
+        }
+      ],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "net_2",
+          firstParty: true,
+          hostname: "numastays.com",
+          isThirdParty: false,
+          requestUrl: "https://numastays.com/",
+          resourceType: "document",
+          thirdParty: false,
+          timestampMs: 40569,
+          url: "https://numastays.com/"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "net_5",
+          firstParty: true,
+          hostname: "numastays.com",
+          isThirdParty: false,
+          requestUrl: "https://numastays.com/.well-known/vercel/security/static/challenge.v2.min.js",
+          resourceType: "script",
+          thirdParty: false,
+          timestampMs: 40926,
+          url: "https://numastays.com/.well-known/vercel/security/static/challenge.v2.min.js"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "net_8",
+          firstParty: true,
+          hostname: "numastays.com",
+          isThirdParty: false,
+          requestUrl: "https://numastays.com/.well-known/vercel/security/static/challenge.v2.wasm",
+          resourceType: "fetch",
+          thirdParty: false,
+          timestampMs: 41334,
+          url: "https://numastays.com/.well-known/vercel/security/static/challenge.v2.wasm"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "net_12",
+          firstParty: true,
+          hostname: "numastays.com",
+          isThirdParty: false,
+          requestUrl: "https://numastays.com/.well-known/vercel/security/request-challenge",
+          resourceType: "fetch",
+          thirdParty: false,
+          timestampMs: 45097,
+          url: "https://numastays.com/.well-known/vercel/security/request-challenge"
+        }
+      ],
+      normalizedUrl: "https://numastays.com/",
+      policySurfaceObservations: [],
+      runtimeCoverage: {
+        coverageStatus: "usable",
+        fallbackModesUsed: [],
+        limitationKeys: [],
+        notes: [],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 4,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 0
+        },
+        silentEmpty: false
+      },
+      runtimeTimeline: [],
+      scanId: "numastays-vercel-checkpoint-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 41243,
+          captureMethod: "primary_viewport_fallback",
+          consentStateAtTime: "pre_consent",
+          pagePhase: "dom_content_loaded",
+          path: path.join(outDir, "screenshot-pre-consent.png"),
+          url: "https://numastays.com/"
+        }
+      ],
+      startedAt: "2026-06-23T14:58:18.234Z",
+      url: "https://numastays.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "numastays.com",
+        scanConfigJson: {
+          hostname: "numastays.com",
+          normalizedUrl: "https://numastays.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const scanNoGoAssessment = detail.runtimeArtifacts?.scan_no_go_assessment as Record<string, unknown> | undefined;
+    const visualAccessReview = detail.runtimeArtifacts?.visual_access_review as Record<string, unknown> | undefined;
+
+    assert.equal(scanNoGoAssessment?.decision, "no_go");
+    assert.deepEqual(scanNoGoAssessment?.reasonCodes, ["access_denied_or_forbidden_page", "scan_no_go_corroborated"]);
+    assert.ok((scanNoGoAssessment?.corroboratorCodes as string[] | undefined)?.includes("low_runtime_activity"));
+    assert.equal(visualAccessReview?.go_no_go, "NO_GO");
+    assert.equal(visualAccessReview?.page_state, "access_blocked");
+    assert.equal(detail.snapshot?.homepage_fetch_status, "blocked");
+    assert.equal(detail.snapshot?.blocked_flag, true);
+    assert.equal(detail.snapshot?.coverage_level, "limited_none");
+    assert.equal(detail.snapshot?.pages_scanned, 0);
+    assert.equal(detail.snapshot?.runtime_counts_retained, false);
+    assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_none");
+    assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, false);
+    assert.equal(detail.scan.pagesScanned, 0);
+    assert.equal(detail.signals.length, 0);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail promotes security block pages even when cookie text resembles consent copy", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

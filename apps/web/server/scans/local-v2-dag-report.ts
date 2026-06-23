@@ -1229,7 +1229,9 @@ function summarizeFirstLayerConsentChoices(bundle: CanonicalEvidenceBundle) {
 }
 
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
-  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id/i;
+  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser/i;
+const LOCAL_V2_VERCEL_SECURITY_CHALLENGE_PATTERN =
+  /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])/i;
 const LOCAL_V2_SCREENSHOT_PLACEHOLDER_PATTERN =
   /1x1 screenshot placeholder used|screenshot placeholder/i;
 const LOCAL_V2_PAGE_CONTEXT_CLOSED_PATTERN =
@@ -1249,6 +1251,15 @@ function collectLocalV2NoGoTextCandidates(bundle: CanonicalEvidenceBundle) {
 
 function collectLocalV2ModuleErrors(bundle: CanonicalEvidenceBundle) {
   return uniqueStrings((bundle.modulesRun ?? []).flatMap((moduleRun) => moduleRun.errors ?? []));
+}
+
+function getNetworkEventUrl(event: NonNullable<CanonicalEvidenceBundle["networkEvents"]>[number]) {
+  return getString((event as { requestUrl?: unknown }).requestUrl) ?? getString(event.url);
+}
+
+function isLocalV2SecurityChallengeRequest(event: NonNullable<CanonicalEvidenceBundle["networkEvents"]>[number]) {
+  const url = getNetworkEventUrl(event);
+  return Boolean(url && LOCAL_V2_VERCEL_SECURITY_CHALLENGE_PATTERN.test(url));
 }
 
 function localV2VisualCapture(bundle: CanonicalEvidenceBundle) {
@@ -1384,6 +1395,7 @@ function buildMaterializedLocalV2Detail(
   const requestedHost = scanRecord.scan.domainHostname ?? hostnameFromUrl(bundle.normalizedUrl ?? bundle.url);
   const rootDomain = registrableDomain(requestedHost);
   const networkEvents = bundle.networkEvents ?? [];
+  const nonChallengeNetworkEvents = networkEvents.filter((event) => !isLocalV2SecurityChallengeRequest(event));
   const cookieEvents = bundle.cookieEvents ?? [];
   const vendorRows = buildVendorEvidence(bundle);
   const thirdPartyRequests = networkEvents.filter((event) => event.thirdParty === true || event.isThirdParty === true);
@@ -1430,8 +1442,8 @@ function buildMaterializedLocalV2Detail(
     bundle,
     consentSurfaceLikelyPresent,
     localOutDir: options.localOutDir,
-    runtimeActivityObserved: preconsentCookies.length > 0 || vendorRows.length > 0 || networkEvents.length > 3 || cookieEvents.length > 0,
-    lowRuntimeActivity: networkEvents.length <= 3 && thirdPartyRequests.length === 0 && vendorRows.length === 0
+    runtimeActivityObserved: preconsentCookies.length > 0 || vendorRows.length > 0 || nonChallengeNetworkEvents.length > 3 || cookieEvents.length > 0,
+    lowRuntimeActivity: nonChallengeNetworkEvents.length <= 3 && thirdPartyRequests.length === 0 && vendorRows.length === 0
   });
   const visualCaptureUnavailable = !localV2NoGo &&
     (visualCapture.status === "failed" || visualCapture.status === "unavailable") &&
