@@ -4,6 +4,7 @@ import {
   type GetObjectCommandOutput
 } from "@aws-sdk/client-s3";
 import {
+  ChangeMessageVisibilityCommand,
   DeleteMessageCommand,
   ReceiveMessageCommand,
   SQSClient,
@@ -172,10 +173,6 @@ export function getLambdaResultTargetEnvironment(rawMessage: unknown): LambdaTar
   } catch {
     return null;
   }
-}
-
-function isLocalResultQueue(queueUrl: string) {
-  return queueUrl.includes("local-results");
 }
 
 function receiptHandle(message: Message) {
@@ -660,19 +657,17 @@ async function pollOnce(input: {
         continue;
       }
       const resultTargetEnvironment = getLambdaResultTargetEnvironment(rawMessage);
-      if (
-        input.targetEnvironment === "local" &&
-        resultTargetEnvironment === "production" &&
-        isLocalResultQueue(input.queueUrl)
-      ) {
-        await input.client.send(new DeleteMessageCommand({
+      if (resultTargetEnvironment && resultTargetEnvironment !== input.targetEnvironment) {
+        await input.client.send(new ChangeMessageVisibilityCommand({
           QueueUrl: input.queueUrl,
-          ReceiptHandle: receiptHandle(message)
+          ReceiptHandle: receiptHandle(message),
+          VisibilityTimeout: 0
         }));
-        deleted += 1;
-        console.warn("[validation-worker] deleted production-target v2 DAG Lambda result from local queue", {
+        console.warn("[validation-worker] released wrong-target v2 DAG Lambda result", {
+          expectedTargetEnvironment: input.targetEnvironment,
           messageId: message.MessageId ?? null,
-          queueRegion: input.queueRegion
+          queueRegion: input.queueRegion,
+          resultTargetEnvironment
         });
         continue;
       }

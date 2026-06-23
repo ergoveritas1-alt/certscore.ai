@@ -101,7 +101,7 @@ test("validation worker identifies manual Lambda smoke results for queue cleanup
   assert.equal(getManualSmokeResultScanId(JSON.stringify({ scanId: "49037835-190b-4e67-9fe2-426d51d55069" })), null);
 });
 
-test("validation worker identifies wrong-target Lambda results in local queues", async () => {
+test("validation worker identifies wrong-target Lambda results for immediate release", async () => {
   assert.equal(getLambdaResultTargetEnvironment(JSON.stringify({ targetEnvironment: "production" })), "production");
   assert.equal(getLambdaResultTargetEnvironment(JSON.stringify({ targetEnvironment: "local" })), "local");
   assert.equal(getLambdaResultTargetEnvironment(JSON.stringify({ targetEnvironment: "staging" })), null);
@@ -110,6 +110,8 @@ test("validation worker identifies wrong-target Lambda results in local queues",
 test("validation worker Lambda result poller uses a short SQS visibility timeout", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
+  assert.match(source, /ChangeMessageVisibilityCommand/);
+  assert.match(source, /VisibilityTimeout:\s*0/);
   assert.match(source, /VisibilityTimeout:\s*5/);
   assert.doesNotMatch(source, /VisibilityTimeout:\s*30/);
 });
