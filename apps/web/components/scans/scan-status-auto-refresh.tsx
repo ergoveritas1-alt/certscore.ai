@@ -68,6 +68,24 @@ export function isTerminalScanStatus(status: string | null | undefined) {
   );
 }
 
+export function getPolledScanStatus(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const scan = record.scan && typeof record.scan === "object" && !Array.isArray(record.scan)
+    ? record.scan as Record<string, unknown>
+    : null;
+  const status = typeof scan?.status === "string"
+    ? scan.status
+    : typeof record.status === "string"
+      ? record.status
+      : null;
+
+  return status;
+}
+
 function ScanStatusRefreshEffect({
   scanId,
   shouldRefresh,
@@ -147,10 +165,15 @@ function ScanStatusRefreshEffect({
           return;
         }
 
-        const payload = await response.json() as { scan?: { status?: unknown } };
-        const nextStatus = typeof payload.scan?.status === "string" ? payload.scan.status : null;
+        const payload = await response.json() as unknown;
+        const nextStatus = getPolledScanStatus(payload);
         if (!disposed && isTerminalScanStatus(nextStatus)) {
-          window.location.reload();
+          router.refresh();
+          window.setTimeout(() => {
+            if (!disposed) {
+              window.location.reload();
+            }
+          }, 400);
         }
       } catch {
         // Ignore transient status polling failures; the router refresh loop keeps retrying.
@@ -168,7 +191,7 @@ function ScanStatusRefreshEffect({
       disposed = true;
       window.clearInterval(intervalId);
     };
-  }, [scanId, shouldRefresh, status]);
+  }, [router, scanId, shouldRefresh, status]);
 
   return null;
 }

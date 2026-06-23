@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { isTerminalScanStatus, ScanStatusAutoRefresh, shouldAutoRefreshScanStatus } from "./scan-status-auto-refresh";
+import {
+  getPolledScanStatus,
+  isTerminalScanStatus,
+  ScanStatusAutoRefresh,
+  shouldAutoRefreshScanStatus
+} from "./scan-status-auto-refresh";
 
 test("shouldAutoRefreshScanStatus keeps polling while completed scans finalize findings", () => {
   assert.equal(shouldAutoRefreshScanStatus({ status: "completed" }), false);
@@ -47,4 +52,12 @@ test("isTerminalScanStatus recognizes scan states that should end in-progress re
   assert.equal(isTerminalScanStatus("running"), false);
   assert.equal(isTerminalScanStatus("processing"), false);
   assert.equal(isTerminalScanStatus(null), false);
+});
+
+test("getPolledScanStatus accepts current and legacy scan status response shapes", () => {
+  assert.equal(getPolledScanStatus({ scan: { status: "completed" } }), "completed");
+  assert.equal(getPolledScanStatus({ status: "completed_limited" }), "completed_limited");
+  assert.equal(getPolledScanStatus({ scan: { status: 200 }, status: "failed" }), "failed");
+  assert.equal(getPolledScanStatus({ scan: null }), null);
+  assert.equal(getPolledScanStatus(null), null);
 });
