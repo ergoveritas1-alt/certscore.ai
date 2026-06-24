@@ -79,10 +79,11 @@ test("dev image setup uses local names and refuses non-dev resource names", asyn
   assert.match(setupScript, /CERTSCORE_CHROMIUM_USER_AGENT/);
   assert.match(setupScript, /s3:GetObject/);
   assert.match(setupScript, /lambda:InvokeFunction/);
+  assert.match(setupScript, /\$\{prefix\}-production-results/);
   assert.match(setupScript, /--memory-size "\$memory_size"/);
   assert.match(setupScript, /OPENAI_API_KEY/);
   assert.match(setupScript, /file:\/\/\$\{environment_json\}/);
-  assert.doesNotMatch(setupScript, /certscore-prod|production/);
+  assert.doesNotMatch(setupScript, /certscore-prod|certscore-v2-dag-production/);
 });
 
 test("local Lambda parity harness uses the Lambda pre-consent visual budget", async () => {

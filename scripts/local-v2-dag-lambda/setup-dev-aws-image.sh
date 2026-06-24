@@ -95,6 +95,7 @@ lambda_resources=()
 for supported_region in "${supported_regions[@]}"; do
   log_resources+=("arn:aws:logs:${supported_region}:${account_id}:*")
   sqs_resources+=("arn:aws:sqs:${supported_region}:${account_id}:${queue_name}")
+  sqs_resources+=("arn:aws:sqs:${supported_region}:${account_id}:${prefix}-production-results")
   s3_resources+=("arn:aws:s3:::${prefix}-artifacts-${supported_region}-${account_id}/${artifact_prefix%/}/*")
   lambda_resources+=("arn:aws:lambda:${supported_region}:${account_id}:function:${prefix}-*")
 done
