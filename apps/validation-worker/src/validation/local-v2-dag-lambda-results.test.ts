@@ -128,3 +128,10 @@ test("validation worker records Lambda result event before marking scan complete
     "scan completion must happen after v2_lambda_result.received exists so completed-scan backfill can see evidence"
   );
 });
+
+test("validation worker mirrors completed Lambda artifacts for production-target results", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+
+  assert.doesNotMatch(source, /targetEnvironment\s*!==\s*"local"/);
+  assert.match(source, /input\.parsedMessage\.status\s*!==\s*"completed"/);
+});

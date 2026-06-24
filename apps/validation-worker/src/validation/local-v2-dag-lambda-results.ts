@@ -403,7 +403,7 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
   workspaceRoot?: string;
 }) {
   const pointers = input.parsedMessage.artifactPointers;
-  if (input.parsedMessage.targetEnvironment !== "local" || input.parsedMessage.status !== "completed" || !pointers) {
+  if (input.parsedMessage.status !== "completed" || !pointers) {
     return null;
   }
 
