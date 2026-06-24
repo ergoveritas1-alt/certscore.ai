@@ -2650,7 +2650,13 @@ function BenchmarkMetricCard(input: {
     : benchmarkValue !== null
       ? `Expected ${benchmarkValue}.`
       : null;
-  const benchmarkTooltip = [benchmarkTooltipBase, input.note].filter(Boolean).join(" ");
+  const metricNote = input.label === "Cookies pre-consent"
+    ? [
+        "Cookie/storage groups pre-consent, deduped by cookie/storage name and domain.",
+        input.note
+      ].filter(Boolean).join(" ")
+    : input.note;
+  const benchmarkTooltip = [benchmarkTooltipBase, metricNote].filter(Boolean).join(" ");
   const displayLabel =
     input.label === "Third-party requests"
       ? "3rd-party requests"
@@ -5029,6 +5035,7 @@ export function ExecutiveSummaryCard(input: {
     })),
     verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
   });
+  const findingsHeading = narrativePresentation.findingsHeading.replace("Highest-priority", "High-priority");
   const regulatoryCounts = {
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     thirdPartyRequestCount: input.thirdPartyRequestCount
@@ -5137,7 +5144,7 @@ export function ExecutiveSummaryCard(input: {
                 <div>
                   <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Top findings</p>
                   <h2 data-testid="executive-findings-heading" className="text-[1.3rem] font-semibold tracking-tight text-slate-950 lg:text-[1.87rem]">
-                    {narrativePresentation.findingsHeading}
+                    {findingsHeading}
                   </h2>
                 </div>
               </div>
@@ -5158,7 +5165,7 @@ export function ExecutiveSummaryCard(input: {
             ) : displayedTopFindings.length > 0 ? (
               <ExecutiveTopFindingsCarousel
                 count={displayedTopFindings.length}
-                heading={narrativePresentation.findingsHeading}
+                heading={findingsHeading}
               >
               {displayedTopFindings.map((finding, index) => {
                 const densityBenchmark = getFindingDensityBenchmark(finding.id);

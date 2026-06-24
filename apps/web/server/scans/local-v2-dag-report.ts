@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { resolveVendorDisplayCategory, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import {
   LOCAL_V2_DAG_LAMBDA_AWS_REGION,
@@ -549,25 +550,160 @@ async function readLocalV2DagBundleFromS3(scanArtifactUri: string): Promise<Cano
   }
 }
 
+function buildVendorResolverInputs(bundle: CanonicalEvidenceBundle): VendorResolverInput[] {
+  return [
+    ...(bundle.networkEvents ?? []).map((event) => ({
+      consentStateAtTime: event.consentStateAtTime,
+      evidenceId: event.eventId,
+      evidenceRef: {
+        refId: `ref_${event.eventId}`,
+        eventId: event.eventId,
+        eventType: event.eventType,
+        url: requestUrl(event as Record<string, unknown>) ?? undefined
+      },
+      hostname: event.hostname ?? hostnameFromUrl(requestUrl(event as Record<string, unknown>)) ?? undefined,
+      matchSource: "network_request" as const,
+      scenario: event.scenario,
+      sourceEventType: event.eventType,
+      sourceScanner: event.sourceScanner,
+      type: "request" as const,
+      url: requestUrl(event as Record<string, unknown>) ?? undefined
+    })),
+    ...(bundle.scriptEvents ?? []).map((event) => ({
+      consentStateAtTime: event.consentStateAtTime,
+      evidenceId: event.eventId,
+      evidenceRef: {
+        refId: `ref_${event.eventId}`,
+        eventId: event.eventId,
+        eventType: event.eventType,
+        url: firstString(event.scriptUrl, event.url) ?? undefined
+      },
+      hostname: event.hostname ?? hostnameFromUrl(firstString(event.scriptUrl, event.url)) ?? undefined,
+      matchSource: "script_url" as const,
+      scenario: event.scenario,
+      sourceEventType: event.eventType,
+      sourceScanner: event.sourceScanner,
+      type: "script" as const,
+      url: firstString(event.scriptUrl, event.url) ?? undefined
+    })),
+    ...(bundle.iframeEvents ?? []).map((event) => ({
+      consentStateAtTime: event.consentStateAtTime,
+      evidenceId: event.eventId,
+      evidenceRef: {
+        refId: `ref_${event.eventId}`,
+        eventId: event.eventId,
+        eventType: event.eventType,
+        url: firstString(event.frameUrl, event.url) ?? undefined
+      },
+      hostname: event.hostname ?? hostnameFromUrl(firstString(event.frameUrl, event.url)) ?? undefined,
+      matchSource: "iframe_url" as const,
+      scenario: event.scenario,
+      sourceEventType: event.eventType,
+      sourceScanner: event.sourceScanner,
+      type: "iframe" as const,
+      url: firstString(event.frameUrl, event.url) ?? undefined
+    })),
+    ...(bundle.cookieEvents ?? []).map((event) => ({
+      consentStateAtTime: event.consentStateAtTime,
+      cookieName: event.cookieName,
+      evidenceId: event.eventId,
+      evidenceRef: {
+        refId: `ref_${event.eventId}`,
+        eventId: event.eventId,
+        eventType: event.eventType,
+        url: event.url
+      },
+      hostname: event.cookieDomain ?? event.hostname,
+      matchSource: "cookie_name" as const,
+      scenario: event.scenario,
+      sourceEventType: event.eventType,
+      sourceScanner: event.sourceScanner,
+      type: "cookie" as const,
+      url: event.url
+    }))
+  ];
+}
+
 function buildVendorEvidence(bundle: CanonicalEvidenceBundle) {
-  const vendors = bundle.normalizedVendorObservations ?? [];
+  const vendors = [
+    ...(bundle.normalizedVendorObservations ?? []),
+    ...resolveVendorObservations(buildVendorResolverInputs(bundle))
+  ];
   return vendors.map((vendor) => {
     const vendorName = firstString(vendor.product, vendor.vendor, vendor.entity) ?? "Unknown vendor";
     const category = purposeToCategory(firstString(vendor.purpose));
+    const displayCategory = resolveVendorDisplayCategory({
+      product: vendor.product,
+      purpose: vendor.purpose,
+      regulatoryRelevance: vendor.regulatoryRelevance,
+      vendor: vendor.vendor
+    });
     const evidenceHost = uniqueStrings((vendor.matchedEvidenceRefs ?? []).map((ref) => hostnameFromUrl(ref.url ?? ref.label))).find(Boolean) ?? null;
+    const relatedJourneyFirstSeenMs = firstNumber(
+      ...(bundle.observedJourneys ?? [])
+        .filter((journey) =>
+          journey.relatedVendorObservationIds?.includes(vendor.observationId) ||
+          journey.relatedVendors?.some((value) => value === vendor.vendor || value === vendor.product || value === vendorName) ||
+          journey.vendor === vendor.vendor ||
+          journey.displayName === vendor.product ||
+          journey.displayName === vendorName
+        )
+        .map((journey) => journey.firstObservedAtMs)
+    );
+    const matchedEventIds = new Set([
+      ...(vendor.matchedEvidenceIds ?? []),
+      ...(vendor.matchedEvidenceRefs ?? []).map((ref) => ref.eventId)
+    ].filter((value): value is string => typeof value === "string" && value.length > 0));
+    const relatedEventFirstSeenMs = firstNumber(
+      ...[
+        ...(bundle.networkEvents ?? []),
+        ...(bundle.scriptEvents ?? []),
+        ...(bundle.iframeEvents ?? [])
+      ]
+        .filter((event) => matchedEventIds.has(event.eventId))
+        .map((event) => event.timestampMs)
+    );
+    const observedVia = uniqueStrings((vendor.matchSources ?? []).map((source) => {
+      const matchSource = firstString(source.source, source.sourceEventType)?.toLowerCase();
+      if (!matchSource) {
+        return null;
+      }
+      if (/cookie/.test(matchSource)) {
+        return "cookie";
+      }
+      if (/script/.test(matchSource)) {
+        return "script";
+      }
+      if (/iframe|frame/.test(matchSource)) {
+        return "iframe";
+      }
+      if (/storage/.test(matchSource)) {
+        return "storage";
+      }
+      if (/request|response|url|host/.test(matchSource)) {
+        return "request";
+      }
+      if (/cmp|dom|global/.test(matchSource)) {
+        return "runtime probe";
+      }
+      return matchSource.replace(/_/g, " ");
+    }));
     return {
       beforeConsent: true,
       collectionEndpointType: "direct_third_party",
       confidence: typeof vendor.confidence === "number" ? vendor.confidence : 0.85,
       detectionSource: "local_v2_dag_runtime",
+      firstSeenMs: firstNumber(relatedJourneyFirstSeenMs, relatedEventFirstSeenMs),
       firstPartyOrThirdParty: "third_party",
       matchedSignatureId: vendor.observationId ?? null,
+      observedVia,
       regulatoryRelevance: vendor.regulatoryRelevance ?? [],
       scriptHost: evidenceHost,
+      vendorDisplayCategory: displayCategory,
       vendorCategory: category,
       vendorName
     };
-  }).filter((vendor) => vendor.vendorCategory !== "cmp");
+  });
 }
 
 function vendorRowsForCategories(
@@ -1211,6 +1347,7 @@ function summarizeFirstLayerConsentChoices(bundle: CanonicalEvidenceBundle) {
   return {
     acceptControlObserved: observation.acceptControlObserved === true || acceptLabels.length > 0,
     acceptLabels,
+    actionableControlInventoryRetained: controls.length > 0 || visibleChoiceLabels.length > 0,
     capturedBeforeInteraction: true,
     controls: controls.slice(0, 12).map((control) => ({
       actionType: control.actionType,
@@ -1226,6 +1363,22 @@ function summarizeFirstLayerConsentChoices(bundle: CanonicalEvidenceBundle) {
     rejectLabels,
     visibleChoiceLabels
   };
+}
+
+function hasRetainedFirstLayerConsentControlInventory(choices: ReturnType<typeof summarizeFirstLayerConsentChoices>) {
+  if (!choices) {
+    return false;
+  }
+  return (
+    choices.layerInspected === "first_layer" &&
+    (
+      choices.actionableControlInventoryRetained === true ||
+      choices.acceptControlObserved === true ||
+      choices.rejectControlObserved === true ||
+      choices.managePreferencesControlObserved === true ||
+      choices.visibleChoiceLabels.length > 0
+    )
+  );
 }
 
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
@@ -1397,7 +1550,8 @@ function buildMaterializedLocalV2Detail(
   const networkEvents = bundle.networkEvents ?? [];
   const nonChallengeNetworkEvents = networkEvents.filter((event) => !isLocalV2SecurityChallengeRequest(event));
   const cookieEvents = bundle.cookieEvents ?? [];
-  const vendorRows = buildVendorEvidence(bundle);
+  const allVendorRows = buildVendorEvidence(bundle);
+  const vendorRows = allVendorRows.filter((vendor) => vendor.vendorCategory !== "cmp");
   const thirdPartyRequests = networkEvents.filter((event) => event.thirdParty === true || event.isThirdParty === true);
   const thirdPartyDomains = uniqueStrings(thirdPartyRequests.map((event) => event.hostname ?? hostnameFromUrl(event.url)));
   const preconsentRequests = thirdPartyRequests.filter((event) => event.consentStateAtTime === "pre_consent");
@@ -1405,14 +1559,6 @@ function buildMaterializedLocalV2Detail(
   const preconsentCookies = cookieEvents.filter((event) => event.consentStateAtTime === "pre_consent");
   const cookieNames = uniqueStrings(cookieEvents.map((event) => cookieName(event)));
   const preconsentCookieNames = uniqueStrings(preconsentCookies.map((event) => cookieName(event)));
-  const advertisingVendors = vendorRowsForAdvertisingInfrastructure(vendorRows);
-  const retargetingBehavioralAdvertisingVendors = vendorRowsForBehavioralAdvertising(vendorRows);
-  const advertisingRetargetingVendors = uniqueVendorRows([
-    ...advertisingVendors,
-    ...retargetingBehavioralAdvertisingVendors,
-    ...vendorRowsForCategories(vendorRows, ["adtech", "marketing"])
-  ]);
-  const analyticsVendors = vendorRowsForCategories(vendorRows, ["analytics", "measurement"]);
   const iframeEvents = sanitizeIframeEvents(bundle, rootDomain);
   const preconsentIframeEvents = iframeEvents.filter((event) => event.preConsent);
   const cmp = bundle.cmpRuntimeObservations?.[0] ?? null;
@@ -1430,7 +1576,8 @@ function buildMaterializedLocalV2Detail(
     (runtimeObservationCounts?.thirdPartyRequests ?? 0) > 0 ||
     (runtimeObservationCounts?.cookiesBeforeConsent ?? 0) > 0 ||
     preconsentCookies.length > 0 ||
-    (runtimeObservationCounts?.normalizedVendors ?? 0) > 0;
+    (runtimeObservationCounts?.normalizedVendors ?? 0) > 0 ||
+    (runtimeCoverageStatus === null && (preconsentRequests.length > 0 || vendorRows.length > 0));
   const visualCapture = localV2VisualCapture(bundle);
   const retainedPreConsentScreenshot = (bundle.screenshots ?? []).some(isPreConsentScreenshotArtifact);
   const preConsentRuntimeReliable = !preConsentRuntimeFailed || retainedPreConsentScreenshot || visualCapture.status === "available";
@@ -1457,9 +1604,22 @@ function buildMaterializedLocalV2Detail(
       : runtimeLimitationKeys;
   const consentRuntimeEvidenceReportable = !localV2NoGo && preConsentRuntimeReliable;
   const runtimeEvidenceReportable = !localV2NoGo && effectiveRuntimeCountsRetained;
+  const vendorEvidenceReportable = runtimeEvidenceReportable ||
+    (!localV2NoGo && preConsentRuntimeReliable && runtimeCoverageStatus === null && meaningfulRuntimeSignalsRetained);
+  const reportableVendorRows = vendorEvidenceReportable ? vendorRows : [];
+  const inventoryVendorRows = vendorEvidenceReportable ? allVendorRows : [];
+  const advertisingVendors = vendorRowsForAdvertisingInfrastructure(reportableVendorRows);
+  const retargetingBehavioralAdvertisingVendors = vendorRowsForBehavioralAdvertising(reportableVendorRows);
+  const advertisingRetargetingVendors = uniqueVendorRows([
+    ...advertisingVendors,
+    ...retargetingBehavioralAdvertisingVendors,
+    ...vendorRowsForCategories(reportableVendorRows, ["adtech", "marketing"])
+  ]);
+  const analyticsVendors = vendorRowsForCategories(reportableVendorRows, ["analytics", "measurement"]);
   const retainedFirstLayerConsentChoices = firstLayerConsentChoices ?? {
     acceptControlObserved: false,
     acceptLabels: [],
+    actionableControlInventoryRetained: false,
     capturedBeforeInteraction: true,
     layerInspected: "unknown",
     managePreferencesControlObserved: false,
@@ -1468,6 +1628,7 @@ function buildMaterializedLocalV2Detail(
     rejectLabels: [],
     visibleChoiceLabels: []
   };
+  const firstLayerConsentControlInventoryRetained = hasRetainedFirstLayerConsentControlInventory(firstLayerConsentChoices);
   const policySurfaces = dedupePolicySurfaces(
     bundle.policySurfaceObservations ?? [],
     bundle.normalizedUrl ?? bundle.url ?? (requestedHost ? `https://${requestedHost}/` : null)
@@ -1488,7 +1649,7 @@ function buildMaterializedLocalV2Detail(
     bundle.runtimeCoverage?.observationCounts.cookiesBeforeConsent ?? 0,
     preconsentCookies.length
   );
-  const vendorCategoryCounts = vendorRows.reduce<Record<string, number>>((counts, vendor) => {
+  const vendorCategoryCounts = reportableVendorRows.reduce<Record<string, number>>((counts, vendor) => {
     counts[vendor.vendorCategory] = (counts[vendor.vendorCategory] ?? 0) + 1;
     return counts;
   }, {});
@@ -1501,10 +1662,10 @@ function buildMaterializedLocalV2Detail(
       : 88;
   const requestPurposeRows = (preconsentRequests
     .map((event) => {
-      const matchedVendor = vendorRows.find((vendor) => {
+      const matchedVendor = reportableVendorRows.find((vendor) => {
         const host = hostnameFromUrl(event.hostname ?? event.url);
         return Boolean(host && vendor.scriptHost && (host === vendor.scriptHost || host.endsWith(`.${vendor.scriptHost}`)));
-      }) ?? vendorRows[0] ?? null;
+      }) ?? reportableVendorRows[0] ?? null;
       const url = requestUrl(event);
       const hostname = event.hostname ?? hostnameFromUrl(url);
       return matchedVendor && url && hostname
@@ -1530,19 +1691,22 @@ function buildMaterializedLocalV2Detail(
   const embeddedContentSummary = summarizeEmbeddedContentEvidence(preconsentIframeEvents, preconsentRequests);
   const fingerprintingRuntimeEvidence = browserApiAccessRows(bundle);
   const fingerprintingEvidenceSummary = summarizeFingerprintingEvidence(bundle);
-  const sessionReplayEvidenceSummary = summarizeSessionReplayEvidence(vendorRows, preconsentRequests, requestPurposeRows);
+  const sessionReplayEvidenceSummary = summarizeSessionReplayEvidence(reportableVendorRows, preconsentRequests, requestPurposeRows);
   const cookieWriteObservations = cookieEvents.map((event) => ({
     beforeConsent: event.consentStateAtTime === "pre_consent",
     category: event.cookiePurpose ?? "unknown",
     cookieName: event.cookieName,
     domain: event.cookieDomain ?? event.hostname,
+    firstObservedAtMs: event.timestampMs,
     initiatorDomain: event.hostname,
     initiatorUrl: event.url,
-    initiatorVendor: vendorRows[0]?.vendorName ?? null,
+    initiatorVendor: reportableVendorRows[0]?.vendorName ?? null,
     nonEssential: event.cookiePurpose !== "security",
     party: event.cookieParty ?? (event.thirdParty ? "third_party" : "first_party"),
+    setAtMs: event.timestampMs,
     setMethod: event.operation ?? "cookie_event",
     thirdParty: event.thirdParty === true || event.cookieParty === "third_party",
+    timestampMs: event.timestampMs,
     timingEvidence: event.consentStateAtTime === "pre_consent" ? "before_consent_cookie_write" : "observed_cookie_write"
   }));
   const hybridRuntimeEvidence = {
@@ -1579,9 +1743,10 @@ function buildMaterializedLocalV2Detail(
       url: requestUrl(event)
     })),
     requestPurposeClassificationConfidence: requestPurposeRows,
-    requestToVendorObservations: vendorRows.map((vendor) => ({
+    requestToVendorObservations: reportableVendorRows.map((vendor) => ({
       category: vendor.vendorCategory,
       hostname: vendor.scriptHost,
+      observedVia: vendor.observedVia,
       preConsent: true,
       regulatoryRelevance: vendor.regulatoryRelevance,
       vendor: vendor.vendorName
@@ -1616,8 +1781,8 @@ function buildMaterializedLocalV2Detail(
       advertisingVendors: uniqueStrings(advertisingVendors.map((vendor) => vendor.vendorName)),
       advertisingRetargetingVendors: uniqueStrings(advertisingRetargetingVendors.map((vendor) => vendor.vendorName)),
       analyticsVendors: uniqueStrings(analyticsVendors.map((vendor) => vendor.vendorName)),
-      normalizedVendors: uniqueStrings(vendorRows.map((vendor) => vendor.vendorName)),
-      preConsentVendorCount: vendorRows.length,
+      normalizedVendors: uniqueStrings(reportableVendorRows.map((vendor) => vendor.vendorName)),
+      preConsentVendorCount: reportableVendorRows.length,
       retargetingBehavioralAdvertisingVendors: uniqueStrings(retargetingBehavioralAdvertisingVendors.map((vendor) => vendor.vendorName)),
       rawThirdPartyDomains: thirdPartyDomains,
       vendorCategoryCounts
@@ -1634,8 +1799,8 @@ function buildMaterializedLocalV2Detail(
     } : {}),
     consent_audit_completed: true,
     consent_baseline_tracker_evidence_urls: runtimeEvidenceReportable ? preconsentRequestUrls : [],
-    consent_baseline_tracker_vendor_names: runtimeEvidenceReportable ? uniqueStrings(vendorRows.map((vendor) => vendor.vendorName)) : [],
-    consent_preconsent_violation_count: runtimeEvidenceReportable ? Math.max(preconsentRequests.length, vendorRows.length) : 0,
+    consent_baseline_tracker_vendor_names: runtimeEvidenceReportable ? uniqueStrings(reportableVendorRows.map((vendor) => vendor.vendorName)) : [],
+    consent_preconsent_violation_count: runtimeEvidenceReportable ? Math.max(preconsentRequests.length, reportableVendorRows.length) : 0,
     collection_surface_count: collectionSurfaceSummary.collectionSurfaceCount,
     collection_surface_observed: collectionSurfaceSummary.collectionSurfacesObserved,
     collectionSurfaceSummary,
@@ -1660,9 +1825,9 @@ function buildMaterializedLocalV2Detail(
       rejectPathDepthAndAvailability: {
         completeRejectPathAvailable: retainedFirstLayerConsentChoices.rejectControlObserved,
         completeRejectPathDetected: retainedFirstLayerConsentChoices.rejectControlObserved,
-        firstLayerCookieConsentBannerObserved: consentSurfaceLikelyPresent,
+        firstLayerCookieConsentBannerObserved: firstLayerConsentControlInventoryRetained,
         firstLayerConsentChoices: retainedFirstLayerConsentChoices,
-        gdprEprivacyConsentSurfaceObserved: consentSurfaceLikelyPresent ? "confirmed" : "unconfirmed",
+        gdprEprivacyConsentSurfaceObserved: firstLayerConsentControlInventoryRetained ? "confirmed" : "unconfirmed",
         layerInspected: retainedFirstLayerConsentChoices.layerInspected,
         rejectAvailableOnFirstLayer: retainedFirstLayerConsentChoices.rejectControlObserved,
         rejectEquivalentFound: retainedFirstLayerConsentChoices.rejectControlObserved,
@@ -1672,9 +1837,9 @@ function buildMaterializedLocalV2Detail(
       reject_path_depth_and_availability: {
         complete_reject_path_available: retainedFirstLayerConsentChoices.rejectControlObserved,
         complete_reject_path_detected: retainedFirstLayerConsentChoices.rejectControlObserved,
-        first_layer_cookie_consent_banner_observed: consentSurfaceLikelyPresent,
+        first_layer_cookie_consent_banner_observed: firstLayerConsentControlInventoryRetained,
         first_layer_consent_choices: retainedFirstLayerConsentChoices,
-        gdpr_eprivacy_consent_surface_observed: consentSurfaceLikelyPresent ? "confirmed" : "unconfirmed",
+        gdpr_eprivacy_consent_surface_observed: firstLayerConsentControlInventoryRetained ? "confirmed" : "unconfirmed",
         layer_inspected: retainedFirstLayerConsentChoices.layerInspected,
         reject_available_on_first_layer: retainedFirstLayerConsentChoices.rejectControlObserved,
         reject_equivalent_found: retainedFirstLayerConsentChoices.rejectControlObserved,
@@ -1696,8 +1861,10 @@ function buildMaterializedLocalV2Detail(
     retargetingBehavioralAdvertisingVendorNames: uniqueStrings(retargetingBehavioralAdvertisingVendors.map((vendor) => vendor.vendorName)),
     analytics_vendor_count: analyticsVendors.length,
     analytics_vendor_names: uniqueStrings(analyticsVendors.map((vendor) => vendor.vendorName)),
-    domainVendorRegistry: vendorRows.map((vendor) => ({
+    domainVendorRegistry: reportableVendorRows.map((vendor) => ({
       endpointHostname: vendor.scriptHost,
+      observedVia: vendor.observedVia,
+      vendorDisplayCategory: vendor.vendorDisplayCategory,
       vendorCategory: vendor.vendorCategory,
       vendorName: vendor.vendorName
     })),
@@ -1844,8 +2011,8 @@ function buildMaterializedLocalV2Detail(
     third_party_cookie_set_before_consent: runtimeEvidenceReportable ? preconsentCookies.length > 0 : false,
     third_party_request_count: runtimeEvidenceReportable ? thirdPartyRequestCount : 0,
     third_party_script_domain_count: runtimeEvidenceReportable ? thirdPartyDomains.length : 0,
-    tracker_count_total: runtimeEvidenceReportable ? Math.max(vendorRows.length, thirdPartyDomains.length) : 0,
-    tracker_vendor_count: runtimeEvidenceReportable ? vendorRows.length : 0,
+    tracker_count_total: runtimeEvidenceReportable ? Math.max(reportableVendorRows.length, thirdPartyDomains.length) : 0,
+    tracker_vendor_count: runtimeEvidenceReportable ? reportableVendorRows.length : 0,
     tracking_before_consent_detected: runtimeEvidenceReportable ? bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0 : false,
     verified_public_surfaces_count: localV2NoGo ? 0 : policySurfaces.length,
     ...(consentRuntimeEvidenceReportable && cmpVendorName ? { cmp_vendor_name: cmpVendorName } : {}),
@@ -1902,14 +2069,16 @@ function buildMaterializedLocalV2Detail(
     ...baseSignals,
     ...signalRows.filter((signal) => !existingSignalKeys.has(signal.key))
   ];
-  const preconsentViolations = runtimeEvidenceReportable ? vendorRows.map((vendor) => ({
+  const preconsentViolations = runtimeEvidenceReportable ? reportableVendorRows.map((vendor) => ({
     collectionEndpointType: vendor.collectionEndpointType,
     confidence: vendor.confidence,
     detectionSource: vendor.detectionSource,
     evidenceUrls: preconsentRequestUrls.filter((url) => vendor.scriptHost && url.includes(vendor.scriptHost)).slice(0, 5),
     firstPartyOrThirdParty: vendor.firstPartyOrThirdParty,
     matchedSignatureId: vendor.matchedSignatureId,
+    observedVia: vendor.observedVia,
     scriptHost: vendor.scriptHost,
+    vendorDisplayCategory: vendor.vendorDisplayCategory,
     vendorCategory: vendor.vendorCategory,
     vendorName: vendor.vendorName
   })) : [];
@@ -1930,7 +2099,7 @@ function buildMaterializedLocalV2Detail(
     signals: materializedSignals,
     snapshot,
     trackerVendors: runtimeEvidenceReportable
-      ? (scanRecord.trackerVendors.length > 0 ? scanRecord.trackerVendors : vendorRows)
+      ? (scanRecord.trackerVendors.length > 0 ? scanRecord.trackerVendors : inventoryVendorRows)
       : []
   };
 }

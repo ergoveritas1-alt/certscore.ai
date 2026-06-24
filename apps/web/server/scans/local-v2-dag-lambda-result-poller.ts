@@ -466,6 +466,7 @@ export async function recordLocalV2DagLambdaResultEvent(
               }
             : {}),
           lambdaPhaseTimings: parsedMessage.phaseTimings ?? [],
+          ...(parsedMessage.handlerTiming ? { lambdaHandlerTiming: parsedMessage.handlerTiming } : {}),
           processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
           productionFindingIntegration: false,
           resultStatus: parsedMessage.status,

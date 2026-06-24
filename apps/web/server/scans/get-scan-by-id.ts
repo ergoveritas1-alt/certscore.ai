@@ -159,6 +159,7 @@ export type ScanTrackerVendorRecord = {
   collectionEndpointType: string;
   confidence: number;
   detectionSource: string;
+  firstSeenMs?: number | null;
   firstPartyOrThirdParty: string;
   matchedSignatureId: string | null;
   scriptHost: string | null;

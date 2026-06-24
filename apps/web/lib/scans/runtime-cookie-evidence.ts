@@ -76,6 +76,18 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
   if (isFunctionalCookieExcludedFromTrackingEvidence(name, domain)) {
     return "necessary";
   }
+  if (/^(countrycode|statecode|geodata|geo_country|trp-country|trp-language)(\b|$)/i.test(normalized)) {
+    return "geolocation";
+  }
+  if (/^(secgpc|usprivacy|uspapi|gpp|euconsent-v2)(\b|$)/i.test(normalized)) {
+    return "privacy_preference";
+  }
+  if (/^(fastab|optimizely|optimizelyenduserid|optimizelysession|mbox|at_check)(\b|$)/i.test(normalized)) {
+    return "experimentation";
+  }
+  if (/^wbdfch$/i.test(name)) {
+    return "site_functionality";
+  }
   if (
     /(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id|ajs_user_id|analytics_session_id|heap|mp_|intercom-id|hubspotutk|__hstc|__hssc|(^|\b)s_ecid(\b|$)|(^|\b)s_sess(\b|$)|(^|\b)s_cc(\b|$)|(^|\b)s_dslv(\b|$)|(^|\b)sat_ppv(\b|$)|^_ali_s_|(^|\b)cna(\b|$)|(^|\b)sca(\b|$)|^yandex|^yuid|aliyun\.com|mmstat\.com|yandex\.(?:ru|com))/i.test(
       normalized
@@ -114,7 +126,7 @@ export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | nu
 }
 
 export function isNonEssentialCookieCategory(category: string | null | undefined) {
-  return category === "analytics" || category === "advertising" || category === "dmp" || category === "session_replay" || category === "personalization";
+  return category === "analytics" || category === "advertising" || category === "dmp" || category === "session_replay" || category === "personalization" || category === "experimentation";
 }
 
 function inferCookieProvider(name: string, domain: string | null = null) {
@@ -383,6 +395,14 @@ export function buildRuntimeCookieInventory(input: {
   const initialRows = initialCookieNames.map((cookieName, index) => normalizeInitialCookieRow(cookieName, initialCookieDomains[index] ?? null));
   const rowsByKey = new Map<string, RuntimeCookieEvidenceRow>();
   for (const row of [...cookieWriteRows, ...explicitPreconsentRows, ...initialRows]) {
+    if (!row.domain) {
+      const hasDomainBearingRow = [...rowsByKey.values()].some((existing) => existing.cookieName === row.cookieName && Boolean(existing.domain));
+      if (hasDomainBearingRow) {
+        continue;
+      }
+    } else {
+      rowsByKey.delete(`${row.cookieName}\u0000`);
+    }
     const key = `${row.cookieName}\u0000${row.domain ?? ""}`;
     const existing = rowsByKey.get(key);
     if (!existing || existing.timingEvidence !== "before_consent_cookie_write" && row.timingEvidence === "before_consent_cookie_write") {

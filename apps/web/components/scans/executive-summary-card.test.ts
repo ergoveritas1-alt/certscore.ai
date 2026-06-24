@@ -2555,6 +2555,7 @@ test("ExecutiveSummaryCard keeps four or more top findings in an expandable top-
   assert.doesNotMatch(html, /max-h-\[38\.375rem\]/);
   assert.match(html, /overflow-y-auto/);
   assert.match(html, /Third-party tracking observed before recorded consent/);
+  assert.match(html, /4 high-priority issues/);
   assert.match(html, /Non-essential tracking continued after reject/);
   assert.match(html, /Session replay service signal observed/);
   assert.match(html, /Automated accessibility issues observed/);
@@ -4151,7 +4152,7 @@ test("ExecutiveSummaryCard renders a neutral empty state when no headline findin
   );
 
   assert.doesNotMatch(html, /Primary concerns:/);
-  assert.match(html, /Highest-priority issues/);
+  assert.match(html, /High-priority issues/);
   assert.match(html, /Review the supporting evidence below for lower-priority signals and scan context\./);
 });
 

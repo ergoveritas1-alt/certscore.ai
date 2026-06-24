@@ -121,6 +121,41 @@ function retainedText(item: GdprEprivacyCoverageChecklistItem) {
   ).toLowerCase();
 }
 
+function retainedString(item: GdprEprivacyCoverageChecklistItem, keys: string[]) {
+  for (const key of keys) {
+    const value = item.criticalEvidence.retainedEvidence[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function getCookieStoragePriorityDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection | null {
+  const priority = retainedString(item, ["cookieStoragePriority", "cookie_storage_priority"]);
+  return getInventoryPriorityDirection(priority);
+}
+
+function getTrackerPriorityDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection | null {
+  const priority = retainedString(item, ["trackerPriority", "tracker_priority"]);
+  return getInventoryPriorityDirection(priority);
+}
+
+function getInventoryPriorityDirection(priority: string | null): AssessmentDirection | null {
+  switch (priority) {
+    case "high":
+      return "potential_concern";
+    case "medium":
+      return "potential_concern";
+    case "review_needed":
+      return "review_signal";
+    case "contextual":
+      return "neutral_signal";
+    default:
+      return null;
+  }
+}
+
 function evidenceMentions(item: GdprEprivacyCoverageChecklistItem, pattern: RegExp) {
   return pattern.test([
     item.explanation,
@@ -278,6 +313,12 @@ function hasConsentSurfaceExpectation(item: GdprEprivacyCoverageChecklistItem) {
 function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
   switch (item.id) {
     case "pre_consent_cookies_storage":
+      {
+        const cookiePriorityDirection = getCookieStoragePriorityDirection(item);
+        if (cookiePriorityDirection) {
+          return cookiePriorityDirection;
+        }
+      }
       if (hasHighConfidenceStorageConcern(item)) {
         return "potential_concern";
       }
@@ -286,6 +327,12 @@ function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem)
       }
       return "review_signal";
     case "pre_consent_third_party_tracking":
+      {
+        const trackerPriorityDirection = getTrackerPriorityDirection(item);
+        if (trackerPriorityDirection) {
+          return trackerPriorityDirection;
+        }
+      }
       if (hasHighRiskPreconsentPurpose(item) === false) {
         return "review_signal";
       }

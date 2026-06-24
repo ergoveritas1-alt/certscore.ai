@@ -83,6 +83,7 @@ export type LocalV2DagLambdaResultMessage = {
     code?: string;
     message: string;
   };
+  handlerTiming?: LocalV2DagLambdaHandlerTiming;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
@@ -103,9 +104,25 @@ type LocalV2DagLambdaAuxiliaryArtifact = {
   uri: string;
 };
 type LocalV2DagLambdaPhaseTiming = {
+  completedAt?: string;
   durationMs: number;
   label: string;
+  startedAt?: string;
   status: "completed" | "failed" | "skipped";
+};
+type LocalV2DagLambdaHandlerTiming = {
+  artifactChainCompletedAt?: string;
+  artifactChainDurationMs?: number;
+  artifactChainStartedAt?: string;
+  completedAt: string;
+  firstPhaseLabel?: string;
+  firstPhaseStartedAt?: string;
+  handlerDurationMs: number;
+  handlerStartedAt: string;
+  scanPhaseCompletedAt?: string;
+  scanPhaseDurationMs?: number;
+  scanPhaseLabel?: string;
+  scanPhaseStartedAt?: string;
 };
 type LocalV2DagLambdaWorkerLane = "coordinator" | "consent_flows" | "accept_gpc" | "accept_only" | "reject_manage";
 type LocalV2DagLambdaDebugOverrides = {
@@ -609,6 +626,7 @@ function writeJson(filePath: string, value: unknown) {
 
 async function writeEgressPreflightArtifact(artifactRoot: string) {
   const startedAt = Date.now();
+  const startedAtIso = new Date(startedAt).toISOString();
   const egressLabel = firstTrimmedRuntimeEnv(process.env, [
     "SCAN_EGRESS_LABEL",
     "CERTSCORE_V2_DAG_LAMBDA_EGRESS_LABEL",
@@ -622,6 +640,7 @@ async function writeEgressPreflightArtifact(artifactRoot: string) {
   const artifact = {
     artifactVersion: "certscore.v2.lambda-egress-preflight.v1",
     checkedAt: new Date().toISOString(),
+    completedAt: null as string | null,
     durationMs: 0,
     egressLabel: egressLabel ? egressLabel.slice(0, 80) : null,
     proxyModeEnabled: proxyEnabled,
@@ -635,11 +654,14 @@ async function writeEgressPreflightArtifact(artifactRoot: string) {
       region?: string;
       timezone?: string;
     },
+    startedAt: startedAtIso,
     error: null as null | string
   };
 
   if (!proxyEnabled) {
-    artifact.durationMs = Date.now() - startedAt;
+    const completedAt = Date.now();
+    artifact.completedAt = new Date(completedAt).toISOString();
+    artifact.durationMs = completedAt - startedAt;
     await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
     return;
   }
@@ -667,7 +689,9 @@ async function writeEgressPreflightArtifact(artifactRoot: string) {
     artifact.error = error instanceof Error ? error.message.slice(0, 240) : "unknown_egress_preflight_error";
   } finally {
     await browser?.close().catch(() => undefined);
-    artifact.durationMs = Date.now() - startedAt;
+    const completedAt = Date.now();
+    artifact.completedAt = new Date(completedAt).toISOString();
+    artifact.durationMs = completedAt - startedAt;
     await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
   }
 }
@@ -725,11 +749,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     scanTuning
   });
   if (!POST_CONSENT_FLOW_SCANNING_ENABLED) {
-    phaseTimings.push({
-      durationMs: 0,
-      label: "worker_invocations",
-      status: "skipped"
-    });
+    phaseTimings.push(skippedLambdaPhaseTiming("worker_invocations"));
     await writeJson(path.join(artifactRoot, "LocalV2DagLambdaShardSummary.json"), {
       artifactOnly: true,
       generatedAt: new Date().toISOString(),
@@ -815,22 +835,40 @@ async function timeLambdaPhase<T>(
   fn: () => Promise<T>
 ) {
   const startedAt = Date.now();
+  const startedAtIso = new Date(startedAt).toISOString();
   try {
     const value = await fn();
+    const completedAt = Date.now();
     phaseTimings.push({
-      durationMs: Date.now() - startedAt,
+      completedAt: new Date(completedAt).toISOString(),
+      durationMs: completedAt - startedAt,
       label,
+      startedAt: startedAtIso,
       status: "completed"
     });
     return value;
   } catch (error) {
+    const completedAt = Date.now();
     phaseTimings.push({
-      durationMs: Date.now() - startedAt,
+      completedAt: new Date(completedAt).toISOString(),
+      durationMs: completedAt - startedAt,
       label,
+      startedAt: startedAtIso,
       status: "failed"
     });
     throw error;
   }
+}
+
+function skippedLambdaPhaseTiming(label: string): LocalV2DagLambdaPhaseTiming {
+  const now = new Date().toISOString();
+  return {
+    completedAt: now,
+    durationMs: 0,
+    label,
+    startedAt: now,
+    status: "skipped"
+  };
 }
 
 async function invokeLocalV2DagLambdaWorkers(input: {
@@ -927,11 +965,21 @@ function parsePhaseTimings(value: unknown): LocalV2DagLambdaPhaseTiming[] {
       const record = asRecord(entry);
       const label = compactString(record.label);
       const durationMs = typeof record.durationMs === "number" ? record.durationMs : null;
+      const completedAt = compactString(record.completedAt);
+      const startedAt = compactString(record.startedAt);
       const status =
         record.status === "failed" || record.status === "completed" || record.status === "skipped"
           ? record.status
           : null;
-      return label && durationMs !== null && status ? [{ label, durationMs, status }] : [];
+      return label && durationMs !== null && status
+        ? [{
+            ...(completedAt ? { completedAt } : {}),
+            durationMs,
+            label,
+            ...(startedAt ? { startedAt } : {}),
+            status
+          }]
+        : [];
     })
     : [];
 }
@@ -1611,6 +1659,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
   artifactPointers?: LocalV2DagLambdaResultMessage["artifactPointers"];
   completedAt: Date;
   error?: { code?: string; message: string };
+  handlerTiming?: LocalV2DagLambdaHandlerTiming;
   payload: LocalV2DagLambdaDispatchPayload;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   status: "completed" | "failed";
@@ -1623,6 +1672,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
     completedAt: input.completedAt.toISOString(),
     contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
     ...(input.error ? { error: sanitizeError(input.error) } : {}),
+    ...(input.handlerTiming ? { handlerTiming: input.handlerTiming } : {}),
     ...(input.phaseTimings ? { phaseTimings: input.phaseTimings } : {}),
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
@@ -1657,6 +1707,34 @@ function sanitizeError(error: { code?: string; message: string }) {
   };
 }
 
+function buildLocalV2DagLambdaHandlerTiming(input: {
+  artifactChainCompletedAt?: Date;
+  artifactChainStartedAt?: Date;
+  completedAt: Date;
+  handlerStartedAt: Date;
+  phaseTimings?: LocalV2DagLambdaPhaseTiming[];
+}): LocalV2DagLambdaHandlerTiming {
+  const firstPhase = input.phaseTimings?.find((phase) => phase.startedAt);
+  const scanPhase = input.phaseTimings?.find((phase) => phase.label === "scan" || phase.label.endsWith("_scan"));
+  const artifactChainDurationMs = input.artifactChainStartedAt && input.artifactChainCompletedAt
+    ? Math.max(0, input.artifactChainCompletedAt.getTime() - input.artifactChainStartedAt.getTime())
+    : undefined;
+  return {
+    ...(input.artifactChainCompletedAt ? { artifactChainCompletedAt: input.artifactChainCompletedAt.toISOString() } : {}),
+    ...(artifactChainDurationMs !== undefined ? { artifactChainDurationMs } : {}),
+    ...(input.artifactChainStartedAt ? { artifactChainStartedAt: input.artifactChainStartedAt.toISOString() } : {}),
+    completedAt: input.completedAt.toISOString(),
+    ...(firstPhase?.label ? { firstPhaseLabel: firstPhase.label.slice(0, 80) } : {}),
+    ...(firstPhase?.startedAt ? { firstPhaseStartedAt: firstPhase.startedAt } : {}),
+    handlerDurationMs: Math.max(0, input.completedAt.getTime() - input.handlerStartedAt.getTime()),
+    handlerStartedAt: input.handlerStartedAt.toISOString(),
+    ...(scanPhase?.completedAt ? { scanPhaseCompletedAt: scanPhase.completedAt } : {}),
+    ...(scanPhase ? { scanPhaseDurationMs: Math.max(0, Math.round(scanPhase.durationMs)) } : {}),
+    ...(scanPhase?.label ? { scanPhaseLabel: scanPhase.label.slice(0, 80) } : {}),
+    ...(scanPhase?.startedAt ? { scanPhaseStartedAt: scanPhase.startedAt } : {})
+  };
+}
+
 export async function sendLocalV2DagLambdaResultMessage(input: {
   message: LocalV2DagLambdaResultMessage;
   queueUrl: string;
@@ -1672,6 +1750,10 @@ export async function sendLocalV2DagLambdaResultMessage(input: {
 export async function handler(event: unknown, options: HandlerOptions = {}) {
   let payload: LocalV2DagLambdaDispatchPayload | null = null;
   const now = options.now ?? (() => new Date());
+  const handlerStartedAt = now();
+  let artifactChainStartedAt: Date | undefined;
+  let artifactChainCompletedAt: Date | undefined;
+  let phaseTimings: LocalV2DagLambdaPhaseTiming[] | undefined;
 
   try {
     payload = parseLocalV2DagLambdaDispatchPayload(event);
@@ -1685,13 +1767,24 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     }
     const runArtifactChain = options.runArtifactChain ?? ((dispatchPayload, runOptions) =>
       runLocalV2DagLambdaArtifactChain(dispatchPayload, { ...runOptions, s3Client: options.s3Client, workspaceRoot }));
+    artifactChainStartedAt = now();
     const artifactResult = await runArtifactChain(payload, { artifactRoot });
+    artifactChainCompletedAt = now();
+    phaseTimings = artifactResult.phaseTimings;
+    const completedAt = now();
     const result = buildLocalV2DagLambdaResultMessage({
       artifactMetadata: artifactResult.artifactMetadata,
       artifactPointers: artifactResult.artifactPointers,
-      completedAt: now(),
+      completedAt,
+      handlerTiming: buildLocalV2DagLambdaHandlerTiming({
+        artifactChainCompletedAt,
+        artifactChainStartedAt,
+        completedAt,
+        handlerStartedAt,
+        phaseTimings
+      }),
       payload,
-      phaseTimings: artifactResult.phaseTimings,
+      phaseTimings,
       status: "completed"
     });
     await sendLocalV2DagLambdaResultMessage({
@@ -1715,12 +1808,20 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         workerLane: payload.workerLane ?? "coordinator"
       };
     }
+    const completedAt = now();
     const result = buildLocalV2DagLambdaResultMessage({
-      completedAt: now(),
+      completedAt,
       error: {
         code: "v2_dag_lambda_failed",
         message: error instanceof Error ? error.message : String(error)
       },
+      handlerTiming: buildLocalV2DagLambdaHandlerTiming({
+        artifactChainCompletedAt,
+        artifactChainStartedAt,
+        completedAt,
+        handlerStartedAt,
+        phaseTimings
+      }),
       payload,
       status: "failed"
     });

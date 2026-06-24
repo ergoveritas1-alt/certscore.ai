@@ -1635,7 +1635,10 @@ test("materializeLocalV2DagScanDetail keeps missing reject actionable when runti
       unifiedFindings: buildScanReportUnifiedFindingsForScan(detail)
     });
     const rejectPath = checklist.find((item) => item.id === "reject_all_path_availability");
+    const rejectPathArtifact = detail.runtimeArtifacts?.rejectPathDepthAndAvailability as Record<string, unknown> | undefined;
 
+    assert.equal(rejectPathArtifact?.firstLayerCookieConsentBannerObserved, false);
+    assert.equal(rejectPathArtifact?.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
     assert.equal(rejectPath?.status, "Review signal");
     assert.equal(rejectPath?.assessmentStatus, "review_signal");
     assert.notEqual(rejectPath?.evidenceState, "not_testable");
@@ -2388,11 +2391,14 @@ test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable 
     }));
 
     const firstLayerChoices = detail.runtimeArtifacts?.first_layer_consent_choices as Record<string, unknown> | undefined;
+    const rejectPath = detail.runtimeArtifacts?.rejectPathDepthAndAvailability as Record<string, unknown> | undefined;
 
     assert.equal(detail.runtimeArtifacts?.scan_no_go_assessment, undefined);
     assert.equal(detail.snapshot?.homepage_fetch_status, "success");
     assert.equal(detail.snapshot?.cookie_banner_present, true);
     assert.equal(detail.runtimeArtifacts?.consent_surface_observed, true);
+    assert.equal(rejectPath?.firstLayerCookieConsentBannerObserved, true);
+    assert.equal(rejectPath?.gdprEprivacyConsentSurfaceObserved, "confirmed");
     assert.equal(firstLayerChoices?.rejectControlObserved, true);
     assert.deepEqual(firstLayerChoices?.rejectLabels, ["Reject Optional"]);
     assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_partial");

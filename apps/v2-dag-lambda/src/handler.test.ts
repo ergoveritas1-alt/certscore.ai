@@ -298,6 +298,16 @@ test("handler emits a validated completed SQS result without production findings
   assert.equal(parsed.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(parsed.scannerRuntimeVersion, "v2-dag-runtime.1");
   assert.deepEqual(parsed.phaseTimings, [{ durationMs: 123, label: "scan", status: "completed" }]);
+  assert.deepEqual(parsed.handlerTiming, {
+    artifactChainCompletedAt: "2026-06-15T18:00:00.000Z",
+    artifactChainDurationMs: 0,
+    artifactChainStartedAt: "2026-06-15T18:00:00.000Z",
+    completedAt: "2026-06-15T18:00:00.000Z",
+    handlerDurationMs: 0,
+    handlerStartedAt: "2026-06-15T18:00:00.000Z",
+    scanPhaseDurationMs: 123,
+    scanPhaseLabel: "scan"
+  });
 });
 
 test("handler worker mode fails closed while post-consent flow scanning is disabled", async () => {

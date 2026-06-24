@@ -30,6 +30,7 @@ type LambdaResultMessage = {
   artifactPointers?: Record<string, unknown>;
   completedAt: string;
   error?: { code?: string; message: string };
+  handlerTiming?: LambdaHandlerTiming;
   phaseTimings?: unknown[];
   scanId: string;
   scannerGitSha?: string;
@@ -37,6 +38,21 @@ type LambdaResultMessage = {
   scannerRuntimeVersion?: string;
   status: LambdaResultStatus;
   targetEnvironment: LambdaTargetEnvironment;
+};
+
+type LambdaHandlerTiming = {
+  artifactChainCompletedAt?: string;
+  artifactChainDurationMs?: number;
+  artifactChainStartedAt?: string;
+  completedAt: string;
+  firstPhaseLabel?: string;
+  firstPhaseStartedAt?: string;
+  handlerDurationMs: number;
+  handlerStartedAt: string;
+  scanPhaseCompletedAt?: string;
+  scanPhaseDurationMs?: number;
+  scanPhaseLabel?: string;
+  scanPhaseStartedAt?: string;
 };
 
 type MirroredLambdaArtifact = {
@@ -103,6 +119,45 @@ function stringValue(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+function parseLambdaHandlerTiming(value: unknown): LambdaHandlerTiming | undefined {
+  const record = asRecord(value);
+  const handlerStartedAt = stringValue(record.handlerStartedAt);
+  const completedAt = stringValue(record.completedAt);
+  const handlerDurationMs = typeof record.handlerDurationMs === "number" && Number.isFinite(record.handlerDurationMs)
+    ? Math.max(0, Math.round(record.handlerDurationMs))
+    : null;
+  if (!handlerStartedAt || !completedAt || handlerDurationMs === null) {
+    return undefined;
+  }
+  const artifactChainDurationMs = typeof record.artifactChainDurationMs === "number" && Number.isFinite(record.artifactChainDurationMs)
+    ? Math.max(0, Math.round(record.artifactChainDurationMs))
+    : null;
+  const scanPhaseDurationMs = typeof record.scanPhaseDurationMs === "number" && Number.isFinite(record.scanPhaseDurationMs)
+    ? Math.max(0, Math.round(record.scanPhaseDurationMs))
+    : null;
+  const artifactChainCompletedAt = stringValue(record.artifactChainCompletedAt);
+  const artifactChainStartedAt = stringValue(record.artifactChainStartedAt);
+  const firstPhaseLabel = stringValue(record.firstPhaseLabel);
+  const firstPhaseStartedAt = stringValue(record.firstPhaseStartedAt);
+  const scanPhaseCompletedAt = stringValue(record.scanPhaseCompletedAt);
+  const scanPhaseLabel = stringValue(record.scanPhaseLabel);
+  const scanPhaseStartedAt = stringValue(record.scanPhaseStartedAt);
+  return {
+    ...(artifactChainCompletedAt ? { artifactChainCompletedAt } : {}),
+    ...(artifactChainDurationMs !== null ? { artifactChainDurationMs } : {}),
+    ...(artifactChainStartedAt ? { artifactChainStartedAt } : {}),
+    completedAt,
+    ...(firstPhaseLabel ? { firstPhaseLabel: firstPhaseLabel.slice(0, 80) } : {}),
+    ...(firstPhaseStartedAt ? { firstPhaseStartedAt } : {}),
+    handlerDurationMs,
+    handlerStartedAt,
+    ...(scanPhaseCompletedAt ? { scanPhaseCompletedAt } : {}),
+    ...(scanPhaseDurationMs !== null ? { scanPhaseDurationMs } : {}),
+    ...(scanPhaseLabel ? { scanPhaseLabel: scanPhaseLabel.slice(0, 80) } : {}),
+    ...(scanPhaseStartedAt ? { scanPhaseStartedAt } : {})
+  };
+}
+
 function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: LambdaTargetEnvironment): LambdaResultMessage {
   const record = asRecord(JSON.parse(raw));
   if (record.artifactOnly !== true || record.productionFindingIntegration !== false) {
@@ -129,6 +184,7 @@ function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: Lambda
   }
   const errorRecord = asRecord(record.error);
   const errorMessage = stringValue(errorRecord.message);
+  const handlerTiming = parseLambdaHandlerTiming(record.handlerTiming);
 
   return {
     artifactMetadata: asRecord(record.artifactMetadata),
@@ -137,6 +193,7 @@ function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: Lambda
     ...(errorMessage
       ? { error: { ...(stringValue(errorRecord.code) ? { code: stringValue(errorRecord.code) as string } : {}), message: errorMessage } }
       : {}),
+    ...(handlerTiming ? { handlerTiming } : {}),
     phaseTimings: Array.isArray(record.phaseTimings) ? record.phaseTimings : [],
     scanId,
     ...(stringValue(record.scannerGitSha) ? { scannerGitSha: (stringValue(record.scannerGitSha) as string).slice(0, 80) } : {}),
@@ -591,6 +648,9 @@ export async function recordLocalV2DagLambdaResult(
               }
             : {}),
           lambdaPhaseTimings: parsedMessage.phaseTimings ?? [],
+          ...(parsedMessage.handlerTiming && Object.keys(parsedMessage.handlerTiming).length > 0
+            ? { lambdaHandlerTiming: parsedMessage.handlerTiming }
+            : {}),
           processor: PROCESSOR,
           productionFindingIntegration: false,
           resultStatus: parsedMessage.status,

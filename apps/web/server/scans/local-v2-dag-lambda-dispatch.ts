@@ -54,9 +54,26 @@ export type LocalV2DagLambdaDispatchSummary = {
 export type LocalV2DagLambdaResultStatus = "completed" | "failed";
 
 export type LocalV2DagLambdaPhaseTiming = {
+  completedAt?: string;
   durationMs: number;
   label: string;
+  startedAt?: string;
   status: "completed" | "failed" | "skipped";
+};
+
+export type LocalV2DagLambdaHandlerTiming = {
+  artifactChainCompletedAt?: string;
+  artifactChainDurationMs?: number;
+  artifactChainStartedAt?: string;
+  completedAt: string;
+  firstPhaseLabel?: string;
+  firstPhaseStartedAt?: string;
+  handlerDurationMs: number;
+  handlerStartedAt: string;
+  scanPhaseCompletedAt?: string;
+  scanPhaseDurationMs?: number;
+  scanPhaseLabel?: string;
+  scanPhaseStartedAt?: string;
 };
 
 export type LocalV2DagLambdaResultMessage = {
@@ -91,6 +108,7 @@ export type LocalV2DagLambdaResultMessage = {
     code?: string;
     message: string;
   };
+  handlerTiming?: LocalV2DagLambdaHandlerTiming;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
@@ -340,18 +358,65 @@ function parsePhaseTimings(value: unknown): LocalV2DagLambdaPhaseTiming[] | unde
   const timings = value.flatMap((item) => {
     const record = asRecord(item);
     const label = stringValue(record.label);
+    const completedAt = stringValue(record.completedAt);
     const durationMs = typeof record.durationMs === "number" && Number.isFinite(record.durationMs)
       ? record.durationMs
       : null;
+    const startedAt = stringValue(record.startedAt);
     const status: LocalV2DagLambdaPhaseTiming["status"] | null =
       record.status === "failed" || record.status === "completed" || record.status === "skipped"
         ? record.status
         : null;
     return label && durationMs !== null && status
-      ? [{ label: label.slice(0, 80), durationMs: Math.max(0, Math.round(durationMs)), status }]
+      ? [{
+          ...(completedAt ? { completedAt } : {}),
+          durationMs: Math.max(0, Math.round(durationMs)),
+          label: label.slice(0, 80),
+          ...(startedAt ? { startedAt } : {}),
+          status
+        }]
       : [];
   });
   return timings.length > 0 ? timings.slice(0, 40) : undefined;
+}
+
+function parseHandlerTiming(value: unknown): LocalV2DagLambdaHandlerTiming | undefined {
+  const record = asRecord(value);
+  const handlerStartedAt = stringValue(record.handlerStartedAt);
+  const completedAt = stringValue(record.completedAt);
+  const handlerDurationMs = typeof record.handlerDurationMs === "number" && Number.isFinite(record.handlerDurationMs)
+    ? Math.max(0, Math.round(record.handlerDurationMs))
+    : null;
+  if (!handlerStartedAt || !completedAt || handlerDurationMs === null) {
+    return undefined;
+  }
+  const artifactChainDurationMs = typeof record.artifactChainDurationMs === "number" && Number.isFinite(record.artifactChainDurationMs)
+    ? Math.max(0, Math.round(record.artifactChainDurationMs))
+    : null;
+  const scanPhaseDurationMs = typeof record.scanPhaseDurationMs === "number" && Number.isFinite(record.scanPhaseDurationMs)
+    ? Math.max(0, Math.round(record.scanPhaseDurationMs))
+    : null;
+  const artifactChainCompletedAt = stringValue(record.artifactChainCompletedAt);
+  const artifactChainStartedAt = stringValue(record.artifactChainStartedAt);
+  const firstPhaseLabel = stringValue(record.firstPhaseLabel);
+  const firstPhaseStartedAt = stringValue(record.firstPhaseStartedAt);
+  const scanPhaseCompletedAt = stringValue(record.scanPhaseCompletedAt);
+  const scanPhaseLabel = stringValue(record.scanPhaseLabel);
+  const scanPhaseStartedAt = stringValue(record.scanPhaseStartedAt);
+  return {
+    ...(artifactChainCompletedAt ? { artifactChainCompletedAt } : {}),
+    ...(artifactChainDurationMs !== null ? { artifactChainDurationMs } : {}),
+    ...(artifactChainStartedAt ? { artifactChainStartedAt } : {}),
+    completedAt,
+    ...(firstPhaseLabel ? { firstPhaseLabel: firstPhaseLabel.slice(0, 80) } : {}),
+    ...(firstPhaseStartedAt ? { firstPhaseStartedAt } : {}),
+    handlerDurationMs,
+    handlerStartedAt,
+    ...(scanPhaseCompletedAt ? { scanPhaseCompletedAt } : {}),
+    ...(scanPhaseDurationMs !== null ? { scanPhaseDurationMs } : {}),
+    ...(scanPhaseLabel ? { scanPhaseLabel: scanPhaseLabel.slice(0, 80) } : {}),
+    ...(scanPhaseStartedAt ? { scanPhaseStartedAt } : {})
+  };
 }
 
 export function parseLocalV2DagLambdaResultMessage(
@@ -405,6 +470,10 @@ export function parseLocalV2DagLambdaResultMessage(
   const phaseTimings = parsePhaseTimings(record.phaseTimings);
   if (phaseTimings) {
     parsed.phaseTimings = phaseTimings;
+  }
+  const handlerTiming = parseHandlerTiming(record.handlerTiming);
+  if (handlerTiming) {
+    parsed.handlerTiming = handlerTiming;
   }
   const scannerGitSha = stringValue(record.scannerGitSha);
   if (scannerGitSha) {

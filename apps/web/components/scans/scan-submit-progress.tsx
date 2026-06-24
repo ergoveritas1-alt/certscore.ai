@@ -68,7 +68,7 @@ export function ScanSubmitProgressBar({
     <div className={compact ? "rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm" : "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"}>
       <div className={compact ? "flex items-center justify-between gap-3 text-xs font-medium text-slate-600" : "flex items-center justify-between gap-3 text-sm font-medium text-slate-700"}>
         <span className="min-w-0 truncate">{progressPhase}</span>
-        <span className="shrink-0">{progressValue}% complete | {elapsedSeconds}s elapsed</span>
+        <span className="shrink-0">{progressValue}% ready | {elapsedSeconds}s elapsed</span>
       </div>
       <div className={compact ? "mt-2 h-2 overflow-hidden rounded-full bg-slate-200" : "mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200"}>
         <div
@@ -200,19 +200,19 @@ export function describeScanProgressPhase(input: {
   estimatedDurationMs: number;
 }) {
   const ratio = Math.max(0, input.elapsedMs) / Math.max(6_000, input.estimatedDurationMs);
-  if (ratio < 0.16) {
-    return "starting browser";
+  if (ratio < 0.18) {
+    return "preparing scanner";
   }
-  if (ratio < 0.48) {
+  if (ratio < 0.55) {
     return "capturing page evidence";
   }
-  if (ratio < 0.74) {
+  if (ratio < 0.76) {
     return "checking policies";
   }
   if (ratio < 1.05) {
-    return "reviewing signals";
+    return "mirroring evidence";
   }
-  return "finalizing report";
+  return "opening report";
 }
 
 export function estimateScanProgressForOptions(input: {
@@ -221,14 +221,14 @@ export function estimateScanProgressForOptions(input: {
 }): ScanProgressEstimate {
   const profileValue = input.profileValue;
   const profileEstimateMs = profileValue === "tiny"
-    ? 9_000
+    ? 16_000
     : profileValue === "standard"
-      ? 18_000
+      ? 36_000
       : profileValue === "policy"
-        ? 20_000
+        ? 36_000
         : profileValue === "consent"
-          ? 24_000
-          : 32_000;
+          ? 42_000
+          : 45_000;
   const estimatedDurationMs = profileEstimateMs;
   const modeLabel = `${profileValue} scan`;
   return { estimatedDurationMs, modeLabel };

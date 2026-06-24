@@ -47,6 +47,29 @@ export type EndpointGeographyResolverInput = {
   thirdParty: boolean;
 };
 
+export type VendorDisplayCategory =
+  | "A/B Testing"
+  | "Advertising"
+  | "Analytics"
+  | "Authentication"
+  | "CDN"
+  | "Cookie compliance"
+  | "Customer support"
+  | "Payment processors"
+  | "Performance monitoring"
+  | "Personalisation"
+  | "Security"
+  | "Session replay"
+  | "Tag management"
+  | "Unknown";
+
+export type VendorDisplayCategoryInput = {
+  product?: string | null;
+  purpose?: NormalizedVendorObservation["purpose"] | string | null;
+  regulatoryRelevance?: readonly string[] | null;
+  vendor?: string | null;
+};
+
 interface VendorRule {
   entity: string;
   vendor: string;
@@ -75,6 +98,40 @@ const rules: VendorRule[] = [
     hostPatterns: [/^p\.tvpixel\.com$/i],
     urlPatterns: [/^https:\/\/p\.tvpixel\.com\/(?:com|com\.snowplowanalytics\.snowplow|pixel|event)\b/i],
     basisLabel: "data_plus_math_tvpixel_ad_measurement_endpoint",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "Google",
+    product: "Google Fonts",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "font_delivery", "third_party_runtime"],
+    confidence: 0.92,
+    hostPatterns: [/^fonts\.googleapis\.com$/i, /^fonts\.gstatic\.com$/i],
+    urlPatterns: [/\/css2?\b/i, /\/s\//i],
+    basisLabel: "google_fonts_cdn",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "Google",
+    product: "Google Interactive Media Ads",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "video_ad_measurement", "ad_delivery"],
+    confidence: 0.93,
+    hostPatterns: [/^imasdk\.googleapis\.com$/i],
+    urlPatterns: [/\/js\/sdkloader\/ima3(?:_dai)?\.js\b/i],
+    basisLabel: "google_ima_sdk",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "Google",
+    product: "Google Sign-in",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["authentication", "third_party_runtime"],
+    confidence: 0.94,
+    hostPatterns: [/^accounts\.google\.com$/i],
+    urlPatterns: [/\/gsi\/client\b/i],
+    globalPatterns: [/^google\.accounts$/i],
+    basisLabel: "google_identity_services_script",
   },
   {
     entity: "Google LLC",
@@ -626,6 +683,39 @@ const rules: VendorRule[] = [
   {
     entity: "Google LLC",
     vendor: "Google",
+    product: "Google Publisher Tag",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "ad_delivery", "publisher_ad_server"],
+    confidence: 0.95,
+    hostPatterns: [/^securepubads\.g\.doubleclick\.net$/i, /^www\.googletagservices\.com$/i],
+    urlPatterns: [/\/tag\/js\/gpt\.js\b/i, /\/gampad\//i],
+    basisLabel: "google_publisher_tag_endpoint",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "Google",
+    product: "Google AdSense",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "ad_delivery"],
+    confidence: 0.95,
+    hostPatterns: [/^pagead2\.googlesyndication\.com$/i],
+    urlPatterns: [/\/pagead\/js\/adsbygoogle\.js\b/i, /\/pagead\//i],
+    basisLabel: "google_adsense_endpoint",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "Google",
+    product: "DoubleClick Floodlight",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "ad_measurement", "conversion_tracking"],
+    confidence: 0.94,
+    hostPatterns: [/^fls\.doubleclick\.net$/i, /^ad\.doubleclick\.net$/i],
+    urlPatterns: [/\/activityi\b/i, /\/ddm\/activity\//i],
+    basisLabel: "doubleclick_floodlight_endpoint",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "Google",
     product: "Google Ads / DoubleClick",
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
@@ -744,6 +834,97 @@ const rules: VendorRule[] = [
     storageKeyPatterns: [/^OptanonConsent$/i, /^OptanonAlertBoxClosed$/i],
     domSelectorPatterns: [/^#onetrust-banner-sdk$/i, /^#onetrust-consent-sdk$/i, /^\.ot-sdk-container$/i],
     basisLabel: "onetrust_cmp_script_or_cookie",
+  },
+  {
+    entity: "Stripe, Inc.",
+    vendor: "Stripe",
+    product: "Stripe.js",
+    purpose: "security",
+    regulatoryRelevance: ["payment_processing", "fraud_prevention", "third_party_runtime"],
+    confidence: 0.94,
+    hostPatterns: [/^js\.stripe\.com$/i],
+    urlPatterns: [/\/v3\b/i],
+    globalPatterns: [/^Stripe$/i],
+    basisLabel: "stripe_js_payment_runtime",
+  },
+  {
+    entity: "jsDelivr",
+    vendor: "jsDelivr",
+    product: "jsDelivr CDN",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "third_party_runtime"],
+    confidence: 0.92,
+    hostPatterns: [/^cdn\.jsdelivr\.net$/i],
+    basisLabel: "jsdelivr_cdn_host",
+  },
+  {
+    entity: "Piano Software Inc.",
+    vendor: "Piano",
+    product: "Piano",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "personalization", "subscription", "audience_management"],
+    confidence: 0.93,
+    hostPatterns: [/\.piano\.io$/i, /\.tinypass\.com$/i],
+    urlPatterns: [/\/api\//i, /\/xbuilder\//i, /\/tinypass/i],
+    cookiePatterns: [/^_pctx$/i, /^_pcid$/i, /^_pprv$/i, /^pa_user$/i, /^pa_privacy$/i, /^pnes_/i, /^pcid$/i],
+    basisLabel: "piano_subscription_personalization_runtime",
+  },
+  {
+    entity: "Piano Software Inc.",
+    vendor: "Piano",
+    product: "Cxense",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "personalization", "audience_management", "analytics"],
+    confidence: 0.93,
+    hostPatterns: [/\.cxense\.com$/i],
+    urlPatterns: [/\/cx\.js\b/i, /\/cce\//i, /\/p1\.js\b/i],
+    basisLabel: "cxense_personalization_runtime",
+  },
+  {
+    entity: "Optimizely, Inc.",
+    vendor: "Optimizely",
+    product: "Optimizely",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "experimentation", "ab_testing", "personalization"],
+    confidence: 0.93,
+    hostPatterns: [/\.optimizely\.com$/i],
+    urlPatterns: [/\/js\/\d+\.js\b/i],
+    cookiePatterns: [/^optimizely/i],
+    storageKeyPatterns: [/^optimizely/i],
+    basisLabel: "optimizely_experimentation_runtime",
+  },
+  {
+    entity: "Cloudflare, Inc.",
+    vendor: "Cloudflare",
+    product: "Cloudflare Bot Management",
+    purpose: "security",
+    regulatoryRelevance: ["security", "bot_detection", "fraud_prevention"],
+    confidence: 0.93,
+    cookiePatterns: [/^__cf_bm$/i, /^cf_clearance$/i, /^cf_chl_/i],
+    basisLabel: "cloudflare_bot_management_cookie",
+  },
+  {
+    entity: "Comscore, Inc.",
+    vendor: "ScorecardResearch / Comscore",
+    product: "ScorecardResearch",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "audience_measurement", "advertising_measurement", "market_research"],
+    confidence: 0.92,
+    hostPatterns: [/\.scorecardresearch\.com$/i],
+    urlPatterns: [/\/b\?/i, /\/p\?/i],
+    basisLabel: "scorecardresearch_audience_measurement_endpoint",
+  },
+  {
+    entity: "Bombora, Inc.",
+    vendor: "Bombora",
+    product: "Bombora Visitor Insights",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "audience_intelligence", "b2b_intent_data"],
+    confidence: 0.91,
+    hostPatterns: [/\.ml314\.com$/i],
+    urlPatterns: [/\/taglw\.js\b/i, /\/Home\/Index\b/i],
+    cookiePatterns: [/^(pi|tp|u)$/i],
+    basisLabel: "bombora_ml314_visitor_insights",
   },
   {
     entity: "Usercentrics A/S",
@@ -926,6 +1107,58 @@ const rules: VendorRule[] = [
     basisLabel: "cookie_information_cmp_runtime_or_endpoint",
   },
 ];
+
+export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput): VendorDisplayCategory {
+  const label = `${input.vendor ?? ""} ${input.product ?? ""}`.toLowerCase();
+  const relevance = (input.regulatoryRelevance ?? []).join(" ").toLowerCase();
+  const purpose = typeof input.purpose === "string" ? input.purpose.toLowerCase() : "";
+  const haystack = `${label} ${relevance} ${purpose}`;
+
+  if (/google sign.?in|identity services|authentication/.test(haystack)) {
+    return "Authentication";
+  }
+  if (/stripe|payment_processing|payment processor/.test(haystack)) {
+    return "Payment processors";
+  }
+  if (/cloudflare bot management|bot_detection|fraud_prevention|security/.test(haystack)) {
+    return "Security";
+  }
+  if (/jsdelivr|cdn\b|font_delivery|content delivery/.test(haystack)) {
+    return "CDN";
+  }
+  if (/onetrust|cookiebot|usercentrics|didomi|consent_management|cookie compliance|cmp\b/.test(haystack)) {
+    return "Cookie compliance";
+  }
+  if (/optimizely|experimentation|ab_testing|a\/b/.test(haystack)) {
+    return "A/B Testing";
+  }
+  if (/piano|cxense|personalization|personalisation|subscription|audience_management/.test(haystack)) {
+    return "Personalisation";
+  }
+  if (/session_replay|session replay|clarity|hotjar|fullstory/.test(haystack)) {
+    return "Session replay";
+  }
+  if (/tag_management|tag management|tag_manager|google tag manager/.test(haystack)) {
+    return "Tag management";
+  }
+  if (/comscore|scorecardresearch/.test(haystack)) {
+    return "Analytics";
+  }
+  if (/advertising|ad_delivery|ad_measurement|programmatic|brand_safety|floodlight|adsense|publisher tag|quantcast|integral ad science|bombora/.test(haystack)) {
+    return "Advertising";
+  }
+  if (/analytics|measurement|audience_measurement/.test(haystack)) {
+    return "Analytics";
+  }
+  if (/performance_monitoring|performance monitoring/.test(haystack)) {
+    return "Performance monitoring";
+  }
+  if (/customer_support|customer support/.test(haystack)) {
+    return "Customer support";
+  }
+
+  return "Unknown";
+}
 
 const explicitInfrastructureRegionPatterns = [
   {

@@ -5,7 +5,9 @@ import {
   type GdprEprivacyCoverageChecklistItem
 } from "./gdpr-eprivacy-coverage-checklist";
 import type { GdprEprivacyCoverageOutcome } from "./gdpr-eprivacy-coverage-policy";
+import { getReportableGdprEprivacyCoverageItems } from "./gdpr-eprivacy-reportable-rows";
 import { deriveGdprEprivacyReviewSummary } from "./gdpr-eprivacy-review-summary";
+import type { RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
 function makeFinding(
@@ -63,6 +65,28 @@ function makeCoverageOutcome(
   };
 }
 
+function makeRuntimeCookieRow(overrides: Partial<RuntimeCookieEvidenceRow>): RuntimeCookieEvidenceRow {
+  return {
+    category: "unknown",
+    cookieName: "test_cookie",
+    domain: "tracker.example",
+    evidenceGrade: "high",
+    firstObservedAtMs: 1200,
+    initiatorDomain: null,
+    initiatorUrl: null,
+    initiatorVendor: null,
+    nonEssential: true,
+    party: "third_party",
+    responseUrl: null,
+    setAtMs: null,
+    setMethod: null,
+    sourceRequestUrl: null,
+    timingBasis: "setAtMs",
+    timingEvidence: "before_consent_cookie_write",
+    ...overrides
+  };
+}
+
 const usableRuntimeVendorDisclosureMismatch = JSON.stringify({
   coverageStatus: "usable",
   directVsInferred: "direct",
@@ -94,11 +118,11 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
   });
 
   assert.deepEqual(
-    items.slice(0, 12).map((item) => item.id),
+    items.slice(0, 11).map((item) => item.id),
     [
       "consent_surface_observed",
-      "reject_all_path_availability",
       "cmp_framework_signal_observed",
+      "reject_all_path_availability",
       "cookie_notice_policy_availability",
       "pre_consent_cookies_storage",
       "pre_consent_third_party_tracking",
@@ -106,8 +130,7 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
       "retargeting_behavioral_advertising_signal_observed",
       "analytics_vendor_observed",
       "session_replay_fingerprinting_review",
-      "device_identification_fingerprinting_signal_observed",
-      "embedded_content_pre_consent"
+      "device_identification_fingerprinting_signal_observed"
     ]
   );
 });
@@ -126,6 +149,19 @@ test("deriveGdprEprivacyCoverageChecklist omits deferred low-confidence producti
   assert.equal(rowIds.has("newsletter_marketing_signup_observed"), false);
   assert.equal(rowIds.has("embedded_content_disclosure_alignment"), false);
   assert.equal(rowIds.has("analytics_disclosure_alignment"), false);
+});
+
+test("getReportableGdprEprivacyCoverageItems omits standalone runtime vendor signal rows", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+  const rowIds = new Set(getReportableGdprEprivacyCoverageItems(items).map((item) => item.id));
+
+  assert.equal(rowIds.has("advertising_retargeting_vendor_signal_observed"), false);
+  assert.equal(rowIds.has("retargeting_behavioral_advertising_signal_observed"), false);
+  assert.equal(rowIds.has("analytics_vendor_observed"), false);
 });
 
 test("deriveGdprEprivacyCoverageChecklist maps canonical unified findings without creating pass/fail language", () => {
@@ -160,6 +196,140 @@ test("deriveGdprEprivacyCoverageChecklist maps canonical unified findings withou
   assert.equal(byId(items, "post_reject_tracking_reduction").status, "Review signal");
   assert.equal(byId(items, "pre_consent_third_party_tracking").status, "Not observed");
   assert.equal(items.some((item) => ["Pass", "Fail"].includes(String(item.status))), false);
+});
+
+test("deriveGdprEprivacyCoverageChecklist rates pre-consent third-party cookie storage from high-priority cookie inventory", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    runtimeCookieRows: [
+      makeRuntimeCookieRow({
+        category: "advertising",
+        cookieName: "IDE",
+        domain: ".doubleclick.net",
+        firstObservedAtMs: 950,
+        initiatorVendor: "Google Ads / DoubleClick"
+      }),
+      makeRuntimeCookieRow({
+        category: "analytics",
+        cookieName: "_ga",
+        domain: ".example.test",
+        firstObservedAtMs: 600,
+        initiatorVendor: "Google",
+        party: "first_party"
+      })
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "pre_consent_cookies_storage");
+  assert.equal(row.status, "Gap observed");
+  assert.equal(row.criticalEvidence.retainedEvidence.cookieStoragePriority, "high");
+  assert.match(row.explanation, /Google - Advertising \(950ms\)/);
+  assert.match(row.criticalEvidence.statusBasis, /High priority.*Advertising/);
+});
+
+test("deriveGdprEprivacyCoverageChecklist keeps medium third-party cookie storage as partial-concern review evidence", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    runtimeCookieRows: [
+      makeRuntimeCookieRow({
+        category: "analytics",
+        cookieName: "_qca",
+        domain: ".quantserve.com",
+        firstObservedAtMs: 1400,
+        initiatorVendor: "Quantcast"
+      })
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "pre_consent_cookies_storage");
+  assert.equal(row.status, "Review signal");
+  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(row.criticalEvidence.retainedEvidence.cookieStoragePriority, "medium");
+  assert.match(row.explanation, /Quantcast - Analytics \(1400ms\)/);
+  assert.match(row.criticalEvidence.statusBasis, /Medium priority.*Analytics/);
+});
+
+test("deriveGdprEprivacyCoverageChecklist lets medium cookie inventory override legacy gap finding status", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    runtimeCookieRows: [
+      makeRuntimeCookieRow({
+        category: "analytics",
+        cookieName: "__qca",
+        domain: ".quantserve.com",
+        firstObservedAtMs: 1187,
+        initiatorVendor: "Quantcast"
+      })
+    ],
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("third_party_cookie_pre_consent", "Third-party cookie before consent")
+    ]
+  });
+
+  const row = byId(items, "pre_consent_cookies_storage");
+  assert.equal(row.status, "Review signal");
+  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(row.criticalEvidence.retainedEvidence.cookieStoragePriority, "medium");
+  assert.match(row.explanation, /Quantcast - Analytics \(1187ms\)/);
+});
+
+test("deriveGdprEprivacyCoverageChecklist rates pre-consent third-party tracking from high-priority tracker inventory", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    runtimeTrackerPriorityRows: [
+      {
+        firstSeenMs: 386,
+        party: "3rd",
+        priority: "high",
+        purpose: "Advertising",
+        vendor: "Google Ads / DoubleClick"
+      },
+      {
+        firstSeenMs: 2100,
+        party: "3rd",
+        priority: "medium",
+        purpose: "A/B Testing",
+        vendor: "Optimizely"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "pre_consent_third_party_tracking");
+  assert.equal(row.status, "Gap observed");
+  assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "high");
+  assert.match(row.explanation, /Google Ads \/ DoubleClick - Advertising \(386ms\)/);
+  assert.match(row.criticalEvidence.statusBasis, /High priority.*Advertising/);
+});
+
+test("deriveGdprEprivacyCoverageChecklist keeps medium pre-consent tracking as partial-concern review evidence", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    runtimeTrackerPriorityRows: [
+      {
+        firstSeenMs: 2100,
+        party: "3rd",
+        priority: "medium",
+        purpose: "A/B Testing",
+        vendor: "Optimizely"
+      }
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "pre_consent_third_party_tracking");
+  assert.equal(row.status, "Review signal");
+  assert.equal(row.assessmentStatus, "review_signal");
+  assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "medium");
+  assert.match(row.explanation, /Optimizely - A\/B Testing \(2100ms\)/);
+  assert.match(row.criticalEvidence.statusBasis, /Medium priority.*A\/B Testing/);
 });
 
 test("deriveGdprEprivacyCoverageChecklist maps Article 13 disclosure findings into transparency rows", () => {
@@ -344,7 +514,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps consent surface and post-choice 
   });
 
   const consentSurface = byId(items, "consent_surface_observed");
-  assert.equal(consentSurface.label, "Consent banner");
+  assert.equal(consentSurface.label, "Consent mechanism");
   assert.equal(consentSurface.evidenceState, "observed");
   assert.equal(consentSurface.assessmentStatus, "checked");
   assert.equal(consentSurface.status, "Observed");
@@ -1628,7 +1798,7 @@ test("deriveGdprEprivacyCoverageChecklist does not let generic advertising categ
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.label, "Pre-consent third-party tracking");
+  assert.equal(row.label, "Pre-consent 3rd-party tracking");
   assert.equal(row.status, "Review signal");
   assert.match(row.explanation, /Security\/performance vendor activity was observed/i);
   assert.match(row.explanation, /Akamai Bot Manager \/ Edge/i);

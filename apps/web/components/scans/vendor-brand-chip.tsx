@@ -9,6 +9,11 @@ type VendorBrandMark = {
 
 const VENDOR_BRAND_MARKS: Array<{ pattern: RegExp; mark: VendorBrandMark }> = [
   { pattern: /google|doubleclick|googletagmanager|googlesyndication|gstatic|googleapis|funding choices/i, mark: { initials: "G", logoPath: "/vendor-logos/google.png", logoDomain: "google.com", tone: "border-blue-200 bg-blue-50 text-blue-700" } },
+  { pattern: /google sign.?in|accounts\.google|gsi\/client/i, mark: { initials: "G", logoPath: "/vendor-logos/google.png", logoDomain: "google.com", tone: "border-blue-200 bg-blue-50 text-blue-700" } },
+  { pattern: /google publisher tag|googletag|gpt\.js|securepubads/i, mark: { initials: "G", logoPath: "/vendor-logos/google.png", logoDomain: "google.com", tone: "border-blue-200 bg-blue-50 text-blue-700" } },
+  { pattern: /google adsense|adsbygoogle|pagead2/i, mark: { initials: "G", logoPath: "/vendor-logos/google.png", logoDomain: "google.com", tone: "border-blue-200 bg-blue-50 text-blue-700" } },
+  { pattern: /floodlight|doubleclick floodlight|fls\.doubleclick/i, mark: { initials: "G", logoPath: "/vendor-logos/google.png", logoDomain: "google.com", tone: "border-blue-200 bg-blue-50 text-blue-700" } },
+  { pattern: /stripe/i, mark: { initials: "S", logoDomain: "stripe.com", tone: "border-violet-200 bg-violet-50 text-violet-800" } },
   { pattern: /meta|facebook/i, mark: { initials: "M", logoPath: "/vendor-logos/facebook.png", logoDomain: "facebook.com", tone: "border-blue-200 bg-blue-50 text-blue-800" } },
   { pattern: /microsoft|bing|clarity/i, mark: { initials: "MS", logoPath: "/vendor-logos/microsoft.png", logoDomain: "microsoft.com", tone: "border-sky-200 bg-sky-50 text-sky-800" } },
   { pattern: /adobe|adobedtm|demdex|launch/i, mark: { initials: "A", logoPath: "/vendor-logos/adobe.png", logoDomain: "adobe.com", tone: "border-red-200 bg-red-50 text-red-700" } },
@@ -25,6 +30,7 @@ const VENDOR_BRAND_MARKS: Array<{ pattern: RegExp; mark: VendorBrandMark }> = [
   { pattern: /osano/i, mark: { initials: "O", logoPath: "/vendor-logos/osano.png", logoDomain: "osano.com", tone: "border-cyan-200 bg-cyan-50 text-cyan-800" } },
   { pattern: /iubenda/i, mark: { initials: "I", logoPath: "/vendor-logos/iubenda.png", logoDomain: "iubenda.com", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" } },
   { pattern: /cloudflare/i, mark: { initials: "CF", logoPath: "/vendor-logos/cloudflare.png", logoDomain: "cloudflare.com", tone: "border-orange-200 bg-orange-50 text-orange-800" } },
+  { pattern: /cloudflare bot management|cf_chl|cf_clearance|__cf_bm/i, mark: { initials: "CF", logoPath: "/vendor-logos/cloudflare.png", logoDomain: "cloudflare.com", tone: "border-orange-200 bg-orange-50 text-orange-800" } },
   { pattern: /hcaptcha/i, mark: { initials: "HC", logoPath: "/vendor-logos/hcaptcha.png", logoDomain: "hcaptcha.com", tone: "border-violet-200 bg-violet-50 text-violet-800" } },
   { pattern: /datadome/i, mark: { initials: "DD", logoPath: "/vendor-logos/datadome.png", logoDomain: "datadome.co", tone: "border-slate-300 bg-slate-50 text-slate-800" } },
   { pattern: /human security|perimeterx/i, mark: { initials: "H", logoPath: "/vendor-logos/human-security.png", logoDomain: "humansecurity.com", tone: "border-slate-300 bg-slate-50 text-slate-800" } },
@@ -48,6 +54,8 @@ const VENDOR_BRAND_MARKS: Array<{ pattern: RegExp; mark: VendorBrandMark }> = [
   { pattern: /stackadapt/i, mark: { initials: "SA", logoPath: "/vendor-logos/stackadapt.png", logoDomain: "stackadapt.com", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" } },
   { pattern: /lotame/i, mark: { initials: "L", logoPath: "/vendor-logos/lotame.png", logoDomain: "lotame.com", tone: "border-cyan-200 bg-cyan-50 text-cyan-800" } },
   { pattern: /quantcast/i, mark: { initials: "Q", logoPath: "/vendor-logos/quantcast.png", logoDomain: "quantcast.com", tone: "border-purple-200 bg-purple-50 text-purple-800" } },
+  { pattern: /cxense/i, mark: { initials: "CX", logoDomain: "cxense.com", tone: "border-cyan-200 bg-cyan-50 text-cyan-800" } },
+  { pattern: /jsdelivr|cdn\.jsdelivr\.net/i, mark: { initials: "JS", logoDomain: "jsdelivr.com", tone: "border-orange-200 bg-orange-50 text-orange-800" } },
   { pattern: /yahoo|aol|oath/i, mark: { initials: "Y", logoPath: "/vendor-logos/yahoo.png", logoDomain: "yahoo.com", tone: "border-purple-200 bg-purple-50 text-purple-800" } },
   { pattern: /twitter| x ads|^x$/i, mark: { initials: "X", logoPath: "/vendor-logos/x.png", logoDomain: "x.com", tone: "border-zinc-300 bg-zinc-50 text-zinc-800" } },
   { pattern: /snap pixel|snapchat|snap\.com/i, mark: { initials: "S", logoPath: "/vendor-logos/snap.png", logoDomain: "snap.com", tone: "border-yellow-200 bg-yellow-50 text-yellow-800" } },

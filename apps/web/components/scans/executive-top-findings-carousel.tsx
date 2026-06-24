@@ -15,6 +15,9 @@ export function ExecutiveTopFindingsCarousel({
   const [activeIndex, setActiveIndex] = React.useState(0);
   const safeCount = Math.max(0, Math.min(count, items.length));
   const boundedActiveIndex = Math.min(activeIndex, Math.max(0, safeCount - 1));
+  const displayHeading = safeCount > 1
+    ? `${safeCount} high-priority issues`
+    : heading.replace("Highest-priority", "High-priority");
 
   const goPrevious = () => {
     setActiveIndex((current) => (current - 1 + safeCount) % safeCount);
@@ -30,7 +33,7 @@ export function ExecutiveTopFindingsCarousel({
         <div>
           <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Top findings</p>
           <h2 data-testid="executive-findings-heading" className="text-[1.3rem] font-semibold tracking-tight text-slate-950 lg:text-[1.87rem]">
-            {heading}
+            {displayHeading}
           </h2>
         </div>
         {safeCount > 1 ? (

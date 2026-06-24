@@ -186,7 +186,27 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
       },
       completedAt: "2026-06-15T18:00:00.000Z",
       contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
-      phaseTimings: [{ durationMs: 42.4, label: "core_artifact_upload", status: "completed" }],
+      handlerTiming: {
+        artifactChainCompletedAt: "2026-06-15T18:00:00.000Z",
+        artifactChainDurationMs: 5100.4,
+        artifactChainStartedAt: "2026-06-15T17:59:54.900Z",
+        completedAt: "2026-06-15T18:00:00.000Z",
+        firstPhaseLabel: "egress_preflight",
+        firstPhaseStartedAt: "2026-06-15T17:59:55.000Z",
+        handlerDurationMs: 6000.2,
+        handlerStartedAt: "2026-06-15T17:59:54.000Z",
+        scanPhaseCompletedAt: "2026-06-15T17:59:59.500Z",
+        scanPhaseDurationMs: 4200.4,
+        scanPhaseLabel: "scan",
+        scanPhaseStartedAt: "2026-06-15T17:59:55.300Z"
+      },
+      phaseTimings: [{
+        completedAt: "2026-06-15T18:00:00.000Z",
+        durationMs: 42.4,
+        label: "core_artifact_upload",
+        startedAt: "2026-06-15T17:59:59.958Z",
+        status: "completed"
+      }],
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
       scanId: "scan-local-1",
@@ -208,7 +228,27 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
   assert.equal(parsed.scannerGitSha, "abc123scanner");
   assert.equal(parsed.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(parsed.scannerRuntimeVersion, "v2-dag-runtime.1");
-  assert.deepEqual(parsed.phaseTimings, [{ durationMs: 42, label: "core_artifact_upload", status: "completed" }]);
+  assert.deepEqual(parsed.phaseTimings, [{
+    completedAt: "2026-06-15T18:00:00.000Z",
+    durationMs: 42,
+    label: "core_artifact_upload",
+    startedAt: "2026-06-15T17:59:59.958Z",
+    status: "completed"
+  }]);
+  assert.deepEqual(parsed.handlerTiming, {
+    artifactChainCompletedAt: "2026-06-15T18:00:00.000Z",
+    artifactChainDurationMs: 5100,
+    artifactChainStartedAt: "2026-06-15T17:59:54.900Z",
+    completedAt: "2026-06-15T18:00:00.000Z",
+    firstPhaseLabel: "egress_preflight",
+    firstPhaseStartedAt: "2026-06-15T17:59:55.000Z",
+    handlerDurationMs: 6000,
+    handlerStartedAt: "2026-06-15T17:59:54.000Z",
+    scanPhaseCompletedAt: "2026-06-15T17:59:59.500Z",
+    scanPhaseDurationMs: 4200,
+    scanPhaseLabel: "scan",
+    scanPhaseStartedAt: "2026-06-15T17:59:55.300Z"
+  });
 });
 
 test("rejects result messages from the wrong environment or processor", () => {

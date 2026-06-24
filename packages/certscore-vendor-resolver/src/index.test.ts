@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveEndpointGeography, resolveVendorObservations } from "./index.js";
+import { resolveEndpointGeography, resolveVendorDisplayCategory, resolveVendorObservations } from "./index.js";
 
 test("resolves endpoint geography only from explicit host region tokens", () => {
   assert.deepEqual(
@@ -471,6 +471,87 @@ test("resolves Google ad traffic quality as security support not tracker purpose
     observations.some((item) => ["analytics", "advertising", "session_replay"].includes(item.purpose)),
     false,
   );
+});
+
+test("resolves CNN-style detected technologies from canonical registry sources", () => {
+  const observations = resolveVendorObservations([
+    request("https://accounts.google.com/gsi/client", "accounts.google.com"),
+    request("https://js.stripe.com/v3", "js.stripe.com"),
+    request("https://cdn.jsdelivr.net/npm/example/package.js", "cdn.jsdelivr.net"),
+    request("https://cdn.optimizely.com/js/123456789.js", "cdn.optimizely.com"),
+    request("https://experience.piano.io/xbuilder/experience/load", "experience.piano.io"),
+    request("https://cdn.tinypass.com/api/tinypass.min.js", "cdn.tinypass.com"),
+    request("https://cdn.cxense.com/cx.js", "cdn.cxense.com"),
+    request("https://cdn.ml314.com/taglw.js", "cdn.ml314.com"),
+    request("https://vi.ml314.com/Home/Index", "vi.ml314.com"),
+    request("https://imasdk.googleapis.com/js/sdkloader/ima3.js", "imasdk.googleapis.com"),
+    request("https://fonts.googleapis.com/css2?family=Inter", "fonts.googleapis.com"),
+    request("https://securepubads.g.doubleclick.net/tag/js/gpt.js", "securepubads.g.doubleclick.net"),
+    request("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", "pagead2.googlesyndication.com"),
+    request("https://fls.doubleclick.net/activityi;src=123;type=abc;cat=def", "fls.doubleclick.net"),
+    request("https://sb.scorecardresearch.com/b?c1=2&c2=123", "sb.scorecardresearch.com"),
+    {
+      type: "cookie",
+      cookieName: "__cf_bm",
+      hostname: "piano.io",
+    },
+  ]);
+
+  assertResolved(observations, "Google", "Google Sign-in", "infrastructure");
+  assertResolved(observations, "Stripe", "Stripe.js", "security");
+  assertResolved(observations, "jsDelivr", "jsDelivr CDN", "infrastructure");
+  assertResolved(observations, "Optimizely", "Optimizely", "analytics");
+  assertResolved(observations, "Piano", "Piano", "analytics");
+  assertResolved(observations, "Piano", "Cxense", "analytics");
+  assertResolved(observations, "Bombora", "Bombora Visitor Insights", "advertising");
+  assertResolved(observations, "Google", "Google Interactive Media Ads", "advertising");
+  assertResolved(observations, "Google", "Google Fonts", "infrastructure");
+  assertResolved(observations, "Google", "Google Publisher Tag", "advertising");
+  assertResolved(observations, "Google", "Google AdSense", "advertising");
+  assertResolved(observations, "Google", "DoubleClick Floodlight", "advertising");
+  assertResolved(observations, "ScorecardResearch / Comscore", "ScorecardResearch", "analytics");
+  const scorecardResearch = observations.find((item) => item.product === "ScorecardResearch");
+  assert.equal(scorecardResearch?.confidence, 0.92);
+  assert.equal(scorecardResearch?.regulatoryRelevance.includes("audience_measurement"), true);
+  assert.equal(scorecardResearch?.regulatoryRelevance.includes("advertising_measurement"), true);
+  assertResolved(observations, "Cloudflare", "Cloudflare Bot Management", "security");
+});
+
+test("assigns canonical display categories for CNN-style technologies", () => {
+  assert.equal(resolveVendorDisplayCategory({ vendor: "Google", product: "Google Sign-in", purpose: "infrastructure", regulatoryRelevance: ["authentication"] }), "Authentication");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "Stripe", product: "Stripe.js", purpose: "security", regulatoryRelevance: ["payment_processing"] }), "Payment processors");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "Cloudflare", product: "Cloudflare Bot Management", purpose: "security", regulatoryRelevance: ["bot_detection"] }), "Security");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "Piano", product: "Cxense", purpose: "analytics", regulatoryRelevance: ["personalization"] }), "Personalisation");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "Google", product: "Google Publisher Tag", purpose: "advertising", regulatoryRelevance: ["ad_delivery"] }), "Advertising");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "jsDelivr", product: "jsDelivr CDN", purpose: "infrastructure", regulatoryRelevance: ["cdn"] }), "CDN");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "OneTrust", product: "OneTrust CMP", purpose: "consent_management", regulatoryRelevance: ["consent"] }), "Cookie compliance");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "Optimizely", product: "Optimizely", purpose: "analytics", regulatoryRelevance: ["experimentation"] }), "A/B Testing");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "Quantcast", product: "Quantcast Measure", purpose: "advertising", regulatoryRelevance: ["audience_measurement"] }), "Advertising");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "ScorecardResearch / Comscore", product: "ScorecardResearch", purpose: "analytics", regulatoryRelevance: ["audience_measurement", "advertising_measurement"] }), "Analytics");
+});
+
+test("resolves Piano Analytics cookie names including _pctx", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "cookie",
+      cookieName: "_pctx",
+      hostname: "example.com",
+    },
+    {
+      type: "cookie",
+      cookieName: "_pcid",
+      hostname: "example.com",
+    },
+    {
+      type: "cookie",
+      cookieName: "_pprv",
+      hostname: "example.com",
+    },
+  ]);
+
+  assertResolved(observations, "Piano", "Piano", "analytics");
+  const piano = observations.find((item) => item.vendor === "Piano" && item.product === "Piano");
+  assert.deepEqual(piano?.matchedCookieNames.sort(), ["_pcid", "_pctx", "_pprv"]);
 });
 
 test("resolves customer experience and session replay endpoint families from canonical registry sources", () => {

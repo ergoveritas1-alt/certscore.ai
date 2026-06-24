@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 import {
   REPORT_PRIMARY_PILLARS,
   getReportEvidenceCategoriesForSection,
@@ -17,8 +18,8 @@ import {
   isKnownCmpVendorLabel
 } from "../../../../packages/shared/src/known-cmps";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
+import { CopyJsonButton } from "./copy-json-button";
 import { ScanCompletedEvent } from "../analytics/data-layer-events";
-import { CookieStoragePanel } from "./cookie-storage-panel";
 import { DiagnosticsPanel } from "./diagnostics-panel";
 import { EvidenceJsonBlock } from "./evidence-json-block";
 import {
@@ -46,7 +47,7 @@ import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { ScanPageHeader } from "./scan-page-header";
-import { VendorFootprintCard } from "./vendor-footprint-card";
+import { VendorBrandChip } from "./vendor-brand-chip";
 import {
   EMPHASIS_METRIC_CARD_CLASS,
   EMPHASIS_METRIC_CARD_VALUE_CLASS,
@@ -122,6 +123,14 @@ import {
 } from "../../lib/scans/policy-enrichment-row";
 import { isGenericBrowserCookieHelpUrl } from "../../lib/scans/policy-surface-url-hygiene";
 import { deriveHighRiskTrackingContext } from "../../lib/scans/high-risk-tracking-context";
+import { buildRuntimeCookieInventory, type RuntimeCookieEvidenceRow } from "../../lib/scans/runtime-cookie-evidence";
+import {
+  buildRuntimeCookiePriorityGroups,
+  runtimeCookieConfidenceWeight,
+  runtimeCookiePriorityWeight,
+  type RuntimeCookieInventoryConfidence,
+  type RuntimeCookieReviewPriority
+} from "../../lib/scans/runtime-cookie-priority";
 import {
   getAllowedConflictType,
   type PolicyBehaviorConflictClaimType,
@@ -184,6 +193,50 @@ function isFunctionalButNotCmpVendorDomain(value: string | null | undefined) {
 
 function isFunctionalButNotCmpVendorLabel(value: string | null | undefined) {
   return isCmpOrFunctionalVendorLabel(value) && !isCmpVendorLabel(value);
+}
+
+type ReportVendorSurfaceProjectionInput = {
+  rawThirdPartyDomains: string[];
+  resolvedVendorNames: string[];
+  topObservedEntities: Array<{ label: string; category: string; requestCount: number }>;
+  unresolvedVendorHosts: string[];
+  vendorCategoryCounts: Record<string, number>;
+};
+
+function buildReportSurfaceVendorProjection(input: ReportVendorSurfaceProjectionInput) {
+  const execSummaryResolvedVendorNames = input.resolvedVendorNames.filter((name) => !isFunctionalButNotCmpVendorLabel(name));
+  const execSummaryThirdPartyDomains = uniqueStrings(input.rawThirdPartyDomains).filter((domain) => !isCmpOrFunctionalVendorDomain(domain));
+  const execSummaryTopObservedEntities = input.topObservedEntities.filter((entity) => (
+    !isFunctionalButNotCmpVendorLabel(entity.label) &&
+    !isFunctionalButNotCmpVendorDomain(entity.label)
+  ));
+  const execSummaryCmpCategoryCount = uniqueStrings([
+    ...execSummaryResolvedVendorNames.filter(isCmpVendorLabel),
+    ...execSummaryTopObservedEntities
+      .filter((entity) => entity.category === "cmp" || isCmpVendorDomain(entity.label) || isCmpVendorLabel(entity.label))
+      .map((entity) => entity.label)
+  ]).length;
+
+  return {
+    execSummary: {
+      resolvedVendorNames: execSummaryResolvedVendorNames,
+      thirdPartyDomains: execSummaryThirdPartyDomains,
+      topObservedEntities: execSummaryTopObservedEntities,
+      unresolvedVendorHosts: uniqueStrings(input.unresolvedVendorHosts).filter((host) => !isCmpOrFunctionalVendorDomain(host)),
+      vendorCategoryCounts: execSummaryCmpCategoryCount > 0
+        ? {
+            ...input.vendorCategoryCounts,
+            cmp: Math.max(input.vendorCategoryCounts.cmp ?? 0, execSummaryCmpCategoryCount)
+          }
+        : input.vendorCategoryCounts
+    },
+    evidenceInventory: {
+      resolvedVendorNames: input.resolvedVendorNames,
+      thirdPartyDomains: uniqueStrings(input.rawThirdPartyDomains),
+      topObservedEntities: input.topObservedEntities,
+      unresolvedVendorHosts: uniqueStrings(input.unresolvedVendorHosts)
+    }
+  };
 }
 
 function formatDateTime(value: string | null) {
@@ -337,6 +390,27 @@ function formatScanTimeLabel(input: {
   return formatScanTimeDurationMs(completedAtMs - startedAtMs);
 }
 
+function formatScanReadyTimeLabel(input: {
+  completedAt: string | null | undefined;
+  createdAt: string | null | undefined;
+  startedAt: string | null | undefined;
+}) {
+  const scanOpenedAt = input.createdAt ?? input.startedAt;
+
+  if (!scanOpenedAt || !input.completedAt) {
+    return null;
+  }
+
+  const startedAtMs = Date.parse(scanOpenedAt);
+  const completedAtMs = Date.parse(input.completedAt);
+
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(completedAtMs) || completedAtMs < startedAtMs) {
+    return null;
+  }
+
+  return formatScanTimeDurationMs(completedAtMs - startedAtMs);
+}
+
 function formatScanTimeDurationMs(durationMs: number) {
   const totalSeconds = Math.max(0, Math.ceil(durationMs / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -355,6 +429,834 @@ function formatScanTimeDurationMs(durationMs: number) {
   }
 
   return parts.join(" ");
+}
+
+type TrackerInventoryRow = {
+  category: string;
+  confidence: number | null;
+  domains: string[];
+  firstSeenMs: number | null;
+  label: string;
+  observedVia: string[];
+  preConsent: boolean;
+  requestCount: number | null;
+  regulatoryRelevance?: string[] | null;
+  source: string;
+  vendorDisplayCategory?: string | null;
+};
+
+function normalizeInventoryLabel(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatInventoryNumber(value: number | null) {
+  return typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
+}
+
+function formatFirstSeenMs(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? `${Math.max(0, Math.round(value))}ms` : "—";
+}
+
+function formatInventorySummaryTime(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "—";
+  }
+  if (value < 1000) {
+    return `${Math.max(0, Math.round(value))}ms`;
+  }
+  return `${(value / 1000).toFixed(2).replace(/\.?0+$/, "")}s`;
+}
+
+function getNumberFromRecord(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function normalizeInventoryHostname(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  const hostname = getTldtsHostname(value.includes("://") ? value : `https://${value}`);
+  return hostname?.replace(/^www\./, "").toLowerCase() ?? null;
+}
+
+function inventoryRegistrableDomain(value: string | null | undefined) {
+  const hostname = normalizeInventoryHostname(value);
+  if (!hostname) {
+    return null;
+  }
+  return getTldtsDomain(hostname, { allowPrivateDomains: true }) ?? hostname;
+}
+
+function getStringArrayFromRecord(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (Array.isArray(value)) {
+      return uniqueStrings(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0));
+    }
+    if (typeof value === "string" && value.trim().length > 0) {
+      return [value.trim()];
+    }
+  }
+  return [];
+}
+
+function buildTrackerInventoryRows(input: {
+  domains: string[];
+  firstPartyDomain?: string | null;
+  preConsentVendors: string[];
+  resolvedVendors: string[];
+  sessionReplayVendors: string[];
+  trackerVendors: Array<ScanDetailResponse["trackerVendors"][number] & { observedVia?: string[] | null; regulatoryRelevance?: string[] | null; vendorDisplayCategory?: string | null }>;
+  topObservedEntities: Array<{ label: string; category: string; requestCount: number }>;
+  unresolvedHosts: string[];
+}) {
+  const rows = new Map<string, TrackerInventoryRow>();
+  const firstPartyRegistrableDomain = inventoryRegistrableDomain(input.firstPartyDomain);
+  const resolvedTrackerHosts = new Set(
+    input.trackerVendors.flatMap((tracker) => {
+      const record = tracker as unknown as Record<string, unknown>;
+      return [
+        tracker.scriptHost,
+        typeof record.endpointHostname === "string" ? record.endpointHostname : null,
+        typeof record.scriptHost === "string" ? record.scriptHost : null
+      ];
+    }).map(normalizeInventoryHostname).filter((value): value is string => Boolean(value))
+  );
+  const isFirstPartyHost = (value: string) => {
+    const hostDomain = inventoryRegistrableDomain(value);
+    return Boolean(firstPartyRegistrableDomain && hostDomain === firstPartyRegistrableDomain);
+  };
+  const isCoveredByResolvedVendorHost = (value: string) => {
+    const host = normalizeInventoryHostname(value);
+    return Boolean(host && resolvedTrackerHosts.has(host));
+  };
+  const addRow = (row: TrackerInventoryRow) => {
+    const key = `${row.label.toLowerCase()}\u0000${row.category.toLowerCase()}`;
+    const existing = rows.get(key);
+    if (!existing) {
+      rows.set(key, row);
+      return;
+    }
+    rows.set(key, {
+      ...existing,
+      confidence: Math.max(existing.confidence ?? 0, row.confidence ?? 0) || existing.confidence || row.confidence,
+      domains: uniqueStrings([...existing.domains, ...row.domains]),
+      firstSeenMs:
+        existing.firstSeenMs !== null && row.firstSeenMs !== null
+          ? Math.min(existing.firstSeenMs, row.firstSeenMs)
+          : existing.firstSeenMs ?? row.firstSeenMs,
+      observedVia: uniqueStrings([...existing.observedVia, ...row.observedVia]),
+      preConsent: existing.preConsent || row.preConsent,
+      regulatoryRelevance: uniqueStrings([...(existing.regulatoryRelevance ?? []), ...(row.regulatoryRelevance ?? [])]),
+      requestCount: Math.max(existing.requestCount ?? 0, row.requestCount ?? 0) || existing.requestCount || row.requestCount,
+      source: existing.source === row.source ? existing.source : "multiple"
+    });
+  };
+
+  for (const entity of input.topObservedEntities) {
+    if (isFirstPartyHost(entity.label) || isCoveredByResolvedVendorHost(entity.label)) {
+      continue;
+    }
+    addRow({
+      category: entity.category || "tracker",
+      confidence: null,
+      domains: input.domains.includes(entity.label) ? [entity.label] : [],
+      firstSeenMs: null,
+      label: entity.label,
+      observedVia: ["request"],
+      preConsent: input.preConsentVendors.includes(entity.label),
+      requestCount: entity.requestCount,
+      source: "runtime requests"
+    });
+  }
+  for (const tracker of input.trackerVendors) {
+    const record = tracker as unknown as Record<string, unknown>;
+    const observedVia = tracker.observedVia && tracker.observedVia.length > 0
+      ? uniqueStrings(tracker.observedVia)
+      : getStringArrayFromRecord(record, ["observedVia", "observed_via"]);
+    addRow({
+      category: tracker.vendorCategory || "tracker",
+      confidence: typeof tracker.confidence === "number" && Number.isFinite(tracker.confidence) ? tracker.confidence : null,
+      domains: tracker.scriptHost ? [tracker.scriptHost] : [],
+      firstSeenMs: getNumberFromRecord(record, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]),
+      label: tracker.vendorName,
+      observedVia: observedVia.length > 0 ? observedVia : ["request"],
+      preConsent: tracker.beforeConsent === true || input.preConsentVendors.includes(tracker.vendorName),
+      regulatoryRelevance: tracker.regulatoryRelevance ?? getStringArrayFromRecord(record, ["regulatoryRelevance", "regulatory_relevance"]),
+      requestCount: null,
+      source: tracker.detectionSource || "tracker inventory",
+      vendorDisplayCategory: tracker.vendorDisplayCategory ?? (typeof record.vendorDisplayCategory === "string" ? record.vendorDisplayCategory : null)
+    });
+  }
+  for (const vendor of input.resolvedVendors) {
+    const hasConcreteObservedRow = [...rows.values()].some((row) =>
+      row.label.toLowerCase() === vendor.toLowerCase() &&
+      (
+        row.domains.length > 0 ||
+        row.observedVia.some((value) => !/^(resolver|vendor resolver)$/i.test(value))
+      )
+    );
+    if (hasConcreteObservedRow) {
+      continue;
+    }
+    addRow({
+      category: input.sessionReplayVendors.includes(vendor) ? "session_replay" : "unknown",
+      confidence: null,
+      domains: [],
+      firstSeenMs: null,
+      label: vendor,
+      observedVia: ["resolver"],
+      preConsent: input.preConsentVendors.includes(vendor),
+      requestCount: null,
+      source: "vendor resolver"
+    });
+  }
+  for (const host of input.unresolvedHosts) {
+    if (isFirstPartyHost(host) || isCoveredByResolvedVendorHost(host)) {
+      continue;
+    }
+    addRow({
+      category: "unresolved_host",
+      confidence: null,
+      domains: [host],
+      firstSeenMs: null,
+      label: host,
+      observedVia: ["host"],
+      preConsent: false,
+      requestCount: null,
+      source: "host inventory"
+    });
+  }
+
+  return [...rows.values()].sort((left, right) => {
+    const requestDelta = (right.requestCount ?? 0) - (left.requestCount ?? 0);
+    return requestDelta !== 0 ? requestDelta : left.label.localeCompare(right.label);
+  });
+}
+
+function InventoryVendorCell({ label }: { label: string }) {
+  return (
+    <VendorBrandChip
+      className="max-w-full rounded-lg py-1"
+      label={label}
+      showMeta={false}
+      suffix={null}
+    />
+  );
+}
+
+function getInventoryCategoryLabel(
+  vendorLabel: string,
+  fallbackCategory: string | null | undefined,
+  regulatoryRelevance?: readonly string[] | null
+) {
+  const relevance = (regulatoryRelevance ?? []).join(" ").toLowerCase();
+  if (/\baudience_measurement\b/.test(relevance)) {
+    return "Audience measurement";
+  }
+  if (/\badvertising_measurement\b|\bad_measurement\b/.test(relevance)) {
+    return "Advertising measurement";
+  }
+  if (fallbackCategory && /^[A-Z][A-Za-z /&-]+$/.test(fallbackCategory) && fallbackCategory !== "Unknown") {
+    return fallbackCategory;
+  }
+  if (fallbackCategory && /^vendor$/i.test(fallbackCategory)) {
+    return "Unknown";
+  }
+
+  const label = vendorLabel.toLowerCase();
+  if (/google sign.?in|accounts\.google|gsi\/client/.test(label)) {
+    return "Authentication";
+  }
+  if (/stripe/.test(label)) {
+    return "Payment processors";
+  }
+  if (/cloudflare bot management|cf_chl|cf_clearance|__cf_bm|cloudflare/.test(label)) {
+    return "Security";
+  }
+  if (/doubleclick floodlight|floodlight|fls\.doubleclick/.test(label)) {
+    return "Advertising";
+  }
+  if (/google adsense|adsbygoogle|pagead2/.test(label)) {
+    return "Advertising";
+  }
+  if (/google publisher tag|googletag|gpt\.js|securepubads/.test(label)) {
+    return "Advertising";
+  }
+  if (/integral ad science|ias/.test(label)) {
+    return "Advertising";
+  }
+  if (/jsdelivr|cdn\.jsdelivr\.net/.test(label)) {
+    return "CDN";
+  }
+  if (/onetrust|cookielaw|optanon/.test(label)) {
+    return "Cookie compliance";
+  }
+  if (/optimizely/.test(label)) {
+    return "A/B Testing";
+  }
+  if (/piano|tinypass/.test(label)) {
+    return "Personalisation";
+  }
+  if (/cxense/.test(label)) {
+    return "Personalisation";
+  }
+  if (/quantcast/.test(label)) {
+    return "Analytics";
+  }
+  return normalizeInventoryLabel(fallbackCategory || "unknown");
+}
+
+type ConsentReviewPriority = RuntimeCookieReviewPriority;
+type InventoryConfidence = RuntimeCookieInventoryConfidence;
+
+const CONSENT_REVIEW_PRIORITY_LABELS: Record<ConsentReviewPriority, string> = {
+  contextual: "Contextual",
+  high: "High",
+  medium: "Medium",
+  review_needed: "Review"
+};
+
+const CONSENT_REVIEW_PRIORITY_INFOTIPS: Record<ConsentReviewPriority, string> = {
+  contextual: "Observed activity from categories commonly associated with site operation, security, payment, authentication, consent management, CDN/static delivery, or other context-dependent functions.",
+  high: "Pre-consent activity from a category commonly associated with advertising, audience measurement, retargeting, behavioral tracking, session replay, or fingerprinting.",
+  medium: "Pre-consent activity that is review-relevant, such as analytics, experimentation, personalization, or vendor-associated first-party storage, but may require context before being treated as a stronger concern.",
+  review_needed: "Unknown, ambiguous, low-confidence, or insufficiently classified evidence that should be manually reviewed."
+};
+
+const INVENTORY_CONFIDENCE_LABELS: Record<InventoryConfidence, string> = {
+  high: "High",
+  low: "Low",
+  medium: "Medium"
+};
+
+function normalizeInventoryPurpose(value: string | null | undefined) {
+  return (value ?? "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
+}
+
+function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {
+  const purpose = normalizeInventoryPurpose(getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance));
+  const confidence = getTrackerInventoryConfidence(row);
+
+  if (/^(advertising|retargeting|audience_measurement|session_replay|fingerprinting)$/.test(purpose)) {
+    return row.preConsent ? "high" : "medium";
+  }
+  if (/^(personalization|personalisation)$/.test(purpose) && confidence === "low") {
+    return "review_needed";
+  }
+  if (/^(analytics|experimentation|personalization|personalisation|a_b_testing|embedded_content)$/.test(purpose)) {
+    return row.preConsent ? "medium" : "contextual";
+  }
+  if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {
+    return "contextual";
+  }
+  if (/^(cdn_static|cdn|functional)$/.test(purpose)) {
+    return "contextual";
+  }
+  if (row.category === "unknown" || row.category === "unresolved_host" || row.domains.length === 0) {
+    return "review_needed";
+  }
+  return "review_needed";
+}
+
+function getTrackerInventoryConfidence(row: TrackerInventoryRow): InventoryConfidence {
+  const confidence = typeof row.confidence === "number" && Number.isFinite(row.confidence) ? row.confidence : null;
+  if (confidence !== null) {
+    if (confidence >= 0.9) {
+      return "high";
+    }
+    if (confidence >= 0.7) {
+      return "medium";
+    }
+    return "low";
+  }
+  if (row.domains.length > 0 && row.category !== "unknown" && row.category !== "unresolved_host") {
+    return "medium";
+  }
+  return "low";
+}
+
+function consentReviewPriorityTone(priority: ConsentReviewPriority) {
+  return priority === "review_needed" ? "medium" : priority;
+}
+
+function InventoryPriorityCell({
+  priority,
+}: {
+  priority: ConsentReviewPriority;
+}) {
+  const label = CONSENT_REVIEW_PRIORITY_LABELS[priority];
+  const infotip = CONSENT_REVIEW_PRIORITY_INFOTIPS[priority];
+  const tone = consentReviewPriorityTone(priority);
+  const toneClass = {
+    contextual: "border-sky-200 bg-sky-50 text-sky-700",
+    high: "border-rose-200 bg-rose-50 text-rose-700",
+    medium: "border-amber-200 bg-amber-50 text-amber-700",
+    neutral: "border-slate-200 bg-white text-slate-600"
+  }[tone];
+  const iconClassName = "h-3.5 w-3.5 shrink-0";
+  const icon = {
+    contextual: (
+      <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 20 20">
+        <path d="M6.4 8.2h7.2M6.4 11.8h7.2" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+      </svg>
+    ),
+    high: (
+      <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 24 24">
+        <path d="M12 4.5 21 19H3L12 4.5Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="2" />
+        <path d="M12 9v4.5M12 17h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" />
+      </svg>
+    ),
+    medium: (
+      <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2" />
+        <path d="M12 7.5v6M12 17h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" />
+      </svg>
+    ),
+    review_needed: (
+      <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 24 24">
+        <path d="M7 20V5.5M7 5.5h9.5l-1.4 3 1.4 3H7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+      </svg>
+    )
+  }[priority];
+
+  return (
+    <span
+      className={`inline-flex max-w-[8.5rem] items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-medium uppercase tracking-[0.08em] ${toneClass}`}
+      title={`${label}: ${infotip}`}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </span>
+  );
+}
+
+function InventoryConfidenceCell({ confidence }: { confidence: InventoryConfidence }) {
+  const confidenceLabel = INVENTORY_CONFIDENCE_LABELS[confidence];
+  const confidenceLevel = confidence === "high" ? 3 : confidence === "medium" ? 2 : confidence === "low" ? 1 : 0;
+
+  return (
+    <span
+      className="inline-flex items-center gap-1"
+      title={`Confidence: ${confidenceLabel}`}
+      aria-label={`Confidence: ${confidenceLabel}`}
+    >
+      {[1, 2, 3].map((level) => (
+        <span
+          key={level}
+          className={`h-2 w-2 rounded-full border border-slate-300 ${level <= confidenceLevel ? "bg-slate-500" : "bg-white"}`}
+        />
+      ))}
+    </span>
+  );
+}
+
+function InventoryTypeIcon({ type }: { type: "cookie" | "tracker" }) {
+  if (type === "cookie") {
+    return (
+      <span
+        aria-label="Cookie"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-sky-700"
+        title="Cookie"
+      >
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+          <path d="M20 13.2A8 8 0 1 1 10.8 4a3.1 3.1 0 0 0 3 4 3.2 3.2 0 0 0 4.1 4.1c.6.2 1.2.5 2.1 1.1Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+          <path d="M8.5 9.5h.01M7.5 15h.01M12.5 14h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      aria-label="Tracker"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-violet-200 bg-violet-50 text-violet-700"
+      title="Tracker"
+    >
+      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+        <path d="M17.6 7.3A7 7 0 0 0 5.3 10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+        <path d="M15.2 7.4h2.7V4.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+        <path d="M6.4 16.7A7 7 0 0 0 18.7 14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+        <path d="M8.8 16.6H6.1v2.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
+      </svg>
+    </span>
+  );
+}
+
+function formatInventoryParty(value: "first_party" | "third_party" | "unknown" | string | null | undefined) {
+  if (value === "first_party") {
+    return "1st";
+  }
+  if (value === "third_party") {
+    return "3rd";
+  }
+  return "—";
+}
+
+function formatTrackerParty(row: TrackerInventoryRow) {
+  if (row.domains.some((domain) => domain.includes("."))) {
+    return "3rd";
+  }
+  return row.preConsent ? "3rd" : "—";
+}
+
+function formatInventoryCellForCopy(value: string | number | null | undefined) {
+  return String(value ?? "—").replace(/[\t\r\n]+/g, " ").trim() || "—";
+}
+
+type CookieInventoryGroupRow = {
+  confidence: InventoryConfidence;
+  domains: string[];
+  firstSeenMs: number | null;
+  party: "first_party" | "third_party" | "unknown" | "mixed";
+  priority: ConsentReviewPriority;
+  purpose: string;
+  vendor: string;
+};
+
+type TrackerInventoryGroupRow = {
+  confidence: InventoryConfidence;
+  domains: string[];
+  firstSeenMs: number | null;
+  party: "3rd" | "—" | "mixed";
+  priority: ConsentReviewPriority;
+  purpose: string;
+  requestCount: number | null;
+  vendor: string;
+};
+
+type InventoryGroupRow =
+  | (CookieInventoryGroupRow & { type: "cookie" })
+  | (TrackerInventoryGroupRow & { type: "tracker" });
+
+function priorityWeight(priority: ConsentReviewPriority) {
+  return runtimeCookiePriorityWeight(priority);
+}
+
+function confidenceWeight(confidence: InventoryConfidence) {
+  return runtimeCookieConfidenceWeight(confidence);
+}
+
+function compareInventoryPriorityRows(
+  left: { confidence: InventoryConfidence; firstSeenMs: number | null; priority: ConsentReviewPriority; requestCount?: number | null; vendor: string },
+  right: { confidence: InventoryConfidence; firstSeenMs: number | null; priority: ConsentReviewPriority; requestCount?: number | null; vendor: string }
+) {
+  const priorityDelta = priorityWeight(right.priority) - priorityWeight(left.priority);
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+  if (left.firstSeenMs !== null || right.firstSeenMs !== null) {
+    if (left.firstSeenMs === null) {
+      return 1;
+    }
+    if (right.firstSeenMs === null) {
+      return -1;
+    }
+    const firstSeenDelta = left.firstSeenMs - right.firstSeenMs;
+    if (firstSeenDelta !== 0) {
+      return firstSeenDelta;
+    }
+  }
+  const confidenceDelta = confidenceWeight(right.confidence) - confidenceWeight(left.confidence);
+  if (confidenceDelta !== 0) {
+    return confidenceDelta;
+  }
+  const requestDelta = (right.requestCount ?? 0) - (left.requestCount ?? 0);
+  if (requestDelta !== 0) {
+    return requestDelta;
+  }
+  return left.vendor.localeCompare(right.vendor);
+}
+
+function mergePartyValues<T extends string>(left: T, right: T): T | "mixed" {
+  return left === right ? left : "mixed";
+}
+
+function formatGroupedParty(value: CookieInventoryGroupRow["party"] | TrackerInventoryGroupRow["party"]) {
+  if (value === "first_party") {
+    return "1st";
+  }
+  if (value === "third_party") {
+    return "3rd";
+  }
+  if (value === "mixed") {
+    return "Mixed";
+  }
+  return value;
+}
+
+function InventoryPriorityDonut({ compact = false, rows }: { compact?: boolean; rows: InventoryGroupRow[] }) {
+  const segments = [
+    { color: "#fb7185", count: rows.filter((row) => row.priority === "high").length, label: "High" },
+    { color: "#fbbf24", count: rows.filter((row) => row.priority === "review_needed").length, label: "Review" },
+    { color: "#38bdf8", count: rows.filter((row) => row.priority === "medium").length, label: "Medium" },
+    { color: "#94a3b8", count: rows.filter((row) => row.priority === "contextual").length, label: "Contextual" }
+  ];
+  const total = Math.max(rows.length, 1);
+  let cursor = 0;
+  const gradientStops = segments.flatMap((segment) => {
+    const start = cursor;
+    const end = cursor + (segment.count / total) * 100;
+    cursor = end;
+    return [`${segment.color} ${start}%`, `${segment.color} ${end}%`];
+  });
+  const gradient = rows.length > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
+
+  return (
+    <div className={`flex items-center gap-3 ${compact ? "" : "mt-3"}`}>
+      <div
+        aria-label="Priority distribution"
+        className={`${compact ? "h-14 w-14" : "h-20 w-20"} grid shrink-0 place-items-center rounded-full`}
+        style={{ background: gradient }}
+      >
+        <div className={`${compact ? "h-8 w-8 text-[10px]" : "h-11 w-11 text-[11px]"} grid place-items-center rounded-full bg-white font-semibold text-slate-600 shadow-sm`}>
+          {rows.length}
+        </div>
+      </div>
+      <div className={`${compact ? "grid-cols-4 gap-x-2" : "grid-cols-2 gap-x-3 gap-y-1.5"} grid min-w-0 flex-1`}>
+        {segments.map((segment) => (
+          <div key={segment.label} className="flex min-w-0 items-center gap-1.5">
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
+            <span className="truncate text-[11px] font-medium text-slate-500">{compact && segment.label === "Contextual" ? "Ctx" : segment.label}</span>
+            <span className="ml-auto text-[11px] font-semibold text-slate-700">{segment.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
+  const purposeCounts = Array.from(rows.reduce((counts, row) => {
+    counts.set(row.purpose, (counts.get(row.purpose) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>())).sort((left, right) => {
+    const countDelta = right[1] - left[1];
+    return countDelta !== 0 ? countDelta : left[0].localeCompare(right[0]);
+  });
+  const topPurposes = purposeCounts.slice(0, 4);
+  const hiddenPurposeCount = Math.max(0, purposeCounts.length - topPurposes.length);
+  const colors = ["#0ea5e9", "#8b5cf6", "#14b8a6", "#f59e0b"];
+  const visibleTotal = topPurposes.reduce((total, [, count]) => total + count, 0);
+  const otherTotal = Math.max(0, rows.length - visibleTotal);
+  const chartSegments = [
+    ...topPurposes.map(([purpose, count], index) => ({ color: colors[index] ?? "#64748b", count, label: purpose })),
+    ...(otherTotal > 0 ? [{ color: "#cbd5e1", count: otherTotal, label: "Other" }] : [])
+  ];
+  let cursor = 0;
+  const gradientStops = chartSegments.flatMap((segment) => {
+    const start = cursor;
+    const end = cursor + (segment.count / Math.max(rows.length, 1)) * 100;
+    cursor = end;
+    return [`${segment.color} ${start}%`, `${segment.color} ${end}%`];
+  });
+  const gradient = rows.length > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Purpose mix</p>
+      <div className="mt-3 flex items-center gap-3">
+        <div
+          aria-label="Purpose distribution"
+          className="grid h-20 w-20 shrink-0 place-items-center rounded-full"
+          style={{ background: gradient }}
+        >
+          <div className="grid h-11 w-11 place-items-center rounded-full bg-white text-[11px] font-semibold text-slate-600 shadow-sm">
+            {rows.length}
+          </div>
+        </div>
+        <div className="grid min-w-0 flex-1 gap-2">
+        {topPurposes.length > 0 ? topPurposes.map(([purpose, count]) => (
+          <div key={purpose} className="flex min-w-0 items-center gap-2">
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: chartSegments.find((segment) => segment.label === purpose)?.color ?? "#64748b" }} />
+            <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-600">{purpose}</span>
+            <span className="text-xs font-semibold text-slate-800">{count}</span>
+          </div>
+        )) : (
+          <p className="text-xs leading-5 text-slate-500">No retained purposes.</p>
+        )}
+        {hiddenPurposeCount > 0 ? (
+          <p className="text-xs leading-5 text-slate-500">+{hiddenPurposeCount} more purpose{hiddenPurposeCount === 1 ? "" : "s"}</p>
+        ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function buildCookieInventoryGroupRows(rows: RuntimeCookieEvidenceRow[]) {
+  return buildRuntimeCookiePriorityGroups(rows);
+}
+
+function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
+  const grouped = new Map<string, TrackerInventoryGroupRow>();
+  for (const row of rows) {
+    const purpose = getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance);
+    const key = `${row.label.toLowerCase()}\u0000${purpose.toLowerCase()}`;
+    const candidate: TrackerInventoryGroupRow = {
+      confidence: getTrackerInventoryConfidence(row),
+      domains: row.domains,
+      firstSeenMs: row.firstSeenMs,
+      party: formatTrackerParty(row),
+      priority: getTrackerConsentReviewPriority(row),
+      purpose,
+      requestCount: row.requestCount,
+      vendor: row.label
+    };
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, candidate);
+      continue;
+    }
+    grouped.set(key, {
+      ...existing,
+      confidence: confidenceWeight(candidate.confidence) > confidenceWeight(existing.confidence) ? candidate.confidence : existing.confidence,
+      domains: uniqueStrings([...existing.domains, ...candidate.domains]),
+      firstSeenMs:
+        existing.firstSeenMs !== null && candidate.firstSeenMs !== null
+          ? Math.min(existing.firstSeenMs, candidate.firstSeenMs)
+          : existing.firstSeenMs ?? candidate.firstSeenMs,
+      party: mergePartyValues(existing.party, candidate.party),
+      priority: priorityWeight(candidate.priority) > priorityWeight(existing.priority) ? candidate.priority : existing.priority,
+      requestCount: Math.max(existing.requestCount ?? 0, candidate.requestCount ?? 0) || existing.requestCount || candidate.requestCount
+    });
+  }
+  return [...grouped.values()].sort(compareInventoryPriorityRows);
+}
+
+function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
+  const copyRows = [
+    ["Type", "Vendor", "Category", "Priority", "First seen", "Domain", "Confidence", "Party", "Requests"],
+    ...rows.map((row) => [
+      row.type === "cookie" ? "Cookie" : "Tracker",
+      row.vendor,
+      row.purpose,
+      CONSENT_REVIEW_PRIORITY_LABELS[row.priority],
+      formatFirstSeenMs(row.firstSeenMs),
+      row.domains.join(", ") || "—",
+      INVENTORY_CONFIDENCE_LABELS[row.confidence],
+      formatGroupedParty(row.party),
+      row.type === "tracker" ? formatInventoryNumber(row.requestCount) : "—"
+    ])
+  ];
+
+  return copyRows.map((row) => row.map(formatInventoryCellForCopy).join("\t")).join("\n");
+}
+
+function RuntimeInventoryTable({
+  cookieRows,
+  trackerRows
+}: {
+  cookieRows: RuntimeCookieEvidenceRow[];
+  trackerRows: TrackerInventoryRow[];
+}) {
+  const groupedCookieRows = buildCookieInventoryGroupRows(cookieRows);
+  const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerRows);
+  const groupedInventoryRows: InventoryGroupRow[] = [
+    ...groupedCookieRows.map((row) => ({ ...row, type: "cookie" as const })),
+    ...groupedTrackerRows.map((row) => ({ ...row, type: "tracker" as const }))
+  ].sort(compareInventoryPriorityRows);
+  const firstHighPriorityTrackerRows = groupedInventoryRows
+    .filter((row) => row.type === "tracker" && row.priority === "high" && row.firstSeenMs !== null)
+    .sort((left, right) => (left.firstSeenMs ?? 0) - (right.firstSeenMs ?? 0));
+  const firstHighPriorityTracker = firstHighPriorityTrackerRows[0] ?? null;
+  const inventorySummaryCards = [
+    {
+      detail: null,
+      label: "First high-priority tracker",
+      value: formatInventorySummaryTime(firstHighPriorityTracker?.firstSeenMs)
+    }
+  ];
+  const copyPayload = buildRuntimeInventoryCopyPayload(groupedInventoryRows);
+
+  return (
+    <section>
+      <details className="group/inventory relative overflow-visible rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]" open>
+        <summary className="flex min-h-[4.75rem] cursor-pointer list-none flex-wrap items-center gap-3 px-3.5 py-4 pr-14 marker:hidden [&::-webkit-details-marker]:hidden lg:px-5 lg:pr-16">
+          <ScanReportDisclosureIcon className="group-open/inventory:rotate-90" />
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Cookies & Trackers (Pre-consent)</p>
+        </summary>
+        <CopyJsonButton
+          className="absolute right-3 top-4 z-20 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-950 lg:right-5"
+          label="Copy table"
+          payload={copyPayload}
+        />
+        <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:grid-cols-[minmax(17rem,0.9fr)_minmax(0,2.1fr)] lg:items-start lg:px-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+            <InventoryPurposeCard rows={groupedInventoryRows} />
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Priority mix</p>
+              <InventoryPriorityDonut rows={groupedInventoryRows} />
+            </div>
+            {inventorySummaryCards.map((metric) => (
+              <div key={metric.label} className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{metric.label}</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{metric.value}</p>
+                {metric.detail ? (
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{metric.detail}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          <div className="overflow-hidden rounded-xl border border-slate-200 lg:h-[412px]">
+            <div className="max-h-[340px] overflow-auto lg:h-full lg:max-h-none">
+            <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                <tr>
+                  <th className="w-[62px] border-b border-slate-200 px-3 py-2 font-semibold">Type</th>
+                  <th className="w-[190px] border-b border-slate-200 px-3 py-2 font-semibold">Vendor</th>
+                  <th className="w-[130px] border-b border-slate-200 px-3 py-2 font-semibold">Purpose</th>
+                  <th className="w-[178px] border-b border-slate-200 px-3 py-2 font-semibold">Priority</th>
+                  <th className="w-[110px] border-b border-slate-200 px-3 py-2 font-semibold">First seen</th>
+                  <th className="w-[180px] border-b border-slate-200 px-3 py-2 font-semibold">Domain</th>
+                  <th className="w-[104px] border-b border-slate-200 px-3 py-2 font-semibold">Confidence</th>
+                  <th className="w-[72px] border-b border-slate-200 px-3 py-2 font-semibold">Party</th>
+                  <th className="w-[80px] border-b border-slate-200 px-3 py-2 font-semibold">Req.</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
+                {groupedInventoryRows.map((row) => (
+                  <tr key={`${row.type}-${row.vendor}-${row.purpose}`} className="h-12">
+                    <td className="truncate whitespace-nowrap px-3 py-2">
+                      <InventoryTypeIcon type={row.type} />
+                    </td>
+                    <td className="truncate whitespace-nowrap px-3 py-2">
+                      <InventoryVendorCell label={row.vendor} />
+                    </td>
+                    <td className="truncate whitespace-nowrap px-3 py-2">{row.purpose}</td>
+                    <td className="truncate whitespace-nowrap px-3 py-2">
+                      <InventoryPriorityCell
+                        priority={row.priority}
+                      />
+                    </td>
+                    <td className="truncate whitespace-nowrap px-3 py-2">{formatFirstSeenMs(row.firstSeenMs)}</td>
+                    <td className="truncate whitespace-nowrap px-3 py-2" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
+                    <td className="truncate whitespace-nowrap px-3 py-2">
+                      <InventoryConfidenceCell confidence={row.confidence} />
+                    </td>
+                    <td className="truncate whitespace-nowrap px-3 py-2">{formatGroupedParty(row.party)}</td>
+                    <td className="truncate whitespace-nowrap px-3 py-2">{row.type === "tracker" ? formatInventoryNumber(row.requestCount) : "—"}</td>
+                  </tr>
+                ))}
+                {groupedInventoryRows.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-5 text-center text-slate-500" colSpan={9}>No retained cookie or tracker rows for this scan.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+            </div>
+          </div>
+        </div>
+      </details>
+    </section>
+  );
 }
 
 function getRuntimeArtifactNumber(
@@ -945,6 +1847,7 @@ function derivePolicyBehaviorContradictions(input: {
   trackerVendors: Array<{
     beforeConsent: boolean | null;
     vendorCategory: string;
+    vendorDisplayCategory?: string | null;
     vendorName: string;
   }>;
 }) {
@@ -1108,6 +2011,7 @@ function derivePreconsentViolationRows(input: {
     matchedSignatureId: string | null;
     scriptHost: string | null;
     vendorCategory: string;
+    vendorDisplayCategory?: string | null;
     vendorName: string;
   }>;
 }) {
@@ -6243,35 +7147,23 @@ export function SharedScanDetailView({
   const fallbackObservedRequestCount = getFiniteNumber(fallbackEvidence?.metrics?.requestCount) ?? 0;
   const fallbackObservedDomainCount = getFiniteNumber(fallbackEvidence?.metrics?.domainCount) ?? 0;
   const fallbackObservedIpCount = getFiniteNumber(fallbackEvidence?.metrics?.ipCount) ?? 0;
-  const executiveResolvedVendorNames = certScoreSummary.resolvedVendorNames.filter((name) => !isFunctionalButNotCmpVendorLabel(name));
-  const executiveThirdPartyDomains = uniqueStrings([
-    ...getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains")
-  ]).filter((domain) => !isCmpOrFunctionalVendorDomain(domain));
+  const vendorSurfaceProjection = buildReportSurfaceVendorProjection({
+    rawThirdPartyDomains: getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains"),
+    resolvedVendorNames: certScoreSummary.resolvedVendorNames,
+    topObservedEntities: certScoreSummary.topObservedEntities,
+    unresolvedVendorHosts: certScoreSummary.unresolvedVendorHosts,
+    vendorCategoryCounts: certScoreSummary.vendorCategoryCounts
+  });
+  const executiveResolvedVendorNames = vendorSurfaceProjection.execSummary.resolvedVendorNames;
+  const inventoryResolvedVendorNames = vendorSurfaceProjection.evidenceInventory.resolvedVendorNames;
+  const executiveThirdPartyDomains = vendorSurfaceProjection.execSummary.thirdPartyDomains;
+  const inventoryThirdPartyDomains = vendorSurfaceProjection.evidenceInventory.thirdPartyDomains;
   const executiveThirdPartyRequestCount = certScoreSummary.thirdPartyRequestCount;
-  const executiveTopObservedEntities =
-    certScoreSummary.topObservedEntities.length > 0
-      ? certScoreSummary.topObservedEntities.filter((entity) => (
-          !isFunctionalButNotCmpVendorLabel(entity.label) &&
-          !isFunctionalButNotCmpVendorDomain(entity.label)
-        ))
-      : [];
-  const executiveCmpCategoryCount = uniqueStrings([
-    ...executiveResolvedVendorNames.filter(isCmpVendorLabel),
-    ...executiveTopObservedEntities
-      .filter((entity) => entity.category === "cmp" || isCmpVendorDomain(entity.label) || isCmpVendorLabel(entity.label))
-      .map((entity) => entity.label)
-  ]).length;
-  const executiveVendorCategoryCounts =
-    executiveCmpCategoryCount > 0
-      ? {
-          ...certScoreSummary.vendorCategoryCounts,
-          cmp: Math.max(certScoreSummary.vendorCategoryCounts.cmp ?? 0, executiveCmpCategoryCount)
-        }
-      : certScoreSummary.vendorCategoryCounts;
+  const executiveTopObservedEntities = vendorSurfaceProjection.execSummary.topObservedEntities;
+  const inventoryTopObservedEntities = vendorSurfaceProjection.evidenceInventory.topObservedEntities;
+  const executiveVendorCategoryCounts = vendorSurfaceProjection.execSummary.vendorCategoryCounts;
   const executiveTrackerSummary = certScoreSummary.trackerSummary;
-  const executiveUnresolvedVendorHosts = uniqueStrings([
-    ...certScoreSummary.unresolvedVendorHosts
-  ]).filter((host) => !isCmpOrFunctionalVendorDomain(host));
+  const executiveUnresolvedVendorHosts = vendorSurfaceProjection.execSummary.unresolvedVendorHosts;
   const executiveFingerprintReasons = uniqueStrings([
     ...getRecordStringArray(hybridFingerprintSummary, "reasons")
   ]);
@@ -6284,21 +7176,34 @@ export function SharedScanDetailView({
     executiveFingerprintCategories.length > 0 ||
     executiveFingerprintReasons.length > 0 ||
     certScoreSummary.fingerprintLabel !== "None detected";
-  const cookiesSeenCount = Math.max(
-    getRecordNumber(hybridStorageSummary, "cookiesSeenCount") ?? 0,
-    getRecordNumber(snapshot, "cookie_count_total") ?? 0,
-    runtimeInitialCookieCount
-  );
-  const thirdPartyCookiesSeenCount = Math.max(
-    getRecordNumber(hybridStorageSummary, "thirdPartyCookieCount") ?? 0,
-    getRecordNumber(snapshot, "third_party_cookie_count") ?? 0,
-    certScoreSummary.thirdPartyCookieNamesSeen.length
-  );
-  const cookiesBeforeConsentCount = Math.max(
-    getRecordNumber(hybridStorageSummary, "cookiesBeforeConsentCount") ?? 0,
-    certScoreSummary.cookieNamesBeforeConsent.length,
-    runtimeInitialCookieCount
-  );
+  const cookieInventoryRows = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence,
+    runtimeArtifacts
+  }).rows;
+  const cookiesBeforeConsentCount = cookieInventoryRows.length > 0
+    ? cookieInventoryRows.length
+    : Math.max(
+        getRecordNumber(hybridStorageSummary, "cookiesBeforeConsentCount") ?? 0,
+        certScoreSummary.cookieNamesBeforeConsent.length,
+        runtimeInitialCookieCount
+      );
+  const trackerInventoryRows = buildTrackerInventoryRows({
+    domains: inventoryThirdPartyDomains,
+    firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
+    preConsentVendors: certScoreSummary.preConsentVendorNames,
+    resolvedVendors: inventoryResolvedVendorNames,
+    sessionReplayVendors: certScoreSummary.sessionReplayVendorNames,
+    trackerVendors: scanRecord.trackerVendors,
+    topObservedEntities: inventoryTopObservedEntities,
+    unresolvedHosts: executiveUnresolvedVendorHosts
+  });
+  const trackerPriorityRows = buildTrackerInventoryGroupRows(trackerInventoryRows).map((row) => ({
+    firstSeenMs: row.firstSeenMs,
+    party: row.party,
+    priority: row.priority,
+    purpose: row.purpose,
+    vendor: row.vendor
+  }));
   const reviewSectionError: string | null = null;
   const scanReportUnifiedFindingState = debugBuildScanReportUnifiedFindingState(scanRecord);
   const { taxonomySnapshotSections } = scanReportUnifiedFindingState.derivedContext;
@@ -6473,6 +7378,8 @@ export function SharedScanDetailView({
       snapshot
     }),
     projectedFindings: allExecutiveFindings,
+    runtimeCookieRows: cookieInventoryRows,
+    runtimeTrackerPriorityRows: trackerPriorityRows,
     scanCompleted: scanRecord.scan.status === "completed",
     unifiedFindings: findingEvidenceDiagnostics
   });
@@ -6568,6 +7475,16 @@ export function SharedScanDetailView({
     durationMs: scanDurationMs,
     startedAt: scanRecord.scan.startedAt
   });
+  const scanReadyTimeLabel = formatScanReadyTimeLabel({
+    completedAt: scanRecord.scan.completedAt,
+    createdAt: scanRecord.scan.createdAt,
+    startedAt: scanRecord.scan.startedAt
+  });
+  const scanTimeDetailLabel = scanReadyTimeLabel
+    ? `scan time: ${scanReadyTimeLabel}`
+    : scanTimeLabel
+      ? `scan time: ${scanTimeLabel}`
+      : null;
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
@@ -6593,10 +7510,10 @@ export function SharedScanDetailView({
         createdAtLabel={
           <>
             Created <ViewerTimestamp value={scanRecord.scan.createdAt} />
-            {scanTimeLabel ? (
+            {scanTimeDetailLabel ? (
               <>
                 {" "}
-                <span>(scan time: {scanTimeLabel})</span>
+                <span>({scanTimeDetailLabel})</span>
               </>
             ) : null}
             {createdAtInfoTip ? (
@@ -6713,9 +7630,13 @@ export function SharedScanDetailView({
             showProtectedRouteInterruptions={showAdvancedDiagnostics}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
           />
+          <RuntimeInventoryTable
+            cookieRows={cookieInventoryRows}
+            trackerRows={trackerInventoryRows}
+          />
           {showRegulatoryChecklistSection ? (
             <RegulatoryChecklistSection
-              headingLabel="GDPR / ePrivacy Evidence Review"
+              headingLabel="GDPR / ePrivacy Evidence Checklist"
               headingTrailing={<GdprEprivacyCoverageSummaryPills items={reportableGdprEprivacyCoverageChecklist} />}
               showAdvancedEvidenceToggle
               tabs={[

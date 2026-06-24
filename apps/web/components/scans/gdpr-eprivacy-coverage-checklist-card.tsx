@@ -3,6 +3,7 @@
 import React from "react";
 import { cn } from "@website-signal-risk-scanner/ui";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
+import { InfoTip } from "./info-tip";
 import { useRegulatoryChecklistAdvancedEvidence } from "./regulatory-checklist-advanced-evidence-context";
 import { RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
@@ -67,8 +68,8 @@ const REPORT_ROW_GROUPS = [
     title: "Consent Surface",
     rowIds: [
       "consent_surface_observed",
-      "reject_all_path_availability",
       "cmp_framework_signal_observed",
+      "reject_all_path_availability",
       "cookie_notice_policy_availability"
     ]
   },
@@ -77,12 +78,8 @@ const REPORT_ROW_GROUPS = [
     rowIds: [
       "pre_consent_cookies_storage",
       "pre_consent_third_party_tracking",
-      "advertising_retargeting_vendor_signal_observed",
-      "retargeting_behavioral_advertising_signal_observed",
-      "analytics_vendor_observed",
       "session_replay_fingerprinting_review",
-      "device_identification_fingerprinting_signal_observed",
-      "embedded_content_pre_consent"
+      "device_identification_fingerprinting_signal_observed"
     ]
   },
   {
@@ -469,31 +466,36 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
       className: "border-rose-200 bg-rose-50 text-rose-700",
       count: summaryCounts.gapsObserved,
       icon: "alert" as const,
-      label: "gaps observed"
+      label: "concern",
+      tooltip: "Rows where retained evidence indicates a material GDPR/ePrivacy review concern, such as consent timing, tracking, storage, disclosure, or choice issues."
     },
     {
       className: "border-rose-200 bg-rose-50 text-rose-700",
       count: summaryCounts.partialConcerns,
       icon: "circle-alert" as const,
-      label: "partial concerns"
+      label: "partial concern",
+      tooltip: "Rows with review-relevant evidence that may indicate a concern, but where context, scope, or evidence strength makes the signal less direct."
     },
     {
       className: "border-amber-200 bg-amber-50 text-amber-700",
       count: summaryCounts.reviewSignals,
       icon: "flag" as const,
-      label: "review"
+      label: "review",
+      tooltip: "Rows with unknown, ambiguous, limited, or insufficiently classified evidence that should be manually reviewed."
     },
     {
       className: "border-emerald-200 bg-emerald-50 text-emerald-700",
       count: summaryCounts.positiveSignals,
       icon: "check" as const,
-      label: "positive"
+      label: "positive",
+      tooltip: "Rows where retained evidence is favorable for this review area. This is a positive signal, not a legal compliance determination."
     },
     {
       className: "border-sky-200 bg-sky-50 text-sky-700",
       count: summaryCounts.neutralSignals,
       icon: "equal" as const,
-      label: "neutral"
+      label: "contextual",
+      tooltip: "Rows with useful context or operational evidence that is not inherently positive or concerning on its own."
     },
     {
       className: "border-slate-300 bg-slate-100 text-slate-600",
@@ -513,6 +515,7 @@ export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivac
           <span className="whitespace-nowrap text-[11px] font-medium text-slate-600">
             <span className="font-semibold text-slate-950">{item.count}</span> {item.label}
           </span>
+          {item.tooltip ? <InfoTip align="end" placement="bottom" text={item.tooltip} /> : null}
         </span>
       ))}
     </>
@@ -727,7 +730,8 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
       fallbackFirstSeenMs: firstSeenMs,
       item,
-      lead: "Pre-consent tracking evidence was retained",
+      lead: "Pre-consent 3rd-party tracking evidence was retained",
+      maxEntries: 2,
       rowKind: "tracking"
     });
     if (canonicalSummary) {
@@ -742,6 +746,15 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
   }
 
   if (item.id === "pre_consent_cookies_storage") {
+    const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
+      fallbackFirstSeenMs: firstSeenMs,
+      item,
+      lead: "Pre-consent cookie/storage evidence was retained",
+      rowKind: "storage"
+    });
+    if (canonicalSummary) {
+      return canonicalSummary;
+    }
     const storageNames = uniqueStrings([
       ...getStringArrayFromEvidenceKeys(evidence, [
         "preConsentCookieExamples",
@@ -1184,12 +1197,14 @@ function getSignalObservedSummary(evidence: Record<string, unknown>) {
   return null;
 }
 
-type CanonicalRuntimeEvidenceKind = "advertising" | "analytics" | "retargeting" | "tracking";
+type CanonicalRuntimeEvidenceKind = "advertising" | "analytics" | "retargeting" | "storage" | "tracking";
 
 type CanonicalRuntimeEvidenceEntry = {
   category: string | null;
   firstSeenMs: number | null;
+  party: string | null;
   preConsent: boolean | null;
+  priority: string | null;
   vendor: string;
 };
 
@@ -1197,15 +1212,18 @@ function getCanonicalRuntimeEvidenceSummary(input: {
   fallbackFirstSeenMs: number | null;
   item: GdprEprivacyCoverageChecklistItem;
   lead: string;
+  maxEntries?: number;
   rowKind: CanonicalRuntimeEvidenceKind;
 }) {
   const entries = getCanonicalRuntimeEvidenceEntries(input.item);
   const matchingEntries = entries.filter((entry) => canonicalEntryMatchesKind(entry, input.rowKind));
+  const thirdPartyMatchingEntries = matchingEntries.filter(isThirdPartyCanonicalRuntimeEvidenceEntry);
   const primaryEntries = (
-    input.rowKind === "tracking" ? entries :
+    input.rowKind === "tracking" && thirdPartyMatchingEntries.length > 0 ? thirdPartyMatchingEntries.sort(compareCanonicalRuntimeEvidenceEntries) :
+      input.rowKind === "tracking" ? matchingEntries.sort(compareCanonicalRuntimeEvidenceEntries) :
       matchingEntries.length > 0 ? matchingEntries :
         entries
-  ).slice(0, 4);
+  ).slice(0, input.maxEntries ?? 4);
   if (primaryEntries.length === 0) {
     return null;
   }
@@ -1215,7 +1233,7 @@ function getCanonicalRuntimeEvidenceSummary(input: {
   ]);
   const preConsentObserved = primaryEntries.some((entry) => entry.preConsent === true) || getPreConsentQualifier(input.item) !== null;
   return joinRationaleParts([
-    `${input.lead}${preConsentObserved ? " before consent" : ""}: ${formatCanonicalRuntimeEvidenceEntries(primaryEntries)}`,
+    `${input.lead}${preConsentObserved ? " before consent" : ""}: ${formatCanonicalRuntimeEvidenceEntries(primaryEntries, { includeTiming: firstSeenMs === null })}`,
     formatFirstSeenPhrase(firstSeenMs),
     preConsentObserved ? "no consent action was recorded first" : null
   ]);
@@ -1224,8 +1242,12 @@ function getCanonicalRuntimeEvidenceSummary(input: {
 function getCanonicalRuntimeEvidenceEntries(item: GdprEprivacyCoverageChecklistItem): CanonicalRuntimeEvidenceEntry[] {
   const evidence = getRetainedEvidenceRecord(item);
   const rowEntries = uniqueCanonicalRuntimeEvidenceEntries([
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.preconsentThirdPartyTrackerGroups),
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.preconsent_third_party_tracker_groups),
     ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.preconsent_tracker_vendor_evidence),
     ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.preConsentTrackerVendorEvidence),
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.preconsentThirdPartyCookieStorageGroups),
+    ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.preconsent_third_party_cookie_storage_groups),
     ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.advertisingRetargetingVendorEvidence),
     ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.analyticsVendorEvidence),
     ...getCanonicalRuntimeEvidenceEntriesFromRows(evidence.findingEntities),
@@ -1238,7 +1260,9 @@ function getCanonicalRuntimeEvidenceEntries(item: GdprEprivacyCoverageChecklistI
     .map((vendor) => ({
       category: null,
       firstSeenMs: null,
+      party: null,
       preConsent: null,
+      priority: null,
       vendor
     }));
   return uniqueCanonicalRuntimeEvidenceEntries([...rowEntries, ...vendorListEntries]);
@@ -1267,7 +1291,9 @@ function getCanonicalRuntimeEvidenceEntriesFromRows(value: unknown): CanonicalRu
     return [{
       category: getFirstStringFromRecord(record, ["category", "vendorCategory", "vendor_category", "purpose", "classification"]),
       firstSeenMs: getFirstNumberFromRecord(record, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms"]),
+      party: getFirstStringFromRecord(record, ["party", "partyType", "party_type", "firstPartyOrThirdParty", "first_party_or_third_party"]),
       preConsent: getFirstBooleanFromRecord(record, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]),
+      priority: getFirstStringFromRecord(record, ["priority", "reviewPriority", "review_priority", "trackerPriority", "tracker_priority"]),
       vendor
     }];
   });
@@ -1284,14 +1310,51 @@ function canonicalEntryMatchesKind(entry: CanonicalRuntimeEvidenceEntry, kind: C
   if (kind === "retargeting") {
     return /\b(retarget|remarket|behavioral|audience|identity sync|idsync|cross[- ]site|profile activation|meta pixel|facebook pixel|linkedin insight|tiktok pixel|pinterest tag)\b/i.test(text);
   }
-  return /\b(track|tracking|advertis|analytics|measurement|retarget|cross[- ]site)\b/i.test(text);
+  if (kind === "storage") {
+    return /\b(cookie|storage|analytics|measurement|advertis|personal|retarget|audience)\b/i.test(text);
+  }
+  return /\b(track|tracking|ad|ads|adtech|advertising|advertis\w*|analytics|measurement|retarget|cross[- ]site)\b/i.test(text);
 }
 
-function formatCanonicalRuntimeEvidenceEntries(entries: CanonicalRuntimeEvidenceEntry[]) {
+function isThirdPartyCanonicalRuntimeEvidenceEntry(entry: CanonicalRuntimeEvidenceEntry) {
+  const party = entry.party?.trim().toLowerCase();
+  return party === "3rd" || party === "third_party" || party === "third-party" || party === "mixed";
+}
+
+function compareCanonicalRuntimeEvidenceEntries(left: CanonicalRuntimeEvidenceEntry, right: CanonicalRuntimeEvidenceEntry) {
+  const priorityDelta = getCanonicalRuntimeEvidencePriorityRank(left.priority) - getCanonicalRuntimeEvidencePriorityRank(right.priority);
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+  const timingDelta = (left.firstSeenMs ?? Number.POSITIVE_INFINITY) - (right.firstSeenMs ?? Number.POSITIVE_INFINITY);
+  if (timingDelta !== 0) {
+    return timingDelta;
+  }
+  return left.vendor.localeCompare(right.vendor);
+}
+
+function getCanonicalRuntimeEvidencePriorityRank(priority: string | null) {
+  const normalized = priority?.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "high" || normalized === "concern") {
+    return 0;
+  }
+  if (normalized === "review" || normalized === "review_needed") {
+    return 1;
+  }
+  if (normalized === "medium" || normalized === "partial_concern") {
+    return 2;
+  }
+  if (normalized === "contextual" || normalized === "low") {
+    return 3;
+  }
+  return 4;
+}
+
+function formatCanonicalRuntimeEvidenceEntries(entries: CanonicalRuntimeEvidenceEntry[], options: { includeTiming?: boolean } = {}) {
   return formatList(entries.map((entry) => {
     const details = [
       entry.category ? formatEvidenceCategory(entry.category) : null,
-      entry.firstSeenMs !== null ? `${Math.round(entry.firstSeenMs)}ms` : null
+      options.includeTiming === true && entry.firstSeenMs !== null ? `${Math.round(entry.firstSeenMs)}ms` : null
     ].filter(Boolean);
     return details.length > 0 ? `${entry.vendor} (${details.join(", ")})` : entry.vendor;
   })) ?? "";
@@ -1300,7 +1363,7 @@ function formatCanonicalRuntimeEvidenceEntries(entries: CanonicalRuntimeEvidence
 function uniqueCanonicalRuntimeEvidenceEntries(entries: CanonicalRuntimeEvidenceEntry[]) {
   const seen = new Set<string>();
   return entries.filter((entry) => {
-    const key = `${entry.vendor.toLowerCase()}|${entry.category ?? ""}|${entry.firstSeenMs ?? ""}|${entry.preConsent ?? ""}`;
+    const key = `${entry.vendor.toLowerCase()}|${entry.category ?? ""}|${entry.firstSeenMs ?? ""}|${entry.party ?? ""}|${entry.preConsent ?? ""}|${entry.priority ?? ""}`;
     if (seen.has(key)) {
       return false;
     }
