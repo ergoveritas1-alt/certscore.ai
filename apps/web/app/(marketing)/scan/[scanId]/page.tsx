@@ -127,7 +127,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   });
   const visualEvidenceArtifact =
     visualEvidenceArtifacts.find((artifact) => artifact.status === "available" && artifact.key) ?? null;
-  const visualEvidenceStatus = visualEvidenceArtifact?.status ?? visualEvidenceArtifacts[0]?.status ?? null;
   const visualEvidenceHref = visualEvidenceArtifact
     ? `/api/scans/${displayScanRecord.scan.id}/visual-evidence/${encodeURIComponent(visualEvidenceArtifact.id)}`
     : null;
@@ -155,7 +154,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
                   domainLabel={publicScanDomainLabel}
                   scanId={displayScanRecord.scan.id}
                   visualEvidenceHref={visualEvidenceHref}
-                  visualEvidenceStatus={visualEvidenceStatus}
                 />
                 <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                   <DomainScanForm

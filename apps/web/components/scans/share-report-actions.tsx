@@ -2,14 +2,12 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import type { VisualEvidenceArtifactStatus } from "../../lib/scans/visual-evidence";
 import { sendReportEmailAction, type SendReportEmailActionState } from "../../server/scans/email-report";
 
 type ShareReportActionsProps = {
   domainLabel: string;
   scanId: string;
   visualEvidenceHref?: string | null;
-  visualEvidenceStatus?: VisualEvidenceArtifactStatus | null;
 };
 
 const initialSendReportEmailActionState: SendReportEmailActionState = {
@@ -39,29 +37,12 @@ function iconActionClassName(tone: "primary" | "secondary" = "secondary") {
   return `${base} border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950`;
 }
 
-function disabledIconActionClassName() {
-  return "group relative inline-flex h-10 w-10 cursor-not-allowed items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-400 shadow-sm";
-}
-
 function IconTooltip({ label }: { label: string }) {
   return (
     <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
       {label}
     </span>
   );
-}
-
-function getVisualEvidenceUnavailableLabel(status: VisualEvidenceArtifactStatus | null | undefined) {
-  if (status === "upload_failed") {
-    return "Captured image upload failed";
-  }
-  if (status === "capture_failed") {
-    return "Captured image unavailable";
-  }
-  if (status === "disabled") {
-    return "Captured image disabled";
-  }
-  return "Captured image unavailable";
 }
 
 function ShareIcon() {
@@ -141,15 +122,53 @@ function VisualEvidenceIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+      <path d="m7 7 10 10M17 7 7 17" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+    </svg>
+  );
+}
+
+function ZoomOutIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <circle cx="10.5" cy="10.5" r="5.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M8 10.5h5M15 15l4 4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function ZoomInIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <circle cx="10.5" cy="10.5" r="5.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M10.5 8v5M8 10.5h5M15 15l4 4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function ImageLoadingGlyph() {
+  return (
+    <span aria-hidden="true" className="relative h-6 w-6 shrink-0">
+      <span className="absolute inset-0 rounded-full border border-sky-300/70" />
+      <span className="absolute inset-[3px] animate-spin rounded-full border-2 border-sky-200 border-t-sky-600" />
+      <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 animate-pulse rounded-full bg-sky-500" />
+    </span>
+  );
+}
+
 export function ShareReportActions({
   domainLabel,
   scanId,
-  visualEvidenceHref = null,
-  visualEvidenceStatus = null
+  visualEvidenceHref = null
 }: ShareReportActionsProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [currentUrl, setCurrentUrl] = useState("");
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
+  const [isVisualEvidenceDialogOpen, setIsVisualEvidenceDialogOpen] = useState(false);
+  const [isVisualEvidenceImageLoading, setIsVisualEvidenceImageLoading] = useState(false);
+  const [visualEvidenceZoom, setVisualEvidenceZoom] = useState(1);
   const [emailState, emailAction, isEmailPending] = useActionState(
     sendReportEmailAction,
     initialSendReportEmailActionState
@@ -229,19 +248,22 @@ export function ShareReportActions({
           <IconTooltip label="Monitor this site" />
         </Link>
         {visualEvidenceHref ? (
-          <a
+          <button
+            type="button"
             aria-label="View captured image"
             className={iconActionClassName()}
             data-analytics-cta-type="visual-evidence"
             data-analytics-event="report_cta_clicked"
-            href={visualEvidenceHref}
-            rel="noreferrer"
-            target="_blank"
+            onClick={() => {
+              setIsVisualEvidenceImageLoading(true);
+              setVisualEvidenceZoom(1);
+              setIsVisualEvidenceDialogOpen(true);
+            }}
             title="View captured image"
           >
             <VisualEvidenceIcon />
             <IconTooltip label="View captured image" />
-          </a>
+          </button>
         ) : null}
       </div>
       {copyState === "failed" ? (
@@ -293,6 +315,99 @@ export function ShareReportActions({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+      {isVisualEvidenceDialogOpen && visualEvidenceHref ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 px-4 py-6">
+          <div
+            aria-labelledby="visual-evidence-modal-title"
+            aria-modal="true"
+            className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+            role="dialog"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div className="space-y-1">
+                <h2 id="visual-evidence-modal-title" className="text-xl font-semibold tracking-normal text-slate-950">
+                  Captured image
+                </h2>
+                <p className="text-sm leading-6 text-slate-600">
+                  Visual evidence retained for {domainLabel}.
+                </p>
+              </div>
+              <div className="flex flex-none items-center gap-2">
+                <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <button
+                    type="button"
+                    aria-label="Zoom out captured image"
+                    className="inline-flex h-10 w-10 items-center justify-center text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
+                    disabled={visualEvidenceZoom <= 0.5}
+                    onClick={() => setVisualEvidenceZoom((value) => Math.max(0.5, Number((value - 0.25).toFixed(2))))}
+                    title="Zoom out"
+                  >
+                    <ZoomOutIcon />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Reset captured image zoom"
+                    className="h-10 min-w-14 border-x border-slate-200 px-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950"
+                    onClick={() => setVisualEvidenceZoom(1)}
+                    title="Reset zoom"
+                  >
+                    {Math.round(visualEvidenceZoom * 100)}%
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Zoom in captured image"
+                    className="inline-flex h-10 w-10 items-center justify-center text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
+                    disabled={visualEvidenceZoom >= 3}
+                    onClick={() => setVisualEvidenceZoom((value) => Math.min(3, Number((value + 0.25).toFixed(2))))}
+                    title="Zoom in"
+                  >
+                    <ZoomInIcon />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close captured image"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                  onClick={() => setIsVisualEvidenceDialogOpen(false)}
+                >
+                  <CloseIcon />
+                </button>
+              </div>
+            </div>
+            <div className="relative min-h-[18rem] flex-1 overflow-auto bg-slate-950/95 p-4">
+              {isVisualEvidenceImageLoading ? (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="inline-flex items-center gap-3 rounded-full border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm font-semibold text-slate-100 shadow-xl">
+                    <ImageLoadingGlyph />
+                    <span>Loading captured image</span>
+                  </div>
+                </div>
+              ) : null}
+              <img
+                alt={`Captured scan evidence for ${domainLabel}`}
+                className={`mx-auto block rounded-lg bg-white object-contain shadow-lg transition-opacity duration-150 ${isVisualEvidenceImageLoading ? "opacity-0" : "opacity-100"}`}
+                onError={() => setIsVisualEvidenceImageLoading(false)}
+                onLoad={() => setIsVisualEvidenceImageLoading(false)}
+                src={visualEvidenceHref}
+                style={{
+                  maxHeight: visualEvidenceZoom === 1 ? "72vh" : "none",
+                  maxWidth: visualEvidenceZoom === 1 ? "100%" : "none",
+                  width: `${visualEvidenceZoom * 100}%`
+                }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-3">
+              <button
+                className={actionClassName("primary")}
+                onClick={() => setIsVisualEvidenceDialogOpen(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

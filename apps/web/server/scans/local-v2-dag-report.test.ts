@@ -560,6 +560,54 @@ test("summarizePolicySurfaces surrounds Article 13 snippets with full retained p
   }
 });
 
+test("summarizePolicySurfaces retains outside-region service-provider transfer safeguards signals", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const evidenceText = "We share personal information with third parties, service providers, and business partners for the purposes described in this notice. These third parties may be in the Netherlands as well as within other countries in the European Economic Area (EEA). Sometimes they may also be outside the EEA. We have concluded agreements with our service providers and business partners, to ensure that your personal information is protected, both within and outside the EEA.";
+
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "target-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      normalizedUrl: "https://example.test/privacy",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: [
+        "Privacy Policy introduction. We explain how this policy works.",
+        "Information we collect. We collect account and usage information.",
+        evidenceText,
+        "Your privacy rights. You can exercise your rights by contacting us."
+      ].join(" "),
+      observedTopics: ["international_transfers"],
+      article13DisclosureSignals: [
+        {
+          disclosureType: "international_transfers",
+          status: "observed",
+          evidenceText,
+          confidence: 0.9,
+          source: "deterministic"
+        }
+      ]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+  const transferSignal = summary.article13DisclosureSignals.find((signal) =>
+    signal.disclosureType === "international_transfers"
+  );
+  const discardedTransferSignals = summary.discardedArticle13DisclosureSignals.filter((signal) =>
+    signal.disclosureType === "international_transfers"
+  );
+
+  assert.equal(transferSignal?.status, "observed");
+  assert.match(transferSignal?.evidenceText ?? "", /Sometimes they may also be outside the EEA/i);
+  assert.match(
+    transferSignal?.evidenceText ?? "",
+    /personal information is protected, both within and outside the EEA/i
+  );
+  assert.equal(discardedTransferSignals.length, 0);
+});
+
 test("summarizePolicySurfaces dedupes overlapping Article 13 evidence candidates", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const shorterRightsText = "You have the right to access and correct your personal data.";

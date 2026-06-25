@@ -42,6 +42,7 @@ import {
   GdprEprivacyCoverageChecklistCard,
   GdprEprivacyCoverageSummaryPills
 } from "./gdpr-eprivacy-coverage-checklist-card";
+import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
@@ -431,7 +432,7 @@ function formatScanTimeDurationMs(durationMs: number) {
   return parts.join(" ");
 }
 
-type TrackerInventoryRow = {
+export type TrackerInventoryRow = {
   category: string;
   confidence: number | null;
   domains: string[];
@@ -726,7 +727,7 @@ const CONSENT_REVIEW_PRIORITY_LABELS: Record<ConsentReviewPriority, string> = {
 const CONSENT_REVIEW_PRIORITY_INFOTIPS: Record<ConsentReviewPriority, string> = {
   contextual: "Observed activity from categories commonly associated with site operation, security, payment, authentication, consent management, CDN/static delivery, or other context-dependent functions.",
   high: "Pre-consent activity from a category commonly associated with advertising, audience measurement, retargeting, behavioral tracking, session replay, or fingerprinting.",
-  medium: "Pre-consent activity that is review-relevant, such as analytics, experimentation, personalization, or vendor-associated first-party storage, but may require context before being treated as a stronger concern.",
+  medium: "Pre-consent activity that is review-relevant, such as analytics, experimentation, personalization, tag management, marketing automation, or vendor-associated first-party storage, but may require context before being treated as a stronger concern.",
   review_needed: "Unknown, ambiguous, low-confidence, or insufficiently classified evidence that should be manually reviewed."
 };
 
@@ -740,7 +741,7 @@ function normalizeInventoryPurpose(value: string | null | undefined) {
   return (value ?? "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
 }
 
-function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {
+export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {
   const purpose = normalizeInventoryPurpose(getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance));
   const confidence = getTrackerInventoryConfidence(row);
 
@@ -750,10 +751,10 @@ function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentRevie
   if (/^(personalization|personalisation)$/.test(purpose) && confidence === "low") {
     return "review_needed";
   }
-  if (/^(analytics|experimentation|personalization|personalisation|a_b_testing|embedded_content)$/.test(purpose)) {
+  if (/^(analytics|experimentation|personalization|personalisation|a_b_testing|embedded_content|tag_management|tag_manager|marketing_automation)$/.test(purpose)) {
     return row.preConsent ? "medium" : "contextual";
   }
-  if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {
+  if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics)$/.test(purpose)) {
     return "contextual";
   }
   if (/^(cdn_static|cdn|functional)$/.test(purpose)) {
@@ -1059,7 +1060,7 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
   const gradient = rows.length > 0 ? `conic-gradient(${gradientStops.join(", ")})` : "conic-gradient(#e2e8f0 0 100%)";
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+    <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Purpose mix</p>
       <div className="mt-3 flex items-center gap-3">
         <div
@@ -1162,19 +1163,6 @@ function RuntimeInventoryTable({
     ...groupedCookieRows.map((row) => ({ ...row, type: "cookie" as const })),
     ...groupedTrackerRows.map((row) => ({ ...row, type: "tracker" as const }))
   ].sort(compareInventoryPriorityRows);
-  const firstHighPriorityTrackerRows = groupedInventoryRows
-    .filter((row) => row.type === "tracker" && row.priority === "high" && row.firstSeenMs !== null)
-    .sort((left, right) => (left.firstSeenMs ?? 0) - (right.firstSeenMs ?? 0));
-  const firstHighPriorityTracker = firstHighPriorityTrackerRows[0] ?? null;
-  const inventorySummaryCards = firstHighPriorityTracker?.firstSeenMs !== null && firstHighPriorityTracker?.firstSeenMs !== undefined
-    ? [
-        {
-          detail: null,
-          label: "First high-priority tracker",
-          value: formatInventorySummaryTime(firstHighPriorityTracker.firstSeenMs)
-        }
-      ]
-    : [];
   const copyPayload = buildRuntimeInventoryCopyPayload(groupedInventoryRows);
 
   return (
@@ -1190,23 +1178,14 @@ function RuntimeInventoryTable({
           payload={copyPayload}
         />
         <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:grid-cols-[minmax(17rem,0.9fr)_minmax(0,2.1fr)] lg:items-start lg:px-5">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          <div className="grid gap-3 sm:grid-cols-2 lg:h-[317px] lg:grid-cols-1 lg:grid-rows-2">
             <InventoryPurposeCard rows={groupedInventoryRows} />
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+            <div className="min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Priority mix</p>
               <InventoryPriorityDonut rows={groupedInventoryRows} />
             </div>
-            {inventorySummaryCards.map((metric) => (
-              <div key={metric.label} className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{metric.label}</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{metric.value}</p>
-                {metric.detail ? (
-                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{metric.detail}</p>
-                ) : null}
-              </div>
-            ))}
           </div>
-          <div className="overflow-hidden rounded-xl border border-slate-200 lg:h-[412px]">
+          <div className="overflow-hidden rounded-xl border border-slate-200 lg:h-[317px]">
             <div className="max-h-[340px] overflow-auto lg:h-full lg:max-h-none">
             <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-sm">
               <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
@@ -7402,7 +7381,17 @@ export function SharedScanDetailView({
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {
       id: "gdpr_eprivacy",
-      rows: reportableGdprEprivacyCoverageChecklist,
+      rows: reportableGdprEprivacyCoverageChecklist.map((item) => {
+        const checklistDescriptor = deriveGdprEprivacyCoverageChecklistRowRationale(item);
+        return {
+          ...item,
+          criticalEvidence: {
+            ...item.criticalEvidence,
+            statusBasis: checklistDescriptor
+          },
+          note: checklistDescriptor
+        };
+      }),
       title: "GDPR / ePrivacy"
     }
   });

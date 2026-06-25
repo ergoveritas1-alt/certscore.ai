@@ -332,6 +332,65 @@ test("deriveGdprEprivacyCoverageChecklist keeps medium third-party cookie storag
   assert.match(row.criticalEvidence.statusBasis, /Medium priority.*Analytics/);
 });
 
+test("deriveGdprEprivacyCoverageChecklist does not let unknown review cookies outrank classified medium storage", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    runtimeCookieRows: [
+      makeRuntimeCookieRow({
+        category: "unknown",
+        cookieName: "unknown_cookie",
+        domain: ".unknown.example",
+        firstObservedAtMs: 900,
+        initiatorVendor: null
+      }),
+      makeRuntimeCookieRow({
+        category: "Marketing automation",
+        cookieName: "__kla_id",
+        domain: ".example.test",
+        firstObservedAtMs: 1422,
+        initiatorDomain: "static.klaviyo.com",
+        initiatorUrl: "https://static.klaviyo.com/onsite/js/klaviyo.js",
+        initiatorVendor: "Klaviyo"
+      })
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "pre_consent_cookies_storage");
+  assert.equal(row.status, "Review signal");
+  assert.equal(row.criticalEvidence.retainedEvidence.cookieStoragePriority, "medium");
+  assert.match(row.explanation, /Klaviyo - Marketing automation \(1422ms\)/);
+  assert.doesNotMatch(row.explanation, /unknown_cookie|Unknown/);
+});
+
+test("deriveGdprEprivacyCoverageChecklist ignores first-party and unknown-party review cookies for third-party storage row", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    runtimeCookieRows: [
+      makeRuntimeCookieRow({
+        category: "unknown",
+        cookieName: "first_party_unknown",
+        domain: ".example.test",
+        firstObservedAtMs: 800,
+        party: "first_party"
+      }),
+      makeRuntimeCookieRow({
+        category: "unknown",
+        cookieName: "unknown_party",
+        domain: ".example.test",
+        firstObservedAtMs: null,
+        party: "unknown"
+      })
+    ],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "pre_consent_cookies_storage");
+  assert.equal(row.status, "Not observed");
+});
+
 test("deriveGdprEprivacyCoverageChecklist lets medium cookie inventory override legacy gap finding status", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,

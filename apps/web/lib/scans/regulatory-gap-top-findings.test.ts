@@ -229,3 +229,41 @@ test("buildRegulatoryGapTopFindings surfaces review rows only when no stronger r
     "review_signal"
   );
 });
+
+test("buildRegulatoryGapTopFindings uses checklist status basis for GDPR row summaries", () => {
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [
+        {
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            retainedEvidence: {
+              policySurfaceSummary: {
+                privacyPolicyPresent: true
+              }
+            },
+            statusBasis:
+              "Not confirmed from retained policy-surface evidence; A privacy-policy surface was retained, but retention-period, deletion, anonymization, or data-lifecycle disclosure text was not confidently extracted for this row."
+          },
+          evidenceState: "not_observed",
+          explanation: "Whether retained privacy-policy evidence included a data-retention disclosure signal.",
+          id: "retention_disclosure_observed",
+          label: "Retention disclosure",
+          status: "Not confirmed"
+        }
+      ]
+    }
+  });
+
+  assert.equal(findings.length, 1);
+  assert.equal(
+    findings[0]?.shortSummary,
+    "Not confirmed from retained policy-surface evidence; A privacy-policy surface was retained, but retention-period, deletion, anonymization, or data-lifecycle disclosure text was not confidently extracted for this row."
+  );
+  assert.deepEqual(findings[0]?.evidencePreview, [
+    "GDPR / ePrivacy: Retention disclosure",
+    "Not confirmed from retained policy-surface evidence; A privacy-policy surface was retained, but retention-period, deletion, anonymization, or data-lifecycle disclosure text was not confidently extracted for this row."
+  ]);
+});

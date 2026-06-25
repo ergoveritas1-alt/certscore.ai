@@ -151,6 +151,43 @@ export async function policySurfaceScanner(
       () => fetchText(input.normalizedUrl, remainingMs(input, moduleStartedAtMs)),
     );
     if (!homepage.ok) {
+      const renderedCandidates = await recordPolicyTiming(
+        timingBreakdown,
+        "homepage-failed rendered discovery",
+        "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
+        () => extractRenderedCandidates(input, moduleStartedAtMs),
+      );
+      renderedCandidateCount = renderedCandidates.length;
+      if (renderedCandidates.length > 0) {
+        observedCandidateCount = renderedCandidates.length;
+        const renderedResults = await fetchRankedPolicyCandidates({
+          input,
+          timingBreakdown,
+          moduleStartedAtMs,
+          candidates: renderedCandidates,
+          labelPrefix: "homepage-failed rendered",
+          policySurfaceTextArtifactBudget,
+        });
+        observations.push(...renderedResults.observations);
+        artifactRefs.push(...renderedResults.artifactRefs);
+        if (hasRetainedCorePolicyOrControlSurface(observations)) {
+          artifactRefs.push(await writePolicyCaptureDiagnostics({
+            input,
+            moduleStartedAtMs,
+            staticCandidateCount,
+            renderedCandidateCount,
+            observedCandidateCount,
+            commonPathFallbackUsed,
+            observations,
+            candidates: renderedCandidates,
+          }));
+          return {
+            moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
+            policySurfaceObservations: observations,
+            artifactRefs,
+          };
+        }
+      }
       const fallbackCandidates = commonPathCandidatesFor(input.normalizedUrl, 0);
       commonPathFallbackUsed = true;
       const fallbackResults = await fetchRankedPolicyCandidates({
@@ -172,7 +209,10 @@ export async function policySurfaceScanner(
           observedCandidateCount,
           commonPathFallbackUsed,
           observations,
-          candidates: fallbackCandidates,
+          candidates: dedupeCandidates([
+            ...renderedCandidates,
+            ...fallbackCandidates,
+          ]),
         }));
         return {
           moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
@@ -240,6 +280,8 @@ export async function policySurfaceScanner(
     const initialCandidates = linkCandidates.length > 0
       ? linkCandidates
       : commonPathCandidates;
+    let speculativeCommonPathRankedCandidates: PolicySurfaceCandidate[] | undefined;
+    let primaryRankedCandidatesFromCommonPath = false;
     let rankedCandidates = input.discoveryMode === "fast"
       ? await recordPolicyTiming(
         timingBreakdown,
@@ -253,18 +295,52 @@ export async function policySurfaceScanner(
         `Rank ${initialCandidates.length} policy candidates for supported surfaces.`,
         () => rankCandidatesWithRequiredNano(input, initialCandidates),
       );
-    if (rankedCandidates.length === 0 && input.discoveryMode === "fast") {
-      rankedCandidates = await recordPolicyTiming(
-        timingBreakdown,
-        "Nano link ranking",
-        `Rank ${initialCandidates.length} policy candidates for supported surfaces after deterministic fast-path found no fetchable candidates.`,
-        () => rankCandidatesWithRequiredNano(input, initialCandidates),
+    if (input.discoveryMode !== "fast" && linkCandidates.length === 0 && rankedCandidates.length > 0) {
+      rankedCandidates = mergeCommonPathFallbackCandidates(
+        deterministicCommonPathFetchFallback(commonPathCandidates),
+        rankedCandidates,
       );
+    }
+    if (rankedCandidates.length === 0 && input.discoveryMode === "fast") {
+      if (shouldSpeculateCommonPathNanoRanking(linkCandidates, commonPathCandidates)) {
+        const [linkNanoRanked, commonPathNanoRanked] = await Promise.allSettled([
+          recordPolicyTiming(
+            timingBreakdown,
+            "Nano link ranking",
+            `Rank ${initialCandidates.length} policy candidates for supported surfaces after deterministic fast-path found no fetchable candidates.`,
+            () => rankCandidatesWithRequiredNano(input, initialCandidates),
+          ),
+          recordPolicyTiming(
+            timingBreakdown,
+            "Nano common-path ranking",
+            `Rank ${commonPathCandidates.length} common policy paths in parallel with fallback link ranking.`,
+            () => rankCandidatesWithRequiredNano(
+              input,
+              commonPathCandidates,
+            ),
+          ),
+        ]);
+        if (linkNanoRanked.status === "rejected") {
+          throw linkNanoRanked.reason;
+        }
+        rankedCandidates = linkNanoRanked.value;
+        speculativeCommonPathRankedCandidates = mergeCommonPathFallbackCandidates(
+          deterministicCommonPathFetchFallback(commonPathCandidates),
+          commonPathNanoRanked.status === "fulfilled" ? commonPathNanoRanked.value : [],
+        );
+      } else {
+        rankedCandidates = await recordPolicyTiming(
+          timingBreakdown,
+          "Nano link ranking",
+          `Rank ${initialCandidates.length} policy candidates for supported surfaces after deterministic fast-path found no fetchable candidates.`,
+          () => rankCandidatesWithRequiredNano(input, initialCandidates),
+        );
+      }
     }
     if (rankedCandidates.length === 0 && linkCandidates.length > 0) {
       rankedCandidates = deterministicFetchFallback(linkCandidates);
       if (rankedCandidates.length === 0) {
-        rankedCandidates = await recordPolicyTiming(
+        rankedCandidates = speculativeCommonPathRankedCandidates ?? await recordPolicyTiming(
           timingBreakdown,
           "Nano common-path ranking",
           `Rank ${commonPathCandidates.length} common policy paths after empty first pass.`,
@@ -274,6 +350,7 @@ export async function policySurfaceScanner(
           ),
         );
         commonPathFallbackUsed = true;
+        primaryRankedCandidatesFromCommonPath = true;
         if (rankedCandidates.length === 0) {
           rankedCandidates = deterministicFetchFallback(commonPathCandidates);
         }
@@ -298,13 +375,20 @@ export async function policySurfaceScanner(
     observations.push(...policyResults.observations);
     artifactRefs.push(...policyResults.artifactRefs);
 
-    if (linkCandidates.length > 0 && !hasRetainedCorePolicyOrControlSurface(observations) && commonPathCandidates.length > 0) {
+    if (
+      linkCandidates.length > 0 &&
+      !primaryRankedCandidatesFromCommonPath &&
+      !hasRetainedCorePolicyOrControlSurface(observations) &&
+      commonPathCandidates.length > 0
+    ) {
       commonPathFallbackUsed = true;
+      const commonPathRankedCandidates = speculativeCommonPathRankedCandidates ??
+        deterministicCommonPathFetchFallback(commonPathCandidates);
       const commonPathResults = await fetchPolicyCandidateGroup({
         input,
         timingBreakdown,
         moduleStartedAtMs,
-        rankedCandidates: deterministicCommonPathFetchFallback(commonPathCandidates),
+        rankedCandidates: commonPathRankedCandidates,
         labelPrefix: "common-path policy",
         policySurfaceTextArtifactBudget,
       });
@@ -548,12 +632,27 @@ async function processPolicyCandidate({
     };
   }
 
-  const fetched = await recordPolicyTiming(
+  let fetched = await recordPolicyTiming(
     timingBreakdown,
     `policy fetch ${candidateIndex + 1}`,
     `Fetch ${candidate.deterministicSurfaceType} candidate document.`,
     () => fetchText(candidate.normalizedUrl, remainingPolicyFetchMs(input, moduleStartedAtMs)),
   );
+  if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch(fetched.status, input, moduleStartedAtMs)) {
+    const renderedFetched = await recordPolicyTiming(
+      timingBreakdown,
+      `policy rendered fetch fallback ${candidateIndex + 1}`,
+      `Fetch ${candidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch failed.`,
+      () => fetchRenderedPolicyDocumentText({
+        input,
+        url: candidate.normalizedUrl,
+        timeoutMs: Math.min(4_000, remainingMs(input, moduleStartedAtMs)),
+      }),
+    );
+    if (renderedFetched.ok) {
+      fetched = renderedFetched;
+    }
+  }
   if (!fetched.ok) {
     return {
       observation: observationFromCandidate(candidate, {
@@ -698,6 +797,54 @@ async function processPolicyCandidate({
       visibleText,
     ),
   };
+}
+
+function shouldTryRenderedPolicyDocumentFetch(
+  status: number | undefined,
+  input: PolicySurfaceScannerInput,
+  moduleStartedAtMs: number,
+): boolean {
+  return Boolean(status && [401, 403, 429].includes(status)) &&
+    remainingMs(input, moduleStartedAtMs) >= 2_500;
+}
+
+async function fetchRenderedPolicyDocumentText(input: {
+  input: PolicySurfaceScannerInput;
+  url: string;
+  timeoutMs: number;
+}): Promise<FetchTextResult> {
+  let browser: Browser | undefined;
+  const ownsBrowser = !input.input.browser;
+  try {
+    browser = input.input.browser ?? await chromium.launch(chromiumLaunchOptions({ headless: true }));
+    const context = await browser.newContext(chromiumContextOptions());
+    const page = await context.newPage();
+    const response = await page.goto(input.url, {
+      waitUntil: "domcontentloaded",
+      timeout: Math.max(1_000, input.timeoutMs),
+    });
+    await page.waitForLoadState("networkidle", {
+      timeout: Math.min(1_000, Math.max(500, input.timeoutMs)),
+    }).catch(() => undefined);
+    await page.waitForTimeout(Math.min(350, Math.max(150, input.timeoutMs)));
+    const html = await page.content().catch(() => "");
+    const bodyText = await page.locator("body").innerText({ timeout: 1_000 }).catch(() => "");
+    const text = html || bodyText;
+    if (!text) {
+      return { ok: false, status: response?.status(), text: "" };
+    }
+    return {
+      ok: Boolean(response?.ok()),
+      status: response?.status(),
+      text: text.slice(0, 500_000),
+    };
+  } catch {
+    return { ok: false, text: "" };
+  } finally {
+    if (ownsBrowser) {
+      await browser?.close().catch(() => undefined);
+    }
+  }
 }
 
 async function resolvePolicyVisibleText(input: {
@@ -1178,7 +1325,48 @@ async function extractRenderedCandidates(
       return output;
     }).catch(() => []);
 
-    return rawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
+    const renderedHtml = await page.content().catch(() => "");
+    const renderedHtmlCandidates = renderedHtml
+      ? extractCandidates(input.normalizedUrl, renderedHtml, htmlToVisibleText(renderedHtml))
+      : [];
+    const fallbackRawCandidates = await page.locator("a[href], button, [role='button'], [role='link'], [aria-label], [title]")
+      .evaluateAll((elements) => elements.map((element) => {
+          const normalizeText = (value: string | null | undefined): string =>
+            (value ?? "").replace(/\s+/g, " ").trim();
+          const href = element.getAttribute("href") ??
+            element.getAttribute("data-href") ??
+            element.getAttribute("data-url") ??
+            element.getAttribute("data-link") ??
+            undefined;
+          const text = normalizeText([
+            element.textContent,
+            element.getAttribute("aria-label"),
+            element.getAttribute("title"),
+            element.getAttribute("data-testid"),
+            href,
+          ].filter(Boolean).join(" "));
+          const domLocation: PolicySurfaceCandidate["domLocation"] = element.closest("footer")
+            ? "footer"
+            : element.closest("header") || element.closest("nav")
+              ? "header"
+              : "body";
+          return {
+            href,
+            text: text.slice(0, 220),
+            selector: element.tagName.toLowerCase(),
+            domLocation,
+            clickable: element.matches("button, a, [role='button'], [role='link']"),
+          };
+        }))
+      .catch(() => []);
+    const retainedRawCandidates = [
+      ...rawCandidates,
+      ...fallbackRawCandidates,
+    ];
+
+    return dedupeCandidates([
+      ...renderedHtmlCandidates,
+      ...retainedRawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
       const normalizedUrl = candidate.href ? normalizeUrl(candidate.href, input.normalizedUrl) : input.normalizedUrl;
       const evidenceText = `${candidate.text} ${normalizedUrl ?? ""}`;
       const deterministic = classifySurface(evidenceText);
@@ -1210,9 +1398,10 @@ async function extractRenderedCandidates(
           ? "footer_link"
           : candidate.domLocation === "header" || candidate.domLocation === "nav"
             ? "header_link"
-            : "page_text_link",
+          : "page_text_link",
       }];
-    });
+      }),
+    ]);
   } catch {
     return [];
   } finally {
@@ -1304,6 +1493,15 @@ function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): Polic
     .slice(0, MAX_CANDIDATES_TO_FETCH);
 }
 
+function shouldSpeculateCommonPathNanoRanking(
+  linkCandidates: PolicySurfaceCandidate[],
+  commonPathCandidates: PolicySurfaceCandidate[],
+): boolean {
+  return linkCandidates.length > 0 &&
+    commonPathCandidates.length > 0 &&
+    deterministicFetchFallback(linkCandidates).length === 0;
+}
+
 function deterministicCommonPathFetchFallback(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {
   return dedupeCommonPathCandidates(candidates)
     .filter((candidate) =>
@@ -1319,6 +1517,20 @@ function deterministicCommonPathFetchFallback(candidates: PolicySurfaceCandidate
       left.normalizedUrl.localeCompare(right.normalizedUrl),
     )
     .slice(0, MAX_CANDIDATES_TO_FETCH);
+}
+
+function mergeCommonPathFallbackCandidates(
+  deterministicRanked: PolicySurfaceCandidate[],
+  nanoRanked: PolicySurfaceCandidate[],
+): PolicySurfaceCandidate[] {
+  const selected = new Map<string, PolicySurfaceCandidate>();
+  for (const candidate of [...deterministicRanked, ...nanoRanked]) {
+    const key = commonPathCandidateKey(candidate.normalizedUrl);
+    if (!selected.has(key)) {
+      selected.set(key, candidate);
+    }
+  }
+  return [...selected.values()].slice(0, MAX_CANDIDATES_TO_FETCH);
 }
 
 function dedupeCommonPathCandidates(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {
@@ -1805,7 +2017,7 @@ function extractPolicyFacts(text: string): PolicyFacts {
     ["legal_basis", /legal basis|lawful basis|legitimate interests?|contractual necessity|public interest|vital interests?/i, "legal basis"],
     ["recipients_or_vendor_categories", /recipients|service providers|processors|partners|third parties|third-party/i, "recipients"],
     ["data_subject_rights", /right to access|right to delete|right to erasure|right to rectification|right to object|data subject rights|exercise (?:your )?rights/i, "data subject rights"],
-    ["international_transfers", /international transfer|transfer (?:your )?(?:personal )?(?:data|information).{0,80}(?:outside|to)|standard contractual clauses|adequacy decision/i, "international transfers"],
+    ["international_transfers", /international transfer|transfer (?:your )?(?:personal )?(?:data|information).{0,80}(?:outside|to)|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,180}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|standard contractual clauses|adequacy decision/i, "international transfers"],
     ["dpo_contact", /data protection officer|\bdpo\b/i, "DPO"],
     ["supervisory_authority", /supervisory authority|data protection authority|lodge a complaint|complain to (?:a )?(?:regulator|authority)/i, "supervisory authority"],
     ["ai_generated_content", /ai-generated|generated by ai/i, "ai generated content"],
@@ -1900,8 +2112,8 @@ const ARTICLE13_SECTION_PROFILES: Array<{
   {
     disclosureType: "international_transfers",
     headingPatterns: [/data transfers?/i, /international transfers?/i],
-    textPatterns: [/servers around the world/i, /processed? outside (?:your )?country/i, /outside (?:of )?the country where you live/i, /legal frameworks? relating to the transfer of data/i, /data protection laws vary/i, /adequacy/i, /safeguards/i, /EU-U\.S\. Data Privacy Framework/i, /UK Extension/i, /Swiss-U\.S\./i],
-    observedPattern: /servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|adequacy|safeguards|EU-U\.S\. Data Privacy Framework|UK Extension|Swiss-U\.S\.|standard contractual clauses/i,
+    textPatterns: [/servers around the world/i, /processed? outside (?:your )?country/i, /outside (?:of )?the country where you live/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /third countr(?:y|ies)/i, /legal frameworks? relating to the transfer of data/i, /data protection laws vary/i, /agreements?.{0,180}(?:protect|safeguard)/i, /adequacy/i, /safeguards/i, /EU-U\.S\. Data Privacy Framework/i, /UK Extension/i, /Swiss-U\.S\./i],
+    observedPattern: /servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|legal frameworks? relating to the transfer of data|data protection laws vary|adequacy|safeguards|EU-U\.S\. Data Privacy Framework|UK Extension|Swiss-U\.S\.|standard contractual clauses/i,
   },
   {
     disclosureType: "supervisory_authority",
@@ -2010,6 +2222,7 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
     pattern: RegExp;
     partialPattern?: RegExp;
     excerptPatterns: RegExp[];
+    maxEvidenceChars?: number;
   }> = [
     {
       disclosureType: "controller_contact",
@@ -2045,9 +2258,10 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
     },
     {
       disclosureType: "international_transfers",
-      pattern: /(?:data transfers?.{0,320}(?:servers around the world|outside (?:of )?the country|legal frameworks?|data privacy frameworks?|safeguards)|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|EU-U\.S\.|UK Extension|Swiss-U\.S\.|privacy shield)/i,
+      pattern: /(?:data transfers?.{0,320}(?:servers around the world|outside (?:of )?the country|legal frameworks?|data privacy frameworks?|safeguards)|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,240}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,240}(?:personal information|personal data|data|information).{0,240}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|EU-U\.S\.|UK Extension|Swiss-U\.S\.|privacy shield)/i,
       partialPattern: /transfer (?:your )?(?:personal )?(?:data|information)/i,
-      excerptPatterns: [/data transfers?.{0,320}(?:servers around the world|outside (?:of )?the country|legal frameworks?|data privacy frameworks?|safeguards)/i, /servers around the world/i, /processed? (?:on servers )?outside (?:your )?country/i, /outside (?:of )?the country where you live/i, /legal frameworks? relating to the transfer of data/i, /data protection laws vary/i, /data privacy framework/i, /international transfer/i, /cross-border transfer/i, /standard contractual clauses/i, /adequacy decision/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /third countr(?:y|ies)/i, /\bdpf\b/i, /EU-U\.S\./i, /UK Extension/i, /Swiss-U\.S\./i, /privacy shield/i, /transfer (?:your )?(?:personal )?(?:data|information)/i],
+      excerptPatterns: [/sometimes (?:they|such third parties|these third parties|service providers|business partners|processors|vendors|recipients).{0,120}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /(?:these|such)?\s*(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,180}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /agreements?.{0,240}(?:personal information|personal data|data|information).{0,240}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))/i, /data transfers?.{0,320}(?:servers around the world|outside (?:of )?the country|legal frameworks?|data privacy frameworks?|safeguards)/i, /servers around the world/i, /processed? (?:on servers )?outside (?:your )?country/i, /outside (?:of )?the country where you live/i, /legal frameworks? relating to the transfer of data/i, /data protection laws vary/i, /data privacy framework/i, /international transfer/i, /cross-border transfer/i, /standard contractual clauses/i, /adequacy decision/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /third countr(?:y|ies)/i, /\bdpf\b/i, /EU-U\.S\./i, /UK Extension/i, /Swiss-U\.S\./i, /privacy shield/i, /transfer (?:your )?(?:personal )?(?:data|information)/i],
+      maxEvidenceChars: 640,
     },
     {
       disclosureType: "dpo_contact",
@@ -2081,7 +2295,7 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
     }
     const evidenceText = boundedExcerptForPatterns(text, rawStatus === "partial" && rule.partialPattern
       ? [rule.partialPattern, ...rule.excerptPatterns]
-      : rule.excerptPatterns).slice(0, 320);
+      : rule.excerptPatterns).slice(0, rule.maxEvidenceChars ?? 320);
     const rejectReason = article13DisclosureRejectReason(evidenceText, rule.disclosureType);
     const confidence = confidenceForArticle13DisclosureSignal(rule.disclosureType, rawStatus, evidenceText);
     const status = rawStatus === "observed" && confidence < 0.74
@@ -2146,6 +2360,8 @@ function confidenceForArticle13DisclosureSignal(
       return 0.68;
     }
     case "international_transfers":
+      if (/\b(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?)\b.{0,220}\boutside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)\b/i.test(text) &&
+        /\b(?:personal information|personal data|data|information|agreements?|contracts?|safeguards?|protect(?:ed)?)\b/i.test(text)) return 0.9;
       if (/\b(?:standard contractual clauses|adequacy decision|data privacy framework|\bdpf\b|EU-U\.S\.|UK Extension|Swiss-U\.S\.|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies))\b/i.test(text)) return 0.92;
       if (/\b(?:servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|cross-border transfer|international transfer)\b/i.test(text)) return 0.84;
       return 0.66;
@@ -2556,7 +2772,7 @@ function boundedPolicyAnalysisExcerpt(text: string): string {
     },
     {
       label: "international_transfers",
-      patterns: [/data transfers?/i, /data transfer frameworks/i, /international transfer/i, /cross-border transfer/i, /servers around the world/i, /processed? (?:on servers )?outside (?:your )?country/i, /outside (?:of )?the country where you live/i, /legal frameworks? relating to the transfer of data/i, /data protection laws vary/i, /standard contractual clauses/i, /adequacy decision/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /third countr(?:y|ies)/i, /data privacy framework|\bDPF\b|EU-U\.S\.|UK Extension|Swiss-U\.S\./i],
+      patterns: [/data transfers?/i, /data transfer frameworks/i, /international transfer/i, /cross-border transfer/i, /servers around the world/i, /processed? (?:on servers )?outside (?:your )?country/i, /outside (?:of )?the country where you live/i, /(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))/i, /legal frameworks? relating to the transfer of data/i, /data protection laws vary/i, /standard contractual clauses/i, /adequacy decision/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /third countr(?:y|ies)/i, /data privacy framework|\bDPF\b|EU-U\.S\.|UK Extension|Swiss-U\.S\./i],
     },
     {
       label: "supervisory_authority",
@@ -3100,7 +3316,7 @@ function hasRowSpecificArticle13Terms(
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);
     case "international_transfers":
-      return /\b(?:data transfers?|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|transfer (?:your )?(?:personal )?(?:data|information).{0,80}outside (?:your )?country)\b/i.test(text);
+      return /\b(?:data transfers?|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|transfer (?:your )?(?:personal )?(?:data|information).{0,80}outside (?:your )?country|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
     case "dpo_contact":
       return /\b(?:data protection officer|\bdpo\b|data protection contact)\b/i.test(text);
     case "supervisory_authority":

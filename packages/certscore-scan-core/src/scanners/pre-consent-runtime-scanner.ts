@@ -589,7 +589,10 @@ export async function preConsentRuntimeScanner(
       },
     );
     if (shouldRecaptureConsentUiAfterCmpRuntime(consentObservation, domText, cmpRuntimeObservations)) {
-      const recaptureTimeoutMs = consentUiBudget.timeoutFor(fastWait ? 1_750 : 2_250);
+      const recaptureTimeoutMs = Math.max(
+        consentUiBudget.timeoutFor(fastWait ? 1_750 : 2_250),
+        fastWait ? 2_500 : 3_000,
+      );
       const recapturedConsentObservation = await recordBoundedTiming(
         timingBreakdown,
         "page evidence: consent UI CMP recapture",
@@ -598,7 +601,7 @@ export async function preConsentRuntimeScanner(
         () => detectConsentUi(
           page,
           input.scanStartedAtMs,
-          Math.min(fastWait ? 1_500 : 2_000, recaptureTimeoutMs),
+          Math.min(fastWait ? 2_250 : 2_750, recaptureTimeoutMs),
           {
             waitForActionableChoiceControls: true,
             waitForControlsOnTextOnlySurface: true,
@@ -607,10 +610,13 @@ export async function preConsentRuntimeScanner(
         () => consentObservation,
       );
       if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
+        const recaptureBasis = hasActionableConsentChoiceControl(recapturedConsentObservation)
+          ? "recapture:post_cmp_first_layer_choice_controls"
+          : "recapture:post_cmp_first_layer_controls";
         consentObservation = mergeConsentUiObservations(
           consentObservation,
           recapturedConsentObservation,
-          "recapture:post_cmp_first_layer_choice_controls",
+          recaptureBasis,
         );
         domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
       } else {
@@ -1539,6 +1545,7 @@ export async function detectConsentUi(
     waitForControlsOnTextOnlySurface?: boolean;
   } = {},
 ): Promise<ConsentUiObservation> {
+  const waitStartedAtMs = Date.now();
   const immediateObservation = await readConsentUiObservation(page, scanStartedAtMs);
   if (
     immediateObservation.controls.length > 0 && (
@@ -1561,10 +1568,10 @@ export async function detectConsentUi(
       if (/do not sell|do not share|do not sell or share|your privacy choices|privacy choices|opt[- ]out|targeted advertising|limit use of (?:my )?sensitive/.test(normalized)) {
         return "do_not_sell_share";
       }
-      if (/^(?:accept all|allow all|accept cookies|i agree|agree and continue)$/.test(normalized) || /\baccept all\b/.test(normalized)) {
+      if (/^(?:accept|agree|allow|accept all|allow all|accept cookies|i agree|agree and continue)$/.test(normalized) || /\baccept all\b/.test(normalized)) {
         return "accept_all";
       }
-      if (/reject all|decline all|deny all|refuse all|only necessary|necessary only|only essential|essential only|essential cookies only|accept essential|accept necessary/i.test(normalized)) {
+      if (/^(?:reject|decline|deny|refuse)$/.test(normalized) || /reject all|decline all|deny all|refuse all|only necessary|necessary only|only essential|essential only|essential cookies only|accept essential|accept necessary/i.test(normalized)) {
         return "reject_all";
       }
       if (/show purposes|manage|preferences|settings|choices|customi[sz]e|options|privacy center/i.test(normalized)) {
@@ -1591,6 +1598,24 @@ export async function detectConsentUi(
       const rect = element.getBoundingClientRect();
       return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
     };
+    const hasConsentContext = (element) => {
+      let current = element;
+      for (let depth = 0; current && depth < 5; depth += 1) {
+        const contextText = (current.textContent || "").replace(/\s+/g, " ").trim();
+        const contextAttrs = [
+          current.getAttribute("aria-label"),
+          current.getAttribute("role"),
+          current.getAttribute("id"),
+          current.getAttribute("class"),
+        ].filter(Boolean).join(" ");
+        if (/cookie|cookies|privacy|consent|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i.test(contextText + " " + contextAttrs)) {
+          return true;
+        }
+        current = current.parentElement;
+      }
+      return false;
+    };
+    const isBareChoiceLabel = (label) => /^(?:accept|agree|allow|reject|decline|deny|refuse)$/i.test(label.trim());
     return Array.from(document.querySelectorAll("button, [role='button'], a, input[type='button'], input[type='submit']")).some((element) => {
       const label = (
         element.getAttribute("aria-label") ||
@@ -1602,11 +1627,22 @@ export async function detectConsentUi(
       const actionType = actionFor(label);
       return isVisible(element) &&
         isFirstLayerPosition(element) &&
+        (!isBareChoiceLabel(label) || hasConsentContext(element)) &&
         consentLabelPattern.test(label) &&
         actionType !== "other" &&
         (!requireActionableChoiceControl || actionType === "accept_all" || actionType === "reject_all");
     });
   })()`, { timeout: waitForControlTimeoutMs }).catch(() => undefined);
+
+  const postWaitObservation = await readConsentUiObservation(page, scanStartedAtMs);
+  if (!options.waitForActionableChoiceControls || hasActionableConsentChoiceControl(postWaitObservation)) {
+    return postWaitObservation;
+  }
+
+  const remainingWaitMs = waitForControlTimeoutMs - (Date.now() - waitStartedAtMs);
+  if (remainingWaitMs > 50) {
+    await page.waitForTimeout(remainingWaitMs).catch(() => undefined);
+  }
 
   return readConsentUiObservation(page, scanStartedAtMs);
 }
@@ -1624,10 +1660,11 @@ async function readConsentUiObservation(
       if (/do not sell|do not share|do not sell or share|your privacy choices|privacy choices|opt[- ]out|targeted advertising|limit use of (?:my )?sensitive/.test(normalized)) {
         return "do_not_sell_share";
       }
-      if (/^(?:accept all|allow all|accept cookies|i agree|agree and continue)$/.test(normalized) || /\baccept all\b/.test(normalized)) {
+      if (/^(?:accept|agree|allow|accept all|allow all|accept cookies|i agree|agree and continue)$/.test(normalized) || /\baccept all\b/.test(normalized)) {
         return "accept_all";
       }
       if (
+        /^(?:reject|decline|deny|refuse)$/.test(normalized) ||
         /reject all|decline all|deny all|refuse all|only necessary|necessary only|only essential|essential only|essential cookies only|accept essential|accept necessary/i.test(normalized)
       ) {
         return "reject_all";
@@ -1674,6 +1711,24 @@ async function readConsentUiObservation(
       const rect = element.getBoundingClientRect();
       return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
     };
+    const hasConsentContext = (element) => {
+      let current = element;
+      for (let depth = 0; current && depth < 5; depth += 1) {
+        const contextText = (current.textContent || "").replace(/\s+/g, " ").trim();
+        const contextAttrs = [
+          current.getAttribute("aria-label"),
+          current.getAttribute("role"),
+          current.getAttribute("id"),
+          current.getAttribute("class"),
+        ].filter(Boolean).join(" ");
+        if (/cookie|cookies|privacy|consent|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i.test(contextText + " " + contextAttrs)) {
+          return true;
+        }
+        current = current.parentElement;
+      }
+      return false;
+    };
+    const isBareChoiceLabel = (label) => /^(?:accept|agree|allow|reject|decline|deny|refuse)$/i.test(label.trim());
     const isPotentialCustomControl = (element) => {
       const role = (element.getAttribute("role") || "").toLowerCase();
       const tabIndex = element.getAttribute("tabindex");
@@ -1744,6 +1799,9 @@ async function readConsentUiObservation(
       }
       const label = labelFor(element).slice(0, 120);
       if (!label || !consentLabelPattern.test(label)) {
+        return [];
+      }
+      if (isBareChoiceLabel(label) && !hasConsentContext(element)) {
         return [];
       }
       const actionType = actionFor(label);
@@ -1878,10 +1936,14 @@ function shouldRecaptureConsentUiAfterCmpRuntime(
   if (isTerminalVisualErrorShellText(domText || observation.textExcerpt || "")) {
     return false;
   }
-  return observation.likelyPresent &&
-    observation.controls.some((control) =>
-      control.actionType === "manage_preferences" || control.actionType === "do_not_sell_share"
-    );
+  if (hasRetainedSettingsPreferencesControl(observation)) {
+    return true;
+  }
+  if (hasStrongTextBackedFirstLayerConsentSurface(observation)) {
+    return true;
+  }
+  return observation.controls.length === 0 &&
+    likelyFirstLayerConsentBannerHintText(domText || observation.textExcerpt || "");
 }
 
 function shouldRecaptureTextBackedConsentUiAfterSettle(
@@ -1903,7 +1965,7 @@ function likelyLateFirstLayerConsentSurfaceText(text: string): boolean {
     return false;
   }
   return /\b(?:cookie|cookies|consent|privacy preferences|privacy choices)\b/i.test(normalized) &&
-    /\b(?:accept|agree|allow|reject|decline|deny|refuse|settings|preferences|choices|options|necessary|essential)\b/i.test(normalized);
+    /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|options|necessary|essential)\b/i.test(normalized);
 }
 
 function hasActionableConsentChoiceControl(observation: ConsentUiObservation): boolean {
@@ -1912,12 +1974,38 @@ function hasActionableConsentChoiceControl(observation: ConsentUiObservation): b
   );
 }
 
+function hasRetainedSettingsPreferencesControl(observation: ConsentUiObservation): boolean {
+  return observation.controls.some((control) => control.actionType === "manage_preferences");
+}
+
+function hasStrongTextBackedFirstLayerConsentSurface(observation: ConsentUiObservation): boolean {
+  return hasTextBackedConsentSurface(observation) &&
+    likelyFirstLayerConsentBannerHintText(observation.textExcerpt ?? "");
+}
+
 function hasTextBackedConsentSurface(observation: ConsentUiObservation): boolean {
   if (!observation.likelyPresent || observation.controls.length > 0) {
     return false;
   }
   const keywordBasisCount = observation.basis.filter((basis) => basis.startsWith("keyword:")).length;
   return keywordBasisCount >= 2 && (observation.textExcerpt ?? "").trim().length >= 80;
+}
+
+function likelyFirstLayerConsentBannerHintText(text: string): boolean {
+  const normalized = text.replace(/\s+/g, " ").trim().toLowerCase();
+  if (!normalized || normalized.length > 12_000) {
+    return false;
+  }
+  const hasConsentSubject = /\b(?:cookie|cookies|consent|privacy preferences|privacy choices)\b/i.test(normalized);
+  const hasChoiceLanguage = /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|manage|options|necessary|essential)\b/i.test(normalized);
+  const hasBannerUseLanguage =
+    /\bwe use (?:cookies|similar technologies)\b/i.test(normalized) ||
+    /\buse cookies\b/i.test(normalized) ||
+    /\byour cookie(?:s)?\b/i.test(normalized) ||
+    /\bcookie preferences\b/i.test(normalized) ||
+    /\bconsent setting\b/i.test(normalized) ||
+    /\bprivacy preferences\b/i.test(normalized);
+  return hasConsentSubject && (hasChoiceLanguage || hasBannerUseLanguage);
 }
 
 function isTerminalVisualErrorShellText(text: string): boolean {

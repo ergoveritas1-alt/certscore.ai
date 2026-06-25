@@ -15,6 +15,8 @@
     "calibrate": "node --import tsx ./src/cli/calibrate.ts",
     "test": "tsx --tsconfig ../../tsconfig.base.json --test --test-concurrency=1 'src/*.test.ts'",
     "test:integration-fixtures": "tsx --tsconfig ../../tsconfig.base.json --test src/integration-fixtures.test.ts",
+    "test:integration-fixtures:corpus": "tsx --tsconfig ../../tsconfig.base.json --test --test-name-pattern='^fixture corpus:' src/integration-fixtures.test.ts",
+    "test:integration-fixtures:consent": "tsx --tsconfig ../../tsconfig.base.json --test --test-name-pattern='first-layer|choice controls|CMP recapture|bare generic|post-screenshot consent|ambiguous consent' src/integration-fixtures.test.ts",
     "test:inspect-snapshots": "tsx --tsconfig ../../tsconfig.base.json --test src/inspect-snapshots.test.ts",
     "clean": "rm -rf dist"
   },

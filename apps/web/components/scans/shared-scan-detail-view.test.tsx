@@ -119,6 +119,35 @@ async function loadShouldShowRegulatoryChecklistSection() {
   }).shouldShowRegulatoryChecklistSection;
 }
 
+async function loadTrackerConsentReviewPriority() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule = (
+    sharedScanDetailViewImport as unknown as {
+      default?: Record<string, unknown>;
+      "module.exports"?: Record<string, unknown>;
+      getTrackerConsentReviewPriority?: unknown;
+    }
+  ).getTrackerConsentReviewPriority
+    ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+    : (
+        sharedScanDetailViewImport as unknown as {
+          default?: Record<string, unknown>;
+          "module.exports"?: Record<string, unknown>;
+        }
+      ).default ??
+      (
+        sharedScanDetailViewImport as unknown as {
+          default?: Record<string, unknown>;
+          "module.exports"?: Record<string, unknown>;
+        }
+      )["module.exports"] ??
+      (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    getTrackerConsentReviewPriority: (row: Record<string, unknown>) => string;
+  }).getTrackerConsentReviewPriority;
+}
+
 async function loadHomepagePreviewGateIdleLabel() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule = (
@@ -2205,6 +2234,64 @@ test("deriveUnverifiedHomepageReview classifies not-found homepages as inactive 
   assert.equal(review?.title, "Domain inactive or unstable");
   assert.equal(review?.outcomeTitle, "Domain inactive or unstable");
   assert.equal(review?.reason, "Reason: homepage returned HTTP 404 Not Found.");
+});
+
+test("getTrackerConsentReviewPriority treats plain Sentry telemetry as contextual", async () => {
+  const getTrackerConsentReviewPriority = await loadTrackerConsentReviewPriority();
+
+  assert.equal(
+    getTrackerConsentReviewPriority({
+      category: "Performance monitoring",
+      confidence: 0.92,
+      domains: ["o514642.ingest.us.sentry.io"],
+      firstSeenMs: 420,
+      label: "Sentry",
+      observedVia: ["request"],
+      preConsent: true,
+      regulatoryRelevance: ["performance_monitoring", "telemetry", "diagnostics"],
+      requestCount: 1,
+      source: "runtime",
+      vendorDisplayCategory: "Performance monitoring",
+    }),
+    "contextual",
+  );
+});
+
+test("getTrackerConsentReviewPriority rates tag management and marketing automation as medium", async () => {
+  const getTrackerConsentReviewPriority = await loadTrackerConsentReviewPriority();
+
+  assert.equal(
+    getTrackerConsentReviewPriority({
+      category: "analytics",
+      confidence: 0.94,
+      domains: ["static.klaviyo.com"],
+      firstSeenMs: 1422,
+      label: "Klaviyo",
+      observedVia: ["script"],
+      preConsent: true,
+      regulatoryRelevance: ["marketing_automation", "email_personalization"],
+      requestCount: 1,
+      source: "runtime",
+      vendorDisplayCategory: "Marketing automation",
+    }),
+    "medium",
+  );
+  assert.equal(
+    getTrackerConsentReviewPriority({
+      category: "tag_manager",
+      confidence: 0.96,
+      domains: ["www.googletagmanager.com"],
+      firstSeenMs: 1630,
+      label: "Google Tag Manager",
+      observedVia: ["script"],
+      preConsent: true,
+      regulatoryRelevance: ["tag_management", "third_party_runtime"],
+      requestCount: 1,
+      source: "runtime",
+      vendorDisplayCategory: "Tag management",
+    }),
+    "medium",
+  );
 });
 
 test("deriveUnverifiedHomepageReview prefers logged DNS failure reason when available", async () => {

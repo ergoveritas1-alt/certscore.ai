@@ -184,6 +184,24 @@ test("keeps CMP classification separate from tracker classification", () => {
   assert.equal(observations[0]?.purpose, "consent_management");
 });
 
+test("resolves Consentmanager CDN as consent management CMP", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      url: "https://cdn.consentmanager.net/delivery/cmp.php?id=abc123",
+      hostname: "cdn.consentmanager.net",
+    },
+  ]);
+
+  assert.equal(observations.length, 1);
+  const observation = observations[0];
+  assert.ok(observation);
+  assert.equal(observation.vendor, "Consentmanager");
+  assert.equal(observation.product, "Consentmanager CMP");
+  assert.equal(observation.purpose, "consent_management");
+  assert.equal(resolveVendorDisplayCategory(observation), "Cookie compliance");
+});
+
 test("resolves CMP runtime probes from canonical registry markers", () => {
   const observations = resolveVendorObservations([
     {
@@ -476,6 +494,24 @@ test("resolves Google ad traffic quality as security support not tracker purpose
   );
 });
 
+test("resolves Sentry ingest endpoints as performance telemetry not advertising or analytics", () => {
+  const observations = resolveVendorObservations([
+    request("https://sentry.io/api/123/envelope/", "sentry.io"),
+    request("https://assets.sentry.io/example.js", "assets.sentry.io"),
+    request("https://o514642.ingest.us.sentry.io/api/514642/envelope/", "o514642.ingest.us.sentry.io"),
+  ]);
+
+  assertResolved(observations, "Sentry", "Sentry", "performance_monitoring");
+  const sentry = observations.find((item) => item.vendor === "Sentry");
+  assert.ok(sentry);
+  assert.equal(sentry.regulatoryRelevance.includes("telemetry"), true);
+  assert.equal(sentry.regulatoryRelevance.includes("diagnostics"), true);
+  assert.equal(
+    observations.some((item) => ["advertising", "analytics", "session_replay"].includes(item.purpose)),
+    false,
+  );
+});
+
 test("resolves CNN-style detected technologies from canonical registry sources", () => {
   const observations = resolveVendorObservations([
     request("https://accounts.google.com/gsi/client", "accounts.google.com"),
@@ -531,6 +567,40 @@ test("resolves CNN-style detected technologies from canonical registry sources",
   assert.equal(pianoTinypass.regulatoryRelevance.includes("cdn"), true);
   assert.equal(pianoTinypass.regulatoryRelevance.includes("script_delivery"), true);
   assertResolved(observations, "Cloudflare", "Cloudflare Bot Management", "security");
+});
+
+test("resolves DatoCMS and Mux image hosts as content infrastructure by default", () => {
+  const observations = resolveVendorObservations([
+    request("https://www.datocms-assets.com/12345/fixture-image.jpg?auto=format", "www.datocms-assets.com"),
+    request("https://image.mux.com/abc123/thumbnail.jpg?time=1", "image.mux.com"),
+  ]);
+
+  assertResolved(observations, "DatoCMS", "DatoCMS Assets", "infrastructure");
+  assertResolved(observations, "Mux", "Mux Image", "infrastructure");
+  assert.equal(
+    observations.every((item) => resolveVendorDisplayCategory(item) === "CDN"),
+    true,
+  );
+  assert.equal(
+    observations.some((item) => ["analytics", "advertising", "session_replay"].includes(item.purpose)),
+    false,
+  );
+});
+
+test("resolves Klaviyo as marketing automation with high-confidence vendor identity", () => {
+  const observations = resolveVendorObservations([
+    request("https://static.klaviyo.com/onsite/js/klaviyo.js?company_id=abc123", "static.klaviyo.com"),
+    request("https://a.klaviyo.com/client/subscriptions/?company_id=abc123", "a.klaviyo.com"),
+    request("https://static-tracking.klaviyo.com/onsite/components/back-in-stock", "static-tracking.klaviyo.com"),
+  ]);
+
+  assertResolved(observations, "Klaviyo", "Klaviyo", "analytics");
+  const klaviyo = observations.find((item) => item.vendor === "Klaviyo");
+  assert.ok(klaviyo);
+  assert.equal(klaviyo.confidence, 0.94);
+  assert.equal(klaviyo.regulatoryRelevance.includes("marketing_automation"), true);
+  assert.equal(klaviyo.regulatoryRelevance.includes("email_personalization"), true);
+  assert.equal(resolveVendorDisplayCategory(klaviyo), "Marketing automation");
 });
 
 test("assigns canonical display categories for CNN-style technologies", () => {

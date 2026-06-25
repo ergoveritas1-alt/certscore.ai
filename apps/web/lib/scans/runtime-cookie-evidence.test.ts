@@ -6,6 +6,7 @@ import {
   classifyRuntimeCookieCategory,
   isFunctionalCookieExcludedFromTrackingEvidence
 } from "./runtime-cookie-evidence";
+import { getRuntimeCookieReviewPriority } from "./runtime-cookie-priority";
 
 test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("_vwo_uuid_v2", ".example.com"), "advertising");
@@ -43,6 +44,51 @@ test("filters consent security and infrastructure cookies from tracking evidence
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("BIGipServerpool", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("akaalb_usp-google", "www.sbtech.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("_ga", ".example.com"), false);
+});
+
+test("rates pre-consent tag-management and marketing-automation cookies as medium priority", () => {
+  assert.equal(
+    getRuntimeCookieReviewPriority({
+      category: "Tag management",
+      cookieName: "_dc_gtm_UA-123",
+      domain: ".example.com",
+      evidenceGrade: "high",
+      firstObservedAtMs: 250,
+      initiatorDomain: "www.googletagmanager.com",
+      initiatorUrl: "https://www.googletagmanager.com/gtm.js?id=GTM-ABC123",
+      initiatorVendor: "Google Tag Manager",
+      nonEssential: true,
+      party: "third_party",
+      responseUrl: null,
+      setAtMs: 250,
+      setMethod: "document_cookie",
+      sourceRequestUrl: "https://www.googletagmanager.com/gtm.js?id=GTM-ABC123",
+      timingBasis: "before_consent",
+      timingEvidence: "before_consent_cookie_write"
+    }),
+    "medium",
+  );
+  assert.equal(
+    getRuntimeCookieReviewPriority({
+      category: "Marketing automation",
+      cookieName: "__kla_id",
+      domain: ".example.com",
+      evidenceGrade: "high",
+      firstObservedAtMs: 300,
+      initiatorDomain: "static.klaviyo.com",
+      initiatorUrl: "https://static.klaviyo.com/onsite/js/klaviyo.js",
+      initiatorVendor: "Klaviyo",
+      nonEssential: true,
+      party: "third_party",
+      responseUrl: null,
+      setAtMs: 300,
+      setMethod: "document_cookie",
+      sourceRequestUrl: "https://static.klaviyo.com/onsite/js/klaviyo.js",
+      timingBasis: "before_consent",
+      timingEvidence: "before_consent_cookie_write"
+    }),
+    "medium",
+  );
 });
 
 test("builds cookie inventory with initiator provenance and before-consent timing", () => {

@@ -19,6 +19,7 @@ import {
   type AssessmentDirection,
   type EvidenceLabel
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
+import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
 import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
 
@@ -1313,11 +1314,7 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
 }
 
 function getChecklistRowRationale(item: GdprEprivacyCoverageChecklistItem) {
-  return truncateSentence(
-    getSpecificChecklistRowRationale(item) ??
-      getEvidenceBackedFallbackRationale(item),
-    320
-  );
+  return deriveGdprEprivacyCoverageChecklistRowRationale(item);
 }
 
 export function getGdprEprivacyCoverageChecklistRowRationaleForAudit(item: GdprEprivacyCoverageChecklistItem) {

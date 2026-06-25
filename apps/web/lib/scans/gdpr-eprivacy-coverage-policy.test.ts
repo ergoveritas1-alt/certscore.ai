@@ -9,7 +9,7 @@ const completedInputBase = {
 
 function retainedArticle13Signal(outcome: NonNullable<ReturnType<typeof deriveGdprEprivacyCoveragePolicyOutcomes>[string]>) {
   return outcome.criticalEvidence.retainedEvidence.article13Signal as
-    | { evidenceText?: string; selectedPolicySectionExcerpt?: string; source?: string; supportingContactContext?: string }
+    | { evidenceText?: string; selectedPolicySectionExcerpt?: string; source?: string; supportingContactContext?: string; supportingTransferSafeguardsContext?: string }
     | null
     | undefined;
 }
@@ -264,6 +264,33 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects common international tran
     retainedArticle13Signal(outcomes.international_transfers_disclosure!)!.source,
     "wc01_retained_policy_text_match"
   );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes confirms outside-region recipient disclosure with agreement safeguards", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt:
+          "We share personal information with third parties, service providers, and business partners for the purposes described in this notice. These third parties may be in the Netherlands as well as within other countries in the European Economic Area (EEA). Sometimes they may also be outside the EEA. We have concluded agreements with our service providers and business partners, to ensure that your personal information is protected, both within and outside the EEA."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Observed");
+  const signal = retainedArticle13Signal(outcomes.international_transfers_disclosure!);
+  assert.match(signal?.evidenceText ?? "", /Sometimes they may also be outside the EEA/i);
+  assert.match(
+    signal?.supportingTransferSafeguardsContext ?? "",
+    /agreements with our service providers and business partners, to ensure that your personal information is protected, both within and outside the EEA/i
+  );
+  assert.equal(signal?.source, "wc01_retained_policy_text_match");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not confirm international transfers from geography-only consent law language", () => {

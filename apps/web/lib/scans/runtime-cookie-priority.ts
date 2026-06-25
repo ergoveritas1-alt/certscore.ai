@@ -47,7 +47,7 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
   if (/(__cf|cf_clearance|cf_chl|cloudflare)/i.test(haystack)) {
     return "Cloudflare";
   }
-  if (/(quantcast|quantserve|__qca|mc|d)/i.test(haystack)) {
+  if (/(quantcast|quantserve|__qca|(?:^|[^a-z0-9])mc(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d(?:[^a-z0-9]|$))/i.test(haystack)) {
     return "Quantcast";
   }
   if (/(piano|tinypass|pnes_|pcid)/i.test(haystack)) {
@@ -122,7 +122,7 @@ export function getRuntimeCookieReviewPriority(row: RuntimeCookieEvidenceRow): R
   if (/^(advertising|retargeting|audience_measurement|session_replay|fingerprinting)$/.test(purpose) && observedPreConsent) {
     return "high";
   }
-  if (/^(analytics|experimentation|personalization|personalisation|a_b_testing)$/.test(purpose) && observedPreConsent) {
+  if (/^(analytics|experimentation|personalization|personalisation|a_b_testing|tag_management|tag_manager|marketing_automation)$/.test(purpose) && observedPreConsent) {
     return "medium";
   }
   if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {

@@ -491,6 +491,52 @@ test("policySurfaceScanner uses common-path fallback when homepage fetch fails",
   }
 });
 
+test("policySurfaceScanner uses rendered footer links before common-path fallback when homepage fetch is blocked", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await policySurfaceScanner({
+      url: `${server.baseUrl}/browser-visible-policy-homepage`,
+      normalizedUrl: `${server.baseUrl}/browser-visible-policy-homepage`,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 7_000,
+      artifactWriter,
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.normalizedUrl === `${server.baseUrl}/browser-visible-policy-homepage/privacy`
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.ok(privacy);
+    assert.equal(privacy.surfaceType, "privacy_policy");
+    assert.equal(diagnostics.renderedCandidateCount > 0, true);
+    assert.equal(diagnostics.commonPathFallbackUsed, false);
+    assert.equal(
+      diagnostics.candidateSummary.some((candidate) =>
+        candidate.normalizedUrl === `${server.baseUrl}/browser-visible-policy-homepage/privacy`
+      ),
+      true,
+    );
+    assert.equal(privacy.httpStatus, 200);
+    assert.equal(privacy.observedTopics.includes("data_retention"), true);
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed rendered discovery")),
+      true,
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy rendered fetch fallback")),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("policySurfaceScanner falls back to common paths when Nano declines observed generic links", async () => {
   let classifyCalls = 0;
   const nanoAssistProvider: PolicyNanoAssistProvider = {
@@ -527,6 +573,48 @@ test("policySurfaceScanner falls back to common paths when Nano declines observe
     assert.ok(fallback);
     assert.equal(fallback.surfaceType, "privacy_policy");
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
+test("policySurfaceScanner keeps deterministic common paths when speculative Nano common-path ranking is poor", async () => {
+  let classifyCalls = 0;
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    async classifyLinks(input) {
+      classifyCalls += 1;
+      if (input.candidates.some((candidate) => candidate.discoveryMethod !== "guessed_common_path")) {
+        return { assistId: input.assistId, rankedCandidates: [] };
+      }
+      const badCandidate = input.candidates.find((candidate) =>
+        candidate.normalizedUrl.endsWith("/customer-service/privacy-policy")
+      );
+      return {
+        assistId: input.assistId,
+        rankedCandidates: badCandidate
+          ? [{
+              candidateId: badCandidate.candidateId,
+              likelySurfaceType: "privacy_policy",
+              shouldFetch: true,
+              priorityRank: 1,
+              confidence: 0.91,
+              reason: "Mock Nano over-prioritized a less reliable common path.",
+            }]
+          : []
+      };
+    },
+  };
+
+  await withPolicyScan("policy-generic-links", async ({ result, baseUrl }) => {
+    const retained = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.normalizedUrl === `${baseUrl}/privacy`
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(classifyCalls, 2);
+    assert.ok(retained);
+    assert.equal(retained.surfaceType, "privacy_policy");
+    assert.equal(diagnostics.corePolicySurfaceRetained, true);
+    assert.equal(diagnostics.commonPathFallbackUsed, true);
+  }, { discoveryMode: "fast", enableNanoPolicyAssist: true, nanoAssistProvider });
 });
 
 test("policySurfaceScanner gold corpus retains core GDPR policy surfaces through bounded fallback", async () => {
@@ -890,6 +978,31 @@ test("policySurfaceScanner gives Nano enough bounded text for distant Article 13
       /standard contractual clauses|European Economic Area/i,
     );
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
+test("policySurfaceScanner confirms international transfer disclosure from recipient geography and safeguards", async () => {
+  await withPolicyScan("policy-international-transfer-recipient-safeguards", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const transferSignal = privacy?.article13DisclosureSignals.find((signal) =>
+      signal.disclosureType === "international_transfers"
+    );
+
+    assert.equal(privacy?.observedTopics.includes("international_transfers"), true);
+    assert.equal(transferSignal?.status, "observed");
+    assert.equal((transferSignal?.confidence ?? 0) >= 0.9, true);
+    assert.match(transferSignal?.evidenceText ?? "", /Sometimes they may also be outside the EEA/i);
+    assert.match(
+      transferSignal?.evidenceText ?? "",
+      /personal information is protected, both within and outside the EEA/i
+    );
+  }, {
+    discoveryMode: "fast",
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run for static privacy policy fixture.");
+      },
+    },
+  });
 });
 
 test("policySurfaceScanner extracts late mature-policy GDPR transparency signals without promoting legal basis", async () => {

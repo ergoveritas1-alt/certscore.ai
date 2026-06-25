@@ -268,6 +268,39 @@ test("builds consent management platform journey", () => {
   );
 });
 
+test("builds Consentmanager CMP journey without tracker classification", () => {
+  const script = scriptEvent({
+    eventId: "script_consentmanager",
+    scriptUrl: "https://cdn.consentmanager.net/delivery/cmp.php?id=abc123",
+    hostname: "cdn.consentmanager.net",
+    registrableDomain: "consentmanager.net",
+  });
+  const vendor = vendorObservation({
+    observationId: "vendor_consentmanager",
+    vendor: "Consentmanager",
+    product: "Consentmanager CMP",
+    purpose: "consent_management",
+    matchedEvidenceIds: [script.eventId],
+    matchedHostnames: ["cdn.consentmanager.net"],
+    matchedUrls: [script.scriptUrl ?? ""],
+  });
+
+  const journeys = buildObservedJourneys(emptyInput({
+    scriptEvents: [script],
+    normalizedVendorObservations: [vendor],
+  }));
+
+  assert.equal(journeys.some((journey) => journey.journeyType === "tracker"), false);
+  assert.equal(
+    journeys.some((journey) =>
+      journey.displayName === "Consentmanager CMP" &&
+      journey.journeyType === "product" &&
+      journey.observedBehaviors.includes("consent_management_observed"),
+    ),
+    true,
+  );
+});
+
 test("generic CDN request does not become tracker journey", () => {
   const request = networkRequest({
     eventId: "net_cdn",
@@ -279,6 +312,51 @@ test("generic CDN request does not become tracker journey", () => {
   });
 
   const journeys = buildObservedJourneys(emptyInput({ networkEvents: [request] }));
+
+  assert.equal(journeys.some((journey) => journey.journeyType === "tracker"), false);
+  assert.equal(journeys.some((journey) => journey.journeyType === "endpoint"), false);
+});
+
+test("content media infrastructure vendors do not become tracker journeys by default", () => {
+  const datoRequest = networkRequest({
+    eventId: "net_datocms_asset",
+    requestId: "req_datocms_asset",
+    requestUrl: "https://www.datocms-assets.com/12345/fixture-image.jpg?auto=format",
+    hostname: "www.datocms-assets.com",
+    registrableDomain: "datocms-assets.com",
+    resourceType: "image",
+  });
+  const muxRequest = networkRequest({
+    eventId: "net_mux_image",
+    requestId: "req_mux_image",
+    requestUrl: "https://image.mux.com/abc123/thumbnail.jpg?time=1",
+    hostname: "image.mux.com",
+    registrableDomain: "mux.com",
+    resourceType: "image",
+  });
+  const datoVendor = vendorObservation({
+    observationId: "vendor_datocms_assets",
+    vendor: "DatoCMS",
+    product: "DatoCMS Assets",
+    purpose: "infrastructure",
+    matchedEvidenceIds: [datoRequest.eventId],
+    matchedHostnames: ["www.datocms-assets.com"],
+    matchedUrls: [datoRequest.requestUrl],
+  });
+  const muxVendor = vendorObservation({
+    observationId: "vendor_mux_image",
+    vendor: "Mux",
+    product: "Mux Image",
+    purpose: "infrastructure",
+    matchedEvidenceIds: [muxRequest.eventId],
+    matchedHostnames: ["image.mux.com"],
+    matchedUrls: [muxRequest.requestUrl],
+  });
+
+  const journeys = buildObservedJourneys(emptyInput({
+    networkEvents: [datoRequest, muxRequest],
+    normalizedVendorObservations: [datoVendor, muxVendor],
+  }));
 
   assert.equal(journeys.some((journey) => journey.journeyType === "tracker"), false);
   assert.equal(journeys.some((journey) => journey.journeyType === "endpoint"), false);
@@ -619,6 +697,44 @@ test("classifies first-party GA, Optanon, and Akamai cookies with nuanced purpos
     normalizedVendorObservations: vendors,
   }));
   assert.equal(journeys.some((journey) => journey.journeyType === "tracker"), false);
+});
+
+test("plain Sentry ingest request remains performance monitoring context, not tracker journey", () => {
+  const event = networkRequest({
+    eventId: "net_sentry",
+    requestId: "req_sentry",
+    requestUrl: "https://o514642.ingest.us.sentry.io/api/514642/envelope/",
+    hostname: "o514642.ingest.us.sentry.io",
+    registrableDomain: "sentry.io",
+    collectionEndpointObserved: true,
+    endpointCategory: "telemetry",
+    attributionStatus: "resolved",
+    attributionReason: "resolved_to_sentry_performance_monitoring",
+    resolverBasis: ["sentry_monitoring_endpoint"],
+  });
+  const sentry = vendorObservation({
+    observationId: "vendor_sentry",
+    vendor: "Sentry",
+    product: "Sentry",
+    purpose: "performance_monitoring",
+    matchedEvidenceIds: [event.eventId],
+    matchedHostnames: ["o514642.ingest.us.sentry.io"],
+    matchedUrls: [event.requestUrl],
+  });
+
+  const journeys = buildObservedJourneys(emptyInput({
+    networkEvents: [event],
+    normalizedVendorObservations: [sentry],
+  }));
+
+  assert.equal(journeys.some((journey) => journey.journeyType === "tracker"), false);
+  assert.equal(
+    journeys.some((journey) =>
+      journey.purpose === "performance_monitoring" &&
+      journey.observedBehaviors.includes("collection_endpoint_observed")
+    ),
+    true,
+  );
 });
 
 function emptyInput(

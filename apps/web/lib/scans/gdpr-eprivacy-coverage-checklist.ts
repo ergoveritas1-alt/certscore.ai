@@ -991,10 +991,26 @@ function runtimeCookiePrioritySortWeight(priority: RuntimeCookieReviewPriority) 
   return { contextual: 1, medium: 2, review_needed: 3, high: 4 }[priority];
 }
 
+function runtimeCookieStorageSelectionWeight(priority: RuntimeCookieReviewPriority) {
+  return { contextual: 1, review_needed: 2, medium: 3, high: 4 }[priority];
+}
+
+function compareRuntimeCookieStorageEvidenceRows(
+  left: RuntimeCookiePriorityGroupRow,
+  right: RuntimeCookiePriorityGroupRow
+) {
+  const priorityDelta = runtimeCookieStorageSelectionWeight(right.priority) - runtimeCookieStorageSelectionWeight(left.priority);
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+  return compareRuntimeCookiePriorityRows(left, right);
+}
+
 function synthesizePreconsentThirdPartyCookieOutcome(rows: RuntimeCookieEvidenceRow[] | undefined) {
-  const thirdPartyGroups = buildRuntimeCookiePriorityGroups(rows ?? [])
-    .filter((row) => row.party === "third_party" || row.party === "mixed")
-    .sort(compareRuntimeCookiePriorityRows);
+  const thirdPartyGroups = buildRuntimeCookiePriorityGroups(
+    (rows ?? []).filter((row) => row.party === "third_party")
+  )
+    .sort(compareRuntimeCookieStorageEvidenceRows);
   if (thirdPartyGroups.length === 0) {
     return undefined;
   }

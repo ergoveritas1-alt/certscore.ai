@@ -1139,7 +1139,7 @@ export const policySurfaceObservationSchema = z.object({
       "automated_decision_making_or_profiling",
     ]),
     status: z.enum(["observed", "partial"]),
-    evidenceText: z.string().max(320).optional(),
+    evidenceText: z.string().max(640).optional(),
     confidence: z.number().min(0).max(1).default(0.5),
     source: z.enum(["deterministic", "nano"]).default("deterministic"),
     selectedPolicySectionHeading: z.string().max(160).optional(),
@@ -1161,7 +1161,7 @@ export const policySurfaceObservationSchema = z.object({
       "supervisory_authority",
       "automated_decision_making_or_profiling",
     ]),
-    evidenceText: z.string().max(320).optional(),
+    evidenceText: z.string().max(640).optional(),
     rejectReason: z.enum([
       "page_chrome_or_navigation",
       "table_of_contents_only",

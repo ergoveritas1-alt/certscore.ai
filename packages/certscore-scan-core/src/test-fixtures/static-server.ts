@@ -24,6 +24,7 @@ export type StaticFixturePage =
   | "consent-no-reject"
   | "consent-late-first-layer-controls"
   | "consent-late-first-layer-choice-controls"
+  | "consent-late-cmp-choice-controls"
   | "consent-privacy-choice-surface-reject-success"
   | "consent-privacy-choice-only"
   | "consent-privacy-opt-out-ad-comparison"
@@ -37,6 +38,7 @@ export type StaticFixturePage =
   | "consent-tracking-persists-after-reject"
   | "ga-collection"
   | "ga-first-party-vendor-associated-cookie"
+  | "generic-bare-choice-controls"
   | "generic-cdn-noise"
   | "google-ads-measurement"
   | "google-doubleclick-pixel"
@@ -47,6 +49,7 @@ export type StaticFixturePage =
   | "policy-ai-disclosure"
   | "policy-article13-long"
   | "policy-article13-accordions"
+  | "policy-international-transfer-recipient-safeguards"
   | "policy-ambiguous-choices"
   | "policy-broken-link"
   | "policy-canonical-near-privacy-center"
@@ -125,6 +128,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-no-reject": "consent-no-reject",
   "consent-late-first-layer-controls": "consent-late-first-layer-controls",
   "consent-late-first-layer-choice-controls": "consent-late-first-layer-choice-controls",
+  "consent-late-cmp-choice-controls": "consent-late-cmp-choice-controls",
   "consent-privacy-choice-surface-reject-success": "consent-privacy-choice-surface-reject-success",
   "consent-privacy-choice-only": "consent-privacy-choice-only",
   "consent-privacy-opt-out-ad-comparison": "consent-privacy-opt-out-ad-comparison",
@@ -138,6 +142,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-tracking-persists-after-reject": "consent-persists",
   "ga-collection": "ga-page",
   "ga-first-party-vendor-associated-cookie": "ga-first-party-cookie",
+  "generic-bare-choice-controls": "generic-bare-choice-controls",
   "generic-cdn-noise": "static-noise",
   "google-ads-measurement": "google-ads",
   "google-doubleclick-pixel": "doubleclick-pixel",
@@ -148,6 +153,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-ai-disclosure": "policy-ai",
   "policy-article13-long": "policy-article13-long",
   "policy-article13-accordions": "policy-article13-accordions",
+  "policy-international-transfer-recipient-safeguards": "policy-international-transfer-recipient-safeguards",
   "policy-ambiguous-choices": "policy-ambiguous-choices",
   "policy-broken-link": "policy-broken-link",
   "policy-canonical-near-privacy-center": "policy-canonical-near-privacy-center",
@@ -244,6 +250,55 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     }
     response.writeHead(404, { "Content-Type": "text/plain" });
     response.end("unknown fixture");
+    return;
+  }
+
+  if (url.pathname === "/browser-visible-policy-homepage") {
+    const userAgent = request.headers["user-agent"] ?? "";
+    const normalizedUserAgent = Array.isArray(userAgent) ? userAgent.join(" ") : userAgent;
+    if (!normalizedUserAgent || /\bnode\b|\bundici\b/i.test(normalizedUserAgent)) {
+      response.writeHead(429, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end("static fetch blocked");
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+      <html>
+        <head><title>Browser rendered policy links</title></head>
+        <body>
+          <main>Fixture homepage available to rendered browser discovery.</main>
+          <footer><a href="/browser-visible-policy-homepage/privacy">Privacy Policy</a></footer>
+        </body>
+      </html>`);
+    return;
+  }
+
+  if (url.pathname === "/browser-visible-policy-homepage/privacy") {
+    const userAgent = request.headers["user-agent"] ?? "";
+    const normalizedUserAgent = Array.isArray(userAgent) ? userAgent.join(" ") : userAgent;
+    if (!normalizedUserAgent || /\bnode\b|\bundici\b/i.test(normalizedUserAgent)) {
+      response.writeHead(429, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end("policy fetch blocked");
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+      <html>
+        <head><title>Privacy Policy</title></head>
+        <body>
+          <main>
+            <h1>Privacy Policy</h1>
+            <p>The controller for this service can be contacted at privacy@example.test.</p>
+            <p>We process personal data to provide services, personalize content, measure performance, and operate customer support.</p>
+            <p>We rely on consent, contract, legal obligation, and legitimate interests as legal bases for processing.</p>
+            <p>Recipients include processors, service providers, analytics providers, advertising partners, and affiliates.</p>
+            <p>We retain personal data only as long as necessary for the purposes described or as required by law.</p>
+            <p>You may exercise rights to access, rectification, erasure, restriction, portability, and objection.</p>
+            <p>We may transfer personal data outside the European Economic Area using adequacy decisions or standard contractual clauses.</p>
+            <p>Our data protection officer can be reached through the privacy office, and you may complain to a supervisory authority.</p>
+          </main>
+        </body>
+      </html>`);
     return;
   }
 
@@ -419,7 +474,11 @@ function cookieForCase(caseName: StaticFixturePage): string | undefined {
   if (caseName === "akamai-security-cookie") {
     return "_abck=fixture-redacted; Path=/; SameSite=Lax";
   }
-  if (caseName === "cmp-cookie" || caseName === "consent-late-first-layer-choice-controls") {
+  if (
+    caseName === "cmp-cookie" ||
+    caseName === "consent-late-first-layer-choice-controls" ||
+    caseName === "consent-late-cmp-choice-controls"
+  ) {
     return "OptanonConsent=fixture-redacted; Path=/; SameSite=Lax";
   }
   if (caseName === "ga-first-party-vendor-associated-cookie") {
@@ -514,6 +573,16 @@ function bodyMarkup(caseName: StaticFixturePage): string {
       }, 25);
     </script>`;
   }
+  if (caseName === "generic-bare-choice-controls") {
+    return `
+      <section>
+        <h1>Account invitation</h1>
+        <p>This page has generic invitation choice controls for a product beta.</p>
+        <button id="accept-invite" type="button">Accept</button>
+        <button id="reject-invite" type="button">Reject</button>
+      </section>
+    `;
+  }
   if (caseName === "newrelic-performance-monitoring") {
     return `<img alt="" src="https://bam.nr-data.net/1/browser/fixture">`;
   }
@@ -547,6 +616,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     manage: caseName === "consent-manage-preferences",
     lateFirstLayerControls: caseName === "consent-late-first-layer-controls",
     lateFirstLayerChoiceControls: caseName === "consent-late-first-layer-choice-controls",
+    lateCmpChoiceControls: caseName === "consent-late-cmp-choice-controls",
     preferenceAmbiguous: caseName === "consent-preference-center-ambiguous",
     preferenceConfirmSave: caseName === "consent-preference-center-confirm-save",
     postChoiceReopen: caseName === "consent-post-choice-reopen-control",
@@ -596,7 +666,26 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
           const target = document.getElementById("late-choice-controls");
           if (!target) return;
           target.innerHTML = '<button id="accept-all" type="button">Accept All</button><button id="reject-all" type="button">Reject All</button>';
-        }, 1900);
+        }, 3200);
+      </script>
+    `;
+  }
+  if (options.lateCmpChoiceControls) {
+    return `
+      <section>
+        <p>Consent-flow fixture page with CMP evidence and delayed first-layer choice controls.</p>
+      </section>
+      <div id="banner" role="dialog" aria-label="Cookie consent">
+        <p>We use cookies for analytics and advertising. Choose your consent setting.</p>
+        <span id="late-choice-controls"></span>
+      </div>
+      <script>
+        window.OneTrust = { fixture: true };
+        setTimeout(() => {
+          const target = document.getElementById("late-choice-controls");
+          if (!target) return;
+          target.innerHTML = '<button id="settings" type="button">Cookie settings</button><button id="accept-all" type="button">Accept</button><button id="reject-all" type="button">Reject</button>';
+        }, 3200);
       </script>
     `;
   }
@@ -815,6 +904,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-ai-disclosure": `<a href="/policies/ai">AI disclosures</a>`,
     "policy-article13-long": `<a href="/policies/article13-long">Privacy Policy</a>`,
     "policy-article13-accordions": `<a href="/policies/article13-accordions">Privacy Policy</a>`,
+    "policy-international-transfer-recipient-safeguards": `<a href="/policies/international-transfer-recipient-safeguards">Privacy Policy</a>`,
     "policy-ambiguous-choices": `<a href="/privacy-choices">Your Choices</a>`,
     "policy-broken-link": `<a href="/policies/missing-privacy">Privacy Policy</a>`,
     "policy-canonical-near-privacy-center": `<a href="/privacy-center-shell">Privacy Policy</a>`,
@@ -930,6 +1020,17 @@ function policyDocumentHtml(pathname: string): string | undefined {
         "You may exercise rights to access, rectification, erasure, restriction, portability, and objection by contacting the privacy team.",
         "We may transfer personal data outside the European Economic Area using standard contractual clauses.",
         "You may complain to a supervisory authority about our handling of personal data.",
+      ].join(" "),
+    },
+    "/policies/international-transfer-recipient-safeguards": {
+      title: "Privacy Policy",
+      body: [
+        "Privacy Policy. We explain how personal information is collected, used, shared, retained, and protected.",
+        "We share personal information with third parties, service providers, and business partners for the purposes described in this notice.",
+        "These third parties may be in the Netherlands as well as within other countries in the European Economic Area (EEA).",
+        "Sometimes they may also be outside the EEA.",
+        "We have concluded agreements with our service providers and business partners, to ensure that your personal information is protected, both within and outside the EEA.",
+        "You may contact the privacy team to exercise rights to access, correction, deletion, portability, restriction, and objection.",
       ].join(" "),
     },
     "/policies/google-script-noise": {

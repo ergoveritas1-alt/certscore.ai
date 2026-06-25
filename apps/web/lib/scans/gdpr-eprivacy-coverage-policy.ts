@@ -3648,7 +3648,7 @@ const DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN =
   /your rights|data subject rights|right to (?:access|delete|erase|erasure|rectif|object|restrict|port)|rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)|access.{0,80}(?:your )?(?:personal )?(?:data|information)|delete your information|delete.{0,80}(?:your )?(?:personal )?(?:data|information)|erasure|correct (?:your )?(?:personal )?(?:data|information)|rectif|portability|object to|restrict (?:the )?processing|export.{0,80}(?:your )?(?:data|information)|review and update|my activity|google takeout|request to remove content|privacy controls|download a copy/i;
 
 const INTERNATIONAL_TRANSFERS_DISCLOSURE_PATTERN =
-  /data transfers?|international transfer|cross-border transfer|transfer.{0,120}(?:personal data|personal information|information|data).{0,160}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies))|(?:personal data|personal information|information|data).{0,120}(?:transfer|transferred|stored|processed|accessed|shared).{0,180}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|usa)|(?:stored|processed|accessed|shared).{0,120}(?:in|from).{0,80}(?:united states|usa|other countries|countries outside|third countries|foreign countries)|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|standard contractual|contractual clauses|sccs?|adequacy|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|transfer mechanisms?|data transfer framework|dpf|privacy shield/i;
+  /data transfers?|international transfer|cross-border transfer|transfer.{0,120}(?:personal data|personal information|information|data).{0,160}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies))|(?:personal data|personal information|information|data).{0,120}(?:transfer|transferred|stored|processed|accessed|shared|protected).{0,180}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|usa|eea|european economic area|uk|united kingdom)|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,240}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries)|agreements?.{0,240}(?:personal data|personal information|information|data).{0,240}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|(?:stored|processed|accessed|shared).{0,120}(?:in|from).{0,80}(?:united states|usa|other countries|countries outside|third countries|foreign countries)|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|standard contractual|contractual clauses|sccs?|adequacy|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|transfer mechanisms?|data transfer framework|dpf|privacy shield/i;
 
 const SUPERVISORY_AUTHORITY_DISCLOSURE_PATTERN =
   /supervisory authority|data protection authority|local data protection authorit(?:y|ies)|lodge a complaint|formal written complaints?|resolve any complaints?|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority|regulatory authorities|regulators?|ico|cnil|dpc/i;
@@ -4361,6 +4361,14 @@ function hasSubstantiveInternationalTransferDisclosure(value: string) {
   if (geographyOnlyConsentOrRights) {
     return false;
   }
+  const recipientOutsideRegionContext =
+    /\b(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?)\b.{0,260}\b(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|outside (?:your|the user's|the users?|their) countr(?:y|ies)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries|countries outside)\b/i.test(body);
+  const personalDataMovementOrProtectionContext =
+    /\b(?:personal data|personal information|information|data)\b/i.test(body) &&
+    /\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted|protect|protected|safeguard|safeguards?|agreements?|contracts?)\b/i.test(body);
+  if (recipientOutsideRegionContext && personalDataMovementOrProtectionContext) {
+    return true;
+  }
   return /\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted)\b.{0,180}\b(?:personal data|personal information|information|data)\b.{0,220}\b(?:outside|international|across countries|other countries|third countries|foreign countries|united states|usa|eea|european economic area|uk|united kingdom)\b/i.test(body) ||
     /\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted)\b.{0,220}\b(?:outside|international|across countries|other countries|third countries|foreign countries|united states|usa|eea|european economic area|uk|united kingdom)\b/i.test(body) ||
     /\b(?:stored|processed|accessed|shared|hosted)\b.{0,120}\b(?:in|from)\b.{0,120}\b(?:united states|usa|other countries|countries outside|third countries|foreign countries)\b/i.test(body) ||
@@ -4458,6 +4466,16 @@ function extractSupervisoryAuthoritySupportingContactContext(value: string) {
   }
   const contactMatch = text.match(/\b(?:privacy center|privacy team|data protection officer|dpo|contact form|contacting us by email|contact us)\b.{0,180}/i);
   return contactMatch?.[0] ? contactMatch[0].trim() : null;
+}
+
+function extractInternationalTransferSupportingSafeguardsContext(value: string) {
+  const text = cleanPolicyDisclosureEvidenceText(value);
+  const match = text.match(
+    /\b(?:agreements?|contracts?|safeguards?|protect(?:ed)?|protection)\b.{0,260}\b(?:personal data|personal information|information|data)\b.{0,260}\b(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies))\b/i
+  ) ?? text.match(
+    /\b(?:personal data|personal information|information|data)\b.{0,260}\b(?:agreements?|contracts?|safeguards?|protect(?:ed)?|protection)\b.{0,260}\b(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies))\b/i
+  );
+  return match?.[0] ? cleanPolicyDisclosureEvidenceText(match[0]).slice(0, 520) : null;
 }
 
 function scorePolicyDisclosureEvidenceText(value: string, disclosureType: string | undefined) {
@@ -4715,11 +4733,33 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
           )
         )
       : null;
-    const retainedArticle13Signal = effectiveArticle13Signal && supportingContactContext
+    const supportingTransferSafeguardsContext = config.rowId === "international_transfers_disclosure"
+      ? (
+          getString(effectiveArticle13Signal, ["supportingTransferSafeguardsContext", "supporting_transfer_safeguards_context"]) ??
+          extractInternationalTransferSupportingSafeguardsContext(
+            [
+              getString(effectiveArticle13Signal, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]),
+              effectiveTextMatchEvidence,
+              getString(effectiveArticle13Signal, ["evidenceText", "evidence_text"])
+            ].filter(Boolean).join(" ")
+          )
+        )
+      : null;
+    const retainedArticle13Signal = effectiveArticle13Signal
       ? {
           ...effectiveArticle13Signal,
-          supportingContactContext,
-          supporting_contact_context: supportingContactContext
+          ...(supportingContactContext
+            ? {
+                supportingContactContext,
+                supporting_contact_context: supportingContactContext
+              }
+            : {}),
+          ...(supportingTransferSafeguardsContext
+            ? {
+                supportingTransferSafeguardsContext,
+                supporting_transfer_safeguards_context: supportingTransferSafeguardsContext
+              }
+            : {})
         }
       : effectiveArticle13Signal;
     return makeOutcome(
@@ -4740,6 +4780,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
             : `Evidence: ${config.label}`,
         effectiveTextMatchEvidence ? `Excerpt: ${effectiveTextMatchEvidence}` : null,
         supportingContactContext ? `Supporting contact context: ${supportingContactContext}` : null,
+        supportingTransferSafeguardsContext ? `Supporting transfer safeguards context: ${supportingTransferSafeguardsContext}` : null,
         ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
       ].filter((value): value is string => Boolean(value)),
       {

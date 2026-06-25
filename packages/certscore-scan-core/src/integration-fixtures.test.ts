@@ -340,28 +340,24 @@ const expectations: Partial<Record<StaticFixturePage, {
   },
 };
 
-test("local fixture server pages produce expected v2 scan/review summaries", async () => {
-  const server = await startStaticFixtureServer();
-  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-fixtures-"));
-  try {
-    for (const page of Object.keys(expectations) as StaticFixturePage[]) {
-      const bundle = await scanFixturePage(server.urlFor(page), path.join(tempRoot, page));
-      const review = await reviewEvidenceBundle(bundle);
-      const report = await inspectBundle(bundle);
-      const expectation = expectations[page];
+const broadFixtureExpectationPages = (Object.keys(expectations) as StaticFixturePage[])
+  .filter((page) =>
+    page !== "cmp-cookie" &&
+    page !== "region-coded-collection-endpoint"
+  );
 
-      assertFixtureExpectations(page, bundle, review, report, expectation);
-
-      if (expectation.savedBundle) {
-        const savedReport = await loadSavedInspectSnapshot(expectation.savedBundle);
-        assertNormalizedSavedBundleComparison(page, report, savedReport, expectation);
-      }
+for (const page of broadFixtureExpectationPages) {
+  test(`fixture corpus: ${page} produces expected v2 scan/review summary`, async () => {
+    const server = await startStaticFixtureServer();
+    const tempRoot = await mkdtemp(path.join(tmpdir(), `certscore-v2-fixture-${page}-`));
+    try {
+      await scanAndAssertFixtureExpectations(server, tempRoot, page);
+    } finally {
+      await server.close();
+      await rm(tempRoot, { recursive: true, force: true });
     }
-  } finally {
-    await server.close();
-    await rm(tempRoot, { recursive: true, force: true });
-  }
-});
+  });
+}
 
 test("region-coded endpoint fixture projects bounded geography into cross-border review", async () => {
   const server = await startStaticFixtureServer();
@@ -606,6 +602,94 @@ test("pre-consent runtime scanner waits briefly for late choice controls when CM
   }
 });
 
+test("pre-consent runtime scanner recaptures late CMP choice controls when no initial controls are retained", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-late-cmp-choice-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-late-cmp-choice-controls"),
+      path.join(tempRoot, "consent-late-cmp-choice-controls"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.basis.includes("recapture:post_cmp_first_layer_choice_controls"),
+      true,
+      "scanner should retain late CMP choice controls even when no initial controls were visible",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner skips CMP recapture without first-layer surface hints", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-cmp-no-surface-hints-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("cmp-cookie"),
+      path.join(tempRoot, "cmp-cookie"),
+      "fast",
+      "selective",
+    );
+    const review = await reviewEvidenceBundle(bundle);
+    const report = await inspectBundle(bundle);
+    const expectation = expectations["cmp-cookie"];
+    const observation = bundle.consentUiObservations[0];
+    const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
+
+    assertFixtureExpectations("cmp-cookie", bundle, review, report, expectation);
+    if (expectation.savedBundle) {
+      const savedReport = await loadSavedInspectSnapshot(expectation.savedBundle);
+      assertNormalizedSavedBundleComparison("cmp-cookie", report, savedReport, expectation);
+    }
+    assert.equal(
+      bundle.cmpRuntimeObservations.some((cmp) => cmp.vendor === "OneTrust"),
+      true,
+      "fixture should retain CMP runtime evidence",
+    );
+    assert.equal(observation?.likelyPresent, false);
+    assert.equal(observation?.controls.length ?? 0, 0);
+    assert.equal(
+      timingLabels.includes("page evidence: consent UI CMP recapture"),
+      false,
+      "generic CMP runtime evidence without first-layer hints should not spend the full CMP recapture wait",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner does not classify bare generic choice controls without consent context", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-generic-bare-choice-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("generic-bare-choice-controls"),
+      path.join(tempRoot, "generic-bare-choice-controls"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.likelyPresent, false);
+    assert.equal(observation?.acceptControlObserved, false);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.deepEqual(observation?.controls ?? [], []);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner retains first-layer accept-only consent surface as no reject observed", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-no-reject-"));
@@ -778,6 +862,26 @@ test("pre-consent runtime scanner avoids long post-screenshot consent recapture"
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+async function scanAndAssertFixtureExpectations(
+  server: Awaited<ReturnType<typeof startStaticFixtureServer>>,
+  tempRoot: string,
+  page: StaticFixturePage,
+): Promise<void> {
+  const expectation = expectations[page];
+  assert.ok(expectation, `${page}: fixture expectation missing`);
+
+  const bundle = await scanFixturePage(server.urlFor(page), path.join(tempRoot, page));
+  const review = await reviewEvidenceBundle(bundle);
+  const report = await inspectBundle(bundle);
+
+  assertFixtureExpectations(page, bundle, review, report, expectation);
+
+  if (expectation.savedBundle) {
+    const savedReport = await loadSavedInspectSnapshot(expectation.savedBundle);
+    assertNormalizedSavedBundleComparison(page, report, savedReport, expectation);
+  }
+}
 
 async function scanFixturePage(
   url: string,

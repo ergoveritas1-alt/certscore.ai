@@ -55,6 +55,7 @@ export type VendorDisplayCategory =
   | "CDN"
   | "Cookie compliance"
   | "Customer support"
+  | "Marketing automation"
   | "Payment processors"
   | "Performance monitoring"
   | "Personalisation"
@@ -398,6 +399,20 @@ const rules: VendorRule[] = [
     basisLabel: "attentive_event_endpoint",
   },
   {
+    entity: "Klaviyo, Inc.",
+    vendor: "Klaviyo",
+    product: "Klaviyo",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "marketing_automation", "email_personalization"],
+    confidence: 0.94,
+    hostPatterns: [/^(?:static|static-tracking)\.klaviyo\.com$/i, /^(?:fast\.)?a\.klaviyo\.com$/i],
+    urlPatterns: [/\/(?:onsite|media\/js|client|track|events?|api|ajax)\b/i, /\/klaviyo(?:\.js)?\b/i],
+    cookiePatterns: [/^__kla_id$/i],
+    storageKeyPatterns: [/^klaviyo/i, /^__kla/i],
+    requireUrlPatternMatch: false,
+    basisLabel: "klaviyo_marketing_automation_runtime",
+  },
+  {
     entity: "BrightLine Partners LLC",
     vendor: "BrightLine",
     product: "BrightLine",
@@ -650,9 +665,13 @@ const rules: VendorRule[] = [
     vendor: "Sentry",
     product: "Sentry",
     purpose: "performance_monitoring",
-    regulatoryRelevance: ["performance_monitoring"],
+    regulatoryRelevance: ["performance_monitoring", "telemetry", "diagnostics"],
     confidence: 0.92,
-    hostPatterns: [/\.sentry\.io$/i, /\.ingest\.sentry\.io$/i],
+    hostPatterns: [
+      /^sentry\.io$/i,
+      /^(?:.+\.)sentry\.io$/i,
+      /^(?:.+\.)ingest\.[^.]+\.sentry\.io$/i,
+    ],
     urlPatterns: [/\/api\/\d+\/envelope/i, /\/api\/\d+\/store/i],
     basisLabel: "sentry_monitoring_endpoint",
   },
@@ -837,6 +856,17 @@ const rules: VendorRule[] = [
     basisLabel: "onetrust_cmp_script_or_cookie",
   },
   {
+    entity: "Consentmanager",
+    vendor: "Consentmanager",
+    product: "Consentmanager CMP",
+    purpose: "consent_management",
+    regulatoryRelevance: ["consent_management"],
+    confidence: 0.94,
+    hostPatterns: [/^cdn\.consentmanager\.net$/i],
+    urlPatterns: [/\/(?:delivery|cmp|choice|consent)/i],
+    basisLabel: "consentmanager_cmp_runtime_or_endpoint",
+  },
+  {
     entity: "Stripe, Inc.",
     vendor: "Stripe",
     product: "Stripe.js",
@@ -857,6 +887,26 @@ const rules: VendorRule[] = [
     confidence: 0.92,
     hostPatterns: [/^cdn\.jsdelivr\.net$/i],
     basisLabel: "jsdelivr_cdn_host",
+  },
+  {
+    entity: "DatoCMS",
+    vendor: "DatoCMS",
+    product: "DatoCMS Assets",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "media_delivery", "content_delivery"],
+    confidence: 0.92,
+    hostPatterns: [/^www\.datocms-assets\.com$/i],
+    basisLabel: "datocms_assets_cdn_host",
+  },
+  {
+    entity: "Mux, Inc.",
+    vendor: "Mux",
+    product: "Mux Image",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "media_delivery", "content_delivery"],
+    confidence: 0.92,
+    hostPatterns: [/^image\.mux\.com$/i],
+    basisLabel: "mux_image_media_delivery_host",
   },
   {
     entity: "Piano Software Inc.",
@@ -1123,6 +1173,9 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   }
   if (/cloudflare bot management|bot_detection|fraud_prevention|security/.test(haystack)) {
     return "Security";
+  }
+  if (/klaviyo|marketing_automation|marketing automation|email_personalization|email personalization/.test(haystack)) {
+    return "Marketing automation";
   }
   if (/piano|tinypass|cxense|personalization|personalisation|paywall|subscription|audience_management/.test(haystack)) {
     return "Personalisation";

@@ -14,6 +14,7 @@ export type RegulatoryGapTopFindingRow = {
   explanation?: string;
   id: string;
   label: string;
+  limitation?: string;
   note?: string;
   regulatoryMapping?: string[];
   retainedEvidence?: Record<string, unknown> | null;
@@ -86,6 +87,7 @@ function findingsForArea(
     })
     .map(({ concernKind, row }, index): CertScoreFinding => {
       const statusLabel = row.statusLabel ?? humanizeStatus(row.status ?? "gap_observed");
+      const shortSummary = getRegulatoryGapTopFindingSummary(row, config);
       return {
         id: `regulatory_gap__${config.idPrefix}__${safeId(row.id)}`,
         label: row.label,
@@ -118,11 +120,11 @@ function findingsForArea(
         },
         evidencePreview: [
           `${area.title}: ${row.label}`,
-          row.note ?? row.explanation ?? `${config.lawLabel} checklist row projected as ${statusLabel}.`
+          shortSummary || `${config.lawLabel} checklist row projected as ${statusLabel}.`
         ],
         evidenceRefs: row.evidenceRefs ?? [],
         severity: "high",
-        shortSummary: getRegulatoryGapTopFindingSummary(row, config)
+        shortSummary
       };
     });
 }
@@ -138,7 +140,12 @@ function getRegulatoryTopFindingConcernRank(kind: RegulatoryTopFindingConcernKin
 }
 
 function getRegulatoryGapTopFindingSummary(row: RegulatoryGapTopFindingRow, config: RegulatoryGapAreaConfig) {
-  const summary = row.note ?? row.explanation ?? row.criticalEvidence?.statusBasis ?? null;
+  const summary =
+    row.criticalEvidence?.statusBasis ??
+    row.limitation ??
+    row.note ??
+    row.explanation ??
+    null;
   if (typeof summary === "string" && summary.trim().length > 0) {
     return summary.trim();
   }

@@ -163,7 +163,7 @@ export function createOpenAiNanoPolicyAssistProvider(
             article13DisclosureSignals: [{
               disclosureType: "one allowed Article 13 disclosure type",
               status: "observed|partial",
-              evidenceText: "short excerpt-supported phrase, max 320 chars",
+              evidenceText: "short excerpt-supported phrase, max 640 chars",
               confidence: "0..1",
             }],
             mentionedVendors: ["vendor names explicitly present in excerpt"],
@@ -338,7 +338,7 @@ function normalizeArticle13Signals(value: unknown): NanoTopicExtractionResult["a
     return [{
       disclosureType,
       status,
-      evidenceText: stringValue(record.evidenceText).slice(0, 320) || undefined,
+      evidenceText: stringValue(record.evidenceText).slice(0, 640) || undefined,
       confidence: confidenceValue(record.confidence, 0.5),
       source: "nano" as const,
     }];
