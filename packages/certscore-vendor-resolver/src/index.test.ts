@@ -421,7 +421,10 @@ test("resolves repeated advertising and measurement endpoint families", () => {
   assertResolved(observations, "TransUnion", "Neustar / AGKN", "advertising");
   assertResolved(observations, "RevJet", "RevJet", "advertising");
   assertResolved(observations, "Spotify", "Spotify Pixel", "advertising");
-  assertResolved(observations, "BrightLine", "BrightLine", "advertising");
+  const brightLine = observations.find((item) => item.vendor === "BrightLine" && item.product === "BrightLine");
+  assert.ok(brightLine, "BrightLine should resolve");
+  assert.equal(brightLine.purpose, "advertising");
+  assert.equal(brightLine.confidence, 0.88);
   assertResolved(observations, "DoubleVerify", "DoubleVerify", "advertising");
   assertResolved(observations, "LinkedIn", "LinkedIn Insight Tag", "advertising");
   assertResolved(observations, "Amazon", "Amazon Ads", "advertising");
@@ -490,6 +493,7 @@ test("resolves CNN-style detected technologies from canonical registry sources",
     request("https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js", "pagead2.googlesyndication.com"),
     request("https://fls.doubleclick.net/activityi;src=123;type=abc;cat=def", "fls.doubleclick.net"),
     request("https://sb.scorecardresearch.com/b?c1=2&c2=123", "sb.scorecardresearch.com"),
+    request("https://events.brightline.tv/collect?event=quartile", "events.brightline.tv"),
     {
       type: "cookie",
       cookieName: "__cf_bm",
@@ -501,7 +505,7 @@ test("resolves CNN-style detected technologies from canonical registry sources",
   assertResolved(observations, "Stripe", "Stripe.js", "security");
   assertResolved(observations, "jsDelivr", "jsDelivr CDN", "infrastructure");
   assertResolved(observations, "Optimizely", "Optimizely", "analytics");
-  assertResolved(observations, "Piano", "Piano", "analytics");
+  assertResolved(observations, "Piano", "Piano (Tinypass)", "infrastructure");
   assertResolved(observations, "Piano", "Cxense", "analytics");
   assertResolved(observations, "Bombora", "Bombora Visitor Insights", "advertising");
   assertResolved(observations, "Google", "Google Interactive Media Ads", "advertising");
@@ -514,6 +518,18 @@ test("resolves CNN-style detected technologies from canonical registry sources",
   assert.equal(scorecardResearch?.confidence, 0.92);
   assert.equal(scorecardResearch?.regulatoryRelevance.includes("audience_measurement"), true);
   assert.equal(scorecardResearch?.regulatoryRelevance.includes("advertising_measurement"), true);
+  const brightLine = observations.find((item) => item.vendor === "BrightLine" && item.product === "BrightLine");
+  assert.ok(brightLine, "BrightLine should resolve");
+  assert.equal(brightLine.purpose, "advertising");
+  assert.equal(brightLine.confidence, 0.88);
+  assert.equal(brightLine.regulatoryRelevance.includes("video_ad_measurement"), true);
+  assert.equal(brightLine.regulatoryRelevance.includes("ad_event_tracking"), true);
+  const pianoTinypass = observations.find((item) => item.vendor === "Piano" && item.product === "Piano (Tinypass)");
+  assert.ok(pianoTinypass, "Piano (Tinypass) should resolve");
+  assert.equal(pianoTinypass.confidence, 0.95);
+  assert.equal(pianoTinypass.regulatoryRelevance.includes("paywall"), true);
+  assert.equal(pianoTinypass.regulatoryRelevance.includes("cdn"), true);
+  assert.equal(pianoTinypass.regulatoryRelevance.includes("script_delivery"), true);
   assertResolved(observations, "Cloudflare", "Cloudflare Bot Management", "security");
 });
 
@@ -521,6 +537,7 @@ test("assigns canonical display categories for CNN-style technologies", () => {
   assert.equal(resolveVendorDisplayCategory({ vendor: "Google", product: "Google Sign-in", purpose: "infrastructure", regulatoryRelevance: ["authentication"] }), "Authentication");
   assert.equal(resolveVendorDisplayCategory({ vendor: "Stripe", product: "Stripe.js", purpose: "security", regulatoryRelevance: ["payment_processing"] }), "Payment processors");
   assert.equal(resolveVendorDisplayCategory({ vendor: "Cloudflare", product: "Cloudflare Bot Management", purpose: "security", regulatoryRelevance: ["bot_detection"] }), "Security");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "Piano", product: "Piano (Tinypass)", purpose: "infrastructure", regulatoryRelevance: ["personalization", "paywall", "cdn", "script_delivery"] }), "Personalisation");
   assert.equal(resolveVendorDisplayCategory({ vendor: "Piano", product: "Cxense", purpose: "analytics", regulatoryRelevance: ["personalization"] }), "Personalisation");
   assert.equal(resolveVendorDisplayCategory({ vendor: "Google", product: "Google Publisher Tag", purpose: "advertising", regulatoryRelevance: ["ad_delivery"] }), "Advertising");
   assert.equal(resolveVendorDisplayCategory({ vendor: "jsDelivr", product: "jsDelivr CDN", purpose: "infrastructure", regulatoryRelevance: ["cdn"] }), "CDN");
@@ -528,9 +545,27 @@ test("assigns canonical display categories for CNN-style technologies", () => {
   assert.equal(resolveVendorDisplayCategory({ vendor: "Optimizely", product: "Optimizely", purpose: "analytics", regulatoryRelevance: ["experimentation"] }), "A/B Testing");
   assert.equal(resolveVendorDisplayCategory({ vendor: "Quantcast", product: "Quantcast Measure", purpose: "advertising", regulatoryRelevance: ["audience_measurement"] }), "Advertising");
   assert.equal(resolveVendorDisplayCategory({ vendor: "ScorecardResearch / Comscore", product: "ScorecardResearch", purpose: "analytics", regulatoryRelevance: ["audience_measurement", "advertising_measurement"] }), "Analytics");
+  assert.equal(resolveVendorDisplayCategory({ vendor: "BrightLine", product: "BrightLine", purpose: "advertising", regulatoryRelevance: ["video_ad_measurement", "ad_event_tracking"] }), "Advertising");
 });
 
-test("resolves Piano Analytics cookie names including _pctx", () => {
+test("resolves BrightLine video ad measurement collector endpoints", () => {
+  const observations = resolveVendorObservations([
+    request("https://events.brightline.tv/beacon/impression", "events.brightline.tv"),
+    request("https://collector.brightline.tv/measurement/video-quartile", "collector.brightline.tv"),
+    request("https://cdn.brightline.tv/static/player.js", "cdn.brightline.tv"),
+  ]);
+
+  const brightLine = observations.find((item) => item.vendor === "BrightLine" && item.product === "BrightLine");
+  assert.ok(brightLine, "BrightLine should resolve");
+  assert.equal(brightLine.purpose, "advertising");
+  assert.equal(brightLine.confidence, 0.88);
+  assert.deepEqual(brightLine.matchedHostnames.sort(), ["collector.brightline.tv", "events.brightline.tv"]);
+  assert.equal(brightLine.matchedHostnames.includes("cdn.brightline.tv"), false);
+  assert.equal(brightLine.regulatoryRelevance.includes("video_ad_measurement"), true);
+  assert.equal(brightLine.regulatoryRelevance.includes("ad_event_tracking"), true);
+});
+
+test("resolves Piano Tinypass cookie names including _pctx", () => {
   const observations = resolveVendorObservations([
     {
       type: "cookie",
@@ -549,9 +584,11 @@ test("resolves Piano Analytics cookie names including _pctx", () => {
     },
   ]);
 
-  assertResolved(observations, "Piano", "Piano", "analytics");
-  const piano = observations.find((item) => item.vendor === "Piano" && item.product === "Piano");
+  assertResolved(observations, "Piano", "Piano (Tinypass)", "infrastructure");
+  const piano = observations.find((item) => item.vendor === "Piano" && item.product === "Piano (Tinypass)");
   assert.deepEqual(piano?.matchedCookieNames.sort(), ["_pcid", "_pctx", "_pprv"]);
+  assert.equal(piano?.regulatoryRelevance.includes("personalization"), true);
+  assert.equal(piano?.regulatoryRelevance.includes("paywall"), true);
 });
 
 test("resolves customer experience and session replay endpoint families from canonical registry sources", () => {

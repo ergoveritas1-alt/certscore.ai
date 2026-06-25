@@ -944,21 +944,27 @@ test("policySurfaceScanner extracts late mature-policy GDPR transparency signals
     assert.equal(sectionEvidenceFor("supervisory_authority")?.selectedPolicySectionHeading, "Compliance and cooperation with regulators");
     assert.equal(sectionEvidenceFor("legal_basis")?.signalObserved, "not_confirmed");
     assert.equal(signalFor("data_retention")?.status, "observed");
+    assert.equal(signalFor("data_retention")?.confidence, 0.9);
     assert.equal(signalFor("data_retention")?.selectedPolicySectionHeading, "Retaining your information");
     assert.match(signalFor("data_retention")?.evidenceText ?? "", /deleted or anonymized|retained as long as necessary/i);
     assert.equal(signalFor("data_subject_rights")?.status, "observed");
+    assert.equal(signalFor("data_subject_rights")?.confidence, 0.8);
     assert.match(signalFor("data_subject_rights")?.selectedPolicySectionHeading ?? "", /privacy controls|exporting and deleting/i);
     assert.match(signalFor("data_subject_rights")?.evidenceText ?? "", /privacy controls|activity controls|ad settings|personalization settings|Google Takeout|delete your information|My Activity/i);
     assert.equal(signalFor("international_transfers")?.status, "observed");
+    assert.equal(signalFor("international_transfers")?.confidence, 0.84);
     assert.equal(signalFor("international_transfers")?.selectedPolicySectionHeading, "Data transfers");
     assert.match(signalFor("international_transfers")?.evidenceText ?? "", /servers around the world|outside the country where you live|data privacy frameworks/i);
     assert.equal(signalFor("supervisory_authority")?.status, "partial");
+    assert.equal(signalFor("supervisory_authority")?.confidence, 0.62);
     assert.equal(signalFor("supervisory_authority")?.selectedPolicySectionHeading, "Compliance and cooperation with regulators");
     assert.match(signalFor("supervisory_authority")?.evidenceText ?? "", /regulatory authorities|local data protection authorities|formal written complaints/i);
     assert.equal(signalFor("automated_decision_making_or_profiling")?.status, "partial");
+    assert.equal(signalFor("automated_decision_making_or_profiling")?.confidence, 0.56);
     assert.equal(signalFor("automated_decision_making_or_profiling")?.selectedPolicySectionHeading, "Automated systems");
     assert.match(signalFor("automated_decision_making_or_profiling")?.evidenceText ?? "", /automated systems|algorithms|personalized ads/i);
     assert.equal(signalFor("controller_contact")?.status, "partial");
+    assert.equal(signalFor("controller_contact")?.confidence, 0.62);
     assert.equal(signalFor("controller_contact")?.selectedPolicySectionHeading, "European requirements");
     assert.match(signalFor("controller_contact")?.evidenceText ?? "", /Google LLC|Google Ireland Limited|contact Google/i);
     assert.equal(signalFor("legal_basis"), undefined);
@@ -975,6 +981,7 @@ test("policySurfaceScanner does not classify deletion rights alone as retention 
 
     assert.equal(retention, undefined);
     assert.equal(rights?.status, "observed");
+    assert.equal(rights?.confidence, 0.9);
     assert.match(rights?.evidenceText ?? "", /right to access, delete, erase/i);
   }, { enableNanoPolicyAssist: true });
 });

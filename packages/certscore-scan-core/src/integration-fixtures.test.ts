@@ -518,6 +518,55 @@ test("pre-consent runtime scanner retains first-layer accept and reject controls
   }
 });
 
+test("pre-consent runtime scanner recaptures late first-layer controls without interaction", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-late-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-late-first-layer-controls"),
+      path.join(tempRoot, "consent-late-first-layer-controls"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+    const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
+
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.layerInspected, "first_layer");
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /\baccept all\b/i.test(label)),
+      true,
+      "scanner should retain late first-layer accept label",
+    );
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /\breject all\b/i.test(label)),
+      true,
+      "scanner should retain late first-layer reject label",
+    );
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /\bcookie settings\b/i.test(label)),
+      true,
+      "scanner should retain late first-layer settings label",
+    );
+    assert.equal(
+      observation?.basis.includes("recapture:post_settle_first_layer_controls"),
+      true,
+      "scanner should mark late controls as retained by the bounded post-settle recapture",
+    );
+    assert.equal(
+      timingLabels.includes("page evidence: consent UI post-settle recapture"),
+      true,
+      "scanner should use the bounded post-settle recapture path",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner retains first-layer accept-only consent surface as no reject observed", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-no-reject-"));

@@ -36,6 +36,36 @@ type GdprEprivacyCoverageChecklistCardProps = {
 
 type RowToolState = Partial<Record<"correction" | "evidence", boolean>>;
 type CoverageIcon = "alert" | "check" | "circle-alert" | "equal" | "flag" | "info" | "slash";
+type PolicyHighlightSnippet = {
+  label: string;
+  text: string;
+  tone: "primary" | "supporting" | "fallback";
+};
+type PolicyHighlightRange = {
+  end: number;
+  label: string;
+  marker: number;
+  start: number;
+  tone: PolicyHighlightSnippet["tone"];
+};
+type Article13DisclosureType =
+  | "controller_contact"
+  | "processing_purposes"
+  | "legal_basis"
+  | "recipients_or_vendor_categories"
+  | "data_retention"
+  | "data_subject_rights"
+  | "international_transfers"
+  | "dpo_contact"
+  | "supervisory_authority"
+  | "automated_decision_making_or_profiling";
+type PolicyReviewPayload = {
+  capturedText: string;
+  evidenceLabel: EvidenceLabel;
+  findingLabel: string;
+  snippets: PolicyHighlightSnippet[];
+  sourceUrl: string | null;
+};
 
 const DIRECTION_UI: Record<AssessmentDirection, {
   icon: CoverageIcon;
@@ -90,12 +120,13 @@ const REPORT_ROW_GROUPS = [
       "processing_purposes_disclosure",
       "legal_basis_disclosure_observed",
       "recipients_vendor_categories_disclosure",
+      "retention_disclosure",
       "retention_disclosure_observed",
+      "retention_disclosure_present",
       "data_subject_rights_disclosure",
       "international_transfers_disclosure",
       "dpo_contact_point_disclosure",
-      "supervisory_authority_complaint_disclosure",
-      "automated_decision_making_profiling_disclosure"
+      "supervisory_authority_complaint_disclosure"
     ]
   }
 ] as const;
@@ -126,6 +157,586 @@ function retainedNumber(item: GdprEprivacyCoverageChecklistItem, keys: string[])
     }
   }
   return null;
+}
+
+function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageChecklistItem): PolicyReviewPayload | null {
+  const evidence = getRetainedEvidenceRecord(item);
+  const article13Signal = getRecord(evidence.article13Signal) ?? getRecord(evidence.article_13_signal);
+  const rowSpecificSectionEvidence =
+    getRecord(evidence.rowSpecificSectionEvidence) ??
+    getRecord(evidence.row_specific_section_evidence);
+  const summary = getRecord(evidence.policySurfaceSummary) ?? getRecord(evidence.policy_surface_summary);
+  if (!summary) {
+    return null;
+  }
+  const fullRetainedPolicyText =
+    getString(summary.retainedPrivacyPolicyTextExcerpt) ??
+    getString(summary.retained_privacy_policy_text_excerpt) ??
+    "";
+  const retainedPolicySurfaceSnippetText = uniqueStrings([
+    fullRetainedPolicyText,
+    getString(summary.selectedPolicySectionExcerpt),
+    getString(summary.selected_policy_section_excerpt),
+    ...getPolicySummaryArticle13Signals(summary).flatMap((signal) => [
+      getString(signal.evidenceText),
+      getString(signal.evidence_text),
+      getString(signal.selectedPolicySectionExcerpt),
+      getString(signal.selected_policy_section_excerpt),
+      getString(signal.supportingContactContext),
+      getString(signal.supporting_contact_context)
+    ])
+  ].filter((value): value is string => Boolean(value))).join("\n\n");
+  const snippets = dedupePolicyHighlightSnippets([
+    ...getGdprTransparencyPolicySnippets(item),
+    ...getFallbackPolicyDisclosureHighlightSnippets(
+      retainedPolicySurfaceSnippetText,
+      item
+    )
+  ]);
+  const retainedContextExcerpt = fullRetainedPolicyText
+    ? getPolicyContextExcerptForSnippets(fullRetainedPolicyText, snippets)
+    : null;
+  const capturedTextCandidates = uniqueStrings([
+    retainedContextExcerpt,
+    getString(rowSpecificSectionEvidence?.selectedPolicySectionExcerpt),
+    getString(rowSpecificSectionEvidence?.selected_policy_section_excerpt),
+    getString(article13Signal?.selectedPolicySectionExcerpt),
+    getString(article13Signal?.selected_policy_section_excerpt),
+    getString(article13Signal?.evidenceText),
+    getString(article13Signal?.evidence_text),
+    ...getPolicySummaryArticle13SignalsForRow(summary, item).flatMap((signal) => [
+      getString(signal.selectedPolicySectionExcerpt),
+      getString(signal.selected_policy_section_excerpt),
+      getString(signal.evidenceText),
+      getString(signal.evidence_text)
+    ]),
+    getString(summary.selectedPolicySectionExcerpt),
+    getString(summary.selected_policy_section_excerpt),
+    ...getPolicySummaryArticle13Signals(summary).flatMap((signal) => [
+      getString(signal.evidenceText),
+      getString(signal.evidence_text),
+      getString(signal.selectedPolicySectionExcerpt),
+      getString(signal.selected_policy_section_excerpt),
+      getString(signal.supportingContactContext),
+      getString(signal.supporting_contact_context)
+    ]),
+    fullRetainedPolicyText,
+    retainedPolicySurfaceSnippetText
+  ].filter((value): value is string => Boolean(value)));
+  const capturedText = capturedTextCandidates
+    .map((candidate) => ({
+      candidate,
+      matchingSnippets: getMatchingPolicyHighlightSnippets(candidate, snippets)
+    }))
+    .sort((left, right) => right.matchingSnippets.length - left.matchingSnippets.length)[0]?.candidate;
+  if (!capturedText) {
+    return null;
+  }
+  const visibleSnippets = getDistinctMatchingPolicyHighlightSnippets(capturedText, snippets);
+  if (visibleSnippets.length === 0) {
+    return null;
+  }
+  const sourceUrl = [
+    ...getStringArray(summary.privacyPolicyUrls),
+    ...getStringArray(summary.privacy_policy_urls),
+    getString(summary.selectedPolicySectionUrl),
+    getString(summary.selected_policy_section_url)
+  ].find(Boolean) ?? null;
+  return {
+    capturedText,
+    evidenceLabel: getEvidenceLabel(item),
+    findingLabel: item.label,
+    snippets: visibleSnippets,
+    sourceUrl
+  };
+}
+
+function getPolicyContextExcerptForSnippets(source: string, snippets: PolicyHighlightSnippet[]) {
+  const ranges = getPolicyHighlightRanges(source, snippets).sort((left, right) => left.start - right.start);
+  if (ranges.length === 0) {
+    return null;
+  }
+  const contextCharacters = 900;
+  const windows: Array<{ end: number; start: number }> = [];
+  for (const range of ranges) {
+    const start = Math.max(0, range.start - contextCharacters);
+    const end = Math.min(source.length, range.end + contextCharacters);
+    const previous = windows.at(-1);
+    if (previous && start <= previous.end) {
+      previous.end = Math.max(previous.end, end);
+      continue;
+    }
+    windows.push({ end, start });
+  }
+  return windows
+    .map((window) => {
+      const prefix = window.start > 0 ? "... " : "";
+      const suffix = window.end < source.length ? " ..." : "";
+      return `${prefix}${source.slice(window.start, window.end).trim()}${suffix}`;
+    })
+    .join("\n\n...\n\n");
+}
+
+function getGdprTransparencyPolicySnippets(item: GdprEprivacyCoverageChecklistItem) {
+  const evidence = getRetainedEvidenceRecord(item);
+  const article13Signal = getRecord(evidence.article13Signal) ?? getRecord(evidence.article_13_signal);
+  const rowSpecificSectionEvidence =
+    getRecord(evidence.rowSpecificSectionEvidence) ??
+    getRecord(evidence.row_specific_section_evidence);
+  const summary = getRecord(evidence.policySurfaceSummary) ?? getRecord(evidence.policy_surface_summary);
+  const primarySnippets = dedupePolicyHighlightSnippets([
+    ...[
+      getString(article13Signal?.evidenceText),
+      getString(article13Signal?.evidence_text)
+    ].filter((value): value is string => Boolean(value))
+      .map((value) => makePolicyHighlightSnippet(
+        alignPolicyEvidenceSnippetToCompleteSentence(cleanEvidenceText(value)),
+        "Primary confirming text",
+        "primary"
+      )),
+    ...[
+      getString(article13Signal?.supportingContactContext),
+      getString(article13Signal?.supporting_contact_context)
+    ].filter((value): value is string => Boolean(value))
+      .map((value) => makePolicyHighlightSnippet(
+        cleanEvidenceText(value),
+        "Supporting contact context",
+        "supporting"
+      )),
+    ...item.evidenceRefs.flatMap((ref) => {
+      const match = ref.match(/^(Excerpt|Supporting contact context):\s*(.+)$/i);
+      if (!match?.[2]) {
+        return [];
+      }
+      const isSupporting = /^Supporting contact context$/i.test(match[1] ?? "");
+      return [makePolicyHighlightSnippet(
+        isSupporting
+          ? cleanEvidenceText(match[2])
+          : alignPolicyEvidenceSnippetToCompleteSentence(cleanEvidenceText(match[2])),
+        isSupporting ? "Supporting contact context" : "Primary confirming text",
+        isSupporting ? "supporting" : "primary"
+      )];
+    })
+  ].filter((snippet) => snippet.text.length >= (snippet.tone === "supporting" ? 6 : 24)));
+  if (primarySnippets.length > 0) {
+    return primarySnippets;
+  }
+
+  return dedupePolicyHighlightSnippets([
+    getString(article13Signal?.selectedPolicySectionExcerpt),
+    getString(article13Signal?.selected_policy_section_excerpt),
+    getString(rowSpecificSectionEvidence?.selectedPolicySectionExcerpt),
+    getString(rowSpecificSectionEvidence?.selected_policy_section_excerpt),
+    ...getPolicySummaryArticle13SignalsForRow(summary, item).flatMap((signal) => [
+      getString(signal.evidenceText),
+      getString(signal.evidence_text),
+      getString(signal.selectedPolicySectionExcerpt),
+      getString(signal.selected_policy_section_excerpt)
+    ]),
+    getString(summary?.selectedPolicySectionExcerpt),
+    getString(summary?.selected_policy_section_excerpt)
+  ].filter((value): value is string => Boolean(value))
+    .map((value) => makePolicyHighlightSnippet(cleanEvidenceText(value), "Matched policy text", "fallback"))
+    .filter((snippet) => snippet.text.length >= 24));
+}
+
+function getPolicySummaryArticle13SignalsForRow(
+  summary: Record<string, unknown> | null,
+  item: GdprEprivacyCoverageChecklistItem
+) {
+  const disclosureType = getArticle13DisclosureTypeForChecklistRow(item);
+  if (!summary || !disclosureType) {
+    return [];
+  }
+  return [
+    ...getRecordArray(summary.article13DisclosureSignals),
+    ...getRecordArray(summary.article_13_disclosure_signals)
+  ].filter((signal) =>
+    getString(signal.disclosureType) === disclosureType ||
+    getString(signal.disclosure_type) === disclosureType
+  );
+}
+
+function getPolicySummaryArticle13Signals(summary: Record<string, unknown> | null) {
+  if (!summary) {
+    return [];
+  }
+  return [
+    ...getRecordArray(summary.article13DisclosureSignals),
+    ...getRecordArray(summary.article_13_disclosure_signals)
+  ];
+}
+
+function getArticle13DisclosureTypeForChecklistRow(itemOrRowId: GdprEprivacyCoverageChecklistItem | string): Article13DisclosureType | null {
+  const rowId = typeof itemOrRowId === "string" ? itemOrRowId : itemOrRowId.id;
+  switch (rowId) {
+    case "controller_contact_disclosure":
+      return "controller_contact";
+    case "processing_purposes_disclosure":
+      return "processing_purposes";
+    case "legal_basis_disclosure_observed":
+      return "legal_basis";
+    case "recipients_vendor_categories_disclosure":
+      return "recipients_or_vendor_categories";
+    case "retention_disclosure":
+    case "retention_disclosure_observed":
+    case "retention_disclosure_present":
+      return "data_retention";
+    case "data_subject_rights_disclosure":
+      return "data_subject_rights";
+    case "international_transfers_disclosure":
+      return "international_transfers";
+    case "dpo_contact_point_disclosure":
+      return "dpo_contact";
+    case "supervisory_authority_complaint_disclosure":
+      return "supervisory_authority";
+    default:
+      break;
+  }
+  if (typeof itemOrRowId !== "string") {
+    return getArticle13DisclosureTypeForChecklistLabel(itemOrRowId.label);
+  }
+  return null;
+}
+
+function makePolicyHighlightSnippet(text: string, label: string, tone: PolicyHighlightSnippet["tone"]): PolicyHighlightSnippet {
+  return { label, text, tone };
+}
+
+function dedupePolicyHighlightSnippets(snippets: PolicyHighlightSnippet[]) {
+  const retained: PolicyHighlightSnippet[] = [];
+  for (const snippet of snippets) {
+    const cleanedText = cleanEvidenceText(snippet.text);
+    if (!cleanedText) {
+      continue;
+    }
+    const normalized = normalizePolicyHighlightText(cleanedText).normalized;
+    if (!normalized) {
+      continue;
+    }
+    const duplicate = retained.some((candidate) => {
+      const candidateNormalized = normalizePolicyHighlightText(candidate.text).normalized;
+      return candidateNormalized === normalized ||
+        (normalized.length > 80 && candidateNormalized.includes(normalized)) ||
+        (candidateNormalized.length > 80 && normalized.includes(candidateNormalized));
+    });
+    if (!duplicate) {
+      retained.push({ ...snippet, text: cleanedText });
+    }
+  }
+  return retained.slice(0, 6);
+}
+
+function alignPolicyEvidenceSnippetToCompleteSentence(value: string) {
+  const normalized = cleanEvidenceText(value);
+  const sentenceStart = normalized.search(/[.!?]\s+(?=[A-Z0-9"“])/);
+  if (
+    sentenceStart >= 0 &&
+    sentenceStart < 120 &&
+    /^[a-z][a-z\s-]{0,80}$/i.test(normalized.slice(0, sentenceStart).replace(/[^a-z\s-]/gi, "")) &&
+    normalized.slice(sentenceStart + 2).trim().length >= 48
+  ) {
+    return normalized.slice(sentenceStart + 2).trim();
+  }
+  return normalized;
+}
+
+const DATA_SUBJECT_RIGHTS_HIGHLIGHT_PATTERN =
+  /your rights|data subject rights|right to (?:access|delete|erase|erasure|rectif|object|restrict|port)|rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)|access.{0,80}(?:your )?(?:personal )?(?:data|information)|delete your information|delete.{0,80}(?:your )?(?:personal )?(?:data|information)|erase your information|erase.{0,80}(?:your )?(?:personal )?(?:data|information)|erasure|correct (?:your )?(?:personal )?(?:data|information)|rectif|portability|object to|restrict (?:the )?processing|export.{0,80}(?:your )?(?:data|information)|review and update|my activity|google takeout|request to remove content|privacy controls|download a copy|stop collecting your information/i;
+
+function getArticle13DisclosureTypeForChecklistLabel(label: string): Article13DisclosureType | null {
+  switch (label.trim().toLocaleLowerCase()) {
+    case "controller/contact disclosure":
+      return "controller_contact";
+    case "processing purposes disclosure":
+      return "processing_purposes";
+    case "legal basis disclosure":
+      return "legal_basis";
+    case "recipients/vendor categories disclosed":
+      return "recipients_or_vendor_categories";
+    case "retention disclosure":
+      return "data_retention";
+    case "data subject rights disclosure":
+      return "data_subject_rights";
+    case "international transfer disclosure":
+      return "international_transfers";
+    case "dpo / privacy contact point":
+      return "dpo_contact";
+    case "supervisory authority complaint":
+      return "supervisory_authority";
+    default:
+      return null;
+  }
+}
+
+function getPolicyDisclosureHighlightPattern(item: GdprEprivacyCoverageChecklistItem) {
+  switch (getArticle13DisclosureTypeForChecklistRow(item)) {
+    case "controller_contact":
+      return /controller|contact (?:us|our privacy team)|privacy@|privacy office|data protection office|questions about (?:this )?(?:policy|privacy)/i;
+    case "processing_purposes":
+      return /purpose|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|provide (?:our )?services|personalize|improve (?:our )?(?:services|products)|protect (?:our )?(?:users|services)/i;
+    case "legal_basis":
+      return /legal basis|lawful basis|lawful bases|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|public interest|vital interests?|consent/i;
+    case "recipients_or_vendor_categories":
+      return /recipients|service providers|processors|vendors?|partners|affiliates|third parties|third-party|advertising partners?|analytics providers?|share (?:your )?(?:personal )?(?:data|information)|disclose (?:your )?(?:personal )?(?:data|information)|process (?:information|personal information) on (?:our|the company's) behalf/i;
+    case "data_retention":
+      return /retention period|retention criteria|storage period|retain|retained|retaining|keep (?:your )?(?:personal )?(?:data|information)|kept for|stored for|as long as necessary|deleted? or anonymi[sz]ed?|delete (?:it|them|the data|personal data|personal information|your information) after|expires?|no longer needed|required by law|legal purposes|fraud|abuse/i;
+    case "data_subject_rights":
+      return DATA_SUBJECT_RIGHTS_HIGHLIGHT_PATTERN;
+    case "international_transfers":
+      return /international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|EU-U\.S\.|UK Extension|Swiss-U\.S\.|privacy shield|transfer (?:your )?(?:personal )?(?:data|information)/i;
+    case "dpo_contact":
+      return /data protection officer|\bdpo\b|data protection contact|data protection office|privacy office|privacy contact|privacy team/i;
+    case "supervisory_authority":
+      return /supervisory authority|data protection authority|local data protection authorit(?:y|ies)|lodge a complaint|complain to (?:a )?(?:regulator|authority)|formal written complaints?|regulatory authorities|unresolved complaints?|regulators?.{0,120}(?:complaints?|authorities|resolve)|\bico\b|\bcnil\b|\bdpc\b/i;
+    default:
+      return null;
+  }
+}
+
+function getFallbackPolicyDisclosureHighlightSnippets(
+  source: string,
+  item: GdprEprivacyCoverageChecklistItem
+): PolicyHighlightSnippet[] {
+  const pattern = getPolicyDisclosureHighlightPattern(item);
+  if (!pattern) {
+    return [];
+  }
+  return uniqueStrings(splitPolicyExcerptIntoHighlightCandidates(source)
+    .filter((candidate) => pattern.test(candidate))
+    .slice(0, 3))
+    .map((snippet) => makePolicyHighlightSnippet(snippet, "Matched policy text", "fallback"));
+}
+
+function splitPolicyExcerptIntoHighlightCandidates(source: string) {
+  const normalized = cleanEvidenceText(source);
+  const sentenceCandidates = normalized
+    .split(/(?<=[.!?])\s+(?=[A-Z0-9"“])/)
+    .map((candidate) => candidate.trim())
+    .filter((candidate) => candidate.length >= 24 && candidate.length <= 900);
+  const clauseCandidates = normalized
+    .split(/(?<=[.;])\s+|,\s+(?=(?:to|or|and|you|we|also|however|including|such as)\b)/i)
+    .map((candidate) => candidate.trim())
+    .filter((candidate) => candidate.length >= 24 && candidate.length <= 420);
+  return [...sentenceCandidates, ...clauseCandidates];
+}
+
+function findCaseInsensitiveIndex(source: string, needle: string, fromIndex: number) {
+  return source.toLocaleLowerCase().indexOf(needle.toLocaleLowerCase(), fromIndex);
+}
+
+function normalizePolicyHighlightText(value: string) {
+  let normalized = "";
+  const indexMap: number[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index] ?? "";
+    const folded = character.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+    if (/[\p{L}\p{N}]/u.test(folded)) {
+      normalized += folded;
+      indexMap.push(index);
+    }
+  }
+  return { indexMap, normalized };
+}
+
+function getHighlightNeedles(snippet: string) {
+  const cleaned = cleanEvidenceText(snippet);
+  const pieces = cleaned
+    .split(/(?<=[.!?;:])\s+|,\s+(?=(?:to|or|and|you|we|including|such as)\b)/i)
+    .map((piece) => cleanEvidenceText(piece).replace(/^[.;:,]+|[.;:,]+$/g, "").trim())
+    .filter((piece) => piece.length >= 32);
+  return uniqueStrings([cleaned, ...pieces]);
+}
+
+function getPolicyHighlightRanges(source: string, snippets: PolicyHighlightSnippet[]) {
+  const normalizedSource = normalizePolicyHighlightText(source);
+  return snippets.flatMap((snippet, snippetIndex) =>
+    getNormalizedPolicyHighlightRangesForSnippet(snippet, snippetIndex, normalizedSource)
+  );
+}
+
+function getMatchingPolicyHighlightSnippets(source: string, snippets: PolicyHighlightSnippet[]) {
+  const normalizedSource = normalizePolicyHighlightText(source);
+  return snippets.filter((snippet, snippetIndex) =>
+    getExactPolicyHighlightRangesForSnippet(source, snippet, snippetIndex).length > 0 ||
+    getNormalizedPolicyHighlightRangesForSnippet(snippet, snippetIndex, normalizedSource).length > 0
+  );
+}
+
+function getDistinctMatchingPolicyHighlightSnippets(source: string, snippets: PolicyHighlightSnippet[]) {
+  const normalizedSource = normalizePolicyHighlightText(source);
+  const retained: Array<{ range: PolicyHighlightRange; snippet: PolicyHighlightSnippet }> = [];
+  snippets.forEach((snippet, snippetIndex) => {
+    const range = getFirstPolicyHighlightRangeForSnippet(source, snippet, snippetIndex, normalizedSource);
+    if (!range) {
+      return;
+    }
+    const overlapsRetainedRange = retained.some((candidate) => rangesOverlap(candidate.range, range));
+    if (!overlapsRetainedRange) {
+      retained.push({ range, snippet });
+    }
+  });
+  return retained.map((entry) => entry.snippet);
+}
+
+function rangesOverlap(left: PolicyHighlightRange, right: PolicyHighlightRange) {
+  return Math.min(left.end, right.end) > Math.max(left.start, right.start);
+}
+
+function getFirstPolicyHighlightRangeForSnippet(
+  source: string,
+  snippet: PolicyHighlightSnippet,
+  snippetIndex: number,
+  normalizedSource: ReturnType<typeof normalizePolicyHighlightText>
+) {
+  return [
+    ...getExactPolicyHighlightRangesForSnippet(source, snippet, snippetIndex),
+    ...getNormalizedPolicyHighlightRangesForSnippet(snippet, snippetIndex, normalizedSource)
+  ].sort((left, right) => left.start - right.start || right.end - left.end)[0] ?? null;
+}
+
+function getNormalizedPolicyHighlightRangesForSnippet(
+  snippet: PolicyHighlightSnippet,
+  snippetIndex: number,
+  normalizedSource: ReturnType<typeof normalizePolicyHighlightText>
+) {
+  const rangesForSnippet: PolicyHighlightRange[] = [];
+  for (const needle of getHighlightNeedles(snippet.text)) {
+    const normalizedNeedle = normalizePolicyHighlightText(needle).normalized;
+    if (normalizedNeedle.length < 20) {
+      continue;
+    }
+    let cursor = 0;
+    while (cursor < normalizedSource.normalized.length) {
+      const normalizedIndex = normalizedSource.normalized.indexOf(normalizedNeedle, cursor);
+      if (normalizedIndex < 0) {
+        break;
+      }
+      const sourceStart = normalizedSource.indexMap[normalizedIndex];
+      const sourceEndIndex = normalizedSource.indexMap[normalizedIndex + normalizedNeedle.length - 1];
+      if (sourceStart !== undefined && sourceEndIndex !== undefined) {
+        rangesForSnippet.push({
+          end: sourceEndIndex + 1,
+          label: snippet.label,
+          marker: snippetIndex + 1,
+          start: sourceStart,
+          tone: snippet.tone
+        });
+      }
+      cursor = normalizedIndex + Math.max(1, normalizedNeedle.length);
+    }
+    if (rangesForSnippet.length > 0) {
+      break;
+    }
+  }
+  return rangesForSnippet;
+}
+
+function getExactPolicyHighlightRangesForSnippet(source: string, snippet: PolicyHighlightSnippet, snippetIndex: number) {
+  const rangesForSnippet: PolicyHighlightRange[] = [];
+  let cursor = 0;
+  while (cursor < source.length) {
+    const index = findCaseInsensitiveIndex(source, snippet.text, cursor);
+    if (index < 0) {
+      break;
+    }
+    rangesForSnippet.push({
+      end: index + snippet.text.length,
+      label: snippet.label,
+      marker: snippetIndex + 1,
+      start: index,
+      tone: snippet.tone
+    });
+    cursor = index + Math.max(1, snippet.text.length);
+  }
+  return rangesForSnippet;
+}
+
+function renderHighlightedPolicyHtml(source: string, snippets: PolicyHighlightSnippet[]) {
+  const normalizedSource = normalizePolicyHighlightText(source);
+  const ranges = snippets.flatMap((snippet, snippetIndex) => {
+    const exactRanges = getExactPolicyHighlightRangesForSnippet(source, snippet, snippetIndex);
+    if (exactRanges.length > 0) {
+      return exactRanges;
+    }
+    return getNormalizedPolicyHighlightRangesForSnippet(snippet, snippetIndex, normalizedSource);
+  }).sort((left, right) => left.start - right.start || right.end - left.end);
+
+  const mergedRanges = mergePolicyHighlightRanges(ranges);
+
+  if (mergedRanges.length === 0) {
+    return escapeHtml(source);
+  }
+
+  let html = "";
+  let cursor = 0;
+  for (const range of mergedRanges) {
+    const colorClass = `policy-highlight-color-${((range.marker - 1) % 6) + 1}`;
+    html += escapeHtml(source.slice(cursor, range.start));
+    html += `<mark class="policy-highlight ${colorClass}" title="${escapeHtml(range.label)}"><span class="policy-highlight-marker ${colorClass}">${range.marker}</span>${escapeHtml(source.slice(range.start, range.end))}</mark>`;
+    cursor = range.end;
+  }
+  html += escapeHtml(source.slice(cursor));
+  return html;
+}
+
+function renderSinglePolicySnippetHighlightHtml(
+  source: string,
+  snippet: PolicyHighlightSnippet,
+  snippetIndex: number,
+  options?: { includeMarker?: boolean }
+) {
+  const normalizedSource = normalizePolicyHighlightText(source);
+  const ranges = mergePolicyHighlightRanges([
+    ...getExactPolicyHighlightRangesForSnippet(source, snippet, snippetIndex),
+    ...getNormalizedPolicyHighlightRangesForSnippet(snippet, snippetIndex, normalizedSource)
+  ].sort((left, right) => left.start - right.start || right.end - left.end));
+  if (ranges.length === 0) {
+    return escapeHtml(source);
+  }
+
+  let html = "";
+  let cursor = 0;
+  for (const range of ranges) {
+    const colorClass = `policy-highlight-color-${((range.marker - 1) % 6) + 1}`;
+    html += escapeHtml(source.slice(cursor, range.start));
+    const marker = options?.includeMarker === false
+      ? ""
+      : `<span class="policy-highlight-marker ${colorClass}">${range.marker}</span>`;
+    html += `<mark class="policy-highlight ${colorClass}" title="${escapeHtml(range.label)}">${marker}${escapeHtml(source.slice(range.start, range.end))}</mark>`;
+    cursor = range.end;
+  }
+  html += escapeHtml(source.slice(cursor));
+  return html;
+}
+
+function mergePolicyHighlightRanges(ranges: PolicyHighlightRange[]) {
+  const mergedRanges: PolicyHighlightRange[] = [];
+  for (const range of ranges) {
+    const previous = mergedRanges.at(-1);
+    if (!previous || range.start > previous.end) {
+      mergedRanges.push({ ...range });
+      continue;
+    }
+    previous.end = Math.max(previous.end, range.end);
+  }
+  return mergedRanges;
+}
+
+export const gdprPolicyExcerptPageTestHelpers = {
+  getDistinctMatchingPolicyHighlightSnippets,
+  getPolicyContextExcerptForSnippets,
+  getMatchingPolicyHighlightSnippets,
+  renderSinglePolicySnippetHighlightHtml,
+  renderHighlightedPolicyHtml
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function retainedText(item: GdprEprivacyCoverageChecklistItem) {
@@ -947,12 +1558,6 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
 
 function getArticle13RationalePrefix(item: GdprEprivacyCoverageChecklistItem) {
   if (
-    item.id === "automated_decision_making_profiling_disclosure" &&
-    getEvidenceLabel(item) === "Partial concern"
-  ) {
-    return "Automated processing or personalization language was observed, but an Article 22-style solely automated decision-making disclosure was not confirmed";
-  }
-  if (
     item.id === "supervisory_authority_complaint_disclosure" &&
     getEvidenceLabel(item) === "Partial concern"
   ) {
@@ -1419,6 +2024,15 @@ function getRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+function getRecordArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.flatMap((entry) => {
+        const record = getRecord(entry);
+        return record ? [record] : [];
+      })
+    : [];
+}
+
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -1770,7 +2384,7 @@ function RowToolButton({
   onClick
 }: {
   active: boolean;
-  icon: "correction" | "evidence";
+  icon: "correction" | "evidence" | "review";
   label: string;
   onClick: () => void;
 }) {
@@ -1783,15 +2397,33 @@ function RowToolButton({
         active
           ? icon === "evidence"
             ? "border-sky-300 bg-sky-50 text-sky-700 shadow-sm"
-            : "border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm"
+            : icon === "correction"
+              ? "border-emerald-300 bg-emerald-50 text-emerald-700 shadow-sm"
+              : "border-indigo-300 bg-indigo-50 text-indigo-700 shadow-sm"
           : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800"
       )}
       title={label}
       type="button"
       onClick={onClick}
     >
-      {icon === "evidence" ? <EvidenceToolIcon /> : <CorrectionToolIcon />}
+      {icon === "evidence" ? <EvidenceToolIcon /> : icon === "correction" ? <CorrectionToolIcon /> : <PolicyReviewToolIcon />}
     </button>
+  );
+}
+
+function PolicyReviewToolIcon() {
+  return (
+    <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+      <path
+        d="M8.7 13.1a4.4 4.4 0 1 0 0-8.8 4.4 4.4 0 0 0 0 8.8Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.7"
+      />
+      <path d="m12 12 3.7 3.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
+      <path d="M6.9 8.6h3.6M8.7 6.8v3.6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+    </svg>
   );
 }
 
@@ -1822,13 +2454,116 @@ function CorrectionToolIcon() {
   );
 }
 
+function PolicyExcerptModal({
+  onClose,
+  payload
+}: {
+  onClose: () => void;
+  payload: PolicyReviewPayload;
+}) {
+  const isNotConfirmed = payload.evidenceLabel === "Not confirmed";
+  const highlightedPolicyHtml = renderHighlightedPolicyHtml(payload.capturedText, payload.snippets);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-3 py-4 sm:px-6">
+      <div
+        aria-labelledby="policy-excerpt-modal-title"
+        aria-modal="true"
+        className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-2xl"
+        role="dialog"
+      >
+        <style>{`
+          .policy-excerpt-modal .legend-item.policy-highlight-color-1 span, .policy-excerpt-modal .policy-highlight-marker.policy-highlight-color-1 { background: ${isNotConfirmed ? "#fdba74" : "#fef08a"}; color: ${isNotConfirmed ? "#7c2d12" : "#713f12"}; }
+          .policy-excerpt-modal .legend-item.policy-highlight-color-2 span, .policy-excerpt-modal .policy-highlight-marker.policy-highlight-color-2 { background: #bfdbfe; color: #1e3a8a; }
+          .policy-excerpt-modal .legend-item.policy-highlight-color-3 span, .policy-excerpt-modal .policy-highlight-marker.policy-highlight-color-3 { background: #d9f99d; color: #365314; }
+          .policy-excerpt-modal .legend-item.policy-highlight-color-4 span, .policy-excerpt-modal .policy-highlight-marker.policy-highlight-color-4 { background: #fecdd3; color: #881337; }
+          .policy-excerpt-modal .legend-item.policy-highlight-color-5 span, .policy-excerpt-modal .policy-highlight-marker.policy-highlight-color-5 { background: #ddd6fe; color: #4c1d95; }
+          .policy-excerpt-modal .legend-item.policy-highlight-color-6 span, .policy-excerpt-modal .policy-highlight-marker.policy-highlight-color-6 { background: #fed7aa; color: #7c2d12; }
+          .policy-excerpt-modal mark.policy-highlight { position: relative; border-radius: 5px; color: inherit; box-decoration-break: clone; -webkit-box-decoration-break: clone; padding: 0 2px; }
+          .policy-excerpt-modal mark.policy-highlight-color-1 { background: ${isNotConfirmed ? "#fdba74" : "#fef08a"}; box-shadow: 0 0 0 2px ${isNotConfirmed ? "#fdba74" : "#fef08a"}; }
+          .policy-excerpt-modal mark.policy-highlight-color-2 { background: #bfdbfe; box-shadow: 0 0 0 2px #bfdbfe; }
+          .policy-excerpt-modal mark.policy-highlight-color-3 { background: #d9f99d; box-shadow: 0 0 0 2px #d9f99d; }
+          .policy-excerpt-modal mark.policy-highlight-color-4 { background: #fecdd3; box-shadow: 0 0 0 2px #fecdd3; }
+          .policy-excerpt-modal mark.policy-highlight-color-5 { background: #ddd6fe; box-shadow: 0 0 0 2px #ddd6fe; }
+          .policy-excerpt-modal mark.policy-highlight-color-6 { background: #fed7aa; box-shadow: 0 0 0 2px #fed7aa; }
+          .policy-excerpt-modal .policy-highlight-marker { display: inline-flex; width: 17px; height: 17px; align-items: center; justify-content: center; border-radius: 999px; margin-right: 5px; transform: translateY(-1px); font-size: 10px; font-weight: 800; line-height: 1; }
+        `}</style>
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
+          <div className="min-w-0 space-y-1">
+            <h2 id="policy-excerpt-modal-title" className="text-xl font-semibold tracking-normal text-slate-950">
+              Excerpt from Privacy Policy
+            </h2>
+            <p className="text-sm leading-6 text-slate-600">
+              <span className="font-semibold text-slate-700">Finding:</span> {payload.findingLabel}
+            </p>
+            {payload.sourceUrl ? (
+              <p className="break-all text-sm leading-6 text-slate-600">
+                <span className="font-semibold text-slate-700">Source URL:</span> {payload.sourceUrl}
+              </p>
+            ) : null}
+          </div>
+          <button
+            aria-label="Close policy excerpt"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900"
+            type="button"
+            onClick={onClose}
+          >
+            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 20 20">
+              <path d="m5.5 5.5 9 9M14.5 5.5l-9 9" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
+            </svg>
+          </button>
+        </div>
+        <div className="policy-excerpt-modal min-h-0 flex-1 overflow-y-auto px-5 py-5">
+          <div className="mx-auto max-w-5xl">
+            <p className="mb-4 text-sm leading-6 text-slate-600">
+              Scanner evidence captured at scan time, not a live fetch of the current policy page.
+            </p>
+            {isNotConfirmed ? (
+              <p className="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm leading-6 text-orange-900">
+                <span className="font-semibold">Not Confirmed:</span> this retained snippet requires manual review before relying on it.
+              </p>
+            ) : null}
+            <div className="mb-6 flex flex-wrap gap-2">
+              {payload.snippets.map((snippet, index) => (
+                <span
+                  key={`${snippet.label}-${index}`}
+                  className={cn(
+                    "legend-item inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700",
+                    `policy-highlight-color-${(index % 6) + 1}`
+                  )}
+                >
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full text-[11px]">
+                    {index + 1}
+                  </span>
+                  {snippet.label}
+                </span>
+              ))}
+            </div>
+            <article
+              className="whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white p-5 text-[15px] leading-7 text-slate-950 shadow-sm"
+              dangerouslySetInnerHTML={{ __html: highlightedPolicyHtml }}
+            />
+            <p className="mt-4 text-xs leading-5 text-slate-400">
+              CertScore can make mistakes. Verify findings before relying on them.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChecklistRows({
+  allowPolicyReview,
   expandAllAdvancedEvidence,
   items,
+  onOpenPolicyReview,
   showDebugConfidenceImprovements
 }: {
+  allowPolicyReview?: boolean;
   expandAllAdvancedEvidence: boolean;
   items: GdprEprivacyCoverageChecklistItem[];
+  onOpenPolicyReview: (payload: PolicyReviewPayload) => void;
   showDebugConfidenceImprovements: boolean;
 }) {
   const [openToolsByRow, setOpenToolsByRow] = React.useState<Record<string, RowToolState>>({});
@@ -1854,6 +2589,11 @@ function ChecklistRows({
         const rowToolState = openToolsByRow[item.id] ?? {};
         const evidenceOpen = expandAllAdvancedEvidence || Boolean(rowToolState.evidence);
         const correctionOpen = expandAllAdvancedEvidence || Boolean(rowToolState.correction);
+        const policyReviewPayload = getGdprTransparencyPolicyReviewPayload(item);
+        const showPolicyReview =
+          allowPolicyReview === true &&
+          (evidenceLabel === "Observed" || evidenceLabel === "Not confirmed") &&
+          policyReviewPayload !== null;
         return (
           <div
             key={item.id}
@@ -1881,6 +2621,18 @@ function ChecklistRows({
             <div className="min-w-0 space-y-1">
               <div className="hidden items-start gap-2 md:flex">
                 <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                  {showPolicyReview ? (
+                    <RowToolButton
+                      active={false}
+                      icon="review"
+                      label={`Open captured privacy policy for ${item.label}`}
+                      onClick={() => {
+                        if (policyReviewPayload) {
+                          onOpenPolicyReview(policyReviewPayload);
+                        }
+                      }}
+                    />
+                  ) : null}
                   <RowToolButton
                     active={evidenceOpen}
                     icon="evidence"
@@ -1898,6 +2650,18 @@ function ChecklistRows({
               </div>
               <div className="flex items-start gap-2 md:hidden">
                 <div className="flex shrink-0 items-center gap-1 pt-0.5">
+                  {showPolicyReview ? (
+                    <RowToolButton
+                      active={false}
+                      icon="review"
+                      label={`Open captured privacy policy for ${item.label}`}
+                      onClick={() => {
+                        if (policyReviewPayload) {
+                          onOpenPolicyReview(policyReviewPayload);
+                        }
+                      }}
+                    />
+                  ) : null}
                   <RowToolButton
                     active={evidenceOpen}
                     icon="evidence"
@@ -1945,6 +2709,7 @@ export function GdprEprivacyCoverageChecklistCard({
   showSummaryStrip = true
 }: GdprEprivacyCoverageChecklistCardProps) {
   const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
+  const [policyReviewPayload, setPolicyReviewPayload] = React.useState<PolicyReviewPayload | null>(null);
   const reportItems = getReportableGdprEprivacyCoverageItems(items);
   const itemsById = new Map(reportItems.map((item) => [item.id, item]));
   const groupedRowIds = new Set<string>(REPORT_ROW_GROUPS.flatMap((group) => [...group.rowIds]));
@@ -1984,27 +2749,29 @@ export function GdprEprivacyCoverageChecklistCard({
             <span className="hidden md:block">Scan-context note</span>
           </div>
           <ChecklistRows
+            allowPolicyReview={group.title === "GDPR Transparency"}
             expandAllAdvancedEvidence={expandAllAdvancedEvidence}
             items={group.items}
+            onOpenPolicyReview={setPolicyReviewPayload}
             showDebugConfidenceImprovements={showDebugConfidenceImprovements}
           />
         </div>
       ))}
       {additionalItems.length > 0 ? (
-        <details className="rounded-lg border border-slate-200 bg-white">
-          <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 marker:hidden [&::-webkit-details-marker]:hidden">
-            <ScanReportDisclosureIcon className="group-open:rotate-90" />
-            <span className="text-sm font-semibold text-slate-950">Additional Review Rows</span>
-            <span className="text-xs text-slate-500">{additionalItems.length} retained rows</span>
-          </summary>
-          <div className="border-t border-slate-200">
-            <ChecklistRows
-              expandAllAdvancedEvidence={expandAllAdvancedEvidence}
-              items={additionalItems}
-              showDebugConfidenceImprovements={showDebugConfidenceImprovements}
-            />
-          </div>
-        </details>
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <ChecklistRows
+            expandAllAdvancedEvidence={expandAllAdvancedEvidence}
+            items={additionalItems}
+            onOpenPolicyReview={setPolicyReviewPayload}
+            showDebugConfidenceImprovements={showDebugConfidenceImprovements}
+          />
+        </div>
+      ) : null}
+      {policyReviewPayload ? (
+        <PolicyExcerptModal
+          payload={policyReviewPayload}
+          onClose={() => setPolicyReviewPayload(null)}
+        />
       ) : null}
     </CollapsibleSectionCard>
   );

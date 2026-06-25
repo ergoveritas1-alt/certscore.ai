@@ -423,6 +423,14 @@ function v2ArtifactRoots() {
   ];
 }
 
+function v2PolicyTextArtifactRoots() {
+  return [
+    ...v2ArtifactRoots(),
+    path.resolve(process.cwd(), "artifacts/local-v2-dag-lambda-simulated"),
+    path.resolve(process.cwd(), "../..", "artifacts/local-v2-dag-lambda-simulated")
+  ];
+}
+
 function resolveLocalV2OutDir(outDir: string) {
   const resolved = path.resolve(outDir);
   const roots = v2ArtifactRoots();
@@ -431,6 +439,264 @@ function resolveLocalV2OutDir(outDir: string) {
     throw new Error("Local v2 DAG artifact path is outside artifacts/local-v2-dag-scans.");
   }
   return resolved;
+}
+
+function resolvePolicyTextArtifactPath(rawPath: string) {
+  const resolved = path.resolve(rawPath);
+  const roots = v2PolicyTextArtifactRoots();
+  const inAllowedRoot = roots.some((root) => resolved === root || resolved.startsWith(`${root}${path.sep}`));
+  if (!inAllowedRoot) {
+    return null;
+  }
+
+  try {
+    const stats = statSync(resolved);
+    if (!stats.isFile() || stats.size <= 0 || stats.size > 1_000_000 || path.extname(resolved).toLowerCase() !== ".txt") {
+      return null;
+    }
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+function readPolicySurfaceTextArtifact(surface: LocalV2PolicySurface) {
+  const artifactRefs = Array.isArray(surface.artifactRefs) ? surface.artifactRefs : [];
+  for (const ref of artifactRefs) {
+    if (!isRecord(ref)) {
+      continue;
+    }
+    const looseRef = ref as Record<string, unknown>;
+    const artifactId = firstString(looseRef.artifactId, looseRef.id);
+    const label = firstString(looseRef.label, looseRef.kind, looseRef.type);
+    const artifactPath = firstString(looseRef.path, looseRef.filePath);
+    if (!artifactPath || !/policy_surface_text/i.test(`${artifactId ?? ""} ${label ?? ""} ${path.basename(artifactPath)}`)) {
+      continue;
+    }
+    const resolved = resolvePolicyTextArtifactPath(artifactPath);
+    if (!resolved) {
+      continue;
+    }
+    try {
+      return readFileSync(resolved, "utf8").replace(/\s+/g, " ").trim();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function findCaseInsensitiveTextIndex(source: string, needle: string) {
+  return source.toLocaleLowerCase().indexOf(needle.toLocaleLowerCase());
+}
+
+function alignPolicyEvidenceTextToCompleteSentence(evidenceText: string) {
+  const normalized = evidenceText.replace(/\s+/g, " ").trim();
+  const sentenceStart = normalized.search(/[.!?]\s+(?=[A-Z0-9"“])/);
+  if (
+    sentenceStart >= 0 &&
+    sentenceStart < 120 &&
+    /^[a-z][a-z\s-]{0,80}$/i.test(normalized.slice(0, sentenceStart).replace(/[^a-z\s-]/gi, "")) &&
+    normalized.slice(sentenceStart + 2).trim().length >= 48
+  ) {
+    return normalized.slice(sentenceStart + 2).trim();
+  }
+  return normalized;
+}
+
+function policySentenceBoundaries(text: string) {
+  const boundaries = [0];
+  const boundaryPattern = /[.!?]\s+(?=[A-Z0-9"“])/g;
+  let match: RegExpExecArray | null;
+  while ((match = boundaryPattern.exec(text)) !== null) {
+    boundaries.push(match.index + match[0].length);
+  }
+  if (boundaries.at(-1) !== text.length) {
+    boundaries.push(text.length);
+  }
+  return boundaries;
+}
+
+function buildPolicyEvidenceContextExcerpt(source: string, evidenceText: string) {
+  const normalizedSource = source.replace(/\s+/g, " ").trim();
+  const normalizedEvidence = alignPolicyEvidenceTextToCompleteSentence(evidenceText);
+  if (!normalizedSource || normalizedEvidence.length < 24) {
+    return null;
+  }
+
+  const exactIndex = findCaseInsensitiveTextIndex(normalizedSource, normalizedEvidence);
+  const fallbackNeedles = normalizedEvidence
+    .split(/(?<=[.!?;:])\s+|,\s+(?=(?:to|or|and|you|we|including|such as|however)\b)/i)
+    .map((piece) => piece.replace(/^[.;:,]+|[.;:,]+$/g, "").trim())
+    .filter((piece) => piece.length >= 48)
+    .sort((left, right) => right.length - left.length);
+  const fallbackMatch = exactIndex >= 0
+    ? null
+    : fallbackNeedles
+        .map((needle) => ({ index: findCaseInsensitiveTextIndex(normalizedSource, needle), needle }))
+        .find((candidate) => candidate.index >= 0);
+  const matchStart = exactIndex >= 0 ? exactIndex : fallbackMatch?.index ?? -1;
+  const matchEnd = matchStart >= 0
+    ? matchStart + (exactIndex >= 0 ? normalizedEvidence.length : fallbackMatch?.needle.length ?? 0)
+    : -1;
+  if (matchStart < 0 || matchEnd <= matchStart) {
+    return null;
+  }
+
+  const boundaries = policySentenceBoundaries(normalizedSource);
+  let startBoundaryIndex = 0;
+  for (let index = boundaries.length - 1; index >= 0; index -= 1) {
+    if ((boundaries[index] ?? 0) <= matchStart) {
+      startBoundaryIndex = index;
+      break;
+    }
+  }
+  const nextBoundaryIndex = boundaries.findIndex((boundary) => boundary >= matchEnd);
+  const endBoundaryIndex = nextBoundaryIndex >= 0 ? nextBoundaryIndex : boundaries.length - 1;
+  const start = boundaries[Math.max(0, startBoundaryIndex - 7)] ?? 0;
+  const end = boundaries[Math.min(boundaries.length - 1, endBoundaryIndex + 8)] ?? normalizedSource.length;
+  let excerpt = normalizedSource.slice(start, end).trim();
+  const nextSectionIndex = excerpt.search(/\s(?:Cookies|Cookie Policy|Terms of Service|Children'?s Privacy Policy|California|US State Supplement|Contact Us)\s+(?:What are|Last updated|Overview|Your|How|If|This|We)\b/);
+  if (nextSectionIndex > 120 && nextSectionIndex > matchEnd - start) {
+    excerpt = excerpt.slice(0, nextSectionIndex).trim();
+  }
+  const maxContextChars = 5_000;
+  if (excerpt.length > maxContextChars) {
+    const localStart = Math.max(0, matchStart - start - 2_000);
+    const localEnd = Math.min(excerpt.length, matchEnd - start + 2_000);
+    excerpt = excerpt.slice(localStart, localEnd).trim();
+  }
+  return `${start > 0 ? "... " : ""}${excerpt}${end < normalizedSource.length ? " ..." : ""}`;
+}
+
+function normalizePolicyExcerptForDedupe(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function policyExcerptsOverlap(left: string | null | undefined, right: string | null | undefined) {
+  const normalizedLeft = normalizePolicyExcerptForDedupe(left);
+  const normalizedRight = normalizePolicyExcerptForDedupe(right);
+  if (normalizedLeft.length < 24 || normalizedRight.length < 24) {
+    return normalizedLeft.length > 0 && normalizedLeft === normalizedRight;
+  }
+  if (normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft)) {
+    return true;
+  }
+  const leftTokens = policyExcerptContentTokens(normalizedLeft);
+  const rightTokens = policyExcerptContentTokens(normalizedRight);
+  if (leftTokens.length < 4 || rightTokens.length < 4) {
+    return false;
+  }
+  const smaller = leftTokens.length <= rightTokens.length ? leftTokens : rightTokens;
+  const larger = new Set(leftTokens.length <= rightTokens.length ? rightTokens : leftTokens);
+  const shared = smaller.filter((token) => larger.has(token)).length;
+  return shared / smaller.length >= 0.75;
+}
+
+function policyExcerptContentTokens(normalizedExcerpt: string) {
+  const stopwords = new Set([
+    "a",
+    "an",
+    "and",
+    "of",
+    "or",
+    "the",
+    "to",
+    "we",
+    "you",
+    "your"
+  ]);
+  return uniqueStrings(normalizedExcerpt
+    .split(/\s+/)
+    .filter((token) => token.length >= 3 && !stopwords.has(token)));
+}
+
+function article13EvidenceStrengthScore(value: string | null | undefined) {
+  switch (value) {
+    case "strong":
+      return 30;
+    case "moderate":
+      return 20;
+    case "limited":
+      return 5;
+    default:
+      return 0;
+  }
+}
+
+function article13StatusScore(value: string | null | undefined) {
+  switch (value) {
+    case "observed":
+      return 100;
+    case "partial":
+      return 50;
+    case "not_confirmed":
+      return 10;
+    default:
+      return 0;
+  }
+}
+
+function policyDisclosureRowScore(row: Record<string, unknown>) {
+  const status = firstString(row.status, row.signalObserved);
+  const strength = firstString(row.selectedEvidenceStrength);
+  const confidence = typeof row.confidence === "number" && Number.isFinite(row.confidence)
+    ? row.confidence
+    : 0;
+  const excerpt = firstString(row.selectedPolicySectionExcerpt, row.evidenceText) ?? "";
+  return article13StatusScore(status) +
+    article13EvidenceStrengthScore(strength) +
+    confidence +
+    Math.min(excerpt.length / 1_000, 5);
+}
+
+function dedupePolicyDisclosureRows<T extends Record<string, unknown>>(
+  rows: T[],
+  options: {
+    excerptKeys: string[];
+    typeKeys: string[];
+  }
+) {
+  const retained: T[] = [];
+  for (const row of rows) {
+    const rowType = firstString(...options.typeKeys.map((key) => row[key]));
+    const rowExcerpt = firstString(...options.excerptKeys.map((key) => row[key]));
+    const duplicateIndex = retained.findIndex((candidate) => {
+      const candidateType = firstString(...options.typeKeys.map((key) => candidate[key]));
+      const candidateExcerpt = firstString(...options.excerptKeys.map((key) => candidate[key]));
+      return rowType === candidateType && policyExcerptsOverlap(rowExcerpt, candidateExcerpt);
+    });
+    if (duplicateIndex < 0) {
+      retained.push(row);
+      continue;
+    }
+    const existing = retained[duplicateIndex];
+    if (existing && policyDisclosureRowScore(row) > policyDisclosureRowScore(existing)) {
+      retained[duplicateIndex] = row;
+    }
+  }
+  return retained;
+}
+
+function extractSupervisoryAuthoritySupportingContactContext(value: string) {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (
+    !/\b(?:supervisory authority|data protection authorit(?:y|ies)|privacy regulator|regulatory authority|lodge a complaint|right to complain|right to contact)\b/i.test(text) ||
+    !/\b(?:further details|more information|help|contact(?:ing)? us|privacy center|contact form|privacy team|data protection officer|dpo)\b/i.test(text)
+  ) {
+    return null;
+  }
+  const emailMatch = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
+  if (emailMatch?.[0]) {
+    return emailMatch[0];
+  }
+  const contactMatch = text.match(/\b(?:privacy center|privacy team|data protection officer|dpo|contact form|contacting us by email|contact us)\b.{0,180}/i);
+  return contactMatch?.[0] ? contactMatch[0].trim() : null;
 }
 
 async function readLocalV2DagBundle(outDir: string): Promise<CanonicalEvidenceBundle | null> {
@@ -966,24 +1232,39 @@ export function summarizePolicySurfaces(
   const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
   const policyTextQuality = assessRetainedPolicyTextQuality(text);
   const observedPolicyTopicHints = uniqueStrings(article13Surfaces.flatMap((row) => row.surface.observedTopics ?? []));
-  const article13SignalCandidates = article13Surfaces.flatMap((row) =>
-    (row.surface.article13DisclosureSignals ?? []).map((signal) => ({
-      confidence: signal.confidence,
-      disclosureType: signal.disclosureType,
-      evidenceText: firstString(signal.evidenceText),
-      evidenceSource: signal.evidenceSource,
-      source: signal.source,
-      status: signal.status,
-      selectedEvidenceStrength: signal.selectedEvidenceStrength,
-      selectedPolicySectionExcerpt: firstString(signal.selectedPolicySectionExcerpt),
-      selectedPolicySectionHeading: firstString(signal.selectedPolicySectionHeading),
-      selectedPolicySectionUrl: firstString(signal.selectedPolicySectionUrl),
-      surfaceUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url
-    }))
-  );
+  const article13SignalCandidates = article13Surfaces.flatMap((row) => {
+    const fullPolicyText = readPolicySurfaceTextArtifact(row.surface);
+    return (row.surface.article13DisclosureSignals ?? []).map((signal) => {
+      const evidenceText = firstString(signal.evidenceText);
+      const retainedPolicyContext = evidenceText && fullPolicyText
+        ? buildPolicyEvidenceContextExcerpt(fullPolicyText, evidenceText)
+        : null;
+      const supportingContactContext = signal.disclosureType === "supervisory_authority"
+        ? extractSupervisoryAuthoritySupportingContactContext(retainedPolicyContext ?? evidenceText ?? "")
+        : null;
+      return {
+        confidence: signal.confidence,
+        disclosureType: signal.disclosureType,
+        evidenceText,
+        evidenceSource: signal.evidenceSource,
+        source: signal.source,
+        status: signal.status,
+        selectedEvidenceStrength: retainedPolicyContext ? "strong" : signal.selectedEvidenceStrength,
+        selectedPolicySectionExcerpt: retainedPolicyContext ?? firstString(signal.selectedPolicySectionExcerpt),
+        selectedPolicySectionHeading: retainedPolicyContext ? "Policy text context" : firstString(signal.selectedPolicySectionHeading),
+        selectedPolicySectionUrl: firstString(signal.selectedPolicySectionUrl) ?? row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
+        supportingContactContext,
+        surfaceUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url
+      };
+    });
+  });
   const validatedArticle13DisclosureSignals = policyTextQuality.usable
     ? article13SignalCandidates.filter((signal) => retainedArticle13SignalRejectReason(signal.evidenceText ?? "", signal.disclosureType) === null)
     : [];
+  const dedupedArticle13DisclosureSignals = dedupePolicyDisclosureRows(validatedArticle13DisclosureSignals, {
+    excerptKeys: ["selectedPolicySectionExcerpt", "evidenceText"],
+    typeKeys: ["disclosureType"]
+  });
   const discardedArticle13DisclosureSignals = [
     ...article13Surfaces.flatMap((row) =>
       (row.surface.discardedArticle13DisclosureSignals ?? []).map((signal) => ({
@@ -1024,7 +1305,7 @@ export function summarizePolicySurfaces(
       textExcerpt: section.textExcerpt,
     }))
   ).slice(0, 80);
-  const retainedArticle13SectionEvidence = article13Surfaces.flatMap((row) =>
+  const retainedArticle13SectionEvidence = dedupePolicyDisclosureRows(article13Surfaces.flatMap((row) =>
     (row.surface.retainedArticle13SectionEvidence ?? []).map((evidence) => ({
       coverageArea: evidence.coverageArea,
       evidenceSource: evidence.evidenceSource,
@@ -1036,7 +1317,10 @@ export function summarizePolicySurfaces(
       signalObserved: evidence.signalObserved,
       surfaceUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url
     }))
-  ).slice(0, 40);
+  ), {
+    excerptKeys: ["selectedPolicySectionExcerpt"],
+    typeKeys: ["coverageArea"]
+  }).slice(0, 40);
   const retainedPolicySectionHeadings = uniqueStrings(retainedPolicySections.map((section) => firstString(section.heading)).filter(Boolean));
   const expectedPolicySectionHeadings = [
     "Your privacy controls",
@@ -1050,11 +1334,11 @@ export function summarizePolicySurfaces(
     !retainedPolicySectionHeadings.some((retainedHeading) => retainedHeading.toLowerCase().includes(heading.toLowerCase()))
   );
   return {
-    article13DisclosureSignals: validatedArticle13DisclosureSignals,
-    article13DisclosureTypesObserved: uniqueStrings(validatedArticle13DisclosureSignals
+    article13DisclosureSignals: dedupedArticle13DisclosureSignals,
+    article13DisclosureTypesObserved: uniqueStrings(dedupedArticle13DisclosureSignals
       .filter((signal) => signal.status === "observed")
       .map((signal) => signal.disclosureType)),
-    article13DisclosureTypesPartial: uniqueStrings(validatedArticle13DisclosureSignals
+    article13DisclosureTypesPartial: uniqueStrings(dedupedArticle13DisclosureSignals
       .filter((signal) => signal.status === "partial")
       .map((signal) => signal.disclosureType)),
     discardedArticle13DisclosureSignals,
@@ -1075,10 +1359,10 @@ export function summarizePolicySurfaces(
     privacyPolicyUrls: uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
     processingErrorObserved,
     retainedPrivacyPolicyTextExcerpt: buildRetainedPolicyDisclosureText(text),
-    validatedDisclosureTypesObserved: uniqueStrings(validatedArticle13DisclosureSignals
+    validatedDisclosureTypesObserved: uniqueStrings(dedupedArticle13DisclosureSignals
       .filter((signal) => signal.status === "observed")
       .map((signal) => signal.disclosureType)),
-    validatedDisclosureTypesPartial: uniqueStrings(validatedArticle13DisclosureSignals
+    validatedDisclosureTypesPartial: uniqueStrings(dedupedArticle13DisclosureSignals
       .filter((signal) => signal.status === "partial")
       .map((signal) => signal.disclosureType))
   };

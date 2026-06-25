@@ -144,3 +144,88 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
     /checklist potential concern/i
   );
 });
+
+test("buildRegulatoryGapTopFindings does not promote contextual-only pre-consent tracking", () => {
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [
+        {
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            retainedEvidence: {
+              firstPreconsentThirdPartyTrackingObservedMs: 9449,
+              preconsentThirdPartyTrackerGroups: [
+                {
+                  firstSeenMs: 9449,
+                  party: "3rd",
+                  priority: "contextual",
+                  purpose: "Cookie compliance",
+                  vendor: "OneTrust CMP"
+                },
+                {
+                  firstSeenMs: null,
+                  party: "3rd",
+                  priority: "contextual",
+                  purpose: "Security",
+                  vendor: "Cloudflare Bot Management"
+                }
+              ],
+              preconsentThirdPartyTrackingVendors: ["OneTrust CMP", "Cloudflare Bot Management"],
+              trackerPriority: "contextual",
+              trackerPriorityLabel: "Contextual"
+            },
+            statusBasis:
+              "Contextual priority pre-consent third-party tracking evidence: OneTrust CMP - Cookie compliance (9449ms), Cloudflare Bot Management - Security (time not retained)."
+          },
+          evidenceRefs: [
+            "OneTrust CMP Cookie compliance tracker first seen 9449ms",
+            "Cloudflare Bot Management Security tracker first seen time not retained"
+          ],
+          evidenceState: "observed",
+          explanation:
+            "Contextual priority pre-consent third-party tracking evidence was retained for OneTrust CMP - Cookie compliance (9449ms), Cloudflare Bot Management - Security (time not retained).",
+          id: "pre_consent_third_party_tracking",
+          label: "Pre-consent 3rd-party tracking",
+          status: "Observed"
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(findings, []);
+});
+
+test("buildRegulatoryGapTopFindings surfaces review rows only when no stronger rows exist", () => {
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [
+        {
+          assessmentStatus: "review_signal",
+          evidenceState: "observed",
+          id: "cross_border_endpoint_review",
+          label: "Cross-border endpoint review",
+          note: "Endpoint location evidence needs manual review.",
+          status: "Review signal"
+        },
+        {
+          assessmentStatus: "checked",
+          evidenceState: "observed",
+          id: "consent_surface_observed",
+          label: "Consent mechanism",
+          note: "Observed.",
+          status: "Observed"
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(findings.map((finding) => finding.label), ["Cross-border endpoint review"]);
+  assert.equal(
+    findings[0]?.evidenceDetails?.policyEvidenceDetails?.regulatoryConcernKind,
+    "review_signal"
+  );
+});

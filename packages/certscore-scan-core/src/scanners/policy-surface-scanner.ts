@@ -1955,7 +1955,11 @@ function withSectionArticle13Evidence(
       disclosureType: evidence.coverageArea,
       status: evidence.signalObserved,
       evidenceText: evidence.selectedPolicySectionExcerpt.slice(0, 320),
-      confidence: evidence.signalObserved === "observed" ? 0.82 : 0.68,
+      confidence: confidenceForArticle13DisclosureSignal(
+        evidence.coverageArea,
+        evidence.signalObserved === "observed" ? "observed" : "partial",
+        evidence.selectedPolicySectionExcerpt,
+      ),
       source: "deterministic" as const,
       selectedPolicySectionHeading: evidence.selectedPolicySectionHeading,
       selectedPolicySectionExcerpt: evidence.selectedPolicySectionExcerpt,
@@ -2067,19 +2071,22 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
   const discardedArticle13DisclosureSignals: PolicySurfaceObservation["discardedArticle13DisclosureSignals"] = [];
 
   for (const rule of rules) {
-    const status = rule.pattern.test(text)
+    const rawStatus = rule.pattern.test(text)
       ? "observed" as const
       : rule.partialPattern?.test(text)
         ? "partial" as const
         : null;
-    if (!status) {
+    if (!rawStatus) {
       continue;
     }
-    const evidenceText = boundedExcerptForPatterns(text, status === "partial" && rule.partialPattern
+    const evidenceText = boundedExcerptForPatterns(text, rawStatus === "partial" && rule.partialPattern
       ? [rule.partialPattern, ...rule.excerptPatterns]
       : rule.excerptPatterns).slice(0, 320);
     const rejectReason = article13DisclosureRejectReason(evidenceText, rule.disclosureType);
-    const confidence = status === "observed" ? 0.78 : 0.62;
+    const confidence = confidenceForArticle13DisclosureSignal(rule.disclosureType, rawStatus, evidenceText);
+    const status = rawStatus === "observed" && confidence < 0.74
+      ? "partial" as const
+      : rawStatus;
     if (rejectReason) {
       discardedArticle13DisclosureSignals.push({
         disclosureType: rule.disclosureType,
@@ -2105,6 +2112,75 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
   };
 }
 
+function confidenceForArticle13DisclosureSignal(
+  disclosureType: PolicySurfaceObservation["article13DisclosureSignals"][number]["disclosureType"],
+  status: "observed" | "partial",
+  evidenceText: string,
+) {
+  const text = normalizeWhitespace(evidenceText);
+  if (status === "partial") {
+    return confidenceForPartialArticle13Signal(disclosureType, text);
+  }
+  switch (disclosureType) {
+    case "controller_contact":
+      if (/\b(?:data controller|\bcontroller\b|privacy@|contact (?:us|our privacy team).{0,120}(?:privacy|data protection))\b/i.test(text)) return 0.9;
+      if (/\b(?:data protection office|privacy office|privacy questions?)\b/i.test(text)) return 0.74;
+      return 0.66;
+    case "processing_purposes":
+      if (/\b(?:purpose(?:s)?|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for))\b/i.test(text)) return 0.88;
+      return 0.76;
+    case "legal_basis":
+      if (/\b(?:legal basis|lawful basis|Article 6|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|public interest|vital interests?)\b/i.test(text)) return 0.9;
+      return 0.7;
+    case "recipients_or_vendor_categories":
+      if (/\b(?:recipients|service providers|processors|vendors?)\b/i.test(text)) return 0.86;
+      return 0.76;
+    case "data_retention":
+      if (/\b(?:retention period|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)|retained.{0,120}(?:as long as necessary|required by law|legal purposes|fraud|abuse)|kept for|stored for|no longer needed)\b/i.test(text)) return 0.9;
+      if (/\b(?:deleted? or anonymi[sz]ed|expires?)\b/i.test(text)) return 0.76;
+      return 0.68;
+    case "data_subject_rights": {
+      const rightsCount = dataSubjectRightsKeywordCount(text);
+      if (rightsCount >= 4 || /\b(?:data subject rights|exercise (?:your )?rights|right to (?:access|delete|erase|erasure|rectif|object|restrict|port)|rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port))\b/i.test(text)) return 0.9;
+      if (rightsCount >= 2) return 0.8;
+      return 0.68;
+    }
+    case "international_transfers":
+      if (/\b(?:standard contractual clauses|adequacy decision|data privacy framework|\bdpf\b|EU-U\.S\.|UK Extension|Swiss-U\.S\.|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies))\b/i.test(text)) return 0.92;
+      if (/\b(?:servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|cross-border transfer|international transfer)\b/i.test(text)) return 0.84;
+      return 0.66;
+    case "dpo_contact":
+      if (/\b(?:data protection officer|\bdpo\b)\b/i.test(text)) return 0.9;
+      return 0.78;
+    case "supervisory_authority":
+      if (/\b(?:supervisory authority|data protection authority|lodge a complaint|complain to (?:a )?(?:supervisory|data protection) authority|\bico\b|\bcnil\b|\bdpc\b)\b/i.test(text)) return 0.9;
+      return 0.66;
+    case "automated_decision_making_or_profiling":
+      if (/\b(?:solely automated|automated decision(?:-making| making)?.{0,160}(?:legal or similarly significant effects|meaningful information about the logic involved))\b/i.test(text)) return 0.9;
+      if (/\b(?:automated decision|profiling|meaningful information about the logic)\b/i.test(text)) return 0.76;
+      return 0.6;
+    default:
+      return 0.78;
+  }
+}
+
+function confidenceForPartialArticle13Signal(
+  disclosureType: PolicySurfaceObservation["article13DisclosureSignals"][number]["disclosureType"],
+  evidenceText: string,
+) {
+  switch (disclosureType) {
+    case "automated_decision_making_or_profiling":
+      return 0.56;
+    case "controller_contact":
+    case "supervisory_authority":
+      return 0.62;
+    default:
+      return /\b(?:right|rights|legal basis|retention|data transfer|data protection|service providers|processors)\b/i.test(evidenceText)
+        ? 0.66
+        : 0.58;
+  }
+}
+
 function mergeArticle13DisclosureSignals(
   deterministic: PolicyFacts,
   assisted: AssistedPolicyFacts | undefined,
@@ -2124,7 +2200,7 @@ function mergeArticle13DisclosureSignals(
       continue;
     }
     const current = byType.get(signal.disclosureType);
-    if (!current || signal.status === "observed" && current.status !== "observed" || signal.confidence > current.confidence) {
+    if (!current || article13SignalIsBetter(signal, current)) {
       byType.set(signal.disclosureType, signal);
     }
   }
@@ -2135,6 +2211,18 @@ function mergeArticle13DisclosureSignals(
       ...(assisted?.discardedArticle13DisclosureSignals ?? [])
     ].slice(0, 24),
   };
+}
+
+function article13SignalIsBetter(
+  candidate: PolicySurfaceObservation["article13DisclosureSignals"][number],
+  current: PolicySurfaceObservation["article13DisclosureSignals"][number],
+) {
+  if (candidate.status === "observed" && current.status !== "observed") return true;
+  if (candidate.status !== "observed" && current.status === "observed") return false;
+  if (candidate.confidence !== current.confidence) return candidate.confidence > current.confidence;
+  if (candidate.selectedPolicySectionHeading && !current.selectedPolicySectionHeading) return true;
+  if (candidate.selectedPolicySectionExcerpt && !current.selectedPolicySectionExcerpt) return true;
+  return false;
 }
 
 async function extractOneTrustNoticeText(input: {

@@ -7,6 +7,7 @@ import {
 import type { GdprEprivacyCoverageOutcome } from "./gdpr-eprivacy-coverage-policy";
 import { getReportableGdprEprivacyCoverageItems } from "./gdpr-eprivacy-reportable-rows";
 import { deriveGdprEprivacyReviewSummary } from "./gdpr-eprivacy-review-summary";
+import { buildRegulatoryGapTopFindings } from "./regulatory-gap-top-findings";
 import type { RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
@@ -162,6 +163,84 @@ test("getReportableGdprEprivacyCoverageItems omits standalone runtime vendor sig
   assert.equal(rowIds.has("advertising_retargeting_vendor_signal_observed"), false);
   assert.equal(rowIds.has("retargeting_behavioral_advertising_signal_observed"), false);
   assert.equal(rowIds.has("analytics_vendor_observed"), false);
+});
+
+test("reportable GDPR/ePrivacy rows keep deferred vendor signals out of top findings", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      advertising_retargeting_vendor_signal_observed: makeCoverageOutcome({
+        evidenceRefs: [],
+        limitation: "Advertising vendor evidence was retained.",
+        retainedEvidence: {
+          advertisingRetargetingVendorCount: 1,
+          advertisingRetargetingVendorNames: ["Example Ads"]
+        },
+        rowId: "advertising_retargeting_vendor_signal_observed",
+        status: "Review signal"
+      }),
+      analytics_vendor_observed: makeCoverageOutcome({
+        evidenceRefs: [],
+        limitation: "Analytics vendor evidence was retained.",
+        retainedEvidence: {
+          analyticsVendorCount: 1,
+          analyticsVendorNames: ["Example Analytics"]
+        },
+        rowId: "analytics_vendor_observed",
+        status: "Review signal"
+      }),
+      pre_consent_third_party_tracking: makeCoverageOutcome({
+        evidenceRefs: [],
+        limitation: "Pre-consent third-party tracking was retained.",
+        retainedEvidence: {
+          highPriorityTrackerVendors: ["Example Ads"],
+          highPriorityTrackerVendorDetails: [
+            { firstSeenMs: 950, purpose: "Advertising", vendor: "Example Ads" }
+          ]
+        },
+        rowId: "pre_consent_third_party_tracking",
+        status: "Gap observed"
+      }),
+      retargeting_behavioral_advertising_signal_observed: makeCoverageOutcome({
+        evidenceRefs: [],
+        limitation: "Retargeting evidence was retained.",
+        retainedEvidence: {
+          retargetingBehavioralAdvertisingVendorCount: 1,
+          retargetingBehavioralAdvertisingVendorNames: ["Example Retargeting"]
+        },
+        rowId: "retargeting_behavioral_advertising_signal_observed",
+        status: "Review signal"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+  const reportableItems = getReportableGdprEprivacyCoverageItems(items);
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      rows: reportableItems,
+      title: "GDPR / ePrivacy"
+    }
+  });
+  const findingIds = findings.map((finding) => finding.id);
+
+  assert.equal(
+    findingIds.includes("regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking"),
+    true
+  );
+  assert.equal(
+    findingIds.includes("regulatory_gap__gdpr_eprivacy__advertising_retargeting_vendor_signal_observed"),
+    false
+  );
+  assert.equal(
+    findingIds.includes("regulatory_gap__gdpr_eprivacy__retargeting_behavioral_advertising_signal_observed"),
+    false
+  );
+  assert.equal(
+    findingIds.includes("regulatory_gap__gdpr_eprivacy__analytics_vendor_observed"),
+    false
+  );
 });
 
 test("deriveGdprEprivacyCoverageChecklist maps canonical unified findings without creating pass/fail language", () => {
@@ -339,15 +418,14 @@ test("deriveGdprEprivacyCoverageChecklist maps Article 13 disclosure findings in
     unifiedFindings: [
       makeFinding("legal_basis_disclosure_present", "Legal basis disclosure present"),
       makeFinding("retention_disclosure_present", "Retention disclosure present"),
-      makeFinding("supervisory_authority_disclosure_present", "Supervisory authority complaint disclosure present"),
-      makeFinding("automated_decision_profiling_disclosure_present", "Automated decision-making/profiling disclosure present")
+      makeFinding("supervisory_authority_disclosure_present", "Supervisory authority complaint disclosure present")
     ]
   });
 
   assert.equal(byId(items, "legal_basis_disclosure_observed").status, "Observed");
   assert.equal(byId(items, "retention_disclosure_observed").status, "Observed");
   assert.equal(byId(items, "supervisory_authority_complaint_disclosure").status, "Observed");
-  assert.equal(byId(items, "automated_decision_making_profiling_disclosure").status, "Observed");
+  assert.equal(items.some((item) => item.id === "automated_decision_making_profiling_disclosure"), false);
 });
 
 test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session replay as observed", () => {
@@ -2488,7 +2566,7 @@ test("deriveGdprEprivacyReviewSummary separates partial concerns from review sig
   assert.equal(summary.priorityReviewText, "1 gap observed, 4 partial concerns, 1 review signal.");
 });
 
-test("deriveGdprEprivacyReviewSummary reports thin privacy policy text as a technical limit", () => {
+test("deriveGdprEprivacyReviewSummary reports thin privacy policy text as a technical limit without a standalone finding", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     coverageOutcomes: {
@@ -2548,8 +2626,8 @@ test("deriveGdprEprivacyReviewSummary reports thin privacy policy text as a tech
   const summary = deriveGdprEprivacyReviewSummary(items);
   const renderedSummary = JSON.stringify(summary);
 
-  assert.match(renderedSummary, /Policy text extraction limited transparency review/);
-  assert.match(renderedSummary, /did not extract enough usable policy text/);
+  assert.doesNotMatch(renderedSummary, /Policy text extraction limited transparency review/);
+  assert.doesNotMatch(renderedSummary, /Policy text extraction/);
   assert.match(summary.coverageText, /technical limit/);
   assert.doesNotMatch(summary.priorityReviewText, /partial concern/);
   assert.doesNotMatch(renderedSummary, /legal violation|violates GDPR/i);

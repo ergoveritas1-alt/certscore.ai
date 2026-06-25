@@ -251,15 +251,6 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
-    id: "policy_text_extraction",
-    label: "Policy text extraction",
-    explanation: "Whether enough usable privacy-policy text was extracted to evaluate individual GDPR Transparency disclosures.",
-    findingIds: [],
-    defaultFindingStatus: "Observed",
-    notObservedText: "Policy text extraction was not confirmed from retained scanner evidence.",
-    requiresPublicWebCoverage: true
-  },
-  {
     id: "legal_basis_disclosure_observed",
     label: "Legal basis disclosure",
     explanation: "Whether retained privacy-policy evidence included a canonical legal-basis disclosure signal.",
@@ -414,15 +405,6 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     findingIds: ["supervisory_authority_disclosure_present"],
     defaultFindingStatus: "Observed",
     notObservedText: "No canonical supervisory-authority complaint disclosure evidence was retained for this scan context.",
-    requiresPublicWebCoverage: true
-  },
-  {
-    id: "automated_decision_making_profiling_disclosure",
-    label: "Automated decision-making/profiling",
-    explanation: "Whether retained privacy-policy evidence disclosed automated decision-making or profiling where found.",
-    findingIds: ["automated_decision_profiling_disclosure_present"],
-    defaultFindingStatus: "Observed",
-    notObservedText: "No canonical automated decision-making or profiling disclosure evidence was retained for this scan context.",
     requiresPublicWebCoverage: true
   }
 ];

@@ -22,6 +22,7 @@ export type StaticFixturePage =
   | "consent-focused-privacy-opt-out"
   | "consent-manage-preferences"
   | "consent-no-reject"
+  | "consent-late-first-layer-controls"
   | "consent-privacy-choice-surface-reject-success"
   | "consent-privacy-choice-only"
   | "consent-privacy-opt-out-ad-comparison"
@@ -121,6 +122,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-focused-privacy-opt-out": "consent-focused-privacy-opt-out",
   "consent-manage-preferences": "consent-manage-preferences",
   "consent-no-reject": "consent-no-reject",
+  "consent-late-first-layer-controls": "consent-late-first-layer-controls",
   "consent-privacy-choice-surface-reject-success": "consent-privacy-choice-surface-reject-success",
   "consent-privacy-choice-only": "consent-privacy-choice-only",
   "consent-privacy-opt-out-ad-comparison": "consent-privacy-opt-out-ad-comparison",
@@ -541,6 +543,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     ambiguous: caseName === "consent-ambiguous-controls",
     acceptEssential: caseName === "consent-accept-essential",
     manage: caseName === "consent-manage-preferences",
+    lateFirstLayerControls: caseName === "consent-late-first-layer-controls",
     preferenceAmbiguous: caseName === "consent-preference-center-ambiguous",
     preferenceConfirmSave: caseName === "consent-preference-center-confirm-save",
     postChoiceReopen: caseName === "consent-post-choice-reopen-control",
@@ -556,6 +559,24 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     leanGuardedImageCookie: caseName === "consent-lean-guarded-image-cookie",
     navigationTimeout: caseName === "consent-navigation-timeout",
   };
+  if (options.lateFirstLayerControls) {
+    return `
+      <section>
+        <p>Consent-flow fixture page with late first-layer controls.</p>
+      </section>
+      <div id="banner" role="dialog" aria-label="Cookie consent">
+        <p>We use cookies for analytics and advertising. Choose your consent setting.</p>
+        <span id="late-controls"></span>
+      </div>
+      <script>
+        setTimeout(() => {
+          const target = document.getElementById("late-controls");
+          if (!target) return;
+          target.innerHTML = '<button id="accept-all" type="button">Accept All</button><button id="reject-all" type="button">Reject All</button><button id="settings" type="button">Cookie settings</button>';
+        }, 1100);
+      </script>
+    `;
+  }
   if (options.privacyOptOutAdComparison || options.privacyOptOutRadioFormAdComparison || options.focusedPrivacyOptOut) {
     const radioForm = options.privacyOptOutRadioFormAdComparison || options.focusedPrivacyOptOut
       ? `

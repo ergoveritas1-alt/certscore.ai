@@ -15,9 +15,12 @@ export function ExecutiveTopFindingsCarousel({
   const [activeIndex, setActiveIndex] = React.useState(0);
   const safeCount = Math.max(0, Math.min(count, items.length));
   const boundedActiveIndex = Math.min(activeIndex, Math.max(0, safeCount - 1));
+  const normalizedHeading = heading.replace("Highest-priority", "High-priority");
   const displayHeading = safeCount > 1
-    ? `${safeCount} high-priority issues`
-    : heading.replace("Highest-priority", "High-priority");
+    ? normalizedHeading === "Issues to review"
+      ? `${safeCount} issues to review`
+      : `${safeCount} high-priority issues`
+    : normalizedHeading;
 
   const goPrevious = () => {
     setActiveIndex((current) => (current - 1 + safeCount) % safeCount);

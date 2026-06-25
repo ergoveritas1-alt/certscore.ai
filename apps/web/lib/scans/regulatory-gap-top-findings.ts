@@ -3,6 +3,9 @@ import type { CertScoreFinding } from "./finding-registry";
 export type RegulatoryGapTopFindingRow = {
   assessmentStatus?: string;
   criticalEvidence?: {
+    missingOrIncompleteSourceSignals?: unknown[];
+    pipeline?: Record<string, unknown>;
+    projectedFindings?: unknown[];
     retainedEvidence?: Record<string, unknown>;
     statusBasis?: string | null;
   };
@@ -29,7 +32,7 @@ export type RegulatoryGapTopFindingInput = {
   gdprEprivacyArea?: RegulatoryGapTopFindingArea | null;
 };
 
-type RegulatoryTopFindingConcernKind = "potential_concern" | "potential_gap";
+type RegulatoryTopFindingConcernKind = "potential_concern" | "potential_gap" | "review_signal";
 
 type RegulatoryGapAreaConfig = {
   idPrefix: string;
@@ -64,7 +67,7 @@ function findingsForArea(
     return [];
   }
 
-  return area.rows
+  const projectedRows = area.rows
     .map((row, index) => ({
       concernKind: getRegulatoryTopFindingConcernKind(row),
       index,
@@ -72,7 +75,11 @@ function findingsForArea(
     }))
     .filter((entry): entry is { concernKind: RegulatoryTopFindingConcernKind; index: number; row: RegulatoryGapTopFindingRow } =>
       entry.concernKind !== null
-    )
+    );
+  const hasConcernOrGap = projectedRows.some((entry) => entry.concernKind !== "review_signal");
+
+  return projectedRows
+    .filter((entry) => hasConcernOrGap ? entry.concernKind !== "review_signal" : true)
     .sort((left, right) => {
       const kindDelta = getRegulatoryTopFindingConcernRank(left.concernKind) - getRegulatoryTopFindingConcernRank(right.concernKind);
       return kindDelta !== 0 ? kindDelta : left.index - right.index;
@@ -97,9 +104,14 @@ function findingsForArea(
             regulatoryAreaId: area.id,
             regulatoryAreaTitle: area.title,
             regulatoryMapping: row.regulatoryMapping ?? [],
+            missingOrIncompleteSourceSignals: row.criticalEvidence?.missingOrIncompleteSourceSignals ?? [],
+            pipeline: row.criticalEvidence?.pipeline ?? null,
+            projectedFindings: row.criticalEvidence?.projectedFindings ?? [],
+            retainedEvidence: row.criticalEvidence?.retainedEvidence ?? row.retainedEvidence ?? null,
             rowId: row.id,
             rowLabel: row.label,
             rowNote: row.note ?? null,
+            statusBasis: row.criticalEvidence?.statusBasis ?? null,
             regulatoryConcernKind: concernKind,
             status: row.status ?? row.statusLabel ?? "gap_observed"
           }
@@ -116,7 +128,13 @@ function findingsForArea(
 }
 
 function getRegulatoryTopFindingConcernRank(kind: RegulatoryTopFindingConcernKind) {
-  return kind === "potential_gap" ? 0 : 1;
+  if (kind === "potential_gap") {
+    return 0;
+  }
+  if (kind === "potential_concern") {
+    return 1;
+  }
+  return 2;
 }
 
 function getRegulatoryGapTopFindingSummary(row: RegulatoryGapTopFindingRow, config: RegulatoryGapAreaConfig) {
@@ -159,7 +177,7 @@ function getRegulatoryTopFindingConcernKind(row: RegulatoryGapTopFindingRow): Re
     return isObservedPotentialConcernRow(row) ? "potential_concern" : null;
   }
   if (evidenceLabel === "Partial" || row.assessmentStatus === "review_signal") {
-    return isObservedPotentialConcernRow(row) ? "potential_concern" : null;
+    return isObservedPotentialConcernRow(row) ? "potential_concern" : "review_signal";
   }
   if (POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS.has(row.id)) {
     return null;
@@ -217,9 +235,21 @@ function isObservedRow(row: RegulatoryGapTopFindingRow) {
 function isObservedPotentialConcernRow(row: RegulatoryGapTopFindingRow) {
   switch (row.id) {
     case "pre_consent_cookies_storage":
+      {
+        const cookiePriorityConcern = hasConcernLevelInventoryPriority(row, ["cookieStoragePriority", "cookie_storage_priority"]);
+        if (cookiePriorityConcern !== null) {
+          return cookiePriorityConcern;
+        }
+      }
       return hasHighConfidenceStorageConcern(row);
     case "pre_consent_third_party_tracking":
-      return true;
+      {
+        const trackerPriorityConcern = hasConcernLevelInventoryPriority(row, ["trackerPriority", "tracker_priority"]);
+        if (trackerPriorityConcern !== null) {
+          return trackerPriorityConcern;
+        }
+      }
+      return hasHighRiskPreconsentPurpose(row);
     case "advertising_retargeting_vendor_signal_observed":
       return hasHighConfidenceAdvertisingConcern(row);
     case "retargeting_behavioral_advertising_signal_observed":
@@ -255,6 +285,31 @@ function retainedNumber(row: RegulatoryGapTopFindingRow, keys: string[]) {
     }
   }
   return null;
+}
+
+function retainedString(row: RegulatoryGapTopFindingRow, keys: string[]) {
+  const evidence = retainedEvidence(row);
+  for (const key of keys) {
+    const value = evidence[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function hasConcernLevelInventoryPriority(row: RegulatoryGapTopFindingRow, keys: string[]) {
+  const priority = retainedString(row, keys);
+  switch (priority) {
+    case "high":
+    case "medium":
+      return true;
+    case "review_needed":
+    case "contextual":
+      return false;
+    default:
+      return null;
+  }
 }
 
 function retainedText(row: RegulatoryGapTopFindingRow) {
@@ -306,6 +361,18 @@ function hasHighConfidenceAnalyticsConcern(row: RegulatoryGapTopFindingRow) {
   }
   return (count !== null && count > 0) ||
     evidenceMentions(row, /\b(analytics|measurement|google analytics|ga4|gtag|adobe analytics|matomo|mixpanel|amplitude)\b/i);
+}
+
+function hasHighRiskPreconsentPurpose(row: RegulatoryGapTopFindingRow) {
+  const evidence = retainedEvidence(row);
+  const mix = evidence.preconsentPurposeRiskMix ?? evidence.preconsent_purpose_risk_mix;
+  if (mix && typeof mix === "object" && !Array.isArray(mix)) {
+    const record = mix as Record<string, unknown>;
+    return ["advertising", "retargeting", "marketingAnalytics", "sessionReplay"].some((key) =>
+      Array.isArray(record[key]) && record[key].length > 0
+    );
+  }
+  return evidenceMentions(row, /\b(advertis(?:ing|er)|adtech|retarget|remarket|behavioral advertis|cross-site|cross site|session replay|hotjar|fullstory|clarity|google analytics|ga4|doubleclick|google ads|meta pixel|facebook pixel)\b/i);
 }
 
 function getDeviceIdentificationDirection(row: RegulatoryGapTopFindingRow) {

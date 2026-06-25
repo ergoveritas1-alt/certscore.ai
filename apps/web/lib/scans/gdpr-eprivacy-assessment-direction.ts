@@ -34,8 +34,7 @@ const POSITIVE_WHEN_OBSERVED_ROW_IDS = new Set([
   "data_subject_rights_disclosure",
   "international_transfers_disclosure",
   "dpo_contact_point_disclosure",
-  "supervisory_authority_complaint_disclosure",
-  "automated_decision_making_profiling_disclosure"
+  "supervisory_authority_complaint_disclosure"
 ]);
 
 const NEUTRAL_WHEN_OBSERVED_ROW_IDS = new Set([

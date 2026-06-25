@@ -402,10 +402,11 @@ const rules: VendorRule[] = [
     vendor: "BrightLine",
     product: "BrightLine",
     purpose: "advertising",
-    regulatoryRelevance: ["consent", "advertising", "video_ad_measurement"],
-    confidence: 0.9,
+    regulatoryRelevance: ["consent", "advertising", "video_ad_measurement", "ad_event_tracking"],
+    confidence: 0.88,
     hostPatterns: [/\.brightline\.tv$/i],
-    urlPatterns: [/\/track\b/i, /\/event\b/i, /\/pixel\b/i],
+    urlPatterns: [/\/(?:beacon|collect|collector|event|events|measure|measurement|metrics|pixel|track|tracking)\b/i],
+    requireUrlPatternMatch: true,
     basisLabel: "brightline_video_ad_measurement_endpoint",
   },
   {
@@ -860,14 +861,14 @@ const rules: VendorRule[] = [
   {
     entity: "Piano Software Inc.",
     vendor: "Piano",
-    product: "Piano",
-    purpose: "analytics",
-    regulatoryRelevance: ["consent", "personalization", "subscription", "audience_management"],
-    confidence: 0.93,
+    product: "Piano (Tinypass)",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["consent", "personalization", "paywall", "subscription", "cdn", "script_delivery", "supporting_assets", "audience_management"],
+    confidence: 0.95,
     hostPatterns: [/\.piano\.io$/i, /\.tinypass\.com$/i],
-    urlPatterns: [/\/api\//i, /\/xbuilder\//i, /\/tinypass/i],
+    urlPatterns: [/\/api\//i, /\/xbuilder\//i, /\/tinypass/i, /\/(?:assets?|scripts?|resources?)\//i],
     cookiePatterns: [/^_pctx$/i, /^_pcid$/i, /^_pprv$/i, /^pa_user$/i, /^pa_privacy$/i, /^pnes_/i, /^pcid$/i],
-    basisLabel: "piano_subscription_personalization_runtime",
+    basisLabel: "piano_tinypass_paywall_personalization_runtime",
   },
   {
     entity: "Piano Software Inc.",
@@ -1123,6 +1124,9 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   if (/cloudflare bot management|bot_detection|fraud_prevention|security/.test(haystack)) {
     return "Security";
   }
+  if (/piano|tinypass|cxense|personalization|personalisation|paywall|subscription|audience_management/.test(haystack)) {
+    return "Personalisation";
+  }
   if (/jsdelivr|cdn\b|font_delivery|content delivery/.test(haystack)) {
     return "CDN";
   }
@@ -1131,9 +1135,6 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   }
   if (/optimizely|experimentation|ab_testing|a\/b/.test(haystack)) {
     return "A/B Testing";
-  }
-  if (/piano|cxense|personalization|personalisation|subscription|audience_management/.test(haystack)) {
-    return "Personalisation";
   }
   if (/session_replay|session replay|clarity|hotjar|fullstory/.test(haystack)) {
     return "Session replay";

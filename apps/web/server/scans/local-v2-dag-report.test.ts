@@ -488,6 +488,179 @@ test("summarizePolicySurfaces retains substantive policy text beyond navigation 
   assert.match(summary.retainedPrivacyPolicyTextExcerpt, /Data transfers/i);
 });
 
+test("summarizePolicySurfaces surrounds Article 13 snippets with full retained policy artifact context", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const artifactRoot = path.join(process.cwd(), "artifacts/local-v2-dag-lambda-simulated");
+  await mkdir(artifactRoot, { recursive: true });
+  const outDir = await mkdtemp(path.join(artifactRoot, "policy-context-"));
+  const artifactPath = path.join(outDir, "policy_surface_text_context.txt");
+  const evidenceText = "If you have a complaint, it is best to contact us first so that we can try to make things right. If you are still not happy, you have the right to contact your data protection authority.";
+  const supportingContactText = "Further details can be found by contacting us by email at wbdprivacy@wbd.com.";
+  const fullPolicyText = [
+    "Privacy Policy introduction. We explain how this policy works.",
+    "Controller information. We describe the company responsible for processing.",
+    "Information we collect. We collect account and usage information.",
+    "How we use information. We use information to provide and improve services.",
+    "Sharing information. We share information with vendors where needed.",
+    "Your choices. You can adjust some preferences in account settings.",
+    evidenceText,
+    supportingContactText,
+    "Retention. We retain information for different periods depending on the context.",
+    "Security. We use safeguards designed to protect information.",
+    "International transfers. Information may be processed outside your country.",
+    "Policy changes. We may update this policy from time to time.",
+    "Contact. You can contact us if you have questions."
+  ].join(" ");
+
+  try {
+    await writeFile(artifactPath, fullPolicyText, "utf8");
+    const surfaces = dedupePolicySurfaces([
+      {
+        observationId: "target-privacy",
+        surfaceType: "privacy_policy",
+        url: "https://example.test/privacy",
+        normalizedUrl: "https://example.test/privacy",
+        confidence: 0.95,
+        status: "fetched",
+        textExcerpt: "Privacy Policy introduction. We explain how this policy works.",
+        observedTopics: ["supervisory_authority"],
+        artifactRefs: [
+          {
+            artifactId: "policy_surface_text_context",
+            label: "privacy_policy normalized text",
+            path: artifactPath
+          }
+        ],
+        article13DisclosureSignals: [
+          {
+            disclosureType: "supervisory_authority",
+            status: "observed",
+            evidenceText,
+            confidence: 0.9,
+            source: "deterministic"
+          }
+        ]
+      }
+    ] as never, "https://example.test/");
+
+    const summary = summarizePolicySurfaces(surfaces, "example.test");
+    const retainedContext = summary.article13DisclosureSignals[0]?.selectedPolicySectionExcerpt ?? "";
+
+    assert.match(retainedContext, /collect account and usage information/i);
+    assert.match(retainedContext, /If you have a complaint/i);
+    assert.match(retainedContext, /wbdprivacy@wbd\.com/i);
+    assert.match(retainedContext, /International transfers/i);
+    assert.match(retainedContext, /Policy changes/i);
+    assert.doesNotMatch(retainedContext, /Cookies What are cookies/i);
+    assert.ok(retainedContext.length > evidenceText.length);
+    assert.equal(summary.article13DisclosureSignals[0]?.selectedPolicySectionHeading, "Policy text context");
+    assert.equal(summary.article13DisclosureSignals[0]?.supportingContactContext, "wbdprivacy@wbd.com");
+  } finally {
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("summarizePolicySurfaces dedupes overlapping Article 13 evidence candidates", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const shorterRightsText = "You have the right to access and correct your personal data.";
+  const mediumRightsText = "You have the right to access, correct, delete, and erase your personal data.";
+  const completeRightsText = "You have the right to access, correct, delete, erase, object to, restrict processing of, and port your personal data.";
+  const distinctRightsText = "You may download a copy of your data through privacy controls.";
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "target-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      normalizedUrl: "https://example.test/privacy",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: [
+        "Privacy Policy. We explain how information is handled.",
+        "We collect account information, device information, usage information, and contact information to provide services, maintain security, improve product features, personalize experiences, respond to requests, and measure performance. ".repeat(18),
+        completeRightsText,
+        distinctRightsText,
+        "Retention. We retain information for different periods depending on the context and legal requirements. ".repeat(12)
+      ].join(" "),
+      observedTopics: ["data_subject_rights"],
+      article13DisclosureSignals: [
+        {
+          disclosureType: "data_subject_rights",
+          status: "observed",
+          evidenceText: shorterRightsText,
+          confidence: 0.8,
+          source: "deterministic",
+          selectedEvidenceStrength: "moderate",
+          selectedPolicySectionExcerpt: shorterRightsText
+        },
+        {
+          disclosureType: "data_subject_rights",
+          status: "observed",
+          evidenceText: completeRightsText,
+          confidence: 0.9,
+          source: "deterministic",
+          selectedEvidenceStrength: "strong",
+          selectedPolicySectionExcerpt: completeRightsText
+        },
+        {
+          disclosureType: "data_subject_rights",
+          status: "observed",
+          evidenceText: mediumRightsText,
+          confidence: 0.85,
+          source: "deterministic",
+          selectedEvidenceStrength: "moderate",
+          selectedPolicySectionExcerpt: mediumRightsText
+        },
+        {
+          disclosureType: "data_subject_rights",
+          status: "observed",
+          evidenceText: distinctRightsText,
+          confidence: 0.86,
+          source: "deterministic",
+          selectedEvidenceStrength: "strong",
+          selectedPolicySectionExcerpt: distinctRightsText
+        }
+      ],
+      retainedArticle13SectionEvidence: [
+        {
+          coverageArea: "data_subject_rights",
+          selectedPolicySectionExcerpt: shorterRightsText,
+          selectedPolicySectionUrl: "https://example.test/privacy",
+          evidenceSource: "deterministic",
+          selectedEvidenceStrength: "moderate",
+          signalObserved: "observed"
+        },
+        {
+          coverageArea: "data_subject_rights",
+          selectedPolicySectionExcerpt: completeRightsText,
+          selectedPolicySectionUrl: "https://example.test/privacy",
+          evidenceSource: "deterministic",
+          selectedEvidenceStrength: "strong",
+          signalObserved: "observed"
+        },
+        {
+          coverageArea: "data_subject_rights",
+          selectedPolicySectionExcerpt: distinctRightsText,
+          selectedPolicySectionUrl: "https://example.test/privacy",
+          evidenceSource: "deterministic",
+          selectedEvidenceStrength: "strong",
+          signalObserved: "observed"
+        }
+      ]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+
+  assert.deepEqual(
+    summary.article13DisclosureSignals.map((signal) => signal.evidenceText),
+    [completeRightsText, distinctRightsText]
+  );
+  assert.deepEqual(
+    summary.retainedArticle13SectionEvidence.map((evidence) => evidence.selectedPolicySectionExcerpt),
+    [completeRightsText, distinctRightsText]
+  );
+});
+
 test("summarizePolicySurfaces carries row-targeted retained policy section evidence", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([

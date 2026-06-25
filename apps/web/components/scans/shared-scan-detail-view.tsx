@@ -1166,13 +1166,15 @@ function RuntimeInventoryTable({
     .filter((row) => row.type === "tracker" && row.priority === "high" && row.firstSeenMs !== null)
     .sort((left, right) => (left.firstSeenMs ?? 0) - (right.firstSeenMs ?? 0));
   const firstHighPriorityTracker = firstHighPriorityTrackerRows[0] ?? null;
-  const inventorySummaryCards = [
-    {
-      detail: null,
-      label: "First high-priority tracker",
-      value: formatInventorySummaryTime(firstHighPriorityTracker?.firstSeenMs)
-    }
-  ];
+  const inventorySummaryCards = firstHighPriorityTracker?.firstSeenMs !== null && firstHighPriorityTracker?.firstSeenMs !== undefined
+    ? [
+        {
+          detail: null,
+          label: "First high-priority tracker",
+          value: formatInventorySummaryTime(firstHighPriorityTracker.firstSeenMs)
+        }
+      ]
+    : [];
   const copyPayload = buildRuntimeInventoryCopyPayload(groupedInventoryRows);
 
   return (
@@ -7400,7 +7402,7 @@ export function SharedScanDetailView({
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {
       id: "gdpr_eprivacy",
-      rows: gdprEprivacyCoverageChecklist,
+      rows: reportableGdprEprivacyCoverageChecklist,
       title: "GDPR / ePrivacy"
     }
   });

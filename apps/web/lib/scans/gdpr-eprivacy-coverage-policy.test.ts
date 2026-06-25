@@ -9,7 +9,7 @@ const completedInputBase = {
 
 function retainedArticle13Signal(outcome: NonNullable<ReturnType<typeof deriveGdprEprivacyCoveragePolicyOutcomes>[string]>) {
   return outcome.criticalEvidence.retainedEvidence.article13Signal as
-    | { evidenceText?: string; source?: string }
+    | { evidenceText?: string; selectedPolicySectionExcerpt?: string; source?: string; supportingContactContext?: string }
     | null
     | undefined;
 }
@@ -86,6 +86,77 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes structured Article 13 di
     "The controller can be contacted at privacy@example.test."
   );
   assert.equal(outcomes.international_transfers_disclosure?.status, "Review signal");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats supervisory contact email as supporting context only", () => {
+  const supervisoryExcerpt = [
+    "If you are still not happy, you have the right to contact your data protection authority.",
+    "Further details can be found by contacting us by email at wbdprivacy@wbd.com."
+  ].join(" ");
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            confidence: 0.91,
+            disclosureType: "supervisory_authority",
+            evidenceText: "you have the right to contact your data protection authority",
+            selectedEvidenceStrength: "strong",
+            selectedPolicySectionExcerpt: supervisoryExcerpt,
+            source: "deterministic",
+            status: "observed",
+            supportingContactContext: "wbdprivacy@wbd.com"
+          }
+        ],
+        policyTextCoverageMode: "section_targeted",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3000,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: supervisoryExcerpt
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  const outcome = outcomes.supervisory_authority_complaint_disclosure;
+  assert.equal(outcome?.status, "Observed");
+  assert.match(outcome?.criticalEvidence.statusBasis ?? "", /authority\/regulator complaint language confirms/i);
+  assert.match(outcome?.criticalEvidence.statusBasis ?? "", /supporting context/i);
+  assert.equal(retainedArticle13Signal(outcome!)?.supportingContactContext, "wbdprivacy@wbd.com");
+  assert.equal(
+    outcome?.evidenceRefs.includes("Supporting contact context: wbdprivacy@wbd.com"),
+    true
+  );
+
+  const emailOnlyOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            confidence: 0.7,
+            disclosureType: "supervisory_authority",
+            evidenceText: "Further details can be found by contacting us by email at wbdprivacy@wbd.com.",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        policyTextCoverageMode: "section_targeted",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3000,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "Further details can be found by contacting us by email at wbdprivacy@wbd.com."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.notEqual(emailOnlyOutcomes.supervisory_authority_complaint_disclosure?.status, "Observed");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes sanitizes and prefers Ireland-relevant policy disclosure snippets", () => {
@@ -195,6 +266,66 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects common international tran
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not confirm international transfers from geography-only consent law language", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://www.cnn.com/privacy"],
+        retainedPrivacyPolicyTextExcerpt:
+          "Under the laws of some countries outside of the European Economic Area and the United Kingdom we may need your or your adult's consent before you can use some of our services."
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.notEqual(outcomes.international_transfers_disclosure?.status, "Observed");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
+  assert.equal(
+    outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
+    "not_confirmed_row_specific_extraction"
+  );
+  assert.match(
+    outcomes.international_transfers_disclosure?.criticalEvidence.statusBasis ?? "",
+    /international-transfer disclosure text was not confidently extracted/i
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes confirms explicit international transfer disclosure examples", () => {
+  const examples = [
+    "We may transfer your personal data outside the EEA/UK.",
+    "Where we transfer personal data internationally, we rely on Standard Contractual Clauses.",
+    "Your information may be stored or processed in the United States and other countries."
+  ];
+
+  for (const excerpt of examples) {
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      ...completedInputBase,
+      runtimeArtifacts: {
+        policyDisclosureSummary: {
+          privacyPolicyPresent: true,
+          privacyPolicyTextCharacterCount: 3200,
+          privacyPolicyUrls: ["https://example.test/privacy"],
+          retainedPrivacyPolicyTextExcerpt: excerpt
+        }
+      },
+      snapshot: {
+        privacy_policy_present: true
+      }
+    });
+
+    assert.equal(outcomes.international_transfers_disclosure?.status, "Observed", excerpt);
+    assert.match(
+      retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText ?? "",
+      /transfer|stored|processed|standard contractual clauses/i
+    );
+  }
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not promote topic-only Article 13 hints to observed", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -278,6 +409,78 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes requires row-specific recipient/v
   assert.equal(
     outcomes.recipients_vendor_categories_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
     "not_confirmed_row_specific_extraction"
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not promote session-replay service-provider text as recipient disclosure", () => {
+  const sessionReplayExcerpt =
+    "In collecting Information about your use of a Digital Service, we may use service providers or other solutions to record users' interactions with our Sites, which may include mouse clicks, mouse movements, page scrolling, and keystrokes/key touches during those sessions.";
+
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            disclosureType: "recipients_or_vendor_categories",
+            evidenceText: sessionReplayExcerpt,
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: sessionReplayExcerpt
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Not confirmed");
+  assert.match(
+    outcomes.recipients_vendor_categories_disclosure?.limitation ?? "",
+    /session-replay|Collected-data|recipient\/vendor-category/i
+  );
+  assert.equal(
+    outcomes.recipients_vendor_categories_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
+    "not_confirmed_row_specific_extraction"
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes confirms explicit recipient/vendor category sharing disclosure", () => {
+  const recipientDisclosure =
+    "We share personal information with service providers, processors, vendors, affiliates, advertising partners, analytics providers, payment processors, business partners, social networks, and regulators where required.";
+
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            disclosureType: "recipients_or_vendor_categories",
+            evidenceText: recipientDisclosure,
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 3200,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: recipientDisclosure
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Observed");
+  assert.match(
+    retainedArticle13Signal(outcomes.recipients_vendor_categories_disclosure!)?.evidenceText ?? "",
+    /share personal information with service providers/i
   );
 });
 

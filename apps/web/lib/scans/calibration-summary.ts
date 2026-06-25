@@ -2,7 +2,7 @@ import type { CertScoreFinding } from "./finding-registry";
 import { deriveDomainCalibrationContext, type DomainCalibrationContext } from "./domain-calibration-context";
 
 export type ExecutivePosture = "Clear" | "Watch" | "Action Needed";
-export type ExecutiveDisplayState = ExecutivePosture | "Limited review" | "Evidence review" | "Scan not representative";
+export type ExecutiveDisplayState = ExecutivePosture | "Limited review" | "Evidence review" | "Review Needed" | "Scan not representative";
 
 const MATERIAL_INCOMPLETE_BEFORE_CONSENT_COOKIE_THRESHOLD = 5;
 const UNDER_OBSERVED_ECOSYSTEM_REQUEST_RATIO_THRESHOLD = 0.35;
@@ -340,6 +340,15 @@ export function formatTopFindingHeadline(findings: CertScoreFinding[]) {
   return `${labels[0]} · ${labels[1]} · ${labels[2]}`;
 }
 
+function isReviewOnlyTopFinding(finding: CertScoreFinding) {
+  const details = finding.evidenceDetails?.policyEvidenceDetails;
+  return details?.regulatoryConcernKind === "review_signal";
+}
+
+function hasOnlyReviewTopFindings(findings: CertScoreFinding[]) {
+  return findings.length > 0 && findings.every(isReviewOnlyTopFinding);
+}
+
 function getPostureHeadline(posture: ExecutivePosture) {
   if (posture === "Action Needed") {
     return "Immediate privacy and consent issues detected";
@@ -432,6 +441,9 @@ function getDisplayStateHeadline(
   }
   if (displayState === "Evidence review") {
     return "Material runtime evidence needs review";
+  }
+  if (displayState === "Review Needed") {
+    return "Checklist items need review";
   }
   if (displayState === "Scan not representative") {
     return "Automated scan could not evaluate this site";
@@ -587,6 +599,17 @@ export function deriveExecutiveNarrativePresentation(input: {
     };
   }
 
+  if (displayState === "Review Needed") {
+    return {
+      findingsHeading: "Issues to review",
+      headline: getDisplayStateHeadline(displayState, input.posture, input.topFindings),
+      hostResolutionCategory,
+      limitedCoverage,
+      summaryLabel: "Review note:",
+      summaryMessage: input.executiveHeadline
+    };
+  }
+
   if (limitedCoverage) {
     return {
       findingsHeading: "Automated homepage findings",
@@ -666,6 +689,10 @@ export function buildScanCalibrationSummary(input: {
     topFindingCount: input.topFindings.length,
     vendorCount: input.vendorCount
   });
+  const effectiveDisplayState =
+    hasOnlyReviewTopFindings(input.topFindings)
+      ? "Review Needed"
+      : displayState;
   const presentation = deriveExecutiveNarrativePresentation({
     accessLimitationNotice: input.accessLimitationNotice,
     executiveHeadline,
@@ -673,7 +700,7 @@ export function buildScanCalibrationSummary(input: {
     coverageLevel: input.coverageLevel,
     legalCoverageScore: input.legalCoverageScore,
     pagesScanned: input.pagesScanned,
-    displayState,
+    displayState: effectiveDisplayState,
     policyEnrichmentCount: input.policyEnrichmentCount,
     posture: input.posture,
     requestedHost: input.requestedHost,
@@ -703,7 +730,7 @@ export function buildScanCalibrationSummary(input: {
       headline: presentation.headline,
       hostResolutionCategory: presentation.hostResolutionCategory,
       limitedCoverage: presentation.limitedCoverage,
-      displayState,
+      displayState: effectiveDisplayState,
       posture: input.posture,
       summaryLabel: presentation.summaryLabel,
       summaryMessage: presentation.summaryMessage

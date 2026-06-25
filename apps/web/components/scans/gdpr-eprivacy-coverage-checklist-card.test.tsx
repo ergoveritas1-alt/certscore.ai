@@ -5,7 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   GdprEprivacyCoverageChecklistCard,
   GdprEprivacyCoverageSummaryPills,
-  getGdprEprivacyCoverageChecklistRowRationaleForAudit
+  getGdprEprivacyCoverageChecklistRowRationaleForAudit,
+  gdprPolicyExcerptPageTestHelpers
 } from "./gdpr-eprivacy-coverage-checklist-card";
 import { getAssessmentDirection, getEvidenceLabel } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -488,25 +489,6 @@ test("GdprEprivacyCoverageChecklistCard renders row-specific extraction uncertai
   assert.doesNotMatch(html, />Partial concern</);
 });
 
-test("GdprEprivacyCoverageChecklistCard keeps substantive automated decision review as partial concern", () => {
-  const row = makeChecklistItem({
-    assessmentStatus: "review_signal",
-    criticalEvidence: {
-      retainedEvidence: {
-        signalObserved: "partial_automated_processing_without_article22_disclosure"
-      }
-    },
-    evidenceState: "observed",
-    id: "automated_decision_making_profiling_disclosure",
-    label: "Automated decision-making / profiling disclosure",
-    status: "Review signal",
-    tone: "review"
-  });
-
-  assert.equal(getEvidenceLabel(row), "Partial concern");
-  assert.equal(getAssessmentDirection(row), "review_signal");
-});
-
 test("GdprEprivacyCoverageChecklistCard renders concise session replay evidence copy", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
@@ -846,6 +828,385 @@ test("GdprEprivacyCoverageChecklistCard starts evidence and correction cards hid
   assert.doesNotMatch(html, />Correction steps</);
 });
 
+test("GdprEprivacyCoverageChecklistCard shows captured policy review button for transparency rows with retained snippets", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            retainedEvidence: {
+              article13Signal: {
+                disclosureType: "legal_basis",
+                evidenceText: "We rely on consent, contract, legal obligation, and legitimate interests as legal bases for processing.",
+                source: "wc01_retained_policy_text_match",
+                status: "observed"
+              },
+              policySurfaceSummary: {
+                privacyPolicyUrls: ["https://example.test/privacy"],
+                retainedPrivacyPolicyTextExcerpt:
+                  "Captured privacy policy text retained at scan time. We rely on consent, contract, legal obligation, and legitimate interests as legal bases for processing."
+              }
+            }
+          },
+          evidenceState: "observed",
+          id: "legal_basis_disclosure_observed",
+          label: "Legal basis disclosure",
+          status: "Observed"
+        }),
+        makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              article13Signal: {
+                disclosureType: "data_subject_rights",
+                evidenceText: "You can ask us to access, correct, delete, or erase your personal data.",
+                source: "wc01_retained_policy_text_match",
+                status: "partial"
+              },
+              policySurfaceSummary: {
+                privacyPolicyUrls: ["https://example.test/privacy"],
+                retainedPrivacyPolicyTextExcerpt:
+                  "Captured privacy policy text retained at scan time. You can ask us to access, correct, delete, or erase your personal data."
+              },
+              signalObserved: "not_confirmed_row_specific_extraction"
+            }
+          },
+          evidenceState: "observed",
+          id: "data_subject_rights_disclosure",
+          label: "Data subject rights disclosure",
+          status: "Not confirmed"
+        }),
+        makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              policySurfaceSummary: {
+                article13DisclosureSignals: [
+                  {
+                    confidence: 0.78,
+                    disclosureType: "recipients_or_vendor_categories",
+                    evidenceText:
+                      "We may share personal information with service providers, vendors, affiliates, and other recipients that process information on our behalf.",
+                    source: "deterministic",
+                    status: "observed",
+                    surfaceUrl: "https://example.test/privacy"
+                  }
+                ],
+                privacyPolicyUrls: ["https://example.test/privacy"],
+                retainedPrivacyPolicyTextExcerpt:
+                  "Captured privacy policy text retained at scan time. We may share personal information with service providers, vendors, affiliates, and other recipients that process information on our behalf."
+              },
+              signalObserved: "not_confirmed_policy_disclosure_extraction"
+            }
+          },
+          evidenceState: "not_observed",
+          id: "recipients_vendor_categories_disclosure",
+          label: "Recipients/vendor categories disclosed",
+          status: "Not confirmed"
+        }),
+        makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              policySurfaceSummary: {
+                privacyPolicyUrls: ["https://example.test/privacy"],
+                retainedPrivacyPolicyTextExcerpt:
+                  "Captured privacy policy text retained at scan time. In some instances, we are able to retain your information even if you withdraw consent or ask us to delete it where required by law, legal purposes, fraud, or abuse prevention."
+              },
+              signalObserved: "not_confirmed_policy_disclosure_extraction"
+            }
+          },
+          evidenceState: "not_observed",
+          id: "retention_disclosure_observed",
+          label: "Retention disclosure",
+          status: "Not confirmed"
+        }),
+        makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              policySurfaceSummary: {
+                privacyPolicyUrls: ["https://example.test/privacy"],
+                retainedPrivacyPolicyTextExcerpt: "Captured privacy policy text retained at scan time."
+              },
+              signalObserved: "not_confirmed_row_specific_extraction"
+            }
+          },
+          evidenceState: "observed",
+          id: "supervisory_authority_complaint_disclosure",
+          label: "Supervisory authority complaint",
+          status: "Not confirmed"
+        }),
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            retainedEvidence: {
+              article13Signal: {
+                disclosureType: "legal_basis",
+                evidenceText: "We rely on consent, contract, legal obligation, and legitimate interests as legal bases for processing.",
+                source: "wc01_retained_policy_text_match",
+                status: "observed"
+              },
+              policySurfaceSummary: {
+                privacyPolicyUrls: ["https://example.test/privacy"],
+                retainedPrivacyPolicyTextExcerpt:
+                  "Captured privacy policy text retained at scan time. We rely on consent, contract, legal obligation, and legitimate interests as legal bases for processing."
+              }
+            }
+          },
+          evidenceState: "observed",
+          id: "pre_consent_third_party_tracking",
+          label: "Pre-consent 3rd-party tracking",
+          status: "Observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /aria-label="Open captured privacy policy for Legal basis disclosure"/);
+  assert.match(html, /aria-label="Open captured privacy policy for Data subject rights disclosure"/);
+  assert.match(html, /aria-label="Open captured privacy policy for Recipients\/vendor categories disclosed"/);
+  assert.match(html, /aria-label="Open captured privacy policy for Retention disclosure"/);
+  assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Supervisory authority complaint"/);
+  assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Pre-consent 3rd-party tracking"/);
+});
+
+test("GdprEprivacyCoverageChecklistCard shows policy review for every not-confirmed transparency row with retained summary snippets", () => {
+  const rows = [
+    ["controller_contact_disclosure", "Controller/contact disclosure", "controller_contact", "The controller of your information is Example Media, and you can contact privacy@example.test about this policy."],
+    ["processing_purposes_disclosure", "Processing purposes disclosure", "processing_purposes", "We process personal information to provide services, personalize content, measure performance, and protect our users."],
+    ["legal_basis_disclosure_observed", "Legal basis disclosure", "legal_basis", "We rely on consent, contract, legal obligation, and legitimate interests as lawful bases for processing."],
+    ["recipients_vendor_categories_disclosure", "Recipients/vendor categories disclosed", "recipients_or_vendor_categories", "We may share personal information with service providers, vendors, affiliates, and other recipients that process information on our behalf."],
+    ["retention_disclosure_observed", "Retention disclosure", "data_retention", "We retain personal information only as long as necessary for the purposes described in this policy or as required by law."],
+    ["data_subject_rights_disclosure", "Data subject rights disclosure", "data_subject_rights", "You can ask us to access, correct, delete, or erase your personal data."],
+    ["international_transfers_disclosure", "International transfer disclosure", "international_transfers", "We may transfer personal information outside the European Economic Area using standard contractual clauses."],
+    ["dpo_contact_point_disclosure", "DPO / privacy contact point", "dpo_contact", "You can contact our Data Protection Officer through the privacy office at dpo@example.test."],
+    ["supervisory_authority_complaint_disclosure", "Supervisory authority complaint", "supervisory_authority", "You may lodge a complaint with your local data protection authority or supervisory authority."]
+  ] as const;
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: rows.map(([id, label, disclosureType, evidenceText]) =>
+        makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              policySurfaceSummary: {
+                article13DisclosureSignals: [
+                  {
+                    confidence: 0.62,
+                    disclosureType,
+                    evidenceText,
+                    source: "deterministic",
+                    status: "partial",
+                    surfaceUrl: "https://example.test/privacy"
+                  }
+                ],
+                privacyPolicyUrls: ["https://example.test/privacy"],
+                retainedPrivacyPolicyTextExcerpt: `Captured privacy policy text retained at scan time. ${evidenceText}`
+              },
+              signalObserved: "not_confirmed_policy_disclosure_extraction"
+            }
+          },
+          evidenceState: "not_observed",
+          id,
+          label,
+          status: "Not confirmed"
+        })
+      ),
+      showSummaryStrip: false
+    })
+  );
+
+  for (const [, label] of rows) {
+    assert.match(html, new RegExp(`aria-label="Open captured privacy policy for ${escapeRegExp(label)}"`));
+  }
+});
+
+test("GdprEprivacyCoverageChecklistCard shows policy review for not-confirmed retention aliases when retained full policy text has a retention excerpt", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        ...["retention_disclosure", "retention_disclosure_present"].map((id) => makeChecklistItem({
+          assessmentStatus: "review_signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              policySurfaceSummary: {
+                article13DisclosureSignals: [
+                  {
+                    confidence: 0.78,
+                    disclosureType: "dpo_contact",
+                    evidenceText:
+                      "In some instances, this may mean that we are able to retain your information even if you withdraw consent. To exercise these rights, contact our data protection officer through the privacy office.",
+                    source: "deterministic",
+                    status: "observed",
+                    surfaceUrl: "https://example.test/privacy"
+                  }
+                ],
+                privacyPolicyUrls: ["https://example.test/privacy"],
+                retainedPrivacyPolicyTextExcerpt:
+                  "Scanner evidence captured at scan time. Contact the privacy office for more information."
+              },
+              signalObserved: "not_confirmed_row_specific_extraction"
+            }
+          },
+          evidenceState: "not_observed",
+          id,
+          label: "Retention disclosure",
+          status: "Not confirmed"
+        }))
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /aria-label="Open captured privacy policy for Retention disclosure"/);
+});
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+test("policy excerpt page highlights every matched snippet with marker-specific colors", () => {
+  const snippets = [
+    {
+      label: "Primary confirming text",
+      text: "You can ask what information we have about you.",
+      tone: "primary" as const
+    },
+    {
+      label: "Matched policy text",
+      text: "Also, you or your guardian can ask us what information we have about you, to stop collecting your information, or to erase your information we have about you.",
+      tone: "fallback" as const
+    },
+    {
+      label: "Matched policy text",
+      text: "You may ask us to delete your information from our records.",
+      tone: "fallback" as const
+    },
+    {
+      label: "Matched policy text",
+      text: "You may review and update your information by contacting us.",
+      tone: "fallback" as const
+    }
+  ];
+  const source = [
+    "You can ask what information we have about you.",
+    "Also, you or your guardian can ask us what information we have about you, to stop collecting your information, or to erase your information we have about you.",
+    "You may ask us to delete your information from our records.",
+    "You may review and update your information by contacting us."
+  ].join(" ");
+
+  const html = gdprPolicyExcerptPageTestHelpers.renderHighlightedPolicyHtml(source, snippets);
+
+  assert.match(html, /policy-highlight-color-1" title="Primary confirming text"><span class="policy-highlight-marker policy-highlight-color-1">1<\/span>/);
+  assert.match(html, /policy-highlight-color-2" title="Matched policy text"><span class="policy-highlight-marker policy-highlight-color-2">2<\/span>/);
+  assert.match(html, /policy-highlight-color-3" title="Matched policy text"><span class="policy-highlight-marker policy-highlight-color-3">3<\/span>/);
+  assert.match(html, /policy-highlight-color-4" title="Matched policy text"><span class="policy-highlight-marker policy-highlight-color-4">4<\/span>/);
+});
+
+test("policy excerpt page filters unmatched legend snippets before numbering highlights", () => {
+  const snippets = [
+    {
+      label: "Primary confirming text",
+      text: "This primary text is not present in the retained excerpt.",
+      tone: "primary" as const
+    },
+    {
+      label: "Matched policy text",
+      text: "Also, you or your guardian can ask us what information we have about you.",
+      tone: "fallback" as const
+    },
+    {
+      label: "Matched policy text",
+      text: "You may ask us to delete your information from our records.",
+      tone: "fallback" as const
+    }
+  ];
+  const source = [
+    "Also, you or your guardian can ask us what information we have about you.",
+    "You may ask us to delete your information from our records."
+  ].join(" ");
+
+  const visibleSnippets = gdprPolicyExcerptPageTestHelpers.getMatchingPolicyHighlightSnippets(source, snippets);
+  const html = gdprPolicyExcerptPageTestHelpers.renderHighlightedPolicyHtml(source, visibleSnippets);
+
+  assert.equal(visibleSnippets.length, 2);
+  assert.equal(visibleSnippets[0]?.text, snippets[1]?.text);
+  assert.match(html, /policy-highlight-marker policy-highlight-color-1">1<\/span>/);
+  assert.match(html, /policy-highlight-marker policy-highlight-color-2">2<\/span>/);
+  assert.doesNotMatch(html, /policy-highlight-marker policy-highlight-color-3">3<\/span>/);
+});
+
+test("policy excerpt page collapses overlapping matched snippets to one full-excerpt highlight", () => {
+  const snippets = [
+    {
+      label: "Matched policy text",
+      text: "Also, you or your guardian can ask us what information we have about you.",
+      tone: "fallback" as const
+    },
+    {
+      label: "Matched policy text",
+      text: "Also, you or your guardian can ask us what information we have about you, to stop collecting your information.",
+      tone: "fallback" as const
+    },
+    {
+      label: "Matched policy text",
+      text: "Also, you or your guardian can ask us what information we have about you, to stop collecting your information, or to erase your information we have about you.",
+      tone: "fallback" as const
+    }
+  ];
+  const source =
+    "Remember, you don't always have to give us your information. Also, you or your guardian can ask us what information we have about you, to stop collecting your information, or to erase your information we have about you.";
+
+  const visibleSnippets = gdprPolicyExcerptPageTestHelpers.getDistinctMatchingPolicyHighlightSnippets(source, snippets);
+  const html = gdprPolicyExcerptPageTestHelpers.renderHighlightedPolicyHtml(source, visibleSnippets);
+
+  assert.equal(visibleSnippets.length, 1);
+  assert.equal((html.match(/<mark /g) ?? []).length, 1);
+  assert.match(html, /policy-highlight-marker policy-highlight-color-1">1<\/span>/);
+  assert.doesNotMatch(html, /policy-highlight-marker policy-highlight-color-2">2<\/span>/);
+  assert.doesNotMatch(html, /policy-highlight-marker policy-highlight-color-3">3<\/span>/);
+});
+
+test("policy excerpt context includes separated retained snippets instead of only the first match", () => {
+  const source = [
+    "First rights section says you can access your information.",
+    "Filler ".repeat(450),
+    "Second rights section says you can erase your information.",
+    "Filler ".repeat(450),
+    "Third rights section says you can update your information."
+  ].join(" ");
+
+  const excerpt = gdprPolicyExcerptPageTestHelpers.getPolicyContextExcerptForSnippets(source, [
+    {
+      label: "Primary confirming text",
+      text: "First rights section says you can access your information.",
+      tone: "primary" as const
+    },
+    {
+      label: "Matched policy text",
+      text: "Second rights section says you can erase your information.",
+      tone: "fallback" as const
+    },
+    {
+      label: "Matched policy text",
+      text: "Third rights section says you can update your information.",
+      tone: "fallback" as const
+    }
+  ]);
+
+  assert.ok(excerpt);
+  assert.match(excerpt, /First rights section/);
+  assert.match(excerpt, /Second rights section/);
+  assert.match(excerpt, /Third rights section/);
+  assert.match(excerpt, /\n\n\.\.\.\n\n/);
+});
+
 test("GdprEprivacyCoverageChecklistCard renders policy excerpts in monospace with word-safe truncation", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
@@ -922,41 +1283,6 @@ test("GdprEprivacyCoverageChecklistCard explains international transfer evidence
   assert.match(html, /adequate level of data protection/);
   assert.match(html, /standard contractual clauses/);
   assert.doesNotMatch(html, /Policy text included matching disclosure evidence/);
-});
-
-test("GdprEprivacyCoverageChecklistCard explains automated-processing partial support without Article 22 overclaim", () => {
-  const html = renderToStaticMarkup(
-    createElement(GdprEprivacyCoverageChecklistCard, {
-      defaultOpen: true,
-      items: [
-        makeChecklistItem({
-          assessmentStatus: "review_signal",
-          criticalEvidence: {
-            retainedEvidence: {
-              article13Signal: {
-                disclosureType: "automated_decision_making_or_profiling",
-                evidenceText:
-                  "Automated systems and algorithms help recognize patterns, detect abuse, personalize ads, and provide tailored search results.",
-                source: "wc01_retained_policy_text_match",
-                status: "partial"
-              }
-            },
-            statusBasis:
-              "Automated processing or personalization language was observed, but an Article 22-style solely automated decision-making disclosure was not confirmed."
-          },
-          evidenceState: "observed",
-          id: "automated_decision_making_profiling_disclosure",
-          label: "Automated decision-making/profiling disclosure",
-          status: "Review signal"
-        })
-      ],
-      showSummaryStrip: false
-    })
-  );
-
-  assert.match(html, /Automated processing or personalization language was observed/);
-  assert.match(html, /Article 22-style solely automated decision-making disclosure was not confirmed/);
-  assert.match(html, /Automated systems and algorithms/);
 });
 
 test("GdprEprivacyCoverageChecklistCard explains supervisory-authority partial support", () => {

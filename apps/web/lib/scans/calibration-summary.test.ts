@@ -506,6 +506,42 @@ test("builds calibration summary with display state separate from canonical post
   assert.match(summary.executive.headline, /Runtime coverage was limited/);
 });
 
+test("builds review-needed summary when only review-signal top findings exist", () => {
+  const summary = buildScanCalibrationSummary({
+    domain: "ikea.com",
+    finalHost: "www.ikea.com",
+    posture: "Action Needed",
+    requestedHost: "ikea.com",
+    scanId: "scan-review-only",
+    status: "completed",
+    topFindings: [
+      {
+        confidence: "good",
+        directVsInferred: "mixed",
+        defaultSurfacePriority: 140,
+        evidenceDetails: {
+          policyEvidenceDetails: {
+            regulatoryConcernKind: "review_signal"
+          }
+        },
+        evidencePreview: ["GDPR / ePrivacy: Reject / decline control"],
+        evidenceRefs: [],
+        id: "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
+        label: "Reject / decline control",
+        remediation: "Review retained checklist evidence.",
+        section: "Privacy & Tracking",
+        severity: "high",
+        shortSummary: "Review retained consent-control evidence.",
+        whyItMatters: "Retained for review."
+      }
+    ]
+  });
+
+  assert.equal(summary.executive.posture, "Action Needed");
+  assert.equal(summary.executive.displayState, "Review Needed");
+  assert.equal(summary.executive.findingsHeading, "Issues to review");
+});
+
 test("builds calibration summary with under-observed ecosystem diagnostics", () => {
   const summary = buildScanCalibrationSummary({
     beforeConsentCookieCount: 19,

@@ -3629,6 +3629,12 @@ const LEGAL_BASIS_DISCLOSURE_PATTERN =
 const RECIPIENTS_VENDOR_CATEGORIES_DISCLOSURE_PATTERN =
   /recipient|third[- ]part(?:y|ies)|service providers?|vendors?|processors?|subprocessors?|business partners?|advertising partners?|analytics providers?|payment processors?|hosting providers?|cloud providers?|affiliates?/i;
 
+const RECIPIENT_VENDOR_CATEGORY_TERMS =
+  /service providers?|vendors?|processors?|subprocessors?|business partners?|advertising partners?|analytics providers?|payment processors?|hosting providers?|cloud providers?|affiliates?|group companies|social networks?|platforms?|law enforcement|regulators?|third[- ]part(?:y|ies)|recipients?/i;
+
+const RECIPIENT_DISCLOSURE_VERBS =
+  /share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|provide|provided|providing|receive|receives|received|access|accessed|handle|handled|process|processed|processing/i;
+
 const CONTROLLER_CONTACT_DISCLOSURE_PATTERN =
   /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection(?: office| officer)?|contact (?:our )?(?:privacy|data protection)|contact (?:google|us).{0,80}(?:privacy|data protection)|privacy@/i;
 
@@ -3642,7 +3648,7 @@ const DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN =
   /your rights|data subject rights|right to (?:access|delete|erase|erasure|rectif|object|restrict|port)|rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)|access.{0,80}(?:your )?(?:personal )?(?:data|information)|delete your information|delete.{0,80}(?:your )?(?:personal )?(?:data|information)|erasure|correct (?:your )?(?:personal )?(?:data|information)|rectif|portability|object to|restrict (?:the )?processing|export.{0,80}(?:your )?(?:data|information)|review and update|my activity|google takeout|request to remove content|privacy controls|download a copy/i;
 
 const INTERNATIONAL_TRANSFERS_DISCLOSURE_PATTERN =
-  /data transfers?|international transfer|transfer.*outside|outside.*(?:eea|european economic area|eu|european union|uk|united kingdom|country where you live)|(?:eea|european economic area|eu|european union|uk|united kingdom).*outside|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|data protection laws vary among countries|standard contractual|contractual clauses|sccs?|adequacy|cross-border|data transfer framework|dpf|privacy shield|third countr(?:y|ies)|foreign countr(?:y|ies)|global(?:ly)? transfer|local data protection authorities/i;
+  /data transfers?|international transfer|cross-border transfer|transfer.{0,120}(?:personal data|personal information|information|data).{0,160}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies))|(?:personal data|personal information|information|data).{0,120}(?:transfer|transferred|stored|processed|accessed|shared).{0,180}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|usa)|(?:stored|processed|accessed|shared).{0,120}(?:in|from).{0,80}(?:united states|usa|other countries|countries outside|third countries|foreign countries)|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|standard contractual|contractual clauses|sccs?|adequacy|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|transfer mechanisms?|data transfer framework|dpf|privacy shield/i;
 
 const SUPERVISORY_AUTHORITY_DISCLOSURE_PATTERN =
   /supervisory authority|data protection authority|local data protection authorit(?:y|ies)|lodge a complaint|formal written complaints?|resolve any complaints?|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority|regulatory authorities|regulators?|ico|cnil|dpc/i;
@@ -4250,6 +4256,12 @@ function isPolicyDisclosureEvidenceUsable(value: string, disclosureType: string 
   if (disclosureType === "data_subject_rights" && !hasSubstantiveDataSubjectRightsDisclosure(text)) {
     return false;
   }
+  if (disclosureType === "recipients_or_vendor_categories" && !hasSubstantiveRecipientsVendorCategoriesDisclosure(text)) {
+    return false;
+  }
+  if (disclosureType === "international_transfers" && !hasSubstantiveInternationalTransferDisclosure(text)) {
+    return false;
+  }
   return true;
 }
 
@@ -4315,6 +4327,44 @@ function hasSubstantiveDataSubjectRightsDisclosure(value: string) {
   const rightsVerbMatches = body.match(/\b(?:see|access|take it with you|export|download|correct(?:ions?)?|rectif(?:y|ication)|withdraw consent|opt out|object|restrict|eras(?:e|ed|ure)|delete|remove|exercise (?:your )?privacy rights|exercise (?:your )?rights)\b/gi) ?? [];
   return rightsVerbMatches.length >= 2 ||
     /\b(?:right to (?:access|delete|erasure|rectification|object|restrict|portability)|rights? to (?:access|delete|erasure|rectification|object|restrict|portability)|exercise (?:your )?(?:privacy )?rights|privacy controls|take it with you|withdraw consent|opt out|download a copy|export (?:your )?(?:data|information)|delete (?:your )?(?:data|information)|erase (?:your )?(?:data|information)|access (?:your )?(?:personal )?(?:data|information)|correct(?:ions?)? (?:to )?(?:your )?(?:personal )?(?:data|information)|request to (?:remove|delete|erase|access|correct))\b/i.test(body);
+}
+
+function hasSubstantiveRecipientsVendorCategoriesDisclosure(value: string) {
+  const body = disclosureEvidenceBodyAfterHeading(value, [
+    /^(?:recipients|third parties|sharing(?: your)? information|how we share|vendors|service providers|categories of third parties)[.:;\-–—]?\s*/i
+  ]);
+  const hasRecipientCategory = RECIPIENT_VENDOR_CATEGORY_TERMS.test(body);
+  if (!hasRecipientCategory) {
+    return false;
+  }
+
+  const sessionReplayOrCollectedDataContext =
+    /\b(?:record users?'? interactions|recording users?'? interactions|mouse clicks|mouse movements|page scrolling|keystrokes?|key touches|session replay|interaction recording|usage data|information about your use|collecting information about your use|cookies?|pixels?|sdks?)\b/i.test(body);
+  const broadRecipientDisclosure =
+    /\b(?:share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|categories of (?:third parties|recipients)|third parties with whom we share|recipients of (?:personal )?(?:data|information))\b/i.test(body);
+  if (sessionReplayOrCollectedDataContext && !broadRecipientDisclosure) {
+    return false;
+  }
+
+  return /\b(?:share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|provide|provided|providing)\b.{0,180}\b(?:personal data|personal information|information|data)\b.{0,240}\b(?:service providers?|vendors?|processors?|subprocessors?|affiliates?|group companies|advertising partners?|analytics providers?|payment processors?|business partners?|social networks?|platforms?|law enforcement|regulators?|third[- ]part(?:y|ies)|recipients?)\b/i.test(body) ||
+    /\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|provide|provided|providing)\b.{0,240}\b(?:service providers?|vendors?|processors?|subprocessors?|affiliates?|group companies|advertising partners?|analytics providers?|payment processors?|business partners?|social networks?|platforms?|law enforcement|regulators?|third[- ]part(?:y|ies)|recipients?)\b/i.test(body) ||
+    /\b(?:categories of (?:third parties|recipients)|third parties with whom we share|recipients of (?:personal )?(?:data|information)|service providers? (?:that|who) (?:process|receive|access|handle|provide|perform|assist)|processors? (?:that|who) process|vendors? (?:that|who) (?:process|receive|access|handle|provide)|affiliates? (?:that|who)? (?:receive|process|access|use|share)|business partners? (?:that|who)? (?:receive|process|access|use|share)|process (?:personal data|personal information|information|data) on our behalf|on our behalf)\b/i.test(body);
+}
+
+function hasSubstantiveInternationalTransferDisclosure(value: string) {
+  const body = disclosureEvidenceBodyAfterHeading(value, [
+    /^(?:international transfers?|data transfers?|transfers of (?:personal )?(?:data|information)|global processing)[.:;\-–—]?\s*/i
+  ]);
+  const geographyOnlyConsentOrRights =
+    /\b(?:laws?|requirements?|consent|adult|parent|guardian|child|children|minor|privacy rights?|jurisdiction|region|country)\b/i.test(body) &&
+    !/\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted|servers?|standard contractual clauses?|sccs?|adequacy|adequate level|uk idta|international data transfer agreement|data transfer framework|dpf|privacy shield|transfer mechanism)\b/i.test(body);
+  if (geographyOnlyConsentOrRights) {
+    return false;
+  }
+  return /\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted)\b.{0,180}\b(?:personal data|personal information|information|data)\b.{0,220}\b(?:outside|international|across countries|other countries|third countries|foreign countries|united states|usa|eea|european economic area|uk|united kingdom)\b/i.test(body) ||
+    /\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted)\b.{0,220}\b(?:outside|international|across countries|other countries|third countries|foreign countries|united states|usa|eea|european economic area|uk|united kingdom)\b/i.test(body) ||
+    /\b(?:stored|processed|accessed|shared|hosted)\b.{0,120}\b(?:in|from)\b.{0,120}\b(?:united states|usa|other countries|countries outside|third countries|foreign countries)\b/i.test(body) ||
+    /\b(?:standard contractual clauses?|sccs?|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|data transfer framework|dpf|privacy shield|transfer mechanisms?|legal frameworks relating to the transfer of data)\b/i.test(body);
 }
 
 function looksLikeCodeOrConfigText(value: string) {
@@ -4394,6 +4444,22 @@ function cleanPolicyDisclosureEvidenceText(value: string) {
     .trim();
 }
 
+function extractSupervisoryAuthoritySupportingContactContext(value: string) {
+  const text = cleanPolicyDisclosureEvidenceText(value);
+  if (
+    !/\b(?:supervisory authority|data protection authorit(?:y|ies)|privacy regulator|regulatory authority|lodge a complaint|right to complain|right to contact)\b/i.test(text) ||
+    !/\b(?:further details|more information|help|contact(?:ing)? us|privacy center|contact form|privacy team|data protection officer|dpo)\b/i.test(text)
+  ) {
+    return null;
+  }
+  const emailMatch = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
+  if (emailMatch?.[0]) {
+    return emailMatch[0];
+  }
+  const contactMatch = text.match(/\b(?:privacy center|privacy team|data protection officer|dpo|contact form|contacting us by email|contact us)\b.{0,180}/i);
+  return contactMatch?.[0] ? contactMatch[0].trim() : null;
+}
+
 function scorePolicyDisclosureEvidenceText(value: string, disclosureType: string | undefined) {
   const text = cleanPolicyDisclosureEvidenceText(value);
   const lower = text.toLowerCase();
@@ -4438,7 +4504,7 @@ function scorePolicyDisclosureEvidenceText(value: string, disclosureType: string
   if (disclosureType === "legal_basis" && LEGAL_BASIS_DISCLOSURE_PATTERN.test(lower)) {
     score += 4;
   }
-  if (disclosureType === "recipients_or_vendor_categories" && RECIPIENTS_VENDOR_CATEGORIES_DISCLOSURE_PATTERN.test(lower)) {
+  if (disclosureType === "recipients_or_vendor_categories" && hasSubstantiveRecipientsVendorCategoriesDisclosure(text)) {
     score += 4;
   }
   if (disclosureType === "controller_contact" && CONTROLLER_CONTACT_DISCLOSURE_PATTERN.test(lower)) {
@@ -4453,7 +4519,7 @@ function scorePolicyDisclosureEvidenceText(value: string, disclosureType: string
   if (disclosureType === "data_subject_rights" && DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN.test(lower)) {
     score += 4;
   }
-  if (disclosureType === "international_transfers" && /data transfers?|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|data protection laws vary among countries|standard contractual clauses|international transfer|adequate level of protection|commission implementing decision/i.test(lower)) {
+  if (disclosureType === "international_transfers" && hasSubstantiveInternationalTransferDisclosure(lower)) {
     score += 4;
   }
   if (disclosureType === "supervisory_authority" && /data protection commissioner|supervisory authority|data protection authorit|regulatory authorit|regulator|complaint/i.test(lower)) {
@@ -4637,18 +4703,48 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
           status: "observed"
         }
       : null);
+    const supportingContactContext = config.rowId === "supervisory_authority_complaint_disclosure"
+      ? (
+          getString(effectiveArticle13Signal, ["supportingContactContext", "supporting_contact_context"]) ??
+          extractSupervisoryAuthoritySupportingContactContext(
+            [
+              getString(effectiveArticle13Signal, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]),
+              effectiveTextMatchEvidence,
+              getString(effectiveArticle13Signal, ["evidenceText", "evidence_text"])
+            ].filter(Boolean).join(" ")
+          )
+        )
+      : null;
+    const retainedArticle13Signal = effectiveArticle13Signal && supportingContactContext
+      ? {
+          ...effectiveArticle13Signal,
+          supportingContactContext,
+          supporting_contact_context: supportingContactContext
+        }
+      : effectiveArticle13Signal;
     return makeOutcome(
       config.rowId,
       "Observed",
-      `${config.label} evidence was retained in public policy-surface evidence.`,
+      config.rowId === "international_transfers_disclosure"
+        ? "International transfer disclosure evidence was retained: the excerpt describes cross-border data transfer, storage, processing, access, sharing, or transfer safeguards."
+        : config.rowId === "supervisory_authority_complaint_disclosure" && supportingContactContext
+          ? "Supervisory authority complaint disclosure evidence was retained: authority/regulator complaint language confirms the row, with nearby privacy contact context retained as supporting context."
+        : `${config.label} evidence was retained in public policy-surface evidence.`,
       [
-        config.rowId === "privacy_notice_availability" ? "Evidence: privacy policy surface retained" : `Evidence: ${config.label}`,
+        config.rowId === "privacy_notice_availability"
+          ? "Evidence: privacy policy surface retained"
+          : config.rowId === "international_transfers_disclosure"
+            ? "Evidence: international data movement or transfer safeguard disclosure"
+            : config.rowId === "supervisory_authority_complaint_disclosure"
+              ? "Evidence: authority/regulator complaint language"
+            : `Evidence: ${config.label}`,
         effectiveTextMatchEvidence ? `Excerpt: ${effectiveTextMatchEvidence}` : null,
+        supportingContactContext ? `Supporting contact context: ${supportingContactContext}` : null,
         ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
       ].filter((value): value is string => Boolean(value)),
       {
         retainedEvidence: {
-          article13Signal: effectiveArticle13Signal,
+          article13Signal: retainedArticle13Signal,
           policySurfaceSummary: summary,
           rowSpecificSectionEvidence: rowSpecificSectionEvidence?.sectionEvidence ?? undefined,
           selectedEvidenceStrength: rowSpecificSectionEvidence?.selectedEvidenceStrength ?? undefined,
@@ -4716,7 +4812,9 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       ? "A privacy-policy surface was retained, but retention-period, deletion, anonymization, or data-lifecycle disclosure text was not confidently extracted."
       : config.rowId === "international_transfers_disclosure"
         ? "A privacy-policy surface was retained, but row-specific international-transfer disclosure text was not confidently extracted."
-        : "Policy topic signals suggested this area may be covered, but row-specific disclosure text was not retained. Manual review is needed before treating this as observed or as a gap.";
+        : config.rowId === "recipients_vendor_categories_disclosure"
+          ? "A privacy-policy surface was retained, but row-specific recipient/vendor-category disclosure text was not confidently extracted. Service-provider mentions in collection, cookie, SDK, or session-replay contexts do not confirm this row unless the excerpt clearly describes sharing, disclosure, recipient categories, or providers processing personal information on the company's behalf."
+          : "Policy topic signals suggested this area may be covered, but row-specific disclosure text was not retained. Manual review is needed before treating this as observed or as a gap.";
     return makeOutcome(
       config.rowId,
       "Not confirmed",
@@ -4826,8 +4924,11 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     return makeOutcome(
       config.rowId,
       "Not confirmed",
-      "A privacy-policy surface was retained, but row-specific international-transfer disclosure text was not confidently extracted.",
-      ["Evidence: retained privacy policy text reviewed", "Missing evidence: row-specific international transfer disclosure signal"],
+      "A privacy-policy surface was retained, but row-specific international-transfer disclosure text was not confidently extracted. Geography, consent-law, child/guardian-consent, jurisdictional-rights, or generic country references do not confirm this row unless they disclose cross-border data movement or transfer safeguards.",
+      [
+        "Evidence: retained privacy policy text reviewed",
+        "Missing evidence: cross-border transfer, storage, processing, access, sharing, or transfer-safeguard disclosure"
+      ],
       {
         missingOrIncompleteSourceSignals: [
           sourceGap(
@@ -4835,6 +4936,36 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
             "row-specific international transfer disclosure evidence",
             "not confidently extracted",
             "Required before treating a retained privacy-policy surface as observed or as an international-transfer transparency gap.",
+            "CertScore"
+          )
+        ],
+        retainedEvidence: {
+          article13Signal,
+          policyTextExtractionHealth: extractionHealth,
+          policySurfaceSummary: summary,
+          selectedEvidenceStrength: "limited",
+          signalObserved: "not_confirmed_row_specific_extraction"
+        }
+      }
+    );
+  }
+
+  if (config.rowId === "recipients_vendor_categories_disclosure") {
+    return makeOutcome(
+      config.rowId,
+      "Not confirmed",
+      "A privacy-policy surface was retained, but row-specific recipient/vendor-category disclosure text was not confidently extracted. Collected-data, usage-data, cookie, SDK, or session-replay descriptions do not confirm this row unless they clearly disclose categories of third parties or recipients that receive, process, access, or handle personal information.",
+      [
+        "Evidence: retained privacy policy text reviewed",
+        "Missing evidence: third-party or recipient categories tied to sharing, disclosure, transfer, access, or processing of personal information"
+      ],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "CertScore.policyDisclosureExtraction.rowSpecificSignal",
+            "row-specific recipient/vendor category disclosure evidence",
+            "not confidently extracted",
+            "Required before treating a retained privacy-policy surface as observed or as a recipient/vendor-category transparency gap.",
             "CertScore"
           )
         ],

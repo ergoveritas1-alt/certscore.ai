@@ -120,6 +120,9 @@ function getPostureClasses(posture: ExecutiveDisplayState) {
   if (posture === "Action Needed") {
     return "border-rose-200 bg-rose-50/90 text-rose-950";
   }
+  if (posture === "Review Needed") {
+    return "border-amber-200 bg-amber-50/90 text-amber-950";
+  }
   if (posture === "Limited review") {
     return "border-sky-200 bg-sky-50/90 text-sky-950";
   }
@@ -3552,7 +3555,7 @@ function getRegulatoryGapRowId(findingId: string) {
   return markerIndex >= 0 ? findingId.slice(markerIndex + marker.length) : null;
 }
 
-type RegulatoryTopFindingConcernKind = "potential_concern" | "potential_gap";
+type RegulatoryTopFindingConcernKind = "potential_concern" | "potential_gap" | "review_signal";
 
 function getRegulatoryTopFindingConcernKind(finding: CertScoreFinding): RegulatoryTopFindingConcernKind | null {
   if (!finding.id.startsWith("regulatory_gap__")) {
@@ -3560,7 +3563,12 @@ function getRegulatoryTopFindingConcernKind(finding: CertScoreFinding): Regulato
   }
   const details = finding.evidenceDetails?.policyEvidenceDetails;
   const kind = typeof details?.regulatoryConcernKind === "string" ? details.regulatoryConcernKind : null;
-  return kind === "potential_gap" || kind === "potential_concern" ? kind : null;
+  return kind === "potential_gap" || kind === "potential_concern" || kind === "review_signal" ? kind : null;
+}
+
+function hasOnlyReviewTopFindings(findings: CertScoreFinding[]) {
+  return findings.length > 0 &&
+    findings.every((finding) => getRegulatoryTopFindingConcernKind(finding) === "review_signal");
 }
 
 function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKey[] {
@@ -3691,7 +3699,11 @@ function assignUniqueFindingTitleIconKeys(findings: CertScoreFinding[]) {
 }
 
 function RegulatoryTopFindingConcernIcon({ kind }: { kind: RegulatoryTopFindingConcernKind }) {
-  const label = kind === "potential_gap" ? "Potential gap" : "Potential concern";
+  const label = kind === "potential_gap"
+    ? "Potential gap"
+    : kind === "review_signal"
+      ? "Review"
+      : "Potential concern";
   const toneClass = kind === "potential_gap"
     ? "border-rose-200 bg-rose-50 text-rose-700"
     : "border-amber-200 bg-amber-50 text-amber-700";
@@ -3705,6 +3717,11 @@ function RegulatoryTopFindingConcernIcon({ kind }: { kind: RegulatoryTopFindingC
         <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 20 20">
           <path d="M10 4.2 17 16H3L10 4.2Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
           <path d="M10 8.2v3.8M10 14.8h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        </svg>
+      ) : kind === "review_signal" ? (
+        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 20 20">
+          <path d="M6 4.5v11" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
+          <path d="M6 5.2h8l-1.7 3L14 11.2H6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
         </svg>
       ) : (
         <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 20 20">
@@ -4067,6 +4084,115 @@ function buildFindingEvidenceHighlights(finding: CertScoreFinding) {
   return highlightRows.slice(0, 3);
 }
 
+function getRegulatoryChecklistTopFindingDetails(finding: CertScoreFinding) {
+  if (!finding.id.startsWith("regulatory_gap__")) {
+    return null;
+  }
+  const details = finding.evidenceDetails?.policyEvidenceDetails;
+  if (!details || typeof details !== "object") {
+    return null;
+  }
+
+  const rowLabel = typeof details.rowLabel === "string" ? details.rowLabel : finding.label;
+  const areaTitle = typeof details.regulatoryAreaTitle === "string" ? details.regulatoryAreaTitle : "GDPR / ePrivacy";
+  const status = typeof details.status === "string" ? details.status : null;
+  const assessmentStatus = typeof details.assessmentStatus === "string" ? details.assessmentStatus : null;
+  const descriptor = [
+    typeof details.rowNote === "string" ? details.rowNote : null,
+    typeof details.explanation === "string" ? details.explanation : null,
+    typeof details.statusBasis === "string" ? details.statusBasis : null,
+    finding.shortSummary
+  ].find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim() ?? finding.shortSummary;
+  const evidenceRefs = Array.isArray(details.evidenceRefs)
+    ? details.evidenceRefs.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : finding.evidenceRefs;
+  const evidencePacket = compactEvidenceJsonForDisplay({
+    area: areaTitle,
+    rowId: typeof details.rowId === "string" ? details.rowId : null,
+    rowLabel,
+    status,
+    assessmentStatus,
+    descriptor,
+    statusBasis: typeof details.statusBasis === "string" ? details.statusBasis : null,
+    retainedEvidence: isPlainObject(details.retainedEvidence) ? details.retainedEvidence : null,
+    projectedFindings: Array.isArray(details.projectedFindings) ? details.projectedFindings : [],
+    missingOrIncompleteSourceSignals: Array.isArray(details.missingOrIncompleteSourceSignals)
+      ? details.missingOrIncompleteSourceSignals
+      : [],
+    pipeline: isPlainObject(details.pipeline) ? details.pipeline : null,
+    evidenceRefs
+  });
+  const correctionSteps = [
+    `Review the retained ${areaTitle} evidence packet for "${rowLabel}" and confirm the row applies to the scanned page/context.`,
+    status ? `Use the checklist status "${status}" as the starting point; do not treat it as a legal conclusion without confirming the retained evidence.` : null,
+    "If the evidence is confirmed, address the underlying consent-control, runtime tracking/storage, or disclosure issue identified by the checklist row.",
+    "Re-run the scan after changes and verify the checklist row, evidence packet, and top-finding summary update together."
+  ].filter((value): value is string => Boolean(value));
+
+  return {
+    correctionSteps,
+    descriptor,
+    evidencePacket,
+    evidenceRefs,
+    statusBasis: typeof details.statusBasis === "string" && details.statusBasis.trim().length > 0
+      ? details.statusBasis.trim()
+      : null
+  };
+}
+
+function RegulatoryChecklistTopFindingBody(input: {
+  details: NonNullable<ReturnType<typeof getRegulatoryChecklistTopFindingDetails>>;
+  finding: CertScoreFinding;
+  tone: ReturnType<typeof getFindingCardTone>;
+}) {
+  const evidenceJsonPayload = hasMeaningfulJsonValue(input.details.evidencePacket)
+    ? JSON.stringify(input.details.evidencePacket, null, 2)
+    : null;
+
+  return (
+    <details id={getFindingEvidenceAnchor(input.finding)} className={`group/reg-top mt-3 scroll-mt-24 rounded-xl border px-3 py-2 ${input.tone.summary}`}>
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-3 text-[13px] leading-5 marker:hidden [&::-webkit-details-marker]:hidden">
+        <span className="line-clamp-2 min-w-0 text-slate-700 group-open/reg-top:line-clamp-none">{input.details.descriptor}</span>
+        <ScanReportDisclosureIcon className="mt-0.5 group-open/reg-top:rotate-90" />
+      </summary>
+      <div className="mt-3 space-y-2">
+        {evidenceJsonPayload ? (
+          <details className="group/evidence block w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+              <span>Evidence packet</span>
+              <ScanReportDisclosureIcon className="group-open/evidence:rotate-90" />
+            </summary>
+            {input.details.statusBasis ? (
+              <div className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
+                <p className="font-mono break-words">
+                  <span className="text-sky-800">"statusBasis": </span>
+                  {JSON.stringify(input.details.statusBasis)}
+                </p>
+              </div>
+            ) : null}
+            <EvidenceJsonBlock
+              payload={evidenceJsonPayload}
+              className="relative mt-3 min-w-0 max-w-full overflow-hidden rounded-lg bg-slate-950"
+              preClassName="max-w-full whitespace-pre-wrap break-words px-3 py-3 pr-12 text-xs leading-5 text-slate-100"
+            />
+          </details>
+        ) : null}
+        <details className="group/correction block w-full min-w-0 max-w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+            <span>Correction steps</span>
+            <ScanReportDisclosureIcon className="group-open/correction:rotate-90" />
+          </summary>
+          <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm leading-6 text-slate-700">
+            {input.details.correctionSteps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        </details>
+      </div>
+    </details>
+  );
+}
+
 function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const reference = getFindingReferenceLink(input.finding);
   const registryContext = getFindingRegulatoryContext(input.finding.id);
@@ -4095,6 +4221,17 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
   const confidenceExplanation =
     typeof fingerprintTelemetry?.confidenceExplanation === "string" ? fingerprintTelemetry.confidenceExplanation : null;
   const regulatoryContext = buildTopFindingRegulatoryContextDisplay(input.finding);
+  const regulatoryChecklistDetails = getRegulatoryChecklistTopFindingDetails(input.finding);
+
+  if (regulatoryChecklistDetails) {
+    return (
+      <RegulatoryChecklistTopFindingBody
+        details={regulatoryChecklistDetails}
+        finding={input.finding}
+        tone={tone}
+      />
+    );
+  }
 
   return (
     <details id={getFindingEvidenceAnchor(input.finding)} className={`group mt-3 scroll-mt-24 rounded-xl border px-3 py-2 ${tone.summary}`}>
@@ -4978,6 +5115,10 @@ export function ExecutiveSummaryCard(input: {
           topFindingCount: displayedTopFindings.length,
           vendorCount: vendorEvidence.length
         });
+  const effectiveDisplayState: ExecutiveDisplayState =
+    hasOnlyReviewTopFindings(displayedTopFindings)
+      ? "Review Needed"
+      : displayState;
   const hasMeaningfulInterruption = hasMeaningfulExecutiveInterruption({ scanInterruptions });
   const trackerFootprintTipText = uniqueStrings([
     hasMeaningfulInterruption
@@ -5023,7 +5164,7 @@ export function ExecutiveSummaryCard(input: {
     coverageLevel: input.coverageLevel,
     legalCoverageScore: input.legalCoverageScore,
     pagesScanned: input.pagesScanned,
-    displayState,
+    displayState: effectiveDisplayState,
     policyEnrichmentCount: input.policyEnrichmentCount,
     posture: input.posture as ExecutivePosture,
     requestedHost: input.requestedHost,
@@ -5064,9 +5205,9 @@ export function ExecutiveSummaryCard(input: {
           <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Exec Summary</p>
           <span
             data-testid="executive-posture-badge"
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${getPostureClasses(displayState)}`}
+            className={`rounded-full border px-3 py-1 text-xs font-medium ${getPostureClasses(effectiveDisplayState)}`}
           >
-            {getExecutiveBadgeLabel(displayState)}
+            {getExecutiveBadgeLabel(effectiveDisplayState)}
           </span>
           {input.domainBenchmark ? (
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
@@ -5214,7 +5355,7 @@ export function ExecutiveSummaryCard(input: {
               </ExecutiveTopFindingsCarousel>
             ) : (
               <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-sm leading-6 text-slate-700">
-                {displayState === "Limited review"
+                {effectiveDisplayState === "Limited review"
                   ? "No headline homepage issue was confirmed from retained evidence. Review coverage limitations and retained signals before treating this scan as clean."
                   : "No headline issue crossed the executive threshold for this scan. Review the supporting evidence below for lower-priority signals and scan context."}
               </div>
