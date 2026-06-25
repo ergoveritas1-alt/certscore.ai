@@ -588,6 +588,38 @@ export async function preConsentRuntimeScanner(
         );
       },
     );
+    if (shouldRecaptureConsentUiAfterCmpRuntime(consentObservation, domText, cmpRuntimeObservations)) {
+      const recaptureTimeoutMs = consentUiBudget.timeoutFor(fastWait ? 1_750 : 2_250);
+      const recapturedConsentObservation = await recordBoundedTiming(
+        timingBreakdown,
+        "page evidence: consent UI CMP recapture",
+        "Short post-CMP first-layer control inventory when CMP evidence is retained but only settings/preferences controls are visible.",
+        recaptureTimeoutMs,
+        () => detectConsentUi(
+          page,
+          input.scanStartedAtMs,
+          Math.min(fastWait ? 1_500 : 2_000, recaptureTimeoutMs),
+          {
+            waitForActionableChoiceControls: true,
+            waitForControlsOnTextOnlySurface: true,
+          },
+        ),
+        () => consentObservation,
+      );
+      if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
+        consentObservation = mergeConsentUiObservations(
+          consentObservation,
+          recapturedConsentObservation,
+          "recapture:post_cmp_first_layer_choice_controls",
+        );
+        domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
+      } else {
+        consentObservation = annotateConsentUiObservation(
+          consentObservation,
+          "recapture:post_cmp_no_first_layer_choice_controls",
+        );
+      }
+    }
 
     const shouldCaptureScreenshot = shouldCapturePreConsentScreenshot({
       cmpRuntimeObservations,
@@ -1502,18 +1534,26 @@ export async function detectConsentUi(
   page: Page,
   scanStartedAtMs: number,
   waitForControlTimeoutMs = 3_500,
-  options: { waitForControlsOnTextOnlySurface?: boolean } = {},
+  options: {
+    waitForActionableChoiceControls?: boolean;
+    waitForControlsOnTextOnlySurface?: boolean;
+  } = {},
 ): Promise<ConsentUiObservation> {
   const immediateObservation = await readConsentUiObservation(page, scanStartedAtMs);
   if (
-    immediateObservation.controls.length > 0 ||
+    immediateObservation.controls.length > 0 && (
+      !options.waitForActionableChoiceControls ||
+      hasActionableConsentChoiceControl(immediateObservation)
+    ) ||
     (immediateObservation.likelyPresent && !options.waitForControlsOnTextOnlySurface) ||
     waitForControlTimeoutMs <= 0
   ) {
     return immediateObservation;
   }
 
-  await page.waitForFunction(String.raw`(() => {
+  const requireActionableChoiceControl = options.waitForActionableChoiceControls === true ? "true" : "false";
+  await page.waitForFunction(`(() => {
+    const requireActionableChoiceControl = ${requireActionableChoiceControl};
     const consentLabelPattern =
       /cookie|privacy|choice|choices|consent|preference|preferences|settings|options|accept|agree|allow|reject|decline|deny|refuse|necessary|essential|purpose|purposes|do not sell|do not share|opt[- ]out|targeted advertising/i;
     const actionFor = (label) => {
@@ -1560,7 +1600,11 @@ export async function detectConsentUi(
         ""
       ).replace(/\s+/g, " ").trim();
       const actionType = actionFor(label);
-      return isVisible(element) && isFirstLayerPosition(element) && consentLabelPattern.test(label) && actionType !== "other";
+      return isVisible(element) &&
+        isFirstLayerPosition(element) &&
+        consentLabelPattern.test(label) &&
+        actionType !== "other" &&
+        (!requireActionableChoiceControl || actionType === "accept_all" || actionType === "reject_all");
     });
   })()`, { timeout: waitForControlTimeoutMs }).catch(() => undefined);
 
@@ -1823,6 +1867,23 @@ function shouldRecaptureConsentUiAfterScreenshot(
     shouldRecaptureConsentUiAfterTimeout(observation, { fastWait: options.fastWait === true });
 }
 
+function shouldRecaptureConsentUiAfterCmpRuntime(
+  observation: ConsentUiObservation,
+  domText: string,
+  cmpRuntimeObservations: CmpRuntimeObservation[],
+): boolean {
+  if (cmpRuntimeObservations.length === 0 || hasActionableConsentChoiceControl(observation)) {
+    return false;
+  }
+  if (isTerminalVisualErrorShellText(domText || observation.textExcerpt || "")) {
+    return false;
+  }
+  return observation.likelyPresent &&
+    observation.controls.some((control) =>
+      control.actionType === "manage_preferences" || control.actionType === "do_not_sell_share"
+    );
+}
+
 function shouldRecaptureTextBackedConsentUiAfterSettle(
   observation: ConsentUiObservation,
   domText = "",
@@ -1843,6 +1904,12 @@ function likelyLateFirstLayerConsentSurfaceText(text: string): boolean {
   }
   return /\b(?:cookie|cookies|consent|privacy preferences|privacy choices)\b/i.test(normalized) &&
     /\b(?:accept|agree|allow|reject|decline|deny|refuse|settings|preferences|choices|options|necessary|essential)\b/i.test(normalized);
+}
+
+function hasActionableConsentChoiceControl(observation: ConsentUiObservation): boolean {
+  return observation.controls.some((control) =>
+    control.actionType === "accept_all" || control.actionType === "reject_all"
+  );
 }
 
 function hasTextBackedConsentSurface(observation: ConsentUiObservation): boolean {

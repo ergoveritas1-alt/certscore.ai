@@ -567,6 +567,45 @@ test("pre-consent runtime scanner recaptures late first-layer controls without i
   }
 });
 
+test("pre-consent runtime scanner waits briefly for late choice controls when CMP evidence is retained", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-late-choice-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-late-first-layer-choice-controls"),
+      path.join(tempRoot, "consent-late-first-layer-choice-controls"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+    const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
+
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.layerInspected, "first_layer");
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.basis.includes("recapture:post_cmp_first_layer_choice_controls"),
+      true,
+      "scanner should mark late choice controls as retained by the bounded CMP recapture",
+    );
+    assert.equal(
+      timingLabels.includes("page evidence: consent UI CMP recapture"),
+      true,
+      "scanner should use the bounded post-CMP recapture path",
+    );
+    assert.equal(
+      bundle.cmpRuntimeObservations.some((cmp) => cmp.vendor === "OneTrust"),
+      true,
+      "fixture should retain CMP runtime evidence before the post-CMP recapture is eligible",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner retains first-layer accept-only consent surface as no reject observed", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-no-reject-"));
