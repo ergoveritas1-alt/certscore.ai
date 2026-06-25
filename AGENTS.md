@@ -108,7 +108,15 @@ Use canonical tracker, vendor, CMP, and domain classification registries for cla
 
 If a module needs different thresholds, severity, or status treatment, express that as WC01 policy over canonical classifications, not duplicated domain/vendor lists.
 
+`packages/shared/src/known-cmps.ts` `KNOWN_CMP_REGISTRY` is the canonical CMP registry. Use it for CMP identity, aliases, domains, cookies, DOM selectors, globals, standards, and infrastructure treatment. CMPs may also appear in vendor resolution and vendor lists as consent-management vendors, but do not create a competing CMP list when the classification belongs in `KNOWN_CMP_REGISTRY`.
+
 For CertScore v2 endpoint/vendor attribution, use `packages/certscore-vendor-resolver` as the canonical resolver home. Do not add local endpoint or vendor lists inside scan modules, report adapters, dry-run bridges, or docs when the classification belongs in the resolver.
+
+Consent UI control discovery must use the canonical consent-control label classifier/registry for label-based classification of accept, reject, options/manage, and privacy opt-out controls. Do not add feature-specific or display-specific accept/reject/options regexes when the same rule belongs in the canonical classifier. New language terms, CMP label variants, or consent-control synonyms should be added to the canonical registry with typed intent, locale, match strength, optional variant, and focused tests.
+
+Keep consent-control intents distinct. `reject` means refusal of optional cookies, tracking, or consent, including necessary-only equivalents. `privacy_opt_out` is refusal-adjacent evidence for sale/share, targeted advertising, legitimate-interest objection, or broader privacy-choice surfaces, but it must not automatically satisfy GDPR/ePrivacy first-layer cookie-banner reject availability. `options` may indicate a path to choices, but does not prove reject availability without retained deeper-path evidence.
+
+WC01 display, executive summary, checklist, and top-finding code must not infer consent findings directly from raw labels. Label evidence should flow through observed structured evidence, normalized concerns, concern policy, and unified finding/checklist projection.
 
 ### Display and summary rules
 

@@ -9,6 +9,7 @@ import {
 } from "./sanitized-network-evidence";
 import { isPromotionGradePreconsentRequestRow } from "./preconsent-public-evidence";
 import { evaluateSaleShareRuntimeCoherence } from "./sale-share-runtime-coherence";
+import { classifyConsentControlLabel, type ConsentControlIntent } from "@certscore/contracts";
 
 type ContractDecision = {
   allowedNarrativeTier: "weak" | "moderate" | "strong";
@@ -198,7 +199,7 @@ function getStringArrayFromSources(
 
 function hasVisibleButtonCandidate(
   candidates: Array<Record<string, unknown>>,
-  pattern: RegExp
+  intent: Exclude<ConsentControlIntent, "unknown">
 ) {
   return candidates.some((candidate) => {
     const label = typeof candidate.label === "string"
@@ -212,7 +213,12 @@ function hasVisibleButtonCandidate(
       candidate.enabled === true ||
       candidate.clickable === true ||
       candidate.disabled === false;
-    return pattern.test(label) && (visible || interactable);
+    const classification = classifyConsentControlLabel({
+      label,
+      hasConsentContext: true,
+      hasPreferenceContext: true,
+    });
+    return classification.intent === intent && classification.confidence >= 0.5 && (visible || interactable);
   });
 }
 
@@ -434,7 +440,7 @@ export function evaluateConsentSurfaceGate(
   const acceptPresent =
     getBooleanFromSources(rawEvidence, [consentSummary], ["acceptPresent", "accept_present"]) === true ||
     acceptLabels.length > 0 ||
-    hasVisibleButtonCandidate(candidateButtons, /accept|allow|agree|ok/i);
+    hasVisibleButtonCandidate(candidateButtons, "accept");
   const rejectPresentFirstLayer =
     explicitStates.includes("reject_present_first_layer") ||
     getBooleanFromSources(rawEvidence, [consentSummary, rejectPath], [
@@ -444,11 +450,11 @@ export function evaluateConsentSurfaceGate(
       "reject_available_on_first_layer"
     ]) === true ||
     rejectLabels.length > 0 ||
-    hasVisibleButtonCandidate(candidateButtons, /reject|decline|deny|refuse/i);
+    hasVisibleButtonCandidate(candidateButtons, "reject");
   const managePresent =
     getBooleanFromSources(rawEvidence, [consentSummary], ["managePresent", "manage_present"]) === true ||
     manageLabels.length > 0 ||
-    hasVisibleButtonCandidate(candidateButtons, /manage|settings|preferences|customi[sz]e|options|control/i);
+    hasVisibleButtonCandidate(candidateButtons, "options");
   const acceptClickDepth = getNumberFromSources(rawEvidence, [rejectPath], [
     "acceptClickDepth",
     "accept_click_depth"

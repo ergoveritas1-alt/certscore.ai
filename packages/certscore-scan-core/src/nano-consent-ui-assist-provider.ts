@@ -3,7 +3,7 @@ import type {
   NanoConsentUiClassificationInput,
   NanoConsentUiClassificationResult,
 } from "./scanners/consent-flow-runtime-scanner.js";
-import type { ConsentActionType } from "@certscore/contracts";
+import { classifyConsentControlLabel, type ConsentActionType } from "@certscore/contracts";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_NANO_MODEL = "gpt-5.4-nano";
@@ -161,17 +161,17 @@ function explicitlyMatchesAction(
   candidate: NanoConsentUiClassificationInput["candidates"][number],
   actionType: ConsentActionType,
 ): boolean {
-  const value = `${candidate.normalizedLabel} ${candidate.labelText}`.toLowerCase();
-  if (actionType === "accept_all") {
-    return /accept all|allow all|agree to all|accept cookies|i agree|allow analytics|accept optional|^accept$|^agree$|^consent$/.test(value);
-  }
-  if (actionType === "reject_all") {
-    return /reject all|reject optional|reject analytics|do not accept|decline all|deny all|refuse all|only necessary|necessary only|essential only|accept essential|accept necessary|^reject$|^decline$|^deny$|^refuse$/.test(value);
-  }
-  if (actionType === "do_not_sell_share") {
-    return /do not sell|do not share|opt[- ]out|sale or sharing|targeted advertising|privacy choices|privacy settings|privacy preferences/.test(value);
-  }
-  return false;
+  const classification = classifyConsentControlLabel({
+    label: candidate.normalizedLabel,
+    ariaLabel: candidate.labelText,
+    hasConsentContext: true,
+  });
+  return (
+    (actionType === "accept_all" && classification.intent === "accept") ||
+    (actionType === "reject_all" && classification.intent === "reject") ||
+    (actionType === "do_not_sell_share" && classification.intent === "privacy_opt_out") ||
+    (actionType === "manage_preferences" && classification.intent === "options")
+  );
 }
 
 function extractJson(content: string): string {

@@ -139,6 +139,7 @@ const ALLOWED_GDPR_EPRIVACY_ROW_IDS = new Set([
   "consent_surface_observed",
   "cookie_notice_availability",
   "reject_all_path_availability",
+  "accept_consent_control",
   "post_reject_tracking_reduction",
   "preference_withdrawal_control",
   "session_replay_fingerprinting_review",
@@ -642,6 +643,8 @@ function consentFlowScannerImprovement(rowId: string) {
   switch (rowId) {
     case "reject_all_path_availability":
       return "Use internal retained/replay review for reject/decline path evidence";
+    case "accept_consent_control":
+      return "Use retained first-layer consent-control evidence for accept control availability";
     case "post_reject_tracking_reduction":
       return "Use internal retained/replay review for before/after reject comparison";
     case "preference_withdrawal_control":
@@ -680,6 +683,8 @@ function rowSpecificConfidenceImprovements(rowId: string) {
       return ["Retain a bounded cookie notice or cookie policy excerpt", "Retain the cookie notice URL and link text"];
     case "reject_all_path_availability":
       return ["Retain internal reject-path proof when already available", "Retain visible first-layer reject-path availability without clicking"];
+    case "accept_consent_control":
+      return ["Retain visible first-layer accept control availability without clicking", "Classify accept labels through the canonical consent-control registry"];
     case "post_reject_tracking_reduction":
       return ["Use retained before/after reject request deltas when already available", "Classify persisted vendors and cookies after reject"];
     case "preference_withdrawal_control":

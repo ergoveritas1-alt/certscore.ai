@@ -99,6 +99,20 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     urlPatterns: [/usercentrics/i]
   },
   {
+    aliases: ["Consentmanager CMP", "consentmanager.net", "consentmanager.de", "ConsentManager"],
+    canonicalName: "Consentmanager",
+    cookieNames: ["__cmpconsent*", "__cmpconsents*", "__cmpconsentx*", "__cmpcc", "__cmpcpc", "__cmpcvc", "__cmpiab"],
+    domains: ["consentmanager.net", "consentmanager.de", "cdn.consentmanager.net", "delivery.consentmanager.net"],
+    domSelectors: ["#cmpbox", "#cmpboxrecall", "[id*='cmpbox' i]", "[class*='cmpbox' i]"],
+    evidenceTreatment: "cmp_infrastructure",
+    globalNames: ["__cmp", "__cmpapi", "__tcfapi", "cmp_data", "cmp_config"],
+    reopenControlHints: ["consentmanager", "privacy settings", "cookie settings", "privacy preferences"],
+    role: "consent management platform",
+    standards: ["tcf", "gpp", "usp", "gpc", "google_consent_mode"],
+    storageKeys: ["__cmpconsent*", "__cmpconsents*", "__cmpconsentx*", "__cmpcc", "__cmpcpc", "__cmpcvc", "__cmpiab"],
+    urlPatterns: [/consentmanager/i, /cdn\.consentmanager\.net\/(?:delivery|cmp|choice|consent)/i, /semiautomatic\.min\.js/i]
+  },
+  {
     aliases: ["Cybot", "Cookiebot by Usercentrics"],
     canonicalName: "Cookiebot",
     cookieNames: ["CookieConsent", "CookieConsentBulkTicket"],
@@ -315,13 +329,28 @@ function collectSignalsForDefinition(definition: KnownCmpDefinition, input: Know
   }
 
   for (const cookieName of uniqueStrings(input.cookieNames ?? [])) {
-    if ((definition.cookieNames ?? []).some((knownName) => cookieName.toLowerCase() === knownName.toLowerCase() || cookieName.toLowerCase().startsWith(`${knownName.toLowerCase()}.`) || (knownName.endsWith("_") && cookieName.toLowerCase().startsWith(knownName.toLowerCase())))) {
+    if ((definition.cookieNames ?? []).some((knownName) => {
+      const normalizedCookieName = cookieName.toLowerCase();
+      const normalizedKnownName = knownName.toLowerCase();
+      const prefixName = normalizedKnownName.endsWith("*") ? normalizedKnownName.slice(0, -1) : null;
+      return normalizedCookieName === normalizedKnownName ||
+        normalizedCookieName.startsWith(`${normalizedKnownName}.`) ||
+        (normalizedKnownName.endsWith("_") && normalizedCookieName.startsWith(normalizedKnownName)) ||
+        (prefixName !== null && normalizedCookieName.startsWith(prefixName));
+    })) {
       push("cookie", cookieName);
     }
   }
 
   for (const storageKey of uniqueStrings(input.storageKeys ?? [])) {
-    if ((definition.storageKeys ?? definition.cookieNames ?? []).some((knownName) => storageKey.toLowerCase() === knownName.toLowerCase() || storageKey.toLowerCase().includes(knownName.toLowerCase()))) {
+    if ((definition.storageKeys ?? definition.cookieNames ?? []).some((knownName) => {
+      const normalizedStorageKey = storageKey.toLowerCase();
+      const normalizedKnownName = knownName.toLowerCase();
+      const prefixName = normalizedKnownName.endsWith("*") ? normalizedKnownName.slice(0, -1) : null;
+      return normalizedStorageKey === normalizedKnownName ||
+        normalizedStorageKey.includes(normalizedKnownName) ||
+        (prefixName !== null && normalizedStorageKey.startsWith(prefixName));
+    })) {
       push("storage", storageKey);
     }
   }

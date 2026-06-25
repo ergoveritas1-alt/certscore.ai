@@ -1,4 +1,5 @@
 import type { CertScoreFinding, CertScoreFindingDirectness } from "./finding-registry";
+import { classifyConsentControlLabel } from "@certscore/contracts";
 
 export type RuntimeTopFindingEligibility =
   | "top_candidate"
@@ -168,13 +169,12 @@ function isCredibleRejectLabel(label: string | null) {
   if (!label) {
     return false;
   }
-  if (/stream|subscribe|sign\s*in|log\s*in|continue|accept|agree|allow/i.test(label)) {
-    return false;
-  }
-  if (label.length > 50 && !/cookie|privacy|consent|preference|choice|optional|necessary|essential/i.test(label)) {
-    return false;
-  }
-  return /reject|decline\s+(?:all|optional|non[-\s]?essential|cookies)|deny|refuse|opt\s*out|save\s+settings|confirm\s+choices|manage\s+preferences|necessary only|essential only|only necessary/i.test(label);
+  const classification = classifyConsentControlLabel({
+    label,
+    hasConsentContext: true,
+    hasPreferenceContext: true,
+  });
+  return classification.intent === "reject" && classification.confidence >= 0.5;
 }
 
 function isGenericPreferenceSaveLabel(label: string | null) {

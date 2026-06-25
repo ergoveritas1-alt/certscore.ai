@@ -43,6 +43,10 @@ import {
   GdprEprivacyCoverageSummaryPills
 } from "./gdpr-eprivacy-coverage-checklist-card";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
+import {
+  getAssessmentDirection,
+  getEvidenceLabel
+} from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
@@ -744,7 +748,14 @@ function normalizeInventoryPurpose(value: string | null | undefined) {
 export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {
   const purpose = normalizeInventoryPurpose(getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance));
   const confidence = getTrackerInventoryConfidence(row);
+  const normalizedLabel = row.label.toLowerCase();
+  const isLinkedInAdsPixel =
+    /linkedin ads pixel/.test(normalizedLabel) ||
+    row.domains.some((domain) => /^px\.ads\.linkedin\.com$/i.test(domain.trim()));
 
+  if (isLinkedInAdsPixel) {
+    return row.preConsent ? "high" : "review_needed";
+  }
   if (/^(advertising|retargeting|audience_measurement|session_replay|fingerprinting)$/.test(purpose)) {
     return row.preConsent ? "high" : "medium";
   }
@@ -801,7 +812,7 @@ function InventoryPriorityCell({
     medium: "border-amber-200 bg-amber-50 text-amber-700",
     neutral: "border-slate-200 bg-white text-slate-600"
   }[tone];
-  const iconClassName = "h-3.5 w-3.5 shrink-0";
+  const iconClassName = "h-2.5 w-2.5 shrink-0";
   const icon = {
     contextual: (
       <svg aria-hidden="true" className={iconClassName} fill="none" viewBox="0 0 20 20">
@@ -829,7 +840,7 @@ function InventoryPriorityCell({
 
   return (
     <span
-      className={`inline-flex max-w-[8.5rem] items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] font-medium uppercase tracking-[0.08em] ${toneClass}`}
+      className={`inline-flex max-w-[6rem] items-center gap-1 rounded-full border px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-[0.08em] ${toneClass}`}
       title={`${label}: ${infotip}`}
     >
       {icon}
@@ -863,10 +874,10 @@ function InventoryTypeIcon({ type }: { type: "cookie" | "tracker" }) {
     return (
       <span
         aria-label="Cookie"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-sky-200 bg-sky-50 text-sky-700"
+        className="inline-flex h-[1.6rem] w-[1.6rem] items-center justify-center rounded-md border border-sky-200 bg-sky-50 text-sky-700"
         title="Cookie"
       >
-        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
           <path d="M20 13.2A8 8 0 1 1 10.8 4a3.1 3.1 0 0 0 3 4 3.2 3.2 0 0 0 4.1 4.1c.6.2 1.2.5 2.1 1.1Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
           <path d="M8.5 9.5h.01M7.5 15h.01M12.5 14h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.6" />
         </svg>
@@ -877,10 +888,10 @@ function InventoryTypeIcon({ type }: { type: "cookie" | "tracker" }) {
   return (
     <span
       aria-label="Tracker"
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-violet-200 bg-violet-50 text-violet-700"
+      className="inline-flex h-[1.6rem] w-[1.6rem] items-center justify-center rounded-md border border-violet-200 bg-violet-50 text-violet-700"
       title="Tracker"
     >
-      <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
         <path d="M17.6 7.3A7 7 0 0 0 5.3 10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
         <path d="M15.2 7.4h2.7V4.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.9" />
         <path d="M6.4 16.7A7 7 0 0 0 18.7 14" stroke="currentColor" strokeLinecap="round" strokeWidth="1.9" />
@@ -1187,42 +1198,42 @@ function RuntimeInventoryTable({
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200 lg:h-[317px]">
             <div className="max-h-[340px] overflow-auto lg:h-full lg:max-h-none">
-            <table className="w-full min-w-[980px] table-fixed border-collapse text-left text-sm">
-              <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+            <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-[13px]">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.12em] text-slate-500">
                 <tr>
-                  <th className="w-[62px] border-b border-slate-200 px-3 py-2 font-semibold">Type</th>
-                  <th className="w-[190px] border-b border-slate-200 px-3 py-2 font-semibold">Vendor</th>
-                  <th className="w-[130px] border-b border-slate-200 px-3 py-2 font-semibold">Purpose</th>
-                  <th className="w-[178px] border-b border-slate-200 px-3 py-2 font-semibold">Priority</th>
-                  <th className="w-[110px] border-b border-slate-200 px-3 py-2 font-semibold">First seen</th>
-                  <th className="w-[180px] border-b border-slate-200 px-3 py-2 font-semibold">Domain</th>
-                  <th className="w-[104px] border-b border-slate-200 px-3 py-2 font-semibold">Confidence</th>
-                  <th className="w-[72px] border-b border-slate-200 px-3 py-2 font-semibold">Party</th>
-                  <th className="w-[80px] border-b border-slate-200 px-3 py-2 font-semibold">Req.</th>
+                  <th className="w-[50px] border-b border-slate-200 px-2.5 py-2 font-semibold">Type</th>
+                  <th className="w-[180px] border-b border-slate-200 px-2.5 py-2 font-semibold">Vendor</th>
+                  <th className="w-[128px] border-b border-slate-200 px-2.5 py-2 font-semibold">Purpose</th>
+                  <th className="w-[112px] border-b border-slate-200 px-2.5 py-2 font-semibold">Priority</th>
+                  <th className="w-[94px] border-b border-slate-200 px-2.5 py-2 font-semibold">First seen</th>
+                  <th className="w-[190px] border-b border-slate-200 px-2.5 py-2 font-semibold">Domain</th>
+                  <th className="w-[88px] border-b border-slate-200 px-2.5 py-2 font-semibold">Confidence</th>
+                  <th className="w-[58px] border-b border-slate-200 px-2.5 py-2 font-semibold">Party</th>
+                  <th className="w-[60px] border-b border-slate-200 px-2.5 py-2 font-semibold">Req.</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
                 {groupedInventoryRows.map((row) => (
-                  <tr key={`${row.type}-${row.vendor}-${row.purpose}`} className="h-12">
-                    <td className="truncate whitespace-nowrap px-3 py-2">
+                  <tr key={`${row.type}-${row.vendor}-${row.purpose}`} className="h-10">
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryTypeIcon type={row.type} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-3 py-2">
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryVendorCell label={row.vendor} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-3 py-2">{row.purpose}</td>
-                    <td className="truncate whitespace-nowrap px-3 py-2">
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">{row.purpose}</td>
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryPriorityCell
                         priority={row.priority}
                       />
                     </td>
-                    <td className="truncate whitespace-nowrap px-3 py-2">{formatFirstSeenMs(row.firstSeenMs)}</td>
-                    <td className="truncate whitespace-nowrap px-3 py-2" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
-                    <td className="truncate whitespace-nowrap px-3 py-2">
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">{formatFirstSeenMs(row.firstSeenMs)}</td>
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryConfidenceCell confidence={row.confidence} />
                     </td>
-                    <td className="truncate whitespace-nowrap px-3 py-2">{formatGroupedParty(row.party)}</td>
-                    <td className="truncate whitespace-nowrap px-3 py-2">{row.type === "tracker" ? formatInventoryNumber(row.requestCount) : "—"}</td>
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">{formatGroupedParty(row.party)}</td>
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">{row.type === "tracker" ? formatInventoryNumber(row.requestCount) : "—"}</td>
                   </tr>
                 ))}
                 {groupedInventoryRows.length === 0 ? (
@@ -7385,10 +7396,12 @@ export function SharedScanDetailView({
         const checklistDescriptor = deriveGdprEprivacyCoverageChecklistRowRationale(item);
         return {
           ...item,
+          assessmentDirection: getAssessmentDirection(item),
           criticalEvidence: {
             ...item.criticalEvidence,
             statusBasis: checklistDescriptor
           },
+          evidenceLabel: getEvidenceLabel(item),
           note: checklistDescriptor
         };
       }),

@@ -1,6 +1,7 @@
 import type { CertScoreFinding } from "./finding-registry";
 
 export type RegulatoryGapTopFindingRow = {
+  assessmentDirection?: string;
   assessmentStatus?: string;
   criticalEvidence?: {
     missingOrIncompleteSourceSignals?: unknown[];
@@ -9,6 +10,7 @@ export type RegulatoryGapTopFindingRow = {
     retainedEvidence?: Record<string, unknown>;
     statusBasis?: string | null;
   };
+  evidenceLabel?: string;
   evidenceRefs?: string[];
   evidenceState?: string;
   explanation?: string;
@@ -33,7 +35,7 @@ export type RegulatoryGapTopFindingInput = {
   gdprEprivacyArea?: RegulatoryGapTopFindingArea | null;
 };
 
-type RegulatoryTopFindingConcernKind = "potential_concern" | "potential_gap" | "review_signal";
+type RegulatoryTopFindingConcernKind = "partial_rating" | "potential_concern" | "potential_gap" | "review_signal";
 
 type RegulatoryGapAreaConfig = {
   idPrefix: string;
@@ -136,7 +138,10 @@ function getRegulatoryTopFindingConcernRank(kind: RegulatoryTopFindingConcernKin
   if (kind === "potential_concern") {
     return 1;
   }
-  return 2;
+  if (kind === "partial_rating") {
+    return 2;
+  }
+  return 3;
 }
 
 function getRegulatoryGapTopFindingSummary(row: RegulatoryGapTopFindingRow, config: RegulatoryGapAreaConfig) {
@@ -173,24 +178,56 @@ function getRegulatoryTopFindingConcernKind(row: RegulatoryGapTopFindingRow): Re
   if (row.assessmentStatus === "gap_observed") {
     return "potential_gap";
   }
+  if (row.assessmentDirection === "potential_concern") {
+    const evidenceLabel = getEvidenceLabel(row);
+    if (evidenceLabel === "Potential gap") {
+      return "potential_gap";
+    }
+    if (evidenceLabel === "Observed" && !isObservedPotentialConcernRow(row)) {
+      return null;
+    }
+    return evidenceLabel === "Partial concern" || evidenceLabel === "Partial"
+      ? "partial_rating"
+      : "potential_concern";
+  }
   const evidenceLabel = getEvidenceLabel(row);
   if (evidenceLabel === "Not testable") {
     return null;
   }
+  if (
+    (
+      row.id === "reject_all_path_availability" ||
+      row.id === "accept_consent_control" ||
+      row.id === "options_settings_preferences_control"
+    ) &&
+    evidenceLabel !== "Observed" &&
+    hasConsentSurfaceExpectation(row)
+  ) {
+    return "potential_gap";
+  }
   if (evidenceLabel === "Potential gap") {
     return "potential_gap";
+  }
+  if (evidenceLabel === "Potential concern") {
+    return "potential_concern";
   }
   if (evidenceLabel === "Observed") {
     return isObservedPotentialConcernRow(row) ? "potential_concern" : null;
   }
-  if (evidenceLabel === "Partial" || row.assessmentStatus === "review_signal") {
+  if (evidenceLabel === "Partial concern") {
+    return isObservedPotentialConcernRow(row) ? "potential_concern" : "partial_rating";
+  }
+  if (evidenceLabel === "Partial") {
+    if (isReviewOnlyRow(row)) {
+      return isObservedPotentialConcernRow(row) ? "potential_concern" : "review_signal";
+    }
+    return isObservedPotentialConcernRow(row) ? "potential_concern" : "partial_rating";
+  }
+  if (row.assessmentStatus === "review_signal") {
     return isObservedPotentialConcernRow(row) ? "potential_concern" : "review_signal";
   }
   if (POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS.has(row.id)) {
     return null;
-  }
-  if (row.id === "reject_all_path_availability" && hasConsentSurfaceExpectation(row)) {
-    return "potential_gap";
   }
   if (
     (row.id === "consent_surface_observed" || row.id === "cookie_notice_policy_availability") &&
@@ -205,10 +242,22 @@ function getEvidenceLabel(row: RegulatoryGapTopFindingRow) {
   if (row.assessmentStatus === "coverage_limitation" || row.evidenceState === "not_testable" || row.status === "Not testable") {
     return "Not testable";
   }
-  if (row.status === "Gap observed" || row.assessmentStatus === "gap_observed") {
+  const statuses = [row.status, row.statusLabel]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => value.trim());
+  if (row.assessmentDirection === "potential_concern" && row.assessmentStatus !== "gap_observed") {
+    return row.evidenceLabel === "Partial concern" ? "Partial concern" : "Potential concern";
+  }
+  if (row.evidenceLabel === "Partial concern") {
+    return "Partial concern";
+  }
+  if (statuses.includes("Gap observed") || row.assessmentStatus === "gap_observed") {
     return "Potential gap";
   }
-  if (row.status === "Insufficient evidence" || row.status === "Not confirmed" || row.status === "Review signal") {
+  if (statuses.includes("Partial concern")) {
+    return "Partial concern";
+  }
+  if (statuses.some((status) => status === "Insufficient evidence" || status === "Not confirmed" || status === "Review signal")) {
     return "Partial";
   }
   if (isObservedRow(row)) {

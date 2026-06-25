@@ -108,6 +108,11 @@ const routeFulfillers: FixtureRouteFulfiller[] = [
     body: pixelBody(),
   },
   {
+    urlPattern: /^https:\/\/cdn\.consentmanager\.net\/delivery\/js\/semiautomatic\.min\.js\b/i,
+    contentType: "application/javascript",
+    body: "window.__fixtureConsentmanagerLoaded = true;",
+  },
+  {
     urlPattern: /^https:\/\/static\.examplecdn\.com\/app\.css\b/i,
     contentType: "text/css",
     body: "body { color: #222; }",
@@ -622,6 +627,171 @@ test("pre-consent runtime scanner recaptures late CMP choice controls when no in
       observation?.basis.includes("recapture:post_cmp_first_layer_choice_controls"),
       true,
       "scanner should retain late CMP choice controls even when no initial controls were visible",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner recaptures late settings controls from high-confidence CMP script evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-cmp-script-late-settings-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-cmp-script-late-settings"),
+      path.join(tempRoot, "consent-cmp-script-late-settings"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+    const cmpRecaptureTiming = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
+      entry.label === "page evidence: consent UI CMP recapture"
+    );
+
+    assert.equal(
+      bundle.cmpRuntimeObservations.some((cmp) =>
+        cmp.confidence >= 0.9 &&
+        cmp.signals.some((signal) => signal.signalType === "global" || signal.signalType === "script_url")
+      ),
+      true,
+      "fixture should retain high-confidence interactive CMP runtime evidence",
+    );
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "manage_preferences" &&
+        control.label === "Settings" &&
+        control.matchedTerm === "settings"
+      ),
+      true,
+      "scanner should classify the delayed Settings control through the canonical registry",
+    );
+    assert.equal(
+      observation?.basis.includes("recapture:post_cmp_first_layer_choice_controls"),
+      true,
+      "scanner should mark the delayed controls as retained by the bounded CMP recapture",
+    );
+    assert.equal(
+      Boolean(cmpRecaptureTiming),
+      true,
+      "scanner should run the post-CMP recapture for high-confidence CMP script evidence",
+    );
+    assert.match(
+      cmpRecaptureTiming?.detail ?? "",
+      /Adaptive post-CMP first-layer control inventory/,
+      "high-confidence CMP recapture should use the adaptive late-modal path",
+    );
+    assert.equal(
+      typeof cmpRecaptureTiming?.durationMs === "number" && cmpRecaptureTiming.durationMs < 10_000,
+      true,
+      "adaptive CMP recapture should exit after the delayed controls are retained instead of waiting the full cap",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner keeps high-confidence CMP recapture open long enough for very late settings controls", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-cmp-script-very-late-settings-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-cmp-script-very-late-settings"),
+      path.join(tempRoot, "consent-cmp-script-very-late-settings"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+    const cmpRecaptureTiming = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
+      entry.label === "page evidence: consent UI CMP recapture"
+    );
+
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "manage_preferences" &&
+        control.label === "Settings" &&
+        control.matchedTerm === "settings"
+      ),
+      true,
+      "scanner should retain very late Settings control before the high-confidence CMP cap expires",
+    );
+    assert.equal(
+      observation?.basis.includes("recapture:post_cmp_first_layer_choice_controls"),
+      true,
+      "scanner should mark the very late controls as retained by the adaptive CMP recapture",
+    );
+    assert.ok(
+      typeof cmpRecaptureTiming?.durationMs === "number" &&
+        cmpRecaptureTiming.durationMs >= 10_000 &&
+        cmpRecaptureTiming.durationMs < 12_000,
+      `adaptive CMP recapture should cover controls appearing after the old 10s fast cap without spending the full 12s; durationMs=${cmpRecaptureTiming?.durationMs ?? "missing"}`,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner performs a structured read after supplemental full-page capture", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-cmp-script-supplemental-settings-"));
+  try {
+    const url = server.urlFor("consent-cmp-script-supplemental-settings");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const observation = result.consentUiObservations[0];
+    const timingLabels = result.moduleRun.timingBreakdown?.map((entry) => entry.label) ?? [];
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(
+      timingLabels.includes("page evidence: consent UI CMP recapture"),
+      true,
+      "scanner should first attempt the high-confidence CMP structured recapture",
+    );
+    assert.equal(
+      timingLabels.includes("supplemental full-page screenshot"),
+      true,
+      "fixture should exercise the same supplemental full-page capture path used by local scans",
+    );
+    assert.equal(
+      timingLabels.includes("consent UI supplemental screenshot recapture"),
+      true,
+      "scanner should run a final same-page structured read after supplemental capture",
+    );
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "manage_preferences" &&
+        control.label === "Settings" &&
+        control.matchedTerm === "settings"
+      ),
+      true,
+      "final structured read should retain Settings without inferring from the screenshot",
+    );
+    assert.equal(
+      observation?.basis.includes("recapture:post_supplemental_screenshot_first_layer_controls"),
+      true,
+      "scanner should identify the final structured read as the source of the retained controls",
     );
   } finally {
     await server.close();

@@ -1422,7 +1422,7 @@ test("GdprEprivacyCoverageChecklistCard does not use observed runtime wording fo
   assert.doesNotMatch(html, /Tracking-classified third-party requests fired before any recorded consent action/);
 });
 
-test("GdprEprivacyCoverageSummaryPills summarizes row decisions instead of evidence labels", () => {
+test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead of tally pills", () => {
   const items = [
     makeChecklistItem({
       assessmentStatus: "checked",
@@ -1470,11 +1470,15 @@ test("GdprEprivacyCoverageSummaryPills summarizes row decisions instead of evide
     createElement(GdprEprivacyCoverageSummaryPills, { items })
   );
 
+  assert.match(html, /GDPR\/ePrivacy checklist rating mix/);
+  assert.match(html, /Rating mix/);
+  assert.match(html, /5 rows/);
   assert.match(html, /concern/);
   assert.match(html, /partial concern/);
   assert.match(html, /review/);
   assert.match(html, /positive/);
   assert.match(html, /contextual/);
+  assert.doesNotMatch(html, /rounded-full border border-slate-200 bg-slate-50\/80 px-2 py-1/);
   assert.doesNotMatch(html, /gaps observed/);
   assert.doesNotMatch(html, /partial concerns/);
   assert.doesNotMatch(html, /review signals/);
@@ -1485,8 +1489,6 @@ test("GdprEprivacyCoverageSummaryPills summarizes row decisions instead of evide
   assert.doesNotMatch(html, /potential gaps/);
   assert.doesNotMatch(html, />partial</);
   assert.doesNotMatch(html, />observed</);
-  assert.match(html, /M10 4\.2 17 16H3L10 4\.2Z/);
-  assert.match(html, /<circle cx="10" cy="10" r="6\.8"/);
 });
 
 test("GdprEprivacyCoverageChecklistCard renders debug confidence metadata", () => {

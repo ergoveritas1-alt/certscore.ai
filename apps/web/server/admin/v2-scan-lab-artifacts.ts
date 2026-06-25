@@ -1364,6 +1364,8 @@ function preferDirectSmokingGunFallback(rowId: string) {
     "post_reject_tracking_reduction",
     "post_opt_out_tracking_behavior",
     "reject_all_path_availability",
+    "accept_consent_control",
+    "options_settings_preferences_control",
     "preference_withdrawal_control",
   ]).has(rowId);
 }
@@ -1463,6 +1465,8 @@ function smokingGunFallbackExamples(bundle: CanonicalEvidenceBundle, rowId: stri
         .map((event) => traceExampleFromRuntimeEvent(event as unknown as Record<string, unknown>));
     case "consent_surface_observed":
     case "reject_all_path_availability":
+    case "accept_consent_control":
+    case "options_settings_preferences_control":
     case "preference_withdrawal_control":
       return [
         ...bundle.consentActionAttempts.map((event) => traceExampleFromRuntimeEvent(event as unknown as Record<string, unknown>)),

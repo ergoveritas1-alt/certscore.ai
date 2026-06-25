@@ -119,11 +119,13 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
   });
 
   assert.deepEqual(
-    items.slice(0, 11).map((item) => item.id),
+    items.slice(0, 13).map((item) => item.id),
     [
       "consent_surface_observed",
       "cmp_framework_signal_observed",
       "reject_all_path_availability",
+      "accept_consent_control",
+      "options_settings_preferences_control",
       "cookie_notice_policy_availability",
       "pre_consent_cookies_storage",
       "pre_consent_third_party_tracking",
@@ -134,6 +136,77 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
       "device_identification_fingerprinting_signal_observed"
     ]
   );
+});
+
+test("deriveGdprEprivacyCoverageChecklist orders structured consent controls as reject, accept, options", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      reject_all_path_availability: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: reject path depth and availability", "Visible choice: Reject all"],
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: true,
+          rejectControlObserved: true,
+          visibleRejectLabels: ["Reject all"]
+        },
+        limitation: "A reject control was retained in structured first-layer consent evidence.",
+        rowId: "reject_all_path_availability",
+        status: "Observed"
+      }),
+      accept_consent_control: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: first-layer accept consent control", "Visible choice: Accept all"],
+        retainedEvidence: {
+          acceptControlObserved: true,
+          acceptControls: [{
+            actionType: "accept_all",
+            classifierReasonCodes: ["matched_accept"],
+            label: "Accept all",
+            matchedLocale: "en",
+            matchedTerm: "accept all",
+            matchStrength: "direct"
+          }],
+          firstLayerCookieConsentBannerObserved: true,
+          visibleAcceptLabels: ["Accept all"]
+        },
+        limitation: "An accept control was retained in structured first-layer consent evidence.",
+        rowId: "accept_consent_control",
+        status: "Observed"
+      }),
+      options_settings_preferences_control: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: first-layer options/settings/preferences control", "Visible choice: Manage preferences"],
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: true,
+          optionsControlObserved: true,
+          optionsControls: [{
+            actionType: "manage_preferences",
+            classifierReasonCodes: ["matched_options"],
+            label: "Manage preferences",
+            matchedLocale: "en",
+            matchedTerm: "manage preferences",
+            matchStrength: "direct"
+          }],
+          visibleOptionsLabels: ["Manage preferences"]
+        },
+        limitation: "An options control was retained in structured first-layer consent evidence.",
+        rowId: "options_settings_preferences_control",
+        status: "Observed"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const consentControlIds = items
+    .filter((item) => item.id === "reject_all_path_availability" || item.id === "accept_consent_control" || item.id === "options_settings_preferences_control")
+    .map((item) => item.id);
+
+  assert.deepEqual(consentControlIds, [
+    "reject_all_path_availability",
+    "accept_consent_control",
+    "options_settings_preferences_control"
+  ]);
+  assert.equal(byId(items, "accept_consent_control").label, "Accept consent control");
+  assert.equal(byId(items, "accept_consent_control").status, "Observed");
 });
 
 test("deriveGdprEprivacyCoverageChecklist omits deferred low-confidence production rows", () => {

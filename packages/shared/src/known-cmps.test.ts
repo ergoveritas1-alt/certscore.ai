@@ -16,6 +16,7 @@ test("registry includes first-wave CMP vendors", () => {
     "OneTrust",
     "TrustArc",
     "Usercentrics",
+    "Consentmanager",
     "Cookiebot",
     "CookieYes",
     "Sourcepoint",
@@ -30,6 +31,21 @@ test("registry includes first-wave CMP vendors", () => {
   ]) {
     assert.ok(names.includes(name), `${name} should be in the known CMP registry`);
   }
+});
+
+test("detects Consentmanager by CDN script, cookies, globals, and labels", () => {
+  assert.equal(getKnownCmpVendorForHost("cdn.consentmanager.net"), "Consentmanager");
+  assert.equal(
+    getKnownCmpVendorName({
+      urls: ["https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"]
+    }),
+    "Consentmanager",
+  );
+  assert.equal(getKnownCmpVendorName({ cookieNames: ["__cmpconsent123"] }), "Consentmanager");
+  assert.equal(getKnownCmpVendorName({ jsGlobals: ["__cmpapi"] }), "Consentmanager");
+  assert.equal(isKnownCmpCookieName("__cmpconsentx456"), true);
+  assert.equal(isKnownCmpInfrastructureUrl("https://cdn.consentmanager.net/delivery/cmp.php?id=abc123"), true);
+  assert.equal(isKnownCmpVendorLabel("Consentmanager CMP"), true);
 });
 
 test("detects CookieYes by domains and consent cookie", () => {

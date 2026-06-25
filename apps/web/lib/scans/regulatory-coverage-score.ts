@@ -42,9 +42,11 @@ const CALIFORNIA_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
 
 const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   accessibility_consent_controls: { weight: 4 },
+  accept_consent_control: { weight: 7 },
   consent_choice_quality: { weight: 10 },
   consent_surface_observed: { weight: 10 },
   cross_border_endpoint_review: { weight: 5 },
+  options_settings_preferences_control: { weight: 7 },
   post_reject_tracking_reduction: { weight: 10 },
   pre_consent_cookies_storage: { weight: 12 },
   pre_consent_third_party_tracking: { weight: 14 },

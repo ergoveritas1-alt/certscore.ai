@@ -2587,6 +2587,14 @@ test("ExecutiveSummaryCard renders GDPR gap-observed checklist rows as top findi
           id: "runtime_vendor_disclosure_alignment",
           label: "Runtime vendor disclosure mismatch",
           note: "Review signal only."
+        },
+        {
+          assessmentStatus: "checked",
+          evidenceState: "not_observed",
+          id: "retention_disclosure",
+          label: "Retention disclosure",
+          note: "Not confirmed from retained policy-surface evidence.",
+          status: "Not confirmed"
         }
       ]
     }
@@ -2642,7 +2650,10 @@ test("ExecutiveSummaryCard renders GDPR gap-observed checklist rows as top findi
   );
   assert.doesNotMatch(html, /GDPR\/ePrivacy potential concern: Pre-consent third-party tracking/);
   assert.match(html, /Advertising and analytics requests were observed before consent/);
-  assert.match(html, /not a legal conclusion/);
+  assert.match(html, /Retention disclosure/);
+  assert.match(html, /Partial rating/);
+  assert.match(html, /Not confirmed from retained policy-surface evidence/);
+  assert.match(html, /do not treat it as a legal conclusion/);
   assert.doesNotMatch(html, /Runtime vendor disclosure mismatch/);
 });
 

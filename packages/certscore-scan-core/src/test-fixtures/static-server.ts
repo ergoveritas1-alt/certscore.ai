@@ -15,6 +15,9 @@ export type StaticFixturePage =
   | "consent-banner-failed-click"
   | "consent-banner-stateful-click"
   | "consent-cmp-cookie-persists"
+  | "consent-cmp-script-late-settings"
+  | "consent-cmp-script-supplemental-settings"
+  | "consent-cmp-script-very-late-settings"
   | "consent-deny-non-essential"
   | "consent-iframe-reject"
   | "consent-lean-guarded-image-cookie"
@@ -119,6 +122,9 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-banner-failed-click": "consent-failed-click",
   "consent-banner-stateful-click": "consent-stateful-click",
   "consent-cmp-cookie-persists": "consent-cmp-cookie-persists",
+  "consent-cmp-script-late-settings": "consent-cmp-script-late-settings",
+  "consent-cmp-script-supplemental-settings": "consent-cmp-script-supplemental-settings",
+  "consent-cmp-script-very-late-settings": "consent-cmp-script-very-late-settings",
   "consent-deny-non-essential": "consent-deny-non-essential",
   "consent-iframe-reject": "consent-iframe-reject",
   "consent-lean-guarded-image-cookie": "consent-lean-guarded-image-cookie",
@@ -617,6 +623,9 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     lateFirstLayerControls: caseName === "consent-late-first-layer-controls",
     lateFirstLayerChoiceControls: caseName === "consent-late-first-layer-choice-controls",
     lateCmpChoiceControls: caseName === "consent-late-cmp-choice-controls",
+    cmpScriptLateSettings: caseName === "consent-cmp-script-late-settings",
+    cmpScriptSupplementalSettings: caseName === "consent-cmp-script-supplemental-settings",
+    cmpScriptVeryLateSettings: caseName === "consent-cmp-script-very-late-settings",
     preferenceAmbiguous: caseName === "consent-preference-center-ambiguous",
     preferenceConfirmSave: caseName === "consent-preference-center-confirm-save",
     postChoiceReopen: caseName === "consent-post-choice-reopen-control",
@@ -686,6 +695,27 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
           if (!target) return;
           target.innerHTML = '<button id="settings" type="button">Cookie settings</button><button id="accept-all" type="button">Accept</button><button id="reject-all" type="button">Reject</button>';
         }, 3200);
+      </script>
+    `;
+  }
+  if (options.cmpScriptLateSettings || options.cmpScriptVeryLateSettings || options.cmpScriptSupplementalSettings) {
+    const modalDelayMs = options.cmpScriptSupplementalSettings
+      ? 14_250
+      : options.cmpScriptVeryLateSettings ? 13_200 : 6_500;
+    return `
+      <section>
+        <h1>Numa-style landing page</h1>
+        <p>Booking content renders before the CMP surface is attached.</p>
+      </section>
+      <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+      <div id="cmp-root"></div>
+      <script>
+        window.OneTrust = { fixture: true };
+        setTimeout(() => {
+          const target = document.getElementById("cmp-root");
+          if (!target) return;
+          target.innerHTML = '<div id="privacy-settings-modal" role="dialog" aria-label="Privacy Settings"><h2>Privacy Settings</h2><p>We use third-party services that store or retrieve information from a visitor device. You can manage privacy settings or accept cookies.</p><button id="settings" type="button">Settings</button><button id="accept" type="button">Accept</button></div>';
+        }, ${modalDelayMs});
       </script>
     `;
   }

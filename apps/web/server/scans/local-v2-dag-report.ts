@@ -1621,7 +1621,7 @@ function summarizeFirstLayerConsentChoices(bundle: CanonicalEvidenceBundle) {
     .filter((control) => control.actionType === "reject_all")
     .map((control) => control.label));
   const preferenceLabels = uniqueStrings(controls
-    .filter((control) => control.actionType === "manage_preferences")
+    .filter((control) => control.actionType === "manage_preferences" || control.actionType === "save_preferences")
     .map((control) => control.label));
 
   if (!observation) {
@@ -1635,10 +1635,15 @@ function summarizeFirstLayerConsentChoices(bundle: CanonicalEvidenceBundle) {
     capturedBeforeInteraction: true,
     controls: controls.slice(0, 12).map((control) => ({
       actionType: control.actionType,
+      classifierReasonCodes: control.classifierReasonCodes,
       label: control.label,
+      matchedLocale: control.matchedLocale,
+      matchedTerm: control.matchedTerm,
+      matchStrength: control.matchStrength,
       role: control.role,
       selectorHint: control.selectorHint,
-      tagName: control.tagName
+      tagName: control.tagName,
+      variant: control.classifierVariant
     })),
     layerInspected: observation.layerInspected ?? (visibleChoiceLabels.length > 0 ? "first_layer" : "unknown"),
     managePreferencesControlObserved: observation.managePreferencesControlObserved === true || preferenceLabels.length > 0,

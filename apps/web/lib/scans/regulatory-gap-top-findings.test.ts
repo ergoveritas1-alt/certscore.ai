@@ -46,6 +46,32 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
         {
           assessmentStatus: "checked",
           evidenceState: "not_observed",
+          id: "accept_consent_control",
+          label: "Accept consent control",
+          note: "No accept consent control was observed while runtime tracking existed.",
+          criticalEvidence: {
+            retainedEvidence: {
+              bannerObserved: true
+            }
+          },
+          status: "Not observed"
+        },
+        {
+          assessmentStatus: "checked",
+          evidenceState: "not_observed",
+          id: "options_settings_preferences_control",
+          label: "Options / settings / preferences control",
+          note: "No options/settings/preferences control was observed while runtime tracking existed.",
+          criticalEvidence: {
+            retainedEvidence: {
+              bannerObserved: true
+            }
+          },
+          status: "Not observed"
+        },
+        {
+          assessmentStatus: "checked",
+          evidenceState: "not_observed",
           id: "cookie_notice_policy_availability",
           label: "Cookie notice / cookie policy availability",
           note: "No cookie notice was retained while runtime tracking existed.",
@@ -86,6 +112,24 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
           note: "Observed."
         },
         {
+          assessmentStatus: "checked",
+          evidenceState: "not_observed",
+          id: "retention_disclosure",
+          label: "Retention disclosure",
+          note: "Not confirmed from retained policy-surface evidence.",
+          status: "Not confirmed"
+        },
+        {
+          assessmentDirection: "review_signal",
+          assessmentStatus: "review_signal",
+          evidenceLabel: "Partial concern",
+          evidenceState: "not_observed",
+          id: "preference_withdrawal_control",
+          label: "Preference withdrawal control",
+          note: "Partial support from retained scanner evidence.",
+          status: "Not observed"
+        },
+        {
           assessmentStatus: "review_signal",
           evidenceState: "observed",
           id: "retargeting_behavioral_advertising_signal_observed",
@@ -107,11 +151,15 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
   assert.deepEqual(findings.map((finding) => finding.id), [
     "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking",
     "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
+    "regulatory_gap__gdpr_eprivacy__accept_consent_control",
+    "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control",
     "regulatory_gap__gdpr_eprivacy__cookie_notice_policy_availability",
     "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
     "regulatory_gap__gdpr_eprivacy__advertising_retargeting_vendor_signal_observed",
     "regulatory_gap__gdpr_eprivacy__analytics_vendor_observed",
-    "regulatory_gap__gdpr_eprivacy__retargeting_behavioral_advertising_signal_observed"
+    "regulatory_gap__gdpr_eprivacy__retargeting_behavioral_advertising_signal_observed",
+    "regulatory_gap__gdpr_eprivacy__retention_disclosure",
+    "regulatory_gap__gdpr_eprivacy__preference_withdrawal_control"
   ]);
   assert.deepEqual(
     findings.map((finding) => finding.evidenceDetails?.policyEvidenceDetails?.regulatoryConcernKind),
@@ -119,14 +167,23 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
       "potential_gap",
       "potential_gap",
       "potential_gap",
+      "potential_gap",
+      "potential_gap",
       "potential_concern",
       "potential_concern",
       "potential_concern",
-      "potential_concern"
+      "potential_concern",
+      "partial_rating",
+      "partial_rating"
     ]
   );
-  assert.equal(findings.at(-1)?.label, "Retargeting / behavioral advertising signal");
+  assert.equal(findings.at(-1)?.label, "Preference withdrawal control");
   assert.equal(findings[0]?.label, "Pre-consent third-party tracking");
+  assert.deepEqual(findings.slice(1, 4).map((finding) => finding.label), [
+    "Reject option",
+    "Accept consent control",
+    "Options / settings / preferences control"
+  ]);
   assert.equal(findings[0]?.severity, "high");
   assert.equal(findings[0]?.section, "Privacy & Tracking");
   assert.equal(findings[0]?.evidenceRefs[0], "gdpr-ref-1");
@@ -143,6 +200,96 @@ test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () =>
     findings.map((finding) => finding.shortSummary).join("\n"),
     /checklist potential concern/i
   );
+});
+
+test("buildRegulatoryGapTopFindings keeps consent-control review rows when CMP expectation is retained", () => {
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [
+        {
+          assessmentStatus: "gap_observed",
+          evidenceRefs: ["gdpr-ref-1"],
+          explanation: "Tracking fired before consent.",
+          id: "pre_consent_third_party_tracking",
+          label: "Pre-consent third-party tracking",
+          note: "Advertising and analytics before consent.",
+          regulatoryMapping: ["ePrivacy consent"]
+        },
+        {
+          assessmentStatus: "review_signal",
+          evidenceLabel: "Partial",
+          evidenceState: "not_observed",
+          id: "reject_all_path_availability",
+          label: "Reject / decline control",
+          note: "No structured reject control was retained.",
+          status: "Review signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              cmpSignalObserved: true,
+              consentSurfaceObserved: true,
+              preconsentCookieOrTrackingActivityObserved: true,
+              rejectControlObserved: false
+            }
+          }
+        },
+        {
+          assessmentStatus: "review_signal",
+          evidenceLabel: "Partial",
+          evidenceState: "not_observed",
+          id: "accept_consent_control",
+          label: "Accept consent control",
+          note: "No structured accept control was retained.",
+          status: "Review signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              acceptControlObserved: false,
+              cmpSignalObserved: true,
+              consentSurfaceObserved: true,
+              preconsentCookieOrTrackingActivityObserved: true
+            }
+          }
+        },
+        {
+          assessmentStatus: "review_signal",
+          evidenceLabel: "Partial",
+          evidenceState: "not_observed",
+          id: "options_settings_preferences_control",
+          label: "Options / settings / preferences control",
+          note: "No structured options/settings/preferences control was retained.",
+          status: "Review signal",
+          criticalEvidence: {
+            retainedEvidence: {
+              cmpSignalObserved: true,
+              consentSurfaceObserved: true,
+              optionsControlObserved: false,
+              preconsentCookieOrTrackingActivityObserved: true
+            }
+          }
+        },
+        {
+          assessmentStatus: "review_signal",
+          evidenceLabel: "Partial",
+          evidenceState: "not_observed",
+          id: "preference_withdrawal_control",
+          label: "Preference withdrawal control",
+          note: "Partial support from retained scanner evidence.",
+          status: "Review signal"
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(findings.map((finding) => finding.id), [
+    "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking",
+    "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
+    "regulatory_gap__gdpr_eprivacy__accept_consent_control",
+    "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control"
+  ]);
+  assert.deepEqual(findings.slice(1).map((finding) =>
+    finding.evidenceDetails?.policyEvidenceDetails?.regulatoryConcernKind
+  ), ["potential_gap", "potential_gap", "potential_gap"]);
 });
 
 test("buildRegulatoryGapTopFindings does not promote contextual-only pre-consent tracking", () => {

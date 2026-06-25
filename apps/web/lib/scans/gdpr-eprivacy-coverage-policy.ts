@@ -1,5 +1,6 @@
 import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
+import { classifyConsentControlLabel } from "@certscore/contracts";
 
 export type GdprEprivacyCoverageOutcomeStatus =
   | "Gap observed"
@@ -738,6 +739,127 @@ function hasSimpleFirstLayerCookieNoticeWithAcceptReject(input: GdprEprivacyCove
   );
 }
 
+function getStructuredFirstLayerChoiceControls(firstLayerChoices: Record<string, unknown> | null | undefined) {
+  return getObjectArray(firstLayerChoices, ["controls"]).filter((control) =>
+    getBoolean(control, ["visible"]) !== false
+  );
+}
+
+function getControlLabel(control: Record<string, unknown>) {
+  return getString(control, ["label", "labelText", "label_text", "text", "visibleText", "visible_text"]);
+}
+
+function isCanonicalOptionsControl(control: Record<string, unknown>) {
+  const actionType = getString(control, ["actionType", "action_type"]);
+  const classifierReasonCodes = getStringArray(control, ["classifierReasonCodes", "classifier_reason_codes"]);
+  const hasClassifierOptionsMetadata = classifierReasonCodes.includes("matched_options") ||
+    getString(control, ["matchedTerm", "matched_term"]) !== null;
+  if (
+    (actionType === "manage_preferences" || actionType === "save_preferences") &&
+    hasClassifierOptionsMetadata
+  ) {
+    return true;
+  }
+
+  const label = getControlLabel(control);
+  if (!label) {
+    return false;
+  }
+  const classification = classifyConsentControlLabel({
+    label,
+    hasConsentContext: true,
+    hasPreferenceContext: actionType === "save_preferences"
+  });
+  return classification.intent === "options" &&
+    (actionType === null || actionType === "manage_preferences" || actionType === "save_preferences");
+}
+
+function isCanonicalAcceptControl(control: Record<string, unknown>) {
+  const actionType = getString(control, ["actionType", "action_type"]);
+  const classifierReasonCodes = getStringArray(control, ["classifierReasonCodes", "classifier_reason_codes"]);
+  const hasClassifierAcceptMetadata = classifierReasonCodes.includes("matched_accept") ||
+    getString(control, ["matchedTerm", "matched_term"]) !== null;
+  if (actionType === "accept_all" && hasClassifierAcceptMetadata) {
+    return true;
+  }
+
+  const label = getControlLabel(control);
+  if (!label) {
+    return false;
+  }
+  const classification = classifyConsentControlLabel({
+    label,
+    hasConsentContext: true
+  });
+  return classification.intent === "accept" && (actionType === null || actionType === "accept_all");
+}
+
+function serializeConsentControlEvidence(control: Record<string, unknown>) {
+  return {
+    actionType: getString(control, ["actionType", "action_type"]),
+    classifierReasonCodes: getStringArray(control, ["classifierReasonCodes", "classifier_reason_codes"]),
+    label: getControlLabel(control),
+    matchedLocale: getString(control, ["matchedLocale", "matched_locale"]),
+    matchedTerm: getString(control, ["matchedTerm", "matched_term"]),
+    matchStrength: getString(control, ["matchStrength", "match_strength"]),
+    variant: getString(control, ["classifierVariant", "classifier_variant", "variant"])
+  };
+}
+
+function getFirstLayerAcceptControlEvidence(input: GdprEprivacyCoveragePolicyInput) {
+  const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const firstLayerChoices =
+    getObject(rejectPath, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
+    getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
+  const layerInspected =
+    getString(firstLayerChoices, ["layerInspected", "layer_inspected"]) ??
+    getString(rejectPath, ["layerInspected", "layer_inspected"]);
+  const controls = getStructuredFirstLayerChoiceControls(firstLayerChoices);
+  const acceptControls = controls.filter(isCanonicalAcceptControl);
+  const labels = uniqueStrings(acceptControls
+    .map((control) => getControlLabel(control))
+    .filter((label): label is string => Boolean(label)));
+
+  return {
+    acceptControlObserved: acceptControls.length > 0,
+    acceptControls: acceptControls.slice(0, 6).map(serializeConsentControlEvidence),
+    firstLayerChoices,
+    firstLayerCookieConsentBannerObserved: getExplicitFirstLayerGdprConsentBannerConfirmed(input),
+    layerInspected,
+    structuredControlInventoryRetained: controls.length > 0,
+    visibleAcceptLabels: labels,
+    visibleChoiceLabels: getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"])
+  };
+}
+
+function getFirstLayerOptionsControlEvidence(input: GdprEprivacyCoveragePolicyInput) {
+  const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const firstLayerChoices =
+    getObject(rejectPath, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
+    getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
+  const layerInspected =
+    getString(firstLayerChoices, ["layerInspected", "layer_inspected"]) ??
+    getString(rejectPath, ["layerInspected", "layer_inspected"]);
+  const controls = getStructuredFirstLayerChoiceControls(firstLayerChoices);
+  const optionsControls = controls.filter(isCanonicalOptionsControl);
+  const labels = uniqueStrings(optionsControls
+    .map((control) => getControlLabel(control))
+    .filter((label): label is string => Boolean(label)));
+
+  return {
+    firstLayerChoices,
+    firstLayerCookieConsentBannerObserved: getExplicitFirstLayerGdprConsentBannerConfirmed(input),
+    layerInspected,
+    optionsControlObserved: optionsControls.length > 0,
+    optionsControls: optionsControls.slice(0, 6).map(serializeConsentControlEvidence),
+    structuredControlInventoryRetained: controls.length > 0,
+    visibleChoiceLabels: getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]),
+    visibleOptionsLabels: labels
+  };
+}
+
 function getFirstLayerNoticeGateEvidence(input: GdprEprivacyCoveragePolicyInput) {
   const evidence = getFirstLayerConsentChoiceEvidence(input);
   const visibleChoiceLabels = evidence.visibleChoiceLabels;
@@ -1340,20 +1462,10 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
 }
 
 function deriveCmpFrameworkSignalOutcome(input: GdprEprivacyCoveragePolicyInput) {
-  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
-  const consentSummary = getObject(hybridRuntimeEvidence, ["consentSummary", "consent_summary"]);
-  const cmpVendorName = getString(input.snapshot, ["cmp_vendor_name", "cmpVendorName"]) ??
-    getString(input.runtimeArtifacts, ["cmp_vendor_name", "cmpVendorName"]);
-  const cmpSignals = getStringArray(input.runtimeArtifacts, [
-    "cmp_runtime_signal_labels",
-    "cmpRuntimeSignalLabels"
-  ]);
-  const cmpObserved =
-    Boolean(cmpVendorName) ||
-    cmpSignals.length > 0 ||
-    getBoolean(input.runtimeArtifacts, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true ||
-    getBoolean(hybridRuntimeEvidence, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true ||
-    getBoolean(consentSummary, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true;
+  const cmpEvidence = getCmpFrameworkSignalEvidence(input);
+  const cmpVendorName = cmpEvidence.cmpVendorName;
+  const cmpSignals = cmpEvidence.cmpSignals;
+  const cmpObserved = cmpEvidence.cmpObserved;
 
   if (cmpObserved) {
     return makeOutcome(
@@ -1393,6 +1505,29 @@ function deriveCmpFrameworkSignalOutcome(input: GdprEprivacyCoveragePolicyInput)
   }
 
   return null;
+}
+
+function getCmpFrameworkSignalEvidence(input: GdprEprivacyCoveragePolicyInput) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const consentSummary = getObject(hybridRuntimeEvidence, ["consentSummary", "consent_summary"]);
+  const cmpVendorName = getString(input.snapshot, ["cmp_vendor_name", "cmpVendorName"]) ??
+    getString(input.runtimeArtifacts, ["cmp_vendor_name", "cmpVendorName"]);
+  const cmpSignals = getStringArray(input.runtimeArtifacts, [
+    "cmp_runtime_signal_labels",
+    "cmpRuntimeSignalLabels"
+  ]);
+  const cmpObserved =
+    Boolean(cmpVendorName) ||
+    cmpSignals.length > 0 ||
+    getBoolean(input.runtimeArtifacts, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true ||
+    getBoolean(hybridRuntimeEvidence, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true ||
+    getBoolean(consentSummary, ["cmpFrameworkSignalObserved", "cmp_framework_signal_observed"]) === true;
+
+  return {
+    cmpObserved,
+    cmpSignals,
+    cmpVendorName
+  };
 }
 
 function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoveragePolicyInput) {
@@ -2194,6 +2329,7 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
 
 function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
+  const cmpEvidence = getCmpFrameworkSignalEvidence(input);
   const consentAuditEntry = getEventMetadata(input.events, "consent_audit_entry");
   const rejectDiagnostic = getEventMetadata(input.events, "reject_persistence_diagnostic");
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
@@ -2322,6 +2458,9 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
         ],
         {
           retainedEvidence: {
+            cmpSignalObserved: cmpEvidence.cmpObserved,
+            cmpVendorName: cmpEvidence.cmpVendorName,
+            consentSurfaceObserved: cmpEvidence.cmpObserved,
             firstLayerCookieConsentBannerObserved: false,
             gdprEprivacyConsentSurfaceObserved: "unconfirmed",
             preconsentCookieOrTrackingActivityObserved: true,
@@ -2510,6 +2649,8 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
         {
           retainedEvidence: {
             consentSurfaceObserved: true,
+            cmpSignalObserved: cmpEvidence.cmpObserved,
+            cmpVendorName: cmpEvidence.cmpVendorName,
             firstLayerCookieConsentBannerObserved: false,
             gdprEprivacyConsentSurfaceObserved: "unconfirmed",
             preconsentCookieOrTrackingActivityObserved: true,
@@ -2540,6 +2681,8 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
         ],
         retainedEvidence: {
           consentSurfaceObserved: true,
+          cmpSignalObserved: cmpEvidence.cmpObserved,
+          cmpVendorName: cmpEvidence.cmpVendorName,
           rejectControlObserved: false,
           rejectPathAvailabilityEvidenceRetained: false
         }
@@ -2549,6 +2692,404 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
 
   const limitedOutcome = makeConsentLifecycleLimitedOutcome(
     "reject_all_path_availability",
+    consentLifecycleLimitation
+  );
+  if (limitedOutcome) {
+    return limitedOutcome;
+  }
+
+  return null;
+}
+
+function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
+  const cmpEvidence = getCmpFrameworkSignalEvidence(input);
+  const evidence = getFirstLayerOptionsControlEvidence(input);
+  const noticeGateEvidence = getFirstLayerNoticeGateEvidence(input);
+  const preconsentCookieOrTrackingActivityObserved = hasObservedPreconsentCookieOrTrackingActivity(input);
+  const evidenceRefs = [
+    "Evidence: first-layer options/settings/preferences control",
+    ...evidence.visibleOptionsLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
+    evidence.layerInspected ? `Layer inspected: ${evidence.layerInspected}` : null
+  ].filter((value): value is string => Boolean(value));
+
+  if (noticeGateEvidence.gateObserved) {
+    return makeOutcome(
+      "options_settings_preferences_control",
+      "Gap observed",
+      "The retained first-layer privacy notice did not display a structured options, settings, or preferences control for cookie-consent choices.",
+      [
+        "Evidence: first-layer legal/privacy notice gate",
+        ...noticeGateEvidence.visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
+        noticeGateEvidence.layerInspected ? `Layer inspected: ${noticeGateEvidence.layerInspected}` : null
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          firstLayerPrivacyNoticeGateObserved: true,
+          legalPrivacyNoticeGateObserved: true,
+          optionsControlObserved: false,
+          privacyNoticeGateWithPrivacyChoicesObserved: noticeGateEvidence.privacyNoticeGateWithPrivacyChoicesObserved,
+          visibleChoiceLabels: noticeGateEvidence.visibleChoiceLabels
+        }
+      }
+    );
+  }
+
+  if (evidence.optionsControlObserved) {
+    return makeOutcome(
+      "options_settings_preferences_control",
+      "Observed",
+      "A structured options, settings, or preferences control was observed on the retained first-layer consent surface.",
+      evidenceRefs,
+      {
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
+          layerInspected: evidence.layerInspected,
+          optionsControlObserved: true,
+          optionsControls: evidence.optionsControls,
+          structuredControlInventoryRetained: evidence.structuredControlInventoryRetained,
+          visibleOptionsLabels: compactArray(evidence.visibleOptionsLabels, 5)
+        }
+      }
+    );
+  }
+
+  if (evidence.firstLayerCookieConsentBannerObserved === false) {
+    if (!preconsentCookieOrTrackingActivityObserved) {
+      return makeOutcome(
+        "options_settings_preferences_control",
+        "Not observed",
+        "No first-layer GDPR/ePrivacy consent banner was retained, and no non-essential cookie/tracking activity was observed in the tested context. Options/settings/preferences control availability is therefore treated as neutral for this scan.",
+        [
+          "Evidence: no confirmed first-layer cookie consent banner",
+          "Evidence: no retained non-essential cookie/tracking activity"
+        ],
+        {
+          retainedEvidence: {
+            firstLayerCookieConsentBannerObserved: false,
+            gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+            optionsControlObserved: false,
+            preconsentCookieOrTrackingActivityObserved: false,
+            reason: "no_banner_and_no_nonessential_activity"
+          }
+        }
+      );
+    }
+
+    return makeOutcome(
+      "options_settings_preferences_control",
+      "Review signal",
+      "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer options, settings, or preferences control.",
+      [
+        "Evidence: retained pre-consent cookie/tracking activity",
+        "Evidence: no structured first-layer options/settings/preferences control retained",
+        "Reason: no_confirmed_first_layer_cookie_consent_banner"
+      ],
+      {
+        retainedEvidence: {
+          cmpSignalObserved: cmpEvidence.cmpObserved,
+          cmpVendorName: cmpEvidence.cmpVendorName,
+          consentSurfaceObserved: cmpEvidence.cmpObserved,
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          optionsControlObserved: false,
+          optionsControlEvidenceRetained: false,
+          preconsentCookieOrTrackingActivityObserved: true,
+          reason: "no_options_control_retained_with_preconsent_activity"
+        }
+      }
+    );
+  }
+
+  if (evidence.firstLayerCookieConsentBannerObserved !== true) {
+    return makeOutcome(
+      "options_settings_preferences_control",
+      "Not confirmed",
+      "A first-layer GDPR/ePrivacy cookie consent banner was not confirmed, so CertScore did not confirm an options/settings/preferences control for cookie-consent choices.",
+      [
+        "Evidence: consent surface demotion",
+        "Reason: no_confirmed_first_layer_cookie_consent_banner"
+      ],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanner.firstLayerCookieConsentBannerObserved",
+            true,
+            evidence.firstLayerCookieConsentBannerObserved,
+            "Required before CertScore can evaluate first-layer options/settings/preferences control availability."
+          )
+        ],
+        retainedEvidence: {
+          cmpSignalObserved: cmpEvidence.cmpObserved,
+          cmpVendorName: cmpEvidence.cmpVendorName,
+          firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          optionsControlObserved: false,
+          reason: "no_confirmed_first_layer_cookie_consent_banner"
+        }
+      }
+    );
+  }
+
+  if (evidence.structuredControlInventoryRetained) {
+    return makeOutcome(
+      "options_settings_preferences_control",
+      "Gap observed",
+      "A first-layer GDPR/ePrivacy cookie consent surface was confirmed, but retained structured controls did not include an options, settings, or preferences control.",
+      [
+        "Evidence: confirmed first-layer GDPR/ePrivacy consent surface",
+        "Evidence: structured first-layer control inventory retained",
+        "Result: no options/settings/preferences control retained"
+      ],
+      {
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: true,
+          layerInspected: evidence.layerInspected,
+          optionsControlObserved: false,
+          structuredControlInventoryRetained: true,
+          visibleChoiceLabels: compactArray(evidence.visibleChoiceLabels, 8)
+        }
+      }
+    );
+  }
+
+  if (
+    getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
+    getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true
+  ) {
+    return makeOutcome(
+      "options_settings_preferences_control",
+      preconsentCookieOrTrackingActivityObserved ? "Review signal" : "Not observed",
+      preconsentCookieOrTrackingActivityObserved
+        ? "CertScore retained a consent/CMP surface signal and pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer options, settings, or preferences control."
+        : "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer options, settings, or preferences control. CertScore does not infer options availability from screenshot pixels.",
+      [
+        "Evidence: consent surface observed",
+        ...(preconsentCookieOrTrackingActivityObserved ? ["Evidence: retained pre-consent cookie/tracking activity"] : []),
+        "Evidence: no structured first-layer options/settings/preferences control retained"
+      ],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanner.firstLayerConsentChoices.controls",
+            "structured first-layer controls classified through canonical consent-control registry",
+            getRawValue(evidence.firstLayerChoices, ["controls"]) ?? "missing",
+            "Required to evaluate options/settings/preferences control availability without screenshot-only inference."
+          )
+        ],
+        retainedEvidence: {
+          consentSurfaceObserved: true,
+          cmpSignalObserved: cmpEvidence.cmpObserved,
+          cmpVendorName: cmpEvidence.cmpVendorName,
+          optionsControlObserved: false,
+          optionsControlEvidenceRetained: false,
+          preconsentCookieOrTrackingActivityObserved
+        }
+      }
+    );
+  }
+
+  const limitedOutcome = makeConsentLifecycleLimitedOutcome(
+    "options_settings_preferences_control",
+    consentLifecycleLimitation
+  );
+  if (limitedOutcome) {
+    return limitedOutcome;
+  }
+
+  return null;
+}
+
+function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
+  const cmpEvidence = getCmpFrameworkSignalEvidence(input);
+  const evidence = getFirstLayerAcceptControlEvidence(input);
+  const noticeGateEvidence = getFirstLayerNoticeGateEvidence(input);
+  const preconsentCookieOrTrackingActivityObserved = hasObservedPreconsentCookieOrTrackingActivity(input);
+  const evidenceRefs = [
+    "Evidence: first-layer accept consent control",
+    ...evidence.visibleAcceptLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
+    evidence.layerInspected ? `Layer inspected: ${evidence.layerInspected}` : null
+  ].filter((value): value is string => Boolean(value));
+
+  if (noticeGateEvidence.gateObserved) {
+    return makeOutcome(
+      "accept_consent_control",
+      "Gap observed",
+      "The retained first-layer privacy notice did not display a structured accept, accept-all, or allow-all consent control.",
+      [
+        "Evidence: first-layer legal/privacy notice gate",
+        ...noticeGateEvidence.visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
+        noticeGateEvidence.layerInspected ? `Layer inspected: ${noticeGateEvidence.layerInspected}` : null
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          acceptControlObserved: false,
+          firstLayerPrivacyNoticeGateObserved: true,
+          legalPrivacyNoticeGateObserved: true,
+          privacyNoticeGateWithPrivacyChoicesObserved: noticeGateEvidence.privacyNoticeGateWithPrivacyChoicesObserved,
+          visibleChoiceLabels: noticeGateEvidence.visibleChoiceLabels
+        }
+      }
+    );
+  }
+
+  if (evidence.acceptControlObserved) {
+    return makeOutcome(
+      "accept_consent_control",
+      "Observed",
+      "A structured accept, accept-all, or allow-all consent control was observed on the retained first-layer consent surface.",
+      evidenceRefs,
+      {
+        retainedEvidence: {
+          acceptControlObserved: true,
+          acceptControls: evidence.acceptControls,
+          firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
+          layerInspected: evidence.layerInspected,
+          structuredControlInventoryRetained: evidence.structuredControlInventoryRetained,
+          visibleAcceptLabels: compactArray(evidence.visibleAcceptLabels, 5)
+        }
+      }
+    );
+  }
+
+  if (evidence.firstLayerCookieConsentBannerObserved === false) {
+    if (!preconsentCookieOrTrackingActivityObserved) {
+      return makeOutcome(
+        "accept_consent_control",
+        "Not observed",
+        "No first-layer GDPR/ePrivacy consent banner was retained, and no non-essential cookie/tracking activity was observed in the tested context. Accept-control availability is therefore treated as neutral for this scan.",
+        [
+          "Evidence: no confirmed first-layer cookie consent banner",
+          "Evidence: no retained non-essential cookie/tracking activity"
+        ],
+        {
+          retainedEvidence: {
+            acceptControlObserved: false,
+            firstLayerCookieConsentBannerObserved: false,
+            gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+            preconsentCookieOrTrackingActivityObserved: false,
+            reason: "no_banner_and_no_nonessential_activity"
+          }
+        }
+      );
+    }
+
+    return makeOutcome(
+      "accept_consent_control",
+      "Review signal",
+      "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer accept, accept-all, or allow-all control.",
+      [
+        "Evidence: retained pre-consent cookie/tracking activity",
+        "Evidence: no structured first-layer accept consent control retained",
+        "Reason: no_confirmed_first_layer_cookie_consent_banner"
+      ],
+      {
+        retainedEvidence: {
+          acceptControlObserved: false,
+          acceptControlEvidenceRetained: false,
+          cmpSignalObserved: cmpEvidence.cmpObserved,
+          cmpVendorName: cmpEvidence.cmpVendorName,
+          consentSurfaceObserved: cmpEvidence.cmpObserved,
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          preconsentCookieOrTrackingActivityObserved: true,
+          reason: "no_accept_control_retained_with_preconsent_activity"
+        }
+      }
+    );
+  }
+
+  if (evidence.firstLayerCookieConsentBannerObserved !== true) {
+    return makeOutcome(
+      "accept_consent_control",
+      "Not confirmed",
+      "A first-layer GDPR/ePrivacy cookie consent banner was not confirmed, so CertScore did not confirm an accept consent control for cookie-consent choices.",
+      [
+        "Evidence: consent surface demotion",
+        "Reason: no_confirmed_first_layer_cookie_consent_banner"
+      ],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanner.firstLayerCookieConsentBannerObserved",
+            true,
+            evidence.firstLayerCookieConsentBannerObserved,
+            "Required before CertScore can evaluate first-layer accept-control availability."
+          )
+        ],
+        retainedEvidence: {
+          acceptControlObserved: false,
+          cmpSignalObserved: cmpEvidence.cmpObserved,
+          cmpVendorName: cmpEvidence.cmpVendorName,
+          firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+          reason: "no_confirmed_first_layer_cookie_consent_banner"
+        }
+      }
+    );
+  }
+
+  if (evidence.structuredControlInventoryRetained) {
+    return makeOutcome(
+      "accept_consent_control",
+      "Gap observed",
+      "A first-layer GDPR/ePrivacy cookie consent surface was confirmed, but retained structured controls did not include an accept, accept-all, or allow-all control.",
+      [
+        "Evidence: confirmed first-layer GDPR/ePrivacy consent surface",
+        "Evidence: structured first-layer control inventory retained",
+        "Result: no accept consent control retained"
+      ],
+      {
+        retainedEvidence: {
+          acceptControlObserved: false,
+          firstLayerCookieConsentBannerObserved: true,
+          layerInspected: evidence.layerInspected,
+          structuredControlInventoryRetained: true,
+          visibleChoiceLabels: compactArray(evidence.visibleChoiceLabels, 8)
+        }
+      }
+    );
+  }
+
+  if (
+    getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
+    getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true
+  ) {
+    return makeOutcome(
+      "accept_consent_control",
+      preconsentCookieOrTrackingActivityObserved ? "Review signal" : "Not observed",
+      preconsentCookieOrTrackingActivityObserved
+        ? "CertScore retained a consent/CMP surface signal and pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer accept consent control."
+        : "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer accept consent control. CertScore does not infer accept availability from screenshot pixels.",
+      [
+        "Evidence: consent surface observed",
+        ...(preconsentCookieOrTrackingActivityObserved ? ["Evidence: retained pre-consent cookie/tracking activity"] : []),
+        "Evidence: no structured first-layer accept consent control retained"
+      ],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanner.firstLayerConsentChoices.controls",
+            "structured first-layer controls classified through canonical consent-control registry",
+            getRawValue(evidence.firstLayerChoices, ["controls"]) ?? "missing",
+            "Required to evaluate accept-control availability without screenshot-only inference."
+          )
+        ],
+        retainedEvidence: {
+          acceptControlObserved: false,
+          acceptControlEvidenceRetained: false,
+          cmpSignalObserved: cmpEvidence.cmpObserved,
+          cmpVendorName: cmpEvidence.cmpVendorName,
+          consentSurfaceObserved: true,
+          preconsentCookieOrTrackingActivityObserved
+        }
+      }
+    );
+  }
+
+  const limitedOutcome = makeConsentLifecycleLimitedOutcome(
+    "accept_consent_control",
     consentLifecycleLimitation
   );
   if (limitedOutcome) {
@@ -6871,6 +7412,8 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveRetargetingBehavioralAdvertisingOutcome(input),
     deriveAnalyticsVendorObservedOutcome(input),
     deriveRejectPathOutcome(input),
+    deriveAcceptConsentControlOutcome(input),
+    deriveOptionsSettingsPreferencesControlOutcome(input),
     deriveConsentChoiceQualityOutcome(input),
     derivePostRejectOutcome(input),
     derivePreferenceWithdrawalOutcome(input),

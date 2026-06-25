@@ -23,6 +23,8 @@ const RISK_SIGNAL_ROW_IDS = new Set([
 
 const POSITIVE_WHEN_OBSERVED_ROW_IDS = new Set([
   "consent_surface_observed",
+  "accept_consent_control",
+  "options_settings_preferences_control",
   "reject_all_path_availability",
   "cookie_notice_policy_availability",
   "privacy_notice_availability",
@@ -380,7 +382,14 @@ export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem):
   if (POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS.has(item.id)) {
     return "positive_signal";
   }
-  if (item.id === "reject_all_path_availability" && hasConsentSurfaceExpectation(item)) {
+  if (
+    (
+      item.id === "reject_all_path_availability" ||
+      item.id === "accept_consent_control" ||
+      item.id === "options_settings_preferences_control"
+    ) &&
+    hasConsentSurfaceExpectation(item)
+  ) {
     return "potential_concern";
   }
   if (

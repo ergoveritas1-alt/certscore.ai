@@ -303,10 +303,91 @@ test("classifies Google Tag Manager as tag management", () => {
       type: "script",
       url: "https://www.googletagmanager.com/gtm.js?id=GTM-ABC123",
     },
+    {
+      type: "script",
+      url: "https://googletagmanager.com/gtm.js?id=GTM-XYZ987",
+      hostname: "googletagmanager.com",
+    },
   ]);
 
-  assert.equal(observations[0]?.product, "Google Tag Manager");
-  assert.equal(observations[0]?.purpose, "tag_management");
+  const gtm = observations.find((item) => item.product === "Google Tag Manager");
+  assert.ok(gtm);
+  assert.equal(gtm.purpose, "tag_management");
+  assert.equal(resolveVendorDisplayCategory(gtm), "Tag management");
+});
+
+test("classifies LinkedIn Insight Tag, Ads Pixel, and cookies as advertising", () => {
+  const observations = resolveVendorObservations([
+    request("https://snap.licdn.com/li.lms-analytics/insight.min.js", "snap.licdn.com"),
+    request("https://px.ads.linkedin.com/collect/?pid=123", "px.ads.linkedin.com"),
+    {
+      type: "cookie",
+      cookieName: "li_sugr",
+      hostname: ".linkedin.com",
+    },
+  ]);
+
+  const insight = observations.find((item) => item.product === "LinkedIn Insight Tag");
+  const adsPixel = observations.find((item) => item.product === "LinkedIn Ads Pixel");
+
+  assert.ok(insight);
+  assert.equal(insight.purpose, "advertising");
+  assert.equal(resolveVendorDisplayCategory(insight), "Advertising");
+  assert.ok(adsPixel);
+  assert.equal(adsPixel.purpose, "advertising");
+  assert.equal(resolveVendorDisplayCategory(adsPixel), "Advertising");
+  assert.equal(insight.matchedCookieNames.includes("li_sugr"), true);
+});
+
+test("classifies HubSpot runtime families without collapsing consent tooling into marketing", () => {
+  const observations = resolveVendorObservations([
+    request("https://js.hsadspixel.net/fb.js", "js.hsadspixel.net"),
+    request("https://js-eu1.hs-scripts.com/123456.js", "js-eu1.hs-scripts.com"),
+    request("https://forms-eu1.hscollectedforms.net/collected-forms/v1/config/json", "forms-eu1.hscollectedforms.net"),
+    request("https://api-eu1.hubapi.com/collector/v3/events", "api-eu1.hubapi.com"),
+    request("https://js-eu1.hs-banner.com/banner.js", "js-eu1.hs-banner.com"),
+    request("https://js-eu1.hs-analytics.net/analytics/123456.js", "js-eu1.hs-analytics.net"),
+  ]);
+
+  assertResolved(observations, "HubSpot", "HubSpot Ads Pixel", "advertising");
+  assertResolved(observations, "HubSpot", "HubSpot Scripts", "analytics");
+  assertResolved(observations, "HubSpot", "HubSpot Forms", "analytics");
+  assertResolved(observations, "HubSpot", "HubSpot API", "analytics");
+  assertResolved(observations, "HubSpot", "HubSpot Banner", "consent_management");
+  assertResolved(observations, "HubSpot", "HubSpot Analytics", "analytics");
+
+  const banner = observations.find((item) => item.product === "HubSpot Banner");
+  const scripts = observations.find((item) => item.product === "HubSpot Scripts");
+  const adsPixel = observations.find((item) => item.product === "HubSpot Ads Pixel");
+
+  assert.ok(banner);
+  assert.equal(resolveVendorDisplayCategory(banner), "Cookie compliance");
+  assert.ok(scripts);
+  assert.equal(resolveVendorDisplayCategory(scripts), "Marketing automation");
+  assert.ok(adsPixel);
+  assert.equal(resolveVendorDisplayCategory(adsPixel), "Advertising");
+
+  const analytics = observations.find((item) => item.product === "HubSpot Analytics");
+  assert.ok(analytics);
+  assert.equal(resolveVendorDisplayCategory(analytics), "Analytics");
+});
+
+test("classifies PostHog EU assets and first-party PostHog cookies as product analytics", () => {
+  const observations = resolveVendorObservations([
+    request("https://eu-assets.i.posthog.com/static/array.js", "eu-assets.i.posthog.com"),
+    {
+      type: "cookie",
+      cookieName: "ph_phc_project_posthog",
+      hostname: ".example.com",
+    },
+  ]);
+
+  const posthog = observations.find((item) => item.vendor === "PostHog");
+  assert.ok(posthog);
+  assert.equal(posthog.purpose, "analytics");
+  assert.equal(posthog.regulatoryRelevance.includes("product_analytics"), true);
+  assert.equal(posthog.matchedCookieNames.includes("ph_phc_project_posthog"), true);
+  assert.equal(resolveVendorDisplayCategory(posthog), "Analytics");
 });
 
 test("classifies Akamai cookies as security not tracking", () => {
@@ -444,7 +525,7 @@ test("resolves repeated advertising and measurement endpoint families", () => {
   assert.equal(brightLine.purpose, "advertising");
   assert.equal(brightLine.confidence, 0.88);
   assertResolved(observations, "DoubleVerify", "DoubleVerify", "advertising");
-  assertResolved(observations, "LinkedIn", "LinkedIn Insight Tag", "advertising");
+  assertResolved(observations, "LinkedIn", "LinkedIn Ads Pixel", "advertising");
   assertResolved(observations, "Amazon", "Amazon Ads", "advertising");
   assertResolved(observations, "Quantcast", "Quantcast Measure", "advertising");
   assertResolved(observations, "Attentive", "Attentive", "analytics");

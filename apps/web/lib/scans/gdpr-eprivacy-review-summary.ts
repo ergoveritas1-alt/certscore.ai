@@ -36,7 +36,9 @@ export type GdprEprivacyReviewSummary = {
 
 const CUSTOMER_LABELS: Record<string, string> = {
   accessibility_consent_controls: "Consent control accessibility",
+  accept_consent_control: "Accept consent control",
   consent_surface_observed: "Consent banner / preference surface",
+  options_settings_preferences_control: "Options / settings / preferences control",
   cross_border_endpoint_review: "Cross-border endpoint review",
   post_reject_tracking_reduction: "Tracking after refusal",
   pre_consent_cookies_storage: "Cookies or storage before consent",
@@ -349,6 +351,30 @@ export function deriveGdprEprivacyEvidenceCard(item: GdprEprivacyCoverageCheckli
         interactionPath: "Observed consent surface",
         whatCertScoreObserved: defaultObserved,
         whyThisMatters: "A meaningful refusal path is a key part of consent-choice review."
+      };
+    case "accept_consent_control":
+      return {
+        ...common,
+        evidenceType: ["Consent control evidence", "Runtime browser scan"],
+        humanVerificationSteps: [
+          "Confirm the visible accept control is part of the first-layer cookie or consent surface.",
+          "Retest regional and device variants of the consent surface."
+        ],
+        interactionPath: "Observed consent surface",
+        whatCertScoreObserved: defaultObserved,
+        whyThisMatters: "Accept-control availability helps compare the first-layer consent choices retained by the scanner."
+      };
+    case "options_settings_preferences_control":
+      return {
+        ...common,
+        evidenceType: ["Consent control evidence", "Runtime browser scan"],
+        humanVerificationSteps: [
+          "Confirm the visible options/settings/preferences control opens meaningful cookie or consent choices.",
+          "Retest regional and device variants of the consent surface."
+        ],
+        interactionPath: "Observed consent surface",
+        whatCertScoreObserved: defaultObserved,
+        whyThisMatters: "A meaningful options or preferences path helps users review cookie and purpose choices before making a consent decision."
       };
     case "post_reject_tracking_reduction":
       return {

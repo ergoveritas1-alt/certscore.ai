@@ -21,6 +21,8 @@ import {
   type RuntimeEvidenceEvent,
   type ScanModuleRun,
   type ScreenshotArtifact,
+  classifyConsentControlLabel,
+  type ConsentControlLabelClassification,
 } from "@certscore/contracts";
 import { resolveEndpointGeography, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import { writeFile } from "node:fs/promises";
@@ -2420,6 +2422,7 @@ async function classifyActionCandidates(
       privacyOptOutClassification?.method ?? classification.method,
       dom,
       screenshot,
+      classification.metadata,
     );
   });
 
@@ -3017,21 +3020,28 @@ export function textFallbackConsentControlAction(label: string, scenario?: Conse
   actionType: ConsentActionType;
   confidence: number;
 } | undefined {
-  const normalized = label.toLowerCase().replace(/\s+/g, " ").trim();
-  if (/^(do not sell or share my personal information|do not sell or share|do not sell my personal information|your privacy choices|your data privacy rights|data privacy rights|your state privacy rights|state privacy rights|your us state privacy rights|us state privacy rights)$/.test(normalized)) {
-    return { actionType: "do_not_sell_share", confidence: 0.88 };
-  }
-  if (/^(review all privacy and ad settings|privacy settings|cookie settings|privacy preferences|manage preferences)$/.test(normalized)) {
+  const classification = classifyConsentControlLabel({
+    label,
+    hasConsentContext: true,
+    hasPreferenceContext: true,
+  });
+  if (classification.intent === "privacy_opt_out") {
     return {
-      actionType: scenario === "privacy_opt_out_flow" ? "do_not_sell_share" : "manage_preferences",
-      confidence: scenario === "privacy_opt_out_flow" ? 0.86 : 0.84,
+      actionType: "do_not_sell_share",
+      confidence: /^review all privacy and ad settings$/i.test(label.trim()) ? 0.86 : 0.88,
     };
   }
-  if (/^(reject all|decline all|only necessary|necessary only|essential only)$/.test(normalized)) {
-    return { actionType: "reject_all", confidence: 0.9 };
+  if (classification.intent === "options") {
+    return {
+      actionType: scenario === "privacy_opt_out_flow" ? "do_not_sell_share" : "manage_preferences",
+      confidence: scenario === "privacy_opt_out_flow" ? 0.86 : Math.max(classification.confidence, 0.84),
+    };
   }
-  if (/^(accept all|allow all|accept cookies|i agree)$/.test(normalized)) {
-    return { actionType: "accept_all", confidence: 0.9 };
+  if (classification.intent === "reject") {
+    return { actionType: "reject_all", confidence: Math.max(classification.confidence, 0.9) };
+  }
+  if (classification.intent === "accept") {
+    return { actionType: "accept_all", confidence: Math.max(classification.confidence, 0.9) };
   }
   return undefined;
 }
@@ -3354,6 +3364,7 @@ function actionCandidateFromRaw(
   detectionMethod: ConsentActionCandidate["detectionMethod"],
   dom: DomSnapshotArtifact,
   screenshot: ScreenshotArtifact | undefined,
+  metadata?: ConsentControlLabelClassification,
 ): ConsentActionCandidate {
   const screenshotRef = artifactRefFromOptionalScreenshot(screenshot);
   return {
@@ -3368,6 +3379,11 @@ function actionCandidateFromRaw(
     visible: raw.visible,
     enabled: raw.enabled,
     confidence,
+    matchedTerm: metadata?.matchedTerm,
+    matchedLocale: metadata?.matchedLocale,
+    matchStrength: metadata?.matchStrength,
+    classifierReasonCodes: metadata?.reasonCodes ?? [],
+    classifierVariant: metadata?.variant,
     detectionMethod,
     shouldClick: confidence >= 0.78 && actionType !== "unknown",
     evidenceRefs: [{ refId: `ref_${dom.artifactId}_${raw.candidateIndex}`, artifactId: dom.artifactId, eventType: "dom_snapshot", label: raw.labelText, excerpt: raw.labelText }],
@@ -3380,34 +3396,19 @@ function classifyControlText(label: string, ariaLabel?: string, contextTextExcer
   actionType: ConsentActionType;
   confidence: number;
   method: ConsentActionCandidate["detectionMethod"];
+  metadata: ConsentControlLabelClassification;
 } {
-  const value = `${label} ${ariaLabel ?? ""}`.toLowerCase();
-  const context = `${contextTextExcerpt ?? ""}`.toLowerCase();
-  if (/reject all|reject optional|reject non[-\s]?essential|do not accept|decline all|decline optional|decline non[-\s]?essential|deny all|deny optional|deny non[-\s]?essential|refuse all|refuse optional|refuse non[-\s]?essential|only necessary|necessary only|only essential|essential only|accept (?:essential|required|necessary)(?: only)?/.test(value)) {
-    return { actionType: "reject_all", confidence: 0.91, method: "deterministic_text" };
-  }
-  if (/^opt out$|^opt-out$/.test(label) && /privacy|cookie|advertising|targeted|sell|share|consent|data processing/.test(context)) {
-    return { actionType: "reject_all", confidence: 0.86, method: "deterministic_text" };
-  }
-  if (/^reject$|^decline$|^deny$|^refuse$/.test(label)) {
-    return { actionType: "reject_all", confidence: 0.9, method: "deterministic_text" };
-  }
-  if (/accept all|allow all|agree to all|accept cookies|i agree/.test(value)) {
-    return { actionType: "accept_all", confidence: 0.91, method: "deterministic_text" };
-  }
-  if (/^accept$|^agree$|^consent$/.test(label)) {
-    return { actionType: "accept_all", confidence: 0.8, method: "deterministic_text" };
-  }
-  if (/(?:save|confirm|submit|apply)(?: my)? (?:choice|choices|preferences)/.test(value)) {
-    return { actionType: "save_preferences", confidence: 0.88, method: "deterministic_text" };
-  }
-  if (/manage preferences|cookie settings|privacy settings|privacy preference|preference center|\bsettings\b|customize|preferences|more options|choices/.test(value)) {
-    return { actionType: "manage_preferences", confidence: 0.84, method: "deterministic_text" };
-  }
-  if (/continue/.test(value)) {
-    return { actionType: "unknown", confidence: 0.42, method: "deterministic_text" };
-  }
-  return { actionType: "unknown", confidence: 0.2, method: "deterministic_text" };
+  const metadata = classifyConsentControlLabel({
+    label,
+    ariaLabel,
+    contextText: contextTextExcerpt,
+  });
+  return {
+    actionType: consentActionTypeFromControlIntent(metadata),
+    confidence: metadata.confidence,
+    method: "deterministic_text",
+    metadata,
+  };
 }
 
 export function classifyPrivacyOptOutControl(label: string, ariaLabel?: string, contextTextExcerpt?: string): {
@@ -3415,13 +3416,40 @@ export function classifyPrivacyOptOutControl(label: string, ariaLabel?: string, 
   confidence: number;
   method: ConsentActionCandidate["detectionMethod"];
 } | undefined {
-  const value = `${label} ${ariaLabel ?? ""}`.toLowerCase();
-  const context = `${contextTextExcerpt ?? ""}`.toLowerCase();
-  if (/do not sell|do not share|do not sell or share|your privacy choices|privacy and ad settings|review all privacy|(?:your )?(?:data |state |us state )?privacy rights|opt out|opt-out|exclude my data|do not use my data|limit use of my sensitive/.test(value) &&
-    /privacy|advertising|targeted|sell|share|data processing|personal information/.test(`${value} ${context}`)) {
-    return { actionType: "do_not_sell_share", confidence: 0.88, method: "deterministic_text" };
+  const metadata = classifyConsentControlLabel({
+    label,
+    ariaLabel,
+    contextText: contextTextExcerpt,
+    hasConsentContext: true,
+  });
+  if (metadata.intent === "privacy_opt_out") {
+    return {
+      actionType: "do_not_sell_share",
+      confidence: 0.88,
+      method: "deterministic_text",
+    };
   }
   return undefined;
+}
+
+function consentActionTypeFromControlIntent(
+  classification: ConsentControlLabelClassification,
+): ConsentActionType {
+  switch (classification.intent) {
+    case "accept":
+      return "accept_all";
+    case "reject":
+      return "reject_all";
+    case "options":
+      if (classification.variant === "save_preferences") {
+        return "save_preferences";
+      }
+      return "manage_preferences";
+    case "privacy_opt_out":
+      return "do_not_sell_share";
+    case "unknown":
+      return "unknown";
+  }
 }
 
 async function openCmpSurfaceIfAvailable(page: Page, deadlineAtMs?: number): Promise<CmpSurfaceProbeDiagnostic> {
@@ -3630,32 +3658,38 @@ export function oneTrustHiddenDiagnosticLabelAction(
   label: string,
   targetActionType: ConsentActionType,
 ): { actionType: Extract<ConsentActionType, "accept_all" | "reject_all" | "manage_preferences" | "save_preferences" | "do_not_sell_share">; confidence: number } | undefined {
-  const normalized = label.toLowerCase().replace(/\s+/g, " ").trim();
-  if (targetActionType === "accept_all" && /^(accept|allow all|accept all|accept cookies|i agree)$/.test(normalized)) {
+  const classification = classifyConsentControlLabel({
+    label,
+    hasConsentContext: true,
+    hasPreferenceContext: true,
+  });
+  if (targetActionType === "accept_all" && classification.intent === "accept") {
     return { actionType: "accept_all", confidence: 0.88 };
   }
   if (
     (targetActionType === "accept_all" || targetActionType === "reject_all") &&
-    /^(privacy center|privacy settings|privacy preferences|cookie settings|manage preferences)$/.test(normalized)
+    classification.intent === "options"
   ) {
-    return { actionType: "manage_preferences", confidence: 0.84 };
+    return {
+      actionType: classification.variant === "save_preferences" ? "save_preferences" : "manage_preferences",
+      confidence: classification.variant === "save_preferences" ? 0.82 : 0.84,
+    };
   }
-  if (targetActionType === "reject_all" &&
-    /^(reject|accept essential|reject all|reject optional|decline all|deny all|only necessary|necessary only|essential only)$/.test(normalized)) {
+  if (targetActionType === "reject_all" && classification.intent === "reject") {
     return { actionType: "reject_all", confidence: 0.86 };
   }
-  if (targetActionType === "reject_all" && /^(confirm my choices|save choices|save preferences|apply)$/.test(normalized)) {
-    return { actionType: "save_preferences", confidence: 0.82 };
+  if (targetActionType === "do_not_sell_share" && /^your privacy choices$/i.test(label.trim())) {
+    return { actionType: "manage_preferences", confidence: 0.78 };
   }
   if (
     targetActionType === "do_not_sell_share" &&
-    /^(do not sell|do not sell my personal information|do not sell or share|do not share|opt out|opt-out|opt out form|opt-out form|opt out of sale|privacy choices|privacy request|data privacy rights|your data privacy rights|state privacy rights|your state privacy rights|us state privacy rights|your us state privacy rights|submit data request|data request|submit request)$/.test(normalized)
+    classification.intent === "privacy_opt_out"
   ) {
     return { actionType: "do_not_sell_share", confidence: 0.8 };
   }
   if (
     targetActionType === "do_not_sell_share" &&
-    /^(privacy center|privacy settings|privacy preferences|cookie settings|manage preferences|your privacy choices)$/.test(normalized)
+    classification.intent === "options"
   ) {
     return { actionType: "manage_preferences", confidence: 0.78 };
   }

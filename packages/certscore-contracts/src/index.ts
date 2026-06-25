@@ -1,4 +1,5 @@
 import { z } from "zod";
+export * from "./consent-control-label-classifier";
 
 export const directVsInferredSchema = z.enum([
   "direct",
@@ -8,6 +9,9 @@ export const directVsInferredSchema = z.enum([
 ]);
 
 export const confidenceSchema = z.number().min(0).max(1);
+export const consentControlLocaleSchema = z.enum(["en", "de", "fr"]);
+export const consentControlMatchStrengthSchema = z.enum(["direct", "equivalent", "contextual", "weak"]);
+export const consentControlClassifierReasonCodesSchema = z.array(z.string().max(80)).max(16).optional();
 
 export const endpointAttributionStatusSchema = z.enum([
   "resolved",
@@ -368,6 +372,11 @@ export const consentUiObservationSchema = z.object({
     role: z.string().max(64).optional(),
     selectorHint: z.string().max(160).optional(),
     visible: z.boolean().default(true),
+    matchedTerm: z.string().max(120).optional(),
+    matchedLocale: consentControlLocaleSchema.optional(),
+    matchStrength: consentControlMatchStrengthSchema.optional(),
+    classifierReasonCodes: consentControlClassifierReasonCodesSchema,
+    classifierVariant: z.string().max(80).optional(),
   })).default([]),
   evidenceRefs: z.array(evidenceRefSchema).default([]),
   confidence: confidenceSchema,
@@ -482,6 +491,11 @@ export const consentActionCandidateSchema = z.object({
   visible: z.boolean().default(true),
   enabled: z.boolean().default(true),
   confidence: confidenceSchema,
+  matchedTerm: z.string().max(120).optional(),
+  matchedLocale: consentControlLocaleSchema.optional(),
+  matchStrength: consentControlMatchStrengthSchema.optional(),
+  classifierReasonCodes: consentControlClassifierReasonCodesSchema,
+  classifierVariant: z.string().max(80).optional(),
   detectionMethod: z.enum([
     "deterministic_text",
     "role_button",

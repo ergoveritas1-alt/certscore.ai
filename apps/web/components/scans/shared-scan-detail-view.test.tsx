@@ -2294,6 +2294,37 @@ test("getTrackerConsentReviewPriority rates tag management and marketing automat
   );
 });
 
+test("getTrackerConsentReviewPriority rates LinkedIn Ads Pixel as high only when pre-consent", async () => {
+  const getTrackerConsentReviewPriority = await loadTrackerConsentReviewPriority();
+  const row = {
+    category: "advertising",
+    confidence: 0.95,
+    domains: ["px.ads.linkedin.com"],
+    firstSeenMs: 1422,
+    label: "LinkedIn Ads Pixel",
+    observedVia: ["request"],
+    regulatoryRelevance: ["consent", "advertising", "cross_site_tracking", "ad_measurement"],
+    requestCount: 1,
+    source: "runtime",
+    vendorDisplayCategory: "Advertising",
+  };
+
+  assert.equal(
+    getTrackerConsentReviewPriority({
+      ...row,
+      preConsent: true,
+    }),
+    "high",
+  );
+  assert.equal(
+    getTrackerConsentReviewPriority({
+      ...row,
+      preConsent: false,
+    }),
+    "review_needed",
+  );
+});
+
 test("deriveUnverifiedHomepageReview prefers logged DNS failure reason when available", async () => {
   const deriveUnverifiedHomepageReview = await loadUnverifiedHomepageReview();
 

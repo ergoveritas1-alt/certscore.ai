@@ -8,6 +8,7 @@ import {
   type ReportPrimaryPillarDefinition,
   type ReportSectionDefinition
 } from "@website-signal-risk-scanner/shared";
+import { classifyConsentControlLabel } from "@certscore/contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { buildValidationFindingLookup } from "./validation-review-linking";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
@@ -1278,13 +1279,12 @@ function isCredibleRejectControlLabel(label: string | null) {
   if (!label) {
     return false;
   }
-  if (/stream|subscribe|sign\s*in|log\s*in|continue|accept|agree|allow/i.test(label)) {
-    return false;
-  }
-  if (label.length > 50 && !/cookie|privacy|consent|preference|choice|optional|necessary|essential/i.test(label)) {
-    return false;
-  }
-  return /reject|decline\s+(?:all|optional|non[-\s]?essential|cookies)|deny|refuse|opt\s*out|save\s+settings|confirm\s+choices|manage\s+preferences|necessary only|essential only|only necessary/i.test(label);
+  const classification = classifyConsentControlLabel({
+    label,
+    hasConsentContext: true,
+    hasPreferenceContext: true,
+  });
+  return classification.intent === "reject" && classification.confidence >= 0.5;
 }
 
 function hasCredibleRejectInteractionAttribution(

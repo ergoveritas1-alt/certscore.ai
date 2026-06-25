@@ -250,6 +250,36 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     }
   }
 
+  if (item.id === "accept_consent_control") {
+    const labels = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["visibleAcceptLabels", "visible_accept_labels", "acceptButtonLabels", "accept_button_labels", "acceptLabels", "accept_labels", "buttonLabels", "button_labels"]),
+      ...extractQuotedButtonLabels(item.criticalEvidence.statusBasis)
+    ]).slice(0, 3);
+    if (evidenceLabel === "Observed") {
+      return labels.length > 0
+        ? `An accept consent control was observed from structured consent-control evidence: ${formatList(labels)}. This confirms availability, not post-click behavior.`
+        : "An accept consent control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
+    }
+    if (evidenceLabel === "Potential gap") {
+      return "A first-layer accept consent control was expected from the observed consent surface but was not retained as structured control evidence.";
+    }
+  }
+
+  if (item.id === "options_settings_preferences_control") {
+    const labels = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["visibleOptionsLabels", "visible_options_labels", "preferenceLabels", "preference_labels", "buttonLabels", "button_labels"]),
+      ...extractQuotedButtonLabels(item.criticalEvidence.statusBasis)
+    ]).slice(0, 3);
+    if (evidenceLabel === "Observed") {
+      return labels.length > 0
+        ? `An options/settings/preferences control was observed from structured consent-control evidence: ${formatList(labels)}. This confirms availability, not post-click behavior.`
+        : "An options/settings/preferences control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
+    }
+    if (evidenceLabel === "Potential gap") {
+      return "A first-layer options/settings/preferences control was expected from the observed consent surface but was not retained as structured control evidence.";
+    }
+  }
+
   const article13Snippet = getArticle13Snippet(evidence);
   if (article13Snippet) {
     return `${getArticle13RationalePrefix(item)}: ${article13Snippet}`;

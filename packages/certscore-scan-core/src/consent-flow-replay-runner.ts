@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { inflateRawSync } from "node:zlib";
 import { chromium } from "playwright";
+import { classifyConsentControlLabel } from "@certscore/contracts";
 
 export interface ConsentFlowReplayManifest {
   actionApplied?: boolean;
@@ -994,7 +995,7 @@ function extractControlTexts(frame: ReplayFrameSnapshot): Array<{ label: string;
       labels.push({ label: normalizeVisibleText(label), reason: "html_input_value" });
     }
   }
-  const actionPhrase = text.match(/(?:accept all|reject all|decline all|deny all|manage preferences|cookie settings|privacy settings|save choices|confirm choices|do not sell or share|do not sell my personal information|do not share my personal information|opt out of sale|opt out of sharing|exclude my data|your privacy choices|privacy policy|privacy notice|cookie policy|cookie notice|cookie information|notice at collection|ca notice at collection)/gi) ?? [];
+  const actionPhrase = text.match(/(?:accept all|reject all|decline all|deny all|manage preferences|cookie settings|privacy settings|save choices|confirm choices|alle akzeptieren|alle ablehnen|cookie-einstellungen|einstellungen speichern|tout accepter|tout refuser|refuser tout|paramètres des cookies|gérer mes choix|enregistrer mes choix|do not sell or share|do not sell my personal information|do not share my personal information|opt out of sale|opt out of sharing|exclude my data|your privacy choices|privacy policy|privacy notice|cookie policy|cookie notice|cookie information|notice at collection|ca notice at collection)/gi) ?? [];
   for (const phrase of actionPhrase) {
     labels.push({ label: normalizeVisibleText(phrase), reason: "frame_text_phrase" });
   }
@@ -1002,26 +1003,41 @@ function extractControlTexts(frame: ReplayFrameSnapshot): Array<{ label: string;
 }
 
 function classifyControlLabel(label: string, reason: string): { action: ReplayActionCandidateType; confidence: number; reason: string } | undefined {
-  const normalized = label.toLowerCase().replace(/\s+/g, " ").trim();
-  if (/do not sell|do not share|do not sell or share|your privacy choices|privacy choices|opt out of (?:sale|sharing|targeted advertising)|exclude my data|do not use my data|limit use of my sensitive/.test(normalized)) {
-    return { action: "do_not_sell_share", confidence: 0.86, reason };
+  const classification = classifyConsentControlLabel({
+    label,
+    hasConsentContext: true,
+    hasPreferenceContext: true,
+  });
+  const action = replayActionFromConsentControlIntent(classification.intent, classification.variant);
+  if (action) {
+    return { action, confidence: classification.confidence, reason };
   }
+  const normalized = label.toLowerCase().replace(/\s+/g, " ").trim();
   if (/privacy policy|privacy notice|cookie policy|cookies policy|cookie notice|cookie information|notice at collection/.test(normalized) && !/choice|settings|preference|manage/.test(normalized)) {
     return { action: "privacy_policy_or_notice_only", confidence: 0.82, reason };
-  }
-  if (/reject all|decline all|deny all|refuse all|necessary only|essential only|disable all|reject/.test(normalized)) {
-    return { action: "reject", confidence: 0.9, reason };
-  }
-  if (/accept all|allow all|agree|i agree|got it|okay|^ok$/.test(normalized)) {
-    return { action: "accept", confidence: 0.88, reason };
-  }
-  if (/manage|settings|preferences|customi[sz]e|options|choose/.test(normalized)) {
-    return { action: "settings/manage", confidence: 0.84, reason };
   }
   if (/save|confirm|submit|apply/.test(normalized) && /choice|preference|settings|selection|consent/.test(normalized)) {
     return { action: "save/confirm", confidence: 0.86, reason };
   }
   return undefined;
+}
+
+function replayActionFromConsentControlIntent(
+  intent: ReturnType<typeof classifyConsentControlLabel>["intent"],
+  variant?: string,
+): ReplayActionCandidateType | undefined {
+  switch (intent) {
+    case "accept":
+      return "accept";
+    case "reject":
+      return "reject";
+    case "options":
+      return variant === "save_preferences" ? "save/confirm" : "settings/manage";
+    case "privacy_opt_out":
+      return "do_not_sell_share";
+    case "unknown":
+      return undefined;
+  }
 }
 
 function hasBannerCandidate(

@@ -136,6 +136,24 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
+    id: "accept_consent_control",
+    label: "Accept consent control",
+    explanation: "Whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No accept consent control finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "options_settings_preferences_control",
+    label: "Options / settings / preferences control",
+    explanation: "Whether a first-layer options, settings, preferences, or manage-preferences control was observed on the retained consent surface.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No options/settings/preferences control finding was surfaced in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
     id: "cookie_notice_policy_availability",
     label: "Cookie notice / cookie policy availability",
     explanation: "Whether a cookie notice, cookie policy, cookie settings surface, or equivalent cookie disclosure surface was retained.",
@@ -473,6 +491,8 @@ function getEvidenceState(input: {
     input.status === "Gap observed" &&
     (
       input.id === "reject_all_path_availability" ||
+      input.id === "accept_consent_control" ||
+      input.id === "options_settings_preferences_control" ||
       input.id === "preference_withdrawal_control"
     )
   ) {
@@ -534,6 +554,10 @@ function getMissingEvidenceNeeded(input: {
       return "Confirmed first-layer GDPR/ePrivacy cookie banner with uncontaminated DOM/control evidence.";
     case "reject_all_path_availability":
       return "Confirmed first-layer GDPR/ePrivacy cookie banner and same-surface accept/reject control inventory.";
+    case "accept_consent_control":
+      return "Confirmed first-layer GDPR/ePrivacy cookie banner and structured accept/accept-all control inventory.";
+    case "options_settings_preferences_control":
+      return "Confirmed first-layer GDPR/ePrivacy cookie banner and structured options/settings/preferences control inventory.";
     case "consent_choice_quality":
       return "Confirmed granular preference center evidence, purpose/vendor choices, default toggle states, save choices, and accept/reject visual parity.";
     case "post_reject_tracking_reduction":
@@ -666,15 +690,32 @@ function selectChecklistEvidenceArtifact(input: {
     );
   }
 
-  if (input.rowId === "reject_all_path_availability" || input.rowId === "post_reject_tracking_reduction") {
+  if (
+    input.rowId === "reject_all_path_availability" ||
+    input.rowId === "accept_consent_control" ||
+    input.rowId === "options_settings_preferences_control" ||
+    input.rowId === "post_reject_tracking_reduction"
+  ) {
     return selection(
       input.rowId === "post_reject_tracking_reduction"
         ? "postRejectTrackingReductionEvidence"
-        : "rejectPathDepthAndAvailability",
+        : input.rowId === "accept_consent_control"
+          ? "firstLayerConsentChoices.acceptControl"
+        : input.rowId === "options_settings_preferences_control"
+          ? "firstLayerConsentChoices.optionsControl"
+          : "rejectPathDepthAndAvailability",
       input.status === "Observed" || input.status === "Gap observed" ? "strong" : "limited",
       input.status === "Not testable"
-        ? "Reject-path evidence is not selected as testable unless a first-layer GDPR/ePrivacy cookie banner and valid reject state are confirmed."
-        : "Selected retained same-surface reject-path or post-reject comparison evidence."
+        ? input.rowId === "accept_consent_control"
+          ? "Accept consent control evidence is not selected as testable unless a first-layer GDPR/ePrivacy cookie banner and structured control inventory are confirmed."
+          : input.rowId === "options_settings_preferences_control"
+          ? "Options/settings/preferences control evidence is not selected as testable unless a first-layer GDPR/ePrivacy cookie banner and structured control inventory are confirmed."
+          : "Reject-path evidence is not selected as testable unless a first-layer GDPR/ePrivacy cookie banner and valid reject state are confirmed."
+        : input.rowId === "accept_consent_control"
+          ? "Selected retained same-surface accept consent control evidence."
+          : input.rowId === "options_settings_preferences_control"
+          ? "Selected retained same-surface options/settings/preferences control evidence."
+          : "Selected retained same-surface reject-path or post-reject comparison evidence."
     );
   }
 
@@ -2085,6 +2126,15 @@ function specializeChecklistRow(input: {
     };
   }
 
+  if (input.definition.id === "accept_consent_control" && input.status === "Observed") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: "An accept, accept-all, or allow-all control was observed from structured first-layer consent-surface evidence. This confirms availability, not the result of clicking it.",
+      label: input.definition.label,
+      status: "Observed" as const
+    };
+  }
+
   if (input.definition.id === "post_reject_tracking_reduction" && input.status === "Observed") {
     return {
       evidenceRefs: input.evidenceRefs,
@@ -2806,7 +2856,12 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
   }
 
   if (
-    (item.id === "reject_all_path_availability" || item.id === "post_reject_tracking_reduction") &&
+    (
+      item.id === "reject_all_path_availability" ||
+      item.id === "accept_consent_control" ||
+      item.id === "options_settings_preferences_control" ||
+      item.id === "post_reject_tracking_reduction"
+    ) &&
     (item.status === "Observed" || item.status === "Gap observed" || item.status === "Review signal") &&
     firstLayerGdprBannerConfirmed === false
   ) {
@@ -2818,8 +2873,24 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
         "preconsent_cookie_or_tracking_activity_observed"
       ]) === true &&
       readRetainedBoolean(retained, ["rejectControlObserved", "reject_control_observed"]) === false;
+    const noOptionsRetainedWithPreconsentActivity =
+      item.id === "options_settings_preferences_control" &&
+      (item.status === "Gap observed" || item.status === "Review signal") &&
+      readRetainedBoolean(retained, [
+        "preconsentCookieOrTrackingActivityObserved",
+        "preconsent_cookie_or_tracking_activity_observed"
+      ]) === true &&
+      readRetainedBoolean(retained, ["optionsControlObserved", "options_control_observed"]) === false;
+    const noAcceptRetainedWithPreconsentActivity =
+      item.id === "accept_consent_control" &&
+      (item.status === "Gap observed" || item.status === "Review signal") &&
+      readRetainedBoolean(retained, [
+        "preconsentCookieOrTrackingActivityObserved",
+        "preconsent_cookie_or_tracking_activity_observed"
+      ]) === true &&
+      readRetainedBoolean(retained, ["acceptControlObserved", "accept_control_observed"]) === false;
 
-    if (noRejectRetainedWithPreconsentActivity) {
+    if (noRejectRetainedWithPreconsentActivity || noAcceptRetainedWithPreconsentActivity || noOptionsRetainedWithPreconsentActivity) {
       return item;
     }
 
@@ -2828,6 +2899,10 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
       "Not testable",
       item.id === "post_reject_tracking_reduction"
         ? "Post-reject tracking could not be tested because no first-layer GDPR/ePrivacy consent banner and no valid reject action were confirmed. Footer privacy/ad-choice controls were observed, but they do not establish a reject state for comparison."
+        : item.id === "accept_consent_control"
+          ? "Accept consent control availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. CertScore did not retain a place where an accept control could appear, so the missing control is treated as part of the missing or unconfirmed consent surface rather than as a standalone accept-control finding."
+        : item.id === "options_settings_preferences_control"
+          ? "Options/settings/preferences control availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. CertScore did not retain a place where an options/settings/preferences control could appear, so the missing control is treated as part of the missing or unconfirmed consent surface rather than as a standalone options-control finding."
         : "Reject-path availability could not be evaluated because no first-layer GDPR/ePrivacy cookie consent banner was confirmed. CertScore did not retain a place where a reject option could appear, so the missing reject option is treated as part of the missing or unconfirmed consent surface rather than as a standalone reject-path finding.",
       "no_confirmed_first_layer_gdpr_eprivacy_consent_banner_or_reject_state",
       "not_testable"

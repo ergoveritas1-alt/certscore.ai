@@ -7,6 +7,7 @@ import type {
   NormalizedConcernPolicyPageType,
   NormalizedConcernPromotionEligibility
 } from "./normalized-concerns";
+import { classifyConsentControlLabel } from "@certscore/contracts";
 import { evaluateCookieRetentionReview } from "./cookie-retention-review";
 import { evaluateConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
 import { evaluateConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
@@ -1290,15 +1291,12 @@ function hasCredibleRejectInteractionAttribution(rawEvidence: Record<string, unk
       : true;
   }
 
-  if (/stream|subscribe|sign\s*in|log\s*in|continue|accept|agree|allow/i.test(label)) {
-    return false;
-  }
-
-  if (label.length > 50 && !/cookie|privacy|consent|preference|choice|optional|necessary|essential/i.test(label)) {
-    return false;
-  }
-
-  if (/reject|decline\s+(?:all|optional|non[-\s]?essential|cookies)|deny|refuse|opt\s*out|save\s+settings|confirm\s+choices|manage\s+preferences|necessary only|essential only|only necessary/i.test(label)) {
+  const classification = classifyConsentControlLabel({
+    label,
+    hasConsentContext: true,
+    hasPreferenceContext: true,
+  });
+  if (classification.intent === "reject" && classification.confidence >= 0.5) {
     return true;
   }
 

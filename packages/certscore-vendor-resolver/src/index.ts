@@ -141,7 +141,7 @@ const rules: VendorRule[] = [
     purpose: "tag_management",
     regulatoryRelevance: ["tag_management", "third_party_runtime"],
     confidence: 0.96,
-    hostPatterns: [/^www\.googletagmanager\.com$/i],
+    hostPatterns: [/^(?:www\.)?googletagmanager\.com$/i],
     urlPatterns: [/\/gtm\.js\b/i, /[?&]id=GTM-/i],
     cookiePatterns: [/^_dc_gtm_/i],
     storageKeyPatterns: [/^_dc_gtm_/i],
@@ -413,6 +413,72 @@ const rules: VendorRule[] = [
     basisLabel: "klaviyo_marketing_automation_runtime",
   },
   {
+    entity: "HubSpot, Inc.",
+    vendor: "HubSpot",
+    product: "HubSpot Ads Pixel",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "marketing_pixel", "marketing_automation"],
+    confidence: 0.93,
+    hostPatterns: [/^(?:js\.)?hsadspixel\.net$/i, /\.hsadspixel\.net$/i],
+    urlPatterns: [/\/(?:fb|pixel|events?|track|collect|ads)/i],
+    basisLabel: "hubspot_ads_pixel_runtime",
+  },
+  {
+    entity: "HubSpot, Inc.",
+    vendor: "HubSpot",
+    product: "HubSpot Scripts",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "marketing_automation", "email_personalization", "third_party_runtime"],
+    confidence: 0.93,
+    hostPatterns: [/^(?:js|js-eu1)\.hs-scripts\.com$/i],
+    urlPatterns: [/\/\d+\.js\b/i, /\/(?:shell|loader|embed|scripts?)\b/i],
+    basisLabel: "hubspot_marketing_scripts_runtime",
+  },
+  {
+    entity: "HubSpot, Inc.",
+    vendor: "HubSpot",
+    product: "HubSpot Forms",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "lead_capture", "forms", "marketing_automation"],
+    confidence: 0.92,
+    hostPatterns: [/^forms(?:-[a-z0-9]+)?\.hscollectedforms\.net$/i],
+    urlPatterns: [/\/(?:collected-forms|forms|submissions?|embed|v\d+)/i],
+    basisLabel: "hubspot_forms_lead_capture_runtime",
+  },
+  {
+    entity: "HubSpot, Inc.",
+    vendor: "HubSpot",
+    product: "HubSpot API",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "crm", "marketing_automation", "lead_capture"],
+    confidence: 0.91,
+    hostPatterns: [/^api(?:-[a-z0-9]+)?\.hubapi\.com$/i],
+    urlPatterns: [/\/(?:contacts|forms|events|analytics|collector|track|crm|v\d+)/i],
+    basisLabel: "hubspot_crm_marketing_api_runtime",
+  },
+  {
+    entity: "HubSpot, Inc.",
+    vendor: "HubSpot",
+    product: "HubSpot Banner",
+    purpose: "consent_management",
+    regulatoryRelevance: ["consent_management", "preference_tooling"],
+    confidence: 0.92,
+    hostPatterns: [/^js(?:-[a-z0-9]+)?\.hs-banner\.com$/i],
+    urlPatterns: [/\/(?:banner|cookie|consent|preferences?)/i],
+    basisLabel: "hubspot_banner_consent_preference_runtime",
+  },
+  {
+    entity: "HubSpot, Inc.",
+    vendor: "HubSpot",
+    product: "HubSpot Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "marketing_analytics", "marketing_automation"],
+    confidence: 0.93,
+    hostPatterns: [/^js(?:-[a-z0-9]+)?\.hs-analytics\.net$/i],
+    urlPatterns: [/\/(?:analytics|events?|track|collect|embed|v\d+)/i],
+    basisLabel: "hubspot_marketing_analytics_runtime",
+  },
+  {
     entity: "BrightLine Partners LLC",
     vendor: "BrightLine",
     product: "BrightLine",
@@ -590,8 +656,8 @@ const rules: VendorRule[] = [
     confidence: 0.93,
     hostPatterns: [/\.posthog\.com$/i],
     urlPatterns: [/\/e\/?$/i, /\/batch/i],
-    cookiePatterns: [/^ph_/i],
-    storageKeyPatterns: [/^ph_/i],
+    cookiePatterns: [/^ph_/i, /posthog/i],
+    storageKeyPatterns: [/^ph_/i, /posthog/i],
     basisLabel: "posthog_endpoint_or_cookie",
   },
   {
@@ -835,10 +901,21 @@ const rules: VendorRule[] = [
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.95,
-    hostPatterns: [/^snap\.licdn\.com$/i, /^px\.ads\.linkedin\.com$/i],
-    urlPatterns: [/\/li\.lms-analytics\/insight\.min\.js\b/i, /\/collect\//i, /\/(?:db_sync|setuid|wa\/?)\b/i],
+    hostPatterns: [/^snap\.licdn\.com$/i],
+    urlPatterns: [/\/li\.lms-analytics\/insight\.min\.js\b/i, /\/collect\//i],
     cookiePatterns: [/^bcookie$/i, /^li_sugr$/i, /^bscookie$/i],
     basisLabel: "linkedin_insight_endpoint_or_cookie",
+  },
+  {
+    entity: "LinkedIn Corporation",
+    vendor: "LinkedIn",
+    product: "LinkedIn Ads Pixel",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "cross_site_tracking", "ad_measurement"],
+    confidence: 0.95,
+    hostPatterns: [/^px\.ads\.linkedin\.com$/i],
+    urlPatterns: [/\/(?:collect|db_sync|setuid|wa\/?)\b/i],
+    basisLabel: "linkedin_ads_pixel_endpoint",
   },
   {
     entity: "OneTrust, LLC",
@@ -1174,7 +1251,16 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   if (/cloudflare bot management|bot_detection|fraud_prevention|security/.test(haystack)) {
     return "Security";
   }
-  if (/klaviyo|marketing_automation|marketing automation|email_personalization|email personalization/.test(haystack)) {
+  if (/onetrust|cookiebot|usercentrics|didomi|hubspot banner|consent_management|cookie compliance|cmp\b/.test(haystack)) {
+    return "Cookie compliance";
+  }
+  if (/hubspot ads pixel/.test(haystack)) {
+    return "Advertising";
+  }
+  if (/hubspot analytics/.test(haystack)) {
+    return "Analytics";
+  }
+  if (/klaviyo|hubspot|marketing_automation|marketing automation|email_personalization|email personalization|lead_capture|lead capture|crm/.test(haystack)) {
     return "Marketing automation";
   }
   if (/piano|tinypass|cxense|personalization|personalisation|paywall|subscription|audience_management/.test(haystack)) {
@@ -1182,9 +1268,6 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   }
   if (/jsdelivr|cdn\b|font_delivery|content delivery/.test(haystack)) {
     return "CDN";
-  }
-  if (/onetrust|cookiebot|usercentrics|didomi|consent_management|cookie compliance|cmp\b/.test(haystack)) {
-    return "Cookie compliance";
   }
   if (/optimizely|experimentation|ab_testing|a\/b/.test(haystack)) {
     return "A/B Testing";

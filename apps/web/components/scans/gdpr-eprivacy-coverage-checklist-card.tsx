@@ -101,6 +101,8 @@ const REPORT_ROW_GROUPS = [
       "consent_surface_observed",
       "cmp_framework_signal_observed",
       "reject_all_path_availability",
+      "accept_consent_control",
+      "options_settings_preferences_control",
       "cookie_notice_policy_availability"
     ]
   },
@@ -1034,103 +1036,125 @@ function getDisplayEvidenceRefs(item: GdprEprivacyCoverageChecklistItem) {
 }
 
 export function GdprEprivacyCoverageSummaryPills({ items }: { items: GdprEprivacyCoverageChecklistItem[] }) {
-  const summaryCounts = items.reduce<{
-    gapsObserved: number;
-    neutralSignals: number;
-    partialConcerns: number;
-    positiveSignals: number;
-    reviewSignals: number;
-    technicalLimits: number;
-  }>((counts, item) => {
+  const summaryCounts = items.reduce<Record<AssessmentDirection | "gap_observed", number>>((counts, item) => {
     const direction = getAssessmentDirection(item);
     if (direction === "technical_limitation") {
-      counts.technicalLimits += 1;
+      counts.technical_limitation += 1;
       return counts;
     }
     if (direction === "positive_signal") {
-      counts.positiveSignals += 1;
+      counts.positive_signal += 1;
       return counts;
     }
     if (direction === "neutral_signal") {
-      counts.neutralSignals += 1;
+      counts.neutral_signal += 1;
       return counts;
     }
     if (item.assessmentStatus === "gap_observed" || item.status === "Gap observed") {
-      counts.gapsObserved += 1;
+      counts.gap_observed += 1;
       return counts;
     }
     if (direction === "potential_concern") {
-      counts.partialConcerns += 1;
+      counts.potential_concern += 1;
       return counts;
     }
-    counts.reviewSignals += 1;
+    counts.review_signal += 1;
     return counts;
   }, {
-    gapsObserved: 0,
-    neutralSignals: 0,
-    partialConcerns: 0,
-    positiveSignals: 0,
-    reviewSignals: 0,
-    technicalLimits: 0
+    gap_observed: 0,
+    neutral_signal: 0,
+    positive_signal: 0,
+    potential_concern: 0,
+    review_signal: 0,
+    technical_limitation: 0
   });
-  const statusSummary = [
+  type DecisionMixSegment = {
+    color: string;
+    count: number;
+    direction: AssessmentDirection | "gap_observed";
+    label: string;
+    tooltip: string;
+  };
+  const statusSummary = ([
     {
-      className: "border-rose-200 bg-rose-50 text-rose-700",
-      count: summaryCounts.gapsObserved,
-      icon: "alert" as const,
+      color: "#e11d48",
+      count: summaryCounts.gap_observed,
+      direction: "gap_observed",
       label: "concern",
       tooltip: "Rows where retained evidence indicates a material GDPR/ePrivacy review concern, such as consent timing, tracking, storage, disclosure, or choice issues."
     },
     {
-      className: "border-rose-200 bg-rose-50 text-rose-700",
-      count: summaryCounts.partialConcerns,
-      icon: "circle-alert" as const,
+      color: "#d97706",
+      count: summaryCounts.potential_concern,
+      direction: "potential_concern",
       label: "partial concern",
       tooltip: "Rows with review-relevant evidence that may indicate a concern, but where context, scope, or evidence strength makes the signal less direct."
     },
     {
-      className: "border-amber-200 bg-amber-50 text-amber-700",
-      count: summaryCounts.reviewSignals,
-      icon: "flag" as const,
+      color: "#f59e0b",
+      count: summaryCounts.review_signal,
+      direction: "review_signal",
       label: "review",
       tooltip: "Rows with unknown, ambiguous, limited, or insufficiently classified evidence that should be manually reviewed."
     },
     {
-      className: "border-emerald-200 bg-emerald-50 text-emerald-700",
-      count: summaryCounts.positiveSignals,
-      icon: "check" as const,
+      color: "#10b981",
+      count: summaryCounts.positive_signal,
+      direction: "positive_signal",
       label: "positive",
       tooltip: "Rows where retained evidence is favorable for this review area. This is a positive signal, not a legal compliance determination."
     },
     {
-      className: "border-sky-200 bg-sky-50 text-sky-700",
-      count: summaryCounts.neutralSignals,
-      icon: "equal" as const,
+      color: "#0ea5e9",
+      count: summaryCounts.neutral_signal,
+      direction: "neutral_signal",
       label: "contextual",
       tooltip: "Rows with useful context or operational evidence that is not inherently positive or concerning on its own."
     },
     {
-      className: "border-slate-300 bg-slate-100 text-slate-600",
-      count: summaryCounts.technicalLimits,
-      icon: "slash" as const,
-      label: "coverage limited"
+      color: "#94a3b8",
+      count: summaryCounts.technical_limitation,
+      direction: "technical_limitation",
+      label: "coverage limited",
+      tooltip: "Rows where retained coverage did not support testing this area."
     }
-  ].filter((item) => item.count > 0);
+  ] satisfies DecisionMixSegment[]).filter((item) => item.count > 0);
+  const total = statusSummary.reduce((sum, item) => sum + item.count, 0);
+  const summaryLabel = statusSummary.map((item) => `${item.count} ${item.label}`).join(", ") || "No reportable checklist ratings";
 
   return (
-    <>
-      {statusSummary.map((item) => (
-        <span key={item.label} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50/80 px-2 py-1">
-          <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border", item.className)}>
-            <CoverageStatusIcon icon={item.icon} />
+    <div
+      aria-label={`GDPR/ePrivacy checklist rating mix: ${summaryLabel}`}
+      className="ml-auto flex min-w-[18rem] max-w-xl shrink-0 flex-col items-stretch justify-start rounded-2xl border border-slate-200 bg-white/85 px-3 py-2 shadow-sm"
+    >
+      <div className="mb-1 flex items-baseline justify-between gap-3">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Rating mix</span>
+        <span className="text-xs font-semibold tabular-nums text-slate-800">{total} rows</span>
+      </div>
+      <div className="flex h-2 overflow-hidden rounded-full bg-slate-100" role="img">
+        {statusSummary.map((item) => (
+          <span
+            key={item.direction}
+            aria-label={`${item.count} ${item.label}`}
+            className="min-w-1"
+            style={{
+              backgroundColor: item.color,
+              width: `${(item.count / Math.max(total, 1)) * 100}%`
+            }}
+          />
+        ))}
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
+        {statusSummary.map((item) => (
+          <span key={item.direction} className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] text-slate-600">
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+            <span className="font-semibold tabular-nums text-slate-950">{item.count}</span>
+            <span>{item.label}</span>
+            <InfoTip align="end" placement="bottom" text={item.tooltip} />
           </span>
-          <span className="whitespace-nowrap text-[11px] font-medium text-slate-600">
-            <span className="font-semibold text-slate-950">{item.count}</span> {item.label}
-          </span>
-          {item.tooltip ? <InfoTip align="end" placement="bottom" text={item.tooltip} /> : null}
-        </span>
-      ))}
-    </>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1209,6 +1233,22 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
       : item.status === "Gap observed"
         ? "A reject-all or equivalent refusal path was not observed as equally available from the consent surface."
         : "Reject-path availability was not resolved from the retained consent-surface evidence.";
+  }
+
+  if (item.id === "accept_consent_control") {
+    return item.status === "Observed"
+      ? "An accept consent control was observed from structured consent-surface evidence."
+      : item.status === "Gap observed"
+        ? "An accept consent control was not observed on the retained first-layer consent surface."
+        : "Accept consent control availability was not resolved from retained structured consent-surface evidence.";
+  }
+
+  if (item.id === "options_settings_preferences_control") {
+    return item.status === "Observed"
+      ? "An options/settings/preferences control was observed from structured consent-surface evidence."
+      : item.status === "Gap observed"
+        ? "An options/settings/preferences control was not observed on the retained first-layer consent surface."
+        : "Options/settings/preferences control availability was not resolved from retained structured consent-surface evidence.";
   }
 
   if (item.id === "post_reject_tracking_reduction") {
@@ -1542,6 +1582,36 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     }
     if (evidenceLabel === "Potential gap") {
       return "A first-layer reject-all or equivalent refusal path was expected from the observed consent surface but was not retained.";
+    }
+  }
+
+  if (item.id === "accept_consent_control") {
+    const labels = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["visibleAcceptLabels", "visible_accept_labels", "acceptButtonLabels", "accept_button_labels", "acceptLabels", "accept_labels", "buttonLabels", "button_labels"]),
+      ...extractQuotedButtonLabels(item.criticalEvidence.statusBasis)
+    ]).slice(0, 3);
+    if (evidenceLabel === "Observed") {
+      return labels.length > 0
+        ? `An accept consent control was observed from structured consent-control evidence: ${formatList(labels)}. This confirms availability, not post-click behavior.`
+        : "An accept consent control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
+    }
+    if (evidenceLabel === "Potential gap") {
+      return "A first-layer accept consent control was expected from the observed consent surface but was not retained as structured control evidence.";
+    }
+  }
+
+  if (item.id === "options_settings_preferences_control") {
+    const labels = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["visibleOptionsLabels", "visible_options_labels", "preferenceLabels", "preference_labels", "buttonLabels", "button_labels"]),
+      ...extractQuotedButtonLabels(item.criticalEvidence.statusBasis)
+    ]).slice(0, 3);
+    if (evidenceLabel === "Observed") {
+      return labels.length > 0
+        ? `An options/settings/preferences control was observed from structured consent-control evidence: ${formatList(labels)}. This confirms availability, not post-click behavior.`
+        : "An options/settings/preferences control was observed from structured consent-control evidence. This confirms availability, not post-click behavior.";
+    }
+    if (evidenceLabel === "Potential gap") {
+      return "A first-layer options/settings/preferences control was expected from the observed consent surface but was not retained as structured control evidence.";
     }
   }
 
@@ -2360,6 +2430,8 @@ function getGdprReviewedAreas(items: GdprEprivacyCoverageChecklistItem[]) {
       : null,
     rowIds.has("consent_surface_observed") ? "consent surface evidence" : null,
     rowIds.has("reject_all_path_availability") ? "refusal path availability" : null,
+    rowIds.has("accept_consent_control") ? "accept consent control availability" : null,
+    rowIds.has("options_settings_preferences_control") ? "options/settings/preferences control availability" : null,
     rowIds.has("post_reject_tracking_reduction") ? "deferred refusal-path tracking evidence" : null,
     rowIds.has("preference_withdrawal_control") ? "withdrawal or preference-control evidence" : null,
     rowIds.has("sensitive_surfaces_third_party_tracking") ? "sensitive-surface tracking context" : null,

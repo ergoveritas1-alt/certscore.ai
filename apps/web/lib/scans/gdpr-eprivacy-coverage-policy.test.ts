@@ -748,6 +748,203 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats essential-only first-layer
   assert.match(outcomes.reject_all_path_availability?.evidenceRefs.join(" "), /Essential Cookies Only/);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats canonical multilingual options controls as observed", () => {
+  const labels = [
+    ["Cookie settings", "cookie settings", "en"],
+    ["Manage preferences", "manage preferences", "en"],
+    ["Cookie-Einstellungen", "cookie-einstellungen", "de"],
+    ["Einstellungen", "einstellungen", "de"],
+    ["Paramètres", "paramètres", "fr"],
+    ["Gérer mes choix", "gérer mes choix", "fr"]
+  ] as const;
+
+  for (const [label, matchedTerm, matchedLocale] of labels) {
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      ...completedInputBase,
+      runtimeArtifacts: {
+        consentSurfaceObserved: true,
+        rejectPathDepthAndAvailability: {
+          firstLayerCookieConsentBannerObserved: true,
+          firstLayerConsentChoices: {
+            acceptControlObserved: true,
+            capturedBeforeInteraction: true,
+            controls: [{
+              actionType: "manage_preferences",
+              classifierReasonCodes: ["matched_options", "match_strength_direct", "context_satisfied"],
+              label,
+              matchedLocale,
+              matchedTerm,
+              matchStrength: "direct",
+              visible: true
+            }],
+            layerInspected: "first_layer",
+            managePreferencesControlObserved: true,
+            visibleChoiceLabels: ["Accept All", label]
+          },
+          gdprEprivacyConsentSurfaceObserved: true,
+          layerInspected: "first_layer"
+        }
+      },
+      snapshot: {
+        cookie_banner_present: true
+      }
+    });
+
+    assert.equal(outcomes.options_settings_preferences_control?.status, "Observed", label);
+    assert.equal(
+      outcomes.options_settings_preferences_control?.criticalEvidence.retainedEvidence.optionsControlObserved,
+      true,
+      label
+    );
+    assert.match(outcomes.options_settings_preferences_control?.evidenceRefs.join(" ") ?? "", new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), label);
+  }
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not infer options control from text-only labels", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentSurfaceObserved: true,
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: true,
+        firstLayerConsentChoices: {
+          capturedBeforeInteraction: true,
+          layerInspected: "first_layer",
+          visibleChoiceLabels: ["Accept All", "Cookie settings"]
+        },
+        gdprEprivacyConsentSurfaceObserved: true,
+        layerInspected: "first_layer"
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+  assert.equal(outcomes.options_settings_preferences_control?.status, "Not observed");
+  assert.equal(
+    outcomes.options_settings_preferences_control?.criticalEvidence.retainedEvidence.optionsControlObserved,
+    false
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats canonical multilingual accept controls as observed", () => {
+  const labels = [
+    ["Accept", "accept", "en"],
+    ["Accept all", "accept all", "en"],
+    ["Allow all", "allow all", "en"],
+    ["I agree", "i agree", "en"],
+    ["Akzeptieren", "akzeptieren", "de"],
+    ["Alle akzeptieren", "alle akzeptieren", "de"],
+    ["Zustimmen", "zustimmen", "de"],
+    ["Ich stimme zu", "ich stimme zu", "de"],
+    ["Accepter", "accepter", "fr"],
+    ["Tout accepter", "tout accepter", "fr"],
+    ["J’accepte", "j’accepte", "fr"],
+    ["Autoriser", "autoriser", "fr"]
+  ] as const;
+
+  for (const [label, matchedTerm, matchedLocale] of labels) {
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      ...completedInputBase,
+      runtimeArtifacts: {
+        consentSurfaceObserved: true,
+        rejectPathDepthAndAvailability: {
+          firstLayerCookieConsentBannerObserved: true,
+          firstLayerConsentChoices: {
+            capturedBeforeInteraction: true,
+            controls: [{
+              actionType: "accept_all",
+              classifierReasonCodes: ["matched_accept", "match_strength_direct", "context_satisfied"],
+              label,
+              matchedLocale,
+              matchedTerm,
+              matchStrength: "direct",
+              visible: true
+            }],
+            layerInspected: "first_layer",
+            visibleChoiceLabels: [label, "Cookie settings"]
+          },
+          gdprEprivacyConsentSurfaceObserved: true,
+          layerInspected: "first_layer"
+        }
+      },
+      snapshot: {
+        cookie_banner_present: true
+      }
+    });
+
+    assert.equal(outcomes.accept_consent_control?.status, "Observed", label);
+    assert.equal(
+      outcomes.accept_consent_control?.criticalEvidence.retainedEvidence.acceptControlObserved,
+      true,
+      label
+    );
+    assert.match(outcomes.accept_consent_control?.evidenceRefs.join(" ") ?? "", new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), label);
+  }
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not infer accept control from text-only labels", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentSurfaceObserved: true,
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: true,
+        firstLayerConsentChoices: {
+          capturedBeforeInteraction: true,
+          layerInspected: "first_layer",
+          visibleChoiceLabels: ["Accept", "Cookie settings"]
+        },
+        gdprEprivacyConsentSurfaceObserved: true,
+        layerInspected: "first_layer"
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+  assert.equal(outcomes.accept_consent_control?.status, "Not observed");
+  assert.equal(
+    outcomes.accept_consent_control?.criticalEvidence.retainedEvidence.acceptControlObserved,
+    false
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not infer accept control from unrelated structured text", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      consentSurfaceObserved: true,
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: true,
+        firstLayerConsentChoices: {
+          capturedBeforeInteraction: true,
+          controls: [{
+            actionType: "other",
+            label: "Accept",
+            visible: true
+          }],
+          layerInspected: "first_layer",
+          visibleChoiceLabels: ["Accept"]
+        },
+        gdprEprivacyConsentSurfaceObserved: true,
+        layerInspected: "first_layer"
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true
+    }
+  });
+
+  assert.notEqual(outcomes.accept_consent_control?.status, "Observed");
+  assert.equal(
+    outcomes.accept_consent_control?.criticalEvidence.retainedEvidence.acceptControlObserved,
+    false
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats thin policy extraction as coverage limited", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -2200,6 +2397,71 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps missing reject partial when
     outcome?.criticalEvidence.retainedEvidence.reason,
     "no_reject_option_retained_with_preconsent_activity"
   );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes carries CMP expectation for missing first-layer consent controls", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      cmpFrameworkSignalObserved: true,
+      cmpRuntimeSignalLabels: ["script_url"],
+      cmp_vendor_name: "Consentmanager CMP",
+      consentSurfaceObserved: true,
+      hybridRuntimeEvidence: {
+        consentSummary: {
+          bannerPresent: true,
+          cmpFrameworkSignalObserved: true,
+          cookieNoticeObserved: true
+        },
+        firstLayerConsentChoices: {
+          acceptControlObserved: false,
+          actionableControlInventoryRetained: false,
+          capturedBeforeInteraction: true,
+          controls: [],
+          layerInspected: "unknown",
+          managePreferencesControlObserved: false,
+          rejectControlObserved: false,
+          visibleChoiceLabels: []
+        },
+        networkSummary: {
+          preConsentThirdPartyRequestCount: 12
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerCookieConsentBannerObserved: false,
+        firstLayerConsentChoices: {
+          controls: [],
+          layerInspected: "unknown",
+          visibleChoiceLabels: []
+        },
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed"
+      }
+    },
+    snapshot: {
+      cmp_vendor_name: "Consentmanager CMP",
+      third_party_request_count: 12
+    }
+  });
+
+  const rejectOutcome = outcomes.reject_all_path_availability;
+  assert.equal(rejectOutcome?.status, "Review signal");
+  assert.equal(rejectOutcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, true);
+  assert.equal(rejectOutcome?.criticalEvidence.retainedEvidence.cmpSignalObserved, true);
+  assert.equal(rejectOutcome?.criticalEvidence.retainedEvidence.rejectControlObserved, false);
+
+  const acceptOutcome = outcomes.accept_consent_control;
+  assert.equal(acceptOutcome?.status, "Review signal");
+  assert.equal(acceptOutcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, true);
+  assert.equal(acceptOutcome?.criticalEvidence.retainedEvidence.cmpSignalObserved, true);
+  assert.equal(acceptOutcome?.criticalEvidence.retainedEvidence.acceptControlObserved, false);
+  assert.equal(acceptOutcome?.criticalEvidence.retainedEvidence.acceptControlEvidenceRetained, false);
+
+  const optionsOutcome = outcomes.options_settings_preferences_control;
+  assert.equal(optionsOutcome?.status, "Review signal");
+  assert.equal(optionsOutcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, true);
+  assert.equal(optionsOutcome?.criticalEvidence.retainedEvidence.cmpSignalObserved, true);
+  assert.equal(optionsOutcome?.criticalEvidence.retainedEvidence.optionsControlObserved, false);
+  assert.equal(optionsOutcome?.criticalEvidence.retainedEvidence.optionsControlEvidenceRetained, false);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes flags first-layer accept-only cookie consent as a reject-option gap", () => {

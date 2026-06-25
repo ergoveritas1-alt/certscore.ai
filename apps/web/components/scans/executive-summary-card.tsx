@@ -3555,7 +3555,7 @@ function getRegulatoryGapRowId(findingId: string) {
   return markerIndex >= 0 ? findingId.slice(markerIndex + marker.length) : null;
 }
 
-type RegulatoryTopFindingConcernKind = "potential_concern" | "potential_gap" | "review_signal";
+type RegulatoryTopFindingConcernKind = "partial_rating" | "potential_concern" | "potential_gap" | "review_signal";
 
 function getRegulatoryTopFindingConcernKind(finding: CertScoreFinding): RegulatoryTopFindingConcernKind | null {
   if (!finding.id.startsWith("regulatory_gap__")) {
@@ -3563,7 +3563,7 @@ function getRegulatoryTopFindingConcernKind(finding: CertScoreFinding): Regulato
   }
   const details = finding.evidenceDetails?.policyEvidenceDetails;
   const kind = typeof details?.regulatoryConcernKind === "string" ? details.regulatoryConcernKind : null;
-  return kind === "potential_gap" || kind === "potential_concern" || kind === "review_signal" ? kind : null;
+  return kind === "partial_rating" || kind === "potential_gap" || kind === "potential_concern" || kind === "review_signal" ? kind : null;
 }
 
 function hasOnlyReviewTopFindings(findings: CertScoreFinding[]) {
@@ -3581,6 +3581,8 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
         return ["cookie-storage", "ad-exchange", "pulse-tracking"];
       case "reject_all_path_availability":
         return ["hidden-choice", "privacy-choice", "circle-x"];
+      case "accept_consent_control":
+        return ["privacy-choice", "split-choice", "cookie-storage"];
       case "cookie_notice_policy_availability":
         return ["document-clarity", "cookie-storage", "policy-sync"];
       case "advertising_retargeting_vendor_signal_observed":
@@ -3701,9 +3703,11 @@ function assignUniqueFindingTitleIconKeys(findings: CertScoreFinding[]) {
 function RegulatoryTopFindingConcernIcon({ kind }: { kind: RegulatoryTopFindingConcernKind }) {
   const label = kind === "potential_gap"
     ? "Potential gap"
-    : kind === "review_signal"
-      ? "Review"
-      : "Potential concern";
+    : kind === "partial_rating"
+      ? "Partial rating"
+      : kind === "review_signal"
+        ? "Review"
+        : "Potential concern";
   const toneClass = kind === "potential_gap"
     ? "border-rose-200 bg-rose-50 text-rose-700"
     : "border-amber-200 bg-amber-50 text-amber-700";
@@ -3718,7 +3722,7 @@ function RegulatoryTopFindingConcernIcon({ kind }: { kind: RegulatoryTopFindingC
           <path d="M10 4.2 17 16H3L10 4.2Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
           <path d="M10 8.2v3.8M10 14.8h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
         </svg>
-      ) : kind === "review_signal" ? (
+      ) : kind === "review_signal" || kind === "partial_rating" ? (
         <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 20 20">
           <path d="M6 4.5v11" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
           <path d="M6 5.2h8l-1.7 3L14 11.2H6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
@@ -5177,6 +5181,13 @@ export function ExecutiveSummaryCard(input: {
     verifiedPublicSurfacesCount: input.verifiedPublicSurfacesCount
   });
   const findingsHeading = narrativePresentation.findingsHeading.replace("Highest-priority", "High-priority");
+  const topFindingsIncludePartialOrReviewRegulatoryRows = displayedTopFindings.some((finding) => {
+    const kind = getRegulatoryTopFindingConcernKind(finding);
+    return kind === "partial_rating" || kind === "review_signal";
+  });
+  const topFindingsCarouselHeading = topFindingsIncludePartialOrReviewRegulatoryRows
+    ? "Issues to review"
+    : findingsHeading;
   const regulatoryCounts = {
     beforeConsentCookieCount: input.beforeConsentCookieCount,
     thirdPartyRequestCount: input.thirdPartyRequestCount
@@ -5306,7 +5317,7 @@ export function ExecutiveSummaryCard(input: {
             ) : displayedTopFindings.length > 0 ? (
               <ExecutiveTopFindingsCarousel
                 count={displayedTopFindings.length}
-                heading={findingsHeading}
+                heading={topFindingsCarouselHeading}
               >
               {displayedTopFindings.map((finding, index) => {
                 const densityBenchmark = getFindingDensityBenchmark(finding.id);
