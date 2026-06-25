@@ -13,9 +13,15 @@ type CanonicalRuntimeEvidenceEntry = {
 };
 
 export function deriveGdprEprivacyCoverageChecklistRowRationale(item: GdprEprivacyCoverageChecklistItem) {
-  return truncateSentence(
+  const rationale =
     getSpecificChecklistRowRationale(item) ??
-      getEvidenceBackedFallbackRationale(item),
+    getEvidenceBackedFallbackRationale(item) ??
+    item.note ??
+    item.explanation ??
+    `${item.label} evidence was evaluated from retained scanner evidence.`;
+
+  return truncateSentence(
+    rationale,
     320
   );
 }

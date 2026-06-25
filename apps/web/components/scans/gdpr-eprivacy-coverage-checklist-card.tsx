@@ -2304,8 +2304,11 @@ function truncateWholeWord(value: string, maxLength: number, suffix = "...") {
   return `${wordSafeClip.replace(/[,:;.!?]+$/g, "").trimEnd()}${suffix}`;
 }
 
-function renderRationaleText(value: string) {
-  return value.split(/("[^"]+")/g).map((part, index) => {
+function renderRationaleText(value: string | null | undefined) {
+  const displayValue = typeof value === "string" && value.trim().length > 0
+    ? value
+    : "Retained scanner evidence was evaluated for this checklist row.";
+  return displayValue.split(/("[^"]+")/g).map((part, index) => {
     if (part.startsWith("\"") && part.endsWith("\"")) {
       return (
         <span className="font-mono text-[0.86em] italic text-slate-700" key={`${index}:${part}`}>

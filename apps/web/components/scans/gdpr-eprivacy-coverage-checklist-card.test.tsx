@@ -1805,3 +1805,38 @@ test("GdprEprivacyCoverageChecklistCard keeps generic cross-border asset hosts o
   assert.match(html, /Google Tag Manager, Google Analytics, and Microsoft Clarity/i);
   assert.match(html, /Additional third-party asset endpoints were retained as supporting runtime context/i);
 });
+
+test("GdprEprivacyCoverageChecklistCard does not throw when retained row rationale text is missing", () => {
+  const item = makeChecklistItem({
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: [],
+      pipeline: {
+        concernPolicyKey: "gdpr_eprivacy_coverage.retention_disclosure.not_confirmed",
+        projectionStage: "coverage_policy",
+        wc01NormalizedConcernKey: "gdpr_eprivacy.coverage.retention_disclosure",
+        ws01EvidenceRole: "observed policy-surface evidence capture and logging"
+      },
+      projectedFindings: [],
+      retainedEvidence: {},
+      statusBasis: undefined
+    },
+    evidenceRefs: [],
+    evidenceState: "not_observed",
+    explanation: undefined,
+    id: "retention_disclosure",
+    label: "Retention disclosure",
+    note: undefined,
+    status: "Not confirmed",
+    tone: "warning"
+  });
+
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [item],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /Not confirmed from retained scanner evidence/);
+});
