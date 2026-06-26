@@ -21,6 +21,7 @@ export type ConsentControlTerm = {
   variant?: string;
   requiresConsentContext?: boolean;
   requiresPreferenceContext?: boolean;
+  requiresContinueConsentContext?: boolean;
 };
 
 export type ConsentControlLabelClassifierInput = {
@@ -53,6 +54,9 @@ const CONTEXT_HINT_PATTERN =
 const PRIVACY_OPT_OUT_HINT_PATTERN =
   /\b(do not sell|do not share|sale|share|targeted advertising|privacy rights?|legitimate interest|berechtigtem interesse|widerspruch|opposition|int[eé]r[eê]t l[eé]gitime|droit d['’]opposition)\b/i;
 
+const CONTINUE_AS_ACCEPT_CONTEXT_PATTERN =
+  /\b(?:by\s+(?:using|continuing(?:\s+to\s+use)?|accessing|remaining\s+on)\s+(?:this\s+)?(?:site|website|service|page)|(?:using|continuing(?:\s+to\s+use)?|accessing|remaining\s+on)\s+(?:this\s+)?(?:site|website|service|page)\s+(?:means|constitutes|indicates)|you\s+(?:consent|agree)\s+to\s+(?:these\s+)?cookies?)\b/i;
+
 const en = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "en", ...term }));
 const de = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "de", ...term }));
 const fr = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "fr", ...term }));
@@ -70,6 +74,10 @@ export const consentControlTerms: ConsentControlTerm[] = [
     ...direct("accept", "allow cookies"),
     ...direct("accept", "agree and continue"),
     ...direct("accept", "accept and continue"),
+    equivalent("accept", "allow analytics", "category_analytics"),
+    equivalent("accept", "accept analytics", "category_analytics"),
+    equivalent("accept", "enable analytics", "category_analytics"),
+    contextual("accept", "continue", { requiresContinueConsentContext: true, variant: "continue_as_accept" }),
     weak("accept", "ok", { requiresConsentContext: true }),
     weak("accept", "got it", { requiresConsentContext: true }),
 
@@ -104,6 +112,9 @@ export const consentControlTerms: ConsentControlTerm[] = [
     ...direct("reject", "reject optional"),
     ...direct("reject", "reject optional cookies"),
     ...direct("reject", "reject non-essential cookies"),
+    equivalent("reject", "reject analytics", "category_analytics"),
+    equivalent("reject", "deny analytics", "category_analytics"),
+    equivalent("reject", "disable analytics", "category_analytics"),
     ...direct("reject", "do not allow"),
     ...direct("reject", "do not allow all"),
     ...direct("reject", "disable all"),
@@ -368,6 +379,7 @@ export function classifyConsentControlLabel(
     CONTEXT_HINT_PATTERN.test(input.contextText ?? "");
   const hasPreferenceContext = input.hasPreferenceContext === true ||
     hasConsentContext && /\b(preference|preferences|settings|choices?|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|param[eè]tres|pr[eé]f[eé]rences?|finalit[eé]s)\b/i.test(input.contextText ?? "");
+  const hasContinueConsentContext = CONTINUE_AS_ACCEPT_CONTEXT_PATTERN.test(input.contextText ?? "");
 
   if (!normalizedLabel) {
     return unknown(["empty_label"]);
@@ -384,7 +396,7 @@ export function classifyConsentControlLabel(
     ? consentControlTerms.filter((term) => localeHints.has(term.locale))
     : consentControlTerms;
   const match = terms
-    .map((term) => ({ term, score: termScore(term, normalizedLabel, hasConsentContext, hasPreferenceContext) }))
+    .map((term) => ({ term, score: termScore(term, normalizedLabel, hasConsentContext, hasPreferenceContext, hasContinueConsentContext) }))
     .filter((entry) => entry.score > 0)
     .sort((left, right) =>
       right.score - left.score ||
@@ -396,7 +408,7 @@ export function classifyConsentControlLabel(
     return unknown(reasonCodes.length > 0 ? reasonCodes : ["no_term_match"]);
   }
 
-  const contextSatisfied = contextRequirementSatisfied(match.term, hasConsentContext, hasPreferenceContext);
+  const contextSatisfied = contextRequirementSatisfied(match.term, hasConsentContext, hasPreferenceContext, hasContinueConsentContext);
   const confidence = confidenceFor(match.term, contextSatisfied);
   return {
     intent: match.term.intent,
@@ -412,6 +424,7 @@ export function classifyConsentControlLabel(
       match.term.variant ? `variant_${match.term.variant}` : null,
       match.term.requiresConsentContext ? "requires_consent_context" : null,
       match.term.requiresPreferenceContext ? "requires_preference_context" : null,
+      match.term.requiresContinueConsentContext ? "requires_continue_consent_context" : null,
       contextSatisfied ? "context_satisfied" : "context_not_satisfied",
     ]),
     contextSatisfied,
@@ -442,7 +455,7 @@ function equivalent(intent: Exclude<ConsentControlIntent, "unknown">, phrase: st
 function contextual(
   intent: Exclude<ConsentControlIntent, "unknown">,
   phrase: string,
-  options: Pick<ConsentControlTerm, "requiresConsentContext" | "requiresPreferenceContext" | "variant"> = {},
+  options: Pick<ConsentControlTerm, "requiresConsentContext" | "requiresPreferenceContext" | "requiresContinueConsentContext" | "variant"> = {},
 ): TermInput {
   return { intent, phrase, strength: "contextual", ...options };
 }
@@ -460,6 +473,7 @@ function termScore(
   normalizedLabel: string,
   hasConsentContext: boolean,
   hasPreferenceContext: boolean,
+  hasContinueConsentContext: boolean,
 ) {
   const phrase = normalizeConsentControlText(term.phrase);
   if (!phrase) {
@@ -473,7 +487,7 @@ function termScore(
   if (!exact && !phraseMatch) {
     return 0;
   }
-  const contextSatisfied = contextRequirementSatisfied(term, hasConsentContext, hasPreferenceContext);
+  const contextSatisfied = contextRequirementSatisfied(term, hasConsentContext, hasPreferenceContext, hasContinueConsentContext);
   if (!contextSatisfied && (term.intent === "options" || term.strength === "contextual")) {
     return 0;
   }
@@ -488,9 +502,11 @@ function contextRequirementSatisfied(
   term: ConsentControlTerm,
   hasConsentContext: boolean,
   hasPreferenceContext: boolean,
+  hasContinueConsentContext: boolean,
 ) {
   return (term.requiresConsentContext !== true || hasConsentContext) &&
-    (term.requiresPreferenceContext !== true || hasPreferenceContext);
+    (term.requiresPreferenceContext !== true || hasPreferenceContext) &&
+    (term.requiresContinueConsentContext !== true || hasContinueConsentContext);
 }
 
 function confidenceFor(term: ConsentControlTerm, contextSatisfied: boolean) {

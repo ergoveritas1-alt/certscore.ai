@@ -56,6 +56,35 @@ test("classifies necessary-only labels as reject-equivalent", () => {
   }
 });
 
+test("classifies category-scoped analytics controls without broadening plain category labels", () => {
+  const allowAnalytics = classifyConsentControlLabel({ label: "Allow analytics" });
+  assert.equal(allowAnalytics.intent, "accept");
+  assert.equal(allowAnalytics.matchStrength, "equivalent");
+  assert.equal(allowAnalytics.variant, "category_analytics");
+
+  const rejectAnalytics = classifyConsentControlLabel({ label: "Reject analytics" });
+  assert.equal(rejectAnalytics.intent, "reject");
+  assert.equal(rejectAnalytics.matchStrength, "equivalent");
+  assert.equal(rejectAnalytics.variant, "category_analytics");
+
+  assert.equal(classifyConsentControlLabel({ label: "Analytics" }).intent, "unknown");
+});
+
+test("classifies Continue as accept only when consent-by-using context is retained", () => {
+  assert.equal(classifyConsentControlLabel({ label: "Continue" }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: "Continue", hasConsentContext: true }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: "Continue reading", contextText: "We use cookies." }).intent, "unknown");
+
+  const classification = classifyConsentControlLabel({
+    label: "Continue",
+    contextText: "We and our partners use cookies on this site. By using the site, you consent to these cookies.",
+  });
+  assert.equal(classification.intent, "accept");
+  assert.equal(classification.matchStrength, "contextual");
+  assert.equal(classification.variant, "continue_as_accept");
+  assert.equal(classification.reasonCodes.includes("requires_continue_consent_context"), true);
+});
+
 test("keeps privacy opt-out distinct from cookie reject", () => {
   for (const label of [
     "Do not sell or share",

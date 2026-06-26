@@ -1710,6 +1710,126 @@ test("materializeLocalV2DagScanDetail promotes security block pages even when co
   }
 });
 
+test("materializeLocalV2DagScanDetail treats retained bot verification DOM as scan-level no-go", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/no-go-bot-verification-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-25T02:16:00.000Z",
+      consentUiObservations: [],
+      cookieEvents: [],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: false
+      },
+      domSnapshots: [
+        {
+          artifactId: "dom_text_pre_consent",
+          capturedAtMs: 1400,
+          consentStateAtTime: "pre_consent",
+          path: "/tmp/certscore-v2/lufthansa-security-check/dom-text-pre-consent.txt",
+          textExcerpt: "Security check We apologise for the interruption. We detected unusual behaviour from your browser, which resembles that of a bot. The reasons could be the following: you are using a VPN or privacy software often used by bots."
+        }
+      ],
+      modulesRun: [],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.lufthansa.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 120,
+          url: "https://www.lufthansa.com/"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "www.lufthansa.com",
+          isThirdParty: false,
+          thirdParty: false,
+          timestampMs: 620,
+          url: "https://www.lufthansa.com/cdn-cgi/challenge-platform/scripts/jsd/main.js"
+        }
+      ],
+      normalizedVendorObservations: [],
+      normalizedUrl: "https://www.lufthansa.com/",
+      policySurfaceObservations: [],
+      runtimeCoverage: {
+        coverageStatus: "usable",
+        fallbackModesUsed: [],
+        limitationKeys: [],
+        notes: [],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 2,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 0
+        },
+        silentEmpty: false
+      },
+      runtimeTimeline: [],
+      scanId: "lufthansa-security-check-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 1600,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "dom_content_loaded",
+          path: "/tmp/certscore-v2/lufthansa-security-check/screenshot-pre-consent.png",
+          url: "https://www.lufthansa.com/"
+        }
+      ],
+      startedAt: "2026-06-25T02:15:48.000Z",
+      url: "https://lufthansa.com/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "lufthansa.com",
+        scanConfigJson: {
+          hostname: "lufthansa.com",
+          normalizedUrl: "https://lufthansa.com/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const scanNoGoAssessment = detail.runtimeArtifacts?.scan_no_go_assessment as Record<string, unknown> | undefined;
+    const visualAccessReview = detail.runtimeArtifacts?.visual_access_review as Record<string, unknown> | undefined;
+
+    assert.equal(scanNoGoAssessment?.decision, "no_go");
+    assert.equal(visualAccessReview?.go_no_go, "NO_GO");
+    assert.equal(detail.snapshot?.homepage_fetch_status, "blocked");
+    assert.equal(detail.snapshot?.blocked_flag, true);
+    assert.equal(detail.snapshot?.coverage_level, "limited_none");
+    assert.equal(detail.snapshot?.pages_scanned, 0);
+    assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, false);
+    assert.equal(detail.scan.pagesScanned, 0);
+    assert.equal(detail.signals.length, 0);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail keeps missing reject actionable when runtime activity was retained", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

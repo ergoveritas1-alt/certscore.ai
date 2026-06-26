@@ -20,9 +20,11 @@ import {
 import { getScanProfile } from "./profiles.js";
 import {
   type FixtureRouteFulfiller,
+  consentControlsFromAccessibilityTree,
   preConsentRuntimeScanner,
 } from "./scanners/pre-consent-runtime-scanner.js";
 import { inspectBundle, type BundleInspectionReport } from "./inspector.js";
+import { runScan } from "./index.js";
 import {
   type StaticFixturePage,
   startStaticFixtureServer,
@@ -519,6 +521,253 @@ test("pre-consent runtime scanner retains first-layer accept and reject controls
   }
 });
 
+test("pre-consent runtime scanner inventories German and French first-layer controls through the canonical classifier", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-localized-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-localized-controls"),
+      path.join(tempRoot, "consent-localized-controls"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "accept_all" &&
+        control.label === "Alle akzeptieren" &&
+        control.matchedLocale === "de"
+      ),
+      true,
+      "scanner should classify German accept controls through the canonical registry",
+    );
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "reject_all" &&
+        control.label === "Tout refuser" &&
+        control.matchedLocale === "fr"
+      ),
+      true,
+      "scanner should classify French reject controls through the canonical registry",
+    );
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "manage_preferences" &&
+        control.label === "Paramètres des cookies" &&
+        control.matchedLocale === "fr"
+      ),
+      true,
+      "scanner should classify French options controls through the canonical registry",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner treats first-layer contextual Continue as accept-equivalent only with retained consent-by-using text", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-contextual-continue-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-contextual-continue-accept"),
+      path.join(tempRoot, "consent-contextual-continue-accept"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.equal(observation?.managePreferencesControlObserved, false);
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "accept_all" &&
+        control.label === "Continue" &&
+        control.matchedTerm === "continue" &&
+        control.classifierVariant === "continue_as_accept"
+      ),
+      true,
+      "scanner should retain NBC-style Continue as accept proof only through the contextual canonical classifier",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner can inventory NBC-style Continue from bounded accessibility-tree consent context", () => {
+  const inventory = consentControlsFromAccessibilityTree([
+    {
+      nodeId: "1",
+      role: { value: "RootWebArea" },
+      name: { value: "NBC News" },
+      childIds: ["2", "9"],
+    },
+    {
+      nodeId: "2",
+      role: { value: "region" },
+      name: { value: "Cookie banner" },
+      childIds: ["3"],
+    },
+    {
+      nodeId: "3",
+      role: { value: "alertdialog" },
+      name: { value: "Privacy" },
+      childIds: ["4", "5", "6"],
+    },
+    {
+      nodeId: "4",
+      role: { value: "StaticText" },
+      name: {
+        value: "We and our partners use cookies on this site to improve our service, perform analytics, personalize advertising, measure advertising performance, and remember website preferences. By using the site, you consent to these cookies.",
+      },
+    },
+    {
+      nodeId: "5",
+      role: { value: "link" },
+      name: { value: "Cookie Policy" },
+    },
+    {
+      nodeId: "6",
+      role: { value: "button" },
+      name: { value: "Continue" },
+    },
+    {
+      nodeId: "9",
+      role: { value: "link" },
+      name: { value: "Privacy Choices" },
+    },
+  ]);
+
+  assert.equal(inventory.controls.length, 1);
+  assert.equal(inventory.controls.some((control) => control.label === "Continue"), true);
+  assert.equal(
+    inventory.controls.every((control) => control.inventorySource === "accessibility_tree"),
+    true,
+  );
+  assert.equal(
+    inventory.controls.some((control) => control.label === "Privacy Choices"),
+    false,
+    "ordinary page privacy links outside bounded consent context should not be retained",
+  );
+  assert.match(inventory.textExcerpts.join(" "), /By using the site, you consent/i);
+});
+
+test("pre-consent runtime scanner inventories first-layer category-scoped analytics controls through the canonical classifier", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-analytics-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-analytics-category-controls"),
+      path.join(tempRoot, "consent-analytics-category-controls"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "accept_all" &&
+        control.label === "Allow analytics" &&
+        control.classifierVariant === "category_analytics"
+      ),
+      true,
+      "scanner should classify category-scoped analytics allowance as accept-equivalent",
+    );
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "reject_all" &&
+        control.label === "Reject analytics" &&
+        control.classifierVariant === "category_analytics"
+      ),
+      true,
+      "scanner should classify category-scoped analytics refusal as reject-equivalent",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner inventories compact analytics controls after supplemental full-page evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-compact-analytics-"));
+  try {
+    const result = await scanFixturePage(
+      server.urlFor("consent-compact-analytics-controls"),
+      path.join(tempRoot, "consent-compact-analytics-controls"),
+      "fast",
+      "always",
+      "viewport_first",
+    );
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, false);
+    assert.deepEqual(observation?.visibleChoiceLabels, ["Reject analytics", "Allow analytics"]);
+    assert.ok((observation?.inventoryDiagnostics?.retainedControlCount ?? 0) >= 2);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner inventories compact German accept and reject controls after supplemental full-page evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-compact-cookie-"));
+  try {
+    const result = await scanFixturePage(
+      server.urlFor("consent-compact-cookie-controls"),
+      path.join(tempRoot, "consent-compact-cookie-controls"),
+      "fast",
+      "always",
+      "viewport_first",
+    );
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, false);
+    assert.deepEqual(observation?.visibleChoiceLabels, ["Ablehnen", "Akzeptieren"]);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner inventories compact privacy settings and accept controls after supplemental full-page evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-compact-privacy-settings-"));
+  try {
+    const result = await scanFixturePage(
+      server.urlFor("consent-compact-privacy-settings-controls"),
+      path.join(tempRoot, "consent-compact-privacy-settings-controls"),
+      "fast",
+      "always",
+      "viewport_first",
+    );
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.deepEqual(observation?.visibleChoiceLabels, ["Settings", "Accept"]);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner recaptures late first-layer controls without interaction", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-late-controls-"));
@@ -799,6 +1048,256 @@ test("pre-consent runtime scanner performs a structured read after supplemental 
   }
 });
 
+test("pre-consent runtime scanner inventories off-viewport controls inside strong CMP containers after supplemental full-page capture", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-offscreen-onetrust-controls-"));
+  try {
+    const url = server.urlFor("consent-cmp-script-offscreen-onetrust-controls");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const observation = result.consentUiObservations[0];
+    const timingLabels = result.moduleRun.timingBreakdown?.map((entry) => entry.label) ?? [];
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(
+      result.cmpRuntimeObservations.some((cmp) => cmp.vendor === "OneTrust" && cmp.confidence >= 0.9),
+      true,
+      "fixture should retain high-confidence OneTrust CMP runtime evidence",
+    );
+    assert.equal(
+      timingLabels.includes("supplemental full-page screenshot"),
+      true,
+      "fixture should exercise the supplemental full-page capture path",
+    );
+    assert.equal(
+      timingLabels.includes("consent UI supplemental screenshot recapture"),
+      true,
+      "scanner should run the final structured control inventory after supplemental capture",
+    );
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.deepEqual(
+      observation?.visibleChoiceLabels,
+      ["Accept", "Reject", "Cookie settings"],
+      "off-viewport OneTrust controls should be retained structurally in deterministic order",
+    );
+    assert.equal(
+      observation?.basis.includes("inventory:full_document_cmp_controls"),
+      true,
+      "observation should mark the full-document CMP inventory as the source",
+    );
+    assert.equal(
+      observation?.basis.includes("recapture:post_supplemental_screenshot_full_document_cmp_controls"),
+      true,
+      "merged observation should distinguish full-document CMP inventory from viewport first-layer reads",
+    );
+    assert.equal(
+      observation?.controls.every((control) =>
+        typeof control.matchedTerm === "string" &&
+        control.matchStrength !== undefined &&
+        (control.actionType === "accept_all" ||
+          control.actionType === "reject_all" ||
+          control.actionType === "manage_preferences")
+      ),
+      true,
+      "retained controls should be canonical-classifier-backed accept/reject/options controls",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner inventories off-viewport controls inside bounded consent-text containers after supplemental full-page capture", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-offscreen-context-controls-"));
+  try {
+    const url = server.urlFor("consent-cmp-script-offscreen-context-controls");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(
+      result.cmpRuntimeObservations.some((cmp) => cmp.vendor === "OneTrust" && cmp.confidence >= 0.9),
+      true,
+      "fixture should retain high-confidence OneTrust CMP runtime evidence",
+    );
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.deepEqual(
+      observation?.visibleChoiceLabels,
+      ["Accept", "Reject", "Cookie settings"],
+      "bounded consent-text containers should retain only canonical-classified controls",
+    );
+    assert.equal(
+      observation?.basis.includes("inventory:full_document_consent_surface_controls"),
+      true,
+      "observation should distinguish bounded consent-text inventory from strong CMP-container inventory",
+    );
+    assert.equal(
+      observation?.basis.includes("recapture:post_supplemental_screenshot_full_document_cmp_controls"),
+      true,
+      "merged observation should identify the supplemental full-document recapture path",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner inventories open shadow-root consent controls without interaction", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-shadow-context-controls-"));
+  try {
+    const url = server.urlFor("consent-cmp-script-shadow-context-controls");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(
+      result.cmpRuntimeObservations.some((cmp) => cmp.vendor === "OneTrust" && cmp.confidence >= 0.9),
+      true,
+      "fixture should retain high-confidence OneTrust CMP runtime evidence",
+    );
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.deepEqual(
+      observation?.visibleChoiceLabels,
+      ["Accept", "Reject", "Cookie settings"],
+      "open shadow-root consent controls should be inventoried and canonical-classified",
+    );
+    assert.equal(
+      observation?.basis.includes("inventory:full_document_consent_surface_controls"),
+      true,
+      "shadow-root controls should retain bounded full-document consent-surface provenance",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner inventories same-origin iframe consent controls without interaction", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-iframe-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-iframe-reject"),
+      path.join(tempRoot, "consent-iframe-reject"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.deepEqual(
+      observation?.visibleChoiceLabels,
+      ["Reject All", "Accept All"],
+      "same-origin iframe controls should be retained as structured controls in deterministic order",
+    );
+    assert.equal(
+      observation?.basis.includes("inventory:same_origin_frame_controls"),
+      true,
+      "observation should mark the same-origin frame inventory source",
+    );
+    assert.equal(
+      observation?.inventoryDiagnostics?.inventorySources.includes("same_origin_frame"),
+      true,
+      "diagnostics should retain same-origin frame provenance",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner does not treat off-viewport footer settings as CMP control proof", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-offscreen-footer-settings-"));
+  try {
+    const url = server.urlFor("consent-cmp-script-offscreen-footer-settings");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: getScanProfile("quick").internalBudgetMs,
+      artifactWriter,
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(
+      result.cmpRuntimeObservations.some((cmp) => cmp.vendor === "OneTrust" && cmp.confidence >= 0.9),
+      true,
+      "fixture should still have high-confidence CMP evidence",
+    );
+    assert.equal(
+      observation?.controls.some((control) => /cookie settings/i.test(control.label)),
+      false,
+      "plain off-viewport footer settings should not become structured consent-control proof",
+    );
+    assert.equal(observation?.acceptControlObserved, false);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.equal(observation?.managePreferencesControlObserved, false);
+    assert.equal(
+      observation?.basis.includes("inventory:full_document_cmp_controls"),
+      false,
+      "full-document inventory basis should only be added when CMP-container controls are retained",
+    );
+    assert.equal(
+      observation?.inventoryDiagnostics?.rejectionReasons.includes("footer_nav_page_chrome"),
+      true,
+      "diagnostics should explain that the rejected Cookie Settings control lived in ordinary page chrome",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner skips CMP recapture without first-layer surface hints", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-cmp-no-surface-hints-"));
@@ -854,6 +1353,16 @@ test("pre-consent runtime scanner does not classify bare generic choice controls
     assert.equal(observation?.acceptControlObserved, false);
     assert.equal(observation?.rejectControlObserved, false);
     assert.deepEqual(observation?.controls ?? [], []);
+    assert.equal(
+      observation?.inventoryDiagnostics?.retainedControlCount,
+      0,
+      "ordinary account choices without consent context should not be retained as proof",
+    );
+    assert.equal(
+      observation?.inventoryDiagnostics?.rejectionReasons.includes("no_consent_context"),
+      true,
+      "diagnostics should explain why the generic account choices were rejected",
+    );
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -1033,6 +1542,56 @@ test("pre-consent runtime scanner avoids long post-screenshot consent recapture"
   }
 });
 
+test("scan-core emits scan no-go assessment for Cloudflare-style security challenge", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-security-challenge-"));
+  try {
+    const bundle = await runScan({
+      url: server.urlFor("security-cloudflare-challenge"),
+      profile: "tiny",
+      outDir: path.join(tempRoot, "out"),
+      preConsentScreenshotMode: "always",
+    });
+
+    assert.equal(bundle.scan_no_go_assessment?.decision, "no_go");
+    assert.equal(bundle.scanNoGoAssessment?.decision, "no_go");
+    assert.equal(bundle.visual_access_review?.go_no_go, "NO_GO");
+    assert.equal(bundle.visual_access_review?.page_state, "captcha_or_challenge");
+    assert.ok(bundle.scan_no_go_assessment?.reasonCodes.includes("captcha_or_challenge"));
+    assert.ok(bundle.scan_no_go_assessment?.corroboratorCodes.includes("network_cloudflare_challenge"));
+    assert.equal(bundle.runtimeCoverage?.coverageStatus, "limited_none");
+    assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("captcha_or_challenge"));
+    assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("scan_no_go_assessment"));
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("scan-core emits scan no-go assessment when initial navigation fails before evidence capture", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-navigation-no-go-"));
+  try {
+    const bundle = await runScan({
+      url: "http://127.0.0.1:9/",
+      profile: "tiny",
+      outDir: path.join(tempRoot, "out"),
+      preConsentScreenshotMode: "never",
+    });
+
+    assert.equal(bundle.scan_no_go_assessment?.decision, "no_go");
+    assert.equal(bundle.scanNoGoAssessment?.decision, "no_go");
+    assert.equal(bundle.visual_access_review?.go_no_go, "NO_GO");
+    assert.equal(bundle.visual_access_review?.page_state, "capture_failed");
+    assert.equal(bundle.visual_access_review?.status, "missing_visual_artifact");
+    assert.ok(bundle.scan_no_go_assessment?.reasonCodes.includes("navigation_transport_failure"));
+    assert.ok(bundle.scan_no_go_assessment?.corroboratorCodes.includes("pre_consent_navigation_failed"));
+    assert.equal(bundle.runtimeCoverage?.coverageStatus, "limited_none");
+    assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("navigation_transport_failure"));
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 async function scanAndAssertFixtureExpectations(
   server: Awaited<ReturnType<typeof startStaticFixtureServer>>,
   tempRoot: string,
@@ -1058,6 +1617,7 @@ async function scanFixturePage(
   outDir: string,
   waitMode: "full" | "fast" = "full",
   screenshotMode: "always" | "selective" | "never" = "always",
+  screenshotCaptureMode?: "full_page_first" | "viewport_first",
 ): Promise<CanonicalEvidenceBundle> {
   const startedAtMs = Date.now();
   const scanProfile = getScanProfile("quick");
@@ -1069,6 +1629,7 @@ async function scanFixturePage(
     internalBudgetMs: waitMode === "fast" ? 6_000 : scanProfile.internalBudgetMs,
     artifactWriter,
     routeFulfillers,
+    screenshotCaptureMode,
     waitMode,
     screenshotMode,
   });

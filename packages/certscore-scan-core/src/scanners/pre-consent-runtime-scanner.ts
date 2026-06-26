@@ -19,7 +19,7 @@ import {
 } from "@certscore/contracts";
 import { resolveEndpointGeography, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import { writeFile } from "node:fs/promises";
-import { chromium, type Browser, type BrowserContext, type Page, type Request, type Response, type Route } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Frame, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import {
   classifyCookieParty,
@@ -123,6 +123,12 @@ export async function preConsentRuntimeScanner(
     "browser api probe install",
     "Install bounded pre-consent browser API access probes for entropy/fingerprinting review.",
     () => installBrowserApiAccessProbe(browserContext),
+  );
+  await recordTiming(
+    timingBreakdown,
+    "consent inventory probe install",
+    "Install deterministic consent-control DOM inventory helper for main document, open shadow roots, and same-origin frames.",
+    () => installConsentInventoryProbe(browserContext),
   );
 
   for (const fulfiller of input.routeFulfillers ?? []) {
@@ -741,15 +747,23 @@ export async function preConsentRuntimeScanner(
             page,
             input.scanStartedAtMs,
             750,
-            { waitForControlsOnTextOnlySurface: true },
+            {
+              allowFullDocumentCmpControls: true,
+              waitForControlsOnTextOnlySurface: true,
+            },
           ),
           () => consentObservation,
         );
         if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
+          const recaptureBasis = recapturedConsentObservation.basis.some((basis) =>
+            basis.startsWith("inventory:full_document_")
+          )
+            ? "recapture:post_supplemental_screenshot_full_document_cmp_controls"
+            : "recapture:post_supplemental_screenshot_first_layer_controls";
           consentObservation = mergeConsentUiObservations(
             consentObservation,
             recapturedConsentObservation,
-            "recapture:post_supplemental_screenshot_first_layer_controls",
+            recaptureBasis,
           );
           domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
         }
@@ -1122,6 +1136,15 @@ function emptyConsentUiObservation(scanStartedAtMs: number): ConsentUiObservatio
     rejectControlObserved: false,
     managePreferencesControlObserved: false,
     controls: [],
+    inventoryDiagnostics: {
+      candidateContainerCount: 0,
+      candidateControlCount: 0,
+      retainedControlCount: 0,
+      inventorySources: [],
+      candidateLabels: [],
+      rejectionReasons: ["timing_expired_before_controls_surfaced"],
+      timingMarkers: ["bounded_capture_timeout_or_failure"],
+    },
     evidenceRefs: [],
     confidence: 0.4,
   };
@@ -1579,21 +1602,34 @@ export async function detectConsentUi(
   scanStartedAtMs: number,
   waitForControlTimeoutMs = 3_500,
   options: {
+    allowFullDocumentCmpControls?: boolean;
     waitForActionableChoiceControls?: boolean;
     waitForControlsOnTextOnlySurface?: boolean;
   } = {},
 ): Promise<ConsentUiObservation> {
   const waitStartedAtMs = Date.now();
-  const immediateObservation = await readConsentUiObservation(page, scanStartedAtMs);
+  const immediateObservation = await readConsentUiObservation(page, scanStartedAtMs, {
+    allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
+  });
+  const shouldWaitForRequestedRecapture =
+    options.waitForActionableChoiceControls === true ||
+    options.waitForControlsOnTextOnlySurface === true ||
+    options.allowFullDocumentCmpControls === true;
   if (
     immediateObservation.controls.length > 0 && (
       !options.waitForActionableChoiceControls ||
       hasActionableConsentChoiceControl(immediateObservation)
     ) ||
     (immediateObservation.likelyPresent && !options.waitForControlsOnTextOnlySurface) ||
+    (!shouldWaitForRequestedRecapture && !immediateObservation.likelyPresent && page.frames().length <= 1) ||
     waitForControlTimeoutMs <= 0
   ) {
-    return immediateObservation;
+    return annotateConsentInventoryTimingMarkers(
+      immediateObservation,
+      immediateObservation.controls.length > 0
+        ? ["immediate_inventory", "early_exit_controls_found"]
+        : ["immediate_inventory"],
+    );
   }
 
   const requireActionableChoiceControl = options.waitForActionableChoiceControls === true ? "true" : "false";
@@ -1618,6 +1654,10 @@ export async function detectConsentUi(
     const hasConsentContext = (element) => {
       let current = element;
       for (let depth = 0; current && depth < 5; depth += 1) {
+        if (current === document.body || current === document.documentElement) {
+          current = current.parentElement;
+          continue;
+        }
         const contextText = (current.textContent || "").replace(/\s+/g, " ").trim();
         const contextAttrs = [
           current.getAttribute("aria-label"),
@@ -1648,11 +1688,18 @@ export async function detectConsentUi(
         (!requireActionableChoiceControl || label.length <= 80);
     });
     return requireActionableChoiceControl ? visibleConsentControls.length >= 2 : visibleConsentControls.length > 0;
-  })()`, { timeout: waitForControlTimeoutMs }).catch(() => undefined);
+  })()`, undefined, { timeout: waitForControlTimeoutMs }).catch(() => undefined);
 
-  const postWaitObservation = await readConsentUiObservation(page, scanStartedAtMs);
+  const postWaitObservation = await readConsentUiObservation(page, scanStartedAtMs, {
+    allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
+  });
   if (!options.waitForActionableChoiceControls || hasActionableConsentChoiceControl(postWaitObservation)) {
-    return postWaitObservation;
+    return annotateConsentInventoryTimingMarkers(
+      postWaitObservation,
+      postWaitObservation.controls.length > 0
+        ? ["immediate_inventory", "post_wait_inventory", "early_exit_controls_found"]
+        : ["immediate_inventory", "post_wait_inventory"],
+    );
   }
 
   const remainingWaitMs = waitForControlTimeoutMs - (Date.now() - waitStartedAtMs);
@@ -1660,152 +1707,64 @@ export async function detectConsentUi(
     await page.waitForTimeout(remainingWaitMs).catch(() => undefined);
   }
 
-  return readConsentUiObservation(page, scanStartedAtMs);
+  const finalObservation = await readConsentUiObservation(page, scanStartedAtMs, {
+    allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
+  });
+  return annotateConsentInventoryTimingMarkers(
+    finalObservation,
+    finalObservation.controls.length > 0
+      ? ["immediate_inventory", "post_wait_inventory", "final_inventory"]
+      : ["immediate_inventory", "post_wait_inventory", "final_inventory", "timing_expired_before_controls_surfaced"],
+  );
 }
 
 async function readConsentUiObservation(
   page: Page,
   scanStartedAtMs: number,
+  options: {
+    allowFullDocumentCmpControls?: boolean;
+  } = {},
 ): Promise<ConsentUiObservation> {
   const text = await page.evaluate(() => (document.body?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 12_000)).catch(() => "");
-  const controls = await page.evaluate<ConsentUiObservation["controls"]>(String.raw`(() => {
-    const labelFor = (element) => {
-      const aria = element.getAttribute("aria-label");
-      const title = element.getAttribute("title");
-      const value = element instanceof HTMLInputElement ? element.value : null;
-      const textContent = element.textContent;
-      return (aria || title || value || textContent || "").replace(/\s+/g, " ").trim();
+  const allowFullDocumentCmpControls = options.allowFullDocumentCmpControls === true;
+  await page.evaluate(CONSENT_INVENTORY_PROBE_SCRIPT).catch(() => undefined);
+  const inventory = await page.evaluate<{
+    controls: ConsentUiInventoryControl[];
+    diagnostics?: ConsentInventoryProbeDiagnostics;
+    frameInaccessibleCount: number;
+  }>(String.raw`(() => {
+    const allowFullDocumentCmpControls = ${allowFullDocumentCmpControls ? "true" : "false"};
+    return {
+      ...window.__certscoreConsentInventory(allowFullDocumentCmpControls),
+      frameInaccessibleCount: 0,
     };
-    const selectorHintFor = (element) => {
-      const id = element.getAttribute("id");
-      const dataTestId = element.getAttribute("data-testid");
-      const className = typeof element.getAttribute("class") === "string"
-        ? element.getAttribute("class")?.split(/\s+/).filter(Boolean).slice(0, 3).join(".")
-        : null;
-      if (id) return "#" + id;
-      if (dataTestId) return '[data-testid="' + dataTestId + '"]';
-      if (className) return element.tagName.toLowerCase() + "." + className;
-      return element.tagName.toLowerCase();
-    };
-    const isVisible = (element) => {
-      const rect = element.getBoundingClientRect();
-      const style = window.getComputedStyle(element);
-      return (
-        rect.width > 0 &&
-        rect.height > 0 &&
-        style.visibility !== "hidden" &&
-        style.display !== "none" &&
-        element.getAttribute("aria-hidden") !== "true" &&
-        Number.parseFloat(style.opacity || "1") > 0.05
-      );
-    };
-    const isFirstLayerPosition = (element) => {
-      const rect = element.getBoundingClientRect();
-      return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
-    };
-    const hasConsentContext = (element) => {
-      let current = element;
-      for (let depth = 0; current && depth < 5; depth += 1) {
-        const contextText = (current.textContent || "").replace(/\s+/g, " ").trim();
-        const contextAttrs = [
-          current.getAttribute("aria-label"),
-          current.getAttribute("role"),
-          current.getAttribute("id"),
-          current.getAttribute("class"),
-        ].filter(Boolean).join(" ");
-        if (/cookie|cookies|privacy|consent|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i.test(contextText + " " + contextAttrs)) {
-          return true;
-        }
-        current = current.parentElement;
-      }
-      return false;
-    };
-    const isPotentialCustomControl = (element) => {
-      const role = (element.getAttribute("role") || "").toLowerCase();
-      const tabIndex = element.getAttribute("tabindex");
-      const className = element.getAttribute("class") || "";
-      const id = element.getAttribute("id") || "";
-      return (
-        role === "button" ||
-        role === "link" ||
-        tabIndex === "0" ||
-        element.hasAttribute("onclick") ||
-        /\b(?:btn|button|choice|option|preference|purpose)\b/i.test(className) ||
-        /(?:btn|button|choice|option|preference|purpose)/i.test(id)
-      );
-    };
-    const directCandidates = Array.from(document.querySelectorAll("button, [role='button'], a, input[type='button'], input[type='submit']"));
-    const customControlSelectors = [
-      "[role='link']",
-      "[tabindex='0']",
-      "[onclick]",
-      "[id*='button' i]",
-      "[id*='btn' i]",
-      "[id*='choice' i]",
-      "[id*='option' i]",
-      "[id*='preference' i]",
-      "[id*='purpose' i]",
-      "[class*='button' i]",
-      "[class*='btn' i]",
-      "[class*='choice' i]",
-      "[class*='option' i]",
-      "[class*='preference' i]",
-      "[class*='purpose' i]",
-    ].join(",");
-    const directSet = new Set(directCandidates);
-    const textCandidates = Array.from(document.querySelectorAll(customControlSelectors))
-      .filter((element) => !directSet.has(element))
-      .slice(0, 250)
-      .filter((element) => {
-        if (element.querySelector("button, [role='button'], a, input[type='button'], input[type='submit']")) {
-          return false;
-        }
-        if (!isPotentialCustomControl(element)) {
-          return false;
-        }
-        const label = labelFor(element);
-        if (!label || label.length > 140 || !hasConsentContext(element)) {
-          return false;
-        }
-        return !Array.from(element.children).slice(0, 20).some((child) => {
-          const childLabel = labelFor(child);
-          return childLabel && childLabel !== label && childLabel.length <= 140;
-        });
-      });
-    const candidates = [...directCandidates.slice(0, 500), ...textCandidates];
-    const seen = new Set();
-    return candidates.flatMap((element) => {
-      if (!isVisible(element)) {
-        return [];
-      }
-      const label = labelFor(element).slice(0, 120);
-      if (!label || label.length > 120 || !hasConsentContext(element)) {
-        return [];
-      }
-      if (!isFirstLayerPosition(element)) {
-        return [];
-      }
-      const dedupeKey = label.toLowerCase();
-      if (seen.has(dedupeKey)) {
-        return [];
-      }
-      seen.add(dedupeKey);
-      return [{
-        actionType: "other",
-        label,
-        role: element.getAttribute("role") || undefined,
-        selectorHint: selectorHintFor(element),
-        tagName: element.tagName.toLowerCase(),
-        visible: true,
-      }];
-    }).slice(0, 12);
-  })()`).catch((): ConsentUiObservation["controls"] => {
-    return [];
+  })()`).catch((): {
+    controls: ConsentUiInventoryControl[];
+    diagnostics?: ConsentInventoryProbeDiagnostics;
+    frameInaccessibleCount: number;
+  } => {
+    return { controls: [], diagnostics: undefined, frameInaccessibleCount: 0 };
   });
-  const enrichedControls = controls.map((control) => {
+  const frameInventory = inventory.controls.some((control) => control.inventorySource === "same_origin_frame")
+    ? { controls: [], frameInaccessibleCount: 0, textExcerpts: [] }
+    : await readAccessibleFrameConsentInventory(page);
+  const accessibilityInventory = await readAccessibilityConsentInventory(page);
+  const combinedControls = [
+    ...inventory.controls,
+    ...frameInventory.controls,
+    ...accessibilityInventory.controls,
+  ];
+  const combinedText = [
+    text,
+    ...frameInventory.textExcerpts,
+    ...accessibilityInventory.textExcerpts,
+  ].filter(Boolean).join(" ").slice(0, 12_000);
+  const frameInaccessibleCount = inventory.frameInaccessibleCount + frameInventory.frameInaccessibleCount;
+  const probeDiagnostics = inventory.diagnostics;
+  const classifiedControls = combinedControls.map((control) => {
     const classification = classifyConsentControlLabel({
       label: control.label,
-      contextText: text,
+      contextText: combinedText,
       hasConsentContext: true,
     });
     const actionType = consentUiControlActionTypeFromClassification(classification);
@@ -1818,12 +1777,752 @@ async function readConsentUiObservation(
       classifierReasonCodes: classification.reasonCodes,
       classifierVariant: classification.variant,
     };
-  }).filter((control) => control.actionType !== "other");
+  });
+  const classifiedConsentSurfaceCountsByContainer = new Map<string, number>();
+  for (const control of classifiedControls) {
+    if (control.inventorySource !== "full_document_consent_surface" || control.actionType === "other") {
+      continue;
+    }
+    const key = control.inventoryContainerKey ?? "unknown";
+    classifiedConsentSurfaceCountsByContainer.set(
+      key,
+      (classifiedConsentSurfaceCountsByContainer.get(key) ?? 0) + 1,
+    );
+  }
+  const retainedInventorySources = new Set<string>();
+  const retainedRootSources = new Set<string>();
+  const rejectedReasons = new Set<NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["rejectionReasons"][number]>();
+  if (frameInaccessibleCount > 0) {
+    rejectedReasons.add("frame_inaccessible");
+  }
+  const enrichedControls = classifiedControls.filter((control) => {
+    if (control.actionType === "other") {
+      rejectedReasons.add("classifier_other_unknown");
+      return false;
+    }
+    if (
+      control.inventorySource === "full_document_consent_surface" &&
+      (classifiedConsentSurfaceCountsByContainer.get(control.inventoryContainerKey ?? "unknown") ?? 0) < 2
+    ) {
+      rejectedReasons.add("generic_container_fewer_than_two_classified_controls");
+      return false;
+    }
+    return true;
+  }).map((control) => {
+    if (control.inventorySource) {
+      retainedInventorySources.add(control.inventorySource);
+    }
+    if (control.inventoryRootSource) {
+      retainedRootSources.add(control.inventoryRootSource);
+    }
+    const {
+      frameUrl: _frameUrl,
+      inventoryContainerKey: _inventoryContainerKey,
+      inventoryRootSource: _inventoryRootSource,
+      inventorySource: _inventorySource,
+      ...retainedControl
+    } = control;
+    return retainedControl;
+  });
+  const diagnostics: NonNullable<ConsentUiObservation["inventoryDiagnostics"]> = {
+    candidateContainerCount: Math.max(
+      probeDiagnostics?.candidateContainerCount ?? 0,
+      new Set(
+        combinedControls
+          .map((control) => `${control.frameUrl ?? "main"}:${control.inventoryContainerKey ?? "unknown"}`)
+          .filter(Boolean),
+      ).size,
+    ),
+    candidateControlCount: Math.max(probeDiagnostics?.candidateControlCount ?? 0, combinedControls.length),
+    retainedControlCount: enrichedControls.length,
+    inventorySources: consentInventoryDiagnosticSources(retainedInventorySources, retainedRootSources),
+    candidateLabels: unique([
+      ...(probeDiagnostics?.candidateLabels ?? []),
+      ...combinedControls.map((control) => control.label).filter(Boolean),
+    ]).slice(0, 24),
+    rejectionReasons: uniqueRejectionReasons([
+      ...(probeDiagnostics?.rejectionReasons ?? []),
+      ...rejectedReasons,
+    ]),
+    timingMarkers: [],
+  };
   return buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
-    text,
+    text: combinedText,
     controls: enrichedControls,
+    fallbackBasis: [
+      ...(retainedInventorySources.has("full_document_cmp") ? ["inventory:full_document_cmp_controls"] : []),
+      ...(retainedInventorySources.has("full_document_consent_surface") ? ["inventory:full_document_consent_surface_controls"] : []),
+      ...(retainedInventorySources.has("same_origin_frame") ? ["inventory:same_origin_frame_controls"] : []),
+      ...(retainedInventorySources.has("accessibility_tree") ? ["inventory:accessibility_tree_controls"] : []),
+      ...(retainedRootSources.has("shadow_root") ? ["inventory:open_shadow_root_controls"] : []),
+    ],
+    inventoryDiagnostics: diagnostics,
   });
+}
+
+type ConsentUiInventoryControl = ConsentUiObservation["controls"][number] & {
+  frameUrl?: string;
+  inventorySource?: "first_layer" | "full_document_cmp" | "full_document_consent_surface" | "same_origin_frame" | "accessibility_tree";
+  inventoryContainerKey?: string;
+  inventoryRootSource?: "document" | "shadow_root";
+};
+
+type ConsentInventoryProbeDiagnostics = Pick<
+  NonNullable<ConsentUiObservation["inventoryDiagnostics"]>,
+  "candidateContainerCount" | "candidateControlCount" | "candidateLabels" | "rejectionReasons"
+>;
+
+async function readAccessibleFrameConsentInventory(
+  page: Page,
+): Promise<{
+  controls: ConsentUiInventoryControl[];
+  frameInaccessibleCount: number;
+  textExcerpts: string[];
+}> {
+  const frames = page.frames()
+    .filter((frame) => frame !== page.mainFrame())
+    .slice(0, 8);
+  const controls: ConsentUiInventoryControl[] = [];
+  const textExcerpts: string[] = [];
+  let frameInaccessibleCount = 0;
+  for (const frame of frames) {
+    await frame.waitForLoadState("domcontentloaded", { timeout: 250 }).catch(() => undefined);
+    const frameInventory = await boundedFrameInventoryRead(frame).catch(() => {
+      return null;
+    });
+    if (!frameInventory) {
+      frameInaccessibleCount += 1;
+      continue;
+    }
+    controls.push(...frameInventory.controls.slice(0, 8));
+    if (frameInventory.textExcerpt) {
+      textExcerpts.push(frameInventory.textExcerpt);
+    }
+    if (controls.length >= 12) {
+      break;
+    }
+  }
+  return {
+    controls: controls.slice(0, 12),
+    frameInaccessibleCount,
+    textExcerpts,
+  };
+}
+
+function boundedFrameInventoryRead(frame: Frame): Promise<{
+  controls: ConsentUiInventoryControl[];
+  textExcerpt: string;
+} | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    frame.evaluate<{
+      controls: ConsentUiInventoryControl[];
+      textExcerpt: string;
+    }>(() => {
+      const controlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
+      const consentContextPattern = /cookie|cookies|privacy|consent|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i;
+      const labelFor = (element: Element) => {
+        const aria = element.getAttribute("aria-label");
+        const title = element.getAttribute("title");
+        const value = element instanceof HTMLInputElement ? element.value : null;
+        const textContent = element.textContent;
+        return (aria || title || value || textContent || "").replace(/\s+/g, " ").trim();
+      };
+      const selectorHintFor = (element: Element) => {
+        const id = element.getAttribute("id");
+        const dataTestId = element.getAttribute("data-testid");
+        if (id) return `#${id}`;
+        if (dataTestId) return `[data-testid="${dataTestId}"]`;
+        return element.tagName.toLowerCase();
+      };
+      const isVisible = (element: Element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.visibility !== "hidden" &&
+          style.display !== "none" &&
+          element.getAttribute("aria-hidden") !== "true" &&
+          Number.parseFloat(style.opacity || "1") > 0.05
+        );
+      };
+      const hasConsentContext = (element: Element) => {
+        let current: Element | null = element;
+        for (let depth = 0; current && depth < 6; depth += 1) {
+          if (current === document.body || current === document.documentElement) {
+            current = current.parentElement;
+            continue;
+          }
+          const contextText = (current.textContent || "").replace(/\s+/g, " ").trim();
+          const contextAttrs = [
+            current.getAttribute("aria-label"),
+            current.getAttribute("role"),
+            current.getAttribute("id"),
+            current.getAttribute("class"),
+          ].filter(Boolean).join(" ");
+          if (consentContextPattern.test(`${contextText} ${contextAttrs}`)) {
+            return true;
+          }
+          current = current.parentElement;
+        }
+        return false;
+      };
+      const controls = Array.from(document.querySelectorAll(controlSelector))
+        .slice(0, 80)
+        .flatMap((element) => {
+          const label = labelFor(element).slice(0, 120);
+          if (!label || label.length > 120 || !isVisible(element) || !hasConsentContext(element)) {
+            return [];
+          }
+          return [{
+            actionType: "other" as const,
+            label,
+            role: element.getAttribute("role") || undefined,
+            selectorHint: selectorHintFor(element),
+            tagName: element.tagName.toLowerCase(),
+            visible: true,
+            frameUrl: window.location.href,
+            inventoryContainerKey: `same_origin_frame:${window.location.href}`,
+            inventoryRootSource: "document" as const,
+            inventorySource: "same_origin_frame" as const,
+          }];
+        })
+        .slice(0, 8);
+      return {
+        controls,
+        textExcerpt: (document.body?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 2_000),
+      };
+    }),
+    new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), 500);
+    }),
+  ]).finally(() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  });
+}
+
+type AccessibilityNodeValue = {
+  value?: unknown;
+};
+
+export type ConsentAccessibilityTreeNode = {
+  childIds?: string[];
+  ignored?: boolean;
+  name?: AccessibilityNodeValue;
+  nodeId: string;
+  role?: AccessibilityNodeValue;
+};
+
+const AX_CONSENT_CONTEXT_PATTERN =
+  /cookie|cookies|privacy|consent|preference|preferences|analytics|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i;
+
+const AX_CONSENT_CONTAINER_ROLE_PATTERN =
+  /^(?:alertdialog|dialog|region|banner)$/i;
+
+async function readAccessibilityConsentInventory(page: Page): Promise<{
+  controls: ConsentUiInventoryControl[];
+  textExcerpts: string[];
+}> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    (async () => {
+      const client = await page.context().newCDPSession(page);
+      try {
+        const result = await client.send("Accessibility.getFullAXTree", {} as never) as {
+          nodes?: ConsentAccessibilityTreeNode[];
+        };
+        return consentControlsFromAccessibilityTree(result.nodes ?? []);
+      } finally {
+        await client.detach().catch(() => undefined);
+      }
+    })(),
+    new Promise<{ controls: ConsentUiInventoryControl[]; textExcerpts: string[] }>((resolve) => {
+      timer = setTimeout(() => resolve({ controls: [], textExcerpts: [] }), 750);
+    }),
+  ]).catch(() => {
+    return { controls: [], textExcerpts: [] };
+  }).finally(() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  });
+}
+
+export function consentControlsFromAccessibilityTree(
+  nodes: ConsentAccessibilityTreeNode[],
+): {
+  controls: ConsentUiInventoryControl[];
+  textExcerpts: string[];
+} {
+  const nodesById = new Map(nodes.map((node) => [node.nodeId, node]));
+  const parentById = new Map<string, string>();
+  for (const node of nodes) {
+    for (const childId of node.childIds ?? []) {
+      parentById.set(childId, node.nodeId);
+    }
+  }
+  const textExcerpts: string[] = [];
+  const controls: ConsentUiInventoryControl[] = [];
+  const seen = new Set<string>();
+
+  for (const node of nodes) {
+    if (node.ignored === true) {
+      continue;
+    }
+    const role = axStringValue(node.role).toLowerCase();
+    if (role !== "button" && role !== "link") {
+      continue;
+    }
+    const label = axStringValue(node.name).replace(/\s+/g, " ").trim().slice(0, 120);
+    if (!label || label.length > 120) {
+      continue;
+    }
+    const container = nearestAccessibilityConsentContainer(node, nodesById, parentById);
+    if (!container) {
+      continue;
+    }
+    const contextText = collectAccessibilitySubtreeText(container, nodesById, 80);
+    if (!AX_CONSENT_CONTEXT_PATTERN.test(contextText)) {
+      continue;
+    }
+    const classification = classifyConsentControlLabel({
+      label,
+      contextText,
+      hasConsentContext: true,
+    });
+    if (classification.intent === "unknown") {
+      continue;
+    }
+    const dedupeKey = `${container.nodeId}:${role}:${label.toLowerCase()}`;
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+    if (contextText && textExcerpts.length < 4 && !textExcerpts.includes(contextText)) {
+      textExcerpts.push(contextText.slice(0, 2_000));
+    }
+    controls.push({
+      actionType: "other",
+      label,
+      role,
+      selectorHint: `ax:${node.nodeId}`,
+      tagName: "ax-node",
+      visible: true,
+      inventoryContainerKey: `accessibility_tree:${container.nodeId}`,
+      inventoryRootSource: "document",
+      inventorySource: "accessibility_tree",
+    });
+    if (controls.length >= 12) {
+      break;
+    }
+  }
+
+  return {
+    controls,
+    textExcerpts,
+  };
+}
+
+function nearestAccessibilityConsentContainer(
+  node: ConsentAccessibilityTreeNode,
+  nodesById: Map<string, ConsentAccessibilityTreeNode>,
+  parentById: Map<string, string>,
+) {
+  let currentId: string | undefined = node.nodeId;
+  for (let depth = 0; currentId && depth < 8; depth += 1) {
+    const current = nodesById.get(currentId);
+    if (!current) {
+      return null;
+    }
+    const role = axStringValue(current.role);
+    const name = axStringValue(current.name);
+    const subtreeText = collectAccessibilitySubtreeText(current, nodesById, 60);
+    const isLikelyConsentContainer = (
+      AX_CONSENT_CONTAINER_ROLE_PATTERN.test(role) ||
+      AX_CONSENT_CONTEXT_PATTERN.test(`${name} ${role}`)
+    );
+    if (
+      current.nodeId !== node.nodeId &&
+      isLikelyConsentContainer &&
+      AX_CONSENT_CONTEXT_PATTERN.test(`${name} ${subtreeText}`) &&
+      subtreeText.length <= 4_000
+    ) {
+      return current;
+    }
+    currentId = parentById.get(currentId);
+  }
+  return null;
+}
+
+function collectAccessibilitySubtreeText(
+  root: ConsentAccessibilityTreeNode,
+  nodesById: Map<string, ConsentAccessibilityTreeNode>,
+  limit: number,
+) {
+  const values: string[] = [];
+  const stack = [root.nodeId];
+  const visited = new Set<string>();
+  while (stack.length > 0 && values.length < limit) {
+    const nodeId = stack.shift();
+    if (!nodeId || visited.has(nodeId)) {
+      continue;
+    }
+    visited.add(nodeId);
+    const node = nodesById.get(nodeId);
+    if (!node || node.ignored === true) {
+      continue;
+    }
+    const name = axStringValue(node.name);
+    if (name) {
+      values.push(name);
+    }
+    for (const childId of node.childIds ?? []) {
+      stack.push(childId);
+    }
+  }
+  return unique(values).join(" ").replace(/\s+/g, " ").trim().slice(0, 4_000);
+}
+
+function axStringValue(value: AccessibilityNodeValue | undefined) {
+  return typeof value?.value === "string" ? value.value : "";
+}
+
+const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
+    window.__certscoreConsentInventory = (allowFullDocumentCmpControls) => {
+      const controlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
+      const customControlSelectors = [
+        "[role='link']",
+        "[tabindex='0']",
+        "[onclick]",
+        "[id*='button' i]",
+        "[id*='btn' i]",
+        "[id*='choice' i]",
+        "[id*='option' i]",
+        "[id*='preference' i]",
+        "[id*='purpose' i]",
+        "[class*='button' i]",
+        "[class*='btn' i]",
+        "[class*='choice' i]",
+        "[class*='option' i]",
+        "[class*='preference' i]",
+        "[class*='purpose' i]",
+      ].join(",");
+      const strongCmpContainerPattern = /(?:^|[\s_-])(?:onetrust|optanon|ot-sdk|trustarc|didomi|usercentrics|cookiebot|consentmanager|cmp)(?:$|[\s_-])/i;
+      const strongCmpIdPattern = /(?:onetrust|optanon|ot-sdk|trustarc|didomi|usercentrics|cookiebot|consentmanager|cmp)/i;
+      const consentContextPattern = /cookie|cookies|privacy|consent|analytics|tracking|marketing|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i;
+      const consentSurfaceTextPattern = /cookie|cookies|privacy settings|privacy preferences|analytics preferences|consent preferences|tracking preferences/i;
+      const consentSurfaceActionPattern = /consent|privacy|preference|preferences|setting|settings|choice|choices|accept|reject|decline|allow|manage|ablehnen|akzeptieren|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer/i;
+      const labelFor = (element) => {
+        const aria = element.getAttribute("aria-label");
+        const title = element.getAttribute("title");
+        const value = element instanceof HTMLInputElement ? element.value : null;
+        const textContent = element.textContent;
+        return (aria || title || value || textContent || "").replace(/\s+/g, " ").trim();
+      };
+      const selectorHintFor = (element) => {
+        const id = element.getAttribute("id");
+        const dataTestId = element.getAttribute("data-testid");
+        const className = typeof element.getAttribute("class") === "string"
+          ? element.getAttribute("class")?.split(/\s+/).filter(Boolean).slice(0, 3).join(".")
+          : null;
+        if (id) return "#" + id;
+        if (dataTestId) return '[data-testid="' + dataTestId + '"]';
+        if (className) return element.tagName.toLowerCase() + "." + className;
+        return element.tagName.toLowerCase();
+      };
+      const parentFor = (element) => {
+        if (element.parentElement) {
+          return element.parentElement;
+        }
+        const root = element.getRootNode?.();
+        return root && root.host instanceof Element ? root.host : null;
+      };
+      const isSameOriginFrameElement = (element) => element.ownerDocument !== document;
+      const rootSourceFor = (element) => element.getRootNode?.() instanceof ShadowRoot ? "shadow_root" : "document";
+      const collectRoots = () => {
+        const roots = [document];
+        const seen = new Set(roots);
+        const visit = (root) => {
+          const elements = Array.from(root.querySelectorAll?.("*") || []).slice(0, 1_500);
+          for (const element of elements) {
+            if (element.shadowRoot && !seen.has(element.shadowRoot)) {
+              seen.add(element.shadowRoot);
+              roots.push(element.shadowRoot);
+              visit(element.shadowRoot);
+            }
+          }
+        };
+        visit(document);
+        for (const iframe of Array.from(document.querySelectorAll("iframe")).slice(0, 8)) {
+          try {
+            const frameDocument = iframe.contentDocument;
+            if (frameDocument?.body && !seen.has(frameDocument)) {
+              seen.add(frameDocument);
+              roots.push(frameDocument);
+              visit(frameDocument);
+            }
+          } catch {
+          }
+        }
+        return roots.slice(0, 40);
+      };
+      const queryAllRoots = (roots, selector, limit) => {
+        const values = [];
+        for (const root of roots) {
+          values.push(...Array.from(root.querySelectorAll?.(selector) || []));
+          if (values.length >= limit) {
+            break;
+          }
+        }
+        return values.slice(0, limit);
+      };
+      const isVisible = (element) => {
+        const rect = element.getBoundingClientRect();
+        const style = window.getComputedStyle(element);
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.visibility !== "hidden" &&
+          style.display !== "none" &&
+          element.getAttribute("aria-hidden") !== "true" &&
+          Number.parseFloat(style.opacity || "1") > 0.05
+        );
+      };
+      const isFirstLayerPosition = (element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
+      };
+      const containerKindFor = (element) => {
+        if (isFirstLayerPosition(element)) {
+          return { key: "first_layer", source: "first_layer" };
+        }
+        if (!allowFullDocumentCmpControls) {
+          return { key: "ineligible", source: "ineligible" };
+        }
+        let current = element;
+        for (let depth = 0; current && depth < 8; depth += 1) {
+          const id = current.getAttribute("id") || "";
+          const className = current.getAttribute("class") || "";
+          const aria = current.getAttribute("aria-label") || "";
+          const role = (current.getAttribute("role") || "").toLowerCase();
+          const dataAttrs = Array.from(current.attributes || [])
+            .filter((attribute) => /^data-/i.test(attribute.name))
+            .map((attribute) => attribute.name + "=" + attribute.value)
+            .join(" ");
+          const strongCmpContainer = (
+            strongCmpIdPattern.test(id) ||
+            strongCmpContainerPattern.test(className) ||
+            strongCmpContainerPattern.test(aria) ||
+            strongCmpContainerPattern.test(dataAttrs) ||
+            current.matches?.("#onetrust-banner-sdk, #onetrust-consent-sdk, #onetrust-pc-sdk, .ot-sdk-container, .ot-sdk-row, [id^='onetrust-'], [id^='optanon'], [class*='onetrust' i], [class*='optanon' i], [class*='ot-sdk' i]")
+          );
+          if (strongCmpContainer) {
+            return { key: selectorHintFor(current), source: "full_document_cmp" };
+          }
+          if (current === document.body || current === document.documentElement) {
+            current = parentFor(current);
+            continue;
+          }
+          const contextText = (current.textContent || "").replace(/\s+/g, " ").trim();
+          if (contextText.length < 80 || contextText.length > 4_000) {
+            current = parentFor(current);
+            continue;
+          }
+          const tagName = current.tagName.toLowerCase();
+          const style = window.getComputedStyle(current);
+          const zIndex = Number.parseInt(style.zIndex || "0", 10);
+          const dialogish = (
+            role === "dialog" ||
+            role === "alertdialog" ||
+            role === "banner" ||
+            current.getAttribute("aria-modal") === "true" ||
+            style.position === "fixed" ||
+            style.position === "sticky" ||
+            Number.isFinite(zIndex) && zIndex >= 10
+          );
+          const genericPageChrome = /^(?:footer|header|nav|aside)$/i.test(tagName) || /(?:footer|header|navbar|navigation|breadcrumb|menu)/i.test(id + " " + className + " " + role);
+          const controlCount = current.querySelectorAll(controlSelector + ", [tabindex='0']").length;
+          if (
+            controlCount >= 2 &&
+            !genericPageChrome &&
+            (dialogish || controlCount <= 8) &&
+            consentSurfaceTextPattern.test(contextText) &&
+            consentSurfaceActionPattern.test(contextText)
+          ) {
+            return { key: selectorHintFor(current), source: "full_document_consent_surface" };
+          }
+          current = parentFor(current);
+        }
+        return { key: "ineligible", source: "ineligible" };
+      };
+      const hasConsentContext = (element) => {
+        let current = element;
+        for (let depth = 0; current && depth < 8; depth += 1) {
+          if (current === document.body || current === document.documentElement) {
+            current = parentFor(current);
+            continue;
+          }
+          const contextText = (current.textContent || "").replace(/\s+/g, " ").trim();
+          const contextAttrs = [
+            current.getAttribute("aria-label"),
+            current.getAttribute("role"),
+            current.getAttribute("id"),
+            current.getAttribute("class"),
+          ].filter(Boolean).join(" ");
+          if (consentContextPattern.test(contextText + " " + contextAttrs)) {
+            return true;
+          }
+          current = parentFor(current);
+        }
+        return false;
+      };
+      const isPotentialCustomControl = (element) => {
+        const role = (element.getAttribute("role") || "").toLowerCase();
+        const tabIndex = element.getAttribute("tabindex");
+        const className = element.getAttribute("class") || "";
+        const id = element.getAttribute("id") || "";
+        return (
+          role === "button" ||
+          role === "link" ||
+          tabIndex === "0" ||
+          element.hasAttribute("onclick") ||
+          /\b(?:btn|button|choice|option|preference|purpose)\b/i.test(className) ||
+          /(?:btn|button|choice|option|preference|purpose)/i.test(id)
+        );
+      };
+      const candidatePriority = (element) => {
+        const label = labelFor(element).toLowerCase();
+        const pageChrome = element.closest?.("footer,header,nav,aside,[role='navigation']");
+        return (
+          (isVisible(element) ? 100 : 0) +
+          (hasConsentContext(element) ? 80 : 0) +
+          (isFirstLayerPosition(element) ? 40 : 0) +
+          (/\b(?:accept|reject|decline|allow|agree|settings|preferences|options|choices|cookie|cookies|consent|ablehnen|akzeptieren|accepter|refuser)\b/i.test(label) ? 70 : 0) -
+          (pageChrome ? 30 : 0)
+        );
+      };
+      const roots = collectRoots();
+      const directCandidates = queryAllRoots(roots, controlSelector, 2_500);
+      const directSet = new Set(directCandidates);
+      const rejectedReasons = new Set();
+      const diagnosticLabels = [];
+      const diagnosticContainers = new Set();
+      const rememberCandidate = (element, label, reason) => {
+        const safeLabel = (label || labelFor(element) || "").replace(/\s+/g, " ").trim().slice(0, 120);
+        if (safeLabel && diagnosticLabels.length < 24 && !diagnosticLabels.includes(safeLabel)) {
+          diagnosticLabels.push(safeLabel);
+        }
+        if (reason) {
+          rejectedReasons.add(reason);
+        }
+        const containerHint = selectorHintFor(element.closest?.("footer,header,nav,aside,[role='dialog'],[role='banner'],section,div") || element);
+        diagnosticContainers.add(containerHint);
+      };
+      const textCandidates = queryAllRoots(roots, customControlSelectors, 350)
+        .filter((element) => !directSet.has(element))
+        .slice(0, 250)
+        .filter((element) => {
+          if (element.querySelector(controlSelector)) {
+            return false;
+          }
+          if (!isPotentialCustomControl(element)) {
+            return false;
+          }
+          const label = labelFor(element);
+          if (!label || label.length > 140 || !hasConsentContext(element)) {
+            rememberCandidate(element, label, "no_consent_context");
+            return false;
+          }
+          return !Array.from(element.children).slice(0, 20).some((child) => {
+            const childLabel = labelFor(child);
+            return childLabel && childLabel !== label && childLabel.length <= 140;
+          });
+        });
+      const candidates = [...directCandidates, ...textCandidates]
+        .sort((left, right) => candidatePriority(right) - candidatePriority(left))
+        .slice(0, 1_200);
+      const seen = new Set();
+      const controls = candidates.flatMap((element) => {
+        if (!isVisible(element)) {
+          rememberCandidate(element, "", "hidden");
+          return [];
+        }
+        const label = labelFor(element).slice(0, 120);
+        if (!label || label.length > 120 || !hasConsentContext(element)) {
+          rememberCandidate(element, label, "no_consent_context");
+          return [];
+        }
+        const container = containerKindFor(element);
+        if (container.source === "ineligible") {
+          const pageChrome = element.closest?.("footer,header,nav,aside,[role='navigation']");
+          rememberCandidate(element, label, pageChrome ? "footer_nav_page_chrome" : "outside_eligible_surface");
+          return [];
+        }
+        rememberCandidate(element, label, undefined);
+        diagnosticContainers.add(container.key);
+        const dedupeKey = label.toLowerCase() + ":" + container.key;
+        if (seen.has(dedupeKey)) {
+          return [];
+        }
+        seen.add(dedupeKey);
+        const sameOriginFrameControl = isSameOriginFrameElement(element);
+        return [{
+          actionType: "other",
+          label,
+          role: element.getAttribute("role") || undefined,
+          selectorHint: selectorHintFor(element),
+          tagName: element.tagName.toLowerCase(),
+          visible: true,
+          frameUrl: sameOriginFrameControl ? element.ownerDocument.location?.href : undefined,
+          inventoryContainerKey: sameOriginFrameControl ? "same_origin_frame:" + (element.ownerDocument.location?.href || "about:blank") : container.key,
+          inventoryRootSource: rootSourceFor(element),
+          inventorySource: sameOriginFrameControl ? "same_origin_frame" : container.source,
+        }];
+      }).slice(0, 12);
+      return {
+        controls,
+        diagnostics: {
+          candidateContainerCount: diagnosticContainers.size,
+          candidateControlCount: candidates.length,
+          candidateLabels: diagnosticLabels,
+          rejectionReasons: Array.from(rejectedReasons),
+        },
+      };
+    };
+  })()`;
+
+async function installConsentInventoryProbe(context: BrowserContext): Promise<void> {
+  await context.addInitScript(CONSENT_INVENTORY_PROBE_SCRIPT);
+}
+
+function consentInventoryDiagnosticSources(
+  inventorySources: Set<string>,
+  rootSources: Set<string>,
+): NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["inventorySources"] {
+  const sources: NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["inventorySources"] = [];
+  if (inventorySources.has("first_layer")) {
+    sources.push("viewport");
+  }
+  if (inventorySources.has("full_document_cmp")) {
+    sources.push("cmp_container");
+  }
+  if (inventorySources.has("full_document_consent_surface")) {
+    sources.push("generic_consent_surface");
+  }
+  if (rootSources.has("shadow_root")) {
+    sources.push("shadow_root");
+  }
+  if (inventorySources.has("same_origin_frame")) {
+    sources.push("same_origin_frame");
+  }
+  if (inventorySources.has("accessibility_tree")) {
+    sources.push("accessibility_tree");
+  }
+  return unique(sources) as typeof sources;
 }
 
 function consentUiControlActionTypeFromClassification(
@@ -1846,15 +2545,19 @@ function consentUiControlActionTypeFromClassification(
 function buildConsentUiObservationFromEvidence(input: {
   controls: ConsentUiObservation["controls"];
   fallbackBasis?: string[];
+  inventoryDiagnostics?: ConsentUiObservation["inventoryDiagnostics"];
   scanStartedAtMs: number;
   text: string;
 }): ConsentUiObservation {
-  const { controls, fallbackBasis = [], scanStartedAtMs, text } = input;
+  const { controls, fallbackBasis = [], inventoryDiagnostics, scanStartedAtMs, text } = input;
   const normalized = text.toLowerCase();
   const keywords = [
     "cookie",
     "cookies",
+    "cookie-einstellungen",
     "consent",
+    "analytics preferences",
+    "privacy settings",
     "privacy preferences",
     "accept all",
     "reject all",
@@ -1865,7 +2568,7 @@ function buildConsentUiObservationFromEvidence(input: {
   const acceptControlObserved = controls.some((control) => control.actionType === "accept_all");
   const rejectControlObserved = controls.some((control) => control.actionType === "reject_all");
   const managePreferencesControlObserved = controls.some((control) =>
-    control.actionType === "manage_preferences" || control.actionType === "do_not_sell_share"
+    control.actionType === "manage_preferences" || control.actionType === "save_preferences"
   );
   const controlBasis = controls.map((control) => `control:${control.actionType}:${control.label}`);
   const likelyPresent = matched.length >= 2 || controls.length > 0;
@@ -1885,6 +2588,7 @@ function buildConsentUiObservationFromEvidence(input: {
     rejectControlObserved,
     managePreferencesControlObserved,
     controls,
+    inventoryDiagnostics,
     evidenceRefs: [],
     confidence: controls.length > 0 ? 0.86 : matched.length >= 2 ? 0.72 : 0.5,
   };
@@ -1955,8 +2659,12 @@ function shouldRecaptureConsentUiAfterSupplementalScreenshot(
   observation: ConsentUiObservation,
   cmpRuntimeObservations: CmpRuntimeObservation[],
 ): boolean {
-  return !hasActionableConsentChoiceControl(observation) &&
-    hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations);
+  if (hasActionableConsentChoiceControl(observation)) {
+    return false;
+  }
+  return hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations) ||
+    hasTextBackedConsentSurface(observation) ||
+    likelyFirstLayerConsentBannerHintText(observation.textExcerpt ?? "");
 }
 
 function hasHighConfidenceInteractiveCmpRuntimeEvidence(
@@ -1993,8 +2701,8 @@ function likelyLateFirstLayerConsentSurfaceText(text: string): boolean {
   if (!normalized || normalized.length > 12_000) {
     return false;
   }
-  return /\b(?:cookie|cookies|consent|privacy preferences|privacy choices)\b/i.test(normalized) &&
-    /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|options|necessary|essential)\b/i.test(normalized);
+  return /\b(?:cookie|cookies|cookie-einstellungen|consent|analytics preferences|privacy settings|privacy preferences|privacy choices)\b/i.test(normalized) &&
+    /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|options|necessary|essential|akzeptieren|ablehnen|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer)\b/i.test(normalized);
 }
 
 function hasActionableConsentChoiceControl(observation: ConsentUiObservation): boolean {
@@ -2025,14 +2733,16 @@ function likelyFirstLayerConsentBannerHintText(text: string): boolean {
   if (!normalized || normalized.length > 12_000) {
     return false;
   }
-  const hasConsentSubject = /\b(?:cookie|cookies|consent|privacy preferences|privacy choices)\b/i.test(normalized);
-  const hasChoiceLanguage = /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|manage|options|necessary|essential)\b/i.test(normalized);
+  const hasConsentSubject = /\b(?:cookie|cookies|cookie-einstellungen|consent|analytics preferences|privacy settings|privacy preferences|privacy choices)\b/i.test(normalized);
+  const hasChoiceLanguage = /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|manage|options|necessary|essential|akzeptieren|ablehnen|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer)\b/i.test(normalized);
   const hasBannerUseLanguage =
     /\bwe use (?:cookies|similar technologies)\b/i.test(normalized) ||
     /\buse cookies\b/i.test(normalized) ||
     /\byour cookie(?:s)?\b/i.test(normalized) ||
+    /\banalytics preferences\b/i.test(normalized) ||
     /\bcookie preferences\b/i.test(normalized) ||
     /\bconsent setting\b/i.test(normalized) ||
+    /\bprivacy settings\b/i.test(normalized) ||
     /\bprivacy preferences\b/i.test(normalized);
   return hasConsentSubject && (hasChoiceLanguage || hasBannerUseLanguage);
 }
@@ -2096,6 +2806,34 @@ function annotateConsentUiObservation(
       basis,
     ]),
   };
+}
+
+function annotateConsentInventoryTimingMarkers(
+  observation: ConsentUiObservation,
+  markers: string[],
+): ConsentUiObservation {
+  const currentDiagnostics = observation.inventoryDiagnostics;
+  return {
+    ...observation,
+    inventoryDiagnostics: {
+      candidateContainerCount: currentDiagnostics?.candidateContainerCount ?? 0,
+      candidateControlCount: currentDiagnostics?.candidateControlCount ?? 0,
+      retainedControlCount: currentDiagnostics?.retainedControlCount ?? observation.controls.length,
+      inventorySources: currentDiagnostics?.inventorySources ?? [],
+      candidateLabels: currentDiagnostics?.candidateLabels ?? [],
+      rejectionReasons: currentDiagnostics?.rejectionReasons ?? [],
+      timingMarkers: unique([
+        ...(currentDiagnostics?.timingMarkers ?? []),
+        ...markers,
+      ]),
+    },
+  };
+}
+
+function uniqueRejectionReasons(
+  values: Iterable<NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["rejectionReasons"][number]>,
+): NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["rejectionReasons"] {
+  return unique([...values]) as NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["rejectionReasons"];
 }
 
 function classifyCollectionSurface(input: {
@@ -2992,6 +3730,7 @@ async function retryPreConsentScreenshotInFreshContext(input: {
     async () => {
       const retryContext = await input.browser.newContext(chromiumContextOptions());
       try {
+        await installConsentInventoryProbe(retryContext);
         for (const fulfiller of input.input.routeFulfillers ?? []) {
           await retryContext.route(fulfiller.urlPattern, async (route: Route) => {
             await route.fulfill({

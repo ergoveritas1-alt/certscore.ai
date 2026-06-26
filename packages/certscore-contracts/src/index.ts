@@ -12,6 +12,24 @@ export const confidenceSchema = z.number().min(0).max(1);
 export const consentControlLocaleSchema = z.enum(["en", "de", "fr"]);
 export const consentControlMatchStrengthSchema = z.enum(["direct", "equivalent", "contextual", "weak"]);
 export const consentControlClassifierReasonCodesSchema = z.array(z.string().max(80)).max(16).optional();
+export const consentControlInventorySourceSchema = z.enum([
+  "viewport",
+  "cmp_container",
+  "generic_consent_surface",
+  "shadow_root",
+  "same_origin_frame",
+  "accessibility_tree",
+]);
+export const consentControlInventoryRejectionReasonSchema = z.enum([
+  "hidden",
+  "outside_eligible_surface",
+  "no_consent_context",
+  "footer_nav_page_chrome",
+  "classifier_other_unknown",
+  "generic_container_fewer_than_two_classified_controls",
+  "frame_inaccessible",
+  "timing_expired_before_controls_surfaced",
+]);
 
 export const endpointAttributionStatusSchema = z.enum([
   "resolved",
@@ -378,6 +396,15 @@ export const consentUiObservationSchema = z.object({
     classifierReasonCodes: consentControlClassifierReasonCodesSchema,
     classifierVariant: z.string().max(80).optional(),
   })).default([]),
+  inventoryDiagnostics: z.object({
+    candidateContainerCount: z.number().int().nonnegative(),
+    candidateControlCount: z.number().int().nonnegative(),
+    retainedControlCount: z.number().int().nonnegative(),
+    inventorySources: z.array(consentControlInventorySourceSchema).default([]),
+    candidateLabels: z.array(z.string().max(120)).max(24).default([]),
+    rejectionReasons: z.array(consentControlInventoryRejectionReasonSchema).default([]),
+    timingMarkers: z.array(z.string().max(80)).default([]),
+  }).optional(),
   evidenceRefs: z.array(evidenceRefSchema).default([]),
   confidence: confidenceSchema,
 });
@@ -1438,6 +1465,55 @@ export const runtimeCoverageSummarySchema = z.object({
   notes: z.array(z.string()).default([]),
 });
 
+export const visualAccessReviewSchema = z.object({
+  artifact_ref: z.string().max(160).nullable().optional(),
+  artifactRef: z.string().max(160).nullable().optional(),
+  confidence: confidenceSchema,
+  go_no_go: z.enum(["GO", "NO_GO"]),
+  goNoGo: z.enum(["GO", "NO_GO"]).optional(),
+  key_visual_evidence: z.array(z.string().max(360)).max(6).default([]),
+  keyVisualEvidence: z.array(z.string().max(360)).max(6).optional(),
+  page_state: z.enum([
+    "access_blocked",
+    "auth_or_login_wall",
+    "blank_or_unusable",
+    "captcha_or_challenge",
+    "capture_failed",
+    "challenge_or_robot_page",
+    "degraded_but_useful",
+    "maintenance_or_unavailable",
+    "missing_visual_artifact",
+    "parked_or_placeholder",
+    "visual_error_shell",
+    "wrong_site_or_soft_404",
+  ]),
+  pageState: z.string().max(80).optional(),
+  reason_code: z.string().max(120),
+  reasonCode: z.string().max(120).optional(),
+  short_explanation: z.string().max(500),
+  shortExplanation: z.string().max(500).optional(),
+  status: z.enum(["available", "missing_visual_artifact"]),
+  version: z.literal("visual-access-review-v1"),
+});
+
+export const scanNoGoAssessmentSchema = z.object({
+  status: z.enum(["available"]),
+  version: z.literal("scan-no-go-assessment-v1"),
+  decision: z.enum(["no_go", "continue_with_diagnostics"]),
+  scanNoGoConfidence: confidenceSchema,
+  visualScreenshotNoGoConfidence: confidenceSchema.optional(),
+  reasonCodes: z.array(z.string().max(120)).max(16).default([]),
+  corroboratorCodes: z.array(z.string().max(120)).max(16).default([]),
+  contradictorCodes: z.array(z.string().max(120)).max(16).default([]),
+  supportingSignals: z.record(z.union([
+    z.boolean(),
+    z.number(),
+    z.string().max(160),
+    z.null(),
+  ])).default({}),
+  evidenceRefs: z.array(z.string().max(160)).max(16).default([]),
+});
+
 export const evidenceExcerptKindSchema = z.enum([
   "network_request",
   "network_response",
@@ -1511,6 +1587,10 @@ export const canonicalEvidenceBundleSchema = z.object({
   derivedRuntimeSignals: derivedRuntimeSignalsSchema,
   runtimeCoverage: runtimeCoverageSummarySchema.optional(),
   visualCapture: visualCaptureSummarySchema.optional(),
+  scanNoGoAssessment: scanNoGoAssessmentSchema.optional(),
+  scan_no_go_assessment: scanNoGoAssessmentSchema.optional(),
+  visualAccessReview: visualAccessReviewSchema.optional(),
+  visual_access_review: visualAccessReviewSchema.optional(),
   artifactRefs: z.array(artifactRefSchema),
   scannerVersion: z.string(),
   schemaVersion: z.string(),
@@ -1691,6 +1771,8 @@ export type CmpRuntimeSignal = z.infer<typeof cmpRuntimeSignalSchema>;
 export type CmpRuntimeObservation = z.infer<typeof cmpRuntimeObservationSchema>;
 export type DerivedRuntimeSignals = z.infer<typeof derivedRuntimeSignalsSchema>;
 export type RuntimeCoverageSummary = z.infer<typeof runtimeCoverageSummarySchema>;
+export type ScanNoGoAssessment = z.infer<typeof scanNoGoAssessmentSchema>;
+export type VisualAccessReview = z.infer<typeof visualAccessReviewSchema>;
 export type ObservedBehavior = z.infer<typeof observedBehaviorSchema>;
 export type JourneyEventRef = z.infer<typeof journeyEventRefSchema>;
 export type ObservedJourney = z.infer<typeof observedJourneySchema>;

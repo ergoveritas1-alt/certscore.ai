@@ -1671,9 +1671,9 @@ function hasRetainedFirstLayerConsentControlInventory(choices: ReturnType<typeof
 }
 
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
-  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser/i;
+  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|detected unusual behaviour[^.]{0,180}(?:bot|browser)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot/i;
 const LOCAL_V2_VERCEL_SECURITY_CHALLENGE_PATTERN =
-  /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])/i;
+  /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])|\/cdn-cgi\/challenge-platform\/|\/cdn-cgi\/challenge|challenges\.cloudflare\.com/i;
 const LOCAL_V2_SCREENSHOT_PLACEHOLDER_PATTERN =
   /1x1 screenshot placeholder used|screenshot placeholder/i;
 const LOCAL_V2_PAGE_CONTEXT_CLOSED_PATTERN =
@@ -1685,6 +1685,7 @@ function boundedTextExcerpt(value: string | null | undefined) {
 
 function collectLocalV2NoGoTextCandidates(bundle: CanonicalEvidenceBundle) {
   return uniqueStrings([
+    ...(bundle.domSnapshots ?? []).map((snapshot) => boundedTextExcerpt(snapshot.textExcerpt)),
     ...(bundle.consentUiObservations ?? []).map((observation) => boundedTextExcerpt(observation.textExcerpt)),
     ...(bundle.policySurfaceObservations ?? []).map((observation) => boundedTextExcerpt(observation.textExcerpt)),
     ...(bundle.screenshots ?? []).map((screenshot) => boundedTextExcerpt(screenshot.url))
@@ -1722,6 +1723,26 @@ function localV2VisualCapture(bundle: CanonicalEvidenceBundle) {
   };
 }
 
+function getProvidedLocalV2ScanNoGoAssessment(bundle: CanonicalEvidenceBundle) {
+  const scanNoGoAssessment = bundle.scan_no_go_assessment ?? bundle.scanNoGoAssessment ?? null;
+  const visualAccessReview = bundle.visual_access_review ?? bundle.visualAccessReview ?? null;
+  if (scanNoGoAssessment?.decision !== "no_go" || visualAccessReview?.go_no_go !== "NO_GO") {
+    return null;
+  }
+  const primaryReasonCode =
+    scanNoGoAssessment.reasonCodes[0] ??
+    visualAccessReview.reason_code ??
+    "scan_no_go_assessment";
+  const pageState = visualAccessReview.page_state;
+  return {
+    matchedText: visualAccessReview.short_explanation,
+    pageState,
+    primaryReasonCode,
+    scanNoGoAssessment,
+    visualAccessReview
+  };
+}
+
 function buildLocalV2ScanNoGoAssessment(input: {
   bundle: CanonicalEvidenceBundle;
   consentSurfaceLikelyPresent: boolean;
@@ -1729,6 +1750,11 @@ function buildLocalV2ScanNoGoAssessment(input: {
   runtimeActivityObserved: boolean;
   lowRuntimeActivity: boolean;
 }) {
+  const providedScanNoGo = getProvidedLocalV2ScanNoGoAssessment(input.bundle);
+  if (providedScanNoGo) {
+    return providedScanNoGo;
+  }
+
   const textCandidates = collectLocalV2NoGoTextCandidates(input.bundle);
   const matchedText = textCandidates.find((text) => LOCAL_V2_HARD_NO_GO_TEXT_PATTERN.test(text));
   const moduleErrors = collectLocalV2ModuleErrors(input.bundle);
@@ -1887,7 +1913,7 @@ function buildMaterializedLocalV2Detail(
   const effectiveRuntimeCoverageStatus = localV2NoGo ? "limited_none" : runtimeCoverageStatus;
   const effectiveRuntimeCountsRetained = localV2NoGo ? false : runtimeCountsRetained;
   const effectiveRuntimeLimitationKeys = localV2NoGo
-    ? uniqueStrings([...runtimeLimitationKeys, "access_denied_or_forbidden_page"])
+    ? uniqueStrings([...runtimeLimitationKeys, localV2NoGo.primaryReasonCode])
     : visualCaptureUnavailable || !preConsentRuntimeReliable
       ? uniqueStrings([...runtimeLimitationKeys, "visual_capture_unavailable"])
       : runtimeLimitationKeys;
@@ -2256,6 +2282,8 @@ function buildMaterializedLocalV2Detail(
       access_posture_class: "early_loss",
       block_page_classification: localV2NoGo.pageState === "access_blocked"
         ? "access_denied"
+        : localV2NoGo.pageState === "captcha_or_challenge" || localV2NoGo.pageState === "challenge_or_robot_page"
+          ? "security_challenge"
         : localV2NoGo.pageState === "visual_error_shell"
           ? "visual_error_shell"
           : "capture_failed",
@@ -2265,21 +2293,29 @@ function buildMaterializedLocalV2Detail(
       homepage_fetch_status: "blocked",
       scan_outcome: localV2NoGo.pageState === "access_blocked"
         ? "reachability_blocked_homepage_403"
+        : localV2NoGo.pageState === "captcha_or_challenge" || localV2NoGo.pageState === "challenge_or_robot_page"
+          ? "homepage_security_challenge"
         : localV2NoGo.pageState === "visual_error_shell"
           ? "homepage_visual_error_shell"
           : "homepage_visual_capture_failed",
       stop_reason_code: localV2NoGo.pageState === "access_blocked"
         ? "reachability_blocked_homepage_403"
+        : localV2NoGo.pageState === "captcha_or_challenge" || localV2NoGo.pageState === "challenge_or_robot_page"
+          ? "homepage_security_challenge"
         : localV2NoGo.pageState === "visual_error_shell"
           ? "homepage_visual_error_shell"
           : "homepage_visual_capture_failed",
       stop_reason_detail: localV2NoGo.pageState === "access_blocked"
         ? "The retained initial-load evidence showed an access-denied or forbidden page instead of the normal public site."
+        : localV2NoGo.pageState === "captcha_or_challenge" || localV2NoGo.pageState === "challenge_or_robot_page"
+          ? "The retained initial-load evidence showed a bot/security challenge instead of the normal public site."
         : localV2NoGo.pageState === "visual_error_shell"
           ? "The retained initial-load screenshot appeared to be a visual error shell instead of the normal public site."
           : "The scanner could not retain a usable homepage visual/runtime capture.",
       stop_reason_label: localV2NoGo.pageState === "access_blocked"
         ? "Homepage access blocked"
+        : localV2NoGo.pageState === "captcha_or_challenge" || localV2NoGo.pageState === "challenge_or_robot_page"
+          ? "Homepage security challenge"
         : localV2NoGo.pageState === "visual_error_shell"
           ? "Homepage visual error shell"
           : "Homepage capture failed"

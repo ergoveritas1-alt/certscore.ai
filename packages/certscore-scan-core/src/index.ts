@@ -14,9 +14,11 @@ import {
   type RuntimeCoverageSummary,
   type RuntimeEvidenceEvent,
   type ScanProfile,
+  type ScanNoGoAssessment,
   type ScreenshotArtifact,
   type ConsentFlowScenario,
   type StorageSnapshot,
+  type VisualAccessReview,
   type VisualCaptureSummary,
   SCHEMA_VERSION,
   canonicalEvidenceBundleSchema,
@@ -537,7 +539,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     journeySummary,
     notes: [],
   };
-  const runtimeCoverage = deriveRuntimeCoverageSummary({
+  const baseRuntimeCoverage = deriveRuntimeCoverageSummary({
     cookieEvents,
     cookieSnapshots,
     enabledModules: scanProfile.enabledModules,
@@ -551,6 +553,40 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   ],
   cmpRuntimeObservations: preConsentResult.cmpRuntimeObservations,
   });
+  const scanNoGoEvidence = buildScanNoGoAssessment({
+    consentUiObservations: [
+      ...preConsentResult.consentUiObservations,
+      ...(consentFlowResult?.consentUiObservations ?? []),
+    ],
+    domSnapshots: [
+      ...preConsentResult.domSnapshots,
+      ...(consentFlowResult?.domSnapshots ?? []),
+    ],
+    networkEvents,
+    policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
+    screenshots: [
+      ...preConsentResult.screenshots,
+      ...(consentFlowResult?.screenshots ?? []),
+    ],
+    modulesRun,
+  });
+  const runtimeCoverage = scanNoGoEvidence
+    ? {
+      ...baseRuntimeCoverage,
+      coverageStatus: "limited_none" as const,
+      limitationKeys: uniqueStrings([
+        ...baseRuntimeCoverage.limitationKeys,
+        scanNoGoEvidence.primaryReasonCode,
+        "scan_no_go_assessment",
+      ]),
+      notes: uniqueStrings([
+        ...baseRuntimeCoverage.notes,
+        scanNoGoEvidence.primaryReasonCode === "navigation_transport_failure"
+          ? "Initial navigation failed before public-page evidence could be retained, so runtime evidence should be treated as not testable for this run."
+          : "Initial-load evidence shows a bot/security challenge or access-block page, so runtime evidence should be treated as not reportable.",
+      ]),
+    }
+    : baseRuntimeCoverage;
 
   const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
     scanId,
@@ -597,6 +633,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     derivedRuntimeSignals,
     runtimeCoverage,
     visualCapture: preConsentResult.visualCapture,
+    ...(scanNoGoEvidence
+      ? {
+        scanNoGoAssessment: scanNoGoEvidence.scanNoGoAssessment,
+        scan_no_go_assessment: scanNoGoEvidence.scanNoGoAssessment,
+        visualAccessReview: scanNoGoEvidence.visualAccessReview,
+        visual_access_review: scanNoGoEvidence.visualAccessReview,
+      }
+      : {}),
     artifactRefs: [
       ...preConsentResult.screenshots.map((artifact) => ({
         artifactId: artifact.artifactId,
@@ -1089,6 +1133,160 @@ function postConsentFlowRuntimeDisabled(input: {
     moduleRun.status === "not_testable" &&
     moduleRun.errors.some((error) => /intentionally disabled/i.test(error))
   );
+}
+
+const SCAN_NO_GO_TEXT_PATTERN =
+  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|detected unusual behaviour[^.]{0,180}(?:bot|browser)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot/i;
+
+const SCAN_NO_GO_SECURITY_CHALLENGE_REQUEST_PATTERN =
+  /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])|\/cdn-cgi\/challenge-platform\/|\/cdn-cgi\/challenge|challenges\.cloudflare\.com/i;
+
+const SCAN_NO_GO_NAVIGATION_FAILURE_PATTERN =
+  /page\.goto|net::ERR_|ERR_HTTP2_PROTOCOL_ERROR|ERR_QUIC_PROTOCOL_ERROR|navigation timeout|timeout \d+ms exceeded/i;
+
+function buildScanNoGoAssessment(input: {
+  consentUiObservations: ConsentUiObservation[];
+  domSnapshots: DomSnapshotArtifact[];
+  modulesRun: CanonicalEvidenceBundle["modulesRun"];
+  networkEvents: NetworkEvent[];
+  policySurfaceObservations: PolicySurfaceObservation[];
+  screenshots: ScreenshotArtifact[];
+}): {
+  primaryReasonCode: string;
+  scanNoGoAssessment: ScanNoGoAssessment;
+  visualAccessReview: VisualAccessReview;
+} | null {
+  const navigationFailureText = input.modulesRun
+    .find((moduleRun) =>
+      moduleRun.moduleName === "preConsentRuntimeScanner" &&
+      moduleRun.status === "failed"
+    )
+    ?.errors.find((error) => SCAN_NO_GO_NAVIGATION_FAILURE_PATTERN.test(error));
+  if (
+    navigationFailureText &&
+    input.screenshots.length === 0 &&
+    input.domSnapshots.length === 0
+  ) {
+    const matchedText = boundedScanNoGoText(navigationFailureText) ?? "Initial navigation failed before page evidence could be retained.";
+    const confidence = 0.92;
+    const visualAccessReview: VisualAccessReview = {
+      artifact_ref: null,
+      confidence,
+      go_no_go: "NO_GO",
+      key_visual_evidence: [matchedText],
+      page_state: "capture_failed",
+      reason_code: "navigation_transport_failure",
+      short_explanation: `The initial navigation failed before the scanner could retain public-page evidence: "${matchedText}"`,
+      status: "missing_visual_artifact",
+      version: "visual-access-review-v1",
+    };
+    const scanNoGoAssessment: ScanNoGoAssessment = {
+      status: "available",
+      version: "scan-no-go-assessment-v1",
+      decision: "no_go",
+      scanNoGoConfidence: confidence,
+      reasonCodes: ["navigation_transport_failure", "scan_no_go_corroborated"],
+      corroboratorCodes: ["pre_consent_navigation_failed", "no_visual_artifact_retained"],
+      contradictorCodes: [],
+      supportingSignals: {
+        challengeSignalsDetected: false,
+        documentStatusBlocked: false,
+        expectedOriginReached: false,
+        navigationTransportFailure: true,
+        retainedVisualArtifactAvailable: false,
+        visualNoGo: true,
+        visualPageState: "capture_failed",
+      },
+      evidenceRefs: [
+        "scan_runtime_artifacts.scan_no_go_assessment",
+        "scan_runtime_artifacts.visual_access_review",
+      ],
+    };
+    return {
+      primaryReasonCode: "navigation_transport_failure",
+      scanNoGoAssessment,
+      visualAccessReview,
+    };
+  }
+
+  const textCandidates = uniqueStrings([
+    ...input.domSnapshots.map((snapshot) => boundedScanNoGoText(snapshot.textExcerpt)),
+    ...input.consentUiObservations.map((observation) => boundedScanNoGoText(observation.textExcerpt)),
+    ...input.policySurfaceObservations.map((observation) => boundedScanNoGoText(observation.textExcerpt)),
+  ].filter((text): text is string => Boolean(text)));
+  const matchedText = textCandidates.find((text) => SCAN_NO_GO_TEXT_PATTERN.test(text));
+  if (!matchedText) {
+    return null;
+  }
+
+  const securityChallengeRequestObserved = input.networkEvents.some((event) =>
+    SCAN_NO_GO_SECURITY_CHALLENGE_REQUEST_PATTERN.test(event.url ?? "")
+  );
+  const screenshot = input.screenshots
+    .filter((artifact) => artifact.consentStateAtTime === "pre_consent")
+    .sort((left, right) => left.capturedAtMs - right.capturedAtMs)[0] ?? null;
+  const primaryReasonCode = securityChallengeRequestObserved
+    ? "captcha_or_challenge"
+    : "access_denied_or_forbidden_page";
+  const visualPageState: VisualAccessReview["page_state"] = securityChallengeRequestObserved
+    ? "captcha_or_challenge"
+    : "access_blocked";
+  const confidence = securityChallengeRequestObserved ? 0.95 : 0.93;
+  const evidenceRefs = [
+    "scan_runtime_artifacts.scan_no_go_assessment",
+    "scan_runtime_artifacts.visual_access_review",
+    screenshot ? "scan_runtime_artifacts.visual_evidence_artifacts" : null,
+  ].filter((value): value is string => Boolean(value));
+  const shortExplanation = securityChallengeRequestObserved
+    ? `The retained initial-load evidence showed a bot/security challenge instead of the normal public site: "${matchedText}"`
+    : `The retained initial-load evidence showed an access-block page instead of the normal public site: "${matchedText}"`;
+  const visualAccessReview: VisualAccessReview = {
+    artifact_ref: screenshot ? "scan_core:screenshot_pre_consent" : null,
+    confidence,
+    go_no_go: "NO_GO",
+    key_visual_evidence: [matchedText],
+    page_state: visualPageState,
+    reason_code: primaryReasonCode,
+    short_explanation: shortExplanation,
+    status: "available",
+    version: "visual-access-review-v1",
+  };
+  const scanNoGoAssessment: ScanNoGoAssessment = {
+    status: "available",
+    version: "scan-no-go-assessment-v1",
+    decision: "no_go",
+    scanNoGoConfidence: confidence,
+    visualScreenshotNoGoConfidence: screenshot ? confidence : undefined,
+    reasonCodes: [primaryReasonCode, "scan_no_go_corroborated"],
+    corroboratorCodes: [
+      securityChallengeRequestObserved ? "network_security_challenge_request_observed" : null,
+      securityChallengeRequestObserved ? "network_cloudflare_challenge" : null,
+      "access_block_text_observed",
+      screenshot ? "retained_visual_artifact_available" : null,
+    ].filter((value): value is string => Boolean(value)),
+    contradictorCodes: [],
+    supportingSignals: {
+      challengeSignalsDetected: true,
+      documentStatusBlocked: true,
+      expectedOriginReached: false,
+      retainedVisualArtifactAvailable: Boolean(screenshot),
+      securityChallengeRequestObserved,
+      visualHardNoGoPageState: true,
+      visualNoGo: true,
+      visualPageState,
+    },
+    evidenceRefs,
+  };
+
+  return {
+    primaryReasonCode,
+    scanNoGoAssessment,
+    visualAccessReview,
+  };
+}
+
+function boundedScanNoGoText(value: string | null | undefined) {
+  return value ? value.replace(/\s+/g, " ").trim().slice(0, 360) : null;
 }
 
 function preConsentPartialIsScreenshotOnly(errors: string[]) {

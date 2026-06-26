@@ -15,12 +15,22 @@ export type StaticFixturePage =
   | "consent-banner-failed-click"
   | "consent-banner-stateful-click"
   | "consent-cmp-cookie-persists"
+  | "consent-cmp-script-offscreen-context-controls"
+  | "consent-cmp-script-offscreen-footer-settings"
   | "consent-cmp-script-late-settings"
+  | "consent-cmp-script-offscreen-onetrust-controls"
+  | "consent-cmp-script-shadow-context-controls"
   | "consent-cmp-script-supplemental-settings"
   | "consent-cmp-script-very-late-settings"
+  | "consent-compact-analytics-controls"
+  | "consent-compact-cookie-controls"
+  | "consent-compact-privacy-settings-controls"
+  | "consent-contextual-continue-accept"
   | "consent-deny-non-essential"
+  | "consent-analytics-category-controls"
   | "consent-iframe-reject"
   | "consent-lean-guarded-image-cookie"
+  | "consent-localized-controls"
   | "consent-navigation-timeout"
   | "consent-focused-privacy-opt-out"
   | "consent-manage-preferences"
@@ -97,6 +107,7 @@ export type StaticFixturePage =
   | "policy-vendor-mentions"
   | "policy-webmd-like-secondary-surfaces"
   | "region-coded-collection-endpoint"
+  | "security-cloudflare-challenge"
   | "site-owned-infrastructure"
   | "third-party-cookie-positive"
   | "unresolved-collection-endpoint";
@@ -122,12 +133,22 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-banner-failed-click": "consent-failed-click",
   "consent-banner-stateful-click": "consent-stateful-click",
   "consent-cmp-cookie-persists": "consent-cmp-cookie-persists",
+  "consent-cmp-script-offscreen-context-controls": "consent-cmp-script-offscreen-context-controls",
+  "consent-cmp-script-offscreen-footer-settings": "consent-cmp-script-offscreen-footer-settings",
   "consent-cmp-script-late-settings": "consent-cmp-script-late-settings",
+  "consent-cmp-script-offscreen-onetrust-controls": "consent-cmp-script-offscreen-onetrust-controls",
+  "consent-cmp-script-shadow-context-controls": "consent-cmp-script-shadow-context-controls",
   "consent-cmp-script-supplemental-settings": "consent-cmp-script-supplemental-settings",
   "consent-cmp-script-very-late-settings": "consent-cmp-script-very-late-settings",
+  "consent-compact-analytics-controls": "consent-compact-analytics-controls",
+  "consent-compact-cookie-controls": "consent-compact-cookie-controls",
+  "consent-compact-privacy-settings-controls": "consent-compact-privacy-settings-controls",
+  "consent-contextual-continue-accept": "consent-contextual-continue-accept",
   "consent-deny-non-essential": "consent-deny-non-essential",
+  "consent-analytics-category-controls": "consent-analytics-category-controls",
   "consent-iframe-reject": "consent-iframe-reject",
   "consent-lean-guarded-image-cookie": "consent-lean-guarded-image-cookie",
+  "consent-localized-controls": "consent-localized-controls",
   "consent-navigation-timeout": "consent-navigation-timeout",
   "consent-focused-privacy-opt-out": "consent-focused-privacy-opt-out",
   "consent-manage-preferences": "consent-manage-preferences",
@@ -204,6 +225,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-vendor-mentions": "policy-vendors",
   "policy-webmd-like-secondary-surfaces": "policy-webmd-like-secondary",
   "region-coded-collection-endpoint": "region-coded-collection",
+  "security-cloudflare-challenge": "security-cloudflare-challenge",
   "site-owned-infrastructure": "site-infra",
   "third-party-cookie-positive": "third-party-cookie",
   "unresolved-collection-endpoint": "unresolved-page",
@@ -256,6 +278,24 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     }
     response.writeHead(404, { "Content-Type": "text/plain" });
     response.end("unknown fixture");
+    return;
+  }
+
+  if (url.pathname === "/frames/consent-reject") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><html><body>
+      <div id="banner" role="dialog" aria-label="OneTrust Cookie consent">
+        <p>OneTrust Cookie Preferences. We use cookies for analytics and advertising.</p>
+        <button id="reject-all" type="button">Reject All</button>
+        <button id="accept-all" type="button">Accept All</button>
+      </div>
+    </body></html>`);
+    return;
+  }
+
+  if (url.pathname.startsWith("/cdn-cgi/challenge-platform/")) {
+    response.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" });
+    response.end("window.__certscoreFixtureCloudflareChallenge = true;");
     return;
   }
 
@@ -604,6 +644,17 @@ function bodyMarkup(caseName: StaticFixturePage): string {
   if (caseName === "region-coded-collection-endpoint") {
     return `<img alt="" src="https://collector.us-east-1.amazonaws.com/collect">`;
   }
+  if (caseName === "security-cloudflare-challenge") {
+    return `
+      <section>
+        <h1>Security check</h1>
+        <p>We apologise for the interruption. We detected unusual behaviour from your browser, which resembles that of a bot.</p>
+        <p>The reasons could be the following: you are using a VPN or privacy software often used by bots, or you are navigating through the website at an unusually high speed.</p>
+        <p>Lufthansa thanks you for your understanding.</p>
+      </section>
+      <script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>
+    `;
+  }
   return "";
 }
 
@@ -624,8 +675,16 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     lateFirstLayerChoiceControls: caseName === "consent-late-first-layer-choice-controls",
     lateCmpChoiceControls: caseName === "consent-late-cmp-choice-controls",
     cmpScriptLateSettings: caseName === "consent-cmp-script-late-settings",
+    cmpScriptOffscreenContextControls: caseName === "consent-cmp-script-offscreen-context-controls",
+    cmpScriptOffscreenFooterSettings: caseName === "consent-cmp-script-offscreen-footer-settings",
+    cmpScriptOffscreenOneTrustControls: caseName === "consent-cmp-script-offscreen-onetrust-controls",
+    cmpScriptShadowContextControls: caseName === "consent-cmp-script-shadow-context-controls",
     cmpScriptSupplementalSettings: caseName === "consent-cmp-script-supplemental-settings",
     cmpScriptVeryLateSettings: caseName === "consent-cmp-script-very-late-settings",
+    contextualContinueAccept: caseName === "consent-contextual-continue-accept",
+    compactAnalyticsControls: caseName === "consent-compact-analytics-controls",
+    compactCookieControls: caseName === "consent-compact-cookie-controls",
+    compactPrivacySettingsControls: caseName === "consent-compact-privacy-settings-controls",
     preferenceAmbiguous: caseName === "consent-preference-center-ambiguous",
     preferenceConfirmSave: caseName === "consent-preference-center-confirm-save",
     postChoiceReopen: caseName === "consent-post-choice-reopen-control",
@@ -633,10 +692,12 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     preferenceToggleSave: caseName === "consent-preference-center-toggle-save",
     cmpCookie: caseName === "consent-cmp-cookie-persists",
     denyNonEssential: caseName === "consent-deny-non-essential",
+    analyticsCategoryControls: caseName === "consent-analytics-category-controls",
     analyticsCookie: caseName === "consent-analytics-cookie-persists",
     failedClick: caseName === "consent-banner-failed-click",
     statefulClick: caseName === "consent-banner-stateful-click",
     iframeReject: caseName === "consent-iframe-reject",
+    localizedControls: caseName === "consent-localized-controls",
     privacyChoiceSurfaceRejectSuccess: caseName === "consent-privacy-choice-surface-reject-success",
     leanGuardedImageCookie: caseName === "consent-lean-guarded-image-cookie",
     navigationTimeout: caseName === "consent-navigation-timeout",
@@ -657,6 +718,58 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
           target.innerHTML = '<button id="accept-all" type="button">Accept All</button><button id="reject-all" type="button">Reject All</button><button id="settings" type="button">Cookie settings</button>';
         }, 1100);
       </script>
+    `;
+  }
+  if (options.localizedControls) {
+    return `
+      <section>
+        <p>Fixture page with localized first-layer cookie consent controls.</p>
+      </section>
+      <div id="banner" role="dialog" aria-label="Cookie consent">
+        <p>Wir verwenden Cookies fuer Analyse und Werbung. Vous pouvez gerer vos preferences de cookies.</p>
+        <button id="accept-all" type="button">Alle akzeptieren</button>
+        <button id="reject-all" type="button">Tout refuser</button>
+        <button id="settings" type="button">Paramètres des cookies</button>
+      </div>
+    `;
+  }
+  if (options.compactAnalyticsControls) {
+    return `
+      <section style="min-height: 1280px;">
+        <h1>Analytics consent fixture</h1>
+        <p>Primary content appears before a compact consent surface.</p>
+      </section>
+      <section id="analytics-preferences-panel" style="padding: 16px; border: 1px solid #111;">
+        <p>Analytics preferences. We use optional analytics and session-insight tools only after you allow them.</p>
+        <button id="reject-analytics" type="button">Reject analytics</button>
+        <button id="allow-analytics" type="button">Allow analytics</button>
+      </section>
+    `;
+  }
+  if (options.compactCookieControls) {
+    return `
+      <section style="min-height: 1280px;">
+        <h1>German cookie fixture</h1>
+        <p>Primary content appears before a compact cookie consent surface.</p>
+      </section>
+      <section id="cookie-preferences-panel" style="padding: 16px; border: 1px solid #111;">
+        <p>Cookie-Einstellungen. Wir verwenden Cookies, um deine Erfahrung zu verbessern. Durch Klicken auf Akzeptieren stimmst du unserem Tracking zu.</p>
+        <button id="reject-cookies" type="button">Ablehnen</button>
+        <button id="accept-cookies" type="button">Akzeptieren</button>
+      </section>
+    `;
+  }
+  if (options.compactPrivacySettingsControls) {
+    return `
+      <section style="min-height: 1280px;">
+        <h1>Privacy settings fixture</h1>
+        <p>Primary content appears before a compact privacy settings surface.</p>
+      </section>
+      <section id="privacy-settings-panel" style="padding: 16px; border: 1px solid #111;">
+        <p>Privacy Settings. We use third-party services that store or retrieve information from your device. By clicking accept, you consent to data storage and processing.</p>
+        <button id="settings" type="button">Settings</button>
+        <button id="accept" type="button">Accept</button>
+      </section>
     `;
   }
   if (options.lateFirstLayerChoiceControls) {
@@ -695,6 +808,73 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
           if (!target) return;
           target.innerHTML = '<button id="settings" type="button">Cookie settings</button><button id="accept-all" type="button">Accept</button><button id="reject-all" type="button">Reject</button>';
         }, 3200);
+      </script>
+    `;
+  }
+  if (options.cmpScriptOffscreenOneTrustControls || options.cmpScriptOffscreenContextControls || options.cmpScriptOffscreenFooterSettings) {
+    const offscreenControlSurface = options.cmpScriptOffscreenOneTrustControls
+      ? `
+        <section id="onetrust-banner-sdk" role="dialog" aria-label="Cookie consent" style="margin-top: 1280px; padding: 24px; border: 1px solid #111;">
+          <h2>Hej! You are in control of your cookies.</h2>
+          <p>On our home page, we use cookies and similar techniques. You may accept analytical cookies or change cookie settings.</p>
+          <button id="onetrust-accept-btn-handler" type="button">Accept</button>
+          <button id="onetrust-reject-all-handler" type="button">Reject</button>
+          <button id="onetrust-pc-btn-handler" type="button">Cookie settings</button>
+        </section>
+      `
+      : options.cmpScriptOffscreenContextControls
+        ? `
+        <section id="global-cookie-choice-panel" role="dialog" aria-label="Privacy choices" style="margin-top: 1280px; padding: 24px; border: 1px solid #111;">
+          <h2>Hej! You are in control of your cookies.</h2>
+          <p>On our home page, we use cookies and similar techniques. You may accept analytical cookies. By clicking accept, you consent to all cookies and related data processing. To change your settings or withdraw consent, go to cookie settings.</p>
+          <button id="global-cookie-accept" type="button">Accept</button>
+          <button id="global-cookie-reject" type="button">Reject</button>
+          <button id="global-cookie-settings" type="button">Cookie settings</button>
+        </section>
+      `
+      : `
+        <footer style="margin-top: 1280px; padding: 24px;">
+          <p>Company footer links and ordinary site controls.</p>
+          <button id="footer-cookie-settings" type="button">Cookie Settings</button>
+        </footer>
+      `;
+    return `
+      <section style="min-height: 900px;">
+        <h1>IKEA-style landing page</h1>
+        <p>Viewport content appears before an offscreen consent or footer surface.</p>
+      </section>
+      <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>
+      <script>
+        window.OneTrust = { fixture: true };
+        window.OptanonWrapper = function OptanonWrapper() {};
+      </script>
+      ${offscreenControlSurface}
+    `;
+  }
+  if (options.cmpScriptShadowContextControls) {
+    return `
+      <section style="min-height: 900px;">
+        <h1>Shadow consent fixture landing page</h1>
+        <p>Viewport content appears before a shadow-root consent surface.</p>
+      </section>
+      <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>
+      <script>
+        window.OneTrust = { fixture: true };
+        window.OptanonWrapper = function OptanonWrapper() {};
+      </script>
+      <div id="shadow-consent-host" style="margin-top: 1280px;"></div>
+      <script>
+        const host = document.getElementById("shadow-consent-host");
+        const root = host.attachShadow({ mode: "open" });
+        root.innerHTML = \`
+          <section id="shadow-cookie-choice-panel" role="dialog" aria-label="Privacy choices" style="padding: 24px; border: 1px solid #111;">
+            <h2>You are in control of your cookies.</h2>
+            <p>We use cookies and similar techniques. You may accept analytical cookies or change your cookie settings.</p>
+            <div id="shadow-accept" role="button" tabindex="0">Accept</div>
+            <div id="shadow-reject" role="button" tabindex="0">Reject</div>
+            <div id="shadow-settings" role="button" tabindex="0">Cookie settings</div>
+          </section>
+        \`;
       </script>
     `;
   }
@@ -808,12 +988,35 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     `;
   }
   if (options.iframeReject) {
-    const iframeHtml = `<div id="banner" role="dialog" aria-label="OneTrust Cookie consent"><p>OneTrust Cookie Preferences. We use cookies for analytics and advertising.</p><button id="reject-all" type="button">Reject All</button><button id="accept-all" type="button">Accept All</button><script>localStorage.setItem("OptanonConsentState","visible");document.getElementById("reject-all").addEventListener("click",()=>{localStorage.setItem("OptanonConsentState","rejected");document.getElementById("banner").remove();});document.getElementById("accept-all").addEventListener("click",()=>{localStorage.setItem("OptanonConsentState","accepted");document.getElementById("banner").remove();});</script></div>`;
     return `
       <section>
         <p>Consent-flow fixture page with iframe-hosted CMP controls.</p>
       </section>
-      <iframe id="cmp-frame" title="OneTrust Cookie Settings" srcdoc="${escapeHtml(iframeHtml)}"></iframe>
+      <iframe id="cmp-frame" title="OneTrust Cookie Settings" src="/frames/consent-reject"></iframe>
+    `;
+  }
+  if (options.contextualContinueAccept) {
+    return `
+      <section>
+        <p>News article fixture page.</p>
+      </section>
+      <div id="banner" role="dialog" aria-label="Cookie notice">
+        <p>We and our partners use cookies on this site to improve our service, perform analytics, personalize advertising, measure advertising performance, and remember website preferences. By using the site, you consent to these cookies.</p>
+        <a href="/policies/cookies">Cookie Policy</a>
+        <button id="continue" type="button">Continue</button>
+      </div>
+    `;
+  }
+  if (options.analyticsCategoryControls) {
+    return `
+      <section>
+        <p>Consent-flow fixture page with category-scoped controls.</p>
+      </section>
+      <div id="banner" role="dialog" aria-label="Cookie consent">
+        <p>We use optional analytics cookies to measure usage. Choose whether to allow analytics cookies.</p>
+        <button id="reject-analytics" type="button">Reject analytics</button>
+        <button id="allow-analytics" type="button">Allow analytics</button>
+      </div>
     `;
   }
   const preferenceOnly = options.preferenceAmbiguous || options.preferenceConfirmSave || options.preferenceSuccess || options.preferenceToggleSave;
