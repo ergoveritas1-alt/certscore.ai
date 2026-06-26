@@ -56,6 +56,13 @@ test("classifies necessary-only labels as reject-equivalent", () => {
   }
 });
 
+test("classifies decline non-essential cookies as reject", () => {
+  const classification = classifyConsentControlLabel({ label: "Decline Non-Essential Cookies" });
+  assert.equal(classification.intent, "reject");
+  assert.equal(classification.matchedTerm, "decline non-essential cookies");
+  assert.equal(classification.matchStrength, "direct");
+});
+
 test("classifies category-scoped analytics controls without broadening plain category labels", () => {
   const allowAnalytics = classifyConsentControlLabel({ label: "Allow analytics" });
   assert.equal(allowAnalytics.intent, "accept");

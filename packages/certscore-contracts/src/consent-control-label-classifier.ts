@@ -112,6 +112,8 @@ export const consentControlTerms: ConsentControlTerm[] = [
     ...direct("reject", "reject optional"),
     ...direct("reject", "reject optional cookies"),
     ...direct("reject", "reject non-essential cookies"),
+    ...direct("reject", "decline non-essential cookies"),
+    ...direct("reject", "decline non essential cookies"),
     equivalent("reject", "reject analytics", "category_analytics"),
     equivalent("reject", "deny analytics", "category_analytics"),
     equivalent("reject", "disable analytics", "category_analytics"),
