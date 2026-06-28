@@ -226,6 +226,9 @@ const CONSENT_CONTEXT_PATTERN =
 const POLICY_LINK_PATTERN = /\b(?:privacy policy|cookie policy|privacy statement|cookie statement|privacy notice|cookie notice|privacy and cookie policy|politique de confidentialit[eé]|politique de confidentialit[eé] et de gestion des cookies|politique|datenschutzerklärung)\b/i;
 const CANDIDATE_ACTION_PRIORITY_PATTERN =
   /accept|agree|allow|continue|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|necessary|essential|required|technical|akzeptieren|ablehnen|einstellungen|accepter|refuser|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza/i;
+const STATIC_TEXT_TAG_NAMES = new Set(["p", "span", "strong", "em", "small", "li", "h1", "h2", "h3", "h4", "h5", "h6"]);
+const INTERACTIVE_TAG_NAMES = new Set(["a", "button", "input", "select", "textarea"]);
+const INTERACTIVE_ROLE_PATTERN = /^(button|link|checkbox|radio|switch|tab|menuitem)$/i;
 
 export async function captureConsentControlGeometry(
   page: Page,
@@ -470,9 +473,22 @@ function actionTypeForClassification(
     return "do_not_sell_share";
   }
   if (classification.intent === "options") {
+    if (
+      classification.matchStrength === "contextual" &&
+      isStaticTextContextualOptionsCandidate(candidate)
+    ) {
+      return "other";
+    }
     return classification.variant === "save_preferences" ? "save_preferences" : "manage_preferences";
   }
   return "other";
+}
+
+function isStaticTextContextualOptionsCandidate(candidate: RawGeometryCandidate): boolean {
+  if (INTERACTIVE_TAG_NAMES.has(candidate.tagName) || INTERACTIVE_ROLE_PATTERN.test(candidate.role ?? "")) {
+    return false;
+  }
+  return STATIC_TEXT_TAG_NAMES.has(candidate.tagName);
 }
 
 function decisionStatusForCandidate(

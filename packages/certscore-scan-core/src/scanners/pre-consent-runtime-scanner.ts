@@ -811,7 +811,7 @@ export async function preConsentRuntimeScanner(
         const geometryProofScreenshot = hasConfirmedFirstLayerGeometryControls(geometry)
           ? await captureConsentGeometryProofScreenshot(page, input, {
             screenshotErrors,
-            timeoutMs: input.waitMode === "fast" ? 5_000 : 7_500,
+            timeoutMs: input.waitMode === "fast" ? 10_000 : 12_500,
           })
           : null;
         if (geometryProofScreenshot) {
@@ -3879,6 +3879,7 @@ async function captureConsentGeometryProofScreenshot(
   const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-geometry-proof.png");
   try {
     await page.screenshot({
+      animations: "disabled",
       fullPage: false,
       path: screenshotPath,
       timeout: options.timeoutMs,

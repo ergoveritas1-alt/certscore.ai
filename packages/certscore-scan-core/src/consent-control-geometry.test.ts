@@ -186,6 +186,25 @@ test("captures Dailymotion-style Personalise as a first-layer options control", 
   assert.equal(findCandidate(artifact, "Personalise")?.decisionStatus, "confirmed_visible");
 });
 
+test("does not count contextual options words in static banner text as first-layer options", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" style="position: fixed; left: 260px; top: 160px; width: 620px; padding: 24px; background: white;">
+      <h1>Your privacy choices</h1>
+      <p tabindex="0">We use cookies and similar technologies to personalise your experience and measure advertising.</p>
+      <button>Accept all</button>
+      <button>Reject all</button>
+    </div>
+  `);
+
+  const staticTextCandidate = artifact.candidates.find((candidate) =>
+    candidate.tagName === "p" && candidate.label.includes("personalise your experience")
+  );
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.equal(staticTextCandidate?.actionType, "other");
+});
+
 test("captures Microsoft-style Manage cookies as a first-layer options control", async () => {
   const artifact = await captureFixture(`
     <div style="position: fixed; left: 0; top: 0; right: 0; padding: 20px; background: white;">

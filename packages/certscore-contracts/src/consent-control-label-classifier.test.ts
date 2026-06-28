@@ -26,6 +26,7 @@ test("classifies direct accept controls across English, German, and French", () 
     ["Accept all", "en"],
     ["Allow all", "en"],
     ["I agree", "en"],
+    ["Agree and close", "en"],
     ["Akzeptieren", "de"],
     ["Alle akzeptieren", "de"],
     ["Zustimmen", "de"],
@@ -61,6 +62,9 @@ test("classifies observed English options labels", () => {
   assert.equal(classifyConsentControlLabel({ label: "I Accept" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Accept", ariaLabel: "Accept" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Deny", ariaLabel: "Deny" }).intent, "reject");
+  const subscribeReject = classifyConsentControlLabel({ label: "Decline and subscribe" });
+  assert.equal(subscribeReject.intent, "reject");
+  assert.equal(subscribeReject.variant, "reject_with_subscription");
   assert.equal(classifyConsentControlLabel({
     label: "Customise",
     contextText: "We use cookies and partners for personalised advertising.",
@@ -97,6 +101,13 @@ test("classifies observed Spanish and Italian consent labels", () => {
     label: "pannello delle preferenze pubblicitarie",
     contextText: "Usiamo cookie e tecnologie simili per finalita pubblicitarie.",
   }).intent, "unknown");
+});
+
+test("classifies observed French reject-all cookie labels", () => {
+  const classification = classifyConsentControlLabel({ label: "Refuser tous les cookies" });
+  assert.equal(classification.intent, "reject");
+  assert.equal(classification.matchStrength, "direct");
+  assert.equal(classification.matchedLocale, "fr");
 });
 
 test("classifies necessary-only labels as reject-equivalent", () => {
