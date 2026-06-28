@@ -206,3 +206,26 @@ test("local Lambda parity cohort runner bounds per-site hangs with explicit qual
   assert.match(cohortRunner, /\/do-not-sell/);
   assert.match(cohortRunner, /productionFindingIntegration: false/);
 });
+
+test("consent geometry ARO no-go Lambda gate stays artifact-only and review-gated", async () => {
+  const packageJson = await readRepoFile("package.json");
+  const gateScript = await readRepoFile("scripts/run-consent-geometry-aro-nogo-lambda-gate.ts");
+  const cohorts = await readRepoFile("scripts/config/consent-geometry-aro-nogo-cohorts.json");
+
+  assert.match(packageJson, /"v2:consent-geometry-aro-nogo-gate"/);
+  assert.match(gateScript, /artifactOnly: true/);
+  assert.match(gateScript, /productionFindingIntegration: false/);
+  assert.match(gateScript, /resultHandoff: "sqs"/);
+  assert.match(gateScript, /cleanupSqsMessages/);
+  assert.match(gateScript, /consent-geometry-review/);
+  assert.match(gateScript, /consent-geometry-final-summary/);
+  assert.match(gateScript, /human-adjudication-priority\.csv/);
+  assert.match(gateScript, /human-adjudication-template\.csv|final-cohort-summary\.json/);
+  assert.doesNotMatch(gateScript, /post.?consent|consentFlowScreenshotMode/i);
+
+  const parsed = JSON.parse(cohorts) as { baseline?: unknown[]; expanded?: unknown[] };
+  assert.ok((parsed.baseline?.length ?? 0) >= 10);
+  assert.ok((parsed.expanded?.length ?? 0) > (parsed.baseline?.length ?? 0));
+  assert.ok(parsed.expanded?.includes("nbcnews.com"));
+  assert.ok(parsed.expanded?.includes("numastays.com"));
+});

@@ -1,0 +1,42 @@
+{
+  "artifactVersion": "consent_geometry_aro_nogo_cohorts.v1",
+  "baseline": [
+    "certscore.ai",
+    "ikea.com",
+    "numastays.com",
+    "skalar.de",
+    "google.com",
+    "gatech.edu",
+    "cnn.com",
+    "nbcnews.com",
+    "airfrance.com",
+    "cimediacloud.com"
+  ],
+  "expanded": [
+    "certscore.ai",
+    "ikea.com",
+    "numastays.com",
+    "skalar.de",
+    "google.com",
+    "gatech.edu",
+    "cnn.com",
+    "nbcnews.com",
+    "airfrance.com",
+    "cimediacloud.com",
+    "bbc.com",
+    "theguardian.com",
+    "reuters.com",
+    "nytimes.com",
+    "latimes.com",
+    "lemonde.fr",
+    "lequipe.fr",
+    "ryanair.com",
+    "booking.com",
+    "spotify.com",
+    "ebay.de",
+    "microsoft.com",
+    "salesforce.com",
+    "euronews.com",
+    "dailymotion.com"
+  ]
+}
