@@ -790,9 +790,24 @@ export async function preConsentRuntimeScanner(
         const access = await collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
           supplementalBodyText: domText,
         });
-        const geometry = await captureConsentControlGeometry(page, {
+        let geometry = await captureConsentControlGeometry(page, {
           screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
         });
+        if (
+          !hasConfirmedFirstLayerGeometryControls(geometry) &&
+          hasBelowFoldFirstLayerGeometryControls(geometry)
+        ) {
+          const recapturedGeometry = await recaptureConsentGeometryAfterBoundedScroll(page, geometry, {
+            screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
+          });
+          if (recapturedGeometry && confirmedFirstLayerGeometryControlCount(recapturedGeometry) > confirmedFirstLayerGeometryControlCount(geometry)) {
+            recapturedGeometry.summary.limitations = [
+              "recapture:bounded_scroll_to_below_fold_first_layer_controls",
+              ...recapturedGeometry.summary.limitations,
+            ].slice(0, 12);
+            geometry = recapturedGeometry;
+          }
+        }
         const geometryProofScreenshot = hasConfirmedFirstLayerGeometryControls(geometry)
           ? await captureConsentGeometryProofScreenshot(page, input, {
             screenshotErrors,
@@ -3773,15 +3788,73 @@ function preferredPreConsentScreenshotRef(screenshots: ScreenshotArtifact[]): st
 }
 
 function hasConfirmedFirstLayerGeometryControls(geometry: ConsentControlGeometryArtifact): boolean {
-  return geometry.candidates.some((candidate) =>
+  return confirmedFirstLayerGeometryControlCount(geometry) > 0;
+}
+
+function confirmedFirstLayerGeometryControlCount(geometry: ConsentControlGeometryArtifact): number {
+  return geometry.candidates.filter((candidate) =>
+    isAroGeometryAction(candidate.actionType) &&
     candidate.layer === "first_layer" &&
-    candidate.decisionStatus === "confirmed_visible" &&
-    (
-      candidate.actionType === "accept_all" ||
-      candidate.actionType === "reject_all" ||
-      candidate.actionType === "manage_preferences"
-    )
+    candidate.decisionStatus === "confirmed_visible"
+  ).length;
+}
+
+function hasBelowFoldFirstLayerGeometryControls(geometry: ConsentControlGeometryArtifact): boolean {
+  return geometry.candidates.some((candidate) =>
+    isAroGeometryAction(candidate.actionType) &&
+    candidate.layer === "first_layer" &&
+    candidate.decisionStatus === "dom_present_not_visible" &&
+    candidate.reasons.includes("outside_viewport") &&
+    candidate.boundingBox.width > 0 &&
+    candidate.boundingBox.height > 0 &&
+    candidate.boundingBox.top >= geometry.viewport.height &&
+    candidate.boundingBox.top <= geometry.viewport.height + 2_400
   );
+}
+
+function isAroGeometryAction(actionType: ConsentControlGeometryArtifact["candidates"][number]["actionType"]): boolean {
+  return actionType === "accept_all" ||
+    actionType === "reject_all" ||
+    actionType === "manage_preferences";
+}
+
+async function recaptureConsentGeometryAfterBoundedScroll(
+  page: Page,
+  geometry: ConsentControlGeometryArtifact,
+  options: {
+    screenshotArtifactRef?: string;
+  },
+): Promise<ConsentControlGeometryArtifact | null> {
+  const target = geometry.candidates
+    .filter((candidate) =>
+      isAroGeometryAction(candidate.actionType) &&
+      candidate.layer === "first_layer" &&
+      candidate.decisionStatus === "dom_present_not_visible" &&
+      candidate.reasons.includes("outside_viewport") &&
+      candidate.boundingBox.width > 0 &&
+      candidate.boundingBox.height > 0
+    )
+    .sort((left, right) => left.boundingBox.top - right.boundingBox.top)[0];
+  if (!target) {
+    return null;
+  }
+
+  const didScroll = await page.evaluate((top) => {
+    const before = window.scrollY;
+    const maxTop = Math.max(0, (document.scrollingElement?.scrollHeight ?? document.body.scrollHeight) - window.innerHeight);
+    const nextTop = Math.max(0, Math.min(maxTop, top - 96));
+    window.scrollTo(0, nextTop);
+    return Math.abs(window.scrollY - before) > 4;
+  }, target.boundingBox.top).catch(() => false);
+
+  if (!didScroll) {
+    return null;
+  }
+
+  await page.waitForTimeout(350).catch(() => undefined);
+  return captureConsentControlGeometry(page, {
+    screenshotArtifactRef: options.screenshotArtifactRef,
+  });
 }
 
 function rewriteConsentGeometryScreenshotRefs(

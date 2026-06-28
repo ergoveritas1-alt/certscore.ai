@@ -30,6 +30,7 @@ test("classifies direct accept controls across English, German, and French", () 
     ["Alle akzeptieren", "de"],
     ["Zustimmen", "de"],
     ["Annehmen", "de"],
+    ["Alle zulassen", "de"],
     ["Ich stimme zu", "de"],
     ["Accepter", "fr"],
     ["Tout accepter", "fr"],

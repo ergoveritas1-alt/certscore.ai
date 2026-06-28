@@ -99,6 +99,21 @@ type SiteResult = {
   status: string;
 };
 
+type AwsResult = {
+  attempts: AwsAttempt[];
+  stderr: string;
+  stdout: string;
+};
+
+type AwsAttempt = {
+  attempt: number;
+  durationMs: number;
+  error?: string;
+  retryable?: boolean;
+  stderr?: string;
+  stdout?: string;
+};
+
 const execFile = promisify(execFileWithCallback);
 const repoRoot = process.cwd();
 const defaultManifestPath = path.join(repoRoot, "scripts", "config", "consent-geometry-aro-nogo-cohorts.json");
@@ -227,7 +242,7 @@ async function runSite(input: {
   await writeFile(payloadPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   const startedMs = Date.now();
   try {
-    const invoke = await runAws([
+    const invoke = await runAwsWithRetry([
       "lambda",
       "invoke",
       "--region",
@@ -241,8 +256,14 @@ async function runSite(input: {
       "--payload",
       `fileb://${payloadPath}`,
       responsePath,
-    ]);
-    await writeFile(path.join(siteDir, "lambda-invoke-meta.json"), invoke.stdout || "{}\n", "utf8");
+    ], {
+      attempts: 3,
+      label: `lambda invoke ${site}`,
+    });
+    await writeFile(path.join(siteDir, "lambda-invoke-meta.json"), `${JSON.stringify({
+      ...jsonObjectFromStdout(invoke.stdout),
+      attempts: invoke.attempts,
+    }, null, 2)}\n`, "utf8");
     const response = JSON.parse(await readFile(responsePath, "utf8")) as LambdaResponse;
     if (response.status !== "completed") {
       throw new Error(`Lambda returned ${response.status ?? "unknown"}: ${JSON.stringify(response.error ?? null)}`);
@@ -642,8 +663,119 @@ async function copyS3(input: { filePath: string; region: Args["region"]; uri: st
   ]);
 }
 
-async function runAws(args: string[]): Promise<{ stdout: string; stderr: string }> {
-  return execFile("aws", args, { cwd: repoRoot, maxBuffer: 20 * 1024 * 1024 });
+async function runAws(args: string[]): Promise<AwsResult> {
+  const startedMs = Date.now();
+  const result = await execFile("aws", args, {
+    cwd: repoRoot,
+    env: awsCliEnv(),
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  return {
+    attempts: [{
+      attempt: 1,
+      durationMs: Date.now() - startedMs,
+      stderr: result.stderr,
+      stdout: result.stdout,
+    }],
+    stderr: result.stderr,
+    stdout: result.stdout,
+  };
+}
+
+async function runAwsWithRetry(
+  args: string[],
+  options: {
+    attempts: number;
+    label: string;
+  },
+): Promise<AwsResult> {
+  const attempts: AwsAttempt[] = [];
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= options.attempts; attempt += 1) {
+    const startedMs = Date.now();
+    try {
+      const result = await execFile("aws", args, {
+        cwd: repoRoot,
+        env: awsCliEnv(),
+        maxBuffer: 20 * 1024 * 1024,
+      });
+      attempts.push({
+        attempt,
+        durationMs: Date.now() - startedMs,
+        stderr: result.stderr,
+        stdout: result.stdout,
+      });
+      return {
+        attempts,
+        stderr: result.stderr,
+        stdout: result.stdout,
+      };
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableAwsCliError(error);
+      attempts.push({
+        attempt,
+        durationMs: Date.now() - startedMs,
+        error: errorMessage(error),
+        retryable,
+        stderr: errorStderr(error),
+        stdout: errorStdout(error),
+      });
+      if (!retryable || attempt >= options.attempts) {
+        break;
+      }
+      console.log(`${options.label}: retrying AWS CLI attempt ${attempt + 1}/${options.attempts} after ${errorMessage(error)}`);
+      await sleep(1_000 * attempt);
+    }
+  }
+  const message = `${options.label} failed after ${attempts.length} attempt(s): ${errorMessage(lastError)}`;
+  const wrapped = new Error(message);
+  (wrapped as Error & { attempts?: AwsAttempt[] }).attempts = attempts;
+  throw wrapped;
+}
+
+function awsCliEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    AWS_CLI_CONNECT_TIMEOUT: process.env.AWS_CLI_CONNECT_TIMEOUT ?? "30",
+    AWS_CLI_READ_TIMEOUT: process.env.AWS_CLI_READ_TIMEOUT ?? "900",
+  };
+}
+
+function isRetryableAwsCliError(error: unknown): boolean {
+  const text = `${errorMessage(error)}\n${errorStderr(error)}`;
+  return /read timeout|connect timeout|timed out|connection reset|connection aborted|temporarily unavailable|throttl|rate exceeded|too many requests|service unavailable|internal failure/i.test(text);
+}
+
+function jsonObjectFromStdout(stdout: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(stdout) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function errorStderr(error: unknown): string {
+  return typeof (error as { stderr?: unknown })?.stderr === "string"
+    ? (error as { stderr: string }).stderr
+    : "";
+}
+
+function errorStdout(error: unknown): string {
+  return typeof (error as { stdout?: unknown })?.stdout === "string"
+    ? (error as { stdout: string }).stdout
+    : "";
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function runPnpm(args: string[]): Promise<void> {

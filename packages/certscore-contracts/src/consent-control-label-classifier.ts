@@ -203,6 +203,7 @@ export const consentControlTerms: ConsentControlTerm[] = [
     ...direct("accept", "zustimmen"),
     ...direct("accept", "annehmen"),
     ...direct("accept", "alle annehmen"),
+    ...direct("accept", "alle zulassen"),
     ...direct("accept", "ich stimme zu"),
     ...direct("accept", "einverstanden"),
     ...direct("accept", "erlauben"),
