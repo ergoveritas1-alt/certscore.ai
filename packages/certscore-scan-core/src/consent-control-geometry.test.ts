@@ -168,6 +168,41 @@ test("captures Ci Media Cloud-style OneTrust accept, reject, and manage controls
   assert.equal(artifact.summary.firstLayerOptions, true);
 });
 
+test("captures Dailymotion-style Personalise as a first-layer options control", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" aria-label="Data privacy at Dailymotion" style="position: fixed; left: 440px; top: 200px; width: 480px; padding: 32px; background: white;">
+      <h1>Data privacy at Dailymotion</h1>
+      <p>We and our Partners may use cookies and process personal data for personalised advertising and content measurement.</p>
+      <button>Accept</button>
+      <button>Personalise</button>
+      <button>Continue without accepting</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Personalise")?.actionType, "manage_preferences");
+  assert.equal(findCandidate(artifact, "Personalise")?.decisionStatus, "confirmed_visible");
+});
+
+test("captures Microsoft-style Manage cookies as a first-layer options control", async () => {
+  const artifact = await captureFixture(`
+    <div style="position: fixed; left: 0; top: 0; right: 0; padding: 20px; background: white;">
+      <p>We use optional cookies to improve your experience and display personalized advertising. You may change your selection by clicking Manage Cookies.</p>
+      <button>Accept</button>
+      <button>Reject</button>
+      <button>Manage cookies</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Manage cookies")?.actionType, "manage_preferences");
+  assert.equal(findCandidate(artifact, "Manage cookies")?.decisionStatus, "confirmed_visible");
+});
+
 test("captures visible first-layer controls inside a bounded iframe", async () => {
   const artifact = await captureFixture(`
     <iframe

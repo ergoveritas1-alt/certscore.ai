@@ -56,6 +56,14 @@ test("classifies British spelling choice controls as options", () => {
   assert.equal(classification.matchedTerm, "customise my choices");
 });
 
+test("classifies observed English options labels", () => {
+  assert.equal(classifyConsentControlLabel({ label: "Manage cookies" }).intent, "options");
+  assert.equal(classifyConsentControlLabel({
+    label: "Personalise",
+    contextText: "Data privacy at Dailymotion. We use cookies and partners for advertising measurement.",
+  }).intent, "options");
+});
+
 test("classifies necessary-only labels as reject-equivalent", () => {
   for (const label of [
     "Use necessary cookies only",
