@@ -382,12 +382,15 @@ async function discoverSiteArtifactInputs(
     const lambdaGeometryPath = path.join(siteDir, "ConsentControlGeometryEvidence.json");
     const legacyGeometryPath = path.join(siteDir, "consent-control-geometry.json");
     const geometryPath = await exists(lambdaGeometryPath) ? lambdaGeometryPath : legacyGeometryPath;
+    const lambdaGeometryProofScreenshotPath = path.join(siteDir, "screenshot-pre-consent-geometry-proof.png");
     const lambdaFullPageScreenshotPath = path.join(siteDir, "screenshot-pre-consent-full-page.jpg");
     const lambdaScreenshotPath = path.join(siteDir, "screenshot-pre-consent.png");
     const legacyScreenshotPath = path.join(siteDir, "pre-consent-viewport.png");
-    const screenshotPath = await exists(lambdaFullPageScreenshotPath)
-      ? lambdaFullPageScreenshotPath
-      : await exists(lambdaScreenshotPath)
+    const screenshotPath = await exists(lambdaGeometryProofScreenshotPath)
+      ? lambdaGeometryProofScreenshotPath
+      : await exists(lambdaFullPageScreenshotPath)
+        ? lambdaFullPageScreenshotPath
+        : await exists(lambdaScreenshotPath)
         ? lambdaScreenshotPath
         : legacyScreenshotPath;
     const errorPath = path.join(siteDir, "error.txt");

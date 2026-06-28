@@ -454,6 +454,7 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
   await writeFile(path.join(tmp, "consent_scenario_plan.json"), JSON.stringify({ plan: true }), "utf8");
   await writeFile(path.join(tmp, "consent_scenario_execution.json"), JSON.stringify({ execution: true }), "utf8");
   await writeFile(path.join(tmp, "screenshot-pre-consent.png"), "not-json", "utf8");
+  await writeFile(path.join(tmp, "screenshot-pre-consent-geometry-proof.png"), "not-json", "utf8");
   await writeFile(path.join(tmp, "screenshot-pre-consent-full-page.jpg"), "not-a-real-jpeg", "utf8");
   const puts: Array<{ bucket: string | undefined; contentType: string | undefined; key: string | undefined }> = [];
   const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
@@ -476,12 +477,13 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
       }
     });
 
-    assert.equal(artifacts.length, 5);
+    assert.equal(artifacts.length, 6);
     assert.deepEqual(artifacts.map((artifact) => artifact.fileName), [
       "ConsentControlGeometryEvidence.json",
       "consent_scenario_execution.json",
       "consent_scenario_plan.json",
       "screenshot-pre-consent-full-page.jpg",
+      "screenshot-pre-consent-geometry-proof.png",
       "screenshot-pre-consent.png"
     ]);
     assert.ok(puts.every((put) => put.bucket === "certscore-v2-local-artifacts"));
@@ -489,6 +491,10 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
     assert.equal(
       puts.find((put) => put.key?.endsWith("/screenshot-pre-consent-full-page.jpg"))?.contentType,
       "image/jpeg"
+    );
+    assert.equal(
+      puts.find((put) => put.key?.endsWith("/screenshot-pre-consent-geometry-proof.png"))?.contentType,
+      "image/png"
     );
     assert.ok(artifacts.every((artifact) => artifact.uri.startsWith("s3://certscore-v2-local-artifacts/")));
   } finally {

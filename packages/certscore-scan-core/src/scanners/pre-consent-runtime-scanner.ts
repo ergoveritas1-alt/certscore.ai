@@ -21,7 +21,10 @@ import { resolveEndpointGeography, resolveVendorObservations, type VendorResolve
 import { writeFile } from "node:fs/promises";
 import { chromium, type Browser, type BrowserContext, type Frame, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
-import { captureConsentControlGeometry } from "../consent-control-geometry.js";
+import {
+  captureConsentControlGeometry,
+  type ConsentControlGeometryArtifact,
+} from "../consent-control-geometry.js";
 import {
   buildConsentGeometryEgressDiagnostic,
   classifyConsentGeometryAccess,
@@ -784,13 +787,22 @@ export async function preConsentRuntimeScanner(
       "consent control geometry diagnostic",
       "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
       async () => {
-        const screenshotArtifactRef = preferredPreConsentScreenshotRef(screenshots);
         const access = await collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
           supplementalBodyText: domText,
         });
         const geometry = await captureConsentControlGeometry(page, {
-          screenshotArtifactRef,
+          screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
         });
+        const geometryProofScreenshot = hasConfirmedFirstLayerGeometryControls(geometry)
+          ? await captureConsentGeometryProofScreenshot(page, input, {
+            screenshotErrors,
+            timeoutMs: input.waitMode === "fast" ? 5_000 : 7_500,
+          })
+          : null;
+        if (geometryProofScreenshot) {
+          screenshots.unshift(geometryProofScreenshot);
+          rewriteConsentGeometryScreenshotRefs(geometry, geometryProofScreenshot.path);
+        }
         await input.artifactWriter.writeJsonArtifact("ConsentControlGeometryEvidence.json", {
           ...geometry,
           access,
@@ -3753,10 +3765,64 @@ function visualCaptureFromScreenshotSummary(
 
 function preferredPreConsentScreenshotRef(screenshots: ScreenshotArtifact[]): string | undefined {
   return (
+    screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page")?.path ??
     screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent")?.path ??
     screenshots[0]?.path
   );
+}
+
+function hasConfirmedFirstLayerGeometryControls(geometry: ConsentControlGeometryArtifact): boolean {
+  return geometry.candidates.some((candidate) =>
+    candidate.layer === "first_layer" &&
+    candidate.decisionStatus === "confirmed_visible" &&
+    (
+      candidate.actionType === "accept_all" ||
+      candidate.actionType === "reject_all" ||
+      candidate.actionType === "manage_preferences"
+    )
+  );
+}
+
+function rewriteConsentGeometryScreenshotRefs(
+  geometry: ConsentControlGeometryArtifact,
+  screenshotArtifactRef: string,
+): void {
+  for (const candidate of geometry.candidates) {
+    if (candidate.layer === "first_layer" && candidate.decisionStatus === "confirmed_visible") {
+      candidate.screenshotArtifactRef = screenshotArtifactRef;
+    }
+  }
+}
+
+async function captureConsentGeometryProofScreenshot(
+  page: Page,
+  input: PreConsentRuntimeScannerInput,
+  options: {
+    screenshotErrors: string[];
+    timeoutMs: number;
+  },
+): Promise<ScreenshotArtifact | null> {
+  const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-geometry-proof.png");
+  try {
+    await page.screenshot({
+      fullPage: false,
+      path: screenshotPath,
+      timeout: options.timeoutMs,
+    });
+    return {
+      artifactId: "screenshot_pre_consent_geometry_proof",
+      capturedAtMs: elapsed(input.scanStartedAtMs),
+      captureMethod: "primary_viewport_fallback",
+      path: screenshotPath,
+      url: page.url(),
+      pagePhase: "network_idle",
+      consentStateAtTime: "pre_consent",
+    };
+  } catch (error) {
+    options.screenshotErrors.push(`Consent geometry proof screenshot failed: ${errorMessageFromUnknown(error)}`);
+    return null;
+  }
 }
 
 async function writeConsentGeometryNoGoArtifact(
