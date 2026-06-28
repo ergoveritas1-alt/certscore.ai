@@ -598,7 +598,7 @@ resource "aws_iam_role_policy" "task_ops_monitor" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["ecs:UpdateService"]
+        Action   = ["ecs:DescribeServices", "ecs:UpdateService"]
         Resource = "*"
       }
     ]

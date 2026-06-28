@@ -109,7 +109,7 @@ jobs:
       - name: Run scheduled monitoring sweep
         if: ${{ env.OPS_SCHEDULED_MONITORING_SWEEP_ENABLED == 'true' }}
         env:
-          OPS_AWS_DB_PROBE_COMMAND: pnpm --filter @website-signal-risk-scanner/web monitoring:sweep -- --limit=${{ env.OPS_SCHEDULED_MONITORING_SWEEP_LIMIT }} --canary-domain=${{ env.OPS_SCHEDULED_MONITORING_CANARY_DOMAIN }}
+          OPS_AWS_DB_PROBE_COMMAND: node --enable-source-maps ./apps/validation-worker/dist/apps/validation-worker/scripts/run-scheduled-monitoring-sweep.js --limit=${{ env.OPS_SCHEDULED_MONITORING_SWEEP_LIMIT }} --canary-domain=${{ env.OPS_SCHEDULED_MONITORING_CANARY_DOMAIN }}
         run: pnpm ops:monitor:prod:aws
 
       - name: Run AWS-side database and worker probe
