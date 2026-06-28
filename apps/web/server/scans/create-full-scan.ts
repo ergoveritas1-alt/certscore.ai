@@ -10,8 +10,6 @@ import {
   type ScanFrom,
   type ScanType
 } from "@website-signal-risk-scanner/shared";
-import { redirect } from "next/navigation";
-import { getDashboardContext } from "../auth";
 import { getDomainById } from "../domains/get-domain-by-id";
 import {
   applyManualRescanLimitOverride,
@@ -22,8 +20,8 @@ import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
 import { getAdminScanThrottleMs, getScanThrottleCopy } from "../../lib/scan-access";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
-import { isPlatformAdminEmail } from "../admin/platform-admin";
-import { ensureValidationRunForManualScan } from "../validation/repository";
+import { parsePlatformAdminEmails } from "../admin/platform-admin-core";
+import { ensureValidationRunForManualScan } from "../validation/manual-scan-handoff";
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 import {
   createQueuedFullScan,
@@ -113,7 +111,9 @@ function getManualDashboardScanThrottleMs(userEmail: string): number | undefined
     return 0;
   }
 
-  return isPlatformAdminEmail(userEmail) ? getAdminScanThrottleMs() : undefined;
+  return parsePlatformAdminEmails(process.env.CERTSCORE_ADMIN_EMAILS).has(userEmail.toLowerCase())
+    ? getAdminScanThrottleMs()
+    : undefined;
 }
 
 function getCurrentMonthWindow(now = new Date()) {
@@ -682,6 +682,7 @@ export async function createFullScanAction(
   _previousState: CreateFullScanActionState = initialState,
   formData: FormData
 ): Promise<CreateFullScanActionState> {
+  const [{ getDashboardContext }, { redirect }] = await Promise.all([import("../auth"), import("next/navigation")]);
   const dashboardContext = await getDashboardContext();
   const domainId = String(formData.get("domainId") ?? "").trim();
   const forceNewScan = formData.get("forceNewScan") === "true";
@@ -734,4 +735,5 @@ export async function createFullScanAction(
   }
 
   redirect(`/app/scans/${result.scanId}`);
+  return initialState;
 }

@@ -11,7 +11,7 @@ import type {
   SharedPriorScanAccelerationConfig
 } from "@website-signal-risk-scanner/shared";
 import { isMissingComplianceChangeEventsTable } from "../changes/legacy-change-events";
-import { isPlatformAdminEmail } from "../admin/platform-admin";
+import { parsePlatformAdminEmails } from "../admin/platform-admin-core";
 
 export type ScanDetailQueryRow = {
   completed_at: string | null;
@@ -531,7 +531,9 @@ export async function loadScanCoreRecord(input: {
   scan: ScanDetailQueryRow;
   scanOrganizationId: string | null;
 }> {
-  const adminCanViewAnyScan = isPlatformAdminEmail(input.viewerEmail);
+  const adminCanViewAnyScan = input.viewerEmail
+    ? parsePlatformAdminEmails(process.env.CERTSCORE_ADMIN_EMAILS).has(input.viewerEmail.toLowerCase())
+    : false;
   const allowAnonymousAccess = input.anonymousOnly === true || input.allowAnonymousFallback === true || adminCanViewAnyScan;
 
   const loadScan = async (organizationId: string | null) => {

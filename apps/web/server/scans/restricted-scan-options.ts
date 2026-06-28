@@ -1,5 +1,9 @@
 import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
-import { isPlatformAdminEmail } from "../admin/platform-admin";
+import { parsePlatformAdminEmails } from "../admin/platform-admin-core";
+
+function isPlatformAdminEmail(email: string | null | undefined) {
+  return email ? parsePlatformAdminEmails(process.env.CERTSCORE_ADMIN_EMAILS).has(email.toLowerCase()) : false;
+}
 
 export function canUseRestrictedScanOptions(input: {
   membershipRole?: string | null;
