@@ -1,4 +1,3 @@
-import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
 import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
@@ -135,8 +134,11 @@ export type LocalV2DagLambdaDispatchResult = {
   payload: LocalV2DagLambdaDispatchPayload;
 };
 
+type LambdaInvokeCommand = import("@aws-sdk/client-lambda").InvokeCommand;
+type LambdaInvokeCommandOutput = import("@aws-sdk/client-lambda").InvokeCommandOutput;
+
 type LambdaInvokeClient = {
-  send(command: InvokeCommand): Promise<InvokeCommandOutput>;
+  send(command: LambdaInvokeCommand): Promise<LambdaInvokeCommandOutput>;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -263,6 +265,7 @@ export async function dispatchLocalV2DagLambdaScan(input: {
   scanId: string;
 }): Promise<LocalV2DagLambdaDispatchResult> {
   const payload = buildLocalV2DagLambdaDispatchPayload(input);
+  const { InvokeCommand, LambdaClient } = await import("@aws-sdk/client-lambda");
   const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: payload.awsRegion });
   const command = new InvokeCommand({
     FunctionName: payload.functionName,

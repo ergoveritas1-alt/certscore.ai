@@ -3,7 +3,7 @@ import { getPlanLimits } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
 import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
-import { ensureValidationRunForManualScan } from "../validation/repository";
+import { ensureValidationRunForManualScan } from "../validation/manual-scan-handoff";
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
 import { setPreviewDomainLatestScan } from "../preview-scan/db";
 import { createQueuedFullScan, insertQueuedFullScanEvent, loadPriorScanAccelerationCandidate } from "./repository";

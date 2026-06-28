@@ -11,6 +11,14 @@ if (originalLoad) {
       return {};
     }
 
+    if (request === "next/cache") {
+      return {
+        revalidatePath: () => {},
+        revalidateTag: () => {},
+        unstable_cache: <Args extends unknown[], Result>(fn: (...args: Args) => Result) => fn
+      };
+    }
+
     if (request === "next/navigation") {
       const unavailable = (name: string) => () => {
         throw new Error(`next/navigation ${name} is unavailable in the scheduled monitoring sweep runtime.`);
