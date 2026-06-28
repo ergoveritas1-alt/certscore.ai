@@ -430,6 +430,36 @@ const FINDING_MAPPINGS: Record<string, FindingMapping> = {
     reviewSignalOnly: true,
     notEligibleStatus: "checked",
   },
+  https_not_enforced: {
+    category: "runtime",
+    wc01RowId: "transport_security_https_delivery",
+    regulatoryFamilies: ["gdpr_eprivacy"],
+    notEligibleStatus: "checked",
+  },
+  tls_certificate_invalid_or_unverified: {
+    category: "runtime",
+    wc01RowId: "transport_security_tls_certificate",
+    regulatoryFamilies: ["gdpr_eprivacy"],
+    notEligibleStatus: "not_testable",
+  },
+  http_to_https_redirect_missing: {
+    category: "runtime",
+    wc01RowId: "transport_security_http_redirect",
+    regulatoryFamilies: ["gdpr_eprivacy"],
+    notEligibleStatus: "not_testable",
+  },
+  mixed_content_observed: {
+    category: "runtime",
+    wc01RowId: "transport_security_mixed_content",
+    regulatoryFamilies: ["gdpr_eprivacy"],
+    notEligibleStatus: "checked",
+  },
+  insecure_form_transport_observed: {
+    category: "runtime",
+    wc01RowId: "transport_security_form_transport",
+    regulatoryFamilies: ["gdpr_eprivacy"],
+    notEligibleStatus: "checked",
+  },
   privacy_notice_observed_or_not_observed: {
     category: "policy_surface",
     wc01RowId: "privacy_notice_availability",

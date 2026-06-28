@@ -1605,6 +1605,82 @@ function summarizeCollectionSurfaces(bundle: CanonicalEvidenceBundle) {
   };
 }
 
+function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
+  const observation = (bundle.transportSecurityObservations ?? [])[0] ?? null;
+  if (!observation) {
+    return {
+      evidenceRetained: false,
+      evidenceRefs: [],
+      formTransportCount: 0,
+      insecureFormTransportObserved: null,
+      mixedContentObserved: null,
+      observedCount: 0,
+      pageHttpsObserved: null,
+      sampledPageUrls: [],
+      validTlsCertificate: null,
+      httpRedirectsToHttps: null,
+    };
+  }
+
+  const mixedContent = observation.mixedContent ?? {
+    blockedHttpSubresources: [],
+    loadedHttpSubresources: [],
+    observedCount: 0
+  };
+  const formTransports = observation.formTransports ?? [];
+  const evidenceRefs = (observation.evidenceRefs ?? []).map((ref) => ref.refId).filter(Boolean);
+  const retainedTransportEvidence =
+    evidenceRefs.length > 0 ||
+    observation.httpProbe?.attempted === true ||
+    observation.tlsProbe?.attempted === true ||
+    observation.finalScheme === "http" ||
+    observation.finalScheme === "https";
+  return {
+    evidenceRetained: retainedTransportEvidence,
+    evidenceRefs,
+    finalScheme: observation.finalScheme,
+    finalUrl: observation.finalUrl,
+    formTransportCount: formTransports.length,
+    httpProbeAttempted: observation.httpProbe?.attempted === true,
+    httpProbeFinalUrl: observation.httpProbe?.finalUrl,
+    httpRedirectsToHttps: observation.summary?.httpRedirectsToHttps ?? null,
+    insecureFormTransportObserved: observation.summary?.insecureFormTransportObserved ?? false,
+    insecureFormTransports: formTransports
+      .filter((form) => form.insecureTransportObserved)
+      .slice(0, 12)
+      .map((form) => ({
+        actionScheme: form.actionScheme,
+        actionUrl: form.actionUrl,
+        fieldTypes: form.fieldTypes,
+        hasEmailField: form.hasEmailField,
+        hasSensitiveFieldHint: form.hasSensitiveFieldHint,
+        method: form.method,
+        pageScheme: form.pageScheme,
+        pageUrl: form.pageUrl
+      })),
+    mixedContentObserved: observation.summary?.mixedContentObserved ?? false,
+    mixedContentObservedCount: mixedContent.observedCount ?? 0,
+    mixedContentSamples: [
+      ...(mixedContent.loadedHttpSubresources ?? []),
+      ...(mixedContent.blockedHttpSubresources ?? [])
+    ].slice(0, 12).map((resource) => ({
+      disposition: resource.disposition,
+      evidenceSource: resource.evidenceSource,
+      hostname: resource.hostname,
+      pageUrl: resource.pageUrl,
+      resourceType: resource.resourceType,
+      url: resource.url
+    })),
+    observedCount: 1,
+    pageHttpsObserved: observation.pageHttpsObserved,
+    requestedScheme: observation.requestedScheme,
+    sampledPageUrls: observation.sampledPageUrls ?? [],
+    tlsProbeAttempted: observation.tlsProbe?.attempted === true,
+    tlsProbeErrorCategory: observation.tlsProbe?.errorCategory,
+    validTlsCertificate: observation.summary?.validTlsCertificate ?? null,
+  };
+}
+
 function summarizeFirstLayerConsentChoices(bundle: CanonicalEvidenceBundle) {
   const observation = (bundle.consentUiObservations ?? []).find((row) => row.likelyPresent) ??
     (bundle.consentUiObservations ?? [])[0] ??
@@ -1950,6 +2026,7 @@ function buildMaterializedLocalV2Detail(
   );
   const policySurfaceSummary = summarizePolicySurfaces(policySurfaces, rootDomain);
   const collectionSurfaceSummary = summarizeCollectionSurfaces(bundle);
+  const transportSecuritySummary = summarizeTransportSecurity(bundle);
   const privacySurface = policySurfaces.find((row) => row.surface.surfaceType === "privacy_policy");
   const termsSurface = policySurfaces.find((row) => row.surface.surfaceType === "terms");
   const cookieSurface = policySurfaces.find((row) =>
@@ -2120,6 +2197,8 @@ function buildMaterializedLocalV2Detail(
     collection_surface_observed: collectionSurfaceSummary.collectionSurfacesObserved,
     collectionSurfaceSummary,
     collection_surface_summary: collectionSurfaceSummary,
+    transportSecuritySummary,
+    transport_security_summary: transportSecuritySummary,
     consentActionableChoiceObserved: consentRuntimeEvidenceReportable ? Boolean(cmpVendorName) : null,
     consentSurfaceObserved: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
     consent_actionable_choice_observed: consentRuntimeEvidenceReportable ? Boolean(cmpVendorName) : null,

@@ -231,6 +231,51 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
+    id: "transport_security_https_delivery",
+    label: "HTTPS delivery for scanned pages",
+    explanation: "Whether the retained scanned page was served over HTTPS.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No typed HTTPS delivery observation was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "transport_security_tls_certificate",
+    label: "Valid SSL/TLS certificate",
+    explanation: "Whether a strict TLS probe verified the HTTPS origin certificate separately from the normal scanner runtime.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No strict TLS certificate probe was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "transport_security_http_redirect",
+    label: "HTTP redirects to HTTPS",
+    explanation: "Whether an explicit HTTP-origin probe redirected to HTTPS.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No explicit HTTP-to-HTTPS redirect probe was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "transport_security_mixed_content",
+    label: "Mixed content",
+    explanation: "Whether HTTP subresources were observed or blocked on a retained HTTPS page.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No mixed-content transport observation was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "transport_security_form_transport",
+    label: "Observed form transport",
+    explanation: "Whether observed forms resolved to HTTPS transport without submitting form data.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No observed-form transport evidence was retained in this scan context.",
+    requiresPublicWebCoverage: true
+  },
+  {
     id: "session_replay_fingerprinting_review",
     label: "Session replay signal",
     explanation: "Whether session replay, behavioral recording, or behavioral analytics signals were observed in the tested pre-consent/public-web context.",

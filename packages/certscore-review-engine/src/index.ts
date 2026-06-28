@@ -54,6 +54,26 @@ export async function reviewEvidenceBundle(
     vendorAssociatedCookiePreConsent(bundle, sourceModulesPresent, moduleSet),
     nonEssentialStoragePreConsent(bundle, sourceModulesPresent, moduleSet),
     unresolvedCollectionEndpointReviewSignal(bundle, sourceModulesPresent, moduleSet),
+    transportSecuritySignal(bundle, sourceModulesPresent, moduleSet, "https_not_enforced", "Scanned page was not served over HTTPS", (observation) =>
+      observation.summary.scannedPagesUseHttps === false,
+      "transport_security.scanned_pages_use_https:false",
+    ),
+    transportSecuritySignal(bundle, sourceModulesPresent, moduleSet, "tls_certificate_invalid_or_unverified", "Strict TLS certificate probe did not verify", (observation) =>
+      observation.tlsProbe.attempted === true && observation.summary.validTlsCertificate === false,
+      "transport_security.strict_tls_probe:false",
+    ),
+    transportSecuritySignal(bundle, sourceModulesPresent, moduleSet, "http_to_https_redirect_missing", "HTTP entry point did not redirect to HTTPS", (observation) =>
+      observation.httpProbe.attempted === true && observation.summary.httpRedirectsToHttps === false,
+      "transport_security.http_redirects_to_https:false",
+    ),
+    transportSecuritySignal(bundle, sourceModulesPresent, moduleSet, "mixed_content_observed", "HTTP subresource observed on an HTTPS page", (observation) =>
+      observation.summary.mixedContentObserved === true,
+      "transport_security.mixed_content_observed:true",
+    ),
+    transportSecuritySignal(bundle, sourceModulesPresent, moduleSet, "insecure_form_transport_observed", "Observed form transport was not HTTPS", (observation) =>
+      observation.summary.insecureFormTransportObserved === true,
+      "transport_security.insecure_form_transport_observed:true",
+    ),
     endpointTransferReviewSignal(bundle, sourceModulesPresent, moduleSet),
     consentBannerObservedOrNotObserved(bundle, sourceModulesPresent, moduleSet),
     sessionReplayOrBehavioralAnalyticsObserved(bundle, sourceModulesPresent, moduleSet),
@@ -556,6 +576,35 @@ function unresolvedCollectionEndpointReviewSignal(
     confidence: maxJourneyConfidence(journeys, journeys.length > 0 ? 0.58 : 0.2),
     directVsInferred: journeys.length > 0 ? "inferred" : "unknown",
     sourceEvidenceRefs: evidenceRefsFromJourneys(journeys),
+    relatedVendors: [],
+    sourceModulesRequired: [PRE_CONSENT_MODULE],
+    sourceModulesPresent,
+  });
+}
+
+function transportSecuritySignal(
+  bundle: CanonicalEvidenceBundle,
+  sourceModulesPresent: string[],
+  moduleSet: Set<string>,
+  findingKey: string,
+  title: string,
+  predicate: (observation: CanonicalEvidenceBundle["transportSecurityObservations"][number]) => boolean,
+  matchedCriterion: string,
+): FindingCandidate {
+  const deferredReason = preConsentRuntimeDeferredReason(bundle, moduleSet);
+  const observations = bundle.transportSecurityObservations ?? [];
+  const matched = observations.filter(predicate);
+  return candidate({
+    findingKey,
+    title,
+    eligible: matched.length > 0,
+    deferred: Boolean(deferredReason),
+    deferredReason,
+    matchedCriteria: matched.length > 0 ? [matchedCriterion] : [],
+    missingCorroborators: matched.length > 0 ? [] : ["typed_transport_security_observation"],
+    confidence: matched.length > 0 ? Math.max(...matched.map((observation) => observation.confidence)) : 0.55,
+    directVsInferred: "direct",
+    sourceEvidenceRefs: matched.flatMap((observation) => observation.evidenceRefs),
     relatedVendors: [],
     sourceModulesRequired: [PRE_CONSENT_MODULE],
     sourceModulesPresent,

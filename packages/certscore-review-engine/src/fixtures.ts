@@ -69,6 +69,7 @@ export function minimalBundle(
     consentFlowComparisons: [],
     collectionSurfaceObservations: [],
     policySurfaceObservations: [],
+    transportSecurityObservations: [],
     cmpRuntimeObservations: [],
     screenshots: [],
     domSnapshots: [],

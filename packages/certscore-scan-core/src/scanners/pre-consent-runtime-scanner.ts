@@ -1,4 +1,5 @@
 import {
+  type ArtifactRef,
   type CmpRuntimeObservation,
   type CollectionSurfaceObservation,
   type CookieEvent,
@@ -13,12 +14,15 @@ import {
   type SetCookieMetadata,
   type ScriptEvent,
   type StorageSnapshot,
+  type TransportSecurityObservation,
   type ConsentUiObservation,
   type VisualCaptureSummary,
   classifyConsentControlLabel,
 } from "@certscore/contracts";
 import { resolveEndpointGeography, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import { writeFile } from "node:fs/promises";
+import { isIP } from "node:net";
+import { connect as tlsConnect } from "node:tls";
 import { chromium, type Browser, type BrowserContext, type Frame, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import {
@@ -85,9 +89,11 @@ export interface PreConsentRuntimeScannerResult {
   consentUiObservations: ConsentUiObservation[];
   collectionSurfaceObservations: CollectionSurfaceObservation[];
   cmpRuntimeObservations: CmpRuntimeObservation[];
+  transportSecurityObservations: TransportSecurityObservation[];
   screenshots: ScreenshotArtifact[];
   visualCapture: VisualCaptureSummary;
   domSnapshots: DomSnapshotArtifact[];
+  artifactRefs: ArtifactRef[];
   vendorResolverInputs: VendorResolverInput[];
 }
 
@@ -105,6 +111,8 @@ export async function preConsentRuntimeScanner(
   const scriptEvents: ScriptEvent[] = [];
   const iframeEvents: IframeEvent[] = [];
   const browserApiAccessEvents: RuntimeEvidenceEvent[] = [];
+  const failedHttpRequests: Array<{ url: string; resourceType?: string; failureText?: string; pageUrl?: string }> = [];
+  const mixedContentConsoleMessages: string[] = [];
   const vendorResolverInputs: VendorResolverInput[] = [];
   const runtimeErrors: string[] = [];
   const requestIds = new WeakMap<Request, string>();
@@ -279,6 +287,24 @@ export async function preConsentRuntimeScanner(
 
   page.on("response", (response) => {
     void captureResponse(response);
+  });
+  page.on("requestfailed", (request) => {
+    const requestUrl = request.url();
+    if (!isHttpUrl(requestUrl)) {
+      return;
+    }
+    failedHttpRequests.push({
+      failureText: request.failure()?.errorText,
+      pageUrl: request.frame().url() === "about:blank" ? page.url() : request.frame().url(),
+      resourceType: request.resourceType(),
+      url: requestUrl,
+    });
+  });
+  page.on("console", (message) => {
+    const text = message.text();
+    if (/mixed content|blocked.+http:|insecure.+http:/i.test(text)) {
+      mixedContentConsoleMessages.push(text.slice(0, 500));
+    }
   });
 
   const screenshots: ScreenshotArtifact[] = [];
@@ -853,6 +879,33 @@ export async function preConsentRuntimeScanner(
       { refId: "dom_text_pre_consent", artifactId: domSnapshot.artifactId, path: domPath },
     ];
 
+    const { observation: transportSecurityObservation, artifactRef: transportSecurityArtifactRef } = await recordBoundedTiming(
+      timingBreakdown,
+      "page evidence: transport security",
+      "Bounded HTTPS, TLS, HTTP redirect, mixed-content, and form transport observation without form submission.",
+      12_000,
+      () => captureTransportSecurityObservation({
+        collectionSurfaceObservations,
+        failedHttpRequests,
+        mixedContentConsoleMessages,
+        networkEvents,
+        normalizedUrl: input.normalizedUrl,
+        page,
+        requestedUrl: input.url,
+        scanStartedAtMs: input.scanStartedAtMs,
+        artifactWriter: input.artifactWriter,
+      }),
+      () => ({
+        observation: emptyTransportSecurityObservation({
+          normalizedUrl: input.normalizedUrl,
+          requestedUrl: input.url,
+          scanStartedAtMs: input.scanStartedAtMs,
+          reason: "transport_security_capture_timeout_or_failure",
+        }),
+        artifactRef: undefined,
+      }),
+    );
+
     return {
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
@@ -875,9 +928,11 @@ export async function preConsentRuntimeScanner(
       consentUiObservations: [consentObservation],
       collectionSurfaceObservations,
       cmpRuntimeObservations,
+      transportSecurityObservations: [transportSecurityObservation],
       screenshots,
       visualCapture,
       domSnapshots: [domSnapshot],
+      artifactRefs: transportSecurityArtifactRef ? [transportSecurityArtifactRef] : [],
       vendorResolverInputs,
     };
   } catch (error) {
@@ -949,9 +1004,11 @@ export async function preConsentRuntimeScanner(
       consentUiObservations: fallbackConsentUiObservations,
       collectionSurfaceObservations: [],
       cmpRuntimeObservations: [],
+      transportSecurityObservations: [],
       screenshots,
       visualCapture,
       domSnapshots: fallbackDomSnapshots,
+      artifactRefs: [],
       vendorResolverInputs,
     };
   } finally {
@@ -1862,9 +1919,22 @@ async function readConsentUiObservation(
   if (frameInaccessibleCount > 0) {
     rejectedReasons.add("frame_inaccessible");
   }
+  const hasActionableClassifiedControl = classifiedControls.some((control) =>
+    control.actionType === "accept_all" || control.actionType === "reject_all"
+  );
+  const retainedControlKeys = new Set<string>();
   const enrichedControls = classifiedControls.filter((control) => {
     if (control.actionType === "other") {
       rejectedReasons.add("classifier_other_unknown");
+      return false;
+    }
+    if (
+      control.inventorySource === "accessibility_tree" &&
+      control.actionType === "manage_preferences" &&
+      !hasActionableClassifiedControl &&
+      probeDiagnostics?.rejectionReasons?.includes("footer_nav_page_chrome")
+    ) {
+      rejectedReasons.add("footer_nav_page_chrome");
       return false;
     }
     if (
@@ -1874,6 +1944,21 @@ async function readConsentUiObservation(
       rejectedReasons.add("generic_container_fewer_than_two_classified_controls");
       return false;
     }
+    const dedupeKey = [
+      control.actionType,
+      control.label.trim().toLowerCase(),
+      control.frameUrl ?? "main",
+    ].join(":");
+    if (retainedControlKeys.has(dedupeKey)) {
+      if (control.inventorySource) {
+        retainedInventorySources.add(control.inventorySource);
+      }
+      if (control.inventoryRootSource) {
+        retainedRootSources.add(control.inventoryRootSource);
+      }
+      return false;
+    }
+    retainedControlKeys.add(dedupeKey);
     return true;
   }).map((control) => {
     if (control.inventorySource) {
@@ -2164,6 +2249,12 @@ export function consentControlsFromAccessibilityTree(
     if (classification.intent === "unknown") {
       continue;
     }
+    if (
+      classification.intent === "options" &&
+      !/\b(?:we use cookies|use cookies|consent|accept|agree|allow|reject|decline|deny|refuse|analytics|tracking|marketing|privacy settings|privacy preferences|cookie preferences|similar techniques)\b/i.test(contextText)
+    ) {
+      continue;
+    }
     const dedupeKey = `${container.nodeId}:${role}:${label.toLowerCase()}`;
     if (seen.has(dedupeKey)) {
       continue;
@@ -2365,6 +2456,30 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
       };
       const containerKindFor = (element) => {
         if (isFirstLayerPosition(element)) {
+          const pageChrome = element.closest?.("footer,header,nav,aside,[role='navigation']");
+          if (pageChrome) {
+            const id = pageChrome.getAttribute("id") || "";
+            const className = pageChrome.getAttribute("class") || "";
+            const aria = pageChrome.getAttribute("aria-label") || "";
+            const role = (pageChrome.getAttribute("role") || "").toLowerCase();
+            const pageChromeText = (pageChrome.textContent || "").replace(/\s+/g, " ").trim();
+            const pageChromeControlCount = pageChrome.querySelectorAll(controlSelector + ", [tabindex='0']").length;
+            const pageChromeHasCmpIdentity = (
+              strongCmpIdPattern.test(id) ||
+              strongCmpContainerPattern.test(className) ||
+              strongCmpContainerPattern.test(aria) ||
+              pageChrome.matches?.("#onetrust-banner-sdk, #onetrust-consent-sdk, #onetrust-pc-sdk, .ot-sdk-container, .ot-sdk-row, [id^='onetrust-'], [id^='optanon'], [class*='onetrust' i], [class*='optanon' i], [class*='ot-sdk' i]")
+            );
+            const pageChromeLooksLikeConsentSurface = (
+              pageChromeControlCount >= 2 &&
+              !/^(?:navigation)$/i.test(role) &&
+              consentSurfaceTextPattern.test(pageChromeText) &&
+              consentSurfaceActionPattern.test(pageChromeText)
+            );
+            if (!pageChromeHasCmpIdentity && !pageChromeLooksLikeConsentSurface) {
+              return { key: "ineligible", source: "ineligible" };
+            }
+          }
           return { key: "first_layer", source: "first_layer" };
         }
         if (!allowFullDocumentCmpControls) {
@@ -2726,11 +2841,13 @@ function shouldRecaptureConsentUiAfterSupplementalScreenshot(
   observation: ConsentUiObservation,
   cmpRuntimeObservations: CmpRuntimeObservation[],
 ): boolean {
+  if (hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations)) {
+    return true;
+  }
   if (hasActionableConsentChoiceControl(observation)) {
     return false;
   }
-  return hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations) ||
-    hasTextBackedConsentSurface(observation) ||
+  return hasTextBackedConsentSurface(observation) ||
     likelyFirstLayerConsentBannerHintText(observation.textExcerpt ?? "");
 }
 
@@ -2827,6 +2944,12 @@ function isStrongerConsentUiObservation(
   candidate: ConsentUiObservation,
   current: ConsentUiObservation,
 ): boolean {
+  if (candidate.basis.some((basis) =>
+    (basis.startsWith("inventory:full_document_") || basis === "inventory:open_shadow_root_controls") &&
+    !current.basis.includes(basis)
+  )) {
+    return true;
+  }
   if (candidate.controls.length > current.controls.length) {
     return true;
   }
@@ -2997,6 +3120,472 @@ async function captureCollectionSurfaceObservations(
       directVsInferred: "direct",
     };
   });
+}
+
+async function captureTransportSecurityObservation(input: {
+  artifactWriter: ArtifactWriter;
+  collectionSurfaceObservations: CollectionSurfaceObservation[];
+  failedHttpRequests: Array<{ url: string; resourceType?: string; failureText?: string; pageUrl?: string }>;
+  mixedContentConsoleMessages: string[];
+  networkEvents: NetworkEvent[];
+  normalizedUrl: string;
+  page: Page;
+  requestedUrl: string;
+  scanStartedAtMs: number;
+}): Promise<{ observation: TransportSecurityObservation; artifactRef?: ArtifactRef }> {
+  const pageUrl = safePageUrl(input.page, input.normalizedUrl);
+  const pageForms = await captureFormTransportObservations(input.page, pageUrl).catch(() => []);
+  const collectionSurfaceForms = input.collectionSurfaceObservations.map((surface, index) =>
+    formTransportFromCollectionSurface(surface, index, pageUrl)
+  );
+  const formTransports = dedupeFormTransports([...pageForms, ...collectionSurfaceForms]).slice(0, 40);
+  const loadedHttpSubresources = input.networkEvents
+    .filter((event) => isMixedContentNetworkEvent(event))
+    .map((event) => ({
+      disposition: "loaded" as const,
+      evidenceSource: "network_request" as const,
+      hostname: event.hostname,
+      pageUrl: sanitizeTransportUrl(event.documentUrl ?? event.topLevelUrl ?? pageUrl),
+      resourceType: event.resourceType,
+      url: sanitizeTransportUrl(event.requestUrl),
+    }))
+    .slice(0, 25);
+  const blockedHttpSubresources = [
+    ...input.failedHttpRequests
+      .filter((request) =>
+        schemeOf(request.url) === "http" &&
+        schemeOf(request.pageUrl ?? pageUrl) === "https" &&
+        /mixed|blocked|insecure|not allowed|upgrade/i.test(request.failureText ?? "")
+      )
+      .map((request) => ({
+        disposition: "blocked" as const,
+        evidenceSource: "request_failed" as const,
+        hostname: getHostname(request.url) ?? undefined,
+        pageUrl: sanitizeTransportUrl(request.pageUrl ?? pageUrl),
+        resourceType: request.resourceType,
+        url: sanitizeTransportUrl(request.url),
+      })),
+    ...input.mixedContentConsoleMessages.flatMap((message) => {
+      const url = firstHttpUrl(message);
+      return url
+        ? [{
+          disposition: "blocked" as const,
+          evidenceSource: "console" as const,
+          hostname: getHostname(url) ?? undefined,
+          pageUrl: sanitizeTransportUrl(pageUrl),
+          resourceType: "unknown",
+          url: sanitizeTransportUrl(url),
+        }]
+        : [];
+    }),
+  ].slice(0, 25);
+  const [httpProbe, tlsProbe] = await Promise.all([
+    probeHttpRedirect(input.normalizedUrl),
+    probeStrictTls(input.normalizedUrl),
+  ]);
+  const observation: TransportSecurityObservation = {
+    observationId: "transport_security_pre_consent",
+    observedAtMs: elapsed(input.scanStartedAtMs),
+    sourceScanner: SOURCE_SCANNER,
+    scenario: SCENARIO,
+    requestedUrl: sanitizeTransportUrl(input.requestedUrl),
+    normalizedUrl: sanitizeTransportUrl(input.normalizedUrl),
+    requestedScheme: schemeOf(input.requestedUrl),
+    finalUrl: sanitizeTransportUrl(pageUrl),
+    finalScheme: schemeOf(pageUrl),
+    sampledPageUrls: unique([input.normalizedUrl, pageUrl].map((url) => sanitizeTransportUrl(url))).slice(0, 20),
+    pageHttpsObserved: schemeOf(pageUrl) === "https",
+    httpProbe,
+    tlsProbe,
+    mixedContent: {
+      loadedHttpSubresources,
+      blockedHttpSubresources,
+      observedCount: loadedHttpSubresources.length + blockedHttpSubresources.length,
+    },
+    formTransports,
+    summary: {
+      scannedPagesUseHttps: schemeOf(pageUrl) === "https",
+      validTlsCertificate: tlsProbe.validCertificate,
+      httpRedirectsToHttps: httpProbe.redirectedToHttps,
+      mixedContentObserved: loadedHttpSubresources.length + blockedHttpSubresources.length > 0,
+      insecureFormTransportObserved: formTransports.some((form) => form.insecureTransportObserved),
+    },
+    evidenceRefs: [{ refId: "ref_transport_security", artifactId: "transport_security_observation" }],
+    confidence: 0.94,
+    directVsInferred: "direct",
+  };
+  const path = await input.artifactWriter.writeJsonArtifact("TransportSecurityObservation.json", observation);
+  return {
+    observation,
+    artifactRef: {
+      artifactId: "transport_security_observation",
+      artifactType: "json",
+      path,
+      createdAt: new Date().toISOString(),
+      observedAtMs: observation.observedAtMs,
+      sourceScanner: SOURCE_SCANNER,
+      scenario: SCENARIO,
+      relatedEventIds: [],
+      sensitivity: "redacted",
+      redactionStatus: "redacted",
+      label: "Transport security observation",
+    },
+  };
+}
+
+function emptyTransportSecurityObservation(input: {
+  normalizedUrl: string;
+  reason: string;
+  requestedUrl: string;
+  scanStartedAtMs: number;
+}): TransportSecurityObservation {
+  return {
+    observationId: "transport_security_pre_consent",
+    observedAtMs: elapsed(input.scanStartedAtMs),
+    sourceScanner: SOURCE_SCANNER,
+    scenario: SCENARIO,
+    requestedUrl: sanitizeTransportUrl(input.requestedUrl),
+    normalizedUrl: sanitizeTransportUrl(input.normalizedUrl),
+    requestedScheme: schemeOf(input.requestedUrl),
+    finalScheme: "unknown",
+    sampledPageUrls: [],
+    pageHttpsObserved: false,
+    httpProbe: {
+      attempted: false,
+      errorCategory: "unknown",
+      errorMessage: input.reason,
+      redirectChain: [],
+    },
+    tlsProbe: {
+      attempted: false,
+      errorCategory: "unknown",
+      errorMessage: input.reason,
+    },
+    mixedContent: {
+      loadedHttpSubresources: [],
+      blockedHttpSubresources: [],
+      observedCount: 0,
+    },
+    formTransports: [],
+    summary: {
+      mixedContentObserved: false,
+      insecureFormTransportObserved: false,
+    },
+    evidenceRefs: [],
+    confidence: 0.4,
+    directVsInferred: "direct",
+  };
+}
+
+async function probeHttpRedirect(normalizedUrl: string): Promise<TransportSecurityObservation["httpProbe"]> {
+  const inputUrl = originProbeUrl(normalizedUrl, "http");
+  if (!inputUrl) {
+    return { attempted: false, errorCategory: "unsupported_url", redirectChain: [] };
+  }
+
+  const redirectChain = [inputUrl];
+  let currentUrl = inputUrl;
+  try {
+    for (let index = 0; index < 8; index += 1) {
+      const response = await fetchWithTimeout(currentUrl, 8_000);
+      const location = response.headers.get("location");
+      const isRedirect = response.status >= 300 && response.status < 400 && Boolean(location);
+      if (!isRedirect || !location) {
+        return {
+          attempted: true,
+          inputUrl: sanitizeTransportUrl(inputUrl),
+          status: response.status,
+          finalUrl: sanitizeTransportUrl(currentUrl),
+          finalScheme: schemeOf(currentUrl),
+          redirectChain: redirectChain.map((url) => sanitizeTransportUrl(url)).slice(0, 12),
+          redirectedToHttps: schemeOf(currentUrl) === "https" && redirectChain.length > 1,
+        };
+      }
+
+      const nextUrl = new URL(location, currentUrl).toString();
+      redirectChain.push(nextUrl);
+      if (schemeOf(nextUrl) === "https") {
+        return {
+          attempted: true,
+          inputUrl: sanitizeTransportUrl(inputUrl),
+          status: response.status,
+          finalUrl: sanitizeTransportUrl(nextUrl),
+          finalScheme: "https",
+          redirectChain: redirectChain.map((url) => sanitizeTransportUrl(url)).slice(0, 12),
+          redirectedToHttps: true,
+        };
+      }
+      currentUrl = nextUrl;
+    }
+
+    return {
+      attempted: true,
+      inputUrl: sanitizeTransportUrl(inputUrl),
+      finalUrl: sanitizeTransportUrl(currentUrl),
+      finalScheme: schemeOf(currentUrl),
+      redirectChain: redirectChain.map((url) => sanitizeTransportUrl(url)).slice(0, 12),
+      redirectedToHttps: schemeOf(currentUrl) === "https" && redirectChain.length > 1,
+      errorCategory: "http_error",
+      errorMessage: "redirect_chain_limit_reached",
+    };
+  } catch (error) {
+    return {
+      attempted: true,
+      inputUrl: sanitizeTransportUrl(inputUrl),
+      errorCategory: classifyTransportProbeError(error),
+      errorMessage: boundedProbeError(error),
+      finalUrl: sanitizeTransportUrl(currentUrl),
+      finalScheme: schemeOf(currentUrl),
+      redirectChain: redirectChain.map((url) => sanitizeTransportUrl(url)).slice(0, 12),
+    };
+  }
+}
+
+async function probeStrictTls(normalizedUrl: string): Promise<TransportSecurityObservation["tlsProbe"]> {
+  const inputUrl = originProbeUrl(normalizedUrl, "https");
+  if (!inputUrl) {
+    return { attempted: false, errorCategory: "unsupported_url" };
+  }
+  const parsed = new URL(inputUrl);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const settle = (result: TransportSecurityObservation["tlsProbe"]) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+    const socket = tlsConnect({
+      host: parsed.hostname,
+      port: parsed.port ? Number(parsed.port) : 443,
+      rejectUnauthorized: true,
+      ...(isIP(parsed.hostname) ? {} : { servername: parsed.hostname }),
+    }, () => {
+      settle({
+        attempted: true,
+        inputUrl: sanitizeTransportUrl(inputUrl),
+        finalUrl: sanitizeTransportUrl(inputUrl),
+        validCertificate: socket.authorized,
+        ...(socket.authorized
+          ? {}
+          : {
+            errorCategory: "tls_or_certificate_failure" as const,
+            errorMessage: socket.authorizationError ? String(socket.authorizationError).slice(0, 240) : "certificate_not_authorized",
+          }),
+      });
+      socket.end();
+    });
+    const timeout = setTimeout(() => {
+      socket.destroy(new Error("strict TLS probe timed out"));
+      settle({
+        attempted: true,
+        inputUrl: sanitizeTransportUrl(inputUrl),
+        validCertificate: false,
+        errorCategory: "timeout",
+        errorMessage: "strict TLS probe timed out",
+      });
+    }, 5_000);
+    socket.on("error", (error) => {
+      settle({
+        attempted: true,
+        inputUrl: sanitizeTransportUrl(inputUrl),
+        validCertificate: false,
+        errorCategory: classifyTransportProbeError(error),
+        errorMessage: boundedProbeError(error),
+      });
+    });
+  });
+}
+
+async function fetchWithTimeout(url: string, timeoutMs: number) {
+  const headResponse = await fetchOnceWithTimeout(url, Math.min(2_000, timeoutMs), "HEAD").catch(() => null);
+  if (headResponse) {
+    return headResponse;
+  }
+  return fetchOnceWithTimeout(url, timeoutMs, "GET");
+}
+
+async function fetchOnceWithTimeout(url: string, timeoutMs: number, method: "GET" | "HEAD") {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error("HTTP redirect probe timed out")), timeoutMs);
+  try {
+    return await fetch(url, {
+      method,
+      redirect: "manual",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function captureFormTransportObservations(page: Page, pageUrl: string): Promise<TransportSecurityObservation["formTransports"]> {
+  const rows = await page.evaluate(() => [...document.querySelectorAll("form")].slice(0, 40).map((form, index) => {
+    const fields = [...form.querySelectorAll("input, textarea, select")].slice(0, 24).map((element) => {
+      const input = element as HTMLInputElement;
+      return {
+        type: (input.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase(),
+        label: [
+          input.getAttribute("aria-label"),
+          input.getAttribute("placeholder"),
+          input.getAttribute("name"),
+          input.getAttribute("id"),
+        ].filter(Boolean).join(" "),
+      };
+    });
+    return {
+      action: form.getAttribute("action") || "",
+      actionPresent: form.hasAttribute("action"),
+      index,
+      method: (form.getAttribute("method") || "get").toLowerCase(),
+      resolvedAction: form.action || window.location.href,
+      fields,
+    };
+  }));
+  return rows.map((row) => {
+    const haystack = row.fields.map((field) => `${field.type} ${field.label}`).join(" ").toLowerCase();
+    const actionUrl = sanitizeTransportUrl(row.resolvedAction || pageUrl);
+    const actionScheme = schemeOf(actionUrl);
+    const pageScheme = schemeOf(pageUrl);
+    return {
+      formId: `form_${row.index}`,
+      pageUrl: sanitizeTransportUrl(pageUrl),
+      pageScheme,
+      method: row.method.slice(0, 16),
+      actionPresent: row.actionPresent,
+      actionUrl,
+      actionScheme,
+      resolvesToHttps: actionScheme === "https" || (!row.actionPresent && pageScheme === "https"),
+      insecureTransportObserved: actionScheme === "http" || pageScheme === "http",
+      fieldTypes: unique(row.fields.map((field) => field.type).filter(Boolean)).slice(0, 24),
+      hasEmailField: /\bemail|e-mail\b/.test(haystack),
+      hasSensitiveFieldHint: /password|ssn|social security|credit card|card number|health|medical|birth|date of birth/.test(haystack),
+    };
+  });
+}
+
+function formTransportFromCollectionSurface(
+  surface: CollectionSurfaceObservation,
+  index: number,
+  fallbackPageUrl: string,
+): TransportSecurityObservation["formTransports"][number] {
+  const pageUrl = sanitizeTransportUrl(surface.pageUrl || fallbackPageUrl);
+  const pageScheme = schemeOf(pageUrl);
+  return {
+    formId: `collection_surface_${index}`,
+    pageUrl,
+    pageScheme,
+    method: "unknown",
+    actionPresent: false,
+    actionUrl: pageUrl,
+    actionScheme: pageScheme,
+    resolvesToHttps: pageScheme === "https",
+    insecureTransportObserved: pageScheme === "http",
+    fieldTypes: unique(surface.fieldTypes ?? []).slice(0, 24),
+    hasEmailField: surface.hasEmailField,
+    hasSensitiveFieldHint: surface.hasSensitiveFieldHint,
+  };
+}
+
+function dedupeFormTransports(forms: TransportSecurityObservation["formTransports"]) {
+  const seen = new Set<string>();
+  return forms.filter((form) => {
+    const key = `${form.pageUrl}|${form.actionUrl ?? ""}|${form.method}|${form.fieldTypes.join(",")}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function isMixedContentNetworkEvent(event: NetworkEvent) {
+  if (event.isMainFrame || schemeOf(event.requestUrl) !== "http") {
+    return false;
+  }
+  return schemeOf(event.documentUrl ?? event.topLevelUrl ?? "") === "https";
+}
+
+function originProbeUrl(value: string, scheme: "http" | "https") {
+  try {
+    const parsed = new URL(value);
+    if (!parsed.hostname) {
+      return undefined;
+    }
+    return `${scheme}://${parsed.host}/`;
+  } catch {
+    return undefined;
+  }
+}
+
+function firstHttpUrl(value: string) {
+  return value.match(/https?:\/\/[^\s"'<>)]{1,500}/i)?.[0];
+}
+
+function safePageUrl(page: Page, fallbackUrl: string) {
+  try {
+    const pageUrl = page.url();
+    return pageUrl === "about:blank" ? fallbackUrl : pageUrl;
+  } catch {
+    return fallbackUrl;
+  }
+}
+
+function sanitizeTransportUrl(value: string): string;
+function sanitizeTransportUrl(value: undefined): undefined;
+function sanitizeTransportUrl(value: string | undefined) {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(value);
+    parsed.hash = "";
+    for (const key of [...parsed.searchParams.keys()]) {
+      parsed.searchParams.set(key, "[redacted]");
+    }
+    return parsed.toString().slice(0, 500);
+  } catch {
+    return value.replace(/\s+/g, " ").slice(0, 500);
+  }
+}
+
+function schemeOf(value: string | undefined): TransportSecurityObservation["requestedScheme"] {
+  if (!value) {
+    return "unknown";
+  }
+  try {
+    const protocol = new URL(value).protocol.replace(":", "");
+    return protocol === "http" || protocol === "https" ? protocol : "other";
+  } catch {
+    return "unknown";
+  }
+}
+
+function classifyTransportProbeError(error: unknown): NonNullable<TransportSecurityObservation["httpProbe"]["errorCategory"]> {
+  const message = errorMessageFromUnknown(error).toLowerCase();
+  if (/cert|ssl|tls|authority|common name|date invalid|err_cert/.test(message)) {
+    return "tls_or_certificate_failure";
+  }
+  if (/name_not_resolved|dns|enotfound|nxdomain/.test(message)) {
+    return "dns_failure";
+  }
+  if (/timed? out|timeout/.test(message)) {
+    return "timeout";
+  }
+  if (/connection|conn(?:ection)?_refused|econnrefused|reset|closed/.test(message)) {
+    return "connection_failure";
+  }
+  if (/http|status/.test(message)) {
+    return "http_error";
+  }
+  return "unknown";
+}
+
+function boundedProbeError(error: unknown) {
+  return errorMessageFromUnknown(error).replace(/\s+/g, " ").slice(0, 240);
 }
 
 function isHttpUrl(url: string): boolean {

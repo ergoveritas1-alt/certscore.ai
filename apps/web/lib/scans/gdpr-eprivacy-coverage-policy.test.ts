@@ -4578,3 +4578,91 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes nested hybrid endpoint j
     "Transfer review signal rows: 1"
   ]);
 });
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes emits transport-security observed rows from retained typed summary", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      transportSecuritySummary: {
+        evidenceRetained: true,
+        evidenceRefs: ["ref_transport_security"],
+        pageHttpsObserved: true,
+        validTlsCertificate: true,
+        httpRedirectsToHttps: true,
+        mixedContentObserved: false,
+        insecureFormTransportObserved: false,
+        sampledPageUrls: ["https://example.com/"]
+      }
+    }
+  });
+
+  assert.equal(outcomes.transport_security_https_delivery?.status, "Observed");
+  assert.equal(outcomes.transport_security_tls_certificate?.status, "Observed");
+  assert.equal(outcomes.transport_security_http_redirect?.status, "Observed");
+  assert.equal(outcomes.transport_security_mixed_content?.status, "Observed");
+  assert.equal(outcomes.transport_security_form_transport?.status, "Observed");
+  assert.deepEqual(outcomes.transport_security_https_delivery?.evidenceRefs, ["ref_transport_security"]);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes marks transport-security gaps from retained typed summary", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      transport_security_summary: {
+        evidenceRetained: true,
+        evidenceRefs: ["ref_transport_security"],
+        pageHttpsObserved: false,
+        validTlsCertificate: false,
+        httpRedirectsToHttps: false,
+        mixedContentObserved: true,
+        mixedContentSamples: [{ url: "http://cdn.example.test/app.js", pageUrl: "https://example.test/" }],
+        insecureFormTransportObserved: true,
+        insecureFormTransports: [{ actionUrl: "http://example.test/submit", pageUrl: "https://example.test/contact" }]
+      }
+    }
+  });
+
+  assert.equal(outcomes.transport_security_https_delivery?.status, "Gap observed");
+  assert.equal(outcomes.transport_security_tls_certificate?.status, "Gap observed");
+  assert.equal(outcomes.transport_security_http_redirect?.status, "Gap observed");
+  assert.equal(outcomes.transport_security_mixed_content?.status, "Gap observed");
+  assert.equal(outcomes.transport_security_form_transport?.status, "Gap observed");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes marks transport-security rows not testable without typed evidence", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {}
+  });
+
+  assert.equal(outcomes.transport_security_https_delivery?.status, "Not testable");
+  assert.equal(outcomes.transport_security_tls_certificate?.status, "Not testable");
+  assert.equal(
+    outcomes.transport_security_tls_certificate?.criticalEvidence.missingOrIncompleteSourceSignals[0]?.field,
+    "runtimeArtifacts.transportSecuritySummary.transport_security_tls_certificate"
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not project fallback-only transport summary", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      transportSecuritySummary: {
+        evidenceRetained: false,
+        evidenceRefs: [],
+        pageHttpsObserved: false,
+        validTlsCertificate: null,
+        httpRedirectsToHttps: null,
+        mixedContentObserved: false,
+        insecureFormTransportObserved: false,
+        sampledPageUrls: []
+      }
+    }
+  });
+
+  assert.equal(outcomes.transport_security_https_delivery?.status, "Not testable");
+  assert.equal(outcomes.transport_security_tls_certificate?.status, "Not testable");
+  assert.equal(outcomes.transport_security_http_redirect?.status, "Not testable");
+  assert.equal(outcomes.transport_security_mixed_content?.status, "Not testable");
+  assert.equal(outcomes.transport_security_form_transport?.status, "Not testable");
+});

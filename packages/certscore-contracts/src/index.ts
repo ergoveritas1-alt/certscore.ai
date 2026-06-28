@@ -427,6 +427,91 @@ export const collectionSurfaceObservationSchema = z.object({
   directVsInferred: directVsInferredSchema,
 });
 
+const transportUrlSchema = z.string().max(500);
+const transportSchemeSchema = z.enum(["http", "https", "other", "unknown"]);
+const transportProbeErrorCategorySchema = z.enum([
+  "dns_failure",
+  "connection_failure",
+  "tls_or_certificate_failure",
+  "timeout",
+  "http_error",
+  "unsupported_url",
+  "unknown",
+]);
+
+export const transportSecuritySubresourceSchema = z.object({
+  url: transportUrlSchema,
+  hostname: z.string().max(255).optional(),
+  pageUrl: transportUrlSchema.optional(),
+  resourceType: z.string().max(80).optional(),
+  disposition: z.enum(["loaded", "blocked"]),
+  evidenceSource: z.enum(["network_request", "request_failed", "console", "dom"]),
+});
+
+export const transportSecurityFormObservationSchema = z.object({
+  formId: z.string(),
+  pageUrl: transportUrlSchema,
+  pageScheme: transportSchemeSchema,
+  method: z.string().max(16),
+  actionPresent: z.boolean(),
+  actionUrl: transportUrlSchema.optional(),
+  actionScheme: transportSchemeSchema,
+  resolvesToHttps: z.boolean(),
+  insecureTransportObserved: z.boolean(),
+  fieldTypes: z.array(z.string().max(40)).max(24).default([]),
+  hasEmailField: z.boolean().default(false),
+  hasSensitiveFieldHint: z.boolean().default(false),
+});
+
+export const transportSecurityObservationSchema = z.object({
+  observationId: z.string(),
+  observedAtMs: z.number().int().nonnegative(),
+  sourceScanner: z.string(),
+  scenario: z.string(),
+  requestedUrl: transportUrlSchema,
+  normalizedUrl: transportUrlSchema,
+  requestedScheme: transportSchemeSchema,
+  finalUrl: transportUrlSchema.optional(),
+  finalScheme: transportSchemeSchema,
+  sampledPageUrls: z.array(transportUrlSchema).max(20).default([]),
+  pageHttpsObserved: z.boolean(),
+  httpProbe: z.object({
+    attempted: z.boolean(),
+    inputUrl: transportUrlSchema.optional(),
+    status: z.number().int().optional(),
+    finalUrl: transportUrlSchema.optional(),
+    finalScheme: transportSchemeSchema.optional(),
+    redirectChain: z.array(transportUrlSchema).max(12).default([]),
+    redirectedToHttps: z.boolean().optional(),
+    errorCategory: transportProbeErrorCategorySchema.optional(),
+    errorMessage: z.string().max(240).optional(),
+  }),
+  tlsProbe: z.object({
+    attempted: z.boolean(),
+    inputUrl: transportUrlSchema.optional(),
+    validCertificate: z.boolean().optional(),
+    finalUrl: transportUrlSchema.optional(),
+    errorCategory: transportProbeErrorCategorySchema.optional(),
+    errorMessage: z.string().max(240).optional(),
+  }),
+  mixedContent: z.object({
+    loadedHttpSubresources: z.array(transportSecuritySubresourceSchema).max(25).default([]),
+    blockedHttpSubresources: z.array(transportSecuritySubresourceSchema).max(25).default([]),
+    observedCount: z.number().int().nonnegative(),
+  }),
+  formTransports: z.array(transportSecurityFormObservationSchema).max(40).default([]),
+  summary: z.object({
+    scannedPagesUseHttps: z.boolean().optional(),
+    validTlsCertificate: z.boolean().optional(),
+    httpRedirectsToHttps: z.boolean().optional(),
+    mixedContentObserved: z.boolean(),
+    insecureFormTransportObserved: z.boolean(),
+  }),
+  evidenceRefs: z.array(evidenceRefSchema).default([]),
+  confidence: confidenceSchema,
+  directVsInferred: directVsInferredSchema,
+});
+
 export const consentInteractionEventSchema = runtimeEvidenceEventSchema.extend({
   eventType: z.literal("consent_interaction"),
   action: z.enum(["accept", "reject", "settings", "close", "unknown"]),
@@ -1579,6 +1664,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   consentActionAttempts: z.array(consentActionAttemptSchema).default([]),
   consentFlowComparisons: z.array(consentFlowComparisonSchema).default([]),
   policySurfaceObservations: z.array(policySurfaceObservationSchema).default([]),
+  transportSecurityObservations: z.array(transportSecurityObservationSchema).default([]),
   cmpRuntimeObservations: z.array(cmpRuntimeObservationSchema).default([]),
   screenshots: z.array(screenshotArtifactSchema),
   domSnapshots: z.array(domSnapshotArtifactSchema),
@@ -1769,6 +1855,7 @@ export type NormalizedVendorObservation = z.infer<
 >;
 export type CmpRuntimeSignal = z.infer<typeof cmpRuntimeSignalSchema>;
 export type CmpRuntimeObservation = z.infer<typeof cmpRuntimeObservationSchema>;
+export type TransportSecurityObservation = z.infer<typeof transportSecurityObservationSchema>;
 export type DerivedRuntimeSignals = z.infer<typeof derivedRuntimeSignalsSchema>;
 export type RuntimeCoverageSummary = z.infer<typeof runtimeCoverageSummarySchema>;
 export type ScanNoGoAssessment = z.infer<typeof scanNoGoAssessmentSchema>;

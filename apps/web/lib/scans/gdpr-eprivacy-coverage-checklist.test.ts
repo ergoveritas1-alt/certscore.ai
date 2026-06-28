@@ -119,7 +119,7 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
   });
 
   assert.deepEqual(
-    items.slice(0, 13).map((item) => item.id),
+    items.slice(0, 18).map((item) => item.id),
     [
       "consent_surface_observed",
       "cmp_framework_signal_observed",
@@ -132,6 +132,11 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
       "advertising_retargeting_vendor_signal_observed",
       "retargeting_behavioral_advertising_signal_observed",
       "analytics_vendor_observed",
+      "transport_security_https_delivery",
+      "transport_security_tls_certificate",
+      "transport_security_http_redirect",
+      "transport_security_mixed_content",
+      "transport_security_form_transport",
       "session_replay_fingerprinting_review",
       "device_identification_fingerprinting_signal_observed"
     ]

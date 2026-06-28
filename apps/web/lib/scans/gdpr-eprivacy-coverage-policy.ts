@@ -239,6 +239,51 @@ function getEventMetadata(events: GdprEprivacyCoveragePolicyEvent[] | undefined,
   return matches.at(-1) ?? null;
 }
 
+function getTransportSecuritySummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  return getObject(runtimeArtifacts, ["transportSecuritySummary", "transport_security_summary"]);
+}
+
+function transportEvidenceRef(summary: Record<string, unknown> | null | undefined) {
+  return getStringArray(summary, ["evidenceRefs", "evidence_refs"]).slice(0, 6);
+}
+
+function transportEvidenceMissingGap(rowId: string) {
+  return sourceGap(
+    `runtimeArtifacts.transportSecuritySummary.${rowId}`,
+    "typed transport security observation",
+    "missing",
+    "Required to evaluate this transport-security checklist row from retained scanner evidence rather than URL display inference."
+  );
+}
+
+function transportOutcomeFromBoolean(input: {
+  falseStatus: GdprEprivacyCoverageOutcomeStatus;
+  falseText: string;
+  nullStatus?: GdprEprivacyCoverageOutcomeStatus;
+  nullText: string;
+  retainedEvidence: Record<string, unknown>;
+  rowId: string;
+  trueStatus: GdprEprivacyCoverageOutcomeStatus;
+  trueText: string;
+  value: boolean | null;
+}) {
+  const evidenceRefs = transportEvidenceRef(input.retainedEvidence);
+  if (input.value === true) {
+    return makeOutcome(input.rowId, input.trueStatus, input.trueText, evidenceRefs, {
+      retainedEvidence: input.retainedEvidence,
+    });
+  }
+  if (input.value === false) {
+    return makeOutcome(input.rowId, input.falseStatus, input.falseText, evidenceRefs, {
+      retainedEvidence: input.retainedEvidence,
+    });
+  }
+  return makeOutcome(input.rowId, input.nullStatus ?? "Not testable", input.nullText, evidenceRefs, {
+    missingOrIncompleteSourceSignals: [transportEvidenceMissingGap(input.rowId)],
+    retainedEvidence: input.retainedEvidence,
+  });
+}
+
 function getHybridRuntimeEvidence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return getObject(runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
 }
@@ -1132,6 +1177,98 @@ function hasRuntimeCapture(input: GdprEprivacyCoveragePolicyInput) {
     getString(runtimeCapture, ["status"]) === "ok" ||
     getNumber(input.snapshot, ["pages_scanned"]) !== null
   );
+}
+
+function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput) {
+  const summary = getTransportSecuritySummary(input.runtimeArtifacts);
+  const evidenceRetained = getBoolean(summary, ["evidenceRetained", "evidence_retained"]) === true;
+  const retainedEvidence = compactRecord({
+    evidenceRefs: transportEvidenceRef(summary),
+    finalScheme: getString(summary, ["finalScheme", "final_scheme"]),
+    finalUrl: getString(summary, ["finalUrl", "final_url"]),
+    formTransportCount: getNumber(summary, ["formTransportCount", "form_transport_count"]),
+    httpProbeAttempted: getBoolean(summary, ["httpProbeAttempted", "http_probe_attempted"]),
+    httpProbeFinalUrl: getString(summary, ["httpProbeFinalUrl", "http_probe_final_url"]),
+    httpRedirectsToHttps: getBoolean(summary, ["httpRedirectsToHttps", "http_redirects_to_https"]),
+    insecureFormTransportObserved: getBoolean(summary, ["insecureFormTransportObserved", "insecure_form_transport_observed"]),
+    insecureFormTransports: getObjectArray(summary, ["insecureFormTransports", "insecure_form_transports"]).slice(0, 12),
+    mixedContentObserved: getBoolean(summary, ["mixedContentObserved", "mixed_content_observed"]),
+    mixedContentObservedCount: getNumber(summary, ["mixedContentObservedCount", "mixed_content_observed_count"]),
+    mixedContentSamples: getObjectArray(summary, ["mixedContentSamples", "mixed_content_samples"]).slice(0, 12),
+    pageHttpsObserved: getBoolean(summary, ["pageHttpsObserved", "page_https_observed"]),
+    sampledPageUrls: getStringArray(summary, ["sampledPageUrls", "sampled_page_urls"]).slice(0, 20),
+    tlsProbeAttempted: getBoolean(summary, ["tlsProbeAttempted", "tls_probe_attempted"]),
+    tlsProbeErrorCategory: getString(summary, ["tlsProbeErrorCategory", "tls_probe_error_category"]),
+    validTlsCertificate: getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]),
+  });
+
+  if (!evidenceRetained) {
+    return [
+      "transport_security_https_delivery",
+      "transport_security_tls_certificate",
+      "transport_security_http_redirect",
+      "transport_security_mixed_content",
+      "transport_security_form_transport",
+    ].map((rowId) =>
+      makeOutcome(rowId, "Not testable", "No typed transport-security observation was retained for this scan context.", [], {
+        missingOrIncompleteSourceSignals: [transportEvidenceMissingGap(rowId)],
+        retainedEvidence,
+      })
+    );
+  }
+
+  return [
+    transportOutcomeFromBoolean({
+      falseStatus: "Gap observed",
+      falseText: "The retained scanner evidence did not show the scanned page being served over HTTPS.",
+      nullText: "The retained transport observation did not include a final page scheme.",
+      retainedEvidence,
+      rowId: "transport_security_https_delivery",
+      trueStatus: "Observed",
+      trueText: "The scanned page was served over HTTPS in the retained transport observation.",
+      value: getBoolean(summary, ["pageHttpsObserved", "page_https_observed"]),
+    }),
+    transportOutcomeFromBoolean({
+      falseStatus: "Gap observed",
+      falseText: "The strict TLS probe did not verify a valid certificate for the HTTPS origin.",
+      nullText: "The strict TLS probe was not retained or did not complete.",
+      retainedEvidence,
+      rowId: "transport_security_tls_certificate",
+      trueStatus: "Observed",
+      trueText: "The strict TLS probe verified the HTTPS origin certificate.",
+      value: getBoolean(summary, ["validTlsCertificate", "valid_tls_certificate"]),
+    }),
+    transportOutcomeFromBoolean({
+      falseStatus: "Gap observed",
+      falseText: "The explicit HTTP-origin probe did not redirect to HTTPS.",
+      nullText: "The explicit HTTP-origin redirect probe was not retained or did not complete.",
+      retainedEvidence,
+      rowId: "transport_security_http_redirect",
+      trueStatus: "Observed",
+      trueText: "The explicit HTTP-origin probe redirected to HTTPS.",
+      value: getBoolean(summary, ["httpRedirectsToHttps", "http_redirects_to_https"]),
+    }),
+    transportOutcomeFromBoolean({
+      falseStatus: "Observed",
+      falseText: "No mixed-content HTTP subresources were retained for the scanned HTTPS page.",
+      nullText: "The mixed-content observation was not retained.",
+      retainedEvidence,
+      rowId: "transport_security_mixed_content",
+      trueStatus: "Gap observed",
+      trueText: "HTTP subresources were retained on an HTTPS page.",
+      value: getBoolean(summary, ["mixedContentObserved", "mixed_content_observed"]),
+    }),
+    transportOutcomeFromBoolean({
+      falseStatus: "Observed",
+      falseText: "No insecure observed form transport was retained for the scanned page.",
+      nullText: "Observed form transport evidence was not retained.",
+      retainedEvidence,
+      rowId: "transport_security_form_transport",
+      trueStatus: "Gap observed",
+      trueText: "An observed form resolved to insecure HTTP transport or was on an HTTP page.",
+      value: getBoolean(summary, ["insecureFormTransportObserved", "insecure_form_transport_observed"]),
+    }),
+  ];
 }
 
 function getEmbeddedContentEvidenceSummary(input: GdprEprivacyCoveragePolicyInput) {
@@ -7422,6 +7559,7 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveSessionReplayFingerprintingOutcome(input),
     deriveDeviceFingerprintingSignalOutcome(input),
     deriveEmbeddedThirdPartyContentPreConsentOutcome(input),
+    ...deriveTransportSecurityOutcomes(input),
     deriveSessionReplayBeforeConsentOutcome(input),
     deriveSessionReplayDisclosureAlignmentOutcome(input),
     deriveSessionReplaySensitiveSurfaceOutcome(input),

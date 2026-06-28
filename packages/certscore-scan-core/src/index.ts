@@ -34,7 +34,7 @@ import {
 import { createOpenAiNanoPolicyAssistProviderFromEnv } from "./nano-policy-assist-provider.js";
 import { getScanProfile } from "./profiles.js";
 import { consentFlowRuntimeScannerPlaceholder, policySurfaceScannerPlaceholder } from "./scanners/placeholders.js";
-import { detectConsentUi, preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
+import { detectConsentUi, preConsentRuntimeScanner, type PreConsentRuntimeScannerResult } from "./scanners/pre-consent-runtime-scanner.js";
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runtime.js";
 
@@ -644,6 +644,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     consentActionAttempts: consentFlowResult?.consentActionAttempts ?? [],
     consentFlowComparisons: consentFlowResult?.consentFlowComparisons ?? [],
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
+    transportSecurityObservations: preConsentResult.transportSecurityObservations,
     cmpRuntimeObservations: preConsentResult.cmpRuntimeObservations,
     screenshots: [
       ...preConsentResult.screenshots,
@@ -679,6 +680,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         path: artifact.path,
         label: "Pre-consent DOM text snapshot",
       })),
+      ...preConsentResult.artifactRefs,
       ...(policySurfaceResult?.artifactRefs ?? []),
       ...(consentFlowResult?.artifactRefs ?? []),
     ],
@@ -1656,24 +1658,7 @@ function isCaptureReplayHeadedRetryEnabled() {
   return explicit === "1" || explicit === "true";
 }
 
-function emptyPreConsentResult(startedAt: string): {
-  moduleRun: CanonicalEvidenceBundle["modulesRun"][number];
-  runtimeTimeline: RuntimeEvidenceEvent[];
-  networkEvents: NetworkEvent[];
-  networkResponseEvents: NetworkResponseEvent[];
-  cookieEvents: CookieEvent[];
-  cookieSnapshots: CookieSnapshot[];
-  storageSnapshots: StorageSnapshot[];
-  scriptEvents: CanonicalEvidenceBundle["scriptEvents"];
-  iframeEvents: IframeEvent[];
-  consentUiObservations: ConsentUiObservation[];
-  collectionSurfaceObservations: CanonicalEvidenceBundle["collectionSurfaceObservations"];
-  cmpRuntimeObservations: CmpRuntimeObservation[];
-  screenshots: ScreenshotArtifact[];
-  visualCapture: VisualCaptureSummary;
-  domSnapshots: DomSnapshotArtifact[];
-  vendorResolverInputs: Parameters<typeof resolveVendorObservations>[0];
-} {
+function emptyPreConsentResult(startedAt: string): PreConsentRuntimeScannerResult {
   return {
     moduleRun: {
       moduleName: "preConsentRuntimeScanner",
@@ -1695,6 +1680,7 @@ function emptyPreConsentResult(startedAt: string): {
     consentUiObservations: [],
     collectionSurfaceObservations: [],
     cmpRuntimeObservations: [],
+    transportSecurityObservations: [],
     screenshots: [],
     visualCapture: {
       status: "unavailable",
@@ -1703,6 +1689,7 @@ function emptyPreConsentResult(startedAt: string): {
       notes: ["Pre-consent runtime scanner was not run."],
     },
     domSnapshots: [],
+    artifactRefs: [],
     vendorResolverInputs: [],
   };
 }
