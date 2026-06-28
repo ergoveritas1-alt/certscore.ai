@@ -89,9 +89,13 @@ test("classifies observed Spanish and Italian consent labels", () => {
   assert.equal(classifyConsentControlLabel({ label: "Rifiuta e abbonati" }).variant, "reject_with_subscription");
   assert.equal(classifyConsentControlLabel({ label: "Continua senza accettare" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({
-    label: "pannello delle preferenze pubblicitarie",
+    label: "Gestisci preferenze",
     contextText: "Usiamo cookie e tecnologie simili per finalita pubblicitarie.",
   }).intent, "options");
+  assert.equal(classifyConsentControlLabel({
+    label: "pannello delle preferenze pubblicitarie",
+    contextText: "Usiamo cookie e tecnologie simili per finalita pubblicitarie.",
+  }).intent, "unknown");
 });
 
 test("classifies necessary-only labels as reject-equivalent", () => {

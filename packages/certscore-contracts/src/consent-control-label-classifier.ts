@@ -54,6 +54,9 @@ const CONTEXT_HINT_PATTERN =
 const PRIVACY_OPT_OUT_HINT_PATTERN =
   /\b(do not sell|do not share|sale|share|targeted advertising|privacy rights?|legitimate interest|berechtigtem interesse|widerspruch|opposition|int[eé]r[eê]t l[eé]gitime|droit d['’]opposition)\b/i;
 
+const NON_ACTIONABLE_REFERENCE_PATTERN =
+  /\bpannello delle preferenze pubblicitarie\b/i;
+
 const CONTINUE_AS_ACCEPT_CONTEXT_PATTERN =
   /\b(?:by\s+(?:using|continuing(?:\s+to\s+use)?|accessing|remaining\s+on)\s+(?:this\s+)?(?:site|website|service|page)|(?:using|continuing(?:\s+to\s+use)?|accessing|remaining\s+on)\s+(?:this\s+)?(?:site|website|service|page)\s+(?:means|constitutes|indicates)|you\s+(?:consent|agree)\s+to\s+(?:these\s+)?cookies?)\b/i;
 
@@ -437,8 +440,6 @@ export const consentControlTerms: ConsentControlTerm[] = [
     contextual("options", "configura", { requiresConsentContext: true }),
     ...direct("options", "gestione cookie"),
     ...direct("options", "gestisci preferenze"),
-    ...direct("options", "pannello delle preferenze"),
-    ...direct("options", "pannello delle preferenze pubblicitarie"),
   ]),
 ];
 
@@ -471,6 +472,9 @@ export function classifyConsentControlLabel(
   }
   if (normalizedLabel.length > 220) {
     return unknown(["label_too_long"]);
+  }
+  if (NON_ACTIONABLE_REFERENCE_PATTERN.test(normalizedLabel)) {
+    return unknown(["non_actionable_reference_label"]);
   }
   if (PRIVACY_OPT_OUT_HINT_PATTERN.test(`${labelText} ${input.contextText ?? ""}`)) {
     reasonCodes.push("privacy_opt_out_context");

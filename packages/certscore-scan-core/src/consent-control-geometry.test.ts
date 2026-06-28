@@ -223,10 +223,10 @@ test("captures BMW-style Customise as a first-layer options control", async () =
 test("captures Italian first-layer accept, reject, and options controls", async () => {
   const artifact = await captureFixture(`
     <div role="dialog" style="position: fixed; left: 120px; top: 120px; width: 620px; padding: 20px; background: white;">
-      <p>Usiamo cookie e tecnologie simili per finalita pubblicitarie e per il tracciamento. Puoi aprire il pannello delle preferenze pubblicitarie.</p>
+      <p>Usiamo cookie e tecnologie simili per finalita pubblicitarie e per il tracciamento. Puoi gestire le preferenze.</p>
       <button>Accetta</button>
       <button>Rifiuta</button>
-      <button>pannello delle preferenze pubblicitarie</button>
+      <button>Gestisci preferenze</button>
     </div>
   `);
 
@@ -235,7 +235,7 @@ test("captures Italian first-layer accept, reject, and options controls", async 
   assert.equal(artifact.summary.firstLayerOptions, true);
   assert.equal(findCandidate(artifact, "Accetta")?.actionType, "accept_all");
   assert.equal(findCandidate(artifact, "Rifiuta")?.actionType, "reject_all");
-  assert.equal(findCandidate(artifact, "pannello delle preferenze pubblicitarie")?.actionType, "manage_preferences");
+  assert.equal(findCandidate(artifact, "Gestisci preferenze")?.actionType, "manage_preferences");
 });
 
 test("captures duplicated accessible names on first-layer consent buttons", async () => {
