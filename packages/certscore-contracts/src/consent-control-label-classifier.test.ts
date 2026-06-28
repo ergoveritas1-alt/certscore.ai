@@ -58,6 +58,8 @@ test("classifies British spelling choice controls as options", () => {
 
 test("classifies observed English options labels", () => {
   assert.equal(classifyConsentControlLabel({ label: "I Accept" }).intent, "accept");
+  assert.equal(classifyConsentControlLabel({ label: "Accept", ariaLabel: "Accept" }).intent, "accept");
+  assert.equal(classifyConsentControlLabel({ label: "Deny", ariaLabel: "Deny" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({
     label: "Customise",
     contextText: "We use cookies and partners for personalised advertising.",
@@ -84,6 +86,7 @@ test("classifies observed Spanish and Italian consent labels", () => {
 
   assert.equal(classifyConsentControlLabel({ label: "Accetta" }).matchedLocale, "it");
   assert.equal(classifyConsentControlLabel({ label: "Rifiuta" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Rifiuta e abbonati" }).variant, "reject_with_subscription");
   assert.equal(classifyConsentControlLabel({ label: "Continua senza accettare" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({
     label: "pannello delle preferenze pubblicitarie",

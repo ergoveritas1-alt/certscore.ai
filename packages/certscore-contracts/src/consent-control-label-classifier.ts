@@ -425,6 +425,7 @@ export const consentControlTerms: ConsentControlTerm[] = [
     ...direct("reject", "rifiuta tutti"),
     ...direct("reject", "rifiuta i cookie"),
     ...direct("reject", "rifiuta tutti i cookie"),
+    equivalent("reject", "rifiuta e abbonati", "reject_with_subscription"),
     equivalent("reject", "continua senza accettare"),
     equivalent("reject", "continua senza cookie"),
     equivalent("reject", "solo cookie necessari", "necessary_only"),
@@ -449,7 +450,13 @@ export function classifyConsentControlLabel(
     input.ariaLabel,
     input.title,
     input.value,
-  ].map((value) => value?.trim()).filter((value): value is string => Boolean(value)).join(" ");
+  ]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .filter((value, index, values) => values.findIndex((candidate) =>
+      normalizeConsentControlText(candidate) === normalizeConsentControlText(value)
+    ) === index)
+    .join(" ");
   const normalizedLabel = normalizeConsentControlText(labelText);
   const normalizedContext = normalizeConsentControlText(input.contextText ?? "");
   const reasonCodes: string[] = [];

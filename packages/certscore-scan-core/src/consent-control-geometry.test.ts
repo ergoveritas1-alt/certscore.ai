@@ -238,6 +238,24 @@ test("captures Italian first-layer accept, reject, and options controls", async 
   assert.equal(findCandidate(artifact, "pannello delle preferenze pubblicitarie")?.actionType, "manage_preferences");
 });
 
+test("captures duplicated accessible names on first-layer consent buttons", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" style="position: fixed; left: 120px; top: 120px; width: 620px; padding: 20px; background: white;">
+      <p>Your personal data, your options, our responsibility. We and our partners use cookies to store information and personalize advertising.</p>
+      <button aria-label="Accept">Accept</button>
+      <button aria-label="Deny">Deny</button>
+      <button aria-label="Customize">Customize</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Accept")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Deny")?.actionType, "reject_all");
+  assert.equal(findCandidate(artifact, "Customize")?.actionType, "manage_preferences");
+});
+
 test("captures visible first-layer controls inside a bounded iframe", async () => {
   const artifact = await captureFixture(`
     <iframe
