@@ -37,7 +37,6 @@ import {
   buildCookieDisclosureGapEvidence,
   buildRuntimeCookieInventory
 } from "../../lib/scans/runtime-cookie-evidence";
-export { ensureValidationRunForManualScan } from "./manual-scan-handoff";
 
 type ValidationSettingsRow = {
   automatic_interval_minutes: number;
