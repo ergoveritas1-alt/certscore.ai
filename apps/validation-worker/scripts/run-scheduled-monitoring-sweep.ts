@@ -11,6 +11,18 @@ if (originalLoad) {
       return {};
     }
 
+    if (request === "next/navigation") {
+      const unavailable = (name: string) => () => {
+        throw new Error(`next/navigation ${name} is unavailable in the scheduled monitoring sweep runtime.`);
+      };
+
+      return {
+        notFound: unavailable("notFound"),
+        permanentRedirect: unavailable("permanentRedirect"),
+        redirect: unavailable("redirect")
+      };
+    }
+
     return originalLoad.call(this, request, parent, isMain);
   };
 }
