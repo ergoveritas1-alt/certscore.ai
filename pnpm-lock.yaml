@@ -215,6 +215,9 @@ importers:
       '@certscore/vendor-resolver':
         specifier: workspace:*
         version: link:../certscore-vendor-resolver
+      '@website-signal-risk-scanner/shared':
+        specifier: workspace:*
+        version: link:../shared
       playwright:
         specifier: ^1.51.1
         version: 1.58.2

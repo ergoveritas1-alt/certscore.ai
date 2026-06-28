@@ -1,0 +1,49 @@
+{
+  "artifactVersion": "consent_geometry_adjudication_metrics.v1",
+  "source": "consent_geometry_final_summary_diagnostic",
+  "generatedAt": "2026-06-28T01:19:07.997Z",
+  "artifactsRoot": "/Users/benmasek/WC01/artifacts/consent-control-geometry/aws-lambda-eu-ie/cohort-classifier-rerun",
+  "metrics": [
+    {
+      "dimension": "no_go",
+      "labeledCount": 1,
+      "truePositive": 0,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "trueNegative": 1,
+      "precision": null,
+      "recall": null
+    },
+    {
+      "dimension": "accept",
+      "labeledCount": 1,
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "trueNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    {
+      "dimension": "reject",
+      "labeledCount": 1,
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "trueNegative": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    {
+      "dimension": "options",
+      "labeledCount": 1,
+      "truePositive": 1,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "trueNegative": 0,
+      "precision": 1,
+      "recall": 1
+    }
+  ],
+  "disagreements": []
+}
