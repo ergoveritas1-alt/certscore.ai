@@ -450,6 +450,7 @@ test("artifact uploader returns durable metadata for all v2 JSON artifacts", asy
 test("auxiliary uploader returns durable metadata for bounded internal JSON artifacts", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "certscore-v2-lambda-aux-test-"));
   await writeFile(path.join(tmp, "CanonicalEvidenceBundle.json"), JSON.stringify({ core: true }), "utf8");
+  await writeFile(path.join(tmp, "ConsentControlGeometryEvidence.json"), JSON.stringify({ artifactOnly: true }), "utf8");
   await writeFile(path.join(tmp, "consent_scenario_plan.json"), JSON.stringify({ plan: true }), "utf8");
   await writeFile(path.join(tmp, "consent_scenario_execution.json"), JSON.stringify({ execution: true }), "utf8");
   await writeFile(path.join(tmp, "screenshot-pre-consent.png"), "not-json", "utf8");
@@ -475,8 +476,9 @@ test("auxiliary uploader returns durable metadata for bounded internal JSON arti
       }
     });
 
-    assert.equal(artifacts.length, 4);
+    assert.equal(artifacts.length, 5);
     assert.deepEqual(artifacts.map((artifact) => artifact.fileName), [
+      "ConsentControlGeometryEvidence.json",
       "consent_scenario_execution.json",
       "consent_scenario_plan.json",
       "screenshot-pre-consent-full-page.jpg",

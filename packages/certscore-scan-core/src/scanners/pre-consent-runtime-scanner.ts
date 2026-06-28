@@ -21,6 +21,12 @@ import { resolveEndpointGeography, resolveVendorObservations, type VendorResolve
 import { writeFile } from "node:fs/promises";
 import { chromium, type Browser, type BrowserContext, type Frame, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
+import { captureConsentControlGeometry } from "../consent-control-geometry.js";
+import {
+  buildConsentGeometryEgressDiagnostic,
+  classifyConsentGeometryAccess,
+  collectConsentGeometryPageAccess,
+} from "../consent-geometry-access.js";
 import {
   classifyCookieParty,
   classifyHostnameParty,
@@ -275,16 +281,19 @@ export async function preConsentRuntimeScanner(
   const screenshots: ScreenshotArtifact[] = [];
   const screenshotErrors: string[] = [];
   let earlyScreenshotCaptured = false;
+  let consentGeometryDiagnosticWritten = false;
+  let initialNavigationHttpStatus: number | undefined;
   const fallbackConsentUiObservations: ConsentUiObservation[] = [];
   const fallbackDomSnapshots: DomSnapshotArtifact[] = [];
 
   try {
-    await recordTiming(timingBreakdown, "page navigation", "Initial navigation until DOMContentLoaded.", () =>
+    const navigationResponse = await recordTiming(timingBreakdown, "page navigation", "Initial navigation until DOMContentLoaded.", () =>
       page.goto(input.normalizedUrl, {
         waitUntil: "domcontentloaded",
         timeout: Math.min(input.internalBudgetMs, 15_000),
       })
     );
+    initialNavigationHttpStatus = navigationResponse?.status();
     if ((input.screenshotMode ?? "always") === "always") {
       const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
       const screenshotCapture = await recordTiming(
@@ -770,6 +779,31 @@ export async function preConsentRuntimeScanner(
       }
     }
 
+    await recordTiming(
+      timingBreakdown,
+      "consent control geometry diagnostic",
+      "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
+      async () => {
+        const screenshotArtifactRef = preferredPreConsentScreenshotRef(screenshots);
+        const access = await collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
+          supplementalBodyText: domText,
+        });
+        const geometry = await captureConsentControlGeometry(page, {
+          screenshotArtifactRef,
+        });
+        await input.artifactWriter.writeJsonArtifact("ConsentControlGeometryEvidence.json", {
+          ...geometry,
+          access,
+          egress: buildConsentGeometryEgressDiagnostic(),
+          artifactOnly: true,
+          productionFindingIntegration: false,
+        });
+        consentGeometryDiagnosticWritten = true;
+      },
+    ).catch((error: unknown) => {
+      runtimeErrors.push(`Consent-control geometry diagnostic failed: ${errorMessageFromUnknown(error)}`);
+    });
+
     const domPath = await recordTiming(
       timingBreakdown,
       "DOM artifact write",
@@ -821,6 +855,12 @@ export async function preConsentRuntimeScanner(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    if (!consentGeometryDiagnosticWritten) {
+      await writeConsentGeometryNoGoArtifact(input.artifactWriter, input.normalizedUrl, errorMessage, initialNavigationHttpStatus)
+        .catch((artifactError: unknown) => {
+          runtimeErrors.push(`Consent-control geometry no-go diagnostic failed: ${errorMessageFromUnknown(artifactError)}`);
+        });
+    }
     const failureReason = classifyVisualCaptureFailureReason(errorMessage);
     if (screenshots.length === 0) {
       visualCapture = {
@@ -3709,6 +3749,56 @@ function visualCaptureFromScreenshotSummary(
     }],
     notes: summary.notes,
   };
+}
+
+function preferredPreConsentScreenshotRef(screenshots: ScreenshotArtifact[]): string | undefined {
+  return (
+    screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page")?.path ??
+    screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent")?.path ??
+    screenshots[0]?.path
+  );
+}
+
+async function writeConsentGeometryNoGoArtifact(
+  artifactWriter: ArtifactWriter,
+  normalizedUrl: string,
+  errorMessage: string,
+  httpStatus: number | undefined,
+): Promise<void> {
+  await artifactWriter.writeJsonArtifact("ConsentControlGeometryEvidence.json", {
+    artifactVersion: "consent_control_geometry.v1",
+    sourceScanner: "consent_control_geometry_diagnostic",
+    pageUrl: normalizedUrl,
+    capturedAt: new Date().toISOString(),
+    viewport: {
+      width: 0,
+      height: 0,
+    },
+    cmp: {
+      detected: false,
+      confidence: 0,
+      reasonCodes: [],
+      matchedSignals: [],
+      detections: [],
+    },
+    containers: [],
+    candidates: [],
+    summary: {
+      firstLayerAccept: false,
+      firstLayerReject: false,
+      firstLayerOptions: false,
+      cmpDetected: false,
+      confidence: 0,
+      limitations: ["A/R/O not evaluated because page access did not reach a loaded pre-consent state."],
+    },
+    access: classifyConsentGeometryAccess({
+      errorMessage,
+      httpStatus,
+    }),
+    egress: buildConsentGeometryEgressDiagnostic(),
+    artifactOnly: true,
+    productionFindingIntegration: false,
+  });
 }
 
 async function retryPreConsentScreenshotInFreshContext(input: {

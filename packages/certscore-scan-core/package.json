@@ -6,11 +6,14 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "pnpm --filter @certscore/contracts build && pnpm --filter @certscore/vendor-resolver build && tsc -p tsconfig.json",
+    "build": "pnpm --filter @certscore/contracts build && pnpm --filter @certscore/vendor-resolver build && pnpm --filter @website-signal-risk-scanner/shared build && tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "scan": "node --import tsx ./src/cli/scan.ts",
     "demo": "node --import tsx ./src/cli/demo.ts",
     "inspect": "node --import tsx ./src/cli/inspect.ts",
+    "consent-geometry": "node --import tsx ./src/cli/consent-geometry.ts",
+    "consent-geometry-review": "node --import tsx ./src/cli/consent-geometry-review.ts",
+    "consent-geometry-final-summary": "node --import tsx ./src/cli/consent-geometry-final-summary.ts",
     "replay": "node --import tsx ./src/cli/replay.ts",
     "calibrate": "node --import tsx ./src/cli/calibrate.ts",
     "test": "tsx --tsconfig ../../tsconfig.base.json --test --test-concurrency=1 'src/*.test.ts'",
@@ -23,6 +26,7 @@
   "dependencies": {
     "@certscore/contracts": "workspace:*",
     "@certscore/vendor-resolver": "workspace:*",
+    "@website-signal-risk-scanner/shared": "workspace:*",
     "playwright": "^1.51.1",
     "tldts": "^7.4.2"
   },

@@ -41,6 +41,7 @@ import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runt
 type ConsentFlowRuntimeScanner = typeof import("./scanners/consent-flow-runtime-scanner.js").consentFlowRuntimeScanner;
 type ConsentFlowRuntimeInput = Parameters<ConsentFlowRuntimeScanner>[0];
 type ConsentFlowRuntimeResult = Awaited<ReturnType<ConsentFlowRuntimeScanner>>;
+const MAX_MODULE_TIMING_BREAKDOWN_ENTRIES = 40;
 
 export {
   chromiumLaunchArgs,
@@ -50,6 +51,29 @@ export {
   isAwsLambdaRuntime,
   lambdaChromiumSingleProcessEnabled,
 } from "./playwright-runtime.js";
+
+export {
+  captureConsentControlGeometry,
+  type ConsentControlCandidateEvidence,
+  type ConsentControlCmpEvidence,
+  type ConsentControlContainerEvidence,
+  type ConsentControlDecisionStatus,
+  type ConsentControlGeometryActionType,
+  type ConsentControlGeometryArtifact,
+  type ConsentControlGeometryLayer,
+  type ConsentControlRect,
+} from "./consent-control-geometry.js";
+
+export {
+  buildReviewPacket,
+  normalizeNanoVisualReview,
+  runConsentGeometryNanoVisualReview,
+  type ConsentGeometryNanoVisualReview,
+  type ConsentGeometryNanoVisualReviewSummary,
+  type NanoVisualAgreement,
+  type NanoVisualBoolean,
+  type NanoVisualReviewStatus,
+} from "./consent-geometry-visual-review.js";
 
 export interface RunScanInput {
   url: string;
@@ -588,6 +612,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     }
     : baseRuntimeCoverage;
 
+  const boundedModulesRun = modulesRun.map(boundModuleRunTimingBreakdown);
   const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
     scanId,
     url: input.url,
@@ -596,7 +621,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     completedAt: new Date().toISOString(),
     region: input.region ?? "local",
     scanProfile,
-    modulesRun,
+    modulesRun: boundedModulesRun,
     runtimeTimeline: [
       ...preConsentResult.runtimeTimeline,
       ...(consentFlowResult?.runtimeTimeline ?? []),
@@ -691,6 +716,7 @@ export function compactCanonicalEvidenceBundleForRetention(
   const retainedJourneys = bundle.observedJourneys.filter((journey) => !isLowSignalEndpointJourney(journey));
   let compacted = canonicalEvidenceBundleSchema.parse({
     ...bundle,
+    modulesRun: bundle.modulesRun.map(boundModuleRunTimingBreakdown),
     runtimeTimeline: bundle.runtimeTimeline
       .filter((event) => !typedEventIds.has(event.eventId))
       .map(stripRuntimeEventDiagnostics),
@@ -764,6 +790,29 @@ export function compactCanonicalEvidenceBundleForRetention(
     iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 20),
     runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 40),
   });
+}
+
+function boundModuleRunTimingBreakdown(
+  moduleRun: CanonicalEvidenceBundle["modulesRun"][number],
+): CanonicalEvidenceBundle["modulesRun"][number] {
+  const timingBreakdown = moduleRun.timingBreakdown;
+  if (!timingBreakdown || timingBreakdown.length <= MAX_MODULE_TIMING_BREAKDOWN_ENTRIES) {
+    return moduleRun;
+  }
+  const retainedCount = MAX_MODULE_TIMING_BREAKDOWN_ENTRIES - 1;
+  const omitted = timingBreakdown.slice(retainedCount);
+  const omittedDurationMs = omitted.reduce((total, entry) => total + entry.durationMs, 0);
+  return {
+    ...moduleRun,
+    timingBreakdown: [
+      ...timingBreakdown.slice(0, retainedCount),
+      {
+        label: "timing entries truncated",
+        durationMs: omittedDurationMs,
+        detail: `${omitted.length} timing breakdown entries omitted to keep the canonical bundle within the contract cap.`,
+      },
+    ],
+  };
 }
 
 type RetainableRuntimeEvent =

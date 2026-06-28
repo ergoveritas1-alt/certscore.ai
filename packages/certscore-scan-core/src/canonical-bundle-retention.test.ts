@@ -32,6 +32,28 @@ test("canonical bundle retention keeps report-critical evidence under 400 KB exc
   assert.equal(compacted.observedJourneys.some((journey) => journey.attributionStatus === "site_owned_infrastructure"), false);
 });
 
+test("canonical bundle retention caps module timing breakdowns before schema validation", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  bundle.modulesRun[0] = {
+    ...bundle.modulesRun[0]!,
+    timingBreakdown: Array.from({ length: 45 }, (_, index) => ({
+      label: `policy timing ${index}`,
+      durationMs: index + 1,
+      detail: `retained diagnostic ${index}`,
+    })),
+  };
+
+  assert.throws(() => canonicalEvidenceBundleSchema.parse(bundle), /at most 40 element/);
+
+  const compacted = compactCanonicalEvidenceBundleForRetention(bundle);
+  const timingBreakdown = compacted.modulesRun[0]?.timingBreakdown ?? [];
+
+  assert.equal(timingBreakdown.length, 40);
+  assert.equal(timingBreakdown[39]?.label, "timing entries truncated");
+  assert.match(timingBreakdown[39]?.detail ?? "", /6 timing breakdown entries omitted/);
+  assert.equal(timingBreakdown[39]?.durationMs, 255);
+});
+
 function oversizedGoogleLikeBundle(): CanonicalEvidenceBundle {
   const startedAt = "2026-06-22T16:15:13.179Z";
   const networkEvents = Array.from({ length: 180 }, (_, index) => networkEvent(index));

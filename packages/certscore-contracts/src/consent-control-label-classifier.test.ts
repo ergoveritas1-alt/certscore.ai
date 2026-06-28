@@ -29,6 +29,7 @@ test("classifies direct accept controls across English, German, and French", () 
     ["Akzeptieren", "de"],
     ["Alle akzeptieren", "de"],
     ["Zustimmen", "de"],
+    ["Annehmen", "de"],
     ["Ich stimme zu", "de"],
     ["Accepter", "fr"],
     ["Tout accepter", "fr"],
@@ -43,9 +44,22 @@ test("classifies direct accept controls across English, German, and French", () 
   }
 });
 
+test("classifies German Microsoft-style consent controls", () => {
+  assert.equal(classifyConsentControlLabel({ label: "Annehmen" }).intent, "accept");
+  assert.equal(classifyConsentControlLabel({ label: "Ablehnen" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Cookies verwalten" }).intent, "options");
+});
+
+test("classifies British spelling choice controls as options", () => {
+  const classification = classifyConsentControlLabel({ label: "Customise my choices" });
+  assert.equal(classification.intent, "options");
+  assert.equal(classification.matchedTerm, "customise my choices");
+});
+
 test("classifies necessary-only labels as reject-equivalent", () => {
   for (const label of [
     "Use necessary cookies only",
+    "Only technically required",
     "Nur notwendige Cookies",
     "Cookies nécessaires uniquement",
   ]) {
@@ -75,6 +89,16 @@ test("classifies category-scoped analytics controls without broadening plain cat
   assert.equal(rejectAnalytics.variant, "category_analytics");
 
   assert.equal(classifyConsentControlLabel({ label: "Analytics" }).intent, "unknown");
+});
+
+test("classifies observed EU banner labels from AWS Lambda cohort", () => {
+  assert.equal(classifyConsentControlLabel({ label: "Yes, I agree" }).intent, "accept");
+  assert.equal(classifyConsentControlLabel({ label: "Reject Cookies" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Set preferences" }).intent, "options");
+
+  const technicallyRequired = classifyConsentControlLabel({ label: "Only technically required" });
+  assert.equal(technicallyRequired.intent, "reject");
+  assert.equal(technicallyRequired.variant, "necessary_only");
 });
 
 test("classifies Continue as accept only when consent-by-using context is retained", () => {

@@ -1,0 +1,37 @@
+{
+  "artifactVersion": "consent_geometry_nano_visual_review_summary.v1",
+  "source": "consent_geometry_nano_visual_review_diagnostic",
+  "artifactsRoot": "/Users/benmasek/WC01/artifacts/consent-control-geometry/aws-lambda-eu-ie/cohort-classifier-rerun",
+  "generatedAt": "2026-06-28T01:17:24.635Z",
+  "model": "gpt-5.4-nano",
+  "rows": [
+    {
+      "site": "lemonde.fr",
+      "reviewStatus": "reviewed",
+      "visualFirstLayerAccept": true,
+      "visualFirstLayerReject": false,
+      "visualFirstLayerOptions": true,
+      "scannerAgreement": {
+        "accept": "agree",
+        "reject": "disagree",
+        "options": "agree"
+      },
+      "visibleLabels": [
+        "Reject all cookies",
+        "Accept",
+        "Cookie settings"
+      ],
+      "notes": [
+        "First-layer modal shows an 'Accept' button.",
+        "First-layer modal shows a 'Cookie settings' link/button.",
+        "A 'Reject all cookies' label is visible at the top of the modal overlay, but the corresponding reject control/button is not clearly shown within the modal content."
+      ],
+      "limitations": [
+        "The 'Reject all cookies' control itself is not clearly visible as a clickable button in the screenshot (only the label appears).",
+        "Screenshot appears to be a consent modal; deeper preference controls are not assessed."
+      ],
+      "reviewedAt": "2026-06-28T01:17:24.633Z",
+      "model": "gpt-5.4-nano"
+    }
+  ]
+}
