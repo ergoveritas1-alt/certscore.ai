@@ -90,6 +90,7 @@ test("classifies observed Spanish and Italian consent labels", () => {
   }).intent, "options");
 
   assert.equal(classifyConsentControlLabel({ label: "Accetta" }).matchedLocale, "it");
+  assert.equal(classifyConsentControlLabel({ label: "Accetto" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Rifiuta" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({ label: "Rifiuta e abbonati" }).variant, "reject_with_subscription");
   assert.equal(classifyConsentControlLabel({ label: "Continua senza accettare" }).intent, "reject");

@@ -41,6 +41,46 @@ test("normalizeNanoVisualReview compares Nano visual decisions to scanner summar
   assert.equal(review.model, "test-nano");
 });
 
+test("normalizeNanoVisualReview keeps visual booleans consistent with listed options labels", () => {
+  const paypalReview = normalizeNanoVisualReview("paypal.com", fixtureGeometry(), {
+    visualFirstLayerAccept: true,
+    visualFirstLayerReject: true,
+    visualFirstLayerOptions: false,
+    visibleLabels: ["Accept", "Decline", "Manage cookies and learn more"],
+    notes: ["A link/button labeled Manage cookies and learn more is visible in the banner text area."],
+    limitations: [],
+  }, "test-nano");
+  const lequipeReview = normalizeNanoVisualReview("lequipe.fr", fixtureGeometry(), {
+    visualFirstLayerAccept: true,
+    visualFirstLayerReject: false,
+    visualFirstLayerOptions: false,
+    visibleLabels: ["oui, j'accepte", "paramétrer mon consentement"],
+    notes: ["A preferences/configuration link is visible in the first-layer overlay text area."],
+    limitations: [],
+  }, "test-nano");
+
+  assert.equal(paypalReview.visualFirstLayerOptions, true);
+  assert.equal(paypalReview.scannerAgreement.options, "agree");
+  assert.equal(lequipeReview.visualFirstLayerOptions, true);
+  assert.equal(lequipeReview.scannerAgreement.options, "agree");
+});
+
+test("normalizeNanoVisualReview keeps reject-with-subscription labels as visible reject", () => {
+  const review = normalizeNanoVisualReview("ilsole24ore.com", fixtureGeometry(), {
+    visualFirstLayerAccept: true,
+    visualFirstLayerReject: false,
+    visualFirstLayerOptions: true,
+    visibleLabels: ["Preferenze", "Accetto", "Rifiuta e abbonati"],
+    notes: ["A visible first-layer control Rifiuta e abbonati is present."],
+    limitations: [],
+  }, "test-nano");
+
+  assert.equal(review.visualFirstLayerAccept, true);
+  assert.equal(review.visualFirstLayerReject, true);
+  assert.equal(review.visualFirstLayerOptions, true);
+  assert.equal(review.scannerAgreement.reject, "agree");
+});
+
 function fixtureGeometry(): ConsentControlGeometryArtifact {
   return {
     artifactVersion: "consent_control_geometry.v1",

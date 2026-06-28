@@ -423,6 +423,7 @@ export const consentControlTerms: ConsentControlTerm[] = [
   ]),
   ...it([
     ...direct("accept", "accetta"),
+    ...direct("accept", "accetto"),
     ...direct("accept", "accetta tutto"),
     ...direct("accept", "accetta tutti"),
     ...direct("accept", "accetta e continua"),
