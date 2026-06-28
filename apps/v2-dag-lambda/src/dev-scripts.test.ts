@@ -220,6 +220,8 @@ test("consent geometry ARO no-go Lambda gate stays artifact-only and review-gate
   assert.match(gateScript, /runAwsWithRetry/);
   assert.match(gateScript, /AWS_CLI_READ_TIMEOUT/);
   assert.match(gateScript, /isRetryableAwsCliError/);
+  assert.match(gateScript, /recoverLambdaResponseFromSqs/);
+  assert.match(gateScript, /recoveredFromSqs/);
   assert.match(gateScript, /consent-geometry-review/);
   assert.match(gateScript, /consent-geometry-final-summary/);
   assert.match(gateScript, /human-adjudication-priority\.csv/);

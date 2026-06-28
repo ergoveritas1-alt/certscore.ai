@@ -101,6 +101,7 @@ type SiteResult = {
 
 type AwsResult = {
   attempts: AwsAttempt[];
+  recoveredFromSqs?: boolean;
   stderr: string;
   stdout: string;
 };
@@ -242,27 +243,18 @@ async function runSite(input: {
   await writeFile(payloadPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   const startedMs = Date.now();
   try {
-    const invoke = await runAwsWithRetry([
-      "lambda",
-      "invoke",
-      "--region",
-      input.args.region,
-      "--function-name",
-      input.args.functionName,
-      "--invocation-type",
-      "RequestResponse",
-      "--cli-binary-format",
-      "raw-in-base64-out",
-      "--payload",
-      `fileb://${payloadPath}`,
+    const invoke = await invokeLambdaWithSqsRecovery({
+      args: input.args,
+      payloadPath,
+      queueUrl: input.queueUrl,
       responsePath,
-    ], {
-      attempts: 3,
-      label: `lambda invoke ${site}`,
+      scanId,
+      site,
     });
     await writeFile(path.join(siteDir, "lambda-invoke-meta.json"), `${JSON.stringify({
       ...jsonObjectFromStdout(invoke.stdout),
       attempts: invoke.attempts,
+      recoveredFromSqs: invoke.recoveredFromSqs === true,
     }, null, 2)}\n`, "utf8");
     const response = JSON.parse(await readFile(responsePath, "utf8")) as LambdaResponse;
     if (response.status !== "completed") {
@@ -663,6 +655,119 @@ async function copyS3(input: { filePath: string; region: Args["region"]; uri: st
   ]);
 }
 
+async function invokeLambdaWithSqsRecovery(input: {
+  args: Args;
+  payloadPath: string;
+  queueUrl: string;
+  responsePath: string;
+  scanId: string;
+  site: string;
+}): Promise<AwsResult> {
+  try {
+    return await runAwsWithRetry([
+      "lambda",
+      "invoke",
+      "--region",
+      input.args.region,
+      "--function-name",
+      input.args.functionName,
+      "--invocation-type",
+      "RequestResponse",
+      "--cli-binary-format",
+      "raw-in-base64-out",
+      "--payload",
+      `fileb://${input.payloadPath}`,
+      input.responsePath,
+    ], {
+      attempts: 3,
+      label: `lambda invoke ${input.site}`,
+    });
+  } catch (error) {
+    const attempts = errorAttempts(error);
+    console.log(`${input.site}: synchronous invoke failed; polling SQS for ${input.scanId}`);
+    const recovered = await recoverLambdaResponseFromSqs({
+      queueUrl: input.queueUrl,
+      region: input.args.region,
+      scanId: input.scanId,
+      timeoutMs: 120_000,
+    });
+    if (!recovered) {
+      throw error;
+    }
+    await writeFile(input.responsePath, `${JSON.stringify(recovered, null, 2)}\n`, "utf8");
+    return {
+      attempts,
+      recoveredFromSqs: true,
+      stderr: "",
+      stdout: JSON.stringify({
+        StatusCode: 200,
+        recoveredFromSqs: true,
+        scanId: input.scanId,
+      }),
+    };
+  }
+}
+
+async function recoverLambdaResponseFromSqs(input: {
+  queueUrl: string;
+  region: Args["region"];
+  scanId: string;
+  timeoutMs: number;
+}): Promise<LambdaResponse | null> {
+  const deadline = Date.now() + input.timeoutMs;
+  while (Date.now() < deadline) {
+    const receive = await runAws([
+      "sqs",
+      "receive-message",
+      "--region",
+      input.region,
+      "--queue-url",
+      input.queueUrl,
+      "--max-number-of-messages",
+      "10",
+      "--wait-time-seconds",
+      "10",
+      "--visibility-timeout",
+      "30",
+      "--output",
+      "json",
+    ]);
+    const parsed = receive.stdout.trim() ? JSON.parse(receive.stdout) as {
+      Messages?: Array<{ Body?: string; ReceiptHandle?: string }>;
+    } : {};
+    for (const message of parsed.Messages ?? []) {
+      const body = parseSqsResultBody(message.Body);
+      if (body?.scanId !== input.scanId || !message.ReceiptHandle) {
+        continue;
+      }
+      await runAws([
+        "sqs",
+        "delete-message",
+        "--region",
+        input.region,
+        "--queue-url",
+        input.queueUrl,
+        "--receipt-handle",
+        message.ReceiptHandle,
+      ]);
+      return body;
+    }
+  }
+  return null;
+}
+
+function parseSqsResultBody(body: string | undefined): LambdaResponse | null {
+  if (!body) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(body) as LambdaResponse;
+    return typeof parsed.scanId === "string" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 async function runAws(args: string[]): Promise<AwsResult> {
   const startedMs = Date.now();
   const result = await execFile("aws", args, {
@@ -772,6 +877,12 @@ function errorStdout(error: unknown): string {
   return typeof (error as { stdout?: unknown })?.stdout === "string"
     ? (error as { stdout: string }).stdout
     : "";
+}
+
+function errorAttempts(error: unknown): AwsAttempt[] {
+  return Array.isArray((error as { attempts?: unknown })?.attempts)
+    ? (error as { attempts: AwsAttempt[] }).attempts
+    : [];
 }
 
 async function sleep(ms: number): Promise<void> {
