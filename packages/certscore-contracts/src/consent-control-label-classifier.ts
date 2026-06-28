@@ -5,7 +5,7 @@ export type ConsentControlIntent =
   | "privacy_opt_out"
   | "unknown";
 
-export type ConsentControlLocale = "en" | "de" | "fr";
+export type ConsentControlLocale = "en" | "de" | "fr" | "es" | "it";
 
 export type ConsentControlMatchStrength =
   | "direct"
@@ -49,7 +49,7 @@ export type ConsentControlLabelClassification = {
 type TermInput = Omit<ConsentControlTerm, "locale">;
 
 const CONTEXT_HINT_PATTERN =
-  /\b(cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|optional|essential|necessary|cmp|onetrust|trustarc|didomi|usercentrics|cookiebot|optanon|datenschutz|cookies?|einwilligung|zustimmung|präferenzen|einstellungen|choix|confidentialit[eé]|pr[eé]f[eé]rences?|consentement|finalit[eé]s)\b/i;
+  /\b(cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|optional|essential|necessary|cmp|onetrust|trustarc|didomi|usercentrics|cookiebot|optanon|datenschutz|cookies?|einwilligung|zustimmung|präferenzen|einstellungen|choix|confidentialit[eé]|pr[eé]f[eé]rences?|consentement|finalit[eé]s|privacidad|preferencias?|configuraci[oó]n|opciones|consenso|privacy|preferenze|impostazioni|pubblicitarie|tracciamento)\b/i;
 
 const PRIVACY_OPT_OUT_HINT_PATTERN =
   /\b(do not sell|do not share|sale|share|targeted advertising|privacy rights?|legitimate interest|berechtigtem interesse|widerspruch|opposition|int[eé]r[eê]t l[eé]gitime|droit d['’]opposition)\b/i;
@@ -60,6 +60,8 @@ const CONTINUE_AS_ACCEPT_CONTEXT_PATTERN =
 const en = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "en", ...term }));
 const de = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "de", ...term }));
 const fr = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "fr", ...term }));
+const es = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "es", ...term }));
+const it = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "it", ...term }));
 
 export const consentControlTerms: ConsentControlTerm[] = [
   ...en([
@@ -68,6 +70,7 @@ export const consentControlTerms: ConsentControlTerm[] = [
     ...direct("accept", "allow all"),
     ...direct("accept", "agree"),
     ...direct("accept", "i agree"),
+    ...direct("accept", "i accept"),
     ...direct("accept", "yes, i agree"),
     ...direct("accept", "consent"),
     ...direct("accept", "accept cookies"),
@@ -146,11 +149,13 @@ export const consentControlTerms: ConsentControlTerm[] = [
     contextual("options", "preferences", { requiresConsentContext: true }),
     contextual("options", "personalise", { requiresConsentContext: true }),
     contextual("options", "personalize", { requiresConsentContext: true }),
+    contextual("options", "customise", { requiresConsentContext: true }),
     contextual("options", "customize", { requiresConsentContext: true }),
     ...direct("options", "customize choices"),
     ...direct("options", "customise choices"),
     ...direct("options", "customise my choices"),
     ...direct("options", "more options"),
+    contextual("options", "show purposes", { requiresConsentContext: true }),
     contextual("options", "options", { requiresConsentContext: true }),
     contextual("options", "settings", { requiresConsentContext: true }),
     contextual("options", "configure", { requiresConsentContext: true }),
@@ -380,6 +385,60 @@ export const consentControlTerms: ConsentControlTerm[] = [
     ...direct("privacy_opt_out", "droit d'opposition"),
     ...direct("privacy_opt_out", "opt-out"),
   ]),
+  ...es([
+    ...direct("accept", "aceptar"),
+    ...direct("accept", "aceptar todo"),
+    ...direct("accept", "aceptar todos"),
+    ...direct("accept", "aceptar y continuar"),
+    ...direct("accept", "aceptar cookies"),
+    ...direct("accept", "aceptar todas las cookies"),
+
+    ...direct("reject", "rechazar"),
+    ...direct("reject", "rechazar todo"),
+    ...direct("reject", "rechazar todos"),
+    ...direct("reject", "rechazar cookies"),
+    ...direct("reject", "rechazar todas las cookies"),
+    equivalent("reject", "continuar sin aceptar"),
+    equivalent("reject", "continuar sin cookies"),
+    equivalent("reject", "solo cookies necesarias", "necessary_only"),
+    equivalent("reject", "solo las cookies necesarias", "necessary_only"),
+
+    contextual("options", "configurar", { requiresConsentContext: true }),
+    contextual("options", "preferencias", { requiresConsentContext: true }),
+    contextual("options", "opciones", { requiresConsentContext: true }),
+    ...direct("options", "configurar cookies"),
+    ...direct("options", "configuración de cookies"),
+    ...direct("options", "gestionar opciones"),
+    ...direct("options", "gestionar preferencias"),
+    ...direct("options", "panel de preferencias"),
+  ]),
+  ...it([
+    ...direct("accept", "accetta"),
+    ...direct("accept", "accetta tutto"),
+    ...direct("accept", "accetta tutti"),
+    ...direct("accept", "accetta e continua"),
+    ...direct("accept", "accetta i cookie"),
+    ...direct("accept", "accetta tutti i cookie"),
+
+    ...direct("reject", "rifiuta"),
+    ...direct("reject", "rifiuta tutto"),
+    ...direct("reject", "rifiuta tutti"),
+    ...direct("reject", "rifiuta i cookie"),
+    ...direct("reject", "rifiuta tutti i cookie"),
+    equivalent("reject", "continua senza accettare"),
+    equivalent("reject", "continua senza cookie"),
+    equivalent("reject", "solo cookie necessari", "necessary_only"),
+    equivalent("reject", "solo i cookie necessari", "necessary_only"),
+
+    contextual("options", "preferenze", { requiresConsentContext: true }),
+    contextual("options", "impostazioni", { requiresConsentContext: true }),
+    contextual("options", "personalizza", { requiresConsentContext: true }),
+    contextual("options", "configura", { requiresConsentContext: true }),
+    ...direct("options", "gestione cookie"),
+    ...direct("options", "gestisci preferenze"),
+    ...direct("options", "pannello delle preferenze"),
+    ...direct("options", "pannello delle preferenze pubblicitarie"),
+  ]),
 ];
 
 export function classifyConsentControlLabel(
@@ -397,7 +456,7 @@ export function classifyConsentControlLabel(
   const hasConsentContext = input.hasConsentContext === true ||
     CONTEXT_HINT_PATTERN.test(input.contextText ?? "");
   const hasPreferenceContext = input.hasPreferenceContext === true ||
-    hasConsentContext && /\b(preference|preferences|settings|choices?|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|param[eè]tres|pr[eé]f[eé]rences?|finalit[eé]s)\b/i.test(input.contextText ?? "");
+    hasConsentContext && /\b(preference|preferences|settings|choices?|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|param[eè]tres|pr[eé]f[eé]rences?|finalit[eé]s|preferencias?|configuraci[oó]n|opciones|preferenze|impostazioni|pubblicitarie)\b/i.test(input.contextText ?? "");
   const hasContinueConsentContext = CONTINUE_AS_ACCEPT_CONTEXT_PATTERN.test(input.contextText ?? "");
 
   if (!normalizedLabel) {

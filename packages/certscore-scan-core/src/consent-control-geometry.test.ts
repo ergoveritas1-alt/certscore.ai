@@ -203,6 +203,41 @@ test("captures Microsoft-style Manage cookies as a first-layer options control",
   assert.equal(findCandidate(artifact, "Manage cookies")?.decisionStatus, "confirmed_visible");
 });
 
+test("captures BMW-style Customise as a first-layer options control", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" style="position: fixed; left: 200px; bottom: 24px; width: 620px; padding: 20px; background: white;">
+      <p>We use cookies, including third-party cookies, for analytical purposes and to show you personalised advertising based on your browsing habits.</p>
+      <button>Customise</button>
+      <button>Reject</button>
+      <button>Accept all</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Customise")?.actionType, "manage_preferences");
+  assert.equal(findCandidate(artifact, "Customise")?.decisionStatus, "confirmed_visible");
+});
+
+test("captures Italian first-layer accept, reject, and options controls", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" style="position: fixed; left: 120px; top: 120px; width: 620px; padding: 20px; background: white;">
+      <p>Usiamo cookie e tecnologie simili per finalita pubblicitarie e per il tracciamento. Puoi aprire il pannello delle preferenze pubblicitarie.</p>
+      <button>Accetta</button>
+      <button>Rifiuta</button>
+      <button>pannello delle preferenze pubblicitarie</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Accetta")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Rifiuta")?.actionType, "reject_all");
+  assert.equal(findCandidate(artifact, "pannello delle preferenze pubblicitarie")?.actionType, "manage_preferences");
+});
+
 test("captures visible first-layer controls inside a bounded iframe", async () => {
   const artifact = await captureFixture(`
     <iframe

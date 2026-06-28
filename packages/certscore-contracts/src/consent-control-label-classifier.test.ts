@@ -57,10 +57,37 @@ test("classifies British spelling choice controls as options", () => {
 });
 
 test("classifies observed English options labels", () => {
+  assert.equal(classifyConsentControlLabel({ label: "I Accept" }).intent, "accept");
+  assert.equal(classifyConsentControlLabel({
+    label: "Customise",
+    contextText: "We use cookies and partners for personalised advertising.",
+  }).intent, "options");
+  assert.equal(classifyConsentControlLabel({
+    label: "Show Purposes",
+    contextText: "We use cookies and partners for advertising purposes.",
+  }).intent, "options");
   assert.equal(classifyConsentControlLabel({ label: "Manage cookies" }).intent, "options");
   assert.equal(classifyConsentControlLabel({
     label: "Personalise",
     contextText: "Data privacy at Dailymotion. We use cookies and partners for advertising measurement.",
+  }).intent, "options");
+});
+
+test("classifies observed Spanish and Italian consent labels", () => {
+  assert.equal(classifyConsentControlLabel({ label: "Aceptar" }).matchedLocale, "es");
+  assert.equal(classifyConsentControlLabel({ label: "Aceptar y continuar" }).intent, "accept");
+  assert.equal(classifyConsentControlLabel({ label: "Rechazar todo" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({
+    label: "Configurar",
+    contextText: "Usamos cookies para publicidad y medicion.",
+  }).intent, "options");
+
+  assert.equal(classifyConsentControlLabel({ label: "Accetta" }).matchedLocale, "it");
+  assert.equal(classifyConsentControlLabel({ label: "Rifiuta" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Continua senza accettare" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({
+    label: "pannello delle preferenze pubblicitarie",
+    contextText: "Usiamo cookie e tecnologie simili per finalita pubblicitarie.",
   }).intent, "options");
 });
 

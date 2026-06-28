@@ -5,12 +5,13 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 type CohortManifest = {
+  adversarial?: string[];
   baseline?: string[];
   expanded?: string[];
 };
 
 type Args = {
-  cohort: "baseline" | "expanded";
+  cohort: "adversarial" | "baseline" | "expanded";
   concurrency: number;
   envFile?: string;
   forceReview: boolean;
@@ -569,7 +570,7 @@ function parseArgs(argv: string[]): Args {
   for (let index = 0; index < argv.length; index += 1) {
     const key = argv[index];
     const value = argv[index + 1];
-    if (key === "--cohort" && (value === "baseline" || value === "expanded")) {
+    if (key === "--cohort" && isCohort(value)) {
       args.cohort = value;
       index += 1;
     } else if (key === "--concurrency" && value) {
@@ -801,6 +802,10 @@ function isProfile(value: string | undefined): value is Args["profile"] {
   return value === "tiny" || value === "standard" || value === "full";
 }
 
+function isCohort(value: string | undefined): value is Args["cohort"] {
+  return value === "baseline" || value === "expanded" || value === "adversarial";
+}
+
 function boundedInteger(value: string, min: number, max: number, label: string): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
@@ -842,7 +847,7 @@ function printUsageAndExit(): never {
     "Usage: pnpm v2:consent-geometry-aro-nogo-gate [options]",
     "",
     "Options:",
-    "  --cohort baseline|expanded",
+    "  --cohort baseline|expanded|adversarial",
     "  --sites-file <path>",
     "  --region eu-central-1|eu-west-1|us-west-2",
     "  --function-name <name>",

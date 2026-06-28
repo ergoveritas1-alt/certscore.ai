@@ -9,7 +9,7 @@ export const directVsInferredSchema = z.enum([
 ]);
 
 export const confidenceSchema = z.number().min(0).max(1);
-export const consentControlLocaleSchema = z.enum(["en", "de", "fr"]);
+export const consentControlLocaleSchema = z.enum(["en", "de", "fr", "es", "it"]);
 export const consentControlMatchStrengthSchema = z.enum(["direct", "equivalent", "contextual", "weak"]);
 export const consentControlClassifierReasonCodesSchema = z.array(z.string().max(80)).max(16).optional();
 export const consentControlInventorySourceSchema = z.enum([
