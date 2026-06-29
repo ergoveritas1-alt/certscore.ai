@@ -98,6 +98,10 @@ test("validation worker identifies manual Lambda smoke results for queue cleanup
     getManualSmokeResultScanId(JSON.stringify({ scanId: "postdeploy-cnn-eu-ie-proxy-123" })),
     "postdeploy-cnn-eu-ie-proxy-123"
   );
+  assert.equal(
+    getManualSmokeResultScanId(JSON.stringify({ scanId: "aro-gate-adversarial-zeit-de-1782705130742" })),
+    "aro-gate-adversarial-zeit-de-1782705130742"
+  );
   assert.equal(getManualSmokeResultScanId(JSON.stringify({ scanId: "49037835-190b-4e67-9fe2-426d51d55069" })), null);
 });
 

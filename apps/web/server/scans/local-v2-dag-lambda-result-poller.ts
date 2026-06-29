@@ -100,7 +100,11 @@ function getManualSmokeResultScanId(rawMessage: unknown) {
   try {
     const record = asRecord(typeof rawMessage === "string" ? JSON.parse(rawMessage) : rawMessage);
     const scanId = typeof record.scanId === "string" ? record.scanId : "";
-    return scanId.startsWith("manual-") || scanId.startsWith("postdeploy-") ? scanId : null;
+    return (
+      scanId.startsWith("manual-") ||
+      scanId.startsWith("postdeploy-") ||
+      scanId.startsWith("aro-gate-")
+    ) ? scanId : null;
   } catch {
     return null;
   }
@@ -639,6 +643,20 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
 
     for (const message of messages) {
       const rawMessage = messageBody(message);
+      const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
+      if (manualSmokeScanId) {
+        await sqsClient.send(new DeleteMessageCommand({
+          QueueUrl: queueUrl,
+          ReceiptHandle: getReceiptHandle(message)
+        }));
+        queueResult.deleted += 1;
+        console.warn("[web] ignored manual local v2 DAG Lambda smoke result", {
+          messageId: message.MessageId ?? null,
+          queueRegion: getSqsQueueRegion(queueUrl),
+          scanId: manualSmokeScanId
+        });
+        continue;
+      }
       try {
         await handleMessage(rawMessage, {
           consumer: {
@@ -658,20 +676,6 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
         queueResult.deleted += 1;
         queueResult.handled += 1;
       } catch (error) {
-        const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
-        if (manualSmokeScanId) {
-          await sqsClient.send(new DeleteMessageCommand({
-            QueueUrl: queueUrl,
-            ReceiptHandle: getReceiptHandle(message)
-          }));
-          queueResult.deleted += 1;
-          console.warn("[web] ignored manual local v2 DAG Lambda smoke result", {
-            messageId: message.MessageId ?? null,
-            queueRegion: getSqsQueueRegion(queueUrl),
-            scanId: manualSmokeScanId
-          });
-          continue;
-        }
         queueResult.failed += 1;
         console.error("[web] local v2 DAG Lambda result message rejected", {
           error: error instanceof Error ? error.message : String(error),

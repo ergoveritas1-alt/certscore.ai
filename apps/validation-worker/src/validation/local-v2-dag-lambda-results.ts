@@ -217,7 +217,11 @@ export function getManualSmokeResultScanId(rawMessage: unknown) {
   try {
     const record = asRecord(typeof rawMessage === "string" ? JSON.parse(rawMessage) : rawMessage);
     const scanId = typeof record.scanId === "string" ? record.scanId : "";
-    return scanId.startsWith("manual-") || scanId.startsWith("postdeploy-") ? scanId : null;
+    return (
+      scanId.startsWith("manual-") ||
+      scanId.startsWith("postdeploy-") ||
+      scanId.startsWith("aro-gate-")
+    ) ? scanId : null;
   } catch {
     return null;
   }
@@ -751,6 +755,20 @@ async function pollOnce(input: {
 
   for (const message of messages) {
     const rawMessage = messageBody(message);
+    const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
+    if (manualSmokeScanId) {
+      await input.client.send(new DeleteMessageCommand({
+        QueueUrl: input.queueUrl,
+        ReceiptHandle: receiptHandle(message)
+      }));
+      deleted += 1;
+      console.warn("[validation-worker] ignored manual v2 DAG Lambda smoke result", {
+        messageId: message.MessageId ?? null,
+        queueRegion: input.queueRegion,
+        scanId: manualSmokeScanId
+      });
+      continue;
+    }
     try {
       const parsed = parseLambdaResultMessage(rawMessage, input.targetEnvironment);
       await recordLocalV2DagLambdaResult(parsed, {
@@ -769,20 +787,6 @@ async function pollOnce(input: {
       deleted += 1;
       handled += 1;
     } catch (error) {
-      const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
-      if (manualSmokeScanId) {
-        await input.client.send(new DeleteMessageCommand({
-          QueueUrl: input.queueUrl,
-          ReceiptHandle: receiptHandle(message)
-        }));
-        deleted += 1;
-        console.warn("[validation-worker] ignored manual v2 DAG Lambda smoke result", {
-          messageId: message.MessageId ?? null,
-          queueRegion: input.queueRegion,
-          scanId: manualSmokeScanId
-        });
-        continue;
-      }
       const resultTargetEnvironment = getLambdaResultTargetEnvironment(rawMessage);
       if (resultTargetEnvironment && resultTargetEnvironment !== input.targetEnvironment) {
         await input.client.send(new ChangeMessageVisibilityCommand({

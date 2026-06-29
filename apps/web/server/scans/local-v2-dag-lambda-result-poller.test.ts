@@ -135,6 +135,48 @@ test("SQS poller deletes manual smoke results that do not belong to a local scan
   assert.deepEqual(deleted, ["receipt-smoke"]);
 });
 
+test("SQS poller deletes A/R/O diagnostic Lambda results that do not belong to WC01 scans", async () => {
+  const deleted: string[] = [];
+  const sqsClient = {
+    async send(command: ReceiveMessageCommand | DeleteMessageCommand) {
+      if (command instanceof ReceiveMessageCommand) {
+        return {
+          $metadata: {},
+          Messages: [
+            {
+              Body: buildResultMessage({ scanId: "aro-gate-adversarial-zeit-de-1782705130742" }),
+              MessageId: "message-aro",
+              ReceiptHandle: "receipt-aro"
+            }
+          ]
+        };
+      }
+
+      deleted.push(String(command.input.ReceiptHandle));
+      return { $metadata: {} };
+    }
+  };
+
+  const result = await pollLocalV2DagLambdaResultQueue({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/local-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
+    },
+    handleMessage: async () => {
+      throw new Error("invalid input syntax for type uuid: \"aro-gate-adversarial-zeit-de-1782705130742\"");
+    },
+    sqsClient
+  });
+
+  assert.deepEqual(result, {
+    deleted: 1,
+    failed: 0,
+    handled: 0,
+    received: 1
+  });
+  assert.deepEqual(deleted, ["receipt-aro"]);
+});
+
 test("SQS poller drains configured regional result queues", async () => {
   const receivedQueueUrls: string[] = [];
   const deletedQueueUrls: string[] = [];
