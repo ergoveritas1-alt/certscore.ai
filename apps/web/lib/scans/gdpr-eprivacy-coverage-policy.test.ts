@@ -2923,6 +2923,112 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
     cmpLocatorOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.preConsentIframeCount,
     1
   );
+
+  const highConfidenceEmbeddedOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        iframeSummary: {
+          iframeEvents: [
+            {
+              firstSeenMs: 210,
+              frameUrl: "https://www.google.com/maps/embed?pb=fixture",
+              hostname: "www.google.com",
+              preConsent: true,
+              thirdParty: true
+            },
+            {
+              firstSeenMs: 230,
+              frameUrl: "https://www.facebook.com/plugins/page.php?href=fixture",
+              hostname: "www.facebook.com",
+              preConsent: true,
+              thirdParty: true
+            },
+            {
+              firstSeenMs: 250,
+              frameUrl: "https://calendly.com/example/demo?embed_domain=fixture",
+              hostname: "calendly.com",
+              preConsent: true,
+              thirdParty: true
+            }
+          ],
+          preConsentIframeCount: 3
+        }
+      }
+    }
+  });
+
+  assert.equal(highConfidenceEmbeddedOutcomes.embedded_content_pre_consent?.status, "Observed");
+  assert.equal(highConfidenceEmbeddedOutcomes.third_party_service_connection_pre_consent?.status, "Gap observed");
+  assert.equal(highConfidenceEmbeddedOutcomes.third_party_iframe_pre_consent?.status, "Gap observed");
+  assert.deepEqual(
+    highConfidenceEmbeddedOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentPurposeBuckets,
+    {
+      fontStaticResource: [],
+      formOrChatWidget: ["calendly.com"],
+      mapEmbed: ["google.com"],
+      mediaEmbed: [],
+      otherEmbeddedContent: [],
+      socialEmbed: ["facebook.com"],
+      videoAdSdk: []
+    }
+  );
+
+  const nonEligibleIframeOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        iframeSummary: {
+          iframeEvents: [
+            {
+              frameUrl: "https://www.example.com/account-frame",
+              hostname: "www.example.com",
+              preConsent: true,
+              thirdParty: false
+            },
+            {
+              frameUrl: "https://widgets.example-cdn.test/frame",
+              hostname: "widgets.example-cdn.test",
+              preConsent: true,
+              thirdParty: true
+            }
+          ],
+          preConsentIframeCount: 2
+        }
+      }
+    }
+  });
+
+  assert.equal(nonEligibleIframeOutcomes.embedded_content_pre_consent?.status, "Not observed");
+  assert.equal(nonEligibleIframeOutcomes.third_party_service_connection_pre_consent?.status, "Not observed");
+  assert.equal(nonEligibleIframeOutcomes.third_party_iframe_pre_consent?.status, "Not observed");
+  assert.equal(
+    nonEligibleIframeOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.preConsentIframeCount,
+    2
+  );
+
+  const fontOnlyOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          coverageRetained: true,
+          embeddedContentObserved: true,
+          observations: [
+            {
+              hostname: "fonts.googleapis.com",
+              requestUrl: "https://fonts.googleapis.com/css2?family=Inter",
+              timestampMs: 430
+            }
+          ]
+        }
+      }
+    }
+  });
+
+  assert.equal(fontOnlyOutcomes.embedded_content_pre_consent?.status, "Not observed");
+  assert.equal(fontOnlyOutcomes.third_party_service_connection_pre_consent?.status, "Not observed");
+  assert.equal(fontOnlyOutcomes.third_party_iframe_pre_consent?.status, "Not observed");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats direct same-context sensitive tracking correlation as a gap", () => {

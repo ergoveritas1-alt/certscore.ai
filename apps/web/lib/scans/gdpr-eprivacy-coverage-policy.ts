@@ -2341,6 +2341,19 @@ function buildEmbeddedContentPurposeBuckets(rows: Record<string, unknown>[], hos
     socialEmbed: [],
     videoAdSdk: []
   };
+  const addBucketHost = (bucket: string, host: string) => {
+    if (bucket === "otherEmbeddedContent") {
+      const alreadyClassified = Object.entries(buckets).some(([existingBucket, existingHosts]) =>
+        existingBucket !== "otherEmbeddedContent" && existingHosts.includes(host)
+      );
+      if (alreadyClassified) {
+        return;
+      }
+    } else {
+      buckets.otherEmbeddedContent = (buckets.otherEmbeddedContent ?? []).filter((existingHost) => existingHost !== host);
+    }
+    buckets[bucket] = uniqueStrings([...(buckets[bucket] ?? []), host]);
+  };
   for (const row of rows) {
     const url = getString(row, ["frameUrl", "frame_url", "requestUrl", "request_url", "url"]);
     const host = getHostnameFromMaybeUrl(getString(row, ["hostname", "host", "domain"]) ?? url);
@@ -2348,11 +2361,11 @@ function buildEmbeddedContentPurposeBuckets(rows: Record<string, unknown>[], hos
       continue;
     }
     const bucket = classifyEmbeddedContentPurpose(host, url);
-    buckets[bucket] = uniqueStrings([...(buckets[bucket] ?? []), host]);
+    addBucketHost(bucket, host);
   }
   for (const host of hosts) {
     const bucket = classifyEmbeddedContentPurpose(host);
-    buckets[bucket] = uniqueStrings([...(buckets[bucket] ?? []), host]);
+    addBucketHost(bucket, host);
   }
   return buckets;
 }
@@ -2388,9 +2401,11 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
   ];
   const embeddedRows = iframeRows.filter(isKnownEmbeddedThirdPartyFrame);
   const summaryObservations = getObjectArray(embeddedSummary, ["observations"]);
-  const summaryObserved = getBoolean(embeddedSummary, ["embeddedContentObserved", "embedded_content_observed"]) === true ||
-    (getNumber(embeddedSummary, ["embeddedContentObservationCount", "embedded_content_observation_count"]) ?? 0) > 0 ||
-    summaryObservations.length > 0;
+  const eligibleSummaryObservations = summaryObservations.filter((row) => {
+    const url = getString(row, ["frameUrl", "frame_url", "requestUrl", "request_url", "url"]);
+    const host = getHostnameFromMaybeUrl(getString(row, ["hostname", "host", "domain"]) ?? url);
+    return classifyEmbeddedContentPurpose(host, url) !== "fontStaticResource";
+  });
   const preConsentIframeCount =
     getNumber(iframeSummary, ["preConsentIframeCount", "pre_consent_iframe_count"]) ??
     iframeRows.filter((row) => getBoolean(row, ["preConsent", "pre_consent"]) === true).length;
@@ -2418,6 +2433,11 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
   ]);
   const purposeBuckets = getObject(embeddedSummary, ["embeddedContentPurposeBuckets", "embedded_content_purpose_buckets"]) ??
     buildEmbeddedContentPurposeBuckets([...embeddedRows, ...summaryObservations], embeddedHosts);
+  const contentPurposeEntries = getEmbeddedPurposeBucketEntries(purposeBuckets)
+    .filter((entry) => entry.bucket !== "fontStaticResource");
+  const summaryObserved = embeddedRows.length > 0 ||
+    eligibleSummaryObservations.length > 0 ||
+    contentPurposeEntries.length > 0;
   const purposeEntries = getEmbeddedPurposeBucketEntries(purposeBuckets);
   const highConfidenceServiceHosts = uniqueStrings(
     purposeEntries
@@ -2441,6 +2461,8 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
     observedMs,
     preConsentIframeCount,
     purposeBuckets,
+    contentPurposeEntries,
+    eligibleSummaryObservations,
     summaryObservations,
     summaryObserved
   };
@@ -2450,10 +2472,10 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
   const {
     embeddedHosts,
     embeddedRows,
+    eligibleSummaryObservations,
     observedMs,
     preConsentIframeCount,
     purposeBuckets,
-    summaryObservations,
     summaryObserved
   } = getEmbeddedThirdPartyEvidence(input);
 
@@ -2463,7 +2485,7 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
       "Observed",
       "Concrete third-party embedded content was retained before consent in iframe/runtime evidence.",
       [
-        `Embedded third-party content observations: ${Math.max(embeddedRows.length, summaryObservations.length)}`,
+        `Embedded third-party content observations: ${Math.max(embeddedRows.length, eligibleSummaryObservations.length)}`,
         ...embeddedHosts.map((host) => `Embedded host: ${host}`).slice(0, 5),
         "Evidence: retained pre-consent embedded-content observations"
       ],
@@ -2472,7 +2494,7 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
           embeddedContentHosts: compactArray(embeddedHosts, 8),
           embeddedContentObservedMs: compactArray(observedMs, 6),
           embeddedContentObservationCount:
-            Math.max(embeddedRows.length, summaryObservations.length),
+            Math.max(embeddedRows.length, eligibleSummaryObservations.length),
           embeddedContentPurposeBuckets: purposeBuckets,
           firstEmbeddedContentObservedMs: observedMs[0] ?? null,
           observedRuntimeSignalOnly: true

@@ -990,6 +990,15 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
           sourceScanner: "pre_consent_runtime",
           timestampMs: 1250,
           url: "https://example.test/"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "frame_2",
+          eventType: "iframe",
+          frameUrl: "https://www.google.com/maps/embed?pb=fixture",
+          sourceScanner: "pre_consent_runtime",
+          timestampMs: 1350,
+          url: "https://example.test/"
         }
       ],
       modulesRun: [
@@ -1094,7 +1103,16 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.ok(rejectPath);
 
     assert.equal(embeddedSummary.embeddedContentObserved, true);
-    assert.deepEqual(embeddedSummary.embeddedContentHosts, ["youtube.com"]);
+    assert.deepEqual(embeddedSummary.embeddedContentHosts, ["youtube.com", "google.com"]);
+    assert.deepEqual(embeddedSummary.embeddedContentPurposeBuckets, {
+      fontStaticResource: [],
+      formOrChatWidget: [],
+      mapEmbed: ["google.com"],
+      mediaEmbed: ["youtube.com"],
+      otherEmbeddedContent: [],
+      socialEmbed: [],
+      videoAdSdk: []
+    });
     assert.equal(sessionReplaySummary.preConsentObserved, true);
     assert.deepEqual(sessionReplaySummary.vendors, ["Microsoft Clarity"]);
     assert.equal(fingerprintingSummary.coverageRetained, true);

@@ -1081,13 +1081,26 @@ function buildEmbeddedContentPurposeBuckets(observations: Array<{ hostname: stri
     socialEmbed: [],
     videoAdSdk: []
   };
+  const addBucketHost = (bucket: string, host: string) => {
+    if (bucket === "otherEmbeddedContent") {
+      const alreadyClassified = Object.entries(buckets).some(([existingBucket, existingHosts]) =>
+        existingBucket !== "otherEmbeddedContent" && existingHosts.includes(host)
+      );
+      if (alreadyClassified) {
+        return;
+      }
+    } else {
+      buckets.otherEmbeddedContent = (buckets.otherEmbeddedContent ?? []).filter((existingHost) => existingHost !== host);
+    }
+    buckets[bucket] = uniqueStrings([...(buckets[bucket] ?? []), host]);
+  };
   for (const observation of observations) {
     const host = observation.hostname;
     if (!host) {
       continue;
     }
     const bucket = classifyEmbeddedContentPurpose(host, observation.frameUrl ?? observation.requestUrl ?? null);
-    buckets[bucket] = uniqueStrings([...(buckets[bucket] ?? []), host]);
+    addBucketHost(bucket, host);
   }
   return buckets;
 }
