@@ -255,9 +255,13 @@ async function callNanoVisualReview(
             "Reject examples: Reject, Reject All, Decline, Decline Non-Essential Cookies, Essential Cookies Only, Necessary Only, Reject and Subscribe, Decline and Subscribe, Rifiuta e abbonati.",
             "Options examples: Cookie settings, Manage Cookies, Manage cookies and learn more, Manage preferences, More options, Customize choices, Preferenze, Personalise, Paramétrer mon consentement.",
             "Visible first-layer links count the same as buttons when they are part of the consent banner and their label opens cookie settings, preferences, choices, or consent configuration.",
+            "Count inline text links inside the visible banner or modal, even when they look like ordinary blue text links, if they are clearly consent settings/options controls.",
+            "Inspect the whole visible banner or modal, including small text links at the top or bottom edge, before deciding reject/options are absent.",
+            "Do not count headings, modal titles, or descriptive section labels as Options unless they are visibly rendered as clickable links, buttons, or controls.",
             "Do not count footer-only links unless they are part of a visible first-layer banner.",
             "Do not count hidden, deeper, or preference-center controls unless they are visibly present in the screenshot.",
             "Do not count privacy opt-out, Do Not Sell, or Do Not Share as first-layer cookie reject.",
+            "If the screenshot shows the target page but no visible consent banner or first-layer consent controls, return false for Accept, Reject, and Options, not uncertain.",
             "If the screenshot is blocked, a security check, or not the target page, mark uncertain and explain briefly.",
             "Keep booleans consistent with visibleLabels: if you list a visible Accept/Accept All/Allow/Agree control, visualFirstLayerAccept must be true; if you list a visible Reject/Decline/Reject and Subscribe/Rifiuta e abbonati/Essential Cookies Only/Necessary Only control, visualFirstLayerReject must be true; if you list a visible Cookie settings/Manage cookies/Manage preferences/Manage settings/More options/Paramétrer mon consentement/Preferenze control, visualFirstLayerOptions must be true.",
           ].join(" "),
@@ -318,9 +322,19 @@ export function normalizeNanoVisualReview(
 ): ConsentGeometryNanoVisualReview {
   const visibleLabels = stringArray(parsed.visibleLabels, 16, 120);
   const visibleLabelHints = classifyVisibleLabels(visibleLabels);
-  const accept = visibleLabelHints.accept ? true : visualBoolean(parsed.visualFirstLayerAccept);
-  const reject = visibleLabelHints.reject ? true : visualBoolean(parsed.visualFirstLayerReject);
-  const options = visibleLabelHints.options ? true : visualBoolean(parsed.visualFirstLayerOptions);
+  const noVisibleControls = shouldNormalizeNoVisibleControlReview(geometry, parsed, visibleLabels);
+  const accept = noVisibleControls
+    ? false
+    : visibleLabelHints.accept ? true : visualBoolean(parsed.visualFirstLayerAccept);
+  const reject = noVisibleControls
+    ? false
+    : visibleLabelHints.reject ? true : visualBoolean(parsed.visualFirstLayerReject);
+  let options = noVisibleControls
+    ? false
+    : visibleLabelHints.options ? true : visualBoolean(parsed.visualFirstLayerOptions);
+  if (shouldSuppressTitleOnlyOptionsReview(geometry, options)) {
+    options = false;
+  }
   return {
     site,
     reviewStatus: "reviewed",
@@ -338,6 +352,45 @@ export function normalizeNanoVisualReview(
     reviewedAt: new Date().toISOString(),
     ...(model ? { model } : {}),
   };
+}
+
+function shouldSuppressTitleOnlyOptionsReview(
+  geometry: ConsentControlGeometryArtifact,
+  visualOptions: NanoVisualBoolean,
+): boolean {
+  if (visualOptions !== true || geometry.summary.firstLayerOptions) {
+    return false;
+  }
+  return !geometry.candidates.some((candidate) => candidate.actionType === "manage_preferences");
+}
+
+function shouldNormalizeNoVisibleControlReview(
+  geometry: ConsentControlGeometryArtifact,
+  parsed: Record<string, unknown>,
+  visibleLabels: string[],
+): boolean {
+  if (
+    geometry.summary.firstLayerAccept ||
+    geometry.summary.firstLayerReject ||
+    geometry.summary.firstLayerOptions ||
+    visibleLabels.length > 0
+  ) {
+    return false;
+  }
+  const parsedValues = [
+    visualBoolean(parsed.visualFirstLayerAccept),
+    visualBoolean(parsed.visualFirstLayerReject),
+    visualBoolean(parsed.visualFirstLayerOptions),
+  ];
+  const parsedDidNotObserveControls = parsedValues.every((value) => value === false || value === "uncertain");
+  if (!parsedDidNotObserveControls) {
+    return false;
+  }
+  const reviewText = [
+    ...stringArray(parsed.notes, 8, 240),
+    ...stringArray(parsed.limitations, 8, 240),
+  ].join(" ");
+  return /no visible (?:cookie\/)?consent|no consent banner|no visible .*first-layer|no .*consent controls|cannot be confirmed/i.test(reviewText);
 }
 
 function classifyVisibleLabels(labels: string[]): {

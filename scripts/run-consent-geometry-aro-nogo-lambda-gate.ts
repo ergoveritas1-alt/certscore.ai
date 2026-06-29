@@ -70,10 +70,14 @@ type FinalSummary = {
 
 type FinalSummaryRow = {
   accessStatus?: string;
+  accept?: boolean | "unavailable";
   nanoAgreementAccept?: string;
   nanoAgreementOptions?: string;
   nanoAgreementReject?: string;
+  nanoSawConsentBanner?: boolean | "not_reviewed" | "uncertain";
   noGo?: boolean;
+  options?: boolean | "unavailable";
+  reject?: boolean | "unavailable";
   screenshotPath?: string;
   site: string;
 };
@@ -395,7 +399,7 @@ async function computeGateMetrics(outDir: string): Promise<Record<string, unknow
     row.nanoAgreementReject,
     row.nanoAgreementOptions,
   ].every((value) => value === "agree")).length;
-  const proofLoadedCount = loadedRows.filter((row) => /geometry-proof/.test(row.screenshotPath ?? "")).length;
+  const proofLoadedCount = loadedRows.filter(hasRequiredLoadedVisualProof).length;
   return {
     artifactVersion: "consent_geometry_aro_nogo_gate_metrics.v1",
     generatedAt: new Date().toISOString(),
@@ -412,6 +416,18 @@ async function computeGateMetrics(outDir: string): Promise<Record<string, unknow
     totalSites: rows.length,
     uncertainFields: agreementFields.filter((value) => value === "uncertain").length,
   };
+}
+
+function hasRequiredLoadedVisualProof(row: FinalSummaryRow): boolean {
+  const screenshotPath = row.screenshotPath ?? "";
+  if (/geometry-proof/.test(screenshotPath)) {
+    return true;
+  }
+  const scannerObservedControl = row.accept === true || row.reject === true || row.options === true;
+  if (scannerObservedControl) {
+    return false;
+  }
+  return /screenshot-pre-consent/.test(screenshotPath);
 }
 
 async function writeHumanAdjudicationPriority(outDir: string): Promise<void> {

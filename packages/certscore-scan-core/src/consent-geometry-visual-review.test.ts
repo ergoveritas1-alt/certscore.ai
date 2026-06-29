@@ -65,6 +65,46 @@ test("normalizeNanoVisualReview keeps visual booleans consistent with listed opt
   assert.equal(lequipeReview.scannerAgreement.options, "agree");
 });
 
+test("normalizeNanoVisualReview treats visible target pages with no consent controls as false A/R/O", () => {
+  const review = normalizeNanoVisualReview("euronews.com", noVisibleControlsGeometry(), {
+    visualFirstLayerAccept: "uncertain",
+    visualFirstLayerReject: "uncertain",
+    visualFirstLayerOptions: "uncertain",
+    visibleLabels: [],
+    notes: ["Screenshot shows the homepage content but no visible consent banner or first-layer consent controls."],
+    limitations: ["No consent banner/buttons/links are visible in the screenshot, so first-layer controls cannot be confirmed."],
+  }, "test-nano");
+
+  assert.equal(review.visualFirstLayerAccept, false);
+  assert.equal(review.visualFirstLayerReject, false);
+  assert.equal(review.visualFirstLayerOptions, false);
+  assert.deepEqual(review.scannerAgreement, {
+    accept: "agree",
+    reject: "agree",
+    options: "agree",
+  });
+});
+
+test("normalizeNanoVisualReview does not promote generic settings titles to options without scanner candidates", () => {
+  const review = normalizeNanoVisualReview("skalar.de", acceptRejectOnlyGeometry(), {
+    visualFirstLayerAccept: true,
+    visualFirstLayerReject: true,
+    visualFirstLayerOptions: true,
+    visibleLabels: ["Cookie-Einstellungen", "Ablehnen", "Akzeptieren"],
+    notes: ["First-layer cookie banner/modal is visible with accept and reject buttons."],
+    limitations: ["The settings text is a banner title, not a verified clickable options control."],
+  }, "test-nano");
+
+  assert.equal(review.visualFirstLayerAccept, true);
+  assert.equal(review.visualFirstLayerReject, true);
+  assert.equal(review.visualFirstLayerOptions, false);
+  assert.deepEqual(review.scannerAgreement, {
+    accept: "agree",
+    reject: "agree",
+    options: "agree",
+  });
+});
+
 test("normalizeNanoVisualReview keeps reject-with-subscription labels as visible reject", () => {
   const review = normalizeNanoVisualReview("ilsole24ore.com", fixtureGeometry(), {
     visualFirstLayerAccept: true,
@@ -122,6 +162,49 @@ function fixtureGeometry(): ConsentControlGeometryArtifact {
       cmpName: "OneTrust",
       confidence: 0.98,
       limitations: ["accept_all:Allow All:hidden"],
+    },
+  };
+}
+
+function acceptRejectOnlyGeometry(): ConsentControlGeometryArtifact {
+  return {
+    ...fixtureGeometry(),
+    candidates: [
+      candidate("candidate_0", "Ablehnen", "reject_all", "confirmed_visible"),
+      candidate("candidate_1", "Akzeptieren", "accept_all", "confirmed_visible"),
+    ],
+    summary: {
+      firstLayerAccept: true,
+      firstLayerReject: true,
+      firstLayerOptions: false,
+      cmpDetected: false,
+      confidence: 0.79,
+      limitations: [],
+    },
+  };
+}
+
+function noVisibleControlsGeometry(): ConsentControlGeometryArtifact {
+  return {
+    ...fixtureGeometry(),
+    cmp: {
+      detected: true,
+      name: "Consentmanager",
+      confidence: 0.9,
+      reasonCodes: ["script:https://cdn.consentmanager.net"],
+      matchedSignals: [],
+      detections: [],
+    },
+    containers: [],
+    candidates: [],
+    summary: {
+      firstLayerAccept: false,
+      firstLayerReject: false,
+      firstLayerOptions: false,
+      cmpDetected: true,
+      cmpName: "Consentmanager",
+      confidence: 0.65,
+      limitations: [],
     },
   };
 }

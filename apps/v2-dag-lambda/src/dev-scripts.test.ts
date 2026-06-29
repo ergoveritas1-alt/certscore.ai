@@ -226,6 +226,8 @@ test("consent geometry ARO no-go Lambda gate stays artifact-only and review-gate
   assert.match(gateScript, /consent-geometry-final-summary/);
   assert.match(gateScript, /human-adjudication-priority\.csv/);
   assert.match(gateScript, /human-adjudication-template\.csv|final-cohort-summary\.json/);
+  assert.match(gateScript, /hasRequiredLoadedVisualProof/);
+  assert.match(gateScript, /scannerObservedControl/);
   assert.doesNotMatch(gateScript, /post.?consent|consentFlowScreenshotMode/i);
 
   const parsed = JSON.parse(cohorts) as { adversarial?: unknown[]; baseline?: unknown[]; expanded?: unknown[] };
