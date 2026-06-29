@@ -153,6 +153,10 @@ test("classifies observed EU banner labels from AWS Lambda cohort", () => {
   assert.equal(classifyConsentControlLabel({ label: "Yes, I agree" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Reject Cookies" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({ label: "Set preferences" }).intent, "options");
+  assert.equal(classifyConsentControlLabel({
+    label: "Set up the collection of your data",
+    contextText: "We and our partners use cookies and process your personal data for advertising purposes."
+  }).intent, "options");
 
   const technicallyRequired = classifyConsentControlLabel({ label: "Only technically required" });
   assert.equal(technicallyRequired.intent, "reject");

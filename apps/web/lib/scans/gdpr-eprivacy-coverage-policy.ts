@@ -4536,6 +4536,18 @@ const PROCESSING_PURPOSES_DISCLOSURE_PATTERN =
 const RETENTION_DISCLOSURE_PATTERN =
   /retaining your information|retain(?:ing)? (?:the |your |personal )?(?:data|information)|retained for|deleted or anonymized|deletion|retention periods?|legal purposes|fraud and abuse prevention|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)|delete your information.{0,120}(?:retention|retain|retained|deleted|anonymized)|keep your.{0,100}(?:as long as necessary|required by law|for)|stored for|kept for|how long|expires?|as long as necessary/i;
 
+const RETENTION_STRONG_HEADING_PATTERN =
+  /\b(?:how long (?:we )?(?:keep|retain)|retention(?: period)?|data retention|storage period|retaining your information)\b/i;
+
+const RETENTION_ROW_SPECIFIC_HEADING_PATTERN =
+  /\b(?:how long (?:we )?(?:keep|retain)|retention period|storage period)\b/i;
+
+const RETENTION_EXPLICIT_LIFECYCLE_PATTERN =
+  /\b(?:how long (?:we )?(?:keep|retain)|retention periods?|storage period|stored for|kept for|kept until|retained for|retained until|retain(?:ed|ing)? .{0,120}(?:as long as necessary|no longer than necessary|required by law|legal obligations?|legal disputes?|for \d+|for (?:one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|weeks?|months?|years?)|until)|until you unsubscribe|deleted|removed|erased|anonymiz(?:ed|e|ation)|no longer than necessary|cctv recordings? (?:are )?kept)\b/i;
+
+const RETENTION_SECURITY_SAFEGUARD_PATTERN =
+  /\b(?:how we keep your personal information safe|protect your personal information|security|safeguards?|encryption|confidential|unauthori[sz]ed access|loss|destruction)\b/i;
+
 const DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN =
   /your rights|data subject rights|right to (?:access|delete|erase|erasure|rectif|object|restrict|port)|rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)|access.{0,80}(?:your )?(?:personal )?(?:data|information)|delete your information|delete.{0,80}(?:your )?(?:personal )?(?:data|information)|erasure|correct (?:your )?(?:personal )?(?:data|information)|rectif|portability|object to|restrict (?:the )?processing|export.{0,80}(?:your )?(?:data|information)|review and update|my activity|google takeout|request to remove content|privacy controls|download a copy/i;
 
@@ -4791,8 +4803,26 @@ function getValidatedRowSpecificPolicyEvidence(
   summary: Record<string, unknown> | null | undefined,
   disclosureType: string | undefined
 ) {
-  if (!disclosureType || getString(summary, ["policyTextCoverageMode", "policy_text_coverage_mode"]) !== "section_targeted") {
+  const hasRetainedSectionEvidence =
+    getObjectArray(summary, ["retainedArticle13SectionEvidence", "retained_article13_section_evidence"]).length > 0 ||
+    getObjectArray(summary, ["retainedPolicySections", "retained_policy_sections"]).length > 0;
+  if (
+    !disclosureType ||
+    (
+      getString(summary, ["policyTextCoverageMode", "policy_text_coverage_mode"]) !== "section_targeted" &&
+      !hasRetainedSectionEvidence
+    )
+  ) {
     return null;
+  }
+
+  const retainedPolicySectionEvidence = getRetainedPolicySectionEvidence(summary, disclosureType);
+  if (
+    disclosureType === "data_retention" &&
+    retainedPolicySectionEvidence &&
+    getString(retainedPolicySectionEvidence, ["selectedEvidenceStrength", "selected_evidence_strength"]) === "strong"
+  ) {
+    return buildRetainedPolicySectionEvidenceResult(retainedPolicySectionEvidence, disclosureType);
   }
 
   const article13Signal = getPolicyArticle13DisclosureSignal(summary, disclosureType);
@@ -4822,7 +4852,10 @@ function getValidatedRowSpecificPolicyEvidence(
 
   const sectionEvidence = getRetainedArticle13SectionEvidence(summary, disclosureType);
   if (!sectionEvidence) {
-    return null;
+    if (!retainedPolicySectionEvidence) {
+      return null;
+    }
+    return buildRetainedPolicySectionEvidenceResult(retainedPolicySectionEvidence, disclosureType);
   }
   return {
     article13Signal: {
@@ -4842,6 +4875,91 @@ function getValidatedRowSpecificPolicyEvidence(
     selectedPolicySectionHeading: getString(sectionEvidence, ["selectedPolicySectionHeading", "selected_policy_section_heading"]),
     selectedPolicySectionUrl: getString(sectionEvidence, ["selectedPolicySectionUrl", "selected_policy_section_url"])
   };
+}
+
+function buildRetainedPolicySectionEvidenceResult(
+  sectionEvidence: Record<string, unknown>,
+  disclosureType: string
+) {
+  return {
+    article13Signal: {
+      disclosureType,
+      evidenceText: getString(sectionEvidence, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]),
+      selectedEvidenceStrength: getString(sectionEvidence, ["selectedEvidenceStrength", "selected_evidence_strength"]),
+      selectedPolicySectionExcerpt: getString(sectionEvidence, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]),
+      selectedPolicySectionHeading: getString(sectionEvidence, ["selectedPolicySectionHeading", "selected_policy_section_heading"]),
+      selectedPolicySectionUrl: getString(sectionEvidence, ["selectedPolicySectionUrl", "selected_policy_section_url"]),
+      source: "retained_policy_sections",
+      status: "observed"
+    },
+    evidenceText: getString(sectionEvidence, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]) ?? "",
+    evidenceType: "retainedPolicySections",
+    sectionEvidence,
+    selectedEvidenceStrength: getString(sectionEvidence, ["selectedEvidenceStrength", "selected_evidence_strength"]),
+    selectedPolicySectionHeading: getString(sectionEvidence, ["selectedPolicySectionHeading", "selected_policy_section_heading"]),
+    selectedPolicySectionUrl: getString(sectionEvidence, ["selectedPolicySectionUrl", "selected_policy_section_url"])
+  };
+}
+
+function getRetainedPolicySectionEvidence(
+  summary: Record<string, unknown> | null | undefined,
+  disclosureType: string | undefined
+) {
+  if (disclosureType !== "data_retention") {
+    return null;
+  }
+  const candidates = getObjectArray(summary, ["retainedPolicySections", "retained_policy_sections"])
+    .map((section) => {
+      const heading = cleanPolicyDisclosureEvidenceText(getString(section, ["heading"]) ?? "");
+      const excerpt = cleanPolicyDisclosureEvidenceText(getString(section, ["textExcerpt", "text_excerpt"]) ?? "");
+      const evidenceText = policySectionEvidenceText(heading, excerpt);
+      const selectedEvidenceStrength = retentionPolicySectionEvidenceStrength(heading, excerpt);
+      return {
+        evidenceSource: "retained_policy_sections",
+        selectedEvidenceStrength,
+        selectedPolicySectionExcerpt: evidenceText,
+        selectedPolicySectionHeading: heading || undefined,
+        selectedPolicySectionUrl: getString(section, ["sourceUrl", "source_url"]),
+        signalObserved: selectedEvidenceStrength ? "observed" : "not_observed"
+      };
+    })
+    .filter((evidence) => rowSpecificSectionEvidenceIsObserved(evidence, disclosureType));
+  return candidates
+    .sort((left, right) =>
+      selectedEvidenceStrengthScore(getString(right, ["selectedEvidenceStrength", "selected_evidence_strength"])) -
+      selectedEvidenceStrengthScore(getString(left, ["selectedEvidenceStrength", "selected_evidence_strength"])) ||
+      scorePolicyDisclosureEvidenceText(
+        getString(right, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]) ?? "",
+        disclosureType
+      ) - scorePolicyDisclosureEvidenceText(
+        getString(left, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]) ?? "",
+        disclosureType
+      )
+    )[0] ?? null;
+}
+
+function retentionPolicySectionEvidenceStrength(heading: string, excerpt: string) {
+  const candidateText = policySectionEvidenceText(heading, excerpt);
+  if (!candidateText || !hasSubstantiveRetentionDisclosure(candidateText)) {
+    return null;
+  }
+  if (RETENTION_STRONG_HEADING_PATTERN.test(heading) && RETENTION_EXPLICIT_LIFECYCLE_PATTERN.test(candidateText)) {
+    return "strong";
+  }
+  return "moderate";
+}
+
+function policySectionEvidenceText(heading: string, excerpt: string) {
+  if (!heading) {
+    return cleanPolicyDisclosureEvidenceText(excerpt);
+  }
+  if (!excerpt) {
+    return cleanPolicyDisclosureEvidenceText(heading);
+  }
+  if (new RegExp(`^${escapeRegExp(heading)}\\b`, "i").test(excerpt)) {
+    return cleanPolicyDisclosureEvidenceText(excerpt);
+  }
+  return cleanPolicyDisclosureEvidenceText(`${heading}. ${excerpt}`);
 }
 
 function getPolicyObservedTopics(summary: Record<string, unknown> | null | undefined) {
@@ -5108,7 +5226,7 @@ function policyDisclosureSectionHints(disclosureType: string): RegExp[] {
     case "recipients_or_vendor_categories":
       return [/share/, /recipients?/, /service providers?/, /processors?/, /partners?/, /affiliates?/];
     case "data_retention":
-      return [/retaining your information/, /retention/, /retain/, /deleted or anonymized/, /deletion/, /anonymiz/, /legal purposes/, /fraud and abuse prevention/, /kept for/, /how long/];
+      return [/how long (?:we )?(?:keep|retain)/, /retaining your information/, /retention periods?/, /storage period/, /stored for/, /kept for/, /kept until/, /until you unsubscribe/, /deleted|removed|erased/, /anonymiz/, /no longer than necessary/, /legal obligations?/, /legal disputes?/, /cctv recordings? (?:are )?kept/];
     case "data_subject_rights":
       return [/your rights/, /privacy controls/, /access/, /review/, /update/, /correct/, /delete/, /export/, /download a copy/, /object/, /restrict/, /request/];
     case "international_transfers":
@@ -5192,17 +5310,26 @@ function disclosureEvidenceBodyAfterHeading(value: string, headings: RegExp[]) {
 
 function hasSubstantiveRetentionDisclosure(value: string) {
   const body = disclosureEvidenceBodyAfterHeading(value, [
-    /^(?:retaining your information|retention|data retention)[.:;\-–—]?\s*/i
+    /^(?:retaining your information|retention|data retention|how long (?:we )?(?:keep|retain)(?: your)?(?: personal)?(?: data| information)?(?: collected through cookies)?)[.:;\-–—]?\s*/i
   ]);
+  const fullCandidate = cleanPolicyDisclosureEvidenceText(value);
+  const hasExplicitLifecycleSignal = RETENTION_EXPLICIT_LIFECYCLE_PATTERN.test(fullCandidate) ||
+    /\b(?:retain|retained|retention|keep|kept|stored|storage)\b.{0,120}\b(?:\d+\s+(?:days?|weeks?|months?|years?)|one (?:day|week|month|year)|two (?:days?|weeks?|months?|years?)|three (?:days?|weeks?|months?|years?)|four (?:days?|weeks?|months?|years?)|legal obligations?|legal disputes?)\b/i.test(fullCandidate) ||
+    /\b(?:\d+\s+(?:days?|weeks?|months?|years?)|one (?:day|week|month|year)|two (?:days?|weeks?|months?|years?)|three (?:days?|weeks?|months?|years?)|four (?:days?|weeks?|months?|years?)|legal obligations?|legal disputes?)\b.{0,120}\b(?:retain|retained|retention|keep|kept|stored|storage)\b/i.test(fullCandidate);
+  if (RETENTION_SECURITY_SAFEGUARD_PATTERN.test(fullCandidate) && !hasExplicitLifecycleSignal) {
+    return false;
+  }
   const genericStorageOnly =
     /\b(?:collect|store|storage|cookies?|local storage|databases?|server logs)\b/i.test(body) &&
-    !/\b(?:retain|retained|retention|retention period|how long|delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove|expires?|kept for|as long as|as long as necessary|required by law|legal purposes|fraud and abuse prevention|no longer needed|no engagement period)\b/i.test(body);
+    !/\b(?:retain|retained|retention|retention period|how long|delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove|expires?|kept for|kept until|stored for|as long as|as long as necessary|no longer than necessary|required by law|legal purposes|legal obligations?|legal disputes?|fraud and abuse prevention|no longer needed|no engagement period)\b/i.test(body);
   if (genericStorageOnly) {
     return false;
   }
-  return /\b(?:retain|retained|retention|retention period|how long|kept for|as long as|as long as necessary|required by law|legal purposes|fraud and abuse prevention|no longer needed|no engagement period|expires?)\b/i.test(body) ||
-    /\b(?:delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove)\b.{0,120}\b(?:automatically|after|when|once|period|retention|no longer|settings|account|inactive|engagement)\b/i.test(body) ||
-    /\b(?:automatically|after|when|once|period|retention|no longer|settings|account|inactive|engagement)\b.{0,120}\b(?:delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove)\b/i.test(body);
+  return RETENTION_ROW_SPECIFIC_HEADING_PATTERN.test(fullCandidate) ||
+    hasExplicitLifecycleSignal ||
+    /\b(?:retain|retained|retention|retention period|how long|kept for|kept until|stored for|as long as|as long as necessary|no longer than necessary|required by law|legal purposes|fraud and abuse prevention|no longer needed|no engagement period|expires?)\b/i.test(body) ||
+    /\b(?:delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove)\b.{0,120}\b(?:automatically|after|when|once|period|retention|no longer|settings|account|inactive|engagement|unsubscribe)\b/i.test(body) ||
+    /\b(?:automatically|after|when|once|period|retention|no longer|settings|account|inactive|engagement|unsubscribe)\b.{0,120}\b(?:delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove)\b/i.test(body);
 }
 
 function hasSubstantiveControllerContactDisclosure(value: string) {
@@ -5425,6 +5552,16 @@ function scorePolicyDisclosureEvidenceText(value: string, disclosureType: string
   }
   if (disclosureType === "data_retention" && /retaining your information|retention|retain|retained|deleted or anonymized|duration|as long as|fraud and abuse prevention|legal purposes|how long|kept for|expires?/i.test(lower)) {
     score += 4;
+  }
+  if (disclosureType === "data_retention" && RETENTION_STRONG_HEADING_PATTERN.test(lower)) {
+    score += 5;
+  }
+  if (
+    disclosureType === "data_retention" &&
+    RETENTION_SECURITY_SAFEGUARD_PATTERN.test(lower) &&
+    !RETENTION_EXPLICIT_LIFECYCLE_PATTERN.test(lower)
+  ) {
+    score -= 8;
   }
   if (disclosureType === "data_subject_rights" && DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN.test(lower)) {
     score += 4;

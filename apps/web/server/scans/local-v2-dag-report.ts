@@ -5,7 +5,7 @@ import { readFileSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
-import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { classifyConsentControlLabel, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { resolveVendorDisplayCategory, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import {
@@ -121,13 +121,36 @@ function getStringArray(value: unknown) {
   return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
 }
 
+function getObjectArray(value: unknown) {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
 function isPreConsentScreenshotArtifact(screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number] | null | undefined) {
   return screenshot?.artifactId === "screenshot_pre_consent" ||
+    screenshot?.artifactId === "screenshot_pre_consent_geometry_proof" ||
     screenshot?.artifactId === "screenshot_pre_consent_full_page";
 }
 
 function preConsentScreenshotRank(screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number]) {
-  return screenshot.artifactId === "screenshot_pre_consent_full_page" ? 0 : 1;
+  switch (screenshot.artifactId) {
+    case "screenshot_pre_consent_geometry_proof":
+      return 0;
+    case "screenshot_pre_consent_full_page":
+      return 1;
+    default:
+      return 2;
+  }
+}
+
+function localV2VisualEvidenceArtifactId(screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number]) {
+  switch (screenshot.artifactId) {
+    case "screenshot_pre_consent_geometry_proof":
+      return "local_v2:screenshot_pre_consent_geometry_proof";
+    case "screenshot_pre_consent_full_page":
+      return "local_v2:screenshot_pre_consent_full_page";
+    default:
+      return "local_v2:screenshot_pre_consent";
+  }
 }
 
 function isPreConsentErrorShellScreenshot(bundle: CanonicalEvidenceBundle, screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number]) {
@@ -716,6 +739,16 @@ async function readLocalV2DagBundle(outDir: string): Promise<CanonicalEvidenceBu
   }
 }
 
+async function readLocalV2ConsentControlGeometry(outDir: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await readFile(path.join(resolveLocalV2OutDir(outDir), "ConsentControlGeometryEvidence.json"), "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseS3Uri(uri: string) {
   if (!uri.startsWith("s3://")) {
     throw new Error("Local v2 DAG Lambda scan artifact URI must be s3://.");
@@ -811,6 +844,20 @@ async function readLocalV2DagBundleFromS3(scanArtifactUri: string): Promise<Cano
       return null;
     }
     return parsed as CanonicalEvidenceBundle;
+  } catch {
+    return null;
+  }
+}
+
+async function readLocalV2ConsentControlGeometryFromS3(scanArtifactUri: string): Promise<Record<string, unknown> | null> {
+  try {
+    const { bucket, key } = parseS3Uri(scanArtifactUri);
+    const geometryKey = `${path.posix.dirname(key)}/auxiliary/ConsentControlGeometryEvidence.json`;
+    const response = await new S3Client({ region: inferS3ArtifactRegion(bucket) }).send(
+      new GetObjectCommand({ Bucket: bucket, Key: geometryKey })
+    );
+    const parsed: unknown = JSON.parse((await streamToBuffer(response.Body)).toString("utf8"));
+    return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -1694,7 +1741,139 @@ function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
   };
 }
 
-function summarizeFirstLayerConsentChoices(bundle: CanonicalEvidenceBundle) {
+function consentGeometrySummary(geometryEvidence: Record<string, unknown> | null | undefined) {
+  return isRecord(geometryEvidence?.summary) ? geometryEvidence.summary : null;
+}
+
+function consentGeometryCmpName(geometryEvidence: Record<string, unknown> | null | undefined) {
+  const summary = consentGeometrySummary(geometryEvidence);
+  if (summary?.cmpDetected !== true) {
+    return null;
+  }
+  return getString(summary.cmpName);
+}
+
+function positiveGeometryBox(candidate: Record<string, unknown>) {
+  const boundingBox = isRecord(candidate.boundingBox) ? candidate.boundingBox : null;
+  return (
+    typeof boundingBox?.width === "number" &&
+    typeof boundingBox.height === "number" &&
+    boundingBox.width > 0 &&
+    boundingBox.height > 0
+  );
+}
+
+function actionTypeFromRetainedGeometryCandidate(candidate: Record<string, unknown>, hasConsentContext: boolean) {
+  const originalActionType = getString(candidate.actionType);
+  const label = getString(candidate.label) ?? "";
+  const classification = classifyConsentControlLabel({
+    ariaLabel: getString(candidate.ariaLabel) ?? undefined,
+    hasConsentContext,
+    label,
+    title: getString(candidate.title) ?? undefined,
+    value: getString(candidate.value) ?? undefined
+  });
+  const classifiedActionType =
+    classification.intent === "accept"
+      ? "accept_all"
+      : classification.intent === "reject"
+        ? "reject_all"
+        : classification.intent === "options"
+          ? classification.variant === "save_preferences" ? "save_preferences" : "manage_preferences"
+          : classification.intent === "privacy_opt_out"
+            ? "do_not_sell_share"
+            : null;
+  return {
+    actionType: classifiedActionType ?? originalActionType,
+    classification
+  };
+}
+
+function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<string, unknown> | null | undefined) {
+  const summary = consentGeometrySummary(geometryEvidence);
+  const hasConsentContext = summary?.cmpDetected === true ||
+    getObjectArray(geometryEvidence?.containers).some((container) =>
+      /cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|personal data/i.test(
+        getString(container.textExcerpt) ?? ""
+      )
+    );
+  const controls = getObjectArray(geometryEvidence?.candidates)
+    .map((candidate) => {
+      const label = getString(candidate.label);
+      const { actionType, classification } = actionTypeFromRetainedGeometryCandidate(candidate, hasConsentContext);
+      const geometryVisible =
+        candidate.layer === "first_layer" &&
+        candidate.enabled !== false &&
+        candidate.intersectsViewport !== false &&
+        positiveGeometryBox(candidate);
+      const retainedDecision = getString(candidate.decisionStatus);
+      const canonicalAction =
+        actionType === "accept_all" ||
+        actionType === "reject_all" ||
+        actionType === "manage_preferences" ||
+        actionType === "save_preferences"
+          ? actionType
+          : null;
+      const visible =
+        geometryVisible &&
+        (
+          retainedDecision === "confirmed_visible" ||
+          (retainedDecision === "ambiguous" && canonicalAction !== null)
+        );
+      return label && visible && canonicalAction
+        ? {
+            actionType: canonicalAction,
+            classifierReasonCodes: classification.reasonCodes,
+            label,
+            matchedLocale: classification.matchedLocale,
+            matchedTerm: classification.matchedTerm,
+            matchStrength: classification.matchStrength,
+            role: getString(candidate.role) ?? undefined,
+            selectorHint: getString(candidate.selectorHint) ?? undefined,
+            tagName: getString(candidate.tagName) ?? undefined,
+            variant: classification.variant
+          }
+        : null;
+    })
+    .filter((control): control is NonNullable<typeof control> => control !== null);
+  if (controls.length === 0 && summary?.cmpDetected !== true) {
+    return null;
+  }
+
+  const acceptLabels = uniqueStrings(controls
+    .filter((control) => control.actionType === "accept_all")
+    .map((control) => control.label));
+  const rejectLabels = uniqueStrings(controls
+    .filter((control) => control.actionType === "reject_all")
+    .map((control) => control.label));
+  const preferenceLabels = uniqueStrings(controls
+    .filter((control) => control.actionType === "manage_preferences" || control.actionType === "save_preferences")
+    .map((control) => control.label));
+  const visibleChoiceLabels = uniqueStrings(controls.map((control) => control.label)).slice(0, 12);
+  return {
+    acceptControlObserved: acceptLabels.length > 0,
+    acceptLabels,
+    actionableControlInventoryRetained: controls.length > 0 || visibleChoiceLabels.length > 0,
+    capturedBeforeInteraction: true,
+    controls: controls.slice(0, 12),
+    layerInspected: controls.length > 0 ? "first_layer" : "unknown",
+    managePreferencesControlObserved: preferenceLabels.length > 0,
+    preferenceLabels,
+    rejectControlObserved: rejectLabels.length > 0,
+    rejectLabels,
+    visibleChoiceLabels
+  };
+}
+
+function summarizeFirstLayerConsentChoices(
+  bundle: CanonicalEvidenceBundle,
+  geometryEvidence?: Record<string, unknown> | null
+) {
+  const geometryChoices = summarizeGeometryFirstLayerConsentChoices(geometryEvidence);
+  if (geometryChoices?.actionableControlInventoryRetained === true) {
+    return geometryChoices;
+  }
+
   const observation = (bundle.consentUiObservations ?? []).find((row) => row.likelyPresent) ??
     (bundle.consentUiObservations ?? [])[0] ??
     null;
@@ -1947,7 +2126,7 @@ function buildLocalV2ScanNoGoAssessment(input: {
 function buildMaterializedLocalV2Detail(
   scanRecord: ScanDetailResponse,
   bundle: CanonicalEvidenceBundle,
-  options: { localOutDir?: string | null; scanArtifactUri?: string | null } = {}
+  options: { consentControlGeometryEvidence?: Record<string, unknown> | null; localOutDir?: string | null; scanArtifactUri?: string | null } = {}
 ): ScanDetailResponse {
   const requestedHost = scanRecord.scan.domainHostname ?? hostnameFromUrl(bundle.normalizedUrl ?? bundle.url);
   const rootDomain = registrableDomain(requestedHost);
@@ -1966,12 +2145,13 @@ function buildMaterializedLocalV2Detail(
   const iframeEvents = sanitizeIframeEvents(bundle, rootDomain);
   const preconsentIframeEvents = iframeEvents.filter((event) => event.preConsent);
   const cmp = bundle.cmpRuntimeObservations?.[0] ?? null;
-  const cmpVendorName = firstString(cmp?.product, cmp?.vendor, cmp?.entity);
+  const geometryCmpName = consentGeometryCmpName(options.consentControlGeometryEvidence);
+  const cmpVendorName = firstString(cmp?.product, cmp?.vendor, cmp?.entity, geometryCmpName);
   const cmpSignalLabels = uniqueStrings((cmp?.signals ?? []).map((signal) =>
     firstString(signal.matchedValueRedacted, signal.matchedField, signal.signalType)
-  ));
+  ).concat(geometryCmpName));
   const consentSurfaceLikelyPresent = Boolean(cmpVendorName ?? bundle.derivedRuntimeSignals?.consentBannerLikelyPresent);
-  const firstLayerConsentChoices = summarizeFirstLayerConsentChoices(bundle);
+  const firstLayerConsentChoices = summarizeFirstLayerConsentChoices(bundle, options.consentControlGeometryEvidence);
   const runtimeCoverageStatus = bundle.runtimeCoverage?.coverageStatus ?? null;
   const runtimeLimitationKeys = bundle.runtimeCoverage?.limitationKeys ?? [];
   const runtimeObservationCounts = bundle.runtimeCoverage?.observationCounts;
@@ -2346,9 +2526,7 @@ function buildMaterializedLocalV2Detail(
         capture_step: "initial_load",
         consent_state: screenshot.consentStateAtTime ?? "pre_consent",
         final_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
-        id: screenshot.artifactId === "screenshot_pre_consent_full_page"
-          ? "local_v2:screenshot_pre_consent_full_page"
-          : "local_v2:screenshot_pre_consent",
+        id: localV2VisualEvidenceArtifactId(screenshot),
         interaction_state: "none",
         key: capturedErrorShell ? null : storagePointer.key,
         mime_type: "image/png",
@@ -2533,7 +2711,14 @@ export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResp
   const bundle = localBundle ?? (input.scanArtifactUri
     ? await readLocalV2DagBundleFromS3(input.scanArtifactUri)
     : null);
+  const localGeometryEvidence = shouldReadLocalOutDir && input.outDir
+    ? await readLocalV2ConsentControlGeometry(input.outDir)
+    : null;
+  const consentControlGeometryEvidence = localGeometryEvidence ?? (input.scanArtifactUri
+    ? await readLocalV2ConsentControlGeometryFromS3(input.scanArtifactUri)
+    : null);
   return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle, {
+    consentControlGeometryEvidence,
     localOutDir: shouldReadLocalOutDir ? input.outDir : null,
     scanArtifactUri: input.scanArtifactUri
   }) : scanRecord;

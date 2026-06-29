@@ -1232,6 +1232,186 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
   }
 });
 
+test("materializeLocalV2DagScanDetail prefers pre-consent geometry proof screenshots for visual evidence", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/visual-geometry-proof-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-29T13:43:12.000Z",
+      consentUiObservations: [
+        {
+          observationId: "consent_ui_pre_consent",
+          likelyPresent: false,
+          basis: ["bounded_capture_timeout_or_failure"],
+          inventoryDiagnostics: {
+            rejectionReasons: ["timing_expired_before_controls_surfaced"]
+          }
+        }
+      ],
+      cookieEvents: [],
+      modulesRun: [],
+      networkEvents: [],
+      normalizedUrl: "https://example.test/",
+      policySurfaceObservations: [],
+      runtimeTimeline: [],
+      scanId: "visual-geometry-proof-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 8402,
+          captureMethod: "primary_viewport_fallback",
+          consentStateAtTime: "pre_consent",
+          pagePhase: "dom_content_loaded",
+          path: "/tmp/certscore-v2/visual-geometry-proof-fixture/screenshot-pre-consent.png",
+          url: "https://example.test/"
+        },
+        {
+          artifactId: "screenshot_pre_consent_geometry_proof",
+          capturedAtMs: 32005,
+          captureMethod: "primary_viewport_fallback",
+          consentStateAtTime: "pre_consent",
+          pagePhase: "network_idle",
+          path: "/tmp/certscore-v2/visual-geometry-proof-fixture/screenshot-pre-consent-geometry-proof.png",
+          url: "https://example.test/"
+        }
+      ],
+      startedAt: "2026-06-29T13:42:39.000Z",
+      url: "https://example.test/"
+    }, null, 2)}\n`, "utf8");
+    await writeFile(path.join(outDir, "ConsentControlGeometryEvidence.json"), `${JSON.stringify({
+      artifactVersion: "consent_control_geometry.v1",
+      candidates: [
+        {
+          actionType: "reject_all",
+          boundingBox: { x: 780, y: 201, width: 166, height: 22, top: 201, right: 946, bottom: 223, left: 780 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Continue without accepting",
+          layer: "first_layer",
+          selectorHint: "button.continue-without-accepting",
+          tagName: "button"
+        },
+        {
+          actionType: "other",
+          boundingBox: { x: 419, y: 631, width: 256, height: 44, top: 631, right: 675, bottom: 675, left: 419 },
+          decisionStatus: "ambiguous",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Set up the collection of your data",
+          layer: "first_layer",
+          selectorHint: "button.setup",
+          tagName: "button"
+        },
+        {
+          actionType: "accept_all",
+          boundingBox: { x: 691, y: 631, width: 256, height: 44, top: 631, right: 947, bottom: 675, left: 691 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Accept all the collection of your data",
+          layer: "first_layer",
+          selectorHint: "button.accept-all",
+          tagName: "button"
+        },
+        {
+          actionType: "reject_all",
+          boundingBox: { x: 419, y: 691, width: 528, height: 16, top: 691, right: 947, bottom: 707, left: 419 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Refuse all the collection of your data",
+          layer: "first_layer",
+          selectorHint: "button.refuse-all",
+          tagName: "button"
+        }
+      ],
+      cmp: { detected: true, name: "Consentmanager", confidence: 0.89, reasonCodes: [], matchedSignals: [], detections: [] },
+      containers: [
+        {
+          layer: "first_layer",
+          textExcerpt: "We and our partners use cookies and process personal data for advertising purposes. Set up. Accept all. Refuse all."
+        }
+      ],
+      pageUrl: "https://example.test/",
+      sourceScanner: "consent_control_geometry_diagnostic",
+      summary: {
+        cmpDetected: true,
+        cmpName: "Consentmanager",
+        confidence: 0.89,
+        firstLayerAccept: true,
+        firstLayerOptions: false,
+        firstLayerReject: true,
+        limitations: []
+      }
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      events: [
+        {
+          createdAt: "2026-06-29T13:43:12.000Z",
+          eventType: "v2_lambda_result.received",
+          id: "event-visual-proof-1",
+          message: "Local v2 DAG Lambda returned a completed artifact-only result.",
+          metadataJson: {
+            artifactOnly: true,
+            artifactPointers: {
+              scanArtifactUri: "s3://certscore-v2-dag-local-artifacts-eu-west-1-199536052647/v2-dag-lambda/local/visual-geometry-proof-fixture/CanonicalEvidenceBundle.json"
+            },
+            processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+            productionFindingIntegration: false
+          }
+        }
+      ],
+      scan: {
+        ...makeScanRecord().scan,
+        id: "39567926-04da-4596-a44e-a48d9a8091a3",
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const visualArtifacts = detail.runtimeArtifacts?.visual_evidence_artifacts as Array<Record<string, unknown>> | undefined;
+    assert.equal(visualArtifacts?.[0]?.id, "local_v2:screenshot_pre_consent_geometry_proof");
+    assert.equal(visualArtifacts?.[0]?.capture_method, "primary_viewport_fallback");
+    assert.equal(
+      visualArtifacts?.[0]?.key,
+      "v2-dag-lambda/local/visual-geometry-proof-fixture/auxiliary/screenshot-pre-consent-geometry-proof.png"
+    );
+    assert.equal(visualArtifacts?.[1]?.id, "local_v2:screenshot_pre_consent");
+    const firstLayerChoices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown> | undefined;
+    assert.equal(detail.runtimeArtifacts?.cmpFrameworkSignalObserved, true);
+    assert.equal(detail.runtimeArtifacts?.cmp_vendor_name, "Consentmanager");
+    assert.equal(firstLayerChoices?.acceptControlObserved, true);
+    assert.equal(firstLayerChoices?.rejectControlObserved, true);
+    assert.equal(firstLayerChoices?.managePreferencesControlObserved, true);
+    assert.deepEqual(firstLayerChoices?.preferenceLabels, ["Set up the collection of your data"]);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail promotes retained access-denied pages to scan no-go", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

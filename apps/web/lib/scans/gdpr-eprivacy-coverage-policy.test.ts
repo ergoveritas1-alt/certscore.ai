@@ -674,6 +674,64 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not observe retention from g
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes prefers retention-specific retained sections over security sections", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        observedTopics: ["data_retention"],
+        policyTextCoverageMode: "section_targeted",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4600,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPolicySections: [
+          {
+            charEnd: 360,
+            charStart: 0,
+            heading: "How we keep your personal information safe",
+            quality: "strong",
+            sourceUrl: "https://example.test/privacy",
+            textExcerpt:
+              "How we keep your personal information safe. We protect your personal information using security safeguards, encryption, confidentiality controls, and procedures intended to prevent unauthorised access, loss, destruction, or damage."
+          },
+          {
+            charEnd: 780,
+            charStart: 361,
+            heading: "How long we keep your personal information",
+            quality: "strong",
+            sourceUrl: "https://example.test/privacy",
+            textExcerpt:
+              "How long we keep your personal information. Newsletter preferences are kept until you unsubscribe, booking information is retained for one year, CCTV recordings are kept for a maximum of four weeks, and some records may be retained longer for legal obligations or legal disputes."
+          },
+          {
+            charEnd: 1120,
+            charStart: 781,
+            heading: "How long we keep your personal information collected through cookies",
+            quality: "strong",
+            sourceUrl: "https://example.test/cookie-policy",
+            textExcerpt:
+              "How long we keep your personal information collected through cookies. Cookie identifiers are stored for the retention period shown in the cookie list and are deleted when they expire or are no longer necessary."
+          }
+        ],
+        retainedPrivacyPolicyTextExcerpt: ""
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  const retentionText = retainedArticle13Signal(outcomes.retention_disclosure_observed!)?.evidenceText ?? "";
+  assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
+  assert.match(retentionText, /How long we keep your personal information/i);
+  assert.match(retentionText, /until you unsubscribe|retained for one year|CCTV recordings are kept/i);
+  assert.doesNotMatch(retentionText, /How we keep your personal information safe/i);
+  assert.equal(
+    outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.selectedPolicySectionHeading,
+    "How long we keep your personal information"
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats guessed-only privacy notice as review", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
