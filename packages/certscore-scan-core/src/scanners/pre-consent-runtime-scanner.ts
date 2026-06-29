@@ -4473,19 +4473,40 @@ async function captureConsentGeometryProofScreenshot(
       path: screenshotPath,
       timeout: options.timeoutMs,
     });
-    return {
-      artifactId: "screenshot_pre_consent_geometry_proof",
-      capturedAtMs: elapsed(input.scanStartedAtMs),
-      captureMethod: "primary_viewport_fallback",
-      path: screenshotPath,
-      url: page.url(),
-      pagePhase: "network_idle",
-      consentStateAtTime: "pre_consent",
-    };
+    return consentGeometryProofScreenshotArtifact(input, page, screenshotPath, "primary_viewport_fallback");
   } catch (error) {
     options.screenshotErrors.push(`Consent geometry proof screenshot failed: ${errorMessageFromUnknown(error)}`);
+  }
+  try {
+    const client = await page.context().newCDPSession(page);
+    const screenshot = await client.send("Page.captureScreenshot", {
+      captureBeyondViewport: false,
+      format: "png",
+      fromSurface: true,
+    });
+    await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
+    return consentGeometryProofScreenshotArtifact(input, page, screenshotPath, "independent_visual_fallback_viewport");
+  } catch (error) {
+    options.screenshotErrors.push(`Consent geometry proof CDP screenshot failed: ${errorMessageFromUnknown(error)}`);
     return null;
   }
+}
+
+function consentGeometryProofScreenshotArtifact(
+  input: PreConsentRuntimeScannerInput,
+  page: Page,
+  screenshotPath: string,
+  captureMethod: ScreenshotArtifact["captureMethod"],
+): ScreenshotArtifact {
+  return {
+    artifactId: "screenshot_pre_consent_geometry_proof",
+    capturedAtMs: elapsed(input.scanStartedAtMs),
+    captureMethod,
+    path: screenshotPath,
+    url: page.url(),
+    pagePhase: "network_idle",
+    consentStateAtTime: "pre_consent",
+  };
 }
 
 async function writeConsentGeometryNoGoArtifact(

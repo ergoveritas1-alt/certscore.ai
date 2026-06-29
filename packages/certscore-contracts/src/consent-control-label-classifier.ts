@@ -109,6 +109,7 @@ export const consentControlTerms: ConsentControlTerm[] = [
     equivalent("reject", "continue without agreeing"),
     equivalent("reject", "continue without cookies"),
     equivalent("reject", "decline and subscribe", "reject_with_subscription"),
+    equivalent("reject", "subscribe and decline", "reject_with_subscription"),
     equivalent("reject", "reject and subscribe", "reject_with_subscription"),
     equivalent("reject", "use necessary cookies only", "necessary_only"),
     equivalent("reject", "necessary cookies only", "necessary_only"),

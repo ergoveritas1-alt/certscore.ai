@@ -65,6 +65,9 @@ test("classifies observed English options labels", () => {
   const subscribeReject = classifyConsentControlLabel({ label: "Decline and subscribe" });
   assert.equal(subscribeReject.intent, "reject");
   assert.equal(subscribeReject.variant, "reject_with_subscription");
+  const reversedSubscribeReject = classifyConsentControlLabel({ label: "Subscribe and decline" });
+  assert.equal(reversedSubscribeReject.intent, "reject");
+  assert.equal(reversedSubscribeReject.variant, "reject_with_subscription");
   assert.equal(classifyConsentControlLabel({
     label: "Customise",
     contextText: "We use cookies and partners for personalised advertising.",
