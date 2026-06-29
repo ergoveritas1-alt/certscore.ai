@@ -189,13 +189,14 @@ export function deriveExecutiveDisplayState(input: {
   topFindingCount?: number | null;
   vendorCount?: number | null;
 }) {
-  if (input.posture === "Action Needed") {
+  const topFindingCount = input.topFindingCount ?? 0;
+  if (input.posture === "Action Needed" && topFindingCount > 0) {
     return input.posture;
   }
 
-  const topFindingCount = input.topFindingCount ?? 0;
+  const posture = input.posture === "Action Needed" ? "Clear" : input.posture;
   if (topFindingCount > 0) {
-    return input.posture;
+    return posture;
   }
 
   const meaningfulInterruption = (input.scanInterruptions ?? []).some(hasMeaningfulInterruption);
@@ -223,15 +224,11 @@ export function deriveExecutiveDisplayState(input: {
     return "Limited review";
   }
 
-  if (input.posture === "Clear" && hasMaterialIncompleteRuntimeContext) {
-    return "Evidence review";
-  }
-
   if (explicitLimitedCoverage || (meaningfulInterruption && (hasRuntimeContext || hasPolicyContext))) {
     return "Limited review";
   }
 
-  return input.posture;
+  return posture;
 }
 
 export function hasMeaningfulExecutiveInterruption(input: {
@@ -447,6 +444,9 @@ function getDisplayStateHeadline(
   }
   if (displayState === "Scan not representative") {
     return "Automated scan could not evaluate this site";
+  }
+  if (displayState === "Clear") {
+    return getTopicAwarePostureHeadline("Clear", findings);
   }
 
   return getTopicAwarePostureHeadline(posture, findings);

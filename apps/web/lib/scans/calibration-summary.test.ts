@@ -245,6 +245,29 @@ test("uses neutral headline when no meaningful top findings are retained", () =>
   assert.doesNotMatch(presentation.headline, /privacy and consent issues/i);
 });
 
+test("does not display action-needed when no executive headline findings are retained", () => {
+  const displayState = deriveExecutiveDisplayState({
+    beforeConsentCookieCount: 5,
+    posture: "Action Needed",
+    scanInterruptions: [],
+    thirdPartyDomains: [],
+    thirdPartyRequestCount: 7,
+    topFindingCount: 0,
+    vendorCount: 3
+  });
+  const presentation = deriveExecutiveNarrativePresentation({
+    displayState,
+    executiveHeadline: "No headline issue crossed the executive threshold for this scan.",
+    finalHost: "www.ikea.com",
+    posture: "Action Needed",
+    requestedHost: "ikea.com",
+    topFindings: []
+  });
+
+  assert.equal(displayState, "Clear");
+  assert.equal(presentation.headline, "No major issues surfaced from retained evidence");
+});
+
 test("derives limited review for interrupted clear scans with retained runtime context", () => {
   const displayState = deriveExecutiveDisplayState({
     domainBenchmark: {
@@ -288,7 +311,7 @@ test("keeps protected routes outside the homepage from triggering limited-review
   assert.equal(displayState, "Clear");
 });
 
-test("uses evidence-review state for material cookie counts without headline findings", () => {
+test("keeps material cookie counts as metrics when no headline findings are retained", () => {
   const displayState = deriveExecutiveDisplayState({
     beforeConsentCookieCount: 19,
     posture: "Clear",
@@ -306,9 +329,8 @@ test("uses evidence-review state for material cookie counts without headline fin
     topFindings: []
   });
 
-  assert.equal(displayState, "Evidence review");
-  assert.equal(presentation.headline, "Material runtime evidence needs review");
-  assert.doesNotMatch(presentation.headline, /No major issues surfaced/i);
+  assert.equal(displayState, "Clear");
+  assert.equal(presentation.headline, "No major issues surfaced from retained evidence");
 });
 
 test("keeps low cookie counts with weak anchors in the clear executive state", () => {

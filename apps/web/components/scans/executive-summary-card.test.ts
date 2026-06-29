@@ -2167,7 +2167,7 @@ test("ExecutiveSummaryCard renders score-only ADA accessibility as audit-only wi
   assert.doesNotMatch(adaMarkup, />88</);
 });
 
-test("ExecutiveSummaryCard shows benchmark beside posture without scanned timestamp pill", () => {
+test("ExecutiveSummaryCard shows benchmark beside clear posture without scanned timestamp pill", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -2204,7 +2204,8 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
     })
   );
 
-  assert.match(html, /Action Needed/);
+  assert.match(html, /Complete/);
+  assert.doesNotMatch(html, /Action Needed/);
   assert.match(html, /Benchmark: Web portal/);
   assert.doesNotMatch(html, /Benchmark: Web portal \/ News &amp; Media \/ Internet services/);
   assert.doesNotMatch(html, /Score note:/);
@@ -2213,7 +2214,7 @@ test("ExecutiveSummaryCard shows benchmark beside posture without scanned timest
   assert.doesNotMatch(html, /20 cookies before consent/);
   assert.match(html, /\+16 above expected for Web portal \/ News &amp; Media \/ Internet services/);
   assert.doesNotMatch(html, /Scanned Apr/);
-  assert.ok(html.indexOf("Action Needed") < html.indexOf("Benchmark: Web portal"));
+  assert.ok(html.indexOf("Complete") < html.indexOf("Benchmark: Web portal"));
 });
 
 test("ExecutiveSummaryCard withholds scores when the captured page is not representative", () => {
