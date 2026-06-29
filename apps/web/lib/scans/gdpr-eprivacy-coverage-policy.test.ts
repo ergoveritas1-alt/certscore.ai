@@ -2843,6 +2843,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
   });
 
   assert.equal(embeddedOutcomes.embedded_content_pre_consent?.status, "Observed");
+  assert.equal(embeddedOutcomes.third_party_service_connection_pre_consent?.status, "Gap observed");
+  assert.equal(embeddedOutcomes.third_party_iframe_pre_consent?.status, "Gap observed");
   assert.deepEqual(
     embeddedOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentHosts,
     ["youtube.com"]
@@ -2876,6 +2878,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
   });
 
   assert.equal(mixedPurposeEmbeddedOutcomes.embedded_content_pre_consent?.status, "Observed");
+  assert.equal(mixedPurposeEmbeddedOutcomes.third_party_service_connection_pre_consent?.status, "Gap observed");
+  assert.deepEqual(
+    mixedPurposeEmbeddedOutcomes.third_party_service_connection_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentHosts,
+    ["imasdk.googleapis.com"]
+  );
   assert.deepEqual(
     mixedPurposeEmbeddedOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.embeddedContentPurposeBuckets,
     {
@@ -2910,6 +2917,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
   });
 
   assert.equal(cmpLocatorOutcomes.embedded_content_pre_consent?.status, "Not observed");
+  assert.equal(cmpLocatorOutcomes.third_party_service_connection_pre_consent?.status, "Not observed");
+  assert.equal(cmpLocatorOutcomes.third_party_iframe_pre_consent?.status, "Not observed");
   assert.equal(
     cmpLocatorOutcomes.embedded_content_pre_consent?.criticalEvidence.retainedEvidence.preConsentIframeCount,
     1

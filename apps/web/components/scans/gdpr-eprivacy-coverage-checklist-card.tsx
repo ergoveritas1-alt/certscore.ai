@@ -110,9 +110,20 @@ const REPORT_ROW_GROUPS = [
     title: "Pre-Consent Runtime",
     rowIds: [
       "pre_consent_cookies_storage",
-      "pre_consent_third_party_tracking",
       "session_replay_fingerprinting_review",
       "device_identification_fingerprinting_signal_observed"
+    ]
+  },
+  {
+    title: "Third-Party Services",
+    rowIds: [
+      "pre_consent_third_party_tracking",
+      "advertising_retargeting_vendor_signal_observed",
+      "retargeting_behavioral_advertising_signal_observed",
+      "analytics_vendor_observed",
+      "third_party_service_connection_pre_consent",
+      "third_party_iframe_pre_consent",
+      "embedded_content_pre_consent"
     ]
   },
   {
@@ -130,6 +141,16 @@ const REPORT_ROW_GROUPS = [
       "international_transfers_disclosure",
       "dpo_contact_point_disclosure",
       "supervisory_authority_complaint_disclosure"
+    ]
+  },
+  {
+    title: "Transport Security",
+    rowIds: [
+      "transport_security_https_delivery",
+      "transport_security_tls_certificate",
+      "transport_security_http_redirect",
+      "transport_security_mixed_content",
+      "transport_security_form_transport"
     ]
   }
 ] as const;
@@ -1221,6 +1242,18 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
       : "No analytics or measurement vendor signal was observed in the retained runtime context.";
   }
 
+  if (item.id === "third_party_service_connection_pre_consent") {
+    return item.status === "Gap observed" || item.status === "Observed" || item.status === "Review signal"
+      ? "Known third-party embed or service connections were retained before a recorded consent action."
+      : "No known third-party embed or service connection was observed before a recorded consent action.";
+  }
+
+  if (item.id === "third_party_iframe_pre_consent") {
+    return item.status === "Gap observed" || item.status === "Observed" || item.status === "Review signal"
+      ? "Known third-party iframe embeds were retained before a recorded consent action."
+      : "No known third-party iframe embed was observed before a recorded consent action.";
+  }
+
   if (item.id === "embedded_content_pre_consent") {
     return item.status === "Observed" || item.status === "Review signal"
       ? "Concrete third-party embedded content was observed before a recorded consent action."
@@ -1566,6 +1599,37 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
       hostPhrase
         ? `Third-party embedded content loaded before any recorded consent action: ${hostPhrase}`
         : "Third-party embedded content loaded before any recorded consent action",
+      formatFirstSeenPhrase(firstSeenMs)
+    ]);
+  }
+
+  if (item.id === "third_party_service_connection_pre_consent" || item.id === "third_party_iframe_pre_consent") {
+    const hosts = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["embeddedContentHosts", "embedded_content_hosts", "embeddedHosts", "embedded_hosts"]),
+      ...getNestedRecordStrings(evidence.embeddedContentObservations, ["host", "hostname", "domain"])
+    ]).slice(0, 4);
+    const purposeParts = getEmbeddedContentPurposeParts(evidence);
+    if (evidenceLabel === "Not observed") {
+      return item.id === "third_party_iframe_pre_consent"
+        ? "No eligible third-party iframe embed was observed before a recorded consent action."
+        : "No eligible third-party embed or service connection was observed before a recorded consent action.";
+    }
+    if (purposeParts.length > 0) {
+      return joinRationaleParts([
+        item.id === "third_party_iframe_pre_consent"
+          ? `Third-party iframe embeds loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`
+          : `Third-party embed or service connections occurred before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`,
+        formatFirstSeenPhrase(firstSeenMs)
+      ]);
+    }
+    return joinRationaleParts([
+      hosts.length > 0
+        ? item.id === "third_party_iframe_pre_consent"
+          ? `Third-party iframe embeds loaded before any recorded consent action: ${formatList(hosts)}`
+          : `Third-party embed or service connections occurred before any recorded consent action: ${formatList(hosts)}`
+        : item.id === "third_party_iframe_pre_consent"
+          ? "Third-party iframe embeds loaded before any recorded consent action"
+          : "Third-party embed or service connections occurred before any recorded consent action",
       formatFirstSeenPhrase(firstSeenMs)
     ]);
   }

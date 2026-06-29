@@ -1422,6 +1422,84 @@ test("GdprEprivacyCoverageChecklistCard does not use observed runtime wording fo
   assert.doesNotMatch(html, /Tracking-classified third-party requests fired before any recorded consent action/);
 });
 
+test("GdprEprivacyCoverageChecklistCard renders transport security rows under a titled section", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          evidenceState: "observed",
+          id: "transport_security_https_delivery",
+          label: "HTTPS delivery for scanned pages",
+          status: "Observed"
+        }),
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          evidenceState: "observed",
+          id: "transport_security_tls_certificate",
+          label: "Valid SSL/TLS certificate",
+          status: "Observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /Transport Security/);
+  assert.match(html, /Scan-context note/);
+  assert.match(html, /HTTPS delivery for scanned pages/);
+  assert.match(html, /Valid SSL\/TLS certificate/);
+});
+
+test("GdprEprivacyCoverageChecklistCard renders third-party service rows under a titled section", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "gap_observed",
+          criticalEvidence: {
+            retainedEvidence: {
+              embeddedContentHosts: ["youtube.com"],
+              embeddedContentPurposeBuckets: {
+                mediaEmbed: ["youtube.com"]
+              },
+              firstEmbeddedContentObservedMs: 928
+            }
+          },
+          evidenceState: "observed",
+          id: "third_party_service_connection_pre_consent",
+          label: "Third-party service connections before consent",
+          status: "Gap observed"
+        }),
+        makeChecklistItem({
+          assessmentStatus: "gap_observed",
+          criticalEvidence: {
+            retainedEvidence: {
+              embeddedContentHosts: ["youtube.com"],
+              embeddedContentPurposeBuckets: {
+                mediaEmbed: ["youtube.com"]
+              },
+              firstEmbeddedContentObservedMs: 928
+            }
+          },
+          evidenceState: "observed",
+          id: "third_party_iframe_pre_consent",
+          label: "Third-party iframes before consent",
+          status: "Gap observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /Third-Party Services/);
+  assert.match(html, /Scan-context note/);
+  assert.match(html, /Third-party service connections before consent/);
+  assert.match(html, /Third-party iframes before consent/);
+});
+
 test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead of tally pills", () => {
   const items = [
     makeChecklistItem({

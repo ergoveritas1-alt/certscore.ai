@@ -231,6 +231,33 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
+    id: "third_party_service_connection_pre_consent",
+    label: "Third-party service connections before consent",
+    explanation: "Whether retained scanner evidence showed known third-party embed/service connections before a recorded consent action.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No known third-party embed/service connection was retained before a recorded consent action.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "third_party_iframe_pre_consent",
+    label: "Third-party iframes before consent",
+    explanation: "Whether retained scanner evidence showed known third-party iframe embeds before a recorded consent action.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No known third-party iframe embed was retained before a recorded consent action.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "embedded_content_pre_consent",
+    label: "Embedded third-party services before consent",
+    explanation: "Whether retained scanner evidence showed known embedded media, map, social, form/chat, or video-ad services before a recorded consent action.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No known embedded third-party service was retained before a recorded consent action.",
+    requiresPublicWebCoverage: true
+  },
+  {
     id: "transport_security_https_delivery",
     label: "HTTPS delivery for scanned pages",
     explanation: "Whether the retained scanned page was served over HTTPS.",

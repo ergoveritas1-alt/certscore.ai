@@ -2357,7 +2357,28 @@ function buildEmbeddedContentPurposeBuckets(rows: Record<string, unknown>[], hos
   return buckets;
 }
 
-function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
+function getEmbeddedPurposeBucketEntries(buckets: Record<string, unknown> | null | undefined) {
+  return Object.entries(buckets ?? {})
+    .flatMap(([bucket, hosts]) =>
+      Array.isArray(hosts)
+        ? hosts
+          .filter((host): host is string => typeof host === "string" && host.trim().length > 0)
+          .map((host) => ({ bucket, host }))
+        : []
+    );
+}
+
+function isHighConfidenceThirdPartyServiceBucket(bucket: string) {
+  return [
+    "formOrChatWidget",
+    "mapEmbed",
+    "mediaEmbed",
+    "socialEmbed",
+    "videoAdSdk"
+  ].includes(bucket);
+}
+
+function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const embeddedSummary = getEmbeddedContentEvidenceSummary(input);
   const iframeSummary = getObject(hybridRuntimeEvidence, ["iframeSummary", "iframe_summary"]);
@@ -2384,7 +2405,7 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
   ]);
   const observedMs = getSortedUniqueMs([
     ...getRuntimeRowObservedMs([...embeddedRows, ...summaryObservations], input.runtimeArtifacts),
-      getRuntimeObservedMs(embeddedSummary, [
+    getRuntimeObservedMs(embeddedSummary, [
       "firstEmbeddedContentObservedMs",
       "first_embedded_content_observed_ms",
       "firstObservedMs",
@@ -2395,8 +2416,46 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
       "observed_at_ms"
     ], getNumber(getHybridTimelineMarkers(input.runtimeArtifacts), ["navigationStartMs", "navigation_start_ms"]))
   ]);
-  const retainedPurposeBuckets = getObject(embeddedSummary, ["embeddedContentPurposeBuckets", "embedded_content_purpose_buckets"]) ??
+  const purposeBuckets = getObject(embeddedSummary, ["embeddedContentPurposeBuckets", "embedded_content_purpose_buckets"]) ??
     buildEmbeddedContentPurposeBuckets([...embeddedRows, ...summaryObservations], embeddedHosts);
+  const purposeEntries = getEmbeddedPurposeBucketEntries(purposeBuckets);
+  const highConfidenceServiceHosts = uniqueStrings(
+    purposeEntries
+      .filter((entry) => isHighConfidenceThirdPartyServiceBucket(entry.bucket))
+      .map((entry) => entry.host)
+  );
+  const highConfidenceObservations = [...embeddedRows, ...summaryObservations].filter((row) => {
+    const url = getString(row, ["frameUrl", "frame_url", "requestUrl", "request_url", "url"]);
+    const host = getHostnameFromMaybeUrl(getString(row, ["hostname", "host", "domain"]) ?? url);
+    if (!host) {
+      return false;
+    }
+    return isHighConfidenceThirdPartyServiceBucket(classifyEmbeddedContentPurpose(host, url));
+  });
+  return {
+    embeddedHosts,
+    embeddedRows,
+    highConfidenceObservations,
+    highConfidenceServiceHosts,
+    iframeRows,
+    observedMs,
+    preConsentIframeCount,
+    purposeBuckets,
+    summaryObservations,
+    summaryObserved
+  };
+}
+
+function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const {
+    embeddedHosts,
+    embeddedRows,
+    observedMs,
+    preConsentIframeCount,
+    purposeBuckets,
+    summaryObservations,
+    summaryObserved
+  } = getEmbeddedThirdPartyEvidence(input);
 
   if (embeddedRows.length > 0 || summaryObserved) {
     return makeOutcome(
@@ -2413,9 +2472,8 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
           embeddedContentHosts: compactArray(embeddedHosts, 8),
           embeddedContentObservedMs: compactArray(observedMs, 6),
           embeddedContentObservationCount:
-            getNumber(embeddedSummary, ["embeddedContentObservationCount", "embedded_content_observation_count"]) ??
             Math.max(embeddedRows.length, summaryObservations.length),
-          embeddedContentPurposeBuckets: retainedPurposeBuckets,
+          embeddedContentPurposeBuckets: purposeBuckets,
           firstEmbeddedContentObservedMs: observedMs[0] ?? null,
           observedRuntimeSignalOnly: true
         }
@@ -2452,6 +2510,140 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
             "row-specific embedded-content iframe/request inventory",
             "missing",
             "Required to determine whether third-party embedded content loaded before consent."
+          )
+        ],
+        retainedEvidence: {
+          runtimeCaptureCompleted: true
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveThirdPartyIframePreConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const evidence = getEmbeddedThirdPartyEvidence(input);
+  const observedCount = evidence.embeddedRows.length;
+
+  if (observedCount > 0) {
+    return makeOutcome(
+      "third_party_iframe_pre_consent",
+      "Gap observed",
+      "Known third-party iframe embeds were retained before a recorded consent action on the scanned page.",
+      [
+        `Third-party iframe observations: ${observedCount}`,
+        ...evidence.embeddedHosts.map((host) => `Iframe host: ${host}`).slice(0, 5),
+        "Evidence: retained pre-consent iframe inventory"
+      ],
+      {
+        retainedEvidence: {
+          embeddedContentHosts: compactArray(evidence.embeddedHosts, 8),
+          embeddedContentObservedMs: compactArray(evidence.observedMs, 6),
+          embeddedContentPurposeBuckets: evidence.purposeBuckets,
+          firstEmbeddedContentObservedMs: evidence.observedMs[0] ?? null,
+          iframeObservationCount: observedCount,
+          preConsentIframeCount: evidence.preConsentIframeCount ?? observedCount
+        }
+      }
+    );
+  }
+
+  if (hasEmbeddedContentRuntimeCoverage(input)) {
+    return makeOutcome(
+      "third_party_iframe_pre_consent",
+      "Not observed",
+      "Retained iframe inventory did not show known third-party iframe embeds before a recorded consent action.",
+      ["Evidence: retained pre-consent iframe inventory"],
+      {
+        retainedEvidence: {
+          iframeObservationCount: 0,
+          preConsentIframeCount: evidence.preConsentIframeCount ?? 0,
+          runtimeCaptureCompleted: hasRuntimeCapture(input)
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "third_party_iframe_pre_consent",
+      "Not testable",
+      "Runtime capture completed, but row-specific third-party iframe inventory was not retained.",
+      ["Evidence gap: third-party iframe inventory not retained"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "runtimeArtifacts.hybridRuntimeEvidence.iframeSummary",
+            "row-specific third-party iframe inventory",
+            "missing",
+            "Required to determine whether known third-party iframes loaded before consent."
+          )
+        ],
+        retainedEvidence: {
+          runtimeCaptureCompleted: true
+        }
+      }
+    );
+  }
+
+  return null;
+}
+
+function deriveThirdPartyServiceConnectionPreConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const evidence = getEmbeddedThirdPartyEvidence(input);
+  const observedCount = evidence.highConfidenceObservations.length;
+
+  if (observedCount > 0) {
+    return makeOutcome(
+      "third_party_service_connection_pre_consent",
+      "Gap observed",
+      "Known embedded third-party service connections were retained before a recorded consent action on the scanned page.",
+      [
+        `Third-party service observations: ${observedCount}`,
+        ...evidence.highConfidenceServiceHosts.map((host) => `Service host: ${host}`).slice(0, 5),
+        "Evidence: retained pre-consent embedded-service requests/iframes"
+      ],
+      {
+        retainedEvidence: {
+          embeddedContentHosts: compactArray(evidence.highConfidenceServiceHosts, 8),
+          embeddedContentObservedMs: compactArray(evidence.observedMs, 6),
+          embeddedContentPurposeBuckets: evidence.purposeBuckets,
+          firstEmbeddedContentObservedMs: evidence.observedMs[0] ?? null,
+          serviceConnectionObservationCount: observedCount
+        }
+      }
+    );
+  }
+
+  if (hasEmbeddedContentRuntimeCoverage(input)) {
+    return makeOutcome(
+      "third_party_service_connection_pre_consent",
+      "Not observed",
+      "Retained iframe/request inventory did not show known embedded third-party service connections before a recorded consent action.",
+      ["Evidence: retained pre-consent embedded-service inventory"],
+      {
+        retainedEvidence: {
+          embeddedContentObservationCount: 0,
+          runtimeCaptureCompleted: hasRuntimeCapture(input)
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "third_party_service_connection_pre_consent",
+      "Not testable",
+      "Runtime capture completed, but row-specific embedded-service request/iframe inventory was not retained.",
+      ["Evidence gap: embedded-service inventory not retained"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "runtimeArtifacts.embeddedContentSummary",
+            "row-specific embedded-service request/iframe inventory",
+            "missing",
+            "Required to determine whether known third-party services connected before consent."
           )
         ],
         retainedEvidence: {
@@ -7558,6 +7750,8 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveSensitiveSurfaceOutcome(input),
     deriveSessionReplayFingerprintingOutcome(input),
     deriveDeviceFingerprintingSignalOutcome(input),
+    deriveThirdPartyServiceConnectionPreConsentOutcome(input),
+    deriveThirdPartyIframePreConsentOutcome(input),
     deriveEmbeddedThirdPartyContentPreConsentOutcome(input),
     ...deriveTransportSecurityOutcomes(input),
     deriveSessionReplayBeforeConsentOutcome(input),
