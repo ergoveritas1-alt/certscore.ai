@@ -877,6 +877,61 @@ test("deriveExecutivePolicySurfaces keeps generic label when there is only one p
   );
 });
 
+test("deriveExecutivePolicySurfaces prefers retention sections over security-only policy excerpts", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+  const sharedUrl = "https://ikea.example/global/en/legal/privacy-cookie-statement";
+
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "privacy-policy",
+      page_type: "privacy_policy",
+      page_url: sharedUrl,
+      policy_summary_short:
+        "How we keep your personal information safe. We protect your personal information using security safeguards, encryption, confidentiality controls, and procedures intended to prevent unauthorised access, loss, destruction, or damage."
+    },
+    {
+      id: "cookie-policy",
+      page_type: "cookie_policy",
+      page_url: sharedUrl,
+      policy_summary_short:
+        "How we keep your personal information safe. We protect your personal information using security safeguards, encryption, confidentiality controls, and procedures intended to prevent unauthorised access, loss, destruction, or damage."
+    }
+  ], null, {
+    policyDisclosureSummary: {
+      retainedPolicySections: [
+        {
+          heading: "How we keep your personal information safe",
+          sourceUrl: sharedUrl,
+          textExcerpt:
+            "How we keep your personal information safe. We protect your personal information using security safeguards, encryption, confidentiality controls, and procedures intended to prevent unauthorised access, loss, destruction, or damage."
+        },
+        {
+          heading: "How long we keep your personal information",
+          sourceUrl: sharedUrl,
+          textExcerpt:
+            "How long we keep your personal information. Newsletter preferences are kept until you unsubscribe, booking information is retained for one year, CCTV recordings are kept for a maximum of four weeks, and some records may be retained longer for legal obligations or legal disputes."
+        },
+        {
+          heading: "How long we keep your personal information collected through cookies",
+          sourceUrl: sharedUrl,
+          textExcerpt:
+            "How long we keep your personal information collected through cookies. Cookie identifiers are stored for the retention period shown in the cookie list and are deleted when they expire or are no longer necessary."
+        }
+      ]
+    }
+  });
+
+  const privacySurface = surfaces.find((surface) => surface.pageLabel === "Privacy policy");
+  const cookieSurface = surfaces.find((surface) => surface.pageLabel === "Cookie policy");
+
+  assert.match(privacySurface?.details[0] ?? "", /How long we keep your personal information/i);
+  assert.match(privacySurface?.details[0] ?? "", /retained for one year|CCTV recordings are kept/i);
+  assert.doesNotMatch(privacySurface?.details[0] ?? "", /How we keep your personal information safe/i);
+  assert.match(cookieSurface?.details[0] ?? "", /How long we keep your personal information collected through cookies/i);
+  assert.match(cookieSurface?.details[0] ?? "", /retention period|deleted when they expire/i);
+  assert.doesNotMatch(cookieSurface?.details[0] ?? "", /How we keep your personal information safe/i);
+});
+
 test("deriveExecutivePolicySurfaces disambiguates terms policy subpages", async () => {
   const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
 

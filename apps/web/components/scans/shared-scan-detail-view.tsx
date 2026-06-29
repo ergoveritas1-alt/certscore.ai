@@ -3598,6 +3598,108 @@ function deriveSnapshotPolicySurfaceFallbacks(
     .filter((surface) => !existingLabels.has(surface.pageLabel.toLowerCase()));
 }
 
+const EXECUTIVE_RETENTION_HEADING_PATTERN =
+  /\b(?:how long (?:we )?(?:keep|retain)|retention(?: period)?|data retention|storage period|retaining your information)\b/i;
+const EXECUTIVE_RETENTION_LIFECYCLE_PATTERN =
+  /\b(?:how long (?:we )?(?:keep|retain)|retention periods?|storage period|stored for|kept for|kept until|retained for|retained until|retain(?:ed|ing)? .{0,120}(?:as long as necessary|no longer than necessary|required by law|legal obligations?|legal disputes?|for \d+|for (?:one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|weeks?|months?|years?)|until)|until you unsubscribe|deleted|removed|erased|anonymiz(?:ed|e|ation)|no longer than necessary|cctv recordings? (?:are )?kept)\b/i;
+const EXECUTIVE_SECURITY_ONLY_POLICY_PATTERN =
+  /\b(?:how we keep your personal information safe|protect your personal information|security|safeguards?|encryption|confidential|unauthori[sz]ed access|loss|destruction)\b/i;
+
+function normalizePolicySurfaceUrlForCompare(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    url.search = "";
+    return url.toString().replace(/\/$/, "").toLowerCase();
+  } catch {
+    return value.trim().replace(/[#?].*$/, "").replace(/\/$/, "").toLowerCase() || null;
+  }
+}
+
+function isSecurityOnlyPolicySnippet(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  return EXECUTIVE_SECURITY_ONLY_POLICY_PATTERN.test(value) &&
+    !EXECUTIVE_RETENTION_HEADING_PATTERN.test(value) &&
+    !EXECUTIVE_RETENTION_LIFECYCLE_PATTERN.test(value);
+}
+
+function getPolicyDisclosureSummary(runtimeArtifacts?: Record<string, unknown> | null) {
+  return getNestedRecord(runtimeArtifacts, "policyDisclosureSummary") ??
+    getNestedRecord(runtimeArtifacts, "policy_disclosure_summary");
+}
+
+function formatRetainedPolicySectionSummary(section: Record<string, unknown>) {
+  const heading = getRecordString(section, "heading");
+  const textExcerpt = getRecordString(section, "textExcerpt") ?? getRecordString(section, "text_excerpt");
+  if (!heading) {
+    return textExcerpt;
+  }
+  if (!textExcerpt) {
+    return heading;
+  }
+  return textExcerpt.toLowerCase().startsWith(heading.toLowerCase())
+    ? textExcerpt
+    : `${heading}. ${textExcerpt}`;
+}
+
+function selectExecutiveRetainedPolicySectionSummary(input: {
+  pageType: string;
+  pageUrl: string | null;
+  runtimeArtifacts?: Record<string, unknown> | null;
+  summary: string | null;
+}) {
+  if (!isSecurityOnlyPolicySnippet(input.summary)) {
+    return input.summary;
+  }
+
+  const policyDisclosureSummary = getPolicyDisclosureSummary(input.runtimeArtifacts);
+  const retainedSections = [
+    ...getRecordObjectArray(policyDisclosureSummary, "retainedPolicySections"),
+    ...getRecordObjectArray(policyDisclosureSummary, "retained_policy_sections")
+  ];
+  const normalizedPageUrl = normalizePolicySurfaceUrlForCompare(input.pageUrl);
+  const matchingSections = retainedSections.filter((section) => {
+    const sourceUrl =
+      getRecordString(section, "sourceUrl") ??
+      getRecordString(section, "source_url") ??
+      getRecordString(section, "url");
+    const normalizedSourceUrl = normalizePolicySurfaceUrlForCompare(sourceUrl);
+    return !normalizedPageUrl || !normalizedSourceUrl || normalizedPageUrl === normalizedSourceUrl;
+  });
+  const retentionSections = matchingSections.filter((section) => {
+    const text = `${getRecordString(section, "heading") ?? ""} ${getRecordString(section, "textExcerpt") ?? getRecordString(section, "text_excerpt") ?? ""}`;
+    return (
+      EXECUTIVE_RETENTION_HEADING_PATTERN.test(text) ||
+      EXECUTIVE_RETENTION_LIFECYCLE_PATTERN.test(text)
+    ) && !isSecurityOnlyPolicySnippet(text);
+  });
+  if (retentionSections.length === 0) {
+    return input.summary;
+  }
+
+  const cookieSpecific = retentionSections.find((section) =>
+    /cookie/i.test(`${getRecordString(section, "heading") ?? ""} ${getRecordString(section, "textExcerpt") ?? getRecordString(section, "text_excerpt") ?? ""}`)
+  );
+  const generalRetention = retentionSections.find((section) =>
+    !/cookie/i.test(`${getRecordString(section, "heading") ?? ""} ${getRecordString(section, "textExcerpt") ?? getRecordString(section, "text_excerpt") ?? ""}`)
+  );
+  const selectedSection = input.pageType === "cookie_policy"
+    ? cookieSpecific ?? retentionSections[0]
+    : generalRetention ?? retentionSections[0];
+  if (!selectedSection) {
+    return input.summary;
+  }
+
+  return formatRetainedPolicySectionSummary(selectedSection) ?? input.summary;
+}
+
 export function deriveExecutivePolicySurfaces(
   policyEnrichments: Array<Record<string, unknown>>,
   snapshot?: Record<string, unknown> | null,
@@ -3608,7 +3710,12 @@ export function deriveExecutivePolicySurfaces(
     .map((row) => {
       const pageType = String(getPolicyPageType(row) ?? "");
       const pageUrl = getPolicyPageUrl(row);
-      const summary = getPolicySummaryText(row);
+      const summary = selectExecutiveRetainedPolicySectionSummary({
+        pageType,
+        pageUrl,
+        runtimeArtifacts,
+        summary: getPolicySummaryText(row)
+      });
       const policyMentions = getPolicyMentions(row);
       const policyFlags = getPolicyActionableFlags(row);
       const topics = Array.isArray(policyMentions)
