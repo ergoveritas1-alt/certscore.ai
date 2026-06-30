@@ -234,6 +234,29 @@ test("buildApiV2DomainLatestScan wraps the latest public scan or null", () => {
   assert.equal(withoutScan.links?.docs, "https://certscore.ai/api/v2/openapi.json");
 });
 
+test("API v2 resources serialize production Date timestamps", () => {
+  const scanRecord = retainedPreConsentInventoryFixture();
+  scanRecord.scan.createdAt = new Date("2026-06-30T12:00:00.000Z") as unknown as string;
+  scanRecord.scan.startedAt = new Date("2026-06-30T12:00:01.000Z") as unknown as string;
+  scanRecord.scan.completedAt = new Date("2026-06-30T12:00:10.000Z") as unknown as string;
+
+  const scan = buildApiV2ScanResource(scanRecord);
+  const status = buildApiV2ScanStatus(scanRecord);
+  const latest = buildApiV2DomainLatestScan({
+    domain: "example.com",
+    scanRecord
+  });
+  const inventory = buildApiV2PreConsentCookiesTrackers(scanRecord);
+
+  assert.equal(scan.createdAt, "2026-06-30T12:00:00.000Z");
+  assert.equal(scan.startedAt, "2026-06-30T12:00:01.000Z");
+  assert.equal(scan.completedAt, "2026-06-30T12:00:10.000Z");
+  assert.equal(status.createdAt, "2026-06-30T12:00:00.000Z");
+  assert.equal(status.lastUpdatedAt, "2026-06-30T12:00:10.000Z");
+  assert.equal(latest.scan?.createdAt, "2026-06-30T12:00:00.000Z");
+  assert.equal(inventory.generatedAt, "2026-06-30T12:00:10.000Z");
+});
+
 test("buildApiV2ScanPulse wraps an existing Pulse projection", () => {
   const wrapped = buildApiV2ScanPulse({
     scanId: "00000000-0000-4000-8000-000000000123",

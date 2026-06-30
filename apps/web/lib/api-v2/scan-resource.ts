@@ -145,6 +145,13 @@ function stringOrNull(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
+function dateStringOrNull(value: unknown) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString();
+  }
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
 function eventObservedAtMs(event: Record<string, unknown>) {
   return finiteInt(event.observedAtMs) ?? finiteInt(event.timestampMs) ?? finiteInt(event.firstSeenMs);
 }
@@ -232,9 +239,9 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
     url: domain === "unknown" ? null : `https://${domain}`,
     status: "completed",
     scanFrom: publicScanFrom(scan.scanFromValue),
-    createdAt: scan.createdAt,
-    startedAt: scan.startedAt,
-    completedAt: scan.completedAt,
+    createdAt: dateStringOrNull(scan.createdAt),
+    startedAt: dateStringOrNull(scan.startedAt),
+    completedAt: dateStringOrNull(scan.completedAt),
     score,
     riskLevel: riskLevelFromScore(score),
     coverage: deriveCoverage(scanRecord),
@@ -265,8 +272,8 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJ
     domain: scan.domainHostname ?? null,
     status,
     phase: status === "completed" || status === "completed_limited" ? "completed" : status === "failed" ? "failed" : "runtime_observation",
-    createdAt: scan.createdAt,
-    lastUpdatedAt: scan.completedAt ?? scan.startedAt ?? scan.createdAt,
+    createdAt: dateStringOrNull(scan.createdAt) ?? undefined,
+    lastUpdatedAt: dateStringOrNull(scan.completedAt ?? scan.startedAt ?? scan.createdAt) ?? undefined,
     retryAfterSeconds,
     links: {
       self: absoluteUrl(`/api/v2/scans/${scan.id}/status`),
@@ -291,8 +298,8 @@ export function buildApiV2ScanJobFromPulseStatus(status: PulseStatusLike): ApiV2
     domain: status.domain ?? null,
     status: normalizedStatus,
     phase: status.phase ?? (normalizedStatus === "completed" || normalizedStatus === "completed_limited" ? "completed" : "queued"),
-    createdAt: status.createdAt,
-    lastUpdatedAt: status.lastUpdatedAt ?? status.completedAt ?? status.createdAt,
+    createdAt: dateStringOrNull(status.createdAt) ?? undefined,
+    lastUpdatedAt: dateStringOrNull(status.lastUpdatedAt ?? status.completedAt ?? status.createdAt) ?? undefined,
     retryAfterSeconds: status.retryAfterSeconds ?? (normalizedStatus === "completed" || normalizedStatus === "completed_limited" ? null : 30),
     links: {
       self: scanId ? absoluteUrl(`/api/v2/scans/${scanId}/status`) : status.statusUrl ?? undefined,
@@ -560,7 +567,7 @@ export function buildApiV2PreConsentCookiesTrackers(scanRecord: ScanDetailRespon
     type: "certscore_pre_consent_cookies_trackers",
     scanId: scan.id,
     domain,
-    generatedAt: scan.completedAt ?? scan.startedAt ?? scan.createdAt,
+    generatedAt: dateStringOrNull(scan.completedAt ?? scan.startedAt ?? scan.createdAt) ?? new Date(0).toISOString(),
     summary: {
       rowCount: rows.length,
       trackerCount: rows.filter((row) => row.kind === "tracker").length,
