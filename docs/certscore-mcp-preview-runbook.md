@@ -84,6 +84,26 @@ BASE_URL=https://certscore.ai pnpm exec tsx ./scripts/smoke-pulse-endpoints.ts
 CERTSCORE_API_KEY=<target-env-token> CERTSCORE_BASE_URL=https://certscore.ai pnpm mcp:certscore:smoke
 ```
 
+For the full operator production smoke, prefer:
+
+```bash
+pnpm ops:smoke:mcp-production
+```
+
+This command verifies the Homebrew-installed `certscore-mcp` command against live `https://certscore.ai`. It creates a short-lived preview token locally, inserts only the token hash into the production `integration_api_keys` table through the approved ECS/Fargate one-off task pattern, runs authenticated MCP protocol calls, and revokes the temporary key afterward.
+
+The production smoke expects:
+
+- the installed `certscore-mcp` command to report a version and reach `/api/v2/health`
+- required MCP tools to be listed
+- `scan_site`, `get_scan_status`, and `get_scan` to work for the smoke URL
+- `list_findings` to return at least one already-projected finding
+- `get_pre_consent_cookies_trackers` to return at least one public-safe table row
+- `explain_finding` to work for the first returned finding
+- latest-domain scan and latest-domain pre-consent cookies/trackers tools to work
+
+This is an operator confidence check over public API/MCP surfaces. It does not add scanner/report logic, create findings, infer policy conclusions, or inspect raw scanner artifacts.
+
 Also inspect:
 
 - `https://certscore.ai/api-pulse#mcp`
@@ -111,5 +131,5 @@ URL scan requests require `pulse:scan` and `mcp`. Existing scan/job reads requir
 - Apply migration in target environment.
 - Generate a scoped preview key in target environment.
 - Run authenticated MCP smoke against target host.
+- Run `pnpm ops:smoke:mcp-production` when AWS operator credentials are available.
 - Verify public docs after deploy.
-

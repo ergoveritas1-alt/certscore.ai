@@ -85,6 +85,14 @@ artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2/bin/certscore-mcp --help
 artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2/bin/certscore-mcp doctor
 ```
 
+For an end-to-end production operator smoke after release:
+
+```bash
+pnpm ops:smoke:mcp-production
+```
+
+The production smoke uses the installed Homebrew command, creates a short-lived preview key, stores only the key hash in production through the approved ECS/Fargate one-off task pattern, verifies non-empty findings and pre-consent cookies/trackers rows through MCP, and revokes the temporary key afterward. It is a public integration smoke, not a scanner/report pipeline change.
+
 ## Troubleshooting
 
 - Command not found: run the Homebrew install again and confirm Homebrew's bin directory is on `PATH`.

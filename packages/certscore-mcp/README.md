@@ -210,6 +210,14 @@ CERTSCORE_MCP_SMOKE_URL=https://example.com
 
 Without `CERTSCORE_API_KEY`, the smoke script exits successfully with a skip message.
 
+For the full production operator smoke, run from the WC01 repo:
+
+```bash
+pnpm ops:smoke:mcp-production
+```
+
+This verifies the Homebrew-installed `certscore-mcp` command against live `https://certscore.ai`. It creates a short-lived preview key, stores only the hash in production through the approved ECS/Fargate path, checks required tools, requires non-empty findings and pre-consent cookies/trackers rows, runs `explain_finding`, and revokes the temporary key afterward. It exercises existing public-safe API/MCP projections only.
+
 ## Troubleshooting
 
 - Command not found: run the Homebrew install again and confirm Homebrew's bin directory is on `PATH`.
