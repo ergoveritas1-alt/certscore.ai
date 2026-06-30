@@ -114,6 +114,16 @@ const rules: VendorRule[] = [
   {
     entity: "Google LLC",
     vendor: "Google",
+    product: "Google Static Assets",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "embedded_content", "static_assets", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^gstatic\.com$/i, /^(?!fonts\.)[^.]+\.gstatic\.com$/i],
+    basisLabel: "google_static_assets_infrastructure",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "Google",
     product: "Google Interactive Media Ads",
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "video_ad_measurement", "ad_delivery"],

@@ -668,6 +668,25 @@ test("resolves DatoCMS and Mux image hosts as content infrastructure by default"
   );
 });
 
+test("resolves gstatic shard hosts as contextual Google static asset infrastructure", () => {
+  const observations = resolveVendorObservations([
+    request("https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON", "t0.gstatic.com"),
+    request("https://t1.gstatic.com/images?q=tbn:fixture", "t1.gstatic.com"),
+    request("https://t2.gstatic.com/static/content.js", "t2.gstatic.com"),
+  ]);
+
+  assert.equal(observations.length, 1);
+  const googleStatic = observations[0];
+  assert.ok(googleStatic);
+  assert.equal(googleStatic.vendor, "Google");
+  assert.equal(googleStatic.product, "Google Static Assets");
+  assert.equal(googleStatic.purpose, "infrastructure");
+  assert.equal(resolveVendorDisplayCategory(googleStatic), "CDN");
+  assert.deepEqual(googleStatic.matchedHostnames.sort(), ["t0.gstatic.com", "t1.gstatic.com", "t2.gstatic.com"]);
+  assert.equal(googleStatic.regulatoryRelevance.includes("embedded_content"), true);
+  assert.equal(googleStatic.regulatoryRelevance.includes("static_assets"), true);
+});
+
 test("resolves Klaviyo as marketing automation with high-confidence vendor identity", () => {
   const observations = resolveVendorObservations([
     request("https://static.klaviyo.com/onsite/js/klaviyo.js?company_id=abc123", "static.klaviyo.com"),

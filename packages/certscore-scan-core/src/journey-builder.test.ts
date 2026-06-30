@@ -569,6 +569,44 @@ test("Google-owned unresolved endpoint remains conservative unresolved review si
   assert.equal(journeys.some((journey) => journey.journeyType === "tracker"), false);
 });
 
+test("Google static asset infrastructure remains contextual even when retained as endpoint evidence", () => {
+  const request = networkRequest({
+    eventId: "net_google_static_asset",
+    requestId: "req_google_static_asset",
+    requestUrl: "https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON",
+    hostname: "t0.gstatic.com",
+    registrableDomain: "gstatic.com",
+    resourceType: "image",
+    collectionEndpointObserved: true,
+    endpointCategory: "runtime_collection",
+    endpointSubtype: "google_owned_infrastructure",
+    attributionStatus: "site_owned_infrastructure",
+    attributionReason: "google_owned_infrastructure",
+    resolverBasis: ["google_endpoint_subtype:google_owned_infrastructure"],
+  });
+  const vendor = vendorObservation({
+    observationId: "vendor_google_static_assets",
+    vendor: "Google",
+    product: "Google Static Assets",
+    purpose: "infrastructure",
+    matchedEvidenceIds: [request.eventId],
+    matchedHostnames: ["t0.gstatic.com"],
+    matchedUrls: [request.requestUrl],
+  });
+
+  const journeys = buildObservedJourneys(emptyInput({
+    networkEvents: [request],
+    normalizedVendorObservations: [vendor],
+  }));
+  const endpoint = journeys.find((journey) => journey.journeyType === "endpoint");
+
+  assert.equal(endpoint?.vendor, "Google");
+  assert.equal(endpoint?.product, "Google Static Assets");
+  assert.equal(endpoint?.purpose, "infrastructure");
+  assert.equal(endpoint?.endpointSubtype, "google_owned_infrastructure");
+  assert.equal(journeys.some((journey) => journey.journeyType === "tracker"), false);
+});
+
 test("Google Ads measurement endpoint can create resolved advertising tracker journey", () => {
   const request = networkRequest({
     eventId: "net_google_ads_conversion",

@@ -7227,6 +7227,15 @@ function classifyConsentFlowEndpointAttribution(input: {
       category: knownEndpoint.category,
     };
   }
+  if (isGoogleConsentFlowStaticAssetHost(hostname, path)) {
+    return {
+      status: "site_owned_infrastructure",
+      reason: "google_owned_infrastructure",
+      basis: [...basis, "google_endpoint_subtype:google_owned_infrastructure"],
+      category: "google_owned_infrastructure",
+      subtype: "google_owned_infrastructure",
+    };
+  }
   if ((hostname === "google.com" || hostname.endsWith(".google.com")) && (
     path.startsWith("/ccm/collect") || params.has("gcd") || params.has("gtm") || params.has("tag_exp")
   )) {
@@ -7254,6 +7263,13 @@ function classifyConsentFlowEndpointAttribution(input: {
     basis,
     category: input.collectionEndpoint ? "collection" : undefined,
   };
+}
+
+function isGoogleConsentFlowStaticAssetHost(hostname: string, path: string) {
+  if (hostname !== "gstatic.com" && !hostname.endsWith(".gstatic.com")) {
+    return false;
+  }
+  return !/^\/recaptcha\//i.test(path);
 }
 
 function classifyKnownConsentFlowEndpoint(hostname: string): { reason: string; basis: string; category: string } | undefined {

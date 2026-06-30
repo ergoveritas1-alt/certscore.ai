@@ -89,6 +89,7 @@ function getErrorMessage(error: unknown) {
 type StaticVendorRule = {
   cookieNames?: string[];
   domains: string[];
+  requireUrlPatternMatch?: boolean;
   urlPatterns?: RegExp[];
   vendorCategory: VendorRegistryEntry["vendorCategory"];
   vendorName: string;
@@ -136,7 +137,13 @@ const STATIC_VENDOR_RULES: StaticVendorRule[] = [
     vendorName: "reCAPTCHA Enterprise",
     vendorCategory: "enterprise_device_risk",
     domains: ["google.com", "www.google.com", "gstatic.com", "www.gstatic.com"],
+    requireUrlPatternMatch: true,
     urlPatterns: [/\/recaptcha\/enterprise(?:\.js|\/)/i]
+  },
+  {
+    vendorName: "Google Static Assets",
+    vendorCategory: "functional",
+    domains: ["gstatic.com"]
   },
   { vendorName: "Meta Pixel", vendorCategory: "advertising", domains: ["facebook.com", "facebook.net", "connect.facebook.net"] },
   { vendorName: "Reddit Pixel", vendorCategory: "advertising", domains: ["redditstatic.com", "alb.reddit.com"], urlPatterns: [/\/ads\/pixel\.js\b/i] },
@@ -632,10 +639,11 @@ function matchCandidateToRegistry(input: {
 function matchCandidateToStaticRules(candidate: VendorCandidate): VendorRegistryEntry | null {
   const rule = STATIC_VENDOR_RULES.find((entry) => {
     const hostMatched = entry.domains.some((domain) => candidate.hostname === domain || candidate.hostname.endsWith(`.${domain}`));
-    if (hostMatched) {
+    const urlMatched = (entry.urlPatterns ?? []).some((pattern) => candidate.sampleUrls.some((url) => pattern.test(url)));
+    if (hostMatched && (!entry.requireUrlPatternMatch || urlMatched)) {
       return true;
     }
-    if ((entry.urlPatterns ?? []).some((pattern) => candidate.sampleUrls.some((url) => pattern.test(url)))) {
+    if (urlMatched) {
       return true;
     }
     return (entry.cookieNames ?? []).some((cookieName) => candidate.cookieNames.includes(cookieName));

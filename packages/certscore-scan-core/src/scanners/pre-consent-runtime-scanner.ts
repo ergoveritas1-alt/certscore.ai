@@ -3967,6 +3967,7 @@ function classifyEndpointAttribution(input: {
     hostname,
     path,
     queryParamNames,
+    resourceType: input.resourceType,
     collectionEndpoint: input.collectionEndpoint,
   });
   if (googleSubtype) {
@@ -4120,6 +4121,7 @@ function classifyGoogleEndpointSubtype(input: {
   hostname: string;
   path: string;
   queryParamNames: string[];
+  resourceType: string | undefined;
   collectionEndpoint: { observed: boolean; category?: string };
 }): NetworkEvent["endpointSubtype"] | undefined {
   const hostname = input.hostname.toLowerCase();
@@ -4134,7 +4136,14 @@ function classifyGoogleEndpointSubtype(input: {
   ) {
     return "google_ads_or_measurement";
   }
-  const isGoogleHost = hostname === "google.com" || hostname.endsWith(".google.com");
+  if (isGoogleStaticAssetHost(hostname, path, input.resourceType)) {
+    return "google_owned_infrastructure";
+  }
+  const isGoogleHost =
+    hostname === "google.com" ||
+    hostname.endsWith(".google.com") ||
+    hostname === "gstatic.com" ||
+    hostname.endsWith(".gstatic.com");
   if (!isGoogleHost) {
     return undefined;
   }
@@ -4157,6 +4166,23 @@ function classifyGoogleEndpointSubtype(input: {
     return "google_owned_unresolved_meaningful";
   }
   return "google_owned_infrastructure";
+}
+
+function isGoogleStaticAssetHost(
+  hostname: string,
+  path: string,
+  resourceType: string | undefined,
+) {
+  if (hostname !== "gstatic.com" && !hostname.endsWith(".gstatic.com")) {
+    return false;
+  }
+  if (/^\/recaptcha\//i.test(path)) {
+    return false;
+  }
+  if (resourceType && ["document", "xhr", "fetch", "beacon", "websocket", "eventsource"].includes(resourceType)) {
+    return /\.(?:avif|css|gif|ico|jpe?g|js|mjs|png|svg|webp|woff2?|ttf|otf)(?:$|[?#])/i.test(path);
+  }
+  return true;
 }
 
 function redirectChainIds(
