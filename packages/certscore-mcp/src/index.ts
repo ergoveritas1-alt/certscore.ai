@@ -5,7 +5,7 @@ import { createCertScoreMcpServer } from "./server.js";
 export { createCertScoreMcpServer } from "./server.js";
 export { explainFinding, exportFindings, findingsFromReport } from "./tools.js";
 
-export const CERTSCORE_MCP_VERSION = "0.1.1";
+export const CERTSCORE_MCP_VERSION = "0.1.2";
 const DEFAULT_CERTSCORE_BASE_URL = "https://certscore.ai";
 const MIN_NODE_MAJOR = 20;
 const MAX_NODE_MAJOR_EXCLUSIVE = 25;

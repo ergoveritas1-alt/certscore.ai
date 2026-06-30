@@ -1,5 +1,11 @@
 # @certscore/mcp
 
+## 0.1.2
+
+- Added Homebrew cask distribution for the prebuilt `certscore-mcp` command.
+- Updated install docs to use `brew install --cask certscore-mcp` so users do not need local Xcode build tooling for the CertScore package.
+- Made the Homebrew wrapper resolve symlinks before launching the bundled MCP server.
+
 ## 0.1.1
 
 - Added `certscore-mcp doctor` for Homebrew install verification.

@@ -30,7 +30,10 @@ export default function DeveloperMcpPage() {
 
         <Section eyebrow="Install" title="Homebrew setup">
           <CodeBlock>{`brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
-brew install certscore-mcp`}</CodeBlock>
+brew install --cask certscore-mcp`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            The cask installs the prebuilt MCP command and avoids requiring local Xcode build tooling for the CertScore package.
+          </p>
         </Section>
 
         <Section eyebrow="Access" title="Use a scoped MCP key">
@@ -93,8 +96,8 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
             <li>If the API key is missing, set CERTSCORE_API_KEY in the MCP client environment and rerun doctor.</li>
             <li>If a token is rejected by a tool call, rotate the key or request a scoped API/MCP key from support@certscore.ai.</li>
             <li>If API health is unreachable, check CERTSCORE_BASE_URL and verify that https://certscore.ai/api/v2/health loads.</li>
-            <li>If Homebrew uses stale metadata, run brew update and reinstall certscore-mcp.</li>
-            <li>If an old release is cached, run brew reinstall certscore-mcp after updating the tap.</li>
+            <li>If Homebrew uses stale metadata, run brew update and reinstall the cask.</li>
+            <li>If an old release is cached, run brew reinstall --cask certscore-mcp after updating the tap.</li>
           </ul>
         </Section>
 

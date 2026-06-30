@@ -60,7 +60,7 @@ https://certscore.ai/api-pulse#mcp
 
 Homebrew install:
 brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
-brew install certscore-mcp
+brew install --cask certscore-mcp
 
 Installed command:
 certscore-mcp

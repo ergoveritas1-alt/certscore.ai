@@ -142,7 +142,7 @@ test("README documents current MCP tool surface and public docs", () => {
 
   assert.match(readme, /https:\/\/certscore\.ai\/developers\/mcp/);
   assert.match(readme, /get_latest_domain_scan/);
-  assert.match(readme, /brew install certscore-mcp/);
+  assert.match(readme, /brew install --cask certscore-mcp/);
   assert.match(readme, /certscore-mcp doctor/);
   assert.match(readme, /"command": "certscore-mcp"/);
   assert.match(readme, /automated public-web observations for review/i);
@@ -161,7 +161,7 @@ test("doctor reports healthy API and missing API key without failing", async () 
   });
 
   assert.equal(result.exitCode, 0);
-  assert.match(result.lines.join("\n"), /version 0\.1\.1/);
+  assert.match(result.lines.join("\n"), /version 0\.1\.2/);
   assert.match(result.lines.join("\n"), /Node\.js 22\.12\.0 is compatible/);
   assert.match(result.lines.join("\n"), /API health reachable/);
   assert.match(result.lines.join("\n"), /CERTSCORE_API_KEY is not set/);

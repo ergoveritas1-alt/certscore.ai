@@ -33,8 +33,10 @@ Install with Homebrew:
 
 ```bash
 brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
-brew install certscore-mcp
+brew install --cask certscore-mcp
 ```
+
+The cask installs the prebuilt MCP command and avoids requiring local Xcode build tooling for the CertScore package.
 
 Use the installed command from an MCP client:
 
@@ -215,7 +217,7 @@ Without `CERTSCORE_API_KEY`, the smoke script exits successfully with a skip mes
 - Bad token: rotate the key or request a scoped API/MCP key from `support@certscore.ai`.
 - API unreachable: check `CERTSCORE_BASE_URL` and verify `https://certscore.ai/api/v2/health`.
 - Homebrew tap stale: run `brew update` and reinstall `certscore-mcp`.
-- Old cached release: run `brew reinstall certscore-mcp` after updating the tap.
+- Old cached release: run `brew reinstall --cask certscore-mcp` after updating the tap.
 
 ## Runbook
 

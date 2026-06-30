@@ -228,7 +228,7 @@ Homebrew install:
 
 ```bash
 brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
-brew install certscore-mcp
+brew install --cask certscore-mcp
 ```
 
 Verify install:

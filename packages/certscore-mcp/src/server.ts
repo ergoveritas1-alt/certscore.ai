@@ -29,7 +29,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
 
   const server = new McpServer({
     name: "certscore-pulse",
-    version: "0.1.1"
+    version: "0.1.2"
   });
 
   async function createPulseScanTool(input: { url: string; detail?: "tiny" | "quick" | "standard" | "full"; format?: "json" | "markdown"; freshness?: "latest" | "refresh"; scanFrom?: "eu_ie" | "california" }) {

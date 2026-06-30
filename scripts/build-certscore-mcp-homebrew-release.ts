@@ -14,6 +14,7 @@ const bundlePath = join(releaseDir, "libexec", "certscore-mcp.mjs");
 const wrapperPath = join(releaseDir, "bin", "certscore-mcp");
 const tarballPath = join(artifactRoot, `${releaseName}.tar.gz`);
 const formulaPath = join(artifactRoot, "certscore-mcp.rb");
+const caskPath = join(artifactRoot, "certscore-mcp-cask.rb");
 
 function run(command: string, args: string[]) {
   const result = spawnSync(command, args, {
@@ -54,7 +55,14 @@ writeFileSync(
   [
     "#!/usr/bin/env bash",
     "set -euo pipefail",
-    'exec node "$(dirname "$0")/../libexec/certscore-mcp.mjs" "$@"',
+    'SOURCE="${BASH_SOURCE[0]}"',
+    'while [ -L "$SOURCE" ]; do',
+    '  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"',
+    '  SOURCE="$(readlink "$SOURCE")"',
+    '  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"',
+    "done",
+    'DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"',
+    'exec node "$DIR/../libexec/certscore-mcp.mjs" "$@"',
     ""
   ].join("\n"),
   { mode: 0o755 }
@@ -136,6 +144,33 @@ writeFileSync(
   ].join("\n")
 );
 
+writeFileSync(
+  caskPath,
+  [
+    'cask "certscore-mcp" do',
+    `  version "${version}"`,
+    `  sha256 "${checksum}"`,
+    "",
+    `  url "${releaseUrl}"`,
+    '  name "CertScore MCP"',
+    '  desc "CertScore MCP stdio server for public website risk-signal workflows"',
+    '  homepage "https://certscore.ai/developers/mcp"',
+    "",
+    '  depends_on formula: "node@22"',
+    "",
+    '  binary "certscore-mcp-v#{version}/bin/certscore-mcp"',
+    "",
+    "  caveats <<~EOS",
+    "    Verify the install with:",
+    "      certscore-mcp --version",
+    "      certscore-mcp --help",
+    "      CERTSCORE_API_KEY=<token> certscore-mcp doctor",
+    "  EOS",
+    "end",
+    ""
+  ].join("\n")
+);
+
 if (!existsSync(tarballPath)) {
   throw new Error(`Expected tarball was not created: ${tarballPath}`);
 }
@@ -143,3 +178,4 @@ if (!existsSync(tarballPath)) {
 console.log(`Created ${tarballPath}`);
 console.log(`sha256 ${checksum}`);
 console.log(`Formula template ${formulaPath}`);
+console.log(`Cask template ${caskPath}`);

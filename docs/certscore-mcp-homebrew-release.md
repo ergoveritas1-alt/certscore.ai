@@ -14,11 +14,13 @@ pnpm mcp:certscore:homebrew:build
 
 The build creates:
 
-- `artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.1.tar.gz`
+- `artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2.tar.gz`
 - `artifacts/certscore-mcp-homebrew/certscore-mcp.rb`
+- `artifacts/certscore-mcp-homebrew/certscore-mcp-cask.rb`
 
-The tracked formula lives at:
+The tracked Homebrew files live at:
 
+- `Casks/certscore-mcp.rb`
 - `Formula/certscore-mcp.rb`
 
 The tarball contains:
@@ -30,17 +32,20 @@ The tarball contains:
 ## Release
 
 1. Run `pnpm mcp:certscore:homebrew:build`.
-2. Confirm `Formula/certscore-mcp.rb` matches `artifacts/certscore-mcp-homebrew/certscore-mcp.rb`.
-3. Commit and push the formula/source changes.
-4. Create a GitHub release named `certscore-mcp-v0.1.1`.
-5. Upload `artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.1.tar.gz`.
+2. Confirm `Casks/certscore-mcp.rb` matches `artifacts/certscore-mcp-homebrew/certscore-mcp-cask.rb`.
+3. Confirm `Formula/certscore-mcp.rb` matches `artifacts/certscore-mcp-homebrew/certscore-mcp.rb`.
+4. Commit and push the cask/formula/source changes.
+5. Create a GitHub release named `certscore-mcp-v0.1.2`.
+6. Upload `artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2.tar.gz`.
 
 Expected user install:
 
 ```bash
 brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
-brew install certscore-mcp
+brew install --cask certscore-mcp
 ```
+
+The cask is the preferred public install path because it links the prebuilt command and avoids requiring local Xcode build tooling for the CertScore package. The formula remains tracked for compatibility and local tap inspection.
 
 ## MCP Client Config
 
@@ -75,9 +80,9 @@ pnpm --filter @certscore/mcp test
 pnpm --filter @certscore/mcp typecheck
 pnpm --filter @certscore/mcp build
 pnpm mcp:certscore:homebrew:build
-artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.1/bin/certscore-mcp --version
-artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.1/bin/certscore-mcp --help
-artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.1/bin/certscore-mcp doctor
+artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2/bin/certscore-mcp --version
+artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2/bin/certscore-mcp --help
+artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2/bin/certscore-mcp doctor
 ```
 
 ## Troubleshooting
@@ -86,5 +91,5 @@ artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.1/bin/certscore-mcp doctor
 - Missing API key: set `CERTSCORE_API_KEY` in the MCP client environment and rerun `certscore-mcp doctor`.
 - Bad token: rotate the key or request a scoped API/MCP key from `support@certscore.ai`.
 - API unreachable: check `CERTSCORE_BASE_URL` and verify `https://certscore.ai/api/v2/health`.
-- Homebrew tap stale: run `brew update` and reinstall `certscore-mcp`.
-- Old cached release: run `brew reinstall certscore-mcp` after updating the tap.
+- Homebrew tap stale: run `brew update` and reinstall the cask.
+- Old cached release: run `brew reinstall --cask certscore-mcp` after updating the tap.
