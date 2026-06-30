@@ -84,7 +84,15 @@ const nextConfig = {
       }
     ];
   },
+  webpack(config) {
+    config.resolve.extensionAlias = {
+      ...(config.resolve.extensionAlias ?? {}),
+      ".js": [".ts", ".tsx", ".js"]
+    };
+    return config;
+  },
   transpilePackages: [
+    "@certscore/api-contracts",
     "@website-signal-risk-scanner/shared",
     "@website-signal-risk-scanner/ui",
     "@website-signal-risk-scanner/db"

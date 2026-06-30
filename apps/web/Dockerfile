@@ -20,6 +20,7 @@ COPY apps/browser-extension/package.json ./apps/browser-extension/package.json
 COPY apps/v2-dag-lambda/package.json ./apps/v2-dag-lambda/package.json
 COPY apps/validation-worker/package.json ./apps/validation-worker/package.json
 COPY apps/web/package.json ./apps/web/package.json
+COPY packages/certscore-api-contracts/package.json ./packages/certscore-api-contracts/package.json
 COPY packages/certscore-contracts/package.json ./packages/certscore-contracts/package.json
 COPY packages/certscore-mcp/package.json ./packages/certscore-mcp/package.json
 COPY packages/certscore-report-adapter/package.json ./packages/certscore-report-adapter/package.json
@@ -44,6 +45,7 @@ COPY packages/shared ./packages/shared
 COPY packages/ui ./packages/ui
 COPY packages/db ./packages/db
 COPY packages/validation-shared ./packages/validation-shared
+COPY packages/certscore-api-contracts ./packages/certscore-api-contracts
 COPY packages/certscore-contracts ./packages/certscore-contracts
 COPY packages/certscore-vendor-resolver ./packages/certscore-vendor-resolver
 COPY scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
@@ -61,6 +63,7 @@ RUN rm -rf \
   ./packages/ui/dist \
   ./packages/db/dist \
   ./packages/validation-shared/dist \
+  ./packages/certscore-api-contracts/dist \
   ./packages/certscore-contracts/dist \
   ./packages/certscore-vendor-resolver/dist
 
@@ -68,6 +71,7 @@ RUN pnpm --filter @website-signal-risk-scanner/shared build
 RUN pnpm --filter @website-signal-risk-scanner/ui build
 RUN pnpm --filter @website-signal-risk-scanner/db build
 RUN pnpm --filter @website-signal-risk-scanner/validation-shared build
+RUN pnpm --filter @certscore/api-contracts build
 RUN pnpm --filter @certscore/contracts build
 RUN pnpm --filter @certscore/vendor-resolver build
 RUN pnpm --filter @website-signal-risk-scanner/web build
@@ -94,6 +98,8 @@ COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/.next/standalone ./
 COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
+COPY --from=builder /app/packages/certscore-api-contracts/package.json ./packages/certscore-api-contracts/package.json
+COPY --from=builder /app/packages/certscore-api-contracts/dist ./packages/certscore-api-contracts/dist
 COPY --from=builder /app/packages/certscore-contracts/package.json ./packages/certscore-contracts/package.json
 COPY --from=builder /app/packages/certscore-contracts/dist ./packages/certscore-contracts/dist
 COPY --from=builder /app/packages/certscore-vendor-resolver/package.json ./packages/certscore-vendor-resolver/package.json
@@ -110,6 +116,7 @@ RUN mkdir -p /app/runtime-node_modules \
     zod@3.24.2
 
 RUN mkdir -p /app/node_modules/@certscore \
+  && ln -sfn ../../packages/certscore-api-contracts /app/node_modules/@certscore/api-contracts \
   && ln -sfn ../../packages/certscore-contracts /app/node_modules/@certscore/contracts \
   && ln -sfn ../../packages/certscore-vendor-resolver /app/node_modules/@certscore/vendor-resolver
 
