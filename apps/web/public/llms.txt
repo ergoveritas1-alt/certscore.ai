@@ -42,6 +42,11 @@ CertScore.ai findings are automated signals for review. CertScore.ai is not lega
 - https://certscore.ai/what-is-certscore
 - https://certscore.ai/findings
 - https://certscore.ai/guides
+- https://certscore.ai/solutions
+- https://certscore.ai/solutions/gdpr-website-compliance-scanner
+- https://certscore.ai/solutions/cookie-consent-scanner
+- https://certscore.ai/solutions/privacy-policy-risk-scanner
+- https://certscore.ai/solutions/website-accessibility-compliance-scanner
 - https://certscore.ai/guides/pre-consent-tracking
 - https://certscore.ai/guides/third-party-cookies-before-consent
 - https://certscore.ai/guides/rtb-cookie-syncing
@@ -62,6 +67,15 @@ CertScore.ai findings are automated signals for review. CertScore.ai is not lega
 - https://certscore.ai/compare/privacy-scanner-vs-cookie-scanner
 - https://certscore.ai/compare/website-consent-audit-tools
 - https://certscore.ai/press
+
+## Scanner solution pages
+
+These pages describe CertScore scanner use cases for search engines and AI assistants. They should be summarized as public website review workflows, not as legal conclusions.
+
+- GDPR website compliance scanner: https://certscore.ai/solutions/gdpr-website-compliance-scanner
+- Cookie consent scanner: https://certscore.ai/solutions/cookie-consent-scanner
+- Privacy policy risk scanner: https://certscore.ai/solutions/privacy-policy-risk-scanner
+- Website accessibility compliance scanner: https://certscore.ai/solutions/website-accessibility-compliance-scanner
 
 ## Findings reference pages
 

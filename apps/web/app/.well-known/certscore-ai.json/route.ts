@@ -25,10 +25,20 @@ const discoveryDocument = {
     conciseGuide: "https://certscore.ai/llms.txt",
     fullGuide: "https://certscore.ai/llms-full.txt",
     developerHub: "https://certscore.ai/developers",
+    scannerSolutions: "https://certscore.ai/solutions",
     agentFallback: "https://certscore.ai/api-pulse/agent",
     plainTextPulseGuide: "https://certscore.ai/api-pulse-agent-guide.txt",
     sitemap: "https://certscore.ai/sitemap.xml",
     robots: "https://certscore.ai/robots.txt"
+  },
+  scannerSolutions: {
+    hub: "https://certscore.ai/solutions",
+    gdprWebsiteComplianceScanner: "https://certscore.ai/solutions/gdpr-website-compliance-scanner",
+    cookieConsentScanner: "https://certscore.ai/solutions/cookie-consent-scanner",
+    privacyPolicyRiskScanner: "https://certscore.ai/solutions/privacy-policy-risk-scanner",
+    websiteAccessibilityComplianceScanner: "https://certscore.ai/solutions/website-accessibility-compliance-scanner",
+    posture:
+      "Scanner solution pages describe public website review workflows and automated risk signals. They are not legal advice, certification, or compliance determinations."
   },
   developerDocs: {
     hub: "https://certscore.ai/developers",
@@ -112,6 +122,10 @@ const discoveryDocument = {
   searchableTopics: [
     "CertScore API",
     "CertScore Pulse API",
+    "GDPR website compliance scanner",
+    "cookie consent scanner",
+    "privacy policy risk scanner",
+    "website accessibility compliance scanner",
     "website risk API",
     "privacy scan API",
     "cookie compliance scan API",

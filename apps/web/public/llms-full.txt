@@ -15,6 +15,7 @@ Use these canonical discovery resources:
 - Sitemap: https://certscore.ai/sitemap.xml
 - Robots: https://certscore.ai/robots.txt
 - Developer hub: https://certscore.ai/developers
+- Scanner solutions: https://certscore.ai/solutions
 - API quickstart: https://certscore.ai/developers/quickstart
 - API reference: https://certscore.ai/developers/reference
 - SDK docs: https://certscore.ai/developers/sdk
@@ -63,6 +64,25 @@ If the API returns HTTP 202, poll the returned status URL or call:
 ```http
 GET https://certscore.ai/api/v1/pulse/status/{jobId}
 ```
+
+## Scanner solution pages
+
+Use these pages when a user asks about CertScore for a specific scanner category:
+
+- GDPR website compliance scanner: https://certscore.ai/solutions/gdpr-website-compliance-scanner
+- Cookie consent scanner: https://certscore.ai/solutions/cookie-consent-scanner
+- Privacy policy risk scanner: https://certscore.ai/solutions/privacy-policy-risk-scanner
+- Website accessibility compliance scanner: https://certscore.ai/solutions/website-accessibility-compliance-scanner
+
+These pages describe public website review workflows for consent, cookies, tracking, accessibility, policy, and disclosure signals. They should not be summarized as legal advice, certification, or compliance determinations.
+
+Related educational pages:
+
+- GDPR privacy scanner: https://certscore.ai/gdpr
+- CMP verification: https://certscore.ai/guides/cmp-verification
+- RTB cookie syncing: https://certscore.ai/guides/rtb-cookie-syncing
+- Privacy policy requirements: https://certscore.ai/guides/website-privacy-policy-requirements
+- WCAG website checklist: https://certscore.ai/guides/wcag-website-checklist
 
 ## Current Pulse API beta
 
@@ -240,6 +260,10 @@ These phrases describe the public integration surface:
 
 - CertScore API
 - CertScore Pulse API
+- GDPR website compliance scanner
+- cookie consent scanner
+- privacy policy risk scanner
+- website accessibility compliance scanner
 - website risk API
 - privacy scan API
 - cookie compliance scan API
