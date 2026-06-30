@@ -1132,6 +1132,162 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
   }
 });
 
+test("materializeLocalV2DagScanDetail carries all gstatic matched hosts for inventory grouping", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/gstatic-hosts-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-17T13:14:02.000Z",
+      cookieEvents: [],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: false,
+        preConsentTrackingObserved: true
+      },
+      iframeEvents: [],
+      modulesRun: [
+        {
+          completedAt: "2026-06-17T13:14:02.000Z",
+          durationMs: 12000,
+          errors: [],
+          evidenceRefs: [],
+          moduleName: "preConsentRuntimeScanner",
+          startedAt: "2026-06-17T13:13:50.000Z",
+          status: "completed",
+          timingBreakdown: []
+        }
+      ],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "net_t0",
+          eventType: "network_request",
+          evidenceRefs: [],
+          hostname: "t0.gstatic.com",
+          requestUrl: "https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=http://caltech.edu&size=64",
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: true,
+          timestampMs: 1184,
+          url: "https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=http://caltech.edu&size=64"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "net_t1",
+          eventType: "network_request",
+          evidenceRefs: [],
+          hostname: "t1.gstatic.com",
+          requestUrl: "https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=http://nbcnews.com&size=64",
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: true,
+          timestampMs: 1220,
+          url: "https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=http://nbcnews.com&size=64"
+        }
+      ],
+      normalizedUrl: "https://example.test/",
+      normalizedVendorObservations: [
+        {
+          confidence: 0.9,
+          entity: "Google LLC",
+          matchedEvidenceRefs: [
+            { eventId: "net_t0", eventType: "network_request", label: "t0.gstatic.com", refId: "ref_net_t0" },
+            { eventId: "net_t1", eventType: "network_request", label: "t1.gstatic.com", refId: "ref_net_t1" }
+          ],
+          matchedHostnames: ["t0.gstatic.com", "t1.gstatic.com"],
+          observationId: "vendor_google_static",
+          product: "Google Static Assets",
+          purpose: "infrastructure",
+          regulatoryRelevance: ["cdn", "embedded_content", "static_assets", "third_party_runtime"],
+          vendor: "Google"
+        }
+      ],
+      observedJourneys: [
+        {
+          confidence: 0.52,
+          displayName: "t0.gstatic.com",
+          entryPoint: "https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=http://caltech.edu&size=64",
+          evidenceRefs: [
+            {
+              eventId: "net_t0",
+              eventType: "network_request",
+              label: "https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=http://caltech.edu&size=64",
+              refId: "ref_net_t0",
+              url: "https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=http://caltech.edu&size=64"
+            }
+          ],
+          firstObservedAtMs: 1184,
+          journeyType: "endpoint",
+          key: "endpoint:t0.gstatic.com"
+        },
+        {
+          confidence: 0.52,
+          displayName: "t1.gstatic.com",
+          entryPoint: "https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=http://nbcnews.com&size=64",
+          evidenceRefs: [
+            {
+              eventId: "net_t1",
+              eventType: "network_request",
+              label: "https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=http://nbcnews.com&size=64",
+              refId: "ref_net_t1",
+              url: "https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&url=http://nbcnews.com&size=64"
+            }
+          ],
+          firstObservedAtMs: 1220,
+          journeyType: "endpoint",
+          key: "endpoint:t1.gstatic.com"
+        }
+      ],
+      policySurfaceObservations: [],
+      runtimeTimeline: [],
+      scanId: "gstatic-hosts-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      startedAt: "2026-06-17T13:13:50.000Z",
+      url: "https://example.test/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "example.test",
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const googleStatic = detail.trackerVendors.find((vendor) => vendor.vendorName === "Google Static Assets");
+    assert.ok(googleStatic);
+    assert.equal(googleStatic.vendorCategory, "infrastructure");
+    assert.equal(
+      (googleStatic as unknown as Record<string, unknown>).vendorDisplayCategory,
+      "CDN"
+    );
+    assert.deepEqual(
+      ((googleStatic as unknown as Record<string, unknown>).matchedHostnames as string[]).sort(),
+      ["t0.gstatic.com", "t1.gstatic.com"]
+    );
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda artifact URI", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

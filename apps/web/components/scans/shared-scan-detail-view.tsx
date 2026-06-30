@@ -511,6 +511,16 @@ function getStringArrayFromRecord(row: Record<string, unknown>, keys: string[]) 
   return [];
 }
 
+function trackerMatchedHosts(tracker: ScanDetailResponse["trackerVendors"][number]) {
+  const record = tracker as unknown as Record<string, unknown>;
+  return uniqueStrings([
+    tracker.scriptHost,
+    typeof record.endpointHostname === "string" ? record.endpointHostname : null,
+    typeof record.scriptHost === "string" ? record.scriptHost : null,
+    ...getStringArrayFromRecord(record, ["matchedHostnames", "matched_hostnames", "matchedHosts", "matched_hosts"])
+  ].map(normalizeInventoryHostname));
+}
+
 function buildTrackerInventoryRows(input: {
   domains: string[];
   firstPartyDomain?: string | null;
@@ -524,14 +534,7 @@ function buildTrackerInventoryRows(input: {
   const rows = new Map<string, TrackerInventoryRow>();
   const firstPartyRegistrableDomain = inventoryRegistrableDomain(input.firstPartyDomain);
   const resolvedTrackerHosts = new Set(
-    input.trackerVendors.flatMap((tracker) => {
-      const record = tracker as unknown as Record<string, unknown>;
-      return [
-        tracker.scriptHost,
-        typeof record.endpointHostname === "string" ? record.endpointHostname : null,
-        typeof record.scriptHost === "string" ? record.scriptHost : null
-      ];
-    }).map(normalizeInventoryHostname).filter((value): value is string => Boolean(value))
+    input.trackerVendors.flatMap(trackerMatchedHosts)
   );
   const isFirstPartyHost = (value: string) => {
     const hostDomain = inventoryRegistrableDomain(value);
@@ -588,7 +591,7 @@ function buildTrackerInventoryRows(input: {
     addRow({
       category: tracker.vendorCategory || "tracker",
       confidence: typeof tracker.confidence === "number" && Number.isFinite(tracker.confidence) ? tracker.confidence : null,
-      domains: tracker.scriptHost ? [tracker.scriptHost] : [],
+      domains: trackerMatchedHosts(tracker),
       firstSeenMs: getNumberFromRecord(record, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]),
       label: tracker.vendorName,
       observedVia: observedVia.length > 0 ? observedVia : ["request"],

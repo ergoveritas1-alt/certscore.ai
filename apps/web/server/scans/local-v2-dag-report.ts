@@ -951,7 +951,16 @@ function buildVendorEvidence(bundle: CanonicalEvidenceBundle) {
       regulatoryRelevance: vendor.regulatoryRelevance,
       vendor: vendor.vendor
     });
-    const evidenceHost = uniqueStrings((vendor.matchedEvidenceRefs ?? []).map((ref) => hostnameFromUrl(ref.url ?? ref.label))).find(Boolean) ?? null;
+    const matchedHostnames = uniqueStrings([
+      ...(vendor.matchedHostnames ?? []),
+      ...(vendor.matchedEvidenceRefs ?? []).map((ref) => hostnameFromUrl(ref.url ?? ref.label) ?? ref.label)
+    ].map((value) => {
+      if (!value || /^https?:\/\//i.test(value)) {
+        return hostnameFromUrl(value);
+      }
+      return value.toLowerCase();
+    }));
+    const evidenceHost = matchedHostnames[0] ?? null;
     const relatedJourneyFirstSeenMs = firstNumber(
       ...(bundle.observedJourneys ?? [])
         .filter((journey) =>
@@ -1009,6 +1018,7 @@ function buildVendorEvidence(bundle: CanonicalEvidenceBundle) {
       firstSeenMs: firstNumber(relatedJourneyFirstSeenMs, relatedEventFirstSeenMs),
       firstPartyOrThirdParty: "third_party",
       matchedSignatureId: vendor.observationId ?? null,
+      matchedHostnames,
       observedVia,
       regulatoryRelevance: vendor.regulatoryRelevance ?? [],
       scriptHost: evidenceHost,
