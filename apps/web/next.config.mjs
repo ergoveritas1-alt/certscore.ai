@@ -91,6 +91,18 @@ const nextConfig = {
     };
     return config;
   },
+  turbopack: {
+    resolveAlias: {
+      "@certscore/api-contracts": "../../packages/certscore-api-contracts/src/index.ts",
+      "./api-v2.js": "../../packages/certscore-api-contracts/src/api-v2.ts",
+      "./mcp.js": "../../packages/certscore-api-contracts/src/mcp.ts",
+      "./openapi.js": "../../packages/certscore-api-contracts/src/openapi.ts",
+      "./openapi-chatgpt.js":
+        "../../packages/certscore-api-contracts/src/openapi-chatgpt.ts",
+      "./openapi-v2.js": "../../packages/certscore-api-contracts/src/openapi-v2.ts",
+      "./pulse-v1.js": "../../packages/certscore-api-contracts/src/pulse-v1.ts"
+    }
+  },
   transpilePackages: [
     "@certscore/api-contracts",
     "@website-signal-risk-scanner/shared",
