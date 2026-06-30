@@ -2,7 +2,7 @@
   "name": "@certscore/mcp",
   "version": "0.1.0",
   "private": true,
-  "description": "MCP server for CertScore Pulse.",
+  "description": "MCP server for CertScore public website risk-signal workflows.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,6 +19,16 @@
     "dist",
     "README.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ergoveritas1-alt/certscore.ai.git",
+    "directory": "packages/certscore-mcp"
+  },
+  "homepage": "https://certscore.ai/developers/mcp",
+  "bugs": {
+    "url": "https://certscore.ai/contact",
+    "email": "support@certscore.ai"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",

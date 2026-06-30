@@ -26,7 +26,7 @@ export function buildPulseV1OpenApiDocument() {
           tags: ["Pulse"],
           summary: "Retrieve a CertScore Pulse summary for a URL, scan, or job.",
           description:
-            `${PULSE_PURPOSE_STATEMENT} Use this endpoint for automated public-web observations for review; it does not provide legal advice, certification, or compliance determinations.`,
+            `${PULSE_PURPOSE_STATEMENT} Use this endpoint for automated public-web observations for review; outputs are not legal advice, certification, or a compliance determination.`,
           parameters: [
             { name: "url", in: "query", schema: { type: "string" } },
             { name: "scanId", in: "query", schema: { type: "string" } },

@@ -4,6 +4,8 @@ Shared public contract package for CertScore API, Pulse API, SDK, and MCP surfac
 
 This package is the home for public-safe schemas, enums, OpenAPI builders, and future SDK/MCP contract types. It must not create findings, infer scanner evidence, or bypass the canonical CertScore scan-to-report flow.
 
+CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.
+
 Current scope:
 
 - Pulse v1 public constants.

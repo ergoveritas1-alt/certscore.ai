@@ -21,26 +21,33 @@ export default function DeveloperMcpPage() {
       <div className="space-y-12">
         <Section eyebrow="External users" title="Current MCP access">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            The MCP server package is in developer preview and is not published for public npm installation yet. External integrations
-            should use the REST API or TypeScript SDK today, and use this page as the stable tool contract for MCP clients.
+            The MCP server is distributed as a Homebrew-installable developer preview for external MCP clients. Use the
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">certscore-mcp</code> command when connecting Claude Desktop,
+            Cursor, Windsurf, or another stdio-compatible MCP client. Use the REST API or TypeScript SDK when you need a
+            language-neutral backend integration.
           </p>
         </Section>
 
-        <Section eyebrow="Planned package install" title="Planned npm-based setup">
-          {/* TODO: Replace this planned package section with a live npx install after @certscore/mcp is published publicly. */}
+        <Section eyebrow="Install" title="Homebrew setup">
+          <CodeBlock>{`brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
+brew install certscore-mcp`}</CodeBlock>
+        </Section>
+
+        <Section eyebrow="MCP client config" title="Use the installed command">
           <CodeBlock>{`{
   "mcpServers": {
     "certscore": {
-      "command": "npx",
-      "args": ["-y", "@certscore/mcp"],
+      "command": "certscore-mcp",
       "env": {
-        "CERTSCORE_API_KEY": "<token>"
+        "CERTSCORE_API_KEY": "<token>",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
       }
     }
   }
 }`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            This package-install path is planned. Do not use it until the package is publicly published.
+            The server runs over stdio and reads the API key from the MCP client environment. Keep the token scoped and rotate it if it
+            is shared outside your workspace.
           </p>
         </Section>
 
@@ -48,21 +55,21 @@ export default function DeveloperMcpPage() {
           <CodeBlock>{`CERTSCORE_API_KEY=<token> pnpm mcp:certscore`}</CodeBlock>
         </Section>
 
-        <Section eyebrow="Claude Desktop" title="Local development config">
+        <Section eyebrow="Claude Desktop" title="Homebrew command config">
           <CodeBlock>{`{
   "mcpServers": {
     "certscore": {
-      "command": "pnpm",
-      "args": ["mcp:certscore"],
+      "command": "certscore-mcp",
       "env": {
-        "CERTSCORE_API_KEY": "<token>"
+        "CERTSCORE_API_KEY": "<token>",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
       }
     }
   }
 }`}</CodeBlock>
         </Section>
 
-        <Section eyebrow="Cursor, Windsurf, and generic MCP clients" title="Generic local config">
+        <Section eyebrow="Cursor, Windsurf, and generic MCP clients" title="Local repo config for contributors">
           <CodeBlock>{`{
   "mcpServers": {
     "certscore": {

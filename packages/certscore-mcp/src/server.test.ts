@@ -141,6 +141,8 @@ test("README documents current MCP tool surface and public docs", () => {
 
   assert.match(readme, /https:\/\/certscore\.ai\/developers\/mcp/);
   assert.match(readme, /get_latest_domain_scan/);
+  assert.match(readme, /brew install certscore-mcp/);
+  assert.match(readme, /"command": "certscore-mcp"/);
   assert.match(readme, /automated public-web observations for review/i);
   assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
 });

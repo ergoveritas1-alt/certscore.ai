@@ -8,7 +8,7 @@ export const PULSE_PURPOSE_STATEMENT =
   "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.";
 
 export const PULSE_STANDARD_DISCLAIMER =
-  "CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice nor certify compliance. Always review the underlying evidence and consult qualified experts where appropriate.";
+  "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.";
 
 export const PULSE_CAPABILITIES = {
   method: "automated_runtime_analysis",

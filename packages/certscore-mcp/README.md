@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: developer preview. This package is private to the WC01 workspace while preview token, rate-limit, and distribution details are finalized.
+Status: public developer preview. The server is distributed for external MCP clients through Homebrew as `certscore-mcp` and for local WC01 development through `pnpm mcp:certscore`.
 
 Public docs:
 
@@ -29,7 +29,30 @@ The initial MCP surface intentionally does not include account scan browsing or 
 
 ## Configuration
 
-Run from this monorepo:
+Install with Homebrew:
+
+```bash
+brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
+brew install certscore-mcp
+```
+
+Use the installed command from an MCP client:
+
+```json
+{
+  "mcpServers": {
+    "certscore": {
+      "command": "certscore-mcp",
+      "env": {
+        "CERTSCORE_API_KEY": "YOUR_TOKEN",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}
+```
+
+Run from this monorepo for local development:
 
 ```bash
 CERTSCORE_API_KEY=... pnpm mcp:certscore
@@ -42,7 +65,7 @@ pnpm db:migrate
 pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"
 ```
 
-Run the built package directly:
+Run the built package directly after local build:
 
 ```bash
 CERTSCORE_API_KEY=... certscore-mcp
@@ -59,7 +82,23 @@ CERTSCORE_REQUEST_TIMEOUT_MS=300000
 
 ## MCP Client Examples
 
-Claude Desktop-style config:
+Claude Desktop-style config with the Homebrew command:
+
+```json
+{
+  "mcpServers": {
+    "certscore": {
+      "command": "certscore-mcp",
+      "env": {
+        "CERTSCORE_API_KEY": "YOUR_TOKEN",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}
+```
+
+Local repo config for contributors:
 
 ```json
 {
@@ -71,21 +110,6 @@ Claude Desktop-style config:
       "env": {
         "CERTSCORE_API_KEY": "YOUR_TOKEN",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
-      }
-    }
-  }
-}
-```
-
-Local package/binary config:
-
-```json
-{
-  "mcpServers": {
-    "certscore": {
-      "command": "certscore-mcp",
-      "env": {
-        "CERTSCORE_API_KEY": "YOUR_TOKEN"
       }
     }
   }
@@ -140,4 +164,4 @@ Without `CERTSCORE_API_KEY`, the smoke script exits successfully with a skip mes
 
 ## Runbook
 
-See `docs/certscore-mcp-preview-runbook.md` for migration, key issuance, smoke testing, deploy verification, and scan-to-report guardrails.
+See `docs/certscore-mcp-homebrew-release.md` for Homebrew release steps and `docs/certscore-mcp-preview-runbook.md` for key issuance, smoke testing, deploy verification, and scan-to-report guardrails.

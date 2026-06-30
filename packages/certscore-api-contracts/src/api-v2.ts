@@ -5,7 +5,7 @@ export const CERTSCORE_API_V2_VERSION = "v2";
 export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.0";
 
 export const apiV2Disclaimer =
-  "CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice, certification, or compliance determinations.";
+  "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.";
 
 export const apiV2ScanStatusSchema = z.enum(["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited"]);
 export const apiV2ScanFreshnessSchema = z.enum(["latest", "refresh"]);

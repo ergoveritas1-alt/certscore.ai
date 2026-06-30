@@ -215,7 +215,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
     "listScanFindings"
   ]);
   assert.match(document.info.description, /automated public-web observations for review/i);
-  assert.match(document.info.description, /does not provide legal advice/i);
+  assert.match(document.info.description, /not legal advice, certification, or a compliance determination/i);
   assert.equal(document.paths["/api/v2/scans"].post.responses["202"].headers["Retry-After"].description, "Recommended retry or polling delay in seconds.");
   assert.ok(document.paths["/api/v2/scans"].post.responses["200"].content["application/json"].examples.completed);
   assert.ok(document.paths["/api/v2/scans"].post.responses["202"].content["application/json"].examples.pending);

@@ -49,6 +49,7 @@
     "ops:smoke:pulse-production": "BASE_URL=https://certscore.ai node ./scripts/smoke-pulse-production.mjs",
     "mcp:certscore": "pnpm --filter @certscore/api-contracts build && pnpm --filter @certscore/sdk build && pnpm --filter @certscore/mcp build && node packages/certscore-mcp/dist/index.js",
     "mcp:certscore:smoke": "pnpm --filter @certscore/api-contracts build && pnpm --filter @certscore/sdk build && pnpm --filter @certscore/mcp build && node scripts/smoke-certscore-mcp.mjs",
+    "mcp:certscore:homebrew:build": "node --import tsx ./scripts/build-certscore-mcp-homebrew-release.ts",
     "mcp:certscore:generate-key": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/generate-certscore-api-key.ts",
     "ops:stripe:setup-billing": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/setup-stripe-billing.ts",
     "ops:preconsent:diagnose": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/preconsent-cookie-evidence-ops.ts diagnose",

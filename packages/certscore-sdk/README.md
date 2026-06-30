@@ -1,8 +1,8 @@
 # CertScore TypeScript SDK
 
-Official TypeScript/JavaScript SDK for CertScore Pulse, an evidence-backed public-web privacy and consent review-signal API.
+Official TypeScript/JavaScript SDK for the CertScore public API, Pulse API, and website risk-signal workflows.
 
-CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice nor certify compliance. Always review the underlying evidence and consult qualified experts where appropriate.
+CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.
 
 ## Installation
 

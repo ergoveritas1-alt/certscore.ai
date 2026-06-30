@@ -215,9 +215,32 @@ console.log(scan.id, scan.status);
 
 ## MCP server
 
-Current package: `@certscore/mcp`
+Current command: `certscore-mcp`
 
 Current transport: stdio
+
+Homebrew install:
+
+```bash
+brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
+brew install certscore-mcp
+```
+
+MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "certscore": {
+      "command": "certscore-mcp",
+      "env": {
+        "CERTSCORE_API_KEY": "<token>",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}
+```
 
 Current tools:
 

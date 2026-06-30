@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-19
 
-CertScore Pulse provides automated public-web observations for review. CertScore does not provide legal advice nor certify compliance.
+CertScore Pulse provides automated public-web observations for review. Outputs are not legal advice, certification, or a compliance determination.
 
 This is beta software. The current Pulse API beta version is 0.5.1.
 
@@ -57,6 +57,13 @@ https://certscore.ai/api-pulse
 
 MCP developer-preview stdio server:
 https://certscore.ai/api-pulse#mcp
+
+Homebrew install:
+brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
+brew install certscore-mcp
+
+Installed command:
+certscore-mcp
 
 Local stdio command:
 CERTSCORE_API_KEY=<token> pnpm mcp:certscore

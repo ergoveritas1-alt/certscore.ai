@@ -505,7 +505,10 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.api.docs, "https://certscore.ai/developers/reference");
   assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
   assert.equal(aiDiscovery.mcp.docs, "https://certscore.ai/developers/mcp");
-  assert.equal(aiDiscovery.mcp.packageStatus, "developer_preview_private_not_publicly_published");
+  assert.equal(aiDiscovery.mcp.distribution, "homebrew");
+  assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
+  assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
+  assert.equal(aiDiscovery.mcp.install, "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install certscore-mcp");
   assert.equal(aiDiscovery.authentication.docs, "https://certscore.ai/developers/quickstart");
   assert.deepEqual(aiDiscovery.authentication.currentScopes, ["scan:read", "scan:create", "mcp"]);
   assert.equal(aiDiscovery.rateLimits.docs, "https://certscore.ai/developers/reference");
@@ -543,8 +546,10 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.match(combinedSources, /broken examples/);
   assert.match(combinedSources, /Prompt for coding agents/);
   assert.match(combinedSources, /Prompt for MCP agents/);
-  assert.match(combinedSources, /Planned package install/);
-  assert.match(combinedSources, /Do not use it until the package is publicly published/);
+  assert.match(combinedSources, /Homebrew setup/);
+  assert.match(combinedSources, /brew tap ergoveritas1-alt\/certscore https:\/\/github\.com\/ergoveritas1-alt\/certscore\.ai/);
+  assert.match(combinedSources, /brew install certscore-mcp/);
+  assert.match(combinedSources, /certscore-mcp/);
   assert.match(combinedSources, /CertScore API/);
   assert.match(combinedSources, /website risk API/);
   assert.match(combinedSources, /privacy scan API/);

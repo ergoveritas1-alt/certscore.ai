@@ -15,6 +15,16 @@
     "dist",
     "README.md"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ergoveritas1-alt/certscore.ai.git",
+    "directory": "packages/certscore-sdk"
+  },
+  "homepage": "https://certscore.ai/developers/sdk",
+  "bugs": {
+    "url": "https://certscore.ai/contact",
+    "email": "support@certscore.ai"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
