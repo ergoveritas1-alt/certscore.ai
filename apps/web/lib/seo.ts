@@ -118,6 +118,47 @@ export function createPublicWebPageSchema({
   };
 }
 
+export function createFaqPageSchema(items: Array<{ answer: string; question: string }>) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: items.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer
+      }
+    }))
+  };
+}
+
+export function createSoftwareApplicationSchema({
+  description,
+  path,
+  title
+}: Pick<PublicArticleSchemaInput, "description" | "path" | "title">) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: title,
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    description,
+    url: absoluteUrl(path),
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD"
+    },
+    publisher: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      url: SITE_URL
+    }
+  };
+}
+
 export function createItemListSchema({
   description,
   items,

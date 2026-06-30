@@ -40,7 +40,9 @@ const publicAllowPaths = [
   "/insights/",
   "/llms.txt",
   "/llms-full.txt",
-  "/sample-report"
+  "/sample-report",
+  "/solutions",
+  "/solutions/"
 ];
 
 const privateDisallowPaths = ["/app/", "/api/", "/auth/", "/dashboard/", "/account/", "/admin/", "/private/"];

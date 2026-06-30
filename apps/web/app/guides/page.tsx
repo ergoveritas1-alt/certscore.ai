@@ -13,7 +13,8 @@ type GuideCategory =
   | "Cookies & Storage"
   | "Privacy & Tracking"
   | "Policy & Disclosure"
-  | "Scanning Basics";
+  | "Scanning Basics"
+  | "Solutions";
 
 type GuideCard = {
   category: GuideCategory;
@@ -34,6 +35,30 @@ const guides: GuideCard[] = [
     description: "A practical overview for reviewing privacy, accessibility, policy, and disclosure signals.",
     category: "Scanning Basics",
     href: "/guides/website-signal-check"
+  },
+  {
+    title: "GDPR website compliance scanner",
+    description: "Scanner page for GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals.",
+    category: "Solutions",
+    href: "/solutions/gdpr-website-compliance-scanner"
+  },
+  {
+    title: "Cookie consent scanner",
+    description: "Scanner page for cookie consent timing, third-party cookies, CMP behavior, and reject-path signals.",
+    category: "Solutions",
+    href: "/solutions/cookie-consent-scanner"
+  },
+  {
+    title: "Privacy policy risk scanner",
+    description: "Scanner page for comparing privacy disclosures with observable public website behavior.",
+    category: "Solutions",
+    href: "/solutions/privacy-policy-risk-scanner"
+  },
+  {
+    title: "Website accessibility compliance scanner",
+    description: "Scanner page for public-page accessibility review signals and WCAG-oriented triage.",
+    category: "Solutions",
+    href: "/solutions/website-accessibility-compliance-scanner"
   },
   {
     title: "Pre-consent tracking",
