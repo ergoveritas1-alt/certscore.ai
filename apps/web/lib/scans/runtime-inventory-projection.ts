@@ -1,0 +1,583 @@
+import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
+import {
+  isKnownCmpInfrastructureHost,
+  isKnownCmpVendorLabel
+} from "../../../../packages/shared/src/known-cmps";
+import { deriveCertScoreFindings } from "./derive-findings";
+import { getHybridRuntimeEvidence } from "./hybrid-runtime-evidence";
+import { buildRuntimeCookieInventory, type RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
+import {
+  buildRuntimeCookiePriorityGroups,
+  runtimeCookieConfidenceWeight,
+  runtimeCookiePriorityWeight,
+  type RuntimeCookieInventoryConfidence,
+  type RuntimeCookieReviewPriority
+} from "./runtime-cookie-priority";
+import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+
+export type ConsentReviewPriority = RuntimeCookieReviewPriority;
+export type InventoryConfidence = RuntimeCookieInventoryConfidence;
+
+export type TrackerInventoryRow = {
+  category: string;
+  confidence: number | null;
+  domains: string[];
+  firstSeenMs: number | null;
+  label: string;
+  observedVia: string[];
+  preConsent: boolean;
+  requestCount: number | null;
+  regulatoryRelevance?: string[] | null;
+  source: string;
+  vendorDisplayCategory?: string | null;
+};
+
+export type CookieInventoryGroupRow = {
+  confidence: InventoryConfidence;
+  domains: string[];
+  firstSeenMs: number | null;
+  party: "first_party" | "third_party" | "unknown" | "mixed";
+  priority: ConsentReviewPriority;
+  purpose: string;
+  vendor: string;
+};
+
+export type TrackerInventoryGroupRow = {
+  confidence: InventoryConfidence;
+  domains: string[];
+  firstSeenMs: number | null;
+  party: "3rd" | "—" | "mixed";
+  priority: ConsentReviewPriority;
+  purpose: string;
+  requestCount: number | null;
+  vendor: string;
+};
+
+export type InventoryGroupRow =
+  | (CookieInventoryGroupRow & { type: "cookie" })
+  | (TrackerInventoryGroupRow & { type: "tracker" });
+
+type ReportVendorSurfaceProjectionInput = {
+  rawThirdPartyDomains: string[];
+  resolvedVendorNames: string[];
+  topObservedEntities: Array<{ label: string; category: string; requestCount: number }>;
+  unresolvedVendorHosts: string[];
+  vendorCategoryCounts: Record<string, number>;
+};
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function getRecordStringArray(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+}
+
+function isCmpVendorDomain(value: string | null | undefined) {
+  return isKnownCmpInfrastructureHost(value);
+}
+
+function isCmpOrFunctionalVendorLabel(value: string | null | undefined) {
+  return isKnownCmpVendorLabel(value);
+}
+
+function isCmpVendorLabel(value: string | null | undefined) {
+  return isKnownCmpVendorLabel(value);
+}
+
+export function isCmpOrFunctionalVendorDomain(value: string | null | undefined) {
+  return isKnownCmpInfrastructureHost(value);
+}
+
+function isFunctionalButNotCmpVendorDomain(value: string | null | undefined) {
+  return isCmpOrFunctionalVendorDomain(value) && !isCmpVendorDomain(value);
+}
+
+function isFunctionalButNotCmpVendorLabel(value: string | null | undefined) {
+  return isCmpOrFunctionalVendorLabel(value) && !isCmpVendorLabel(value);
+}
+
+export function buildReportSurfaceVendorProjection(input: ReportVendorSurfaceProjectionInput) {
+  const execSummaryResolvedVendorNames = input.resolvedVendorNames.filter((name) => !isFunctionalButNotCmpVendorLabel(name));
+  const execSummaryThirdPartyDomains = uniqueStrings(input.rawThirdPartyDomains).filter((domain) => !isCmpOrFunctionalVendorDomain(domain));
+  const execSummaryTopObservedEntities = input.topObservedEntities.filter((entity) => (
+    !isFunctionalButNotCmpVendorLabel(entity.label) &&
+    !isFunctionalButNotCmpVendorDomain(entity.label)
+  ));
+  const execSummaryCmpCategoryCount = uniqueStrings([
+    ...execSummaryResolvedVendorNames.filter(isCmpVendorLabel),
+    ...execSummaryTopObservedEntities
+      .filter((entity) => entity.category === "cmp" || isCmpVendorDomain(entity.label) || isCmpVendorLabel(entity.label))
+      .map((entity) => entity.label)
+  ]).length;
+
+  return {
+    execSummary: {
+      resolvedVendorNames: execSummaryResolvedVendorNames,
+      thirdPartyDomains: execSummaryThirdPartyDomains,
+      topObservedEntities: execSummaryTopObservedEntities,
+      unresolvedVendorHosts: uniqueStrings(input.unresolvedVendorHosts).filter((host) => !isCmpOrFunctionalVendorDomain(host)),
+      vendorCategoryCounts: execSummaryCmpCategoryCount > 0
+        ? {
+            ...input.vendorCategoryCounts,
+            cmp: Math.max(input.vendorCategoryCounts.cmp ?? 0, execSummaryCmpCategoryCount)
+          }
+        : input.vendorCategoryCounts
+    },
+    evidenceInventory: {
+      resolvedVendorNames: input.resolvedVendorNames,
+      thirdPartyDomains: uniqueStrings(input.rawThirdPartyDomains),
+      topObservedEntities: input.topObservedEntities,
+      unresolvedVendorHosts: uniqueStrings(input.unresolvedVendorHosts)
+    }
+  };
+}
+
+function normalizeInventoryLabel(value: string) {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getNumberFromRecord(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function normalizeInventoryHostname(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  const hostname = getTldtsHostname(value.includes("://") ? value : `https://${value}`);
+  return hostname?.replace(/^www\./, "").toLowerCase() ?? null;
+}
+
+export function inventoryRegistrableDomain(value: string | null | undefined) {
+  const hostname = normalizeInventoryHostname(value);
+  if (!hostname) {
+    return null;
+  }
+  return getTldtsDomain(hostname, { allowPrivateDomains: true }) ?? hostname;
+}
+
+function getStringArrayFromRecord(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (Array.isArray(value)) {
+      return uniqueStrings(value.filter((item): item is string => typeof item === "string" && item.trim().length > 0));
+    }
+    if (typeof value === "string" && value.trim().length > 0) {
+      return [value.trim()];
+    }
+  }
+  return [];
+}
+
+function trackerMatchedHosts(tracker: ScanDetailResponse["trackerVendors"][number]) {
+  const record = tracker as unknown as Record<string, unknown>;
+  return uniqueStrings([
+    tracker.scriptHost,
+    typeof record.endpointHostname === "string" ? record.endpointHostname : null,
+    typeof record.scriptHost === "string" ? record.scriptHost : null,
+    ...getStringArrayFromRecord(record, ["matchedHostnames", "matched_hostnames", "matchedHosts", "matched_hosts"])
+  ].map(normalizeInventoryHostname));
+}
+
+export function buildTrackerInventoryRows(input: {
+  domains: string[];
+  firstPartyDomain?: string | null;
+  preConsentVendors: string[];
+  resolvedVendors: string[];
+  sessionReplayVendors: string[];
+  trackerVendors: Array<ScanDetailResponse["trackerVendors"][number] & { observedVia?: string[] | null; regulatoryRelevance?: string[] | null; vendorDisplayCategory?: string | null }>;
+  topObservedEntities: Array<{ label: string; category: string; requestCount: number }>;
+  unresolvedHosts: string[];
+}) {
+  const rows = new Map<string, TrackerInventoryRow>();
+  const firstPartyRegistrableDomain = inventoryRegistrableDomain(input.firstPartyDomain);
+  const resolvedTrackerHosts = new Set(
+    input.trackerVendors.flatMap(trackerMatchedHosts)
+  );
+  const isFirstPartyHost = (value: string) => {
+    const hostDomain = inventoryRegistrableDomain(value);
+    return Boolean(firstPartyRegistrableDomain && hostDomain === firstPartyRegistrableDomain);
+  };
+  const isCoveredByResolvedVendorHost = (value: string) => {
+    const host = normalizeInventoryHostname(value);
+    return Boolean(host && resolvedTrackerHosts.has(host));
+  };
+  const addRow = (row: TrackerInventoryRow) => {
+    const key = `${row.label.toLowerCase()}\u0000${row.category.toLowerCase()}`;
+    const existing = rows.get(key);
+    if (!existing) {
+      rows.set(key, row);
+      return;
+    }
+    rows.set(key, {
+      ...existing,
+      confidence: Math.max(existing.confidence ?? 0, row.confidence ?? 0) || existing.confidence || row.confidence,
+      domains: uniqueStrings([...existing.domains, ...row.domains]),
+      firstSeenMs:
+        existing.firstSeenMs !== null && row.firstSeenMs !== null
+          ? Math.min(existing.firstSeenMs, row.firstSeenMs)
+          : existing.firstSeenMs ?? row.firstSeenMs,
+      observedVia: uniqueStrings([...existing.observedVia, ...row.observedVia]),
+      preConsent: existing.preConsent || row.preConsent,
+      regulatoryRelevance: uniqueStrings([...(existing.regulatoryRelevance ?? []), ...(row.regulatoryRelevance ?? [])]),
+      requestCount: Math.max(existing.requestCount ?? 0, row.requestCount ?? 0) || existing.requestCount || row.requestCount,
+      source: existing.source === row.source ? existing.source : "multiple"
+    });
+  };
+
+  for (const entity of input.topObservedEntities) {
+    if (isFirstPartyHost(entity.label) || isCoveredByResolvedVendorHost(entity.label)) {
+      continue;
+    }
+    addRow({
+      category: entity.category || "tracker",
+      confidence: null,
+      domains: input.domains.includes(entity.label) ? [entity.label] : [],
+      firstSeenMs: null,
+      label: entity.label,
+      observedVia: ["request"],
+      preConsent: input.preConsentVendors.includes(entity.label),
+      requestCount: entity.requestCount,
+      source: "runtime requests"
+    });
+  }
+  for (const tracker of input.trackerVendors) {
+    const record = tracker as unknown as Record<string, unknown>;
+    const observedVia = tracker.observedVia && tracker.observedVia.length > 0
+      ? uniqueStrings(tracker.observedVia)
+      : getStringArrayFromRecord(record, ["observedVia", "observed_via"]);
+    addRow({
+      category: tracker.vendorCategory || "tracker",
+      confidence: typeof tracker.confidence === "number" && Number.isFinite(tracker.confidence) ? tracker.confidence : null,
+      domains: trackerMatchedHosts(tracker),
+      firstSeenMs: getNumberFromRecord(record, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]),
+      label: tracker.vendorName,
+      observedVia: observedVia.length > 0 ? observedVia : ["request"],
+      preConsent: tracker.beforeConsent === true || input.preConsentVendors.includes(tracker.vendorName),
+      regulatoryRelevance: tracker.regulatoryRelevance ?? getStringArrayFromRecord(record, ["regulatoryRelevance", "regulatory_relevance"]),
+      requestCount: null,
+      source: tracker.detectionSource || "tracker inventory",
+      vendorDisplayCategory: tracker.vendorDisplayCategory ?? (typeof record.vendorDisplayCategory === "string" ? record.vendorDisplayCategory : null)
+    });
+  }
+  for (const vendor of input.resolvedVendors) {
+    const hasConcreteObservedRow = [...rows.values()].some((row) =>
+      row.label.toLowerCase() === vendor.toLowerCase() &&
+      (
+        row.domains.length > 0 ||
+        row.observedVia.some((value) => !/^(resolver|vendor resolver)$/i.test(value))
+      )
+    );
+    if (hasConcreteObservedRow) {
+      continue;
+    }
+    addRow({
+      category: input.sessionReplayVendors.includes(vendor) ? "session_replay" : "unknown",
+      confidence: null,
+      domains: [],
+      firstSeenMs: null,
+      label: vendor,
+      observedVia: ["resolver"],
+      preConsent: input.preConsentVendors.includes(vendor),
+      requestCount: null,
+      source: "vendor resolver"
+    });
+  }
+  for (const host of input.unresolvedHosts) {
+    if (isFirstPartyHost(host) || isCoveredByResolvedVendorHost(host)) {
+      continue;
+    }
+    addRow({
+      category: "unresolved_host",
+      confidence: null,
+      domains: [host],
+      firstSeenMs: null,
+      label: host,
+      observedVia: ["host"],
+      preConsent: false,
+      requestCount: null,
+      source: "host inventory"
+    });
+  }
+
+  return [...rows.values()].sort((left, right) => {
+    const requestDelta = (right.requestCount ?? 0) - (left.requestCount ?? 0);
+    return requestDelta !== 0 ? requestDelta : left.label.localeCompare(right.label);
+  });
+}
+
+export function getInventoryCategoryLabel(
+  vendorLabel: string,
+  fallbackCategory: string | null | undefined,
+  regulatoryRelevance?: readonly string[] | null
+) {
+  const relevance = (regulatoryRelevance ?? []).join(" ").toLowerCase();
+  if (/\baudience_measurement\b/.test(relevance)) {
+    return "Audience measurement";
+  }
+  if (/\badvertising_measurement\b|\bad_measurement\b/.test(relevance)) {
+    return "Advertising measurement";
+  }
+  if (fallbackCategory && /^[A-Z][A-Za-z /&-]+$/.test(fallbackCategory) && fallbackCategory !== "Unknown") {
+    return fallbackCategory;
+  }
+  if (fallbackCategory && /^vendor$/i.test(fallbackCategory)) {
+    return "Unknown";
+  }
+
+  const label = vendorLabel.toLowerCase();
+  if (/google sign.?in|accounts\.google|gsi\/client/.test(label)) {
+    return "Authentication";
+  }
+  if (/stripe/.test(label)) {
+    return "Payment processors";
+  }
+  if (/cloudflare bot management|cf_chl|cf_clearance|__cf_bm|cloudflare/.test(label)) {
+    return "Security";
+  }
+  if (/doubleclick floodlight|floodlight|fls\.doubleclick/.test(label)) {
+    return "Advertising";
+  }
+  if (/google adsense|adsbygoogle|pagead2/.test(label)) {
+    return "Advertising";
+  }
+  if (/google publisher tag|googletag|gpt\.js|securepubads/.test(label)) {
+    return "Advertising";
+  }
+  if (/integral ad science|ias/.test(label)) {
+    return "Advertising";
+  }
+  if (/jsdelivr|cdn\.jsdelivr\.net/.test(label)) {
+    return "CDN";
+  }
+  if (/onetrust|cookielaw|optanon/.test(label)) {
+    return "Cookie compliance";
+  }
+  if (/optimizely/.test(label)) {
+    return "A/B Testing";
+  }
+  if (/piano|tinypass/.test(label)) {
+    return "Personalisation";
+  }
+  if (/cxense/.test(label)) {
+    return "Personalisation";
+  }
+  if (/quantcast/.test(label)) {
+    return "Analytics";
+  }
+  return normalizeInventoryLabel(fallbackCategory || "unknown");
+}
+
+function normalizeInventoryPurpose(value: string | null | undefined) {
+  return (value ?? "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
+}
+
+export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {
+  const purpose = normalizeInventoryPurpose(getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance));
+  const confidence = getTrackerInventoryConfidence(row);
+  const normalizedLabel = row.label.toLowerCase();
+  const isLinkedInAdsPixel =
+    /linkedin ads pixel/.test(normalizedLabel) ||
+    row.domains.some((domain) => /^px\.ads\.linkedin\.com$/i.test(domain.trim()));
+
+  if (isLinkedInAdsPixel) {
+    return row.preConsent ? "high" : "review_needed";
+  }
+  if (/^(advertising|retargeting|audience_measurement|session_replay|fingerprinting)$/.test(purpose)) {
+    return row.preConsent ? "high" : "medium";
+  }
+  if (/^(personalization|personalisation)$/.test(purpose) && confidence === "low") {
+    return "review_needed";
+  }
+  if (/^(analytics|experimentation|personalization|personalisation|a_b_testing|embedded_content|tag_management|tag_manager|marketing_automation)$/.test(purpose)) {
+    return row.preConsent ? "medium" : "contextual";
+  }
+  if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics)$/.test(purpose)) {
+    return "contextual";
+  }
+  if (/^(cdn_static|cdn|functional)$/.test(purpose)) {
+    return "contextual";
+  }
+  if (row.category === "unknown" || row.category === "unresolved_host" || row.domains.length === 0) {
+    return "review_needed";
+  }
+  return "review_needed";
+}
+
+export function getTrackerInventoryConfidence(row: TrackerInventoryRow): InventoryConfidence {
+  const confidence = typeof row.confidence === "number" && Number.isFinite(row.confidence) ? row.confidence : null;
+  if (confidence !== null) {
+    if (confidence >= 0.9) {
+      return "high";
+    }
+    if (confidence >= 0.7) {
+      return "medium";
+    }
+    return "low";
+  }
+  if (row.domains.length > 0 && row.category !== "unknown" && row.category !== "unresolved_host") {
+    return "medium";
+  }
+  return "low";
+}
+
+function formatTrackerParty(row: TrackerInventoryRow) {
+  if (row.domains.some((domain) => domain.includes("."))) {
+    return "3rd";
+  }
+  return row.preConsent ? "3rd" : "—";
+}
+
+function priorityWeight(priority: ConsentReviewPriority) {
+  return runtimeCookiePriorityWeight(priority);
+}
+
+function confidenceWeight(confidence: InventoryConfidence) {
+  return runtimeCookieConfidenceWeight(confidence);
+}
+
+export function compareInventoryPriorityRows(
+  left: { confidence: InventoryConfidence; firstSeenMs: number | null; priority: ConsentReviewPriority; requestCount?: number | null; vendor: string },
+  right: { confidence: InventoryConfidence; firstSeenMs: number | null; priority: ConsentReviewPriority; requestCount?: number | null; vendor: string }
+) {
+  const priorityDelta = priorityWeight(right.priority) - priorityWeight(left.priority);
+  if (priorityDelta !== 0) {
+    return priorityDelta;
+  }
+  if (left.firstSeenMs !== null || right.firstSeenMs !== null) {
+    if (left.firstSeenMs === null) {
+      return 1;
+    }
+    if (right.firstSeenMs === null) {
+      return -1;
+    }
+    const firstSeenDelta = left.firstSeenMs - right.firstSeenMs;
+    if (firstSeenDelta !== 0) {
+      return firstSeenDelta;
+    }
+  }
+  const confidenceDelta = confidenceWeight(right.confidence) - confidenceWeight(left.confidence);
+  if (confidenceDelta !== 0) {
+    return confidenceDelta;
+  }
+  const requestDelta = (right.requestCount ?? 0) - (left.requestCount ?? 0);
+  if (requestDelta !== 0) {
+    return requestDelta;
+  }
+  return left.vendor.localeCompare(right.vendor);
+}
+
+function mergePartyValues<T extends string>(left: T, right: T): T | "mixed" {
+  return left === right ? left : "mixed";
+}
+
+export function formatGroupedParty(value: CookieInventoryGroupRow["party"] | TrackerInventoryGroupRow["party"]) {
+  if (value === "first_party") {
+    return "1st";
+  }
+  if (value === "third_party") {
+    return "3rd";
+  }
+  if (value === "mixed") {
+    return "Mixed";
+  }
+  return value;
+}
+
+export function buildCookieInventoryGroupRows(rows: RuntimeCookieEvidenceRow[]) {
+  return buildRuntimeCookiePriorityGroups(rows);
+}
+
+export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
+  const grouped = new Map<string, TrackerInventoryGroupRow>();
+  for (const row of rows) {
+    const purpose = getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance);
+    const key = `${row.label.toLowerCase()}\u0000${purpose.toLowerCase()}`;
+    const candidate: TrackerInventoryGroupRow = {
+      confidence: getTrackerInventoryConfidence(row),
+      domains: row.domains,
+      firstSeenMs: row.firstSeenMs,
+      party: formatTrackerParty(row),
+      priority: getTrackerConsentReviewPriority(row),
+      purpose,
+      requestCount: row.requestCount,
+      vendor: row.label
+    };
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, candidate);
+      continue;
+    }
+    grouped.set(key, {
+      ...existing,
+      confidence: confidenceWeight(candidate.confidence) > confidenceWeight(existing.confidence) ? candidate.confidence : existing.confidence,
+      domains: uniqueStrings([...existing.domains, ...candidate.domains]),
+      firstSeenMs:
+        existing.firstSeenMs !== null && candidate.firstSeenMs !== null
+          ? Math.min(existing.firstSeenMs, candidate.firstSeenMs)
+          : existing.firstSeenMs ?? candidate.firstSeenMs,
+      party: mergePartyValues(existing.party, candidate.party),
+      priority: priorityWeight(candidate.priority) > priorityWeight(existing.priority) ? candidate.priority : existing.priority,
+      requestCount: Math.max(existing.requestCount ?? 0, candidate.requestCount ?? 0) || existing.requestCount || candidate.requestCount
+    });
+  }
+  return [...grouped.values()].sort(compareInventoryPriorityRows);
+}
+
+export function buildRuntimeInventoryGroupRows(input: {
+  cookieRows: RuntimeCookieEvidenceRow[];
+  trackerRows: TrackerInventoryRow[];
+}) {
+  const groupedCookieRows = buildCookieInventoryGroupRows(input.cookieRows);
+  const groupedTrackerRows = buildTrackerInventoryGroupRows(input.trackerRows);
+  return [
+    ...groupedCookieRows.map((row) => ({ ...row, type: "cookie" as const })),
+    ...groupedTrackerRows.map((row) => ({ ...row, type: "tracker" as const }))
+  ].sort(compareInventoryPriorityRows);
+}
+
+export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailResponse) {
+  const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
+  const hybridVendorSummary = getRecord(hybridRuntimeEvidence?.vendorSummary ?? hybridRuntimeEvidence?.vendor_summary);
+  const certScoreSummary = deriveCertScoreFindings(scanRecord);
+  const vendorSurfaceProjection = buildReportSurfaceVendorProjection({
+    rawThirdPartyDomains: getRecordStringArray(hybridVendorSummary, "rawThirdPartyDomains"),
+    resolvedVendorNames: certScoreSummary.resolvedVendorNames,
+    topObservedEntities: certScoreSummary.topObservedEntities,
+    unresolvedVendorHosts: certScoreSummary.unresolvedVendorHosts,
+    vendorCategoryCounts: certScoreSummary.vendorCategoryCounts
+  });
+  const cookieRows = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence,
+    runtimeArtifacts
+  }).rows;
+  const trackerRows = buildTrackerInventoryRows({
+    domains: vendorSurfaceProjection.evidenceInventory.thirdPartyDomains,
+    firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
+    preConsentVendors: certScoreSummary.preConsentVendorNames,
+    resolvedVendors: vendorSurfaceProjection.evidenceInventory.resolvedVendorNames,
+    sessionReplayVendors: certScoreSummary.sessionReplayVendorNames,
+    trackerVendors: scanRecord.trackerVendors,
+    topObservedEntities: vendorSurfaceProjection.evidenceInventory.topObservedEntities,
+    unresolvedHosts: vendorSurfaceProjection.evidenceInventory.unresolvedVendorHosts
+  });
+
+  return {
+    cookieRows,
+    trackerRows,
+    groupedRows: buildRuntimeInventoryGroupRows({ cookieRows, trackerRows })
+  };
+}

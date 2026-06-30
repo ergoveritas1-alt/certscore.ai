@@ -43,7 +43,8 @@ const discoveryDocument = {
     reference: "https://certscore.ai/developers/reference",
     sdk: "https://certscore.ai/developers/sdk",
     mcp: "https://certscore.ai/developers/mcp",
-    examples: "https://certscore.ai/developers/examples"
+    examples: "https://certscore.ai/developers/examples",
+    preConsentCookiesTrackersExample: "https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json"
   },
   api: {
     v2Health: "https://certscore.ai/api/v2/health",
@@ -53,7 +54,9 @@ const discoveryDocument = {
     v2ScanStatus: "https://certscore.ai/api/v2/scans/{scanId}/status",
     v2ScanFindings: "https://certscore.ai/api/v2/scans/{scanId}/findings",
     v2ScanFinding: "https://certscore.ai/api/v2/scans/{scanId}/findings/{findingId}",
+    v2ScanPreConsentCookiesTrackers: "https://certscore.ai/api/v2/scans/{scanId}/pre-consent-cookies-trackers",
     v2DomainLatest: "https://certscore.ai/api/v2/domains/{domain}/latest",
+    v2DomainLatestPreConsentCookiesTrackers: "https://certscore.ai/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers",
     docs: "https://certscore.ai/developers/reference"
   },
   sdk: {
@@ -75,8 +78,10 @@ const discoveryDocument = {
       "get_report",
       "export_findings",
       "list_findings",
+      "get_pre_consent_cookies_trackers",
       "explain_finding",
-      "get_latest_domain_scan"
+      "get_latest_domain_scan",
+      "get_latest_domain_pre_consent_cookies_trackers"
     ]
   },
   recommendedAgentWorkflow: [
@@ -99,6 +104,10 @@ const discoveryDocument = {
     {
       step: "retrieve_public_safe_findings",
       request: "GET https://certscore.ai/api/v2/scans/{scanId}/findings"
+    },
+    {
+      step: "retrieve_pre_consent_cookies_trackers_table",
+      request: "GET https://certscore.ai/api/v2/scans/{scanId}/pre-consent-cookies-trackers"
     }
   ],
   searchableTopics: [
@@ -109,6 +118,7 @@ const discoveryDocument = {
     "website risk API",
     "privacy scan API",
     "cookie compliance scan API",
+    "Cookies & Trackers (Pre-consent) JSON",
     "MCP server for website compliance review",
     "automated public-web risk signals",
     "evidence-backed website scan API"

@@ -37,12 +37,21 @@ export const mcpListFindingsInputSchema = {
   scanId: z.string().min(1).describe("Stable CertScore scan ID.")
 } as const;
 
+export const mcpGetPreConsentCookiesTrackersInputSchema = {
+  scanId: z.string().min(1).describe("Stable CertScore scan ID.")
+} as const;
+
 export const mcpExplainFindingInputSchema = {
   scanId: z.string().min(1).describe("Stable CertScore scan ID."),
   findingId: z.string().min(1).describe("Finding ID to explain.")
 } as const;
 
 export const mcpGetLatestDomainScanInputSchema = {
+  domain: z.string().min(1).describe("Public domain to look up."),
+  scanFrom: mcpScanFromSchema.optional().describe("Optional scan execution context for matching eligible scans.")
+} as const;
+
+export const mcpGetLatestDomainPreConsentCookiesTrackersInputSchema = {
   domain: z.string().min(1).describe("Public domain to look up."),
   scanFrom: mcpScanFromSchema.optional().describe("Optional scan execution context for matching eligible scans.")
 } as const;
@@ -91,6 +100,12 @@ export const certScoreMcpToolContracts = [
     inputSchema: mcpListFindingsInputSchema
   },
   {
+    name: "get_pre_consent_cookies_trackers",
+    title: "Get pre-consent cookies and trackers",
+    description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.",
+    inputSchema: mcpGetPreConsentCookiesTrackersInputSchema
+  },
+  {
     name: "explain_finding",
     title: "Explain CertScore finding",
     description: "Explain a single CertScore finding with public evidence, caveats, and reviewer next steps.",
@@ -101,5 +116,11 @@ export const certScoreMcpToolContracts = [
     title: "Get latest domain scan",
     description: "Retrieve the latest eligible API v2 public-safe scan for a domain.",
     inputSchema: mcpGetLatestDomainScanInputSchema
+  },
+  {
+    name: "get_latest_domain_pre_consent_cookies_trackers",
+    title: "Get latest domain pre-consent cookies and trackers",
+    description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.",
+    inputSchema: mcpGetLatestDomainPreConsentCookiesTrackersInputSchema
   }
 ] as const;

@@ -107,7 +107,9 @@ test("CertScore MCP server exposes the scoped v1 tool surface", async () => {
         "create_scan",
         "explain_finding",
         "export_findings",
+        "get_latest_domain_pre_consent_cookies_trackers",
         "get_latest_domain_scan",
+        "get_pre_consent_cookies_trackers",
         "get_report",
         "get_scan",
         "get_scan_status",
@@ -129,8 +131,10 @@ test("README documents current MCP tool surface and public docs", () => {
     "get_report",
     "export_findings",
     "list_findings",
+    "get_pre_consent_cookies_trackers",
     "explain_finding",
-    "get_latest_domain_scan"
+    "get_latest_domain_scan",
+    "get_latest_domain_pre_consent_cookies_trackers"
   ]) {
     assert.match(readme, new RegExp(`\\\`${tool}\\\``));
   }
@@ -357,9 +361,29 @@ test("API v2 MCP tools return scan, findings, and latest domain resources", asyn
     {
       status: 200,
       body: {
+        type: "certscore_pre_consent_cookies_trackers",
+        scanId: "scan_123",
+        domain: "example.com",
+        summary: { rowCount: 0, trackerCount: 0, cookieCount: 0, requestCount: 0 },
+        rows: []
+      }
+    },
+    {
+      status: 200,
+      body: {
         type: "certscore_domain_latest_scan",
         domain: "example.com",
         scan: null
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_pre_consent_cookies_trackers",
+        scanId: "scan_123",
+        domain: "example.com",
+        summary: { rowCount: 0, trackerCount: 0, cookieCount: 0, requestCount: 0 },
+        rows: []
       }
     }
   ]);
@@ -367,16 +391,24 @@ test("API v2 MCP tools return scan, findings, and latest domain resources", asyn
     await withMcpClient(async (client) => {
       const scan = parseToolJson(await client.callTool({ name: "get_scan", arguments: { scanId: "scan_123" } }));
       const findings = parseToolJson(await client.callTool({ name: "list_findings", arguments: { scanId: "scan_123" } }));
+      const inventory = parseToolJson(await client.callTool({ name: "get_pre_consent_cookies_trackers", arguments: { scanId: "scan_123" } }));
       const latest = parseToolJson(
         await client.callTool({ name: "get_latest_domain_scan", arguments: { domain: "example.com", scanFrom: "california" } })
+      );
+      const latestInventory = parseToolJson(
+        await client.callTool({ name: "get_latest_domain_pre_consent_cookies_trackers", arguments: { domain: "example.com", scanFrom: "california" } })
       );
 
       assert.equal(scan.type, "certscore_scan");
       assert.equal(findings.type, "certscore_finding_list");
+      assert.equal(inventory.type, "certscore_pre_consent_cookies_trackers");
       assert.equal(latest.type, "certscore_domain_latest_scan");
+      assert.equal(latestInventory.type, "certscore_pre_consent_cookies_trackers");
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123$/);
       assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/findings$/);
-      assert.match(mock.calls[2] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=california$/);
+      assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/scan_123\/pre-consent-cookies-trackers$/);
+      assert.match(mock.calls[3] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=california$/);
+      assert.match(mock.calls[4] ?? "", /\/api\/v2\/domains\/example.com\/latest\/pre-consent-cookies-trackers\?scanFrom=california$/);
     });
   } finally {
     mock.restore();

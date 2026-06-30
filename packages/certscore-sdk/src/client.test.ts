@@ -77,6 +77,7 @@ test("README documents current SDK resource clients", () => {
   for (const method of [
     "certscore.scans.create()",
     "certscore.scans.get()",
+    "certscore.scans.preConsentCookiesTrackers()",
     "certscore.scans.status()",
     "certscore.scans.wait()",
     "certscore.findings.list()",
@@ -84,6 +85,7 @@ test("README documents current SDK resource clients", () => {
     "certscore.findings.explain()",
     "certscore.pulse.get()",
     "certscore.domains.latest()",
+    "certscore.domains.latestPreConsentCookiesTrackers()",
     "certscore.scan()"
   ]) {
     assert.match(readme, new RegExp(method.replace(/[().]/g, "\\$&")));
@@ -282,6 +284,16 @@ test("resource clients call API v2 read endpoints", async () => {
     {
       status: 200,
       body: {
+        type: "certscore_pre_consent_cookies_trackers",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        domain: "example.com",
+        summary: { rowCount: 0, trackerCount: 0, cookieCount: 0, requestCount: 0 },
+        rows: []
+      }
+    },
+    {
+      status: 200,
+      body: {
         type: "certscore_finding_list",
         scanId: "00000000-0000-4000-8000-000000000123",
         findings: []
@@ -320,6 +332,16 @@ test("resource clients call API v2 read endpoints", async () => {
         domain: "example.com",
         scan: null
       }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_pre_consent_cookies_trackers",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        domain: "example.com",
+        summary: { rowCount: 0, trackerCount: 0, cookieCount: 0, requestCount: 0 },
+        rows: []
+      }
     }
   ]);
 
@@ -327,23 +349,29 @@ test("resource clients call API v2 read endpoints", async () => {
     const client = new CertScoreClient({ baseUrl: "https://certscore.ai/" });
     const scan = await client.scans.get("00000000-0000-4000-8000-000000000123");
     const status = await client.scans.status("00000000-0000-4000-8000-000000000123");
+    const inventory = await client.scans.preConsentCookiesTrackers("00000000-0000-4000-8000-000000000123");
     const findings = await client.findings.list("00000000-0000-4000-8000-000000000123");
     const finding = await client.findings.explain("00000000-0000-4000-8000-000000000123", "pre_consent_tracking_detected");
     const wrappedPulse = await client.pulse.get("00000000-0000-4000-8000-000000000123");
     const latest = await client.domains.latest("example.com", { scanFrom: "california" });
+    const latestInventory = await client.domains.latestPreConsentCookiesTrackers("example.com", { scanFrom: "california" });
 
     assert.equal(scan.type, "certscore_scan");
     assert.equal(status.type, "certscore_scan_job");
+    assert.equal(inventory.type, "certscore_pre_consent_cookies_trackers");
     assert.equal(findings.type, "certscore_finding_list");
     assert.equal(finding.id, "pre_consent_tracking_detected");
     assert.equal(wrappedPulse.type, "certscore_scan_pulse");
     assert.equal(latest.type, "certscore_domain_latest_scan");
+    assert.equal(latestInventory.type, "certscore_pre_consent_cookies_trackers");
     assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
     assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status$/);
-    assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/findings$/);
-    assert.match(mock.calls[3] ?? "", /\/findings\/pre_consent_tracking_detected$/);
-    assert.match(mock.calls[4] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/pulse$/);
-    assert.match(mock.calls[5] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=california$/);
+    assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/pre-consent-cookies-trackers$/);
+    assert.match(mock.calls[3] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/findings$/);
+    assert.match(mock.calls[4] ?? "", /\/findings\/pre_consent_tracking_detected$/);
+    assert.match(mock.calls[5] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/pulse$/);
+    assert.match(mock.calls[6] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=california$/);
+    assert.match(mock.calls[7] ?? "", /\/api\/v2\/domains\/example.com\/latest\/pre-consent-cookies-trackers\?scanFrom=california$/);
   } finally {
     mock.restore();
   }

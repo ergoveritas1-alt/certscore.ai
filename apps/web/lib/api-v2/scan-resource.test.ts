@@ -6,12 +6,14 @@ import {
   buildApiV2DomainLatestScan,
   buildApiV2FindingDetail,
   buildApiV2FindingList,
+  buildApiV2PreConsentCookiesTrackers,
   buildApiV2ScanJobFromPulseStatus,
   buildApiV2ScanPulse,
   buildApiV2ScanResource,
   buildApiV2ScanStatus,
   projectedFindingsFromPulse
 } from "./scan-resource";
+import { buildRuntimeInventoryProjectionFromScan } from "../scans/runtime-inventory-projection";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 
 function fixture(overrides: Partial<ScanDetailResponse["scan"]> = {}) {
@@ -47,6 +49,87 @@ function fixture(overrides: Partial<ScanDetailResponse["scan"]> = {}) {
     regulatoryRisk: {
       overallScore: 28
     }
+  } as unknown as ScanDetailResponse;
+}
+
+function retainedPreConsentInventoryFixture() {
+  return {
+    ...fixture(),
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        vendorSummary: {
+          rawThirdPartyDomains: ["connect.facebook.net", "static.klaviyo.com", "cdn.example.com"]
+        },
+        cookieWriteObservations: [
+          {
+            beforeConsent: true,
+            cookieInitiatorDomain: "connect.facebook.net",
+            cookieInitiatorUrl: "https://connect.facebook.net/fbevents.js?email=person@example.com",
+            cookieInitiatorVendor: "Meta Pixel",
+            cookieName: "_fbp",
+            cookieSetMethod: "document_cookie",
+            cookieValue: "must-not-leak",
+            domain: ".example.com",
+            rawRequestBody: "email=person@example.com&token=secret",
+            responseUrl: "https://connect.facebook.net/fbevents.js?token=secret",
+            setAtMs: 120
+          },
+          {
+            beforeConsent: true,
+            cookieInitiatorDomain: "static.klaviyo.com",
+            cookieInitiatorVendor: "Klaviyo",
+            cookieName: "__kla_id",
+            cookieSetMethod: "document_cookie",
+            cookieValue: "also-must-not-leak",
+            domain: ".example.com",
+            responseUrl: "https://static.klaviyo.com/onsite/js/klaviyo.js?customer_email=person@example.com",
+            setAtMs: 260
+          }
+        ],
+        timelineMarkers: {
+          consentBannerDetectedMs: 400
+        },
+        requestObservations: [
+          {
+            beforeConsent: true,
+            host: "connect.facebook.net",
+            url: "https://connect.facebook.net/tr?id=123&email=person@example.com"
+          },
+          {
+            beforeConsent: true,
+            host: "static.klaviyo.com",
+            url: "https://static.klaviyo.com/onsite/js/klaviyo.js?token=secret"
+          }
+        ]
+      },
+      initial_cookie_domains: [".example.com"],
+      initial_cookie_names: ["_ga"]
+    },
+    trackerVendors: [
+      {
+        beforeConsent: true,
+        confidence: 0.96,
+        detectionSource: "request",
+        firstSeenMs: 144,
+        matchedSignatureId: "meta_pixel",
+        rawRequestBody: "email=person@example.com",
+        scriptHost: "connect.facebook.net/tr?id=123&email=person@example.com",
+        vendorCategory: "advertising",
+        vendorDisplayCategory: "Advertising",
+        vendorName: "Meta Pixel"
+      },
+      {
+        beforeConsent: true,
+        confidence: 0.86,
+        detectionSource: "request",
+        firstSeenMs: 260,
+        matchedSignatureId: "klaviyo",
+        scriptHost: "static.klaviyo.com/onsite/js/klaviyo.js?token=secret",
+        vendorCategory: "marketing_automation",
+        vendorDisplayCategory: "Marketing automation",
+        vendorName: "Klaviyo"
+      }
+    ]
   } as unknown as ScanDetailResponse;
 }
 
@@ -257,4 +340,113 @@ test("buildApiV2FindingDetail uses unknown enums conservatively", () => {
   assert.equal(detail.confidence, "unknown");
   assert.equal(detail.evidence.basis, "public_report_projection");
   assert.equal(detail.detail?.caveats?.[0], "Coverage was limited; absence of findings should not be interpreted as absence of risk.");
+});
+
+test("buildApiV2PreConsentCookiesTrackers matches the shared public report table projection", () => {
+  const scanRecord = retainedPreConsentInventoryFixture();
+  const projection = buildRuntimeInventoryProjectionFromScan(scanRecord);
+  const resource = buildApiV2PreConsentCookiesTrackers(scanRecord);
+  const secondResource = buildApiV2PreConsentCookiesTrackers(scanRecord);
+  const serialized = JSON.stringify(resource);
+
+  assert.equal(resource.type, "certscore_pre_consent_cookies_trackers");
+  assert.equal(resource.summary.rowCount, projection.groupedRows.length);
+  assert.equal(resource.rows.length, projection.groupedRows.length);
+  assert.equal(resource.summary.cookieCount, projection.groupedRows.filter((row) => row.type === "cookie").length);
+  assert.equal(resource.summary.trackerCount, projection.groupedRows.filter((row) => row.type === "tracker").length);
+  assert.ok(resource.summary.cookieCount > 0);
+  assert.ok(resource.summary.trackerCount > 0);
+  assert.deepEqual(
+    resource.rows.map((row) => row.id),
+    secondResource.rows.map((row) => row.id)
+  );
+  assert.deepEqual(
+    resource.rows.map((row) => `${row.kind}:${row.vendor}:${row.purpose}:${row.host ?? "none"}`),
+    projection.groupedRows.map((row) => `${row.type}:${row.vendor}:${row.purpose}:${row.domains[0]?.split(/[/?#]/, 1)[0]?.replace(/^www\./, "").toLowerCase() ?? "none"}`)
+  );
+  assert.ok(resource.rows.every((row) => row.evidenceBasis === "public_report_projection"));
+  assert.ok(resource.rows.every((row) => row.observedBeforeConsent === true));
+  assert.ok(resource.rows.every((row) => !row.host?.includes("?")));
+  assert.equal(serialized.includes("must-not-leak"), false);
+  assert.equal(serialized.includes("also-must-not-leak"), false);
+  assert.equal(serialized.includes("person@example.com"), false);
+  assert.equal(serialized.includes("rawRequestBody"), false);
+  assert.equal(serialized.includes("cookieValue"), false);
+  assert.equal(serialized.includes("token=secret"), false);
+});
+
+test("buildApiV2PreConsentCookiesTrackers maps report table rows without raw values or URLs", () => {
+  const resource = buildApiV2PreConsentCookiesTrackers({
+    ...fixture(),
+    runtimeArtifacts: {
+      hybrid_runtime_evidence: {
+        vendorSummary: {
+          rawThirdPartyDomains: ["tracker.example.test"]
+        },
+        cookieWriteObservations: [
+          {
+            cookieName: "_ga",
+            cookieValue: "secret-cookie-value",
+            domain: ".doubleclick.net",
+            category: "advertising",
+            beforeConsent: true,
+            setAtMs: 123,
+            sourceRequestUrl: "https://doubleclick.net/pixel?email=person@example.com",
+            rawRequestBody: "token=secret"
+          }
+        ],
+        requestObservations: [
+          {
+            host: "tracker.example.test",
+            url: "https://tracker.example.test/collect?email=person@example.com",
+            beforeConsent: true
+          }
+        ]
+      }
+    },
+    trackerVendors: [
+      {
+        vendorName: "Example Analytics",
+        vendorCategory: "analytics",
+        beforeConsent: true,
+        confidence: 0.95,
+        scriptHost: "tracker.example.test/path?secret=true",
+        detectionSource: "tracker inventory",
+        firstSeenMs: 456,
+        rawRequestBody: "secret"
+      }
+    ]
+  } as unknown as ScanDetailResponse);
+
+  const serialized = JSON.stringify(resource);
+
+  assert.equal(resource.type, "certscore_pre_consent_cookies_trackers");
+  assert.equal(resource.scanId, "00000000-0000-4000-8000-000000000123");
+  assert.ok(resource.summary.rowCount >= 2);
+  assert.ok(resource.summary.cookieCount >= 1);
+  assert.ok(resource.summary.trackerCount >= 1);
+  assert.ok(resource.rows.every((row) => row.evidenceBasis === "public_report_projection"));
+  assert.ok(resource.rows.every((row) => row.phase === "pre_consent"));
+  assert.ok(resource.rows.every((row) => !row.host?.includes("?")));
+  assert.ok(resource.rows.some((row) => row.kind === "tracker" && row.host === "tracker.example.test"));
+  assert.equal(serialized.includes("secret-cookie-value"), false);
+  assert.equal(serialized.includes("person@example.com"), false);
+  assert.equal(serialized.includes("rawRequestBody"), false);
+});
+
+test("buildApiV2PreConsentCookiesTrackers returns a valid empty response", () => {
+  const resource = buildApiV2PreConsentCookiesTrackers({
+    ...fixture(),
+    runtimeArtifacts: { hybrid_runtime_evidence: { vendorSummary: { rawThirdPartyDomains: [] } } },
+    trackerVendors: []
+  } as unknown as ScanDetailResponse);
+
+  assert.equal(resource.type, "certscore_pre_consent_cookies_trackers");
+  assert.deepEqual(resource.summary, {
+    rowCount: 0,
+    trackerCount: 0,
+    cookieCount: 0,
+    requestCount: 0
+  });
+  assert.deepEqual(resource.rows, []);
 });

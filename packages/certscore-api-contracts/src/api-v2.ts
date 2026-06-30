@@ -13,6 +13,10 @@ export const apiV2ScanFromSchema = z.enum(["eu_ie", "california"]);
 export const apiV2FindingCriticalitySchema = z.enum(["critical", "high", "medium", "low", "info", "unknown"]);
 export const apiV2FindingConfidenceSchema = z.enum(["strong", "moderate", "weak", "unknown"]);
 export const apiV2EvidenceBasisSchema = z.enum(["runtime_observation", "policy_surface_detection", "accessibility_check", "public_report_projection"]);
+export const apiV2PreConsentInventoryKindSchema = z.enum(["cookie", "tracker", "request", "storage", "unknown"]);
+export const apiV2PreConsentInventoryPhaseSchema = z.literal("pre_consent");
+export const apiV2PreConsentInventoryPrioritySchema = z.enum(["high", "medium", "review_needed", "contextual", "unknown"]);
+export const apiV2PreConsentInventoryConfidenceSchema = z.enum(["high", "medium", "low", "unknown"]);
 
 export const apiV2LinksSchema = z
   .object({
@@ -176,6 +180,50 @@ export const apiV2ScanPulseSchema = z
   })
   .passthrough();
 
+export const apiV2PreConsentCookiesTrackersRowSchema = z
+  .object({
+    id: z.string(),
+    kind: apiV2PreConsentInventoryKindSchema,
+    name: z.string(),
+    vendor: z.string().nullable().optional(),
+    host: z.string().nullable().optional(),
+    registrableDomain: z.string().nullable().optional(),
+    category: z.string().nullable().optional(),
+    purpose: z.string().nullable().optional(),
+    priority: apiV2PreConsentInventoryPrioritySchema.optional(),
+    confidence: apiV2PreConsentInventoryConfidenceSchema.optional(),
+    party: z.enum(["first_party", "third_party", "mixed", "unknown"]).optional(),
+    requestCount: z.number().int().min(0).nullable().optional(),
+    phase: apiV2PreConsentInventoryPhaseSchema,
+    observedBeforeConsent: z.boolean(),
+    evidenceBasis: z.literal("public_report_projection"),
+    firstObservedAtMs: z.number().int().min(0).nullable().optional(),
+    pageUrlHost: z.string().nullable().optional()
+  })
+  .strict();
+
+export const apiV2PreConsentCookiesTrackersSummarySchema = z
+  .object({
+    rowCount: z.number().int().min(0),
+    trackerCount: z.number().int().min(0),
+    cookieCount: z.number().int().min(0),
+    requestCount: z.number().int().min(0)
+  })
+  .strict();
+
+export const apiV2PreConsentCookiesTrackersSchema = z
+  .object({
+    type: z.literal("certscore_pre_consent_cookies_trackers"),
+    scanId: z.string(),
+    domain: z.string(),
+    generatedAt: z.string().nullable().optional(),
+    summary: apiV2PreConsentCookiesTrackersSummarySchema,
+    rows: z.array(apiV2PreConsentCookiesTrackersRowSchema),
+    links: apiV2LinksSchema.optional(),
+    disclaimer: z.string().optional()
+  })
+  .passthrough();
+
 export type ApiV2CreateScanRequest = z.infer<typeof apiV2CreateScanRequestSchema>;
 export type ApiV2ScanJob = z.infer<typeof apiV2ScanJobSchema>;
 export type ApiV2ScanResource = z.infer<typeof apiV2ScanResourceSchema>;
@@ -184,4 +232,5 @@ export type ApiV2FindingDetail = z.infer<typeof apiV2FindingDetailSchema>;
 export type ApiV2FindingList = z.infer<typeof apiV2FindingListSchema>;
 export type ApiV2DomainLatestScan = z.infer<typeof apiV2DomainLatestScanSchema>;
 export type ApiV2ScanPulse = z.infer<typeof apiV2ScanPulseSchema>;
+export type ApiV2PreConsentCookiesTrackers = z.infer<typeof apiV2PreConsentCookiesTrackersSchema>;
 export type ApiV2Error = z.infer<typeof apiV2ErrorSchema>;

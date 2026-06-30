@@ -4,6 +4,8 @@ import {
   mcpExplainFindingInputSchema,
   mcpExportFindingsInputSchema,
   mcpGetLatestDomainScanInputSchema,
+  mcpGetLatestDomainPreConsentCookiesTrackersInputSchema,
+  mcpGetPreConsentCookiesTrackersInputSchema,
   mcpGetReportInputSchema,
   mcpGetScanInputSchema,
   mcpGetScanStatusInputSchema,
@@ -195,6 +197,22 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   );
 
   server.registerTool(
+    "get_pre_consent_cookies_trackers",
+    {
+      title: "Get pre-consent cookies and trackers",
+      description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.",
+      inputSchema: mcpGetPreConsentCookiesTrackersInputSchema
+    },
+    async ({ scanId }) => {
+      try {
+        return toToolResult(await client.scans.preConsentCookiesTrackers(scanId));
+      } catch (error) {
+        return toToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
     "explain_finding",
     {
       title: "Explain CertScore finding",
@@ -220,6 +238,22 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     async ({ domain, scanFrom }) => {
       try {
         return toToolResult(await client.domains.latest(domain, { scanFrom }));
+      } catch (error) {
+        return toToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "get_latest_domain_pre_consent_cookies_trackers",
+    {
+      title: "Get latest domain pre-consent cookies and trackers",
+      description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.",
+      inputSchema: mcpGetLatestDomainPreConsentCookiesTrackersInputSchema
+    },
+    async ({ domain, scanFrom }) => {
+      try {
+        return toToolResult(await client.domains.latestPreConsentCookiesTrackers(domain, { scanFrom }));
       } catch (error) {
         return toToolError(error);
       }

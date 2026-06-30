@@ -20,8 +20,10 @@ Public docs:
 - `get_report` retrieves a Pulse report by stable scan ID as JSON or markdown.
 - `export_findings` returns structured findings for ticketing, review, or compliance workflows.
 - `list_findings` returns API v2 public-safe findings for a scan.
+- `get_pre_consent_cookies_trackers` returns the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON.
 - `explain_finding` retrieves one API v2 public-safe finding with evidence summary, caveats, and next steps.
 - `get_latest_domain_scan` retrieves the latest eligible API v2 scan for a domain.
+- `get_latest_domain_pre_consent_cookies_trackers` retrieves the latest-domain Cookies & Trackers (Pre-consent) table projection.
 
 The initial MCP surface intentionally does not include account scan browsing or scan comparison tools.
 
@@ -96,9 +98,30 @@ Local package/binary config:
 2. If it returns a `jobId`, call `get_scan_status` until the scan completes.
 3. Call `get_scan` with the stable `scanId`.
 4. Call `list_findings` to route structured findings into review workflows.
-5. Call `explain_finding` when a reviewer needs evidence and caveats for a specific finding.
-6. Call `get_latest_domain_scan` when the user asks for the latest eligible public scan for a domain.
+5. Call `get_pre_consent_cookies_trackers` when the user asks for Cookies & Trackers (Pre-consent) table data as JSON.
+6. Call `explain_finding` when a reviewer needs evidence and caveats for a specific finding.
+7. Call `get_latest_domain_scan` or `get_latest_domain_pre_consent_cookies_trackers` when the user asks for latest eligible public data for a domain.
 
+```json
+{
+  "tool": "get_pre_consent_cookies_trackers",
+  "arguments": {
+    "scanId": "00000000-0000-4000-8000-000000000123"
+  }
+}
+```
+
+```json
+{
+  "tool": "get_latest_domain_pre_consent_cookies_trackers",
+  "arguments": {
+    "domain": "example.com",
+    "scanFrom": "eu_ie"
+  }
+}
+```
+
+When summarizing table data, group rows by `vendor`, `purpose`, and `host` unless the user asks for row-level JSON.
 Treat MCP outputs as automated public-web observations for review. They are not legal advice, certification, or a compliance determination. MCP tools must not infer findings from raw labels, raw network events, missing data, or display-only context.
 
 ## Live Smoke

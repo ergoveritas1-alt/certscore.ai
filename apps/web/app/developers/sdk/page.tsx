@@ -30,18 +30,30 @@ const certscore = new CertScoreClient({
   apiKey: process.env.CERTSCORE_API_KEY
 });
 
-const scanOrJob = await certscore.scans.create({
-  url: "https://example.com",
-  detail: "standard",
+const created = await certscore.scans.create("https://example.com", {
+  freshness: "latest",
   scanFrom: "eu_ie"
 });
 
-const scan = scanOrJob.type === "certscore_api_scan_job"
-  ? await certscore.scans.wait(scanOrJob.id)
-  : scanOrJob;
+const completed = created.type === "certscore_scan_job"
+  ? await certscore.scans.wait(created)
+  : created;
 
-const findings = await certscore.findings.list(scan.id);
-const latest = await certscore.domains.latest("example.com");`}</CodeBlock>
+const scanId = typeof completed === "string"
+  ? undefined
+  : completed.scanId;
+
+if (!scanId) {
+  throw new Error("Scan did not return a durable scanId.");
+}
+
+const status = await certscore.scans.status(scanId);
+const findings = await certscore.findings.list(scanId);
+const preConsentTable = await certscore.scans.preConsentCookiesTrackers(scanId);
+const latest = await certscore.domains.latest("example.com");
+const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
+
+console.log(status.status, findings.findings.length, preConsentTable.summary.rowCount, latest.scan?.scanId, latestPreConsentTable.summary.rowCount);`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Available clients" title="SDK surface">
@@ -49,12 +61,14 @@ const latest = await certscore.domains.latest("example.com");`}</CodeBlock>
             {[
               "certscore.scans.create()",
               "certscore.scans.get()",
+              "certscore.scans.preConsentCookiesTrackers()",
               "certscore.scans.status()",
               "certscore.scans.wait()",
               "certscore.findings.list()",
               "certscore.findings.get()",
               "certscore.findings.explain()",
-              "certscore.domains.latest()"
+              "certscore.domains.latest()",
+              "certscore.domains.latestPreConsentCookiesTrackers()"
             ].map((client) => (
               <code key={client} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800">
                 {client}

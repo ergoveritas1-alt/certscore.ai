@@ -592,7 +592,8 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
           <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
             <p>
               Pulse v1 remains the compatibility entry point. For the resource-oriented CertScore API v2, TypeScript SDK, MCP server,
-              examples, and machine-readable discovery links, use the developer hub.
+              examples, and machine-readable discovery links, use the developer hub. For structured Cookies & Trackers (Pre-consent)
+              table data, use API v2 instead of parsing Pulse prose or report HTML.
             </p>
             <div className="flex flex-wrap gap-3">
               <Link
@@ -606,6 +607,12 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
                 href="/developers/reference"
               >
                 API v2 reference
+              </Link>
+              <Link
+                className="inline-flex w-fit rounded-full border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                href="/developers/examples#pre-consent-cookies-trackers-json"
+              >
+                Cookies & Trackers JSON
               </Link>
               <Link
                 className="inline-flex w-fit rounded-full border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"

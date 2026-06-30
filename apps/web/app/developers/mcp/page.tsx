@@ -53,15 +53,23 @@ export default function DeveloperMcpPage() {
 2. get_scan_status when a job is pending.
 3. get_scan after a stable scanId is available.
 4. list_findings for compact structured review.
-5. explain_finding for evidence summaries and caveats.
-6. get_latest_domain_scan when the user asks for the latest known scan.`}</CodeBlock>
+5. get_pre_consent_cookies_trackers when the user asks for the Cookies & Trackers (Pre-consent) table as JSON.
+6. explain_finding for evidence summaries and caveats.
+7. get_latest_domain_scan or get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
+          <CodeBlock>{`get_pre_consent_cookies_trackers({
+  scanId: "00000000-0000-4000-8000-000000000123"
+})
+
+get_latest_domain_pre_consent_cookies_trackers({
+  domain: "example.com",
+  scanFrom: "eu_ie"
+})`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             MCP tools return compact public-safe JSON. They must not infer raw-signal findings or convert automated review signals into
-            legal conclusions.
+            legal conclusions. Group Cookies & Trackers rows by vendor, purpose, and host when the user wants a short review handoff.
           </p>
         </Section>
       </div>
     </DeveloperShell>
   );
 }
-

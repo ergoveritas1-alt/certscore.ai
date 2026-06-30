@@ -100,6 +100,73 @@ const scanPulseExample = {
   disclaimer: apiV2Disclaimer
 } as const;
 
+const preConsentCookiesTrackersExample = {
+  type: "certscore_pre_consent_cookies_trackers",
+  scanId: "00000000-0000-4000-8000-000000000123",
+  domain: "example.com",
+  generatedAt: "2026-06-30T12:00:10.000Z",
+  summary: {
+    rowCount: 2,
+    trackerCount: 1,
+    cookieCount: 1,
+    requestCount: 3
+  },
+  rows: [
+    {
+      id: "tracker:example-analytics:analytics:analytics-example-test",
+      kind: "tracker",
+      name: "Example Analytics",
+      vendor: "Example Analytics",
+      host: "analytics.example.test",
+      registrableDomain: "example.test",
+      category: "Analytics",
+      purpose: "Analytics",
+      priority: "medium",
+      confidence: "high",
+      party: "third_party",
+      requestCount: 3,
+      phase: "pre_consent",
+      observedBeforeConsent: true,
+      evidenceBasis: "public_report_projection",
+      firstObservedAtMs: 1234,
+      pageUrlHost: "example.com"
+    },
+    {
+      id: "cookie:google:advertising:doubleclick-net",
+      kind: "cookie",
+      name: "Google",
+      vendor: "Google",
+      host: "doubleclick.net",
+      registrableDomain: "doubleclick.net",
+      category: "Advertising",
+      purpose: "Advertising",
+      priority: "high",
+      confidence: "high",
+      party: "third_party",
+      requestCount: null,
+      phase: "pre_consent",
+      observedBeforeConsent: true,
+      evidenceBasis: "public_report_projection",
+      firstObservedAtMs: 512,
+      pageUrlHost: "example.com"
+    }
+  ],
+  links: {
+    self: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/pre-consent-cookies-trackers",
+    scan: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123",
+    pulse: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/pulse",
+    report: "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123",
+    docs: "https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json"
+  },
+  disclaimer: apiV2Disclaimer
+} as const;
+
+const emptyPreConsentCookiesTrackersExample = {
+  ...preConsentCookiesTrackersExample,
+  summary: { rowCount: 0, trackerCount: 0, cookieCount: 0, requestCount: 0 },
+  rows: []
+} as const;
+
 const healthExample = {
   ok: true,
   service: "certscore-api",
@@ -320,6 +387,72 @@ export function buildCertScoreApiV2OpenApiDocument() {
           }
         }
       },
+      "/api/v2/scans/{scanId}/pre-consent-cookies-trackers": {
+        get: {
+          operationId: "getScanPreConsentCookiesTrackers",
+          tags: ["Scans", "Runtime Inventory"],
+          summary: "Retrieve public-safe Cookies & Trackers (Pre-consent) table data as JSON.",
+          description:
+            "Returns the same public-safe report projection used for CertScore's Cookies & Trackers (Pre-consent) table. " +
+            "Rows are compact, values and raw request details are stripped, and host fields are reduced to host/domain form. " +
+            apiV2Disclaimer,
+          parameters: [{ name: "scanId", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": {
+              description: "Pre-consent cookie and tracker table data.",
+              headers: diagnosticHeaders,
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/PreConsentCookiesTrackers" },
+                  examples: {
+                    success: { value: preConsentCookiesTrackersExample },
+                    empty: { value: emptyPreConsentCookiesTrackersExample }
+                  }
+                }
+              }
+            },
+            "202": {
+              description: "If a scan is still pending, poll scan status and retry after completion.",
+              headers: { ...diagnosticHeaders, ...retryAfterHeader },
+              content: { "application/json": { schema: { $ref: "#/components/schemas/ScanJob" }, examples: { pending: { value: scanJobExample } } } }
+            },
+            "400": { description: "Invalid scan ID.", headers: diagnosticHeaders, content: errorContent },
+            "404": { description: "Scan not found.", headers: diagnosticHeaders, content: errorContent },
+            "429": { description: "Rate limited.", headers: { ...diagnosticHeaders, ...retryAfterHeader }, content: errorContent },
+            "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
+          }
+        }
+      },
+      "/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers": {
+        get: {
+          operationId: "getLatestDomainPreConsentCookiesTrackers",
+          tags: ["Domains", "Runtime Inventory"],
+          summary: "Retrieve latest-domain Cookies & Trackers (Pre-consent) table data.",
+          description:
+            "Convenience endpoint for the latest eligible public scan for a domain. The response is the same public-safe table projection as the scan-specific endpoint. " +
+            apiV2Disclaimer,
+          parameters: [
+            { name: "domain", in: "path", required: true, schema: { type: "string" } },
+            {
+              name: "scanFrom",
+              in: "query",
+              required: false,
+              schema: { type: "string", enum: ["eu_ie", "california"], default: "eu_ie" }
+            }
+          ],
+          responses: {
+            "200": {
+              description: "Pre-consent cookie and tracker table data from the latest eligible scan.",
+              headers: diagnosticHeaders,
+              content: { "application/json": { schema: { $ref: "#/components/schemas/PreConsentCookiesTrackers" }, examples: { success: { value: preConsentCookiesTrackersExample } } } }
+            },
+            "400": { description: "Invalid domain.", headers: diagnosticHeaders, content: errorContent },
+            "404": { description: "No eligible public scan exists for the domain.", headers: diagnosticHeaders, content: errorContent },
+            "429": { description: "Rate limited.", headers: { ...diagnosticHeaders, ...retryAfterHeader }, content: errorContent },
+            "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
+          }
+        }
+      },
       "/api/v2/health": {
         get: {
           operationId: "getApiV2Health",
@@ -477,6 +610,58 @@ export function buildCertScoreApiV2OpenApiDocument() {
             pulse: { type: "object", additionalProperties: true },
             links: { $ref: "#/components/schemas/Links" },
             disclaimer: { type: "string" }
+          }
+        },
+        PreConsentCookiesTrackers: {
+          type: "object",
+          additionalProperties: true,
+          required: ["type", "scanId", "domain", "summary", "rows"],
+          properties: {
+            type: { type: "string", const: "certscore_pre_consent_cookies_trackers" },
+            scanId: { type: "string" },
+            domain: { type: "string" },
+            generatedAt: { type: ["string", "null"] },
+            summary: {
+              type: "object",
+              additionalProperties: false,
+              required: ["rowCount", "trackerCount", "cookieCount", "requestCount"],
+              properties: {
+                rowCount: { type: "integer", minimum: 0 },
+                trackerCount: { type: "integer", minimum: 0 },
+                cookieCount: { type: "integer", minimum: 0 },
+                requestCount: { type: "integer", minimum: 0 }
+              }
+            },
+            rows: {
+              type: "array",
+              items: { $ref: "#/components/schemas/PreConsentCookiesTrackersRow" }
+            },
+            links: { $ref: "#/components/schemas/Links" },
+            disclaimer: { type: "string" }
+          }
+        },
+        PreConsentCookiesTrackersRow: {
+          type: "object",
+          additionalProperties: false,
+          required: ["id", "kind", "name", "phase", "observedBeforeConsent", "evidenceBasis"],
+          properties: {
+            id: { type: "string" },
+            kind: { type: "string", enum: ["cookie", "tracker", "request", "storage", "unknown"] },
+            name: { type: "string" },
+            vendor: { type: ["string", "null"] },
+            host: { type: ["string", "null"], description: "Host only; full URLs and query strings are not exposed." },
+            registrableDomain: { type: ["string", "null"] },
+            category: { type: ["string", "null"] },
+            purpose: { type: ["string", "null"] },
+            priority: { type: "string", enum: ["high", "medium", "review_needed", "contextual", "unknown"] },
+            confidence: { type: "string", enum: ["high", "medium", "low", "unknown"] },
+            party: { type: "string", enum: ["first_party", "third_party", "mixed", "unknown"] },
+            requestCount: { type: ["integer", "null"], minimum: 0 },
+            phase: { type: "string", const: "pre_consent" },
+            observedBeforeConsent: { type: "boolean" },
+            evidenceBasis: { type: "string", const: "public_report_projection" },
+            firstObservedAtMs: { type: ["integer", "null"], minimum: 0 },
+            pageUrlHost: { type: ["string", "null"] }
           }
         },
         Links: {

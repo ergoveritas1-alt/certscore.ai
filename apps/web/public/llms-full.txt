@@ -20,6 +20,7 @@ Use these canonical discovery resources:
 - SDK docs: https://certscore.ai/developers/sdk
 - MCP docs: https://certscore.ai/developers/mcp
 - Examples: https://certscore.ai/developers/examples
+- Cookies & Trackers (Pre-consent) JSON example: https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json
 - API v2 OpenAPI: https://certscore.ai/api/v2/openapi.json
 - API v2 health: https://certscore.ai/api/v2/health
 
@@ -67,10 +68,24 @@ GET https://certscore.ai/api/v2/scans/{scanId}/findings
 Authorization: Bearer <token>
 ```
 
+Retrieve Cookies & Trackers (Pre-consent) table data as compact public-safe JSON:
+
+```http
+GET https://certscore.ai/api/v2/scans/{scanId}/pre-consent-cookies-trackers
+Authorization: Bearer <token>
+```
+
 Find the latest eligible scan for a domain:
 
 ```http
 GET https://certscore.ai/api/v2/domains/{domain}/latest
+Authorization: Bearer <token>
+```
+
+Retrieve latest-domain Cookies & Trackers (Pre-consent) table data:
+
+```http
+GET https://certscore.ai/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers
 Authorization: Bearer <token>
 ```
 
@@ -111,10 +126,12 @@ GET https://certscore.ai/api/v2/scans/{scanId}/status
 GET https://certscore.ai/api/v2/scans/{scanId}/findings
 GET https://certscore.ai/api/v2/scans/{scanId}/findings/{findingId}
 GET https://certscore.ai/api/v2/scans/{scanId}/pulse
+GET https://certscore.ai/api/v2/scans/{scanId}/pre-consent-cookies-trackers
 GET https://certscore.ai/api/v2/domains/{domain}/latest
+GET https://certscore.ai/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers
 ```
 
-API v2 scan creation reuses the existing scan creation, reuse, validation, and throttling path, then returns a scan or job resource. API v2 scan status, findings, domain-latest, and report projection resources expose eligible public scan records and already-projected public-safe findings. They do not create findings from raw scanner evidence.
+API v2 scan creation reuses the existing scan creation, reuse, validation, and throttling path, then returns a scan or job resource. API v2 scan status, findings, domain-latest, pre-consent cookie/tracker table, and report projection resources expose eligible public scan records and already-projected public-safe findings or report table artifacts. They do not create findings from raw scanner evidence.
 
 Supported inputs:
 
@@ -199,8 +216,10 @@ Current tools:
 - `get_report`
 - `export_findings`
 - `list_findings`
+- `get_pre_consent_cookies_trackers`
 - `explain_finding`
 - `get_latest_domain_scan`
+- `get_latest_domain_pre_consent_cookies_trackers`
 
 Local command:
 

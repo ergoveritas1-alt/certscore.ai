@@ -22,7 +22,7 @@ console.log(pulse.summary?.score, pulse.links?.fullReportUrl);
 
 ## Resource Clients
 
-New integrations should prefer the resource-oriented API v2 clients for scan, status, finding, domain latest, and Pulse projection workflows.
+New integrations should prefer the resource-oriented API v2 clients for scan, status, finding, pre-consent cookie/tracker table, domain latest, and Pulse projection workflows.
 
 ```ts
 import { CertScoreClient } from "@certscore/sdk";
@@ -31,34 +31,44 @@ const certscore = new CertScoreClient({
   apiKey: process.env.CERTSCORE_API_KEY
 });
 
-const scanOrJob = await certscore.scans.create({
-  url: "https://example.com",
-  detail: "standard",
+const created = await certscore.scans.create("https://example.com", {
+  freshness: "latest",
   scanFrom: "eu_ie"
 });
 
-const scan = scanOrJob.type === "certscore_api_scan_job"
-  ? await certscore.scans.wait(scanOrJob.id)
-  : scanOrJob;
+const completed = created.type === "certscore_scan_job"
+  ? await certscore.scans.wait(created)
+  : created;
 
-const status = await certscore.scans.status(scan.id);
-const findings = await certscore.findings.list(scan.id);
-const firstFinding = findings.items[0]
-  ? await certscore.findings.get(scan.id, findings.items[0].id)
+const scanId = typeof completed === "string"
+  ? undefined
+  : completed.scanId;
+
+if (!scanId) {
+  throw new Error("Scan did not return a durable scanId.");
+}
+
+const status = await certscore.scans.status(scanId);
+const findings = await certscore.findings.list(scanId);
+const preConsentTable = await certscore.scans.preConsentCookiesTrackers(scanId);
+const firstFinding = findings.findings[0]
+  ? await certscore.findings.get(scanId, findings.findings[0].id)
   : null;
 const explanation = firstFinding
-  ? await certscore.findings.explain(scan.id, firstFinding.id)
+  ? await certscore.findings.explain(scanId, firstFinding.id)
   : null;
-const pulseProjection = await certscore.pulse.get(scan.id);
+const pulseProjection = await certscore.pulse.get(scanId);
 const latestDomainScan = await certscore.domains.latest("example.com");
+const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
 
-console.log(status.status, explanation?.title, pulseProjection.disclaimer, latestDomainScan.scan?.id);
+console.log(status.status, preConsentTable.summary.rowCount, explanation?.title, pulseProjection.disclaimer, latestDomainScan.scan?.id, latestPreConsentTable.rows.length);
 ```
 
 Available resource clients:
 
 - `certscore.scans.create()`
 - `certscore.scans.get()`
+- `certscore.scans.preConsentCookiesTrackers()`
 - `certscore.scans.status()`
 - `certscore.scans.wait()`
 - `certscore.findings.list()`
@@ -66,7 +76,28 @@ Available resource clients:
 - `certscore.findings.explain()`
 - `certscore.pulse.get()`
 - `certscore.domains.latest()`
+- `certscore.domains.latestPreConsentCookiesTrackers()`
 - `certscore.scan()`
+
+## Cookies & Trackers (Pre-consent)
+
+Use the API v2 resource client when you need the public report table as JSON instead of parsing report HTML or Pulse prose.
+
+```ts
+const table = await certscore.scans.preConsentCookiesTrackers(scanId);
+
+const grouped = new Map<string, typeof table.rows>();
+for (const row of table.rows) {
+  const key = [row.vendor, row.purpose, row.host].join("|");
+  grouped.set(key, [...(grouped.get(key) ?? []), row]);
+}
+
+const latestTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
+console.log(grouped.size, latestTable.summary.rowCount);
+```
+
+The response is a public-safe report projection. It does not include cookie values, raw request bodies, full request URLs, sensitive query strings, or internal scanner artifacts.
+Server-side filters are intentionally deferred in the initial version; group or filter the returned table client-side by `kind`, `priority`, `party`, `vendor`, `purpose`, or `host`.
 
 ## Async Lifecycle
 

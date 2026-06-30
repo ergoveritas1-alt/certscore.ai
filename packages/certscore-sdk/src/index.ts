@@ -31,6 +31,7 @@ export type {
   Links,
   NormalizedPulseDetail,
   PendingJob,
+  PreConsentCookiesTrackers,
   PulseDetail,
   PulseErrorResponse,
   PulseFormat,

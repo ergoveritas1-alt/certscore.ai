@@ -4,6 +4,7 @@ import {
   apiV2FindingDetailSchema,
   apiV2FindingListSchema,
   apiV2FindingSummarySchema,
+  apiV2PreConsentCookiesTrackersSchema,
   apiV2ScanJobSchema,
   apiV2ScanPulseSchema,
   apiV2ScanResourceSchema,
@@ -13,12 +14,14 @@ import {
   type ApiV2FindingDetail,
   type ApiV2FindingList,
   type ApiV2FindingSummary,
+  type ApiV2PreConsentCookiesTrackers,
   type ApiV2ScanJob,
   type ApiV2ScanPulse,
   type ApiV2ScanResource
 } from "@certscore/api-contracts";
 import type { PulseResponse } from "@certscore/api-contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { buildRuntimeInventoryProjectionFromScan, inventoryRegistrableDomain, type InventoryGroupRow } from "../scans/runtime-inventory-projection";
 import { absoluteUrl } from "../seo";
 
 export const API_V2_SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
@@ -239,6 +242,7 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
       self: absoluteUrl(`/api/v2/scans/${scan.id}`),
       status: absoluteUrl(`/api/v2/scans/${scan.id}/status`),
       findings: absoluteUrl(`/api/v2/scans/${scan.id}/findings`),
+      preConsentCookiesTrackers: absoluteUrl(`/api/v2/scans/${scan.id}/pre-consent-cookies-trackers`),
       pulse: absoluteUrl(`/api/v2/scans/${scan.id}/pulse`),
       report: absoluteUrl(`/scan/${scan.id}`),
       latestDomainScan: domain === "unknown" ? undefined : absoluteUrl(`/api/v2/domains/${encodeURIComponent(domain)}/latest`),
@@ -350,6 +354,7 @@ export function buildApiV2DomainLatestScan(input: {
       self: absoluteUrl(`/api/v2/domains/${encodeURIComponent(input.domain)}/latest`),
       ...(input.scanRecord ? { status: absoluteUrl(`/api/v2/scans/${input.scanRecord.scan.id}/status`) } : {}),
       ...(input.scanRecord ? { findings: absoluteUrl(`/api/v2/scans/${input.scanRecord.scan.id}/findings`) } : {}),
+      ...(input.scanRecord ? { preConsentCookiesTrackers: absoluteUrl(`/api/v2/scans/${input.scanRecord.scan.id}/pre-consent-cookies-trackers`) } : {}),
       ...(input.scanRecord ? { pulse: absoluteUrl(`/api/v2/scans/${input.scanRecord.scan.id}/pulse`) } : {}),
       ...(input.scanRecord ? { report: absoluteUrl(`/scan/${input.scanRecord.scan.id}`) } : {}),
       docs: absoluteUrl("/api/v2/openapi.json")
@@ -461,6 +466,122 @@ export function buildApiV2ScanPulse(input: {
   } satisfies ApiV2ScanPulse;
 
   return apiV2ScanPulseSchema.parse(resource);
+}
+
+function compactApiText(value: unknown, fallback = "unknown") {
+  const text = typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+  return text.replace(/[\t\r\n]+/g, " ").replace(/\s{2,}/g, " ").slice(0, 160);
+}
+
+function sanitizeHost(value: string | null | undefined) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text) {
+    return null;
+  }
+  const candidate = text.includes("://") ? text : `https://${text}`;
+  try {
+    const hostname = new URL(candidate).hostname.replace(/^www\./, "").toLowerCase();
+    return hostname || null;
+  } catch {
+    return text.split(/[/?#]/, 1)[0]?.replace(/^www\./, "").toLowerCase() || null;
+  }
+}
+
+function normalizePreConsentPriority(value: unknown): "high" | "medium" | "review_needed" | "contextual" | "unknown" {
+  return value === "high" || value === "medium" || value === "review_needed" || value === "contextual" ? value : "unknown";
+}
+
+function normalizePreConsentConfidence(value: unknown): "high" | "medium" | "low" | "unknown" {
+  return value === "high" || value === "medium" || value === "low" ? value : "unknown";
+}
+
+function normalizePreConsentParty(value: InventoryGroupRow["party"]): "first_party" | "third_party" | "mixed" | "unknown" {
+  if (value === "first_party") {
+    return "first_party";
+  }
+  if (value === "third_party" || value === "3rd") {
+    return "third_party";
+  }
+  if (value === "mixed") {
+    return "mixed";
+  }
+  return "unknown";
+}
+
+function stableInventoryRowId(row: InventoryGroupRow, host: string | null) {
+  return [row.type, row.vendor, row.purpose, host ?? "no-host"]
+    .map((part) => compactApiText(part).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "unknown")
+    .join(":")
+    .slice(0, 220);
+}
+
+function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | null) {
+  const host = sanitizeHost(row.domains[0]);
+  const registrableDomain = host ? inventoryRegistrableDomain(host) : null;
+  const requestCount = row.type === "tracker" && typeof row.requestCount === "number" && Number.isFinite(row.requestCount)
+    ? Math.max(0, Math.round(row.requestCount))
+    : null;
+
+  return {
+    id: stableInventoryRowId(row, host),
+    kind: row.type,
+    name: compactApiText(row.vendor),
+    vendor: compactApiText(row.vendor),
+    host,
+    registrableDomain,
+    category: compactApiText(row.purpose),
+    purpose: compactApiText(row.purpose),
+    priority: normalizePreConsentPriority(row.priority),
+    confidence: normalizePreConsentConfidence(row.confidence),
+    party: normalizePreConsentParty(row.party),
+    requestCount,
+    phase: "pre_consent" as const,
+    observedBeforeConsent: true,
+    evidenceBasis: "public_report_projection" as const,
+    firstObservedAtMs: finiteInt(row.firstSeenMs),
+    pageUrlHost
+  };
+}
+
+export function buildApiV2PreConsentCookiesTrackers(scanRecord: ScanDetailResponse): ApiV2PreConsentCookiesTrackers {
+  const scan = scanRecord.scan;
+  const domain = scan.domainHostname ?? "unknown";
+  const pageUrlHost = sanitizeHost(domain);
+  const projection = buildRuntimeInventoryProjectionFromScan(scanRecord);
+  const rowsById = new Map<string, ReturnType<typeof buildApiV2PreConsentRow>>();
+
+  for (const row of projection.groupedRows) {
+    const safeRow = buildApiV2PreConsentRow(row, pageUrlHost);
+    rowsById.set(safeRow.id, safeRow);
+  }
+
+  const rows = [...rowsById.values()];
+  const resource = {
+    type: "certscore_pre_consent_cookies_trackers",
+    scanId: scan.id,
+    domain,
+    generatedAt: scan.completedAt ?? scan.startedAt ?? scan.createdAt,
+    summary: {
+      rowCount: rows.length,
+      trackerCount: rows.filter((row) => row.kind === "tracker").length,
+      cookieCount: rows.filter((row) => row.kind === "cookie").length,
+      requestCount: rows.reduce((total, row) => total + (row.requestCount ?? 0), 0)
+    },
+    rows,
+    links: {
+      self: absoluteUrl(`/api/v2/scans/${scan.id}/pre-consent-cookies-trackers`),
+      scan: absoluteUrl(`/api/v2/scans/${scan.id}`),
+      status: absoluteUrl(`/api/v2/scans/${scan.id}/status`),
+      findings: absoluteUrl(`/api/v2/scans/${scan.id}/findings`),
+      pulse: absoluteUrl(`/api/v2/scans/${scan.id}/pulse`),
+      report: absoluteUrl(`/scan/${scan.id}`),
+      latestDomainScan: domain === "unknown" ? undefined : absoluteUrl(`/api/v2/domains/${encodeURIComponent(domain)}/latest/pre-consent-cookies-trackers`),
+      docs: absoluteUrl("/developers/examples#pre-consent-cookies-trackers-json")
+    },
+    disclaimer: apiV2Disclaimer
+  } satisfies ApiV2PreConsentCookiesTrackers;
+
+  return apiV2PreConsentCookiesTrackersSchema.parse(resource);
 }
 
 export function apiV2JsonResponse(input: {

@@ -103,6 +103,7 @@ Use the current API v2 discovery resources for integrations and agent workflows.
 - SDK docs: https://certscore.ai/developers/sdk
 - MCP docs: https://certscore.ai/developers/mcp
 - Examples: https://certscore.ai/developers/examples
+- Cookies & Trackers (Pre-consent) JSON example: https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json
 - Full LLM and agent guide: https://certscore.ai/llms-full.txt
 
 Recommended flow:
@@ -111,6 +112,9 @@ Recommended flow:
 3. Create or reuse a scan through API v2.
 4. Poll scan status when work is pending.
 5. Retrieve already-projected public-safe findings.
+6. Retrieve Cookies & Trackers (Pre-consent) table data as JSON when needed:
+   https://certscore.ai/api/v2/scans/{scanId}/pre-consent-cookies-trackers
+   https://certscore.ai/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers
 
 API keys use `Authorization: Bearer <token>`. Current integration scopes are `scan:read`, `scan:create`, and `mcp`.
 

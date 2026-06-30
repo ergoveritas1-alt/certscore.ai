@@ -66,7 +66,9 @@ test("MCP contracts expose the current scoped tool surface", () => {
       "create_scan",
       "explain_finding",
       "export_findings",
+      "get_latest_domain_pre_consent_cookies_trackers",
       "get_latest_domain_scan",
+      "get_pre_consent_cookies_trackers",
       "get_report",
       "get_scan",
       "get_scan_status",
@@ -203,9 +205,11 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   assert.deepEqual(operations.sort(), [
     "createScan",
     "getApiV2Health",
+    "getLatestDomainPreConsentCookiesTrackers",
     "getLatestDomainScan",
     "getScan",
     "getScanFinding",
+    "getScanPreConsentCookiesTrackers",
     "getScanPulse",
     "getScanStatus",
     "listScanFindings"

@@ -12,6 +12,7 @@ import type {
   GetScanOptions,
   JobStatus,
   PendingJob,
+  PreConsentCookiesTrackers,
   PulseDetail,
   PulseErrorResponse,
   PulseFormat,
@@ -121,6 +122,7 @@ export class CertScoreClient {
     this.scans = {
       create: (url, scanOptions) => this.createScanResource(url, scanOptions),
       get: (scanId, scanOptions) => this.getScanResource(scanId, scanOptions),
+      preConsentCookiesTrackers: (scanId, scanOptions) => this.getPreConsentCookiesTrackers(scanId, scanOptions),
       status: (scanId, scanOptions) => this.getScanStatus(scanId, scanOptions),
       wait: (scan, scanOptions) => this.waitForScan(scan, scanOptions)
     };
@@ -133,7 +135,8 @@ export class CertScoreClient {
       get: (scanId, pulseOptions) => this.getScanPulse(scanId, pulseOptions)
     };
     this.domains = {
-      latest: (domain, domainOptions) => this.getLatestDomainScan(domain, domainOptions)
+      latest: (domain, domainOptions) => this.getLatestDomainScan(domain, domainOptions),
+      latestPreConsentCookiesTrackers: (domain, domainOptions) => this.getLatestDomainPreConsentCookiesTrackers(domain, domainOptions)
     };
   }
 
@@ -229,6 +232,11 @@ export class CertScoreClient {
     return this.fetchJson<ScanJob>(`/api/v2/scans/${encodeURIComponent(scanId)}/status`, options);
   }
 
+  /** Retrieve the public-safe Cookies & Trackers (Pre-consent) table for an eligible public scan. */
+  async getPreConsentCookiesTrackers(scanId: string, options: { signal?: AbortSignal } = {}): Promise<PreConsentCookiesTrackers> {
+    return this.fetchJson<PreConsentCookiesTrackers>(`/api/v2/scans/${encodeURIComponent(scanId)}/pre-consent-cookies-trackers`, options);
+  }
+
   /** List API v2 public-safe findings for an eligible public scan. */
   async listFindings(scanId: string, options: { signal?: AbortSignal } = {}): Promise<FindingList> {
     return this.fetchJson<FindingList>(`/api/v2/scans/${encodeURIComponent(scanId)}/findings`, options);
@@ -251,6 +259,15 @@ export class CertScoreClient {
       endpoint.searchParams.set("scanFrom", options.scanFrom);
     }
     return this.fetchJson<DomainLatestScan>(endpoint, options);
+  }
+
+  /** Retrieve latest-domain public-safe Cookies & Trackers (Pre-consent) table data. */
+  async getLatestDomainPreConsentCookiesTrackers(domain: string, options: { scanFrom?: "eu_ie" | "california"; signal?: AbortSignal } = {}): Promise<PreConsentCookiesTrackers> {
+    const endpoint = this.url(`/api/v2/domains/${encodeURIComponent(domain)}/latest/pre-consent-cookies-trackers`);
+    if (options.scanFrom) {
+      endpoint.searchParams.set("scanFrom", options.scanFrom);
+    }
+    return this.fetchJson<PreConsentCookiesTrackers>(endpoint, options);
   }
 
   /** Wait for a Pulse job/status object or retrieve a stable scan by scanId. */

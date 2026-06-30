@@ -2,6 +2,7 @@ import type {
   ApiV2DomainLatestScan,
   ApiV2FindingDetail,
   ApiV2FindingList,
+  ApiV2PreConsentCookiesTrackers,
   ApiV2ScanJob,
   ApiV2ScanPulse,
   ApiV2ScanResource
@@ -76,10 +77,12 @@ export type FindingList = ApiV2FindingList;
 export type FindingDetail = ApiV2FindingDetail;
 export type DomainLatestScan = ApiV2DomainLatestScan;
 export type ScanPulse = ApiV2ScanPulse;
+export type PreConsentCookiesTrackers = ApiV2PreConsentCookiesTrackers;
 
 export interface ScanResourceClient {
   create(url: string, options?: CreateScanResourceOptions): Promise<ScanResource | ScanJob>;
   get(scanId: string, options?: ApiV2RequestOptions): Promise<ScanResource>;
+  preConsentCookiesTrackers(scanId: string, options?: ApiV2RequestOptions): Promise<PreConsentCookiesTrackers>;
   status(scanId: string, options?: ApiV2RequestOptions): Promise<ScanJob>;
   wait(scan: string | PendingJob | JobStatus, options?: ScanOptions): Promise<PulseResult | string>;
 }
@@ -96,6 +99,7 @@ export interface PulseResourceClient {
 
 export interface DomainResourceClient {
   latest(domain: string, options?: DomainLatestScanOptions): Promise<DomainLatestScan>;
+  latestPreConsentCookiesTrackers(domain: string, options?: DomainLatestScanOptions): Promise<PreConsentCookiesTrackers>;
 }
 
 export interface PulseMeta {
