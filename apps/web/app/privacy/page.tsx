@@ -37,8 +37,9 @@ const sections = [
     ]
   },
   {
-    title: "5. Processing Purposes",
+    title: "5. Purposes Of Processing Personal Data",
     body: [
+      "Processing purposes: CertScore.ai processes personal data and service data for account administration, authentication, scan and report delivery, monitoring, customer support, billing, security, fraud and abuse prevention, product reliability, optional analytics after consent, legal or business recordkeeping, and responding to privacy requests.",
       "CertScore.ai may process account and submitted information to create and manage accounts, authenticate users, provide scans and reports, manage plans, respond to requests, send service messages, and operate customer support.",
       "CertScore.ai may process usage and operational data to run the service, secure accounts, debug errors, monitor scan status, improve product reliability, measure product usage after optional analytics consent, prevent abuse, and maintain business records.",
       "CertScore.ai may process public website scan data to generate evidence-led reports, support remediation review, preserve limited evidence context, compare changes over time, and operate monitoring or validation workflows requested by users."
@@ -98,9 +99,10 @@ const sections = [
     ]
   },
   {
-    title: "14. Privacy And Data-Protection Contact",
+    title: "14. Data Protection Officer / Privacy Contact Point",
     body: [
-      "For privacy-related questions, data-protection questions, or privacy rights requests, contact CertScore.ai at privacy@certscore.ai or use the privacy request form linked from this policy and the site footer."
+      "Privacy contact point: for privacy-related questions, data-protection questions, or privacy rights requests, contact CertScore.ai at privacy@certscore.ai or use the privacy request form linked from this policy and the site footer.",
+      "CertScore.ai does not currently publish a separate named Data Protection Officer. The privacy and data-protection contact point for this service is privacy@certscore.ai."
     ]
   }
 ];
@@ -116,6 +118,13 @@ export default function PrivacyPage() {
           <p className="text-lg text-slate-600">
             This page explains how CertScore.ai handles account information, public website scan data,
             limited evidence context, cookies, and the third-party infrastructure used to operate the service.
+          </p>
+          <p className="text-sm leading-6 text-slate-600">
+            Privacy contact point:{" "}
+            <a className="font-medium text-sky-700 hover:text-sky-800" href="mailto:privacy@certscore.ai">
+              privacy@certscore.ai
+            </a>
+            .
           </p>
           <p className="text-sm text-slate-600">
             To exercise privacy rights, use{" "}
