@@ -16,6 +16,7 @@ const resourceLinks = [
   { href: "/guides", label: "Guides" },
   { href: "/benchmarks", label: "Benchmarks" },
   { href: "/findings", label: "Findings" },
+  { href: "/developers", label: "Developers" },
   { href: "/regulatory", label: "Regulatory pages" },
   { href: "/methodology", label: "Methodology" },
   { href: "/compare", label: "Compare" }

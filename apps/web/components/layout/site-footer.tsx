@@ -10,8 +10,8 @@ const footerSections = [
       { href: "/", label: "Home" },
       { href: "/how-it-works", label: "How It Works" },
       { href: "/findings", label: "Findings" },
+      { href: "/developers", label: "Developers" },
       { href: "/api-pulse", label: "Pulse API beta" },
-      { href: "/api-pulse#mcp", label: "MCP preview" },
       { href: "/pricing", label: "Pricing" }
     ]
   },
@@ -21,6 +21,9 @@ const footerSections = [
       { href: "/guides", label: "Guides" },
       { href: "/benchmarks", label: "Benchmarks" },
       { href: "/findings", label: "Findings" },
+      { href: "/developers/reference", label: "API reference" },
+      { href: "/developers/sdk", label: "SDK docs" },
+      { href: "/developers/mcp", label: "MCP docs" },
       { href: "/regulatory", label: "Regulatory pages" },
       { href: "/gdpr", label: "GDPR privacy scanner" },
       { href: "/ftc", label: "FTC disclosure scanner" },

@@ -30,5 +30,7 @@
     "runtime-analysis"
   ],
   "license": "UNLICENSED",
-  "dependencies": {}
+  "dependencies": {
+    "@certscore/api-contracts": "workspace:*"
+  }
 }

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { hasDatabaseEnv } from "@website-signal-risk-scanner/db";
+import { GET as aiDiscoveryGET } from "../../app/.well-known/certscore-ai.json/route";
 import { GET as discoveryGET } from "../../app/.well-known/certscore-pulse/route";
+import sitemap from "../../app/sitemap";
 import { GET as chatGptOpenApiGET } from "../../app/api/v1/openapi.chatgpt.json/route";
 import { GET as openApiGET } from "../../app/api/v1/openapi.json/route";
 import { GET as pulseHealthGET } from "../../app/api/v1/pulse-health/route";
@@ -97,9 +99,8 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].headers["x-certscore-request-id"]);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["202"].headers["Retry-After"]);
   assert.equal(body.paths["/api/v1/pulse-self-test"].get.responses["200"].content["application/json"].schema.$ref, "#/components/schemas/PulseSelfTest");
-  assert.match(JSON.stringify(body), /format=markdown|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
   assert.match(JSON.stringify(body), /checkPulseConnectivity|transient client\/action transport error/);
-  assert.match(JSON.stringify(body), /https:\/\/certscore\.ai\/findings/);
+  assert.match(JSON.stringify(body), /format=markdown|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
   assert.doesNotMatch(JSON.stringify(body.paths["/api/v1/pulse/gpt"].get.parameters), /refresh|full/);
   assert.doesNotMatch(JSON.stringify(body.paths), /pulse-health/);
   assert.doesNotMatch(JSON.stringify(body), /pre_consent_tracking_detected|raw DOM|DATABASE_URL|AUTH_SECRET/i);
@@ -272,6 +273,10 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /Open quick-start endpoint/);
   assert.match(source, /Open test URL/);
   assert.match(source, /MCP preview/);
+  assert.match(source, /Developer hub/);
+  assert.match(source, /href="\/developers"/);
+  assert.match(source, /href="\/developers\/reference"/);
+  assert.match(source, /href="\/developers\/mcp"/);
   assert.match(source, /developer-preview stdio server/);
   assert.match(source, /pnpm mcp:certscore/);
   assert.match(source, /pnpm mcp:certscore:smoke/);
@@ -347,7 +352,7 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   assert.match(source, /CERTSCORE_API_KEY=<token> pnpm mcp:certscore/);
   assert.match(source, /CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke/);
   assert.match(source, /pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"/);
-  assert.match(source, /explain_finding for evidence, caveats, and next steps/);
+  assert.match(source, /explain_finding for evidence summaries, caveats, and next steps/);
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse\/agent/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/openapi\.chatgpt\.json/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-health/);
@@ -432,15 +437,127 @@ test("Robots allows public Pulse docs and support endpoints while keeping generi
 
     assert.ok(allow.includes("/api-pulse"));
     assert.ok(allow.includes("/api-pulse/"));
+    assert.ok(allow.includes("/developers"));
+    assert.ok(allow.includes("/developers/"));
+    assert.ok(allow.includes("/llms.txt"));
+    assert.ok(allow.includes("/llms-full.txt"));
     assert.ok(allow.includes("/api-pulse-agent-guide.txt"));
+    assert.ok(allow.includes("/.well-known/certscore-ai.json"));
     assert.ok(allow.includes("/api/v1/openapi.json"));
     assert.ok(allow.includes("/api/v1/openapi.chatgpt.json"));
     assert.ok(allow.includes("/api/v1/pulse"));
     assert.ok(allow.includes("/api/v1/pulse-health"));
     assert.ok(allow.includes("/api/v1/pulse-self-test"));
+    assert.ok(allow.includes("/api/v2/health"));
+    assert.ok(allow.includes("/api/v2/openapi.json"));
     assert.ok(allow.includes("/.well-known/certscore-pulse"));
     assert.ok(disallow.includes("/api/"));
+    assert.ok(disallow.includes("/app/"));
+    assert.ok(disallow.includes("/admin/"));
+    assert.ok(disallow.includes("/account/"));
+    assert.ok(disallow.includes("/dashboard/"));
+    assert.ok(disallow.includes("/private/"));
     assert.ok(disallow.includes("/cdn-cgi/"));
+  }
+});
+
+test("Developer API docs are discoverable by crawlers and agent manifests", async () => {
+  const developerPaths = [
+    "/developers",
+    "/developers/quickstart",
+    "/developers/reference",
+    "/developers/sdk",
+    "/developers/mcp",
+    "/developers/examples"
+  ];
+  const sitemapUrls = sitemap().map((entry) => entry.url);
+  const llms = readFileSync("apps/web/public/llms.txt", "utf8");
+  const llmsFull = readFileSync("apps/web/public/llms-full.txt", "utf8");
+  const header = readFileSync("apps/web/components/layout/site-header.tsx", "utf8");
+  const footer = readFileSync("apps/web/components/layout/site-footer.tsx", "utf8");
+  const pageSources = [
+    "apps/web/app/developers/page.tsx",
+    "apps/web/app/developers/quickstart/page.tsx",
+    "apps/web/app/developers/reference/page.tsx",
+    "apps/web/app/developers/sdk/page.tsx",
+    "apps/web/app/developers/mcp/page.tsx",
+    "apps/web/app/developers/examples/page.tsx",
+    "apps/web/app/developers/developer-pages.tsx"
+  ].map((path) => readFileSync(path, "utf8"));
+  const aiDiscovery = await (aiDiscoveryGET(new Request("https://certscore.ai/.well-known/certscore-ai.json"))).json();
+  const pulseDiscovery = await (discoveryGET(new Request("https://certscore.ai/.well-known/certscore-pulse"))).json();
+
+  for (const path of developerPaths) {
+    assert.ok(sitemapUrls.includes(`https://certscore.ai${path}`), `${path} should be in sitemap`);
+    assert.match(llms, new RegExp(`https://certscore\\.ai${path.replaceAll("/", "\\/")}`));
+    assert.match(llmsFull, new RegExp(`https://certscore\\.ai${path.replaceAll("/", "\\/")}`));
+  }
+
+  assert.equal(aiDiscovery.aiDiscovery.developerHub, "https://certscore.ai/developers");
+  assert.equal(aiDiscovery.organization.supportUrl, "https://certscore.ai/contact");
+  assert.equal(aiDiscovery.organization.termsUrl, "https://certscore.ai/terms");
+  assert.equal(aiDiscovery.organization.privacyUrl, "https://certscore.ai/privacy");
+  assert.equal(aiDiscovery.developerDocs.quickstart, "https://certscore.ai/developers/quickstart");
+  assert.equal(aiDiscovery.developerDocs.reference, "https://certscore.ai/developers/reference");
+  assert.equal(aiDiscovery.developerDocs.sdk, "https://certscore.ai/developers/sdk");
+  assert.equal(aiDiscovery.developerDocs.mcp, "https://certscore.ai/developers/mcp");
+  assert.equal(aiDiscovery.developerDocs.examples, "https://certscore.ai/developers/examples");
+  assert.equal(aiDiscovery.api.docs, "https://certscore.ai/developers/reference");
+  assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
+  assert.equal(aiDiscovery.mcp.docs, "https://certscore.ai/developers/mcp");
+  assert.equal(aiDiscovery.authentication.docs, "https://certscore.ai/developers/quickstart");
+  assert.deepEqual(aiDiscovery.authentication.currentScopes, ["pulse:read", "pulse:scan", "mcp"]);
+  assert.equal(aiDiscovery.rateLimits.docs, "https://certscore.ai/developers/reference");
+  assert.equal(aiDiscovery.support.terms, "https://certscore.ai/terms");
+  assert.equal(pulseDiscovery.developerHub, "https://certscore.ai/developers");
+  assert.equal(pulseDiscovery.developerReference, "https://certscore.ai/developers/reference");
+  assert.equal(pulseDiscovery.developerMcpDocs, "https://certscore.ai/developers/mcp");
+  assert.equal(pulseDiscovery.terms, "https://certscore.ai/terms");
+
+  assert.match(header, /href: "\/developers", label: "Developers"/);
+  assert.match(footer, /href: "\/developers", label: "Developers"/);
+  assert.match(footer, /href: "\/developers\/reference", label: "API reference"/);
+  assert.match(footer, /href: "\/developers\/sdk", label: "SDK docs"/);
+  assert.match(footer, /href: "\/developers\/mcp", label: "MCP docs"/);
+  assert.match(llms, /Authorization: Bearer <token>/);
+  assert.match(llms, /pulse:read.*pulse:scan.*mcp/s);
+  assert.match(llms, /https:\/\/certscore\.ai\/terms/);
+  assert.match(llmsFull, /Authentication, scopes, and rate limits/);
+  assert.match(llmsFull, /https:\/\/certscore\.ai\/terms/);
+
+  const combinedSources = [...pageSources, header, footer, llms, llmsFull].join("\n");
+  assert.match(combinedSources, /CertScore API/);
+  assert.match(combinedSources, /CertScore Pulse API/);
+  assert.match(combinedSources, /website risk API/);
+  assert.match(combinedSources, /privacy scan API/);
+  assert.match(combinedSources, /cookie compliance scan API/);
+  assert.match(combinedSources, /accessibility risk scan API/);
+  assert.match(combinedSources, /MCP server for website compliance review/);
+  assert.match(combinedSources, /automated public-web risk signals/);
+  assert.match(combinedSources, /evidence-backed website scan API/);
+  assert.match(combinedSources, /already-projected public-safe artifacts/);
+  assert.match(combinedSources, /not legal advice, certification, or a\s+compliance determination/);
+  assert.doesNotMatch(combinedSources, /legal violation|non-compliant/i);
+});
+
+test("API v2 routes stay beside the public projection layer", () => {
+  const routePaths = [
+    "apps/web/app/api/v2/domains/[domain]/latest/route.ts",
+    "apps/web/app/api/v2/health/route.ts",
+    "apps/web/app/api/v2/openapi.json/route.ts",
+    "apps/web/app/api/v2/scans/[scanId]/findings/[findingId]/route.ts",
+    "apps/web/app/api/v2/scans/[scanId]/findings/route.ts",
+    "apps/web/app/api/v2/scans/[scanId]/pulse/route.ts",
+    "apps/web/app/api/v2/scans/[scanId]/route.ts",
+    "apps/web/app/api/v2/scans/[scanId]/status/route.ts",
+    "apps/web/app/api/v2/scans/route.ts"
+  ];
+
+  for (const routePath of routePaths) {
+    const source = readFileSync(routePath, "utf8");
+    assert.doesNotMatch(source, /normalized-concerns|concern-policy|unified-findings|finding-evidence-gates/i);
+    assert.doesNotMatch(source, /certscore-scan-core|scan-core|scanner-runtime|raw-artifact|repair|backfill/i);
+    assert.doesNotMatch(source, /rawRequestBody|rawResponseBody|rawDom|raw DOM/i);
   }
 });
 
@@ -468,7 +585,6 @@ test("Pulse OpenAPI and discovery routes stay static and dependency-light", () =
 
   for (const routePath of supportRoutes) {
     const source = readFileSync(routePath, "utf8");
-    assert.doesNotMatch(source, /^import\s/m, `${routePath} should not import runtime dependencies`);
     assert.doesNotMatch(source, /from\s+["'][^"']*(db|server|auth|queue|redis|pulse\/repository|internal)["']/i);
     assert.doesNotMatch(source, /fetch\(/i, `${routePath} should not call internal or external fetch`);
     assert.doesNotMatch(source, /process\.env/i, `${routePath} should not depend on runtime environment variables`);

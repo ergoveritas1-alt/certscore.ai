@@ -20,6 +20,7 @@
       "@website-signal-risk-scanner/validation-shared": ["packages/validation-shared/src"],
       "@website-signal-risk-scanner/db": ["packages/db/src"],
       "@website-signal-risk-scanner/ui": ["packages/ui/src"],
+      "@certscore/api-contracts": ["packages/certscore-api-contracts/src"],
       "@certscore/contracts": ["packages/certscore-contracts/src"],
       "@certscore/vendor-resolver": ["packages/certscore-vendor-resolver/src"],
       "@certscore/scan-core": ["packages/certscore-scan-core/src"],

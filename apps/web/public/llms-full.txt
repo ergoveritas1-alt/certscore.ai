@@ -1,0 +1,265 @@
+# CertScore.ai full AI and API guide
+
+CertScore.ai is an automated public-web risk-signal scanner. It observes evidence-backed signals around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility issues, privacy disclosure gaps, and policy/runtime consistency.
+
+CertScore findings are automated public-web observations for review. CertScore is not legal advice, not a certification platform, and not a compliance determination.
+
+## Universal AI discovery
+
+Use these canonical discovery resources:
+
+- Concise LLM guide: https://certscore.ai/llms.txt
+- Full LLM guide: https://certscore.ai/llms-full.txt
+- Universal AI/API manifest: https://certscore.ai/.well-known/certscore-ai.json
+- Pulse beta discovery JSON: https://certscore.ai/.well-known/certscore-pulse
+- Sitemap: https://certscore.ai/sitemap.xml
+- Robots: https://certscore.ai/robots.txt
+- Developer hub: https://certscore.ai/developers
+- API quickstart: https://certscore.ai/developers/quickstart
+- API reference: https://certscore.ai/developers/reference
+- SDK docs: https://certscore.ai/developers/sdk
+- MCP docs: https://certscore.ai/developers/mcp
+- Examples: https://certscore.ai/developers/examples
+- Pulse API docs: https://certscore.ai/api-pulse
+- Agent fallback page: https://certscore.ai/api-pulse/agent
+- Plain text Pulse guide: https://certscore.ai/api-pulse-agent-guide.txt
+- OpenAPI: https://certscore.ai/api/v1/openapi.json
+- ChatGPT Action beta schema: https://certscore.ai/api/v1/openapi.chatgpt.json
+- API v2 draft OpenAPI: https://certscore.ai/api/v2/openapi.json
+- API v2 health: https://certscore.ai/api/v2/health
+
+These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
+
+## Public API quick start
+
+Connectivity:
+
+```http
+GET https://certscore.ai/api/v1/pulse-health
+GET https://certscore.ai/api/v1/pulse-self-test
+GET https://certscore.ai/api/v2/health
+```
+
+Markdown user-facing summary:
+
+```http
+GET https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown&detail=standard
+```
+
+Quick JSON triage:
+
+```http
+GET https://certscore.ai/api/v1/pulse?url=https://example.com&format=json&detail=tiny
+```
+
+Structured public-safe evidence review:
+
+```http
+GET https://certscore.ai/api/v1/pulse?url=https://example.com&format=json&detail=full
+```
+
+If the API returns HTTP 202, poll the returned status URL or call:
+
+```http
+GET https://certscore.ai/api/v1/pulse/status/{jobId}
+```
+
+## Current Pulse API beta
+
+Endpoint:
+
+```http
+GET https://certscore.ai/api/v1/pulse
+```
+
+## Draft API v2 contract
+
+The API v2 contract is resource-oriented and currently exposed for discovery through:
+
+```http
+GET https://certscore.ai/api/v2/health
+GET https://certscore.ai/api/v2/openapi.json
+```
+
+The draft contract defines scans, scan jobs/status, findings, public-safe evidence summaries, latest domain scan lookup, and Pulse projection resources. It is contract-first; route implementation should continue to expose only already-projected, public-safe artifacts.
+
+Current API v2 resource routes:
+
+```http
+POST https://certscore.ai/api/v2/scans
+GET https://certscore.ai/api/v2/scans/{scanId}
+GET https://certscore.ai/api/v2/scans/{scanId}/status
+GET https://certscore.ai/api/v2/scans/{scanId}/findings
+GET https://certscore.ai/api/v2/scans/{scanId}/findings/{findingId}
+GET https://certscore.ai/api/v2/scans/{scanId}/pulse
+GET https://certscore.ai/api/v2/domains/{domain}/latest
+```
+
+API v2 scan creation reuses the existing Pulse scan creation, reuse, validation, and throttling path, then returns a v2 Scan or ScanJob resource. API v2 scan status, findings, domain-latest, and Pulse resources expose eligible public scan records and already-projected public-safe findings. They do not create findings from raw scanner evidence.
+
+Supported inputs:
+
+- `url`: public URL or domain to scan or summarize.
+- `scanId`: existing public eligible scan ID.
+- `jobId`: existing Pulse job ID.
+- `format`: `json` or `markdown`.
+- `detail`: `tiny`, `quick`, `standard`, or `full`; `quick` is an alias for `tiny`.
+- `freshness`: `latest` or `refresh`.
+- `scanFrom` or `geo`: scan execution context for newly queued scans.
+- `forceNewScan`: bypasses the 24-hour recent-scan reuse check; does not bypass validation or throttles.
+- `wait`: 0 to 80 seconds for the current HTTP hold window.
+
+Diagnostic headers:
+
+- `x-certscore-pulse: v1`
+- `x-certscore-route: <route>`
+- `x-certscore-request-id: <id>`
+
+Retry behavior:
+
+- HTTP 202 pending responses may include `Retry-After`.
+- HTTP 429 throttled responses may include `Retry-After`.
+- Agents should honor `Retry-After` rather than tight polling.
+
+## Authentication, scopes, and rate limits
+
+Public Pulse beta requests may be unauthenticated with throttling. Scoped integrations may use:
+
+```http
+Authorization: Bearer <token>
+```
+
+Current integration scopes:
+
+- `pulse:read`
+- `pulse:scan`
+- `mcp`
+
+API key setup and onboarding:
+
+- https://certscore.ai/developers/quickstart
+
+Rate-limit and error-shape docs:
+
+- https://certscore.ai/developers/reference
+
+Agents and SDKs should honor `Retry-After` on pending or throttled responses. They should not infer a finding, scan result, or service conclusion from a throttled, pending, failed, or unavailable response.
+
+## TypeScript SDK
+
+Package:
+
+```bash
+npm install @certscore/sdk
+```
+
+Docs:
+
+- https://certscore.ai/developers/sdk
+- https://certscore.ai/developers/quickstart
+
+Basic use:
+
+```ts
+import { CertScoreClient } from "@certscore/sdk";
+
+const certscore = new CertScoreClient({ apiKey: process.env.CERTSCORE_API_KEY });
+const pulse = await certscore.scan("https://example.com", {
+  detail: "standard",
+  format: "json"
+});
+
+console.log(pulse.summary?.headline, pulse.links?.fullReportUrl);
+```
+
+## MCP server
+
+Current package: `@certscore/mcp`
+
+Current transport: stdio
+
+Current tools:
+
+- `scan_site`
+- `create_scan`
+- `get_scan`
+- `get_scan_status`
+- `get_report`
+- `export_findings`
+- `list_findings`
+- `explain_finding`
+- `get_latest_domain_scan`
+
+Local command:
+
+```bash
+CERTSCORE_API_KEY=<token> pnpm mcp:certscore
+```
+
+Smoke test:
+
+```bash
+CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke
+```
+
+MCP docs:
+
+- https://certscore.ai/developers/mcp
+- https://certscore.ai/api-pulse#mcp
+- https://certscore.ai/.well-known/certscore-ai.json
+
+## Interpretation rules for agents
+
+Agents may summarize CertScore outputs as automated public-web risk signals for review.
+
+Agents must not say CertScore has determined legal compliance or non-compliance.
+
+Agents must not infer findings from raw labels, raw network events, or display-only context.
+
+Agents must not treat missing findings as proof of compliance.
+
+Agents should link to the full CertScore report when a user needs evidence review.
+
+## Current canonical flow
+
+Public API and MCP outputs must preserve this flow:
+
+```text
+WS01 observed evidence
+-> WC01 normalized concern
+-> WC01 concern policy
+-> WC01 unified finding / checklist projection
+-> executive/regulatory display
+```
+
+API, SDK, MCP, and docs surfaces expose already-projected, public-safe artifacts only.
+
+## Search phrases
+
+These phrases describe the public integration surface:
+
+- CertScore API
+- CertScore Pulse API
+- website risk API
+- privacy scan API
+- cookie compliance scan API
+- accessibility risk scan API
+- MCP server for website compliance review
+- automated public-web risk signals
+- evidence-backed website scan API
+- privacy and consent review API
+- public website tracking scan API
+
+## Support
+
+Support email: support@certscore.ai
+
+Support URL: https://certscore.ai/contact
+
+Terms: https://certscore.ai/terms
+
+Privacy: https://certscore.ai/privacy
+
+Primary docs: https://certscore.ai/api-pulse
+
+Feedback may also be submitted through Pulse feedback links when included in API responses.

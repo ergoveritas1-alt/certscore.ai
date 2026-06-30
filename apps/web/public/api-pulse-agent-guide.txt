@@ -69,11 +69,12 @@ pnpm db:migrate
 pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"
 
 MCP workflow:
-1. create_scan with a public URL.
-2. get_scan_status when create_scan returns a jobId.
-3. get_report with the stable scanId.
-4. export_findings for structured review handoff.
-5. explain_finding for evidence, caveats, and next steps.
+1. scan_site or create_scan with a public URL.
+2. get_scan_status when scan creation returns a jobId, or with a stable scanId for API v2 status.
+3. get_scan with the stable scanId.
+4. list_findings for structured review handoff.
+5. explain_finding for evidence summaries, caveats, and next steps.
+6. get_latest_domain_scan to find the latest eligible public scan for a domain.
 
 Plain browser-readable fallback:
 https://certscore.ai/api-pulse/agent

@@ -14,6 +14,9 @@ const publicAllowPaths = [
   "/benchmarks/",
   "/compare",
   "/compare/",
+  "/developers",
+  "/developers/",
+  "/.well-known/certscore-ai.json",
   "/.well-known/certscore-pulse",
   "/api-pulse",
   "/api-pulse/",
@@ -24,9 +27,14 @@ const publicAllowPaths = [
   "/api/v1/pulse/",
   "/api/v1/pulse-health",
   "/api/v1/pulse-self-test",
+  "/api/v2/health",
+  "/api/v2/openapi.json",
+  "/api/v2/scans/",
+  "/api/v2/domains/",
   "/faq",
   "/insights/",
-  "/llms.txt"
+  "/llms.txt",
+  "/llms-full.txt"
 ];
 
 const privateDisallowPaths = ["/app/", "/api/", "/auth/", "/dashboard/", "/account/", "/admin/", "/private/"];
@@ -47,10 +55,24 @@ export default function robots(): MetadataRoute.Robots {
           "GPTBot",
           "Googlebot",
           "Google-Extended",
+          "GoogleOther",
           "ClaudeBot",
           "Claude-User",
           "Claude-SearchBot",
-          "anthropic-ai"
+          "anthropic-ai",
+          "PerplexityBot",
+          "Perplexity-User",
+          "bingbot",
+          "BingPreview",
+          "Applebot",
+          "Meta-ExternalAgent",
+          "FacebookBot",
+          "MistralAI-User",
+          "DeepSeekBot",
+          "KimiBot",
+          "QwenBot",
+          "GrokBot",
+          "CCBot"
         ],
         allow: publicAllowPaths,
         disallow: [...privateDisallowPaths, ...infrastructureDisallowPaths]

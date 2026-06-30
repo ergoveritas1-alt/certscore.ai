@@ -2,6 +2,12 @@ import { CertScoreApiError, InvalidUrlError, ScanFailedError, ThrottledError } f
 import { parseRetryAfter, retryDelayMs, sleep, SUCCESS_STATUSES, throwForTerminalStatus, throwTimeout } from "./poll.js";
 import type {
   CertScoreClientOptions,
+  CreateScanResourceOptions,
+  DomainLatestScan,
+  DomainResourceClient,
+  FindingDetail,
+  FindingList,
+  FindingResourceClient,
   FreshnessMode,
   GetScanOptions,
   JobStatus,
@@ -9,8 +15,13 @@ import type {
   PulseDetail,
   PulseErrorResponse,
   PulseFormat,
+  PulseResourceClient,
   PulseResult,
+  ScanJob,
   ScanOptions,
+  ScanPulse,
+  ScanResource,
+  ScanResourceClient,
   SubmitScanOptions
 } from "./types.js";
 
@@ -23,6 +34,8 @@ type JsonFormatOption = { format?: "json" };
 type MarkdownFormatOption = { format: "markdown" };
 
 type RequestOptions = {
+  body?: unknown;
+  method?: "GET" | "POST";
   signal?: AbortSignal;
   timeout?: number;
 };
@@ -95,12 +108,33 @@ export class CertScoreClient {
   private readonly apiKey?: string;
   private readonly baseUrl: string;
   private readonly timeout: number;
+  public readonly scans: ScanResourceClient;
+  public readonly findings: FindingResourceClient;
+  public readonly pulse: PulseResourceClient;
+  public readonly domains: DomainResourceClient;
 
   /** Create a CertScore Pulse API client. */
   constructor(options: CertScoreClientOptions = {}) {
     this.apiKey = options.apiKey;
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
+    this.scans = {
+      create: (url, scanOptions) => this.createScanResource(url, scanOptions),
+      get: (scanId, scanOptions) => this.getScanResource(scanId, scanOptions),
+      status: (scanId, scanOptions) => this.getScanStatus(scanId, scanOptions),
+      wait: (scan, scanOptions) => this.waitForScan(scan, scanOptions)
+    };
+    this.findings = {
+      list: (scanId, findingOptions) => this.listFindings(scanId, findingOptions),
+      get: (scanId, findingId, findingOptions) => this.getFinding(scanId, findingId, findingOptions),
+      explain: (scanId, findingId, findingOptions) => this.getFinding(scanId, findingId, findingOptions)
+    };
+    this.pulse = {
+      get: (scanId, pulseOptions) => this.getScanPulse(scanId, pulseOptions)
+    };
+    this.domains = {
+      latest: (domain, domainOptions) => this.getLatestDomainScan(domain, domainOptions)
+    };
   }
 
   /** Submit a URL to CertScore Pulse and return a completed JSON result, polling async jobs until completion. */
@@ -122,7 +156,8 @@ export class CertScoreClient {
       wait: 60,
       detail,
       format,
-      freshness
+      freshness,
+      scanFrom: options.scanFrom
     });
     if (options.callbackUrl) {
       endpoint.searchParams.set("callbackUrl", options.callbackUrl);
@@ -169,13 +204,93 @@ export class CertScoreClient {
     return await this.throwForResponse(response);
   }
 
+  /** Create or reuse a scan through the API v2 resource endpoint. */
+  async createScanResource(url: string, options: CreateScanResourceOptions = {}): Promise<ScanResource | ScanJob> {
+    return this.postJson<ScanResource | ScanJob>(
+      "/api/v2/scans",
+      {
+        url,
+        ...(options.freshness ? { freshness: options.freshness } : {}),
+        ...(options.scanFrom ? { scanFrom: options.scanFrom } : {}),
+        ...(options.callbackUrl ? { callbackUrl: options.callbackUrl } : {}),
+        ...(options.metadata ? { metadata: options.metadata } : {})
+      },
+      { signal: options.signal }
+    );
+  }
+
+  /** Retrieve the API v2 scan resource for an eligible public scan. */
+  async getScanResource(scanId: string, options: { signal?: AbortSignal } = {}): Promise<ScanResource> {
+    return this.fetchJson<ScanResource>(`/api/v2/scans/${encodeURIComponent(scanId)}`, options);
+  }
+
+  /** Retrieve API v2 status for an eligible public scan. */
+  async getScanStatus(scanId: string, options: { signal?: AbortSignal } = {}): Promise<ScanJob> {
+    return this.fetchJson<ScanJob>(`/api/v2/scans/${encodeURIComponent(scanId)}/status`, options);
+  }
+
+  /** List API v2 public-safe findings for an eligible public scan. */
+  async listFindings(scanId: string, options: { signal?: AbortSignal } = {}): Promise<FindingList> {
+    return this.fetchJson<FindingList>(`/api/v2/scans/${encodeURIComponent(scanId)}/findings`, options);
+  }
+
+  /** Retrieve one API v2 public-safe finding for an eligible public scan. */
+  async getFinding(scanId: string, findingId: string, options: { signal?: AbortSignal } = {}): Promise<FindingDetail> {
+    return this.fetchJson<FindingDetail>(`/api/v2/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}`, options);
+  }
+
+  /** Retrieve the API v2 Pulse wrapper for an eligible public scan. */
+  async getScanPulse(scanId: string, options: { signal?: AbortSignal } = {}): Promise<ScanPulse> {
+    return this.fetchJson<ScanPulse>(`/api/v2/scans/${encodeURIComponent(scanId)}/pulse`, options);
+  }
+
+  /** Retrieve the latest eligible public scan for a domain. */
+  async getLatestDomainScan(domain: string, options: { scanFrom?: "eu_ie" | "california"; signal?: AbortSignal } = {}): Promise<DomainLatestScan> {
+    const endpoint = this.url(`/api/v2/domains/${encodeURIComponent(domain)}/latest`);
+    if (options.scanFrom) {
+      endpoint.searchParams.set("scanFrom", options.scanFrom);
+    }
+    return this.fetchJson<DomainLatestScan>(endpoint, options);
+  }
+
+  /** Wait for a Pulse job/status object or retrieve a stable scan by scanId. */
+  async waitForScan(scan: string | PendingJob | JobStatus, options: ScanOptions = {}): Promise<PulseResult | string> {
+    if (typeof scan === "string") {
+      return this.fetchScan(scan, normalizeDetail(options.detail), normalizeFormat(options.format), options.signal);
+    }
+    if (scan.type === "certscore_pulse_completed" && scan.pulse && normalizeFormat(options.format) !== "markdown") {
+      return scan.pulse;
+    }
+    if (scan.status === "completed" || scan.status === "completed_limited") {
+      const scanId = statusScanId(scan);
+      if (scanId) {
+        return this.fetchScan(scanId, normalizeDetail(options.detail), normalizeFormat(options.format), options.signal);
+      }
+    }
+    if (!scan.jobId) {
+      throw new ScanFailedError("Cannot wait for a scan without a jobId or completed scanId.", {
+        scanId: statusScanId(scan),
+        responseBody: scan
+      });
+    }
+    return this.pollUntilComplete(scan as JobStatus, {
+      detail: normalizeDetail(options.detail),
+      format: normalizeFormat(options.format),
+      pollIntervalMs: options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+      maxWaitMs: options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS,
+      startedAt: Date.now(),
+      signal: options.signal,
+      onStatusUpdate: options.onStatusUpdate
+    });
+  }
+
   /** Submit a Pulse scan request with wait=0 and return immediately without polling. */
   async submitScan(url: string, options: SubmitScanOptions = {}): Promise<PendingJob> {
     const detail = normalizeDetail(options.detail);
     const format = normalizeFormat(options.format);
     const freshness = normalizeFreshness(options.freshness);
     const endpoint = this.url("/api/v1/pulse");
-    withSearchParams(endpoint, { url, wait: 0, detail, format, freshness });
+    withSearchParams(endpoint, { url, wait: 0, detail, format, freshness, scanFrom: options.scanFrom });
     const response = await this.fetch(endpoint, { signal: options.signal });
 
     if (response.status === 202) {
@@ -315,6 +430,29 @@ export class CertScoreClient {
     });
   }
 
+  private async fetchJson<T>(pathOrUrl: string | URL, options: RequestOptions = {}): Promise<T> {
+    const endpoint = typeof pathOrUrl === "string" ? this.url(pathOrUrl) : pathOrUrl;
+    const response = await this.fetch(endpoint, { signal: options.signal, timeout: options.timeout });
+    if (response.ok) {
+      return (await response.json()) as T;
+    }
+    return await this.throwForResponse(response);
+  }
+
+  private async postJson<T>(pathOrUrl: string | URL, body: unknown, options: RequestOptions = {}): Promise<T> {
+    const endpoint = typeof pathOrUrl === "string" ? this.url(pathOrUrl) : pathOrUrl;
+    const response = await this.fetch(endpoint, {
+      body,
+      method: "POST",
+      signal: options.signal,
+      timeout: options.timeout
+    });
+    if (response.ok) {
+      return (await response.json()) as T;
+    }
+    return await this.throwForResponse(response);
+  }
+
   private async throwForResponse(response: Response): Promise<never> {
     const body = await this.safeBody(response);
     const code = bodyErrorCode(body);
@@ -349,8 +487,9 @@ export class CertScoreClient {
         options.signal?.addEventListener("abort", abort, { once: true });
       }
       return await fetch(url, {
-        method: "GET",
-        headers: this.headers(),
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        method: options.method ?? "GET",
+        headers: this.headers(options.body !== undefined),
         signal: controller.signal
       });
     } finally {
@@ -359,10 +498,13 @@ export class CertScoreClient {
     }
   }
 
-  private headers(): HeadersInit {
+  private headers(jsonBody = false): HeadersInit {
     const headers: Record<string, string> = {
       Accept: "application/json, text/markdown;q=0.9"
     };
+    if (jsonBody) {
+      headers["Content-Type"] = "application/json; charset=utf-8";
+    }
     if (this.apiKey) {
       headers.Authorization = `Bearer ${this.apiKey}`;
     }

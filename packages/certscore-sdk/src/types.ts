@@ -1,7 +1,17 @@
+import type {
+  ApiV2DomainLatestScan,
+  ApiV2FindingDetail,
+  ApiV2FindingList,
+  ApiV2ScanJob,
+  ApiV2ScanPulse,
+  ApiV2ScanResource
+} from "@certscore/api-contracts";
+
 export type PulseDetail = "tiny" | "quick" | "standard" | "full";
 export type NormalizedPulseDetail = "tiny" | "standard" | "full";
 export type PulseFormat = "json" | "markdown";
 export type FreshnessMode = "latest" | "refresh";
+export type ScanFrom = "eu_ie" | "california";
 
 export type PulseJobStatus =
   | "queued"
@@ -23,6 +33,7 @@ export interface ScanOptions {
   detail?: PulseDetail;
   format?: PulseFormat;
   freshness?: FreshnessMode;
+  scanFrom?: ScanFrom;
   callbackUrl?: string;
   maxWaitMs?: number;
   pollIntervalMs?: number;
@@ -34,6 +45,7 @@ export interface SubmitScanOptions {
   detail?: PulseDetail;
   format?: PulseFormat;
   freshness?: FreshnessMode;
+  scanFrom?: ScanFrom;
   signal?: AbortSignal;
 }
 
@@ -41,6 +53,49 @@ export interface GetScanOptions {
   detail?: PulseDetail;
   format?: PulseFormat;
   signal?: AbortSignal;
+}
+
+export interface ApiV2RequestOptions {
+  signal?: AbortSignal;
+}
+
+export interface DomainLatestScanOptions extends ApiV2RequestOptions {
+  scanFrom?: ScanFrom;
+}
+
+export interface CreateScanResourceOptions extends ApiV2RequestOptions {
+  callbackUrl?: string;
+  freshness?: FreshnessMode;
+  metadata?: Record<string, string>;
+  scanFrom?: ScanFrom;
+}
+
+export type ScanResource = ApiV2ScanResource;
+export type ScanJob = ApiV2ScanJob;
+export type FindingList = ApiV2FindingList;
+export type FindingDetail = ApiV2FindingDetail;
+export type DomainLatestScan = ApiV2DomainLatestScan;
+export type ScanPulse = ApiV2ScanPulse;
+
+export interface ScanResourceClient {
+  create(url: string, options?: CreateScanResourceOptions): Promise<ScanResource | ScanJob>;
+  get(scanId: string, options?: ApiV2RequestOptions): Promise<ScanResource>;
+  status(scanId: string, options?: ApiV2RequestOptions): Promise<ScanJob>;
+  wait(scan: string | PendingJob | JobStatus, options?: ScanOptions): Promise<PulseResult | string>;
+}
+
+export interface FindingResourceClient {
+  list(scanId: string, options?: ApiV2RequestOptions): Promise<FindingList>;
+  get(scanId: string, findingId: string, options?: ApiV2RequestOptions): Promise<FindingDetail>;
+  explain(scanId: string, findingId: string, options?: ApiV2RequestOptions): Promise<FindingDetail>;
+}
+
+export interface PulseResourceClient {
+  get(scanId: string, options?: ApiV2RequestOptions): Promise<ScanPulse>;
+}
+
+export interface DomainResourceClient {
+  latest(domain: string, options?: DomainLatestScanOptions): Promise<DomainLatestScan>;
 }
 
 export interface PulseMeta {

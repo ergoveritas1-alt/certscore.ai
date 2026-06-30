@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -102,9 +103,42 @@ test("CertScore MCP server exposes the scoped v1 tool surface", async () => {
     const tools = await client.listTools();
     assert.deepEqual(
       tools.tools.map((tool) => tool.name).sort(),
-      ["create_scan", "explain_finding", "export_findings", "get_report", "get_scan_status"]
+      [
+        "create_scan",
+        "explain_finding",
+        "export_findings",
+        "get_latest_domain_scan",
+        "get_report",
+        "get_scan",
+        "get_scan_status",
+        "list_findings",
+        "scan_site"
+      ]
     );
   });
+});
+
+test("README documents current MCP tool surface and public docs", () => {
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+
+  for (const tool of [
+    "scan_site",
+    "create_scan",
+    "get_scan",
+    "get_scan_status",
+    "get_report",
+    "export_findings",
+    "list_findings",
+    "explain_finding",
+    "get_latest_domain_scan"
+  ]) {
+    assert.match(readme, new RegExp(`\\\`${tool}\\\``));
+  }
+
+  assert.match(readme, /https:\/\/certscore\.ai\/developers\/mcp/);
+  assert.match(readme, /get_latest_domain_scan/);
+  assert.match(readme, /automated public-web observations for review/i);
+  assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
 });
 
 test("create_scan returns async status and scan handles", async () => {
@@ -160,6 +194,35 @@ test("create_scan returns immediate completed Pulse when API responds 200", asyn
   }
 });
 
+test("scan_site uses API v2 scan creation", async () => {
+  const mock = installFetch([
+    {
+      status: 202,
+      body: {
+        type: "certscore_scan_job",
+        status: "queued",
+        jobId: "pulse_job_123",
+        scanId: "scan_123"
+      }
+    }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const result = parseToolJson(
+        await client.callTool({
+          name: "scan_site",
+          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "california" }
+        })
+      );
+      assert.equal(result.type, "certscore_scan_job");
+      assert.equal(result.status, "queued");
+      assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
 test("get_scan_status returns normalized scanId", async () => {
   const mock = installFetch([
     {
@@ -172,6 +235,35 @@ test("get_scan_status returns normalized scanId", async () => {
       const result = parseToolJson(await client.callTool({ name: "get_scan_status", arguments: { jobId: "pulse_job_123" } }));
       assert.equal(result.scanId, "scan_123");
       assert.match(mock.calls[0] ?? "", /pulse\/status\/pulse_job_123/);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("get_scan_status supports API v2 scanId status", async () => {
+  const mock = installFetch([
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan_job",
+        jobId: "00000000-0000-4000-8000-000000000123",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        status: "completed"
+      }
+    }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const result = parseToolJson(
+        await client.callTool({
+          name: "get_scan_status",
+          arguments: { scanId: "00000000-0000-4000-8000-000000000123" }
+        })
+      );
+      assert.equal(result.type, "certscore_scan_job");
+      assert.equal(result.scanId, "00000000-0000-4000-8000-000000000123");
+      assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status/);
     });
   } finally {
     mock.restore();
@@ -197,8 +289,30 @@ test("get_report supports markdown and JSON report retrieval", async () => {
   }
 });
 
-test("export_findings and explain_finding use full report detail", async () => {
-  const mock = installFetch([{ status: 200, body: pulse }, { status: 200, body: pulse }]);
+test("export_findings uses full Pulse detail and explain_finding uses API v2 finding detail", async () => {
+  const mock = installFetch([
+    { status: 200, body: pulse },
+    {
+      status: 200,
+      body: {
+        type: "certscore_finding",
+        id: "pre_consent_tracking_detected",
+        scanId: "scan_123",
+        label: "Tracking started before consent",
+        criticality: "critical",
+        confidence: "strong",
+        plainEnglish: "Runtime evidence showed non-essential tracking before a consent choice.",
+        evidence: {
+          basis: "runtime_observation",
+          summary: "A third-party tracking request was observed before consent.",
+          exampleCount: 1,
+          examplesShown: 1
+        },
+        detail: { caveats: ["Automated public-web scan only."] },
+        disclaimer: "Automated public-web observations for review."
+      }
+    }
+  ]);
   try {
     await withMcpClient(async (client) => {
       const exported = parseToolJson(await client.callTool({ name: "export_findings", arguments: { scanId: "scan_123" } }));
@@ -211,10 +325,58 @@ test("export_findings and explain_finding use full report detail", async () => {
           arguments: { scanId: "scan_123", findingId: "pre_consent_tracking_detected" }
         })
       );
-      assert.equal(explanation.found, true);
-      assert.deepEqual(explanation.caveats, ["Automated public-web scan only."]);
+      assert.equal(explanation.type, "certscore_finding");
+      assert.equal(explanation.id, "pre_consent_tracking_detected");
       assert.match(mock.calls[0] ?? "", /detail=full/);
-      assert.match(mock.calls[1] ?? "", /detail=full/);
+      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/findings\/pre_consent_tracking_detected/);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("API v2 MCP tools return scan, findings, and latest domain resources", async () => {
+  const mock = installFetch([
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan",
+        scanId: "scan_123",
+        domain: "example.com",
+        status: "completed"
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_finding_list",
+        scanId: "scan_123",
+        findings: []
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_domain_latest_scan",
+        domain: "example.com",
+        scan: null
+      }
+    }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const scan = parseToolJson(await client.callTool({ name: "get_scan", arguments: { scanId: "scan_123" } }));
+      const findings = parseToolJson(await client.callTool({ name: "list_findings", arguments: { scanId: "scan_123" } }));
+      const latest = parseToolJson(
+        await client.callTool({ name: "get_latest_domain_scan", arguments: { domain: "example.com", scanFrom: "california" } })
+      );
+
+      assert.equal(scan.type, "certscore_scan");
+      assert.equal(findings.type, "certscore_finding_list");
+      assert.equal(latest.type, "certscore_domain_latest_scan");
+      assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123$/);
+      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/findings$/);
+      assert.match(mock.calls[2] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=california$/);
     });
   } finally {
     mock.restore();

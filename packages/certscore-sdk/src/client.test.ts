@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { CertScoreClient } from "./client.js";
 import { InvalidUrlError, ScanFailedError, ScanTimeoutError, ThrottledError } from "./errors.js";
@@ -26,9 +27,11 @@ function textResponse(status: number, body: string, headers: Record<string, stri
 
 function installFetch(responses: MockResponse[]) {
   const calls: string[] = [];
+  const callDetails: Array<{ body?: BodyInit | null; method?: string }> = [];
   const previous = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push(String(input));
+    callDetails.push({ body: init?.body, method: init?.method });
     const next = responses.shift();
     if (!next) {
       throw new Error("Unexpected fetch call");
@@ -40,6 +43,7 @@ function installFetch(responses: MockResponse[]) {
   }) as typeof fetch;
   return {
     calls,
+    callDetails,
     restore() {
       globalThis.fetch = previous;
     }
@@ -65,6 +69,29 @@ test("scan returns immediate 200 JSON", async () => {
   } finally {
     mock.restore();
   }
+});
+
+test("README documents current SDK resource clients", () => {
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+
+  for (const method of [
+    "certscore.scans.create()",
+    "certscore.scans.get()",
+    "certscore.scans.status()",
+    "certscore.scans.wait()",
+    "certscore.findings.list()",
+    "certscore.findings.get()",
+    "certscore.findings.explain()",
+    "certscore.pulse.get()",
+    "certscore.domains.latest()",
+    "certscore.scan()"
+  ]) {
+    assert.match(readme, new RegExp(method.replace(/[().]/g, "\\$&")));
+  }
+
+  assert.match(readme, /resource-oriented API v2 clients/i);
+  assert.match(readme, /automated public-web observations for review/i);
+  assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
 });
 
 test("scan returns immediate 200 markdown", async () => {
@@ -229,5 +256,126 @@ test("failed and expired statuses map to ScanFailedError", async () => {
     } finally {
       mock.restore();
     }
+  }
+});
+
+test("resource clients call API v2 read endpoints", async () => {
+  const mock = installFetch([
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        domain: "example.com",
+        status: "completed"
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan_job",
+        jobId: "00000000-0000-4000-8000-000000000123",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        status: "completed"
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_finding_list",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        findings: []
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_finding",
+        id: "pre_consent_tracking_detected",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        label: "Tracking started before consent",
+        criticality: "high",
+        confidence: "strong",
+        plainEnglish: "A third-party tracking request was observed before consent.",
+        evidence: {
+          basis: "runtime_observation",
+          summary: "Public-safe projected evidence summary.",
+          exampleCount: 1,
+          examplesShown: 1
+        }
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan_pulse",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        pulse
+      }
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_domain_latest_scan",
+        domain: "example.com",
+        scan: null
+      }
+    }
+  ]);
+
+  try {
+    const client = new CertScoreClient({ baseUrl: "https://certscore.ai/" });
+    const scan = await client.scans.get("00000000-0000-4000-8000-000000000123");
+    const status = await client.scans.status("00000000-0000-4000-8000-000000000123");
+    const findings = await client.findings.list("00000000-0000-4000-8000-000000000123");
+    const finding = await client.findings.explain("00000000-0000-4000-8000-000000000123", "pre_consent_tracking_detected");
+    const wrappedPulse = await client.pulse.get("00000000-0000-4000-8000-000000000123");
+    const latest = await client.domains.latest("example.com", { scanFrom: "california" });
+
+    assert.equal(scan.type, "certscore_scan");
+    assert.equal(status.type, "certscore_scan_job");
+    assert.equal(findings.type, "certscore_finding_list");
+    assert.equal(finding.id, "pre_consent_tracking_detected");
+    assert.equal(wrappedPulse.type, "certscore_scan_pulse");
+    assert.equal(latest.type, "certscore_domain_latest_scan");
+    assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
+    assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status$/);
+    assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/findings$/);
+    assert.match(mock.calls[3] ?? "", /\/findings\/pre_consent_tracking_detected$/);
+    assert.match(mock.calls[4] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/pulse$/);
+    assert.match(mock.calls[5] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=california$/);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("scans.create uses API v2 scan creation", async () => {
+  const mock = installFetch([
+    {
+      status: 202,
+      body: { type: "certscore_scan_job", status: "queued", jobId: "job_1", scanId: "scan_123" }
+    }
+  ]);
+
+  try {
+    const client = new CertScoreClient();
+    const pending = await client.scans.create("https://example.com", {
+      freshness: "refresh",
+      metadata: { source: "test" },
+      scanFrom: "california"
+    });
+
+    assert.equal(pending.type, "certscore_scan_job");
+    assert.equal(pending.status, "queued");
+    assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
+    assert.equal(mock.callDetails[0]?.method, "POST");
+    assert.deepEqual(JSON.parse(String(mock.callDetails[0]?.body)), {
+      freshness: "refresh",
+      metadata: { source: "test" },
+      scanFrom: "california",
+      url: "https://example.com"
+    });
+  } finally {
+    mock.restore();
   }
 });

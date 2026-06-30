@@ -101,11 +101,15 @@ const detailLevels = [
 ] as const;
 
 const mcpTools = [
+  ["scan_site", "Start or reuse a CertScore scan for a public URL from an agent workflow."],
   ["create_scan", "Start a CertScore scan for a public URL from an agent or developer workflow."],
-  ["get_scan_status", "Check a queued or running scan without inventing status from partial results."],
+  ["get_scan", "Retrieve the API v2 public-safe scan resource for a stable scan ID."],
+  ["get_scan_status", "Check a queued Pulse job or API v2 scan without inventing status from partial results."],
   ["get_report", "Retrieve the evidence-backed Pulse report for a stable scan ID."],
   ["export_findings", "Return structured findings for ticketing, review, or compliance workflows."],
-  ["explain_finding", "Explain one finding with public evidence, caveats, and reviewer next steps."]
+  ["list_findings", "Return API v2 public-safe findings for ticketing, review, or compliance workflows."],
+  ["explain_finding", "Explain one finding with public evidence, caveats, and reviewer next steps."],
+  ["get_latest_domain_scan", "Find the latest eligible public scan for a domain."]
 ] as const;
 
 const exampleMeta = {
@@ -581,6 +585,38 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
           </CardContent>
         </Card>
 
+        <Card className="border-emerald-200 bg-emerald-50 shadow-none">
+          <CardHeader>
+            <CardTitle>Developer hub</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
+            <p>
+              Pulse v1 remains the compatibility entry point. For the resource-oriented CertScore API v2, TypeScript SDK, MCP server,
+              examples, and machine-readable discovery links, use the developer hub.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                className="inline-flex w-fit rounded-full border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                href="/developers"
+              >
+                Open developer hub
+              </Link>
+              <Link
+                className="inline-flex w-fit rounded-full border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                href="/developers/reference"
+              >
+                API v2 reference
+              </Link>
+              <Link
+                className="inline-flex w-fit rounded-full border border-emerald-300 bg-white px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                href="/developers/mcp"
+              >
+                MCP docs
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card id="mcp" className="border-violet-200 bg-violet-50 shadow-none">
           <CardHeader>
             <CardTitle>MCP preview</CardTitle>
@@ -631,8 +667,8 @@ pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
   }
 }`}</CodeBlock>
             <p>
-              Recommended workflow: call `create_scan` with a public URL, poll `get_scan_status` when a job ID is returned, retrieve the
-              stable report with `get_report`, then use `export_findings` or `explain_finding` for review and ticketing.
+              Recommended workflow: call `scan_site` with a public URL, poll `get_scan_status` when a job ID is returned, retrieve the
+              stable scan with `get_scan`, then use `list_findings` or `explain_finding` for review and ticketing.
             </p>
             <p>
               Preview keys are scoped to `pulse:read`, `pulse:scan`, and `mcp`; CertScore validates bearer tokens before request
@@ -930,8 +966,14 @@ Content-Type: application/json
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/.well-known/certscore-pulse">
               Discovery JSON
             </Link>
+            <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/.well-known/certscore-ai.json">
+              AI discovery manifest
+            </Link>
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/llms.txt">
               llms.txt
+            </Link>
+            <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/llms-full.txt">
+              llms-full.txt
             </Link>
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/findings">
               Findings reference

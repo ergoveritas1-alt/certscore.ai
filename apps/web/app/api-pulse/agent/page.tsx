@@ -21,7 +21,9 @@ const endpoints = [
   ["Health canary", "https://certscore.ai/api/v1/pulse-health"],
   ["OpenAPI JSON", "https://certscore.ai/api/v1/openapi.json"],
   ["ChatGPT Action beta schema", "https://certscore.ai/api/v1/openapi.chatgpt.json"],
+  ["Universal AI/API discovery JSON", "https://certscore.ai/.well-known/certscore-ai.json"],
   ["Discovery JSON", "https://certscore.ai/.well-known/certscore-pulse"],
+  ["Full LLM guide", "https://certscore.ai/llms-full.txt"],
   ["Tiny Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=tiny"],
   ["Full Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full"],
   ["Pulse markdown", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&format=markdown"],
@@ -219,6 +221,12 @@ export default function PulseAgentFallbackPage() {
           </Link>
           <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/llms.txt">
             llms.txt
+          </Link>
+          <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/llms-full.txt">
+            llms-full.txt
+          </Link>
+          <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/.well-known/certscore-ai.json">
+            AI discovery manifest
           </Link>
           <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/findings">
             Findings reference

@@ -1,11 +1,16 @@
 import { CertScoreClient } from "@certscore/sdk";
+import {
+  mcpCreateScanInputSchema,
+  mcpExplainFindingInputSchema,
+  mcpExportFindingsInputSchema,
+  mcpGetLatestDomainScanInputSchema,
+  mcpGetReportInputSchema,
+  mcpGetScanInputSchema,
+  mcpGetScanStatusInputSchema,
+  mcpListFindingsInputSchema
+} from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-import { explainFinding, exportFindings, normalizeDetail, normalizeFormat, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
-
-const detailSchema = z.enum(["tiny", "quick", "standard", "full"]).optional();
-const formatSchema = z.enum(["json", "markdown"]).optional();
-const freshnessSchema = z.enum(["latest", "refresh"]).optional();
+import { exportFindings, normalizeDetail, normalizeFormat, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -25,36 +30,73 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     version: "0.1.0"
   });
 
+  async function createPulseScanTool(input: { url: string; detail?: "tiny" | "quick" | "standard" | "full"; format?: "json" | "markdown"; freshness?: "latest" | "refresh"; scanFrom?: "eu_ie" | "california" }) {
+    const result = await client.submitScan(input.url, {
+      detail: normalizeDetail(input.detail),
+      format: normalizeFormat(input.format),
+      freshness: input.freshness ?? "latest",
+      scanFrom: input.scanFrom
+    });
+    return {
+      type: "certscore_mcp_scan_created",
+      status: result.status,
+      jobId: result.jobId ?? null,
+      scanId: result.scanId ?? result.scan_id ?? null,
+      completed: result.completed ?? false,
+      statusUrl: result.statusUrl ?? result.nextCheckUrl ?? null,
+      resultUrl: result.resultUrl ?? null,
+      reportUrl: result.reportUrl ?? null,
+      pulse: result.pulse ?? null
+    };
+  }
+
   server.registerTool(
     "create_scan",
     {
       title: "Create CertScore Pulse scan",
       description: "Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links.",
-      inputSchema: {
-        url: z.string().min(1).describe("Public URL or domain to scan."),
-        detail: detailSchema.describe("Pulse detail level. Defaults to standard."),
-        format: formatSchema.describe("Response format for completed immediate responses. Defaults to json."),
-        freshness: freshnessSchema.describe("Use latest to reuse recent scans or refresh to request a new scan when eligible.")
-      }
+      inputSchema: mcpCreateScanInputSchema
     },
-    async ({ url, detail, format, freshness }) => {
+    async (input) => {
       try {
-        const result = await client.submitScan(url, {
-          detail: normalizeDetail(detail),
-          format: normalizeFormat(format),
-          freshness: freshness ?? "latest"
-        });
-        return toToolResult({
-          type: "certscore_mcp_scan_created",
-          status: result.status,
-          jobId: result.jobId ?? null,
-          scanId: result.scanId ?? result.scan_id ?? null,
-          completed: result.completed ?? false,
-          statusUrl: result.statusUrl ?? result.nextCheckUrl ?? null,
-          resultUrl: result.resultUrl ?? null,
-          reportUrl: result.reportUrl ?? null,
-          pulse: result.pulse ?? null
-        });
+        return toToolResult(await createPulseScanTool(input));
+      } catch (error) {
+        return toToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "scan_site",
+    {
+      title: "Scan site",
+      description: "Start or reuse a CertScore public-web scan for a public URL.",
+      inputSchema: mcpCreateScanInputSchema
+    },
+    async (input) => {
+      try {
+        return toToolResult(
+          await client.scans.create(input.url, {
+            freshness: input.freshness ?? "latest",
+            scanFrom: input.scanFrom
+          })
+        );
+      } catch (error) {
+        return toToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "get_scan",
+    {
+      title: "Get CertScore scan",
+      description: "Retrieve the API v2 public-safe scan resource for a stable scan ID.",
+      inputSchema: mcpGetScanInputSchema
+    },
+    async ({ scanId }) => {
+      try {
+        return toToolResult(await client.scans.get(scanId));
       } catch (error) {
         return toToolError(error);
       }
@@ -65,13 +107,22 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     "get_scan_status",
     {
       title: "Get CertScore Pulse scan status",
-      description: "Check the public-safe status for an existing CertScore Pulse job.",
-      inputSchema: {
-        jobId: z.string().min(1).describe("Pulse job ID returned by create_scan.")
-      }
+      description: "Check public-safe status for an existing Pulse jobId or API v2 scanId.",
+      inputSchema: mcpGetScanStatusInputSchema
     },
-    async ({ jobId }) => {
+    async ({ jobId, scanId }) => {
       try {
+        if (scanId) {
+          return toToolResult(await client.scans.status(scanId));
+        }
+        if (!jobId) {
+          return toToolResult({
+            error: {
+              name: "InvalidToolInput",
+              message: "Provide either scanId for API v2 scan status or jobId for Pulse job status."
+            }
+          });
+        }
         const status = await client.getJobStatus(jobId);
         return toToolResult({
           ...status,
@@ -88,11 +139,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     {
       title: "Get CertScore Pulse report",
       description: "Retrieve an evidence-backed CertScore Pulse report by stable scan ID.",
-      inputSchema: {
-        scanId: z.string().min(1).describe("Stable CertScore scan ID."),
-        detail: detailSchema.describe("Pulse detail level. Defaults to standard."),
-        format: formatSchema.describe("Use json for structured agent work or markdown for conversational summaries.")
-      }
+      inputSchema: mcpGetReportInputSchema
     },
     async ({ scanId, detail, format }) => {
       try {
@@ -119,9 +166,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     {
       title: "Export CertScore findings",
       description: "Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows.",
-      inputSchema: {
-        scanId: z.string().min(1).describe("Stable CertScore scan ID.")
-      }
+      inputSchema: mcpExportFindingsInputSchema
     },
     async ({ scanId }) => {
       try {
@@ -134,19 +179,47 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   );
 
   server.registerTool(
+    "list_findings",
+    {
+      title: "List CertScore findings",
+      description: "List API v2 public-safe findings already projected for a scan.",
+      inputSchema: mcpListFindingsInputSchema
+    },
+    async ({ scanId }) => {
+      try {
+        return toToolResult(await client.findings.list(scanId));
+      } catch (error) {
+        return toToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
     "explain_finding",
     {
       title: "Explain CertScore finding",
       description: "Explain a single CertScore finding with public evidence, caveats, and reviewer next steps.",
-      inputSchema: {
-        scanId: z.string().min(1).describe("Stable CertScore scan ID."),
-        findingId: z.string().min(1).describe("Finding ID to explain.")
-      }
+      inputSchema: mcpExplainFindingInputSchema
     },
     async ({ scanId, findingId }) => {
       try {
-        const report = await client.getScan(scanId, { detail: "full", format: "json" });
-        return toToolResult(explainFinding(report, findingId));
+        return toToolResult(await client.findings.explain(scanId, findingId));
+      } catch (error) {
+        return toToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "get_latest_domain_scan",
+    {
+      title: "Get latest domain scan",
+      description: "Retrieve the latest eligible API v2 public-safe scan for a domain.",
+      inputSchema: mcpGetLatestDomainScanInputSchema
+    },
+    async ({ domain, scanFrom }) => {
+      try {
+        return toToolResult(await client.domains.latest(domain, { scanFrom }));
       } catch (error) {
         return toToolError(error);
       }

@@ -20,6 +20,54 @@ const pulse = await client.scan("https://example.com");
 console.log(pulse.summary?.score, pulse.links?.fullReportUrl);
 ```
 
+## Resource Clients
+
+New integrations should prefer the resource-oriented API v2 clients for scan, status, finding, domain latest, and Pulse projection workflows.
+
+```ts
+import { CertScoreClient } from "@certscore/sdk";
+
+const certscore = new CertScoreClient({
+  apiKey: process.env.CERTSCORE_API_KEY
+});
+
+const scanOrJob = await certscore.scans.create({
+  url: "https://example.com",
+  detail: "standard",
+  scanFrom: "eu_ie"
+});
+
+const scan = scanOrJob.type === "certscore_api_scan_job"
+  ? await certscore.scans.wait(scanOrJob.id)
+  : scanOrJob;
+
+const status = await certscore.scans.status(scan.id);
+const findings = await certscore.findings.list(scan.id);
+const firstFinding = findings.items[0]
+  ? await certscore.findings.get(scan.id, findings.items[0].id)
+  : null;
+const explanation = firstFinding
+  ? await certscore.findings.explain(scan.id, firstFinding.id)
+  : null;
+const pulseProjection = await certscore.pulse.get(scan.id);
+const latestDomainScan = await certscore.domains.latest("example.com");
+
+console.log(status.status, explanation?.title, pulseProjection.disclaimer, latestDomainScan.scan?.id);
+```
+
+Available resource clients:
+
+- `certscore.scans.create()`
+- `certscore.scans.get()`
+- `certscore.scans.status()`
+- `certscore.scans.wait()`
+- `certscore.findings.list()`
+- `certscore.findings.get()`
+- `certscore.findings.explain()`
+- `certscore.pulse.get()`
+- `certscore.domains.latest()`
+- `certscore.scan()`
+
 ## Async Lifecycle
 
 `scan()` calls `/api/v1/pulse` with `wait=60`. If CertScore returns HTTP 202, the SDK polls the returned `statusUrl` or `nextCheckUrl`. It honors `Retry-After` on pending or throttled responses.

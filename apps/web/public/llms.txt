@@ -25,6 +25,17 @@ CertScore.ai findings are automated signals for review. CertScore.ai is not lega
 ## Key pages
 
 - https://certscore.ai/
+- https://certscore.ai/llms-full.txt
+- https://certscore.ai/.well-known/certscore-ai.json
+- https://certscore.ai/.well-known/certscore-pulse
+- https://certscore.ai/developers
+- https://certscore.ai/developers/quickstart
+- https://certscore.ai/developers/reference
+- https://certscore.ai/developers/sdk
+- https://certscore.ai/developers/mcp
+- https://certscore.ai/developers/examples
+- https://certscore.ai/api-pulse
+- https://certscore.ai/api-pulse/agent
 - https://certscore.ai/how-it-works
 - https://certscore.ai/methodology
 - https://certscore.ai/pricing
@@ -106,6 +117,12 @@ Recommended calls:
 
 Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.
 
+Authentication and API keys:
+Public Pulse beta requests may be unauthenticated with throttling. Scoped integrations may use `Authorization: Bearer <token>`. Current integration scopes are `pulse:read`, `pulse:scan`, and `mcp`. API key and setup docs are at https://certscore.ai/developers/quickstart.
+
+Rate limits:
+HTTP 202 pending responses may include Retry-After. HTTP 429 throttled responses may include Retry-After. Agents and SDKs should honor Retry-After and avoid tight polling. Rate-limit and error-shape docs are at https://certscore.ai/developers/reference.
+
 Standard markdown structure:
 - Starts with a compact Field/Value summary table.
 - Stable headings: Summary, Highest-priority findings, Privacy and consent signals, Cookie and third-party request activity, Accessibility signals, Disclosure and trust signals, Coverage and limitations, Links, Disclaimer.
@@ -149,6 +166,30 @@ https://certscore.ai/api/v1/pulse-self-test
 Health:
 https://certscore.ai/api/v1/pulse-health
 
+Universal AI/API discovery:
+https://certscore.ai/.well-known/certscore-ai.json
+
+Developer hub:
+https://certscore.ai/developers
+
+API quickstart:
+https://certscore.ai/developers/quickstart
+
+API reference:
+https://certscore.ai/developers/reference
+
+SDK docs:
+https://certscore.ai/developers/sdk
+
+MCP docs:
+https://certscore.ai/developers/mcp
+
+Examples:
+https://certscore.ai/developers/examples
+
+Full LLM and agent guide:
+https://certscore.ai/llms-full.txt
+
 Wait behavior:
 The wait query parameter accepts 0 to 80 seconds. It only controls how long the current HTTP request may be held open. Queue backlog, worker availability, page load time, and scan finalization can make total completion take longer than 80 seconds. If the API returns HTTP 202, poll the status URL until completed.
 
@@ -163,6 +204,21 @@ https://certscore.ai/api/v1/openapi.json
 
 ChatGPT Action beta schema:
 https://certscore.ai/api/v1/openapi.chatgpt.json
+
+API v2 draft OpenAPI:
+https://certscore.ai/api/v2/openapi.json
+
+API v2 health:
+https://certscore.ai/api/v2/health
+
+API v2 resources:
+POST https://certscore.ai/api/v2/scans
+GET https://certscore.ai/api/v2/scans/{scanId}
+GET https://certscore.ai/api/v2/scans/{scanId}/status
+GET https://certscore.ai/api/v2/scans/{scanId}/findings
+GET https://certscore.ai/api/v2/scans/{scanId}/findings/{findingId}
+GET https://certscore.ai/api/v2/scans/{scanId}/pulse
+GET https://certscore.ai/api/v2/domains/{domain}/latest
 
 API instructions:
 https://certscore.ai/api-pulse
@@ -181,11 +237,12 @@ pnpm db:migrate
 pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"
 
 MCP workflow:
-1. create_scan with a public URL.
-2. get_scan_status when create_scan returns a jobId.
-3. get_report with the stable scanId.
-4. export_findings for structured review handoff.
-5. explain_finding for evidence, caveats, and next steps.
+1. scan_site or create_scan with a public URL.
+2. get_scan_status when scan creation returns a jobId, or with a stable scanId for API v2 status.
+3. get_scan with the stable scanId.
+4. list_findings for structured review handoff.
+5. explain_finding for evidence summaries, caveats, and next steps.
+6. get_latest_domain_scan to find the latest eligible public scan for a domain.
 
 Agent fetch fallback:
 https://certscore.ai/api-pulse/agent
@@ -198,6 +255,11 @@ https://certscore.ai/findings
 
 Feedback:
 Send comments to support@certscore.ai or use the feedbackUrl included in Pulse responses.
+
+Support and terms:
+https://certscore.ai/contact
+https://certscore.ai/terms
+https://certscore.ai/privacy
 
 Guidance:
 Treat CertScore outputs as automated public-web observations for review, not legal advice, certification, or compliance determinations. Results may be incomplete or contain errors. Do not treat absence of findings as proof of compliance.
