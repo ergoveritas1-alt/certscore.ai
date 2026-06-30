@@ -65,6 +65,13 @@ brew install certscore-mcp
 Installed command:
 certscore-mcp
 
+Verify installed command:
+certscore-mcp --version
+certscore-mcp --help
+CERTSCORE_API_KEY=<token> certscore-mcp doctor
+
+The doctor command checks binary startup, runtime compatibility, API v2 health, and API key presence without printing secrets.
+
 Local stdio command:
 CERTSCORE_API_KEY=<token> pnpm mcp:certscore
 

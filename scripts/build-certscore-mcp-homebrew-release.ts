@@ -83,6 +83,16 @@ writeFileSync(
     "}",
     "```",
     "",
+    "Verify install:",
+    "",
+    "```bash",
+    "certscore-mcp --version",
+    "certscore-mcp --help",
+    "CERTSCORE_API_KEY=<token> certscore-mcp doctor",
+    "```",
+    "",
+    "The doctor command checks binary startup, runtime compatibility, API v2 health, and API key presence without printing secrets.",
+    "",
     "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.",
     ""
   ].join("\n")

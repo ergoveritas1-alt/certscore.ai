@@ -80,9 +80,51 @@ CERTSCORE_REQUEST_TIMEOUT_MS=300000
 
 `CERTSCORE_API_KEY` should be a scoped CertScore API token for the workspace or preview user. The MCP server passes it to Pulse as a bearer token and does not persist it.
 
+## Verify Install
+
+```bash
+certscore-mcp --version
+certscore-mcp --help
+CERTSCORE_API_KEY=... certscore-mcp doctor
+```
+
+The doctor command checks binary startup, version output, Node.js runtime compatibility, the configured CertScore base URL, API v2 health, and API key presence. It does not print secrets, create scans, or inspect raw scanner artifacts. There is no dedicated public auth-check endpoint; verify credentials with a real MCP tool call such as `scan_site` after the client is connected.
+
 ## MCP Client Examples
 
 Claude Desktop-style config with the Homebrew command:
+
+```json
+{
+  "mcpServers": {
+    "certscore": {
+      "command": "certscore-mcp",
+      "env": {
+        "CERTSCORE_API_KEY": "YOUR_TOKEN",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}
+```
+
+Cursor config with the Homebrew command:
+
+```json
+{
+  "mcpServers": {
+    "certscore": {
+      "command": "certscore-mcp",
+      "env": {
+        "CERTSCORE_API_KEY": "YOUR_TOKEN",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}
+```
+
+Windsurf or generic stdio MCP client config:
 
 ```json
 {
@@ -161,6 +203,15 @@ CERTSCORE_MCP_SMOKE_URL=https://example.com
 ```
 
 Without `CERTSCORE_API_KEY`, the smoke script exits successfully with a skip message.
+
+## Troubleshooting
+
+- Command not found: run the Homebrew install again and confirm Homebrew's bin directory is on `PATH`.
+- Missing API key: set `CERTSCORE_API_KEY` in the MCP client environment and rerun `certscore-mcp doctor`.
+- Bad token: rotate the key or request a scoped API/MCP key from `support@certscore.ai`.
+- API unreachable: check `CERTSCORE_BASE_URL` and verify `https://certscore.ai/api/v2/health`.
+- Homebrew tap stale: run `brew update` and reinstall `certscore-mcp`.
+- Old cached release: run `brew reinstall certscore-mcp` after updating the tap.
 
 ## Runbook
 

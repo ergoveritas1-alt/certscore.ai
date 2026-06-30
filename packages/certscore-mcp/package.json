@@ -1,6 +1,6 @@
 {
   "name": "@certscore/mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "MCP server for CertScore public website risk-signal workflows.",
   "type": "module",

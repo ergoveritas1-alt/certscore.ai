@@ -74,9 +74,11 @@ const discoveryDocument = {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
+    currentVersion: "0.1.1",
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install certscore-mcp",
+    verify: ["certscore-mcp --version", "certscore-mcp --help", "CERTSCORE_API_KEY=<token> certscore-mcp doctor"],
     transport: "stdio",
     currentTools: [
       "scan_site",

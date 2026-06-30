@@ -33,6 +33,16 @@ export default function DeveloperMcpPage() {
 brew install certscore-mcp`}</CodeBlock>
         </Section>
 
+        <Section eyebrow="Verify install" title="Run the doctor check">
+          <CodeBlock>{`certscore-mcp --version
+certscore-mcp --help
+CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            The doctor command checks the installed binary, Node.js runtime compatibility, the configured CertScore base URL, API v2
+            health, and API key presence without printing the token. It does not create scans or inspect raw scanner artifacts.
+          </p>
+        </Section>
+
         <Section eyebrow="MCP client config" title="Use the installed command">
           <CodeBlock>{`{
   "mcpServers": {
@@ -49,6 +59,31 @@ brew install certscore-mcp`}</CodeBlock>
             The server runs over stdio and reads the API key from the MCP client environment. Keep the token scoped and rotate it if it
             is shared outside your workspace.
           </p>
+        </Section>
+
+        <Section eyebrow="Cursor and Windsurf" title="Generic stdio config">
+          <CodeBlock>{`{
+  "mcpServers": {
+    "certscore": {
+      "command": "certscore-mcp",
+      "env": {
+        "CERTSCORE_API_KEY": "<token>",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}`}</CodeBlock>
+        </Section>
+
+        <Section eyebrow="Troubleshooting" title="Common install checks">
+          <ul className="max-w-3xl list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
+            <li>If the command is not found, run the Homebrew install again and check that Homebrew&apos;s bin directory is on PATH.</li>
+            <li>If the API key is missing, set CERTSCORE_API_KEY in the MCP client environment and rerun doctor.</li>
+            <li>If a token is rejected by a tool call, rotate the key or request a scoped API/MCP key from support@certscore.ai.</li>
+            <li>If API health is unreachable, check CERTSCORE_BASE_URL and verify that https://certscore.ai/api/v2/health loads.</li>
+            <li>If Homebrew uses stale metadata, run brew update and reinstall certscore-mcp.</li>
+            <li>If an old release is cached, run brew reinstall certscore-mcp after updating the tap.</li>
+          </ul>
         </Section>
 
         <Section eyebrow="Local development" title="Run the stdio server from this repo">

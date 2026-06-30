@@ -5,7 +5,16 @@ import { createCertScoreMcpServer } from "./server.js";
 export { createCertScoreMcpServer } from "./server.js";
 export { explainFinding, exportFindings, findingsFromReport } from "./tools.js";
 
-const CERTSCORE_MCP_VERSION = "0.1.0";
+export const CERTSCORE_MCP_VERSION = "0.1.1";
+const DEFAULT_CERTSCORE_BASE_URL = "https://certscore.ai";
+const MIN_NODE_MAJOR = 20;
+const MAX_NODE_MAJOR_EXCLUSIVE = 25;
+
+export interface CertScoreMcpDoctorOptions {
+  env?: Record<string, string | undefined>;
+  fetch?: typeof fetch;
+  nodeVersion?: string;
+}
 
 function parseTimeout(value: string | undefined) {
   if (!value) {
@@ -32,8 +41,15 @@ async function main() {
       "  CERTSCORE_REQUEST_TIMEOUT_MS   Optional request timeout.",
       "",
       "Usage:",
-      "  certscore-mcp"
+      "  certscore-mcp",
+      "  certscore-mcp doctor"
     ].join("\n"));
+    return;
+  }
+  if (process.argv.includes("doctor")) {
+    const result = await getCertScoreMcpDoctorReport();
+    console.log(result.lines.join("\n"));
+    process.exitCode = result.exitCode;
     return;
   }
 
@@ -43,6 +59,66 @@ async function main() {
     timeout: parseTimeout(process.env.CERTSCORE_REQUEST_TIMEOUT_MS)
   });
   await server.connect(new StdioServerTransport());
+}
+
+export async function getCertScoreMcpDoctorReport(options: CertScoreMcpDoctorOptions = {}) {
+  const env = options.env ?? process.env;
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const nodeVersion = options.nodeVersion ?? process.versions.node;
+  const lines = ["CertScore MCP doctor"];
+  let exitCode = 0;
+
+  lines.push(`[ok] version ${CERTSCORE_MCP_VERSION}`);
+
+  const nodeMajor = Number(nodeVersion.split(".")[0]);
+  if (Number.isInteger(nodeMajor) && nodeMajor >= MIN_NODE_MAJOR && nodeMajor < MAX_NODE_MAJOR_EXCLUSIVE) {
+    lines.push(`[ok] Node.js ${nodeVersion} is compatible`);
+  } else {
+    lines.push(`[error] Node.js ${nodeVersion || "unknown"} is not compatible; use Node.js >=20 <25`);
+    exitCode = 1;
+  }
+
+  const baseUrlInput = env.CERTSCORE_BASE_URL?.trim() || DEFAULT_CERTSCORE_BASE_URL;
+  let healthUrl: URL | null = null;
+  try {
+    const baseUrl = new URL(baseUrlInput);
+    healthUrl = new URL("/api/v2/health", baseUrl);
+    lines.push(`[ok] base URL ${baseUrl.origin}`);
+  } catch {
+    lines.push(`[error] CERTSCORE_BASE_URL is not a valid URL`);
+    exitCode = 1;
+  }
+
+  if (healthUrl) {
+    try {
+      const response = await fetchImpl(healthUrl, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(10_000)
+      });
+      if (response.ok) {
+        lines.push(`[ok] API health reachable at ${healthUrl.href}`);
+      } else {
+        lines.push(`[error] API health returned HTTP ${response.status} at ${healthUrl.href}`);
+        exitCode = 1;
+      }
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "request failed";
+      lines.push(`[error] API health unreachable at ${healthUrl.href}: ${message}`);
+      exitCode = 1;
+    }
+  }
+
+  if (env.CERTSCORE_API_KEY?.trim()) {
+    lines.push("[ok] CERTSCORE_API_KEY is present");
+    lines.push("[info] No dedicated auth-check endpoint is exposed; verify credentials with a real MCP tool call such as scan_site.");
+  } else {
+    lines.push("[warn] CERTSCORE_API_KEY is not set");
+    lines.push("[info] Set CERTSCORE_API_KEY before connecting an MCP client or calling authenticated tools.");
+  }
+
+  lines.push("CertScore outputs are automated public-web observations for review, not legal advice, certification, or a compliance determination.");
+
+  return { exitCode, lines };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

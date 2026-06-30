@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { CERTSCORE_MCP_VERSION, getCertScoreMcpDoctorReport } from "./index.js";
 import { createCertScoreMcpServer } from "./server.js";
 
 type MockResponse = {
@@ -142,9 +143,77 @@ test("README documents current MCP tool surface and public docs", () => {
   assert.match(readme, /https:\/\/certscore\.ai\/developers\/mcp/);
   assert.match(readme, /get_latest_domain_scan/);
   assert.match(readme, /brew install certscore-mcp/);
+  assert.match(readme, /certscore-mcp doctor/);
   assert.match(readme, /"command": "certscore-mcp"/);
   assert.match(readme, /automated public-web observations for review/i);
   assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
+});
+
+test("doctor reports healthy API and missing API key without failing", async () => {
+  const fetchCalls: string[] = [];
+  const result = await getCertScoreMcpDoctorReport({
+    env: {},
+    fetch: (async (input: RequestInfo | URL) => {
+      fetchCalls.push(String(input));
+      return jsonResponse(200, { type: "certscore_api_v2_health", status: "ok" });
+    }) as typeof fetch,
+    nodeVersion: "22.12.0"
+  });
+
+  assert.equal(result.exitCode, 0);
+  assert.match(result.lines.join("\n"), /version 0\.1\.1/);
+  assert.match(result.lines.join("\n"), /Node\.js 22\.12\.0 is compatible/);
+  assert.match(result.lines.join("\n"), /API health reachable/);
+  assert.match(result.lines.join("\n"), /CERTSCORE_API_KEY is not set/);
+  assert.equal(fetchCalls[0], "https://certscore.ai/api/v2/health");
+});
+
+test("doctor reports present API key without leaking the secret", async () => {
+  const secret = "cs_test_super_secret_value";
+  const result = await getCertScoreMcpDoctorReport({
+    env: {
+      CERTSCORE_API_KEY: secret,
+      CERTSCORE_BASE_URL: "https://certscore.ai"
+    },
+    fetch: (async () => jsonResponse(200, { status: "ok" })) as typeof fetch,
+    nodeVersion: "24.1.0"
+  });
+
+  const output = result.lines.join("\n");
+  assert.equal(result.exitCode, 0);
+  assert.match(output, /CERTSCORE_API_KEY is present/);
+  assert.match(output, /No dedicated auth-check endpoint is exposed/);
+  assert.doesNotMatch(output, new RegExp(secret));
+});
+
+test("doctor fails for unreachable API health", async () => {
+  const result = await getCertScoreMcpDoctorReport({
+    env: { CERTSCORE_BASE_URL: "https://api.example.test" },
+    fetch: (async () => {
+      throw new Error("network unavailable");
+    }) as typeof fetch,
+    nodeVersion: "22.12.0"
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.match(result.lines.join("\n"), /API health unreachable/);
+  assert.match(result.lines.join("\n"), /network unavailable/);
+});
+
+test("doctor fails for incompatible Node runtime", async () => {
+  const result = await getCertScoreMcpDoctorReport({
+    env: {},
+    fetch: (async () => jsonResponse(200, { status: "ok" })) as typeof fetch,
+    nodeVersion: "25.0.0"
+  });
+
+  assert.equal(result.exitCode, 1);
+  assert.match(result.lines.join("\n"), /Node\.js 25\.0\.0 is not compatible/);
+});
+
+test("version constant stays aligned with package version", () => {
+  const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
+  assert.equal(CERTSCORE_MCP_VERSION, packageJson.version);
 });
 
 test("create_scan returns async status and scan handles", async () => {

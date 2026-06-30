@@ -226,6 +226,16 @@ brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscor
 brew install certscore-mcp
 ```
 
+Verify install:
+
+```bash
+certscore-mcp --version
+certscore-mcp --help
+CERTSCORE_API_KEY=<token> certscore-mcp doctor
+```
+
+The doctor command checks the installed command, Node.js runtime compatibility, CertScore API v2 health, and API key presence without printing secrets. It does not create scans or inspect raw scanner artifacts.
+
 MCP client config:
 
 ```json

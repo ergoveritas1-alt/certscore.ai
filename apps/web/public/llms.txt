@@ -121,6 +121,13 @@ Use the current API v2 discovery resources for integrations and agent workflows.
 - Cookies & Trackers (Pre-consent) JSON example: https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json
 - Full LLM and agent guide: https://certscore.ai/llms-full.txt
 
+MCP install verification:
+```bash
+certscore-mcp --version
+certscore-mcp --help
+CERTSCORE_API_KEY=<token> certscore-mcp doctor
+```
+
 Recommended flow:
 1. Check https://certscore.ai/api/v2/health.
 2. Read https://certscore.ai/api/v2/openapi.json for the current contract.
