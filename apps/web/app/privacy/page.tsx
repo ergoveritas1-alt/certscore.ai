@@ -7,70 +7,101 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Privacy Policy",
   description:
-    "Read the CertScore.ai Privacy Policy, including information collection, scan data handling, third-party infrastructure, cookies, and retention.",
+    "Read the CertScore.ai Privacy Policy, including information collection, processing purposes, service providers, transfers, cookies, and retention.",
   path: "/privacy"
 });
 
 const sections = [
   {
     title: "1. Overview",
-    body:
+    body: [
       "This Privacy Policy describes how CertScore.ai collects, uses, stores, and retains information when you use certscore.ai and the CertScore.ai service."
+    ]
   },
   {
     title: "2. Account And Submitted Information",
-    body:
+    body: [
       "We may collect information you provide directly, such as your email address, name, authentication details, submitted domains, scan settings, selected plan, and account preferences."
+    ]
   },
   {
     title: "3. Usage And Operational Data",
-    body:
+    body: [
       "We may collect technical information needed to operate the service, such as authentication events, usage logs, scan status events, browser metadata, and product interaction data."
+    ]
   },
   {
     title: "4. Website Scan Data",
-    body:
+    body: [
       "CertScore.ai analyzes publicly accessible website content using automated systems and rule-based checks. We may retain scan metadata, derived signals, counts, booleans, timestamps, evidence URLs, change history, and limited policy or disclosure excerpts when needed to support analysis, review, remediation, and evidence context. We do not describe the service as an archive of full websites or complete policy text bodies."
+    ]
   },
   {
-    title: "5. Third-Party Services",
-    body:
-      "CertScore.ai uses third-party infrastructure and service providers, including PostgreSQL-compatible database hosting, S3-compatible object storage, AWS, Stripe for payment and subscription processing, and Gmail SMTP where applicable. These providers process data as part of hosting, job processing, storage, email delivery, payment processing, subscription management, and platform operation."
+    title: "5. Processing Purposes",
+    body: [
+      "CertScore.ai may process account and submitted information to create and manage accounts, authenticate users, provide scans and reports, manage plans, respond to requests, send service messages, and operate customer support.",
+      "CertScore.ai may process usage and operational data to run the service, secure accounts, debug errors, monitor scan status, improve product reliability, measure product usage after optional analytics consent, prevent abuse, and maintain business records.",
+      "CertScore.ai may process public website scan data to generate evidence-led reports, support remediation review, preserve limited evidence context, compare changes over time, and operate monitoring or validation workflows requested by users."
+    ]
   },
   {
-    title: "6. Payments And Subscription Records",
-    body:
+    title: "6. Third-Party Service Providers And Recipients",
+    body: [
+      "CertScore.ai uses third-party infrastructure and service providers that may receive or process information on our behalf. These provider categories include cloud hosting, PostgreSQL-compatible database hosting, S3-compatible object storage, job processing, email delivery, payment and subscription processing, authentication, analytics, security, and operational monitoring.",
+      "Current provider examples include AWS for hosting and infrastructure, Stripe for payment and subscription processing, Gmail SMTP where applicable for email delivery, Google Analytics for optional website analytics, and Microsoft Clarity for optional session-insight analysis. Provider use may vary by feature, account state, and operational configuration.",
+      "These providers process data to operate, secure, troubleshoot, measure, bill for, or support the CertScore.ai service. CertScore.ai does not describe service-provider access alone as a sale of personal information."
+    ]
+  },
+  {
+    title: "7. Payments And Subscription Records",
+    body: [
       "Payment card details are handled by Stripe rather than stored directly by CertScore.ai. CertScore.ai may retain Stripe customer identifiers, subscription identifiers, plan status, invoice or checkout status, billing event metadata, and related operational records needed to provide paid plans, support cancellation, reconcile payments, prevent fraud, and maintain business records."
+    ]
   },
   {
-    title: "7. Data Retention",
-    body:
-      "We retain account data, scan metadata, and related operational records for as long as needed to operate the service, subject to plan limits, retention settings, and operational needs."
+    title: "8. Cookies, Analytics, And Session-Insight Tools",
+    body: [
+      "CertScore.ai uses cookies and similar technologies to operate the service, maintain sessions, remember preferences, protect accounts, and understand usage.",
+      "Optional analytics and session-insight tools, including Google Analytics and Microsoft Clarity, are intended to run only after analytics consent is allowed. Microsoft Clarity is configured with masking intended to avoid intentionally collecting sensitive form inputs or private report content.",
+      "Users can reject optional analytics from the consent surface and can review or change analytics preferences from the Cookie preferences link in the site footer."
+    ]
   },
   {
-    title: "8. Your Privacy Rights",
-    body:
+    title: "9. International Transfers",
+    body: [
+      "CertScore.ai is operated from the United States and uses service providers that may process information in the United States and other countries. Where personal information is transferred across borders, CertScore.ai reviews vendor, contractual, security, and operational safeguards as part of service operation.",
+      "Cross-border processing may occur for hosting, storage, payment processing, email delivery, analytics, support, security, and other operational purposes described in this policy."
+    ]
+  },
+  {
+    title: "10. Data Retention",
+    body: [
+      "We retain account data, scan metadata, limited evidence context, and related operational records for as long as needed to operate the service, subject to plan limits, retention settings, legal, security, billing, audit, dispute-resolution, and operational needs."
+    ]
+  },
+  {
+    title: "11. Your Privacy Rights",
+    body: [
       "Depending on where you live, you may have rights to request access to personal data, deletion, correction, portability, restriction, objection, or certain opt-outs. CertScore.ai provides a public privacy request form at certscore.ai/privacy-request and also accepts requests sent to privacy@certscore.ai."
+    ]
   },
   {
-    title: "9. Cookies and Tracking",
-    body:
-      "CertScore.ai uses cookies and similar technologies to operate the service, maintain sessions, and understand usage. We use Google Analytics and Microsoft Clarity for website analytics and session behavior analysis. Microsoft Clarity is configured with strict masking to avoid intentionally collecting sensitive form inputs or private report content."
-  },
-  {
-    title: "10. Security",
-    body:
+    title: "12. Security",
+    body: [
       "We use reasonable technical and operational measures to protect account and scan data, but no system can guarantee absolute security."
+    ]
   },
   {
-    title: "11. Changes to This Policy",
-    body:
+    title: "13. Changes to This Policy",
+    body: [
       "We may update this Privacy Policy from time to time. Material changes will be reflected on this page with updated content."
+    ]
   },
   {
-    title: "12. Contact",
-    body:
-      "If you have privacy-related questions, email privacy@certscore.ai or use the privacy request form linked from this policy and the site footer."
+    title: "14. Privacy And Data-Protection Contact",
+    body: [
+      "For privacy-related questions, data-protection questions, or privacy rights requests, contact CertScore.ai at privacy@certscore.ai or use the privacy request form linked from this policy and the site footer."
+    ]
   }
 ];
 
@@ -110,7 +141,9 @@ export default function PrivacyPage() {
           {sections.map((section) => (
             <section key={section.title} className="space-y-2">
               <h2 className="text-2xl font-semibold tracking-tight text-slate-900">{section.title}</h2>
-              <p className="text-sm leading-6 text-slate-600">{section.body}</p>
+              {section.body.map((paragraph) => (
+                <p key={paragraph} className="text-sm leading-6 text-slate-600">{paragraph}</p>
+              ))}
             </section>
           ))}
         </div>

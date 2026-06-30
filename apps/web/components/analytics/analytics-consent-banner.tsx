@@ -19,7 +19,7 @@ function AnalyticsConsentPanel(input: {
       <div className="space-y-1">
         <p className="text-sm font-semibold text-slate-950">Analytics preferences</p>
         <p className="text-sm leading-6 text-slate-600">
-          We use optional analytics and session-insight tools only after you allow them. Necessary app and security scripts still run.
+          We use optional analytics and session-insight tools only after you allow them. You can reject optional analytics now and change this choice later from Cookie preferences.
         </p>
       </div>
       <div className="mt-3 flex shrink-0 flex-wrap gap-2 md:mt-0">
@@ -83,7 +83,7 @@ export function AnalyticsPreferencesButton() {
   return (
     <>
       <button type="button" className="hover:text-slate-900" onClick={() => setIsOpen(true)}>
-        Cookie preferences
+        Cookie / analytics preferences
       </button>
       {isOpen ? <AnalyticsConsentPanel onChoose={choose} onClose={() => setIsOpen(false)} /> : null}
     </>
