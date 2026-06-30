@@ -73,6 +73,7 @@ import {
   DOMAIN_BENCHMARK_EVENT_TYPE,
   buildDomainBenchmarkEstimateFromMacroEnrichment,
   generateDomainBenchmarkEstimate,
+  getDomainBenchmarkEstimateOverride,
   normalizeDomainBenchmarkEstimate,
   shouldPreferMacroBenchmarkEstimate,
   type DomainBenchmarkEstimate
@@ -251,6 +252,11 @@ async function resolveDomainBenchmarkEstimate(input: {
   organizationId: string | null;
   scanId: string;
 }): Promise<DomainBenchmarkEstimate | null> {
+  const overrideEstimate = getDomainBenchmarkEstimateOverride(input.domainHostname);
+  if (overrideEstimate) {
+    return overrideEstimate;
+  }
+
   const macroEstimate = buildDomainBenchmarkEstimateFromMacroEnrichment(input.macroEnrichment);
   const currentEvent = [...input.currentEvents].reverse().find((event) => event.eventType === DOMAIN_BENCHMARK_EVENT_TYPE);
   const currentEstimate = normalizeDomainBenchmarkEstimate(currentEvent?.metadataJson);

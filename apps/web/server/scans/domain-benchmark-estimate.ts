@@ -12,6 +12,7 @@ export type DomainBenchmarkEstimate = {
 };
 
 const GENERIC_UNKNOWN_INDUSTRY_PATTERN = /general web|placeholder|brand landing|unknown|generic/i;
+const CERTSCORE_HOST_PATTERN = /(^|\.)certscore\.ai$/i;
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -56,6 +57,23 @@ function getStringArray(value: unknown) {
 
 function normalizeToken(value: string | null) {
   return value?.trim().toLowerCase().replace(/[_-]+/g, " ") ?? null;
+}
+
+export function getDomainBenchmarkEstimateOverride(domainHostname: string | null | undefined): DomainBenchmarkEstimate | null {
+  const hostname = domainHostname?.trim().toLowerCase();
+  if (!hostname || !CERTSCORE_HOST_PATTERN.test(hostname)) {
+    return null;
+  }
+
+  return {
+    confidence: "high",
+    estimatedRankLabel: "Specialized SaaS",
+    expectedCookiesBeforeConsent: 0,
+    expectedOverallScore: 86,
+    expectedThirdPartyRequests: 8,
+    industry: "Compliance software / privacy and accessibility risk analytics",
+    rationale: "Matched first-party CertScore domain; use the product category instead of hostname-only credit-scoring inference."
+  };
 }
 
 function formatMacroIndustryLabel(input: {

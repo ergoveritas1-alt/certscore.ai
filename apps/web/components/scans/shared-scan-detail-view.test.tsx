@@ -992,6 +992,52 @@ test("deriveExecutivePolicySurfaces numbers duplicate generic policy labels", as
   );
 });
 
+test("deriveExecutivePolicySurfaces suppresses privacy-adjacent resource links", async () => {
+  const deriveExecutivePolicySurfaces = await loadDeriveExecutivePolicySurfaces();
+
+  const surfaces = deriveExecutivePolicySurfaces([
+    {
+      id: "privacy",
+      page_type: "privacy_policy",
+      page_url: "https://certscore.ai/privacy",
+      policy_summary_short: "Privacy policy retained."
+    },
+    {
+      id: "privacy-request",
+      page_type: "privacy_policy",
+      page_url: "https://certscore.ai/privacy-request",
+      policy_summary_short: "Privacy request form retained."
+    },
+    {
+      id: "gdpr-resource",
+      page_type: "privacy_policy",
+      page_url: "https://certscore.ai/gdpr",
+      policy_summary_short: "GDPR privacy scanner marketing page retained."
+    },
+    {
+      id: "external-gpt",
+      page_type: "privacy_policy",
+      page_url: "https://chatgpt.com/gpts?search=GDPR%20ePrivacy%20Cookie%20Consent%20Privacy%20Scanner",
+      policy_summary_short: "External GPT resource retained."
+    },
+    {
+      id: "privacy-email",
+      page_type: "privacy_policy",
+      page_url: "mailto:privacy@certscore.ai",
+      policy_summary_short: "Privacy contact email retained."
+    }
+  ]);
+
+  assert.deepEqual(
+    surfaces.map((surface) => surface.pageLabel),
+    ["Privacy", "Privacy Request"]
+  );
+  assert.deepEqual(
+    surfaces.map((surface) => surface.pageUrl),
+    ["https://certscore.ai/privacy", "https://certscore.ai/privacy-request"]
+  );
+});
+
 test("buildScanReportUnifiedFindings surfaces page-attributed privacy-rights paths as review evidence", async () => {
   const buildScanReportUnifiedFindings = await loadBuildScanReportUnifiedFindings();
 

@@ -3412,6 +3412,42 @@ function isReportPolicySurfaceRow(row: Record<string, unknown>) {
   return !(pageType === "cookie_policy" && isGenericBrowserCookieHelpUrl(getPolicyPageUrl(row)));
 }
 
+function isExecutivePolicySurfaceRow(row: Record<string, unknown>) {
+  if (!isReportPolicySurfaceRow(row)) {
+    return false;
+  }
+
+  const pageUrl = getPolicyPageUrl(row);
+  if (!pageUrl) {
+    return true;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(pageUrl);
+  } catch {
+    return false;
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return false;
+  }
+
+  const pageType = String(getPolicyPageType(row) ?? "");
+  if (pageType === "privacy_policy") {
+    const normalized = `${parsed.hostname} ${parsed.pathname} ${parsed.search}`.toLowerCase();
+    if (/\bchatgpt\.com\b/i.test(parsed.hostname)) {
+      return false;
+    }
+    if (/(^|\/)(?:gdpr|ftc|accessibility|guides?|compare|benchmarks?|findings?|methodology|what-is-certscore|api-pulse)(?:\/|$)/i.test(parsed.pathname)) {
+      return false;
+    }
+    return /privacy|data-protection|data_protection|rights?|request|dsar|subject-access|do-not-sell|opt-out|preferences?|cookie/i.test(normalized);
+  }
+
+  return true;
+}
+
 function deriveVerifiedPolicyInsights(policyEnrichments: Array<Record<string, unknown>>) {
   return policyEnrichments
     .filter(isReportPolicySurfaceRow)
@@ -3709,7 +3745,7 @@ export function deriveExecutivePolicySurfaces(
   runtimeArtifacts?: Record<string, unknown> | null
 ): ExecutivePolicySurface[] {
   const enrichedSurfaces = policyEnrichments
-    .filter(isReportPolicySurfaceRow)
+    .filter(isExecutivePolicySurfaceRow)
     .map((row) => {
       const pageType = String(getPolicyPageType(row) ?? "");
       const pageUrl = getPolicyPageUrl(row);

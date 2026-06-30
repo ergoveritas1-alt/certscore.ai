@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildDomainBenchmarkEstimateFromMacroEnrichment,
+  getDomainBenchmarkEstimateOverride,
   shouldPreferMacroBenchmarkEstimate
 } from "./domain-benchmark-estimate";
 
@@ -21,6 +22,14 @@ test("buildDomainBenchmarkEstimateFromMacroEnrichment maps ABC-style media publi
   assert.equal(estimate?.estimatedRankLabel, "Large media publisher");
   assert.equal(estimate?.expectedThirdPartyRequests, 55);
   assert.match(estimate?.rationale ?? "", /ABC Network/);
+});
+
+test("getDomainBenchmarkEstimateOverride classifies CertScore as compliance software", () => {
+  const estimate = getDomainBenchmarkEstimateOverride("certscore.ai");
+
+  assert.equal(estimate?.industry, "Compliance software / privacy and accessibility risk analytics");
+  assert.equal(estimate?.confidence, "high");
+  assert.doesNotMatch(estimate?.industry ?? "", /fintech|credit/i);
 });
 
 test("shouldPreferMacroBenchmarkEstimate replaces generic domain-only estimates", () => {

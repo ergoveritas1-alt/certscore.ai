@@ -184,36 +184,50 @@ database_port() {
   '
 }
 
+database_host() {
+  node -e '
+    const url = new URL(process.env.DATABASE_URL);
+    console.log(url.hostname.replace(/^\[|\]$/g, ""));
+  '
+}
+
 database_name() {
   node -e '
     const url = new URL(process.env.DATABASE_URL);
-    console.log(url.pathname.replace(/^\/+/, "") || "postgres");
+    console.log(decodeURIComponent(url.pathname.replace(/^\/+/, "") || "postgres"));
+  '
+}
+
+database_user() {
+  node -e '
+    const url = new URL(process.env.DATABASE_URL);
+    console.log(decodeURIComponent(url.username || ""));
+  '
+}
+
+database_password() {
+  node -e '
+    const url = new URL(process.env.DATABASE_URL);
+    console.log(decodeURIComponent(url.password || ""));
   '
 }
 
 wait_for_database() {
   local timeout="${1:-45}"
+  local host
+  local port
+  local db_name
+  local db_user
+  local db_password
+
+  host="$(database_host)"
+  port="$(database_port)"
+  db_name="$(database_name)"
+  db_user="$(database_user)"
+  db_password="$(database_password)"
 
   for _ in $(seq 1 "${timeout}"); do
-    if (
-      cd "${ROOT_DIR}/apps/web"
-      node --input-type=module <<'EOF' >/dev/null 2>&1
-import { Client } from "pg";
-
-const client = new Client({ connectionString: process.env.DATABASE_URL });
-try {
-  await client.connect();
-  await client.query("select 1");
-  await client.end();
-  process.exit(0);
-} catch {
-  try {
-    await client.end();
-  } catch {}
-  process.exit(1);
-}
-EOF
-    ); then
+    if PGPASSWORD="${db_password}" psql -h "${host}" -p "${port}" -U "${db_user}" -d "${db_name}" -Atc "select 1" >/dev/null 2>&1; then
       log "database is reachable"
       return 0
     fi
@@ -225,11 +239,13 @@ EOF
 
 wait_for_postgres_server() {
   local timeout="${1:-30}"
+  local host
   local port
 
+  host="$(database_host)"
   port="$(database_port)"
   for _ in $(seq 1 "${timeout}"); do
-    if pg_isready -h 127.0.0.1 -p "${port}" >/dev/null 2>&1; then
+    if pg_isready -h "${host}" -p "${port}" >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -240,10 +256,16 @@ wait_for_postgres_server() {
 
 ensure_database_exists() {
   local db_name
+  local host
   local port
+  local db_user
+  local db_password
 
   db_name="$(database_name)"
+  host="$(database_host)"
   port="$(database_port)"
+  db_user="$(database_user)"
+  db_password="$(database_password)"
 
   if wait_for_database 2; then
     return 0
@@ -254,7 +276,9 @@ ensure_database_exists() {
   fi
 
   log "creating local database ${db_name} if needed"
-  createdb -h 127.0.0.1 -p "${port}" -U postgres "${db_name}" >/dev/null 2>&1 || true
+  PGPASSWORD="${db_password}" createdb -h "${host}" -p "${port}" -U "${db_user}" "${db_name}" >/dev/null 2>&1 ||
+    createdb -h "${host}" -p "${port}" -U postgres "${db_name}" >/dev/null 2>&1 ||
+    true
   wait_for_database 5
 }
 
@@ -434,6 +458,11 @@ ensure_visual_evidence_storage() {
   local object_root="${ROOT_DIR}/tmp/minio-data/${bucket}"
   local probe_key=".local-stack-health/visual-evidence-probe.txt"
   local probe_path="${object_root}/${probe_key}"
+  local host
+  local port
+  local db_name
+  local db_user
+  local db_password
 
   if [[ -z "${endpoint}" ]]; then
     fail "S3_ENDPOINT is not set; local visual evidence cannot be served"
@@ -448,39 +477,27 @@ ensure_visual_evidence_storage() {
     log "visual evidence storage path is writable: ${object_root}"
   fi
 
-  (
-    cd "${ROOT_DIR}/apps/web"
-    node --input-type=module <<'EOF'
-import { Client } from "pg";
+  host="$(database_host)"
+  port="$(database_port)"
+  db_name="$(database_name)"
+  db_user="$(database_user)"
+  db_password="$(database_password)"
 
-const client = new Client({ connectionString: process.env.DATABASE_URL });
-try {
-  await client.connect();
-  const result = await client.query(`
-    select 1
+  PGPASSWORD="${db_password}" psql -h "${host}" -p "${port}" -U "${db_user}" -d "${db_name}" -Atc "
+    select count(*)
     from information_schema.columns
     where table_schema = 'public'
       and table_name = 'scan_runtime_artifacts'
-      and column_name in ('visual_evidence_artifacts', 'visual_access_review')
-  `);
-  await client.end();
-  process.exit(result.rowCount === 2 ? 0 : 1);
-} catch {
-  try {
-    await client.end();
-  } catch {}
-  process.exit(1);
-}
-EOF
-  ) || fail "scan_runtime_artifacts is missing visual evidence columns; run migrations"
+      and column_name in ('visual_evidence_artifacts', 'visual_access_review');
+  " 2>/dev/null | grep -qx "2" || fail "scan_runtime_artifacts is missing visual evidence columns; run migrations"
 
   log "visual evidence database columns are present"
 }
 
 ensure_playwright_chromium() {
   if (
-    cd "${ROOT_DIR}"
-    PLAYWRIGHT_BROWSERS_PATH= node --env-file=apps/web/.env.local --input-type=module <<'EOF' >/dev/null 2>&1
+    cd "${ROOT_DIR}/apps/validation-worker"
+    node --env-file=../web/.env.local --input-type=module <<'EOF' >/dev/null 2>&1
 import { chromium } from "playwright";
 
 let browser;
@@ -500,15 +517,15 @@ EOF
     return 0
   fi
 
-  log "playwright chromium is missing or not launchable; installing chromium for local v2 scans"
+  log "playwright chromium is missing or not launchable; installing chromium for local scan workflows"
   (
-    cd "${ROOT_DIR}"
-    PLAYWRIGHT_BROWSERS_PATH= pnpm exec playwright install chromium
-  ) || fail "could not install Playwright Chromium; run: PLAYWRIGHT_BROWSERS_PATH= pnpm exec playwright install chromium"
+    cd "${ROOT_DIR}/apps/validation-worker"
+    pnpm exec playwright install chromium
+  ) || fail "could not install Playwright Chromium; run: cd apps/validation-worker && pnpm exec playwright install chromium"
 
   (
-    cd "${ROOT_DIR}"
-    PLAYWRIGHT_BROWSERS_PATH= node --env-file=apps/web/.env.local --input-type=module <<'EOF' >/dev/null 2>&1
+    cd "${ROOT_DIR}/apps/validation-worker"
+    node --env-file=../web/.env.local --input-type=module <<'EOF' >/dev/null 2>&1
 import { chromium } from "playwright";
 
 const browser = await chromium.launch({ headless: true });
