@@ -46,6 +46,33 @@ const personas = [
   }
 ];
 
+const scannerSolutions = [
+  {
+    href: "/solutions/gdpr-website-compliance-scanner",
+    title: "GDPR website scanner",
+    description:
+      "Review consent, cookie, tracking, policy, and disclosure signals for GDPR/ePrivacy workflows."
+  },
+  {
+    href: "/solutions/cookie-consent-scanner",
+    title: "Cookie consent scanner",
+    description:
+      "Check cookie timing, CMP behavior, third-party cookies before consent, and reject-path review signals."
+  },
+  {
+    href: "/solutions/privacy-policy-risk-scanner",
+    title: "Privacy policy risk scanner",
+    description:
+      "Compare observable website behavior with privacy, cookie, vendor, and disclosure surfaces."
+  },
+  {
+    href: "/solutions/website-accessibility-compliance-scanner",
+    title: "Accessibility scanner",
+    description:
+      "Triage labels, headings, alt text, contrast indicators, and interactive-control accessibility signals."
+  }
+];
+
 function PersonaIcon({ index }: { index: number }) {
   const toneClassName =
     index === 0
@@ -111,11 +138,24 @@ export default async function MarketingHomePage() {
       description: finding.observed
     }))
   };
+  const scannerSolutionsSchema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "CertScore.ai scanner solution pages",
+    itemListElement: scannerSolutions.map((solution, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      url: `${SITE_URL}${solution.href}`,
+      name: solution.title,
+      description: solution.description
+    }))
+  };
 
   return (
     <main className="min-h-screen bg-slate-50">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(findingRegistrySchema) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(scannerSolutionsSchema) }} />
       <SiteHeader />
 
       <section className="border-b border-slate-200 bg-[radial-gradient(circle_at_50%_-12%,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.72)_24%,rgba(238,242,255,0.88)_58%,rgba(244,246,255,0.98)_100%)]">
@@ -176,6 +216,34 @@ export default async function MarketingHomePage() {
       </section>
 
       <HomepageFindingsOverview findings={findings} />
+
+      <section className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-6 py-14">
+          <div className="max-w-3xl space-y-3">
+            <Badge tone="neutral">Scanner solutions</Badge>
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
+              Focused pages for the review workflow you need.
+            </h2>
+            <p className="text-sm leading-6 text-slate-600">
+              Start with the scanner category closest to the question: GDPR, cookie consent, privacy policy risk, or accessibility. Each page explains observable public-web signals for review, not legal conclusions.
+            </p>
+          </div>
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            {scannerSolutions.map((solution) => (
+              <Link key={solution.href} href={solution.href} className="group block">
+                <Card className="h-full border-slate-200 bg-slate-50 shadow-none transition group-hover:border-sky-200 group-hover:bg-white group-hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+                  <CardHeader>
+                    <CardTitle className="text-xl text-slate-950">{solution.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm leading-7 text-slate-600">{solution.description}</p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
 
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-16">

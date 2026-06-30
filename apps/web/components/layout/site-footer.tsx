@@ -8,6 +8,7 @@ const footerSections = [
     title: "Product",
     links: [
       { href: "/", label: "Home" },
+      { href: "/solutions", label: "Solutions" },
       { href: "/how-it-works", label: "How It Works" },
       { href: "/findings", label: "Findings" },
       { href: "/developers", label: "Developers" },
@@ -35,6 +36,10 @@ const footerSections = [
   {
     title: "Use cases",
     links: [
+      { href: "/solutions/gdpr-website-compliance-scanner", label: "GDPR website scanner" },
+      { href: "/solutions/cookie-consent-scanner", label: "Cookie consent scanner" },
+      { href: "/solutions/privacy-policy-risk-scanner", label: "Privacy policy risk scanner" },
+      { href: "/solutions/website-accessibility-compliance-scanner", label: "Accessibility scanner" },
       { href: "/guides/detect-tracking-before-consent", label: "Detect tracking before consent" },
       { href: "/guides/cookie-consent-enforcement-checker", label: "Verify cookie consent" },
       { href: "/guides/third-party-cookie-checker", label: "Review third-party tracking" },

@@ -4,12 +4,18 @@ import { PendingButtonLink } from "../ui/pending-link";
 
 const navLinks = [
   { href: "/how-it-works", label: "How It Works" },
+  { href: "/solutions", label: "Solutions" },
   { href: "/findings", label: "Findings" },
   { href: "/pricing", label: "Pricing" },
   { href: "/contact", label: "Contact" }
 ];
 
 const resourceLinks = [
+  { href: "/solutions", label: "Scanner solutions" },
+  { href: "/solutions/gdpr-website-compliance-scanner", label: "GDPR website scanner" },
+  { href: "/solutions/cookie-consent-scanner", label: "Cookie consent scanner" },
+  { href: "/solutions/privacy-policy-risk-scanner", label: "Privacy policy risk scanner" },
+  { href: "/solutions/website-accessibility-compliance-scanner", label: "Accessibility scanner" },
   { href: "/gdpr", label: "GDPR privacy" },
   { href: "/ftc", label: "FTC disclosure" },
   { href: "/accessibility", label: "ADA accessibility" },
