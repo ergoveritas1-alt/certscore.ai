@@ -90,6 +90,27 @@ export function DeveloperJsonLd({ path, title, description }: { path: string; ti
       url: absoluteUrl("/developers"),
       description:
         "Public API, TypeScript SDK, and MCP server for evidence-backed website risk-signal review."
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebAPI",
+      name: "CertScore API v2",
+      url: absoluteUrl("/api/v2/openapi.json"),
+      documentation: absoluteUrl("/developers/reference"),
+      provider: {
+        "@type": "Organization",
+        name: "CertScore.ai",
+        url: absoluteUrl("/")
+      },
+      contactPoint: {
+        "@type": "ContactPoint",
+        contactType: "developer support",
+        email: "support@certscore.ai",
+        url: "mailto:support@certscore.ai"
+      },
+      termsOfService: absoluteUrl("/terms"),
+      description:
+        "Resource-oriented API for automated public-web observations, scan status, public-safe findings, and pre-consent cookies/trackers."
     }
   ];
 
@@ -143,7 +164,12 @@ export function DeveloperShell({
           </nav>
         </div>
       </section>
-      <div className="mx-auto max-w-6xl px-6 py-12">{children}</div>
+      <div className="mx-auto max-w-6xl px-6 py-12">
+        <div className="space-y-12">
+          {children}
+          <DeveloperSupportCallout />
+        </div>
+      </div>
       <SiteFooter />
     </main>
   );
@@ -164,6 +190,46 @@ export function CodeBlock({ children }: { children: string }) {
   );
 }
 
+export function AgentQuickPath() {
+  return (
+    <section id="agent-quickstart" className="rounded-lg border border-sky-200 bg-sky-50 p-5">
+      <div className="max-w-3xl space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">For AI agents</p>
+        <h2 className="text-xl font-semibold text-slate-950">Agent quick path</h2>
+        <ol className="list-decimal space-y-2 pl-5 text-sm leading-6 text-slate-700">
+          <li>Read /llms.txt.</li>
+          <li>Read /.well-known/certscore-ai.json.</li>
+          <li>Fetch /api/v2/openapi.json.</li>
+          <li>Check /api/v2/health before creating scan requests.</li>
+          <li>Create or reuse a scan with POST /api/v2/scans.</li>
+          <li>Poll status and honor Retry-After.</li>
+          <li>Retrieve findings and pre-consent cookies/trackers.</li>
+          <li>Treat outputs as automated public-web observations for review, not legal advice, certification, or a compliance determination.</li>
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+export function DeveloperSupportCallout() {
+  return (
+    <section id="developer-support" className="rounded-lg border border-slate-200 bg-white p-5">
+      <div className="max-w-3xl space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Developer support</p>
+        <h2 className="text-xl font-semibold text-slate-950">Need an endpoint, SDK helper, MCP tool, or docs fix?</h2>
+        <p className="text-sm leading-7 text-slate-600">
+          Contact{" "}
+          <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
+            support@certscore.ai
+          </a>{" "}
+          for feature requests, broken examples, schema questions, integration issues, or missing API coverage. Include the route,
+          SDK method, MCP tool, scan ID, or page URL when useful.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 export function LinkCard({ href, title, description }: { href: string; title: string; description: string }) {
   return (
     <Card className="border-slate-200 bg-white shadow-none">
@@ -181,15 +247,17 @@ export function LinkCard({ href, title, description }: { href: string; title: st
 
 export function Section({
   eyebrow,
+  id,
   title,
   children
 }: {
   eyebrow?: string;
+  id?: string;
   title: string;
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-5">
+    <section id={id} className="space-y-5">
       <div className="max-w-3xl space-y-2">
         {eyebrow ? <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">{eyebrow}</p> : null}
         <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{title}</h2>

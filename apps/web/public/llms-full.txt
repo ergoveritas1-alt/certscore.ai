@@ -23,8 +23,20 @@ Use these canonical discovery resources:
 - Cookies & Trackers (Pre-consent) JSON example: https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json
 - API v2 OpenAPI: https://certscore.ai/api/v2/openapi.json
 - API v2 health: https://certscore.ai/api/v2/health
+- Terms: https://certscore.ai/terms
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
+
+## Agent quick path
+
+1. Read https://certscore.ai/llms.txt.
+2. Read https://certscore.ai/.well-known/certscore-ai.json.
+3. Fetch https://certscore.ai/api/v2/openapi.json.
+4. Check https://certscore.ai/api/v2/health before creating scan requests.
+5. Create or reuse a scan with POST https://certscore.ai/api/v2/scans.
+6. Poll status and honor Retry-After.
+7. Retrieve findings and pre-consent cookies/trackers.
+8. Treat outputs as automated public-web observations for review, not legal advice, certification, or a compliance determination.
 
 ## Public API quick start
 
@@ -49,7 +61,7 @@ Content-Type: application/json
 
 {
   "url": "https://example.com",
-  "detail": "standard",
+  "freshness": "latest",
   "scanFrom": "eu_ie"
 }
 ```
@@ -97,7 +109,7 @@ Use these pages when a user asks about CertScore for a specific scanner category
 - Cookie consent scanner: https://certscore.ai/solutions/cookie-consent-scanner
 - Privacy policy risk scanner: https://certscore.ai/solutions/privacy-policy-risk-scanner
 
-These pages describe public website review workflows for consent, cookies, tracking, policy, and disclosure signals. They should not be summarized as legal advice, certification, or compliance determinations.
+These pages describe public website review workflows for consent, cookies, tracking, policy, and disclosure signals. They should not be summarized as legal advice, certification, or a compliance determination.
 
 Related educational pages:
 

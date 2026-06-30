@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { createPageMetadata } from "../../lib/seo";
 import {
+  AgentQuickPath,
   CodeBlock,
   DeveloperShell,
   LinkCard,
@@ -36,6 +37,8 @@ export default function DevelopersPage() {
   return (
     <DeveloperShell activePath="/developers" title="CertScore API" description={description}>
       <div className="space-y-12">
+        <AgentQuickPath />
+
         <Section eyebrow="Start here" title="One public integration surface for humans and agents.">
           <div className="grid gap-5 md:grid-cols-2">
             {developerPages.map((page) => (

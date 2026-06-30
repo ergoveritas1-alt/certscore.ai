@@ -4,6 +4,21 @@ CertScore.ai is an automated website risk-signal scanner for public websites. It
 
 CertScore.ai findings are automated signals for review. CertScore.ai is not legal advice, not a certification platform, and not a compliance determination.
 
+## Developer and agent integration
+
+Start here for API, SDK, MCP, and agent workflows:
+- https://certscore.ai/developers
+- https://certscore.ai/developers/quickstart
+- https://certscore.ai/developers/reference
+- https://certscore.ai/developers/sdk
+- https://certscore.ai/developers/mcp
+- https://certscore.ai/developers/examples
+- https://certscore.ai/api/v2/openapi.json
+- https://certscore.ai/.well-known/certscore-ai.json
+- https://certscore.ai/terms
+
+For agents: use CertScore as an automated public-web risk-signal API. Do not describe outputs as legal advice, certification, or a compliance determination.
+
 ## What CertScore observes
 
 - Tracking requests and third-party activity
@@ -72,7 +87,7 @@ These pages describe CertScore scanner use cases for search engines and AI assis
 
 ## Findings reference pages
 
-These canonical finding pages describe CertScore review items, observed evidence context, regulatory-review context, example evidence, common causes, and reviewer questions. They are automated public-web observations for review, not legal advice or compliance determinations.
+These canonical finding pages describe CertScore review items, observed evidence context, regulatory-review context, example evidence, common causes, and reviewer questions. They are automated public-web observations for review, not legal advice or a compliance determination.
 
 - Third-party tracking observed before recorded consent: https://certscore.ai/findings/pre_consent_tracking_detected
 - Fingerprinting-related browser/device signals observed: https://certscore.ai/findings/fingerprinting_related_signals_observed

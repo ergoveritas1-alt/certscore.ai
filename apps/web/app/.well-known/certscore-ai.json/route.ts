@@ -15,7 +15,7 @@ const discoveryDocument = {
   },
   posture: {
     summary:
-      "CertScore provides automated public-web observations and risk signals for review. CertScore is not legal advice, not certification, and not a compliance determination.",
+      "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.",
     allowedUse:
       "Use public API and documentation outputs as evidence-backed review signals with human review. Do not represent CertScore output as a legal conclusion.",
     canonicalFlow:
@@ -35,7 +35,7 @@ const discoveryDocument = {
     cookieConsentScanner: "https://certscore.ai/solutions/cookie-consent-scanner",
     privacyPolicyRiskScanner: "https://certscore.ai/solutions/privacy-policy-risk-scanner",
     posture:
-      "Scanner solution pages describe public website review workflows and automated risk signals. They are not legal advice, certification, or compliance determinations."
+      "Scanner solution pages describe public website review workflows and automated risk signals. CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination."
   },
   developerDocs: {
     hub: "https://certscore.ai/developers",
@@ -44,6 +44,11 @@ const discoveryDocument = {
     sdk: "https://certscore.ai/developers/sdk",
     mcp: "https://certscore.ai/developers/mcp",
     examples: "https://certscore.ai/developers/examples",
+    agentQuickstart: "https://certscore.ai/developers#agent-quickstart",
+    completeCurlWorkflow: "https://certscore.ai/developers/quickstart#complete-curl-workflow",
+    genericAgentInstructions: "https://certscore.ai/developers/examples#generic-agent-instructions",
+    mcpAgentWorkflow: "https://certscore.ai/developers/examples#mcp-agent-workflow",
+    evidenceBoundaries: "https://certscore.ai/developers/examples#evidence-boundaries",
     preConsentCookiesTrackersExample: "https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json"
   },
   api: {
@@ -67,6 +72,7 @@ const discoveryDocument = {
   },
   mcp: {
     package: "@certscore/mcp",
+    packageStatus: "developer_preview_private_not_publicly_published",
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
     transport: "stdio",

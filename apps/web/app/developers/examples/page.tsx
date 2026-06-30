@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { createPageMetadata } from "../../../lib/seo";
-import { CodeBlock, DeveloperShell, Section } from "../developer-pages";
+import { AgentQuickPath, CodeBlock, DeveloperShell, Section } from "../developer-pages";
 
 const description =
   "Copy-paste examples for the CertScore API, TypeScript SDK, and MCP server across website risk API and AI agent workflows.";
@@ -19,11 +19,26 @@ export default function DeveloperExamplesPage() {
   return (
     <DeveloperShell activePath="/developers/examples" title="Examples" description={description}>
       <div className="space-y-12">
-        <Section eyebrow="Curl" title="Scan and retrieve findings">
+        <AgentQuickPath />
+
+        <Section id="generic-agent-instructions" eyebrow="Agent prompts" title="Copy-paste instructions for agents">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-950">Prompt for coding agents</h3>
+              <CodeBlock>{`Use CertScore's public developer docs. Read /llms.txt, then /.well-known/certscore-ai.json, then /api/v2/openapi.json. Create a scan for the target domain, poll until complete, fetch findings and pre-consent cookies/trackers, and summarize only evidence-backed public-web observations. Do not provide legal advice or call the result a compliance determination.`}</CodeBlock>
+            </div>
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-950">Prompt for MCP agents</h3>
+              <CodeBlock>{`Use the CertScore MCP server to create or reuse a scan, check status, retrieve findings, export evidence-backed results, and explain findings with cited evidence. Treat CertScore output as review signals only.`}</CodeBlock>
+            </div>
+          </div>
+        </Section>
+
+        <Section id="complete-curl-workflow" eyebrow="Curl" title="Scan and retrieve findings">
           <CodeBlock>{`SCAN=$(curl -s -X POST https://certscore.ai/api/v2/scans \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
-  -d '{"url":"https://example.com","detail":"standard"}')
+  -d '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}')
 
 SCAN_ID=$(echo "$SCAN" | jq -r '.id // .scanId')
 
@@ -34,7 +49,7 @@ curl https://certscore.ai/api/v2/scans/$SCAN_ID/findings \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY"`}</CodeBlock>
         </Section>
 
-        <Section eyebrow="Curl" title="Retrieve Cookies & Trackers (Pre-consent) as JSON">
+        <Section id="pre-consent-cookies-trackers" eyebrow="Curl" title="Retrieve Cookies & Trackers (Pre-consent) as JSON">
           <div id="pre-consent-cookies-trackers-json" className="space-y-4">
             <CodeBlock>{`SCAN=$(curl -s -X POST https://certscore.ai/api/v2/scans \\
   -H "Content-Type: application/json" \\
@@ -57,7 +72,7 @@ curl -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
             <CodeBlock>{`curl -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
   "https://certscore.ai/api/v2/domains/example.com/latest/pre-consent-cookies-trackers"`}</CodeBlock>
             <p className="max-w-3xl text-sm leading-7 text-slate-600">
-              Rows are automated public-web observations for review. They are not legal advice, certification, or compliance determinations.
+              CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.
             </p>
           </div>
         </Section>
@@ -106,7 +121,7 @@ const latestTable = await certscore.domains.latestPreConsentCookiesTrackers("exa
 console.log(grouped, latestTable.summary.rowCount);`}</CodeBlock>
         </Section>
 
-        <Section eyebrow="MCP" title="Agent tool call for the pre-consent table">
+        <Section id="mcp-agent-workflow" eyebrow="MCP" title="Agent tool call for the pre-consent table">
           <CodeBlock>{`get_pre_consent_cookies_trackers({ scanId: "00000000-0000-4000-8000-000000000123" })
 
 get_latest_domain_pre_consent_cookies_trackers({
@@ -115,7 +130,7 @@ get_latest_domain_pre_consent_cookies_trackers({
 })`}</CodeBlock>
         </Section>
 
-        <Section eyebrow="Agent" title="Instruction block for generic LLM tools">
+        <Section id="evidence-boundaries" eyebrow="Boundaries" title="Evidence boundaries">
           <CodeBlock>{`Use CertScore as an automated public-web risk-signal API.
 
 Discovery:
@@ -125,7 +140,7 @@ Discovery:
 
 Rules:
 - Treat results as evidence-backed review signals.
-- Do not describe outputs as legal advice, certification, or compliance determinations.
+- Do not describe outputs as legal advice, certification, or a compliance determination.
 - Do not infer findings from missing data, raw labels, raw network events, or display-only context.
 - Link to the CertScore report when the user needs evidence review.`}</CodeBlock>
         </Section>

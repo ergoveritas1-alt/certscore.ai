@@ -50,6 +50,100 @@ export default function DeveloperReferencePage() {
           </p>
         </Section>
 
+        <Section eyebrow="Examples" title="Small response shapes">
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-950">Scan creation</h3>
+              <CodeBlock>{`{
+  "type": "certscore_scan_job",
+  "jobId": "job_123",
+  "scanId": "00000000-0000-4000-8000-000000000123",
+  "domain": "example.com",
+  "status": "queued",
+  "retryAfterSeconds": 30
+}`}</CodeBlock>
+            </div>
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-950">Pending or running status</h3>
+              <CodeBlock>{`{
+  "type": "certscore_scan_job",
+  "jobId": "job_123",
+  "scanId": "00000000-0000-4000-8000-000000000123",
+  "status": "running",
+  "phase": "runtime_observation",
+  "retryAfterSeconds": 30
+}`}</CodeBlock>
+            </div>
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-950">Completed scan</h3>
+              <CodeBlock>{`{
+  "type": "certscore_scan",
+  "scanId": "00000000-0000-4000-8000-000000000123",
+  "domain": "example.com",
+  "status": "completed",
+  "score": 72,
+  "links": {
+    "findings": "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings",
+    "preConsentCookiesTrackers": "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/pre-consent-cookies-trackers",
+    "report": "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123"
+  }
+}`}</CodeBlock>
+            </div>
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-950">Partial or failed scan</h3>
+              <CodeBlock>{`{
+  "type": "certscore_scan",
+  "scanId": "00000000-0000-4000-8000-000000000123",
+  "status": "completed_limited",
+  "coverage": {
+    "status": "partial",
+    "summary": "Automated public-web scan completed with coverage limitations."
+  }
+}`}</CodeBlock>
+            </div>
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-950">Findings</h3>
+              <CodeBlock>{`{
+  "type": "certscore_finding_list",
+  "scanId": "00000000-0000-4000-8000-000000000123",
+  "findings": [
+    {
+      "id": "pre_consent_tracking_detected",
+      "label": "Third-party tracking observed before recorded consent",
+      "criticality": "high",
+      "evidence": {
+        "basis": "public_report_projection",
+        "exampleCount": 3,
+        "examplesShown": 2
+      }
+    }
+  ]
+}`}</CodeBlock>
+            </div>
+            <div className="space-y-3">
+              <h3 className="font-semibold text-slate-950">Pre-consent cookies/trackers</h3>
+              <CodeBlock>{`{
+  "type": "certscore_pre_consent_cookies_trackers",
+  "summary": {
+    "rowCount": 28,
+    "trackerCount": 24,
+    "cookieCount": 4,
+    "requestCount": 14
+  },
+  "rows": [
+    {
+      "kind": "tracker",
+      "vendor": "LinkedIn Insight Tag",
+      "host": "snap.licdn.com",
+      "purpose": "Advertising",
+      "evidenceBasis": "public_report_projection"
+    }
+  ]
+}`}</CodeBlock>
+            </div>
+          </div>
+        </Section>
+
         <Section eyebrow="Runtime inventory" title="Cookies & Trackers (Pre-consent) JSON">
           <CodeBlock>{`GET /api/v2/scans/{scanId}/pre-consent-cookies-trackers
 GET /api/v2/domains/{domain}/latest/pre-consent-cookies-trackers
@@ -105,6 +199,34 @@ Current scopes:
     "docs": "https://certscore.ai/developers/reference"
   }
 }`}</CodeBlock>
+          <div className="grid gap-5 pt-2 lg:grid-cols-3">
+            <CodeBlock>{`HTTP 401
+{
+  "type": "certscore_api_error",
+  "error": {
+    "code": "unauthorized",
+    "message": "Missing or invalid API key."
+  }
+}`}</CodeBlock>
+            <CodeBlock>{`HTTP 429
+Retry-After: 60
+{
+  "type": "certscore_api_error",
+  "error": {
+    "code": "rate_limited",
+    "message": "Retry later.",
+    "retryAfterSeconds": 60
+  }
+}`}</CodeBlock>
+            <CodeBlock>{`HTTP 500
+{
+  "type": "certscore_api_error",
+  "error": {
+    "code": "internal_error",
+    "message": "CertScore API v2 is temporarily unavailable."
+  }
+}`}</CodeBlock>
+          </div>
         </Section>
 
         <Section eyebrow="Status" title="Polling and retry behavior">
@@ -127,6 +249,8 @@ Current scopes:
             API v2 exposes scan resources, status, already-projected findings, public-safe evidence summaries, latest-domain lookup,
             and report-ready review context. It does not expose raw DOM, raw request bodies, internal scanner artifacts, internal reasoning, or
             display-only findings.
+            Failed or partial scans should be surfaced as incomplete evidence, not compliance failures. Do not infer legal conclusions from
+            scan output.
           </p>
         </Section>
       </div>

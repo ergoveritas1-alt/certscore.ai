@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { createPageMetadata } from "../../../lib/seo";
-import { CodeBlock, DeveloperShell, Section } from "../developer-pages";
+import { AgentQuickPath, CodeBlock, DeveloperShell, Section } from "../developer-pages";
 
 const description =
   "Start using the CertScore API v2 with curl: create a public website scan, poll status, list public-safe findings, and retrieve latest-domain scan resources.";
@@ -19,9 +19,64 @@ export default function DeveloperQuickstartPage() {
   return (
     <DeveloperShell activePath="/developers/quickstart" title="API quickstart" description={description}>
       <div className="space-y-12">
+        <AgentQuickPath />
+
         <Section eyebrow="Health" title="Check the public API surface">
           <CodeBlock>{`curl https://certscore.ai/api/v2/health
 curl https://certscore.ai/api/v2/openapi.json`}</CodeBlock>
+        </Section>
+
+        <Section id="complete-curl-workflow" eyebrow="Complete curl workflow" title="Create, poll, and retrieve review data">
+          <CodeBlock>{`export CERTSCORE_API_KEY="cs_live_..."
+TARGET_URL="https://example.com"
+
+SCAN_RESPONSE=$(curl -sS -D /tmp/certscore-create-headers.txt \\
+  -X POST https://certscore.ai/api/v2/scans \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
+  -d "{\"url\":\"$TARGET_URL\",\"freshness\":\"latest\",\"scanFrom\":\"eu_ie\"}")
+
+SCAN_ID=$(printf '%s' "$SCAN_RESPONSE" | jq -r '.scanId // .scan.scanId // empty')
+JOB_ID=$(printf '%s' "$SCAN_RESPONSE" | jq -r '.jobId // empty')
+
+if [ -z "$SCAN_ID" ] && [ -n "$JOB_ID" ]; then
+  echo "Scan queued as job $JOB_ID; poll the returned status link until a scanId is available."
+  exit 1
+fi
+
+while true; do
+  curl -sS -D /tmp/certscore-status-headers.txt \\
+    -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
+    "https://certscore.ai/api/v2/scans/$SCAN_ID/status" \\
+    -o /tmp/certscore-status.json
+
+  STATUS=$(jq -r '.status // "unknown"' /tmp/certscore-status.json)
+  case "$STATUS" in
+    completed|completed_limited) break ;;
+    failed|expired|rate_limited)
+      cat /tmp/certscore-status.json
+      exit 1
+      ;;
+  esac
+
+  RETRY_AFTER=$(awk 'BEGIN{IGNORECASE=1} /^Retry-After:/ {print $2}' /tmp/certscore-status-headers.txt | tr -d '\\r')
+  sleep "\${RETRY_AFTER:-10}"
+done
+
+curl -sS -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
+  "https://certscore.ai/api/v2/scans/$SCAN_ID/findings" \\
+  -o certscore-findings.json
+
+curl -sS -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
+  "https://certscore.ai/api/v2/scans/$SCAN_ID/pre-consent-cookies-trackers" \\
+  -o certscore-pre-consent-cookies-trackers.json
+
+jq '.findings | length' certscore-findings.json
+jq '.summary' certscore-pre-consent-cookies-trackers.json`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            This example uses jq to extract fields and print summaries. jq is optional; any JSON parser can read the same fields.
+            Honor Retry-After on pending or throttled responses.
+          </p>
         </Section>
 
         <Section eyebrow="Create" title="Create or reuse a public scan">
@@ -30,7 +85,7 @@ curl https://certscore.ai/api/v2/openapi.json`}</CodeBlock>
   -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
   -d '{
     "url": "https://example.com",
-    "detail": "standard",
+    "freshness": "latest",
     "scanFrom": "eu_ie"
   }'`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
@@ -58,6 +113,11 @@ curl https://certscore.ai/api/v2/openapi.json`}</CodeBlock>
 
         <Section eyebrow="Latest domain" title="Find the latest eligible scan">
           <CodeBlock>{`curl https://certscore.ai/api/v2/domains/example.com/latest \\
+  -H "Authorization: Bearer $CERTSCORE_API_KEY"`}</CodeBlock>
+        </Section>
+
+        <Section eyebrow="Runtime inventory" title="Retrieve pre-consent cookies and trackers">
+          <CodeBlock>{`curl https://certscore.ai/api/v2/scans/{scanId}/pre-consent-cookies-trackers \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY"`}</CodeBlock>
         </Section>
       </div>
