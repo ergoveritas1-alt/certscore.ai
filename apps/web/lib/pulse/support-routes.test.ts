@@ -426,7 +426,7 @@ test("Pulse public text surfaces keep cautious language outside explicit avoid g
   assert.match(text, /not legal advice/i);
 });
 
-test("Robots allows public Pulse docs and support endpoints while keeping generic API private", async () => {
+test("Robots allows public developer docs and API v2 discovery while keeping generic API private", async () => {
   const { default: robots } = await import("../../app/robots");
   const result = robots();
   const rules = Array.isArray(result.rules) ? result.rules : [result.rules];
@@ -435,22 +435,17 @@ test("Robots allows public Pulse docs and support endpoints while keeping generi
     const allow = Array.isArray(rule.allow) ? rule.allow : [rule.allow].filter(Boolean);
     const disallow = Array.isArray(rule.disallow) ? rule.disallow : [rule.disallow].filter(Boolean);
 
-    assert.ok(allow.includes("/api-pulse"));
-    assert.ok(allow.includes("/api-pulse/"));
     assert.ok(allow.includes("/developers"));
     assert.ok(allow.includes("/developers/"));
     assert.ok(allow.includes("/llms.txt"));
     assert.ok(allow.includes("/llms-full.txt"));
-    assert.ok(allow.includes("/api-pulse-agent-guide.txt"));
     assert.ok(allow.includes("/.well-known/certscore-ai.json"));
-    assert.ok(allow.includes("/api/v1/openapi.json"));
-    assert.ok(allow.includes("/api/v1/openapi.chatgpt.json"));
-    assert.ok(allow.includes("/api/v1/pulse"));
-    assert.ok(allow.includes("/api/v1/pulse-health"));
-    assert.ok(allow.includes("/api/v1/pulse-self-test"));
     assert.ok(allow.includes("/api/v2/health"));
     assert.ok(allow.includes("/api/v2/openapi.json"));
-    assert.ok(allow.includes("/.well-known/certscore-pulse"));
+    assert.ok(!allow.includes("/api-pulse"));
+    assert.ok(!allow.includes("/api/v1/openapi.json"));
+    assert.ok(!allow.includes("/api/v1/pulse"));
+    assert.ok(!allow.includes("/.well-known/certscore-pulse"));
     assert.ok(disallow.includes("/api/"));
     assert.ok(disallow.includes("/app/"));
     assert.ok(disallow.includes("/admin/"));
@@ -506,7 +501,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
   assert.equal(aiDiscovery.mcp.docs, "https://certscore.ai/developers/mcp");
   assert.equal(aiDiscovery.authentication.docs, "https://certscore.ai/developers/quickstart");
-  assert.deepEqual(aiDiscovery.authentication.currentScopes, ["pulse:read", "pulse:scan", "mcp"]);
+  assert.deepEqual(aiDiscovery.authentication.currentScopes, ["scan:read", "scan:create", "mcp"]);
   assert.equal(aiDiscovery.rateLimits.docs, "https://certscore.ai/developers/reference");
   assert.equal(aiDiscovery.support.terms, "https://certscore.ai/terms");
   assert.equal(pulseDiscovery.developerHub, "https://certscore.ai/developers");
@@ -520,18 +515,16 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.match(footer, /href: "\/developers\/sdk", label: "SDK docs"/);
   assert.match(footer, /href: "\/developers\/mcp", label: "MCP docs"/);
   assert.match(llms, /Authorization: Bearer <token>/);
-  assert.match(llms, /pulse:read.*pulse:scan.*mcp/s);
+  assert.match(llms, /scan:read.*scan:create.*mcp/s);
   assert.match(llms, /https:\/\/certscore\.ai\/terms/);
   assert.match(llmsFull, /Authentication, scopes, and rate limits/);
   assert.match(llmsFull, /https:\/\/certscore\.ai\/terms/);
 
   const combinedSources = [...pageSources, header, footer, llms, llmsFull].join("\n");
   assert.match(combinedSources, /CertScore API/);
-  assert.match(combinedSources, /CertScore Pulse API/);
   assert.match(combinedSources, /website risk API/);
   assert.match(combinedSources, /privacy scan API/);
   assert.match(combinedSources, /cookie compliance scan API/);
-  assert.match(combinedSources, /accessibility risk scan API/);
   assert.match(combinedSources, /MCP server for website compliance review/);
   assert.match(combinedSources, /automated public-web risk signals/);
   assert.match(combinedSources, /evidence-backed website scan API/);

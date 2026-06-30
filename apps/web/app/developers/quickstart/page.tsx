@@ -51,7 +51,7 @@ curl https://certscore.ai/api/v2/openapi.json`}</CodeBlock>
           <CodeBlock>{`curl https://certscore.ai/api/v2/scans/{scanId}/findings \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY"`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Findings are sourced from already-projected public report/Pulse artifacts. Evidence examples are compact and capped for
+            Findings are sourced from already-projected public report artifacts. Evidence examples are compact and capped for
             public API use.
           </p>
         </Section>

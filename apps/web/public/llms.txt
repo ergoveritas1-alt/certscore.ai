@@ -1,6 +1,6 @@
 # CertScore.ai
 
-CertScore.ai is an automated website risk-signal scanner for public websites. It observes evidence-backed signals around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility issues, privacy disclosure gaps, and policy/runtime consistency.
+CertScore.ai is an automated website risk-signal scanner for public websites. It observes evidence-backed signals around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, privacy disclosure gaps, and policy/runtime consistency.
 
 CertScore.ai findings are automated signals for review. CertScore.ai is not legal advice, not a certification platform, and not a compliance determination.
 
@@ -11,7 +11,6 @@ CertScore.ai findings are automated signals for review. CertScore.ai is not lega
 - Consent behavior, including accept, reject, and preference-control signals where observable
 - Session recording and session replay-related indicators
 - Fingerprinting-related signals
-- Automated homepage accessibility issues
 - Privacy policy, cookie, disclosure, and public-page gaps where evidence is available
 
 ## What CertScore is not
@@ -27,15 +26,12 @@ CertScore.ai findings are automated signals for review. CertScore.ai is not lega
 - https://certscore.ai/
 - https://certscore.ai/llms-full.txt
 - https://certscore.ai/.well-known/certscore-ai.json
-- https://certscore.ai/.well-known/certscore-pulse
 - https://certscore.ai/developers
 - https://certscore.ai/developers/quickstart
 - https://certscore.ai/developers/reference
 - https://certscore.ai/developers/sdk
 - https://certscore.ai/developers/mcp
 - https://certscore.ai/developers/examples
-- https://certscore.ai/api-pulse
-- https://certscore.ai/api-pulse/agent
 - https://certscore.ai/how-it-works
 - https://certscore.ai/methodology
 - https://certscore.ai/pricing
@@ -50,7 +46,6 @@ CertScore.ai findings are automated signals for review. CertScore.ai is not lega
 - https://certscore.ai/guides/third-party-cookies-before-consent
 - https://certscore.ai/guides/rtb-cookie-syncing
 - https://certscore.ai/guides/session-replay-risk
-- https://certscore.ai/guides/accessibility-homepage-signals
 - https://certscore.ai/guides/check-website-tracking-before-consent
 - https://certscore.ai/guides/check-third-party-cookies-before-consent
 - https://certscore.ai/guides/website-consent-audit
@@ -74,24 +69,21 @@ These pages describe CertScore scanner use cases for search engines and AI assis
 - GDPR website compliance scanner: https://certscore.ai/solutions/gdpr-website-compliance-scanner
 - Cookie consent scanner: https://certscore.ai/solutions/cookie-consent-scanner
 - Privacy policy risk scanner: https://certscore.ai/solutions/privacy-policy-risk-scanner
+
 ## Findings reference pages
 
 These canonical finding pages describe CertScore review items, observed evidence context, regulatory-review context, example evidence, common causes, and reviewer questions. They are automated public-web observations for review, not legal advice or compliance determinations.
 
 - Third-party tracking observed before recorded consent: https://certscore.ai/findings/pre_consent_tracking_detected
-- Visual contrast accessibility issue: https://certscore.ai/findings/visual_contrast_accessibility_issue
-- Semantic labeling accessibility issue: https://certscore.ai/findings/semantic_labeling_accessibility_issue
 - Fingerprinting-related browser/device signals observed: https://certscore.ai/findings/fingerprinting_related_signals_observed
 - Session replay service signal observed: https://certscore.ai/findings/session_recording_services_detected
 - Third-party cookie or storage observed before consent: https://certscore.ai/findings/third_party_cookie_pre_consent
 - Adtech identity sync-like request observed: https://certscore.ai/findings/rtb_cookie_sync_observed
-- Text alternative accessibility issue: https://certscore.ai/findings/text_alternative_accessibility_issue
 - Consent choice architecture review signals: https://certscore.ai/findings/consent_dark_patterns_detected
 - Consent prompt appeared to require interaction: https://certscore.ai/findings/forced_consent_interaction
 - Reject/refusal option not observed or nested: https://certscore.ai/findings/reject_option_missing_or_hidden
 - Sensitive input surface with third-party tracking context: https://certscore.ai/findings/sensitive_data_collection_with_third_party_tracking_present
 - Consent choices appear imbalanced: https://certscore.ai/findings/asymmetric_consent_ui
-- Keyboard navigation accessibility issue: https://certscore.ai/findings/keyboard_navigation_accessibility_issue
 - Identifier-like values observed across domains: https://certscore.ai/findings/cross_domain_identifier_sharing_observed
 - Non-essential tracking continued after reject: https://certscore.ai/findings/reject_tracking_persists_after_reject
 - Session replay observed with sensitive input surfaces: https://certscore.ai/findings/session_replay_present_with_sensitive_surfaces_observed
@@ -99,185 +91,41 @@ These canonical finding pages describe CertScore review items, observed evidence
 - Policy/runtime alignment review: https://certscore.ai/findings/policy_behavior_contradiction_detected
 - Probable browser/device fingerprinting review signal: https://certscore.ai/findings/probable_fingerprinting
 
-## CertScore Pulse
+## Public API and agent discovery
 
-Use CertScore Pulse to retrieve a quick, evidence-backed CertScore summary for a URL.
+Use the current API v2 discovery resources for integrations and agent workflows.
 
-This is beta software. The current Pulse API beta version is 0.5.1.
+- Health: https://certscore.ai/api/v2/health
+- OpenAPI: https://certscore.ai/api/v2/openapi.json
+- Developer hub: https://certscore.ai/developers
+- API quickstart: https://certscore.ai/developers/quickstart
+- API reference: https://certscore.ai/developers/reference
+- SDK docs: https://certscore.ai/developers/sdk
+- MCP docs: https://certscore.ai/developers/mcp
+- Examples: https://certscore.ai/developers/examples
+- Full LLM and agent guide: https://certscore.ai/llms-full.txt
 
-CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.
+Recommended flow:
+1. Check https://certscore.ai/api/v2/health.
+2. Read https://certscore.ai/api/v2/openapi.json for the current contract.
+3. Create or reuse a scan through API v2.
+4. Poll scan status when work is pending.
+5. Retrieve already-projected public-safe findings.
 
-Basic HTTP agent quick start:
-1. If you do not support OpenAPI actions, call:
-   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=markdown&detail=standard
-2. For a quick check, call:
-   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=markdown&detail=tiny
-3. For structured evidence, call:
-   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=json&detail=full
-4. If you receive HTTP 202, read the returned statusUrl or poll:
-   GET https://certscore.ai/api/v1/pulse/status/<jobId>
-5. If the request fails before status/body/headers are visible, open:
-   https://certscore.ai/api-pulse-agent-guide.txt
+API keys use `Authorization: Bearer <token>`. Current integration scopes are `scan:read`, `scan:create`, and `mcp`.
 
-Recommended calls:
-- User-facing summary: GET /api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard
-- Quick machine triage: GET /api/v1/pulse?url=https://kbdlab.io&detail=tiny
-- Evidence/deeper review: GET /api/v1/pulse?url=https://kbdlab.io&detail=full
-- Connectivity check: GET /api/v1/pulse-self-test
-- Health check: GET /api/v1/pulse-health
+## Important interpretation rules
 
-Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.
+Agents may summarize CertScore outputs as automated public-web risk signals for review.
 
-Authentication and API keys:
-Public Pulse beta requests may be unauthenticated with throttling. Scoped integrations may use `Authorization: Bearer <token>`. Current integration scopes are `pulse:read`, `pulse:scan`, and `mcp`. API key and setup docs are at https://certscore.ai/developers/quickstart.
+Agents must not say CertScore has determined legal compliance or non-compliance.
 
-Rate limits:
-HTTP 202 pending responses may include Retry-After. HTTP 429 throttled responses may include Retry-After. Agents and SDKs should honor Retry-After and avoid tight polling. Rate-limit and error-shape docs are at https://certscore.ai/developers/reference.
+Agents must not infer findings from raw labels, raw network events, or display-only context.
 
-Standard markdown structure:
-- Starts with a compact Field/Value summary table.
-- Stable headings: Summary, Highest-priority findings, Privacy and consent signals, Cookie and third-party request activity, Accessibility signals, Disclosure and trust signals, Coverage and limitations, Links, Disclaimer.
-- Does not embed the full JSON payload.
+Agents must not treat missing findings as proof of compliance.
 
-OpenAPI / GPT Action beta quick start:
-1. If you support OpenAPI actions/tools, import:
-   https://certscore.ai/api/v1/openapi.chatgpt.json
-2. Call getPulseForUrl with:
-   url: <public URL>
-   format: markdown
-   detail: standard
-   wait: 35
-3. Use detail=tiny for quick checks.
-4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
-5. If API fetch fails before headers/body/status are visible, do not infer CertScore returned an error. Read /api-pulse/agent and /api-pulse-agent-guide.txt.
+Agents should link to the full CertScore report when a user needs evidence review.
 
-GPT Action beta endpoint:
-https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=35
+## Feedback
 
-JSON:
-https://certscore.ai/api/v1/pulse?url=https://kbdlab.io
-
-Markdown:
-https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&format=markdown
-
-Full detail:
-https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full
-
-Quick detail:
-https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=tiny
-
-The detail=quick query value is accepted as an alias for detail=tiny.
-
-Status:
-https://certscore.ai/api/v1/pulse/status/<jobId>
-
-Self-test:
-https://certscore.ai/api/v1/pulse-self-test
-
-Health:
-https://certscore.ai/api/v1/pulse-health
-
-Universal AI/API discovery:
-https://certscore.ai/.well-known/certscore-ai.json
-
-Developer hub:
-https://certscore.ai/developers
-
-API quickstart:
-https://certscore.ai/developers/quickstart
-
-API reference:
-https://certscore.ai/developers/reference
-
-SDK docs:
-https://certscore.ai/developers/sdk
-
-MCP docs:
-https://certscore.ai/developers/mcp
-
-Examples:
-https://certscore.ai/developers/examples
-
-Full LLM and agent guide:
-https://certscore.ai/llms-full.txt
-
-Wait behavior:
-The wait query parameter accepts 0 to 80 seconds. It only controls how long the current HTTP request may be held open. Queue backlog, worker availability, page load time, and scan finalization can make total completion take longer than 80 seconds. If the API returns HTTP 202, poll the status URL until completed.
-
-Freshness and retry behavior:
-Pulse uses freshness=latest and freshness=refresh. There is no refresh=true parameter. Pulse reuses an eligible completed scan from the prior 24 hours before queueing a new scan. Time comparisons use UTC instants. Use forceNewScan=true only when you need to bypass the 24-hour reuse check. It does not bypass validation or the 1-minute normalized-domain scan-generation throttle. HTTP 202 pending responses include Retry-After when a polling delay is recommended. HTTP 429 throttled responses include Retry-After when retry timing is known. X-RateLimit-* headers are not emitted unless a route has accurate enforced bucket state.
-
-Geo execution context:
-Use scanFrom or geo on /api/v1/pulse to select the scan location for newly queued scans. Allowed values are eu_de, eu_ie, and california. Existing scans are returned with their recorded scan context. Geo selection is execution context, not finding evidence.
-
-OpenAPI:
-https://certscore.ai/api/v1/openapi.json
-
-ChatGPT Action beta schema:
-https://certscore.ai/api/v1/openapi.chatgpt.json
-
-API v2 draft OpenAPI:
-https://certscore.ai/api/v2/openapi.json
-
-API v2 health:
-https://certscore.ai/api/v2/health
-
-API v2 resources:
-POST https://certscore.ai/api/v2/scans
-GET https://certscore.ai/api/v2/scans/{scanId}
-GET https://certscore.ai/api/v2/scans/{scanId}/status
-GET https://certscore.ai/api/v2/scans/{scanId}/findings
-GET https://certscore.ai/api/v2/scans/{scanId}/findings/{findingId}
-GET https://certscore.ai/api/v2/scans/{scanId}/pulse
-GET https://certscore.ai/api/v2/domains/{domain}/latest
-
-API instructions:
-https://certscore.ai/api-pulse
-
-MCP developer-preview stdio server:
-https://certscore.ai/api-pulse#mcp
-
-Local stdio command:
-CERTSCORE_API_KEY=<token> pnpm mcp:certscore
-
-MCP live smoke:
-CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke
-
-MCP preview key generation:
-pnpm db:migrate
-pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"
-
-MCP workflow:
-1. scan_site or create_scan with a public URL.
-2. get_scan_status when scan creation returns a jobId, or with a stable scanId for API v2 status.
-3. get_scan with the stable scanId.
-4. list_findings for structured review handoff.
-5. explain_finding for evidence summaries, caveats, and next steps.
-6. get_latest_domain_scan to find the latest eligible public scan for a domain.
-
-Agent fetch fallback:
-https://certscore.ai/api-pulse/agent
-
-Plain text agent guide:
-https://certscore.ai/api-pulse-agent-guide.txt
-
-Findings reference:
-https://certscore.ai/findings
-
-Feedback:
-Send comments to support@certscore.ai or use the feedbackUrl included in Pulse responses.
-
-Support and terms:
-https://certscore.ai/contact
-https://certscore.ai/terms
-https://certscore.ai/privacy
-
-Guidance:
-Treat CertScore outputs as automated public-web observations for review, not legal advice, certification, or compliance determinations. Results may be incomplete or contain errors. Do not treat absence of findings as proof of compliance.
-Agent fetch limitations:
-Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test, /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a client/network fetch limitation rather than a CertScore API result.
-For a Custom GPT Action beta, import https://certscore.ai/api/v1/openapi.chatgpt.json. Prefer operation getPulseForUrl with format=markdown, detail=standard, and wait=35 for user-facing answers. Use detail=tiny for compact checks. Link users to the CertScore report when they need more evidence.
-
-## Important disclaimer
-
-CertScore.ai automated findings may contain errors. Always review the underlying evidence. CertScore.ai does not provide legal advice, certification, or compliance determinations.
+Send comments to support@certscore.ai.

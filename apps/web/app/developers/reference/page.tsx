@@ -54,8 +54,8 @@ export default function DeveloperReferencePage() {
           <CodeBlock>{`Authorization: Bearer <token>
 
 Current scopes:
-- pulse:read
-- pulse:scan
+- scan:read
+- scan:create
 - mcp`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             Scoped integrations use bearer API keys. HTTP 202 pending responses and HTTP 429 throttled responses may include <code className="rounded bg-white px-1">Retry-After</code>;

@@ -115,10 +115,10 @@ const discoveryDocument = {
   ],
   responseFormats: ["application/json", "text/markdown"],
   authentication: {
-    currentPublicPulse: "Unauthenticated public beta requests are supported with throttling. Bearer API keys are supported for scoped integrations.",
+    summary: "Bearer API keys are supported for scoped API, SDK, and MCP integrations.",
     header: "Authorization: Bearer <token>",
     docs: "https://certscore.ai/developers/quickstart",
-    currentScopes: ["pulse:read", "pulse:scan", "mcp"]
+    currentScopes: ["scan:read", "scan:create", "mcp"]
   },
   rateLimits: {
     docs: "https://certscore.ai/developers/reference",
