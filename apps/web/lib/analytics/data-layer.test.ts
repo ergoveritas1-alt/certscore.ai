@@ -183,7 +183,7 @@ test("GPT CTA events dispatch after analytics consent is granted", () => {
     event: "gpt_cta_clicked",
     location: "api_pulse",
     destination: "certscore_gpt",
-    url: "https://chatgpt.com/gpts?search=GDPR%20%26%20CCPA%20Cookie%2C%20Consent%20%26%20Privacy%20Scanner"
+    url: "https://chatgpt.com/gpts?search=GDPR%20ePrivacy%20Cookie%20Consent%20Privacy%20Scanner"
   });
 
   assert.deepEqual(mockWindow.dataLayer, [
@@ -191,7 +191,7 @@ test("GPT CTA events dispatch after analytics consent is granted", () => {
       event: "gpt_cta_clicked",
       location: "api_pulse",
       destination: "certscore_gpt",
-      url: "https://chatgpt.com/gpts?search=GDPR%20%26%20CCPA%20Cookie%2C%20Consent%20%26%20Privacy%20Scanner"
+      url: "https://chatgpt.com/gpts?search=GDPR%20ePrivacy%20Cookie%20Consent%20Privacy%20Scanner"
     }
   ]);
 });

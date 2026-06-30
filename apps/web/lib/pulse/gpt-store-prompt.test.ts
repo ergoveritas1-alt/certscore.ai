@@ -10,6 +10,7 @@ test("CertScore GPT Store prompt stays aligned with the ChatGPT Action contract"
   const publicPrompt = readFileSync(publicPromptPath, "utf8");
 
   assert.equal(publicPrompt, rootPrompt);
+  assert.match(rootPrompt, /GDPR\/ePrivacy Consent Scanner/);
   assert.match(rootPrompt, /getPulseForUrl Action/);
   assert.match(rootPrompt, /format: markdown/);
   assert.match(rootPrompt, /detail: standard/);
@@ -20,5 +21,6 @@ test("CertScore GPT Store prompt stays aligned with the ChatGPT Action contract"
   assert.match(rootPrompt, /does not provide legal advice nor certify compliance/);
   assert.doesNotMatch(rootPrompt, /wait:\s*60|wait=60/);
   assert.doesNotMatch(rootPrompt, /eu_de/);
+  assert.doesNotMatch(rootPrompt, /CCPA|CPRA/i);
   assert.doesNotMatch(rootPrompt, /compliant, non-compliant, certified, illegal, or violates law[\s\S]*CertScore returned an API error, no report, no jobId, or no findings[\s\S]*without visible CertScore diagnostic headers/);
 });
