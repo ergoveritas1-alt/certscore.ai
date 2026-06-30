@@ -7,11 +7,9 @@ import { absoluteUrl, createBreadcrumbSchema, createPublicArticleSchema } from "
 
 export const developerSearchTopics = [
   "CertScore API",
-  "CertScore Pulse API",
   "website risk API",
   "privacy scan API",
   "cookie compliance scan API",
-  "accessibility risk scan API",
   "MCP server for website compliance review",
   "automated public-web risk signals",
   "evidence-backed website scan API"
@@ -21,7 +19,7 @@ export const developerPages = [
   {
     href: "/developers/quickstart",
     label: "Quickstart",
-    description: "Create a scan, poll status, retrieve findings, and request a Pulse projection."
+    description: "Create a scan, poll status, retrieve findings, and review public-safe scan resources."
   },
   {
     href: "/developers/reference",
@@ -31,7 +29,7 @@ export const developerPages = [
   {
     href: "/developers/sdk",
     label: "TypeScript SDK",
-    description: "Use ergonomic resource clients for scans, findings, domains, and Pulse."
+    description: "Use ergonomic resource clients for scans, findings, and domains."
   },
   {
     href: "/developers/mcp",
@@ -46,12 +44,11 @@ export const developerPages = [
 ] as const;
 
 export const apiV2Routes = [
-  ["POST", "/api/v2/scans", "Create or reuse a public scan through the existing Pulse scan path."],
+  ["POST", "/api/v2/scans", "Create or reuse a public scan through the resource API."],
   ["GET", "/api/v2/scans/{scanId}", "Retrieve the public-safe scan resource."],
   ["GET", "/api/v2/scans/{scanId}/status", "Check scan or job status without inferring from partial evidence."],
   ["GET", "/api/v2/scans/{scanId}/findings", "List already-projected public findings for a scan."],
   ["GET", "/api/v2/scans/{scanId}/findings/{findingId}", "Retrieve one public-safe finding and capped evidence summary."],
-  ["GET", "/api/v2/scans/{scanId}/pulse", "Retrieve the Pulse projection for a scan resource."],
   ["GET", "/api/v2/domains/{domain}/latest", "Find the latest eligible public scan for a domain."],
   ["GET", "/api/v2/openapi.json", "Fetch the machine-readable API v2 contract."],
   ["GET", "/api/v2/health", "Check API v2 discovery health."]
@@ -60,13 +57,10 @@ export const apiV2Routes = [
 export const mcpTools = [
   ["scan_site", "Start or reuse a CertScore scan for a public URL."],
   ["get_scan", "Retrieve an API v2 public-safe scan resource."],
-  ["get_scan_status", "Check a queued Pulse job or a stable API v2 scan ID."],
+  ["get_scan_status", "Check a queued scan job or a stable API v2 scan ID."],
   ["list_findings", "Return API v2 public-safe findings for handoff or review."],
   ["explain_finding", "Explain one finding with evidence summaries, caveats, and next steps."],
-  ["get_latest_domain_scan", "Find the latest eligible public scan for a domain."],
-  ["create_scan", "Compatibility alias for existing Pulse scan creation workflows."],
-  ["get_report", "Compatibility tool for retrieving the Pulse report projection."],
-  ["export_findings", "Compatibility tool for structured finding export."]
+  ["get_latest_domain_scan", "Find the latest eligible public scan for a domain."]
 ] as const;
 
 export function DeveloperJsonLd({ path, title, description }: { path: string; title: string; description: string }) {
@@ -91,7 +85,7 @@ export function DeveloperJsonLd({ path, title, description }: { path: string; ti
       operatingSystem: "Web",
       url: absoluteUrl("/developers"),
       description:
-        "Public API, Pulse API, TypeScript SDK, and MCP server for evidence-backed website risk-signal review."
+        "Public API, TypeScript SDK, and MCP server for evidence-backed website risk-signal review."
     }
   ];
 
@@ -200,4 +194,3 @@ export function Section({
     </section>
   );
 }
-

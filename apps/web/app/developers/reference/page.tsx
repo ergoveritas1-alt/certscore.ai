@@ -58,8 +58,7 @@ Current scopes:
 - pulse:scan
 - mcp`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Public Pulse beta requests may be unauthenticated with throttling. Scoped integrations use bearer API keys. HTTP 202
-            pending responses and HTTP 429 throttled responses may include <code className="rounded bg-white px-1">Retry-After</code>;
+            Scoped integrations use bearer API keys. HTTP 202 pending responses and HTTP 429 throttled responses may include <code className="rounded bg-white px-1">Retry-After</code>;
             agents and SDKs should honor that value rather than tight polling.
           </p>
         </Section>
@@ -95,7 +94,7 @@ Current scopes:
         <Section eyebrow="Evidence discipline" title="What API v2 exposes">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             API v2 exposes scan resources, status, already-projected findings, public-safe evidence summaries, latest-domain lookup,
-            and Pulse projections. It does not expose raw DOM, raw request bodies, internal scanner artifacts, internal reasoning, or
+            and report-ready review context. It does not expose raw DOM, raw request bodies, internal scanner artifacts, internal reasoning, or
             display-only findings.
           </p>
         </Section>

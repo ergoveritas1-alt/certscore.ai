@@ -3,7 +3,7 @@ import { createPageMetadata } from "../../../lib/seo";
 import { CodeBlock, DeveloperShell, Section } from "../developer-pages";
 
 const description =
-  "Copy-paste examples for the CertScore API, Pulse API, TypeScript SDK, and MCP server across website risk API and AI agent workflows.";
+  "Copy-paste examples for the CertScore API, TypeScript SDK, and MCP server across website risk API and AI agent workflows.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -32,10 +32,6 @@ curl https://certscore.ai/api/v2/scans/$SCAN_ID/status \\
 
 curl https://certscore.ai/api/v2/scans/$SCAN_ID/findings \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY"`}</CodeBlock>
-        </Section>
-
-        <Section eyebrow="Pulse" title="Get a conversational summary">
-          <CodeBlock>{`curl "https://certscore.ai/api/v1/pulse?url=https://example.com&format=markdown&detail=standard"`}</CodeBlock>
         </Section>
 
         <Section eyebrow="SDK" title="Build a review handoff">
@@ -68,12 +64,10 @@ Rules:
         <Section eyebrow="Search use cases" title="Natural-language queries this page supports">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             CertScore API examples for website risk API workflows, privacy scan API reviews, cookie compliance scan API checks,
-            accessibility risk scan API monitoring, MCP server for website compliance review, automated public-web risk signals, and
-            evidence-backed website scan API integrations.
+            MCP server for website compliance review, automated public-web risk signals, and evidence-backed website scan API integrations.
           </p>
         </Section>
       </div>
     </DeveloperShell>
   );
 }
-

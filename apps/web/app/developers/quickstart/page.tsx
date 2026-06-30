@@ -3,7 +3,7 @@ import { createPageMetadata } from "../../../lib/seo";
 import { CodeBlock, DeveloperShell, Section } from "../developer-pages";
 
 const description =
-  "Start using the CertScore API v2 with curl: create a public website scan, poll status, list public-safe findings, and retrieve the Pulse projection.";
+  "Start using the CertScore API v2 with curl: create a public website scan, poll status, list public-safe findings, and retrieve latest-domain scan resources.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -34,8 +34,7 @@ curl https://certscore.ai/api/v2/openapi.json`}</CodeBlock>
     "scanFrom": "eu_ie"
   }'`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Scan creation uses the existing Pulse scan creation, validation, reuse, and throttling path. It may return a completed scan
-            resource or a queued job resource.
+            Scan creation may return a completed scan resource or a queued job resource.
           </p>
         </Section>
 
@@ -48,11 +47,8 @@ curl https://certscore.ai/api/v2/openapi.json`}</CodeBlock>
           </p>
         </Section>
 
-        <Section eyebrow="Review" title="Retrieve findings and Pulse">
+        <Section eyebrow="Review" title="Retrieve findings">
           <CodeBlock>{`curl https://certscore.ai/api/v2/scans/{scanId}/findings \\
-  -H "Authorization: Bearer $CERTSCORE_API_KEY"
-
-curl https://certscore.ai/api/v2/scans/{scanId}/pulse \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY"`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             Findings are sourced from already-projected public report/Pulse artifacts. Evidence examples are compact and capped for
@@ -68,4 +64,3 @@ curl https://certscore.ai/api/v2/scans/{scanId}/pulse \\
     </DeveloperShell>
   );
 }
-

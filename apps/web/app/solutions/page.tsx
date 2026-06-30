@@ -23,18 +23,13 @@ const solutions = [
     title: "Privacy policy risk scanner",
     description: "Compare public privacy disclosures with observable website behavior and vendor signals.",
     href: "/solutions/privacy-policy-risk-scanner"
-  },
-  {
-    title: "Website accessibility compliance scanner",
-    description: "Triage public-page accessibility signals for labels, headings, alt text, contrast, and controls.",
-    href: "/solutions/website-accessibility-compliance-scanner"
   }
 ] as const;
 
 export const metadata: Metadata = createPageMetadata({
   title: "CertScore.ai Solutions",
   description:
-    "Browse CertScore.ai scanner pages for GDPR, cookie consent, privacy policy risk, and website accessibility review signals.",
+    "Browse CertScore.ai scanner pages for GDPR, cookie consent, and privacy policy risk review signals.",
   path: "/solutions"
 });
 
@@ -43,7 +38,7 @@ export default function SolutionsPage() {
     createPublicWebPageSchema({
       title: "CertScore.ai Solutions",
       description:
-        "Browse CertScore.ai scanner pages for GDPR, cookie consent, privacy policy risk, and website accessibility review signals.",
+        "Browse CertScore.ai scanner pages for GDPR, cookie consent, and privacy policy risk review signals.",
       path: "/solutions"
     }),
     createBreadcrumbSchema([
@@ -76,7 +71,7 @@ export default function SolutionsPage() {
         <Badge tone="neutral">Solutions</Badge>
         <h1 className="text-4xl font-semibold tracking-tight text-slate-950">CertScore.ai scanner solutions</h1>
         <p className="text-lg leading-8 text-slate-600">
-          Focused scanner pages for teams reviewing public website privacy, cookies, consent, accessibility, policy, and disclosure signals.
+          Focused scanner pages for teams reviewing public website privacy, cookies, consent, policy, and disclosure signals.
         </p>
       </div>
 

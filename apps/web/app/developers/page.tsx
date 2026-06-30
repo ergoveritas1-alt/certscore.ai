@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { createPageMetadata } from "../../lib/seo";
 import {
   CodeBlock,
@@ -13,14 +12,11 @@ import {
 } from "./developer-pages";
 
 const description =
-  "Discover the CertScore API, Pulse API, TypeScript SDK, and MCP server for evidence-backed website risk API workflows, privacy scan API use cases, cookie compliance scan API checks, accessibility risk scan API reviews, and AI agent integrations.";
+  "Discover the CertScore API, TypeScript SDK, and MCP server for evidence-backed website risk API workflows, privacy scan API use cases, cookie compliance scan API checks, and AI agent integrations.";
 
 const discoveryLinks = [
   ["API v2 OpenAPI", "/api/v2/openapi.json"],
-  ["Pulse v1 OpenAPI", "/api/v1/openapi.json"],
-  ["ChatGPT Action schema", "/api/v1/openapi.chatgpt.json"],
   ["Universal AI manifest", "/.well-known/certscore-ai.json"],
-  ["Pulse discovery manifest", "/.well-known/certscore-pulse"],
   ["LLM guide", "/llms.txt"],
   ["Full LLM guide", "/llms-full.txt"],
   ["Sitemap", "/sitemap.xml"]
@@ -87,7 +83,7 @@ export default function DevelopersPage() {
 3. POST https://certscore.ai/api/v2/scans
 4. GET https://certscore.ai/api/v2/scans/{scanId}/status
 5. GET https://certscore.ai/api/v2/scans/{scanId}/findings
-6. GET https://certscore.ai/api/v2/scans/{scanId}/pulse`}</CodeBlock>
+6. GET https://certscore.ai/api/v2/domains/{domain}/latest`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             The API, SDK, and MCP server expose already-projected public-safe artifacts. They do not create findings from raw scanner
             evidence or turn display text into policy conclusions.
@@ -103,21 +99,6 @@ export default function DevelopersPage() {
             ))}
           </div>
         </Section>
-
-        <Card className="border-sky-200 bg-sky-50 shadow-none">
-          <CardHeader>
-            <CardTitle className="text-lg text-slate-950">Compatibility</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm leading-7 text-slate-700">
-            <p>
-              Pulse v1 remains available at <code className="rounded bg-white px-1">/api/v1/pulse</code>. API v2 makes scan, status,
-              findings, domain latest, and Pulse projection resources easier to discover and use from agents and developer tools.
-            </p>
-            <p>
-              For the current Pulse beta page, keep using <Link className="font-semibold text-sky-700" href="/api-pulse">/api-pulse</Link>.
-            </p>
-          </CardContent>
-        </Card>
       </div>
     </DeveloperShell>
   );

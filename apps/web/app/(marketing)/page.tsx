@@ -64,12 +64,6 @@ const scannerSolutions = [
     title: "Privacy policy risk scanner",
     description:
       "Compare observable website behavior with privacy, cookie, vendor, and disclosure surfaces."
-  },
-  {
-    href: "/solutions/website-accessibility-compliance-scanner",
-    title: "Accessibility scanner",
-    description:
-      "Triage labels, headings, alt text, contrast indicators, and interactive-control accessibility signals."
   }
 ];
 
@@ -225,7 +219,7 @@ export default async function MarketingHomePage() {
               Focused pages for the review workflow you need.
             </h2>
             <p className="text-sm leading-6 text-slate-600">
-              Start with the scanner category closest to the question: GDPR, cookie consent, privacy policy risk, or accessibility. Each page explains observable public-web signals for review, not legal conclusions.
+              Start with the scanner category closest to the question: GDPR, cookie consent, or privacy policy risk. Each page explains observable public-web signals for review, not legal conclusions.
             </p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-2">

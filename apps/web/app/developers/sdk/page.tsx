@@ -3,7 +3,7 @@ import { createPageMetadata } from "../../../lib/seo";
 import { CodeBlock, DeveloperShell, Section } from "../developer-pages";
 
 const description =
-  "Use the CertScore TypeScript SDK for scan, status, finding, domain latest, and Pulse workflows with resource clients and a simple scan convenience method.";
+  "Use the CertScore TypeScript SDK for scan, status, finding, and domain latest workflows with resource clients.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -41,20 +41,7 @@ const scan = scanOrJob.type === "certscore_api_scan_job"
   : scanOrJob;
 
 const findings = await certscore.findings.list(scan.id);
-const pulse = await certscore.pulse.get(scan.id);`}</CodeBlock>
-        </Section>
-
-        <Section eyebrow="Convenience" title="Keep the simple Pulse workflow">
-          <CodeBlock>{`const pulse = await certscore.scan("https://example.com", {
-  detail: "standard",
-  format: "json"
-});
-
-console.log(pulse.summary?.headline, pulse.links?.fullReportUrl);`}</CodeBlock>
-          <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Existing Pulse methods remain available for compatibility while new integrations can use resource clients for clearer scan,
-            status, finding, and Pulse flows.
-          </p>
+const latest = await certscore.domains.latest("example.com");`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Available clients" title="SDK surface">
@@ -67,9 +54,7 @@ console.log(pulse.summary?.headline, pulse.links?.fullReportUrl);`}</CodeBlock>
               "certscore.findings.list()",
               "certscore.findings.get()",
               "certscore.findings.explain()",
-              "certscore.pulse.get()",
-              "certscore.domains.latest()",
-              "certscore.scan()"
+              "certscore.domains.latest()"
             ].map((client) => (
               <code key={client} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800">
                 {client}
@@ -81,4 +66,3 @@ console.log(pulse.summary?.headline, pulse.links?.fullReportUrl);`}</CodeBlock>
     </DeveloperShell>
   );
 }
-

@@ -8,7 +8,7 @@ import {
 const config: SolutionPageConfig = {
   badge: "GDPR website scanner",
   description:
-    "Scan public websites for GDPR-relevant consent, cookie, tracking, accessibility, policy, and disclosure review signals. CertScore provides evidence-backed observations for review, not legal advice.",
+    "Scan public websites for GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals. CertScore provides evidence-backed observations for review, not legal advice.",
   intro:
     "CertScore helps teams review GDPR-relevant website behavior by observing public pages in a real browser and surfacing consent, cookie, tracking, policy, and disclosure signals that deserve follow-up.",
   path: "/solutions/gdpr-website-compliance-scanner",
@@ -16,8 +16,8 @@ const config: SolutionPageConfig = {
     "Pre-consent tracking",
     "Third-party cookies before consent",
     "Consent UX and reject-path behavior",
-    "Policy/runtime disclosure gaps",
-    "Session replay and fingerprinting-related signals"
+      "Policy/runtime disclosure gaps",
+      "Session replay and fingerprinting-related signals"
   ],
   sections: [
     {
@@ -28,7 +28,7 @@ const config: SolutionPageConfig = {
     {
       title: "What CertScore checks",
       body:
-        "CertScore checks request timing, cookies and storage, consent-state evidence, vendor behavior, session replay indicators, fingerprinting-related activity, accessibility signals, and whether public disclosures appear aligned with observed behavior."
+        "CertScore checks request timing, cookies and storage, consent-state evidence, vendor behavior, session replay indicators, fingerprinting-related activity, and whether public disclosures appear aligned with observed behavior."
     },
     {
       title: "How teams use it",

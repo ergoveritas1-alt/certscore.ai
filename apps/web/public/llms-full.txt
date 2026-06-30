@@ -72,9 +72,8 @@ Use these pages when a user asks about CertScore for a specific scanner category
 - GDPR website compliance scanner: https://certscore.ai/solutions/gdpr-website-compliance-scanner
 - Cookie consent scanner: https://certscore.ai/solutions/cookie-consent-scanner
 - Privacy policy risk scanner: https://certscore.ai/solutions/privacy-policy-risk-scanner
-- Website accessibility compliance scanner: https://certscore.ai/solutions/website-accessibility-compliance-scanner
 
-These pages describe public website review workflows for consent, cookies, tracking, accessibility, policy, and disclosure signals. They should not be summarized as legal advice, certification, or compliance determinations.
+These pages describe public website review workflows for consent, cookies, tracking, policy, and disclosure signals. They should not be summarized as legal advice, certification, or compliance determinations.
 
 Related educational pages:
 
@@ -263,11 +262,9 @@ These phrases describe the public integration surface:
 - GDPR website compliance scanner
 - cookie consent scanner
 - privacy policy risk scanner
-- website accessibility compliance scanner
 - website risk API
 - privacy scan API
 - cookie compliance scan API
-- accessibility risk scan API
 - MCP server for website compliance review
 - automated public-web risk signals
 - evidence-backed website scan API

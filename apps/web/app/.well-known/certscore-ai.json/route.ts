@@ -3,7 +3,7 @@ const discoveryDocument = {
   version: "2026-06-30",
   type: "certscore_ai_discovery",
   description:
-    "Vendor-neutral discovery document for CertScore public API, Pulse API, SDK, MCP, OpenAPI, and agent-readable documentation.",
+    "Vendor-neutral discovery document for CertScore public API, SDK, MCP, OpenAPI, and agent-readable documentation.",
   homepage: "https://certscore.ai/",
   organization: {
     name: "CertScore.ai",
@@ -26,8 +26,6 @@ const discoveryDocument = {
     fullGuide: "https://certscore.ai/llms-full.txt",
     developerHub: "https://certscore.ai/developers",
     scannerSolutions: "https://certscore.ai/solutions",
-    agentFallback: "https://certscore.ai/api-pulse/agent",
-    plainTextPulseGuide: "https://certscore.ai/api-pulse-agent-guide.txt",
     sitemap: "https://certscore.ai/sitemap.xml",
     robots: "https://certscore.ai/robots.txt"
   },
@@ -36,7 +34,6 @@ const discoveryDocument = {
     gdprWebsiteComplianceScanner: "https://certscore.ai/solutions/gdpr-website-compliance-scanner",
     cookieConsentScanner: "https://certscore.ai/solutions/cookie-consent-scanner",
     privacyPolicyRiskScanner: "https://certscore.ai/solutions/privacy-policy-risk-scanner",
-    websiteAccessibilityComplianceScanner: "https://certscore.ai/solutions/website-accessibility-compliance-scanner",
     posture:
       "Scanner solution pages describe public website review workflows and automated risk signals. They are not legal advice, certification, or compliance determinations."
   },
@@ -49,13 +46,6 @@ const discoveryDocument = {
     examples: "https://certscore.ai/developers/examples"
   },
   api: {
-    pulseV1: "https://certscore.ai/api/v1/pulse",
-    pulseStatusV1: "https://certscore.ai/api/v1/pulse/status/{jobId}",
-    pulseGptActionV1: "https://certscore.ai/api/v1/pulse/gpt",
-    health: "https://certscore.ai/api/v1/pulse-health",
-    selfTest: "https://certscore.ai/api/v1/pulse-self-test",
-    openapi: "https://certscore.ai/api/v1/openapi.json",
-    chatgptOpenapi: "https://certscore.ai/api/v1/openapi.chatgpt.json",
     v2Health: "https://certscore.ai/api/v2/health",
     v2Openapi: "https://certscore.ai/api/v2/openapi.json",
     v2CreateScan: "https://certscore.ai/api/v2/scans",
@@ -63,11 +53,8 @@ const discoveryDocument = {
     v2ScanStatus: "https://certscore.ai/api/v2/scans/{scanId}/status",
     v2ScanFindings: "https://certscore.ai/api/v2/scans/{scanId}/findings",
     v2ScanFinding: "https://certscore.ai/api/v2/scans/{scanId}/findings/{findingId}",
-    v2ScanPulse: "https://certscore.ai/api/v2/scans/{scanId}/pulse",
     v2DomainLatest: "https://certscore.ai/api/v2/domains/{domain}/latest",
-    docs: "https://certscore.ai/developers/reference",
-    pulseDocs: "https://certscore.ai/api-pulse",
-    pulseDiscovery: "https://certscore.ai/.well-known/certscore-pulse"
+    docs: "https://certscore.ai/developers/reference"
   },
   sdk: {
     npmPackage: "@certscore/sdk",
@@ -78,7 +65,6 @@ const discoveryDocument = {
   mcp: {
     package: "@certscore/mcp",
     docs: "https://certscore.ai/developers/mcp",
-    compatibilityDocs: "https://certscore.ai/api-pulse#mcp",
     repositoryPath: "packages/certscore-mcp",
     transport: "stdio",
     currentTools: [
@@ -96,7 +82,7 @@ const discoveryDocument = {
   recommendedAgentWorkflow: [
     {
       step: "health_check",
-      request: "GET https://certscore.ai/api/v1/pulse-health"
+      request: "GET https://certscore.ai/api/v2/health"
     },
     {
       step: "api_v2_contract_check",
@@ -104,32 +90,25 @@ const discoveryDocument = {
     },
     {
       step: "scan_or_reuse_latest",
-      request: "GET https://certscore.ai/api/v1/pulse?url=https://example.com&format=json&detail=standard"
+      request: "POST https://certscore.ai/api/v2/scans"
     },
     {
       step: "poll_if_pending",
-      request: "GET https://certscore.ai/api/v1/pulse/status/{jobId}"
+      request: "GET https://certscore.ai/api/v2/scans/{scanId}/status"
     },
     {
-      step: "retrieve_markdown_for_user_summary",
-      request: "GET https://certscore.ai/api/v1/pulse?scanId={scanId}&format=markdown&detail=standard"
-    },
-    {
-      step: "retrieve_full_public_safe_json_for_review",
-      request: "GET https://certscore.ai/api/v1/pulse?scanId={scanId}&format=json&detail=full"
+      step: "retrieve_public_safe_findings",
+      request: "GET https://certscore.ai/api/v2/scans/{scanId}/findings"
     }
   ],
   searchableTopics: [
     "CertScore API",
-    "CertScore Pulse API",
     "GDPR website compliance scanner",
     "cookie consent scanner",
     "privacy policy risk scanner",
-    "website accessibility compliance scanner",
     "website risk API",
     "privacy scan API",
     "cookie compliance scan API",
-    "accessibility risk scan API",
     "MCP server for website compliance review",
     "automated public-web risk signals",
     "evidence-backed website scan API"
@@ -156,7 +135,7 @@ const discoveryDocument = {
     "Results may be incomplete or contain errors.",
     "Absence of findings must not be treated as proof of compliance.",
     "Full raw scanner artifacts are not exposed by public API or MCP surfaces.",
-    "Some agent fetch tools may fail before receiving HTTP status or CertScore diagnostic headers; use health, self-test, llms.txt, and this manifest for fallback discovery."
+    "Some agent fetch tools may fail before receiving HTTP status or CertScore diagnostic headers; use API v2 health, llms.txt, and this manifest for fallback discovery."
   ]
 } as const;
 
@@ -171,7 +150,6 @@ export function GET(request: Request) {
     headers: {
       "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
       "Content-Type": "application/json; charset=utf-8",
-      "X-CertScore-Pulse": "v1",
       "X-CertScore-Route": "ai-discovery",
       "X-CertScore-Request-Id": id,
       "X-Content-Type-Options": "nosniff"

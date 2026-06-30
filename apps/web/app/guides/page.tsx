@@ -55,12 +55,6 @@ const guides: GuideCard[] = [
     href: "/solutions/privacy-policy-risk-scanner"
   },
   {
-    title: "Website accessibility compliance scanner",
-    description: "Scanner page for public-page accessibility review signals and WCAG-oriented triage.",
-    category: "Solutions",
-    href: "/solutions/website-accessibility-compliance-scanner"
-  },
-  {
     title: "Pre-consent tracking",
     description: "What it means when tracking requests appear before a recorded consent choice.",
     category: "Privacy & Tracking",
