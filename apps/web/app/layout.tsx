@@ -7,7 +7,7 @@ import { DataLayerClickTracker } from "../components/analytics/data-layer-events
 import { buildConsentBootstrapScript } from "../lib/analytics/consent-bootstrap";
 import { SITE_NAME, SITE_URL } from "../lib/seo";
 
-const GTM_CONTAINER_ID = "GTM-M2JDQD5N";
+const GOOGLE_TAG_ID = "G-B6TQVX35ZB";
 const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
 const bingSiteVerification = process.env.NEXT_PUBLIC_BING_SITE_VERIFICATION?.trim();
 
@@ -67,7 +67,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="en" suppressHydrationWarning>
       <body>
         <Script id="certscore-consent-bootstrap" strategy="beforeInteractive">
-          {buildConsentBootstrapScript(GTM_CONTAINER_ID)}
+          {buildConsentBootstrapScript(GOOGLE_TAG_ID)}
         </Script>
         <DataLayerClickTracker />
         <AnalyticsConsentBanner />

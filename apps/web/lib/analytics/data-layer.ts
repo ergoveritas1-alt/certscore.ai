@@ -35,10 +35,24 @@ type CertScoreDataLayerNavigationEvent = CertScoreDataLayerEvent & {
 declare global {
   interface Window {
     dataLayer?: unknown[];
+    gtag?: (...args: unknown[]) => void;
   }
 }
 
 const pushedEventKeys = new Set<string>();
+
+function pushGoogleAnalyticsEvent(event: CertScoreDataLayerEvent, eventCallback?: () => void, eventTimeout?: number) {
+  if (typeof window === "undefined" || typeof window.gtag !== "function") {
+    return;
+  }
+
+  const { event: eventName, ...parameters } = event;
+  window.gtag("event", eventName, {
+    ...parameters,
+    ...(eventCallback ? { event_callback: eventCallback } : {}),
+    ...(eventTimeout ? { event_timeout: eventTimeout } : {})
+  });
+}
 
 export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {
   if (typeof window === "undefined" || !hasAnalyticsConsent()) {
@@ -47,6 +61,7 @@ export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {
 
   window.dataLayer = window.dataLayer ?? [];
   window.dataLayer.push(event);
+  pushGoogleAnalyticsEvent(event);
 }
 
 export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEvent, timeoutMs = 300) {
@@ -76,6 +91,7 @@ export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEven
 
     window.dataLayer = window.dataLayer ?? [];
     window.dataLayer.push(eventWithCallback);
+    pushGoogleAnalyticsEvent(event, finish, timeoutMs);
   });
 }
 

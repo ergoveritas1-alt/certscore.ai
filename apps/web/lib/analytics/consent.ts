@@ -12,9 +12,9 @@ export { ANALYTICS_CONSENT_CHANGE_EVENT, ANALYTICS_CONSENT_STORAGE_KEY, type Ana
 declare global {
   interface Window {
     certscoreAnalyticsConsent?: AnalyticsConsentChoice;
-    certscoreLoadGtm?: () => void;
-    clarity?: (...args: unknown[]) => void;
+    certscoreLoadGoogleTag?: () => void;
     dataLayer?: unknown[];
+    gtag?: (...args: unknown[]) => void;
   }
 }
 
@@ -47,10 +47,6 @@ export function applyGoogleConsentMode(choice: AnalyticsConsentChoice) {
   window.dataLayer = window.dataLayer ?? [];
   window.dataLayer.push(["consent", "update", getGoogleConsentModeState(choice)]);
   window.certscoreAnalyticsConsent = choice;
-
-  if (typeof window.clarity === "function") {
-    window.clarity("consent", choice === "granted");
-  }
 }
 
 export function saveAnalyticsConsent(choice: AnalyticsConsentChoice) {
@@ -67,7 +63,7 @@ export function saveAnalyticsConsent(choice: AnalyticsConsentChoice) {
   applyGoogleConsentMode(choice);
 
   if (choice === "granted") {
-    window.certscoreLoadGtm?.();
+    window.certscoreLoadGoogleTag?.();
   }
 
   window.dispatchEvent(new CustomEvent(ANALYTICS_CONSENT_CHANGE_EVENT, { detail: { choice } }));

@@ -31,10 +31,16 @@ const publicAllowPaths = [
   "/api/v2/openapi.json",
   "/api/v2/scans/",
   "/api/v2/domains/",
+  "/book-demo",
+  "/contact",
+  "/contact-sales",
   "/faq",
+  "/findings",
+  "/findings/",
   "/insights/",
   "/llms.txt",
-  "/llms-full.txt"
+  "/llms-full.txt",
+  "/sample-report"
 ];
 
 const privateDisallowPaths = ["/app/", "/api/", "/auth/", "/dashboard/", "/account/", "/admin/", "/private/"];

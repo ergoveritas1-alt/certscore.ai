@@ -10,9 +10,10 @@ import {
 
 type MockWindow = {
   certscoreAnalyticsConsent?: "granted" | "denied";
-  certscoreLoadGtm?: () => void;
+  certscoreLoadGoogleTag?: () => void;
   dataLayer?: unknown[];
   dispatchEvent: (event: Event) => boolean;
+  gtag?: (...args: unknown[]) => void;
   localStorage: {
     getItem: (key: string) => string | null;
     setItem: (key: string, value: string) => void;
@@ -77,7 +78,11 @@ test("data-layer events are blocked before analytics consent", () => {
 });
 
 test("data-layer events dispatch after analytics consent is granted", () => {
+  const gtagCalls: unknown[][] = [];
   const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
+  mockWindow.gtag = (...args: unknown[]) => {
+    gtagCalls.push(args);
+  };
 
   pushDataLayerEvent({
     event: "contact_clicked",
@@ -90,6 +95,7 @@ test("data-layer events dispatch after analytics consent is granted", () => {
       cta_location: "header"
     }
   ]);
+  assert.deepEqual(gtagCalls, [["event", "contact_clicked", { cta_location: "header" }]]);
 });
 
 test("report CTA events dispatch after analytics consent is granted", () => {
@@ -222,12 +228,12 @@ test("pre-navigation scan events still dispatch when consent is granted", async 
   await pending;
 });
 
-test("saved analytics consent applies Google consent mode and loads GTM only when granted", () => {
+test("saved analytics consent applies Google consent mode and loads Google tag only when granted", () => {
   let loadCount = 0;
   const mockWindow = installWindow({
     certscoreAnalyticsConsent: "denied",
     dataLayer: [],
-    certscoreLoadGtm: () => {
+    certscoreLoadGoogleTag: () => {
       loadCount += 1;
     }
   });
@@ -264,9 +270,12 @@ test("saved analytics consent applies Google consent mode and loads GTM only whe
 });
 
 test("bootstrap defaults Google consent mode to denied before reading saved consent", () => {
-  const script = buildConsentBootstrapScript("GTM-TEST");
+  const script = buildConsentBootstrapScript("G-TEST");
 
   assert.match(script, /gtag\('consent', 'default'/);
+  assert.match(script, /gtag\/js\?id/);
+  assert.match(script, /certscoreLoadGoogleTag/);
+  assert.doesNotMatch(script, /certscoreLoadGtm/);
   assert.match(script, /"analytics_storage":"denied"/);
   assert.match(script, /"ad_storage":"denied"/);
   assert.match(script, /"ad_user_data":"denied"/);

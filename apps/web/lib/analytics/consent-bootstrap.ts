@@ -7,8 +7,8 @@ function serializeConsentState(state: ReturnType<typeof getGoogleConsentModeStat
   return JSON.stringify(state).replace(/</g, "\\u003c");
 }
 
-export function buildConsentBootstrapScript(gtmContainerId: string) {
-  const safeContainerId = JSON.stringify(gtmContainerId);
+export function buildConsentBootstrapScript(googleTagId: string) {
+  const safeGoogleTagId = JSON.stringify(googleTagId);
   const defaultConsent = serializeConsentState(DEFAULT_CONSENT);
   const grantedConsent = serializeConsentState(GRANTED_CONSENT);
   const storageKey = JSON.stringify(ANALYTICS_CONSENT_STORAGE_KEY);
@@ -16,7 +16,7 @@ export function buildConsentBootstrapScript(gtmContainerId: string) {
   return `
     (function(w,d){
       var storageKey = ${storageKey};
-      var containerId = ${safeContainerId};
+      var googleTagId = ${safeGoogleTagId};
       var defaultConsent = ${defaultConsent};
       var grantedConsent = ${grantedConsent};
       var storedChoice = null;
@@ -33,26 +33,28 @@ export function buildConsentBootstrapScript(gtmContainerId: string) {
 
       w.certscoreAnalyticsConsent = storedChoice === 'granted' ? 'granted' : 'denied';
 
-      function loadGtm(){
-        if (w.certscoreAnalyticsConsent !== 'granted' || w.certscoreGtmLoaded || !containerId) {
+      function loadGoogleTag(){
+        if (w.certscoreAnalyticsConsent !== 'granted' || w.certscoreGoogleTagLoaded || !googleTagId) {
           return;
         }
 
-        w.certscoreGtmLoaded = true;
+        w.certscoreGoogleTagLoaded = true;
         w.gtag('consent', 'update', grantedConsent);
-        w.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
 
         var firstScript = d.getElementsByTagName('script')[0];
         var script = d.createElement('script');
         script.async = true;
-        script.src = 'https://www.googletagmanager.com/gtm.js?id=' + containerId;
+        script.src = 'https://www.googletagmanager.com/gtag/js?id=' + googleTagId;
         firstScript.parentNode.insertBefore(script, firstScript);
+
+        w.gtag('js', new Date());
+        w.gtag('config', googleTagId);
       }
 
-      w.certscoreLoadGtm = loadGtm;
+      w.certscoreLoadGoogleTag = loadGoogleTag;
 
       if (storedChoice === 'granted') {
-        loadGtm();
+        loadGoogleTag();
       }
     })(window,document);
   `;
