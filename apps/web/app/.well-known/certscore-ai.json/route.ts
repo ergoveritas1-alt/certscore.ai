@@ -136,9 +136,19 @@ const discoveryDocument = {
   responseFormats: ["application/json", "text/markdown"],
   authentication: {
     summary: "Bearer API keys are supported for scoped API, SDK, and MCP integrations.",
+    accessStatus: "developer_preview_request",
+    requestEmail: "support@certscore.ai",
+    requestInstructions:
+      "Email support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes.",
     header: "Authorization: Bearer <token>",
     docs: "https://certscore.ai/developers/quickstart",
-    currentScopes: ["scan:read", "scan:create", "mcp"]
+    currentScopes: ["scan:read", "scan:create", "mcp"],
+    recommendedScopes: {
+      restReadOnly: ["scan:read"],
+      restScanCreation: ["scan:read", "scan:create"],
+      typescriptSdk: ["scan:read", "scan:create"],
+      mcp: ["scan:read", "scan:create", "mcp"]
+    }
   },
   rateLimits: {
     docs: "https://certscore.ai/developers/reference",

@@ -80,6 +80,10 @@ CERTSCORE_REQUEST_TIMEOUT_MS=300000
 
 `CERTSCORE_API_KEY` should be a scoped CertScore API token for the workspace or preview user. The MCP server passes it to Pulse as a bearer token and does not persist it.
 
+## API Key Access
+
+MCP clients usually need `scan:read`, `scan:create`, and `mcp` scopes. Request developer-preview access by emailing `support@certscore.ai` with your organization, MCP client, expected workflow, expected request volume, contact email, and requested scopes.
+
 ## Verify Install
 
 ```bash

@@ -57,6 +57,17 @@ export default function DevelopersPage() {
           </div>
         </Section>
 
+        <Section eyebrow="Developer preview access" title="Request an API key">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Use a scoped bearer API key for the REST API, TypeScript SDK, or MCP server. Request preview access at{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
+              support@certscore.ai
+            </a>
+            . Include your organization, intended workflow, expected request volume, and whether you need <code className="rounded bg-white px-1">scan:read</code>,{" "}
+            <code className="rounded bg-white px-1">scan:create</code>, or <code className="rounded bg-white px-1">mcp</code>.
+          </p>
+        </Section>
+
         <Section eyebrow="API v2" title="Resource-oriented routes">
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <table className="w-full text-left text-sm">

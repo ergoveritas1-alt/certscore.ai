@@ -512,7 +512,14 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.install, "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install certscore-mcp");
   assert.deepEqual(aiDiscovery.mcp.verify, ["certscore-mcp --version", "certscore-mcp --help", "CERTSCORE_API_KEY=<token> certscore-mcp doctor"]);
   assert.equal(aiDiscovery.authentication.docs, "https://certscore.ai/developers/quickstart");
+  assert.equal(aiDiscovery.authentication.accessStatus, "developer_preview_request");
+  assert.equal(aiDiscovery.authentication.requestEmail, "support@certscore.ai");
+  assert.match(aiDiscovery.authentication.requestInstructions, /organization/);
   assert.deepEqual(aiDiscovery.authentication.currentScopes, ["scan:read", "scan:create", "mcp"]);
+  assert.deepEqual(aiDiscovery.authentication.recommendedScopes.restReadOnly, ["scan:read"]);
+  assert.deepEqual(aiDiscovery.authentication.recommendedScopes.restScanCreation, ["scan:read", "scan:create"]);
+  assert.deepEqual(aiDiscovery.authentication.recommendedScopes.typescriptSdk, ["scan:read", "scan:create"]);
+  assert.deepEqual(aiDiscovery.authentication.recommendedScopes.mcp, ["scan:read", "scan:create", "mcp"]);
   assert.equal(aiDiscovery.rateLimits.docs, "https://certscore.ai/developers/reference");
   assert.equal(aiDiscovery.support.terms, "https://certscore.ai/terms");
   assert.equal(pulseDiscovery.developerHub, "https://certscore.ai/developers");
@@ -544,6 +551,10 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.match(combinedSources, /id="evidence-boundaries"/);
   assert.match(combinedSources, /id="developer-support"/);
   assert.match(combinedSources, /mailto:support@certscore\.ai/);
+  assert.match(combinedSources, /developer-preview access/i);
+  assert.match(combinedSources, /Request an API key/);
+  assert.match(combinedSources, /requested scopes/);
+  assert.match(combinedSources, /expected request volume|expected volume/);
   assert.match(combinedSources, /feature requests/);
   assert.match(combinedSources, /broken examples/);
   assert.match(combinedSources, /Prompt for coding agents/);

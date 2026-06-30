@@ -33,6 +33,18 @@ export default function DeveloperMcpPage() {
 brew install certscore-mcp`}</CodeBlock>
         </Section>
 
+        <Section eyebrow="Access" title="Use a scoped MCP key">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            MCP clients need a CertScore API key with <code className="rounded bg-white px-1">scan:read</code>,{" "}
+            <code className="rounded bg-white px-1">scan:create</code>, and <code className="rounded bg-white px-1">mcp</code> scopes.
+            Request developer-preview access at{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
+              support@certscore.ai
+            </a>
+            . Include your MCP client, expected workflow, and expected request volume.
+          </p>
+        </Section>
+
         <Section eyebrow="Verify install" title="Run the doctor check">
           <CodeBlock>{`certscore-mcp --version
 certscore-mcp --help

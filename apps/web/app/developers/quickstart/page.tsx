@@ -21,6 +21,22 @@ export default function DeveloperQuickstartPage() {
       <div className="space-y-12">
         <AgentQuickPath />
 
+        <Section id="api-key-access" eyebrow="Access" title="Get a scoped API key">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            CertScore API, SDK, and MCP integrations use bearer API keys. During the developer-preview period, request a scoped key by
+            emailing{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
+              support@certscore.ai
+            </a>
+            . Include your organization, integration type, expected volume, callback or contact email, and the scopes you need.
+          </p>
+          <CodeBlock>{`Recommended scopes by integration:
+- REST API read-only: scan:read
+- REST API scan creation: scan:read, scan:create
+- TypeScript SDK: scan:read, scan:create
+- MCP server: scan:read, scan:create, mcp`}</CodeBlock>
+        </Section>
+
         <Section eyebrow="Health" title="Check the public API surface">
           <CodeBlock>{`curl https://certscore.ai/api/v2/health
 curl https://certscore.ai/api/v2/openapi.json`}</CodeBlock>

@@ -216,14 +216,14 @@ export function DeveloperSupportCallout() {
     <section id="developer-support" className="rounded-lg border border-slate-200 bg-white p-5">
       <div className="max-w-3xl space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Developer support</p>
-        <h2 className="text-xl font-semibold text-slate-950">Need an endpoint, SDK helper, MCP tool, or docs fix?</h2>
+        <h2 className="text-xl font-semibold text-slate-950">Need an API key, endpoint, SDK helper, MCP tool, or docs fix?</h2>
         <p className="text-sm leading-7 text-slate-600">
           Contact{" "}
           <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
             support@certscore.ai
           </a>{" "}
-          for feature requests, broken examples, schema questions, integration issues, or missing API coverage. Include the route,
-          SDK method, MCP tool, scan ID, or page URL when useful.
+          for preview API keys, feature requests, broken examples, schema questions, integration issues, or missing API coverage.
+          Include the route, SDK method, MCP tool, scan ID, requested scopes, expected volume, or page URL when useful.
         </p>
       </div>
     </section>
