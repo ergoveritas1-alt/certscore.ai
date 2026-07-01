@@ -211,6 +211,45 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     ]);
   }
 
+  if (item.id === "social_media_embed_pre_consent") {
+    const hosts = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, [
+        "socialMediaEmbedDomains",
+        "social_media_embed_domains",
+        "embeddedContentHosts",
+        "embedded_content_hosts"
+      ]),
+      ...getNestedRecordStrings(evidence.socialMediaEmbedObservations, ["domain", "host", "hostname"]),
+      ...getNestedRecordStrings(evidence.social_media_embed_observations, ["domain", "host", "hostname"])
+    ]).slice(0, 4);
+    const providers = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["providers"]),
+      ...getNestedRecordStrings(evidence.socialMediaEmbedObservations, ["provider"]),
+      ...getNestedRecordStrings(evidence.social_media_embed_observations, ["provider"])
+    ]).slice(0, 4);
+    const providerPhrase = formatList(providers.length > 0 ? providers : hosts);
+    if (evidenceLabel === "Not observed") {
+      return "No eligible social/media provider request was observed before a recorded consent action; plain outbound social links are not counted for this row.";
+    }
+    if (evidenceLabel === "Partial concern") {
+      return joinRationaleParts([
+        providerPhrase
+          ? `A social/media third-party asset loaded before consent: ${providerPhrase}. Stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed`
+          : "A social/media third-party asset loaded before consent, but stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed",
+        formatFirstSeenPhrase(firstSeenMs)
+      ]);
+    }
+    return joinRationaleParts([
+      providerPhrase
+        ? `A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: ${providerPhrase}`
+        : "A social/media embed, plugin, widget, or pixel loaded before any recorded consent action",
+      evidence.placeholderIneffective === true
+        ? "placeholder-style blocking was retained, but the provider request had already fired"
+        : null,
+      formatFirstSeenPhrase(firstSeenMs)
+    ]);
+  }
+
   if (item.id === "embedded_content_pre_consent") {
     const hosts = uniqueStrings([
       ...getStringArrayFromEvidenceKeys(evidence, ["embeddedContentHosts", "embedded_content_hosts", "embeddedHosts", "embedded_hosts"]),
@@ -851,6 +890,8 @@ function getFirstEvidenceMs(item: GdprEprivacyCoverageChecklistItem) {
     "first_retargeting_behavioral_advertising_vendor_observed_ms",
     "firstAnalyticsVendorObservedMs",
     "first_analytics_vendor_observed_ms",
+    "firstSocialMediaEmbedObservedMs",
+    "first_social_media_embed_observed_ms",
     "firstEmbeddedContentObservedMs",
     "first_embedded_content_observed_ms"
   ]);
@@ -860,6 +901,8 @@ function getFirstEvidenceMs(item: GdprEprivacyCoverageChecklistItem) {
     evidence.representative_requests,
     evidence.embeddedContentObservations,
     evidence.embedded_content_observations,
+    evidence.socialMediaEmbedObservations,
+    evidence.social_media_embed_observations,
     evidence.preConsentCookieExamples,
     evidence.pre_consent_cookie_examples
   ]);

@@ -901,14 +901,14 @@ test("projects concrete reject-missing dark-pattern evidence into the umbrella e
 
   assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
   const umbrellaFinding = projection.findings.find((finding) => finding.id === "consent_dark_patterns_detected");
-  assert.equal(umbrellaFinding?.label, "Consent choice architecture review signals");
+  assert.equal(umbrellaFinding?.label, "Cookie banner dark pattern signal");
   assert.equal(
     umbrellaFinding?.shortSummary,
     "The retained consent interaction structure shows reject was not available on the first layer."
   );
   assert.doesNotMatch(
     `${umbrellaFinding?.label ?? ""} ${umbrellaFinding?.shortSummary ?? ""} ${umbrellaFinding?.whyItMatters ?? ""}`,
-    /dark pattern|violates?|violation|liability|illegal|deceptive|manipulative|non-compliant/i
+    /violates?|violation|liability|illegal|deceptive|manipulative|non-compliant/i
   );
   assert.ok(projection.topFindings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });

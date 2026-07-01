@@ -119,7 +119,7 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
   });
 
   assert.deepEqual(
-    items.slice(0, 21).map((item) => item.id),
+    items.slice(0, 22).map((item) => item.id),
     [
       "consent_surface_observed",
       "cmp_framework_signal_observed",
@@ -134,6 +134,7 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
       "analytics_vendor_observed",
       "third_party_service_connection_pre_consent",
       "third_party_iframe_pre_consent",
+      "social_media_embed_pre_consent",
       "embedded_content_pre_consent",
       "transport_security_https_delivery",
       "transport_security_tls_certificate",
@@ -241,6 +242,8 @@ test("getReportableGdprEprivacyCoverageItems omits standalone runtime vendor sig
   });
   const rowIds = new Set(getReportableGdprEprivacyCoverageItems(items).map((item) => item.id));
 
+  assert.equal(rowIds.has("consent_choice_quality"), true);
+  assert.equal(rowIds.has("cookie_banner_preticked_or_implied_consent"), true);
   assert.equal(rowIds.has("advertising_retargeting_vendor_signal_observed"), false);
   assert.equal(rowIds.has("retargeting_behavioral_advertising_signal_observed"), false);
   assert.equal(rowIds.has("analytics_vendor_observed"), false);
@@ -826,6 +829,27 @@ test("deriveGdprEprivacyCoverageChecklist renders consent choice quality as a st
           "Basic same-layer Accept and Decline controls were observed, but CertScore did not confirm granular cookie preferences, purpose/vendor choices, default toggle states, or a cookie preference center.",
         rowId: "consent_choice_quality",
         status: "Review signal"
+      }),
+      cookie_banner_preticked_or_implied_consent: makeCoverageOutcome({
+        evidenceRefs: [
+          "Evidence: cookie banner default state",
+          "Visible choice: Accept",
+          "Visible choice: Decline",
+          "Layer inspected: first_layer"
+        ],
+        retainedEvidence: {
+          defaultToggleStatesObserved: true,
+          firstLayerCookieConsentBannerObserved: true,
+          layerInspected: "first_layer",
+          nonEssentialDefaultsOff: false,
+          selectedEvidenceArtifactId: "consentChoiceQualityEvidence",
+          selectedEvidenceStrength: "strong",
+          visibleChoiceLabels: ["Accept", "Decline"]
+        },
+        limitation:
+          "Retained cookie-banner preference evidence indicates at least one optional or non-essential purpose was preselected by default.",
+        rowId: "cookie_banner_preticked_or_implied_consent",
+        status: "Gap observed"
       })
     },
     scanCompleted: true,
@@ -841,7 +865,7 @@ test("deriveGdprEprivacyCoverageChecklist renders consent choice quality as a st
   assert.equal(rejectPath.assessmentStatus, "checked");
 
   const choiceQuality = byId(items, "consent_choice_quality");
-  assert.equal(choiceQuality.label, "Consent choice quality");
+  assert.equal(choiceQuality.label, "Cookie banner dark pattern signal");
   assert.equal(choiceQuality.status, "Review signal");
   assert.equal(choiceQuality.assessmentStatus, "review_signal");
   assert.equal(choiceQuality.evidenceState, "observed");
@@ -850,6 +874,18 @@ test("deriveGdprEprivacyCoverageChecklist renders consent choice quality as a st
   assert.equal(choiceQuality.criticalEvidence.retainedEvidence.selectedEvidenceStrength, "limited");
   assert.deepEqual(choiceQuality.criticalEvidence.retainedEvidence.visibleChoiceLabels, ["Accept", "Decline"]);
   assert.match(JSON.stringify(choiceQuality.criticalEvidence.retainedEvidence.missingEvidenceNeeded), /purpose or cookie-category choices/i);
+
+  const pretickedOrImplied = byId(items, "cookie_banner_preticked_or_implied_consent");
+  assert.equal(pretickedOrImplied.label, "Cookie banner pre-ticked boxes or implied consent");
+  assert.equal(pretickedOrImplied.status, "Gap observed");
+  assert.equal(pretickedOrImplied.assessmentStatus, "gap_observed");
+  assert.equal(pretickedOrImplied.evidenceState, "observed");
+  assert.match(pretickedOrImplied.criticalEvidence.statusBasis, /optional or non-essential purpose was preselected/i);
+  assert.equal(
+    pretickedOrImplied.criticalEvidence.retainedEvidence.selectedEvidenceArtifactId,
+    "consentChoiceQualityEvidence.defaultStateGap"
+  );
+  assert.equal(pretickedOrImplied.criticalEvidence.retainedEvidence.nonEssentialDefaultsOff, false);
 });
 
 test("deriveGdprEprivacyCoverageChecklist renders consent choice quality not testable for footer privacy links only", () => {

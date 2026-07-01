@@ -20,6 +20,7 @@ const RISK_SIGNAL_ROW_IDS = new Set([
   "device_identification_fingerprinting_signal_observed",
   "third_party_service_connection_pre_consent",
   "third_party_iframe_pre_consent",
+  "social_media_embed_pre_consent",
   "embedded_content_pre_consent"
 ]);
 
@@ -27,6 +28,7 @@ const POSITIVE_WHEN_OBSERVED_ROW_IDS = new Set([
   "consent_surface_observed",
   "accept_consent_control",
   "options_settings_preferences_control",
+  "cookie_banner_preticked_or_implied_consent",
   "reject_all_path_availability",
   "cookie_notice_policy_availability",
   "privacy_notice_availability",
@@ -50,6 +52,7 @@ const POSITIVE_WHEN_NOT_OBSERVED_ROW_IDS = new Set([
   "pre_consent_third_party_tracking",
   "third_party_service_connection_pre_consent",
   "third_party_iframe_pre_consent",
+  "social_media_embed_pre_consent",
   "embedded_content_pre_consent"
 ]);
 

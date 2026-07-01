@@ -168,7 +168,7 @@ const HOMEPAGE_FINDING_CAROUSEL_COPY = {
   consent_dark_patterns_detected: {
     overview:
       "Consent-surface evidence shows a cluster of choice-architecture signals such as nested refusal, forced interaction, hierarchy, repeated prompts, or misleading controls.",
-    regulatoryLabel: "Consent choice-architecture review",
+    regulatoryLabel: "Cookie banner dark pattern signal",
     regulatoryCopy:
       "Useful for reviewing whether consent controls, labels, visual hierarchy, path depth, accessibility, repetition, and preference-revisit controls affect user choice.",
     evidence: {

@@ -2117,6 +2117,15 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes checks consent choice quality wit
   assert.equal(outcomes.consent_choice_quality?.status, "Observed");
   assert.match(outcomes.consent_choice_quality?.limitation ?? "", /granular preferences/i);
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.selectedEvidenceStrength, "strong");
+  assert.equal(outcomes.cookie_banner_preticked_or_implied_consent?.status, "Observed");
+  assert.match(
+    outcomes.cookie_banner_preticked_or_implied_consent?.limitation ?? "",
+    /optional or non-essential purposes were not preselected/i
+  );
+  assert.equal(
+    outcomes.cookie_banner_preticked_or_implied_consent?.criticalEvidence.retainedEvidence.nonEssentialDefaultsOff,
+    true
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks direct poor consent choice quality as a gap", () => {
@@ -2146,6 +2155,15 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks direct poor consent choice 
     "accept_without_same_layer_reject",
     "non_essential_toggles_default_on"
   ]);
+  assert.equal(outcomes.cookie_banner_preticked_or_implied_consent?.status, "Gap observed");
+  assert.match(
+    outcomes.cookie_banner_preticked_or_implied_consent?.limitation ?? "",
+    /optional or non-essential purpose was preselected/i
+  );
+  assert.deepEqual(
+    outcomes.cookie_banner_preticked_or_implied_consent?.criticalEvidence.retainedEvidence.directGapReasons,
+    ["optional_purposes_preselected_by_default"]
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes demotes footer privacy choices from GDPR consent surface observation", () => {
@@ -3087,6 +3105,335 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes detects concrete embedded content
   assert.equal(fontOnlyOutcomes.embedded_content_pre_consent?.status, "Not observed");
   assert.equal(fontOnlyOutcomes.third_party_service_connection_pre_consent?.status, "Not observed");
   assert.equal(fontOnlyOutcomes.third_party_iframe_pre_consent?.status, "Not observed");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes classifies social and media embeds before consent from runtime evidence only", () => {
+  const linkOnlyOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          coverageRetained: true,
+          embeddedContentObserved: false,
+          outboundSocialLinks: ["https://www.linkedin.com/company/example"]
+        }
+      }
+    }
+  });
+  assert.equal(linkOnlyOutcomes.social_media_embed_pre_consent?.status, "Not observed");
+  assert.match(linkOnlyOutcomes.social_media_embed_pre_consent?.limitation ?? "", /Plain outbound links/i);
+
+  const firstPartyIconOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          coverageRetained: true,
+          embeddedContentObserved: false,
+          observations: [
+            {
+              hostname: "www.example.com",
+              initiatorType: "image",
+              requestUrl: "https://www.example.com/icons/linkedin.svg",
+              thirdParty: false,
+              timestampMs: 120
+            }
+          ]
+        }
+      }
+    }
+  });
+  assert.equal(firstPartyIconOutcomes.social_media_embed_pre_consent?.status, "Not observed");
+
+  const requestObservationOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        requestObservations: [
+          {
+            hostname: "connect.facebook.net",
+            initiatorType: "script",
+            preConsent: true,
+            requestUrl: "https://connect.facebook.net/en_US/fbevents.js",
+            resourceType: "script",
+            thirdParty: true,
+            timestampMs: 260
+          }
+        ]
+      }
+    }
+  });
+  assert.equal(requestObservationOutcomes.social_media_embed_pre_consent?.status, "Gap observed");
+  assert.match(
+    requestObservationOutcomes.social_media_embed_pre_consent?.criticalEvidence.statusBasis ?? "",
+    /Meta\/Facebook.*first seen 260ms/i
+  );
+
+  const postConsentRequestObservationOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          coverageRetained: true,
+          observations: []
+        },
+        requestObservations: [
+          {
+            hostname: "connect.facebook.net",
+            initiatorType: "script",
+            preConsent: false,
+            requestUrl: "https://connect.facebook.net/en_US/fbevents.js",
+            resourceType: "script",
+            thirdParty: true,
+            timestampMs: 260
+          }
+        ]
+      }
+    }
+  });
+  assert.equal(postConsentRequestObservationOutcomes.social_media_embed_pre_consent?.status, "Not observed");
+
+  const youtubeOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        iframeSummary: {
+          iframeEvents: [
+            {
+              consentStateAtTime: "pre_consent",
+              firstSeenMs: 842,
+              frameUrl: "https://www.youtube.com/embed/abc123",
+              hostname: "www.youtube.com",
+              initiatorType: "iframe",
+              preConsent: true,
+              thirdParty: true
+            }
+          ],
+          preConsentIframeCount: 1
+        }
+      }
+    }
+  });
+  assert.equal(youtubeOutcomes.social_media_embed_pre_consent?.status, "Gap observed");
+  assert.match(
+    youtubeOutcomes.social_media_embed_pre_consent?.criticalEvidence.statusBasis ?? "",
+    /YouTube.*first seen 842ms/i
+  );
+  assert.equal(
+    youtubeOutcomes.social_media_embed_pre_consent?.criticalEvidence.retainedEvidence.firstSocialMediaEmbedObservedMs,
+    842
+  );
+  assert.deepEqual(
+    youtubeOutcomes.social_media_embed_pre_consent?.criticalEvidence.retainedEvidence.providerCategories,
+    ["mediaEmbed"]
+  );
+
+  const socialEmbedOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          coverageRetained: true,
+          observations: [
+            {
+              hostname: "platform.twitter.com",
+              initiatorType: "script",
+              requestUrl: "https://platform.twitter.com/widgets.js",
+              timestampMs: 300
+            },
+            {
+              hostname: "www.tiktok.com",
+              initiatorType: "iframe",
+              requestUrl: "https://www.tiktok.com/embed/v2/123",
+              timestampMs: 340
+            },
+            {
+              hostname: "www.instagram.com",
+              initiatorType: "iframe",
+              requestUrl: "https://www.instagram.com/p/example/embed",
+              timestampMs: 380
+            }
+          ]
+        }
+      }
+    }
+  });
+  assert.equal(socialEmbedOutcomes.social_media_embed_pre_consent?.status, "Gap observed");
+  assert.match(
+    socialEmbedOutcomes.social_media_embed_pre_consent?.criticalEvidence.statusBasis ?? "",
+    /X\/Twitter.*TikTok.*Instagram.*first seen 300ms/i
+  );
+  assert.deepEqual(
+    socialEmbedOutcomes.social_media_embed_pre_consent?.criticalEvidence.retainedEvidence.socialMediaEmbedDomains,
+    ["platform.twitter.com", "tiktok.com", "instagram.com"]
+  );
+
+  const pixelOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        requestPurposeClassificationConfidence: [
+          {
+            category: "social_pixel",
+            confidence: 0.9,
+            initiatorType: "script",
+            requestUrl: "https://px.ads.linkedin.com/collect/?pid=123",
+            tsMs: 250,
+            vendor: "LinkedIn Insight"
+          },
+          {
+            category: "marketing_pixel",
+            confidence: 0.9,
+            initiatorType: "beacon",
+            requestUrl: "https://analytics.tiktok.com/i18n/pixel/events.js",
+            tsMs: 260,
+            vendor: "TikTok Pixel"
+          },
+          {
+            category: "social_pixel",
+            confidence: 0.9,
+            initiatorType: "script",
+            requestUrl: "https://connect.facebook.net/en_US/fbevents.js",
+            tsMs: 270,
+            vendor: "Meta Pixel"
+          }
+        ]
+      }
+    }
+  });
+  assert.equal(pixelOutcomes.social_media_embed_pre_consent?.status, "Gap observed");
+  assert.deepEqual(
+    pixelOutcomes.social_media_embed_pre_consent?.criticalEvidence.retainedEvidence.providerCategories,
+    ["social_pixel"]
+  );
+
+  const condeAdtechAndChatOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        requestPurposeClassificationConfidence: [
+          {
+            category: "social_pixel",
+            initiatorType: "script",
+            requestUrl: "https://privacy.condenastdigital.com/fides.js?property_id=FDS-NCFH3W",
+            tsMs: 934,
+            vendor: "privacy.condenastdigital.com"
+          },
+          {
+            category: "advertising",
+            initiatorType: "script",
+            requestUrl: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+            tsMs: 941,
+            vendor: "Google Publisher Tag"
+          },
+          {
+            category: "marketing_pixel",
+            initiatorType: "script",
+            requestUrl: "https://ads-static.conde.digital/production/cns/builds/vogue/v6.js",
+            tsMs: 942,
+            vendor: "ads-static.conde.digital"
+          },
+          {
+            category: "marketing_pixel",
+            initiatorType: "script",
+            requestUrl: "https://martech.condenastdigital.com/lib/martech.js",
+            tsMs: 942,
+            vendor: "martech.condenastdigital.com"
+          },
+          {
+            category: "chat",
+            initiatorType: "script",
+            requestUrl: "https://cdn.gladly.com/chat-sdk/widget.js",
+            tsMs: 1170,
+            vendor: "Gladly"
+          }
+        ],
+        embeddedContentSummary: {
+          coverageRetained: true,
+          observations: []
+        }
+      }
+    }
+  });
+  assert.equal(condeAdtechAndChatOutcomes.social_media_embed_pre_consent?.status, "Not observed");
+
+  const staticAssetOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          coverageRetained: true,
+          observations: [
+            {
+              hostname: "assets.pinterest.com",
+              initiatorType: "image",
+              requestUrl: "https://assets.pinterest.com/images/pidgets/pinit_fg_en_round_red_32.png",
+              timestampMs: 430
+            }
+          ]
+        }
+      }
+    }
+  });
+  assert.equal(staticAssetOutcomes.social_media_embed_pre_consent?.status, "Review signal");
+
+  const placeholderBlockedOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          coverageRetained: true,
+          placeholderDetected: true,
+          observations: []
+        }
+      }
+    }
+  });
+  assert.equal(placeholderBlockedOutcomes.social_media_embed_pre_consent?.status, "Not observed");
+  assert.equal(
+    placeholderBlockedOutcomes.social_media_embed_pre_consent?.criticalEvidence.retainedEvidence.placeholderDetected,
+    true
+  );
+
+  const ineffectivePlaceholderOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        embeddedContentSummary: {
+          coverageRetained: true,
+          observations: [
+            {
+              hostname: "player.vimeo.com",
+              initiatorType: "iframe",
+              placeholderDetected: true,
+              requestUrl: "https://player.vimeo.com/video/123",
+              timestampMs: 510
+            }
+          ]
+        }
+      }
+    }
+  });
+  assert.equal(ineffectivePlaceholderOutcomes.social_media_embed_pre_consent?.status, "Gap observed");
+  assert.equal(
+    ineffectivePlaceholderOutcomes.social_media_embed_pre_consent?.criticalEvidence.retainedEvidence.placeholderIneffective,
+    true
+  );
+
+  const notTestableOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        networkSummary: {
+          totalRequestCount: 2
+        }
+      }
+    },
+    snapshot: {
+      pages_scanned: 1
+    }
+  });
+  assert.equal(notTestableOutcomes.social_media_embed_pre_consent?.status, "Not testable");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats direct same-context sensitive tracking correlation as a gap", () => {

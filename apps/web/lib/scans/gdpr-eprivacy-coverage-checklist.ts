@@ -249,6 +249,15 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
+    id: "social_media_embed_pre_consent",
+    label: "Social/media embeds or plugins loaded before consent",
+    explanation: "Whether retained network/runtime evidence showed a social, video, media embed, social pixel, or plugin provider loading before a recorded consent action.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No social/media third-party embed, plugin, widget, or pixel request was retained before a recorded consent action.",
+    requiresPublicWebCoverage: true
+  },
+  {
     id: "embedded_content_pre_consent",
     label: "Embedded third-party services before consent",
     explanation: "Whether retained scanner evidence showed known embedded media, map, social, form/chat, or video-ad services before a recorded consent action.",
@@ -360,11 +369,20 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "consent_choice_quality",
-    label: "Consent choice quality",
-    explanation: "Deferred from the current production core scanner; retained consent-choice quality evidence is review context, not production consent-path validation.",
+    label: "Cookie banner dark pattern signal",
+    explanation: "Whether retained cookie-banner evidence shows choice architecture that may steer users toward accepting optional cookies or tracking.",
     findingIds: [],
     defaultFindingStatus: "Review signal",
-    notObservedText: "No consent-choice quality outcome was surfaced from retained canonical evidence.",
+    notObservedText: "No cookie-banner dark pattern signal was surfaced from retained canonical evidence.",
+    requiresPublicWebCoverage: true
+  },
+  {
+    id: "cookie_banner_preticked_or_implied_consent",
+    label: "Cookie banner pre-ticked boxes or implied consent",
+    explanation: "Whether retained cookie-banner or preference evidence shows optional purposes preselected by default, or consent implied through continuing rather than an affirmative choice.",
+    findingIds: [],
+    defaultFindingStatus: "Gap observed",
+    notObservedText: "No pre-ticked optional-purpose or implied-consent signal was surfaced from retained canonical evidence.",
     requiresPublicWebCoverage: true
   },
   {
@@ -632,6 +650,8 @@ function getMissingEvidenceNeeded(input: {
       return "Confirmed first-layer GDPR/ePrivacy cookie banner and structured options/settings/preferences control inventory.";
     case "consent_choice_quality":
       return "Confirmed granular preference center evidence, purpose/vendor choices, default toggle states, save choices, and accept/reject visual parity.";
+    case "cookie_banner_preticked_or_implied_consent":
+      return "Confirmed cookie-banner preference evidence showing optional purposes were not preselected by default, or direct evidence of preselected optional purposes/implied consent.";
     case "post_reject_tracking_reduction":
       return "Post-choice consent-flow automation is deferred from the production core scanner; use retained evidence only as analyst review context.";
     case "preference_withdrawal_control":
@@ -748,6 +768,36 @@ function selectChecklistEvidenceArtifact(input: {
       "consentChoiceQualityEvidence",
       explicitStrength ?? (input.status === "Not testable" ? "missing" : "limited"),
       "Selected retained first-layer consent choice evidence; granular preference quality evidence was incomplete or missing."
+    );
+  }
+
+  if (input.rowId === "cookie_banner_preticked_or_implied_consent") {
+    const selectedEvidenceStrength = readRetainedString(input.retained, ["selectedEvidenceStrength", "selected_evidence_strength"]);
+    const explicitStrength =
+      selectedEvidenceStrength === "strong" ||
+      selectedEvidenceStrength === "moderate" ||
+      selectedEvidenceStrength === "limited" ||
+      selectedEvidenceStrength === "missing"
+        ? selectedEvidenceStrength
+        : null;
+    if (input.status === "Gap observed") {
+      return selection(
+        "consentChoiceQualityEvidence.defaultStateGap",
+        explicitStrength ?? "strong",
+        "Selected retained evidence of preselected optional purposes or implied-consent-style continuation."
+      );
+    }
+    if (input.status === "Observed") {
+      return selection(
+        "consentChoiceQualityEvidence.optionalDefaultsOff",
+        explicitStrength ?? "strong",
+        "Selected retained preference default-state evidence showing optional purposes were not preselected."
+      );
+    }
+    return selection(
+      "consentChoiceQualityEvidence.defaultStateReview",
+      explicitStrength ?? (input.status === "Not testable" ? "missing" : "limited"),
+      "Selected retained cookie-banner evidence; optional-purpose default state or implied-consent evidence was incomplete."
     );
   }
 

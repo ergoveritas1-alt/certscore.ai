@@ -640,7 +640,12 @@ test("consent UI batch public copy avoids determinative choice-architecture clai
     assert.doesNotMatch(publicText, /\bunlawful\b/i);
     assert.doesNotMatch(publicText, /\binvalid consent\b/i);
     assert.doesNotMatch(publicText, /\bnon-compliance\b/i);
-    assert.doesNotMatch(publicText, /\bdark pattern(?!_label)/i);
+    if (finding.id === "consent_dark_patterns_detected") {
+      assert.match(finding.title, /Cookie banner dark pattern signal/);
+      assert.doesNotMatch(publicText.replace(finding.title, ""), /\bdark pattern detected\b/i);
+    } else {
+      assert.doesNotMatch(publicText, /\bdark pattern(?!_label)/i);
+    }
     assert.match(publicText, /does not determine|not_a_finding_determination|manual review/);
   }
 });
@@ -666,7 +671,9 @@ test("consent UI regulatory applicability copy stays review-oriented", () => {
     assert.doesNotMatch(appliesWhenCopy, /^Reject is hidden/im);
     assert.doesNotMatch(appliesWhenCopy, /^The consent overlay blocks/im);
     assert.doesNotMatch(regulatoryCopy, /dark pattern detected/i);
-    assert.doesNotMatch(regulatoryCopy, /\bdark pattern\b/i);
+    if (finding.id !== "consent_dark_patterns_detected") {
+      assert.doesNotMatch(regulatoryCopy, /\bdark pattern\b/i);
+    }
     assert.match(regulatoryCopy, /may|suggests|review|does not determine/i);
   }
 });

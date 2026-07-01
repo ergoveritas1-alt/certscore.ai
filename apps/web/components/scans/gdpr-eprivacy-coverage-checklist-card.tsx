@@ -103,6 +103,8 @@ const REPORT_ROW_GROUPS = [
       "reject_all_path_availability",
       "accept_consent_control",
       "options_settings_preferences_control",
+      "consent_choice_quality",
+      "cookie_banner_preticked_or_implied_consent",
       "cookie_notice_policy_availability"
     ]
   },
@@ -123,6 +125,7 @@ const REPORT_ROW_GROUPS = [
       "analytics_vendor_observed",
       "third_party_service_connection_pre_consent",
       "third_party_iframe_pre_consent",
+      "social_media_embed_pre_consent",
       "embedded_content_pre_consent"
     ]
   },
@@ -1254,6 +1257,35 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
       : "No known third-party iframe embed was observed before a recorded consent action.";
   }
 
+  if (item.id === "social_media_embed_pre_consent") {
+    const evidence = getRetainedEvidenceRecord(item);
+    const providers = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["providers"]),
+      ...getNestedRecordStrings(evidence.socialMediaEmbedObservations, ["provider"])
+    ]).slice(0, 4);
+    const domains = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["socialMediaEmbedDomains", "social_media_embed_domains"]),
+      ...getNestedRecordStrings(evidence.socialMediaEmbedObservations, ["domain", "host", "hostname"])
+    ]).slice(0, 4);
+    const providerPhrase = formatList(providers.length > 0 ? providers : domains);
+    const firstSeenPhrase = formatFirstSeenPhrase(getFirstEvidenceMs(item));
+    return item.status === "Gap observed" || item.status === "Observed"
+      ? joinRationaleParts([
+          providerPhrase
+            ? `Social/media provider request observed before a recorded consent action: ${providerPhrase}`
+            : "A social/media third-party service loaded before a recorded consent action",
+          firstSeenPhrase
+        ])
+      : item.status === "Review signal"
+        ? joinRationaleParts([
+            providerPhrase
+              ? `Social/media third-party asset observed before consent: ${providerPhrase}`
+              : "A social/media third-party asset loaded before consent, but stronger embed or tracking behavior was not confirmed",
+            firstSeenPhrase
+          ])
+        : "No social/media embed, plugin, widget, or pixel request was observed before a recorded consent action.";
+  }
+
   if (item.id === "embedded_content_pre_consent") {
     return item.status === "Observed" || item.status === "Review signal"
       ? "Concrete third-party embedded content was observed before a recorded consent action."
@@ -1575,6 +1607,38 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
       reasonPhrase
         ? `Device-identification or fingerprinting-like signals were observed: ${reasonPhrase}`
         : "Device-identification or fingerprinting-like signals were observed",
+      formatFirstSeenPhrase(firstSeenMs)
+    ]);
+  }
+
+  if (item.id === "social_media_embed_pre_consent") {
+    const hosts = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["socialMediaEmbedDomains", "social_media_embed_domains", "embeddedContentHosts", "embedded_content_hosts"]),
+      ...getNestedRecordStrings(evidence.socialMediaEmbedObservations, ["domain", "host", "hostname"])
+    ]).slice(0, 4);
+    const providers = uniqueStrings([
+      ...getStringArrayFromEvidenceKeys(evidence, ["providers"]),
+      ...getNestedRecordStrings(evidence.socialMediaEmbedObservations, ["provider"])
+    ]).slice(0, 4);
+    const providerPhrase = formatList(providers.length > 0 ? providers : hosts);
+    if (evidenceLabel === "Not observed") {
+      return "No eligible social/media provider request was observed before a recorded consent action; plain outbound social links are not counted for this row.";
+    }
+    if (evidenceLabel === "Partial concern") {
+      return joinRationaleParts([
+        providerPhrase
+          ? `A social/media third-party asset loaded before consent: ${providerPhrase}. Stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed`
+          : "A social/media third-party asset loaded before consent, but stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed",
+        formatFirstSeenPhrase(firstSeenMs)
+      ]);
+    }
+    return joinRationaleParts([
+      providerPhrase
+        ? `A social/media embed, plugin, widget, or pixel loaded before any recorded consent action: ${providerPhrase}`
+        : "A social/media embed, plugin, widget, or pixel loaded before any recorded consent action",
+      evidence.placeholderIneffective === true
+        ? "Placeholder-style blocking was retained, but the provider request had already fired"
+        : null,
       formatFirstSeenPhrase(firstSeenMs)
     ]);
   }
@@ -2282,6 +2346,8 @@ function getFirstEvidenceMs(item: GdprEprivacyCoverageChecklistItem) {
     "first_retargeting_behavioral_advertising_vendor_observed_ms",
     "firstAnalyticsVendorObservedMs",
     "first_analytics_vendor_observed_ms",
+    "firstSocialMediaEmbedObservedMs",
+    "first_social_media_embed_observed_ms",
     "firstEmbeddedContentObservedMs",
     "first_embedded_content_observed_ms"
   ]);
@@ -2291,6 +2357,8 @@ function getFirstEvidenceMs(item: GdprEprivacyCoverageChecklistItem) {
     evidence.representative_requests,
     evidence.embeddedContentObservations,
     evidence.embedded_content_observations,
+    evidence.socialMediaEmbedObservations,
+    evidence.social_media_embed_observations,
     evidence.preConsentCookieExamples,
     evidence.pre_consent_cookie_examples
   ]);

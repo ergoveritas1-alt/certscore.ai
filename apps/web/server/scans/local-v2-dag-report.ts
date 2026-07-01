@@ -1090,10 +1090,30 @@ const EMBEDDED_CONTENT_HOST_PATTERNS = [
   /(^|\.)soundcloud\.com$/i,
   /(^|\.)twitter\.com$/i,
   /(^|\.)x\.com$/i,
+  /(^|\.)platform\.twitter\.com$/i,
+  /(^|\.)static\.ads-twitter\.com$/i,
+  /(^|\.)analytics\.twitter\.com$/i,
+  /(^|\.)t\.co$/i,
   /(^|\.)instagram\.com$/i,
+  /(^|\.)cdninstagram\.com$/i,
   /(^|\.)facebook\.com$/i,
+  /(^|\.)connect\.facebook\.net$/i,
   /(^|\.)tiktok\.com$/i,
+  /(^|\.)analytics\.tiktok\.com$/i,
+  /(^|\.)tiktokw\.us$/i,
   /(^|\.)linkedin\.com$/i,
+  /(^|\.)px\.ads\.linkedin\.com$/i,
+  /(^|\.)dc\.ads\.linkedin\.com$/i,
+  /(^|\.)pinterest\.com$/i,
+  /(^|\.)assets\.pinterest\.com$/i,
+  /(^|\.)ct\.pinterest\.com$/i,
+  /(^|\.)reddit\.com$/i,
+  /(^|\.)redditstatic\.com$/i,
+  /(^|\.)pixel-config\.reddit\.com$/i,
+  /(^|\.)alb\.reddit\.com$/i,
+  /(^|\.)disqus\.com$/i,
+  /(^|\.)ssp\.disqus\.com$/i,
+  /(^|\.)pixel\.byspotify\.com$/i,
   /(^|\.)typeform\.com$/i,
   /(^|\.)calendly\.com$/i,
   /(^|\.)hubspot(?:usercontent)?\.com$/i
@@ -1119,7 +1139,7 @@ function classifyEmbeddedContentPurpose(hostname: string | null | undefined, url
   if (/maps\/embed|google\.[a-z.]+\/maps|openstreetmap\.org/.test(text)) {
     return "mapEmbed";
   }
-  if (/facebook\.com|instagram\.com|tiktok\.com|linkedin\.com|twitter\.com|x\.com/.test(text)) {
+  if (/facebook\.com|connect\.facebook\.net|instagram\.com|cdninstagram\.com|tiktok\.com|analytics\.tiktok\.com|tiktokw\.us|linkedin\.com|px\.ads\.linkedin\.com|dc\.ads\.linkedin\.com|twitter\.com|x\.com|platform\.twitter\.com|static\.ads-twitter\.com|analytics\.twitter\.com|t\.co|pinterest\.com|assets\.pinterest\.com|ct\.pinterest\.com|reddit\.com|redditstatic\.com|pixel-config\.reddit\.com|alb\.reddit\.com|disqus\.com|ssp\.disqus\.com/.test(text)) {
     return "socialEmbed";
   }
   if (/typeform\.com|calendly\.com|hubspot(?:usercontent)?\.com|chat|widget/.test(text)) {
@@ -1180,6 +1200,8 @@ function summarizeEmbeddedContentEvidence(
       evidenceType: "iframe",
       frameUrl: event.frameUrl,
       hostname: event.hostname,
+      initiatorType: "iframe",
+      resourceType: "iframe",
       timestampMs: event.timestampMs
     }));
   const networkObservations = (preconsentRequests ?? [])
@@ -1188,7 +1210,12 @@ function summarizeEmbeddedContentEvidence(
     .map((event) => ({
       evidenceType: "network_request",
       hostname: event.hostname ?? hostnameFromUrl(requestUrl(event)),
+      initiatorType: event.initiatorType ?? event.resourceType,
+      pageUrlSharedViaReferrer: typeof event.requestHeaders?.referer === "string" &&
+        Boolean(hostnameFromUrl(event.topLevelUrl) && event.requestHeaders.referer.includes(hostnameFromUrl(event.topLevelUrl) ?? "")),
+      referrerSent: Boolean(event.requestHeaders?.referer),
       requestUrl: requestUrl(event),
+      resourceType: event.resourceType,
       timestampMs: event.timestampMs
     }));
   const observations = [...iframeObservations, ...networkObservations].slice(0, 25);
@@ -2272,8 +2299,13 @@ function buildMaterializedLocalV2Detail(
             essentiality: "non_essential",
             firstPartyOrThirdParty: sameSite(hostname, rootDomain) ? "first_party" : "third_party",
             hostname,
+            initiatorType: event.initiatorType ?? event.resourceType,
+            pageUrlSharedViaReferrer: typeof event.requestHeaders?.referer === "string" &&
+              Boolean(hostnameFromUrl(event.topLevelUrl) && event.requestHeaders.referer.includes(hostnameFromUrl(event.topLevelUrl) ?? "")),
+            referrerSent: Boolean(event.requestHeaders?.referer),
             requestUrl: url,
             regulatoryRelevance: matchedVendor.regulatoryRelevance,
+            resourceType: event.resourceType,
             runtimePhase: "pre_consent",
             tsMs: event.timestampMs,
             vendor: matchedVendor.vendorName,
@@ -2331,8 +2363,13 @@ function buildMaterializedLocalV2Detail(
     requestObservations: networkEvents.slice(0, 200).map((event) => ({
       collectionEndpointObserved: event.collectionEndpointObserved === true,
       domain: event.hostname ?? hostnameFromUrl(event.url),
+      initiatorType: event.initiatorType ?? event.resourceType,
+      pageUrlSharedViaReferrer: typeof event.requestHeaders?.referer === "string" &&
+        Boolean(hostnameFromUrl(event.topLevelUrl) && event.requestHeaders.referer.includes(hostnameFromUrl(event.topLevelUrl) ?? "")),
       preConsent: event.consentStateAtTime === "pre_consent",
+      referrerSent: Boolean(event.requestHeaders?.referer),
       requestUrl: requestUrl(event),
+      resourceType: event.resourceType,
       thirdParty: event.thirdParty === true || event.isThirdParty === true,
       timestampMs: event.timestampMs,
       url: requestUrl(event)

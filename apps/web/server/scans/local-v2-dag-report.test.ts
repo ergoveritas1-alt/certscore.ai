@@ -1027,6 +1027,24 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
           thirdParty: true,
           timestampMs: 800,
           url: "https://c.clarity.ms/collect"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "net_social_1",
+          eventType: "network_request",
+          evidenceRefs: [],
+          hostname: "connect.facebook.net",
+          initiatorType: "script",
+          requestHeaders: {
+            referer: "https://example.test/"
+          },
+          requestUrl: "https://connect.facebook.net/en_US/fbevents.js",
+          resourceType: "script",
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: true,
+          timestampMs: 980,
+          topLevelUrl: "https://example.test/",
+          url: "https://connect.facebook.net/en_US/fbevents.js"
         }
       ],
       normalizedUrl: "https://example.test/",
@@ -1103,16 +1121,22 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.ok(rejectPath);
 
     assert.equal(embeddedSummary.embeddedContentObserved, true);
-    assert.deepEqual(embeddedSummary.embeddedContentHosts, ["youtube.com", "google.com"]);
+    assert.deepEqual(embeddedSummary.embeddedContentHosts, ["youtube.com", "google.com", "connect.facebook.net"]);
     assert.deepEqual(embeddedSummary.embeddedContentPurposeBuckets, {
       fontStaticResource: [],
       formOrChatWidget: [],
       mapEmbed: ["google.com"],
       mediaEmbed: ["youtube.com"],
       otherEmbeddedContent: [],
-      socialEmbed: [],
+      socialEmbed: ["connect.facebook.net"],
       videoAdSdk: []
     });
+    const embeddedObservations = embeddedSummary.observations as Array<Record<string, unknown>>;
+    const facebookObservation = embeddedObservations.find((row) => row.hostname === "connect.facebook.net");
+    assert.equal(facebookObservation?.initiatorType, "script");
+    assert.equal(facebookObservation?.resourceType, "script");
+    assert.equal(facebookObservation?.referrerSent, true);
+    assert.equal(facebookObservation?.pageUrlSharedViaReferrer, true);
     assert.equal(sessionReplaySummary.preConsentObserved, true);
     assert.deepEqual(sessionReplaySummary.vendors, ["Microsoft Clarity"]);
     assert.equal(fingerprintingSummary.coverageRetained, true);
@@ -1122,6 +1146,18 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.equal(rejectPath.rejectControlObserved, false);
     assert.equal(rejectPath.rejectAvailableOnFirstLayer, false);
     assert.equal(rejectPath.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
+
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      coverageLimited: false,
+      events: detail.events,
+      runtimeArtifacts: detail.runtimeArtifacts,
+      scanCompleted: true,
+      snapshot: detail.snapshot
+    });
+    const socialMediaEmbed = outcomes.social_media_embed_pre_consent;
+    assert.equal(socialMediaEmbed?.status, "Gap observed");
+    assert.deepEqual(socialMediaEmbed?.criticalEvidence.retainedEvidence.providers, ["YouTube", "Meta/Facebook"]);
+    assert.equal(socialMediaEmbed?.criticalEvidence.retainedEvidence.firstSocialMediaEmbedObservedMs, 980);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

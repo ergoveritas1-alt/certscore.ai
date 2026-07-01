@@ -2316,19 +2316,189 @@ function classifyEmbeddedContentPurpose(hostname: string | null | undefined, url
   if (/fonts\.googleapis\.com|fonts\.gstatic\.com|typekit\.net|use\.typekit\.net/.test(text)) {
     return "fontStaticResource";
   }
-  if (/youtube(?:-nocookie)?\.com|youtu\.be|vimeo\.com|spotify\.com|soundcloud\.com/.test(text)) {
+  if (/youtube(?:-nocookie)?\.com|youtu\.be|ytimg\.com|vimeo\.com|spotify\.com|soundcloud\.com/.test(text)) {
     return "mediaEmbed";
   }
   if (/maps\/embed|google\.[a-z.]+\/maps|openstreetmap\.org/.test(text)) {
     return "mapEmbed";
   }
-  if (/facebook\.com|instagram\.com|tiktok\.com|linkedin\.com|twitter\.com|x\.com/.test(text)) {
+  if (/facebook\.com|connect\.facebook\.net|instagram\.com|tiktok\.com|analytics\.tiktok\.com|linkedin\.com|px\.ads\.linkedin\.com|twitter\.com|x\.com|platform\.twitter\.com|pinterest\.com|assets\.pinterest\.com|reddit\.com|redditstatic\.com|disqus\.com/.test(text)) {
     return "socialEmbed";
   }
   if (/typeform\.com|calendly\.com|hubspot(?:usercontent)?\.com|chat|widget/.test(text)) {
     return "formOrChatWidget";
   }
   return "otherEmbeddedContent";
+}
+
+function isSocialMediaEmbeddedContentBucket(bucket: string) {
+  return bucket === "mediaEmbed" || bucket === "socialEmbed";
+}
+
+function isStaticSocialMediaAssetInitiator(initiatorType: string | null) {
+  return Boolean(initiatorType && /^(?:image|img|stylesheet|css|font|icon|other)$/i.test(initiatorType));
+}
+
+function isStrongSocialMediaEmbedInitiator(initiatorType: string | null) {
+  return Boolean(initiatorType && /^(?:iframe|script|embed|object|pixel|beacon|fetch|xhr|xmlhttprequest|subdocument)$/i.test(initiatorType));
+}
+
+function getRuntimeObservationUrl(row: Record<string, unknown>) {
+  return getString(row, [
+    "frameUrl",
+    "frame_url",
+    "requestUrl",
+    "request_url",
+    "representativeUrl",
+    "representative_url",
+    "scriptUrl",
+    "script_url",
+    "url"
+  ]);
+}
+
+function getRuntimeObservationHost(row: Record<string, unknown>) {
+  return getHostnameFromMaybeUrl(
+    getString(row, ["hostname", "host", "domain", "registrableDomain", "registrable_domain"]) ??
+      getRuntimeObservationUrl(row)
+  );
+}
+
+function getRuntimeObservationInitiatorType(row: Record<string, unknown>, fallback: string | null = null) {
+  return getString(row, [
+    "initiatorType",
+    "initiator_type",
+    "resourceType",
+    "resource_type",
+    "requestType",
+    "request_type",
+    "elementType",
+    "element_type"
+  ]) ?? fallback;
+}
+
+function rowHasPostConsentState(row: Record<string, unknown>) {
+  if (getBoolean(row, ["preConsent", "pre_consent", "beforeConsent", "before_consent"]) === false) {
+    return true;
+  }
+  return /post[_ -]?consent|post[_ -]?accept|after[_ -]?consent|after[_ -]?accept/i.test([
+    getString(row, ["consentStateAtTime", "consent_state_at_time", "consentState", "consent_state"]),
+    getString(row, ["runtimePhase", "runtime_phase", "pagePhase", "page_phase"])
+  ].filter(Boolean).join(" "));
+}
+
+function rowHasUserActionBeforeLoad(row: Record<string, unknown>) {
+  return getBoolean(row, ["userActionBeforeLoad", "user_action_before_load", "userActionOccurredBeforeLoad", "user_action_occurred_before_load"]) === true;
+}
+
+function hostMatchesSocialMediaProvider(host: string | null, providerDomain: string) {
+  return Boolean(host && (host === providerDomain || host.endsWith(`.${providerDomain}`)));
+}
+
+function getSocialMediaProviderName(host: string | null) {
+  if (hostMatchesSocialMediaProvider(host, "youtube.com") || hostMatchesSocialMediaProvider(host, "youtube-nocookie.com") || hostMatchesSocialMediaProvider(host, "youtu.be") || hostMatchesSocialMediaProvider(host, "ytimg.com")) {
+    return "YouTube";
+  }
+  if (hostMatchesSocialMediaProvider(host, "vimeo.com")) return "Vimeo";
+  if (hostMatchesSocialMediaProvider(host, "facebook.com") || hostMatchesSocialMediaProvider(host, "connect.facebook.net")) return "Meta/Facebook";
+  if (hostMatchesSocialMediaProvider(host, "instagram.com") || hostMatchesSocialMediaProvider(host, "cdninstagram.com")) return "Instagram";
+  if (hostMatchesSocialMediaProvider(host, "tiktok.com") || hostMatchesSocialMediaProvider(host, "analytics.tiktok.com") || hostMatchesSocialMediaProvider(host, "tiktokw.us")) return "TikTok";
+  if (hostMatchesSocialMediaProvider(host, "linkedin.com") || hostMatchesSocialMediaProvider(host, "px.ads.linkedin.com") || hostMatchesSocialMediaProvider(host, "dc.ads.linkedin.com")) return "LinkedIn";
+  if (hostMatchesSocialMediaProvider(host, "twitter.com") || hostMatchesSocialMediaProvider(host, "x.com") || hostMatchesSocialMediaProvider(host, "platform.twitter.com") || hostMatchesSocialMediaProvider(host, "static.ads-twitter.com") || hostMatchesSocialMediaProvider(host, "analytics.twitter.com") || hostMatchesSocialMediaProvider(host, "t.co")) return "X/Twitter";
+  if (hostMatchesSocialMediaProvider(host, "pinterest.com") || hostMatchesSocialMediaProvider(host, "assets.pinterest.com") || hostMatchesSocialMediaProvider(host, "ct.pinterest.com")) return "Pinterest";
+  if (hostMatchesSocialMediaProvider(host, "reddit.com") || hostMatchesSocialMediaProvider(host, "redditstatic.com") || hostMatchesSocialMediaProvider(host, "pixel-config.reddit.com") || hostMatchesSocialMediaProvider(host, "alb.reddit.com")) return "Reddit";
+  if (hostMatchesSocialMediaProvider(host, "disqus.com") || hostMatchesSocialMediaProvider(host, "ssp.disqus.com")) return "Disqus";
+  if (hostMatchesSocialMediaProvider(host, "spotify.com") || hostMatchesSocialMediaProvider(host, "pixels.spotify.com") || hostMatchesSocialMediaProvider(host, "pixel.byspotify.com")) return "Spotify";
+  if (hostMatchesSocialMediaProvider(host, "soundcloud.com")) return "SoundCloud";
+  return null;
+}
+
+function rowHasSocialMediaPixelPurpose(row: Record<string, unknown>) {
+  const host = getRuntimeObservationHost(row);
+  if (!getSocialMediaProviderName(host)) {
+    return false;
+  }
+  const text = [
+    getString(row, ["category", "vendorCategory", "vendor_category", "purpose", "vendorPurpose", "vendor_purpose"]),
+    getString(row, ["name", "vendor", "vendorName", "vendor_name", "product"]),
+    host,
+    getRuntimeObservationUrl(row)
+  ].filter(Boolean).join(" ").toLowerCase();
+  return /social[_ -]?pixel|meta pixel|facebook pixel|linkedin insight|tiktok pixel|pinterest tag|reddit pixel|twitter pixel|x pixel|spotify pixel|pixel-config\.reddit|redditstatic\.com\/ads\/pixel|connect\.facebook\.net\/.*fbevents|px\.ads\.linkedin\.com|analytics\.tiktok\.com|ct\.pinterest\.com|static\.ads-twitter\.com|analytics\.twitter\.com|t\.co\/.*adsct|pixels?\.spotify\.com/.test(text);
+}
+
+function buildSocialMediaEmbedObservation(row: Record<string, unknown>, source: string, fallbackInitiatorType: string | null = null) {
+  if (rowHasPostConsentState(row) || rowHasUserActionBeforeLoad(row)) {
+    return null;
+  }
+  const requestUrl = getRuntimeObservationUrl(row);
+  const host = getRuntimeObservationHost(row);
+  if (!host && !requestUrl) {
+    return null;
+  }
+  const provider = getSocialMediaProviderName(host);
+  if (!provider) {
+    return null;
+  }
+  const providerCategory = rowHasSocialMediaPixelPurpose(row)
+    ? "social_pixel"
+    : classifyEmbeddedContentPurpose(host, requestUrl);
+  const socialMediaProvider =
+    providerCategory === "social_pixel" ||
+    isSocialMediaEmbeddedContentBucket(providerCategory);
+  if (!socialMediaProvider) {
+    return null;
+  }
+  const initiatorType = getRuntimeObservationInitiatorType(row, fallbackInitiatorType);
+  const cookiesSet = getStringArray(row, ["cookiesSet", "cookies_set", "cookieNamesSet", "cookie_names_set"]);
+  const setCookieMetadata = getObjectArray(row, ["setCookieMetadata", "set_cookie_metadata"]);
+  const storageTouched =
+    getBoolean(row, ["storageTouched", "storage_touched", "localStorageTouched", "local_storage_touched", "sessionStorageTouched", "session_storage_touched"]) === true;
+  const placeholderDetected =
+    getBoolean(row, ["placeholderDetected", "placeholder_detected", "consentPlaceholderDetected", "consent_placeholder_detected"]) === true;
+  const firstSeenMs = getNumber(row, [
+    "firstSeenMs",
+    "first_seen_ms",
+    "firstObservedMs",
+    "first_observed_ms",
+    "observedAtMs",
+    "observed_at_ms",
+    "timestampMs",
+    "timestamp_ms",
+    "tsMs",
+    "ts_ms"
+  ]);
+  const strongInitiator =
+    isStrongSocialMediaEmbedInitiator(initiatorType) ||
+    providerCategory === "social_pixel" ||
+    rowHasSocialMediaPixelPurpose(row);
+  const staticAssetOnly =
+    !strongInitiator &&
+    isStaticSocialMediaAssetInitiator(initiatorType) &&
+    cookiesSet.length === 0 &&
+    setCookieMetadata.length === 0 &&
+    !storageTouched;
+
+  return compactRecord({
+    cookiesSet: compactArray(cookiesSet, 6),
+    domain: host,
+    firstSeenMs,
+    initiatorType,
+    pageUrlSharedViaReferrer: getBoolean(row, ["pageUrlSharedViaReferrer", "page_url_shared_via_referrer"]),
+    placeholderDetected,
+    placeholderIneffective: placeholderDetected,
+    provider,
+    providerCategory,
+    referrerSent: getBoolean(row, ["referrerSent", "referrer_sent"]),
+    requestUrl,
+    setCookieMetadataCount: setCookieMetadata.length,
+    source,
+    staticAssetOnly,
+    storageTouched,
+    strongInitiator,
+    userActionBeforeLoad: false,
+    visibleElement: getBoolean(row, ["visibleElement", "visible_element"])
+  });
 }
 
 function buildEmbeddedContentPurposeBuckets(rows: Record<string, unknown>[], hosts: string[]) {
@@ -2466,6 +2636,182 @@ function getEmbeddedThirdPartyEvidence(input: GdprEprivacyCoveragePolicyInput) {
     summaryObservations,
     summaryObserved
   };
+}
+
+function getSocialMediaEmbedPreConsentEvidence(input: GdprEprivacyCoveragePolicyInput) {
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const embeddedEvidence = getEmbeddedThirdPartyEvidence(input);
+  const embeddedSummary = getEmbeddedContentEvidenceSummary(input);
+  const requestRows = [
+    ...getObjectArray(hybridRuntimeEvidence, [
+      "requestPurposeClassificationConfidence",
+      "request_purpose_classification_confidence"
+    ]),
+    ...getObjectArray(hybridRuntimeEvidence, [
+      "preconsentState0RequestObservations",
+      "preconsent_state0_request_observations"
+    ]),
+    ...getObjectArray(hybridRuntimeEvidence, [
+      "requestObservations",
+      "request_observations"
+    ])
+  ];
+  const observations = [
+    ...embeddedEvidence.embeddedRows.map((row) => buildSocialMediaEmbedObservation(row, "iframe_inventory", "iframe")),
+    ...embeddedEvidence.summaryObservations.map((row) => buildSocialMediaEmbedObservation(row, "embedded_content_summary")),
+    ...requestRows.map((row) => buildSocialMediaEmbedObservation(row, "preconsent_request_classification"))
+  ].filter((row): row is Record<string, unknown> => Boolean(row));
+  const deduped = Array.from(
+    observations
+      .reduce((map, row) => {
+        const key = getString(row, ["requestUrl", "domain", "provider"]) ?? JSON.stringify(row);
+        const existing = map.get(key);
+        if (!existing) {
+          map.set(key, row);
+          return map;
+        }
+        map.set(key, {
+          ...existing,
+          ...row,
+          strongInitiator: getBoolean(existing, ["strongInitiator"]) === true || getBoolean(row, ["strongInitiator"]) === true,
+          staticAssetOnly: getBoolean(existing, ["staticAssetOnly"]) === true && getBoolean(row, ["staticAssetOnly"]) === true
+        });
+        return map;
+      }, new Map<string, Record<string, unknown>>())
+      .values()
+  );
+  const strongObservations = deduped.filter((row) => getBoolean(row, ["strongInitiator"]) === true);
+  const staticAssetObservations = deduped.filter((row) => getBoolean(row, ["staticAssetOnly"]) === true);
+  const placeholderDetected =
+    getBoolean(embeddedSummary, ["placeholderDetected", "placeholder_detected", "socialMediaPlaceholderDetected", "social_media_placeholder_detected"]) === true ||
+    deduped.some((row) => getBoolean(row, ["placeholderDetected"]) === true);
+  const observedMs = getSortedUniqueMs([
+    ...deduped.map((row) => getNumber(row, ["firstSeenMs", "first_seen_ms"]))
+  ]);
+  const providerCategories = uniqueStrings(
+    deduped.map((row) => getString(row, ["providerCategory", "provider_category"]))
+  );
+  const providers = uniqueStrings(deduped.map((row) => getString(row, ["provider"])));
+  const domains = uniqueStrings(deduped.map((row) => getString(row, ["domain"])));
+  return {
+    domains,
+    observedMs,
+    observations: deduped,
+    placeholderDetected,
+    providerCategories,
+    providers,
+    staticAssetObservations,
+    strongObservations
+  };
+}
+
+function formatSocialMediaEmbedEvidencePhrase(input: {
+  domains: string[];
+  observedMs: number[];
+  providers: string[];
+}) {
+  const names = compactArray(input.providers.length > 0 ? input.providers : input.domains, 5);
+  const providers = names.length > 0
+    ? ` Providers/domains observed: ${names.join(", ")}`
+    : "";
+  const timing = input.observedMs[0] !== undefined
+    ? `${names.length > 0 ? "; first" : " First"} seen ${Math.round(input.observedMs[0])}ms after scan start`
+    : "";
+  return providers || timing ? `${providers}${timing}.` : "";
+}
+
+function deriveSocialMediaEmbedPreConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const evidence = getSocialMediaEmbedPreConsentEvidence(input);
+  const evidencePhrase = formatSocialMediaEmbedEvidencePhrase(evidence);
+  const retainedEvidence = {
+    firstSocialMediaEmbedObservedMs: evidence.observedMs[0] ?? null,
+    placeholderDetected: evidence.placeholderDetected,
+    providerCategories: compactArray(evidence.providerCategories, 8),
+    providers: compactArray(evidence.providers, 8),
+    socialMediaEmbedDomains: compactArray(evidence.domains, 8),
+    socialMediaEmbedObservedMs: compactArray(evidence.observedMs, 6),
+    socialMediaEmbedObservations: compactArray(evidence.observations, 8)
+  };
+
+  if (evidence.strongObservations.length > 0) {
+    return makeOutcome(
+      "social_media_embed_pre_consent",
+      "Gap observed",
+      evidence.placeholderDetected
+        ? `A social/media embed, plugin, widget, or pixel provider loaded before a recorded consent action even though placeholder-style blocking evidence was retained.${evidencePhrase}`
+        : `A social/media embed, plugin, widget, or pixel provider loaded before any recorded consent choice in retained network/runtime evidence.${evidencePhrase}`,
+      [
+        `Social/media provider observations: ${evidence.strongObservations.length}`,
+        ...evidence.providers.map((provider) => `Provider: ${provider}`).slice(0, 5),
+        ...evidence.domains.map((domain) => `Domain: ${domain}`).slice(0, 5),
+        "Evidence: retained pre-consent social/media network or iframe observation"
+      ],
+      {
+        retainedEvidence: {
+          ...retainedEvidence,
+          placeholderIneffective: evidence.placeholderDetected
+        }
+      }
+    );
+  }
+
+  if (evidence.staticAssetObservations.length > 0) {
+    return makeOutcome(
+      "social_media_embed_pre_consent",
+      "Review signal",
+      `A third-party social/media asset request was retained before consent, but the retained evidence did not show an iframe, script, plugin, pixel, cookie/storage write, or other stronger embed behavior.${evidencePhrase}`,
+      [
+        `Static social/media asset observations: ${evidence.staticAssetObservations.length}`,
+        ...evidence.providers.map((provider) => `Provider: ${provider}`).slice(0, 5),
+        "Evidence: retained pre-consent social/media asset request"
+      ],
+      {
+        retainedEvidence
+      }
+    );
+  }
+
+  if (hasEmbeddedContentRuntimeCoverage(input)) {
+    return makeOutcome(
+      "social_media_embed_pre_consent",
+      "Not observed",
+      evidence.placeholderDetected
+        ? "Retained embedded-content checks found placeholder-style blocking and did not retain a social/media provider request before consent."
+        : "Retained embedded-content checks did not show a social/media embed, plugin, widget, or pixel provider request before consent. Plain outbound links are not treated as evidence for this row.",
+      ["Evidence: retained pre-consent embedded-content inventory"],
+      {
+        retainedEvidence: {
+          placeholderDetected: evidence.placeholderDetected,
+          runtimeCaptureCompleted: hasRuntimeCapture(input),
+          socialMediaEmbedObservationCount: 0
+        }
+      }
+    );
+  }
+
+  if (hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "social_media_embed_pre_consent",
+      "Not testable",
+      "Runtime capture completed, but the retained scanner context did not include enough row-specific social/media embed request, timing, or initiator evidence.",
+      ["Evidence gap: social/media embed inventory not retained"],
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "runtimeArtifacts.embeddedContentSummary",
+            "row-specific social/media embed request, timing, and initiator evidence",
+            "missing",
+            "Required to determine whether social/media embeds or plugins loaded before consent."
+          )
+        ],
+        retainedEvidence: {
+          runtimeCaptureCompleted: true
+        }
+      }
+    );
+  }
+
+  return null;
 }
 
 function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
@@ -3787,6 +4133,146 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
           "same-layer accept/reject plus granular preferences, default-state evidence, save choices, and visual parity",
           "partial",
           "Required before CertScore can mark consent choice quality as checked."
+        )
+      ],
+      retainedEvidence: {
+        ...retainedEvidence,
+        selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "limited"
+      }
+    }
+  );
+}
+
+function deriveCookieBannerPretickedOrImpliedConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const evidence = getConsentChoiceQualityEvidence(input);
+  const noticeGateEvidence = getFirstLayerNoticeGateEvidence(input);
+  const evidenceRefs = [
+    "Evidence: cookie banner default state",
+    ...evidence.visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
+    evidence.layerInspected ? `Layer inspected: ${evidence.layerInspected}` : null
+  ].filter((value): value is string => Boolean(value));
+  const retainedEvidence = {
+    acceptControlObserved: evidence.acceptControlObserved,
+    defaultToggleStatesObserved: evidence.defaultToggleStatesObserved,
+    firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
+    layerInspected: evidence.layerInspected,
+    nonEssentialDefaultsOff: evidence.nonEssentialDefaultsOff,
+    purposeCategoryControlsObserved: evidence.purposeCategoryControlsObserved,
+    selectedEvidenceArtifactId: evidence.selectedEvidenceArtifactId,
+    selectedEvidenceStrength: evidence.selectedEvidenceStrength,
+    vendorControlsObserved: evidence.vendorControlsObserved,
+    visibleChoiceLabels: compactArray(evidence.visibleChoiceLabels, 8)
+  };
+
+  if (noticeGateEvidence.gateObserved) {
+    return makeOutcome(
+      "cookie_banner_preticked_or_implied_consent",
+      "Gap observed",
+      noticeGateEvidence.privacyNoticeGateWithPrivacyChoicesObserved
+        ? "A first-layer privacy notice gate was retained with Continue-style action text and privacy-choice labels, but no affirmative cookie consent choice or optional-purpose default-state evidence was retained."
+        : "A first-layer legal/privacy notice with a single Continue action was retained. This is an implied-consent-style review signal unless manual review confirms a separate affirmative cookie consent path.",
+      [
+        "Evidence: first-layer legal/privacy notice gate",
+        ...noticeGateEvidence.visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
+        noticeGateEvidence.layerInspected ? `Layer inspected: ${noticeGateEvidence.layerInspected}` : null
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          ...retainedEvidence,
+          impliedConsentSignalObserved: true,
+          firstLayerPrivacyNoticeGateObserved: true,
+          legalPrivacyNoticeGateObserved: true,
+          onlyContinueActionObserved: true,
+          privacyNoticeGateWithPrivacyChoicesObserved: noticeGateEvidence.privacyNoticeGateWithPrivacyChoicesObserved,
+          selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "strong"
+        }
+      }
+    );
+  }
+
+  if (evidence.firstLayerCookieConsentBannerObserved === false) {
+    return makeOutcome(
+      "cookie_banner_preticked_or_implied_consent",
+      "Not confirmed",
+      "Pre-ticked optional-purpose and implied-consent review was not confirmed because no first-layer GDPR/ePrivacy cookie consent surface was confirmed in retained evidence.",
+      evidenceRefs,
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanner.firstLayerCookieConsentBannerObserved",
+            true,
+            false,
+            "Required before CertScore can evaluate pre-ticked optional-purpose or implied-consent cookie-banner signals."
+          )
+        ],
+        retainedEvidence
+      }
+    );
+  }
+
+  if (evidence.firstLayerCookieConsentBannerObserved !== true) {
+    return makeOutcome(
+      "cookie_banner_preticked_or_implied_consent",
+      "Not testable",
+      "Pre-ticked optional-purpose and implied-consent review could not be evaluated because no first-layer GDPR/ePrivacy cookie consent surface was confirmed.",
+      evidenceRefs,
+      {
+        missingOrIncompleteSourceSignals: [
+          sourceGap(
+            "scanner.firstLayerCookieConsentBannerObserved",
+            true,
+            evidence.firstLayerCookieConsentBannerObserved,
+            "Required before CertScore can evaluate pre-ticked optional-purpose or implied-consent cookie-banner signals."
+          )
+        ],
+        retainedEvidence
+      }
+    );
+  }
+
+  if (evidence.defaultToggleStatesObserved === true && evidence.nonEssentialDefaultsOff === false) {
+    return makeOutcome(
+      "cookie_banner_preticked_or_implied_consent",
+      "Gap observed",
+      "Retained cookie-banner preference evidence indicates at least one optional or non-essential purpose was preselected by default.",
+      [...evidenceRefs, "Reason: optional_purposes_preselected_by_default"],
+      {
+        retainedEvidence: {
+          ...retainedEvidence,
+          directGapReasons: ["optional_purposes_preselected_by_default"],
+          selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "strong"
+        }
+      }
+    );
+  }
+
+  if (evidence.defaultToggleStatesObserved === true && evidence.nonEssentialDefaultsOff === true) {
+    return makeOutcome(
+      "cookie_banner_preticked_or_implied_consent",
+      "Observed",
+      "Retained cookie-banner preference evidence confirms optional or non-essential purposes were not preselected by default.",
+      evidenceRefs,
+      {
+        retainedEvidence: {
+          ...retainedEvidence,
+          selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "strong"
+        }
+      }
+    );
+  }
+
+  return makeOutcome(
+    "cookie_banner_preticked_or_implied_consent",
+    "Not confirmed",
+    "A first-layer cookie consent surface was retained, but CertScore did not retain optional-purpose default toggle state evidence or a separate implied-consent signal.",
+    evidenceRefs,
+    {
+      missingOrIncompleteSourceSignals: [
+        sourceGap(
+          "scanner.consentChoiceQuality.defaultToggleStatesObserved",
+          "optional-purpose default toggle state evidence",
+          evidence.defaultToggleStatesObserved,
+          "Required before CertScore can determine whether optional purposes were preselected by default."
         )
       ],
       retainedEvidence: {
@@ -7903,6 +8389,7 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveAcceptConsentControlOutcome(input),
     deriveOptionsSettingsPreferencesControlOutcome(input),
     deriveConsentChoiceQualityOutcome(input),
+    deriveCookieBannerPretickedOrImpliedConsentOutcome(input),
     derivePostRejectOutcome(input),
     derivePreferenceWithdrawalOutcome(input),
     ...derivePolicyDisclosureOutcomes(input),
@@ -7911,6 +8398,7 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveDeviceFingerprintingSignalOutcome(input),
     deriveThirdPartyServiceConnectionPreConsentOutcome(input),
     deriveThirdPartyIframePreConsentOutcome(input),
+    deriveSocialMediaEmbedPreConsentOutcome(input),
     deriveEmbeddedThirdPartyContentPreConsentOutcome(input),
     ...deriveTransportSecurityOutcomes(input),
     deriveSessionReplayBeforeConsentOutcome(input),

@@ -1533,7 +1533,7 @@ test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead 
       assessmentStatus: "review_signal",
       evidenceState: "observed",
       id: "consent_choice_quality",
-      label: "Consent choice quality",
+      label: "Cookie banner dark pattern signal",
       status: "Review signal"
     }),
     makeChecklistItem({
@@ -1844,6 +1844,50 @@ test("GdprEprivacyCoverageChecklistCard uses persistence wording without reducti
 
   assert.match(html, /Potential gap from retained scanner evidence; Test row basis/i);
   assert.doesNotMatch(html, /did not materially decrease/i);
+});
+
+test("GdprEprivacyCoverageChecklistCard names social media providers and timing", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "gap_observed",
+          criticalEvidence: {
+            retainedEvidence: {
+              firstSocialMediaEmbedObservedMs: 1390,
+              providers: ["Meta/Facebook", "LinkedIn"],
+              socialMediaEmbedDomains: ["connect.facebook.net", "px.ads.linkedin.com"],
+              socialMediaEmbedObservations: [
+                {
+                  domain: "connect.facebook.net",
+                  firstSeenMs: 1390,
+                  provider: "Meta/Facebook"
+                },
+                {
+                  domain: "px.ads.linkedin.com",
+                  firstSeenMs: 1820,
+                  provider: "LinkedIn"
+                }
+              ]
+            },
+            statusBasis:
+              "A social/media embed, plugin, widget, or pixel provider loaded before any recorded consent choice in retained network/runtime evidence."
+          },
+          evidenceState: "observed",
+          id: "social_media_embed_pre_consent",
+          label: "Social/media embeds or plugins loaded before consent",
+          status: "Gap observed",
+          tone: "warning"
+        })
+      ]
+    })
+  );
+
+  assert.match(html, /Meta\/Facebook/);
+  assert.match(html, /LinkedIn/);
+  assert.match(html, /first seen 1390ms after scan start/i);
+  assert.doesNotMatch(html, /Potential gap from retained scanner evidence; A social\/media embed, plugin, widget, or pixel provider loaded before any recorded consent choice in retained network\/runtime evidence\\./i);
 });
 
 test("GdprEprivacyCoverageChecklistCard keeps generic cross-border asset hosts out of lead copy", () => {

@@ -3,7 +3,6 @@ import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage
 const DEFERRED_NON_PRODUCTION_ROW_IDS = new Set([
   "advertising_retargeting_vendor_signal_observed",
   "analytics_vendor_observed",
-  "consent_choice_quality",
   "post_reject_tracking_reduction",
   "preference_withdrawal_control",
   "retargeting_behavioral_advertising_signal_observed",
