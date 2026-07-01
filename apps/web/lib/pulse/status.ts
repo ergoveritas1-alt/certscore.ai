@@ -34,11 +34,11 @@ function elapsedSeconds(createdAt: string, completedAt?: string | null) {
 }
 
 function publicPhase(status: string, phase?: string | null) {
-  if (phase) {
-    return phase;
-  }
   if (status === "completed" || status === "completed_limited") {
     return "completed";
+  }
+  if (phase) {
+    return phase;
   }
   if (status === "running") {
     return "runtime_observation";
