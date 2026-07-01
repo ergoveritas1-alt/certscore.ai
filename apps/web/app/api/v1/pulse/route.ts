@@ -663,6 +663,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         userAgent: requester.userAgent,
         originIp: requester.ipHash
       },
+      localV2DagRunViaLambda: true,
       scanFrom
     });
     if ("reusedExistingScan" in queued && queued.reusedExistingScan) {
