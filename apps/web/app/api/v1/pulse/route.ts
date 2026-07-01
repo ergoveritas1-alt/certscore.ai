@@ -12,7 +12,7 @@ import {
   logPulseGptActionEvent
 } from "../../../../lib/pulse/gpt-action-analytics";
 import { renderPulseMarkdown } from "../../../../lib/pulse/markdown";
-import { buildPulseProjection } from "../../../../lib/pulse/projection";
+import { assessPulseScanRecordQuality, buildPulseProjection } from "../../../../lib/pulse/projection";
 import {
   getPulseRequesterContext,
   normalizePulseUrl,
@@ -31,6 +31,7 @@ import {
 import { checkDomainDns } from "../../../../server/domains/domain-dns";
 import { createAnonymousFullScan } from "../../../../server/scans/create-anonymous-full-scan";
 import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
+import { materializeLocalV2DagScanDetail } from "../../../../server/scans/local-v2-dag-report";
 import { RECENT_SCAN_REUSE_WINDOW_HOURS } from "../../../../server/scans/recent-scan-reuse";
 import {
   claimPulseDomainScanCreation,
@@ -105,10 +106,49 @@ function parseForceNewScan(value: string | null) {
   return value === "true" || value === "1";
 }
 
+async function loadPulseScanRecord(scanId: string) {
+  const scanRecord = await getAnonymousScanById(scanId).catch(() => null);
+  if (!scanRecord || scanRecord.scan.status !== "completed") {
+    return scanRecord;
+  }
+  return materializeLocalV2DagScanDetail(scanRecord).catch((error) => {
+    console.error("[pulse] local v2 artifact materialization failed", {
+      error: error instanceof Error ? error.message : String(error),
+      scanId
+    });
+    return scanRecord;
+  });
+}
+
+function pulseUnavailableResponse(input: {
+  detail: "tiny" | "standard" | "full";
+  format: "json" | "markdown";
+  message?: string;
+  requestId: string;
+  routeName: string;
+  status?: number;
+  url?: string | null;
+}) {
+  return pulseJson(
+    buildPulseError({
+      code: "scan_unavailable",
+      message:
+        input.message ??
+        "This scan completed without enough retained public evidence for a reliable Pulse summary. Run a fresh scan before relying on the result.",
+      url: input.url,
+      detail: input.detail,
+      format: input.format
+    }),
+    { headers: { "Cache-Control": "no-store", "Retry-After": "60" }, status: input.status ?? 409 },
+    input.requestId,
+    input.routeName
+  );
+}
+
 async function waitForCompletedScan(scanId: string, waitSeconds: number) {
   const deadline = Date.now() + waitSeconds * 1000;
   while (Date.now() < deadline) {
-    const scanRecord = await getAnonymousScanById(scanId).catch(() => null);
+    const scanRecord = await loadPulseScanRecord(scanId);
     if (scanRecord?.scan.status === "completed") {
       return scanRecord;
     }
@@ -392,9 +432,20 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         scanId,
         status: "completed"
       });
-      const scanRecord = await getAnonymousScanById(scanId);
+      const scanRecord = await loadPulseScanRecord(scanId);
       if (!scanRecord || scanRecord.scan.status !== "completed") {
         return pulseJson(buildPulseError({ code: "not_found", message: "Scan not found or not eligible for public Pulse.", detail, format }), { status: 404 }, requestId, routeName);
+      }
+      const quality = assessPulseScanRecordQuality(scanRecord);
+      if (!quality.usable) {
+        return pulseUnavailableResponse({
+          detail,
+          format,
+          message: quality.message,
+          requestId,
+          routeName,
+          url: scanRecord.scan.domainHostname ? `https://${scanRecord.scan.domainHostname}` : null
+        });
       }
       return buildAndLogCompletedPulse({
         detail,
@@ -416,8 +467,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         return pulseJson(buildPulseError({ code: "not_found", message: "Pulse job not found.", detail, format }), { status: 404 }, requestId, routeName);
       }
       if (pulseRequest.scan_id) {
-        const scanRecord = await getAnonymousScanById(pulseRequest.scan_id).catch(() => null);
-        if (scanRecord?.scan.status === "completed") {
+        const scanRecord = await loadPulseScanRecord(pulseRequest.scan_id);
+        if (scanRecord?.scan.status === "completed" && assessPulseScanRecordQuality(scanRecord).usable) {
           return buildAndLogCompletedPulse({
             detail,
             format,
@@ -561,8 +612,13 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       ? null
       : await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, { maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS, scanFrom });
     const latestScan = recentScan ?? (await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, { scanFrom }));
-    const latestScanRecord = latestScan ? await getAnonymousScanById(latestScan.id).catch(() => null) : null;
-    const recentScanRecord = recentScan ? latestScanRecord : null;
+    const latestScanRecord = latestScan ? await loadPulseScanRecord(latestScan.id) : null;
+    const latestScanQuality = latestScanRecord ? assessPulseScanRecordQuality(latestScanRecord) : null;
+    const recentScanWasUnusable = Boolean(recentScan && latestScanRecord && latestScanQuality && !latestScanQuality.usable);
+    const recentScanRecord =
+      recentScan && latestScanRecord && latestScanQuality?.usable
+        ? latestScanRecord
+        : null;
 
     if (recentScanRecord) {
       return buildAndLogCompletedPulse({
@@ -585,7 +641,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     });
     if (!throttle.allowed) {
       await updatePulseRequestRateLimited({ pulseRequestId: publicId, retryAfterSeconds: throttle.retryAfterSeconds, scanId: latestScan?.id ?? null });
-      if (latestScanRecord) {
+      if (latestScanRecord && latestScanQuality?.usable) {
         return buildAndLogCompletedPulse({
           detail,
           format,
@@ -656,7 +712,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     }
 
     const queued = await createAnonymousFullScan({
-      bypassRecentScanReuse: forceNewScan,
+      bypassRecentScanReuse: forceNewScan || recentScanWasUnusable,
       hostname: normalized.normalizedDomain,
       normalizedUrl: normalized.normalizedUrl,
       provenance: {
@@ -669,8 +725,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       scanFrom
     });
     if ("reusedExistingScan" in queued && queued.reusedExistingScan) {
-      const reusedScanRecord = await getAnonymousScanById(queued.scan.id).catch(() => null);
-      if (reusedScanRecord?.scan.status === "completed") {
+      const reusedScanRecord = await loadPulseScanRecord(queued.scan.id);
+      if (reusedScanRecord?.scan.status === "completed" && assessPulseScanRecordQuality(reusedScanRecord).usable) {
         return buildAndLogCompletedPulse({
           detail,
           format,
@@ -684,6 +740,13 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
           routeOptions: { gptAction, routeName }
         });
       }
+      return pulseUnavailableResponse({
+        detail,
+        format,
+        requestId,
+        routeName,
+        url: rawUrl
+      });
     }
     await updatePulseRequestQueued({
       pulseRequestId: publicId,
@@ -739,7 +802,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         ...status,
         statusUrl: absoluteUrl(`/api/v1/pulse/status/${createdJobId}`),
         nextCheckUrl: absoluteUrl(`/api/v1/pulse?jobId=${createdJobId}`),
-        lastKnownPulse: latestScanRecord ? absoluteUrl(`/api/v1/pulse?scanId=${latestScanRecord.scan.id}`) : null
+        lastKnownPulse: latestScanRecord && latestScanQuality?.usable ? absoluteUrl(`/api/v1/pulse?scanId=${latestScanRecord.scan.id}`) : null
       },
       { headers: { "Cache-Control": "no-store", "Retry-After": String(retryAfterForStatus(status)) }, status: 202 },
       requestId,

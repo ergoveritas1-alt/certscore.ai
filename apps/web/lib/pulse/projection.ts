@@ -145,6 +145,57 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
   };
 }
 
+function hasExplicitAccessInterruption(scanRecord: ScanDetailResponse) {
+  const posture = scanRecord.accessPostureSummary;
+  return Boolean(
+    posture.interruptionLabel ||
+      posture.interruptionReason ||
+      posture.stopOutcomeTitle ||
+      posture.stopReviewTitle ||
+      posture.stopReason
+  );
+}
+
+function hasPositiveNumber(value: unknown) {
+  const number = finiteNumber(value);
+  return number !== null && number > 0;
+}
+
+export function assessPulseScanRecordQuality(scanRecord: ScanDetailResponse) {
+  const posture = scanRecord.accessPostureSummary;
+  const snapshot = scanRecord.snapshot;
+  const homepageObserved = scanRecord.scan.pagesScanned > 0 || posture.homepageFetchStatus === "ok";
+  const explicitInterruption = hasExplicitAccessInterruption(scanRecord);
+  const evidenceAnchorCount = [
+    hasPositiveNumber(recordValue(snapshot, "total_signals")),
+    hasPositiveNumber(recordValue(snapshot, "third_party_request_domain_count")),
+    hasPositiveNumber(recordValue(snapshot, "third_party_domain_count")),
+    hasPositiveNumber(recordValue(snapshot, "finding_count")),
+    scanRecord.trackerVendors.length > 0,
+    scanRecord.policyEnrichment.length > 0,
+    finiteNumber(scanRecord.regulatoryRisk?.overallScore) !== null
+  ].filter(Boolean).length;
+
+  if (!homepageObserved && !explicitInterruption && evidenceAnchorCount === 0) {
+    return {
+      usable: false as const,
+      level: "unavailable",
+      reason: "completed_without_retained_public_evidence",
+      message:
+        "The scan completed without retained homepage, runtime, policy, tracker, score, finding, or access-interruption evidence. Run a fresh scan before summarizing this domain."
+    };
+  }
+
+  return {
+    usable: true as const,
+    level: homepageObserved ? "usable" : "usable_with_limitations",
+    reason: homepageObserved ? "retained_public_evidence" : "retained_access_limitation",
+    message: homepageObserved
+      ? "Retained public-page evidence is available for Pulse projection."
+      : "Retained access-limitation evidence is available for Pulse projection."
+  };
+}
+
 function getReviewLenses(scanRecord: ScanDetailResponse, findings: CertScoreFinding[]) {
   const risk = scanRecord.regulatoryRisk;
   const financialRelevant = findings.some((finding) => finding.section === "Financial & Claims");
@@ -502,6 +553,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const domain = scan.domainHostname ?? safeHostname(input.requestedUrl) ?? "unknown";
   const score = deriveScore(input.scanRecord);
   const coverage = deriveCoverage(input.scanRecord);
+  const quality = assessPulseScanRecordQuality(input.scanRecord);
   const packets = buildScanReportUnifiedFindings(input.scanRecord);
   const executive = projectExecutiveFindingsFromUnifiedPackets(packets);
   const allFindings = executive.findings;
@@ -657,11 +709,12 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     recommendedActions: buildRecommendedActions(topFindings),
     coverage: {
       ...coverage,
-      status: coverage.status
+      status: quality.usable ? coverage.status : "unavailable"
     },
     resultQuality: {
-      level: coverage.status === "complete" ? "usable" : "usable_with_limitations",
-      summary: coverage.summary
+      level: quality.usable ? (coverage.status === "complete" ? "usable" : "usable_with_limitations") : "unavailable",
+      summary: quality.usable ? coverage.summary : quality.message,
+      reason: quality.reason
     },
     usageGuidance: PULSE_USAGE_GUIDANCE
   };

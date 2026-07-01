@@ -128,7 +128,7 @@ function formatReviewLensLinks(finding: any) {
 }
 
 function isLimitedCoverage(status: unknown) {
-  return ["partial", "limited", "blocked", "unknown"].includes(String(status ?? "").toLowerCase());
+  return ["partial", "limited", "blocked", "unknown", "unavailable"].includes(String(status ?? "").toLowerCase());
 }
 
 function gptFooter(pulse: PulseMarkdownInput) {
