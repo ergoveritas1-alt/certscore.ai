@@ -74,7 +74,7 @@ const discoveryDocument = {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
-    currentVersion: "0.1.2",
+    currentVersion: "0.1.3",
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",

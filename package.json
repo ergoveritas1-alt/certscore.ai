@@ -48,8 +48,8 @@
     "ops:smoke:pulse": "BASE_URL=https://certscore.ai node --import tsx ./scripts/smoke-pulse-endpoints.ts",
     "ops:smoke:pulse-production": "BASE_URL=https://certscore.ai node ./scripts/smoke-pulse-production.mjs",
     "ops:smoke:mcp-production": "node --import tsx ./scripts/smoke-certscore-mcp-production.ts",
-    "mcp:certscore": "pnpm --filter @certscore/api-contracts build && pnpm --filter @certscore/sdk build && pnpm --filter @certscore/mcp build && node packages/certscore-mcp/dist/index.js",
-    "mcp:certscore:smoke": "pnpm --filter @certscore/api-contracts build && pnpm --filter @certscore/sdk build && pnpm --filter @certscore/mcp build && node scripts/smoke-certscore-mcp.mjs",
+    "mcp:certscore": "corepack pnpm --filter @certscore/api-contracts build && corepack pnpm --filter @certscore/sdk build && corepack pnpm --filter @certscore/mcp build && node packages/certscore-mcp/dist/index.js",
+    "mcp:certscore:smoke": "corepack pnpm --filter @certscore/api-contracts build && corepack pnpm --filter @certscore/sdk build && corepack pnpm --filter @certscore/mcp build && node scripts/smoke-certscore-mcp.mjs",
     "mcp:certscore:homebrew:build": "node --import tsx ./scripts/build-certscore-mcp-homebrew-release.ts",
     "mcp:certscore:generate-key": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/generate-certscore-api-key.ts",
     "ops:stripe:setup-billing": "node --env-file=apps/web/.env.local --enable-source-maps --import tsx ./scripts/setup-stripe-billing.ts",
@@ -127,8 +127,10 @@
     "clean": "turbo run clean"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.20.0",
+    "esbuild": "^0.27.3",
     "tsx": "^4.21.0",
     "turbo": "^2.5.0",
     "typescript": "^5.8.2"

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { CERTSCORE_MCP_VERSION, getCertScoreMcpDoctorReport } from "./index.js";
 import { createCertScoreMcpServer } from "./server.js";
 
@@ -121,6 +122,20 @@ test("CertScore MCP server exposes the scoped v1 tool surface", async () => {
   });
 });
 
+test("CertScore MCP server tool metadata stays aligned with shared contracts", async () => {
+  await withMcpClient(async (client) => {
+    const tools = await client.listTools();
+    const byName = new Map(tools.tools.map((tool) => [tool.name, tool]));
+
+    for (const contract of certScoreMcpToolContracts) {
+      const listed = byName.get(contract.name);
+      assert.ok(listed, `Expected listed MCP tool ${contract.name}`);
+      assert.equal(listed.title, contract.title);
+      assert.equal(listed.description, contract.description);
+    }
+  });
+});
+
 test("README documents current MCP tool surface and public docs", () => {
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
@@ -161,7 +176,7 @@ test("doctor reports healthy API and missing API key without failing", async () 
   });
 
   assert.equal(result.exitCode, 0);
-  assert.match(result.lines.join("\n"), /version 0\.1\.2/);
+  assert.match(result.lines.join("\n"), /version 0\.1\.3/);
   assert.match(result.lines.join("\n"), /Node\.js 22\.12\.0 is compatible/);
   assert.match(result.lines.join("\n"), /API health reachable/);
   assert.match(result.lines.join("\n"), /CERTSCORE_API_KEY is not set/);
@@ -212,8 +227,12 @@ test("doctor fails for incompatible Node runtime", async () => {
 });
 
 test("version constant stays aligned with package version", () => {
-  const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
+  const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    engines?: { node?: string };
+    version: string;
+  };
   assert.equal(CERTSCORE_MCP_VERSION, packageJson.version);
+  assert.equal(packageJson.engines?.node, ">=20.0.0 <25.0.0");
 });
 
 test("create_scan returns async status and scan handles", async () => {

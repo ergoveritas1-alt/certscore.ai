@@ -14,7 +14,7 @@ pnpm mcp:certscore:homebrew:build
 
 The build creates:
 
-- `artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2.tar.gz`
+- `artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.3.tar.gz`
 - `artifacts/certscore-mcp-homebrew/certscore-mcp.rb`
 - `artifacts/certscore-mcp-homebrew/certscore-mcp-cask.rb`
 
@@ -35,8 +35,8 @@ The tarball contains:
 2. Confirm `Casks/certscore-mcp.rb` matches `artifacts/certscore-mcp-homebrew/certscore-mcp-cask.rb`.
 3. Confirm `Formula/certscore-mcp.rb` matches `artifacts/certscore-mcp-homebrew/certscore-mcp.rb`.
 4. Commit and push the cask/formula/source changes.
-5. Create a GitHub release named `certscore-mcp-v0.1.2`.
-6. Upload `artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2.tar.gz`.
+5. Create a GitHub release named `certscore-mcp-v0.1.3`.
+6. Upload `artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.3.tar.gz`.
 
 Expected user install:
 
@@ -80,9 +80,9 @@ pnpm --filter @certscore/mcp test
 pnpm --filter @certscore/mcp typecheck
 pnpm --filter @certscore/mcp build
 pnpm mcp:certscore:homebrew:build
-artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2/bin/certscore-mcp --version
-artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2/bin/certscore-mcp --help
-artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.2/bin/certscore-mcp doctor
+artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.3/bin/certscore-mcp --version
+artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.3/bin/certscore-mcp --help
+artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.3/bin/certscore-mcp doctor
 ```
 
 For an end-to-end production operator smoke after release:

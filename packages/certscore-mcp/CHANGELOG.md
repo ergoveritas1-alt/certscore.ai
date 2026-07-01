@@ -1,5 +1,11 @@
 # @certscore/mcp
 
+## 0.1.3
+
+- Registered MCP tools from the shared CertScore MCP contract definitions to prevent server/contract metadata drift.
+- Added package-level Node.js engine metadata aligned with the runtime doctor check.
+- Fixed root-level MCP smoke dependency resolution for operator release checks.
+
 ## 0.1.2
 
 - Added Homebrew cask distribution for the prebuilt `certscore-mcp` command.

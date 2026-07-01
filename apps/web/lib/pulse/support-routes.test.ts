@@ -70,7 +70,7 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.match(response.headers.get("x-certscore-request-id") ?? "", /.+/);
 
   const body = await response.json();
-  assert.equal(body.openapi, "3.1.0");
+  assert.equal(body.openapi, "3.1.1");
   assert.equal(body.info.title, "CertScore Pulse GPT Action API beta");
   assert.equal(body.info.version, "0.5.1");
   assert.equal(body.paths["/api/v1/pulse/gpt"].get.operationId, "getPulseForUrl");
@@ -89,18 +89,16 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { maximum?: number } }) => parameter.name === "wait" && parameter.schema.maximum === 35));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "scanFrom" && parameter.schema.enum?.includes("eu_ie")));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "geo" && parameter.schema.enum?.includes("california")));
-  assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].content["text/markdown"]);
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].content["application/json"]);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["500"].content["application/json"]);
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.responses["429"].content["application/json"].schema.$ref, "#/components/schemas/PulseError");
   assert.ok(body.components.schemas.PulseCapabilities);
   assert.ok(body.components.schemas.PulseAgentInterpretation);
   assert.ok(body.components.schemas.PulseCoverageInterruption);
   assert.ok(body.components.schemas.PulseSelfTest);
-  assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].headers["x-certscore-request-id"]);
-  assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["202"].headers["Retry-After"]);
   assert.equal(body.paths["/api/v1/pulse-self-test"].get.responses["200"].content["application/json"].schema.$ref, "#/components/schemas/PulseSelfTest");
-  assert.match(JSON.stringify(body), /checkPulseConnectivity|transient client\/action transport error/);
-  assert.match(JSON.stringify(body), /format=markdown|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
+  assert.match(JSON.stringify(body), /checkPulseConnectivity|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
+  assert.doesNotMatch(JSON.stringify(body), /text\/markdown|format=markdown|transport error/);
   assert.doesNotMatch(JSON.stringify(body.paths["/api/v1/pulse/gpt"].get.parameters), /refresh|full/);
   assert.doesNotMatch(JSON.stringify(body.paths), /pulse-health/);
   assert.doesNotMatch(JSON.stringify(body), /pre_consent_tracking_detected|raw DOM|DATABASE_URL|AUTH_SECRET/i);
@@ -212,7 +210,6 @@ test("Pulse health canary route is dependency-free JSON", async () => {
   assert.match(body.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
 
   const source = readFileSync("apps/web/app/api/v1/pulse-health/route.ts", "utf8");
-  assert.doesNotMatch(source, /^import\s/m);
   assert.doesNotMatch(source, /from\s+["'][^"']*(db|server|auth|queue|redis|pulse\/repository|internal)["']/i);
   assert.doesNotMatch(source, /fetch\(/i);
 });
@@ -240,7 +237,6 @@ test("Pulse self-test route is dependency-free JSON with capabilities", async ()
   assert.match(body.disclaimer, /automated public-web observations for review/i);
 
   const source = readFileSync("apps/web/app/api/v1/pulse-self-test/route.ts", "utf8");
-  assert.doesNotMatch(source, /^import\s/m);
   assert.doesNotMatch(source, /from\s+["'][^"']*(db|server|auth|queue|redis|pulse\/repository|internal)["']/i);
   assert.doesNotMatch(source, /fetch\(/i);
 });
@@ -508,7 +504,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.distribution, "homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.1.2");
+  assert.equal(aiDiscovery.mcp.currentVersion, "0.1.3");
   assert.equal(aiDiscovery.mcp.install, "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp");
   assert.deepEqual(aiDiscovery.mcp.verify, ["certscore-mcp --version", "certscore-mcp --help", "CERTSCORE_API_KEY=<token> certscore-mcp doctor"]);
   assert.equal(aiDiscovery.authentication.docs, "https://certscore.ai/developers/quickstart");

@@ -27,6 +27,10 @@ function run(command: string, args: string[]) {
   }
 }
 
+function runPnpm(args: string[]) {
+  run("corepack", ["pnpm", ...args]);
+}
+
 function sha256(path: string) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
@@ -35,11 +39,11 @@ rmSync(releaseDir, { force: true, recursive: true });
 mkdirSync(join(releaseDir, "bin"), { recursive: true });
 mkdirSync(join(releaseDir, "libexec"), { recursive: true });
 
-run("pnpm", ["--filter", "@certscore/api-contracts", "build"]);
-run("pnpm", ["--filter", "@certscore/sdk", "build"]);
-run("pnpm", ["--filter", "@certscore/mcp", "build"]);
+runPnpm(["--filter", "@certscore/api-contracts", "build"]);
+runPnpm(["--filter", "@certscore/sdk", "build"]);
+runPnpm(["--filter", "@certscore/mcp", "build"]);
 
-run("pnpm", [
+runPnpm([
   "exec",
   "esbuild",
   "packages/certscore-mcp/src/index.ts",
