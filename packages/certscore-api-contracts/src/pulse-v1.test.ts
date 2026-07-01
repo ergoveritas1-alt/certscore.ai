@@ -51,7 +51,7 @@ test("Pulse ChatGPT OpenAPI stays compact and action-compatible", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.openapi, "3.0.3");
+  assert.equal(document.openapi, "3.1.1");
   assert.equal(document.info.version, PULSE_SCHEMA_VERSION);
   assert.ok(document.info.title.includes("GPT Action"));
   assert.ok(document.paths["/api/v1/pulse/gpt"].get.responses["200"].content["application/json"].schema);

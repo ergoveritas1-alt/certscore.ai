@@ -17,7 +17,7 @@ const pulseErrorResponses = {
 
 export function buildPulseChatGptOpenApiDocument() {
   return {
-    openapi: "3.0.3",
+    openapi: "3.1.1",
     info: {
       title: "CertScore Pulse GPT Action API beta",
       version: PULSE_SCHEMA_VERSION,
