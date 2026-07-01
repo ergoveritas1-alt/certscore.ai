@@ -47,6 +47,13 @@ export function getTopFindingIds(pulse: { topFindings?: unknown }) {
 }
 
 export function getHighPriorityFindingCount(pulse: { topFindings?: unknown; findings?: unknown }) {
+  if ("counts" in pulse && pulse.counts && typeof pulse.counts === "object") {
+    const count = (pulse.counts as { highPriorityFindingCount?: unknown }).highPriorityFindingCount;
+    if (typeof count === "number" && Number.isFinite(count)) {
+      return count;
+    }
+  }
+
   const findings = Array.isArray(pulse.topFindings) && pulse.topFindings.length > 0
     ? pulse.topFindings
     : Array.isArray(pulse.findings)
@@ -61,7 +68,14 @@ export function getHighPriorityFindingCount(pulse: { topFindings?: unknown; find
   }).length;
 }
 
-export function getTotalObservationCount(pulse: { findings?: unknown; topFindings?: unknown; evidenceHighlights?: unknown }) {
+export function getTotalObservationCount(pulse: { counts?: unknown; findings?: unknown; topFindings?: unknown; evidenceHighlights?: unknown }) {
+  if (pulse.counts && typeof pulse.counts === "object") {
+    const count = (pulse.counts as { totalObservationCount?: unknown }).totalObservationCount;
+    if (typeof count === "number" && Number.isFinite(count)) {
+      return count;
+    }
+  }
+
   if (Array.isArray(pulse.findings)) {
     return pulse.findings.length;
   }

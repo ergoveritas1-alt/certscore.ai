@@ -71,3 +71,12 @@ test("Pulse route rejects unusable completed scan records before projection", ()
   assert.match(source, /recentScanWasUnusable/);
   assert.match(source, /bypassRecentScanReuse: forceNewScan \|\| recentScanWasUnusable/);
 });
+
+test("Pulse projection exposes explicit counts for agent summaries", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /function buildPulseCounts/);
+  assert.match(source, /totalObservationCount: input\.allFindingCount/);
+  assert.match(source, /highPriorityFindingCount/);
+  assert.match(source, /counts: base\.counts/);
+});

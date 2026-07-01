@@ -490,6 +490,26 @@ function buildRecommendedActions(findings: ReturnType<typeof toPulseFinding>[]) 
   }));
 }
 
+function buildPulseCounts(input: {
+  allFindingCount: number;
+  evidenceHighlights: ReturnType<typeof buildEvidenceHighlights>;
+  topFindings: ReturnType<typeof toPulseFinding>[];
+}) {
+  const highPriorityFindingCount = input.topFindings.filter((finding) => /^(critical|high)$/i.test(finding.criticality)).length;
+
+  return {
+    totalObservationCount: input.allFindingCount,
+    totalAutomatedFindingCount: input.allFindingCount,
+    topFindingCount: input.topFindings.length,
+    highPriorityFindingCount,
+    evidenceHighlightCount: Object.keys(input.evidenceHighlights).length,
+    thirdPartyDomainsObserved: input.evidenceHighlights.trackerFootprint.thirdPartyDomainsObserved,
+    classifiedTrackerVendors: input.evidenceHighlights.trackerFootprint.classifiedTrackerVendors,
+    policyUrlCount: input.evidenceHighlights.policySurfaces.policyUrlCount,
+    probableFingerprintingDetected: input.evidenceHighlights.fingerprinting.probableFingerprintingDetected
+  };
+}
+
 function buildSummary(input: {
   benchmark: string | null;
   coverageLimited: boolean;
@@ -568,6 +588,12 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     score
   });
   const topFindingCount = topFindings.length;
+  const evidenceHighlights = buildEvidenceHighlights(input.scanRecord);
+  const counts = buildPulseCounts({
+    allFindingCount: allFindings.length,
+    evidenceHighlights,
+    topFindings
+  });
   const tinySummary =
     topFindingCount === 0 &&
     summary.score !== null &&
@@ -628,6 +654,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     scan_id: scan.id,
     scanStatus: scan.status,
     summary,
+    counts,
     topFindings,
     capabilities: PULSE_CAPABILITIES,
     coverage: {
@@ -651,6 +678,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       scanId: base.scanId,
       scanStatus: base.scanStatus,
       summary: tinySummary,
+      counts: base.counts,
       topFindings: topFindings.map((finding) => ({
         id: finding.id,
         label: finding.label,
@@ -705,7 +733,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     freshness: deriveFreshness(scan.completedAt, generated),
     confidence: buildConfidence(allFindings, coverage.status),
     reviewContext: getReviewLenses(input.scanRecord, allFindings),
-    evidenceHighlights: buildEvidenceHighlights(input.scanRecord),
+    evidenceHighlights,
     recommendedActions: buildRecommendedActions(topFindings),
     coverage: {
       ...coverage,
