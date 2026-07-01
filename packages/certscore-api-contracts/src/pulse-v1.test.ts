@@ -51,12 +51,15 @@ test("Pulse ChatGPT OpenAPI stays compact and action-compatible", () => {
   };
   walk(document.paths);
 
+  assert.equal(document.openapi, "3.0.3");
   assert.equal(document.info.version, PULSE_SCHEMA_VERSION);
   assert.ok(document.info.title.includes("GPT Action"));
-  assert.ok(document.paths["/api/v1/pulse/gpt"].get.responses["200"].content["text/markdown"].schema);
+  assert.ok(document.paths["/api/v1/pulse/gpt"].get.responses["200"].content["application/json"].schema);
   assert.deepEqual(operations.sort(), ["checkPulseConnectivity", "getPulseByScanId", "getPulseForUrl", "getPulseJobStatus"]);
   assert.equal(serialized.includes("\"refresh\""), false);
   assert.equal(serialized.includes("\"full\""), false);
+  assert.equal(serialized.includes("\"text/markdown\""), false);
+  assert.equal(serialized.includes("\"const\""), false);
 });
 
 test("MCP contracts expose the current scoped tool surface", () => {

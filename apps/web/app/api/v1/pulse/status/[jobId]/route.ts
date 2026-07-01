@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { applyPulseCors, pulseOptionsResponse } from "../../../../../../lib/pulse/cors";
 import { buildPulseError } from "../../../../../../lib/pulse/error";
 import { logPulseGptActionEvent } from "../../../../../../lib/pulse/gpt-action-analytics";
 import { buildPulseStatus } from "../../../../../../lib/pulse/status";
@@ -17,7 +18,7 @@ function diagnosticHeaders(requestId: string, headers?: HeadersInit) {
   nextHeaders.set("X-CertScore-Pulse", "v1");
   nextHeaders.set("X-CertScore-Route", "pulse-status");
   nextHeaders.set("X-CertScore-Request-Id", requestId);
-  return nextHeaders;
+  return applyPulseCors(nextHeaders);
 }
 
 function pulseJson(body: unknown, init: ResponseInit | undefined, requestId: string) {
@@ -147,4 +148,8 @@ export async function GET(request: Request, context: RouteContext) {
       requestId
     );
   }
+}
+
+export function OPTIONS(request: Request) {
+  return pulseOptionsResponse(request);
 }

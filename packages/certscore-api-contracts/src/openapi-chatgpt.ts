@@ -1,47 +1,23 @@
 import { PULSE_CAPABILITIES, PULSE_PURPOSE_STATEMENT, PULSE_SCHEMA_VERSION, PULSE_STANDARD_DISCLAIMER } from "./pulse-v1.js";
 
-const diagnosticHeaders = {
-  "x-certscore-pulse": { schema: { type: "string", const: "v1" }, description: "CertScore Pulse API version marker." },
-  "x-certscore-route": { schema: { type: "string" }, description: "Public Pulse route identifier." },
-  "x-certscore-request-id": { schema: { type: "string" }, description: "Request identifier for support and diagnostics." }
-} as const;
-
-const retryAfterHeader = {
-  "Retry-After": { schema: { type: "integer" }, description: "Recommended retry or polling delay in seconds." }
-} as const;
-
-const markdownResponse = {
-  schema: { type: "string" },
-  examples: {
-    completed: {
-      summary: "Markdown completed response",
-      value:
-        "# CertScore Pulse\n\nNo top automated findings were surfaced in this scan.\n\nCertScore provides automated public-web observations for review. It does not provide legal advice, certification, or a compliance determination."
-    }
-  }
-} as const;
-
 const pulseErrorResponses = {
   "400": {
     description: "Invalid URL, scanId, or request input.",
-    headers: diagnosticHeaders,
     content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
   },
   "429": {
     description: "The request was throttled.",
-    headers: { ...diagnosticHeaders, ...retryAfterHeader },
     content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
   },
   "500": {
     description: "Unexpected public-safe API error.",
-    headers: { ...diagnosticHeaders, ...retryAfterHeader },
     content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
   }
 } as const;
 
 export function buildPulseChatGptOpenApiDocument() {
   return {
-    openapi: "3.1.0",
+    openapi: "3.0.3",
     info: {
       title: "CertScore Pulse GPT Action API beta",
       version: PULSE_SCHEMA_VERSION,
@@ -102,16 +78,13 @@ export function buildPulseChatGptOpenApiDocument() {
           ],
           responses: {
             "200": {
-              description: "Completed Pulse response as JSON or markdown.",
-              headers: diagnosticHeaders,
+              description: "Completed Pulse response as JSON.",
               content: {
-                "application/json": { schema: { $ref: "#/components/schemas/PulseResponse" } },
-                "text/markdown": markdownResponse
+                "application/json": { schema: { $ref: "#/components/schemas/PulseResponse" } }
               }
             },
             "202": {
               description: "Pulse scan is queued or running. Poll the statusUrl.",
-              headers: { ...diagnosticHeaders, ...retryAfterHeader },
               content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
             },
             ...pulseErrorResponses
@@ -150,16 +123,13 @@ export function buildPulseChatGptOpenApiDocument() {
           ],
           responses: {
             "200": {
-              description: "Completed Pulse response as JSON or markdown.",
-              headers: diagnosticHeaders,
+              description: "Completed Pulse response as JSON.",
               content: {
-                "application/json": { schema: { $ref: "#/components/schemas/PulseResponse" } },
-                "text/markdown": { schema: { type: "string" } }
+                "application/json": { schema: { $ref: "#/components/schemas/PulseResponse" } }
               }
             },
             "404": {
               description: "Scan not found or not eligible for public Pulse.",
-              headers: diagnosticHeaders,
               content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
             },
             ...pulseErrorResponses
@@ -185,17 +155,14 @@ export function buildPulseChatGptOpenApiDocument() {
           responses: {
             "200": {
               description: "Pulse job status.",
-              headers: diagnosticHeaders,
               content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
             },
             "202": {
               description: "Pulse job is still queued or running.",
-              headers: { ...diagnosticHeaders, ...retryAfterHeader },
               content: { "application/json": { schema: { $ref: "#/components/schemas/PulseStatus" } } }
             },
             "404": {
               description: "Pulse job was not found.",
-              headers: diagnosticHeaders,
               content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
             },
             ...pulseErrorResponses
@@ -212,12 +179,10 @@ export function buildPulseChatGptOpenApiDocument() {
           responses: {
             "200": {
               description: "Pulse support route is reachable.",
-              headers: diagnosticHeaders,
               content: { "application/json": { schema: { $ref: "#/components/schemas/PulseSelfTest" } } }
             },
             "500": {
               description: "Unexpected public-safe canary error.",
-              headers: diagnosticHeaders,
               content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
             }
           }
@@ -231,14 +196,14 @@ export function buildPulseChatGptOpenApiDocument() {
           additionalProperties: true,
           required: ["type", "summary", "feedback", "capabilities", "agentInterpretation", "disclaimer"],
           properties: {
-            type: { type: "string", const: "certscore_pulse" },
+            type: { type: "string", enum: ["certscore_pulse"] },
             scanStatus: { type: "string" },
             target: { type: "object", additionalProperties: true },
             summary: {
               type: "object",
               additionalProperties: true,
               properties: {
-                score: { type: ["integer", "null"] },
+                score: { type: "integer", nullable: true },
                 riskLevel: { type: "string" },
                 coverageNote: { type: "string" }
               }
@@ -258,7 +223,7 @@ export function buildPulseChatGptOpenApiDocument() {
           additionalProperties: true,
           required: ["type", "status", "capabilities", "agentInterpretation", "disclaimer"],
           properties: {
-            type: { type: "string", const: "certscore_pulse_status" },
+            type: { type: "string", enum: ["certscore_pulse_status"] },
             status: { type: "string" },
             jobId: { type: "string" },
             statusUrl: { type: "string" },
@@ -273,7 +238,7 @@ export function buildPulseChatGptOpenApiDocument() {
           additionalProperties: true,
           required: ["type", "error", "feedback", "agentInterpretation", "disclaimer"],
           properties: {
-            type: { type: "string", const: "certscore_pulse_error" },
+            type: { type: "string", enum: ["certscore_pulse_error"] },
             error: {
               type: "object",
               required: ["code", "message"],
@@ -281,11 +246,11 @@ export function buildPulseChatGptOpenApiDocument() {
               properties: {
                 code: { type: "string", enum: ["invalid_url", "not_found", "pulse_throttled", "rate_limited", "internal_error", "scan_unavailable"] },
                 message: { type: "string" },
-                retryAfterSeconds: { type: ["integer", "null"] }
+                retryAfterSeconds: { type: "integer", nullable: true }
               }
             },
             feedback: { $ref: "#/components/schemas/PulseFeedback" },
-            resolution: { type: ["object", "null"], additionalProperties: true },
+            resolution: { type: "object", nullable: true, additionalProperties: true },
             agentInterpretation: { $ref: "#/components/schemas/PulseAgentInterpretation" },
             disclaimer: { type: "string" }
           }
@@ -296,8 +261,8 @@ export function buildPulseChatGptOpenApiDocument() {
           required: ["ok", "type", "service", "version", "routes", "capabilities", "disclaimer"],
           properties: {
             ok: { type: "boolean" },
-            type: { type: "string", const: "certscore_pulse_self_test" },
-            service: { type: "string", const: "certscore_pulse" },
+            type: { type: "string", enum: ["certscore_pulse_self_test"] },
+            service: { type: "string", enum: ["certscore_pulse"] },
             version: { type: "string" },
             timestamp: { type: "string" },
             routes: { type: "object", additionalProperties: { type: "string" } },
@@ -309,7 +274,7 @@ export function buildPulseChatGptOpenApiDocument() {
           type: "object",
           additionalProperties: true,
           properties: {
-            email: { type: "string", const: "support@certscore.ai" },
+            email: { type: "string", enum: ["support@certscore.ai"] },
             feedbackUrl: { type: "string" },
             positiveUrl: { type: "string" },
             negativeUrl: { type: "string" }
@@ -319,7 +284,7 @@ export function buildPulseChatGptOpenApiDocument() {
           type: "object",
           required: ["method", "observes", "doesNotProvide"],
           properties: {
-            method: { type: "string", const: PULSE_CAPABILITIES.method },
+            method: { type: "string", enum: [PULSE_CAPABILITIES.method] },
             observes: { type: "array", items: { type: "string", enum: [...PULSE_CAPABILITIES.observes] } },
             doesNotProvide: { type: "array", items: { type: "string", enum: [...PULSE_CAPABILITIES.doesNotProvide] } }
           }
@@ -330,7 +295,7 @@ export function buildPulseChatGptOpenApiDocument() {
           properties: {
             responseClass: { type: "string", enum: ["completed_pulse", "pending_pulse", "api_error", "rate_limited"] },
             safeSummaryUse: { type: "boolean" },
-            requiresHumanReview: { type: "boolean", const: true },
+            requiresHumanReview: { type: "boolean", enum: [true] },
             doNotCallThis: { type: "array", items: { type: "string", enum: [...PULSE_CAPABILITIES.doesNotProvide] } }
           }
         },
