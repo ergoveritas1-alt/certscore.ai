@@ -253,7 +253,9 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const freshness = gptAction ? "latest" : requestedFreshness;
   const waitSeconds = gptAction ? parseGptPulseWaitSeconds(url) : parsePulseWaitSeconds(url.searchParams.get("wait"));
   const requester = getPulseRequesterContext(request);
-  const forceNewScan = gptAction ? false : parseForceNewScan(url.searchParams.get("forceNewScan"));
+  const forceNewScan = gptAction
+    ? false
+    : parseForceNewScan(url.searchParams.get("forceNewScan")) || requestedFreshness === "refresh";
   const scanFrom = getRequestedScanFrom(url);
   const scanId = url.searchParams.get("scanId")?.trim() || null;
   const jobId = url.searchParams.get("jobId")?.trim() || null;

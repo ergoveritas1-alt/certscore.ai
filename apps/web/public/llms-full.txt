@@ -151,9 +151,9 @@ Supported inputs:
 - `scanId`: existing public eligible scan ID.
 - `format`: `json` or `markdown`.
 - `detail`: `tiny`, `quick`, `standard`, or `full`; `quick` is an alias for `tiny`.
-- `freshness`: `latest` or `refresh`.
+- `freshness`: `latest` reuses a recent eligible scan; `refresh` requests a new scan when eligible and bypasses the 24-hour recent-scan reuse check.
 - `scanFrom` or `geo`: scan execution context for newly queued scans.
-- `forceNewScan`: bypasses the 24-hour recent-scan reuse check; does not bypass validation or throttles.
+- `forceNewScan`: compatibility override for `freshness=refresh`; bypasses the 24-hour recent-scan reuse check, but does not bypass validation or throttles.
 - `wait`: 0 to 80 seconds for the current HTTP hold window.
 
 Retry behavior:

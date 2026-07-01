@@ -33,7 +33,13 @@ export function buildPulseV1OpenApiDocument() {
             { name: "jobId", in: "query", schema: { type: "string" } },
             { name: "format", in: "query", schema: { type: "string", enum: ["json", "markdown"], default: "json" } },
             { name: "detail", in: "query", schema: { type: "string", enum: ["tiny", "quick", "standard", "full"], default: "standard" } },
-            { name: "freshness", in: "query", schema: { type: "string", enum: ["latest", "refresh"], default: "latest" } },
+            {
+              name: "freshness",
+              in: "query",
+              description:
+                "Use latest to reuse recent eligible scans. Use refresh to request a new scan when eligible; refresh bypasses the 24-hour recent-scan reuse check but not validation or throttles.",
+              schema: { type: "string", enum: ["latest", "refresh"], default: "latest" }
+            },
             {
               name: "scanFrom",
               in: "query",
@@ -49,7 +55,8 @@ export function buildPulseV1OpenApiDocument() {
             {
               name: "forceNewScan",
               in: "query",
-              description: "Set true to bypass the 24-hour recent-scan reuse check. This does not bypass validation or the 1-minute scan-generation throttle.",
+              description:
+                "Compatibility override for freshness=refresh. Set true to bypass the 24-hour recent-scan reuse check. This does not bypass validation or the 1-minute scan-generation throttle.",
               schema: { type: "boolean", default: false }
             },
             { name: "wait", in: "query", schema: { type: "integer", minimum: 0, maximum: 80 } }

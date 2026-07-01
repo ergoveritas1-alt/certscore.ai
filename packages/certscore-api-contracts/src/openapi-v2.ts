@@ -484,7 +484,13 @@ export function buildCertScoreApiV2OpenApiDocument() {
           required: ["url"],
           properties: {
             url: { type: "string" },
-            freshness: { type: "string", enum: ["latest", "refresh"], default: "latest" },
+            freshness: {
+              type: "string",
+              enum: ["latest", "refresh"],
+              default: "latest",
+              description:
+                "Use latest to reuse recent eligible scans. Use refresh to request a new scan when eligible; refresh bypasses the 24-hour recent-scan reuse check but not validation or throttles."
+            },
             scanFrom: { type: "string", enum: ["eu_ie", "california"], default: "eu_ie" },
             callbackUrl: { type: "string", format: "uri" },
             metadata: { type: "object", additionalProperties: { type: "string" } }

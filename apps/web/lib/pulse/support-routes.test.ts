@@ -127,7 +127,8 @@ test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass"
 
   assert.match(reuseSource, /RECENT_SCAN_REUSE_WINDOW_HOURS = 24/);
   assert.match(reuseSource, /getTime\(\)/);
-  assert.match(pulseRoute, /forceNewScan = gptAction \? false/);
+  assert.match(pulseRoute, /requestedFreshness === "refresh"/);
+  assert.match(pulseRoute, /parseForceNewScan\(url\.searchParams\.get\("forceNewScan"\)\) \|\| requestedFreshness === "refresh"/);
   assert.match(pulseRoute, /maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS/);
   assert.match(pulseRoute, /resolutionMode: "reused_existing_scan"/);
   assert.match(fullScanRoute, /parseForceNewScan/);

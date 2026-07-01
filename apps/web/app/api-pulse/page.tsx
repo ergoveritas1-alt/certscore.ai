@@ -829,8 +829,8 @@ Public-safe phase message:
                 may queue a new scan.
               </p>
               <p>
-                `freshness=refresh` requests a new scan only when the 24-hour reuse window does not already contain an eligible completed scan. To bypass the 24-hour reuse check, pass `forceNewScan=true`. Scan generation is still limited to one new Pulse scan
-                per normalized domain every one minute under the 1-minute normalized-domain throttle.
+                `freshness=refresh` requests a new scan when eligible and bypasses the 24-hour reuse check. `forceNewScan=true` is a compatibility override with the same reuse-bypass behavior. Scan generation is still limited to one new
+                Pulse scan per normalized domain every one minute under the 1-minute normalized-domain throttle.
               </p>
               <p>
                 If refresh is throttled but a completed scan exists, CertScore may return the latest completed Pulse with

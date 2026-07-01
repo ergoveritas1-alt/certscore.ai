@@ -302,7 +302,12 @@ async function runInstalledMcpSmoke(token: string) {
       }
     }
 
-    const created = await callTool(client, "scan_site", { url: smokeUrl, detail: "standard", freshness: "latest" });
+    const created = await callTool(client, "scan_site", {
+      url: smokeUrl,
+      detail: "standard",
+      freshness: "refresh",
+      scanFrom: "eu_ie"
+    });
     summarize("scan_site", created);
     const scanId = scanIdFrom(created);
     if (!scanId) {

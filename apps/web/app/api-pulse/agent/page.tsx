@@ -75,9 +75,11 @@ export default function PulseAgentFallbackPage() {
               .
             </li>
             <li>
-              Pulse reuses an eligible completed scan from the prior 24 hours before queueing a new scan. Time comparisons use UTC
-              instants. Use <code className="rounded bg-white px-1">forceNewScan=true</code> only when you need to bypass that reuse
-              check; it does not bypass validation or throttles.
+              Pulse reuses an eligible completed scan from the prior 24 hours before queueing a new scan when{" "}
+              <code className="rounded bg-white px-1">freshness=latest</code>. Use{" "}
+              <code className="rounded bg-white px-1">freshness=refresh</code> to request a new scan when eligible.{" "}
+              <code className="rounded bg-white px-1">forceNewScan=true</code> is a compatibility override; neither option bypasses
+              validation or throttles.
             </li>
             <li>
               Use <code className="rounded bg-white px-1">scanFrom</code> or{" "}
