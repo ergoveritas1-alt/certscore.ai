@@ -175,7 +175,7 @@ export function buildPulseChatGptOpenApiDocument() {
           tags: ["Diagnostics"],
           summary: "Check CertScore Pulse action connectivity.",
           description:
-            "Dependency-free connectivity canary. Use once when a scan action fails before HTTP status, body, or x-certscore diagnostic headers are visible; success indicates a transient client/action transport error.",
+            "Quick CertScore Pulse reachability check. Use once when a scan action cannot be reached, then ask the user to retry or provide the direct Pulse URL.",
           responses: {
             "200": {
               description: "Pulse support route is reachable.",
