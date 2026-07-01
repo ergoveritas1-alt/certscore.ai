@@ -1,3 +1,5 @@
+import { applyPulseCors, pulseOptionsResponse } from "../../../../lib/pulse/cors";
+
 const standardDisclaimer =
   "CertScore provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore does not provide legal advice nor certify compliance. Always review the underlying evidence and consult qualified experts where appropriate.";
 
@@ -41,15 +43,21 @@ export function GET(request: Request) {
     disclaimer: standardDisclaimer
   };
 
+  const headers = applyPulseCors(new Headers({
+    "Cache-Control": "no-store",
+    "Content-Type": "application/json; charset=utf-8",
+    "X-CertScore-Pulse": "v1",
+    "X-CertScore-Route": "pulse-self-test",
+    "X-CertScore-Request-Id": id,
+    "X-Content-Type-Options": "nosniff"
+  }), request);
+
   return new Response(JSON.stringify(body), {
-    headers: {
-      "Cache-Control": "no-store",
-      "Content-Type": "application/json; charset=utf-8",
-      "X-CertScore-Pulse": "v1",
-      "X-CertScore-Route": "pulse-self-test",
-      "X-CertScore-Request-Id": id,
-      "X-Content-Type-Options": "nosniff"
-    },
+    headers,
     status: 200
   });
+}
+
+export function OPTIONS(request: Request) {
+  return pulseOptionsResponse(request);
 }

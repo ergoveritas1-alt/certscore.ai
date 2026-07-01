@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { restrictScanFromForUser } from "../../../../server/scans/restricted-scan-options";
 import { absoluteUrl } from "../../../../lib/seo";
+import { applyPulseCors, pulseOptionsResponse } from "../../../../lib/pulse/cors";
 import { buildPulseError } from "../../../../lib/pulse/error";
 import {
   getHighPriorityFindingCount,
@@ -64,7 +65,7 @@ function diagnosticHeaders(route: string, requestId: string, headers?: HeadersIn
   nextHeaders.set("X-CertScore-Pulse", "v1");
   nextHeaders.set("X-CertScore-Route", route);
   nextHeaders.set("X-CertScore-Request-Id", requestId);
-  return nextHeaders;
+  return applyPulseCors(nextHeaders);
 }
 
 function completedResponse(pulse: any, format: "json" | "markdown", requestId: string, options: PulseRouteOptions = {}) {
@@ -772,4 +773,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
 
 export async function GET(request: Request) {
   return handlePulseGET(request);
+}
+
+export function OPTIONS(request: Request) {
+  return pulseOptionsResponse(request);
 }
