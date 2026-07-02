@@ -109,6 +109,7 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
 test("GPT Pulse route source preserves public-mode gates", () => {
   const source = readFileSync("apps/web/app/api/v1/pulse/route.ts", "utf8");
   const gptRoute = readFileSync("apps/web/app/api/v1/pulse/gpt/route.ts", "utf8");
+  const coverageSource = readFileSync("apps/web/lib/pulse/scan-coverage.ts", "utf8");
 
   assert.match(source, /gptAction \? \(url\.searchParams\.get\("detail"\) \?\? "full"\)/);
   assert.doesNotMatch(source, /Full evidence detail is not available through the public GPT Action/);
@@ -116,8 +117,9 @@ test("GPT Pulse route source preserves public-mode gates", () => {
   assert.match(source, /public GPT Action uses latest available Pulse results only/);
   assert.match(source, /GPT_ACTION_HOURLY_LIMIT = 5/);
   assert.match(source, /GPT_ACTION_DAILY_LIMIT = 20/);
-  assert.match(source, /PULSE_SCAN_COVERAGE_PLAN_CODE = "team"/);
-  assert.match(source, /PULSE_MIN_REUSABLE_PAGES_REQUESTED = getPlanDefinition\(PULSE_SCAN_COVERAGE_PLAN_CODE\)\.maxPagesPerScan/);
+  assert.match(coverageSource, /PULSE_SCAN_COVERAGE_PLAN_CODE = "team"/);
+  assert.match(coverageSource, /PULSE_MIN_REUSABLE_PAGES_REQUESTED = getPlanDefinition\(PULSE_SCAN_COVERAGE_PLAN_CODE\)\.maxPagesPerScan/);
+  assert.match(source, /from "\.\.\/\.\.\/\.\.\/\.\.\/lib\/pulse\/scan-coverage"/);
   assert.match(source, /coveragePlanCode: PULSE_SCAN_COVERAGE_PLAN_CODE/);
   assert.match(source, /minimumReusablePagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
   assert.match(gptRoute, /channel", "gpt_action"/);
@@ -125,6 +127,9 @@ test("GPT Pulse route source preserves public-mode gates", () => {
 
 test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass", () => {
   const pulseRoute = readFileSync("apps/web/app/api/v1/pulse/route.ts", "utf8");
+  const apiV2CreateScanRoute = readFileSync("apps/web/app/api/v2/scans/route.ts", "utf8");
+  const apiV2DomainLatestRoute = readFileSync("apps/web/app/api/v2/domains/[domain]/latest/route.ts", "utf8");
+  const apiV2DomainLatestInventoryRoute = readFileSync("apps/web/app/api/v2/domains/[domain]/latest/pre-consent-cookies-trackers/route.ts", "utf8");
   const fullScanRoute = readFileSync("apps/web/app/api/full-scan/route.ts", "utf8");
   const anonymousScanSource = readFileSync("apps/web/server/scans/create-anonymous-full-scan.ts", "utf8");
   const authenticatedScanSource = readFileSync("apps/web/server/scans/create-full-scan.ts", "utf8");
@@ -139,6 +144,12 @@ test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass"
   assert.match(pulseRoute, /parseForceNewScan\(url\.searchParams\.get\("forceNewScan"\)\) \|\| requestedFreshness === "refresh"/);
   assert.match(pulseRoute, /maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS/);
   assert.match(pulseRoute, /minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
+  assert.match(apiV2CreateScanRoute, /GET as pulseGET/);
+  assert.match(apiV2CreateScanRoute, /new URL\("\/api\/v1\/pulse"/);
+  assert.match(apiV2DomainLatestRoute, /PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
+  assert.match(apiV2DomainLatestRoute, /minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
+  assert.match(apiV2DomainLatestInventoryRoute, /PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
+  assert.match(apiV2DomainLatestInventoryRoute, /minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
   assert.match(pulseRoute, /resolutionMode: "reused_existing_scan"/);
   assert.match(fullScanRoute, /parseForceNewScan/);
   assert.match(pulseRoute, /url\.searchParams\.get\("scanFrom"\) \?\? url\.searchParams\.get\("geo"\)/);
@@ -586,6 +597,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
 test("API v2 routes stay beside the public projection layer", () => {
   const routePaths = [
     "apps/web/app/api/v2/domains/[domain]/latest/route.ts",
+    "apps/web/app/api/v2/domains/[domain]/latest/pre-consent-cookies-trackers/route.ts",
     "apps/web/app/api/v2/health/route.ts",
     "apps/web/app/api/v2/openapi.json/route.ts",
     "apps/web/app/api/v2/scans/[scanId]/findings/[findingId]/route.ts",

@@ -1,5 +1,6 @@
 import { normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { apiV2JsonResponse, buildApiV2DomainLatestScan, buildApiV2Error } from "../../../../../../lib/api-v2/scan-resource";
+import { PULSE_MIN_REUSABLE_PAGES_REQUESTED } from "../../../../../../lib/pulse/scan-coverage";
 import { normalizePulseUrl } from "../../../../../../lib/pulse/request";
 import { getAnonymousScanById } from "../../../../../../server/scans/get-scan-by-id";
 import { findLatestCompletedAnonymousScanForDomain } from "../../../../../../server/pulse/repository";
@@ -34,7 +35,10 @@ export async function GET(request: Request, context: RouteContext) {
   try {
     const url = new URL(request.url);
     const scanFrom = normalizeScanFrom(url.searchParams.get("scanFrom"));
-    const latestScan = await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, { scanFrom });
+    const latestScan = await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, {
+      minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
+      scanFrom
+    });
     const scanRecord = latestScan ? await getAnonymousScanById(latestScan.id).catch(() => null) : null;
 
     return apiV2JsonResponse({

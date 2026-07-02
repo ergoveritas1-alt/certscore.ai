@@ -48,7 +48,17 @@ function fixture(overrides: Partial<ScanDetailResponse["scan"]> = {}) {
     },
     regulatoryRisk: {
       overallScore: 28
-    }
+    },
+    domainBenchmark: null,
+    events: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
+    runtimeArtifacts: {},
+    signals: [],
+    snapshot: {},
+    trackerVendors: [],
+    validationFindings: []
   } as unknown as ScanDetailResponse;
 }
 
@@ -139,8 +149,8 @@ test("buildApiV2ScanResource projects a completed scan into public-safe v2 shape
   assert.equal(resource.type, "certscore_scan");
   assert.equal(resource.scanId, "00000000-0000-4000-8000-000000000123");
   assert.equal(resource.domain, "example.com");
-  assert.equal(resource.score, 72);
-  assert.equal(resource.riskLevel, "review_recommended");
+  assert.equal(resource.score, 33);
+  assert.equal(resource.riskLevel, "significant_review_recommended");
   assert.equal(resource.coverage?.status, "complete");
   assert.equal(resource.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });

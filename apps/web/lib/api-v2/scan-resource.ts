@@ -21,6 +21,7 @@ import {
 } from "@certscore/api-contracts";
 import type { PulseResponse } from "@certscore/api-contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { derivePulseReportScore } from "../pulse/projection";
 import { buildRuntimeInventoryProjectionFromScan, inventoryRegistrableDomain, type InventoryGroupRow } from "../scans/runtime-inventory-projection";
 import { absoluteUrl } from "../seo";
 
@@ -83,11 +84,6 @@ function finiteScore(value: unknown) {
 
 function finiteInt(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : null;
-}
-
-function derivePublicScore(scanRecord: ScanDetailResponse) {
-  const riskScore = finiteScore(scanRecord.regulatoryRisk?.overallScore);
-  return riskScore === null ? null : 100 - riskScore;
 }
 
 function riskLevelFromScore(score: number | null) {
@@ -231,7 +227,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
 export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2ScanResource {
   const scan = scanRecord.scan;
   const domain = scan.domainHostname ?? "unknown";
-  const score = derivePublicScore(scanRecord);
+  const score = derivePulseReportScore({ scanRecord });
   const resource = {
     type: "certscore_scan",
     scanId: scan.id,

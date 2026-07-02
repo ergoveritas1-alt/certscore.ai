@@ -1,6 +1,7 @@
 import { normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { apiV2PreConsentCookiesTrackersSchema } from "@certscore/api-contracts";
 import { apiV2JsonResponse, buildApiV2Error, buildApiV2PreConsentCookiesTrackers } from "../../../../../../../lib/api-v2/scan-resource";
+import { PULSE_MIN_REUSABLE_PAGES_REQUESTED } from "../../../../../../../lib/pulse/scan-coverage";
 import { normalizePulseUrl } from "../../../../../../../lib/pulse/request";
 import { findLatestCompletedAnonymousScanForDomain } from "../../../../../../../server/pulse/repository";
 import { getAnonymousScanById } from "../../../../../../../server/scans/get-scan-by-id";
@@ -35,7 +36,10 @@ export async function GET(request: Request, context: RouteContext) {
   try {
     const url = new URL(request.url);
     const scanFrom = normalizeScanFrom(url.searchParams.get("scanFrom"));
-    const latestScan = await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, { scanFrom });
+    const latestScan = await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, {
+      minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
+      scanFrom
+    });
     const scanRecord = latestScan ? await getAnonymousScanById(latestScan.id).catch(() => null) : null;
 
     if (!scanRecord || scanRecord.scan.status !== "completed") {

@@ -98,13 +98,16 @@ function deriveRegulatoryRiskDisplayScore(scanRecord: ScanDetailResponse) {
   return null;
 }
 
-function deriveReportAlignedScore(input: {
-  coverageLimited: boolean;
-  findings: CertScoreFinding[];
+export function derivePulseReportScore(input: {
+  coverageLimited?: boolean;
+  findings?: CertScoreFinding[];
   scanRecord: ScanDetailResponse;
-  unifiedFindingPackets: ReturnType<typeof buildScanReportUnifiedFindings>;
+  unifiedFindingPackets?: ReturnType<typeof buildScanReportUnifiedFindings>;
 }) {
   const scanRecord = input.scanRecord;
+  const coverageLimited = input.coverageLimited ?? (deriveCoverage(scanRecord).status !== "complete");
+  const unifiedFindingPackets = input.unifiedFindingPackets ?? buildScanReportUnifiedFindings(scanRecord);
+  const findings = input.findings ?? projectExecutiveFindingsFromUnifiedPackets(unifiedFindingPackets).findings;
   const presentationSummary = deriveCertScoreFindings(scanRecord);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(scanRecord.runtimeArtifacts);
   const runtimeCookieRows = buildRuntimeCookieInventory({
@@ -129,27 +132,27 @@ function deriveReportAlignedScore(input: {
     vendor: row.vendor
   }));
   const gdprEprivacyChecklist = deriveGdprEprivacyCoverageChecklist({
-    coverageLimited: input.coverageLimited,
+    coverageLimited,
     coverageOutcomes: deriveGdprEprivacyCoveragePolicyOutcomes({
-      coverageLimited: input.coverageLimited,
+      coverageLimited,
       events: scanRecord.events,
       policyEnrichmentCount: scanRecord.policyEnrichment.length,
       runtimeArtifacts: scanRecord.runtimeArtifacts,
       scanCompleted: scanRecord.scan.status === "completed",
       snapshot: scanRecord.snapshot
     }),
-    projectedFindings: input.findings,
+    projectedFindings: findings,
     runtimeCookieRows,
     runtimeTrackerPriorityRows,
     scanCompleted: scanRecord.scan.status === "completed",
-    unifiedFindings: input.unifiedFindingPackets
+    unifiedFindings: unifiedFindingPackets
   });
   const gdprEprivacyScore = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: getReportableGdprEprivacyCoverageItems(gdprEprivacyChecklist)
   }).score;
   const executiveScore = deriveExecutiveDisplayedScore({
-    findings: input.findings,
+    findings,
     previewMode: "homepage",
     snapshot: scanRecord.snapshot,
     storedScore: presentationSummary.score
@@ -654,7 +657,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const packets = buildScanReportUnifiedFindings(input.scanRecord);
   const executive = projectExecutiveFindingsFromUnifiedPackets(packets);
   const allFindings = executive.findings;
-  const score = deriveReportAlignedScore({
+  const score = derivePulseReportScore({
     coverageLimited: coverage.status !== "complete",
     findings: allFindings,
     scanRecord: input.scanRecord,

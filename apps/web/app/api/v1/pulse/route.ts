@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { getPlanDefinition, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { restrictScanFromForUser } from "../../../../server/scans/restricted-scan-options";
 import { absoluteUrl } from "../../../../lib/seo";
 import { applyPulseCors, pulseOptionsResponse } from "../../../../lib/pulse/cors";
@@ -22,6 +22,7 @@ import {
   parsePulseWaitSeconds
 } from "../../../../lib/pulse/request";
 import { buildPulseStatus } from "../../../../lib/pulse/status";
+import { PULSE_MIN_REUSABLE_PAGES_REQUESTED, PULSE_SCAN_COVERAGE_PLAN_CODE } from "../../../../lib/pulse/scan-coverage";
 import {
   checkIntegrationApiKeyUsageLimit,
   parseBearerToken,
@@ -51,8 +52,6 @@ const SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
 const GPT_ACTION_HOURLY_LIMIT = 5;
 const GPT_ACTION_DAILY_LIMIT = 20;
 const GPT_ACTION_MAX_WAIT_SECONDS = 35;
-const PULSE_SCAN_COVERAGE_PLAN_CODE = "team" as const;
-const PULSE_MIN_REUSABLE_PAGES_REQUESTED = getPlanDefinition(PULSE_SCAN_COVERAGE_PLAN_CODE).maxPagesPerScan;
 
 type PulseRouteOptions = {
   gptAction?: boolean;
