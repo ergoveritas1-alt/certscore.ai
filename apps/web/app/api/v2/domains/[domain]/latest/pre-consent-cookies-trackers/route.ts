@@ -4,7 +4,7 @@ import { apiV2JsonResponse, buildApiV2Error, buildApiV2PreConsentCookiesTrackers
 import { PULSE_MIN_REUSABLE_PAGES_REQUESTED } from "../../../../../../../lib/pulse/scan-coverage";
 import { normalizePulseUrl } from "../../../../../../../lib/pulse/request";
 import { findLatestCompletedAnonymousScanForDomain } from "../../../../../../../server/pulse/repository";
-import { getAnonymousScanById } from "../../../../../../../server/scans/get-scan-by-id";
+import { getPublicScanRecord } from "../../../../../../../server/scans/get-public-scan-record";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -40,7 +40,9 @@ export async function GET(request: Request, context: RouteContext) {
       minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
       scanFrom
     });
-    const scanRecord = latestScan ? await getAnonymousScanById(latestScan.id).catch(() => null) : null;
+    const scanRecord = latestScan
+      ? await getPublicScanRecord(latestScan.id, { logPrefix: "[api-v2-domain-latest-pre-consent-cookies-trackers]" })
+      : null;
 
     if (!scanRecord || scanRecord.scan.status !== "completed") {
       return apiV2JsonResponse({

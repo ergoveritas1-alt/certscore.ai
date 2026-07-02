@@ -128,12 +128,18 @@ test("GPT Pulse route source preserves public-mode gates", () => {
 test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass", () => {
   const pulseRoute = readFileSync("apps/web/app/api/v1/pulse/route.ts", "utf8");
   const apiV2CreateScanRoute = readFileSync("apps/web/app/api/v2/scans/route.ts", "utf8");
+  const apiV2ScanRoute = readFileSync("apps/web/app/api/v2/scans/[scanId]/route.ts", "utf8");
+  const apiV2ScanPulseRoute = readFileSync("apps/web/app/api/v2/scans/[scanId]/pulse/route.ts", "utf8");
+  const apiV2ScanFindingsRoute = readFileSync("apps/web/app/api/v2/scans/[scanId]/findings/route.ts", "utf8");
+  const apiV2ScanFindingRoute = readFileSync("apps/web/app/api/v2/scans/[scanId]/findings/[findingId]/route.ts", "utf8");
+  const apiV2ScanInventoryRoute = readFileSync("apps/web/app/api/v2/scans/[scanId]/pre-consent-cookies-trackers/route.ts", "utf8");
   const apiV2DomainLatestRoute = readFileSync("apps/web/app/api/v2/domains/[domain]/latest/route.ts", "utf8");
   const apiV2DomainLatestInventoryRoute = readFileSync("apps/web/app/api/v2/domains/[domain]/latest/pre-consent-cookies-trackers/route.ts", "utf8");
   const fullScanRoute = readFileSync("apps/web/app/api/full-scan/route.ts", "utf8");
   const anonymousScanSource = readFileSync("apps/web/server/scans/create-anonymous-full-scan.ts", "utf8");
   const authenticatedScanSource = readFileSync("apps/web/server/scans/create-full-scan.ts", "utf8");
   const domainSource = readFileSync("apps/web/server/domains/create-domain.ts", "utf8");
+  const publicScanRecordSource = readFileSync("apps/web/server/scans/get-public-scan-record.ts", "utf8");
   const reuseSource = readFileSync("apps/web/server/scans/recent-scan-reuse.ts", "utf8");
 
   assert.match(reuseSource, /RECENT_SCAN_REUSE_WINDOW_HOURS = 24/);
@@ -146,9 +152,19 @@ test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass"
   assert.match(pulseRoute, /minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
   assert.match(apiV2CreateScanRoute, /GET as pulseGET/);
   assert.match(apiV2CreateScanRoute, /new URL\("\/api\/v1\/pulse"/);
+  assert.match(publicScanRecordSource, /materializeLocalV2DagScanDetail/);
+  assert.match(pulseRoute, /getPublicScanRecord\(scanId/);
+  assert.match(apiV2CreateScanRoute, /getPublicScanRecord\(scanId/);
+  assert.match(apiV2ScanRoute, /getPublicScanRecord\(scanId/);
+  assert.match(apiV2ScanPulseRoute, /getPublicScanRecord\(scanId/);
+  assert.match(apiV2ScanFindingsRoute, /getPublicScanRecord\(scanId/);
+  assert.match(apiV2ScanFindingRoute, /getPublicScanRecord\(scanId/);
+  assert.match(apiV2ScanInventoryRoute, /getPublicScanRecord\(scanId/);
   assert.match(apiV2DomainLatestRoute, /PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
+  assert.match(apiV2DomainLatestRoute, /getPublicScanRecord\(latestScan\.id/);
   assert.match(apiV2DomainLatestRoute, /minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
   assert.match(apiV2DomainLatestInventoryRoute, /PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
+  assert.match(apiV2DomainLatestInventoryRoute, /getPublicScanRecord\(latestScan\.id/);
   assert.match(apiV2DomainLatestInventoryRoute, /minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
   assert.match(pulseRoute, /resolutionMode: "reused_existing_scan"/);
   assert.match(fullScanRoute, /parseForceNewScan/);

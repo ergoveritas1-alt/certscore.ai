@@ -7,7 +7,7 @@ import {
   buildApiV2ScanJobFromPulseStatus,
   buildApiV2ScanResource
 } from "../../../../lib/api-v2/scan-resource";
-import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
+import { getPublicScanRecord } from "../../../../server/scans/get-public-scan-record";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     if (pulseResponse.status === 200) {
       const pulse = pulseResponseSchema.parse(pulseBody);
       const scanId = pulse.scanId ?? pulse.scan_id ?? null;
-      const scanRecord = scanId ? await getAnonymousScanById(scanId).catch(() => null) : null;
+      const scanRecord = scanId ? await getPublicScanRecord(scanId, { logPrefix: "[api-v2-create-scan]" }) : null;
       if (!scanRecord || scanRecord.scan.status !== "completed") {
         return apiV2JsonResponse({
           body: buildApiV2Error({ code: "scan_unavailable", message: "Pulse returned a completed result without an eligible public scan resource." }),

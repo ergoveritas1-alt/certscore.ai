@@ -31,8 +31,7 @@ import {
 } from "../../../../server/integrations/api-keys";
 import { checkDomainDns } from "../../../../server/domains/domain-dns";
 import { createAnonymousFullScan } from "../../../../server/scans/create-anonymous-full-scan";
-import { getAnonymousScanById } from "../../../../server/scans/get-scan-by-id";
-import { materializeLocalV2DagScanDetail } from "../../../../server/scans/local-v2-dag-report";
+import { getPublicScanRecord, type PublicScanRecord } from "../../../../server/scans/get-public-scan-record";
 import { RECENT_SCAN_REUSE_WINDOW_HOURS } from "../../../../server/scans/recent-scan-reuse";
 import {
   claimPulseDomainScanCreation,
@@ -108,17 +107,7 @@ function parseForceNewScan(value: string | null) {
 }
 
 async function loadPulseScanRecord(scanId: string) {
-  const scanRecord = await getAnonymousScanById(scanId).catch(() => null);
-  if (!scanRecord || scanRecord.scan.status !== "completed") {
-    return scanRecord;
-  }
-  return materializeLocalV2DagScanDetail(scanRecord).catch((error) => {
-    console.error("[pulse] local v2 artifact materialization failed", {
-      error: error instanceof Error ? error.message : String(error),
-      scanId
-    });
-    return scanRecord;
-  });
+  return getPublicScanRecord(scanId, { logPrefix: "[pulse]" });
 }
 
 function pulseUnavailableResponse(input: {
@@ -165,7 +154,7 @@ async function buildAndLogCompletedPulse(input: {
   pulseRequestId: string;
   requestedUrl: string | null;
   resolutionMode: string;
-  scanRecord: NonNullable<Awaited<ReturnType<typeof getAnonymousScanById>>>;
+  scanRecord: PublicScanRecord;
   waitSeconds: number;
   requestId: string;
   refresh?: Record<string, unknown> | null;

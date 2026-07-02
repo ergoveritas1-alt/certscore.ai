@@ -7,7 +7,7 @@ import {
   projectedFindingsFromPulse
 } from "../../../../../../../lib/api-v2/scan-resource";
 import { buildPulseProjection } from "../../../../../../../lib/pulse/projection";
-import { getAnonymousScanById } from "../../../../../../../server/scans/get-scan-by-id";
+import { getPublicScanRecord } from "../../../../../../../server/scans/get-public-scan-record";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,7 +37,7 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   try {
-    const scanRecord = await getAnonymousScanById(scanId);
+    const scanRecord = await getPublicScanRecord(scanId, { logPrefix: "[api-v2-scan-finding]" });
     if (!scanRecord || scanRecord.scan.status !== "completed") {
       return apiV2JsonResponse({
         body: buildApiV2Error({ code: "not_found", message: "Scan not found or not eligible for public API v2." }),

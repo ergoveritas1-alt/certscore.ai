@@ -2,7 +2,7 @@ import { normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { apiV2JsonResponse, buildApiV2DomainLatestScan, buildApiV2Error } from "../../../../../../lib/api-v2/scan-resource";
 import { PULSE_MIN_REUSABLE_PAGES_REQUESTED } from "../../../../../../lib/pulse/scan-coverage";
 import { normalizePulseUrl } from "../../../../../../lib/pulse/request";
-import { getAnonymousScanById } from "../../../../../../server/scans/get-scan-by-id";
+import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
 import { findLatestCompletedAnonymousScanForDomain } from "../../../../../../server/pulse/repository";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,7 @@ export async function GET(request: Request, context: RouteContext) {
       minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
       scanFrom
     });
-    const scanRecord = latestScan ? await getAnonymousScanById(latestScan.id).catch(() => null) : null;
+    const scanRecord = latestScan ? await getPublicScanRecord(latestScan.id, { logPrefix: "[api-v2-domain-latest]" }) : null;
 
     return apiV2JsonResponse({
       body: buildApiV2DomainLatestScan({
