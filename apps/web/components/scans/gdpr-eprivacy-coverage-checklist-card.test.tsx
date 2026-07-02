@@ -1964,3 +1964,34 @@ test("GdprEprivacyCoverageChecklistCard does not throw when retained row rationa
 
   assert.match(html, /Not confirmed from retained scanner evidence/);
 });
+
+test("GdprEprivacyCoverageChecklistCard uses retained status basis for visible scan-context notes", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            missingOrIncompleteSourceSignals: [],
+            retainedEvidence: {
+              consentSurfaceObserved: true,
+              visibleChoiceLabels: ["Accept", "Reject"]
+            },
+            statusBasis: "A first-layer cookie notice was observed with actionable Accept and Decline controls."
+          },
+          evidenceState: "observed",
+          explanation: "",
+          id: "consent_surface_observed",
+          label: "Consent mechanism",
+          note: "",
+          status: "Observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /A first-layer cookie notice was observed with actionable Accept and Decline controls/);
+  assert.doesNotMatch(html, /Retained scanner evidence was evaluated for this checklist row/);
+});

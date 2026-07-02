@@ -13,17 +13,23 @@ type CanonicalRuntimeEvidenceEntry = {
 };
 
 export function deriveGdprEprivacyCoverageChecklistRowRationale(item: GdprEprivacyCoverageChecklistItem) {
-  const rationale =
-    getSpecificChecklistRowRationale(item) ??
-    getEvidenceBackedFallbackRationale(item) ??
-    item.note ??
-    item.explanation ??
-    `${item.label} evidence was evaluated from retained scanner evidence.`;
+  const rationale = firstNonEmptyRationale([
+    getSpecificChecklistRowRationale(item),
+    getEvidenceBackedFallbackRationale(item),
+    item.criticalEvidence.statusBasis,
+    item.note,
+    item.explanation,
+    `${item.label} evidence was evaluated from retained scanner evidence.`
+  ]);
 
   return truncateSentence(
     rationale,
     320
   );
+}
+
+function firstNonEmptyRationale(values: Array<string | null | undefined>) {
+  return values.find((value) => typeof value === "string" && value.trim().length > 0) ?? "";
 }
 
 function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistItem) {

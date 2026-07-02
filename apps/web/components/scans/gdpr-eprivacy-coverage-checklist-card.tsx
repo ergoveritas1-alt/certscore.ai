@@ -1419,7 +1419,17 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
 }
 
 function getChecklistRowRationale(item: GdprEprivacyCoverageChecklistItem) {
-  return deriveGdprEprivacyCoverageChecklistRowRationale(item);
+  const derived = deriveGdprEprivacyCoverageChecklistRowRationale(item);
+  if (typeof derived === "string" && derived.trim().length > 0) {
+    return derived;
+  }
+
+  return [
+    item.criticalEvidence.statusBasis,
+    item.note,
+    item.explanation
+  ].find((value) => typeof value === "string" && value.trim().length > 0)
+    ?? `${item.label} evidence was evaluated from retained scanner evidence.`;
 }
 
 export function getGdprEprivacyCoverageChecklistRowRationaleForAudit(item: GdprEprivacyCoverageChecklistItem) {
