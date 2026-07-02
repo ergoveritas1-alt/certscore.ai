@@ -31,7 +31,7 @@ export function buildPulseChatGptOpenApiDocument() {
           tags: ["Pulse"],
           summary: "Retrieve a GPT-safe CertScore Pulse summary for a public URL.",
           description:
-            "Scan a public website URL with CertScore Pulse and return automated privacy, consent, tracking, accessibility, and disclosure observations. Use markdown and standard detail by default. Not legal advice or a compliance determination.",
+            "Scan a public website URL with CertScore Pulse and return automated privacy, consent, tracking, accessibility, and disclosure observations. Use markdown and full public report detail by default. Not legal advice or a compliance determination.",
           parameters: [
             {
               name: "url",
@@ -51,8 +51,8 @@ export function buildPulseChatGptOpenApiDocument() {
               name: "detail",
               in: "query",
               required: false,
-              description: "tiny is compact; standard is balanced and best for GPT responses.",
-              schema: { type: "string", enum: ["tiny", "standard"], default: "standard" }
+              description: "full returns the same public-safe report coverage used by the CertScore website; standard is shorter; tiny is compact.",
+              schema: { type: "string", enum: ["tiny", "standard", "full"], default: "full" }
             },
             {
               name: "scanFrom",
@@ -117,8 +117,8 @@ export function buildPulseChatGptOpenApiDocument() {
               name: "detail",
               in: "query",
               required: false,
-              description: "tiny is compact; standard is balanced and best for GPT responses.",
-              schema: { type: "string", enum: ["tiny", "standard"], default: "standard" }
+              description: "full returns the same public-safe report coverage used by the CertScore website; standard is shorter; tiny is compact.",
+              schema: { type: "string", enum: ["tiny", "standard", "full"], default: "full" }
             }
           ],
           responses: {

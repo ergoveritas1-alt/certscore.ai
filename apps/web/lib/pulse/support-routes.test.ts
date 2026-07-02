@@ -89,6 +89,8 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { maximum?: number } }) => parameter.name === "wait" && parameter.schema.maximum === 35));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "scanFrom" && parameter.schema.enum?.includes("eu_ie")));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "geo" && parameter.schema.enum?.includes("california")));
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[]; default?: string } }) => parameter.name === "detail" && parameter.schema.enum?.includes("full") && parameter.schema.default === "full"));
+  assert.ok(body.paths["/api/v1/pulse/gpt/scan/{scanId}"].get.parameters.some((parameter: { name: string; schema: { enum?: string[]; default?: string } }) => parameter.name === "detail" && parameter.schema.enum?.includes("full") && parameter.schema.default === "full"));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].content["application/json"]);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["500"].content["application/json"]);
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.responses["429"].content["application/json"].schema.$ref, "#/components/schemas/PulseError");
@@ -99,7 +101,7 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.equal(body.paths["/api/v1/pulse-self-test"].get.responses["200"].content["application/json"].schema.$ref, "#/components/schemas/PulseSelfTest");
   assert.match(JSON.stringify(body), /checkPulseConnectivity|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
   assert.doesNotMatch(JSON.stringify(body), /text\/markdown|format=markdown|transport error/);
-  assert.doesNotMatch(JSON.stringify(body.paths["/api/v1/pulse/gpt"].get.parameters), /refresh|full/);
+  assert.doesNotMatch(JSON.stringify(body.paths["/api/v1/pulse/gpt"].get.parameters), /refresh/);
   assert.doesNotMatch(JSON.stringify(body.paths), /pulse-health/);
   assert.doesNotMatch(JSON.stringify(body), /pre_consent_tracking_detected|raw DOM|DATABASE_URL|AUTH_SECRET/i);
 });
@@ -108,8 +110,8 @@ test("GPT Pulse route source preserves public-mode gates", () => {
   const source = readFileSync("apps/web/app/api/v1/pulse/route.ts", "utf8");
   const gptRoute = readFileSync("apps/web/app/api/v1/pulse/gpt/route.ts", "utf8");
 
-  assert.match(source, /gptAction && detail === "full"/);
-  assert.match(source, /Full evidence detail is not available through the public GPT Action/);
+  assert.match(source, /gptAction \? \(url\.searchParams\.get\("detail"\) \?\? "full"\)/);
+  assert.doesNotMatch(source, /Full evidence detail is not available through the public GPT Action/);
   assert.match(source, /gptAction && requestedFreshness === "refresh"/);
   assert.match(source, /public GPT Action uses latest available Pulse results only/);
   assert.match(source, /GPT_ACTION_HOURLY_LIMIT = 5/);

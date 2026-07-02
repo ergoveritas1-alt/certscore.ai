@@ -57,7 +57,7 @@ test("Pulse ChatGPT OpenAPI stays compact and action-compatible", () => {
   assert.ok(document.paths["/api/v1/pulse/gpt"].get.responses["200"].content["application/json"].schema);
   assert.deepEqual(operations.sort(), ["checkPulseConnectivity", "getPulseByScanId", "getPulseForUrl", "getPulseJobStatus"]);
   assert.equal(serialized.includes("\"refresh\""), false);
-  assert.equal(serialized.includes("\"full\""), false);
+  assert.equal(serialized.includes("\"full\""), true);
   assert.equal(serialized.includes("\"text/markdown\""), false);
   assert.equal(serialized.includes("\"const\""), false);
 });

@@ -288,7 +288,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const gptAction = isGptActionRequest(url, options);
   const routeName = options.routeName ?? (gptAction ? "pulse-gpt" : "pulse");
   const format = gptAction ? parseGptPulseFormat(url) : parsePulseFormat(url.searchParams.get("format"));
-  const detail = parsePulseDetail(url.searchParams.get("detail"));
+  const detail = parsePulseDetail(gptAction ? (url.searchParams.get("detail") ?? "full") : url.searchParams.get("detail"));
   const requestedFreshness = parsePulseFreshness(url.searchParams.get("freshness"));
   const freshness = gptAction ? "latest" : requestedFreshness;
   const waitSeconds = gptAction ? parseGptPulseWaitSeconds(url) : parsePulseWaitSeconds(url.searchParams.get("wait"));
@@ -373,29 +373,6 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const startedAt = Date.now();
 
   try {
-    if (gptAction && detail === "full") {
-      logPulseGptActionEvent("pulse_gpt_action_error", {
-        detail,
-        elapsedMs: Date.now() - startedAt,
-        errorCode: "scan_unavailable",
-        format,
-        requestId,
-        route: "/api/v1/pulse/gpt",
-        statusCode: 400,
-        wait: waitSeconds
-      });
-      return pulseJson(
-        buildPulseError({
-          code: "scan_unavailable",
-          message: "Full evidence detail is not available through the public GPT Action. Open the CertScore report or use the standard Pulse API for public-safe full detail.",
-          detail: "standard",
-          format
-        }),
-        { headers: { "Cache-Control": "no-store" }, status: 400 },
-        requestId,
-        routeName
-      );
-    }
     if (gptAction && requestedFreshness === "refresh") {
       logPulseGptActionEvent("pulse_gpt_action_error", {
         detail,
