@@ -371,7 +371,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     id: "consent_choice_quality",
     label: "Cookie banner dark pattern signal",
     explanation: "Whether retained cookie-banner evidence shows choice architecture that may steer users toward accepting optional cookies or tracking.",
-    findingIds: [],
+    findingIds: ["consent_dark_patterns_detected", "asymmetric_consent_ui"],
     defaultFindingStatus: "Review signal",
     notObservedText: "No cookie-banner dark pattern signal was surfaced from retained canonical evidence.",
     requiresPublicWebCoverage: true

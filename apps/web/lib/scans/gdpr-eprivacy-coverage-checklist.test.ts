@@ -948,6 +948,48 @@ test("deriveGdprEprivacyCoverageChecklist renders consent choice quality not tes
   assert.match(choiceQuality.criticalEvidence.statusBasis, /no first-layer GDPR\/ePrivacy cookie consent surface was confirmed/i);
 });
 
+test("deriveGdprEprivacyCoverageChecklist projects canonical dark-pattern findings into consent choice quality row", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      consent_choice_quality: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: consent choice quality"],
+        retainedEvidence: {
+          firstLayerCookieConsentBannerObserved: null,
+          selectedEvidenceArtifactId: "consentChoiceQualityEvidence",
+          selectedEvidenceStrength: "missing"
+        },
+        limitation:
+          "Consent choice quality could not be evaluated because no first-layer GDPR/ePrivacy cookie consent surface was confirmed.",
+        rowId: "consent_choice_quality",
+        status: "Not testable"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("consent_dark_patterns_detected", "Cookie banner dark pattern signal", "surface", [
+        {
+          key: "policy_surface_detection",
+          kind: "signal",
+          label: "Reject was not available on the first layer.",
+          source: "runtime_artifact_signal"
+        }
+      ])
+    ]
+  });
+
+  const choiceQuality = byId(items, "consent_choice_quality");
+  assert.equal(choiceQuality.label, "Cookie banner dark pattern signal");
+  assert.equal(choiceQuality.status, "Review signal");
+  assert.equal(choiceQuality.assessmentStatus, "review_signal");
+  assert.equal(choiceQuality.evidenceState, "observed");
+  assert.match(choiceQuality.criticalEvidence.statusBasis, /retained first-layer consent choice evidence/i);
+  assert.match(choiceQuality.evidenceRefs.join(" "), /Cookie banner dark pattern signal/i);
+
+  const pretickedOrImplied = byId(items, "cookie_banner_preticked_or_implied_consent");
+  assert.notEqual(pretickedOrImplied.status, "Gap observed");
+});
+
 test("deriveGdprEprivacyCoverageChecklist keeps footer privacy-choice controls as consent-surface review signals", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
