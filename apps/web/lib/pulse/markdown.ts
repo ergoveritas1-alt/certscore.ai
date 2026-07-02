@@ -164,7 +164,10 @@ function lensUrl(lensName: unknown, fullReportUrl: unknown) {
 }
 
 export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAction?: boolean } = {}) {
-  const findings = Array.isArray(pulse.topFindings) ? pulse.topFindings : [];
+  const fullFindings = Array.isArray(pulse.findings) ? pulse.findings : [];
+  const topFindings = Array.isArray(pulse.topFindings) ? pulse.topFindings : [];
+  const findings = fullFindings.length > 0 ? fullFindings : topFindings;
+  const findingsHeading = fullFindings.length > 0 ? "## Automated findings" : "## Highest-priority findings";
   const lenses = Array.isArray(pulse.reviewContext?.lenses) ? pulse.reviewContext.lenses : [];
   const highlights = pulse.evidenceHighlights ?? {};
   const links = pulse.links ?? {};
@@ -211,7 +214,7 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
         ]
       : []),
     "",
-    "## Highest-priority findings",
+    findingsHeading,
     "",
     compactFindings(findings, options),
     "",

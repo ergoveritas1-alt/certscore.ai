@@ -70,8 +70,52 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
   assert.match(markdown, /API docs: https:\/\/certscore\.ai\/api-pulse/);
   assert.match(markdown, /Findings reference: https:\/\/certscore\.ai\/findings/);
   assert.match(markdown, /## Disclaimer/);
-  assert.match(markdown, /does not provide legal advice/);
+  assert.match(markdown, /not legal advice/);
   assert.doesNotMatch(markdown, /\bclean\b/i);
+});
+
+test("Pulse markdown renders full findings when full detail payload includes them", () => {
+  const markdown = renderPulseMarkdown({
+    meta: { detail: "full", generatedAt: "2026-05-18T23:15:32Z" },
+    domain: "nbcnews.com",
+    scanStatus: "completed",
+    summary: { score: 66, riskLevel: "review_recommended", humanSummary: "Automated scan surfaced review signals." },
+    topFindings: [
+      {
+        id: "pre_consent_tracking_detected",
+        label: "Third-party tracking observed before recorded consent",
+        criticality: "high",
+        confidence: "strong",
+        evidence: { summary: "Runtime evidence was retained." }
+      }
+    ],
+    findings: [
+      {
+        id: "pre_consent_tracking_detected",
+        label: "Third-party tracking observed before recorded consent",
+        criticality: "high",
+        confidence: "strong",
+        evidence: { summary: "Runtime evidence was retained." }
+      },
+      {
+        id: "device_identification_fingerprinting_signal",
+        label: "Device identification / fingerprinting signal",
+        criticality: "medium",
+        confidence: "good",
+        evidence: { summary: "Fingerprinting indicators were retained." }
+      }
+    ],
+    reviewContext: { lenses: [] },
+    coverage: { status: "partial", summary: "Automated public-web scan completed with partial coverage." },
+    links: { fullReportUrl: "https://certscore.ai/scan/scan_123" },
+    feedback: {},
+    disclaimer: PULSE_STANDARD_DISCLAIMER
+  });
+
+  assert.match(markdown, /## Automated findings/);
+  assert.doesNotMatch(markdown, /## Highest-priority findings/);
+  assert.match(markdown, /Third-party tracking observed before recorded consent/);
+  assert.match(markdown, /Device identification \/ fingerprinting signal/);
 });
 
 test("Pulse markdown uses available top-level completedAt before showing unavailable", () => {
@@ -139,7 +183,7 @@ test("GPT Action markdown uses GPT-safe no-finding copy and CertScore footer lin
   assert.equal((markdown.match(/Findings reference:|Explore finding definitions:/g) ?? []).length, 1);
   assert.match(markdown, /Run another scan: https:\/\/certscore\.ai/);
   assert.equal((markdown.match(/## Disclaimer/g) ?? []).length, 1);
-  assert.equal((markdown.match(/CertScore provides automated public-web observations for review/g) ?? []).length, 1);
+  assert.equal((markdown.match(/CertScore outputs are automated public-web observations for review/g) ?? []).length, 1);
 });
 
 test("Pulse markdown uses review-signal lens status labels", () => {
