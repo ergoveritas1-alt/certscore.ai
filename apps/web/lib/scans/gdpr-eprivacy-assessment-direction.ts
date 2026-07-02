@@ -28,7 +28,6 @@ const POSITIVE_WHEN_OBSERVED_ROW_IDS = new Set([
   "consent_surface_observed",
   "accept_consent_control",
   "options_settings_preferences_control",
-  "cookie_banner_preticked_or_implied_consent",
   "reject_all_path_availability",
   "cookie_notice_policy_availability",
   "privacy_notice_availability",

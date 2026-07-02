@@ -42,10 +42,10 @@ const CUSTOMER_LABELS: Record<string, string> = {
   cross_border_endpoint_review: "Cross-border endpoint review",
   post_reject_tracking_reduction: "Tracking after refusal",
   pre_consent_cookies_storage: "Cookies or storage before consent",
-  pre_consent_third_party_tracking: "Third-party tracking before consent",
+  pre_consent_third_party_tracking: "3rd party tracking before consent",
   preference_withdrawal_control: "Post-choice consent controls",
   reject_all_path_availability: "Reject option",
-  sensitive_surfaces_third_party_tracking: "Sensitive forms with third-party tracking",
+  sensitive_surfaces_third_party_tracking: "Sensitive forms with 3rd party tracking",
   session_replay_after_refusal: "Session replay after refusal / opt-out",
   session_replay_before_consent: "Session replay before consent",
   session_replay_disclosure_alignment: "Session replay disclosure alignment",
@@ -324,8 +324,8 @@ export function deriveGdprEprivacyEvidenceCard(item: GdprEprivacyCoverageCheckli
         ],
         interactionPath: "Before recorded consent interaction",
         whatCertScoreObserved: observedVendors.length > 0
-          ? `Third-party tracking activity was observed before recorded consent for ${observedVendors.join(", ")}.`
-          : "Third-party tracking activity was observed before a recorded consent action.",
+          ? `3rd party tracking activity was observed before recorded consent for ${observedVendors.join(", ")}.`
+          : "3rd party tracking activity was observed before a recorded consent action.",
         whyThisMatters: "Some privacy regimes require non-essential tracking activity to be gated until valid consent is obtained."
       };
     case "pre_consent_cookies_storage":
@@ -424,7 +424,7 @@ export function deriveGdprEprivacyEvidenceCard(item: GdprEprivacyCoverageCheckli
           "Confirm transfer context, vendor purpose, and public disclosure alignment for material runtime vendors."
         ],
         whatCertScoreObserved: getRetainedStrings(item, ["evidenceHighlights"])[0] ??
-          "Transfer-relevant third-party endpoint evidence was retained for review.",
+          "Transfer-relevant 3rd party endpoint evidence was retained for review.",
         whyThisMatters: "Transfer-relevant analytics or behavioral tracking endpoints can require review of vendor purpose, region, disclosure alignment, and transfer safeguards."
       };
     case "sensitive_surfaces_third_party_tracking":
@@ -433,10 +433,10 @@ export function deriveGdprEprivacyEvidenceCard(item: GdprEprivacyCoverageCheckli
         evidenceType: ["Runtime browser scan", "Sensitive-field correlation"],
         humanVerificationSteps: [
           "Review important forms and account flows not reached by the automated scan.",
-          "Confirm whether any third-party scripts run on sensitive collection surfaces."
+          "Confirm whether any 3rd party scripts run on sensitive collection surfaces."
         ],
         whatCertScoreObserved: defaultObserved,
-        whyThisMatters: "Sensitive collection surfaces paired with third-party tracking can materially change privacy review priority."
+        whyThisMatters: "Sensitive collection surfaces paired with 3rd party tracking can materially change privacy review priority."
       };
     default:
       return {
@@ -495,8 +495,8 @@ export function deriveGdprEprivacyReviewSummary(
     preConsentVendors.length > 0
   ) {
     addBullet(bullets, {
-      copy: `CertScore observed third-party tracking activity before a recorded consent action for ${preConsentVendors.join(", ")}.`,
-      headline: "Third-party tracking observed before recorded consent",
+      copy: `CertScore observed 3rd party tracking activity before a recorded consent action for ${preConsentVendors.join(", ")}.`,
+      headline: "3rd party tracking observed before recorded consent",
       id: "pre_consent_tracking_observed"
     });
   }
@@ -576,7 +576,7 @@ export function deriveGdprEprivacyReviewSummary(
     getString(sensitiveEvidence, ["sensitiveThirdPartyTrackingCorrelationStatus"]) === "ok"
   ) {
     addBullet(bullets, {
-      copy: "CertScore did not observe eligible sensitive fields alongside third-party tracking in the tested context.",
+      copy: "CertScore did not observe eligible sensitive fields alongside 3rd party tracking in the tested context.",
       headline: "Sensitive form tracking was not observed in the tested path",
       id: "sensitive_surface_tracking_not_observed"
     });

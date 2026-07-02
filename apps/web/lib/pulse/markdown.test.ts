@@ -239,8 +239,8 @@ test("Pulse markdown leads with report-backed executive and GDPR/ePrivacy surfac
   assert.match(markdown, /Signal snapshot: consent platform OneTrust; tracker footprint 19 vendors, 35 domains\./);
   assert.match(markdown, /## Surfaced GDPR\/ePrivacy Results/);
   assert.match(markdown, /Reject \/ decline control - A first-layer reject-all or equivalent refusal path was expected/);
-  assert.match(markdown, /Bombora Visitor Insights \(Advertising\); first seen 2308ms/);
-  assert.match(markdown, /ScorecardResearch \(Audience measurement\); first seen 2326ms/);
+  assert.match(markdown, /Bombora Visitor Insights \(Advertising\); first seen 2.31s/);
+  assert.match(markdown, /ScorecardResearch \(Audience measurement\); first seen 2.33s/);
 });
 
 test("Pulse markdown uses review-signal lens status labels", () => {

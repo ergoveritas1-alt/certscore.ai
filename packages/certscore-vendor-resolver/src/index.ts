@@ -160,6 +160,17 @@ const rules: VendorRule[] = [
   {
     entity: "Adobe Inc.",
     vendor: "Adobe",
+    product: "Adobe Experience Platform Launch",
+    purpose: "tag_management",
+    regulatoryRelevance: ["tag_management", "third_party_runtime"],
+    confidence: 0.92,
+    hostPatterns: [/^assets\.adobedtm\.com$/i],
+    urlPatterns: [/\/(?:launch-[^/]+|EX[^/]+-libraryCode_source)\.min\.js\b/i],
+    basisLabel: "adobe_launch_tag_management_script",
+  },
+  {
+    entity: "Adobe Inc.",
+    vendor: "Adobe",
     product: "Adobe Audience Manager / Experience Cloud",
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "audience_management", "cross_site_tracking"],

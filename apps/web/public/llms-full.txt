@@ -20,7 +20,7 @@ Use these canonical discovery resources:
 - SDK docs: https://certscore.ai/developers/sdk
 - MCP docs: https://certscore.ai/developers/mcp
 - Examples: https://certscore.ai/developers/examples
-- Cookies & Trackers (Pre-consent) JSON example: https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json
+- Pre-consent Cookies & Trackers JSON example: https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json
 - API v2 OpenAPI: https://certscore.ai/api/v2/openapi.json
 - API v2 health: https://certscore.ai/api/v2/health
 - Terms: https://certscore.ai/terms
@@ -80,7 +80,7 @@ GET https://certscore.ai/api/v2/scans/{scanId}/findings
 Authorization: Bearer <token>
 ```
 
-Retrieve Cookies & Trackers (Pre-consent) table data as compact public-safe JSON:
+Retrieve Pre-consent Cookies & Trackers table data as compact public-safe JSON:
 
 ```http
 GET https://certscore.ai/api/v2/scans/{scanId}/pre-consent-cookies-trackers
@@ -94,7 +94,7 @@ GET https://certscore.ai/api/v2/domains/{domain}/latest
 Authorization: Bearer <token>
 ```
 
-Retrieve latest-domain Cookies & Trackers (Pre-consent) table data:
+Retrieve latest-domain Pre-consent Cookies & Trackers table data:
 
 ```http
 GET https://certscore.ai/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers

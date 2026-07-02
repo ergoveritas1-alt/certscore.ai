@@ -137,12 +137,17 @@ function compactPreConsentTrackers(pulse: PulseMarkdownInput) {
   return trackers
     .slice(0, 8)
     .map((tracker: any) => {
-      const firstSeen = typeof tracker.firstSeenMs === "number" ? `; first seen ${tracker.firstSeenMs}ms` : "";
+      const firstSeen = typeof tracker.firstSeenMs === "number" ? `; first seen ${formatElapsedSeconds(tracker.firstSeenMs)}` : "";
       const purpose = line(tracker.purpose);
       const purposeCopy = purpose === "Not available" ? "" : ` (${purpose})`;
       return `- ${line(tracker.vendor)}${purposeCopy}${firstSeen}`;
     })
     .join("\n");
+}
+
+function formatElapsedSeconds(value: number) {
+  const seconds = Math.max(0, value) / 1000;
+  return `${seconds.toPrecision(3)}s`;
 }
 
 function formatReviewLensLinks(finding: any) {

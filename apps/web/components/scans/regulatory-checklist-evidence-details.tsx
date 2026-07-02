@@ -117,7 +117,7 @@ function formatShortTextLine(label: string, value: unknown, maxLength = 120) {
 
 function formatMs(value: unknown) {
   const numeric = getNumber(value);
-  return typeof numeric === "number" ? `${Math.round(numeric)}ms` : null;
+  return typeof numeric === "number" ? formatElapsedSeconds(numeric) : null;
 }
 
 function formatHumanTimeMs(value: unknown) {
@@ -125,10 +125,12 @@ function formatHumanTimeMs(value: unknown) {
   if (typeof numeric !== "number") {
     return null;
   }
-  if (numeric < 1000) {
-    return `${Math.round(numeric)}ms`;
-  }
-  return `${(numeric / 1000).toFixed(numeric < 10000 ? 1 : 0)}s`;
+  return formatElapsedSeconds(numeric);
+}
+
+function formatElapsedSeconds(value: number) {
+  const seconds = Math.max(0, value) / 1000;
+  return `${seconds.toPrecision(3)}s`;
 }
 
 function getFirstNumberFromKeys(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -380,10 +382,10 @@ function getRowSpecificEvidenceRows(parsed: Record<string, unknown> | null, reta
       ),
       formatScalarLine("analyticsVendorCount", retainedEvidence.analyticsVendorCount)
     );
-  } else if (/embedded.*third-party|embedded.*content|third-party embedded/.test(coverageArea)) {
+  } else if (/embedded.*(?:third-party|3rd party)|embedded.*content|(?:third-party|3rd party) embedded/.test(coverageArea)) {
     rows.push(
       formatObservedListLine(
-        "Embedded third-party content observed",
+        "Embedded 3rd party content observed",
         getStringArray(retainedEvidence.embeddedContentHosts),
         firstVendorObservedMs
       ),
@@ -558,6 +560,14 @@ function normalizeTraceChip(value: string | null | undefined) {
   return value ? humanizeTraceToken(value).replace(/\bPre Consent\b/i, "Pre-consent") : null;
 }
 
+function formatTraceParty(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  const normalized = value.replace(/_/g, " ");
+  return /\bthird party\b/i.test(normalized) ? "3rd party" : normalized;
+}
+
 function buildSmokingGunTraceEvent(record: Record<string, unknown>, coverageArea: string): ResultTraceEvent {
   const subject = getPrimaryTraceSubject(record);
   const vendorLabel = getTraceVendorLabel(record);
@@ -595,7 +605,7 @@ function buildSmokingGunTraceEvent(record: Record<string, unknown>, coverageArea
       ? `${subject} was observed${timing ? ` ${timing} after scan start` : ""}, before any consent action was recorded.`
       : `${subject} was retained as evidence${timing ? ` ${timing} after scan start` : ""}.`;
   const detail = purpose
-    ? `${humanizeTraceToken(purpose)} ${kind ?? "signal"}${isBeforeConsent ? " appeared before consent" : " was observed"}${party ? ` as ${party.replace(/_/g, " ")}` : ""}.`
+    ? `${humanizeTraceToken(purpose)} ${kind ?? "signal"}${isBeforeConsent ? " appeared before consent" : " was observed"}${party ? ` as ${formatTraceParty(party)}` : ""}.`
     : getString(record.url) ?? getString(record.path) ?? undefined;
   const rawDetails = [
     getString(record.cookieName) ? `cookieName=${getString(record.cookieName)}` : null,
@@ -620,7 +630,7 @@ function formatFriendlySmokingGun(record: Record<string, unknown>, coverageArea:
   const details = [
     host ? `on ${host}` : null,
     purpose ? `for ${purpose.replace(/_/g, " ")}` : null,
-    party ? `as ${party.replace(/_/g, " ")}` : null,
+    party ? `as ${formatTraceParty(party)}` : null,
     timing ? `${timing} after scan start` : null
   ].filter((part): part is string => Boolean(part));
   return `${subject} was observed${beforeConsent ? " before consent" : ""}${details.length > 0 ? ` (${details.join(", ")})` : ""}.`;
@@ -944,7 +954,7 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
     ]};
   }
 
-  if (/pre-consent third-party tracking|targeted advertising/.test(normalizedCoverageArea)) {
+  if (/pre-consent (?:third-party|3rd party) tracking|targeted advertising/.test(normalizedCoverageArea)) {
     return {
       kind: "steps",
       steps: [
@@ -1058,7 +1068,7 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
 
   if (/cross-border|endpoint/.test(normalizedCoverageArea)) {
     return { kind: "steps", steps: [
-      `Identify ${subjectList} and any other third-party endpoint hosts shown in the trace.`,
+      `Identify ${subjectList} and any other 3rd party endpoint hosts shown in the trace.`,
       "Confirm where each endpoint is operated, processed, or routed, using vendor documentation if needed.",
       "Update transfer, vendor, or subprocessors disclosures when the retained policy surface does not cover the observed processing context.",
       "Remove or regionalize endpoints that are not needed for the tested page or visitor context.",

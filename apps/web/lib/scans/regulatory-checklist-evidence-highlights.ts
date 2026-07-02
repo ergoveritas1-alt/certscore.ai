@@ -42,6 +42,11 @@ function getFirstNumberValue(record: Record<string, unknown> | null | undefined,
 
 const MAX_RUNTIME_ELAPSED_MS = 10 * 60 * 1000;
 
+function formatElapsedSeconds(value: number) {
+  const seconds = Math.max(0, value) / 1000;
+  return `${seconds.toPrecision(3)}s`;
+}
+
 function normalizeRuntimeElapsedMs(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return null;
@@ -232,7 +237,7 @@ function buildPreConsentTrackingHighlights(finding: ExecutiveEvidenceFinding) {
       .map((row) => getFirstRuntimeElapsedMs(row, ["firstSeenMs", "first_seen_ms", "firstRequestMs", "first_request_ms"]) ?? fallbackFirstSeenMs)
       .find((value): value is number => typeof value === "number");
     highlights.push(
-      `Tracking requests observed before consent: ${formatList(summaryVendors)}${typeof firstSeenMs === "number" ? `; first seen ${Math.round(firstSeenMs)}ms after scan start` : ""}.`
+      `Tracking requests observed before consent: ${formatList(summaryVendors)}${typeof firstSeenMs === "number" ? `; first seen ${formatElapsedSeconds(firstSeenMs)} after scan start` : ""}.`
     );
   }
 
@@ -317,9 +322,9 @@ function buildPreConsentCookieStorageHighlights(finding: ExecutiveEvidenceFindin
   })).slice(0, 3);
   if (storageVendors.length > 0 || domains.length > 0) {
     const timingSuffix = firstStorageMs !== null
-      ? ` First storage signal at ~${Math.round(firstStorageMs)}ms.`
+      ? ` First storage signal at ~${formatElapsedSeconds(firstStorageMs)}.`
       : firstNonEssentialRequestMs !== null
-        ? ` First non-essential request at ~${Math.round(firstNonEssentialRequestMs)}ms.`
+        ? ` First non-essential request at ~${formatElapsedSeconds(firstNonEssentialRequestMs)}.`
         : "";
     highlights.push(
       `Storage observed before consent${storageVendors.length > 0 ? `: ${formatList(storageVendors)}` : ""}${domains.length > 0 ? ` on ${formatList(domains)}` : ""}.${timingSuffix}`

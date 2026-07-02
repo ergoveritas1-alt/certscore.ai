@@ -104,7 +104,6 @@ const REPORT_ROW_GROUPS = [
       "accept_consent_control",
       "options_settings_preferences_control",
       "consent_choice_quality",
-      "cookie_banner_preticked_or_implied_consent",
       "cookie_notice_policy_availability"
     ]
   },
@@ -117,7 +116,7 @@ const REPORT_ROW_GROUPS = [
     ]
   },
   {
-    title: "Third-Party Services",
+    title: "3rd Party Services",
     rowIds: [
       "pre_consent_third_party_tracking",
       "advertising_retargeting_vendor_signal_observed",
@@ -1221,8 +1220,8 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
 
   if (item.id === "pre_consent_third_party_tracking") {
     return item.status === "Observed" || item.status === "Review signal" || item.status === "Gap observed"
-      ? "Third-party runtime activity was retained before recorded consent; purpose classification determines whether it is a review signal or a stronger concern."
-      : "No eligible third-party tracking requests were observed before recorded consent.";
+      ? "3rd party runtime activity was retained before recorded consent; purpose classification determines whether it is a review signal or a stronger concern."
+      : "No eligible 3rd party tracking requests were observed before recorded consent.";
   }
 
   if (item.id === "advertising_retargeting_vendor_signal_observed") {
@@ -1247,14 +1246,14 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
 
   if (item.id === "third_party_service_connection_pre_consent") {
     return item.status === "Gap observed" || item.status === "Observed" || item.status === "Review signal"
-      ? "Known third-party embed or service connections were retained before a recorded consent action."
-      : "No known third-party embed or service connection was observed before a recorded consent action.";
+      ? "Known 3rd party embed or service connections were retained before a recorded consent action."
+      : "No known 3rd party embed or service connection was observed before a recorded consent action.";
   }
 
   if (item.id === "third_party_iframe_pre_consent") {
     return item.status === "Gap observed" || item.status === "Observed" || item.status === "Review signal"
-      ? "Known third-party iframe embeds were retained before a recorded consent action."
-      : "No known third-party iframe embed was observed before a recorded consent action.";
+      ? "Known 3rd party iframe embeds were retained before a recorded consent action."
+      : "No known 3rd party iframe embed was observed before a recorded consent action.";
   }
 
   if (item.id === "social_media_embed_pre_consent") {
@@ -1273,14 +1272,14 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
       ? joinRationaleParts([
           providerPhrase
             ? `Social/media provider request observed before a recorded consent action: ${providerPhrase}`
-            : "A social/media third-party service loaded before a recorded consent action",
+            : "A social/media 3rd party service loaded before a recorded consent action",
           firstSeenPhrase
         ])
       : item.status === "Review signal"
         ? joinRationaleParts([
             providerPhrase
-              ? `Social/media third-party asset observed before consent: ${providerPhrase}`
-              : "A social/media third-party asset loaded before consent, but stronger embed or tracking behavior was not confirmed",
+              ? `Social/media 3rd party asset observed before consent: ${providerPhrase}`
+              : "A social/media 3rd party asset loaded before consent, but stronger embed or tracking behavior was not confirmed",
             firstSeenPhrase
           ])
         : "No social/media embed, plugin, widget, or pixel request was observed before a recorded consent action.";
@@ -1288,8 +1287,8 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
 
   if (item.id === "embedded_content_pre_consent") {
     return item.status === "Observed" || item.status === "Review signal"
-      ? "Concrete third-party embedded content was observed before a recorded consent action."
-      : "No concrete third-party embedded content was observed before a recorded consent action.";
+      ? "Concrete 3rd party embedded content was observed before a recorded consent action."
+      : "No concrete 3rd party embedded content was observed before a recorded consent action.";
   }
 
   if (item.id === "reject_all_path_availability") {
@@ -1336,8 +1335,8 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
 
   if (item.id === "sensitive_surfaces_third_party_tracking") {
     return item.status === "Not observed"
-      ? "No eligible sensitive forms or flows were observed alongside third-party tracking in the tested context."
-      : "Sensitive forms or flows appeared alongside third-party tracking or measurement scripts in the tested context.";
+      ? "No eligible sensitive forms or flows were observed alongside 3rd party tracking in the tested context."
+      : "Sensitive forms or flows appeared alongside 3rd party tracking or measurement scripts in the tested context.";
   }
 
   if (item.id === "session_replay_fingerprinting_review") {
@@ -1383,12 +1382,12 @@ function getScanContextNote(item: GdprEprivacyCoverageChecklistItem) {
   if (item.id === "cross_border_endpoint_review") {
     if (item.status === "Gap observed") {
       return getStringArrayFromRetainedEvidence(item, "evidenceHighlights")[0] ??
-        "Transfer-relevant analytics / behavioral tracking endpoints were observed. Additional third-party asset endpoints were retained as supporting runtime context.";
+        "Transfer-relevant analytics / behavioral tracking endpoints were observed. Additional 3rd party asset endpoints were retained as supporting runtime context.";
     }
 
     return item.status === "Review signal"
-      ? "Observed third-party endpoints created a public-web international transfer review signal."
-      : "No public-web international transfer review signal was projected from observed third-party endpoints.";
+      ? "Observed 3rd party endpoints created a public-web international transfer review signal."
+      : "No public-web international transfer review signal was projected from observed 3rd party endpoints.";
   }
 
   if (item.id === "accessibility_consent_controls") {
@@ -1448,12 +1447,12 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
 
   if (item.id === "pre_consent_third_party_tracking") {
     if (evidenceLabel === "Not observed") {
-      return "No tracking-classified third-party request was observed before a recorded consent action.";
+      return "No tracking-classified 3rd party request was observed before a recorded consent action.";
     }
     const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
       fallbackFirstSeenMs: firstSeenMs,
       item,
-      lead: "Pre-consent 3rd-party tracking evidence was retained",
+      lead: "Pre-consent 3rd party tracking evidence was retained",
       maxEntries: 2,
       rowKind: "tracking"
     });
@@ -1462,8 +1461,8 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     }
     return joinRationaleParts([
       vendorPhrase
-        ? `Tracking-classified third-party requests fired before any recorded consent action: ${vendorPhrase}`
-        : "Tracking-classified third-party requests fired before any recorded consent action",
+        ? `Tracking-classified 3rd party requests fired before any recorded consent action: ${vendorPhrase}`
+        : "Tracking-classified 3rd party requests fired before any recorded consent action",
       formatFirstSeenPhrase(firstSeenMs)
     ]);
   }
@@ -1605,19 +1604,29 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
   }
 
   if (item.id === "device_identification_fingerprinting_signal_observed") {
+    const entropyEvidence = getRecord(evidence.browserDeviceEntropyEvidence) ?? {};
     const fingerprintReasons = uniqueStrings([
       ...getStringArrayFromEvidenceKeys(evidence, ["fingerprintingReasons", "fingerprinting_reasons", "reasons"]),
-      ...getStringArrayFromEvidenceKeys(getRecord(evidence.browserDeviceEntropyEvidence) ?? {}, ["reasons", "signals", "vendors"])
+      ...getStringArrayFromEvidenceKeys(entropyEvidence, [
+        "reasons",
+        "signals",
+        "vendors",
+        "browserApiSignals",
+        "browser_api_signals",
+        "highEntropySignals",
+        "high_entropy_signals"
+      ])
     ]).slice(0, 4);
+    const entropyFirstSeenMs = getFirstNumberFromRecord(entropyEvidence, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms"]);
     const reasonPhrase = formatList(fingerprintReasons);
     if (evidenceLabel === "Not observed") {
       return "No eligible device-identification or fingerprinting signal was observed in retained runtime evidence.";
     }
     return joinRationaleParts([
       reasonPhrase
-        ? `Device-identification or fingerprinting-like signals were observed: ${reasonPhrase}`
+        ? `Device-identification or fingerprinting-like browser API signals were observed: ${reasonPhrase}`
         : "Device-identification or fingerprinting-like signals were observed",
-      formatFirstSeenPhrase(firstSeenMs)
+      formatFirstSeenPhrase(entropyFirstSeenMs ?? firstSeenMs)
     ]);
   }
 
@@ -1637,8 +1646,8 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     if (evidenceLabel === "Partial concern") {
       return joinRationaleParts([
         providerPhrase
-          ? `A social/media third-party asset loaded before consent: ${providerPhrase}. Stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed`
-          : "A social/media third-party asset loaded before consent, but stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed",
+          ? `A social/media 3rd party asset loaded before consent: ${providerPhrase}. Stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed`
+          : "A social/media 3rd party asset loaded before consent, but stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed",
         formatFirstSeenPhrase(firstSeenMs)
       ]);
     }
@@ -1661,18 +1670,18 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     const hostPhrase = formatList(hosts);
     const purposeParts = getEmbeddedContentPurposeParts(evidence);
     if (evidenceLabel === "Not observed") {
-      return "No eligible third-party embedded content was observed before a recorded consent action.";
+      return "No eligible 3rd party embedded content was observed before a recorded consent action.";
     }
     if (purposeParts.length > 0) {
       return joinRationaleParts([
-        `Third-party embedded content loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}. Review retained domains by purpose`,
+        `3rd party embedded content loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}. Review retained domains by purpose`,
         formatFirstSeenPhrase(firstSeenMs)
       ]);
     }
     return joinRationaleParts([
       hostPhrase
-        ? `Third-party embedded content loaded before any recorded consent action: ${hostPhrase}`
-        : "Third-party embedded content loaded before any recorded consent action",
+        ? `3rd party embedded content loaded before any recorded consent action: ${hostPhrase}`
+        : "3rd party embedded content loaded before any recorded consent action",
       formatFirstSeenPhrase(firstSeenMs)
     ]);
   }
@@ -1685,25 +1694,25 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     const purposeParts = getEmbeddedContentPurposeParts(evidence);
     if (evidenceLabel === "Not observed") {
       return item.id === "third_party_iframe_pre_consent"
-        ? "No eligible third-party iframe embed was observed before a recorded consent action."
-        : "No eligible third-party embed or service connection was observed before a recorded consent action.";
+        ? "No eligible 3rd party iframe embed was observed before a recorded consent action."
+        : "No eligible 3rd party embed or service connection was observed before a recorded consent action.";
     }
     if (purposeParts.length > 0) {
       return joinRationaleParts([
         item.id === "third_party_iframe_pre_consent"
-          ? `Third-party iframe embeds loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`
-          : `Third-party embed or service connections occurred before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`,
+          ? `3rd party iframe embeds loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`
+          : `3rd party embed or service connections occurred before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}`,
         formatFirstSeenPhrase(firstSeenMs)
       ]);
     }
     return joinRationaleParts([
       hosts.length > 0
         ? item.id === "third_party_iframe_pre_consent"
-          ? `Third-party iframe embeds loaded before any recorded consent action: ${formatList(hosts)}`
-          : `Third-party embed or service connections occurred before any recorded consent action: ${formatList(hosts)}`
+          ? `3rd party iframe embeds loaded before any recorded consent action: ${formatList(hosts)}`
+          : `3rd party embed or service connections occurred before any recorded consent action: ${formatList(hosts)}`
         : item.id === "third_party_iframe_pre_consent"
-          ? "Third-party iframe embeds loaded before any recorded consent action"
-          : "Third-party embed or service connections occurred before any recorded consent action",
+          ? "3rd party iframe embeds loaded before any recorded consent action"
+          : "3rd party embed or service connections occurred before any recorded consent action",
       formatFirstSeenPhrase(firstSeenMs)
     ]);
   }
@@ -2164,7 +2173,7 @@ function formatCanonicalRuntimeEvidenceEntries(entries: CanonicalRuntimeEvidence
   return formatList(entries.map((entry) => {
     const details = [
       entry.category ? formatEvidenceCategory(entry.category) : null,
-      options.includeTiming === true && entry.firstSeenMs !== null ? `${Math.round(entry.firstSeenMs)}ms` : null
+      options.includeTiming === true && entry.firstSeenMs !== null ? formatElapsedSeconds(entry.firstSeenMs) : null
     ].filter(Boolean);
     return details.length > 0 ? `${entry.vendor} (${details.join(", ")})` : entry.vendor;
   })) ?? "";
@@ -2416,8 +2425,13 @@ function minNumber(values: Array<number | null | undefined>) {
 
 function formatFirstSeenPhrase(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value)
-    ? `first seen ${Math.round(value)}ms after scan start`
+    ? `first seen ${formatElapsedSeconds(value)} after scan start`
     : null;
+}
+
+function formatElapsedSeconds(value: number) {
+  const seconds = Math.max(0, value) / 1000;
+  return `${seconds.toPrecision(3)}s`;
 }
 
 function getConsentActionQualifier(item: GdprEprivacyCoverageChecklistItem) {

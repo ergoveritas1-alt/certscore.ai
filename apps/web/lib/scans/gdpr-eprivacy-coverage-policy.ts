@@ -220,6 +220,10 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
 }
 
+function uniqueNumbers(values: Array<number | null | undefined>) {
+  return [...new Set(values.filter((value): value is number => typeof value === "number" && Number.isFinite(value)))];
+}
+
 function sourceGap(
   field: string,
   expected: unknown,
@@ -602,7 +606,12 @@ function formatPreconsentObservedMsRef(label: string, observedMs: unknown, basis
   if (typeof observedMs !== "number" || !Number.isFinite(observedMs)) {
     return null;
   }
-  return `${label}: ${Math.round(observedMs)}ms after scan start`;
+  return `${label}: ${formatElapsedSeconds(observedMs)} after scan start`;
+}
+
+function formatElapsedSeconds(value: number) {
+  const seconds = Math.max(0, value) / 1000;
+  return `${seconds.toPrecision(3)}s`;
 }
 
 function getPostRejectTrackingReductionEvidence(runtimeArtifacts: Record<string, unknown> | null | undefined) {
@@ -668,7 +677,17 @@ const MANAGE_CHOICE_LABEL_PATTERN =
 
 function getEvidenceText(record: Record<string, unknown> | null | undefined) {
   return [
-    getString(record, ["bannerTextSnippet", "banner_text_snippet", "textSnippet", "text_snippet", "text", "bodyText", "body_text"]),
+    getString(record, [
+      "bannerTextSnippet",
+      "banner_text_snippet",
+      "textExcerpt",
+      "text_excerpt",
+      "textSnippet",
+      "text_snippet",
+      "text",
+      "bodyText",
+      "body_text"
+    ]),
     ...getStringArray(record, [
       "evidenceRefs",
       "evidence_refs",
@@ -679,6 +698,14 @@ function getEvidenceText(record: Record<string, unknown> | null | undefined) {
       "snippets"
     ])
   ].filter((value): value is string => Boolean(value));
+}
+
+function getFirstLayerConsentChoicesFromArtifacts(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const rejectPath = getRejectPathDepthAndAvailability(runtimeArtifacts);
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
+  return getObject(rejectPath, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
+    getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
+    getObject(runtimeArtifacts, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
 }
 
 function getConsentPathControlLabels(
@@ -716,9 +743,7 @@ function getFirstLayerConsentChoiceEvidence(input: GdprEprivacyCoveragePolicyInp
   const consentSummary = getObject(hybridRuntimeEvidence, ["consentSummary", "consent_summary"]);
   const consentUiPath = getObject(hybridRuntimeEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
-  const firstLayerChoices =
-    getObject(rejectPath, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
-    getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
+  const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const consentPathControlLabels = getConsentPathControlLabels(consentUiPath, rejectPath);
   const visibleChoiceLabels = uniqueStrings([
     ...getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]),
@@ -853,10 +878,7 @@ function serializeConsentControlEvidence(control: Record<string, unknown>) {
 
 function getFirstLayerAcceptControlEvidence(input: GdprEprivacyCoveragePolicyInput) {
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
-  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
-  const firstLayerChoices =
-    getObject(rejectPath, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
-    getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
+  const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const layerInspected =
     getString(firstLayerChoices, ["layerInspected", "layer_inspected"]) ??
     getString(rejectPath, ["layerInspected", "layer_inspected"]);
@@ -880,10 +902,7 @@ function getFirstLayerAcceptControlEvidence(input: GdprEprivacyCoveragePolicyInp
 
 function getFirstLayerOptionsControlEvidence(input: GdprEprivacyCoveragePolicyInput) {
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
-  const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
-  const firstLayerChoices =
-    getObject(rejectPath, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
-    getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
+  const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const layerInspected =
     getString(firstLayerChoices, ["layerInspected", "layer_inspected"]) ??
     getString(rejectPath, ["layerInspected", "layer_inspected"]);
@@ -1003,7 +1022,14 @@ function getExplicitFirstLayerGdprConsentBannerConfirmed(input: GdprEprivacyCove
   if (
     simpleCookieNoticeWithChoice ||
     retainedInitialCookieConsentLayerEvidence ||
-    (firstLayerObserved === true && (gdprSurfaceObserved === true || gdprSurfaceObserved === "true"))
+    (
+      firstLayerObserved === true &&
+      (
+        gdprSurfaceObserved === true ||
+        gdprSurfaceObserved === "true" ||
+        gdprSurfaceObserved === "confirmed"
+      )
+    )
   ) {
     return true;
   }
@@ -1670,7 +1696,7 @@ function getCmpFrameworkSignalEvidence(input: GdprEprivacyCoveragePolicyInput) {
 function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const consentSummary = getObject(hybridRuntimeEvidence, ["consentSummary", "consent_summary"]);
-  const firstLayerChoices = getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
+  const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const policyDisclosureSummary = getPolicyDisclosureSummary(input.runtimeArtifacts);
   const policySurfaceUrls = [
     ...getStringArray(input.runtimeArtifacts, ["cookiePolicyUrls", "cookie_policy_urls", "cookieNoticeUrls", "cookie_notice_urls"]),
@@ -1772,7 +1798,7 @@ function deriveCookieNoticePolicyAvailabilityOutcome(input: GdprEprivacyCoverage
 function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const preconsentTimingEvidence = getPreconsentTimingRetainedEvidence(input.runtimeArtifacts);
   const firstObservedMsRef = formatPreconsentObservedMsRef(
-    "First pre-consent third-party tracking request observation",
+    "First pre-consent 3rd party tracking request observation",
     preconsentTimingEvidence.firstPreconsentThirdPartyTrackingObservedMs,
     preconsentTimingEvidence.firstPreconsentThirdPartyTrackingObservationBasis
   );
@@ -1808,8 +1834,8 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
       concreteTrackerEvidenceRetained
         ? highRiskPurposeRetained
           ? "Concrete pre-consent tracker vendor or request evidence was retained, but no eligible unified tracking finding was projected for this row. Manual review should confirm whether the retained request sequence supports a GDPR/ePrivacy tracking gap."
-          : "Pre-consent third-party timing evidence was retained, but the retained purpose mix is limited to lower-risk or unresolved infrastructure categories. Manual review should confirm essentiality without treating the evidence as adtech or retargeting by itself."
-        : "Pre-consent third-party tracking evidence was retained, but no eligible unified tracking finding was projected for this row.",
+          : "Pre-consent 3rd party timing evidence was retained, but the retained purpose mix is limited to lower-risk or unresolved infrastructure categories. Manual review should confirm essentiality without treating the evidence as adtech or retargeting by itself."
+        : "Pre-consent 3rd party tracking evidence was retained, but no eligible unified tracking finding was projected for this row.",
       [
         firstObservedMsRef,
         "Evidence: pre-consent tracking runtime signal",
@@ -1844,7 +1870,7 @@ function derivePreConsentThirdPartyTrackingOutcome(input: GdprEprivacyCoveragePo
     return makeOutcome(
       "pre_consent_third_party_tracking",
       "Not observed",
-      "Runtime tracking checks completed for the tested context, and no eligible pre-consent third-party tracking finding was projected.",
+      "Runtime tracking checks completed for the tested context, and no eligible pre-consent 3rd party tracking finding was projected.",
       [
         firstObservedMsRef,
         "Evidence: runtime capture completed"
@@ -2715,7 +2741,7 @@ function formatSocialMediaEmbedEvidencePhrase(input: {
     ? ` Providers/domains observed: ${names.join(", ")}`
     : "";
   const timing = input.observedMs[0] !== undefined
-    ? `${names.length > 0 ? "; first" : " First"} seen ${Math.round(input.observedMs[0])}ms after scan start`
+    ? `${names.length > 0 ? "; first" : " First"} seen ${formatElapsedSeconds(input.observedMs[0])} after scan start`
     : "";
   return providers || timing ? `${providers}${timing}.` : "";
 }
@@ -2759,7 +2785,7 @@ function deriveSocialMediaEmbedPreConsentOutcome(input: GdprEprivacyCoveragePoli
     return makeOutcome(
       "social_media_embed_pre_consent",
       "Review signal",
-      `A third-party social/media asset request was retained before consent, but the retained evidence did not show an iframe, script, plugin, pixel, cookie/storage write, or other stronger embed behavior.${evidencePhrase}`,
+      `A 3rd party social/media asset request was retained before consent, but the retained evidence did not show an iframe, script, plugin, pixel, cookie/storage write, or other stronger embed behavior.${evidencePhrase}`,
       [
         `Static social/media asset observations: ${evidence.staticAssetObservations.length}`,
         ...evidence.providers.map((provider) => `Provider: ${provider}`).slice(0, 5),
@@ -2829,9 +2855,9 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
     return makeOutcome(
       "embedded_content_pre_consent",
       "Observed",
-      "Concrete third-party embedded content was retained before consent in iframe/runtime evidence.",
+      "Concrete 3rd party embedded content was retained before consent in iframe/runtime evidence.",
       [
-        `Embedded third-party content observations: ${Math.max(embeddedRows.length, eligibleSummaryObservations.length)}`,
+        `Embedded 3rd party content observations: ${Math.max(embeddedRows.length, eligibleSummaryObservations.length)}`,
         ...embeddedHosts.map((host) => `Embedded host: ${host}`).slice(0, 5),
         "Evidence: retained pre-consent embedded-content observations"
       ],
@@ -2853,7 +2879,7 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
     return makeOutcome(
       "embedded_content_pre_consent",
       "Not observed",
-      "Iframe/runtime checks completed for the tested context and did not retain a concrete third-party embedded-content iframe before consent.",
+      "Iframe/runtime checks completed for the tested context and did not retain a concrete 3rd party embedded-content iframe before consent.",
       ["Evidence: retained pre-consent embedded-content inventory"],
       {
         retainedEvidence: {
@@ -2877,7 +2903,7 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
             "runtimeArtifacts.embeddedContentSummary",
             "row-specific embedded-content iframe/request inventory",
             "missing",
-            "Required to determine whether third-party embedded content loaded before consent."
+            "Required to determine whether 3rd party embedded content loaded before consent."
           )
         ],
         retainedEvidence: {
@@ -2898,9 +2924,9 @@ function deriveThirdPartyIframePreConsentOutcome(input: GdprEprivacyCoveragePoli
     return makeOutcome(
       "third_party_iframe_pre_consent",
       "Gap observed",
-      "Known third-party iframe embeds were retained before a recorded consent action on the scanned page.",
+      "Known 3rd party iframe embeds were retained before a recorded consent action on the scanned page.",
       [
-        `Third-party iframe observations: ${observedCount}`,
+        `3rd party iframe observations: ${observedCount}`,
         ...evidence.embeddedHosts.map((host) => `Iframe host: ${host}`).slice(0, 5),
         "Evidence: retained pre-consent iframe inventory"
       ],
@@ -2921,7 +2947,7 @@ function deriveThirdPartyIframePreConsentOutcome(input: GdprEprivacyCoveragePoli
     return makeOutcome(
       "third_party_iframe_pre_consent",
       "Not observed",
-      "Retained iframe inventory did not show known third-party iframe embeds before a recorded consent action.",
+      "Retained iframe inventory did not show known 3rd party iframe embeds before a recorded consent action.",
       ["Evidence: retained pre-consent iframe inventory"],
       {
         retainedEvidence: {
@@ -2937,15 +2963,15 @@ function deriveThirdPartyIframePreConsentOutcome(input: GdprEprivacyCoveragePoli
     return makeOutcome(
       "third_party_iframe_pre_consent",
       "Not testable",
-      "Runtime capture completed, but row-specific third-party iframe inventory was not retained.",
-      ["Evidence gap: third-party iframe inventory not retained"],
+      "Runtime capture completed, but row-specific 3rd party iframe inventory was not retained.",
+      ["Evidence gap: 3rd party iframe inventory not retained"],
       {
         missingOrIncompleteSourceSignals: [
           sourceGap(
             "runtimeArtifacts.hybridRuntimeEvidence.iframeSummary",
-            "row-specific third-party iframe inventory",
+            "row-specific 3rd party iframe inventory",
             "missing",
-            "Required to determine whether known third-party iframes loaded before consent."
+            "Required to determine whether known 3rd party iframes loaded before consent."
           )
         ],
         retainedEvidence: {
@@ -2966,9 +2992,9 @@ function deriveThirdPartyServiceConnectionPreConsentOutcome(input: GdprEprivacyC
     return makeOutcome(
       "third_party_service_connection_pre_consent",
       "Gap observed",
-      "Known embedded third-party service connections were retained before a recorded consent action on the scanned page.",
+      "Known embedded 3rd party service connections were retained before a recorded consent action on the scanned page.",
       [
-        `Third-party service observations: ${observedCount}`,
+        `3rd party service observations: ${observedCount}`,
         ...evidence.highConfidenceServiceHosts.map((host) => `Service host: ${host}`).slice(0, 5),
         "Evidence: retained pre-consent embedded-service requests/iframes"
       ],
@@ -2988,7 +3014,7 @@ function deriveThirdPartyServiceConnectionPreConsentOutcome(input: GdprEprivacyC
     return makeOutcome(
       "third_party_service_connection_pre_consent",
       "Not observed",
-      "Retained iframe/request inventory did not show known embedded third-party service connections before a recorded consent action.",
+      "Retained iframe/request inventory did not show known embedded 3rd party service connections before a recorded consent action.",
       ["Evidence: retained pre-consent embedded-service inventory"],
       {
         retainedEvidence: {
@@ -3011,7 +3037,7 @@ function deriveThirdPartyServiceConnectionPreConsentOutcome(input: GdprEprivacyC
             "runtimeArtifacts.embeddedContentSummary",
             "row-specific embedded-service request/iframe inventory",
             "missing",
-            "Required to determine whether known third-party services connected before consent."
+            "Required to determine whether known 3rd party services connected before consent."
           )
         ],
         retainedEvidence: {
@@ -3030,7 +3056,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentAuditEntry = getEventMetadata(input.events, "consent_audit_entry");
   const rejectDiagnostic = getEventMetadata(input.events, "reject_persistence_diagnostic");
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
-  const firstLayerChoices = getObject(rejectPath, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
+  const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const attempted = getBoolean(consentAuditEntry, ["shouldAttemptConsentAudit"]) === true;
   const rejectButtonCount = getNumber(input.snapshot, ["consent_reject_button_count"]);
   const preferenceButtonCount = getNumber(input.snapshot, ["consent_preferences_button_count"]);
@@ -3806,9 +3832,7 @@ function getConsentChoiceQualityEvidence(input: GdprEprivacyCoveragePolicyInput)
   const lifecycle = getConsentControlLifecycleEvidence(input.runtimeArtifacts);
   const consentUiPathEvidence = getObject(hybridRuntimeEvidence, ["consentUiPathEvidence", "consent_ui_path_evidence"]);
   const rejectPath = getRejectPathDepthAndAvailability(input.runtimeArtifacts);
-  const firstLayerChoices =
-    getObject(rejectPath, ["firstLayerConsentChoices", "first_layer_consent_choices"]) ??
-    getObject(hybridRuntimeEvidence, ["firstLayerConsentChoices", "first_layer_consent_choices"]);
+  const firstLayerChoices = getFirstLayerConsentChoicesFromArtifacts(input.runtimeArtifacts);
   const consentPathControlLabels = getConsentPathControlLabels(consentUiPathEvidence, rejectPath);
   const visibleChoiceLabels = uniqueStrings([
     ...getStringArray(firstLayerChoices, ["visibleChoiceLabels", "visible_choice_labels"]),
@@ -3863,7 +3887,14 @@ function getConsentChoiceQualityEvidence(input: GdprEprivacyCoveragePolicyInput)
     (rejectControlObserved === true && (layerInspected === "first_layer" || rejectClickDepth === 0 || rejectClickDepth === 1));
   const observedControlLabels = lifecycle ? getObservedPreferenceControlLabels(lifecycle) : [];
   const explicitManagePreferencesObserved =
-    getBoolean(firstLayerChoices, ["managePreferencesObserved", "manage_preferences_observed", "preferencesControlObserved", "preferences_control_observed"]) ??
+    getBoolean(firstLayerChoices, [
+      "managePreferencesObserved",
+      "manage_preferences_observed",
+      "managePreferencesControlObserved",
+      "manage_preferences_control_observed",
+      "preferencesControlObserved",
+      "preferences_control_observed"
+    ]) ??
     getBooleanAnyTrue(lifecycle, [
       "cookiePreferencesLinkObserved",
       "cookie_preferences_link_observed",
@@ -3976,6 +4007,9 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
     ...evidence,
     missingEvidenceNeeded
   };
+  const visibleChoicePhrase = evidence.visibleChoiceLabels.length > 0
+    ? ` Retained first-layer controls included ${formatInlineList(evidence.visibleChoiceLabels.slice(0, 4))}.`
+    : "";
 
   if (noticeGateEvidence.gateObserved) {
     return makeOutcome(
@@ -4059,16 +4093,57 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
   ].filter((value): value is string => Boolean(value));
 
   if (directGapReasons.length > 0) {
+    const directGapDetails = [
+      directGapReasons.includes("accept_without_same_layer_reject")
+        ? "an accept/accept-all control was retained, but no same-layer reject, decline, reject-all, or essential-only control was retained"
+        : null,
+      directGapReasons.includes("reject_buried_behind_additional_clicks")
+        ? `the retained reject path required ${evidence.rejectClickDepth} clicks`
+        : null,
+      directGapReasons.includes("non_essential_toggles_default_on")
+        ? "optional or non-essential purposes appeared selected by default"
+        : null,
+      directGapReasons.includes("accept_materially_more_prominent_than_reject")
+        ? "retained visual evidence suggested accept was materially more prominent than reject"
+        : null
+    ].filter((value): value is string => Boolean(value));
     return makeOutcome(
       "consent_choice_quality",
       "Gap observed",
-      "Retained consent-surface evidence directly indicates poor consent choice quality.",
+      `Retained first-layer consent-surface evidence indicated a consent choice-quality issue: ${formatInlineList(directGapDetails)}.${visibleChoicePhrase}`,
       [...evidenceRefs, ...directGapReasons.map((reason) => `Reason: ${reason}`)],
       {
         retainedEvidence: {
           ...retainedEvidence,
           directGapReasons,
           selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "strong"
+        }
+      }
+    );
+  }
+
+  if (
+    evidence.acceptControlObserved === true &&
+    evidence.sameLayerRejectObserved === true &&
+    evidence.managePreferencesObserved === true
+  ) {
+    const strongNoDarkPatternSupport = [
+      evidence.purposeCategoryControlsObserved === true,
+      evidence.vendorControlsObserved === true,
+      evidence.defaultToggleStatesObserved === true && evidence.nonEssentialDefaultsOff === true,
+      evidence.saveChoicesObserved === true,
+      evidence.visualParityEvidenceObserved === true
+    ].filter(Boolean).length >= 3;
+    return makeOutcome(
+      "consent_choice_quality",
+      "Not observed",
+      `No obvious cookie-banner dark-pattern signal was observed in retained first-layer consent controls.${visibleChoicePhrase} CertScore observed same-layer accept, reject/refusal, and settings/preferences controls; deeper preference-center default states and visual-parity review were not used as standalone dark-pattern findings.`,
+      evidenceRefs,
+      {
+        retainedEvidence: {
+          ...retainedEvidence,
+          darkPatternSignalObserved: false,
+          selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? (strongNoDarkPatternSupport ? "strong" : "moderate")
         }
       }
     );
@@ -4143,149 +4218,6 @@ function deriveConsentChoiceQualityOutcome(input: GdprEprivacyCoveragePolicyInpu
           "same-layer accept/reject plus granular preferences, default-state evidence, save choices, and visual parity",
           "partial",
           "Required before CertScore can mark consent choice quality as checked."
-        )
-      ],
-      retainedEvidence: {
-        ...retainedEvidence,
-        selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "limited"
-      }
-    }
-  );
-}
-
-function deriveCookieBannerPretickedOrImpliedConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
-  const evidence = getConsentChoiceQualityEvidence(input);
-  const noticeGateEvidence = getFirstLayerNoticeGateEvidence(input);
-  const evidenceRefs = [
-    "Evidence: cookie banner default state",
-    ...evidence.visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
-    ...evidence.precheckedOptionalPurposeLabels.map((label) => `Preselected optional purpose: ${label}`).slice(0, 5),
-    evidence.layerInspected ? `Layer inspected: ${evidence.layerInspected}` : null
-  ].filter((value): value is string => Boolean(value));
-  const retainedEvidence = {
-    acceptControlObserved: evidence.acceptControlObserved,
-    defaultToggleStatesObserved: evidence.defaultToggleStatesObserved,
-    defaultTogglePurposeLabels: compactArray(evidence.defaultTogglePurposeLabels, 8),
-    firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
-    layerInspected: evidence.layerInspected,
-    nonEssentialDefaultsOff: evidence.nonEssentialDefaultsOff,
-    precheckedOptionalPurposeLabels: compactArray(evidence.precheckedOptionalPurposeLabels, 8),
-    purposeCategoryControlsObserved: evidence.purposeCategoryControlsObserved,
-    selectedEvidenceArtifactId: evidence.selectedEvidenceArtifactId,
-    selectedEvidenceStrength: evidence.selectedEvidenceStrength,
-    vendorControlsObserved: evidence.vendorControlsObserved,
-    visibleChoiceLabels: compactArray(evidence.visibleChoiceLabels, 8)
-  };
-
-  if (noticeGateEvidence.gateObserved) {
-    return makeOutcome(
-      "cookie_banner_preticked_or_implied_consent",
-      "Gap observed",
-      noticeGateEvidence.privacyNoticeGateWithPrivacyChoicesObserved
-        ? "A first-layer privacy notice gate was retained with Continue-style action text and privacy-choice labels, but no affirmative cookie consent choice or optional-purpose default-state evidence was retained."
-        : "A first-layer legal/privacy notice with a single Continue action was retained. This is an implied-consent-style review signal unless manual review confirms a separate affirmative cookie consent path.",
-      [
-        "Evidence: first-layer legal/privacy notice gate",
-        ...noticeGateEvidence.visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
-        noticeGateEvidence.layerInspected ? `Layer inspected: ${noticeGateEvidence.layerInspected}` : null
-      ].filter((value): value is string => Boolean(value)),
-      {
-        retainedEvidence: {
-          ...retainedEvidence,
-          impliedConsentSignalObserved: true,
-          firstLayerPrivacyNoticeGateObserved: true,
-          legalPrivacyNoticeGateObserved: true,
-          onlyContinueActionObserved: true,
-          privacyNoticeGateWithPrivacyChoicesObserved: noticeGateEvidence.privacyNoticeGateWithPrivacyChoicesObserved,
-          selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "strong"
-        }
-      }
-    );
-  }
-
-  if (evidence.firstLayerCookieConsentBannerObserved === false) {
-    return makeOutcome(
-      "cookie_banner_preticked_or_implied_consent",
-      "Not confirmed",
-      "Pre-ticked optional-purpose and implied-consent review was not confirmed because no first-layer GDPR/ePrivacy cookie consent surface was confirmed in retained evidence.",
-      evidenceRefs,
-      {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "scanner.firstLayerCookieConsentBannerObserved",
-            true,
-            false,
-            "Required before CertScore can evaluate pre-ticked optional-purpose or implied-consent cookie-banner signals."
-          )
-        ],
-        retainedEvidence
-      }
-    );
-  }
-
-  if (evidence.firstLayerCookieConsentBannerObserved !== true) {
-    return makeOutcome(
-      "cookie_banner_preticked_or_implied_consent",
-      "Not testable",
-      "Pre-ticked optional-purpose and implied-consent review could not be evaluated because no first-layer GDPR/ePrivacy cookie consent surface was confirmed.",
-      evidenceRefs,
-      {
-        missingOrIncompleteSourceSignals: [
-          sourceGap(
-            "scanner.firstLayerCookieConsentBannerObserved",
-            true,
-            evidence.firstLayerCookieConsentBannerObserved,
-            "Required before CertScore can evaluate pre-ticked optional-purpose or implied-consent cookie-banner signals."
-          )
-        ],
-        retainedEvidence
-      }
-    );
-  }
-
-  if (evidence.defaultToggleStatesObserved === true && evidence.nonEssentialDefaultsOff === false) {
-    return makeOutcome(
-      "cookie_banner_preticked_or_implied_consent",
-      "Gap observed",
-      "Retained cookie-banner preference evidence indicates at least one optional or non-essential purpose was preselected by default.",
-      [...evidenceRefs, "Reason: optional_purposes_preselected_by_default"],
-      {
-        retainedEvidence: {
-          ...retainedEvidence,
-          directGapReasons: ["optional_purposes_preselected_by_default"],
-          selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "strong"
-        }
-      }
-    );
-  }
-
-  if (evidence.defaultToggleStatesObserved === true && evidence.nonEssentialDefaultsOff === true) {
-    return makeOutcome(
-      "cookie_banner_preticked_or_implied_consent",
-      "Observed",
-      "Retained cookie-banner preference evidence confirms optional or non-essential purposes were not preselected by default.",
-      evidenceRefs,
-      {
-        retainedEvidence: {
-          ...retainedEvidence,
-          selectedEvidenceStrength: evidence.selectedEvidenceStrength ?? "strong"
-        }
-      }
-    );
-  }
-
-  return makeOutcome(
-    "cookie_banner_preticked_or_implied_consent",
-    "Not confirmed",
-    "A first-layer cookie consent surface was retained, but CertScore did not retain optional-purpose default toggle state evidence or a separate implied-consent signal.",
-    evidenceRefs,
-    {
-      missingOrIncompleteSourceSignals: [
-        sourceGap(
-          "scanner.consentChoiceQuality.defaultToggleStatesObserved",
-          "optional-purpose default toggle state evidence",
-          evidence.defaultToggleStatesObserved,
-          "Required before CertScore can determine whether optional purposes were preselected by default."
         )
       ],
       retainedEvidence: {
@@ -5283,6 +5215,32 @@ function selectedEvidenceStrengthIsCreditworthy(value: string | null | undefined
   return value === "strong" || value === "moderate";
 }
 
+function article13SignalEvidenceStrengthIsCreditworthy(signal: Record<string, unknown> | null | undefined) {
+  const selectedEvidenceStrength = getString(signal, ["selectedEvidenceStrength", "selected_evidence_strength"]);
+  if (selectedEvidenceStrengthIsCreditworthy(selectedEvidenceStrength)) {
+    return true;
+  }
+
+  const confidence = getNumber(signal, ["confidence"]);
+  return confidence !== null && confidence >= 0.8;
+}
+
+function inferredArticle13SignalEvidenceStrength(signal: Record<string, unknown> | null | undefined) {
+  const selectedEvidenceStrength = getString(signal, ["selectedEvidenceStrength", "selected_evidence_strength"]);
+  if (selectedEvidenceStrength) {
+    return selectedEvidenceStrength;
+  }
+
+  const confidence = getNumber(signal, ["confidence"]);
+  if (confidence !== null && confidence >= 0.9) {
+    return "strong";
+  }
+  if (confidence !== null && confidence >= 0.8) {
+    return "moderate";
+  }
+  return selectedEvidenceStrength;
+}
+
 function rowSpecificSectionEvidenceIsObserved(evidence: Record<string, unknown>, disclosureType: string | undefined) {
   const signalObserved = getString(evidence, ["signalObserved", "signal_observed"]);
   const selectedEvidenceStrength = getString(evidence, ["selectedEvidenceStrength", "selected_evidence_strength"]);
@@ -5326,7 +5284,7 @@ function getValidatedRowSpecificPolicyEvidence(
 
   const article13Signal = getPolicyArticle13DisclosureSignal(summary, disclosureType);
   const article13SignalStatus = getString(article13Signal, ["status"]);
-  const article13SelectedStrength = getString(article13Signal, ["selectedEvidenceStrength", "selected_evidence_strength"]);
+  const article13SelectedStrength = inferredArticle13SignalEvidenceStrength(article13Signal);
   const article13SectionExcerpt = cleanPolicyDisclosureEvidenceText(
     getString(article13Signal, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt"]) ??
     getString(article13Signal, ["evidenceText", "evidence_text"]) ??
@@ -5334,7 +5292,7 @@ function getValidatedRowSpecificPolicyEvidence(
   );
   if (
     article13SignalStatus === "observed" &&
-    selectedEvidenceStrengthIsCreditworthy(article13SelectedStrength) &&
+    article13SignalEvidenceStrengthIsCreditworthy(article13Signal) &&
     article13SectionExcerpt &&
     isPolicyDisclosureEvidenceUsable(article13SectionExcerpt, disclosureType)
   ) {
@@ -5866,6 +5824,8 @@ function hasSubstantiveRecipientsVendorCategoriesDisclosure(value: string) {
 
   return /\b(?:share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|provide|provided|providing)\b.{0,180}\b(?:personal data|personal information|information|data)\b.{0,240}\b(?:service providers?|vendors?|processors?|subprocessors?|affiliates?|group companies|advertising partners?|analytics providers?|payment processors?|business partners?|social networks?|platforms?|law enforcement|regulators?|third[- ]part(?:y|ies)|recipients?)\b/i.test(body) ||
     /\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|provide|provided|providing)\b.{0,240}\b(?:service providers?|vendors?|processors?|subprocessors?|affiliates?|group companies|advertising partners?|analytics providers?|payment processors?|business partners?|social networks?|platforms?|law enforcement|regulators?|third[- ]part(?:y|ies)|recipients?)\b/i.test(body) ||
+    /\b(?:service providers?|vendors?|processors?|subprocessors?)\b.{0,80}\b(?:will|may|can|to)?\s*(?:process|receive|access|handle)\b.{0,180}\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:as (?:a )?data processor|under (?:our )?instructions?|on (?:our )?behalf|for us)\b/i.test(body) ||
+    /\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:processed|handled|accessed|received)\b.{0,180}\b(?:by|with)\b.{0,80}\b(?:service providers?|vendors?|processors?|subprocessors?)\b.{0,180}\b(?:under (?:our )?instructions?|on (?:our )?behalf|for us)\b/i.test(body) ||
     /\b(?:categories of (?:third parties|recipients)|third parties with whom we share|recipients of (?:personal )?(?:data|information)|service providers? (?:that|who) (?:process|receive|access|handle|provide|perform|assist)|processors? (?:that|who) process|vendors? (?:that|who) (?:process|receive|access|handle|provide)|affiliates? (?:that|who)? (?:receive|process|access|use|share)|business partners? (?:that|who)? (?:receive|process|access|use|share)|process (?:personal data|personal information|information|data) on our behalf|on our behalf)\b/i.test(body);
 }
 
@@ -6526,7 +6486,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       "A privacy-policy surface was retained, but row-specific recipient/vendor-category disclosure text was not confidently extracted. Collected-data, usage-data, cookie, SDK, or session-replay descriptions do not confirm this row unless they clearly disclose categories of third parties or recipients that receive, process, access, or handle personal information.",
       [
         "Evidence: retained privacy policy text reviewed",
-        "Missing evidence: third-party or recipient categories tied to sharing, disclosure, transfer, access, or processing of personal information"
+        "Missing evidence: 3rd party or recipient categories tied to sharing, disclosure, transfer, access, or processing of personal information"
       ],
       {
         missingOrIncompleteSourceSignals: [
@@ -6754,8 +6714,8 @@ function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
         return makeOutcome(
           "sensitive_surfaces_third_party_tracking",
           "Not observed",
-          "Sensitive-field correlation completed for the tested context and did not retain eligible sensitive fields alongside third-party tracking.",
-          ["Evidence: sensitive third-party tracking correlation completed"],
+          "Sensitive-field correlation completed for the tested context and did not retain eligible sensitive fields alongside 3rd party tracking.",
+          ["Evidence: sensitive 3rd party tracking correlation completed"],
         {
           retainedEvidence: {
             eligibleSensitiveFieldCount: count,
@@ -6913,7 +6873,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
   };
   const evidenceRefs = [
     sensitiveDirect ? "Sensitive collection surface observed" : null,
-    payloadGapObserved ? "Sensitive collection with third-party payload evidence observed" : null,
+    payloadGapObserved ? "Sensitive collection with 3rd party payload evidence observed" : null,
     sameContext ? "Same-page or same-flow tracking correlation retained" : null,
     ...thirdPartyTrackingVendors.slice(0, 3).map((vendor) => `Runtime vendor: ${vendor}`),
     ...thirdPartyTrackingDomains.slice(0, 3).map((domain) => `Runtime domain: ${domain}`),
@@ -6951,7 +6911,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
           )
         ],
         reason:
-          "Sensitive-surface/tracking correlation requires review. Retained evidence indicates possible sensitive data context and third-party tracking, but does not conclusively establish same-context sensitive payload exposure.",
+          "Sensitive-surface/tracking correlation requires review. Retained evidence indicates possible sensitive data context and 3rd party tracking, but does not conclusively establish same-context sensitive payload exposure.",
         retainedEvidence,
         status: "Review signal" as const
       };
@@ -6963,7 +6923,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
       evidenceRefs,
       missingOrIncompleteSourceSignals: [],
       reason:
-        "CertScore retained evidence of a sensitive or personal-data value associated with a third-party request in the tested context. Review whether this data flow is necessary, disclosed, consent-gated where required, and excluded from sensitive form interactions.",
+        "CertScore retained evidence of a sensitive or personal-data value associated with a 3rd party request in the tested context. Review whether this data flow is necessary, disclosed, consent-gated where required, and excluded from sensitive form interactions.",
       retainedEvidence,
       status: "Gap observed" as const
     };
@@ -6985,7 +6945,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
       evidenceRefs,
       missingOrIncompleteSourceSignals: [],
       reason:
-        "CertScore observed a sensitive or high-risk collection surface in the same tested page or flow as third-party tracking or measurement scripts. Review whether the tracking is necessary, disclosed, consent-gated where required, and excluded from sensitive form interactions.",
+        "CertScore observed a sensitive or high-risk collection surface in the same tested page or flow as 3rd party tracking or measurement scripts. Review whether the tracking is necessary, disclosed, consent-gated where required, and excluded from sensitive form interactions.",
       retainedEvidence,
       status: "Gap observed" as const
     };
@@ -6997,7 +6957,7 @@ function evaluateSensitiveFormsWithThirdPartyTracking(
       evidenceRefs,
       missingOrIncompleteSourceSignals: [],
       reason:
-        "Sensitive-surface/tracking correlation requires review. Retained evidence indicates possible sensitive data context and third-party tracking, but does not conclusively establish same-context sensitive payload exposure.",
+        "Sensitive-surface/tracking correlation requires review. Retained evidence indicates possible sensitive data context and 3rd party tracking, but does not conclusively establish same-context sensitive payload exposure.",
       retainedEvidence,
       status: "Review signal" as const
     };
@@ -7298,7 +7258,7 @@ function sessionReplayEvidenceRefs(sessionReplayEvidence: Record<string, unknown
   const firstSeenMs = getNumber(sessionReplayEvidence, ["firstSeenMs", "first_seen_ms"]);
   return [
     lead,
-    typeof firstSeenMs === "number" ? `First session replay signal: ${Math.round(firstSeenMs)}ms after scan start` : null,
+    typeof firstSeenMs === "number" ? `First session replay signal: ${formatElapsedSeconds(firstSeenMs)} after scan start` : null,
     ...getStringArray(sessionReplayEvidence, ["vendors"]).map((vendor) => `Runtime vendor: ${vendor}`),
     ...getStringArray(sessionReplayEvidence, ["requestUrls", "request_urls"]).slice(0, 2).map((url) => `Runtime endpoint: ${url}`),
     ...getStringArray(sessionReplayEvidence, ["consentStates", "consent_states"]).map((state) => `Consent state: ${state}`)
@@ -7384,24 +7344,35 @@ function buildBrowserDeviceEntropyReviewEvidence(input: GdprEprivacyCoveragePoli
     ...rows.map((row) => getString(row, ["host", "hostname", "scriptHost", "script_host", "domain"])),
     ...getStringArray(summary, ["hosts", "hostnames", "scriptHosts", "script_hosts"])
   ]);
-  const signals = uniqueStrings([
+  const observedMs = uniqueNumbers([
+    ...rows.map((row) => getNumber(row, ["timestampMs", "timestamp_ms", "firstSeenMs", "first_seen_ms", "observedMs", "observed_ms"])),
+    getNumber(summary, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms"])
+  ]).sort((left, right) => left - right);
+  const browserApiSignals = uniqueStrings([
     ...rows.flatMap((row) => getStringArray(row, [
-      "fingerprintAttributeCategories",
-      "fingerprint_attribute_categories",
       "fingerprintingSignals",
       "fingerprinting_signals",
       "highEntropySignals",
       "high_entropy_signals"
     ])),
     ...getStringArray(summary, [
-      "fingerprintAttributeCategories",
-      "fingerprint_attribute_categories",
       "fingerprintingSignals",
       "fingerprinting_signals",
       "highEntropySignals",
       "high_entropy_signals"
     ])
   ]);
+  const entropyCategories = uniqueStrings([
+    ...rows.flatMap((row) => getStringArray(row, [
+      "fingerprintAttributeCategories",
+      "fingerprint_attribute_categories"
+    ])),
+    ...getStringArray(summary, [
+      "fingerprintAttributeCategories",
+      "fingerprint_attribute_categories"
+    ])
+  ]);
+  const signals = uniqueStrings([...browserApiSignals, ...entropyCategories]);
   const strongCorroboratorObserved =
     Boolean(knownFingerprintLibraryMatch) ||
     entropyTransmissionObserved === true ||
@@ -7420,10 +7391,13 @@ function buildBrowserDeviceEntropyReviewEvidence(input: GdprEprivacyCoveragePoli
     deviceDataLikeRequestCount,
     entropyLinkedToIdentifier,
     entropyTransmissionObserved,
+    firstObservedMs: observedMs[0] ?? null,
+    browserApiSignals: compactArray(browserApiSignals, 8),
     fingerprintingRuntimeEvidenceCount: rows.length,
     highEntropySignals: compactArray(signals, 8),
     hosts: compactArray(hosts, 5),
     knownFingerprintLibraryMatch,
+    observedMs: compactArray(observedMs, 8),
     securityBotTelemetryObserved: securityBotTelemetryObserved ? true : null,
     strongCorroboratorObserved
   });
@@ -7450,13 +7424,13 @@ function deriveSessionReplayFingerprintingOutcome(input: GdprEprivacyCoveragePol
 
   if (sessionReplayPostAcceptObserved || (sessionReplayObserved && sessionReplayEvidence)) {
     const sessionReplayTimingRef = typeof sessionReplayFirstSeenMs === "number"
-      ? `First session replay signal: ${Math.round(sessionReplayFirstSeenMs)}ms after scan start`
+      ? `First session replay signal: ${formatElapsedSeconds(sessionReplayFirstSeenMs)} after scan start`
       : null;
     return makeOutcome(
       "session_replay_fingerprinting_review",
       sessionReplayPreConsentObserved ? "Review signal" : "Observed",
       sessionReplayPreConsentObserved
-        ? `Session replay or behavioral analytics were observed before any recorded consent choice${typeof sessionReplayFirstSeenMs === "number" ? `; first seen ${Math.round(sessionReplayFirstSeenMs)}ms after scan start` : ""}.`
+        ? `Session replay or behavioral analytics were observed before any recorded consent choice${typeof sessionReplayFirstSeenMs === "number" ? `; first seen ${formatElapsedSeconds(sessionReplayFirstSeenMs)} after scan start` : ""}.`
         : sessionReplayPostAcceptObserved
         ? "Session replay or behavioral analytics were retained only after a recorded accept/consent state; no pre-consent replay evidence was retained."
         : "Session replay or behavioral analytics were observed during the scan, but retained evidence does not confirm the signal fired before consent.",
@@ -7599,16 +7573,28 @@ function deriveDeviceFingerprintingSignalOutcome(input: GdprEprivacyCoveragePoli
 
   if (fingerprintingObserved) {
     const securityBotTelemetryObserved = getBoolean(browserDeviceEntropyEvidence, ["securityBotTelemetryObserved", "security_bot_telemetry_observed"]) === true;
+    const highEntropySignals = getStringArray(browserDeviceEntropyEvidence, ["highEntropySignals", "high_entropy_signals"]);
+    const browserApiSignals = getStringArray(browserDeviceEntropyEvidence, ["browserApiSignals", "browser_api_signals"]);
+    const descriptorSignals = browserApiSignals.length > 0 ? browserApiSignals : highEntropySignals;
+    const firstObservedMs = getNumber(browserDeviceEntropyEvidence, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms"]);
+    const signalPhrase = descriptorSignals.length > 0
+      ? ` Retained API signals: ${formatInlineList(descriptorSignals.slice(0, 4))}${typeof firstObservedMs === "number" ? `; first observed around ${formatElapsedSeconds(firstObservedMs)} after scan start` : ""}.`
+      : "";
     return makeOutcome(
       "device_identification_fingerprinting_signal_observed",
       "Review signal",
       securityBotTelemetryObserved
         ? "Security/bot-detection telemetry with device-identification-like attributes was retained for review. This is preserved as runtime evidence but is not classified as marketing fingerprinting by itself."
-        : "Browser/device entropy, fingerprinting, or identifier-like device collection evidence was retained for review.",
+        : `Browser/device entropy, fingerprinting, or identifier-like device collection evidence was retained for review.${signalPhrase}`,
       [
         securityBotTelemetryObserved
           ? "Security/bot telemetry signal observed"
           : "Fingerprinting or device-identification signal observed",
+        ...descriptorSignals.map((signal) =>
+          typeof firstObservedMs === "number"
+            ? `Browser API access: ${signal}; first observed around ${formatElapsedSeconds(firstObservedMs)} after scan start`
+            : `Browser API access: ${signal}`
+        ).slice(0, 4),
         ...getStringArray(browserDeviceEntropyEvidence, ["hosts"]).map((host) => `Observed host: ${host}`).slice(0, 3)
       ],
       {
@@ -8044,15 +8030,15 @@ function deriveCrossBorderOutcome(input: GdprEprivacyCoveragePolicyInput) {
     return makeOutcome(
         "cross_border_endpoint_review",
         "Not testable",
-        "Third-party endpoint inventory was retained, but endpoint jurisdiction or transfer-region evidence was not retained for this scan.",
-        [`Third-party endpoint domains observed: ${thirdPartyDomainCount}`],
+        "3rd party endpoint inventory was retained, but endpoint jurisdiction or transfer-region evidence was not retained for this scan.",
+        [`3rd party endpoint domains observed: ${thirdPartyDomainCount}`],
       {
         missingOrIncompleteSourceSignals: [
           sourceGap(
             "hybridRuntimeEvidence.endpointJurisdictionEvidence",
             "one or more endpoint jurisdiction evidence rows",
             endpointJurisdictionRows.length,
-            "Required to evaluate whether observed third-party endpoints create a transfer-region review signal."
+            "Required to evaluate whether observed 3rd party endpoints create a transfer-region review signal."
           )
         ],
         retainedEvidence: {
@@ -8402,7 +8388,6 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     deriveAcceptConsentControlOutcome(input),
     deriveOptionsSettingsPreferencesControlOutcome(input),
     deriveConsentChoiceQualityOutcome(input),
-    deriveCookieBannerPretickedOrImpliedConsentOutcome(input),
     derivePostRejectOutcome(input),
     derivePreferenceWithdrawalOutcome(input),
     ...derivePolicyDisclosureOutcomes(input),

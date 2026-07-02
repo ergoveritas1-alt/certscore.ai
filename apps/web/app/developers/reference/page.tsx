@@ -144,7 +144,7 @@ export default function DeveloperReferencePage() {
           </div>
         </Section>
 
-        <Section eyebrow="Runtime inventory" title="Cookies & Trackers (Pre-consent) JSON">
+        <Section eyebrow="Runtime inventory" title="Pre-consent Cookies & Trackers JSON">
           <CodeBlock>{`GET /api/v2/scans/{scanId}/pre-consent-cookies-trackers
 GET /api/v2/domains/{domain}/latest/pre-consent-cookies-trackers
 
@@ -168,7 +168,7 @@ GET /api/v2/domains/{domain}/latest/pre-consent-cookies-trackers
   ]
 }`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            This endpoint exposes the public report projection used for the Cookies & Trackers (Pre-consent) table. It strips cookie
+            This endpoint exposes the public report projection used for the Pre-consent Cookies & Trackers table. It strips cookie
             values, raw request bodies, full request URLs, sensitive query strings, internal artifacts, and scanner-only details.
             The initial version returns the complete table; server-side filters are deferred while integrations validate usage. Clients
             can group or filter rows by kind, priority, party, vendor, purpose, and host.

@@ -44,12 +44,12 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
 
   if (item.id === "pre_consent_third_party_tracking") {
     if (evidenceLabel === "Not observed") {
-      return "No tracking-classified third-party request was observed before a recorded consent action.";
+      return "No tracking-classified 3rd party request was observed before a recorded consent action.";
     }
     const canonicalSummary = getCanonicalRuntimeEvidenceSummary({
       fallbackFirstSeenMs: firstSeenMs,
       item,
-      lead: "Pre-consent 3rd-party tracking evidence was retained",
+      lead: "Pre-consent 3rd party tracking evidence was retained",
       maxEntries: 2,
       rowKind: "tracking"
     });
@@ -58,8 +58,8 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     }
     return joinRationaleParts([
       vendorPhrase
-        ? `Tracking-classified third-party requests fired before any recorded consent action: ${vendorPhrase}`
-        : "Tracking-classified third-party requests fired before any recorded consent action",
+        ? `Tracking-classified 3rd party requests fired before any recorded consent action: ${vendorPhrase}`
+        : "Tracking-classified 3rd party requests fired before any recorded consent action",
       formatFirstSeenPhrase(firstSeenMs)
     ]);
   }
@@ -201,19 +201,29 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
   }
 
   if (item.id === "device_identification_fingerprinting_signal_observed") {
+    const entropyEvidence = getRecord(evidence.browserDeviceEntropyEvidence) ?? {};
     const fingerprintReasons = uniqueStrings([
       ...getStringArrayFromEvidenceKeys(evidence, ["fingerprintingReasons", "fingerprinting_reasons", "reasons"]),
-      ...getStringArrayFromEvidenceKeys(getRecord(evidence.browserDeviceEntropyEvidence) ?? {}, ["reasons", "signals", "vendors"])
+      ...getStringArrayFromEvidenceKeys(entropyEvidence, [
+        "reasons",
+        "signals",
+        "vendors",
+        "browserApiSignals",
+        "browser_api_signals",
+        "highEntropySignals",
+        "high_entropy_signals"
+      ])
     ]).slice(0, 4);
+    const entropyFirstSeenMs = getFirstNumberFromRecord(entropyEvidence, ["firstObservedMs", "first_observed_ms", "firstSeenMs", "first_seen_ms"]);
     const reasonPhrase = formatList(fingerprintReasons);
     if (evidenceLabel === "Not observed") {
       return "No eligible device-identification or fingerprinting signal was observed in retained runtime evidence.";
     }
     return joinRationaleParts([
       reasonPhrase
-        ? `Device-identification or fingerprinting-like signals were observed: ${reasonPhrase}`
+        ? `Device-identification or fingerprinting-like browser API signals were observed: ${reasonPhrase}`
         : "Device-identification or fingerprinting-like signals were observed",
-      formatFirstSeenPhrase(firstSeenMs)
+      formatFirstSeenPhrase(entropyFirstSeenMs ?? firstSeenMs)
     ]);
   }
 
@@ -240,8 +250,8 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     if (evidenceLabel === "Partial concern") {
       return joinRationaleParts([
         providerPhrase
-          ? `A social/media third-party asset loaded before consent: ${providerPhrase}. Stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed`
-          : "A social/media third-party asset loaded before consent, but stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed",
+          ? `A social/media 3rd party asset loaded before consent: ${providerPhrase}. Stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed`
+          : "A social/media 3rd party asset loaded before consent, but stronger embed, plugin, pixel, cookie, or storage behavior was not confirmed",
         formatFirstSeenPhrase(firstSeenMs)
       ]);
     }
@@ -264,18 +274,18 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     const hostPhrase = formatList(hosts);
     const purposeParts = getEmbeddedContentPurposeParts(evidence);
     if (evidenceLabel === "Not observed") {
-      return "No eligible third-party embedded content was observed before a recorded consent action.";
+      return "No eligible 3rd party embedded content was observed before a recorded consent action.";
     }
     if (purposeParts.length > 0) {
       return joinRationaleParts([
-        `Third-party embedded content loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}. Review retained domains by purpose`,
+        `3rd party embedded content loaded before any recorded consent action, including ${formatEmbeddedPurposeParts(purposeParts)}. Review retained domains by purpose`,
         formatFirstSeenPhrase(firstSeenMs)
       ]);
     }
     return joinRationaleParts([
       hostPhrase
-        ? `Third-party embedded content loaded before any recorded consent action: ${hostPhrase}`
-        : "Third-party embedded content loaded before any recorded consent action",
+        ? `3rd party embedded content loaded before any recorded consent action: ${hostPhrase}`
+        : "3rd party embedded content loaded before any recorded consent action",
       formatFirstSeenPhrase(firstSeenMs)
     ]);
   }
@@ -725,7 +735,7 @@ function formatCanonicalRuntimeEvidenceEntries(entries: CanonicalRuntimeEvidence
   return formatList(entries.map((entry) => {
     const details = [
       entry.category ? formatEvidenceCategory(entry.category) : null,
-      options.includeTiming === true && entry.firstSeenMs !== null ? `${Math.round(entry.firstSeenMs)}ms` : null
+      options.includeTiming === true && entry.firstSeenMs !== null ? formatElapsedSeconds(entry.firstSeenMs) : null
     ].filter(Boolean);
     return details.length > 0 ? `${entry.vendor} (${details.join(", ")})` : entry.vendor;
   })) ?? "";
@@ -956,8 +966,13 @@ function minNumber(values: Array<number | null | undefined>) {
 
 function formatFirstSeenPhrase(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value)
-    ? `first seen ${Math.round(value)}ms after scan start`
+    ? `first seen ${formatElapsedSeconds(value)} after scan start`
     : null;
+}
+
+function formatElapsedSeconds(value: number) {
+  const seconds = Math.max(0, value) / 1000;
+  return `${seconds.toPrecision(3)}s`;
 }
 
 function getPreConsentQualifier(item: GdprEprivacyCoverageChecklistItem) {

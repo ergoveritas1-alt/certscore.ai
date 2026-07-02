@@ -316,6 +316,27 @@ test("classifies Google Tag Manager as tag management", () => {
   assert.equal(resolveVendorDisplayCategory(gtm), "Tag management");
 });
 
+test("classifies Adobe Launch host as tag management", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      url: "https://assets.adobedtm.com/5d4962a43b79/96fada676f0e/launch-95431b44ee81.min.js",
+      hostname: "assets.adobedtm.com",
+    },
+    {
+      type: "script",
+      url: "https://assets.adobedtm.com/5d4962a43b79/96fada676f0e/94bc53536e0e/EXea8a172518894e9e9d3a538770eec1ef-libraryCode_source.min.js",
+      hostname: "assets.adobedtm.com",
+    },
+  ]);
+
+  const launch = observations.find((item) => item.product === "Adobe Experience Platform Launch");
+  assert.ok(launch);
+  assert.equal(launch.vendor, "Adobe");
+  assert.equal(launch.purpose, "tag_management");
+  assert.equal(resolveVendorDisplayCategory(launch), "Tag management");
+});
+
 test("classifies LinkedIn Insight Tag, Ads Pixel, and cookies as advertising", () => {
   const observations = resolveVendorObservations([
     request("https://snap.licdn.com/li.lms-analytics/insight.min.js", "snap.licdn.com"),

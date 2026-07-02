@@ -603,7 +603,7 @@ Summary JSON is best for concise agent output. Markdown is best for conversation
           <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
             <p>
               Pulse v1 remains the compatibility entry point. For the resource-oriented CertScore API v2, TypeScript SDK, MCP server,
-              examples, and machine-readable discovery links, use the developer hub. For structured Cookies & Trackers (Pre-consent)
+              examples, and machine-readable discovery links, use the developer hub. For structured Pre-consent Cookies & Trackers
               table data, use API v2 instead of parsing Pulse prose or report HTML.
             </p>
             <div className="flex flex-wrap gap-3">

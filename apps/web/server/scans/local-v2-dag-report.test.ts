@@ -1262,10 +1262,7 @@ test("materializeLocalV2DagScanDetail projects retained first-layer optional tog
       scanCompleted: true,
       snapshot: detail.snapshot
     });
-    const preticked = outcomes.cookie_banner_preticked_or_implied_consent;
-    assert.equal(preticked?.status, "Gap observed");
-    assert.equal(preticked?.criticalEvidence.retainedEvidence.defaultToggleStatesObserved, true);
-    assert.equal(preticked?.criticalEvidence.retainedEvidence.nonEssentialDefaultsOff, false);
+    assert.equal(outcomes.cookie_banner_preticked_or_implied_consent, undefined);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;
@@ -3080,11 +3077,20 @@ test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable 
           basis: [
             "keyword:cookie",
             "keyword:accept all",
+            "control:manage_preferences:Manage Settings, Opens the preference center dialog",
             "control:accept_all:Accept All",
             "control:reject_all:Reject Optional"
           ],
           confidence: 0.86,
           controls: [
+            {
+              actionType: "manage_preferences",
+              label: "Manage Settings, Opens the preference center dialog",
+              role: "button",
+              selectorHint: "#onetrust-pc-btn-handler",
+              tagName: "button",
+              visible: true
+            },
             {
               actionType: "reject_all",
               label: "Reject Optional",
@@ -3104,11 +3110,11 @@ test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable 
           ],
           layerInspected: "first_layer",
           likelyPresent: true,
-          managePreferencesControlObserved: false,
+          managePreferencesControlObserved: true,
           observationId: "consent_ui_pre_consent",
           rejectControlObserved: true,
-          textExcerpt: "NVIDIA and our third-party partners use cookies. Reject Optional Accept All",
-          visibleChoiceLabels: ["Reject Optional", "Accept All"]
+          textExcerpt: "NVIDIA and our third-party partners use cookies. Manage Settings Reject Optional Accept All",
+          visibleChoiceLabels: ["Manage Settings, Opens the preference center dialog", "Reject Optional", "Accept All"]
         }
       ],
       cookieEvents: [],
@@ -3254,6 +3260,23 @@ test("materializeLocalV2DagScanDetail keeps fallback consent controls scoreable 
     assert.equal(detail.scan.pagesScanned, 1);
     const projectedFindings = buildScanReportUnifiedFindingsForScan(detail);
     assert.equal(projectedFindings.some((finding) => finding.unifiedFindingId === "preconsent_tracking"), false);
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      coverageLimited: false,
+      events: detail.events,
+      runtimeArtifacts: detail.runtimeArtifacts,
+      scanCompleted: true,
+      snapshot: detail.snapshot
+    });
+    const checklist = deriveGdprEprivacyCoverageChecklist({
+      coverageLimited: false,
+      coverageOutcomes: outcomes,
+      scanCompleted: true,
+      unifiedFindings: projectedFindings
+    });
+    const choiceQuality = checklist.find((item) => item.id === "consent_choice_quality");
+    assert.equal(choiceQuality?.status, "Not observed");
+    assert.equal(choiceQuality?.evidenceState, "not_observed");
+    assert.match(choiceQuality?.limitation ?? "", /No obvious cookie-banner dark-pattern signal/i);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

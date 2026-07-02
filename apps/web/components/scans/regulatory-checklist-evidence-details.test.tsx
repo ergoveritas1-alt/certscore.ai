@@ -50,7 +50,7 @@ test("RegulatoryChecklistActiveTrace renders a concise end-user result explanati
   assert.match(html, /Evidence used/);
   assert.match(html, /x_vendor was observed before consent/);
   assert.match(html, /advertising/);
-  assert.match(html, /third party/);
+  assert.match(html, /3rd party/);
   assert.match(html, /x_vendor/);
   assert.doesNotMatch(html, /Scan started/);
   assert.doesNotMatch(html, /Gate decision/);
@@ -97,7 +97,7 @@ test("RegulatoryChecklistActiveTrace shows first-observed timing for embedded ve
       evidenceRefs: ["Embedded host: youtube.com"],
       jsonPayload: JSON.stringify({
         assessmentStatus: "checked",
-        coverageArea: "Embedded third-party content loaded before consent",
+        coverageArea: "Embedded 3rd party content loaded before consent",
         evidenceState: "observed",
         retainedEvidence: {
           embeddedContentHosts: ["youtube.com"],
@@ -105,14 +105,14 @@ test("RegulatoryChecklistActiveTrace shows first-observed timing for embedded ve
           firstEmbeddedContentObservedMs: 928
         },
         status: "Observed",
-        statusBasis: "Concrete third-party embedded content was retained before consent in iframe/runtime evidence."
+        statusBasis: "Concrete 3rd party embedded content was retained before consent in iframe/runtime evidence."
       })
     })
   );
 
   assert.match(html, /Why this result/);
-  assert.match(html, /Embedded third-party content observed: youtube\.com; first observed 928ms after scan start/);
-  assert.match(html, /Concrete third-party embedded content was retained before consent/);
+  assert.match(html, /Embedded 3rd party content observed: youtube\.com; first observed 0.928s after scan start/);
+  assert.match(html, /Concrete 3rd party embedded content was retained before consent/);
 });
 
 test("RegulatoryChecklistActiveTrace shows Article 13 row-specific retained snippets", () => {
@@ -149,11 +149,11 @@ test("RegulatoryChecklistEvidenceDetails renders compact retained evidence ahead
   const html = renderToStaticMarkup(
     createElement(RegulatoryChecklistEvidenceDetails, {
       evidenceRefs: [
-        "Third-party tracking observed before recorded consent",
+        "3rd party tracking observed before recorded consent",
         "Signal Pre-consent tracking detected"
       ],
       jsonPayload: JSON.stringify({
-        coverageArea: "Pre-consent third-party tracking",
+        coverageArea: "Pre-consent 3rd party tracking",
         status: "Gap observed",
         retainedEvidence: {
           evidenceHighlights: [
@@ -161,7 +161,7 @@ test("RegulatoryChecklistEvidenceDetails renders compact retained evidence ahead
             "\"Cloudflare Web Analytics\", \"preConsent\": true, \"firstSeenMs\": 482"
           ],
           evidenceRefs: [
-            "Third-party tracking observed before recorded consent",
+            "3rd party tracking observed before recorded consent",
             "Signal Pre-consent tracking detected"
           ]
         }
@@ -174,7 +174,7 @@ test("RegulatoryChecklistEvidenceDetails renders compact retained evidence ahead
   assert.match(html, /preConsent/);
   assert.match(html, /firstSeenMs/);
   assert.doesNotMatch(html, /Evidence references:/);
-  assert.match(html, /Pre-consent third-party tracking/);
+  assert.match(html, /Pre-consent 3rd party tracking/);
 });
 
 test("RegulatoryChecklistCorrectionSteps gives friendly cookie consent remediation", () => {
@@ -294,7 +294,7 @@ test("RegulatoryChecklistEvidenceDetails prefers smoking-gun event timing over g
   const summaryHtml = html.split("<pre")[0] ?? html;
   assert.match(summaryHtml, /TapAd_TS/);
   assert.match(summaryHtml, /timestampMs/);
-  assert.match(summaryHtml, /2716ms/);
+  assert.match(summaryHtml, /2.72s/);
   assert.match(summaryHtml, /cookiePurpose/);
   assert.match(summaryHtml, /advertising/);
   assert.match(summaryHtml, /pre_consent/);

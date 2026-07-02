@@ -76,7 +76,7 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
   if (isFunctionalCookieExcludedFromTrackingEvidence(name, domain)) {
     return "necessary";
   }
-  if (/^(countrycode|statecode|geodata|geo_country|trp-country|trp-language)(\b|$)/i.test(normalized)) {
+  if (/^(c_code|countrycode|statecode|geodata|geo_country|trp-country|trp-language)(\b|$)/i.test(normalized)) {
     return "geolocation";
   }
   if (/^(secgpc|usprivacy|uspapi|gpp|euconsent-v2)(\b|$)/i.test(normalized)) {
@@ -109,7 +109,7 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
     return "session_replay";
   }
   if (
-    /(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid|(^|\b)sid($|\b)|(^|\b)session($|\b)|optanonconsent|optanonalertboxclosed|cookieyes-consent|didomi_token|geo_country|trp-country|trp-language)/i.test(
+    /(cf_clearance|__cf|recaptcha|akamai|datadome|perimeterx|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid|(^|\b)sid($|\b)|(^|\b)session($|\b)|optanonconsent|optanonalertboxclosed|cookieyes-consent|didomi_token|geo_country|trp-country|trp-language)/i.test(
       normalized
     )
   ) {
@@ -120,7 +120,7 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
 
 export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | null | undefined, domain: string | null = null) {
   const normalized = `${name ?? ""} ${domain ?? ""}`.toLowerCase();
-  return /(^|\b)(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token|geo_country|trp-country|trp-language|__cf_bm|cf_clearance|bigipserver|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
+  return /(^|\b)(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token|geo_country|trp-country|trp-language|__cf_bm|cf_clearance|bigipserver|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
     normalized
   );
 }
@@ -329,7 +329,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain);
   const explicitCategory = getString(row.category ?? row.cookieCategory ?? row.cookie_category);
   const inferredCategory = classifyRuntimeCookieCategory(cookieName, domain);
-  const category = explicitCategory && explicitCategory !== "unknown" ? explicitCategory : inferredCategory;
+  const category = explicitCategory && !/^unknown$/i.test(explicitCategory) ? explicitCategory : inferredCategory;
   const rawSetAtMs = getNumber(row.setAtMs ?? row.set_at_ms);
   const setAtMs = rawSetAtMs !== null && rawSetAtMs >= 0 ? rawSetAtMs : null;
   const rawFirstObservedAtMs = getNumber(row.firstObservedAtMs ?? row.first_observed_at_ms);

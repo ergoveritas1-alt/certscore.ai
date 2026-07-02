@@ -49,9 +49,9 @@ export const apiV2Routes = [
   ["GET", "/api/v2/scans/{scanId}/status", "Check scan or job status without inferring from partial evidence."],
   ["GET", "/api/v2/scans/{scanId}/findings", "List already-projected public findings for a scan."],
   ["GET", "/api/v2/scans/{scanId}/findings/{findingId}", "Retrieve one public-safe finding and capped evidence summary."],
-  ["GET", "/api/v2/scans/{scanId}/pre-consent-cookies-trackers", "Retrieve Cookies & Trackers (Pre-consent) report table data as public-safe JSON."],
+  ["GET", "/api/v2/scans/{scanId}/pre-consent-cookies-trackers", "Retrieve Pre-consent Cookies & Trackers report table data as public-safe JSON."],
   ["GET", "/api/v2/domains/{domain}/latest", "Find the latest eligible public scan for a domain."],
-  ["GET", "/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers", "Retrieve the latest-domain Cookies & Trackers (Pre-consent) table projection."],
+  ["GET", "/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers", "Retrieve the latest-domain Pre-consent Cookies & Trackers table projection."],
   ["GET", "/api/v2/openapi.json", "Fetch the machine-readable API v2 contract."],
   ["GET", "/api/v2/health", "Check API v2 discovery health."]
 ] as const;
@@ -61,10 +61,10 @@ export const mcpTools = [
   ["get_scan", "Retrieve an API v2 public-safe scan resource."],
   ["get_scan_status", "Check a queued scan job or a stable API v2 scan ID."],
   ["list_findings", "Return API v2 public-safe findings for handoff or review."],
-  ["get_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) table as compact JSON."],
+  ["get_pre_consent_cookies_trackers", "Retrieve the public-safe Pre-consent Cookies & Trackers table as compact JSON."],
   ["explain_finding", "Explain one finding with evidence summaries, caveats, and next steps."],
   ["get_latest_domain_scan", "Find the latest eligible public scan for a domain."],
-  ["get_latest_domain_pre_consent_cookies_trackers", "Retrieve the latest-domain Cookies & Trackers (Pre-consent) table projection."]
+  ["get_latest_domain_pre_consent_cookies_trackers", "Retrieve the latest-domain Pre-consent Cookies & Trackers table projection."]
 ] as const;
 
 export function DeveloperJsonLd({ path, title, description }: { path: string; title: string; description: string }) {

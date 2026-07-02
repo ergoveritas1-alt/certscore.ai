@@ -45,7 +45,6 @@ const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   accept_consent_control: { weight: 7 },
   consent_choice_quality: { weight: 10 },
   consent_surface_observed: { weight: 10 },
-  cookie_banner_preticked_or_implied_consent: { weight: 6 },
   cross_border_endpoint_review: { weight: 5 },
   options_settings_preferences_control: { weight: 7 },
   post_reject_tracking_reduction: { weight: 10 },

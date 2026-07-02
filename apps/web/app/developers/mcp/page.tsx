@@ -166,7 +166,7 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
 2. get_scan_status when a job is pending.
 3. get_scan after a stable scanId is available.
 4. list_findings for compact structured review.
-5. get_pre_consent_cookies_trackers when the user asks for the Cookies & Trackers (Pre-consent) table as JSON.
+5. get_pre_consent_cookies_trackers when the user asks for the Pre-consent Cookies & Trackers table as JSON.
 6. explain_finding for evidence summaries and caveats.
 7. get_latest_domain_scan or get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
           <CodeBlock>{`get_pre_consent_cookies_trackers({

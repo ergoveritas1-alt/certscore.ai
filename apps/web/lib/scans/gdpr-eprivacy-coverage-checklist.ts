@@ -177,15 +177,15 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "pre_consent_third_party_tracking",
-    label: "Pre-consent 3rd-party tracking",
-    explanation: "Whether analytics, advertising, cross-site measurement, or similar third-party requests were observed before recorded consent.",
+    label: "Pre-consent 3rd party tracking",
+    explanation: "Whether analytics, advertising, cross-site measurement, or similar 3rd party requests were observed before recorded consent.",
     findingIds: [
       "preconsent_tracking",
       "pre_consent_tracking_detected",
       "third_party_tracking_pre_consent"
     ],
     defaultFindingStatus: "Gap observed",
-    notObservedText: "No pre-consent third-party tracking finding was surfaced in this scan context.",
+    notObservedText: "No pre-consent 3rd party tracking finding was surfaced in this scan context.",
     requiresPublicWebCoverage: true
   },
   {
@@ -232,20 +232,20 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "third_party_service_connection_pre_consent",
-    label: "Third-party service connections before consent",
-    explanation: "Whether retained scanner evidence showed known third-party embed/service connections before a recorded consent action.",
+    label: "3rd party service connections before consent",
+    explanation: "Whether retained scanner evidence showed known 3rd party embed/service connections before a recorded consent action.",
     findingIds: [],
     defaultFindingStatus: "Gap observed",
-    notObservedText: "No known third-party embed/service connection was retained before a recorded consent action.",
+    notObservedText: "No known 3rd party embed/service connection was retained before a recorded consent action.",
     requiresPublicWebCoverage: true
   },
   {
     id: "third_party_iframe_pre_consent",
-    label: "Third-party iframes before consent",
-    explanation: "Whether retained scanner evidence showed known third-party iframe embeds before a recorded consent action.",
+    label: "3rd party iframes before consent",
+    explanation: "Whether retained scanner evidence showed known 3rd party iframe embeds before a recorded consent action.",
     findingIds: [],
     defaultFindingStatus: "Gap observed",
-    notObservedText: "No known third-party iframe embed was retained before a recorded consent action.",
+    notObservedText: "No known 3rd party iframe embed was retained before a recorded consent action.",
     requiresPublicWebCoverage: true
   },
   {
@@ -254,16 +254,16 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     explanation: "Whether retained network/runtime evidence showed a social, video, media embed, social pixel, or plugin provider loading before a recorded consent action.",
     findingIds: [],
     defaultFindingStatus: "Gap observed",
-    notObservedText: "No social/media third-party embed, plugin, widget, or pixel request was retained before a recorded consent action.",
+    notObservedText: "No social/media 3rd party embed, plugin, widget, or pixel request was retained before a recorded consent action.",
     requiresPublicWebCoverage: true
   },
   {
     id: "embedded_content_pre_consent",
-    label: "Embedded third-party services before consent",
+    label: "Embedded 3rd party services before consent",
     explanation: "Whether retained scanner evidence showed known embedded media, map, social, form/chat, or video-ad services before a recorded consent action.",
     findingIds: [],
     defaultFindingStatus: "Gap observed",
-    notObservedText: "No known embedded third-party service was retained before a recorded consent action.",
+    notObservedText: "No known embedded 3rd party service was retained before a recorded consent action.",
     requiresPublicWebCoverage: true
   },
   {
@@ -377,15 +377,6 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
-    id: "cookie_banner_preticked_or_implied_consent",
-    label: "Cookie banner pre-ticked boxes or implied consent",
-    explanation: "Whether retained cookie-banner or preference evidence shows optional purposes preselected by default, or consent implied through continuing rather than an affirmative choice.",
-    findingIds: [],
-    defaultFindingStatus: "Gap observed",
-    notObservedText: "No pre-ticked optional-purpose or implied-consent signal was surfaced from retained canonical evidence.",
-    requiresPublicWebCoverage: true
-  },
-  {
     id: "post_reject_tracking_reduction",
     label: "Post-choice tracking reduction",
     explanation: "Deferred from the current production core scanner; retained post-choice tracking evidence is review context, not a production gap conclusion.",
@@ -412,20 +403,20 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "sensitive_surfaces_third_party_tracking",
-    label: "Sensitive surfaces with third-party tracking",
-    explanation: "Whether forms or sensitive flows appeared alongside third-party tracking or measurement scripts.",
+    label: "Sensitive surfaces with 3rd party tracking",
+    explanation: "Whether forms or sensitive flows appeared alongside 3rd party tracking or measurement scripts.",
     findingIds: [
       "sensitive_collection_surface_observed",
       "sensitive_data_collection_with_third_party_tracking_present"
     ],
     defaultFindingStatus: "Review signal",
-    notObservedText: "No sensitive-surface third-party tracking finding was surfaced in this scan context.",
+    notObservedText: "No sensitive-surface 3rd party tracking finding was surfaced in this scan context.",
     requiresPublicWebCoverage: true
   },
   {
     id: "cross_border_endpoint_review",
     label: "Cross-border analytics / tracking endpoint review",
-    explanation: "Whether transfer-relevant analytics, behavioral tracking, adtech, or identifier-bearing third-party endpoints were observed.",
+    explanation: "Whether transfer-relevant analytics, behavioral tracking, adtech, or identifier-bearing 3rd party endpoints were observed.",
     findingIds: [
       "cross_border_endpoint_transfer_review_signal",
       "cross_border_vendor_disclosure_gap",
@@ -465,7 +456,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   {
     id: "recipients_vendor_categories_disclosure",
     label: "Recipients/vendor categories disclosed",
-    explanation: "Whether retained privacy-policy evidence described recipient, vendor, or third-party categories.",
+    explanation: "Whether retained privacy-policy evidence described recipient, vendor, or 3rd party categories.",
     findingIds: [
       "third_party_advertising_disclosure_present",
       "third_party_recipient_disclosure_missing",
@@ -650,14 +641,12 @@ function getMissingEvidenceNeeded(input: {
       return "Confirmed first-layer GDPR/ePrivacy cookie banner and structured options/settings/preferences control inventory.";
     case "consent_choice_quality":
       return "Confirmed granular preference center evidence, purpose/vendor choices, default toggle states, save choices, and accept/reject visual parity.";
-    case "cookie_banner_preticked_or_implied_consent":
-      return "Confirmed cookie-banner preference evidence showing optional purposes were not preselected by default, or direct evidence of preselected optional purposes/implied consent.";
     case "post_reject_tracking_reduction":
       return "Post-choice consent-flow automation is deferred from the production core scanner; use retained evidence only as analyst review context.";
     case "preference_withdrawal_control":
       return "Cookie preference center, cookie-category controls, or consent-withdrawal control tied to GDPR/ePrivacy cookie consent.";
     case "sensitive_surfaces_third_party_tracking":
-      return "Eligible sensitive field plus direct or moderate-confidence same-context third-party tracking correlation.";
+      return "Eligible sensitive field plus direct or moderate-confidence same-context 3rd party tracking correlation.";
     case "cross_border_endpoint_review":
       return "Endpoint geography plus usable disclosure mismatch for transfer-relevant vendors before rendering a gap.";
     case "accessibility_consent_controls":
@@ -771,36 +760,6 @@ function selectChecklistEvidenceArtifact(input: {
     );
   }
 
-  if (input.rowId === "cookie_banner_preticked_or_implied_consent") {
-    const selectedEvidenceStrength = readRetainedString(input.retained, ["selectedEvidenceStrength", "selected_evidence_strength"]);
-    const explicitStrength =
-      selectedEvidenceStrength === "strong" ||
-      selectedEvidenceStrength === "moderate" ||
-      selectedEvidenceStrength === "limited" ||
-      selectedEvidenceStrength === "missing"
-        ? selectedEvidenceStrength
-        : null;
-    if (input.status === "Gap observed") {
-      return selection(
-        "consentChoiceQualityEvidence.defaultStateGap",
-        explicitStrength ?? "strong",
-        "Selected retained evidence of preselected optional purposes or implied-consent-style continuation."
-      );
-    }
-    if (input.status === "Observed") {
-      return selection(
-        "consentChoiceQualityEvidence.optionalDefaultsOff",
-        explicitStrength ?? "strong",
-        "Selected retained preference default-state evidence showing optional purposes were not preselected."
-      );
-    }
-    return selection(
-      "consentChoiceQualityEvidence.defaultStateReview",
-      explicitStrength ?? (input.status === "Not testable" ? "missing" : "limited"),
-      "Selected retained cookie-banner evidence; optional-purpose default state or implied-consent evidence was incomplete."
-    );
-  }
-
   if (input.rowId === "consent_surface_observed") {
     const confirmed = hasConfirmedFirstLayerGdprBanner(input.retained);
     return selection(
@@ -851,7 +810,7 @@ function selectChecklistEvidenceArtifact(input: {
       "sensitiveThirdPartyTrackingCorrelation",
       input.status === "Gap observed" && eligibleCount > 0 && sameContext && !fallbackOnly ? "strong" : input.status === "Not observed" ? "moderate" : "limited",
       input.status === "Gap observed" && eligibleCount > 0 && sameContext && !fallbackOnly
-        ? "Selected same-context sensitive-field and third-party tracking correlation evidence."
+        ? "Selected same-context sensitive-field and 3rd party tracking correlation evidence."
         : "Retained sensitive-surface evidence does not conclusively establish direct same-context sensitive-field tracking correlation."
     );
   }
@@ -1047,7 +1006,7 @@ function mergeCoverageOutcomePreconsentTimingEvidence(input: {
     return true;
   });
   const timingRefs = (input.coverageOutcome?.evidenceRefs ?? []).filter((ref) =>
-    /ms after scan start|exact observation\/write time not retained/i.test(ref)
+    /(?:ms|s) after scan start|exact observation\/write time not retained/i.test(ref)
   );
   if (retainedTimingEntries.length === 0 && timingRefs.length === 0) {
     return input.criticalEvidence;
@@ -1082,15 +1041,20 @@ function mergeCoverageOutcomePreconsentTimingEvidenceRefs(
   }
 
   const timingRefs = (coverageOutcome?.evidenceRefs ?? []).filter((ref) =>
-    /ms after scan start|exact observation\/write time not retained/i.test(ref)
+    /(?:ms|s) after scan start|exact observation\/write time not retained/i.test(ref)
   );
   return [...new Set([...evidenceRefs, ...timingRefs])].slice(0, 6);
 }
 
 function formatCookiePriorityFirstSeen(value: number | null) {
   return typeof value === "number" && Number.isFinite(value)
-    ? `${Math.max(0, Math.round(value))}ms`
+    ? formatElapsedSeconds(value)
     : "time not retained";
+}
+
+function formatElapsedSeconds(value: number) {
+  const seconds = Math.max(0, value) / 1000;
+  return `${seconds.toPrecision(3)}s`;
 }
 
 function formatCookiePriorityEvidence(rows: RuntimeCookiePriorityGroupRow[]) {
@@ -1215,16 +1179,16 @@ function synthesizePreconsentThirdPartyCookieOutcome(rows: RuntimeCookieEvidence
       },
       statusBasis:
         selectedEvidence.length > 0
-          ? `${priorityLabel} priority pre-consent third-party cookie/storage evidence: ${selectedEvidence}.`
-          : `${priorityLabel} priority pre-consent third-party cookie/storage evidence was retained.`
+          ? `${priorityLabel} priority pre-consent 3rd party cookie/storage evidence: ${selectedEvidence}.`
+          : `${priorityLabel} priority pre-consent 3rd party cookie/storage evidence was retained.`
     } satisfies GdprEprivacyCoverageCriticalEvidence,
     evidenceRefs: selectedRows
       .map((row) => `${row.vendor} ${row.purpose} cookie/storage first seen ${formatCookiePriorityFirstSeen(row.firstSeenMs)}`)
       .slice(0, 6),
     limitation:
       selectedEvidence.length > 0
-        ? `${priorityLabel} priority pre-consent third-party cookie/storage evidence was retained for ${selectedEvidence}.`
-        : `${priorityLabel} priority pre-consent third-party cookie/storage evidence was retained.`,
+        ? `${priorityLabel} priority pre-consent 3rd party cookie/storage evidence was retained for ${selectedEvidence}.`
+        : `${priorityLabel} priority pre-consent 3rd party cookie/storage evidence was retained.`,
     rowId: "pre_consent_cookies_storage",
     status
   } satisfies GdprEprivacyCoverageOutcome;
@@ -1280,16 +1244,16 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
       },
       statusBasis:
         selectedEvidence.length > 0
-          ? `${priorityLabel} priority pre-consent third-party tracking evidence: ${selectedEvidence}.`
-          : `${priorityLabel} priority pre-consent third-party tracking evidence was retained.`
+          ? `${priorityLabel} priority pre-consent 3rd party tracking evidence: ${selectedEvidence}.`
+          : `${priorityLabel} priority pre-consent 3rd party tracking evidence was retained.`
     } satisfies GdprEprivacyCoverageCriticalEvidence,
     evidenceRefs: selectedRows
       .map((row) => `${row.vendor} ${row.purpose} tracker first seen ${formatCookiePriorityFirstSeen(row.firstSeenMs)}`)
       .slice(0, 6),
     limitation:
       selectedEvidence.length > 0
-        ? `${priorityLabel} priority pre-consent third-party tracking evidence was retained for ${selectedEvidence}.`
-        : `${priorityLabel} priority pre-consent third-party tracking evidence was retained.`,
+        ? `${priorityLabel} priority pre-consent 3rd party tracking evidence was retained for ${selectedEvidence}.`
+        : `${priorityLabel} priority pre-consent 3rd party tracking evidence was retained.`,
     rowId: "pre_consent_third_party_tracking",
     status
   } satisfies GdprEprivacyCoverageOutcome;
@@ -1793,10 +1757,10 @@ function buildPreconsentTrackingExplanation(input: {
   }
 
   if (unknownVendors.length > 0) {
-    return `Third-party vendor activity with unresolved purpose was observed before a recorded consent choice, including ${formatVendorPhrase(unknownVendors.slice(0, 8))}. Review purpose and essentiality before treating it as advertising or retargeting.`;
+    return `3rd party vendor activity with unresolved purpose was observed before a recorded consent choice, including ${formatVendorPhrase(unknownVendors.slice(0, 8))}. Review purpose and essentiality before treating it as advertising or retargeting.`;
   }
 
-  return `Third-party vendor activity was observed before a recorded consent choice${vendorFallback.length > 0 ? `, including ${formatVendorPhrase(vendorFallback)}` : ""}. Review retained request categories before treating it as advertising or retargeting.`;
+  return `3rd party vendor activity was observed before a recorded consent choice${vendorFallback.length > 0 ? `, including ${formatVendorPhrase(vendorFallback)}` : ""}. Review retained request categories before treating it as advertising or retargeting.`;
 }
 
 function hasHighRiskPreconsentTrackingPurpose(input: {
@@ -1963,7 +1927,7 @@ function buildCrossBorderEndpointEvidenceHighlights(findings: UnifiedFindingDisp
   }
 
   return [
-    `Transfer-relevant advertising, analytics, or behavioral tracking endpoints were observed for ${formatVendorPhrase(vendors.slice(0, 6))}. Additional third-party asset endpoints were retained as supporting runtime context.`
+    `Transfer-relevant advertising, analytics, or behavioral tracking endpoints were observed for ${formatVendorPhrase(vendors.slice(0, 6))}. Additional 3rd party asset endpoints were retained as supporting runtime context.`
   ];
 }
 
@@ -2141,7 +2105,7 @@ function specializeChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation:
-        `${statusBasis} This row is limited to concrete third-party tracker/request evidence retained before a recorded consent choice.`,
+        `${statusBasis} This row is limited to concrete 3rd party tracker/request evidence retained before a recorded consent choice.`,
       label: input.definition.label,
       status: input.coverageOutcome.status
     };
@@ -2168,7 +2132,7 @@ function specializeChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation:
-        `${statusBasis} This row is limited to concrete third-party cookie/storage evidence retained before a recorded consent choice.`,
+        `${statusBasis} This row is limited to concrete 3rd party cookie/storage evidence retained before a recorded consent choice.`,
       label: input.definition.label,
       status: input.coverageOutcome.status
     };
@@ -2270,7 +2234,7 @@ function specializeChecklistRow(input: {
     return {
       evidenceRefs: input.evidenceRefs,
       explanation:
-        "Sensitive-field correlation completed and did not retain eligible sensitive fields alongside third-party tracking in the tested context.",
+        "Sensitive-field correlation completed and did not retain eligible sensitive fields alongside 3rd party tracking in the tested context.",
       label: input.definition.label,
       status: "Not observed" as const
     };
@@ -2312,6 +2276,32 @@ function shouldPreferCoverageOutcomeForMissingReject(
       "preconsent_cookie_or_tracking_activity_observed"
     ]) === true &&
     readRetainedBoolean(retained, ["rejectControlObserved", "reject_control_observed"]) === false
+  );
+}
+
+function shouldPreferCoverageOutcomeForConsentChoiceQuality(
+  rowId: string,
+  coverageOutcome: GdprEprivacyCoverageOutcome | undefined
+) {
+  if (
+    rowId !== "consent_choice_quality" ||
+    !coverageOutcome ||
+    coverageOutcome.status === "Not testable" ||
+    coverageOutcome.status === "Insufficient evidence"
+  ) {
+    return false;
+  }
+
+  const retained = getRecordValue(coverageOutcome.criticalEvidence.retainedEvidence) ?? {};
+  const visibleChoiceLabels = retainedStringArray(retained, ["visibleChoiceLabels", "visible_choice_labels"]);
+  const directGapReasons = retainedStringArray(retained, ["directGapReasons", "direct_gap_reasons"]);
+  const missingEvidenceNeeded = retainedStringArray(retained, ["missingEvidenceNeeded", "missing_evidence_needed"]);
+  return (
+    readRetainedBoolean(retained, [
+      "firstLayerCookieConsentBannerObserved",
+      "first_layer_cookie_consent_banner_observed"
+    ]) === true &&
+    (visibleChoiceLabels.length > 0 || directGapReasons.length > 0 || missingEvidenceNeeded.length > 0)
   );
 }
 
@@ -2524,7 +2514,7 @@ function getUnifiedFindingStatusBasis(input: {
   if (input.rowId === "pre_consent_third_party_tracking" && input.status === "Gap observed") {
     return firstHighlight
       ? `${firstHighlight} Consent action was not recorded before these requests.`
-      : "Third-party tracking request timing evidence was retained before a recorded consent action.";
+      : "3rd party tracking request timing evidence was retained before a recorded consent action.";
   }
 
   if (input.rowId === "session_replay_fingerprinting_review" && input.status === "Gap observed") {
@@ -3068,8 +3058,8 @@ function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageCheck
         item,
         eligibleCount === 0 && (rawCount === 0 || rawCount === null) ? "Not observed" : "Review signal",
         eligibleCount === 0 && (rawCount === 0 || rawCount === null)
-          ? "Sensitive-field correlation completed and did not retain eligible sensitive fields alongside third-party tracking in the tested context."
-          : "Sensitive-surface/tracking correlation requires review. Retained evidence indicates possible sensitive data context and third-party tracking, but CertScore did not surface direct same-context sensitive-field and tracking correlation evidence.",
+          ? "Sensitive-field correlation completed and did not retain eligible sensitive fields alongside 3rd party tracking in the tested context."
+          : "Sensitive-surface/tracking correlation requires review. Retained evidence indicates possible sensitive data context and 3rd party tracking, but CertScore did not surface direct same-context sensitive-field and tracking correlation evidence.",
         fallbackOnly
           ? "fallback_or_policy_only_sensitive_tracking_evidence"
           : "missing_direct_same_context_sensitive_tracking_or_payload_evidence",
@@ -3216,7 +3206,13 @@ export function deriveGdprEprivacyCoverageChecklist(
       return finding && isProjectedFindingEligibleForCoverageRow(definition.id, finding) ? [finding] : [];
     });
 
-    if (coverageOutcome && shouldPreferCoverageOutcomeForMissingReject(definition.id, coverageOutcome)) {
+    if (
+      coverageOutcome &&
+      (
+        shouldPreferCoverageOutcomeForMissingReject(definition.id, coverageOutcome) ||
+        shouldPreferCoverageOutcomeForConsentChoiceQuality(definition.id, coverageOutcome)
+      )
+    ) {
       const specialized = specializeChecklistRow({
         coverageOutcome,
         definition,

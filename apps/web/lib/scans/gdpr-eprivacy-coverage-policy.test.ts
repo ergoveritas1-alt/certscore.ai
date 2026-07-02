@@ -88,6 +88,85 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes structured Article 13 di
   assert.equal(outcomes.international_transfers_disclosure?.status, "Review signal");
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes credits high-confidence direct Article 13 signals when section extraction is limited", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            confidence: 0.88,
+            disclosureType: "processing_purposes",
+            evidenceText:
+              "We use personal information to provide products and services, support customer service efforts, communicate with you about your requests, and keep records.",
+            source: "deterministic",
+            status: "observed"
+          },
+          {
+            confidence: 0.86,
+            disclosureType: "recipients_or_vendor_categories",
+            evidenceText:
+              "These vendors will process your personal information as a data processor, and under our instructions. We use email interaction data to improve how we communicate with you and others.",
+            source: "deterministic",
+            status: "observed"
+          },
+          {
+            confidence: 0.9,
+            disclosureType: "data_subject_rights",
+            evidenceText:
+              "You have the right to see the data we have collected, take it with you, make corrections, withdraw consent, opt out, or erase your data.",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        policySectionCount: 1,
+        policyTextCoverageMode: "section_targeted",
+        policyTextExtractionHealth: {
+          extractedTextLength: 0,
+          extractionFailureReason: "privacy_policy_text_processing_error",
+          minimumTextLengthRequired: 2500,
+          policySurfaceObserved: true,
+          policyTextExtractionStatus: "errored",
+          policyTextQuality: {
+            codeSignalCount: 0,
+            naturalLanguageSentenceCount: 12,
+            usable: true
+          },
+          policyUrlRetained: true
+        },
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 0,
+        privacyPolicyUrls: ["https://www.nvidia.com/en-gb/about-nvidia/privacy-policy/"],
+        processingErrorObserved: true,
+        retainedArticle13SectionEvidence: [
+          {
+            coverageArea: "data_subject_rights",
+            extractionLimitation: "section_retained_without_row_specific_disclosure",
+            selectedEvidenceStrength: "limited",
+            selectedPolicySectionExcerpt:
+              "NVIDIA Privacy Policy. Control your personal data. You have the right to see the data we have collected, take it with you, make corrections, withdraw consent for future uses, opt out of sales and sharing, or erase your data.",
+            selectedPolicySectionHeading: "NVIDIA Privacy Policy",
+            selectedPolicySectionUrl: "https://www.nvidia.com/en-gb/about-nvidia/privacy-policy/",
+            signalObserved: "not_confirmed"
+          }
+        ],
+        retainedPrivacyPolicyTextExcerpt: ""
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.processing_purposes_disclosure?.status, "Observed");
+  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Observed");
+  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Observed");
+  assert.match(
+    retainedArticle13Signal(outcomes.data_subject_rights_disclosure!)?.evidenceText ?? "",
+    /right to see the data/i
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats supervisory contact email as supporting context only", () => {
   const supervisoryExcerpt = [
     "If you are still not happy, you have the right to contact your data protection authority.",
@@ -1597,7 +1676,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains elapsed ms for pre-consen
   );
   assert.match(
     outcomes.pre_consent_cookies_storage?.evidenceRefs.join(" ") ?? "",
-    /6ms after scan start/
+    /0.00600s after scan start/
   );
   assert.equal(
     outcomes.pre_consent_third_party_tracking?.criticalEvidence.retainedEvidence.firstPreconsentThirdPartyTrackingObservedMs,
@@ -1605,7 +1684,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains elapsed ms for pre-consen
   );
   assert.match(
     outcomes.pre_consent_third_party_tracking?.evidenceRefs.join(" ") ?? "",
-    /478ms after scan start/
+    /0.478s after scan start/
   );
 });
 
@@ -1822,11 +1901,13 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes reconciles retained first-layer c
   assert.equal(outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, true);
   assert.equal(outcomes.reject_all_path_availability?.status, "Observed");
   assert.equal(outcomes.reject_all_path_availability?.criticalEvidence.retainedEvidence.rejectInteractionSucceeded, true);
-  assert.equal(outcomes.consent_choice_quality?.status, "Review signal");
+  assert.equal(outcomes.consent_choice_quality?.status, "Not observed");
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /No obvious cookie-banner dark-pattern signal/i);
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.firstLayerCookieConsentBannerObserved, true);
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.acceptControlObserved, true);
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.rejectControlObserved, true);
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.sameLayerRejectObserved, true);
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.darkPatternSignalObserved, false);
   assert.deepEqual(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.visibleChoiceLabels, [
     "Customize Cookies",
     "Accept Optional Cookies",
@@ -2114,18 +2195,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes checks consent choice quality wit
     }
   });
 
-  assert.equal(outcomes.consent_choice_quality?.status, "Observed");
-  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /granular preferences/i);
+  assert.equal(outcomes.consent_choice_quality?.status, "Not observed");
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /No obvious cookie-banner dark-pattern signal/i);
   assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.selectedEvidenceStrength, "strong");
-  assert.equal(outcomes.cookie_banner_preticked_or_implied_consent?.status, "Observed");
-  assert.match(
-    outcomes.cookie_banner_preticked_or_implied_consent?.limitation ?? "",
-    /optional or non-essential purposes were not preselected/i
-  );
-  assert.equal(
-    outcomes.cookie_banner_preticked_or_implied_consent?.criticalEvidence.retainedEvidence.nonEssentialDefaultsOff,
-    true
-  );
+  assert.equal(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.darkPatternSignalObserved, false);
+  assert.equal(outcomes.cookie_banner_preticked_or_implied_consent, undefined);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks direct poor consent choice quality as a gap", () => {
@@ -2150,20 +2224,16 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks direct poor consent choice 
   });
 
   assert.equal(outcomes.consent_choice_quality?.status, "Gap observed");
-  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /poor consent choice quality/i);
+  assert.match(
+    outcomes.consent_choice_quality?.limitation ?? "",
+    /an accept\/accept-all control was retained, but no same-layer reject, decline, reject-all, or essential-only control was retained/i
+  );
+  assert.match(outcomes.consent_choice_quality?.limitation ?? "", /Accept all/i);
   assert.deepEqual(outcomes.consent_choice_quality?.criticalEvidence.retainedEvidence.directGapReasons, [
     "accept_without_same_layer_reject",
     "non_essential_toggles_default_on"
   ]);
-  assert.equal(outcomes.cookie_banner_preticked_or_implied_consent?.status, "Gap observed");
-  assert.match(
-    outcomes.cookie_banner_preticked_or_implied_consent?.limitation ?? "",
-    /optional or non-essential purpose was preselected/i
-  );
-  assert.deepEqual(
-    outcomes.cookie_banner_preticked_or_implied_consent?.criticalEvidence.retainedEvidence.directGapReasons,
-    ["optional_purposes_preselected_by_default"]
-  );
+  assert.equal(outcomes.cookie_banner_preticked_or_implied_consent, undefined);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes demotes footer privacy choices from GDPR consent surface observation", () => {
@@ -2864,6 +2934,79 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat Akamai security or
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes retains concrete browser API names and timing for device-identification review", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        fingerprintingRuntimeEvidence: [
+          {
+            consentStateAtTime: "pre_consent",
+            fingerprintAttributeCategories: ["canvas"],
+            highEntropySignals: ["HTMLCanvasElement.toDataURL"],
+            host: "nvidia.com",
+            timestampMs: 6570
+          },
+          {
+            consentStateAtTime: "pre_consent",
+            fingerprintAttributeCategories: ["canvas"],
+            highEntropySignals: ["CanvasRenderingContext2D.getImageData"],
+            host: "nvidia.com",
+            timestampMs: 6571
+          }
+        ],
+        fingerprintingEvidenceSummary: {
+          coverageRetained: true,
+          fingerprintingObserved: true,
+          highEntropySignals: ["HTMLCanvasElement.toDataURL", "CanvasRenderingContext2D.getImageData"],
+          hosts: ["nvidia.com"],
+          preConsentObserved: true
+        }
+      }
+    },
+    snapshot: {
+      fingerprinting_detected: true
+    }
+  });
+
+  const outcome = outcomes.device_identification_fingerprinting_signal_observed;
+  assert.equal(outcome?.status, "Review signal");
+  assert.match(outcome?.limitation ?? "", /HTMLCanvasElement\.toDataURL/);
+  assert.match(outcome?.limitation ?? "", /CanvasRenderingContext2D\.getImageData/);
+  assert.match(outcome?.limitation ?? "", /6.57s/);
+  const entropyEvidence = outcome?.criticalEvidence.retainedEvidence.browserDeviceEntropyEvidence as
+    | {
+        browserApiSignals?: string[];
+        firstObservedMs?: number;
+        highEntropySignals?: string[];
+        observedMs?: number[];
+      }
+    | undefined;
+  assert.deepEqual(
+    entropyEvidence?.browserApiSignals,
+    ["HTMLCanvasElement.toDataURL", "CanvasRenderingContext2D.getImageData"]
+  );
+  assert.deepEqual(
+    entropyEvidence?.highEntropySignals,
+    ["HTMLCanvasElement.toDataURL", "CanvasRenderingContext2D.getImageData", "canvas"]
+  );
+  assert.deepEqual(
+    entropyEvidence?.observedMs,
+    [6570, 6571]
+  );
+  assert.equal(
+    entropyEvidence?.firstObservedMs,
+    6570
+  );
+  assert.deepEqual(
+    outcome?.evidenceRefs.filter((ref) => /Browser API access/i.test(ref)),
+    [
+      "Browser API access: HTMLCanvasElement.toDataURL; first observed around 6.57s after scan start",
+      "Browser API access: CanvasRenderingContext2D.getImageData; first observed around 6.57s after scan start"
+    ]
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks row-specific runtime lanes not testable when coverage summaries are missing", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -3166,7 +3309,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes classifies social and media embed
   assert.equal(requestObservationOutcomes.social_media_embed_pre_consent?.status, "Gap observed");
   assert.match(
     requestObservationOutcomes.social_media_embed_pre_consent?.criticalEvidence.statusBasis ?? "",
-    /Meta\/Facebook.*first seen 260ms/i
+    /Meta\/Facebook.*first seen 0.260s/i
   );
 
   const postConsentRequestObservationOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
@@ -3217,7 +3360,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes classifies social and media embed
   assert.equal(youtubeOutcomes.social_media_embed_pre_consent?.status, "Gap observed");
   assert.match(
     youtubeOutcomes.social_media_embed_pre_consent?.criticalEvidence.statusBasis ?? "",
-    /YouTube.*first seen 842ms/i
+    /YouTube.*first seen 0.842s/i
   );
   assert.equal(
     youtubeOutcomes.social_media_embed_pre_consent?.criticalEvidence.retainedEvidence.firstSocialMediaEmbedObservedMs,
@@ -3261,7 +3404,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes classifies social and media embed
   assert.equal(socialEmbedOutcomes.social_media_embed_pre_consent?.status, "Gap observed");
   assert.match(
     socialEmbedOutcomes.social_media_embed_pre_consent?.criticalEvidence.statusBasis ?? "",
-    /X\/Twitter.*TikTok.*Instagram.*first seen 300ms/i
+    /X\/Twitter.*TikTok.*Instagram.*first seen 0.300s/i
   );
   assert.deepEqual(
     socialEmbedOutcomes.social_media_embed_pre_consent?.criticalEvidence.retainedEvidence.socialMediaEmbedDomains,
@@ -3619,7 +3762,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes demotes fallback-only sensitive t
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained sensitive third-party payload exposure as a gap", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained sensitive 3rd party payload exposure as a gap", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     events: [
@@ -3647,7 +3790,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained sensitive third-pa
   assert.equal(outcomes.sensitive_surfaces_third_party_tracking?.status, "Gap observed");
   assert.match(
     outcomes.sensitive_surfaces_third_party_tracking?.limitation ?? "",
-    /sensitive or personal-data value associated with a third-party request/i
+    /sensitive or personal-data value associated with a 3rd party request/i
   );
   assert.equal(
     outcomes.sensitive_surfaces_third_party_tracking?.criticalEvidence.retainedEvidence.payloadExposureObserved,
@@ -4014,7 +4157,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes surfaces post-accept session repl
   assert.match(outcome?.limitation ?? "", /no pre-consent replay evidence was retained/i);
   assert.deepEqual(outcome?.evidenceRefs, [
     "Session replay signal observed after consent",
-    "First session replay signal: 2410ms after scan start",
+    "First session replay signal: 2.41s after scan start",
     "Runtime vendor: Microsoft Clarity",
     "Consent state: post_accept"
   ]);
@@ -4176,7 +4319,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 session replay summ
   assert.match(beforeConsentOutcome?.limitation ?? "", /before a recorded consent action/i);
   assert.deepEqual(beforeConsentOutcome?.evidenceRefs, [
     "Session replay signal observed before consent",
-    "First session replay signal: 250ms after scan start",
+    "First session replay signal: 0.250s after scan start",
     "Runtime vendor: Hotjar",
     "Runtime endpoint: https://static.hotjar.com/c/hotjar-123.js",
     "Consent state: pre_consent"

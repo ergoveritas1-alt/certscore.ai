@@ -6,13 +6,19 @@ import {
   classifyRuntimeCookieCategory,
   isFunctionalCookieExcludedFromTrackingEvidence
 } from "./runtime-cookie-evidence";
-import { getRuntimeCookieReviewPriority } from "./runtime-cookie-priority";
+import {
+  buildRuntimeCookiePriorityGroups,
+  getRuntimeCookieReviewPriority
+} from "./runtime-cookie-priority";
 
 test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("_vwo_uuid_v2", ".example.com"), "advertising");
   assert.equal(classifyRuntimeCookieCategory("analytics_session_id", ".example.com"), "analytics");
   assert.equal(classifyRuntimeCookieCategory("_hjSession_123", ".example.com"), "session_replay");
   assert.equal(classifyRuntimeCookieCategory("__cf_bm", ".example.com"), "necessary");
+  assert.equal(classifyRuntimeCookieCategory("c_code", "nvidia.com"), "geolocation");
+  assert.equal(classifyRuntimeCookieCategory("bm_sv", ".nvidia.com"), "necessary");
+  assert.equal(classifyRuntimeCookieCategory("bm_mi", "nvidia.com"), "necessary");
   assert.equal(classifyRuntimeCookieCategory("geo_country", ".troweprice.com"), "necessary");
   assert.equal(classifyRuntimeCookieCategory("trp-country", ".troweprice.com"), "necessary");
   assert.equal(classifyRuntimeCookieCategory("trp-language", ".troweprice.com"), "necessary");
@@ -41,6 +47,8 @@ test("filters consent security and infrastructure cookies from tracking evidence
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("euconsent-v2", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("notice_preferences", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("__cf_bm", ".example.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("bm_sv", ".nvidia.com"), true);
+  assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("bm_mi", "nvidia.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("BIGipServerpool", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("akaalb_usp-google", "www.sbtech.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("_ga", ".example.com"), false);
@@ -89,6 +97,65 @@ test("rates pre-consent tag-management and marketing-automation cookies as mediu
     }),
     "medium",
   );
+});
+
+test("groups NVIDIA region and Akamai bot cookies as contextual inventory", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          category: "Unknown",
+          beforeConsent: true,
+          cookieName: "c_code",
+          domain: "nvidia.com",
+          initiatorVendor: "Akamai Bot Manager / Edge",
+          setAtMs: 947
+        },
+        {
+          category: "Unknown",
+          beforeConsent: true,
+          cookieName: "bm_sv",
+          domain: ".nvidia.com",
+          setAtMs: 1468
+        }
+      ]
+    }
+  });
+  const groups = buildRuntimeCookiePriorityGroups(inventory.rows);
+  const regionCookie = groups.find((row) => row.vendor === "nvidia.com");
+  const akamaiCookie = groups.find((row) => row.vendor === "Akamai Bot Manager / Edge");
+
+  assert.equal(regionCookie?.purpose, "Functional");
+  assert.equal(regionCookie?.priority, "contextual");
+  assert.equal(akamaiCookie?.purpose, "Security");
+  assert.equal(akamaiCookie?.priority, "contextual");
+});
+
+test("does not display retained Akamai unknown cookie rows as review-level unknown", () => {
+  const groups = buildRuntimeCookiePriorityGroups([
+    {
+      category: "Unknown",
+      cookieName: "ak_bmsc",
+      domain: ".nvidia.com",
+      evidenceGrade: null,
+      firstObservedAtMs: 7761,
+      initiatorDomain: null,
+      initiatorUrl: null,
+      initiatorVendor: "Akamai Bot Manager / Edge",
+      nonEssential: false,
+      party: "first_party",
+      responseUrl: null,
+      setAtMs: 7761,
+      setMethod: "browser_snapshot",
+      sourceRequestUrl: null,
+      timingBasis: "browser_snapshot",
+      timingEvidence: "before_consent_cookie_write"
+    }
+  ]);
+
+  assert.equal(groups[0]?.vendor, "Akamai Bot Manager / Edge");
+  assert.equal(groups[0]?.purpose, "Security");
+  assert.equal(groups[0]?.priority, "contextual");
 });
 
 test("builds cookie inventory with initiator provenance and before-consent timing", () => {

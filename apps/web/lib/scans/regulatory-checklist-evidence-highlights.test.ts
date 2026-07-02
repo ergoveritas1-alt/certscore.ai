@@ -26,11 +26,10 @@ test("pre-consent storage highlights include fallback request timing when cookie
 
   assert.equal(
     highlights[0],
-    "Storage observed before consent: Google Analytics on .caltech.edu. First non-essential request at ~1164ms."
+    "Storage observed before consent: Google Analytics on .caltech.edu. First non-essential request at ~1.16s."
   );
   assert.equal(
     highlights[1],
     "\"Google Analytics\", \"preConsent\": true, \"category\": \"analytics\", \"domain\": \".caltech.edu\""
   );
 });
-

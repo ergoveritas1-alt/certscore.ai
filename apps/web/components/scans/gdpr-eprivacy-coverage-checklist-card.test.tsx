@@ -217,7 +217,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       assessmentStatus: "checked",
       evidenceState: "not_observed",
       id: "pre_consent_third_party_tracking",
-      label: "Pre-consent third-party tracking",
+      label: "Pre-consent 3rd party tracking",
       status: "Not observed"
     })),
     "positive_signal"
@@ -310,7 +310,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "embedded_content_pre_consent",
-      label: "Embedded third-party content loaded before consent",
+      label: "Embedded 3rd party content loaded before consent",
       status: "Observed"
     })),
     "review_signal"
@@ -325,7 +325,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
       },
       evidenceState: "observed",
       id: "embedded_content_pre_consent",
-      label: "Embedded third-party content loaded before consent",
+      label: "Embedded 3rd party content loaded before consent",
       status: "Observed"
     })),
     "potential_concern"
@@ -552,13 +552,13 @@ test("GdprEprivacyCoverageChecklistCard preserves first-seen timing in concise r
               ]
             },
             statusBasis:
-              "Tracking requests observed before consent: Quantcast Measure, Google Ads / DoubleClick, and BrightLine; first seen 521ms after scan start. Consent action was not recorded before these requests."
+              "Tracking requests observed before consent: Quantcast Measure, Google Ads / DoubleClick, and BrightLine; first seen 0.521s after scan start. Consent action was not recorded before these requests."
           },
           evidenceState: "observed",
           id: "pre_consent_third_party_tracking",
-          label: "Pre-consent third-party tracking",
+          label: "Pre-consent 3rd party tracking",
           note:
-            "Tracking requests observed before consent: Quantcast Measure, Google Ads / DoubleClick, and BrightLine; first seen 521ms after scan start. Consent action was not recorded before these requests.",
+            "Tracking requests observed before consent: Quantcast Measure, Google Ads / DoubleClick, and BrightLine; first seen 0.521s after scan start. Consent action was not recorded before these requests.",
           status: "Gap observed"
         })
       ],
@@ -568,7 +568,7 @@ test("GdprEprivacyCoverageChecklistCard preserves first-seen timing in concise r
 
   assert.match(
     html,
-    /Pre-consent 3rd-party tracking evidence was retained before consent: Google Ads \/ DoubleClick \(advertising measurement\) and Quantcast Measure \(tracking\); first seen 521ms after scan start; no consent action was recorded first\./
+    /Pre-consent 3rd party tracking evidence was retained before consent: Google Ads \/ DoubleClick \(advertising measurement\) and Quantcast Measure \(tracking\); first seen 0.521s after scan start; no consent action was recorded first\./
   );
   assert.match(html, /aria-label="Potential gap"/);
   assert.match(html, /border-rose-200 bg-rose-50 text-rose-700/);
@@ -577,7 +577,7 @@ test("GdprEprivacyCoverageChecklistCard preserves first-seen timing in concise r
   assert.doesNotMatch(html, /Evidence summary/);
 });
 
-test("GdprEprivacyCoverageChecklistCard summarizes the top two highest-priority third-party trackers", () => {
+test("GdprEprivacyCoverageChecklistCard summarizes the top two highest-priority 3rd party trackers", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -619,11 +619,11 @@ test("GdprEprivacyCoverageChecklistCard summarizes the top two highest-priority 
               ]
             },
             statusBasis:
-              "High priority pre-consent third-party tracking evidence: Bombora Visitor Insights - Advertising (3269ms), ScorecardResearch - Audience measurement (3269ms), Quantcast Measure - Audience measurement (3270ms)."
+              "High priority pre-consent 3rd party tracking evidence: Bombora Visitor Insights - Advertising (3.27s), ScorecardResearch - Audience measurement (3.27s), Quantcast Measure - Audience measurement (3.27s)."
           },
           evidenceState: "observed",
           id: "pre_consent_third_party_tracking",
-          label: "Pre-consent 3rd-party tracking",
+          label: "Pre-consent 3rd party tracking",
           status: "Gap observed"
         })
       ],
@@ -633,7 +633,7 @@ test("GdprEprivacyCoverageChecklistCard summarizes the top two highest-priority 
 
   assert.match(
     html,
-    /Pre-consent 3rd-party tracking evidence was retained before consent: Bombora Visitor Insights \(Advertising\) and ScorecardResearch \(Audience measurement\); first seen 3269ms after scan start; no consent action was recorded first\./
+    /Pre-consent 3rd party tracking evidence was retained before consent: Bombora Visitor Insights \(Advertising\) and ScorecardResearch \(Audience measurement\); first seen 3.27s after scan start; no consent action was recorded first\./
   );
   assert.doesNotMatch(html, /Optimizely \(A\/B Testing\)/);
   assert.doesNotMatch(html, /Quantcast Measure \(Audience measurement\)/);
@@ -653,11 +653,11 @@ test("GdprEprivacyCoverageChecklistCard reads canonical pre-consent timing field
               firstPreconsentThirdPartyTrackingObservationBasis: "runtime_third_party_request_timing",
               preconsentThirdPartyTrackingTimedObservationCount: 1
             },
-            statusBasis: "Runtime third-party request timing was retained before any recorded consent action."
+            statusBasis: "Runtime 3rd party request timing was retained before any recorded consent action."
           },
           evidenceState: "observed",
           id: "pre_consent_third_party_tracking",
-          label: "Pre-consent third-party tracking",
+          label: "Pre-consent 3rd party tracking",
           status: "Review signal"
         })
       ],
@@ -667,7 +667,7 @@ test("GdprEprivacyCoverageChecklistCard reads canonical pre-consent timing field
 
   assert.match(
     html,
-    /Tracking-classified third-party requests fired before any recorded consent action; first seen 2944ms after scan start/
+    /Tracking-classified 3rd party requests fired before any recorded consent action; first seen 2.94s after scan start/
   );
 });
 
@@ -693,7 +693,7 @@ test("GdprEprivacyCoverageChecklistCard includes pre-consent cookie vendor and p
               ]
             },
             statusBasis:
-              "Medium priority pre-consent third-party cookie/storage evidence: Quantcast - Analytics (1216ms)."
+              "Medium priority pre-consent 3rd party cookie/storage evidence: Quantcast - Analytics (1.22s)."
           },
           evidenceState: "observed",
           id: "pre_consent_cookies_storage",
@@ -707,9 +707,9 @@ test("GdprEprivacyCoverageChecklistCard includes pre-consent cookie vendor and p
 
   assert.match(
     html,
-    /Pre-consent cookie\/storage evidence was retained before consent: Quantcast \(Analytics\); first seen 1216ms after scan start; no consent action was recorded first\./
+    /Pre-consent cookie\/storage evidence was retained before consent: Quantcast \(Analytics\); first seen 1.22s after scan start; no consent action was recorded first\./
   );
-  assert.doesNotMatch(html, /Cookie\/storage writes were observed before any recorded consent action; first seen 1216ms after scan start/);
+  assert.doesNotMatch(html, /Cookie\/storage writes were observed before any recorded consent action; first seen 1.22s after scan start/);
 });
 
 test("GdprEprivacyCoverageChecklistCard combines advertising basis and retained evidence into one compact note", () => {
@@ -748,7 +748,7 @@ test("GdprEprivacyCoverageChecklistCard combines advertising basis and retained 
           id: "advertising_retargeting_vendor_signal_observed",
           label: "Advertising vendor signal",
           note:
-            "Advertising vendor signals were observed; first seen 521ms after scan start; before any recorded consent action.",
+            "Advertising vendor signals were observed; first seen 0.521s after scan start; before any recorded consent action.",
           status: "Review signal"
         })
       ],
@@ -758,7 +758,7 @@ test("GdprEprivacyCoverageChecklistCard combines advertising basis and retained 
 
   assert.match(
     html,
-    /Advertising-infrastructure evidence was partially retained before consent: Google Ads \/ DoubleClick \(advertising measurement\); first seen 521ms after scan start; no consent action was recorded first\./
+    /Advertising-infrastructure evidence was partially retained before consent: Google Ads \/ DoubleClick \(advertising measurement\); first seen 0.521s after scan start; no consent action was recorded first\./
   );
   assert.doesNotMatch(html, /Why this result/);
   assert.doesNotMatch(html, /Evidence summary/);
@@ -783,11 +783,11 @@ test("GdprEprivacyCoverageChecklistCard separates embedded content purpose bucke
               firstEmbeddedContentObservedMs: 412
             },
             statusBasis:
-              "Concrete third-party embedded content was retained before consent in iframe/runtime evidence."
+              "Concrete 3rd party embedded content was retained before consent in iframe/runtime evidence."
           },
           evidenceState: "observed",
           id: "embedded_content_pre_consent",
-          label: "Embedded third-party content loaded before consent",
+          label: "Embedded 3rd party content loaded before consent",
           status: "Observed"
         })
       ],
@@ -814,7 +814,7 @@ test("GdprEprivacyCoverageChecklistCard starts evidence and correction cards hid
           assessmentStatus: "gap_observed",
           evidenceState: "observed",
           id: "pre_consent_third_party_tracking",
-          label: "Pre-consent third-party tracking",
+          label: "Pre-consent 3rd party tracking",
           status: "Gap observed"
         })
       ],
@@ -822,8 +822,8 @@ test("GdprEprivacyCoverageChecklistCard starts evidence and correction cards hid
     })
   );
 
-  assert.match(html, /aria-label="Toggle evidence packet for Pre-consent third-party tracking"/);
-  assert.match(html, /aria-label="Toggle correction steps for Pre-consent third-party tracking"/);
+  assert.match(html, /aria-label="Toggle evidence packet for Pre-consent 3rd party tracking"/);
+  assert.match(html, /aria-label="Toggle correction steps for Pre-consent 3rd party tracking"/);
   assert.doesNotMatch(html, />Evidence packet</);
   assert.doesNotMatch(html, />Correction steps</);
 });
@@ -958,7 +958,7 @@ test("GdprEprivacyCoverageChecklistCard shows captured policy review button for 
           },
           evidenceState: "observed",
           id: "pre_consent_third_party_tracking",
-          label: "Pre-consent 3rd-party tracking",
+          label: "Pre-consent 3rd party tracking",
           status: "Observed"
         })
       ],
@@ -971,7 +971,7 @@ test("GdprEprivacyCoverageChecklistCard shows captured policy review button for 
   assert.match(html, /aria-label="Open captured privacy policy for Recipients\/vendor categories disclosed"/);
   assert.match(html, /aria-label="Open captured privacy policy for Retention disclosure"/);
   assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Supervisory authority complaint"/);
-  assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Pre-consent 3rd-party tracking"/);
+  assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Pre-consent 3rd party tracking"/);
 });
 
 test("GdprEprivacyCoverageChecklistCard shows policy review for every not-confirmed transparency row with retained summary snippets", () => {
@@ -1406,7 +1406,7 @@ test("GdprEprivacyCoverageChecklistCard does not use observed runtime wording fo
     },
     evidenceState: "not_testable",
     id: "pre_consent_third_party_tracking",
-    label: "Pre-consent third-party tracking",
+    label: "Pre-consent 3rd party tracking",
     status: "Not testable"
   });
   const html = renderToStaticMarkup(
@@ -1419,7 +1419,7 @@ test("GdprEprivacyCoverageChecklistCard does not use observed runtime wording fo
 
   assert.match(html, /Not testable from retained source-signal coverage evidence/);
   assert.match(html, /expected usable pre-consent runtime evidence; retained preConsentRuntimeScanner failed/);
-  assert.doesNotMatch(html, /Tracking-classified third-party requests fired before any recorded consent action/);
+  assert.doesNotMatch(html, /Tracking-classified 3rd party requests fired before any recorded consent action/);
 });
 
 test("GdprEprivacyCoverageChecklistCard renders transport security rows under a titled section", () => {
@@ -1452,7 +1452,7 @@ test("GdprEprivacyCoverageChecklistCard renders transport security rows under a 
   assert.match(html, /Valid SSL\/TLS certificate/);
 });
 
-test("GdprEprivacyCoverageChecklistCard renders third-party service rows under a titled section", () => {
+test("GdprEprivacyCoverageChecklistCard renders 3rd party service rows under a titled section", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -1470,7 +1470,7 @@ test("GdprEprivacyCoverageChecklistCard renders third-party service rows under a
           },
           evidenceState: "observed",
           id: "third_party_service_connection_pre_consent",
-          label: "Third-party service connections before consent",
+          label: "3rd party service connections before consent",
           status: "Gap observed"
         }),
         makeChecklistItem({
@@ -1486,7 +1486,7 @@ test("GdprEprivacyCoverageChecklistCard renders third-party service rows under a
           },
           evidenceState: "observed",
           id: "third_party_iframe_pre_consent",
-          label: "Third-party iframes before consent",
+          label: "3rd party iframes before consent",
           status: "Gap observed"
         })
       ],
@@ -1494,10 +1494,10 @@ test("GdprEprivacyCoverageChecklistCard renders third-party service rows under a
     })
   );
 
-  assert.match(html, /Third-Party Services/);
+  assert.match(html, /3rd Party Services/);
   assert.match(html, /Scan-context note/);
-  assert.match(html, /Third-party service connections before consent/);
-  assert.match(html, /Third-party iframes before consent/);
+  assert.match(html, /3rd party service connections before consent/);
+  assert.match(html, /3rd party iframes before consent/);
 });
 
 test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead of tally pills", () => {
@@ -1540,7 +1540,7 @@ test("GdprEprivacyCoverageSummaryPills renders a segmented decision mix instead 
       assessmentStatus: "gap_observed",
       evidenceState: "observed",
       id: "pre_consent_third_party_tracking",
-      label: "Pre-consent third-party tracking",
+      label: "Pre-consent 3rd party tracking",
       status: "Gap observed"
     })
   ];
@@ -1580,12 +1580,12 @@ test("GdprEprivacyCoverageChecklistCard renders debug confidence metadata", () =
             score: 7,
             improveConfidence: [
               "Retain request timing relative to consent state",
-              "Resolve vendor and purpose for third-party endpoints"
+              "Resolve vendor and purpose for 3rd party endpoints"
             ]
           },
           evidenceState: "observed",
           id: "pre_consent_third_party_tracking",
-          label: "Pre-consent third-party tracking",
+          label: "Pre-consent 3rd party tracking",
           status: "Gap observed",
           tone: "warning"
         })
@@ -1595,7 +1595,7 @@ test("GdprEprivacyCoverageChecklistCard renders debug confidence metadata", () =
 
   assert.match(html, /Confidence: 7/);
   assert.match(html, /Improve confidence: Retain request timing relative to consent state/);
-  assert.match(html, /Resolve vendor and purpose for third-party endpoints/);
+  assert.match(html, /Resolve vendor and purpose for 3rd party endpoints/);
 });
 
 test("GdprEprivacyCoverageChecklistCard avoids duplicate observed wording for not-observed rows", () => {
@@ -1693,7 +1693,7 @@ test("GdprEprivacyCoverageChecklistCard summarizes evaluated and coverage-missin
           assessmentStatus: "gap_observed",
           evidenceState: "observed",
           id: "pre_consent_third_party_tracking",
-          label: "Pre-consent third-party tracking",
+          label: "Pre-consent 3rd party tracking",
           status: "Gap observed",
           tone: "warning"
         }),
@@ -1758,7 +1758,7 @@ test("GdprEprivacyCoverageChecklistCard does not render suggested follow-up capt
     assessmentStatus: "coverage_limitation",
     evidenceState: "not_testable",
     id: "pre_consent_third_party_tracking",
-    label: "Pre-consent third-party tracking",
+    label: "Pre-consent 3rd party tracking",
     status: "Not testable",
     tone: "muted"
   });
@@ -1886,7 +1886,7 @@ test("GdprEprivacyCoverageChecklistCard names social media providers and timing"
 
   assert.match(html, /Meta\/Facebook/);
   assert.match(html, /LinkedIn/);
-  assert.match(html, /first seen 1390ms after scan start/i);
+  assert.match(html, /first seen 1.39s after scan start/i);
   assert.doesNotMatch(html, /Potential gap from retained scanner evidence; A social\/media embed, plugin, widget, or pixel provider loaded before any recorded consent choice in retained network\/runtime evidence\\./i);
 });
 
@@ -1908,7 +1908,7 @@ test("GdprEprivacyCoverageChecklistCard keeps generic cross-border asset hosts o
             projectedFindings: [],
             retainedEvidence: {
               evidenceHighlights: [
-                "Transfer-relevant analytics / behavioral tracking endpoints were observed for Google Tag Manager, Google Analytics, and Microsoft Clarity. Additional third-party asset endpoints were retained as supporting runtime context."
+                "Transfer-relevant analytics / behavioral tracking endpoints were observed for Google Tag Manager, Google Analytics, and Microsoft Clarity. Additional 3rd party asset endpoints were retained as supporting runtime context."
               ],
               evidenceRefs: ["cdnjs.cloudflare.com", "fonts.gstatic.com"],
               status: "Gap observed"
@@ -1927,7 +1927,7 @@ test("GdprEprivacyCoverageChecklistCard keeps generic cross-border asset hosts o
   );
 
   assert.match(html, /Google Tag Manager, Google Analytics, and Microsoft Clarity/i);
-  assert.match(html, /Additional third-party asset endpoints were retained as supporting runtime context/i);
+  assert.match(html, /Additional 3rd party asset endpoints were retained as supporting runtime context/i);
 });
 
 test("GdprEprivacyCoverageChecklistCard does not throw when retained row rationale text is missing", () => {

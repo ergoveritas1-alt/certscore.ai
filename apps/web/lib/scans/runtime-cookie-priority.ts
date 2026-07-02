@@ -30,6 +30,10 @@ export function getRuntimeCookieFirstSeenMs(row: RuntimeCookieEvidenceRow) {
 }
 
 export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
+  if (/^(c_code|countrycode|statecode|geodata|geo_country|trp-country|trp-language)$/i.test(row.cookieName)) {
+    return row.domain ?? row.cookieName;
+  }
+
   const haystack = [
     row.cookieName,
     row.domain,
@@ -46,6 +50,9 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
   }
   if (/(__cf|cf_clearance|cf_chl|cloudflare)/i.test(haystack)) {
     return "Cloudflare";
+  }
+  if (/(ak_bmsc|bm_sz|bm_sv|bm_mi|_abck|akamai)/i.test(haystack)) {
+    return "Akamai Bot Manager / Edge";
   }
   if (/(quantcast|quantserve|__qca|(?:^|[^a-z0-9])mc(?:[^a-z0-9]|$)|(?:^|[^a-z0-9])d(?:[^a-z0-9]|$))/i.test(haystack)) {
     return "Quantcast";
@@ -82,6 +89,9 @@ export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {
   if (/cloudflare bot management|cf_chl|cf_clearance|__cf_bm|cloudflare/.test(label)) {
     return "Security";
   }
+  if (/akamai bot manager|akamai/.test(label)) {
+    return "Security";
+  }
   if (/doubleclick floodlight|floodlight|fls\.doubleclick/.test(label)) {
     return "Advertising";
   }
@@ -112,6 +122,9 @@ export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {
   if (/quantcast/.test(label)) {
     return "Analytics";
   }
+  if (/^geolocation$/i.test(fallbackCategory)) {
+    return "Functional";
+  }
   return normalizeInventoryLabel(fallbackCategory || "unknown");
 }
 
@@ -125,7 +138,7 @@ export function getRuntimeCookieReviewPriority(row: RuntimeCookieEvidenceRow): R
   if (/^(analytics|experimentation|personalization|personalisation|a_b_testing|tag_management|tag_manager|marketing_automation)$/.test(purpose) && observedPreConsent) {
     return "medium";
   }
-  if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {
+  if (/^(security|necessary|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {
     return "contextual";
   }
   if (/^(cdn_static|cdn|functional)$/.test(purpose)) {

@@ -373,17 +373,19 @@ function formatInventoryNumber(value: number | null) {
 }
 
 function formatFirstSeenMs(value: number | null | undefined) {
-  return typeof value === "number" && Number.isFinite(value) ? `${Math.max(0, Math.round(value))}ms` : "—";
+  return typeof value === "number" && Number.isFinite(value) ? formatElapsedSeconds(value) : "—";
+}
+
+function formatElapsedSeconds(value: number) {
+  const seconds = Math.max(0, value) / 1000;
+  return `${seconds.toPrecision(3)}s`;
 }
 
 function formatInventorySummaryTime(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "—";
   }
-  if (value < 1000) {
-    return `${Math.max(0, Math.round(value))}ms`;
-  }
-  return `${(value / 1000).toFixed(2).replace(/\.?0+$/, "")}s`;
+  return formatElapsedSeconds(value);
 }
 
 function InventoryVendorCell({ label }: { label: string }) {
@@ -671,7 +673,7 @@ function RuntimeInventoryTable({
       <details className="group/inventory relative overflow-visible rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]" open>
         <summary className="flex min-h-[4.75rem] cursor-pointer list-none flex-wrap items-center gap-3 px-3.5 py-4 pr-14 marker:hidden [&::-webkit-details-marker]:hidden lg:px-5 lg:pr-16">
           <ScanReportDisclosureIcon className="group-open/inventory:rotate-90" />
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Cookies & Trackers (Pre-consent)</p>
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Pre-consent Cookies & Trackers</p>
         </summary>
         <CopyJsonButton
           className="absolute right-3 top-4 z-20 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-950 lg:right-5"

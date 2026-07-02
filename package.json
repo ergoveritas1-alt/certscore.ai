@@ -85,8 +85,6 @@
     "v2:demo": "pnpm --filter @certscore/contracts build && pnpm --filter @certscore/vendor-resolver build && PLAYWRIGHT_BROWSERS_PATH= node --env-file=apps/web/.env.local --import tsx ./packages/certscore-scan-core/src/cli/demo.ts",
     "v2:inspect": "pnpm -s --filter @certscore/contracts build && node --import tsx ./packages/certscore-scan-core/src/cli/inspect.ts",
     "v2:replay": "PLAYWRIGHT_BROWSERS_PATH= node --import tsx ./packages/certscore-scan-core/src/cli/replay.ts",
-    "v2:wc01-import-evidence-preview": "pnpm --filter @website-signal-risk-scanner/web import:wc01-v2-evidence-preview",
-    "v2:wc01-reviewer-ui-smoke": "pnpm --filter @website-signal-risk-scanner/web smoke:wc01-v2-reviewer-decisions",
     "v2:wc01-artifact-chain-smoke": "node --import tsx ./scripts/run-wc01-v2-artifact-chain-smoke.ts",
     "v2:wc01-scan-lab-cohort": "node --env-file=apps/web/.env.local --import tsx ./scripts/run-wc01-v2-scan-lab-cohort.ts",
     "v2:wc01-verify-scan-lab-cohort": "node --import tsx ./scripts/verify-wc01-v2-scan-lab-cohort.ts",

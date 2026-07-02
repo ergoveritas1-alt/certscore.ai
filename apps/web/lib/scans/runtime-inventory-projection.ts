@@ -25,6 +25,7 @@ export type TrackerInventoryRow = {
   firstSeenMs: number | null;
   label: string;
   observedVia: string[];
+  party: "first_party" | "third_party" | "unknown" | "mixed";
   preConsent: boolean;
   requestCount: number | null;
   regulatoryRelevance?: string[] | null;
@@ -214,6 +215,19 @@ export function buildTrackerInventoryRows(input: {
     const host = normalizeInventoryHostname(value);
     return Boolean(host && resolvedTrackerHosts.has(host));
   };
+  const getTrackerParty = (domains: string[]): TrackerInventoryRow["party"] => {
+    if (domains.length === 0) {
+      return "unknown";
+    }
+    const firstPartyCount = domains.filter(isFirstPartyHost).length;
+    if (firstPartyCount === domains.length) {
+      return "first_party";
+    }
+    if (firstPartyCount > 0) {
+      return "mixed";
+    }
+    return "third_party";
+  };
   const addRow = (row: TrackerInventoryRow) => {
     const key = `${row.label.toLowerCase()}\u0000${row.category.toLowerCase()}`;
     const existing = rows.get(key);
@@ -230,6 +244,7 @@ export function buildTrackerInventoryRows(input: {
           ? Math.min(existing.firstSeenMs, row.firstSeenMs)
           : existing.firstSeenMs ?? row.firstSeenMs,
       observedVia: uniqueStrings([...existing.observedVia, ...row.observedVia]),
+      party: mergePartyValues(existing.party, row.party),
       preConsent: existing.preConsent || row.preConsent,
       regulatoryRelevance: uniqueStrings([...(existing.regulatoryRelevance ?? []), ...(row.regulatoryRelevance ?? [])]),
       requestCount: Math.max(existing.requestCount ?? 0, row.requestCount ?? 0) || existing.requestCount || row.requestCount,
@@ -248,6 +263,7 @@ export function buildTrackerInventoryRows(input: {
       firstSeenMs: null,
       label: entity.label,
       observedVia: ["request"],
+      party: getTrackerParty(input.domains.includes(entity.label) ? [entity.label] : []),
       preConsent: input.preConsentVendors.includes(entity.label),
       requestCount: entity.requestCount,
       source: "runtime requests"
@@ -258,13 +274,15 @@ export function buildTrackerInventoryRows(input: {
     const observedVia = tracker.observedVia && tracker.observedVia.length > 0
       ? uniqueStrings(tracker.observedVia)
       : getStringArrayFromRecord(record, ["observedVia", "observed_via"]);
+    const matchedDomains = trackerMatchedHosts(tracker);
     addRow({
       category: tracker.vendorCategory || "tracker",
       confidence: typeof tracker.confidence === "number" && Number.isFinite(tracker.confidence) ? tracker.confidence : null,
-      domains: trackerMatchedHosts(tracker),
+      domains: matchedDomains,
       firstSeenMs: getNumberFromRecord(record, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]),
       label: tracker.vendorName,
       observedVia: observedVia.length > 0 ? observedVia : ["request"],
+      party: getTrackerParty(matchedDomains),
       preConsent: tracker.beforeConsent === true || input.preConsentVendors.includes(tracker.vendorName),
       regulatoryRelevance: tracker.regulatoryRelevance ?? getStringArrayFromRecord(record, ["regulatoryRelevance", "regulatory_relevance"]),
       requestCount: null,
@@ -290,6 +308,7 @@ export function buildTrackerInventoryRows(input: {
       firstSeenMs: null,
       label: vendor,
       observedVia: ["resolver"],
+      party: "unknown",
       preConsent: input.preConsentVendors.includes(vendor),
       requestCount: null,
       source: "vendor resolver"
@@ -306,6 +325,7 @@ export function buildTrackerInventoryRows(input: {
       firstSeenMs: null,
       label: host,
       observedVia: ["host"],
+      party: getTrackerParty([host]),
       preConsent: false,
       requestCount: null,
       source: "host inventory"
@@ -358,6 +378,9 @@ export function getInventoryCategoryLabel(
   }
   if (/integral ad science|ias/.test(label)) {
     return "Advertising";
+  }
+  if (/assets\.adobedtm\.com|adobe experience platform launch|adobe launch|adobe dtm/.test(label)) {
+    return "Tag management";
   }
   if (/jsdelivr|cdn\.jsdelivr\.net/.test(label)) {
     return "CDN";
@@ -434,7 +457,13 @@ export function getTrackerInventoryConfidence(row: TrackerInventoryRow): Invento
 }
 
 function formatTrackerParty(row: TrackerInventoryRow) {
-  if (row.domains.some((domain) => domain.includes("."))) {
+  if (row.party === "first_party") {
+    return "—";
+  }
+  if (row.party === "mixed") {
+    return "mixed";
+  }
+  if (row.party === "third_party") {
     return "3rd";
   }
   return row.preConsent ? "3rd" : "—";

@@ -49,7 +49,7 @@ curl https://certscore.ai/api/v2/scans/$SCAN_ID/findings \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY"`}</CodeBlock>
         </Section>
 
-        <Section id="pre-consent-cookies-trackers" eyebrow="Curl" title="Retrieve Cookies & Trackers (Pre-consent) as JSON">
+        <Section id="pre-consent-cookies-trackers" eyebrow="Curl" title="Retrieve Pre-consent Cookies & Trackers as JSON">
           <div id="pre-consent-cookies-trackers-json" className="space-y-4">
             <CodeBlock>{`SCAN=$(curl -s -X POST https://certscore.ai/api/v2/scans \\
   -H "Content-Type: application/json" \\
@@ -148,7 +148,7 @@ Rules:
         <Section eyebrow="Search use cases" title="Natural-language queries this page supports">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             CertScore API examples for website risk API workflows, privacy scan API reviews, cookie compliance scan API checks,
-            Cookies & Trackers (Pre-consent) JSON retrieval, MCP server for website compliance review, automated public-web risk
+            Pre-consent Cookies & Trackers JSON retrieval, MCP server for website compliance review, automated public-web risk
             signals, and evidence-backed website scan API integrations.
           </p>
         </Section>
