@@ -1893,12 +1893,35 @@ function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<stri
     actionableControlInventoryRetained: controls.length > 0 || visibleChoiceLabels.length > 0,
     capturedBeforeInteraction: true,
     controls: controls.slice(0, 12),
+    defaultTogglePurposeLabels: [],
+    defaultToggleStatesObserved: null,
     layerInspected: controls.length > 0 ? "first_layer" : "unknown",
     managePreferencesControlObserved: preferenceLabels.length > 0,
+    nonEssentialDefaultsOff: null,
     preferenceLabels,
+    precheckedOptionalPurposeCount: 0,
+    precheckedOptionalPurposeLabels: [],
     rejectControlObserved: rejectLabels.length > 0,
     rejectLabels,
     visibleChoiceLabels
+  };
+}
+
+function summarizeConsentDefaultToggleEvidence(observation: CanonicalEvidenceBundle["consentUiObservations"][number] | null | undefined) {
+  const defaultToggleStatesObserved = typeof observation?.defaultToggleStatesObserved === "boolean"
+    ? observation.defaultToggleStatesObserved
+    : null;
+  const nonEssentialDefaultsOff = typeof observation?.nonEssentialDefaultsOff === "boolean"
+    ? observation.nonEssentialDefaultsOff
+    : null;
+  return {
+    defaultTogglePurposeLabels: uniqueStrings(getStringArray(observation?.defaultTogglePurposeLabels)).slice(0, 12),
+    defaultToggleStatesObserved,
+    nonEssentialDefaultsOff,
+    precheckedOptionalPurposeCount: typeof observation?.precheckedOptionalPurposeCount === "number"
+      ? Math.max(0, observation.precheckedOptionalPurposeCount)
+      : 0,
+    precheckedOptionalPurposeLabels: uniqueStrings(getStringArray(observation?.precheckedOptionalPurposeLabels)).slice(0, 10)
   };
 }
 
@@ -1906,14 +1929,17 @@ function summarizeFirstLayerConsentChoices(
   bundle: CanonicalEvidenceBundle,
   geometryEvidence?: Record<string, unknown> | null
 ) {
-  const geometryChoices = summarizeGeometryFirstLayerConsentChoices(geometryEvidence);
-  if (geometryChoices?.actionableControlInventoryRetained === true) {
-    return geometryChoices;
-  }
-
   const observation = (bundle.consentUiObservations ?? []).find((row) => row.likelyPresent) ??
     (bundle.consentUiObservations ?? [])[0] ??
     null;
+  const defaultToggleEvidence = summarizeConsentDefaultToggleEvidence(observation);
+  const geometryChoices = summarizeGeometryFirstLayerConsentChoices(geometryEvidence);
+  if (geometryChoices?.actionableControlInventoryRetained === true) {
+    return {
+      ...geometryChoices,
+      ...defaultToggleEvidence
+    };
+  }
   const controls = (observation?.controls ?? []).filter((control) => control.visible !== false);
   const visibleChoiceLabels = uniqueStrings([
     ...(observation?.visibleChoiceLabels ?? []),
@@ -1950,11 +1976,13 @@ function summarizeFirstLayerConsentChoices(
       tagName: control.tagName,
       variant: control.classifierVariant
     })),
+    ...defaultToggleEvidence,
     layerInspected: observation.layerInspected ?? (visibleChoiceLabels.length > 0 ? "first_layer" : "unknown"),
     managePreferencesControlObserved: observation.managePreferencesControlObserved === true || preferenceLabels.length > 0,
     preferenceLabels,
     rejectControlObserved: observation.rejectControlObserved === true || rejectLabels.length > 0,
     rejectLabels,
+    textSnippet: boundedTextExcerpt(observation.textExcerpt),
     visibleChoiceLabels
   };
 }
@@ -2242,9 +2270,14 @@ function buildMaterializedLocalV2Detail(
     acceptLabels: [],
     actionableControlInventoryRetained: false,
     capturedBeforeInteraction: true,
+    defaultTogglePurposeLabels: [],
+    defaultToggleStatesObserved: null,
     layerInspected: "unknown",
     managePreferencesControlObserved: false,
+    nonEssentialDefaultsOff: null,
     preferenceLabels: [],
+    precheckedOptionalPurposeCount: 0,
+    precheckedOptionalPurposeLabels: [],
     rejectControlObserved: false,
     rejectLabels: [],
     visibleChoiceLabels: []

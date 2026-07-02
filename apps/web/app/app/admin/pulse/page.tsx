@@ -99,12 +99,14 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-7">
         <Metric label="Total" value={counts.total} />
         <Metric label="Completed" value={counts.completed} />
         <Metric label="Queued/running" value={counts.queuedOrRunning} />
         <Metric label="Rate limited" value={counts.rateLimited} />
         <Metric label="Feedback" value={counts.feedback} />
+        <Metric label="Summary JSON" value={counts.summaryJsonDownloads} />
+        <Metric label="Evidence JSON" value={counts.evidenceJsonDownloads} />
       </div>
 
       <Card className="border-slate-200 bg-white">
@@ -224,7 +226,9 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                             Signals {request.snapshotTotalSignals ?? 0} · Findings {request.snapshotFindingCount ?? 0} · Top {request.topFindingIds.length}
                           </p>
                         ) : null}
-                        <p className="mt-1 text-xs text-slate-500">Feedback {request.feedbackCount}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Feedback {request.feedbackCount} · Summary JSON {request.summaryJsonDownloads} · Evidence JSON {request.evidenceJsonDownloads}
+                        </p>
                         <p className="mt-1 text-xs text-slate-500">{formatAdminDateTime(request.requestedAt)}</p>
                       </td>
                       <td className="py-3 align-top">

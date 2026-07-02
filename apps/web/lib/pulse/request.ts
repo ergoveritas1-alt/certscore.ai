@@ -10,10 +10,10 @@ export function parsePulseDetail(value: string | null): PulseDetail {
   if (value === "quick") {
     return "tiny";
   }
-  if (value === "tiny" || value === "full") {
+  if (value === "tiny" || value === "standard" || value === "full" || value === "summary" || value === "evidence") {
     return value;
   }
-  return "standard";
+  return "summary";
 }
 
 export function parsePulseFreshness(value: string | null): PulseFreshnessMode {

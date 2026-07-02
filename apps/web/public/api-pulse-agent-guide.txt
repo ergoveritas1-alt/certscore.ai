@@ -14,7 +14,7 @@ Basic HTTP agent quick start:
 2. For a quick check, call:
    GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=markdown&detail=tiny
 3. For structured evidence, call:
-   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=json&detail=full
+   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=json&detail=evidence
 4. If you receive HTTP 202, read the returned statusUrl or poll:
    GET https://certscore.ai/api/v1/pulse/status/<jobId>
 5. If the request fails before status/body/headers are visible, open:
@@ -23,11 +23,11 @@ Basic HTTP agent quick start:
 Recommended calls:
 - User-facing summary: GET /api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard
 - Quick machine triage: GET /api/v1/pulse?url=https://kbdlab.io&detail=tiny
-- Evidence/deeper review: GET /api/v1/pulse?url=https://kbdlab.io&detail=full
+- Evidence/deeper review: GET /api/v1/pulse?url=https://kbdlab.io&detail=evidence
 - Connectivity check: GET /api/v1/pulse-self-test
 - Health check: GET /api/v1/pulse-health
 
-Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.
+Summary JSON is best for concise agent output. Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Evidence JSON is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.
 
 Standard markdown structure:
 - Starts with a compact Field/Value summary table.
@@ -44,7 +44,7 @@ OpenAPI / GPT Action beta quick start:
    scanFrom: eu_ie | california
    wait: 35
 3. Use detail=tiny for quick checks.
-4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
+4. Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or the linked CertScore report when users need more support.
 5. If API fetch fails before headers/body/status are visible, call checkPulseConnectivity once.
 6. If checkPulseConnectivity succeeds, treat the scan failure as a transient client/action transport error and retry or use the markdown endpoint.
 7. If checkPulseConnectivity also fails without CertScore diagnostic headers, do not infer CertScore returned an error. Report it as a client/network fetch limitation and read /api-pulse/agent and /api-pulse-agent-guide.txt.
@@ -121,8 +121,11 @@ https://certscore.ai/api/v1/pulse?url=https://kbdlab.io
 Markdown endpoint:
 https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&format=markdown
 
-Full-detail endpoint:
-https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full
+Summary endpoint:
+https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=summary
+
+Evidence endpoint:
+https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=evidence
 
 Quick endpoint:
 https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=tiny
@@ -166,8 +169,8 @@ Expected public response contracts:
 
 Use guidance:
 - Use detail=tiny for compact badges, CLI summaries, or simple agents.
-- Use detail=standard for default agent summaries.
-- Use detail=full when structured finding, evidence, review lens, coverage, and benchmark context are needed.
+- Use detail=summary for default agent summaries.
+- Use detail=evidence when structured finding, evidence, review lens, coverage, and benchmark context are needed.
 - Use format=markdown when a tool handles readable text better than JSON.
 - For a Custom GPT Action beta, import https://certscore.ai/api/v1/openapi.chatgpt.json and use getPulseForUrl with format=markdown, detail=standard, wait=35.
 - Treat the response as automated public-web observations for review.

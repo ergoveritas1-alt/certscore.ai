@@ -161,10 +161,10 @@ export default async function MarketingHomePage() {
                 backgroundImage: "linear-gradient(180deg, #020617 0%, #0f172a 24%, #334155 62%, #94a3b8 100%)"
               }}
             >
-              See how websites handle consent, privacy and accessibility.
+              See how websites handle privacy, consent, tracking, and disclosure.
             </h1>
             <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
-              Evidence based analysis of pre-consent tracking, third-party requests, consent surfaces, cookie activity, accessibility issues, and disclosure inconsistencies. Mapped to GDPR/ePrivacy.
+              Evidence based analysis of pre-consent tracking, consent surfaces, cookie activity, transport security, and disclosure inconsistencies. Mapped to GDPR/ePrivacy.
             </p>
             <div className="flex flex-col gap-3 pt-1 sm:flex-row">
               <PendingButtonLink

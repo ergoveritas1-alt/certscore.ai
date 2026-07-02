@@ -31,7 +31,7 @@ export function buildPulseChatGptOpenApiDocument() {
           tags: ["Pulse"],
           summary: "Retrieve a GPT-safe CertScore Pulse summary for a public URL.",
           description:
-            "Scan a public website URL with CertScore Pulse and return automated privacy, consent, tracking, accessibility, and disclosure observations. Use markdown and full public report detail by default. Not legal advice or a compliance determination.",
+            "Scan a public website URL with CertScore Pulse and return automated privacy, consent, tracking, accessibility, and disclosure observations. Summary JSON is the default; evidence returns a bounded structured evidence packet. Not legal advice or a compliance determination.",
           parameters: [
             {
               name: "url",
@@ -51,8 +51,8 @@ export function buildPulseChatGptOpenApiDocument() {
               name: "detail",
               in: "query",
               required: false,
-              description: "full returns the same public-safe report coverage used by the CertScore website; standard is shorter; tiny is compact.",
-              schema: { type: "string", enum: ["tiny", "standard", "full"], default: "full" }
+              description: "summary returns the small GPT-friendly artifact. evidence returns the larger bounded structured evidence packet. standard/full remain backward compatible.",
+              schema: { type: "string", enum: ["tiny", "standard", "full", "summary", "evidence"], default: "summary" }
             },
             {
               name: "scanFrom",
@@ -117,8 +117,8 @@ export function buildPulseChatGptOpenApiDocument() {
               name: "detail",
               in: "query",
               required: false,
-              description: "full returns the same public-safe report coverage used by the CertScore website; standard is shorter; tiny is compact.",
-              schema: { type: "string", enum: ["tiny", "standard", "full"], default: "full" }
+              description: "summary returns the small GPT-friendly artifact. evidence returns the larger bounded structured evidence packet. standard/full remain backward compatible.",
+              schema: { type: "string", enum: ["tiny", "standard", "full", "summary", "evidence"], default: "summary" }
             }
           ],
           responses: {
@@ -196,7 +196,7 @@ export function buildPulseChatGptOpenApiDocument() {
           additionalProperties: true,
           required: ["type", "summary", "feedback", "capabilities", "agentInterpretation", "disclaimer"],
           properties: {
-            type: { type: "string", enum: ["certscore_pulse"] },
+            type: { type: "string", enum: ["certscore_pulse", "certscore_pulse_summary", "certscore_pulse_evidence"] },
             scanStatus: { type: "string" },
             target: { type: "object", additionalProperties: true },
             summary: {
@@ -210,6 +210,16 @@ export function buildPulseChatGptOpenApiDocument() {
             },
             findings: { type: "array", items: { type: "object", additionalProperties: true } },
             topFindings: { type: "array", items: { type: "object", additionalProperties: true } },
+            executiveSummary: {
+              type: "object",
+              additionalProperties: true,
+              description: "Report-backed executive summary metrics for agents, including issues to review, score, tracker footprint, consent platform, third-party requests, cookies pre-consent, and policy surfaces."
+            },
+            surfacedResults: {
+              type: "object",
+              additionalProperties: true,
+              description: "Report-backed surfaced result lists for agents, including GDPR/ePrivacy checklist findings and named pre-consent tracker rows with timing where available."
+            },
             coverage: { type: "object", additionalProperties: true },
             links: { type: "object", additionalProperties: true },
             feedback: { $ref: "#/components/schemas/PulseFeedback" },

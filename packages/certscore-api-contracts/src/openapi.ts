@@ -32,7 +32,12 @@ export function buildPulseV1OpenApiDocument() {
             { name: "scanId", in: "query", schema: { type: "string" } },
             { name: "jobId", in: "query", schema: { type: "string" } },
             { name: "format", in: "query", schema: { type: "string", enum: ["json", "markdown"], default: "json" } },
-            { name: "detail", in: "query", schema: { type: "string", enum: ["tiny", "quick", "standard", "full"], default: "standard" } },
+            {
+              name: "detail",
+              in: "query",
+              description: "summary returns the small agent-friendly JSON artifact. evidence returns the larger bounded structured evidence packet. standard/full remain backward compatible.",
+              schema: { type: "string", enum: ["tiny", "quick", "standard", "full", "summary", "evidence"], default: "summary" }
+            },
             {
               name: "freshness",
               in: "query",
@@ -225,7 +230,7 @@ export function buildPulseV1OpenApiDocument() {
           additionalProperties: true,
           required: ["type", "meta", "summary", "topFindings", "links", "feedback", "capabilities", "agentInterpretation", "disclaimer"],
           properties: {
-            type: { type: "string", const: "certscore_pulse" },
+            type: { type: "string", enum: ["certscore_pulse", "certscore_pulse_summary", "certscore_pulse_evidence"] },
             meta: { type: "object", additionalProperties: true },
             domain: { type: "string" },
             scanId: { type: "string" },
@@ -259,6 +264,8 @@ export function buildPulseV1OpenApiDocument() {
                 canonicalPulseUrl: { type: "string" },
                 fullReportUrl: { type: "string" },
                 markdownUrl: { type: "string" },
+                summaryJsonUrl: { type: "string" },
+                evidenceJsonUrl: { type: "string" },
                 docsUrl: { type: "string" },
                 findingsReferenceUrl: { type: "string" }
               }

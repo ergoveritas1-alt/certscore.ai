@@ -80,6 +80,8 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
             {request.scanId ? <AdminLink href={`/app/admin/scans/${request.scanId}`} label="Admin scan detail" /> : null}
             {request.scanId ? <AdminLink href={`/scan/${request.scanId}`} label="Public report" /> : null}
             {request.resultPulseUrl ? <AdminLink href={request.resultPulseUrl} label="Pulse JSON" /> : null}
+            {request.scanId ? <AdminLink href={`/api/v1/pulse?scanId=${request.scanId}&detail=summary`} label="Summary JSON" /> : null}
+            {request.scanId ? <AdminLink href={`/api/v1/pulse?scanId=${request.scanId}&detail=evidence`} label="Evidence JSON" /> : null}
             {request.resultReportUrl ? <AdminLink href={request.resultReportUrl} label="Report URL" /> : null}
             <AdminLink href={`/api/v1/pulse/status/${request.jobId}`} label="Status API" />
           </CardContent>
@@ -137,6 +139,48 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
             payload={formatJson(request.responseSummary)}
             preClassName="overflow-x-auto whitespace-pre-wrap break-words p-4 pr-12 text-xs leading-5 text-slate-100"
           />
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white">
+        <CardHeader>
+          <CardTitle>JSON Downloads ({request.artifactDownloads.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {request.artifactDownloads.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-[760px] divide-y divide-slate-200 text-sm">
+                <thead>
+                  <tr className="text-left text-slate-500">
+                    <th className="pb-3 pr-4 font-medium">Artifact</th>
+                    <th className="pb-3 pr-4 font-medium">Source</th>
+                    <th className="pb-3 pr-4 font-medium">Status</th>
+                    <th className="pb-3 pr-4 font-medium">Bytes</th>
+                    <th className="pb-3 font-medium">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {request.artifactDownloads.map((download) => (
+                    <tr key={download.id}>
+                      <td className="py-3 pr-4 align-top font-medium text-slate-900">{formatLabel(download.artifactType)}</td>
+                      <td className="py-3 pr-4 align-top text-slate-700">
+                        <p>{formatLabel(download.requestSource)}</p>
+                        <p className="text-xs text-slate-500">{formatLabel(download.requestChannel)} · {formatLabel(download.routeName)}</p>
+                      </td>
+                      <td className="py-3 pr-4 align-top text-slate-700">
+                        <p>{download.responseStatus}</p>
+                        <p className="text-xs text-slate-500">{download.cachedOrReused === null ? "Cache unknown" : download.cachedOrReused ? "Cached/reused" : "Fresh"}</p>
+                      </td>
+                      <td className="py-3 pr-4 align-top text-slate-700">{download.byteSize === null ? "Not recorded" : download.byteSize.toLocaleString()}</td>
+                      <td className="py-3 align-top text-slate-700">{formatAdminDateTime(download.createdAt, { includeSeconds: true })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-600">No Summary JSON or Evidence JSON downloads recorded for this Pulse request.</p>
+          )}
         </CardContent>
       </Card>
 

@@ -29,7 +29,8 @@ function pulseScanRecord(overrides: Record<string, unknown> = {}) {
 test("Pulse projection does not cap top findings by detail level", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
-  assert.match(source, /const topFindings = executive\.topFindings\.map\(/);
+  assert.match(source, /const topFindings = regulatoryGapTopFindings\.length > 0 \? regulatoryGapTopFindings : executive\.topFindings/);
+  assert.match(source, /reportSurface\.topFindings\.map\(/);
   assert.doesNotMatch(source, /topFindings = executive\.topFindings\.slice\(/);
   assert.doesNotMatch(source, /input\.detail === "tiny" \? 3 : 5/);
 });
@@ -64,7 +65,6 @@ test("Pulse quality gate keeps explicit access-limited scans usable as limitatio
 test("Pulse route rejects unusable completed scan records before projection", () => {
   const source = readFileSync(new URL("../../app/api/v1/pulse/route.ts", import.meta.url), "utf8");
 
-  assert.match(source, /materializeLocalV2DagScanDetail/);
   assert.match(source, /loadPulseScanRecord/);
   assert.match(source, /assessPulseScanRecordQuality\(scanRecord\)/);
   assert.match(source, /pulseUnavailableResponse/);
@@ -79,4 +79,22 @@ test("Pulse projection exposes explicit counts for agent summaries", () => {
   assert.match(source, /totalObservationCount: input\.allFindingCount/);
   assert.match(source, /highPriorityFindingCount/);
   assert.match(source, /counts: base\.counts/);
+});
+
+test("Pulse projection exposes Summary JSON and Evidence JSON artifacts", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+  const routeSource = readFileSync(new URL("../../app/api/v1/pulse/route.ts", import.meta.url), "utf8");
+  const adminSource = readFileSync(new URL("../../server/admin/list-pulse-requests.ts", import.meta.url), "utf8");
+
+  assert.match(source, /type: "certscore_pulse_summary"/);
+  assert.match(source, /type: "certscore_pulse_evidence"/);
+  assert.match(source, /summaryJsonUrl/);
+  assert.match(source, /evidenceJsonUrl/);
+  assert.match(source, /function capArray/);
+  assert.match(routeSource, /recordPulseArtifactDownload/);
+  assert.match(routeSource, /summary_json/);
+  assert.match(routeSource, /evidence_json/);
+  assert.match(adminSource, /pulse_artifact_downloads/);
+  assert.match(adminSource, /summary_json_downloads/);
+  assert.match(adminSource, /evidence_json_downloads/);
 });

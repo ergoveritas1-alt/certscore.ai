@@ -722,6 +722,78 @@ test("pre-consent runtime scanner inventories compact analytics controls after s
   }
 });
 
+test("pre-consent runtime scanner captures first-layer optional toggles defaulted on", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-toggle-on-"));
+  try {
+    const result = await scanFixturePage(
+      server.urlFor("consent-first-layer-optional-toggle-on"),
+      path.join(tempRoot, "consent-first-layer-optional-toggle-on"),
+      "fast",
+      "always",
+      "viewport_first",
+    );
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(observation?.defaultToggleStatesObserved, true);
+    assert.equal(observation?.nonEssentialDefaultsOff, false);
+    assert.equal(observation?.precheckedOptionalPurposeCount, 1);
+    assert.deepEqual(observation?.precheckedOptionalPurposeLabels, ["Analytics cookies"]);
+    assert.deepEqual(observation?.defaultTogglePurposeLabels, ["Analytics cookies"]);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner captures first-layer optional toggles defaulted off", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-toggle-off-"));
+  try {
+    const result = await scanFixturePage(
+      server.urlFor("consent-first-layer-optional-toggle-off"),
+      path.join(tempRoot, "consent-first-layer-optional-toggle-off"),
+      "fast",
+      "always",
+      "viewport_first",
+    );
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(observation?.defaultToggleStatesObserved, true);
+    assert.equal(observation?.nonEssentialDefaultsOff, true);
+    assert.equal(observation?.precheckedOptionalPurposeCount, 0);
+    assert.deepEqual(observation?.precheckedOptionalPurposeLabels, []);
+    assert.deepEqual(observation?.defaultTogglePurposeLabels, ["Analytics cookies"]);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner does not treat necessary-only checked controls as optional defaults", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-toggle-necessary-"));
+  try {
+    const result = await scanFixturePage(
+      server.urlFor("consent-first-layer-necessary-toggle-only"),
+      path.join(tempRoot, "consent-first-layer-necessary-toggle-only"),
+      "fast",
+      "always",
+      "viewport_first",
+    );
+    const observation = result.consentUiObservations[0];
+
+    assert.equal(observation?.defaultToggleStatesObserved, null);
+    assert.equal(observation?.nonEssentialDefaultsOff, null);
+    assert.equal(observation?.precheckedOptionalPurposeCount, 0);
+    assert.deepEqual(observation?.precheckedOptionalPurposeLabels, []);
+    assert.deepEqual(observation?.defaultTogglePurposeLabels, []);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner inventories compact German accept and reject controls after supplemental full-page evidence", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-compact-cookie-"));

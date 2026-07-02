@@ -112,6 +112,39 @@ function compactFindings(findings: any[], options: { gptAction?: boolean } = {})
     : `${NO_TOP_FINDINGS_COPY} ${ABSENCE_OF_FINDINGS_CAVEAT}`;
 }
 
+function compactSurfacedResults(pulse: PulseMarkdownInput) {
+  const results = pulse.surfacedResults ?? {};
+  const gdprFindings = Array.isArray(results.gdprEprivacyFindings) ? results.gdprEprivacyFindings : [];
+  if (gdprFindings.length === 0) {
+    return "";
+  }
+
+  return gdprFindings
+    .slice(0, 8)
+    .map((finding: any, index: number) => {
+      const status = line(finding.status);
+      return `${index + 1}. ${line(finding.label)}${status === "Not available" ? "" : ` - ${status}`}`;
+    })
+    .join("\n");
+}
+
+function compactPreConsentTrackers(pulse: PulseMarkdownInput) {
+  const trackers = Array.isArray(pulse.surfacedResults?.preConsentTrackers) ? pulse.surfacedResults.preConsentTrackers : [];
+  if (trackers.length === 0) {
+    return "No named pre-consent tracker rows were available in the Pulse projection.";
+  }
+
+  return trackers
+    .slice(0, 8)
+    .map((tracker: any) => {
+      const firstSeen = typeof tracker.firstSeenMs === "number" ? `; first seen ${tracker.firstSeenMs}ms` : "";
+      const purpose = line(tracker.purpose);
+      const purposeCopy = purpose === "Not available" ? "" : ` (${purpose})`;
+      return `- ${line(tracker.vendor)}${purposeCopy}${firstSeen}`;
+    })
+    .join("\n");
+}
+
 function formatReviewLensLinks(finding: any) {
   if (Array.isArray(finding.reviewLensLinks) && finding.reviewLensLinks.length > 0) {
     return finding.reviewLensLinks
@@ -181,6 +214,15 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
   const completedAt = line(pulse.scan?.completedAt ?? pulse.timestamps?.completedAt ?? pulse.completedAt);
   const highPriorityCount = countHighPriorityFindings(findings);
   const observationCount = totalObservationCount(pulse, findings);
+  const executive = pulse.executiveSummary ?? {};
+  const executiveIssueCount =
+    typeof executive.issuesToReview === "number"
+      ? executive.issuesToReview
+      : typeof pulse.counts?.executiveIssueCount === "number"
+        ? pulse.counts.executiveIssueCount
+        : findings.length;
+  const completionSummary = line(pulse.summary?.completionSummary ?? executive.completionSummary);
+  const surfacedResults = compactSurfacedResults(pulse);
   const markdown = [
     "# CertScore Pulse",
     "",
@@ -191,6 +233,7 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
     `| Domain | ${titleDomain} |`,
     `| Score | ${pulse.summary?.score ?? "Not available"}/100 |`,
     `| Risk level | ${formatLabel(pulse.summary?.riskLevel)} |`,
+    `| Issues to review | ${executiveIssueCount} |`,
     `| High-priority findings | ${highPriorityCount} |`,
     `| Total observations | ${observationCount} |`,
     `| Scan completed | ${completedAt} |`,
@@ -205,7 +248,10 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
     "",
     "## Summary",
     "",
-    safeSummary(pulse.summary?.humanSummary ?? pulse.summary?.headline),
+    completionSummary === "Not available" ? safeSummary(pulse.summary?.humanSummary ?? pulse.summary?.headline) : completionSummary,
+    "",
+    `Executive report: ${metricValue(executive.score ?? pulse.summary?.score)}/100; ${executiveIssueCount} issue${executiveIssueCount === 1 ? "" : "s"} to review; ${metricValue(executive.thirdPartyRequests)} third-party requests; ${metricValue(executive.cookiesPreConsent)} cookies pre-consent.`,
+    `Signal snapshot: consent platform ${line(executive.consentPlatform)}; tracker footprint ${metricValue(executive.trackerFootprint?.vendors)} vendor${executive.trackerFootprint?.vendors === 1 ? "" : "s"}, ${metricValue(executive.trackerFootprint?.domains)} domain${executive.trackerFootprint?.domains === 1 ? "" : "s"}.`,
     ...(options.gptAction && isLimitedCoverage(pulse.coverage?.status)
       ? [
           "",
@@ -213,6 +259,18 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
             line(pulse.coverage?.summary ?? "Coverage was limited; absence of findings should not be interpreted as absence of risk.")
         ]
       : []),
+    "",
+    ...(surfacedResults
+      ? [
+          "## Surfaced GDPR/ePrivacy Results",
+          "",
+          surfacedResults,
+          ""
+        ]
+      : []),
+    "## Named Pre-consent Tracker Rows",
+    "",
+    compactPreConsentTrackers(pulse),
     "",
     findingsHeading,
     "",
@@ -269,6 +327,8 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
     "## Links",
     "",
     `Full report: ${line(links.fullReportUrl)}`,
+    `Summary JSON: ${line(links.summaryJsonUrl ?? links.immutableJsonUrl ?? links.scanJsonUrl)}`,
+    `Evidence JSON: ${line(links.evidenceJsonUrl ?? links.immutableFullJsonUrl ?? links.fullJsonUrl)}`,
     `JSON: ${line(links.jsonUrl ?? links.scanJsonUrl)}`,
     `Immutable JSON: ${line(links.immutableJsonUrl ?? links.scanJsonUrl)}`,
     `Immutable Markdown: ${line(links.immutableMarkdownUrl)}`,

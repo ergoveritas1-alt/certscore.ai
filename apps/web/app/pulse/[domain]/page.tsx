@@ -160,7 +160,8 @@ export default async function PulseDomainPage({ params }: PulsePageProps) {
           <div className="mt-3 flex flex-wrap gap-2">
             <LinkButton href={pulse.links.jsonUrl}>JSON</LinkButton>
             <LinkButton href={pulse.links.markdownUrl}>Markdown</LinkButton>
-            <LinkButton href={pulse.links.fullJsonUrl}>Full JSON</LinkButton>
+            {pulse.links.summaryJsonUrl ? <LinkButton href={pulse.links.summaryJsonUrl}>Summary JSON</LinkButton> : null}
+            {pulse.links.evidenceJsonUrl ? <LinkButton href={pulse.links.evidenceJsonUrl}>Evidence JSON</LinkButton> : null}
             <LinkButton href={pulse.links.fullReportUrl}>Full report</LinkButton>
           </div>
         </section>

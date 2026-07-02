@@ -5,10 +5,13 @@ import { normalizePulseUrl, parsePulseDetail, parsePulseFormat, parsePulseFreshn
 test("Pulse request parsing applies canonical defaults and wait bounds", () => {
   assert.equal(parsePulseFormat(null), "json");
   assert.equal(parsePulseFormat("markdown"), "markdown");
-  assert.equal(parsePulseDetail(null), "standard");
+  assert.equal(parsePulseDetail(null), "summary");
   assert.equal(parsePulseDetail("quick"), "tiny");
   assert.equal(parsePulseDetail("tiny"), "tiny");
+  assert.equal(parsePulseDetail("standard"), "standard");
   assert.equal(parsePulseDetail("full"), "full");
+  assert.equal(parsePulseDetail("summary"), "summary");
+  assert.equal(parsePulseDetail("evidence"), "evidence");
   assert.equal(parsePulseFreshness(null), "latest");
   assert.equal(parsePulseFreshness("refresh"), "refresh");
   assert.equal(parsePulseWaitSeconds("999"), 80);

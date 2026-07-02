@@ -35,8 +35,8 @@ const copyPasteExamples = [
     href: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io"
   },
   {
-    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full"`,
-    href: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full"
+    command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=evidence"`,
+    href: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=evidence"
   },
   {
     command: `curl "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&format=markdown"`,
@@ -69,7 +69,7 @@ const parameters = [
   ["scanId", "Existing public eligible scan ID. Use this later for an immutable scan-backed Pulse response."],
   ["jobId", "Existing Pulse job ID. Use this to resolve or check an async Pulse request."],
   ["format", "`json` or `markdown`. Defaults to `json`."],
-  ["detail", "`tiny`, `quick`, `standard`, or `full`. Defaults to `standard`. `quick` is an alias for `tiny`."],
+  ["detail", "`summary`, `evidence`, `tiny`, `quick`, `standard`, or `full`. Defaults to `summary`. `quick` is an alias for `tiny`."],
   ["freshness", "`latest` or `refresh`. Defaults to `latest`."],
   ["scanFrom", "`eu_ie` or `california`. Selects the geo execution context for newly queued public scans. Defaults to `eu_ie`."],
   ["geo", "Alias for `scanFrom`; accepts `eu_ie` or `california`."],
@@ -82,6 +82,15 @@ const parameters = [
 
 const detailLevels = [
   {
+    name: "detail=summary",
+    summary: "Default agent-friendly JSON artifact with executive metrics, surfaced results, key counts, and links."
+  },
+  {
+    name: "detail=evidence",
+    summary:
+      "Bounded structured evidence packet for review. Includes projected findings, GDPR/ePrivacy checklist rows, tracker/cookie inventories, timing summaries, and safety notes without raw payloads."
+  },
+  {
     name: "detail=tiny",
     summary: "Quick compact summary for badges, CLI output, widgets, and simple agents."
   },
@@ -91,7 +100,7 @@ const detailLevels = [
   },
   {
     name: "detail=standard",
-    summary: "Default mode. Best for agent use and quick evidence-backed summaries."
+    summary: "Backward-compatible report projection for quick evidence-backed summaries."
   },
   {
     name: "detail=full",
@@ -167,6 +176,8 @@ const exampleLinks = {
   canonicalPulseUrl: "https://certscore.ai/pulse/kbdlab.io",
   jsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123",
   markdownUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123&format=markdown",
+  summaryJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123&detail=summary",
+  evidenceJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123&detail=evidence",
   fullJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_abc123&detail=full",
   fullReportUrl: "https://certscore.ai/scan/scan_abc123",
   docsUrl: "https://certscore.ai/api-pulse",
@@ -296,11 +307,11 @@ const responseExamples = [
     }
   },
   {
-    title: "200 completed full JSON",
+    title: "200 completed Evidence JSON",
     language: "json",
     value: {
-      type: "certscore_pulse",
-      meta: { ...exampleMeta, format: "json", detail: "full" },
+      type: "certscore_pulse_evidence",
+      meta: { ...exampleMeta, format: "json", detail: "evidence" },
       domain: "kbdlab.io",
       scanId: "scan_abc123",
       scanStatus: "completed",
@@ -498,7 +509,7 @@ export default function ApiPulsePage() {
             </div>
             <p>
               If you are an agent with OpenAPI actions or HTTP tools, start here before trying ad hoc fetches. CertScore Pulse works
-              best when agents call the markdown response for user-facing summaries and reserve full JSON for evidence-heavy review.
+              best when agents call Summary JSON or markdown for user-facing summaries and reserve Evidence JSON for evidence-heavy review.
             </p>
             <CodeBlock>{`Basic HTTP agent quick start:
 1. If you do not support OpenAPI actions, call:
@@ -506,7 +517,7 @@ export default function ApiPulsePage() {
 2. For a quick check, call:
    GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=markdown&detail=tiny
 3. For structured evidence, call:
-   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=json&detail=full
+   GET https://certscore.ai/api/v1/pulse?url=<public URL>&format=json&detail=evidence
 4. If you receive HTTP 202, read the returned statusUrl or poll:
    GET https://certscore.ai/api/v1/pulse/status/<jobId>
 5. If the request fails before status/body/headers are visible, open:
@@ -514,11 +525,11 @@ export default function ApiPulsePage() {
             <CodeBlock>{`Recommended calls:
 - User-facing summary: GET /api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard
 - Quick machine triage: GET /api/v1/pulse?url=https://kbdlab.io&detail=tiny
-- Evidence/deeper review: GET /api/v1/pulse?url=https://kbdlab.io&detail=full
+- Evidence/deeper review: GET /api/v1/pulse?url=https://kbdlab.io&detail=evidence
 - Connectivity check: GET /api/v1/pulse-self-test
 - Health check: GET /api/v1/pulse-health
 
-Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.`}</CodeBlock>
+Summary JSON is best for concise agent output. Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Evidence JSON is best for evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.`}</CodeBlock>
             <CodeBlock>{`OpenAPI / GPT Action beta quick start:
 1. If you support OpenAPI actions/tools, import:
    https://certscore.ai/api/v1/openapi.chatgpt.json
@@ -529,7 +540,7 @@ Markdown is best for conversational summaries. Tiny is best for badges, triage, 
    scanFrom: eu_ie | california
    wait: 35
 3. Use detail=tiny for quick checks.
-4. Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans.
+4. Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or the linked CertScore report when users need more support.
 5. If API fetch fails before headers/body/status are visible, call checkPulseConnectivity once.
 6. If checkPulseConnectivity succeeds, treat the scan failure as a transient client/action transport error and retry or use the markdown endpoint.
 7. If checkPulseConnectivity also fails without CertScore diagnostic headers, do not infer CertScore returned an error. Report it as a client/network fetch limitation and read /api-pulse/agent and /api-pulse-agent-guide.txt.`}</CodeBlock>
@@ -854,7 +865,8 @@ Public-safe phase message:
               </p>
               <CodeBlock>{`https://certscore.ai/scan/<scanId>
 https://certscore.ai/api/v1/pulse?scanId=<scanId>
-https://certscore.ai/api/v1/pulse?scanId=<scanId>&detail=full
+https://certscore.ai/api/v1/pulse?scanId=<scanId>&detail=summary
+https://certscore.ai/api/v1/pulse?scanId=<scanId>&detail=evidence
 https://certscore.ai/api/v1/pulse?scanId=<scanId>&format=markdown`}</CodeBlock>
             </CardContent>
           </Card>

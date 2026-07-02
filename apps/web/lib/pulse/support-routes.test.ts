@@ -89,8 +89,18 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { maximum?: number } }) => parameter.name === "wait" && parameter.schema.maximum === 35));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "scanFrom" && parameter.schema.enum?.includes("eu_ie")));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "geo" && parameter.schema.enum?.includes("california")));
-  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[]; default?: string } }) => parameter.name === "detail" && parameter.schema.enum?.includes("full") && parameter.schema.default === "full"));
-  assert.ok(body.paths["/api/v1/pulse/gpt/scan/{scanId}"].get.parameters.some((parameter: { name: string; schema: { enum?: string[]; default?: string } }) => parameter.name === "detail" && parameter.schema.enum?.includes("full") && parameter.schema.default === "full"));
+  assert.ok(
+    body.paths["/api/v1/pulse/gpt"].get.parameters.some(
+      (parameter: { name: string; schema: { enum?: string[]; default?: string } }) =>
+        parameter.name === "detail" && parameter.schema.enum?.includes("summary") && parameter.schema.enum?.includes("evidence") && parameter.schema.default === "summary"
+    )
+  );
+  assert.ok(
+    body.paths["/api/v1/pulse/gpt/scan/{scanId}"].get.parameters.some(
+      (parameter: { name: string; schema: { enum?: string[]; default?: string } }) =>
+        parameter.name === "detail" && parameter.schema.enum?.includes("summary") && parameter.schema.enum?.includes("evidence") && parameter.schema.default === "summary"
+    )
+  );
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["200"].content["application/json"]);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.responses["500"].content["application/json"]);
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.responses["429"].content["application/json"].schema.$ref, "#/components/schemas/PulseError");
@@ -111,7 +121,7 @@ test("GPT Pulse route source preserves public-mode gates", () => {
   const gptRoute = readFileSync("apps/web/app/api/v1/pulse/gpt/route.ts", "utf8");
   const coverageSource = readFileSync("apps/web/lib/pulse/scan-coverage.ts", "utf8");
 
-  assert.match(source, /gptAction \? \(url\.searchParams\.get\("detail"\) \?\? "full"\)/);
+  assert.match(source, /gptAction \? \(url\.searchParams\.get\("detail"\) \?\? "summary"\)/);
   assert.doesNotMatch(source, /Full evidence detail is not available through the public GPT Action/);
   assert.match(source, /gptAction && requestedFreshness === "refresh"/);
   assert.match(source, /public GPT Action uses latest available Pulse results only/);
@@ -330,7 +340,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /Status lifecycle|queued to running to finalizing to completed/);
   assert.match(source, /`scanId` is the canonical field name/);
   assert.match(source, /200 completed tiny JSON/);
-  assert.match(source, /200 completed full JSON/);
+  assert.match(source, /200 completed Evidence JSON/);
   assert.match(source, /202 pending\/running response/);
   assert.match(source, /429 rate-limit response/);
 });

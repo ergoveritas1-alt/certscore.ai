@@ -24,8 +24,8 @@ export const PULSE_CAPABILITIES = {
 } as const;
 
 export const pulseFormatSchema = z.enum(["json", "markdown"]);
-export const pulseDetailSchema = z.enum(["tiny", "quick", "standard", "full"]);
-export const normalizedPulseDetailSchema = z.enum(["tiny", "standard", "full"]);
+export const pulseDetailSchema = z.enum(["tiny", "quick", "standard", "full", "summary", "evidence"]);
+export const normalizedPulseDetailSchema = z.enum(["tiny", "standard", "full", "summary", "evidence"]);
 export const pulseFreshnessSchema = z.enum(["latest", "refresh"]);
 export const pulseJobStatusSchema = z.enum([
   "queued",
@@ -111,6 +111,8 @@ export const pulseLinksSchema = z
     canonicalPulseUrl: z.string().optional(),
     jsonUrl: z.string().optional(),
     markdownUrl: z.string().optional(),
+    summaryJsonUrl: z.string().optional(),
+    evidenceJsonUrl: z.string().optional(),
     fullJsonUrl: z.string().optional(),
     scanJsonUrl: z.string().optional(),
     immutableJsonUrl: z.string().optional(),
@@ -151,7 +153,7 @@ export const pulseFindingSchema = z
 
 export const pulseResponseSchema = z
   .object({
-    type: z.literal("certscore_pulse"),
+    type: z.enum(["certscore_pulse", "certscore_pulse_summary", "certscore_pulse_evidence"]),
     meta: pulseMetaSchema.optional(),
     request: z.record(z.unknown()).optional(),
     domain: z.string().optional(),

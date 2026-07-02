@@ -1,7 +1,7 @@
 import type { PULSE_FEEDBACK_RATINGS, PULSE_FEEDBACK_REASONS } from "./constants";
 
 export type PulseFormat = "json" | "markdown";
-export type PulseDetail = "tiny" | "standard" | "full";
+export type PulseDetail = "tiny" | "standard" | "full" | "summary" | "evidence";
 export type PulseFreshnessMode = "latest" | "refresh";
 export type PulseJobStatus =
   | "queued"

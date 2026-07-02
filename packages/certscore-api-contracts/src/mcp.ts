@@ -1,14 +1,14 @@
 import { z } from "zod";
 
-export const mcpPulseDetailSchema = z.enum(["tiny", "quick", "standard", "full"]);
-export const mcpGptSafePulseDetailSchema = z.enum(["tiny", "standard"]);
+export const mcpPulseDetailSchema = z.enum(["tiny", "quick", "standard", "full", "summary", "evidence"]);
+export const mcpGptSafePulseDetailSchema = z.enum(["tiny", "standard", "summary"]);
 export const mcpPulseFormatSchema = z.enum(["json", "markdown"]);
 export const mcpPulseFreshnessSchema = z.enum(["latest", "refresh"]);
 export const mcpScanFromSchema = z.enum(["eu_ie", "california"]);
 
 export const mcpCreateScanInputSchema = {
   url: z.string().min(1).describe("Public URL or domain to scan."),
-  detail: mcpPulseDetailSchema.optional().describe("Pulse detail level. Defaults to standard."),
+  detail: mcpPulseDetailSchema.optional().describe("Pulse detail level. Defaults to summary."),
   format: mcpPulseFormatSchema.optional().describe("Response format for completed immediate responses. Defaults to json."),
   freshness: mcpPulseFreshnessSchema.optional().describe("Use latest to reuse recent scans or refresh to request a new scan when eligible."),
   scanFrom: mcpScanFromSchema.optional().describe("Optional scan execution context for newly queued scans.")
@@ -25,8 +25,12 @@ export const mcpGetScanInputSchema = {
 
 export const mcpGetReportInputSchema = {
   scanId: z.string().min(1).describe("Stable CertScore scan ID."),
-  detail: mcpPulseDetailSchema.optional().describe("Pulse detail level. Defaults to standard."),
+  detail: mcpPulseDetailSchema.optional().describe("Pulse detail level. Defaults to summary for agent-friendly JSON."),
   format: mcpPulseFormatSchema.optional().describe("Use json for structured agent work or markdown for conversational summaries.")
+} as const;
+
+export const mcpGetEvidenceInputSchema = {
+  scanId: z.string().min(1).describe("Stable CertScore scan ID.")
 } as const;
 
 export const mcpExportFindingsInputSchema = {
@@ -84,8 +88,14 @@ export const certScoreMcpToolContracts = [
   {
     name: "get_report",
     title: "Get CertScore Pulse report",
-    description: "Retrieve an evidence-backed CertScore Pulse report by stable scan ID.",
+    description: "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet.",
     inputSchema: mcpGetReportInputSchema
+  },
+  {
+    name: "get_evidence",
+    title: "Get CertScore Pulse evidence",
+    description: "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.",
+    inputSchema: mcpGetEvidenceInputSchema
   },
   {
     name: "export_findings",

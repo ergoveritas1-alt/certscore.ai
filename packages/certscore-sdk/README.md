@@ -58,10 +58,11 @@ const explanation = firstFinding
   ? await certscore.findings.explain(scanId, firstFinding.id)
   : null;
 const pulseProjection = await certscore.pulse.get(scanId);
+const pulseEvidence = await certscore.pulse.evidence(scanId);
 const latestDomainScan = await certscore.domains.latest("example.com");
 const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
 
-console.log(status.status, preConsentTable.summary.rowCount, explanation?.title, pulseProjection.disclaimer, latestDomainScan.scan?.id, latestPreConsentTable.rows.length);
+console.log(status.status, preConsentTable.summary.rowCount, explanation?.title, pulseProjection.disclaimer, pulseEvidence.type, latestDomainScan.scan?.id, latestPreConsentTable.rows.length);
 ```
 
 Available resource clients:
@@ -75,6 +76,7 @@ Available resource clients:
 - `certscore.findings.get()`
 - `certscore.findings.explain()`
 - `certscore.pulse.get()`
+- `certscore.pulse.evidence()`
 - `certscore.domains.latest()`
 - `certscore.domains.latestPreConsentCookiesTrackers()`
 - `certscore.scan()`

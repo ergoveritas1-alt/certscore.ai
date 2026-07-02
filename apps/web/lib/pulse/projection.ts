@@ -7,6 +7,9 @@ import { getHybridRuntimeEvidence } from "../scans/hybrid-runtime-evidence";
 import { getPublicReportFindingDisplay } from "../scans/public-report-finding-display";
 import type { CertScoreFinding } from "../scans/finding-registry";
 import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
+import { getAssessmentDirection, getEvidenceLabel } from "../scans/gdpr-eprivacy-assessment-direction";
+import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../scans/gdpr-eprivacy-checklist-rationale";
+import { buildRegulatoryGapTopFindings } from "../scans/regulatory-gap-top-findings";
 import { buildPromotionGradePreconsentRequests } from "../scans/preconsent-public-evidence";
 import { buildRuntimeCookieInventory } from "../scans/runtime-cookie-evidence";
 import {
@@ -72,6 +75,59 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+function capArray<T>(items: T[], limit: number) {
+  const boundedLimit = Math.max(0, limit);
+  return {
+    items: items.slice(0, boundedLimit),
+    cap: {
+      shown: Math.min(items.length, boundedLimit),
+      total: items.length,
+      truncated: items.length > boundedLimit
+    }
+  };
+}
+
+function safeUrl(value: unknown) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    if (url.search) {
+      url.search = "?redacted=1";
+    }
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return value.replace(/[?#].*$/, "");
+  }
+}
+
+function safeRecordSubset(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  const output: Record<string, unknown> = {};
+  if (!record) {
+    return output;
+  }
+  for (const key of keys) {
+    const value = record[key];
+    if (value === undefined) {
+      continue;
+    }
+    if (typeof value === "string") {
+      output[key] = value.slice(0, 240);
+    } else if (typeof value === "number" || typeof value === "boolean" || value === null) {
+      output[key] = value;
+    } else if (Array.isArray(value)) {
+      output[key] = value
+        .filter((entry) => typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean")
+        .slice(0, 20);
+    }
+  }
+  return output;
+}
+
 function titleCase(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -98,16 +154,14 @@ function deriveRegulatoryRiskDisplayScore(scanRecord: ScanDetailResponse) {
   return null;
 }
 
-export function derivePulseReportScore(input: {
-  coverageLimited?: boolean;
-  findings?: CertScoreFinding[];
+function buildPulseReportSurface(input: {
+  coverageLimited: boolean;
   scanRecord: ScanDetailResponse;
   unifiedFindingPackets?: ReturnType<typeof buildScanReportUnifiedFindings>;
 }) {
   const scanRecord = input.scanRecord;
-  const coverageLimited = input.coverageLimited ?? (deriveCoverage(scanRecord).status !== "complete");
   const unifiedFindingPackets = input.unifiedFindingPackets ?? buildScanReportUnifiedFindings(scanRecord);
-  const findings = input.findings ?? projectExecutiveFindingsFromUnifiedPackets(unifiedFindingPackets).findings;
+  const executive = projectExecutiveFindingsFromUnifiedPackets(unifiedFindingPackets);
   const presentationSummary = deriveCertScoreFindings(scanRecord);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(scanRecord.runtimeArtifacts);
   const runtimeCookieRows = buildRuntimeCookieInventory({
@@ -129,36 +183,112 @@ export function derivePulseReportScore(input: {
     party: row.party,
     priority: row.priority,
     purpose: row.purpose,
+    requestCount: row.requestCount ?? null,
     vendor: row.vendor
   }));
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: input.coverageLimited,
+    events: scanRecord.events,
+    policyEnrichmentCount: scanRecord.policyEnrichment.length,
+    runtimeArtifacts: scanRecord.runtimeArtifacts,
+    scanCompleted: scanRecord.scan.status === "completed",
+    snapshot: scanRecord.snapshot
+  });
   const gdprEprivacyChecklist = deriveGdprEprivacyCoverageChecklist({
-    coverageLimited,
-    coverageOutcomes: deriveGdprEprivacyCoveragePolicyOutcomes({
-      coverageLimited,
-      events: scanRecord.events,
-      policyEnrichmentCount: scanRecord.policyEnrichment.length,
-      runtimeArtifacts: scanRecord.runtimeArtifacts,
-      scanCompleted: scanRecord.scan.status === "completed",
-      snapshot: scanRecord.snapshot
-    }),
-    projectedFindings: findings,
+    coverageLimited: input.coverageLimited,
+    coverageOutcomes,
+    projectedFindings: executive.findings,
     runtimeCookieRows,
     runtimeTrackerPriorityRows,
     scanCompleted: scanRecord.scan.status === "completed",
     unifiedFindings: unifiedFindingPackets
   });
+  const reportableGdprRows = getReportableGdprEprivacyCoverageItems(gdprEprivacyChecklist).map((item) => {
+    const statusBasis = deriveGdprEprivacyCoverageChecklistRowRationale(item);
+    return {
+      ...item,
+      assessmentDirection: getAssessmentDirection(item),
+      criticalEvidence: {
+        ...item.criticalEvidence,
+        statusBasis
+      },
+      evidenceLabel: getEvidenceLabel(item),
+      note: statusBasis
+    };
+  });
+  const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      rows: reportableGdprRows,
+      title: "GDPR / ePrivacy"
+    }
+  });
+  const regulatoryGapFindingIds = new Set(regulatoryGapTopFindings.map((finding) => finding.id));
+  const allFindings = [
+    ...regulatoryGapTopFindings,
+    ...executive.findings.filter((finding) => !regulatoryGapFindingIds.has(finding.id))
+  ];
+  const topFindings = regulatoryGapTopFindings.length > 0 ? regulatoryGapTopFindings : executive.topFindings;
   const gdprEprivacyScore = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
-    rows: getReportableGdprEprivacyCoverageItems(gdprEprivacyChecklist)
+    rows: reportableGdprRows
   }).score;
   const executiveScore = deriveExecutiveDisplayedScore({
-    findings,
+    findings: allFindings,
     previewMode: "homepage",
     snapshot: scanRecord.snapshot,
     storedScore: presentationSummary.score
   });
+  const score = boundedScore(gdprEprivacyScore ?? executiveScore ?? deriveRegulatoryRiskDisplayScore(scanRecord));
+  const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);
+  const preConsentTrackerRows = groupedTrackerRows
+    .filter((row) => row.firstSeenMs !== null || /high|medium|review/i.test(row.priority))
+    .sort((left, right) => {
+      const leftMs = left.firstSeenMs ?? Number.MAX_SAFE_INTEGER;
+      const rightMs = right.firstSeenMs ?? Number.MAX_SAFE_INTEGER;
+      return leftMs - rightMs || left.vendor.localeCompare(right.vendor);
+    })
+    .slice(0, 8)
+    .map((row) => ({
+      vendor: row.vendor,
+      purpose: row.purpose,
+      priority: row.priority,
+      firstSeenMs: row.firstSeenMs,
+      domains: row.domains.slice(0, 4)
+    }));
 
-  return boundedScore(gdprEprivacyScore ?? executiveScore ?? deriveRegulatoryRiskDisplayScore(scanRecord));
+  return {
+    allFindings,
+    executive,
+    gdprEprivacyChecklist,
+    gdprEprivacyScore,
+    presentationSummary,
+    preConsentTrackerRows,
+    reportableGdprRows,
+    runtimeCookieRows,
+    runtimeTrackerPriorityRows,
+    score,
+    topFindings,
+    trackerInventoryRows,
+    unifiedFindingPackets
+  };
+}
+
+export function derivePulseReportScore(input: {
+  coverageLimited?: boolean;
+  findings?: CertScoreFinding[];
+  scanRecord: ScanDetailResponse;
+  unifiedFindingPackets?: ReturnType<typeof buildScanReportUnifiedFindings>;
+}) {
+  const scanRecord = input.scanRecord;
+  const coverageLimited = input.coverageLimited ?? (deriveCoverage(scanRecord).status !== "complete");
+  const surface = buildPulseReportSurface({
+    coverageLimited,
+    scanRecord,
+    unifiedFindingPackets: input.unifiedFindingPackets
+  });
+
+  return input.findings ? boundedScore(surface.score ?? deriveRegulatoryRiskDisplayScore(scanRecord)) : surface.score;
 }
 
 function deriveFreshness(completedAt: string | null, generated: string) {
@@ -574,6 +704,7 @@ function buildRecommendedActions(findings: ReturnType<typeof toPulseFinding>[]) 
 function buildPulseCounts(input: {
   allFindingCount: number;
   evidenceHighlights: ReturnType<typeof buildEvidenceHighlights>;
+  executiveIssueCount: number;
   topFindings: ReturnType<typeof toPulseFinding>[];
 }) {
   const highPriorityFindingCount = input.topFindings.filter((finding) => /^(critical|high)$/i.test(finding.criticality)).length;
@@ -581,6 +712,7 @@ function buildPulseCounts(input: {
   return {
     totalObservationCount: input.allFindingCount,
     totalAutomatedFindingCount: input.allFindingCount,
+    executiveIssueCount: input.executiveIssueCount,
     topFindingCount: input.topFindings.length,
     highPriorityFindingCount,
     evidenceHighlightCount: Object.keys(input.evidenceHighlights).length,
@@ -591,9 +723,262 @@ function buildPulseCounts(input: {
   };
 }
 
+function deriveConsentPlatform(scanRecord: ScanDetailResponse, presentationSummary: ReturnType<typeof deriveCertScoreFindings>) {
+  const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  const runtimePlatform =
+    typeof recordValue(runtimeArtifacts, "consentPlatform") === "string"
+      ? String(recordValue(runtimeArtifacts, "consentPlatform"))
+      : typeof recordValue(runtimeArtifacts, "consent_platform") === "string"
+        ? String(recordValue(runtimeArtifacts, "consent_platform"))
+        : typeof recordValue(runtimeArtifacts, "cmpName") === "string"
+          ? String(recordValue(runtimeArtifacts, "cmpName"))
+          : typeof recordValue(runtimeArtifacts, "cmp_name") === "string"
+            ? String(recordValue(runtimeArtifacts, "cmp_name"))
+            : null;
+  if (runtimePlatform) {
+    return runtimePlatform.replace(/\s+CMP$/i, "");
+  }
+
+  const cmpEntity = presentationSummary.topObservedEntities.find((entity) => entity.category === "cmp");
+  if (cmpEntity?.label) {
+    return cmpEntity.label.replace(/\s+CMP$/i, "");
+  }
+
+  const cmpVendor = scanRecord.trackerVendors.find((vendor) =>
+    /consent|cmp|cookie compliance/i.test(`${vendor.vendorCategory ?? ""} ${vendor.vendorName ?? ""}`)
+  );
+  return cmpVendor?.vendorName?.replace(/\s+CMP$/i, "") ?? null;
+}
+
+function buildSummaryArtifact(input: {
+  base: Record<string, unknown>;
+  standard: Record<string, unknown>;
+  timestamps: Record<string, unknown>;
+}) {
+  const baseLinks = asRecord(input.base.links) ?? {};
+  return {
+    type: "certscore_pulse_summary",
+    meta: input.base.meta,
+    domain: input.base.domain,
+    scanId: input.base.scanId,
+    scan_id: input.base.scan_id,
+    scanStatus: input.base.scanStatus,
+    timestamps: input.timestamps,
+    summary: input.base.summary,
+    executiveSummary: input.base.executiveSummary,
+    surfacedResults: input.base.surfacedResults,
+    counts: input.base.counts,
+    topFindings: input.base.topFindings,
+    coverage: input.standard.coverage ?? input.base.coverage,
+    links: {
+      summaryJsonUrl: baseLinks.summaryJsonUrl,
+      evidenceJsonUrl: baseLinks.evidenceJsonUrl,
+      fullReportUrl: baseLinks.fullReportUrl,
+      markdownUrl: baseLinks.markdownUrl,
+      docsUrl: baseLinks.docsUrl,
+      findingsReferenceUrl: baseLinks.findingsReferenceUrl,
+      jsonUrl: baseLinks.jsonUrl,
+      scanJsonUrl: baseLinks.scanJsonUrl,
+      fullJsonUrl: baseLinks.fullJsonUrl
+    },
+    feedback: input.base.feedback,
+    capabilities: input.base.capabilities,
+    agentInterpretation: input.base.agentInterpretation,
+    disclaimer: input.base.disclaimer
+  };
+}
+
+function buildEvidenceArtifact(input: {
+  allFindings: CertScoreFinding[];
+  base: Record<string, unknown>;
+  coverage: ReturnType<typeof deriveCoverage>;
+  executive: ReturnType<typeof projectExecutiveFindingsFromUnifiedPackets>;
+  reportSurface: ReturnType<typeof buildPulseReportSurface>;
+  scanRecord: ScanDetailResponse;
+  standard: Record<string, unknown>;
+  timestamps: Record<string, unknown>;
+}) {
+  const scanRecord = input.scanRecord;
+  const baseLinks = asRecord(input.base.links) ?? {};
+  const runtimeArtifacts = asRecord(scanRecord.runtimeArtifacts);
+  const firstLayerConsentChoices = asRecord(recordValue(runtimeArtifacts, "firstLayerConsentChoices"));
+  const consentSummary = asRecord(recordValue(runtimeArtifacts, "consentSummary")) ?? asRecord(recordValue(runtimeArtifacts, "consent_summary"));
+  const networkSummary = asRecord(recordValue(runtimeArtifacts, "networkSummary")) ?? asRecord(recordValue(runtimeArtifacts, "network_summary"));
+  const storageSummary = asRecord(recordValue(runtimeArtifacts, "storageSummary")) ?? asRecord(recordValue(runtimeArtifacts, "storage_summary"));
+  const navigationSummary = asRecord(recordValue(runtimeArtifacts, "navigationSummary")) ?? asRecord(recordValue(runtimeArtifacts, "navigation_summary"));
+  const requestTimingRows = input.reportSurface.runtimeTrackerPriorityRows.map((row) => ({
+    vendor: row.vendor,
+    purpose: row.purpose,
+    priority: row.priority,
+    party: row.party,
+    firstSeenMs: row.firstSeenMs,
+    requestCount: row.requestCount ?? null
+  }));
+  const checklistRows = input.reportSurface.reportableGdprRows.map((row) => ({
+    id: row.id,
+    label: row.label,
+    status: row.status,
+    evidenceLabel: row.evidenceLabel,
+    assessmentDirection: row.assessmentDirection,
+    assessmentStatus: row.assessmentStatus,
+    explanation: row.explanation,
+    note: row.note,
+    evidenceRefs: row.evidenceRefs?.slice(0, 12) ?? [],
+    retainedEvidence: row.criticalEvidence?.retainedEvidence
+      ? safeRecordSubset(row.criticalEvidence.retainedEvidence as Record<string, unknown>, [
+          "basis",
+          "statusBasis",
+          "provider",
+          "providerCategory",
+          "domain",
+          "firstSeenMs",
+          "consentState",
+          "cookieStoragePriority",
+          "thirdPartyRequestCount",
+          "cookiesBeforeConsentCount",
+          "defaultToggleStatesObserved",
+          "nonEssentialDefaultsOff",
+          "precheckedOptionalPurposeCount"
+        ])
+      : null
+  }));
+  const findings = input.allFindings.map((finding) => toPulseFinding(finding, scanRecord.scan.id));
+
+  return {
+    type: "certscore_pulse_evidence",
+    meta: {
+      ...(asRecord(input.base.meta) ?? {}),
+      evidenceSafety: "bounded_structured_public_evidence"
+    },
+    domain: input.base.domain,
+    scanId: input.base.scanId,
+    scan_id: input.base.scan_id,
+    scanStatus: input.base.scanStatus,
+    timestamps: input.timestamps,
+    summary: input.base.summary,
+    executiveSummary: input.base.executiveSummary,
+    surfacedResults: input.base.surfacedResults,
+    evidenceSafetyNotes: [
+      "This packet contains bounded structured evidence for review, not raw browser capture.",
+      "Raw cookie values, raw request/response bodies, sensitive payloads, full DOM, raw Nano reasoning, and unredacted query values are not included.",
+      "CertScore outputs are automated public-web observations for review and are not legal advice or a compliance determination."
+    ],
+    projectedFindings: capArray(findings, 100),
+    gdprEprivacyChecklistRows: capArray(checklistRows, 120),
+    retainedEvidence: {
+      findingEvidence: capArray(
+        findings.map((finding) => ({
+          id: finding.id,
+          label: finding.label,
+          evidence: finding.evidence,
+          evidenceDigest: finding.evidenceDigest
+        })),
+        100
+      ),
+      publicReportProjection: {
+        surfacedFindingCount: input.allFindings.length,
+        surfacedPacketCount: input.executive.surfacedPackets.length,
+        groupedFindings: input.executive.groupedFindings.map((group) => ({
+          section: group.section,
+          findingIds: group.findings.map((finding) => finding.id)
+        }))
+      }
+    },
+    trackerVendorInventory: capArray(
+      scanRecordVendors(scanRecord).map((vendor) => ({
+        name: vendor.name,
+        category: vendor.category,
+        host: vendor.host,
+        beforeConsent: vendor.beforeConsent,
+        confidence: vendor.confidence
+      })),
+      150
+    ),
+    trackerRows: capArray(input.reportSurface.trackerInventoryRows, 150),
+    cookieStorageInventory: capArray(
+      input.reportSurface.runtimeCookieRows.map((row) => ({
+        cookieName: row.cookieName,
+        domain: row.domain,
+        party: row.party,
+        category: row.category,
+        nonEssential: row.nonEssential,
+        firstObservedAtMs: row.firstObservedAtMs,
+        setAtMs: row.setAtMs,
+        timingBasis: row.timingBasis,
+        evidenceGrade: row.evidenceGrade,
+        timingEvidence: row.timingEvidence
+      })),
+      150
+    ),
+    requestTimingSummary: {
+      rows: capArray(requestTimingRows, 150),
+      networkSummary: safeRecordSubset(networkSummary, [
+        "totalRequestCount",
+        "thirdPartyRequestCount",
+        "thirdPartyDomainCount",
+        "preConsentRequestCount",
+        "preConsentThirdPartyRequestCount",
+        "collectionEndpointCount",
+        "identifierLikeRequestCount"
+      ])
+    },
+    consentSurfaceEvidence: {
+      firstLayerConsentChoices: safeRecordSubset(firstLayerConsentChoices, [
+        "consentSurfaceObserved",
+        "acceptVisible",
+        "rejectVisible",
+        "optionsVisible",
+        "defaultToggleStatesObserved",
+        "nonEssentialDefaultsOff",
+        "precheckedOptionalPurposeCount"
+      ]),
+      consentSummary: safeRecordSubset(consentSummary, [
+        "cmpDetected",
+        "cmpName",
+        "consentSurfaceObserved",
+        "requestsBeforeAnyConsentAction",
+        "userConsentActionObserved"
+      ])
+    },
+    storageEvidenceSummary: safeRecordSubset(storageSummary, [
+      "cookiesBeforeConsentCount",
+      "thirdPartyCookieBeforeConsentCount",
+      "localStorageBeforeConsentCount",
+      "sessionStorageBeforeConsentCount",
+      "storageTouched"
+    ]),
+    policySurfaceCoverage: capArray(
+      scanRecord.policyEnrichment.map((row) => ({
+        type: typeof row.policy_page_type === "string" ? row.policy_page_type : "policy_surface",
+        url: safeUrl(row.policy_page_url),
+        title: typeof row.policy_page_title === "string" ? row.policy_page_title.slice(0, 160) : null
+      })),
+      80
+    ),
+    coverageDiagnostics: {
+      accessPosture: scanRecord.accessPostureSummary,
+      interruptions: input.coverage.interruptions,
+      navigationSummary: safeRecordSubset(navigationSummary, ["finalUrl", "status", "httpStatus", "landedOnDifferentHost"])
+    },
+    links: {
+      summaryJsonUrl: baseLinks.summaryJsonUrl,
+      evidenceJsonUrl: baseLinks.evidenceJsonUrl,
+      fullReportUrl: baseLinks.fullReportUrl,
+      markdownUrl: baseLinks.markdownUrl,
+      docsUrl: baseLinks.docsUrl,
+      findingsReferenceUrl: baseLinks.findingsReferenceUrl
+    },
+    feedback: input.base.feedback,
+    capabilities: input.base.capabilities,
+    agentInterpretation: input.base.agentInterpretation,
+    disclaimer: input.base.disclaimer
+  };
+}
+
 function buildSummary(input: {
   benchmark: string | null;
   coverageLimited: boolean;
+  domain: string;
   findings: CertScoreFinding[];
   score: number | null;
 }) {
@@ -623,6 +1008,7 @@ function buildSummary(input: {
     headline: noFindings
       ? "No major automated review signals were surfaced in this scan."
       : "Automated scan surfaced public-web review signals with retained evidence.",
+    completionSummary: `CertScore.ai Pulse completed a scan of ${input.domain}.`,
     score: input.score,
     riskLevel: input.score === null ? "unknown" : riskLevelFromScore(input.score),
     benchmark: input.benchmark,
@@ -655,21 +1041,22 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const coverage = deriveCoverage(input.scanRecord);
   const quality = assessPulseScanRecordQuality(input.scanRecord);
   const packets = buildScanReportUnifiedFindings(input.scanRecord);
-  const executive = projectExecutiveFindingsFromUnifiedPackets(packets);
-  const allFindings = executive.findings;
-  const score = derivePulseReportScore({
+  const reportSurface = buildPulseReportSurface({
     coverageLimited: coverage.status !== "complete",
-    findings: allFindings,
     scanRecord: input.scanRecord,
     unifiedFindingPackets: packets
   });
-  const topFindings = executive.topFindings.map((finding) => toPulseFinding(finding, scan.id));
+  const executive = reportSurface.executive;
+  const allFindings = reportSurface.allFindings;
+  const score = reportSurface.score;
+  const topFindings = reportSurface.topFindings.map((finding) => toPulseFinding(finding, scan.id));
   const benchmark = input.scanRecord.domainBenchmark
     ? `${input.scanRecord.domainBenchmark.industry} / ${input.scanRecord.domainBenchmark.estimatedRankLabel}`
     : null;
   const summary = buildSummary({
     benchmark,
     coverageLimited: coverage.status !== "complete",
+    domain,
     findings: allFindings,
     score
   });
@@ -678,8 +1065,53 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const counts = buildPulseCounts({
     allFindingCount: allFindings.length,
     evidenceHighlights,
+    executiveIssueCount: topFindings.length,
     topFindings
   });
+  const cookiesBeforeConsentCount = reportSurface.runtimeCookieRows.length > 0
+    ? reportSurface.runtimeCookieRows.length
+    : finiteNumber(recordValue(input.scanRecord.snapshot, "initial_cookie_count")) ??
+      finiteNumber(recordValue(input.scanRecord.snapshot, "initialCookieCount")) ??
+      0;
+  const policySurfaces = input.scanRecord.policyEnrichment.slice(0, 8).map((row) => ({
+    type: typeof row.policy_page_type === "string" ? row.policy_page_type : "policy_surface",
+    url: typeof row.policy_page_url === "string" ? row.policy_page_url : null
+  }));
+  const executiveSummary = {
+    completionSummary: summary.completionSummary,
+    domain,
+    score,
+    scoreLabel: score === null ? "Not available" : `${score}/100`,
+    riskLevel: summary.riskLevel,
+    actionLabel: score !== null && score < 75 ? "Action Needed" : "Monitor",
+    benchmark,
+    issuesToReview: topFindings.length,
+    thirdPartyRequests: reportSurface.presentationSummary.thirdPartyRequestCount,
+    cookiesPreConsent: cookiesBeforeConsentCount,
+    consentPlatform: deriveConsentPlatform(input.scanRecord, reportSurface.presentationSummary),
+    trackerFootprint: {
+      vendors: evidenceHighlights.trackerFootprint.classifiedTrackerVendors,
+      domains: evidenceHighlights.trackerFootprint.thirdPartyDomainsObserved
+    },
+    policySurfaces,
+    scanTimeSeconds:
+      scan.completedAt && scan.startedAt
+        ? Math.max(0, Number(((new Date(scan.completedAt).getTime() - new Date(scan.startedAt).getTime()) / 1000).toFixed(1)))
+        : null
+  };
+  const surfacedResults = {
+    summaryLine: `${summary.completionSummary} The executive report surfaced ${topFindings.length} issue${topFindings.length === 1 ? "" : "s"} to review.`,
+    gdprEprivacyFindings: topFindings.map((finding) => ({
+      id: finding.id,
+      label: finding.label,
+      status: finding.evidence?.summary ?? finding.plainEnglish,
+      criticality: finding.criticality,
+      confidence: finding.confidence,
+      evidenceUrl: finding.evidence?.fullEvidenceUrl ?? finding.anchorUrl
+    })),
+    preConsentTrackers: reportSurface.preConsentTrackerRows,
+    coverageNote: coverage.summary
+  };
   const tinySummary =
     topFindingCount === 0 &&
     summary.score !== null &&
@@ -707,6 +1139,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     canonicalPulseUrl: absoluteUrl(`/pulse/${domain}`),
     jsonUrl: absoluteUrl(`/api/v1/pulse?url=${encodeURIComponent(input.requestedUrl ?? domain)}`),
     markdownUrl: absoluteUrl(`/api/v1/pulse?url=${encodeURIComponent(input.requestedUrl ?? domain)}&format=markdown`),
+    summaryJsonUrl: absoluteUrl(`/api/v1/pulse?scanId=${scan.id}&detail=summary`),
+    evidenceJsonUrl: absoluteUrl(`/api/v1/pulse?scanId=${scan.id}&detail=evidence`),
     fullJsonUrl: absoluteUrl(`/api/v1/pulse?url=${encodeURIComponent(input.requestedUrl ?? domain)}&detail=full`),
     scanJsonUrl: absoluteUrl(`/api/v1/pulse?scanId=${scan.id}`),
     immutableJsonUrl: absoluteUrl(`/api/v1/pulse?scanId=${scan.id}`),
@@ -740,6 +1174,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     scan_id: scan.id,
     scanStatus: scan.status,
     summary,
+    executiveSummary,
+    surfacedResults,
     counts,
     topFindings,
     capabilities: PULSE_CAPABILITIES,
@@ -778,6 +1214,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
         markdownUrl: links.markdownUrl,
         docsUrl: links.docsUrl,
         findingsReferenceUrl: links.findingsReferenceUrl,
+        summaryJsonUrl: links.summaryJsonUrl,
+        evidenceJsonUrl: links.evidenceJsonUrl,
         jsonUrl: links.jsonUrl,
         fullJsonUrl: links.fullJsonUrl,
         scanJsonUrl: links.scanJsonUrl
@@ -832,6 +1270,23 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     },
     usageGuidance: PULSE_USAGE_GUIDANCE
   };
+
+  if (input.detail === "summary") {
+    return buildSummaryArtifact({ base, standard, timestamps });
+  }
+
+  if (input.detail === "evidence") {
+    return buildEvidenceArtifact({
+      allFindings,
+      base,
+      coverage,
+      executive,
+      reportSurface,
+      scanRecord: input.scanRecord,
+      standard,
+      timestamps
+    });
+  }
 
   if (input.detail !== "full") {
     return standard;

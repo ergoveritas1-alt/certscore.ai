@@ -46,7 +46,7 @@ function normalizeBaseUrl(baseUrl: string | undefined) {
 }
 
 function normalizeDetail(detail: PulseDetail | undefined) {
-  return detail ?? "standard";
+  return detail ?? "summary";
 }
 
 function normalizeFormat(format: PulseFormat | undefined) {
@@ -98,7 +98,8 @@ function isAbsoluteUrl(value: string) {
 }
 
 function isCompletedPulse(body: unknown): body is PulseResult {
-  return asRecord(body).type === "certscore_pulse";
+  const type = asRecord(body).type;
+  return type === "certscore_pulse" || type === "certscore_pulse_summary" || type === "certscore_pulse_evidence";
 }
 
 function isStatus(body: unknown): body is JobStatus {
@@ -132,7 +133,8 @@ export class CertScoreClient {
       explain: (scanId, findingId, findingOptions) => this.getFinding(scanId, findingId, findingOptions)
     };
     this.pulse = {
-      get: (scanId, pulseOptions) => this.getScanPulse(scanId, pulseOptions)
+      get: (scanId, pulseOptions) => this.getScanPulse(scanId, pulseOptions),
+      evidence: (scanId, pulseOptions) => this.getScanEvidence(scanId, pulseOptions)
     };
     this.domains = {
       latest: (domain, domainOptions) => this.getLatestDomainScan(domain, domainOptions),
@@ -250,6 +252,11 @@ export class CertScoreClient {
   /** Retrieve the API v2 Pulse wrapper for an eligible public scan. */
   async getScanPulse(scanId: string, options: { signal?: AbortSignal } = {}): Promise<ScanPulse> {
     return this.fetchJson<ScanPulse>(`/api/v2/scans/${encodeURIComponent(scanId)}/pulse`, options);
+  }
+
+  /** Retrieve the bounded Pulse Evidence JSON artifact for an eligible public scan. */
+  async getScanEvidence(scanId: string, options: { signal?: AbortSignal } = {}): Promise<PulseResult> {
+    return this.fetchScan(scanId, "evidence", "json", options.signal) as Promise<PulseResult>;
   }
 
   /** Retrieve the latest eligible public scan for a domain. */

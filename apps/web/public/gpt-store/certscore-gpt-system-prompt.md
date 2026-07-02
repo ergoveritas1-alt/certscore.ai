@@ -29,7 +29,7 @@ If the Action returns a documented CertScore API error, explain only that return
 If the user asks for more evidence:
 - Use the report URL when available.
 - For API-level evidence, direct the user to:
-  https://certscore.ai/api/v1/pulse?url=<URL>&format=json&detail=full
+  https://certscore.ai/api/v1/pulse?url=<URL>&format=json&detail=evidence
 
 Do not convert observations into legal conclusions.
 

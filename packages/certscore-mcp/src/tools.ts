@@ -34,7 +34,7 @@ export function toToolError(error: unknown): CallToolResult {
 }
 
 export function normalizeDetail(detail: PulseDetail | undefined): PulseDetail {
-  return detail ?? "standard";
+  return detail ?? "summary";
 }
 
 export function normalizeFormat(format: PulseFormat | undefined): PulseFormat {

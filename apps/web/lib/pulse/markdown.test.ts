@@ -43,6 +43,8 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
       jsonUrl: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io",
       immutableJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123",
       immutableMarkdownUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123&format=markdown",
+      summaryJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123&detail=summary",
+      evidenceJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123&detail=evidence",
       immutableFullJsonUrl: "https://certscore.ai/api/v1/pulse?scanId=scan_123&detail=full",
       fullJsonUrl: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full",
       docsUrl: "https://certscore.ai/api-pulse",
@@ -67,6 +69,8 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
   assert.match(markdown, /support@certscore\.ai/);
   assert.match(markdown, /Scan ID: scan_123/);
   assert.match(markdown, /Immutable JSON: https:\/\/certscore\.ai\/api\/v1\/pulse\?scanId=scan_123/);
+  assert.match(markdown, /Summary JSON: https:\/\/certscore\.ai\/api\/v1\/pulse\?scanId=scan_123&detail=summary/);
+  assert.match(markdown, /Evidence JSON: https:\/\/certscore\.ai\/api\/v1\/pulse\?scanId=scan_123&detail=evidence/);
   assert.match(markdown, /API docs: https:\/\/certscore\.ai\/api-pulse/);
   assert.match(markdown, /Findings reference: https:\/\/certscore\.ai\/findings/);
   assert.match(markdown, /## Disclaimer/);
@@ -184,6 +188,59 @@ test("GPT Action markdown uses GPT-safe no-finding copy and CertScore footer lin
   assert.match(markdown, /Run another scan: https:\/\/certscore\.ai/);
   assert.equal((markdown.match(/## Disclaimer/g) ?? []).length, 1);
   assert.equal((markdown.match(/CertScore outputs are automated public-web observations for review/g) ?? []).length, 1);
+});
+
+test("Pulse markdown leads with report-backed executive and GDPR/ePrivacy surfaced results", () => {
+  const markdown = renderPulseMarkdown(
+    {
+      meta: { detail: "standard", generatedAt: "2026-07-02T01:44:00Z" },
+      domain: "cnn.com",
+      scanStatus: "completed",
+      scan: { completedAt: "2026-07-02T01:43:47.684Z" },
+      summary: {
+        completionSummary: "CertScore.ai Pulse completed a scan of cnn.com.",
+        score: 69,
+        riskLevel: "review_recommended",
+        humanSummary: "Automated scan surfaced review signals."
+      },
+      executiveSummary: {
+        completionSummary: "CertScore.ai Pulse completed a scan of cnn.com.",
+        issuesToReview: 6,
+        thirdPartyRequests: 63,
+        cookiesPreConsent: 43,
+        consentPlatform: "OneTrust",
+        trackerFootprint: { vendors: 19, domains: 35 }
+      },
+      surfacedResults: {
+        gdprEprivacyFindings: [
+          {
+            label: "Reject / decline control",
+            status: "A first-layer reject-all or equivalent refusal path was expected from the observed consent surface but was not retained."
+          }
+        ],
+        preConsentTrackers: [
+          { vendor: "Bombora Visitor Insights", purpose: "Advertising", firstSeenMs: 2308 },
+          { vendor: "ScorecardResearch", purpose: "Audience measurement", firstSeenMs: 2326 }
+        ]
+      },
+      topFindings: [],
+      reviewContext: { lenses: [] },
+      coverage: { status: "partial", summary: "Automated public-web scan completed with coverage limitations." },
+      links: { fullReportUrl: "https://certscore.ai/scan/cb27f583-41c4-4b5b-985e-f2bd453d52c4" },
+      feedback: {},
+      disclaimer: PULSE_STANDARD_DISCLAIMER
+    },
+    { gptAction: true }
+  );
+
+  assert.match(markdown, /\| Issues to review \| 6 \|/);
+  assert.match(markdown, /CertScore\.ai Pulse completed a scan of cnn\.com\./);
+  assert.match(markdown, /Executive report: 69\/100; 6 issues to review; 63 third-party requests; 43 cookies pre-consent\./);
+  assert.match(markdown, /Signal snapshot: consent platform OneTrust; tracker footprint 19 vendors, 35 domains\./);
+  assert.match(markdown, /## Surfaced GDPR\/ePrivacy Results/);
+  assert.match(markdown, /Reject \/ decline control - A first-layer reject-all or equivalent refusal path was expected/);
+  assert.match(markdown, /Bombora Visitor Insights \(Advertising\); first seen 2308ms/);
+  assert.match(markdown, /ScorecardResearch \(Audience measurement\); first seen 2326ms/);
 });
 
 test("Pulse markdown uses review-signal lens status labels", () => {

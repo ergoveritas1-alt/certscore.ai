@@ -39,6 +39,7 @@ import {
   findLatestCompletedAnonymousScanForDomain,
   getPulseGptActionUsage,
   getPulseRequestByJobId,
+  recordPulseArtifactDownload,
   updatePulseRequestCompleted,
   updatePulseRequestQueued,
   updatePulseRequestRateLimited
@@ -69,7 +70,28 @@ function diagnosticHeaders(route: string, requestId: string, headers?: HeadersIn
   return applyPulseCors(nextHeaders);
 }
 
-function completedResponse(pulse: any, format: "json" | "markdown", requestId: string, options: PulseRouteOptions = {}) {
+function pulseArtifactType(detail: unknown) {
+  if (detail === "summary") {
+    return "summary_json" as const;
+  }
+  if (detail === "evidence") {
+    return "evidence_json" as const;
+  }
+  return null;
+}
+
+async function completedResponse(
+  pulse: any,
+  format: "json" | "markdown",
+  requestId: string,
+  options: PulseRouteOptions & {
+    requestContext?: Record<string, unknown> | null;
+    resolutionMode?: string | null;
+    pulseRequestId?: string | null;
+    scanId?: string | null;
+    normalizedDomain?: string | null;
+  } = {}
+) {
   const scanId = pulse.scan?.scanId ?? pulse.links?.scanJsonUrl?.split("scanId=")[1] ?? "unknown";
   if (format === "markdown") {
     return new NextResponse(renderPulseMarkdown(pulse, { gptAction: options.gptAction }), {
@@ -80,12 +102,35 @@ function completedResponse(pulse: any, format: "json" | "markdown", requestId: s
       })
     });
   }
-  return NextResponse.json(pulse, {
+  const body = JSON.stringify(pulse);
+  const artifactType = pulseArtifactType(pulse.meta?.detail);
+  if (artifactType) {
+    await recordPulseArtifactDownload({
+      artifactType,
+      byteSize: new TextEncoder().encode(body).byteLength,
+      cachedOrReused: options.resolutionMode === "reused_existing_scan" || options.resolutionMode === "returned_stale_while_refreshing",
+      normalizedDomain: options.normalizedDomain ?? pulse.domain ?? null,
+      pulseRequestId: options.pulseRequestId ?? null,
+      requestChannel: typeof options.requestContext?.channel === "string" ? options.requestContext.channel : options.gptAction ? "gpt_action" : "pulse_api",
+      requestSource: typeof options.requestContext?.source === "string" ? options.requestContext.source : options.gptAction ? "gpt_action" : "pulse_api",
+      requesterContext: {
+        ipHash: options.requestContext?.ipHash ?? null,
+        userAgent: options.requestContext?.userAgent ?? null,
+        referer: options.requestContext?.referer ?? null
+      },
+      resolutionMode: options.resolutionMode ?? null,
+      responseStatus: 200,
+      routeName: options.routeName ?? "pulse",
+      scanId: options.scanId ?? pulse.scanId ?? pulse.scan_id ?? null
+    }).catch((error) => console.error("[pulse] artifact download log failed", { requestId, artifactType, error }));
+  }
+  return new Response(body, {
     headers: diagnosticHeaders(options.routeName ?? "pulse", requestId, {
       "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
       "Content-Type": "application/json; charset=utf-8",
       ETag: etagFor(scanId, pulse.meta.detail, "json")
-    })
+    }),
+    status: 200
   });
 }
 
@@ -111,7 +156,7 @@ async function loadPulseScanRecord(scanId: string) {
 }
 
 function pulseUnavailableResponse(input: {
-  detail: "tiny" | "standard" | "full";
+  detail: "tiny" | "standard" | "full" | "summary" | "evidence";
   format: "json" | "markdown";
   message?: string;
   requestId: string;
@@ -148,7 +193,7 @@ async function waitForCompletedScan(scanId: string, waitSeconds: number) {
 }
 
 async function buildAndLogCompletedPulse(input: {
-  detail: "tiny" | "standard" | "full";
+  detail: "tiny" | "standard" | "full" | "summary" | "evidence";
   format: "json" | "markdown";
   freshness: "latest" | "refresh";
   pulseRequestId: string;
@@ -158,6 +203,7 @@ async function buildAndLogCompletedPulse(input: {
   waitSeconds: number;
   requestId: string;
   refresh?: Record<string, unknown> | null;
+  requestContext?: Record<string, unknown> | null;
   routeOptions?: PulseRouteOptions;
 }) {
   const startedAt = Date.now();
@@ -171,16 +217,17 @@ async function buildAndLogCompletedPulse(input: {
     scanRecord: input.scanRecord,
     waitSeconds: input.waitSeconds
   });
+  const pulseRecord = pulse as Record<string, any>;
   if (input.refresh && typeof pulse === "object") {
-    (pulse as Record<string, unknown>).refresh = input.refresh;
+    pulseRecord.refresh = input.refresh;
   }
   if (input.routeOptions?.gptAction && typeof pulse === "object") {
-    (pulse as Record<string, unknown>).gptAction = {
+    pulseRecord.gptAction = {
       channel: "gpt_action",
       detail: input.detail,
       format: input.format,
       freshness: "latest",
-      fullDetailAvailableAt: pulse.links?.fullReportUrl ?? absoluteUrl(`/scan/${input.scanRecord.scan.id}`)
+      fullDetailAvailableAt: pulseRecord.links?.fullReportUrl ?? absoluteUrl(`/scan/${input.scanRecord.scan.id}`)
     };
   }
   await updatePulseRequestCompleted({
@@ -190,14 +237,14 @@ async function buildAndLogCompletedPulse(input: {
     resultReportUrl: absoluteUrl(`/scan/${input.scanRecord.scan.id}`),
     resolutionMode: input.resolutionMode,
     responseSummary: {
-      score: pulse.summary?.score ?? null,
-      riskLevel: pulse.summary?.riskLevel ?? null,
-      topFindingIds: Array.isArray(pulse.topFindings) ? pulse.topFindings.map((finding: any) => finding.id) : [],
-      coverageStatus: pulse.coverage?.status ?? null
+      score: pulseRecord.summary?.score ?? null,
+      riskLevel: pulseRecord.summary?.riskLevel ?? null,
+      topFindingIds: Array.isArray(pulseRecord.topFindings) ? pulseRecord.topFindings.map((finding: any) => finding.id) : [],
+      coverageStatus: pulseRecord.coverage?.status ?? null
     }
   }).catch((error) => console.error("[pulse] request completion update failed", error));
   if (input.routeOptions?.gptAction) {
-    const topFindingIds = getTopFindingIds(pulse);
+    const topFindingIds = getTopFindingIds(pulseRecord);
     logPulseGptActionEvent("pulse_gpt_action_scan_completed", {
       detail: input.detail,
       elapsedMs: Date.now() - startedAt,
@@ -209,14 +256,21 @@ async function buildAndLogCompletedPulse(input: {
       scanId: input.scanRecord.scan.id,
       statusCode: 200,
       topFindingIds,
-      highPriorityFindingCount: getHighPriorityFindingCount(pulse),
-      totalObservationCount: getTotalObservationCount(pulse),
-      coverageStatus: pulse.coverage?.status ?? null,
+      highPriorityFindingCount: getHighPriorityFindingCount(pulseRecord),
+      totalObservationCount: getTotalObservationCount(pulseRecord),
+      coverageStatus: pulseRecord.coverage?.status ?? null,
       wait: input.waitSeconds,
       wasCached: input.resolutionMode === "reused_existing_scan" || input.resolutionMode === "returned_stale_while_refreshing"
     });
   }
-  return completedResponse(pulse, input.format, input.requestId, input.routeOptions);
+  return completedResponse(pulse, input.format, input.requestId, {
+    ...input.routeOptions,
+    normalizedDomain: input.scanRecord.scan.domainHostname ?? null,
+    pulseRequestId: input.pulseRequestId,
+    requestContext: input.requestContext ?? null,
+    resolutionMode: input.resolutionMode,
+    scanId: input.scanRecord.scan.id
+  });
 }
 
 function isGptActionRequest(url: URL, options: PulseRouteOptions) {
@@ -278,7 +332,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const gptAction = isGptActionRequest(url, options);
   const routeName = options.routeName ?? (gptAction ? "pulse-gpt" : "pulse");
   const format = gptAction ? parseGptPulseFormat(url) : parsePulseFormat(url.searchParams.get("format"));
-  const detail = parsePulseDetail(gptAction ? (url.searchParams.get("detail") ?? "full") : url.searchParams.get("detail"));
+  const detail = parsePulseDetail(gptAction ? (url.searchParams.get("detail") ?? "summary") : url.searchParams.get("detail"));
   const requestedFreshness = parsePulseFreshness(url.searchParams.get("freshness"));
   const freshness = gptAction ? "latest" : requestedFreshness;
   const waitSeconds = gptAction ? parseGptPulseWaitSeconds(url) : parsePulseWaitSeconds(url.searchParams.get("wait"));
@@ -424,6 +478,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         scanRecord,
         waitSeconds,
         requestId,
+        requestContext: contextBase,
         routeOptions: { gptAction, routeName }
       });
     }
@@ -446,6 +501,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
             scanRecord,
             waitSeconds,
             requestId,
+            requestContext: contextBase,
             routeOptions: { gptAction, routeName }
           });
         }
@@ -607,6 +663,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         scanRecord: recentScanRecord,
         waitSeconds,
         requestId,
+        requestContext: contextBase,
         routeOptions: { gptAction, routeName }
       });
     }
@@ -628,6 +685,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
           scanRecord: latestScanRecord,
           waitSeconds,
           requestId,
+          requestContext: contextBase,
           routeOptions: { gptAction, routeName },
           refresh: {
             requested: freshness === "refresh",
@@ -715,6 +773,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
           scanRecord: reusedScanRecord,
           waitSeconds,
           requestId,
+          requestContext: contextBase,
           routeOptions: { gptAction, routeName }
         });
       }
@@ -760,6 +819,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
           scanRecord: completed,
           waitSeconds,
           requestId,
+          requestContext: contextBase,
           routeOptions: { gptAction, routeName }
         });
       }

@@ -3892,6 +3892,14 @@ function getConsentChoiceQualityEvidence(input: GdprEprivacyCoveragePolicyInput)
   const nonEssentialDefaultsOff =
     getBoolean(firstLayerChoices, ["nonEssentialDefaultsOff", "non_essential_defaults_off"]) ??
     getBoolean(lifecycle, ["nonEssentialDefaultsOff", "non_essential_defaults_off"]);
+  const defaultTogglePurposeLabels = uniqueStrings([
+    ...getStringArray(firstLayerChoices, ["defaultTogglePurposeLabels", "default_toggle_purpose_labels"]),
+    ...getStringArray(lifecycle, ["defaultTogglePurposeLabels", "default_toggle_purpose_labels"])
+  ]);
+  const precheckedOptionalPurposeLabels = uniqueStrings([
+    ...getStringArray(firstLayerChoices, ["precheckedOptionalPurposeLabels", "prechecked_optional_purpose_labels"]),
+    ...getStringArray(lifecycle, ["precheckedOptionalPurposeLabels", "prechecked_optional_purpose_labels"])
+  ]);
   const visualParityEvidenceObserved =
     getBoolean(firstLayerChoices, ["visualParityEvidenceObserved", "visual_parity_evidence_observed"]) ??
     getBoolean(rejectPath, ["visualParityEvidenceObserved", "visual_parity_evidence_observed"]);
@@ -3925,12 +3933,14 @@ function getConsentChoiceQualityEvidence(input: GdprEprivacyCoveragePolicyInput)
   return {
     acceptControlObserved,
     acceptRejectProminenceComparison,
+    defaultTogglePurposeLabels: compactArray(defaultTogglePurposeLabels, 8),
     defaultToggleStatesObserved,
     firstLayerCookieConsentBannerObserved,
     layerInspected,
     managePreferencesObserved,
     nonEssentialDefaultsOff,
     preferenceCenterOpened,
+    precheckedOptionalPurposeLabels: compactArray(precheckedOptionalPurposeLabels, 8),
     purposeCategoryControlsObserved,
     rejectClickDepth,
     rejectControlObserved,
@@ -4149,14 +4159,17 @@ function deriveCookieBannerPretickedOrImpliedConsentOutcome(input: GdprEprivacyC
   const evidenceRefs = [
     "Evidence: cookie banner default state",
     ...evidence.visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
+    ...evidence.precheckedOptionalPurposeLabels.map((label) => `Preselected optional purpose: ${label}`).slice(0, 5),
     evidence.layerInspected ? `Layer inspected: ${evidence.layerInspected}` : null
   ].filter((value): value is string => Boolean(value));
   const retainedEvidence = {
     acceptControlObserved: evidence.acceptControlObserved,
     defaultToggleStatesObserved: evidence.defaultToggleStatesObserved,
+    defaultTogglePurposeLabels: compactArray(evidence.defaultTogglePurposeLabels, 8),
     firstLayerCookieConsentBannerObserved: evidence.firstLayerCookieConsentBannerObserved,
     layerInspected: evidence.layerInspected,
     nonEssentialDefaultsOff: evidence.nonEssentialDefaultsOff,
+    precheckedOptionalPurposeLabels: compactArray(evidence.precheckedOptionalPurposeLabels, 8),
     purposeCategoryControlsObserved: evidence.purposeCategoryControlsObserved,
     selectedEvidenceArtifactId: evidence.selectedEvidenceArtifactId,
     selectedEvidenceStrength: evidence.selectedEvidenceStrength,

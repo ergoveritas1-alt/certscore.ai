@@ -183,6 +183,45 @@ export async function updatePulseRequestCompleted(input: {
   );
 }
 
+export async function recordPulseArtifactDownload(input: {
+  artifactType: "summary_json" | "evidence_json";
+  byteSize?: number | null;
+  cachedOrReused?: boolean | null;
+  normalizedDomain?: string | null;
+  pulseRequestId?: string | null;
+  requestChannel?: string | null;
+  requestSource?: string | null;
+  requesterContext?: Record<string, unknown> | null;
+  resolutionMode?: string | null;
+  responseStatus: number;
+  routeName?: string | null;
+  scanId?: string | null;
+}) {
+  await ensurePulseTables();
+  await query(
+    `insert into pulse_artifact_downloads (
+       pulse_request_id, scan_id, normalized_domain, artifact_type, route_name,
+       request_source, request_channel, response_status, byte_size, resolution_mode,
+       cached_or_reused, requester_context
+     )
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    [
+      input.pulseRequestId ?? null,
+      input.scanId ?? null,
+      input.normalizedDomain ?? null,
+      input.artifactType,
+      input.routeName ?? null,
+      input.requestSource ?? null,
+      input.requestChannel ?? null,
+      input.responseStatus,
+      input.byteSize ?? null,
+      input.resolutionMode ?? null,
+      input.cachedOrReused ?? null,
+      input.requesterContext ?? {}
+    ]
+  );
+}
+
 export async function updatePulseRequestQueued(input: {
   pulseRequestId: string;
   scanId: string | null;

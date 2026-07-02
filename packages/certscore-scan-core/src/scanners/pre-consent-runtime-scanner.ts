@@ -1256,6 +1256,11 @@ function emptyConsentUiObservation(scanStartedAtMs: number): ConsentUiObservatio
     textExcerpt: "",
     layerInspected: "unknown",
     visibleChoiceLabels: [],
+    defaultToggleStatesObserved: null,
+    nonEssentialDefaultsOff: null,
+    defaultTogglePurposeLabels: [],
+    precheckedOptionalPurposeCount: 0,
+    precheckedOptionalPurposeLabels: [],
     acceptControlObserved: false,
     rejectControlObserved: false,
     managePreferencesControlObserved: false,
@@ -1883,6 +1888,7 @@ async function readConsentUiObservation(
     ...frameInventory.textExcerpts,
     ...accessibilityInventory.textExcerpts,
   ].filter(Boolean).join(" ").slice(0, 12_000);
+  const defaultToggleEvidence = await readConsentDefaultToggleEvidence(page);
   const frameInaccessibleCount = inventory.frameInaccessibleCount + frameInventory.frameInaccessibleCount;
   const probeDiagnostics = inventory.diagnostics;
   const classifiedControls = combinedControls.map((control) => {
@@ -2002,6 +2008,7 @@ async function readConsentUiObservation(
     scanStartedAtMs,
     text: combinedText,
     controls: enrichedControls,
+    defaultToggleEvidence,
     fallbackBasis: [
       ...(retainedInventorySources.has("full_document_cmp") ? ["inventory:full_document_cmp_controls"] : []),
       ...(retainedInventorySources.has("full_document_consent_surface") ? ["inventory:full_document_consent_surface_controls"] : []),
@@ -2020,10 +2027,175 @@ type ConsentUiInventoryControl = ConsentUiObservation["controls"][number] & {
   inventoryRootSource?: "document" | "shadow_root";
 };
 
+type ConsentDefaultToggleEvidence = Pick<
+  ConsentUiObservation,
+  | "defaultTogglePurposeLabels"
+  | "defaultToggleStatesObserved"
+  | "nonEssentialDefaultsOff"
+  | "precheckedOptionalPurposeCount"
+  | "precheckedOptionalPurposeLabels"
+>;
+
 type ConsentInventoryProbeDiagnostics = Pick<
   NonNullable<ConsentUiObservation["inventoryDiagnostics"]>,
   "candidateContainerCount" | "candidateControlCount" | "candidateLabels" | "rejectionReasons"
 >;
+
+const CONSENT_DEFAULT_TOGGLE_PROBE_SCRIPT = String.raw`(() => {
+  const normalize = (value) => (value ?? "").replace(/\s+/g, " ").trim();
+  const selectorHintFor = (element) => {
+    const id = element.getAttribute("id");
+    const dataTestId = element.getAttribute("data-testid");
+    if (id) return "#" + id;
+    if (dataTestId) return "[data-testid=\"" + dataTestId + "\"]";
+    return element.tagName.toLowerCase();
+  };
+  const isVisible = (element) => {
+    if (!element) return false;
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return (
+      rect.width > 0 &&
+      rect.height > 0 &&
+      style.visibility !== "hidden" &&
+      style.display !== "none" &&
+      element.getAttribute("aria-hidden") !== "true" &&
+      Number.parseFloat(style.opacity || "1") > 0.05
+    );
+  };
+  const isFirstLayerPosition = (element) => {
+    if (!element) return false;
+    const rect = element.getBoundingClientRect();
+    return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
+  };
+  const labeledByText = (element) => {
+    const ids = normalize(element.getAttribute("aria-labelledby")).split(/\s+/).filter(Boolean);
+    return ids.map((id) => normalize(document.getElementById(id)?.textContent)).filter(Boolean).join(" ");
+  };
+  const labelElementFor = (element) => {
+    const id = element.getAttribute("id");
+    return id ? document.querySelector("label[for=\"" + CSS.escape(id) + "\"]") : null;
+  };
+  const contextElementFor = (element) =>
+    element.closest("label,[role='group'],[role='row'],li,tr,fieldset,.category,.purpose,.preference,.toggle,.switch,.option,[class*='category' i],[class*='purpose' i],[class*='preference' i],[class*='toggle' i],[class*='switch' i],[class*='option' i]") ??
+    labelElementFor(element) ??
+    element;
+  const labelFor = (element) => {
+    const context = contextElementFor(element);
+    const values = [
+      element.getAttribute("aria-label"),
+      labeledByText(element),
+      labelElementFor(element)?.textContent,
+      element.closest("label")?.textContent,
+      context?.textContent,
+      element.getAttribute("title"),
+      element.textContent,
+    ].map(normalize).filter(Boolean);
+    return normalize(values[0]).slice(0, 120);
+  };
+  const hasConsentContext = (element) => {
+    let current = contextElementFor(element);
+    for (let depth = 0; current && depth < 8; depth += 1) {
+      if (current === document.body || current === document.documentElement) {
+        current = current.parentElement;
+        continue;
+      }
+      const contextText = normalize(current.textContent);
+      const contextAttrs = [
+        current.getAttribute("aria-label"),
+        current.getAttribute("role"),
+        current.getAttribute("id"),
+        current.getAttribute("class"),
+      ].map(normalize).filter(Boolean).join(" ");
+      if (/cookie|cookies|privacy|consent|preference|preferences|analytics|advertising|marketing|tracking|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i.test(contextText + " " + contextAttrs)) {
+        return true;
+      }
+      current = current.parentElement;
+    }
+    return false;
+  };
+  const checkedState = (element) => {
+    if (element instanceof HTMLInputElement && (element.type === "checkbox" || element.type === "radio")) {
+      return element.checked;
+    }
+    const ariaChecked = element.getAttribute("aria-checked");
+    if (ariaChecked === "true") return true;
+    if (ariaChecked === "false") return false;
+    const ariaPressed = element.getAttribute("aria-pressed");
+    if (ariaPressed === "true") return true;
+    if (ariaPressed === "false") return false;
+    return null;
+  };
+  const nonEssentialLabel = (label) => {
+    const optional = /\b(?:optional|non[-\s]?essential|analytics?|statistics?|measurement|advertis(?:e|ing|ement)?|ads?|marketing|target(?:ed|ing)?|personal(?:ized|ised|ization|isation)?|social|tracking|profil(?:e|ing)|remarketing|sale|share|partners?|vendors?|third[-\s]?party)\b/i.test(label);
+    const necessaryOnly = /\b(?:strictly necessary|always active|always on|required|security|authentication|essential cookies?|necessary cookies?)\b/i.test(label) &&
+      !/\b(?:optional|non[-\s]?essential)\b/i.test(label);
+    return optional && !necessaryOnly;
+  };
+  const roots = [document];
+  const seen = new Set(roots);
+  const visit = (root) => {
+    for (const element of Array.from(root.querySelectorAll("*")).slice(0, 1_500)) {
+      if (element.shadowRoot && !seen.has(element.shadowRoot)) {
+        seen.add(element.shadowRoot);
+        roots.push(element.shadowRoot);
+        visit(element.shadowRoot);
+      }
+    }
+  };
+  visit(document);
+  const controls = roots.flatMap((root) =>
+    Array.from(root.querySelectorAll("input[type='checkbox'], input[type='radio'], [role='switch'], [role='checkbox'], [role='radio'], [aria-checked], [aria-pressed]"))
+  ).slice(0, 200);
+  const candidates = controls.flatMap((element) => {
+    const checked = checkedState(element);
+    if (checked === null) return [];
+    const context = contextElementFor(element);
+    const visible = isVisible(element) || isVisible(labelElementFor(element)) || isVisible(context);
+    const firstLayer = isFirstLayerPosition(element) || isFirstLayerPosition(context);
+    if (!visible || !firstLayer || !hasConsentContext(element)) return [];
+    const label = labelFor(element);
+    if (!label || !nonEssentialLabel(label)) return [];
+    return [{ checked, label, selectorHint: selectorHintFor(element) }];
+  });
+  const byLabel = new Map();
+  for (const candidate of candidates) {
+    const key = candidate.label.toLowerCase();
+    if (!byLabel.has(key)) byLabel.set(key, candidate);
+  }
+  const nonEssentialToggles = Array.from(byLabel.values()).slice(0, 12);
+  const checkedOptional = nonEssentialToggles.filter((toggle) => toggle.checked);
+  return {
+    defaultTogglePurposeLabels: nonEssentialToggles.map((toggle) => toggle.label),
+    defaultToggleStatesObserved: nonEssentialToggles.length > 0 ? true : null,
+    nonEssentialDefaultsOff: nonEssentialToggles.length > 0 ? checkedOptional.length === 0 : null,
+    precheckedOptionalPurposeCount: checkedOptional.length,
+    precheckedOptionalPurposeLabels: checkedOptional.map((toggle) => toggle.label).slice(0, 10),
+  };
+})()`;
+
+async function readConsentDefaultToggleEvidence(page: Page): Promise<ConsentDefaultToggleEvidence> {
+  const perFrame = await Promise.all(
+    page.frames().slice(0, 8).map((frame) =>
+      frame.evaluate<ConsentDefaultToggleEvidence>(CONSENT_DEFAULT_TOGGLE_PROBE_SCRIPT).catch((): ConsentDefaultToggleEvidence => ({
+        defaultTogglePurposeLabels: [],
+        defaultToggleStatesObserved: null,
+        nonEssentialDefaultsOff: null,
+        precheckedOptionalPurposeCount: 0,
+        precheckedOptionalPurposeLabels: [],
+      }))
+    )
+  );
+  const defaultTogglePurposeLabels = unique(perFrame.flatMap((row) => row.defaultTogglePurposeLabels ?? [])).slice(0, 12);
+  const precheckedOptionalPurposeLabels = unique(perFrame.flatMap((row) => row.precheckedOptionalPurposeLabels ?? [])).slice(0, 10);
+  return {
+    defaultTogglePurposeLabels,
+    defaultToggleStatesObserved: defaultTogglePurposeLabels.length > 0 ? true : null,
+    nonEssentialDefaultsOff: defaultTogglePurposeLabels.length > 0 ? precheckedOptionalPurposeLabels.length === 0 : null,
+    precheckedOptionalPurposeCount: precheckedOptionalPurposeLabels.length,
+    precheckedOptionalPurposeLabels,
+  };
+}
 
 async function readAccessibleFrameConsentInventory(
   page: Page,
@@ -2726,12 +2898,13 @@ function consentUiControlActionTypeFromClassification(
 
 function buildConsentUiObservationFromEvidence(input: {
   controls: ConsentUiObservation["controls"];
+  defaultToggleEvidence?: ConsentDefaultToggleEvidence;
   fallbackBasis?: string[];
   inventoryDiagnostics?: ConsentUiObservation["inventoryDiagnostics"];
   scanStartedAtMs: number;
   text: string;
 }): ConsentUiObservation {
-  const { controls, fallbackBasis = [], inventoryDiagnostics, scanStartedAtMs, text } = input;
+  const { controls, defaultToggleEvidence, fallbackBasis = [], inventoryDiagnostics, scanStartedAtMs, text } = input;
   const normalized = text.toLowerCase();
   const keywords = [
     "cookie",
@@ -2766,6 +2939,11 @@ function buildConsentUiObservationFromEvidence(input: {
     textExcerpt: text.slice(0, 2_000),
     layerInspected: controls.length > 0 ? "first_layer" : "unknown",
     visibleChoiceLabels,
+    defaultToggleStatesObserved: defaultToggleEvidence?.defaultToggleStatesObserved ?? null,
+    nonEssentialDefaultsOff: defaultToggleEvidence?.nonEssentialDefaultsOff ?? null,
+    defaultTogglePurposeLabels: defaultToggleEvidence?.defaultTogglePurposeLabels ?? [],
+    precheckedOptionalPurposeCount: defaultToggleEvidence?.precheckedOptionalPurposeCount ?? 0,
+    precheckedOptionalPurposeLabels: defaultToggleEvidence?.precheckedOptionalPurposeLabels ?? [],
     acceptControlObserved,
     rejectControlObserved,
     managePreferencesControlObserved,
@@ -2962,6 +3140,9 @@ function isStrongerConsentUiObservation(
   if (!current.acceptControlObserved && candidate.acceptControlObserved) {
     return true;
   }
+  if (current.defaultToggleStatesObserved !== true && candidate.defaultToggleStatesObserved === true) {
+    return true;
+  }
   return !current.likelyPresent && candidate.likelyPresent;
 }
 
@@ -2977,11 +3158,25 @@ function mergeConsentUiObservations(
       ...candidate.basis,
       basis,
     ]),
+    defaultTogglePurposeLabels: unique([
+      ...(current.defaultTogglePurposeLabels ?? []),
+      ...(candidate.defaultTogglePurposeLabels ?? []),
+    ]).slice(0, 12),
+    defaultToggleStatesObserved: candidate.defaultToggleStatesObserved ?? current.defaultToggleStatesObserved ?? null,
     confidence: Math.max(current.confidence, candidate.confidence),
     evidenceRefs: uniqueEvidenceRefs([
       ...current.evidenceRefs,
       ...candidate.evidenceRefs,
     ]),
+    nonEssentialDefaultsOff: candidate.nonEssentialDefaultsOff ?? current.nonEssentialDefaultsOff ?? null,
+    precheckedOptionalPurposeCount: unique([
+      ...(current.precheckedOptionalPurposeLabels ?? []),
+      ...(candidate.precheckedOptionalPurposeLabels ?? []),
+    ]).length,
+    precheckedOptionalPurposeLabels: unique([
+      ...(current.precheckedOptionalPurposeLabels ?? []),
+      ...(candidate.precheckedOptionalPurposeLabels ?? []),
+    ]).slice(0, 10),
   };
 }
 

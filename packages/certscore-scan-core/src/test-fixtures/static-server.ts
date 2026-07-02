@@ -27,6 +27,9 @@ export type StaticFixturePage =
   | "consent-compact-privacy-settings-controls"
   | "consent-contextual-continue-accept"
   | "consent-deny-non-essential"
+  | "consent-first-layer-necessary-toggle-only"
+  | "consent-first-layer-optional-toggle-off"
+  | "consent-first-layer-optional-toggle-on"
   | "consent-analytics-category-controls"
   | "consent-iframe-reject"
   | "consent-lean-guarded-image-cookie"
@@ -145,6 +148,9 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-compact-privacy-settings-controls": "consent-compact-privacy-settings-controls",
   "consent-contextual-continue-accept": "consent-contextual-continue-accept",
   "consent-deny-non-essential": "consent-deny-non-essential",
+  "consent-first-layer-necessary-toggle-only": "consent-first-layer-necessary-toggle-only",
+  "consent-first-layer-optional-toggle-off": "consent-first-layer-optional-toggle-off",
+  "consent-first-layer-optional-toggle-on": "consent-first-layer-optional-toggle-on",
   "consent-analytics-category-controls": "consent-analytics-category-controls",
   "consent-iframe-reject": "consent-iframe-reject",
   "consent-lean-guarded-image-cookie": "consent-lean-guarded-image-cookie",
@@ -685,6 +691,9 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     compactAnalyticsControls: caseName === "consent-compact-analytics-controls",
     compactCookieControls: caseName === "consent-compact-cookie-controls",
     compactPrivacySettingsControls: caseName === "consent-compact-privacy-settings-controls",
+    firstLayerNecessaryToggleOnly: caseName === "consent-first-layer-necessary-toggle-only",
+    firstLayerOptionalToggleOff: caseName === "consent-first-layer-optional-toggle-off",
+    firstLayerOptionalToggleOn: caseName === "consent-first-layer-optional-toggle-on",
     preferenceAmbiguous: caseName === "consent-preference-center-ambiguous",
     preferenceConfirmSave: caseName === "consent-preference-center-confirm-save",
     postChoiceReopen: caseName === "consent-post-choice-reopen-control",
@@ -1016,6 +1025,23 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
         <p>We use optional analytics cookies to measure usage. Choose whether to allow analytics cookies.</p>
         <button id="reject-analytics" type="button">Reject analytics</button>
         <button id="allow-analytics" type="button">Allow analytics</button>
+      </div>
+    `;
+  }
+  if (options.firstLayerOptionalToggleOn || options.firstLayerOptionalToggleOff || options.firstLayerNecessaryToggleOnly) {
+    const optionalToggle = options.firstLayerNecessaryToggleOnly
+      ? ""
+      : `<label class="purpose-row"><input id="analytics-purpose" type="checkbox" ${options.firstLayerOptionalToggleOn ? "checked" : ""}> Analytics cookies</label>`;
+    return `
+      <section>
+        <p>Consent-flow fixture page with first-layer cookie purpose toggles.</p>
+      </section>
+      <div id="banner" role="dialog" aria-label="Cookie consent">
+        <p>We use cookies for analytics and advertising. Manage optional cookie purposes below.</p>
+        <label class="purpose-row"><input id="necessary-purpose" type="checkbox" checked disabled> Strictly necessary cookies</label>
+        ${optionalToggle}
+        <button id="reject-all" type="button">Reject All</button>
+        <button id="accept-all" type="button">Accept All</button>
       </div>
     `;
   }

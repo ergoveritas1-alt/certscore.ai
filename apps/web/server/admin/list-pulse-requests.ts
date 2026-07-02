@@ -45,6 +45,8 @@ export type AdminPulseRequestListItem = {
   status: string;
   snapshotFindingCount: number | null;
   snapshotTotalSignals: number | null;
+  summaryJsonDownloads: number;
+  evidenceJsonDownloads: number;
   topFindingIds: string[];
 };
 
@@ -67,6 +69,7 @@ export type AdminPulseRequestDetail = AdminPulseRequestListItem & {
   throttleReason: string | null;
   updatedAt: string;
   feedback: AdminPulseFeedbackItem[];
+  artifactDownloads: AdminPulseArtifactDownloadItem[];
 };
 
 export type AdminPulseFeedbackItem = {
@@ -80,11 +83,26 @@ export type AdminPulseFeedbackItem = {
   userAgent: string | null;
 };
 
+export type AdminPulseArtifactDownloadItem = {
+  artifactType: string;
+  byteSize: number | null;
+  cachedOrReused: boolean | null;
+  createdAt: string;
+  id: string;
+  requestChannel: string | null;
+  requestSource: string | null;
+  resolutionMode: string | null;
+  responseStatus: number;
+  routeName: string | null;
+};
+
 export type AdminPulseOverviewCounts = {
   completed: number;
+  evidenceJsonDownloads: number;
   feedback: number;
   queuedOrRunning: number;
   rateLimited: number;
+  summaryJsonDownloads: number;
   total: number;
 };
 
@@ -158,6 +176,8 @@ function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId:
     status: String(row.status),
     snapshotFindingCount: typeof row.snapshot_finding_count === "number" ? row.snapshot_finding_count : null,
     snapshotTotalSignals: typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
+    summaryJsonDownloads: typeof row.summary_json_downloads === "number" ? row.summary_json_downloads : 0,
+    evidenceJsonDownloads: typeof row.evidence_json_downloads === "number" ? row.evidence_json_downloads : 0,
     topFindingIds: storedTopFindingIds.length > 0 || !scanId ? storedTopFindingIds : (topFindingIdsByScanId.get(scanId) ?? [])
   };
 }
@@ -212,9 +232,11 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
   await ensurePulseTables();
   const result = await queryOne<{
     completed: number;
+    evidence_json_downloads: number;
     feedback: number;
     queued_or_running: number;
     rate_limited: number;
+    summary_json_downloads: number;
     total: number;
   }>(
     `select
@@ -222,7 +244,9 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
        count(*) filter (where status in ('completed', 'completed_limited'))::int as completed,
        count(*) filter (where status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
        count(*) filter (where status = 'rate_limited')::int as rate_limited,
-       (select count(*)::int from pulse_feedback)::int as feedback
+       (select count(*)::int from pulse_feedback)::int as feedback,
+       (select count(*)::int from pulse_artifact_downloads where artifact_type = 'summary_json')::int as summary_json_downloads,
+       (select count(*)::int from pulse_artifact_downloads where artifact_type = 'evidence_json')::int as evidence_json_downloads
      from pulse_requests`,
     [],
     { readOnly: true }
@@ -230,9 +254,11 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
 
   return {
     completed: result?.completed ?? 0,
+    evidenceJsonDownloads: result?.evidence_json_downloads ?? 0,
     feedback: result?.feedback ?? 0,
     queuedOrRunning: result?.queued_or_running ?? 0,
     rateLimited: result?.rate_limited ?? 0,
+    summaryJsonDownloads: result?.summary_json_downloads ?? 0,
     total: result?.total ?? 0
   };
 }
@@ -269,7 +295,9 @@ export async function listAdminPulseRequests(input: {
             ss.total_signals::int as snapshot_total_signals,
             ss.report_finding_count::int as snapshot_finding_count,
             s.scan_config_json,
-            coalesce(pf.feedback_count, 0)::int as feedback_count
+            coalesce(pf.feedback_count, 0)::int as feedback_count,
+            coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
+            coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
        from pulse_requests pr
        left join scan_snapshots ss on ss.scan_id = pr.scan_id
        left join scans s on s.id = pr.scan_id
@@ -278,6 +306,13 @@ export async function listAdminPulseRequests(input: {
            from pulse_feedback
           where pulse_request_id = pr.public_id
        ) pf on true
+       left join lateral (
+         select
+           count(*) filter (where artifact_type = 'summary_json')::int as summary_json_downloads,
+           count(*) filter (where artifact_type = 'evidence_json')::int as evidence_json_downloads
+          from pulse_artifact_downloads
+         where pulse_request_id = pr.public_id
+       ) pad on true
       where ($1::text is null or pr.status = $1)
         and (
           $2::text is null
@@ -299,7 +334,7 @@ export async function listAdminPulseRequests(input: {
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {
   await requirePlatformAdminContext();
   await ensurePulseTables();
-  const [request, feedbackRows] = await Promise.all([
+  const [request, feedbackRows, artifactDownloadRows] = await Promise.all([
     queryOne<Record<string, unknown>>(
       `select pr.public_id,
               pr.job_id,
@@ -331,7 +366,9 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               pr.created_at,
               pr.updated_at,
               s.scan_config_json,
-              coalesce(pf.feedback_count, 0)::int as feedback_count
+              coalesce(pf.feedback_count, 0)::int as feedback_count,
+              coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
+              coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
          from pulse_requests pr
          left join scans s on s.id = pr.scan_id
          left join lateral (
@@ -339,6 +376,13 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
              from pulse_feedback
             where pulse_request_id = pr.public_id
          ) pf on true
+         left join lateral (
+           select
+             count(*) filter (where artifact_type = 'summary_json')::int as summary_json_downloads,
+             count(*) filter (where artifact_type = 'evidence_json')::int as evidence_json_downloads
+            from pulse_artifact_downloads
+           where pulse_request_id = pr.public_id
+         ) pad on true
         where pr.public_id = $1 or pr.job_id = $1
         limit 1`,
       [pulseRequestId],
@@ -354,6 +398,24 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               user_agent,
               created_at
          from pulse_feedback
+        where pulse_request_id = $1
+        order by created_at desc
+        limit 100`,
+      [pulseRequestId],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    query<Record<string, unknown>>(
+      `select id::text,
+              artifact_type,
+              route_name,
+              request_source,
+              request_channel,
+              response_status,
+              byte_size,
+              resolution_mode,
+              cached_or_reused,
+              created_at
+         from pulse_artifact_downloads
         where pulse_request_id = $1
         order by created_at desc
         limit 100`,
@@ -396,6 +458,18 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
       rating: String(row.rating),
       reason: typeof row.reason === "string" ? row.reason : null,
       userAgent: typeof row.user_agent === "string" ? row.user_agent : null
+    })),
+    artifactDownloads: artifactDownloadRows.map((row) => ({
+      artifactType: String(row.artifact_type),
+      byteSize: typeof row.byte_size === "number" ? row.byte_size : null,
+      cachedOrReused: typeof row.cached_or_reused === "boolean" ? row.cached_or_reused : null,
+      createdAt: String(row.created_at),
+      id: String(row.id),
+      requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
+      requestSource: typeof row.request_source === "string" ? row.request_source : null,
+      resolutionMode: typeof row.resolution_mode === "string" ? row.resolution_mode : null,
+      responseStatus: typeof row.response_status === "number" ? row.response_status : 0,
+      routeName: typeof row.route_name === "string" ? row.route_name : null
     }))
   };
 }
@@ -420,7 +494,9 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             pr.elapsed_seconds,
             pr.created_at,
             s.scan_config_json,
-            coalesce(pf.feedback_count, 0)::int as feedback_count
+            coalesce(pf.feedback_count, 0)::int as feedback_count,
+            coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
+            coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
        from pulse_requests pr
        left join scans s on s.id = pr.scan_id
        left join lateral (
@@ -428,6 +504,13 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
            from pulse_feedback
           where pulse_request_id = pr.public_id
        ) pf on true
+       left join lateral (
+         select
+           count(*) filter (where artifact_type = 'summary_json')::int as summary_json_downloads,
+           count(*) filter (where artifact_type = 'evidence_json')::int as evidence_json_downloads
+          from pulse_artifact_downloads
+         where pulse_request_id = pr.public_id
+       ) pad on true
       where pr.scan_id = $1
       order by pr.requested_at desc
       limit 25`,

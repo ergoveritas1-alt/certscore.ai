@@ -8,8 +8,8 @@ import type {
   ApiV2ScanResource
 } from "@certscore/api-contracts";
 
-export type PulseDetail = "tiny" | "quick" | "standard" | "full";
-export type NormalizedPulseDetail = "tiny" | "standard" | "full";
+export type PulseDetail = "tiny" | "quick" | "standard" | "full" | "summary" | "evidence";
+export type NormalizedPulseDetail = "tiny" | "standard" | "full" | "summary" | "evidence";
 export type PulseFormat = "json" | "markdown";
 export type FreshnessMode = "latest" | "refresh";
 export type ScanFrom = "eu_ie" | "california";
@@ -95,6 +95,7 @@ export interface FindingResourceClient {
 
 export interface PulseResourceClient {
   get(scanId: string, options?: ApiV2RequestOptions): Promise<ScanPulse>;
+  evidence(scanId: string, options?: ApiV2RequestOptions): Promise<PulseResult>;
 }
 
 export interface DomainResourceClient {
@@ -220,6 +221,8 @@ export interface Links {
   canonicalPulseUrl?: string;
   jsonUrl?: string;
   markdownUrl?: string;
+  summaryJsonUrl?: string;
+  evidenceJsonUrl?: string;
   fullJsonUrl?: string;
   scanJsonUrl?: string;
   immutableJsonUrl?: string;
@@ -264,7 +267,7 @@ export interface AgentInterpretation {
 }
 
 export interface PulseResultBase {
-  type: "certscore_pulse";
+  type: "certscore_pulse" | "certscore_pulse_summary" | "certscore_pulse_evidence";
   meta?: PulseMeta;
   request?: PulseRequest;
   domain?: string;

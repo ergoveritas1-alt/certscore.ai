@@ -25,7 +25,8 @@ const endpoints = [
   ["Discovery JSON", "https://certscore.ai/.well-known/certscore-pulse"],
   ["Full LLM guide", "https://certscore.ai/llms-full.txt"],
   ["Tiny Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=tiny"],
-  ["Full Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=full"],
+  ["Summary Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=summary"],
+  ["Evidence Pulse JSON", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&detail=evidence"],
   ["Pulse markdown", "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io&format=markdown"],
   ["Invalid URL contract", "https://certscore.ai/api/v1/pulse?url=%3A%3A%3A%3A"],
   ["Missing job contract", "https://certscore.ai/api/v1/pulse/status/pulse_job_nonexistent_test"]
@@ -41,7 +42,7 @@ const recommendedCalls = [
   ["GPT Action beta summary", "GET /api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&detail=standard&wait=35"],
   ["User-facing summary", "GET /api/v1/pulse?url=https://kbdlab.io&format=markdown&detail=standard"],
   ["Quick machine triage", "GET /api/v1/pulse?url=https://kbdlab.io&detail=tiny"],
-  ["Evidence/deeper review", "GET /api/v1/pulse?url=https://kbdlab.io&detail=full"],
+  ["Evidence/deeper review", "GET /api/v1/pulse?url=https://kbdlab.io&detail=evidence"],
   ["Connectivity check", "GET /api/v1/pulse-self-test"],
   ["Health check", "GET /api/v1/pulse-health"]
 ] as const;
@@ -93,7 +94,7 @@ export default function PulseAgentFallbackPage() {
             </li>
             <li>
               For structured evidence, use <code className="rounded bg-white px-1">format=json</code> and{" "}
-              <code className="rounded bg-white px-1">detail=full</code>.
+              <code className="rounded bg-white px-1">detail=evidence</code>.
             </li>
             <li>
               If you receive HTTP 202, read the returned <code className="rounded bg-white px-1">statusUrl</code> or poll{" "}
@@ -111,8 +112,9 @@ export default function PulseAgentFallbackPage() {
             ))}
           </div>
           <p className="mt-3">
-            Markdown is best for conversational summaries. Tiny is best for badges, triage, and routing. Full is best for
-            evidence review and coverage diagnostics. Self-test is best for deployment and agent connectivity checks.
+            Summary JSON is best for concise agent output. Markdown is best for conversational summaries. Tiny is best for badges,
+            triage, and routing. Evidence JSON is best for evidence review and coverage diagnostics. Self-test is best for deployment
+            and agent connectivity checks.
           </p>
           <h3 className="mt-5 font-semibold text-slate-950">OpenAPI / GPT Action beta agents</h3>
           <ol className="mt-3 list-decimal space-y-2 pl-5">
@@ -136,8 +138,8 @@ export default function PulseAgentFallbackPage() {
               Use <code className="rounded bg-white px-1">detail=tiny</code> for quick checks.
             </li>
             <li>
-              Public GPT Action beta access uses latest-mode summaries and does not expose full detail or refresh scans. Link users to the
-              CertScore report when they need more evidence.
+              Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or link users to the CertScore report when
+              they need more support.
             </li>
           </ol>
         </section>
@@ -203,7 +205,7 @@ export default function PulseAgentFallbackPage() {
             <li>If the health canary is unavailable only inside one tool, treat that as a tool fetch/DNS failure.</li>
             <li>Use the Pulse markdown endpoint when a tool prefers readable text over JSON.</li>
             <li>Use the ChatGPT Action beta schema when configuring a Custom GPT beta action.</li>
-            <li>Use the full JSON endpoint when structured finding, evidence, and review context are needed.</li>
+            <li>Use the Evidence JSON endpoint when structured finding, evidence, and review context are needed.</li>
           </ol>
         </section>
 

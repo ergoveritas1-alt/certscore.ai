@@ -12,14 +12,15 @@ export interface CertScoreMcpOptions {
 type CertScoreMcpToolName = (typeof certScoreMcpToolContracts)[number]["name"];
 type CreateScanInput = {
   url: string;
-  detail?: "tiny" | "quick" | "standard" | "full";
+  detail?: "tiny" | "quick" | "standard" | "full" | "summary" | "evidence";
   format?: "json" | "markdown";
   freshness?: "latest" | "refresh";
   scanFrom?: "eu_ie" | "california";
 };
 type GetScanStatusInput = { jobId?: string; scanId?: string };
 type GetScanInput = { scanId: string };
-type GetReportInput = { scanId: string; detail?: "tiny" | "quick" | "standard" | "full"; format?: "json" | "markdown" };
+type GetReportInput = { scanId: string; detail?: "tiny" | "quick" | "standard" | "full" | "summary" | "evidence"; format?: "json" | "markdown" };
+type GetEvidenceInput = { scanId: string };
 type ExportFindingsInput = { scanId: string };
 type ListFindingsInput = { scanId: string };
 type GetPreConsentCookiesTrackersInput = { scanId: string };
@@ -156,6 +157,18 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
                 format: "json"
               });
         return toToolResult(result);
+      } catch (error) {
+        return toToolError(error);
+      }
+    }
+  );
+
+  server.registerTool(
+    "get_evidence",
+    toolContract("get_evidence"),
+    async ({ scanId }: GetEvidenceInput) => {
+      try {
+        return toToolResult(await client.getScan(scanId, { detail: "evidence", format: "json" }));
       } catch (error) {
         return toToolError(error);
       }

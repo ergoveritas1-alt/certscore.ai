@@ -109,6 +109,7 @@ test("CertScore MCP server exposes the scoped v1 tool surface", async () => {
         "create_scan",
         "explain_finding",
         "export_findings",
+        "get_evidence",
         "get_latest_domain_pre_consent_cookies_trackers",
         "get_latest_domain_scan",
         "get_pre_consent_cookies_trackers",
@@ -377,6 +378,20 @@ test("get_report supports markdown and JSON report retrieval", async () => {
       assert.equal(json.scanId, "scan_123");
       assert.match(mock.calls[0] ?? "", /format=markdown/);
       assert.match(mock.calls[1] ?? "", /detail=full/);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("get_evidence retrieves the bounded Evidence JSON artifact", async () => {
+  const mock = installFetch([{ status: 200, body: { ...pulse, type: "certscore_pulse_evidence" } }]);
+  try {
+    await withMcpClient(async (client) => {
+      const evidence = parseToolJson(await client.callTool({ name: "get_evidence", arguments: { scanId: "scan_123" } }));
+      assert.equal(evidence.type, "certscore_pulse_evidence");
+      assert.match(mock.calls[0] ?? "", /scanId=scan_123/);
+      assert.match(mock.calls[0] ?? "", /detail=evidence/);
     });
   } finally {
     mock.restore();

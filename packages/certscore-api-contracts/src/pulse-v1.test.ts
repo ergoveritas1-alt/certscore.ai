@@ -58,6 +58,8 @@ test("Pulse ChatGPT OpenAPI stays compact and action-compatible", () => {
   assert.deepEqual(operations.sort(), ["checkPulseConnectivity", "getPulseByScanId", "getPulseForUrl", "getPulseJobStatus"]);
   assert.equal(serialized.includes("\"refresh\""), false);
   assert.equal(serialized.includes("\"full\""), true);
+  assert.equal(serialized.includes("\"summary\""), true);
+  assert.equal(serialized.includes("\"evidence\""), true);
   assert.equal(serialized.includes("\"text/markdown\""), false);
   assert.equal(serialized.includes("\"const\""), false);
 });
@@ -69,6 +71,7 @@ test("MCP contracts expose the current scoped tool surface", () => {
       "create_scan",
       "explain_finding",
       "export_findings",
+      "get_evidence",
       "get_latest_domain_pre_consent_cookies_trackers",
       "get_latest_domain_scan",
       "get_pre_consent_cookies_trackers",
@@ -80,6 +83,7 @@ test("MCP contracts expose the current scoped tool surface", () => {
     ]
   );
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.inputSchema.url);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_evidence")?.inputSchema.scanId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.inputSchema.findingId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_latest_domain_scan")?.inputSchema.domain);
 });

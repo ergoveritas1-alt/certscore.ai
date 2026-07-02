@@ -1168,6 +1168,114 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
   }
 });
 
+test("materializeLocalV2DagScanDetail projects retained first-layer optional toggle defaults", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/consent-toggle-defaults-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-17T13:14:02.000Z",
+      consentUiObservations: [
+        {
+          observationId: "consent_ui_pre_consent",
+          observedAtMs: 900,
+          likelyPresent: true,
+          basis: ["keyword:cookie", "control:accept_all:Accept All", "control:reject_all:Reject All"],
+          textExcerpt: "We use cookies for analytics and advertising. Manage optional cookie purposes below.",
+          layerInspected: "first_layer",
+          visibleChoiceLabels: ["Reject All", "Accept All"],
+          defaultToggleStatesObserved: true,
+          nonEssentialDefaultsOff: false,
+          defaultTogglePurposeLabels: ["Analytics cookies"],
+          precheckedOptionalPurposeCount: 1,
+          precheckedOptionalPurposeLabels: ["Analytics cookies"],
+          acceptControlObserved: true,
+          rejectControlObserved: true,
+          managePreferencesControlObserved: false,
+          controls: [
+            {
+              actionType: "reject_all",
+              classifierReasonCodes: ["canonical_match"],
+              label: "Reject All",
+              visible: true
+            },
+            {
+              actionType: "accept_all",
+              classifierReasonCodes: ["canonical_match"],
+              label: "Accept All",
+              visible: true
+            }
+          ],
+          confidence: 0.86,
+          evidenceRefs: []
+        }
+      ],
+      cookieEvents: [],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: true,
+        preConsentTrackingObserved: false
+      },
+      iframeEvents: [],
+      modulesRun: [],
+      networkEvents: [],
+      normalizedUrl: "https://example.test/",
+      normalizedVendorObservations: [],
+      policySurfaceObservations: [],
+      runtimeTimeline: [],
+      scanId: "consent-toggle-defaults-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      startedAt: "2026-06-17T13:13:50.000Z",
+      url: "https://example.test/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "example.test",
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+    const firstLayerChoices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown> | undefined;
+    assert.equal(firstLayerChoices?.defaultToggleStatesObserved, true);
+    assert.equal(firstLayerChoices?.nonEssentialDefaultsOff, false);
+    assert.deepEqual(firstLayerChoices?.precheckedOptionalPurposeLabels, ["Analytics cookies"]);
+
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      coverageLimited: false,
+      events: detail.events,
+      runtimeArtifacts: detail.runtimeArtifacts,
+      scanCompleted: true,
+      snapshot: detail.snapshot
+    });
+    const preticked = outcomes.cookie_banner_preticked_or_implied_consent;
+    assert.equal(preticked?.status, "Gap observed");
+    assert.equal(preticked?.criticalEvidence.retainedEvidence.defaultToggleStatesObserved, true);
+    assert.equal(preticked?.criticalEvidence.retainedEvidence.nonEssentialDefaultsOff, false);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail carries all gstatic matched hosts for inventory grouping", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

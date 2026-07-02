@@ -84,6 +84,7 @@ test("README documents current SDK resource clients", () => {
     "certscore.findings.get()",
     "certscore.findings.explain()",
     "certscore.pulse.get()",
+    "certscore.pulse.evidence()",
     "certscore.domains.latest()",
     "certscore.domains.latestPreConsentCookiesTrackers()",
     "certscore.scan()"
@@ -94,6 +95,19 @@ test("README documents current SDK resource clients", () => {
   assert.match(readme, /resource-oriented API v2 clients/i);
   assert.match(readme, /automated public-web observations for review/i);
   assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
+});
+
+test("pulse.evidence retrieves the bounded Evidence JSON artifact", async () => {
+  const mock = installFetch([{ status: 200, body: { ...pulse, type: "certscore_pulse_evidence" } }]);
+  try {
+    const client = new CertScoreClient();
+    const result = await client.pulse.evidence("scan_123");
+    assert.equal(result.type, "certscore_pulse_evidence");
+    assert.match(mock.calls[0] ?? "", /scanId=scan_123/);
+    assert.match(mock.calls[0] ?? "", /detail=evidence/);
+  } finally {
+    mock.restore();
+  }
 });
 
 test("scan returns immediate 200 markdown", async () => {
