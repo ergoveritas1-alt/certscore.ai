@@ -1,10 +1,24 @@
 import { projectExecutiveFindingsFromUnifiedPackets } from "../scans/executive-findings-projection";
+import { deriveCertScoreFindings } from "../scans/derive-findings";
+import { deriveGdprEprivacyCoverageChecklist } from "../scans/gdpr-eprivacy-coverage-checklist";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../scans/gdpr-eprivacy-coverage-policy";
+import { getReportableGdprEprivacyCoverageItems } from "../scans/gdpr-eprivacy-reportable-rows";
+import { getHybridRuntimeEvidence } from "../scans/hybrid-runtime-evidence";
 import { getPublicReportFindingDisplay } from "../scans/public-report-finding-display";
 import type { CertScoreFinding } from "../scans/finding-registry";
 import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
 import { buildPromotionGradePreconsentRequests } from "../scans/preconsent-public-evidence";
+import { buildRuntimeCookieInventory } from "../scans/runtime-cookie-evidence";
+import {
+  buildTrackerInventoryGroupRows,
+  buildTrackerInventoryRows
+} from "../scans/runtime-inventory-projection";
+import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
-import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
+import {
+  buildScanReportUnifiedFindings,
+  deriveExecutiveDisplayedScore
+} from "../../components/scans/shared-scan-detail-view";
 import { absoluteUrl } from "../seo";
 import {
   PULSE_API_VERSION,
@@ -72,12 +86,76 @@ function riskLevelFromScore(score: number) {
   return "monitor";
 }
 
-function deriveScore(scanRecord: ScanDetailResponse) {
+function boundedScore(value: number | null) {
+  return value === null ? null : Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function deriveRegulatoryRiskDisplayScore(scanRecord: ScanDetailResponse) {
   const riskScore = finiteNumber(scanRecord.regulatoryRisk?.overallScore);
   if (riskScore !== null) {
-    return Math.max(0, Math.min(100, Math.round(100 - riskScore)));
+    return boundedScore(100 - riskScore);
   }
   return null;
+}
+
+function deriveReportAlignedScore(input: {
+  coverageLimited: boolean;
+  findings: CertScoreFinding[];
+  scanRecord: ScanDetailResponse;
+  unifiedFindingPackets: ReturnType<typeof buildScanReportUnifiedFindings>;
+}) {
+  const scanRecord = input.scanRecord;
+  const presentationSummary = deriveCertScoreFindings(scanRecord);
+  const hybridRuntimeEvidence = getHybridRuntimeEvidence(scanRecord.runtimeArtifacts);
+  const runtimeCookieRows = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence,
+    runtimeArtifacts: scanRecord.runtimeArtifacts
+  }).rows;
+  const trackerInventoryRows = buildTrackerInventoryRows({
+    domains: uniqueStrings(scanRecord.trackerVendors.map((vendor) => vendor.scriptHost)),
+    firstPartyDomain: scanRecord.scan.domainHostname ?? presentationSummary.requestedHost,
+    preConsentVendors: presentationSummary.preConsentVendorNames,
+    resolvedVendors: presentationSummary.resolvedVendorNames,
+    sessionReplayVendors: presentationSummary.sessionReplayVendorNames,
+    trackerVendors: scanRecord.trackerVendors,
+    topObservedEntities: presentationSummary.topObservedEntities,
+    unresolvedHosts: presentationSummary.unresolvedVendorHosts
+  });
+  const runtimeTrackerPriorityRows = buildTrackerInventoryGroupRows(trackerInventoryRows).map((row) => ({
+    firstSeenMs: row.firstSeenMs,
+    party: row.party,
+    priority: row.priority,
+    purpose: row.purpose,
+    vendor: row.vendor
+  }));
+  const gdprEprivacyChecklist = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: input.coverageLimited,
+    coverageOutcomes: deriveGdprEprivacyCoveragePolicyOutcomes({
+      coverageLimited: input.coverageLimited,
+      events: scanRecord.events,
+      policyEnrichmentCount: scanRecord.policyEnrichment.length,
+      runtimeArtifacts: scanRecord.runtimeArtifacts,
+      scanCompleted: scanRecord.scan.status === "completed",
+      snapshot: scanRecord.snapshot
+    }),
+    projectedFindings: input.findings,
+    runtimeCookieRows,
+    runtimeTrackerPriorityRows,
+    scanCompleted: scanRecord.scan.status === "completed",
+    unifiedFindings: input.unifiedFindingPackets
+  });
+  const gdprEprivacyScore = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: getReportableGdprEprivacyCoverageItems(gdprEprivacyChecklist)
+  }).score;
+  const executiveScore = deriveExecutiveDisplayedScore({
+    findings: input.findings,
+    previewMode: "homepage",
+    snapshot: scanRecord.snapshot,
+    storedScore: presentationSummary.score
+  });
+
+  return boundedScore(gdprEprivacyScore ?? executiveScore ?? deriveRegulatoryRiskDisplayScore(scanRecord));
 }
 
 function deriveFreshness(completedAt: string | null, generated: string) {
@@ -571,12 +649,17 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const generated = generatedAt();
   const scan = input.scanRecord.scan;
   const domain = scan.domainHostname ?? safeHostname(input.requestedUrl) ?? "unknown";
-  const score = deriveScore(input.scanRecord);
   const coverage = deriveCoverage(input.scanRecord);
   const quality = assessPulseScanRecordQuality(input.scanRecord);
   const packets = buildScanReportUnifiedFindings(input.scanRecord);
   const executive = projectExecutiveFindingsFromUnifiedPackets(packets);
   const allFindings = executive.findings;
+  const score = deriveReportAlignedScore({
+    coverageLimited: coverage.status !== "complete",
+    findings: allFindings,
+    scanRecord: input.scanRecord,
+    unifiedFindingPackets: packets
+  });
   const topFindings = executive.topFindings.map((finding) => toPulseFinding(finding, scan.id));
   const benchmark = input.scanRecord.domainBenchmark
     ? `${input.scanRecord.domainBenchmark.industry} / ${input.scanRecord.domainBenchmark.estimatedRankLabel}`
