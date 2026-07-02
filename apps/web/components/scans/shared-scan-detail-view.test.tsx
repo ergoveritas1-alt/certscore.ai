@@ -297,6 +297,46 @@ async function loadExecutiveDisplayedScore() {
   }).deriveExecutiveDisplayedScore;
 }
 
+async function loadSharedScanDetailGdprEprivacyCoverageChecklist() {
+  const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
+  const sharedScanDetailViewModule =
+    (sharedScanDetailViewImport as unknown as { deriveSharedScanDetailGdprEprivacyCoverageChecklist?: unknown })
+      .deriveSharedScanDetailGdprEprivacyCoverageChecklist
+      ? (sharedScanDetailViewImport as unknown as Record<string, unknown>)
+      : (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        ).default ??
+        (
+          sharedScanDetailViewImport as unknown as {
+            default?: Record<string, unknown>;
+            "module.exports"?: Record<string, unknown>;
+          }
+        )["module.exports"] ??
+        (sharedScanDetailViewImport as unknown as Record<string, unknown>);
+
+  return (sharedScanDetailViewModule as unknown as {
+    deriveSharedScanDetailGdprEprivacyCoverageChecklist: (input: {
+      coverageLimited: boolean;
+      events?: unknown[];
+      policyEnrichmentCount: number;
+      projectedFindings?: unknown[];
+      runtimeArtifacts: Record<string, unknown> | null;
+      runtimeCookieRows?: unknown[];
+      runtimeTrackerPriorityRows?: unknown[];
+      scanCompleted: boolean;
+      snapshot: Record<string, unknown> | null;
+      unifiedFindings: unknown[];
+    }) => Array<{
+      criticalEvidence: { retainedEvidence: Record<string, unknown> };
+      id: string;
+      status: string;
+    }>;
+  }).deriveSharedScanDetailGdprEprivacyCoverageChecklist;
+}
+
 async function loadFindingEvidenceQualitySummary() {
   const sharedScanDetailViewImport = await import("./shared-scan-detail-view");
   const sharedScanDetailViewModule =
@@ -675,6 +715,104 @@ function makeReviewPacket(overrides: Record<string, unknown>) {
     ...overrides
   };
 }
+
+function makeSharedScanDetailGdprTransparencyRuntimeArtifacts(input: {
+  enabled?: boolean;
+  profile?: string;
+  selectedEvidenceStrength?: string;
+  status?: string;
+} = {}) {
+  return {
+    policyDisclosureSummary: {
+      article13DisclosureSignals: [
+        {
+          classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+          classifierReasonCodes: ["matched_legal_basis"],
+          confidence: 0.94,
+          disclosureType: "legal_basis",
+          evidenceText: "Die Rechtsgrundlage fur die Verarbeitung personenbezogener Daten ist Vertrag und Einwilligung.",
+          matchStrength: "direct",
+          matchedLocale: "de",
+          matchedTerm: "Rechtsgrundlage",
+          productionCredit: true,
+          productionCreditProfile: "gdpr_transparency_multilingual_article13_v1",
+          selectedEvidenceStrength: input.selectedEvidenceStrength ?? "strong",
+          selectedPolicySectionExcerpt:
+            "Die Rechtsgrundlage fur die Verarbeitung personenbezogener Daten ist Vertrag und Einwilligung.",
+          selectedPolicySectionUrl: "https://example.test/datenschutz",
+          source: "deterministic",
+          status: input.status ?? "observed"
+        }
+      ],
+      gdprTransparencyEvidenceProfile: input.profile ?? "gdpr_transparency_multilingual_article13_v1",
+      gdprTransparencyProductionEvidenceEnabled: input.enabled ?? true
+    }
+  };
+}
+
+test("scan-detail GDPR/ePrivacy checklist consumes opt-in multilingual Article 13 normalized concerns", async () => {
+  const deriveChecklist = await loadSharedScanDetailGdprEprivacyCoverageChecklist();
+  const checklist = deriveChecklist({
+    coverageLimited: false,
+    events: [],
+    policyEnrichmentCount: 0,
+    projectedFindings: [],
+    runtimeArtifacts: makeSharedScanDetailGdprTransparencyRuntimeArtifacts(),
+    runtimeCookieRows: [],
+    runtimeTrackerPriorityRows: [],
+    scanCompleted: true,
+    snapshot: {},
+    unifiedFindings: []
+  });
+  const legalBasis = checklist.find((item) => item.id === "legal_basis_disclosure_observed");
+
+  assert.equal(legalBasis?.status, "Observed");
+  assert.equal(
+    legalBasis?.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern !== undefined,
+    true
+  );
+});
+
+test("scan-detail GDPR/ePrivacy checklist keeps legacy_only Article 13 behavior unchanged", async () => {
+  const deriveChecklist = await loadSharedScanDetailGdprEprivacyCoverageChecklist();
+  const baseline = deriveChecklist({
+    coverageLimited: false,
+    events: [],
+    policyEnrichmentCount: 0,
+    projectedFindings: [],
+    runtimeArtifacts: null,
+    runtimeCookieRows: [],
+    runtimeTrackerPriorityRows: [],
+    scanCompleted: true,
+    snapshot: {},
+    unifiedFindings: []
+  });
+  const legacyOnly = deriveChecklist({
+    coverageLimited: false,
+    events: [],
+    policyEnrichmentCount: 0,
+    projectedFindings: [],
+    runtimeArtifacts: makeSharedScanDetailGdprTransparencyRuntimeArtifacts({
+      enabled: false,
+      profile: "legacy_only"
+    }),
+    runtimeCookieRows: [],
+    runtimeTrackerPriorityRows: [],
+    scanCompleted: true,
+    snapshot: {},
+    unifiedFindings: []
+  });
+
+  assert.equal(
+    legacyOnly.find((item) => item.id === "legal_basis_disclosure_observed")?.status,
+    baseline.find((item) => item.id === "legal_basis_disclosure_observed")?.status
+  );
+  assert.equal(
+    legacyOnly.find((item) => item.id === "legal_basis_disclosure_observed")
+      ?.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern,
+    undefined
+  );
+});
 
 test("review evidence export uses canonical projected status for reject persistence packets and removes stale no-request observed values", async () => {
   const buildReviewFindingSummaryJson = await loadBuildReviewFindingSummaryJson();

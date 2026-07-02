@@ -36,6 +36,64 @@ function makeConcern(
   >;
 }
 
+test("deriveConcernPolicy keeps GDPR Transparency Article 13 concerns internal while assigning checklist eligibility", () => {
+  const concern = makeConcern({
+    originKey: "gdpr_transparency.article13.legal_basis",
+    originType: "runtime_artifact",
+    policyIsPrimarySource: true,
+    policyPageType: "privacy_policy",
+    title: "GDPR Transparency Article 13 topic observed: legal_basis"
+  });
+  const observed = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["policy_text", "page_attributed"],
+    rawEvidence: {
+      classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+      gdprTransparencyArticle13ConcernState: "sufficient",
+      gdprTransparencyArticle13Evidence: true,
+      gdprTransparencyArticle13Topic: "legal_basis",
+      gdprTransparencyEvidenceProfile: "gdpr_transparency_multilingual_article13_v1",
+      productionCredit: true,
+      productionCreditProfile: "gdpr_transparency_multilingual_article13_v1"
+    }
+  });
+  const automated = deriveConcernPolicy({
+    concern: makeConcern({
+      ...concern,
+      originKey: "gdpr_transparency.article13.automated_decision_making_or_profiling"
+    }),
+    evidenceStrengthFlags: ["policy_text", "page_attributed"],
+    rawEvidence: {
+      classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+      gdprTransparencyArticle13ConcernState: "sufficient",
+      gdprTransparencyArticle13Evidence: true,
+      gdprTransparencyArticle13Topic: "automated_decision_making_or_profiling",
+      gdprTransparencyEvidenceProfile: "gdpr_transparency_multilingual_article13_v1",
+      productionCredit: true,
+      productionCreditProfile: "gdpr_transparency_multilingual_article13_v1"
+    }
+  });
+  const ambiguous = deriveConcernPolicy({
+    concern,
+    evidenceStrengthFlags: ["policy_text", "page_attributed"],
+    rawEvidence: {
+      classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+      gdprTransparencyArticle13ConcernState: "ambiguous",
+      gdprTransparencyArticle13Evidence: true,
+      gdprTransparencyArticle13Topic: "legal_basis",
+      gdprTransparencyEvidenceProfile: "gdpr_transparency_multilingual_article13_v1",
+      productionCredit: true,
+      productionCreditProfile: "gdpr_transparency_multilingual_article13_v1"
+    }
+  });
+
+  assert.equal(observed.promotionEligibility, "internal_only");
+  assert.equal(observed.externalSurfacingEligibility, "audit_only");
+  assert.equal(observed.regulatoryChecklistEligibility, "observed");
+  assert.equal(automated.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(ambiguous.regulatoryChecklistEligibility, "none");
+});
+
 test("deriveConcernPolicy handles the main concern families consistently", () => {
   const cases = [
     {

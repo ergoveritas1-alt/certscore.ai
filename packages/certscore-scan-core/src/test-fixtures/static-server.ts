@@ -84,12 +84,15 @@ export type StaticFixturePage =
   | "policy-google-script-noise"
   | "policy-google-script-only"
   | "policy-google-like-late-sections"
+  | "policy-gdpr-transparency-diagnostic-negatives"
   | "policy-gpc-disclosure-late"
   | "policy-gpc-disclosure"
   | "policy-generic-links"
   | "policy-link-aria-title"
   | "policy-latimes-footer-surfaces"
   | "policy-mature-real-prose"
+  | "policy-multilingual-article13-topics"
+  | "policy-multilingual-surfaces"
   | "policy-onetrust-index-json"
   | "policy-onetrust-notice-json"
   | "policy-privacy-center-link"
@@ -205,12 +208,15 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-google-script-noise": "policy-google-script-noise",
   "policy-google-script-only": "policy-google-script-only",
   "policy-google-like-late-sections": "policy-google-like-late-sections",
+  "policy-gdpr-transparency-diagnostic-negatives": "policy-gdpr-transparency-diagnostic-negatives",
   "policy-gpc-disclosure-late": "policy-gpc-late",
   "policy-gpc-disclosure": "policy-gpc",
   "policy-generic-links": "policy-generic-links",
   "policy-link-aria-title": "policy-link-aria-title",
   "policy-latimes-footer-surfaces": "policy-latimes-footer-surfaces",
   "policy-mature-real-prose": "policy-mature-real-prose",
+  "policy-multilingual-article13-topics": "policy-multilingual-article13-topics",
+  "policy-multilingual-surfaces": "policy-multilingual-surfaces",
   "policy-onetrust-index-json": "policy-onetrust-index-json",
   "policy-onetrust-notice-json": "policy-onetrust-notice-json",
   "policy-privacy-center-link": "policy-privacy-center",
@@ -1182,6 +1188,11 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-google-script-noise": `<a href="/policies/google-script-noise">Privacy Policy</a>`,
     "policy-google-script-only": `<a href="/policies/google-script-only">Privacy Policy</a>`,
     "policy-google-like-late-sections": `<a href="/policies/google-like-late-sections">Privacy Policy</a>`,
+    "policy-gdpr-transparency-diagnostic-negatives": [
+      `<a href="/policies/article13-toc-de">Datenschutzerklärung</a>`,
+      `<a href="/policies/article13-nav-fr">Politique de confidentialité</a>`,
+      `<a href="/policies/article13-support-pl">Polityka prywatności</a>`,
+    ].join(" | "),
     "policy-gpc-disclosure-late": `<a href="/policies/gpc-late">Privacy Policy</a>`,
     "policy-gpc-disclosure": `<a href="/policies/gpc">Privacy Notice</a>`,
     "policy-generic-links": `<a href="/products">Products</a><a href="/about">About us</a>`,
@@ -1192,6 +1203,28 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/do-not-sell-or-share">Do Not Sell or Share My Personal Information</a>`,
     ].join(" | "),
     "policy-mature-real-prose": `<a href="/policies/mature-real-prose">Privacy Policy</a>`,
+    "policy-multilingual-article13-topics": [
+      `<a href="/policies/article13-en">Privacy Policy</a>`,
+      `<a href="/policies/article13-de">Datenschutzerklärung</a>`,
+      `<a href="/policies/article13-fr">Politique de confidentialité</a>`,
+      `<a href="/policies/article13-es">Política de privacidad</a>`,
+      `<a href="/policies/article13-it">Informativa sulla privacy</a>`,
+      `<a href="/policies/article13-nl">Privacybeleid</a>`,
+      `<a href="/policies/article13-pl">Polityka prywatności</a>`,
+    ].join(" | "),
+    "policy-multilingual-surfaces": [
+      `<a href="/policies/privacy">Privacy Policy</a>`,
+      `<a href="/policies/de-datenschutz">Datenschutzerklärung</a>`,
+      `<a href="/policies/fr-confidentialite">Politique de confidentialité</a>`,
+      `<a href="/policies/es-privacidad">Política de privacidad</a>`,
+      `<a href="/policies/it-privacy">Informativa sulla privacy</a>`,
+      `<a href="/policies/nl-privacybeleid">Privacybeleid</a>`,
+      `<a href="/policies/pl-prywatnosc">Polityka prywatności</a>`,
+      `<a href="/policies/cookies">Cookie Policy</a>`,
+      `<a href="/policies/nl-cookiebeleid">Cookiebeleid</a>`,
+      `<a href="/policies/pl-cookies">Polityka plików cookie</a>`,
+      `<a href="/terms">Terms of Service</a>`,
+    ].join(" | "),
     "policy-privacy-center-link": `<a href="/privacy-center">Privacy Center</a>`,
     "policy-retention-rights-only": `<a href="/policies/rights-only">Privacy Policy</a>`,
     "policy-state-privacy-rights-link": `<a href="/state-privacy-rights">State Privacy Rights</a>`,
@@ -1242,6 +1275,70 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/policies/privacy": {
       title: "Privacy Policy",
       body: "Last updated: May 1, 2026. We use cookies for analytics and advertising. Our service providers include Google Analytics and Meta for measurement and advertising. You may contact privacy@example.test with questions.",
+    },
+    "/policies/de-datenschutz": {
+      title: "Datenschutzerklärung",
+      body: "Datenschutzerklärung. Wir verarbeiten personenbezogene Daten, verwenden Cookies für Analyse und Werbung und beantworten Datenschutzanfragen unter privacy@example.test.",
+    },
+    "/policies/fr-confidentialite": {
+      title: "Politique de confidentialité",
+      body: "Politique de confidentialité. Nous traitons des données personnelles, utilisons des cookies pour la mesure et la publicité, et répondons aux demandes de confidentialité.",
+    },
+    "/policies/es-privacidad": {
+      title: "Política de privacidad",
+      body: "Política de privacidad. Tratamos datos personales, usamos cookies para analítica y publicidad, y atendemos solicitudes de privacidad.",
+    },
+    "/policies/it-privacy": {
+      title: "Informativa sulla privacy",
+      body: "Informativa sulla privacy. Trattiamo dati personali, utilizziamo cookie per analisi e pubblicità e rispondiamo alle richieste privacy.",
+    },
+    "/policies/nl-privacybeleid": {
+      title: "Privacybeleid",
+      body: "Privacybeleid. We verwerken persoonsgegevens, gebruiken cookies voor analyse en advertenties, en beantwoorden privacyverzoeken.",
+    },
+    "/policies/pl-prywatnosc": {
+      title: "Polityka prywatności",
+      body: "Polityka prywatności. Przetwarzamy dane osobowe, używamy plików cookie do analityki i reklamy oraz obsługujemy żądania dotyczące prywatności.",
+    },
+    "/policies/article13-en": {
+      title: "Privacy Policy",
+      body: "The data controller provides a privacy contact and our data protection officer. We explain the purposes of processing personal data, the legal basis for processing personal data, categories of recipients of personal data, the retention period for personal data, your right to access your personal data, international transfers of personal data, the right to lodge a complaint with a supervisory authority, and automated decision-making using personal data.",
+    },
+    "/policies/article13-de": {
+      title: "Datenschutzerklärung",
+      body: "Der Verantwortlicher für die Datenverarbeitung nennt den Kontakt zum Datenschutz und den Datenschutzbeauftragten. Wir erklären die Zwecke der Verarbeitung personenbezogener Daten, die Rechtsgrundlage für die Verarbeitung personenbezogener Daten, Kategorien von Empfängern personenbezogener Daten, die Speicherdauer personenbezogener Daten, das Recht auf Auskunft über personenbezogene Daten, die Übermittlung personenbezogener Daten in ein Drittland, das Recht auf Beschwerde bei einer Aufsichtsbehörde und automatisierte Entscheidungsfindung mit personenbezogenen Daten.",
+    },
+    "/policies/article13-fr": {
+      title: "Politique de confidentialité",
+      body: "Le responsable du traitement indique le contact protection des données et le délégué à la protection des données. Nous expliquons les finalités du traitement des données personnelles, la base juridique du traitement des données personnelles, les catégories de destinataires des données personnelles, la durée de conservation des données personnelles, le droit d'accès aux données personnelles, les transferts internationaux de données personnelles, le droit d'introduire une réclamation auprès d'une autorité de contrôle et la décision automatisée utilisant des données personnelles.",
+    },
+    "/policies/article13-es": {
+      title: "Política de privacidad",
+      body: "El responsable del tratamiento indica el contacto de protección de datos y el delegado de protección de datos. Explicamos las finalidades del tratamiento de datos personales, la base jurídica del tratamiento de datos personales, las categorías de destinatarios de datos personales, el plazo de conservación de datos personales, el derecho de acceso a datos personales, las transferencias internacionales de datos personales, el derecho a presentar una reclamación ante una autoridad de control y decisiones automatizadas con datos personales.",
+    },
+    "/policies/article13-it": {
+      title: "Informativa sulla privacy",
+      body: "Il titolare del trattamento indica il contatto protezione dati e il responsabile della protezione dei dati. Spieghiamo le finalità del trattamento dei dati personali, la base giuridica del trattamento dei dati personali, le categorie di destinatari dei dati personali, il periodo di conservazione dei dati personali, il diritto di accesso ai dati personali, i trasferimenti internazionali di dati personali, il diritto di proporre reclamo all'autorità di controllo e decisioni automatizzate con dati personali.",
+    },
+    "/policies/article13-nl": {
+      title: "Privacybeleid",
+      body: "De verwerkingsverantwoordelijke noemt het contact gegevensbescherming en de functionaris voor gegevensbescherming. Wij beschrijven de doeleinden van de verwerking van persoonsgegevens, de rechtsgrondslag voor de verwerking van persoonsgegevens, categorieën van ontvangers van persoonsgegevens, de bewaartermijn van persoonsgegevens, het recht op inzage in persoonsgegevens, internationale doorgiften van persoonsgegevens, het recht om klacht in te dienen bij een toezichthoudende autoriteit en geautomatiseerde besluitvorming met persoonsgegevens.",
+    },
+    "/policies/article13-pl": {
+      title: "Polityka prywatności",
+      body: "Administrator danych podaje kontakt w sprawie ochrony danych oraz inspektor ochrony danych. Opisujemy cele przetwarzania danych osobowych, podstawa prawna przetwarzania danych osobowych, kategorie odbiorców danych osobowych, okres przechowywania danych osobowych, prawo dostępu do danych osobowych, transfery międzynarodowe danych osobowych, prawo do wniesienia skargi do organu nadzorczego oraz zautomatyzowane podejmowanie decyzji z użyciem danych osobowych.",
+    },
+    "/policies/article13-toc-de": {
+      title: "Datenschutzerklärung",
+      body: "Inhaltsverzeichnis. Zwecke der Verarbeitung personenbezogener Daten. Rechtsgrundlage für die Verarbeitung personenbezogener Daten. Kategorien von Empfängern personenbezogener Daten. Speicherdauer personenbezogener Daten. Recht auf Auskunft über personenbezogene Daten. Übermittlung personenbezogener Daten in ein Drittland. Recht auf Beschwerde bei einer Aufsichtsbehörde. Automatisierte Entscheidungsfindung mit personenbezogenen Daten.",
+    },
+    "/policies/article13-nav-fr": {
+      title: "Politique de confidentialité",
+      body: "Navigation de la politique. Finalités du traitement des données personnelles. Base juridique du traitement des données personnelles. Catégories de destinataires des données personnelles. Durée de conservation des données personnelles. Droit d'accès aux données personnelles. Transferts internationaux de données personnelles. Droit d'introduire une réclamation auprès d'une autorité de contrôle. Décision automatisée utilisant des données personnelles.",
+    },
+    "/policies/article13-support-pl": {
+      title: "Polityka prywatności",
+      body: "Artykuł pomocy produktu. Szablon formularza zawiera przykładowe etykiety: cele przetwarzania danych osobowych, podstawa prawna przetwarzania danych osobowych, kategorie odbiorców danych osobowych, okres przechowywania danych osobowych, prawo dostępu do danych osobowych, transfery międzynarodowe danych osobowych oraz zautomatyzowane podejmowanie decyzji z użyciem danych osobowych.",
     },
     "/intl/en/policies/privacy/": {
       title: "Legacy Privacy",
@@ -1390,6 +1487,14 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/policies/cookies": {
       title: "Cookie Policy",
       body: "Cookie Policy. We use cookies, analytics cookies, advertising cookies, cookie settings, and cookie preferences. You may withdraw consent through manage preferences.",
+    },
+    "/policies/nl-cookiebeleid": {
+      title: "Cookiebeleid",
+      body: "Cookiebeleid. We gebruiken cookies voor analyse en advertenties en bieden cookie-instellingen.",
+    },
+    "/policies/pl-cookies": {
+      title: "Polityka plików cookie",
+      body: "Polityka plików cookie. Używamy plików cookie do analityki i reklamy oraz udostępniamy ustawienia plików cookie.",
     },
     "/cookie-policy": {
       title: "Cookie Policy",

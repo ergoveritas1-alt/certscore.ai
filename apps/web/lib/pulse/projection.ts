@@ -10,6 +10,7 @@ import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
 import { getAssessmentDirection, getEvidenceLabel } from "../scans/gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../scans/gdpr-eprivacy-checklist-rationale";
 import { buildRegulatoryGapTopFindings } from "../scans/regulatory-gap-top-findings";
+import { buildNormalizedConcerns } from "../scans/normalized-concerns";
 import { buildPromotionGradePreconsentRequests } from "../scans/preconsent-public-evidence";
 import { buildRuntimeCookieInventory } from "../scans/runtime-cookie-evidence";
 import {
@@ -186,9 +187,15 @@ function buildPulseReportSurface(input: {
     requestCount: row.requestCount ?? null,
     vendor: row.vendor
   }));
+  const runtimeArtifactNormalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: scanRecord.runtimeArtifacts,
+    validationFindings: []
+  });
   const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     coverageLimited: input.coverageLimited,
     events: scanRecord.events,
+    normalizedConcerns: runtimeArtifactNormalizedConcerns,
     policyEnrichmentCount: scanRecord.policyEnrichment.length,
     runtimeArtifacts: scanRecord.runtimeArtifacts,
     scanCompleted: scanRecord.scan.status === "completed",

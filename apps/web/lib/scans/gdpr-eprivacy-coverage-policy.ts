@@ -1,6 +1,7 @@
 import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
 import { classifyConsentControlLabel } from "@certscore/contracts";
+import type { NormalizedConcern } from "./normalized-concerns";
 
 export type GdprEprivacyCoverageOutcomeStatus =
   | "Gap observed"
@@ -53,6 +54,7 @@ export type GdprEprivacyCoveragePolicyEvent = {
 export type GdprEprivacyCoveragePolicyInput = {
   coverageLimited: boolean;
   events?: GdprEprivacyCoveragePolicyEvent[];
+  normalizedConcerns?: NormalizedConcern[];
   policyEnrichmentCount?: number | null;
   runtimeArtifacts?: Record<string, unknown> | null;
   scanCompleted: boolean;
@@ -4935,6 +4937,19 @@ type PolicyDisclosureRowConfig = {
   textPattern: RegExp;
 };
 
+const GDPR_TRANSPARENCY_ARTICLE13_TOPIC_TO_ROW_ID: Record<string, string> = {
+  automated_decision_making_or_profiling: "automated_decision_making_profiling_disclosure",
+  controller_contact: "controller_contact_disclosure",
+  data_retention: "retention_disclosure_observed",
+  data_subject_rights: "data_subject_rights_disclosure",
+  dpo_contact: "dpo_contact_point_disclosure",
+  international_transfers: "international_transfers_disclosure",
+  legal_basis: "legal_basis_disclosure_observed",
+  processing_purposes: "processing_purposes_disclosure",
+  recipients_or_vendor_categories: "recipients_vendor_categories_disclosure",
+  supervisory_authority: "supervisory_authority_complaint_disclosure"
+};
+
 type PolicySectionChunk = {
   charEnd?: number;
   charStart?: number;
@@ -5080,6 +5095,113 @@ const MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 = 2_500;
 
 function getPolicyDisclosureSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return getObject(runtimeArtifacts, ["policyDisclosureSummary", "policy_disclosure_summary"]);
+}
+
+function getGdprTransparencyArticle13ChecklistConcern(
+  input: GdprEprivacyCoveragePolicyInput,
+  rowId: string
+) {
+  return (input.normalizedConcerns ?? [])
+    .filter((concern) => {
+      const rawEvidence = concern.evidenceBundle.rawEvidence;
+      const topic = getString(rawEvidence, [
+        "gdprTransparencyArticle13Topic",
+        "gdpr_transparency_article13_topic"
+      ]);
+      return concern.originKey === `gdpr_transparency.article13.${topic}` &&
+        concern.originType === "runtime_artifact" &&
+        concern.promotionEligibility === "internal_only" &&
+        concern.externalSurfacingEligibility === "audit_only" &&
+        rawEvidence?.gdprTransparencyArticle13Evidence === true &&
+        rawEvidence.productionCredit === true &&
+        getString(rawEvidence, ["productionCreditProfile", "production_credit_profile"]) ===
+          "gdpr_transparency_multilingual_article13_v1" &&
+        getString(rawEvidence, ["classifierProvenance", "classifier_provenance"]) ===
+          "gdpr_transparency_topic_classifier.v1" &&
+        topic !== null &&
+        GDPR_TRANSPARENCY_ARTICLE13_TOPIC_TO_ROW_ID[topic] === rowId;
+    })
+    .sort((left, right) =>
+      gdprTransparencyChecklistEligibilityScore(right.regulatoryChecklistEligibility) -
+      gdprTransparencyChecklistEligibilityScore(left.regulatoryChecklistEligibility)
+    )[0] ?? null;
+}
+
+function gdprTransparencyChecklistEligibilityScore(value: unknown) {
+  return value === "observed" ? 2 : value === "review_signal" ? 1 : 0;
+}
+
+function buildGdprTransparencyArticle13ConcernOutcome(
+  input: GdprEprivacyCoveragePolicyInput,
+  config: PolicyDisclosureRowConfig
+) {
+  const concern = getGdprTransparencyArticle13ChecklistConcern(input, config.rowId);
+  if (!concern || concern.regulatoryChecklistEligibility === "none") {
+    return null;
+  }
+
+  const rawEvidence = concern.evidenceBundle.rawEvidence ?? {};
+  const topic = getString(rawEvidence, [
+    "gdprTransparencyArticle13Topic",
+    "gdpr_transparency_article13_topic"
+  ]) ?? config.disclosureType ?? "unknown";
+  const sourceUrl = getString(rawEvidence, ["sourceUrl", "source_url"]);
+  const locale = getString(rawEvidence, ["matchedLocale", "matched_locale"]);
+  const state = getString(rawEvidence, [
+    "gdprTransparencyArticle13ConcernState",
+    "gdpr_transparency_article13_concern_state"
+  ]) ?? concern.observedValue ?? "ambiguous";
+  const evidenceRefs = [
+    `Evidence: ${config.label}`,
+    locale ? `Locale: ${locale}` : null,
+    sourceUrl ? `Policy URL: ${sourceUrl}` : null
+  ].filter((value): value is string => Boolean(value));
+  const retainedEvidence = {
+    article13Signal: {
+      classifierProvenance: rawEvidence.classifierProvenance,
+      classifierReasonCodes: rawEvidence.classifierReasonCodes,
+      confidence: rawEvidence.confidence,
+      disclosureType: topic,
+      evidenceSource: "normalized_gdpr_transparency_article13_concern",
+      matchStrength: rawEvidence.matchStrength,
+      matchedLocale: locale,
+      productionCredit: rawEvidence.productionCredit,
+      productionCreditProfile: rawEvidence.productionCreditProfile,
+      selectedEvidenceStrength: rawEvidence.selectedEvidenceStrength,
+      source: "normalized_concern",
+      status: concern.regulatoryChecklistEligibility === "observed" ? "observed" : "partial"
+    },
+    gdprTransparencyArticle13Concern: {
+      canonicalConcernKey: concern.canonicalConcernKey,
+      originKey: concern.originKey,
+      regulatoryChecklistEligibility: concern.regulatoryChecklistEligibility,
+      state,
+      topic
+    },
+    signalObserved: concern.regulatoryChecklistEligibility === "observed" ? true : "partial"
+  };
+
+  if (concern.regulatoryChecklistEligibility === "observed") {
+    return makeOutcome(
+      config.rowId,
+      "Observed",
+      `${config.label} evidence was retained through adapter-approved multilingual GDPR Transparency Article 13 evidence.`,
+      evidenceRefs,
+      {
+        retainedEvidence
+      }
+    );
+  }
+
+  return makeOutcome(
+    config.rowId,
+    "Review signal",
+    `${config.label} was partially observed through adapter-approved multilingual GDPR Transparency Article 13 evidence and needs review before Observed credit.`,
+    evidenceRefs,
+    {
+      retainedEvidence
+    }
+  );
 }
 
 function getPolicyDisclosureText(summary: Record<string, unknown> | null | undefined) {
@@ -6121,6 +6243,11 @@ function hasRetainedControllerOrPrivacyContactDisclosure(
 }
 
 function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, config: PolicyDisclosureRowConfig) {
+  const gdprTransparencyConcernOutcome = buildGdprTransparencyArticle13ConcernOutcome(input, config);
+  if (gdprTransparencyConcernOutcome) {
+    return gdprTransparencyConcernOutcome;
+  }
+
   const summary = getPolicyDisclosureSummary(input.runtimeArtifacts);
   const privacyPolicyPresent =
     getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true ||

@@ -1,5 +1,10 @@
 import { z } from "zod";
+import { SUPPORTED_PRIVACY_EVIDENCE_LOCALES } from "./supported-languages";
 export * from "./consent-control-label-classifier";
+export * from "./gdpr-transparency-topic-classifier";
+export * from "./article13-disclosure-rejection";
+export * from "./privacy-surface-classifier";
+export * from "./supported-languages";
 
 export const directVsInferredSchema = z.enum([
   "direct",
@@ -9,7 +14,8 @@ export const directVsInferredSchema = z.enum([
 ]);
 
 export const confidenceSchema = z.number().min(0).max(1);
-export const consentControlLocaleSchema = z.enum(["en", "de", "fr", "es", "it"]);
+export const supportedPrivacyEvidenceLocaleSchema = z.enum(SUPPORTED_PRIVACY_EVIDENCE_LOCALES);
+export const consentControlLocaleSchema = supportedPrivacyEvidenceLocaleSchema;
 export const consentControlMatchStrengthSchema = z.enum(["direct", "equivalent", "contextual", "weak"]);
 export const consentControlClassifierReasonCodesSchema = z.array(z.string().max(80)).max(16).optional();
 export const consentControlInventorySourceSchema = z.enum([
@@ -1278,6 +1284,34 @@ export const policySurfaceObservationSchema = z.object({
     selectedPolicySectionUrl: z.string().optional(),
     evidenceSource: z.enum(["deterministic", "nano", "deterministic_plus_nano"]).optional(),
     selectedEvidenceStrength: z.enum(["strong", "partial", "limited"]).optional(),
+    classifierProvenance: z.literal("gdpr_transparency_topic_classifier.v1").optional(),
+    matchedLocale: supportedPrivacyEvidenceLocaleSchema.optional(),
+    matchedTerm: z.string().max(240).optional(),
+    matchStrength: z.enum(["direct", "equivalent", "contextual", "weak"]).optional(),
+    classifierReasonCodes: z.array(z.string().max(100)).max(16).optional(),
+  })).default([]),
+  gdprTransparencyTopicCandidates: z.array(z.object({
+    topic: z.enum([
+      "controller_contact",
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers",
+      "dpo_contact",
+      "supervisory_authority",
+      "automated_decision_making_or_profiling",
+    ]),
+    status: z.literal("diagnostic_only").default("diagnostic_only"),
+    evidenceText: z.string().max(640),
+    confidence: z.number().min(0).max(1).default(0.5),
+    classifierProvenance: z.literal("gdpr_transparency_topic_classifier.v1"),
+    matchedLocale: supportedPrivacyEvidenceLocaleSchema,
+    matchedTerm: z.string().max(240),
+    matchStrength: z.enum(["direct", "equivalent", "contextual", "weak"]),
+    classifierReasonCodes: z.array(z.string().max(100)).max(16).default([]),
+    productionCredit: z.literal(false).default(false),
   })).default([]),
   discardedArticle13DisclosureSignals: z.array(z.object({
     disclosureType: z.enum([

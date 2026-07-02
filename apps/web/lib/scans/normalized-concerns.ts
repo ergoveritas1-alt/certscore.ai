@@ -55,6 +55,7 @@ import {
 
 import type { ReviewFindingSeverity } from "./canonical-review-finding";
 import { deriveConcernPolicy } from "./concern-policy";
+import { GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE } from "./gdpr-transparency-production-profile";
 import type { FetchQuality } from "./signal-fallback-evidence";
 import { normalizeScanValidationFinding, type ScanValidationFinding } from "./validation-review-linking";
 const MAX_POLICY_SNIPPET_LENGTH = 600;
@@ -130,6 +131,8 @@ export type NormalizedConcernPromotionEligibility = "eligible" | "internal_only"
 export type NormalizedConcernExternalSurfacingEligibility = "eligible" | "audit_only" | "suppress";
 
 export type NormalizedConcernAssertionLevel = "weak" | "moderate" | "strong";
+
+export type NormalizedConcernRegulatoryChecklistEligibility = "observed" | "review_signal" | "none";
 
 export type NormalizedConcernNegativeEvidenceFlag =
   | "no_consent_surface_observed"
@@ -237,6 +240,7 @@ export type NormalizedConcern = {
   policyIsPrimarySource: boolean | null;
   policyPageType: NormalizedConcernPolicyPageType;
   promotionEligibility: NormalizedConcernPromotionEligibility;
+  regulatoryChecklistEligibility?: NormalizedConcernRegulatoryChecklistEligibility;
   severity: ReviewFindingSeverity;
   signalKey?: string;
   signalLabel?: string;
@@ -245,6 +249,8 @@ export type NormalizedConcern = {
   suggestedUnifiedFindingId?: string;
   title: string;
 };
+
+export type GdprTransparencyArticle13ConcernState = "sufficient" | "partial" | "ambiguous" | "missing";
 
 export type ReviewFindingCandidateInput = {
   categoryId?: string;
@@ -1877,6 +1883,7 @@ function buildConcernFromSharedInput(input: {
     policyIsPrimarySource: evidenceBundle.policyIsPrimarySource,
     policyPageType: evidenceBundle.policyPageType,
     promotionEligibility: eligibility.promotionEligibility,
+    regulatoryChecklistEligibility: eligibility.regulatoryChecklistEligibility,
     severity: input.severity,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
@@ -2260,6 +2267,116 @@ function getRuntimeNumber(record: Record<string, unknown> | null | undefined, ke
   return null;
 }
 
+function getPolicyDisclosureSummaryForGdprTransparency(
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+) {
+  return getRuntimeRecord(runtimeArtifacts, ["policyDisclosureSummary", "policy_disclosure_summary"]);
+}
+
+function getGdprTransparencyArticle13Signals(summary: Record<string, unknown> | null | undefined) {
+  return getPlainRecordArray(summary?.article13DisclosureSignals ?? summary?.article13_disclosure_signals);
+}
+
+function getGdprTransparencyArticle13ConcernState(
+  signal: Record<string, unknown>
+): Exclude<GdprTransparencyArticle13ConcernState, "missing"> {
+  const status = getStringValue(signal.status);
+  const selectedEvidenceStrength = getStringValue(signal.selectedEvidenceStrength ?? signal.selected_evidence_strength);
+  const matchStrength = getStringValue(signal.matchStrength ?? signal.match_strength);
+
+  if (
+    status === "observed" &&
+    selectedEvidenceStrength === "strong" &&
+    (matchStrength === "direct" || matchStrength === "equivalent")
+  ) {
+    return "sufficient";
+  }
+  if (status === "partial") {
+    return "partial";
+  }
+  return "ambiguous";
+}
+
+function isAdapterApprovedGdprTransparencyArticle13Signal(signal: Record<string, unknown>) {
+  return signal.productionCredit === true &&
+    getStringValue(signal.productionCreditProfile ?? signal.production_credit_profile) ===
+      GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE &&
+    getStringValue(signal.classifierProvenance ?? signal.classifier_provenance) ===
+      "gdpr_transparency_topic_classifier.v1";
+}
+
+function buildGdprTransparencyArticle13Concerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const summary = getPolicyDisclosureSummaryForGdprTransparency(runtimeArtifacts);
+  const profile = getStringValue(summary?.gdprTransparencyEvidenceProfile ?? summary?.gdpr_transparency_evidence_profile);
+  const productionEvidenceEnabled =
+    getRuntimeBoolean(summary, [
+      "gdprTransparencyProductionEvidenceEnabled",
+      "gdpr_transparency_production_evidence_enabled"
+    ]) === true;
+
+  if (profile !== GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE || !productionEvidenceEnabled) {
+    return [];
+  }
+
+  return getGdprTransparencyArticle13Signals(summary)
+    .filter(isAdapterApprovedGdprTransparencyArticle13Signal)
+    .map((signal) => {
+      const topic = getStringValue(signal.disclosureType ?? signal.disclosure_type) ?? "unknown";
+      const evidenceText =
+        getStringValue(signal.selectedPolicySectionExcerpt ?? signal.selected_policy_section_excerpt) ??
+        getStringValue(signal.evidenceText ?? signal.evidence_text);
+      const sourceUrl =
+        getStringValue(signal.selectedPolicySectionUrl ?? signal.selected_policy_section_url) ??
+        getStringValue(signal.surfaceUrl ?? signal.surface_url);
+      const locale = getStringValue(signal.matchedLocale ?? signal.matched_locale);
+      const state = getGdprTransparencyArticle13ConcernState(signal);
+      const evidence = uniqueStrings([evidenceText, sourceUrl]);
+
+      return buildConcernFromSharedInput({
+        categoryId: "privacy",
+        description: [
+          "Adapter-approved GDPR Transparency classifier evidence was retained as structured Article 13 topic evidence.",
+          locale ? `Locale: ${locale}.` : null
+        ].filter((part): part is string => Boolean(part)).join(" "),
+        domainContext,
+        evidence,
+        observedValue: state,
+        originKey: `gdpr_transparency.article13.${topic}`,
+        originType: "runtime_artifact",
+        rawEvidence: {
+          classifierProvenance: signal.classifierProvenance ?? signal.classifier_provenance,
+          classifierReasonCodes: getRuntimeStringArray(signal, ["classifierReasonCodes", "classifier_reason_codes"]),
+          confidence: getNumberValue(signal.confidence),
+          gdprTransparencyArticle13ConcernState: state,
+          gdprTransparencyArticle13Evidence: true,
+          gdprTransparencyArticle13Topic: topic,
+          gdprTransparencyEvidenceProfile: profile,
+          matchStrength: getStringValue(signal.matchStrength ?? signal.match_strength),
+          matchedLocale: locale,
+          matchedTerm: getStringValue(signal.matchedTerm ?? signal.matched_term),
+          pageType: "privacy_policy",
+          policyIsPrimarySource: true,
+          productionCredit: true,
+          productionCreditProfile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+          selectedEvidenceStrength: getStringValue(signal.selectedEvidenceStrength ?? signal.selected_evidence_strength),
+          signalKey: `privacy.gdpr_transparency.article13.${topic}`,
+          sourceUrl,
+          sourceUrls: sourceUrl ? [sourceUrl] : [],
+          policySnippets: evidenceText ? [evidenceText] : []
+        },
+        severity: "low",
+        signalKey: `privacy.gdpr_transparency.article13.${topic}`,
+        signalLabel: `GDPR Transparency Article 13 topic observed: ${topic}`,
+        signalSource: "runtime_artifact_signal",
+        sourceType: "signal",
+        title: `GDPR Transparency Article 13 topic observed: ${topic}`
+      });
+    });
+}
+
 const SCAN_NO_GO_CONFIDENCE_THRESHOLD = 0.9;
 
 function getScanNoGoAssessment(runtimeArtifacts: Record<string, unknown> | null | undefined) {
@@ -2427,7 +2544,8 @@ export function buildNormalizedConcerns(input: {
       return normalizedFinding ? [normalizeConcernFromValidationFinding(normalizedFinding, input.domainContext)] : [];
     }),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
-    ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext)
+    ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext)
   ];
 
   return [

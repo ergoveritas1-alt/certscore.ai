@@ -4,10 +4,14 @@ import {
   deriveGdprEprivacyCoverageChecklist,
   type GdprEprivacyCoverageChecklistItem
 } from "./gdpr-eprivacy-coverage-checklist";
-import type { GdprEprivacyCoverageOutcome } from "./gdpr-eprivacy-coverage-policy";
+import {
+  deriveGdprEprivacyCoveragePolicyOutcomes,
+  type GdprEprivacyCoverageOutcome
+} from "./gdpr-eprivacy-coverage-policy";
 import { getReportableGdprEprivacyCoverageItems } from "./gdpr-eprivacy-reportable-rows";
 import { deriveGdprEprivacyReviewSummary } from "./gdpr-eprivacy-review-summary";
 import { buildRegulatoryGapTopFindings } from "./regulatory-gap-top-findings";
+import { buildNormalizedConcerns } from "./normalized-concerns";
 import type { RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
@@ -39,6 +43,63 @@ function byId(items: GdprEprivacyCoverageChecklistItem[], id: string) {
   assert.ok(item, `expected checklist item ${id}`);
   return item;
 }
+
+function makeChecklistGdprTransparencyConcerns(disclosureType: string) {
+  return buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [
+          {
+            classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+            classifierReasonCodes: [`matched_${disclosureType}`],
+            confidence: 0.93,
+            disclosureType,
+            evidenceText: "Localized bounded Article 13 evidence about personal data processing.",
+            matchStrength: "direct",
+            matchedLocale: "nl",
+            matchedTerm: "persoonsgegevens",
+            productionCredit: true,
+            productionCreditProfile: "gdpr_transparency_multilingual_article13_v1",
+            selectedEvidenceStrength: "strong",
+            selectedPolicySectionExcerpt: "Localized bounded Article 13 evidence about personal data processing.",
+            selectedPolicySectionUrl: "https://example.test/privacy",
+            source: "deterministic",
+            status: "observed"
+          }
+        ],
+        gdprTransparencyEvidenceProfile: "gdpr_transparency_multilingual_article13_v1",
+        gdprTransparencyProductionEvidenceEnabled: true
+      }
+    },
+    validationFindings: []
+  });
+}
+
+test("checklist consumes approved multilingual GDPR Transparency Article 13 coverage without unified findings", () => {
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns: makeChecklistGdprTransparencyConcerns("legal_basis"),
+    runtimeArtifacts: {},
+    scanCompleted: true,
+    snapshot: {}
+  });
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+  const legalBasis = byId(items, "legal_basis_disclosure_observed");
+
+  assert.equal(legalBasis.status, "Observed");
+  assert.equal(legalBasis.criticalEvidence.projectedFindings.length, 0);
+  assert.equal(
+    legalBasis.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern !== undefined,
+    true
+  );
+});
 
 function makeCoverageOutcome(
   outcome: Omit<GdprEprivacyCoverageOutcome, "criticalEvidence"> & {

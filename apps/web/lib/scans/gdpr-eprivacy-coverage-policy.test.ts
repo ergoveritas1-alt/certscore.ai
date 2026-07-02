@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
+import { buildNormalizedConcerns } from "./normalized-concerns";
 
 const completedInputBase = {
   coverageLimited: true,
@@ -12,6 +13,59 @@ function retainedArticle13Signal(outcome: NonNullable<ReturnType<typeof deriveGd
     | { evidenceText?: string; selectedPolicySectionExcerpt?: string; source?: string; supportingContactContext?: string; supportingTransferSafeguardsContext?: string }
     | null
     | undefined;
+}
+
+const GDPR_TRANSPARENCY_TOPIC_TO_ROW_ID = {
+  controller_contact: "controller_contact_disclosure",
+  data_retention: "retention_disclosure_observed",
+  data_subject_rights: "data_subject_rights_disclosure",
+  dpo_contact: "dpo_contact_point_disclosure",
+  international_transfers: "international_transfers_disclosure",
+  legal_basis: "legal_basis_disclosure_observed",
+  processing_purposes: "processing_purposes_disclosure",
+  recipients_or_vendor_categories: "recipients_vendor_categories_disclosure",
+  supervisory_authority: "supervisory_authority_complaint_disclosure"
+} as const;
+
+function makeGdprTransparencyArticle13Signal(input: {
+  disclosureType: string;
+  productionCredit?: boolean;
+  productionCreditProfile?: string;
+  selectedEvidenceStrength?: string;
+  status?: string;
+}) {
+  return {
+    classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+    classifierReasonCodes: [`matched_${input.disclosureType}`],
+    confidence: 0.93,
+    disclosureType: input.disclosureType,
+    evidenceSource: "gdpr_transparency_topic_candidate",
+    evidenceText: "Localized bounded Article 13 evidence about personal data processing.",
+    matchStrength: "direct",
+    matchedLocale: "de",
+    matchedTerm: "personenbezogene daten",
+    productionCredit: input.productionCredit ?? true,
+    productionCreditProfile: input.productionCreditProfile ?? "gdpr_transparency_multilingual_article13_v1",
+    selectedEvidenceStrength: input.selectedEvidenceStrength ?? "strong",
+    selectedPolicySectionExcerpt: "Localized bounded Article 13 evidence about personal data processing.",
+    selectedPolicySectionUrl: "https://example.test/privacy",
+    source: "deterministic",
+    status: input.status ?? "observed"
+  };
+}
+
+function makeGdprTransparencyConcerns(signals: Array<Record<string, unknown>>, profile = "gdpr_transparency_multilingual_article13_v1") {
+  return buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: signals,
+        gdprTransparencyEvidenceProfile: profile,
+        gdprTransparencyProductionEvidenceEnabled: profile === "gdpr_transparency_multilingual_article13_v1"
+      }
+    },
+    validationFindings: []
+  });
 }
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks policy-dependent rows not testable when policy evidence is missing under limited coverage", () => {
@@ -46,6 +100,109 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks policy-dependent rows not t
     outcomes.cross_border_endpoint_review?.criticalEvidence.statusBasis ?? "",
     /No usable privacy, cookie, or legal policy document/
   );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps legacy_only GDPR Transparency concerns silent", () => {
+  const baseline = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {},
+    snapshot: {}
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: makeGdprTransparencyConcerns([
+      makeGdprTransparencyArticle13Signal({ disclosureType: "legal_basis" })
+    ], "legacy_only"),
+    runtimeArtifacts: {},
+    snapshot: {}
+  });
+
+  assert.equal(outcomes.legal_basis_disclosure_observed?.status, baseline.legal_basis_disclosure_observed?.status);
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit to approved multilingual Article 13 topics", () => {
+  const signals = Object.keys(GDPR_TRANSPARENCY_TOPIC_TO_ROW_ID).map((disclosureType) =>
+    makeGdprTransparencyArticle13Signal({ disclosureType })
+  );
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: makeGdprTransparencyConcerns(signals),
+    runtimeArtifacts: {},
+    snapshot: {}
+  });
+
+  for (const rowId of Object.values(GDPR_TRANSPARENCY_TOPIC_TO_ROW_ID)) {
+    assert.equal(outcomes[rowId]?.status, "Observed", `${rowId} should receive checklist Observed credit`);
+    assert.equal(
+      outcomes[rowId]?.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern !== undefined,
+      true,
+      `${rowId} should retain normalized concern provenance`
+    );
+  }
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps automated profiling Article 13 evidence in review", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: makeGdprTransparencyConcerns([
+      makeGdprTransparencyArticle13Signal({ disclosureType: "automated_decision_making_or_profiling" })
+    ]),
+    runtimeArtifacts: {},
+    snapshot: {}
+  });
+
+  assert.notEqual(outcomes.automated_decision_making_profiling_disclosure?.status, "Observed");
+  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Review signal");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes maps partial and ambiguous multilingual Article 13 evidence safely", () => {
+  const partial = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: makeGdprTransparencyConcerns([
+      makeGdprTransparencyArticle13Signal({ disclosureType: "legal_basis", status: "partial" })
+    ]),
+    runtimeArtifacts: {},
+    snapshot: {}
+  });
+  const ambiguous = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: makeGdprTransparencyConcerns([
+      makeGdprTransparencyArticle13Signal({
+        disclosureType: "legal_basis",
+        selectedEvidenceStrength: "limited"
+      })
+    ]),
+    runtimeArtifacts: {},
+    snapshot: {}
+  });
+
+  assert.equal(partial.legal_basis_disclosure_observed?.status, "Review signal");
+  assert.notEqual(ambiguous.legal_basis_disclosure_observed?.status, "Observed");
+  assert.equal(
+    ambiguous.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern,
+    undefined
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes ignores rejected non-credit multilingual Article 13 evidence", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: makeGdprTransparencyConcerns([
+      makeGdprTransparencyArticle13Signal({
+        disclosureType: "legal_basis",
+        productionCredit: false
+      }),
+      makeGdprTransparencyArticle13Signal({
+        disclosureType: "data_retention",
+        productionCreditProfile: "legacy_only"
+      })
+    ]),
+    runtimeArtifacts: {},
+    snapshot: {}
+  });
+
+  assert.notEqual(outcomes.legal_basis_disclosure_observed?.status, "Observed");
+  assert.notEqual(outcomes.retention_disclosure_observed?.status, "Observed");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes consumes structured Article 13 disclosure signals", () => {

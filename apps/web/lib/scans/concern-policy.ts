@@ -5,7 +5,8 @@ import type {
   NormalizedConcernExternalSurfacingEligibility,
   NormalizedConcernNegativeEvidenceFlag,
   NormalizedConcernPolicyPageType,
-  NormalizedConcernPromotionEligibility
+  NormalizedConcernPromotionEligibility,
+  NormalizedConcernRegulatoryChecklistEligibility
 } from "./normalized-concerns";
 import { classifyConsentControlLabel } from "@certscore/contracts";
 import { evaluateCookieRetentionReview } from "./cookie-retention-review";
@@ -114,6 +115,18 @@ const RETIRED_FINANCIAL_FINDING_IDS = new Set([
 
 const BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN =
   /unable to authorize your request|access denied|verify you are human|captcha|bot challenge|request blocked|security check|temporarily unavailable|forbidden|we(?:'|’)re sorry, but we were unable to authorize your request/i;
+
+const GDPR_TRANSPARENCY_ARTICLE13_CHECKLIST_OBSERVED_TOPICS = new Set([
+  "controller_contact",
+  "processing_purposes",
+  "legal_basis",
+  "recipients_or_vendor_categories",
+  "data_retention",
+  "data_subject_rights",
+  "international_transfers",
+  "dpo_contact",
+  "supervisory_authority"
+]);
 
 function hasTruthyArrayValue(value: unknown) {
   return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
@@ -2196,6 +2209,44 @@ function hasStableLinkedDiscoveryPath(rawEvidence: Record<string, unknown> | nul
   return ["footer_link", "header_link", "body_link", "legal_hub", "second_hop_legal_hub"].includes(discoverySource ?? "");
 }
 
+function isGdprTransparencyArticle13EvidenceConcern(rawEvidence: Record<string, unknown> | null | undefined) {
+  return rawEvidence?.gdprTransparencyArticle13Evidence === true &&
+    getFirstString(rawEvidence, ["gdprTransparencyEvidenceProfile", "gdpr_transparency_evidence_profile"]) ===
+      "gdpr_transparency_multilingual_article13_v1" &&
+    rawEvidence.productionCredit === true &&
+    getFirstString(rawEvidence, ["productionCreditProfile", "production_credit_profile"]) ===
+      "gdpr_transparency_multilingual_article13_v1" &&
+    getFirstString(rawEvidence, ["classifierProvenance", "classifier_provenance"]) ===
+      "gdpr_transparency_topic_classifier.v1";
+}
+
+function getGdprTransparencyArticle13ChecklistEligibility(
+  rawEvidence: Record<string, unknown> | null | undefined
+): NormalizedConcernRegulatoryChecklistEligibility {
+  if (!isGdprTransparencyArticle13EvidenceConcern(rawEvidence)) {
+    return "none";
+  }
+
+  const state = getFirstString(rawEvidence, [
+    "gdprTransparencyArticle13ConcernState",
+    "gdpr_transparency_article13_concern_state"
+  ]);
+  if (state === "partial") {
+    return "review_signal";
+  }
+  if (state !== "sufficient") {
+    return "none";
+  }
+
+  const topic = getFirstString(rawEvidence, [
+    "gdprTransparencyArticle13Topic",
+    "gdpr_transparency_article13_topic"
+  ]);
+  return topic && GDPR_TRANSPARENCY_ARTICLE13_CHECKLIST_OBSERVED_TOPICS.has(topic)
+    ? "observed"
+    : "review_signal";
+}
+
 function isGuessedOnlyDiscovery(rawEvidence: Record<string, unknown> | null | undefined) {
   return rawEvidence?.keyPageGuessedOnly === true || rawEvidence?.key_page_guessed_only === true;
 }
@@ -2288,6 +2339,7 @@ export function deriveConcernPolicy(input: {
   externalSurfacingEligibility: NormalizedConcernExternalSurfacingEligibility;
   negativeEvidenceFlags: NormalizedConcernNegativeEvidenceFlag[];
   promotionEligibility: NormalizedConcernPromotionEligibility;
+  regulatoryChecklistEligibility?: NormalizedConcernRegulatoryChecklistEligibility;
 } {
   const hasDirectRuntime = input.evidenceStrengthFlags.includes("direct_runtime");
   const hasPageAttribution = input.evidenceStrengthFlags.includes("page_attributed");
@@ -3179,6 +3231,23 @@ export function deriveConcernPolicy(input: {
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only"
+    };
+  }
+
+  if (isGdprTransparencyArticle13EvidenceConcern(input.rawEvidence)) {
+    const regulatoryChecklistEligibility = getGdprTransparencyArticle13ChecklistEligibility(input.rawEvidence);
+    return {
+      allowedNarrativeTier:
+        getFirstString(input.rawEvidence, [
+          "gdprTransparencyArticle13ConcernState",
+          "gdpr_transparency_article13_concern_state"
+        ]) === "sufficient"
+          ? "moderate"
+          : "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags],
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility
     };
   }
 

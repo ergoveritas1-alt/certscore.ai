@@ -180,6 +180,148 @@ test("policySurfaceScanner classifies expected policy and control surfaces", asy
   }
 });
 
+test("policySurfaceScanner uses canonical privacy-surface classifier across supported locales", async () => {
+  await withPolicyScan("policy-multilingual-surfaces", async ({ result }) => {
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    const summaryByText = new Map(diagnostics.candidateSummary.map((candidate) => [candidate.linkText, candidate]));
+    const expected = [
+      ["Privacy Policy", "en", "privacy_policy", "direct"],
+      ["Datenschutzerklärung", "de", "privacy_policy", "direct"],
+      ["Politique de confidentialité", "fr", "privacy_policy", "direct"],
+      ["Política de privacidad", "es", "privacy_policy", "direct"],
+      ["Informativa sulla privacy", "it", "privacy_policy", "direct"],
+      ["Privacybeleid", "nl", "privacy_policy", "direct"],
+      ["Polityka prywatności", "pl", "privacy_policy", "direct"],
+      ["Cookiebeleid", "nl", "cookie_policy", "direct"],
+      ["Polityka plików cookie", "pl", "cookie_policy", "direct"],
+    ] as const;
+
+    for (const [linkText, matchedLocale, surfaceType, matchStrength] of expected) {
+      const summary = summaryByText.get(linkText);
+      assert.ok(summary, `${linkText} should be retained in policy candidate diagnostics`);
+      assert.equal(summary.surfaceType, surfaceType, linkText);
+      assert.equal(summary.matchedLocale, matchedLocale, linkText);
+      assert.equal(summary.matchStrength, matchStrength, linkText);
+      assert.equal(summary.classifierProvenance, "privacy_surface_classifier.v1", linkText);
+      assert.equal(summary.classifierReasonCodes.some((code) => code === `matched_${surfaceType}`), true, linkText);
+    }
+  }, {
+    discoveryMode: "fast",
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run for deterministic multilingual surface coverage.");
+      },
+    },
+  });
+});
+
+test("policySurfaceScanner retains canonical GDPR Transparency topic candidates across supported locales without default production credit", async () => {
+  await withPolicyScan("policy-multilingual-article13-topics", async ({ result, baseUrl }) => {
+    const expectedTopics = [
+      "controller_contact",
+      "dpo_contact",
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers",
+      "supervisory_authority",
+      "automated_decision_making_or_profiling",
+    ] as const;
+    const expectedPolicies = [
+      ["en", "/policies/article13-en"],
+      ["de", "/policies/article13-de"],
+      ["fr", "/policies/article13-fr"],
+      ["es", "/policies/article13-es"],
+      ["it", "/policies/article13-it"],
+      ["nl", "/policies/article13-nl"],
+      ["pl", "/policies/article13-pl"],
+    ] as const;
+
+    for (const [locale, path] of expectedPolicies) {
+      const privacy = result.policySurfaceObservations.find((observation) =>
+        observation.status === "fetched" &&
+        observation.surfaceType === "privacy_policy" &&
+        observation.normalizedUrl === `${baseUrl}${path}`
+      );
+      assert.ok(privacy, `${locale} policy should be fetched`);
+
+      for (const topic of expectedTopics) {
+        const candidate = privacy.gdprTransparencyTopicCandidates.find((item) => item.topic === topic);
+        assert.ok(
+          candidate,
+          `${locale} should retain diagnostic ${topic}; got ${privacy.gdprTransparencyTopicCandidates.map((item) => item.topic).join(", ")}`,
+        );
+        assert.equal(candidate.status, "diagnostic_only", `${locale} ${topic}`);
+        assert.equal(candidate.productionCredit, false, `${locale} ${topic}`);
+        assert.equal(candidate.classifierProvenance, "gdpr_transparency_topic_classifier.v1", `${locale} ${topic}`);
+        assert.equal(candidate.matchedLocale, locale, `${locale} ${topic}`);
+        assert.ok(candidate.matchedTerm, `${locale} ${topic} should retain matched term`);
+        assert.ok(candidate.matchStrength === "direct" || candidate.matchStrength === "equivalent", `${locale} ${topic}`);
+        assert.equal(candidate.classifierReasonCodes?.includes(`matched_${topic}`), true, `${locale} ${topic}`);
+        assert.ok(candidate.evidenceText.length <= 640, `${locale} ${topic} evidence should be bounded`);
+      }
+
+      assert.equal(
+        privacy.article13DisclosureSignals.some((signal) => signal.classifierProvenance === "gdpr_transparency_topic_classifier.v1"),
+        false,
+        `${locale} classifier candidates must not be promoted to Article 13 signals by default`,
+      );
+
+      if (locale !== "en") {
+        const productionArticle13Topics = expectedTopics.map((topic) =>
+          topic === "automated_decision_making_or_profiling" ? "profiling_or_automated_decision_making" : topic
+        );
+        assert.deepEqual(privacy.article13DisclosureSignals, [], `${locale} classifier-only matches should not create Article 13 signals`);
+        assert.equal(
+          privacy.observedTopics.some((topic) => productionArticle13Topics.includes(topic)),
+          false,
+          `${locale} classifier-only matches should not create Article 13 observed topics`,
+        );
+      } else {
+        assert.equal(
+          privacy.article13DisclosureSignals.some((signal) => signal.disclosureType === "legal_basis"),
+          true,
+          "English legacy Article 13 extraction should still run",
+        );
+      }
+    }
+  });
+});
+
+test("policySurfaceScanner keeps classifier-only TOC navigation and non-policy snippets diagnostic-only", async () => {
+  await withPolicyScan("policy-gdpr-transparency-diagnostic-negatives", async ({ result, baseUrl }) => {
+    const expectedPolicies = [
+      `${baseUrl}/policies/article13-toc-de`,
+      `${baseUrl}/policies/article13-nav-fr`,
+      `${baseUrl}/policies/article13-support-pl`,
+    ];
+
+    for (const url of expectedPolicies) {
+      const privacy = result.policySurfaceObservations.find((observation) =>
+        observation.status === "fetched" &&
+        observation.surfaceType === "privacy_policy" &&
+        observation.normalizedUrl === url
+      );
+      assert.ok(privacy, `${url} should be fetched`);
+      assert.equal(privacy.gdprTransparencyTopicCandidates.length > 0, true, `${url} should retain diagnostic candidates`);
+      assert.equal(
+        privacy.gdprTransparencyTopicCandidates.every((candidate) =>
+          candidate.status === "diagnostic_only" &&
+          candidate.productionCredit === false &&
+          candidate.classifierProvenance === "gdpr_transparency_topic_classifier.v1" &&
+          candidate.evidenceText.length <= 640
+        ),
+        true,
+        `${url} candidates should be bounded diagnostic-only classifier evidence`,
+      );
+      assert.deepEqual(privacy.article13DisclosureSignals, [], `${url} should not promote classifier-only candidates to Article 13 signals`);
+      assert.deepEqual(privacy.observedTopics, [], `${url} should not promote classifier-only candidates to observed topics`);
+    }
+  });
+});
+
 test("policySurfaceScanner treats external terms links as fetchable policy surfaces", () => {
   const baseUrl = "https://www.nbcnews.com/";
 
@@ -1256,11 +1398,15 @@ async function readPolicyCaptureDiagnostics(
   commonPathFallbackUsed: boolean;
   fetchedCount: number;
   failedCandidateCount: number;
-  candidateSummary: Array<{
-    linkText: string;
-    observationOnly: boolean;
-    surfaceType: string;
-  }>;
+	  candidateSummary: Array<{
+	    classifierProvenance: string;
+	    classifierReasonCodes: string[];
+	    linkText: string;
+	    matchedLocale?: string;
+	    matchStrength?: string;
+	    observationOnly: boolean;
+	    surfaceType: string;
+	  }>;
   winningSurfaceUrls: string[];
   policyCaptureDurationMs: number;
 }> {
