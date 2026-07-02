@@ -1,4 +1,10 @@
-import { FULL_SCAN_EVENT_TYPES, SCAN_EVENT_TYPES, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import {
+  FULL_SCAN_EVENT_TYPES,
+  SCAN_EVENT_TYPES,
+  normalizeScanFrom,
+  type PlanCode,
+  type ScanFrom
+} from "@website-signal-risk-scanner/shared";
 import { getPlanLimits } from "../plans/get-plan-limits";
 import { getFullScanQueueAvailability } from "../queue/full-scan-queue";
 import { getFullScanQueueMetadata } from "../queue/scan-queue-priority";
@@ -35,15 +41,26 @@ type ScanQueueProvenance = {
 
 export async function createAnonymousFullScan(input: {
   bypassRecentScanReuse?: boolean;
+  coveragePlanCode?: PlanCode;
   hostname: string;
   localV2DagLambdaDebugOverrides?: import("./local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagRunViaLambda?: boolean | null;
+  minimumReusablePagesRequested?: number;
   normalizedUrl: string;
   provenance?: ScanQueueProvenance;
   scanFrom?: ScanFrom;
 }) {
   const scanFrom = normalizeScanFrom(input.scanFrom);
+  const coveragePlanCode = input.coveragePlanCode ?? "free";
+  const planLimits = await getPlanLimits(coveragePlanCode);
+  const pagesRequested = planLimits.maxPagesPerScan;
+  const minimumReusablePagesRequested =
+    typeof input.minimumReusablePagesRequested === "number" && Number.isFinite(input.minimumReusablePagesRequested)
+      ? Math.floor(input.minimumReusablePagesRequested)
+      : input.coveragePlanCode
+        ? pagesRequested
+        : undefined;
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const bypassRecentScanReuse = Boolean(input.bypassRecentScanReuse);
 
@@ -52,7 +69,8 @@ export async function createAnonymousFullScan(input: {
       normalizedDomain: input.hostname,
       normalizedUrl: input.normalizedUrl,
       organizationId: null,
-      scanFrom
+      scanFrom,
+      minPagesRequested: minimumReusablePagesRequested
     }).catch((error) => {
       console.error("[web] anonymous recent scan reuse lookup failed", {
         error: error instanceof Error ? error.message : String(error),
@@ -72,7 +90,9 @@ export async function createAnonymousFullScan(input: {
         requestedUrl: input.normalizedUrl,
         requestContext: {
           bypassRecentScanReuse,
+          coveragePlanCode,
           localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
+          minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
           provenance: input.provenance ?? null,
           scanFrom
         },
@@ -106,7 +126,9 @@ export async function createAnonymousFullScan(input: {
       requestedUrl: input.normalizedUrl,
       requestContext: {
         bypassRecentScanReuse,
+        coveragePlanCode,
         localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
+        minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
         provenance: input.provenance ?? null,
         scanFrom
       },
@@ -119,8 +141,6 @@ export async function createAnonymousFullScan(input: {
     throw new Error(fullScanQueueAvailability.reason ?? "Full scan queue is unavailable.");
   }
 
-  const planLimits = await getPlanLimits("free");
-  const pagesRequested = planLimits.maxPagesPerScan;
   const priorScanAcceleration = await loadPriorScanAccelerationCandidate({
     domainId: domain.id,
     normalizedUrl: domain.normalized_url,
@@ -171,7 +191,9 @@ export async function createAnonymousFullScan(input: {
     requestedUrl: input.normalizedUrl,
     requestContext: {
       bypassRecentScanReuse,
+      coveragePlanCode,
       localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
+      minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
       pagesRequested,
       provenance: input.provenance ?? null,
       queueOrigin: queueMetadata.queueOrigin,
@@ -211,6 +233,7 @@ export async function createAnonymousFullScan(input: {
       : "Scan queued and awaiting scanner pickup.",
     metadataJson: {
       pagesRequested,
+      coveragePlanCode,
       profile: planLimits.scanProfile,
       queueOrigin: queueMetadata.queueOrigin,
       queuePriority: queueMetadata.queuePriority,

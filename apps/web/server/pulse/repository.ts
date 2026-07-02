@@ -36,14 +36,27 @@ export function createPulsePublicId(prefix = "pulse_req") {
   return `${prefix}_${randomUUID()}`;
 }
 
-export async function findLatestCompletedAnonymousScanForDomain(normalizedDomain: string, input?: { maxAgeHours?: number; scanFrom?: ScanFrom }) {
+export async function findLatestCompletedAnonymousScanForDomain(
+  normalizedDomain: string,
+  input?: { maxAgeHours?: number; minPagesRequested?: number; scanFrom?: ScanFrom }
+) {
   await ensurePulseTables();
   const scanFrom = normalizeScanFrom(input?.scanFrom);
+  const parameters: Array<string | number> = [normalizedDomain, `https://${normalizedDomain}`, scanFrom];
   const maxAgeClause =
-    typeof input?.maxAgeHours === "number"
-      ? "and s.completed_at is not null and s.completed_at >= timezone('utc', now()) - ($3::int * interval '1 hour')"
+    typeof input?.maxAgeHours === "number" && Number.isFinite(input.maxAgeHours)
+      ? (() => {
+          parameters.push(Math.floor(input.maxAgeHours));
+          return `and s.completed_at is not null and s.completed_at >= timezone('utc', now()) - ($${parameters.length}::int * interval '1 hour')`;
+        })()
       : "";
-  const scanFromParameter = typeof input?.maxAgeHours === "number" ? "$4" : "$3";
+  const minPagesClause =
+    typeof input?.minPagesRequested === "number" && Number.isFinite(input.minPagesRequested)
+      ? (() => {
+          parameters.push(Math.floor(input.minPagesRequested));
+          return `and s.pages_requested >= $${parameters.length}`;
+        })()
+      : "";
   return queryOne<{ id: string }>(
     `select s.id
        from scans s
@@ -51,14 +64,13 @@ export async function findLatestCompletedAnonymousScanForDomain(normalizedDomain
       where s.organization_id is null
         and d.organization_id is null
         and s.status = 'completed'
-        and coalesce(s.scan_config_json->>'scanFrom', '${DEFAULT_SCAN_FROM}') = ${scanFromParameter}
+        and coalesce(s.scan_config_json->>'scanFrom', '${DEFAULT_SCAN_FROM}') = $3
+        ${minPagesClause}
         and (lower(d.hostname) = lower($1) or lower(d.normalized_url) = lower($2))
         ${maxAgeClause}
       order by s.completed_at desc nulls last, s.created_at desc
       limit 1`,
-    typeof input?.maxAgeHours === "number"
-      ? [normalizedDomain, `https://${normalizedDomain}`, input.maxAgeHours, scanFrom]
-      : [normalizedDomain, `https://${normalizedDomain}`, scanFrom],
+    parameters,
     { readOnly: true }
   );
 }

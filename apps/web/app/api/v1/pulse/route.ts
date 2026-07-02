@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import { getPlanDefinition, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { restrictScanFromForUser } from "../../../../server/scans/restricted-scan-options";
 import { absoluteUrl } from "../../../../lib/seo";
 import { applyPulseCors, pulseOptionsResponse } from "../../../../lib/pulse/cors";
@@ -51,6 +51,8 @@ const SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
 const GPT_ACTION_HOURLY_LIMIT = 5;
 const GPT_ACTION_DAILY_LIMIT = 20;
 const GPT_ACTION_MAX_WAIT_SECONDS = 35;
+const PULSE_SCAN_COVERAGE_PLAN_CODE = "team" as const;
+const PULSE_MIN_REUSABLE_PAGES_REQUESTED = getPlanDefinition(PULSE_SCAN_COVERAGE_PLAN_CODE).maxPagesPerScan;
 
 type PulseRouteOptions = {
   gptAction?: boolean;
@@ -587,8 +589,17 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     });
     const recentScan = forceNewScan
       ? null
-      : await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, { maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS, scanFrom });
-    const latestScan = recentScan ?? (await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, { scanFrom }));
+      : await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, {
+          maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS,
+          minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
+          scanFrom
+        });
+    const latestScan =
+      recentScan ??
+      (await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, {
+        minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
+        scanFrom
+      }));
     const latestScanRecord = latestScan ? await loadPulseScanRecord(latestScan.id) : null;
     const latestScanQuality = latestScanRecord ? assessPulseScanRecordQuality(latestScanRecord) : null;
     const recentScanWasUnusable = Boolean(recentScan && latestScanRecord && latestScanQuality && !latestScanQuality.usable);
@@ -690,7 +701,9 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
 
     const queued = await createAnonymousFullScan({
       bypassRecentScanReuse: forceNewScan || recentScanWasUnusable,
+      coveragePlanCode: PULSE_SCAN_COVERAGE_PLAN_CODE,
       hostname: normalized.normalizedDomain,
+      minimumReusablePagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
       normalizedUrl: normalized.normalizedUrl,
       provenance: {
         source: gptAction ? "gpt_action" : "pulse_api",

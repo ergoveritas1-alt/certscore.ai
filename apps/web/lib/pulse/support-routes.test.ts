@@ -116,6 +116,10 @@ test("GPT Pulse route source preserves public-mode gates", () => {
   assert.match(source, /public GPT Action uses latest available Pulse results only/);
   assert.match(source, /GPT_ACTION_HOURLY_LIMIT = 5/);
   assert.match(source, /GPT_ACTION_DAILY_LIMIT = 20/);
+  assert.match(source, /PULSE_SCAN_COVERAGE_PLAN_CODE = "team"/);
+  assert.match(source, /PULSE_MIN_REUSABLE_PAGES_REQUESTED = getPlanDefinition\(PULSE_SCAN_COVERAGE_PLAN_CODE\)\.maxPagesPerScan/);
+  assert.match(source, /coveragePlanCode: PULSE_SCAN_COVERAGE_PLAN_CODE/);
+  assert.match(source, /minimumReusablePagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
   assert.match(gptRoute, /channel", "gpt_action"/);
 });
 
@@ -129,9 +133,12 @@ test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass"
 
   assert.match(reuseSource, /RECENT_SCAN_REUSE_WINDOW_HOURS = 24/);
   assert.match(reuseSource, /getTime\(\)/);
+  assert.match(reuseSource, /minPagesRequested/);
+  assert.match(reuseSource, /s\.pages_requested >=/);
   assert.match(pulseRoute, /requestedFreshness === "refresh"/);
   assert.match(pulseRoute, /parseForceNewScan\(url\.searchParams\.get\("forceNewScan"\)\) \|\| requestedFreshness === "refresh"/);
   assert.match(pulseRoute, /maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS/);
+  assert.match(pulseRoute, /minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
   assert.match(pulseRoute, /resolutionMode: "reused_existing_scan"/);
   assert.match(fullScanRoute, /parseForceNewScan/);
   assert.match(pulseRoute, /url\.searchParams\.get\("scanFrom"\) \?\? url\.searchParams\.get\("geo"\)/);

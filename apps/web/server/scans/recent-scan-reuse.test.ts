@@ -19,6 +19,14 @@ test("recent scan database reuse is isolated by scan-from value", () => {
   assert.match(source, /DEFAULT_SCAN_FROM/);
 });
 
+test("recent scan database reuse can require a minimum requested page count", () => {
+  const source = readFileSync("apps/web/server/scans/recent-scan-reuse.ts", "utf8");
+
+  assert.match(source, /minPagesRequested/);
+  assert.match(source, /Number\.isFinite\(input\.minPagesRequested\)/);
+  assert.match(source, /s\.pages_requested >=/);
+});
+
 test("recent scan reuse selects the newest completed scan in the 24 hour window", () => {
   const now = new Date("2026-05-19T12:00:00.000Z");
   const recent = findRecentCompletedScanInHistory(

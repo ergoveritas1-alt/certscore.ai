@@ -46,6 +46,7 @@ export function findRecentCompletedScanInHistory(scans: ScanHistoryCandidate[], 
 
 export async function findRecentCompletedScanForDomain(input: {
   allowCrossWorkspace?: boolean;
+  minPagesRequested?: number;
   normalizedDomain: string;
   normalizedUrl: string;
   organizationId: string | null;
@@ -53,7 +54,7 @@ export async function findRecentCompletedScanForDomain(input: {
   windowHours?: number;
 }) {
   const scanFrom = normalizeScanFrom(input.scanFrom);
-  const parameters = input.allowCrossWorkspace
+  const parameters: Array<string | number | null> = input.allowCrossWorkspace
     ? [input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl, scanFrom]
     : [input.organizationId, input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl, scanFrom];
   const organizationFilter = input.allowCrossWorkspace
@@ -64,6 +65,13 @@ export async function findRecentCompletedScanForDomain(input: {
   const domainParameter = input.allowCrossWorkspace ? "$2" : "$3";
   const urlParameter = input.allowCrossWorkspace ? "$3" : "$4";
   const scanFromParameter = input.allowCrossWorkspace ? "$4" : "$5";
+  const minPagesClause =
+    typeof input.minPagesRequested === "number" && Number.isFinite(input.minPagesRequested)
+      ? (() => {
+          parameters.push(Math.floor(input.minPagesRequested));
+          return `and s.pages_requested >= $${parameters.length}`;
+        })()
+      : "";
 
   return queryOne<CompletedScanCandidate>(
     `select s.id, s.organization_id as "organizationId", s.completed_at as "completedAt"
@@ -75,6 +83,7 @@ export async function findRecentCompletedScanForDomain(input: {
         and s.completed_at is not null
         and s.completed_at >= timezone('utc', now()) - (${windowParameter}::int * interval '1 hour')
         and coalesce(s.scan_config_json->>'scanFrom', '${DEFAULT_SCAN_FROM}') = ${scanFromParameter}
+        ${minPagesClause}
         and (lower(d.hostname) = lower(${domainParameter}) or lower(d.normalized_url) = lower(${urlParameter}))
       order by s.completed_at desc, s.created_at desc
       limit 1`,
