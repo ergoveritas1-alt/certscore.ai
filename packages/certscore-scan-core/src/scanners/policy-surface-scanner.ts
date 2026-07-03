@@ -29,6 +29,7 @@ const MIN_SUBSTANTIVE_POLICY_TEXT_CHARS = 2_500;
 const MAX_CANONICAL_POLICY_LINK_FETCHES = 2;
 const MAX_POLICY_SURFACE_TEXT_ARTIFACT_CHARS = 256_000;
 const MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS = 1_000_000;
+const MAX_FETCHED_TEXT_CHARS = 500_000;
 const MAX_POLICY_PDF_BYTES = 2_500_000;
 const MAX_POLICY_PDF_PAGES = 12;
 const MAX_POLICY_PDF_TEXT_CHARS = 500_000;
@@ -3303,7 +3304,7 @@ async function fetchTextOnce(url: string, timeoutMs: number): Promise<FetchTextR
       documentFormat: "text",
       ok: true,
       status: response.status,
-      text: decodeFetchedPolicyText(body, contentType).slice(0, 500_000),
+      text: boundedFetchedText(decodeFetchedPolicyText(body, contentType), MAX_FETCHED_TEXT_CHARS),
     };
   } catch {
     return { ok: false, text: "" };
@@ -4242,6 +4243,15 @@ function decodeEmbeddedHtml(html: string): string {
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function boundedFetchedText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const headChars = Math.floor(maxChars * 0.65);
+  const tailChars = Math.max(0, maxChars - headChars);
+  return `${value.slice(0, headChars)}\n\n[CertScore retained tail of oversized response for footer policy discovery.]\n\n${value.slice(value.length - tailChars)}`;
 }
 
 function titleFromHtml(html: string): string | undefined {

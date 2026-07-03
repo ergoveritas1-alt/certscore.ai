@@ -2,10 +2,10 @@
 
 import { loadOrganizationSettings } from "./repository";
 
-export type DefaultScanFromSetting = "eu_de" | "eu_ie" | "california";
+export type DefaultScanFromSetting = "eu_de" | "eu_ie";
 
 function normalizeDefaultScanFrom(value: unknown): DefaultScanFromSetting {
-  if (value === "eu_de" || value === "california") {
+  if (value === "eu_de") {
     return value;
   }
 

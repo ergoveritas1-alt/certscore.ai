@@ -1,6 +1,6 @@
 const discoveryDocument = {
   name: "CertScore Pulse beta",
-  version: "0.5.1",
+  version: "0.5.3",
   description:
     "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.",
   capabilities: {

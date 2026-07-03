@@ -157,6 +157,11 @@ export type UnifiedFindingDetails =
         vendorDisplayLimitedToAnchoredEvidence?: boolean;
       };
       requestUrls?: string[];
+      firstClassifiedTrackerAtMs?: number | null;
+      cmpScriptLoadedAtMs?: number | null;
+      cmpReadyAtMs?: number | null;
+      cmpGapMs?: number | null;
+      cmpVendorName?: string | null;
     }
   | {
       family: "sensitive_data";
@@ -875,6 +880,7 @@ const UNIFIED_FINDING_TOP_FINDING_IDS: Record<string, string[]> = {
   fingerprinting_observed: ["fingerprinting_related_signals_observed", "probable_fingerprinting"],
   focus_management_issue: ["focus_management_issue"],
   forced_consent_wall: ["forced_consent_interaction"],
+  consent_infrastructure__cmp_load_order: ["cmp_load_order_gap"],
   preconsent_tracking: ["pre_consent_tracking_detected"],
   reject_button_missing: ["reject_option_missing_or_hidden", "consent_dark_patterns_detected"],
   reject_did_not_reduce_tracking: ["reject_tracking_persists_after_reject"],
@@ -1013,6 +1019,7 @@ const CONTRADICTION_FINDING_IDS = new Set([
 
 const CONSENT_TRACKING_FINDING_IDS = new Set([
   "preconsent_tracking",
+  "consent_infrastructure__cmp_load_order",
   "consent_mechanism_absent",
   "consent_surface_missing",
   "reject_did_not_reduce_tracking",
@@ -1940,7 +1947,19 @@ function buildUnifiedFindingDetails(input: {
         ...(Array.isArray(input.fallbackEvidence?.consentBaselineTrackerEvidenceUrls)
           ? (input.fallbackEvidence?.consentBaselineTrackerEvidenceUrls as string[])
           : [])
-      ])
+      ]),
+      firstClassifiedTrackerAtMs:
+        typeof input.fallbackEvidence?.firstClassifiedTrackerAtMs === "number" ? input.fallbackEvidence.firstClassifiedTrackerAtMs : null,
+      cmpScriptLoadedAtMs:
+        typeof input.fallbackEvidence?.cmpScriptLoadedAtMs === "number" ? input.fallbackEvidence.cmpScriptLoadedAtMs : null,
+      cmpReadyAtMs:
+        typeof input.fallbackEvidence?.cmpReadyAtMs === "number" ? input.fallbackEvidence.cmpReadyAtMs : null,
+      cmpGapMs:
+        typeof input.fallbackEvidence?.cmpGapMs === "number" ? input.fallbackEvidence.cmpGapMs : null,
+      cmpVendorName:
+        typeof input.fallbackEvidence?.cmpVendorName === "string" && input.fallbackEvidence.cmpVendorName.trim().length > 0
+          ? input.fallbackEvidence.cmpVendorName
+          : null
     } satisfies UnifiedFindingDetails;
   }
 
@@ -5686,6 +5705,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Block non-essential trackers until consent is captured and verify the reject path suppresses them.",
     whyThisMatters: "Tracking before a clear user choice can undermine consent expectations and create immediate transparency risk."
   },
+  consent_infrastructure__cmp_load_order: {
+    suggestedFix: "Load the CMP before tag, ad, and analytics infrastructure, or gate those tags on CMP readiness before they can run.",
+    whyThisMatters: "When tracker activity starts before consent infrastructure is available, the consent control may be structurally too late to govern the first page load."
+  },
   reject_did_not_reduce_tracking: {
     suggestedFix: "Verify the reject path actually suppresses the non-essential vendors that were present at baseline, and re-test the post-reject runtime path with concrete request-level evidence.",
     whyThisMatters: "If non-essential tracking persists after reject, the site may be signaling a meaningful choice that is not actually enforced."
@@ -6828,7 +6851,24 @@ function mergeUnifiedFindingDetails(
       return {
         ...n,
         vendors: uniqueStrings([...(e.vendors ?? []), ...(n.vendors ?? [])]),
-        requestUrls: uniqueStrings([...(e.requestUrls ?? []), ...(n.requestUrls ?? [])])
+        requestUrls: uniqueStrings([...(e.requestUrls ?? []), ...(n.requestUrls ?? [])]),
+        firstClassifiedTrackerAtMs:
+          typeof e.firstClassifiedTrackerAtMs === "number" && typeof n.firstClassifiedTrackerAtMs === "number"
+            ? Math.min(e.firstClassifiedTrackerAtMs, n.firstClassifiedTrackerAtMs)
+            : e.firstClassifiedTrackerAtMs ?? n.firstClassifiedTrackerAtMs,
+        cmpScriptLoadedAtMs:
+          typeof e.cmpScriptLoadedAtMs === "number" && typeof n.cmpScriptLoadedAtMs === "number"
+            ? Math.min(e.cmpScriptLoadedAtMs, n.cmpScriptLoadedAtMs)
+            : e.cmpScriptLoadedAtMs ?? n.cmpScriptLoadedAtMs,
+        cmpReadyAtMs:
+          typeof e.cmpReadyAtMs === "number" && typeof n.cmpReadyAtMs === "number"
+            ? Math.min(e.cmpReadyAtMs, n.cmpReadyAtMs)
+            : e.cmpReadyAtMs ?? n.cmpReadyAtMs,
+        cmpGapMs:
+          typeof e.cmpGapMs === "number" && typeof n.cmpGapMs === "number"
+            ? Math.max(e.cmpGapMs, n.cmpGapMs)
+            : e.cmpGapMs ?? n.cmpGapMs,
+        cmpVendorName: e.cmpVendorName ?? n.cmpVendorName
       };
     }
     case "contradiction": {

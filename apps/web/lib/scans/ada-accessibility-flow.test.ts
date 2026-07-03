@@ -33,7 +33,7 @@ function makeValidationFinding(evidence: Record<string, unknown>): ScanValidatio
   };
 }
 
-test("ADA accessibility flow promotes persisted WS axe examples into the DOJ ADA executive lens", () => {
+test("accessibility flow keeps persisted WS axe examples out of non-GDPR regulatory lenses", () => {
   const persistedRows = [
     {
       description: "Buttons must have discernible text",
@@ -104,19 +104,10 @@ test("ADA accessibility flow promotes persisted WS axe examples into the DOJ ADA
     beforeConsentCookieCount: 0,
     thirdPartyRequestCount: 0
   });
-  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-
-  assert.ok(adaLens);
-  assert.equal(adaLens.minimal, undefined);
-  assert.notEqual(adaLens.ratingLabel, "Audit-only");
-  assert.ok(
-    adaLens.findings.some((finding) =>
-      /Representative axe examples: 2 rules across 2 pages; max impact: critical\./.test(finding.label)
-    )
-  );
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
-test("ADA accessibility flow leaves score-only evidence audit-only with explicit telemetry", () => {
+test("accessibility flow leaves score-only evidence audit-only with explicit telemetry", () => {
   const validationFinding = makeValidationFinding({
     pageUrl: "https://example.com/",
     value: 88
@@ -137,10 +128,5 @@ test("ADA accessibility flow leaves score-only evidence audit-only with explicit
     beforeConsentCookieCount: 0,
     thirdPartyRequestCount: 0
   });
-  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-
-  assert.ok(adaLens);
-  assert.equal(adaLens.minimal, true);
-  assert.equal(adaLens.ratingLabel, "Audit-only");
-  assert.equal(adaLens.score, null);
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });

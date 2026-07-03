@@ -15,7 +15,7 @@ test("CertScore GPT Store prompt stays aligned with the ChatGPT Action contract"
   assert.match(rootPrompt, /format: markdown/);
   assert.match(rootPrompt, /detail: standard/);
   assert.match(rootPrompt, /wait: 35/);
-  assert.match(rootPrompt, /scanFrom: eu_ie or california/);
+  assert.match(rootPrompt, /scanFrom: eu_ie/);
   assert.match(rootPrompt, /checkPulseConnectivity/);
   assert.match(rootPrompt, /\/api\/v1\/pulse\/gpt\?url=<URL>&format=markdown&detail=standard&wait=35/);
   assert.match(rootPrompt, /not legal advice, certification, or a compliance determination/);

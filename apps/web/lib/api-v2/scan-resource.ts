@@ -43,6 +43,8 @@ type PulseFindingLike = {
     phase?: string | null;
     exampleCount?: number;
     examplesShown?: number;
+    examplesAvailable?: number;
+    authRequiredForExamples?: boolean;
     hasTimingAnchor?: boolean;
     hasVendorAnchor?: boolean;
     hasConsentContext?: boolean;
@@ -52,7 +54,7 @@ type PulseFindingLike = {
   nextStep?: string;
 };
 type ApiV2FindingCriticalityValue = "critical" | "high" | "medium" | "low" | "info" | "unknown";
-type ApiV2FindingConfidenceValue = "strong" | "moderate" | "weak" | "unknown";
+type ApiV2FindingConfidenceValue = "strong" | "good" | "moderate" | "weak" | "unknown";
 type ApiV2EvidenceBasisValue = "runtime_observation" | "policy_surface_detection" | "accessibility_check" | "public_report_projection";
 type ApiV2EvidenceEventTypeValue = "request" | "page" | "accessibility_check" | "policy_surface";
 type PulseStatusLike = {
@@ -100,7 +102,7 @@ function riskLevelFromScore(score: number | null) {
 }
 
 function publicScanFrom(value: string | null | undefined) {
-  return value === "eu_ie" || value === "california" ? value : undefined;
+  return value === "eu_ie" ? value : undefined;
 }
 
 function normalizeScanStatus(value: string | null | undefined) {
@@ -124,7 +126,7 @@ function normalizeCriticality(value: unknown): ApiV2FindingCriticalityValue {
 }
 
 function normalizeConfidence(value: unknown): ApiV2FindingConfidenceValue {
-  return value === "strong" || value === "moderate" || value === "weak" ? value : "unknown";
+  return value === "strong" || value === "good" || value === "moderate" || value === "weak" ? value : "unknown";
 }
 
 function normalizeEvidenceBasis(value: unknown): ApiV2EvidenceBasisValue {
@@ -152,12 +154,22 @@ function eventObservedAtMs(event: Record<string, unknown>) {
   return finiteInt(event.observedAtMs) ?? finiteInt(event.timestampMs) ?? finiteInt(event.firstSeenMs);
 }
 
+function eventVendor(event: Record<string, unknown>) {
+  return (
+    stringOrNull(event.vendor) ??
+    stringOrNull(event.vendorName) ??
+    stringOrNull(event.endpointVendor) ??
+    stringOrNull(event.initiatingVendor) ??
+    stringOrNull(event.sourceVendor)
+  );
+}
+
 function buildApiV2EvidenceExamples(finding: PulseFindingLike) {
   const events = Array.isArray(finding.evidence?.exampleEvents) ? finding.evidence.exampleEvents : [];
   return events.slice(0, 5).map((event) =>
     apiV2EvidenceEventSummarySchema.parse({
       type: normalizeEvidenceEventType(event.type),
-      vendor: stringOrNull(event.vendor),
+      vendor: eventVendor(event),
       urlHost: stringOrNull(event.urlHost),
       registrableDomain: stringOrNull(event.registrableDomain),
       observedAtMs: eventObservedAtMs(event),
@@ -169,17 +181,24 @@ function buildApiV2EvidenceExamples(finding: PulseFindingLike) {
 function buildApiV2EvidenceSummary(finding: PulseFindingLike) {
   const examples = buildApiV2EvidenceExamples(finding);
   const exampleCount = finiteInt(finding.evidenceDigest?.exampleCount) ?? examples.length;
-  const examplesShown = Math.min(finiteInt(finding.evidenceDigest?.examplesShown) ?? examples.length, examples.length);
+  const examplesShown = examples.length;
+  const examplesAvailable = finiteInt(finding.evidenceDigest?.examplesAvailable) ?? exampleCount;
+  const eventTimingAnchor = examples.some((example) => finiteInt(example.observedAtMs) !== null);
+  const sourceEvents = Array.isArray(finding.evidence?.exampleEvents) ? finding.evidence.exampleEvents : [];
+  const eventVendorAnchor = sourceEvents.some((event) => eventVendor(event) !== null);
+  const firstExamplePhase = examples.map((example) => stringOrNull(example.phase)).find((phase): phase is string => phase !== null);
 
   return {
     basis: normalizeEvidenceBasis(finding.evidenceDigest?.basis),
     summary: finding.evidence?.summary ?? finding.plainEnglish ?? finding.label ?? finding.id,
-    phase: stringOrNull(finding.evidenceDigest?.phase ?? finding.evidence?.observedPhase),
+    phase: stringOrNull(finding.evidenceDigest?.phase) ?? firstExamplePhase ?? stringOrNull(finding.evidence?.observedPhase),
     exampleCount,
     examplesShown,
+    examplesAvailable,
+    authRequiredForExamples: finding.evidenceDigest?.authRequiredForExamples === true,
     ...(examples.length > 0 ? { examples } : {}),
-    ...(finding.evidenceDigest?.hasTimingAnchor !== undefined ? { hasTimingAnchor: finding.evidenceDigest.hasTimingAnchor } : {}),
-    ...(finding.evidenceDigest?.hasVendorAnchor !== undefined ? { hasVendorAnchor: finding.evidenceDigest.hasVendorAnchor } : {}),
+    hasTimingAnchor: eventTimingAnchor || finding.evidenceDigest?.hasTimingAnchor === true,
+    hasVendorAnchor: eventVendorAnchor || finding.evidenceDigest?.hasVendorAnchor === true,
     ...(finding.evidenceDigest?.hasConsentContext !== undefined ? { hasConsentContext: finding.evidenceDigest.hasConsentContext } : {}),
     ...(finding.evidenceDigest?.hasPolicyAnchor !== undefined ? { hasPolicyAnchor: finding.evidenceDigest.hasPolicyAnchor } : {})
   };

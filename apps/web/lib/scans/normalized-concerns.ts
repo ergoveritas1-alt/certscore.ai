@@ -3,6 +3,7 @@ import {
   getReportUnifiedFindingByAlias,
   getReportUnifiedFindingForSignal,
   getReportUnifiedFindingForValidationRule,
+  getKnownCmpVendorName,
   type ReportSignalSource
 } from "@website-signal-risk-scanner/shared";
 import {
@@ -58,6 +59,7 @@ import { deriveConcernPolicy } from "./concern-policy";
 import { GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE } from "./gdpr-transparency-production-profile";
 import type { FetchQuality } from "./signal-fallback-evidence";
 import { normalizeScanValidationFinding, type ScanValidationFinding } from "./validation-review-linking";
+import { buildPromotionGradePreconsentRequests } from "./preconsent-public-evidence";
 const MAX_POLICY_SNIPPET_LENGTH = 600;
 
 function truncatePolicySnippet(value: string): string {
@@ -2267,6 +2269,146 @@ function getRuntimeNumber(record: Record<string, unknown> | null | undefined, ke
   return null;
 }
 
+function getRuntimeObjectArray(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  return keys.flatMap((key) => getPlainRecordArray(record?.[key]));
+}
+
+function getHostnameFromUrl(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function getCmpLoadOrderSeverity(gapMs: number): ReviewFindingSeverity {
+  if (gapMs > 3000) {
+    return "high";
+  }
+  if (gapMs > 500) {
+    return "medium";
+  }
+  return "low";
+}
+
+function buildCmpLoadOrderConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const hybridRuntimeEvidence = getRuntimeRecord(runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
+  const consentTimeline =
+    getRuntimeRecord(runtimeArtifacts, ["consentTimeline", "consent_timeline"]) ??
+    getRuntimeRecord(hybridRuntimeEvidence, ["consentTimeline", "consent_timeline"]);
+  const requestRows = [
+    ...getRuntimeObjectArray(runtimeArtifacts, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"]),
+    ...getRuntimeObjectArray(hybridRuntimeEvidence, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"])
+  ];
+  const classifiedTrackerRequests = buildPromotionGradePreconsentRequests({
+    rows: requestRows,
+    consentTimeline,
+    maxItems: 12
+  });
+  const firstClassifiedTrackerAtMs = classifiedTrackerRequests
+    .map((request) => request.firstSeenMs)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    .sort((left, right) => left - right)[0] ?? null;
+
+  const allRuntimeRequestRows = [
+    ...getRuntimeObjectArray(runtimeArtifacts, ["requestObservations", "request_observations", "networkRequests", "network_requests"]),
+    ...getRuntimeObjectArray(hybridRuntimeEvidence, ["requestObservations", "request_observations", "networkRequests", "network_requests"])
+  ];
+  const cmpRequestRows = allRuntimeRequestRows.flatMap((row) => {
+    const requestUrl = getRuntimeString(row, ["requestUrl", "request_url", "url", "src"]);
+    const host = getRuntimeString(row, ["hostname", "host", "domain"]) ?? getHostnameFromUrl(requestUrl);
+    const resourceType = getRuntimeString(row, ["resourceType", "resource_type", "type"]);
+    const cmpVendorName = getKnownCmpVendorName({
+      domains: host ? [host] : [],
+      urls: requestUrl ? [requestUrl] : []
+    });
+    const observedAtMs = getRuntimeNumber(row, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms", "tsMs", "ts_ms"]);
+    if (!cmpVendorName || observedAtMs === null) {
+      return [];
+    }
+    return [{
+      cmpVendorName,
+      host,
+      requestUrl,
+      resourceType,
+      observedAtMs
+    }];
+  }).sort((left, right) => left.observedAtMs - right.observedAtMs);
+
+  const firstCmpRequest = cmpRequestRows[0] ?? null;
+  const cmpScriptLoadedAtMs = firstCmpRequest?.observedAtMs ?? null;
+  const cmpReadyAtMs =
+    getRuntimeNumber(consentTimeline, [
+      "cmpReadyAtMs",
+      "cmp_ready_at_ms",
+      "firstConsentCookieSetMs",
+      "first_consent_cookie_set_ms",
+      "firstConsentActionMs",
+      "first_consent_action_ms",
+      "firstCmpVisibleMs",
+      "first_cmp_visible_ms"
+    ]) ?? cmpScriptLoadedAtMs;
+
+  if (firstClassifiedTrackerAtMs === null || cmpScriptLoadedAtMs === null) {
+    return [];
+  }
+
+  const cmpGapMs = cmpScriptLoadedAtMs - firstClassifiedTrackerAtMs;
+  if (cmpGapMs <= 0) {
+    return [];
+  }
+
+  const trackerVendors = uniqueStrings(classifiedTrackerRequests.map((request) => request.vendorName)).slice(0, 8);
+  const trackerHosts = uniqueStrings(classifiedTrackerRequests.map((request) => request.hostname)).slice(0, 8);
+  const cmpVendorName = firstCmpRequest?.cmpVendorName ?? null;
+  const rawEvidence = {
+    cmpLoadOrderObserved: true,
+    firstClassifiedTrackerAtMs,
+    cmpScriptLoadedAtMs,
+    cmpReadyAtMs,
+    cmpGapMs,
+    cmpVendorName,
+    cmpRequestHost: firstCmpRequest?.host ?? null,
+    cmpRequestResourceType: firstCmpRequest?.resourceType ?? null,
+    trackerVendors,
+    trackerHosts,
+    consentTimeline,
+    requestPurposeClassificationConfidence: requestRows,
+    signalKey: "privacy.cmp_load_order_gap",
+    signalLabel: "CMP load-order gap observed",
+    signalValue: true,
+    unifiedFindingId: "consent_infrastructure__cmp_load_order"
+  };
+
+  return [
+    buildConcernFromSharedInput({
+      categoryId: "preconsent_tracking_incidents",
+      description: `Classified tracker activity was first observed at ${Math.round(firstClassifiedTrackerAtMs)}ms, before CMP infrastructure was observed at ${Math.round(cmpScriptLoadedAtMs)}ms.`,
+      domainContext,
+      evidence: [
+        `First classified tracker: ${Math.round(firstClassifiedTrackerAtMs)}ms.`,
+        `First CMP infrastructure request${cmpVendorName ? ` (${cmpVendorName})` : ""}: ${Math.round(cmpScriptLoadedAtMs)}ms.`
+      ],
+      observedValue: `${Math.round(cmpGapMs)}ms CMP load-order gap`,
+      originKey: "privacy.cmp_load_order_gap",
+      originType: "runtime_artifact",
+      rawEvidence,
+      severity: getCmpLoadOrderSeverity(cmpGapMs),
+      signalKey: "privacy.cmp_load_order_gap",
+      signalLabel: "CMP load-order gap observed",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Consent infrastructure loaded after tracker activity"
+    })
+  ];
+}
+
 function getPolicyDisclosureSummaryForGdprTransparency(
   runtimeArtifacts: Record<string, unknown> | null | undefined
 ) {
@@ -2545,6 +2687,7 @@ export function buildNormalizedConcerns(input: {
     }),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildCmpLoadOrderConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext)
   ];
 

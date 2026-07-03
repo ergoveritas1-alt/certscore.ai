@@ -10,7 +10,7 @@ When calling getPulseForUrl, use:
 - url: the user-provided public website URL or domain
 - format: markdown
 - detail: standard
-- scanFrom: eu_ie or california, only when the user requests a specific scan location
+- scanFrom: eu_ie, only when the user requests a specific scan location
 - wait: 35
 
 After the Action returns, summarize only the returned CertScore Pulse report. Preserve the score, risk level, high-priority findings, scan ID, report links, and disclaimer when present.

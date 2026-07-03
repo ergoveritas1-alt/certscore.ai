@@ -100,6 +100,48 @@ const pulse = {
   disclaimer: "Automated public-web observations for review."
 } as const;
 
+function apiFinding(id: string) {
+  return {
+    type: "certscore_finding",
+    id,
+    scanId: "scan_123",
+    label: "Tracking started before consent",
+    criticality: "high",
+    confidence: "good",
+    plainEnglish: "Runtime evidence showed non-essential tracking before a consent choice.",
+    evidence: {
+      basis: "runtime_observation",
+      summary: "A third-party tracking request was observed before consent.",
+      exampleCount: 1,
+      examplesShown: 1,
+      hasTimingAnchor: true,
+      hasVendorAnchor: true
+    },
+    reviewLenses: ["GDPR / ePrivacy"],
+    disclaimer: "Automated public-web observations for review."
+  };
+}
+
+function preConsentRow(id: string) {
+  return {
+    id,
+    kind: "tracker",
+    name: "Example Analytics",
+    vendor: "Example Analytics",
+    host: "analytics.example.test",
+    registrableDomain: "example.test",
+    priority: "high",
+    confidence: "high",
+    party: "third_party",
+    requestCount: 1,
+    phase: "pre_consent",
+    observedBeforeConsent: true,
+    evidenceBasis: "public_report_projection",
+    firstObservedAtMs: 1200,
+    pageUrlHost: "example.com"
+  };
+}
+
 test("CertScore MCP server exposes the scoped v1 tool surface", async () => {
   await withMcpClient(async (client) => {
     const tools = await client.listTools();
@@ -133,6 +175,8 @@ test("CertScore MCP server tool metadata stays aligned with shared contracts", a
       assert.ok(listed, `Expected listed MCP tool ${contract.name}`);
       assert.equal(listed.title, contract.title);
       assert.equal(listed.description, contract.description);
+      assert.deepEqual(listed.annotations, contract.annotations);
+      assert.equal(listed.outputSchema?.type, "object");
     }
   });
 });
@@ -306,7 +350,7 @@ test("scan_site uses API v2 scan creation", async () => {
       const result = parseToolJson(
         await client.callTool({
           name: "scan_site",
-          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "california" }
+          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie" }
         })
       );
       assert.equal(result.type, "certscore_scan_job");
@@ -460,7 +504,7 @@ test("API v2 MCP tools return scan, findings, and latest domain resources", asyn
       body: {
         type: "certscore_finding_list",
         scanId: "scan_123",
-        findings: []
+        findings: Array.from({ length: 3 }, (_, index) => apiFinding(`finding_${index + 1}`))
       }
     },
     {
@@ -469,8 +513,8 @@ test("API v2 MCP tools return scan, findings, and latest domain resources", asyn
         type: "certscore_pre_consent_cookies_trackers",
         scanId: "scan_123",
         domain: "example.com",
-        summary: { rowCount: 0, trackerCount: 0, cookieCount: 0, requestCount: 0 },
-        rows: []
+        summary: { rowCount: 3, trackerCount: 0, cookieCount: 0, requestCount: 0 },
+        rows: Array.from({ length: 3 }, (_, index) => preConsentRow(`row_${index + 1}`))
       }
     },
     {
@@ -487,33 +531,46 @@ test("API v2 MCP tools return scan, findings, and latest domain resources", asyn
         type: "certscore_pre_consent_cookies_trackers",
         scanId: "scan_123",
         domain: "example.com",
-        summary: { rowCount: 0, trackerCount: 0, cookieCount: 0, requestCount: 0 },
-        rows: []
+        summary: { rowCount: 3, trackerCount: 0, cookieCount: 0, requestCount: 0 },
+        rows: Array.from({ length: 3 }, (_, index) => preConsentRow(`latest_row_${index + 1}`))
       }
     }
   ]);
   try {
     await withMcpClient(async (client) => {
       const scan = parseToolJson(await client.callTool({ name: "get_scan", arguments: { scanId: "scan_123" } }));
-      const findings = parseToolJson(await client.callTool({ name: "list_findings", arguments: { scanId: "scan_123" } }));
-      const inventory = parseToolJson(await client.callTool({ name: "get_pre_consent_cookies_trackers", arguments: { scanId: "scan_123" } }));
+      const findings = parseToolJson(await client.callTool({ name: "list_findings", arguments: { scanId: "scan_123", limit: 1, offset: 1 } }));
+      const inventory = parseToolJson(await client.callTool({ name: "get_pre_consent_cookies_trackers", arguments: { scanId: "scan_123", maxRows: 2 } }));
       const latest = parseToolJson(
-        await client.callTool({ name: "get_latest_domain_scan", arguments: { domain: "example.com", scanFrom: "california" } })
+        await client.callTool({ name: "get_latest_domain_scan", arguments: { domain: "example.com", scanFrom: "eu_ie" } })
       );
       const latestInventory = parseToolJson(
-        await client.callTool({ name: "get_latest_domain_pre_consent_cookies_trackers", arguments: { domain: "example.com", scanFrom: "california" } })
+        await client.callTool({ name: "get_latest_domain_pre_consent_cookies_trackers", arguments: { domain: "example.com", scanFrom: "eu_ie", maxRows: 1 } })
       );
 
       assert.equal(scan.type, "certscore_scan");
       assert.equal(findings.type, "certscore_finding_list");
+      assert.deepEqual((findings.findings as Array<{ id: string }>).map((finding) => finding.id), ["finding_2"]);
+      assert.deepEqual(findings.pagination, {
+        limit: 1,
+        offset: 1,
+        returned: 1,
+        total: 3,
+        truncated: true
+      });
       assert.equal(inventory.type, "certscore_pre_consent_cookies_trackers");
+      assert.equal((inventory.rows as unknown[]).length, 2);
+      assert.equal((inventory.summary as Record<string, unknown>).truncated, true);
+      assert.equal((inventory.summary as Record<string, unknown>).totalRowCount, 3);
       assert.equal(latest.type, "certscore_domain_latest_scan");
       assert.equal(latestInventory.type, "certscore_pre_consent_cookies_trackers");
+      assert.equal((latestInventory.rows as unknown[]).length, 1);
+      assert.equal((latestInventory.summary as Record<string, unknown>).truncated, true);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123$/);
       assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/findings$/);
       assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/scan_123\/pre-consent-cookies-trackers$/);
-      assert.match(mock.calls[3] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=california$/);
-      assert.match(mock.calls[4] ?? "", /\/api\/v2\/domains\/example.com\/latest\/pre-consent-cookies-trackers\?scanFrom=california$/);
+      assert.match(mock.calls[3] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=eu_ie$/);
+      assert.match(mock.calls[4] ?? "", /\/api\/v2\/domains\/example.com\/latest\/pre-consent-cookies-trackers\?scanFrom=eu_ie$/);
     });
   } finally {
     mock.restore();
@@ -529,10 +586,12 @@ test("tool errors are returned as structured JSON", async () => {
   ]);
   try {
     await withMcpClient(async (client) => {
-      const result = parseToolJson(await client.callTool({ name: "create_scan", arguments: { url: "::::" } }));
+      const raw = await client.callTool({ name: "create_scan", arguments: { url: "::::" } });
+      const result = parseToolJson(raw);
       const error = result.error as Record<string, unknown>;
       assert.equal(error.name, "InvalidUrlError");
       assert.equal(error.code, "invalid_url");
+      assert.equal(raw.isError, true);
     });
   } finally {
     mock.restore();

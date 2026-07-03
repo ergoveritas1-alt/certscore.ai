@@ -62,6 +62,7 @@ const UNIFIED_FINDING_ID_TO_CERT_FINDING_ID: Record<string, keyof typeof CERT_SC
   accept_more_prominent_than_reject: "asymmetric_consent_ui",
   accept_only_banner: "consent_dark_patterns_detected",
   consent_control_not_reopenable: "consent_preference_reopen_control_not_observed",
+  consent_infrastructure__cmp_load_order: "cmp_load_order_gap",
   dismiss_without_reject: "consent_dark_patterns_detected",
   fingerprinting_observed: "probable_fingerprinting",
   forced_consent_wall: "forced_consent_interaction",
@@ -4398,12 +4399,56 @@ function attachConsentGovernanceDisclosureDetails(
   }
 }
 
+function buildCmpLoadOrderEvidenceDetails(packet: UnifiedFindingDisplayPacket): CertScoreFindingEvidenceDetails {
+  const details = packet.details?.family === "consent_tracking" ? packet.details : null;
+  const firstClassifiedTrackerAtMs = details?.firstClassifiedTrackerAtMs ?? null;
+  const cmpScriptLoadedAtMs = details?.cmpScriptLoadedAtMs ?? null;
+  const cmpReadyAtMs = details?.cmpReadyAtMs ?? null;
+  const cmpGapMs = details?.cmpGapMs ?? null;
+  const trackerVendors = uniqueStrings([
+    ...(details?.vendors ?? []),
+    ...getEntityValues(packet, /^(?:trackerVendors|preconsent_tracker_vendors|runtimeVendors)$/i)
+  ]).slice(0, 8);
+  const cmpVendorName =
+    details?.cmpVendorName ??
+    getEntityValues(packet, /^(?:cmpVendorName|consentPlatform|cmpName)$/i)[0] ??
+    null;
+
+  return {
+    cmpLoadOrder: {
+      firstClassifiedTrackerAtMs,
+      cmpScriptLoadedAtMs,
+      cmpReadyAtMs,
+      cmpGapMs,
+      cmpVendorName,
+      trackerVendors,
+      hasTimingAnchor: firstClassifiedTrackerAtMs !== null && cmpScriptLoadedAtMs !== null,
+      recommendation: "Load the CMP before tag, ad, and analytics infrastructure, or gate non-essential tags on CMP readiness."
+    },
+    timing: {
+      pageStartMs: 0,
+      firstRequestMs: null,
+      firstThirdPartyRequestMs: firstClassifiedTrackerAtMs,
+      firstThirdPartyTrackingRequestMs: firstClassifiedTrackerAtMs,
+      firstCookieSeenMs: null,
+      firstTrackingCookieSeenMs: null,
+      ...(cmpScriptLoadedAtMs !== null ? { cmpScriptLoadedAtMs } : {}),
+      ...(cmpReadyAtMs !== null ? { cmpReadyAtMs } : {}),
+      ...(cmpGapMs !== null ? { cmpGapMs } : {})
+    },
+    runtimeVendors: trackerVendors
+  };
+}
+
 function buildExecutiveEvidenceDetails(
   packet: UnifiedFindingDisplayPacket,
   findingId: keyof typeof CERT_SCORE_FINDING_REGISTRY
 ): CertScoreFindingEvidenceDetails | undefined {
   if (findingId === "pre_consent_tracking_detected") {
     return buildPreConsentTrackingEvidenceDetails(packet);
+  }
+  if (findingId === "cmp_load_order_gap") {
+    return buildCmpLoadOrderEvidenceDetails(packet);
   }
   if (findingId === "reject_tracking_persists_after_reject") {
     return buildRejectTrackingEvidenceDetails(packet);

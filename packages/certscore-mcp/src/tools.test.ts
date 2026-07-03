@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { explainFinding, exportFindings } from "./tools.js";
-import type { PulseResult } from "@certscore/sdk";
+import { CertScoreError, type PulseResult } from "@certscore/sdk";
+import { explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, toToolError, toToolResult } from "./tools.js";
 
 const report = {
   type: "certscore_pulse",
@@ -57,4 +57,69 @@ test("explainFinding returns available IDs when finding is absent", () => {
   const explanation = explainFinding(report, "missing");
   assert.equal(explanation.found, false);
   assert.deepEqual(explanation.availableFindingIds, ["pre_consent_tracking_detected"]);
+});
+
+test("toToolResult returns compact JSON text and structured content", () => {
+  const result = toToolResult({ type: "fixture", ok: true });
+  assert.deepEqual(result.structuredContent, { type: "fixture", ok: true });
+  assert.equal(result.content[0]?.type, "text");
+  assert.equal(result.content[0]?.text, "{\"type\":\"fixture\",\"ok\":true}");
+});
+
+test("toToolError marks CertScoreError results as MCP errors and truncates response bodies", () => {
+  const responseBody = "x".repeat(2_100);
+  const result = toToolError(new CertScoreError("Nope", {
+    code: "fixture",
+    responseBody,
+    status: 401
+  }));
+  const payload = result.structuredContent as {
+    error?: { responseBody?: string };
+  };
+
+  assert.equal(result.isError, true);
+  assert.equal(payload.error?.responseBody?.length, 2_012);
+  assert.match(payload.error?.responseBody ?? "", /…\[truncated\]$/);
+});
+
+test("toToolError marks generic errors as MCP errors", () => {
+  const result = toToolError(new Error("Boom"));
+  const payload = result.structuredContent as {
+    error?: { message?: string; name?: string };
+  };
+
+  assert.equal(result.isError, true);
+  assert.equal(payload.error?.name, "Error");
+  assert.equal(payload.error?.message, "Boom");
+});
+
+test("paginateFindingList applies MCP-side limit and offset", () => {
+  const result = paginateFindingList({
+    type: "certscore_finding_list",
+    findings: [{ id: "a" }, { id: "b" }, { id: "c" }]
+  }, { limit: 1, offset: 1 });
+
+  assert.deepEqual(result.findings, [{ id: "b" }]);
+  assert.deepEqual(result.pagination, {
+    limit: 1,
+    offset: 1,
+    returned: 1,
+    total: 3,
+    truncated: true
+  });
+});
+
+test("limitPreConsentRows caps inventory rows and records truncation metadata", () => {
+  const result = limitPreConsentRows({
+    type: "certscore_pre_consent_cookies_trackers",
+    summary: { rowCount: 3 },
+    rows: [{ id: "a" }, { id: "b" }, { id: "c" }]
+  }, { maxRows: 2 });
+
+  assert.deepEqual(result.rows, [{ id: "a" }, { id: "b" }]);
+  assert.deepEqual(result.summary, {
+    rowCount: 3,
+    totalRowCount: 3,
+    truncated: true
+  });
 });

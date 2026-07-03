@@ -2,16 +2,16 @@ import { z } from "zod";
 import { pulseResponseSchema } from "./pulse-v1.js";
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.0";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.1";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.";
 
 export const apiV2ScanStatusSchema = z.enum(["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited"]);
 export const apiV2ScanFreshnessSchema = z.enum(["latest", "refresh"]);
-export const apiV2ScanFromSchema = z.enum(["eu_ie", "california"]);
+export const apiV2ScanFromSchema = z.enum(["eu_ie"]);
 export const apiV2FindingCriticalitySchema = z.enum(["critical", "high", "medium", "low", "info", "unknown"]);
-export const apiV2FindingConfidenceSchema = z.enum(["strong", "moderate", "weak", "unknown"]);
+export const apiV2FindingConfidenceSchema = z.enum(["strong", "good", "moderate", "weak", "unknown"]);
 export const apiV2EvidenceBasisSchema = z.enum(["runtime_observation", "policy_surface_detection", "accessibility_check", "public_report_projection"]);
 export const apiV2PreConsentInventoryKindSchema = z.enum(["cookie", "tracker", "request", "storage", "unknown"]);
 export const apiV2PreConsentInventoryPhaseSchema = z.literal("pre_consent");
@@ -115,6 +115,8 @@ export const apiV2EvidenceSummarySchema = z
     phase: z.string().nullable().optional(),
     exampleCount: z.number().int().min(0),
     examplesShown: z.number().int().min(0),
+    examplesAvailable: z.number().int().min(0).optional(),
+    authRequiredForExamples: z.boolean().optional(),
     examples: z.array(apiV2EvidenceEventSummarySchema).max(5).optional(),
     hasTimingAnchor: z.boolean().optional(),
     hasVendorAnchor: z.boolean().optional(),

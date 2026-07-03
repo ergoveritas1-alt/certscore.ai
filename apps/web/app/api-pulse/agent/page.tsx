@@ -56,7 +56,7 @@ export default function PulseAgentFallbackPage() {
         <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950">Agent-readable beta fallback</h1>
         <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
           This page is a plain browser-readable fallback for agents or review tools whose JSON fetch layer cannot retrieve API
-          endpoints. This is beta software. The current Pulse API beta version is 0.5.1. The canonical Pulse API remains{" "}
+          endpoints. This is beta software. The current Pulse API beta version is 0.5.3. The canonical Pulse API remains{" "}
           <code className="rounded bg-slate-100 px-1">/api/v1/pulse</code>.
         </p>
         <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">{PULSE_PURPOSE_STATEMENT}</p>
@@ -85,8 +85,7 @@ export default function PulseAgentFallbackPage() {
             <li>
               Use <code className="rounded bg-white px-1">scanFrom</code> or{" "}
               <code className="rounded bg-white px-1">geo</code> to select the scan location. Accepted values are{" "}
-              <code className="rounded bg-white px-1">eu_ie</code> and{" "}
-              <code className="rounded bg-white px-1">california</code>.
+              <code className="rounded bg-white px-1">eu_ie</code>.
             </li>
             <li>
               For a quick check, use <code className="rounded bg-white px-1">format=markdown</code> and{" "}

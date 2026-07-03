@@ -16,7 +16,7 @@ function requestId(request: Request) {
   return request.headers.get("x-request-id") ?? crypto.randomUUID();
 }
 
-function pulseRequestFromV2(request: Request, body: { url: string; freshness?: "latest" | "refresh"; scanFrom?: "eu_ie" | "california" }) {
+function pulseRequestFromV2(request: Request, body: { url: string; freshness?: "latest" | "refresh"; scanFrom?: "eu_ie" }) {
   const sourceUrl = new URL(request.url);
   const pulseUrl = new URL("/api/v1/pulse", sourceUrl.origin);
   pulseUrl.searchParams.set("url", body.url);

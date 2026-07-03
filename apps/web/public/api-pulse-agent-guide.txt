@@ -4,7 +4,7 @@ Last updated: 2026-05-19
 
 CertScore Pulse provides automated public-web observations for review. Outputs are not legal advice, certification, or a compliance determination.
 
-This is beta software. The current Pulse API beta version is 0.5.1.
+This is beta software. The current Pulse API beta version is 0.5.3.
 
 CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.
 
@@ -41,7 +41,7 @@ OpenAPI / GPT Action beta quick start:
    url: <public URL>
    format: markdown
    detail: standard
-   scanFrom: eu_ie | california
+   scanFrom: eu_ie
    wait: 35
 3. Use detail=tiny for quick checks.
 4. Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or the linked CertScore report when users need more support.
@@ -161,7 +161,7 @@ Expected public response contracts:
 - HTTP 429 throttled responses include Retry-After when retry timing is known.
 - Pulse uses freshness=latest and freshness=refresh. There is no refresh=true parameter.
 - freshness=latest reuses a recent eligible scan before queueing a new scan. freshness=refresh requests a new scan when eligible and bypasses the 24-hour reuse check.
-- Use scanFrom or geo to select the geo execution context for newly queued public scans. Allowed values are eu_ie and california. Existing scans are returned with their recorded scan context.
+- Use scanFrom or geo to select the geo execution context for newly queued public scans. Allowed value is eu_ie. Existing scans are returned with their recorded scan context.
 - Pulse reuses an eligible completed scan from the prior 24 hours before queueing a new scan when freshness=latest. Time comparisons use UTC instants.
 - Use forceNewScan=true only as a compatibility override for freshness=refresh. It does not bypass validation or the 1-minute normalized-domain scan-generation throttle.
 - New Pulse scan generation is throttled to one submitted scan job per normalized domain every 1 minute. A throttled request returns HTTP 429, Retry-After when known, and support guidance at support@certscore.ai.

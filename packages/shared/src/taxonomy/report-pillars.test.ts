@@ -65,12 +65,21 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 149);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 150);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
     )
   );
+});
+
+test("maps CMP load-order gap runtime signal through unified finding registry", () => {
+  const signal = getReportSignalBySourceAndKey("runtime_artifact_signal", "privacy.cmp_load_order_gap");
+  const finding = getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.cmp_load_order_gap");
+
+  assert.equal(signal?.label, "CMP load-order gap observed");
+  assert.equal(finding?.id, "consent_infrastructure__cmp_load_order");
+  assert.equal(finding?.categoryAlignments.find((alignment) => alignment.relation === "owner")?.evidenceCategoryId, "preconsent_tracking_incidents");
 });
 
 test("maps video content tracking exposure through signal and finding registries", () => {

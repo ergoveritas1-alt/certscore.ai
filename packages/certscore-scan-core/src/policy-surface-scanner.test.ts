@@ -247,6 +247,39 @@ test("policySurfaceScanner uses canonical privacy-surface classifier across supp
   });
 });
 
+test("policySurfaceScanner keeps footer policy links from oversized publisher homepages", async () => {
+  await withPolicyScan("policy-large-homepage-legal-footer", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/legal/page/politique-de-confidentialite`
+    );
+    const cookies = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "cookie_policy" &&
+      observation.normalizedUrl === `${baseUrl}/legal/le-figaro/info-cookies-lefigaro`
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.ok(privacy);
+    assert.ok(cookies);
+    assert.equal(
+      diagnostics.candidateSummary.some((candidate) =>
+        candidate.linkText === "Confidentialité" &&
+        candidate.normalizedUrl === `${baseUrl}/legal/page/politique-de-confidentialite`
+      ),
+      true,
+    );
+  }, {
+    discoveryMode: "fast",
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not be needed for oversized footer policy links.");
+      },
+    },
+  });
+});
+
 test("policySurfaceScanner does not classify unrelated footer links from neighboring privacy text", async () => {
   await withPolicyScan("policy-neighboring-footer-privacy-noise", async ({ result, baseUrl }) => {
     const diagnostics = await readPolicyCaptureDiagnostics(result);

@@ -1259,6 +1259,14 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
     ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"]
   ),
   defineReportSignal(
+    "runtime_artifact_signal",
+    "privacy.cmp_load_order_gap",
+    "CMP load-order gap observed",
+    "preconsent_tracking_incidents",
+    ["consent_framework_cmp_signals"],
+    ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"]
+  ),
+  defineReportSignal(
     "snapshot_signal",
     "privacy.video_content_tracking_exposure_detected",
     "Video content tracking exposure detected",
@@ -2758,6 +2766,19 @@ export const REPORT_UNIFIED_FINDINGS = [
       "Third-party cookies before consent",
       "Analytics cookies before consent",
       "Adtech cookies before consent"
+    ]
+  }),
+  defineReportUnifiedFinding({
+    id: "consent_infrastructure__cmp_load_order",
+    label: "Consent infrastructure loaded after tracker activity",
+    owner: "preconsent_tracking_incidents",
+    mirrors: ["consent_framework_cmp_signals"],
+    overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.cmp_load_order_gap" }],
+    aliases: [
+      "CMP loaded after trackers",
+      "CMP load-order gap observed",
+      "Consent infrastructure race condition"
     ]
   }),
   defineReportUnifiedFinding({

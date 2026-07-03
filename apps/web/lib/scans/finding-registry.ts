@@ -199,6 +199,7 @@ export type CertScoreFindingEvidenceDetails = {
   policyEvidenceDetails?: Record<string, unknown>;
   financialClaimsEvidence?: Record<string, unknown>;
   disclosureEvidence?: Record<string, unknown>;
+  cmpLoadOrder?: Record<string, unknown>;
   policyRuntimeConflict?: {
     policyAnchor: {
       claimType: string | null;
@@ -309,6 +310,14 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     defaultSurfacePriority: 100,
     whyItMatters: "Observed runtime behavior placed classified third-party tracking before a recorded consent choice, which is a high-priority implementation review signal.",
     remediation: "Delay non-essential requests until consent state is established."
+  },
+  cmp_load_order_gap: {
+    id: "cmp_load_order_gap",
+    label: "Consent infrastructure loaded after tracker activity",
+    section: "Consent Experience",
+    defaultSurfacePriority: 96,
+    whyItMatters: "Observed runtime timing placed classified tracker activity before CMP infrastructure, which is a consent implementation review signal.",
+    remediation: "Load the CMP before tag, ad, and analytics infrastructure, or gate non-essential tags on CMP readiness."
   },
   reject_tracking_persists_after_reject: {
     id: "reject_tracking_persists_after_reject",

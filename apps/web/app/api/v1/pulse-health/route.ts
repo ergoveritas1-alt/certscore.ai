@@ -8,7 +8,7 @@ export function GET(request: Request) {
     ok: true,
     service: "certscore-pulse",
     version: "v1",
-    betaVersion: "0.5.1",
+    betaVersion: "0.5.3",
     generatedAt: new Date().toISOString()
   };
 

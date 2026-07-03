@@ -71,8 +71,8 @@ const parameters = [
   ["format", "`json` or `markdown`. Defaults to `json`."],
   ["detail", "`summary`, `evidence`, `tiny`, `quick`, `standard`, or `full`. Defaults to `summary`. `quick` is an alias for `tiny`."],
   ["freshness", "`latest` or `refresh`. Defaults to `latest`."],
-  ["scanFrom", "`eu_ie` or `california`. Selects the geo execution context for newly queued public scans. Defaults to `eu_ie`."],
-  ["geo", "Alias for `scanFrom`; accepts `eu_ie` or `california`."],
+  ["scanFrom", "`eu_ie`. Selects the geo execution context for newly queued public scans. Defaults to `eu_ie`."],
+  ["geo", "Alias for `scanFrom`; accepts `eu_ie`."],
   ["forceNewScan", "`true` or `1` bypasses the 24-hour recent-scan reuse check. It does not bypass throttles or validation."],
   [
     "wait",
@@ -123,7 +123,7 @@ const mcpTools = [
 
 const exampleMeta = {
   apiVersion: "v1",
-  schemaVersion: "0.5.1",
+  schemaVersion: "0.5.3",
   pulseVersion: "2026-05-18",
   projectionVersion: "pulse-public-v1",
   generatedAt: "2026-05-18T23:15:32Z",
@@ -537,7 +537,7 @@ Summary JSON is best for concise agent output. Markdown is best for conversation
    url: <public URL>
    format: markdown
    detail: standard
-   scanFrom: eu_ie | california
+   scanFrom: eu_ie
    wait: 35
 3. Use detail=tiny for quick checks.
 4. Public GPT Action beta access uses latest-mode summaries. Use Evidence JSON or the linked CertScore report when users need more support.

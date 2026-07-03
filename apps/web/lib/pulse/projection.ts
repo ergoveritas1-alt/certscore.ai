@@ -19,6 +19,7 @@ import {
 } from "../scans/runtime-inventory-projection";
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { getKnownCmpVendorName } from "@website-signal-risk-scanner/shared";
 import {
   buildScanReportUnifiedFindings,
   deriveExecutiveDisplayedScore
@@ -416,7 +417,6 @@ export function assessPulseScanRecordQuality(scanRecord: ScanDetailResponse) {
 
 function getReviewLenses(scanRecord: ScanDetailResponse, findings: CertScoreFinding[]) {
   const risk = scanRecord.regulatoryRisk;
-  const financialRelevant = findings.some((finding) => finding.section === "Financial & Claims");
   const toStatus = (score: number | null | undefined) => {
     if (typeof score !== "number") {
       return "not_evaluated";
@@ -431,39 +431,12 @@ function getReviewLenses(scanRecord: ScanDetailResponse, findings: CertScoreFind
   };
   const lenses = [
     {
-      name: "CCPA / CPRA / CIPA",
-      status: toStatus(risk?.privacyEnforcementRiskScore),
-      score: risk?.privacyEnforcementRiskScore ?? null,
-      summary: "Third-party collection, privacy-choice, and disclosure posture drive this review context."
-    },
-    {
       name: "GDPR / ePrivacy",
       status: toStatus(risk?.consentEnforcementRiskScore),
       score: risk?.consentEnforcementRiskScore ?? null,
       summary: "Consent timing, consent surface, and tracker behavior drive this review context."
-    },
-    {
-      name: "FTC",
-      status: toStatus(risk?.consumerProtectionRiskScore),
-      score: risk?.consumerProtectionRiskScore ?? null,
-      summary: "Consumer-facing claims, tracking posture, and disclosure signals should be reviewed together."
-    },
-    {
-      name: "DOJ / ADA accessibility",
-      status: toStatus(risk?.accessibilityEnforcementRiskScore),
-      score: risk?.accessibilityEnforcementRiskScore ?? null,
-      summary: "Automated accessibility signals are the main review area for this lens."
     }
   ];
-
-  if (financialRelevant) {
-    lenses.push({
-      name: "Financial & commercial claims",
-      status: "watch",
-      score: null,
-      summary: "Financial or commercial claim language was surfaced for review context."
-    });
-  }
 
   return {
     disclaimer: PULSE_REVIEW_CONTEXT_DISCLAIMER,
@@ -475,17 +448,8 @@ function getFindingReviewLenses(finding: CertScoreFinding) {
   const lenses = new Set<string>();
   if (/consent|cookie|privacy|tracking|vendor|fingerprinting/i.test(`${finding.section} ${finding.id}`)) {
     lenses.add("GDPR / ePrivacy");
-    lenses.add("CCPA / CPRA / CIPA");
-    lenses.add("FTC");
   }
-  if (/accessibility|contrast|keyboard|label|alternative/i.test(`${finding.section} ${finding.id}`)) {
-    lenses.add("DOJ / ADA accessibility");
-  }
-  if (/financial|claim|offer|bonus|investment/i.test(`${finding.section} ${finding.id}`)) {
-    lenses.add("Financial & commercial claims");
-    lenses.add("FTC");
-  }
-  return [...lenses].slice(0, 4);
+  return [...lenses];
 }
 
 function getFindingReviewLensLinks(finding: CertScoreFinding, scanId: string) {
@@ -493,6 +457,50 @@ function getFindingReviewLensLinks(finding: CertScoreFinding, scanId: string) {
     name,
     url: absoluteUrl(`/scan/${scanId}#${getRegulatoryLensAnchor(name)}`)
   }));
+}
+
+function evidenceTimestampMs(event: Record<string, unknown>) {
+  return (
+    finiteNumber(event.timestampMs) ??
+    finiteNumber(event.observedAtMs) ??
+    finiteNumber(event.firstSeenMs) ??
+    finiteNumber(event.setAtMs)
+  );
+}
+
+function evidenceVendorName(event: Record<string, unknown>) {
+  return (
+    stringValue(event.vendor) ??
+    stringValue(event.vendorName) ??
+    stringValue(event.endpointVendor) ??
+    stringValue(event.initiatingVendor) ??
+    stringValue(event.sourceVendor)
+  );
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function canonicalEvidencePhase(value: unknown) {
+  if (value === "pre_consent" || value === "before_consent") {
+    return "pre_consent";
+  }
+  if (value === "after_reject") {
+    return "after_reject";
+  }
+  return stringValue(value);
+}
+
+function eventEvidencePhase(event: Record<string, unknown>) {
+  const explicitPhase = canonicalEvidencePhase(event.phase ?? event.runtimePhase ?? event.observedPhase);
+  if (explicitPhase) {
+    return explicitPhase;
+  }
+  if (event.noConsentActionObserved === true || event.preConsent === true || event.setBeforeConsent === true) {
+    return "pre_consent";
+  }
+  return null;
 }
 
 function buildEvidence(finding: CertScoreFinding, scanId: string) {
@@ -518,10 +526,10 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
   const runtimePhase =
     (asRecord(details.policyRuntimeConflict)?.runtimeAnchor as { phase?: string } | undefined)?.phase ??
     (typeof recordValue(details.trackingEvidence, "phase") === "string" ? String(recordValue(details.trackingEvidence, "phase")) : null);
-  const observedPhase = runtimePhase === "pre_consent" ? "before_consent" : runtimePhase === "after_reject" ? "after_reject" : runtimePhase ?? null;
   const examples = promotionGradePreconsentRequests.length > 0
     ? promotionGradePreconsentRequests.map((request) => ({
         type: "request",
+        phase: "pre_consent",
         scannedPageUrl: request.scannedPageUrl ?? null,
         requestUrl: request.requestUrl,
         vendor: request.vendorName,
@@ -540,6 +548,7 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     firstRequest
       ? {
           type: "request",
+          phase: firstRequest.runtimePhase ?? (firstRequest.preConsent ? "pre_consent" : null),
           vendor: firstRequest.vendor ?? firstVendor?.name ?? null,
           urlHost: firstRequest.hostname ?? null,
           timestampMs: firstRequest.firstSeenMs ?? null
@@ -548,6 +557,7 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     runtimeRequestUrls[0]
       ? {
           type: "request",
+          phase: runtimePhase ?? null,
           vendor: asStringArray(details.runtimeVendors)[0] ?? null,
           urlHost: safeHostname(runtimeRequestUrls[0]),
           timestampMs: null
@@ -556,22 +566,35 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     sourceUrls[0] || pageUrls[0]
       ? {
           type: "page",
+          phase: null,
           vendor: null,
           urlHost: safeHostname(sourceUrls[0] ?? pageUrls[0]),
           timestampMs: null
         }
       : null
   ].filter(Boolean).slice(0, 3);
+  const exampleEvents = examples as Array<Record<string, unknown>>;
+  const canonicalPhase =
+    canonicalEvidencePhase(runtimePhase) ??
+    exampleEvents.map(eventEvidencePhase).find((phase): phase is string => phase !== null) ??
+    null;
+  const observedPhase = canonicalPhase === "pre_consent" ? "before_consent" : canonicalPhase;
   const hasTimingAnchor =
-    Boolean(firstRequest?.firstSeenMs) ||
+    exampleEvents.some((event) => evidenceTimestampMs(event) !== null) ||
+    finiteNumber(firstRequest?.firstSeenMs) !== null ||
     Boolean(finiteNumber(recordValue(details.timing, "firstRequestMs"))) ||
     Boolean(finiteNumber(recordValue(details.timing, "firstThirdPartyTrackingRequestMs")));
-  const hasVendorAnchor = vendors.length > 0 || asStringArray(details.runtimeVendors).length > 0 || Boolean(firstRequest?.vendor);
+  const hasVendorAnchor =
+    exampleEvents.some((event) => evidenceVendorName(event) !== null) ||
+    vendors.length > 0 ||
+    asStringArray(details.runtimeVendors).length > 0 ||
+    Boolean(firstRequest?.vendor);
   const hasConsentContext = Boolean(details.consentState || details.consentInteraction || /consent|reject|pre_consent/i.test(finding.id));
   const hasPolicyAnchor = Boolean(details.policyEvidence || details.policyEvidenceDetails || details.policyRuntimeConflict);
   const basis = finding.section === "Accessibility" ? "accessibility_check" : hasPolicyAnchor ? "policy_surface_detection" : "runtime_observation";
   const summary = finding.evidencePreview[0] ?? finding.shortSummary;
   const anchorUrl = absoluteUrl(`/scan/${scanId}#finding-${finding.id}`);
+  const exampleCount = Math.max(finding.evidencePreview.length, examples.length);
 
   return {
     summary,
@@ -587,9 +610,11 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     fullEvidenceUrl: anchorUrl,
     evidenceDigest: {
       basis,
-      phase: observedPhase ?? null,
-      exampleCount: Math.max(finding.evidencePreview.length, examples.length),
+      phase: canonicalPhase,
+      exampleCount,
       examplesShown: examples.length,
+      examplesAvailable: exampleCount,
+      authRequiredForExamples: false,
       hasTimingAnchor,
       hasVendorAnchor,
       hasConsentContext,
@@ -643,6 +668,95 @@ function toPulseFinding(finding: CertScoreFinding, scanId: string) {
   };
 }
 
+function recordArray(record: Record<string, unknown> | null | undefined, keys: string[]) {
+  return keys.flatMap((key) => {
+    const value = recordValue(record, key);
+    return Array.isArray(value)
+      ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+      : [];
+  });
+}
+
+function elapsedMsFromRecord(record: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = finiteNumber(recordValue(record, key));
+    if (value !== null && value >= 0 && value <= 10 * 60 * 1000) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function buildCmpLoadOrderHighlight(scanRecord: ScanDetailResponse) {
+  const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
+  const consentTimeline =
+    asRecord(recordValue(runtimeArtifacts, "consentTimeline")) ??
+    asRecord(recordValue(runtimeArtifacts, "consent_timeline")) ??
+    asRecord(recordValue(hybrid, "consentTimeline")) ??
+    asRecord(recordValue(hybrid, "consent_timeline"));
+  const requestPurposeRows = [
+    ...recordArray(runtimeArtifacts, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"]),
+    ...recordArray(hybrid, ["requestPurposeClassificationConfidence", "request_purpose_classification_confidence"])
+  ];
+  const trackerRequests = buildPromotionGradePreconsentRequests({
+    rows: requestPurposeRows,
+    consentTimeline,
+    maxItems: 12
+  });
+  const firstClassifiedTrackerAtMs = trackerRequests
+    .map((request) => request.firstSeenMs)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    .sort((left, right) => left - right)[0] ?? null;
+  const requestRows = [
+    ...recordArray(runtimeArtifacts, ["requestObservations", "request_observations", "networkRequests", "network_requests"]),
+    ...recordArray(hybrid, ["requestObservations", "request_observations", "networkRequests", "network_requests"])
+  ];
+  const cmpRows = requestRows.flatMap((row) => {
+    const requestUrl = stringValue(recordValue(row, "requestUrl")) ?? stringValue(recordValue(row, "request_url")) ?? stringValue(recordValue(row, "url"));
+    const host = stringValue(recordValue(row, "hostname")) ?? stringValue(recordValue(row, "host")) ?? stringValue(recordValue(row, "domain")) ?? safeHostname(requestUrl);
+    const cmpVendorName = getKnownCmpVendorName({
+      domains: host ? [host] : [],
+      urls: requestUrl ? [requestUrl] : []
+    });
+    const observedAtMs = elapsedMsFromRecord(row, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms", "timestampMs", "timestamp_ms", "tsMs", "ts_ms"]);
+    return cmpVendorName && observedAtMs !== null
+      ? [{ cmpVendorName, host, observedAtMs }]
+      : [];
+  }).sort((left, right) => left.observedAtMs - right.observedAtMs);
+  const cmpScriptLoadedAtMs = cmpRows[0]?.observedAtMs ?? null;
+  if (firstClassifiedTrackerAtMs === null || cmpScriptLoadedAtMs === null) {
+    return null;
+  }
+  const cmpGapMs = cmpScriptLoadedAtMs - firstClassifiedTrackerAtMs;
+  if (cmpGapMs <= 0) {
+    return null;
+  }
+  const cmpReadyAtMs =
+    finiteNumber(recordValue(consentTimeline, "cmpReadyAtMs")) ??
+    finiteNumber(recordValue(consentTimeline, "cmp_ready_at_ms")) ??
+    finiteNumber(recordValue(consentTimeline, "firstConsentCookieSetMs")) ??
+    finiteNumber(recordValue(consentTimeline, "first_consent_cookie_set_ms")) ??
+    finiteNumber(recordValue(consentTimeline, "firstConsentActionMs")) ??
+    finiteNumber(recordValue(consentTimeline, "first_consent_action_ms")) ??
+    finiteNumber(recordValue(consentTimeline, "firstCmpVisibleMs")) ??
+    finiteNumber(recordValue(consentTimeline, "first_cmp_visible_ms")) ??
+    cmpScriptLoadedAtMs;
+  const trackerVendors = uniqueStrings(trackerRequests.map((request) => request.vendorName)).slice(0, 8);
+
+  return {
+    firstClassifiedTrackerAtMs,
+    cmpScriptLoadedAtMs,
+    cmpReadyAtMs,
+    cmpGapMs,
+    cmpVendorName: cmpRows[0]?.cmpVendorName ?? null,
+    trackerVendors,
+    hasTimingAnchor: true,
+    summary: `Classified tracker activity preceded CMP infrastructure by ${Math.round(cmpGapMs)}ms.`,
+    detailsUrl: absoluteUrl(`/scan/${scanRecord.scan.id}#finding-cmp_load_order_gap`)
+  };
+}
+
 function buildEvidenceHighlights(scanRecord: ScanDetailResponse) {
   const snapshot = scanRecord.snapshot;
   const thirdPartyDomainsObserved =
@@ -668,6 +782,7 @@ function buildEvidenceHighlights(scanRecord: ScanDetailResponse) {
     .slice(0, 6)
     .map(([key, count]) => `${key.replaceAll("_", " ")} ${count}`)
     .join(" | ");
+  const cmpLoadOrder = buildCmpLoadOrderHighlight(scanRecord);
 
   return {
     trackerFootprint: {
@@ -696,7 +811,8 @@ function buildEvidenceHighlights(scanRecord: ScanDetailResponse) {
       categoryCount: Object.keys(categories).length,
       summary: categorySummary || "No classified tracker vendor categories were available.",
       detailsUrl: absoluteUrl(`/scan/${scanRecord.scan.id}#vendor-mix`)
-    }
+    },
+    ...(cmpLoadOrder ? { cmpLoadOrder } : {})
   };
 }
 

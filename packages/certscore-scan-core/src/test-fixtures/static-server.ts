@@ -100,6 +100,7 @@ export type StaticFixturePage =
   | "policy-gpc-disclosure"
   | "policy-generic-links"
   | "policy-link-aria-title"
+  | "policy-large-homepage-legal-footer"
   | "policy-latimes-footer-surfaces"
   | "policy-localized-privacy-supplement"
   | "policy-mature-real-prose"
@@ -244,6 +245,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-gpc-disclosure": "policy-gpc",
   "policy-generic-links": "policy-generic-links",
   "policy-link-aria-title": "policy-link-aria-title",
+  "policy-large-homepage-legal-footer": "policy-large-homepage-legal-footer",
   "policy-latimes-footer-surfaces": "policy-latimes-footer-surfaces",
   "policy-localized-privacy-supplement": "policy-localized-privacy-supplement",
   "policy-mature-real-prose": "policy-mature-real-prose",
@@ -1504,6 +1506,11 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-gpc-disclosure": `<a href="/policies/gpc">Privacy Notice</a>`,
     "policy-generic-links": `<a href="/products">Products</a><a href="/about">About us</a>`,
     "policy-link-aria-title": `<a href="/policies/privacy" aria-label="Privacy Policy" title="Privacy Policy"></a>`,
+    "policy-large-homepage-legal-footer": [
+      `<div data-fixture-noise="large-homepage">${"Large publisher body content. ".repeat(24_000)}</div>`,
+      `<a href="/legal/page/politique-de-confidentialite">Confidentialité</a>`,
+      `<a href="/legal/le-figaro/info-cookies-lefigaro">Info cookies</a>`,
+    ].join(" "),
     "policy-localized-privacy-supplement": [
       `<a href="/politica-de-privacidad">Política de privacidad</a>`,
       `<a href="/politica-de-cookies">Política de cookies</a>`,
@@ -1630,6 +1637,14 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/policies/fr-confidentialite": {
       title: "Politique de confidentialité",
       body: "Politique de confidentialité. Nous traitons des données personnelles, utilisons des cookies pour la mesure et la publicité, et répondons aux demandes de confidentialité.",
+    },
+    "/legal/page/politique-de-confidentialite": {
+      title: "Politique de confidentialité",
+      body: "Politique de confidentialité. Le responsable du traitement explique les finalités du traitement des données personnelles, les bases juridiques, les destinataires, les durées de conservation et les droits des personnes. Vous pouvez contacter le délégué à la protection des données et exercer vos droits d'accès, d'effacement, de rectification, d'opposition et de portabilité.",
+    },
+    "/legal/le-figaro/info-cookies-lefigaro": {
+      title: "Info cookies",
+      body: "Info cookies. Ce document décrit l'utilisation des cookies nécessaires, des cookies de mesure d'audience, des cookies publicitaires et des partenaires pouvant déposer des traceurs. Vous pouvez paramétrer les cookies depuis le module de consentement.",
     },
     "/policies/es-privacidad": {
       title: "Política de privacidad",

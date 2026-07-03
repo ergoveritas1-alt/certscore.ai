@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const PULSE_API_VERSION = "v1";
-export const PULSE_SCHEMA_VERSION = "0.5.1";
+export const PULSE_SCHEMA_VERSION = "0.5.3";
 export const PULSE_SOURCE = "certscore.ai";
 
 export const PULSE_PURPOSE_STATEMENT =
@@ -14,6 +14,7 @@ export const PULSE_CAPABILITIES = {
   method: "automated_runtime_analysis",
   observes: [
     "pre_consent_tracking",
+    "cmp_load_order",
     "third_party_requests",
     "consent_enforcement_gaps",
     "cookie_activity",
@@ -130,6 +131,8 @@ export const pulseEvidenceDigestSchema = z
     phase: z.string().nullable().optional(),
     exampleCount: z.number().int().optional(),
     examplesShown: z.number().int().optional(),
+    examplesAvailable: z.number().int().optional(),
+    authRequiredForExamples: z.boolean().optional(),
     hasTimingAnchor: z.boolean().optional(),
     hasVendorAnchor: z.boolean().optional(),
     hasConsentContext: z.boolean().optional(),

@@ -57,9 +57,13 @@ export const apiV2Routes = [
 ] as const;
 
 export const mcpTools = [
+  ["create_scan", "Deprecated compatibility alias of scan_site for older Pulse workflows."],
   ["scan_site", "Start or reuse a CertScore scan for a public URL."],
   ["get_scan", "Retrieve an API v2 public-safe scan resource."],
-  ["get_scan_status", "Check a queued scan job or a stable API v2 scan ID."],
+  ["get_scan_status", "Check a stable API v2 scan ID, or a just-created job ID before a scan ID is available."],
+  ["get_report", "Retrieve a CertScore Pulse report by stable scan ID."],
+  ["get_evidence", "Retrieve the bounded structured evidence packet for a stable scan ID."],
+  ["export_findings", "Export structured findings from a CertScore Pulse report."],
   ["list_findings", "Return API v2 public-safe findings for handoff or review."],
   ["get_pre_consent_cookies_trackers", "Retrieve the public-safe Pre-consent Cookies & Trackers table as compact JSON."],
   ["explain_finding", "Explain one finding with evidence summaries, caveats, and next steps."],

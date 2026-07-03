@@ -21,16 +21,10 @@ const SCAN_LOCATION_OPTIONS = [
     flag: "🇩🇪",
     label: "EU-DE",
     value: "eu_de"
-  },
-  {
-    description: "US-West Lambda scanner",
-    flag: "california",
-    label: "California",
-    value: "california"
   }
 ] as const satisfies Array<{
   description: string;
-  flag: "🇮🇪" | "🇩🇪" | "california";
+  flag: "🇮🇪" | "🇩🇪";
   label: string;
   value: ScanFrom;
 }>;

@@ -286,34 +286,6 @@ function makePolicyRuntimeConflictPacket(
   });
 }
 
-function makeCpraPacket(input: {
-  optOutControlFound?: string;
-  optOutUiResult: string;
-  policyCbaLanguage?: string;
-}) {
-  return makePacket("cpra_cba_opt_out_missing", {
-    confidenceBand: "high",
-    details: { family: "consent_tracking", kind: "cpra_cba_opt_out_missing" },
-    evidence: {
-      counts: {},
-      entities: {
-        directAdvertisingSharingVendors: ["The Trade Desk"],
-        choiceControlsInspected: ["true"],
-        optOutControlFound: input.optOutControlFound ? [input.optOutControlFound] : [],
-        optOutUiResult: [input.optOutUiResult],
-        policyCbaLanguage: [input.policyCbaLanguage ?? "full_cba_language"]
-      },
-      fetchQuality: null,
-      flags: ["privacy.cpra_cba_opt_out_missing"],
-      pageUrls: ["https://example.com/"],
-      snippets: [],
-      sourceUrls: []
-    },
-    severity: "high",
-    summary: "Cross-context behavioral advertising vendors were retained with incomplete opt-out evidence."
-  });
-}
-
 test("projects surfaced unified findings into executive findings and regulatory lenses", () => {
   const projection = projectExecutiveFindingsFromUnifiedPackets([
     makePacket("preconsent_tracking", {
@@ -521,12 +493,12 @@ test("projects surfaced unified findings into executive findings and regulatory 
     ]
   );
 
-  assert.equal(
+  assert.deepEqual(
     buildRegulatoryLenses(projection.findings, {
       beforeConsentCookieCount: 0,
       thirdPartyRequestCount: 6
-    }).some((lens) => lens.acronym === "Financial & commercial claims"),
-    false
+    }).map((lens) => lens.acronym),
+    ["GDPR / ePrivacy"]
   );
 });
 
@@ -1382,8 +1354,7 @@ test("projects RTB cookie sync into executive and privacy regulatory lenses", ()
     thirdPartyRequestCount: 1
   });
   assert.ok(lenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
-  assert.ok(lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"));
-  assert.equal(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "rtb_cookie_sync_observed"), false);
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
 test("does not leak structured runtime disclosure rows into RTB summary vendor text", () => {
@@ -2366,8 +2337,7 @@ test("projects confirmed cookie disclosure gaps into executive and privacy regul
     thirdPartyRequestCount: 1
   });
   assert.ok(lenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
-  assert.ok(lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
-  assert.ok(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "cookie_disclosure_gap"));
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
 test("keeps confirmed cookie disclosure gaps in top findings alongside higher-ranked homepage issues", () => {
@@ -3774,7 +3744,7 @@ test("projects policy behavior contradictions as official executive top findings
   );
 });
 
-test("projects representative accessibility packets into DOJ ADA regulatory lens", () => {
+test("keeps representative accessibility packets out of non-GDPR regulatory lenses", () => {
   const seriousExampleCount = ADA_ACCESSIBILITY_FIXTURES.seriousAxeExample.accessibilityRuleExamples.length;
   const lenses = buildRegulatoryLensesFromUnifiedPackets(
     [
@@ -3807,15 +3777,10 @@ test("projects representative accessibility packets into DOJ ADA regulatory lens
     }
   );
 
-  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-
-  assert.ok(adaLens);
-  assert.equal(adaLens?.minimal, undefined);
-  assert.notEqual(adaLens?.ratingLabel, "Not applicable");
-  assert.ok(adaLens?.findings.some((finding) => /automated wcag|representative accessibility/i.test(finding.label)));
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
-test("keeps DOJ ADA regulatory lens minimal for score-only accessibility packets", () => {
+test("keeps score-only accessibility packets outside regulatory lenses", () => {
   const lenses = buildRegulatoryLensesFromUnifiedPackets(
     [
       makePacket("accessibility_risk_score", {
@@ -3849,12 +3814,7 @@ test("keeps DOJ ADA regulatory lens minimal for score-only accessibility packets
     }
   );
 
-  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-
-  assert.ok(adaLens);
-  assert.equal(adaLens?.minimal, true);
-  assert.equal(adaLens?.ratingLabel, "Audit-only");
-  assert.equal(adaLens?.score, null);
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
 test("projects surfaced visual contrast findings with representative axe evidence into executive findings", () => {
@@ -4245,124 +4205,6 @@ test("focus-management projection keeps WS01 behavior-reproduced traversal evide
     finding.evidenceDetails?.accessibilityEvidence?.focusManagementEvidence,
     [focusManagementEvidence]
   );
-});
-
-test("keeps CPRA CBA opt-out missing out of production executive findings", () => {
-  const projection = projectExecutiveFindingsFromUnifiedPackets([
-    makePacket("preconsent_tracking", {
-      confidenceBand: "high",
-      details: { family: "consent_tracking", kind: "preconsent_tracking" },
-      evidence: {
-        counts: { preconsentViolationCount: 3 },
-        entities: {
-          runtimeVendors: ["Google Ads", "Google Analytics", "Google Tag Manager"]
-        },
-        fetchQuality: null,
-        flags: ["privacy.preconsent_tracking_detected"],
-        pageUrls: ["https://www.healthline.com/"],
-        snippets: [],
-        sourceUrls: []
-      },
-      severity: "high",
-      summary: "Tracking started before consent."
-    }),
-    makePacket("cpra_cba_opt_out_missing", {
-      confidenceBand: "high",
-      details: { family: "consent_tracking", kind: "cpra_cba_opt_out_missing" },
-      evidence: {
-        counts: {},
-        entities: {
-          directAdvertisingSharingVendors: ["The Trade Desk", "PubMatic", "LiveRamp"],
-          optOutUiResult: ["absent"]
-        },
-        fetchQuality: null,
-        flags: ["privacy.cpra_cba_opt_out_missing"],
-        pageUrls: ["https://www.healthline.com/"],
-        snippets: ["CPRA CBA opt-out evidence retained with absent opt-out UI."],
-        sourceUrls: []
-      },
-      severity: "high",
-      summary: "Cross-context behavioral advertising vendors were retained without a CPRA-specific opt-out mechanism."
-    }),
-    makePacket("rtb_cookie_sync_observed", {
-      confidenceBand: "high",
-      details: { family: "commercial", kind: "rtb_cookie_sync_observed" },
-      evidence: {
-        counts: {},
-        entities: {
-          vendors: ["DoubleClick / Floodlight", "DoubleVerify", "ID5"]
-        },
-        fetchQuality: null,
-        flags: ["privacy.rtb_cookie_sync_observed"],
-        pageUrls: ["https://www.healthline.com/"],
-        snippets: [],
-        sourceUrls: []
-      },
-      severity: "high",
-      summary: "RTB cookie sync evidence was retained."
-    })
-  ]);
-
-  const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
-
-  assert.equal(finding, undefined);
-  assert.equal(projection.topFindings.some((candidate) => candidate.id === "cpra_cba_opt_out_missing"), false);
-  assert.equal(projection.topFindingEligibility.cpra_cba_opt_out_missing, undefined);
-  assert.ok(projection.findings.some((candidate) => candidate.id === "pre_consent_tracking_detected"));
-  assert.ok(projection.findings.some((candidate) => candidate.id === "rtb_cookie_sync_observed"));
-});
-
-test("keeps partial CPRA privacy-choice packets out of production executive findings", () => {
-  const projection = projectExecutiveFindingsFromUnifiedPackets([
-    makePacket("cpra_cba_opt_out_missing", {
-      confidenceBand: "high",
-      details: { family: "consent_tracking", kind: "cpra_cba_opt_out_missing" },
-      evidence: {
-        counts: {},
-        entities: {
-          directAdvertisingSharingVendors: [
-            "The Trade Desk",
-            "Amazon Ads",
-            "Criteo",
-            "Google Ads",
-            "OpenX",
-            "PubMatic",
-            "Magnite",
-            "Taboola",
-            "Yahoo Ads"
-          ],
-          choiceControlsInspected: ["true"],
-          gpcHandlingObserved: ["not_determined"],
-          gpcScanStateSent: ["false"],
-          optOutControlFound: ["true"],
-          optOutUiResult: ["partial_no_icon"],
-          policyCbaLanguage: ["full_cba_language"],
-          policyUiCongruent: ["true"]
-        },
-        fetchQuality: null,
-        flags: ["privacy.cpra_cba_opt_out_missing"],
-        pageUrls: ["https://www.nbcnews.com/"],
-        snippets: [],
-        sourceUrls: []
-      },
-      severity: "high",
-      summary: "Cross-context behavioral advertising vendors were retained with partial privacy-choice evidence."
-    })
-  ]);
-  const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
-
-  assert.equal(finding, undefined);
-  assert.equal(projection.topFindingEligibility.cpra_cba_opt_out_missing, undefined);
-});
-
-test("keeps generic do-not-sell CPRA packets out of production executive findings", () => {
-  const projection = projectExecutiveFindingsFromUnifiedPackets([
-    makeCpraPacket({ optOutControlFound: "true", optOutUiResult: "generic_do_not_sell" })
-  ]);
-  const finding = projection.findings.find((candidate) => candidate.id === "cpra_cba_opt_out_missing");
-
-  assert.equal(finding, undefined);
-  assert.equal(projection.topFindingEligibility.cpra_cba_opt_out_missing, undefined);
 });
 
 test("projects remaining top finding families with canonical evidence details", () => {
@@ -5379,21 +5221,13 @@ test("surfaces sensitive-data tracking in regulatory lenses", () => {
   });
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
-  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
 
   assert.equal(
     gdprLens?.findings.some((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"),
     false
   );
   assert.equal(gdprLens?.summary, "Sensitive-data collection and tracking exposure are the main issue.");
-  assert.ok(cpraLens?.findings.some((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"));
-  assert.equal(cpraLens?.summary, "Sensitive-data collection and downstream third-party exposure drive this score.");
-  assert.ok(ftcLens?.findings.some((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present"));
-  assert.equal(
-    ftcLens?.summary,
-    "Sensitive-data collection alongside third-party tracking should be reviewed for consumer-protection context."
-  );
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
 test("keeps public reference evidence schema separate from runtime report evidence packets", () => {

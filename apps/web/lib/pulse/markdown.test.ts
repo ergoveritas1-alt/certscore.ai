@@ -252,10 +252,7 @@ test("Pulse markdown uses review-signal lens status labels", () => {
     topFindings: [],
     reviewContext: {
       lenses: [
-        { name: "CCPA / CPRA / CIPA", status: "needs_work", summary: "Third-party collection, privacy-choice, and disclosure posture may warrant review." },
-        { name: "GDPR / ePrivacy", status: "clear", summary: "Consent timing, consent surface, and tracker behavior were reviewed within scan coverage." },
-        { name: "FTC", status: "clear", summary: "Consumer-facing claims, tracking posture, and disclosure signals were reviewed within scan coverage." },
-        { name: "DOJ / ADA accessibility", status: "action_needed", summary: "Automated accessibility checks surfaced items for review." }
+        { name: "GDPR / ePrivacy", status: "clear", summary: "Consent timing, consent surface, and tracker behavior were reviewed within scan coverage." }
       ]
     },
     coverage: { status: "partial", summary: "Automated public-web scan completed with partial coverage." },
@@ -264,10 +261,7 @@ test("Pulse markdown uses review-signal lens status labels", () => {
     disclaimer: PULSE_STANDARD_DISCLAIMER
   });
 
-  assert.match(markdown, /CCPA \/ CPRA \/ CIPA review context: Third-party collection, privacy-choice, and disclosure posture may warrant review\.[^\n]+Review context retained/);
   assert.match(markdown, /GDPR \/ ePrivacy review context: Consent timing, consent surface, and tracker behavior were reviewed within scan coverage\.[^\n]+No top automated findings surfaced/);
-  assert.match(markdown, /FTC review context: Consumer-facing claims, tracking posture, and disclosure signals were reviewed within scan coverage\.[^\n]+No top automated findings surfaced/);
-  assert.match(markdown, /DOJ \/ ADA accessibility review context: Automated accessibility checks surfaced items for review\.[^\n]+Review recommended/);
   assert.doesNotMatch(markdown, /Needs Work|: Clear/);
 });
 
@@ -283,16 +277,13 @@ test("Pulse markdown keeps lens labels cautious when surfaced findings reference
         label: "Third-party tracking observed before recorded consent",
         criticality: "high",
         confidence: "strong",
-        reviewLenses: ["GDPR / ePrivacy", "CCPA / CPRA / CIPA", "FTC"],
+        reviewLenses: ["GDPR / ePrivacy"],
         evidence: { summary: "Runtime evidence was retained for review.", fullEvidenceUrl: "https://certscore.ai/scan/scan_123#finding" }
       }
     ],
     reviewContext: {
       lenses: [
-        { name: "CCPA / CPRA / CIPA", status: "clear", summary: "Third-party collection, privacy-choice, and disclosure posture drive this review context." },
         { name: "GDPR / ePrivacy", status: "clear", summary: "Consent timing, consent surface, and tracker behavior drive this review context." },
-        { name: "FTC", status: "watch", summary: "Consumer-facing claims, tracking posture, and disclosure signals should be reviewed together." },
-        { name: "DOJ / ADA accessibility", status: "clear", summary: "Automated accessibility signals are the main review area for this lens." }
       ]
     },
     coverage: { status: "partial", summary: "Automated public-web scan completed with partial coverage." },
@@ -301,11 +292,7 @@ test("Pulse markdown keeps lens labels cautious when surfaced findings reference
     disclaimer: PULSE_STANDARD_DISCLAIMER
   });
 
-  assert.match(markdown, /CCPA \/ CPRA \/ CIPA review context: Third-party collection, privacy-choice, and disclosure posture drive this review context\.[^\n]+Review context retained/);
   assert.match(markdown, /\[GDPR \/ ePrivacy review context: Consent timing, consent surface, and tracker behavior drive this review context\.\]\(https:\/\/certscore\.ai\/scan\/scan_123#review-lens-gdpr-eprivacy\)/);
-  assert.match(markdown, /\[FTC review context: Consumer-facing claims, tracking posture, and disclosure signals should be reviewed together\.\]\(https:\/\/certscore\.ai\/scan\/scan_123#review-lens-ftc\)/);
   assert.match(markdown, /GDPR \/ ePrivacy review context: Consent timing, consent surface, and tracker behavior drive this review context\.[^\n]+Review context retained/);
-  assert.match(markdown, /FTC review context: Consumer-facing claims, tracking posture, and disclosure signals should be reviewed together\.[^\n]+Review context retained/);
-  assert.match(markdown, /DOJ \/ ADA accessibility review context: Automated accessibility signals are the main review area for this lens\.[^\n]+No top automated findings surfaced/);
   assert.doesNotMatch(markdown, /Needs Work|: Clear/);
 });

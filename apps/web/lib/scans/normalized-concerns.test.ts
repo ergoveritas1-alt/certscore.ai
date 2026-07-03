@@ -508,6 +508,71 @@ test("promotes evidence-quality preconsent artifact when sequence and classifica
   assert.equal(packets.some((packet) => packet.unifiedFindingId === "preconsent_tracking"), true);
 });
 
+test("runtime CMP load-order evidence flows through normalized concerns and public findings", () => {
+  const runtimeArtifacts = {
+    consentTimeline: {
+      firstCmpVisibleMs: 7800,
+      firstConsentActionMs: 12000,
+      firstNonEssentialRequestMs: 250,
+      timelineConfidence: "high"
+    },
+    hybrid_runtime_evidence: {
+      requestObservations: [
+        {
+          firstSeenMs: 4200,
+          requestUrl: "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js",
+          resourceType: "script"
+        }
+      ],
+      requestPurposeClassificationConfidence: [
+        {
+          confidence: 0.95,
+          essentiality: "non_essential",
+          firstSeenMs: 250,
+          requestUrl: "https://analytics.example/collect",
+          runtimePhase: "pre_consent",
+          vendorCategory: "analytics",
+          vendorName: "Example Analytics"
+        }
+      ]
+    }
+  };
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  const concern = concerns.find((candidate) => candidate.suggestedUnifiedFindingId === "consent_infrastructure__cmp_load_order");
+
+  assert.ok(concern);
+  assert.equal(concern.promotionEligibility, "eligible");
+  assert.equal(concern.severity, "high");
+  assert.equal(concern.evidenceBundle.rawEvidence?.cmpGapMs, 3950);
+
+  const packets = buildUnifiedFindingPackets({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
+  const packet = packets.find((entry) => entry.unifiedFindingId === "consent_infrastructure__cmp_load_order");
+  assert.equal(packet?.details?.family, "consent_tracking");
+  assert.equal(packet?.details?.kind, "consent_infrastructure__cmp_load_order");
+  assert.equal(packet?.details?.cmpScriptLoadedAtMs, 4200);
+  assert.equal(packet?.details?.firstClassifiedTrackerAtMs, 250);
+
+  const displayPackets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+  const executive = projectExecutiveFindingsFromUnifiedPackets(displayPackets);
+  const finding = executive.findings.find((entry) => entry.id === "cmp_load_order_gap");
+  assert.ok(finding);
+  assert.equal(finding.evidenceDetails?.cmpLoadOrder?.cmpGapMs, 3950);
+  assert.equal(finding.evidenceDetails?.cmpLoadOrder?.cmpVendorName, "OneTrust");
+});
+
 test("replay policy review concerns stay internal without direct runtime evidence", () => {
   const concern = normalizeConcernFromPolicyReviewQueue({
     description: "Indirect replay-related signals may be present.",
@@ -1344,300 +1409,6 @@ test("normalizes snake_case validation rows before building concerns", () => {
   assert.equal(concerns[0]?.evidenceBundle.rawEvidence?.preconsent_tracking_detected, true);
 });
 
-test("California runtime evidence is silent when no retained California packet exists", () => {
-  const concerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {},
-    validationFindings: []
-  });
-
-  assert.equal(concerns.some((concern) => concern.originKey.startsWith("california_privacy.")), false);
-});
-
-test("California CPRA opt-out gaps require applicability and inspected choice-control evidence", () => {
-  const incompleteConcerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      californiaPrivacyEvidence: {
-        directAdvertisingSharingVendors: ["The Trade Desk"],
-        saleShareRequestUrls: ["https://pixel.adsrvr.org/track"],
-        targetedAdvertisingSignalsObserved: true
-      },
-      cpraCbaOptOutEvidence: {
-        directAdvertisingSharingVendors: ["The Trade Desk"],
-        optOutUiResult: "absent",
-        policyCbaLanguage: "full_cba_language"
-      }
-    },
-    validationFindings: []
-  });
-  assert.equal(
-    incompleteConcerns.some((concern) => concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing"),
-    false
-  );
-
-  const concerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      californiaPrivacyEvidence: {
-        directAdvertisingSharingVendors: ["The Trade Desk"],
-        saleShareRequestUrls: ["https://pixel.adsrvr.org/track"],
-        targetedAdvertisingSignalsObserved: true
-      },
-      cpraCbaOptOutEvidence: {
-        directAdvertisingSharingVendors: ["The Trade Desk"],
-        choiceControlsInspected: true,
-        optOutControlFound: false,
-        optOutUiResult: "absent",
-        policyCbaLanguage: "full_cba_language",
-        privacyChoiceSearchUrls: ["https://example.test/privacy"]
-      }
-    },
-    validationFindings: []
-  });
-  const concern = concerns.find((candidate) => candidate.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing");
-
-  assert.ok(concern);
-  assert.equal(concern.originKey, "california_privacy.sale_share_control.potential_gap");
-  assert.equal(concern.promotionEligibility, "eligible");
-  assert.equal(concern.externalSurfacingEligibility, "eligible");
-  assert.equal(concern.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "sale_share_control");
-});
-
-test("California CPRA opt-out gap is suppressed when a retained privacy-choice path exists", () => {
-  const concerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      californiaPrivacyEvidence: {
-        directAdvertisingSharingVendors: ["The Trade Desk"],
-        doNotSellSharePathObserved: true,
-        doNotSellSharePathUrl: "https://example.test/privacy-choices",
-        privacyChoicePathEvidence: {
-          observed: false,
-          selectedUrl: "https://example.test/privacy-choices"
-        },
-        saleShareRequestUrls: ["https://pixel.adsrvr.org/track"],
-        targetedAdvertisingSignalsObserved: true
-      }
-    },
-    validationFindings: []
-  });
-
-  assert.equal(
-    concerns.some((concern) => concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing"),
-    false
-  );
-  assert.equal(
-    concerns.some((concern) => concern.suggestedUnifiedFindingId === "targeted_advertising_choices_present"),
-    true
-  );
-});
-
-test("California collection notice potential gap retains bounded sweep evidence in normalized concern", () => {
-  const concerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      californiaPrivacyEvidence: {
-        collectionContextObserved: true,
-        collectionContextTypes: ["email"],
-        collectionContextUrls: ["https://example.test/newsletter"],
-        collectionNoticeCueObserved: false,
-        collectionNoticeEvidenceKind: "collection_form_without_notice",
-        collectionSurfaceSearchAttempted: true,
-        collectionSurfaceCandidateUrls: [
-          "https://example.test/contact",
-          "https://example.test/newsletter"
-        ],
-        collectionSurfaceVisitedUrls: [
-          "https://example.test/contact",
-          "https://example.test/newsletter"
-        ],
-        collectionSurfaceBlockedUrls: [],
-        pointOfCollectionContextTested: true,
-        collectionContextNegativeReviewSufficient: false,
-        collectionContextCoverageLimitation: "collection_context_tested"
-      }
-    },
-    validationFindings: []
-  });
-  const concern = concerns.find((candidate) => candidate.originKey === "california_privacy.collection_notice.potential_gap");
-
-  assert.ok(concern);
-  assert.equal(concern.suggestedUnifiedFindingId, "policy_clarity_risk");
-  assert.equal(concern.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "collection_notice");
-  assert.deepEqual(concern.evidenceBundle.rawEvidence?.collectionSurfaceCandidateUrls, [
-    "https://example.test/contact",
-    "https://example.test/newsletter"
-  ]);
-  assert.deepEqual(concern.evidenceBundle.rawEvidence?.collectionSurfaceVisitedUrls, [
-    "https://example.test/contact",
-    "https://example.test/newsletter"
-  ]);
-  assert.equal(concern.evidenceBundle.rawEvidence?.pointOfCollectionContextTested, true);
-  assert.equal(concern.evidenceBundle.rawEvidence?.collectionContextCoverageLimitation, "collection_context_tested");
-});
-
-test("California GPC runtime evidence flows through unified findings when retained support is concrete", () => {
-  const concerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      gpcVerification: {
-        gpcRecognitionObserved: false,
-        gpcSignalSent: true,
-        policyMentions: ["This policy says Global Privacy Control opt-out preference signals are honored."],
-        thirdPartyCookieCountDelta: 1,
-        trackerCountDelta: 2
-      }
-    },
-    validationFindings: []
-  });
-  const concern = concerns.find((candidate) => candidate.suggestedUnifiedFindingId === "gpc_signal_not_honored");
-  const packets = buildUnifiedFindingPackets({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      gpcVerification: {
-        gpcRecognitionObserved: false,
-        gpcSignalSent: true,
-        policyMentions: ["This policy says Global Privacy Control opt-out preference signals are honored."],
-        thirdPartyCookieCountDelta: 1,
-        trackerCountDelta: 2
-      }
-    },
-    validationFindings: []
-  });
-  const packet = packets.find((candidate) => candidate.unifiedFindingId === "gpc_signal_not_honored");
-
-  assert.equal(concern?.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "gpc_handling");
-  assert.ok(packet);
-});
-
-test("California credential-only sensitive context does not create a Limit Use gap concern", () => {
-  const concerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      californiaPrivacyEvidence: {
-        limitUseSensitivePiPathObserved: false,
-        sensitivePiCategories: ["password"],
-        sensitivePiContextObserved: true,
-        sensitivePiContextUrls: ["https://example.test/login"],
-        sensitiveThirdPartyTrackingObserved: false
-      }
-    },
-    validationFindings: []
-  });
-
-  assert.equal(
-    concerns.some((concern) => concern.originKey === "california_privacy.sensitive_pi_control.potential_gap"),
-    false
-  );
-  assert.equal(
-    concerns.some((concern) => concern.suggestedUnifiedFindingId === "sensitive_collection_surface_observed"),
-    false
-  );
-});
-
-test("California CIPA-sensitive retained evidence flows through normalized concerns", () => {
-  const concerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      californiaPrivacyEvidence: {
-        cipaCommunicationInterceptionEvidence: {
-          cipaConsentTiming: "pre_consent",
-          cipaDisclosureObserved: false,
-          cipaEvidenceConfidence: "medium",
-          cipaSensitive: true,
-          cipaSensitiveSurfaceObserved: false,
-          cipaSignalTypes: ["form_interaction", "third_party_interaction_endpoint"],
-          cipaThirdPartyReceiptObserved: true,
-          directEvidenceObserved: true,
-          legalConclusion: false,
-          pageUrls: ["https://example.test/contact"],
-          requestUrls: ["https://collector.example.test/interaction"],
-          vendors: ["collector.example.test"]
-        },
-        cipaInteractionRecordingEvidence: {
-          cipaConsentTiming: "pre_consent",
-          cipaDisclosureObserved: false,
-          cipaEvidenceConfidence: "high",
-          cipaSensitive: true,
-          cipaSensitiveSurfaceObserved: true,
-          cipaSignalTypes: ["session_replay", "third_party_interaction_endpoint"],
-          cipaThirdPartyReceiptObserved: true,
-          collectionEndpointObserved: true,
-          directEvidenceObserved: true,
-          legalConclusion: false,
-          pageUrls: ["https://example.test/intake"],
-          requestUrls: ["https://rs.fullstory.com/rec/page"],
-          vendors: ["FullStory"]
-        }
-      }
-    },
-    validationFindings: []
-  });
-
-  const interactionConcern = concerns.find(
-    (concern) => concern.suggestedUnifiedFindingId === "cipa_sensitive_interaction_recording_signal"
-  );
-  const communicationConcern = concerns.find(
-    (concern) => concern.suggestedUnifiedFindingId === "cipa_sensitive_communication_interception_signal"
-  );
-
-  assert.ok(interactionConcern);
-  assert.ok(communicationConcern);
-  assert.equal(interactionConcern.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "cipa_interaction_recording");
-  assert.equal(communicationConcern.evidenceBundle.rawEvidence?.californiaEvidenceFamily, "cipa_communication_interception");
-  assert.equal(interactionConcern.evidenceBundle.rawEvidence?.legalConclusion, false);
-  assert.doesNotMatch(`${interactionConcern.title} ${interactionConcern.description}`, /violation|illegal/i);
-});
-
-test("California CIPA negative retained evidence does not create normalized concerns", () => {
-  const concerns = buildNormalizedConcerns({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      californiaPrivacyEvidence: {
-        cipaCommunicationInterceptionEvidence: {
-          cipaConsentTiming: "unknown",
-          cipaDisclosureObserved: false,
-          cipaEvidenceConfidence: "high",
-          cipaSensitive: false,
-          cipaSensitiveSurfaceObserved: false,
-          cipaSignalTypes: [],
-          cipaThirdPartyReceiptObserved: false,
-          directEvidenceObserved: false,
-          legalConclusion: false,
-          pageUrls: [],
-          requestUrls: [],
-          vendors: []
-        },
-        cipaInteractionRecordingEvidence: {
-          cipaConsentTiming: "unknown",
-          cipaDisclosureObserved: false,
-          cipaEvidenceConfidence: "high",
-          cipaSensitive: false,
-          cipaSensitiveSurfaceObserved: false,
-          cipaSignalTypes: [],
-          cipaThirdPartyReceiptObserved: false,
-          directEvidenceObserved: false,
-          legalConclusion: false,
-          pageUrls: [],
-          requestUrls: [],
-          vendors: []
-        }
-      }
-    },
-    validationFindings: []
-  });
-
-  assert.equal(
-    concerns.some((concern) => concern.suggestedUnifiedFindingId === "cipa_sensitive_interaction_recording_signal"),
-    false
-  );
-  assert.equal(
-    concerns.some((concern) => concern.suggestedUnifiedFindingId === "cipa_sensitive_communication_interception_signal"),
-    false
-  );
-});
-
 test("runtime coverage limitation artifacts create audit-only normalized concerns", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
@@ -1934,24 +1705,4 @@ test("English legacy normalized concern behavior is preserved with legacy Articl
     withLegacyArticle13Summary.some((concern) => concern.originKey.startsWith("gdpr_transparency.article13.")),
     false
   );
-});
-
-test("California rights request evidence creates a positive rights-path finding without absence logic", () => {
-  const packets = buildUnifiedFindingDisplayPackets({
-    reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      californiaPrivacyEvidence: {
-        consumerRightsRequestMethodObserved: true,
-        consumerRightsRequestMethods: ["access_request", "delete_request"],
-        consumerRightsRequestSnippets: ["Submit a privacy request to access, delete, or correct your personal information."],
-        consumerRightsRequestUrls: ["https://example.test/privacy-request"]
-      }
-    },
-    validationFindingLookup: new Map(),
-    validationFindings: []
-  });
-  const packet = packets.find((candidate) => candidate.unifiedFindingId === "privacy_rights_path_present");
-
-  assert.ok(packet);
-  assert.equal(packets.some((candidate) => /missing/.test(candidate.unifiedFindingId)), false);
 });

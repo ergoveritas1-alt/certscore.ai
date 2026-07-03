@@ -104,8 +104,7 @@ test("promotes known advertising cookie retention evidence into a medium strong 
     thirdPartyRequestCount: 0
   });
   assert.ok(lenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((entry) => entry.id === "long_lived_cookie_retention_review"));
-  assert.ok(lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((entry) => entry.id === "long_lived_cookie_retention_review"));
-  assert.equal(lenses.find((lens) => lens.acronym === "FTC")?.findings.some((entry) => entry.id === "long_lived_cookie_retention_review"), false);
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
 test("keeps unknown long-lived cookie evidence audit-only medium review signal", () => {

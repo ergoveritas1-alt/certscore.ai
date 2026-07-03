@@ -1,7 +1,8 @@
 import { CertScoreClient } from "@certscore/sdk";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { exportFindings, normalizeDetail, normalizeFormat, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
+import { CERTSCORE_MCP_VERSION } from "./version.js";
+import { exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -15,18 +16,18 @@ type CreateScanInput = {
   detail?: "tiny" | "quick" | "standard" | "full" | "summary" | "evidence";
   format?: "json" | "markdown";
   freshness?: "latest" | "refresh";
-  scanFrom?: "eu_ie" | "california";
+  scanFrom?: "eu_ie";
 };
 type GetScanStatusInput = { jobId?: string; scanId?: string };
 type GetScanInput = { scanId: string };
 type GetReportInput = { scanId: string; detail?: "tiny" | "quick" | "standard" | "full" | "summary" | "evidence"; format?: "json" | "markdown" };
 type GetEvidenceInput = { scanId: string };
 type ExportFindingsInput = { scanId: string };
-type ListFindingsInput = { scanId: string };
-type GetPreConsentCookiesTrackersInput = { scanId: string };
+type ListFindingsInput = { limit?: number; offset?: number; scanId: string };
+type GetPreConsentCookiesTrackersInput = { maxRows?: number; scanId: string };
 type ExplainFindingInput = { scanId: string; findingId: string };
-type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_ie" | "california" };
-type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; scanFrom?: "eu_ie" | "california" };
+type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_ie" };
+type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_ie" };
 
 function toolContract(name: CertScoreMcpToolName) {
   const contract = certScoreMcpToolContracts.find((candidate) => candidate.name === name);
@@ -36,7 +37,9 @@ function toolContract(name: CertScoreMcpToolName) {
   return {
     title: contract.title,
     description: contract.description,
-    inputSchema: contract.inputSchema
+    inputSchema: contract.inputSchema,
+    outputSchema: contract.outputSchema,
+    annotations: contract.annotations
   };
 }
 
@@ -48,8 +51,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   });
 
   const server = new McpServer({
-    name: "certscore-pulse",
-    version: "0.1.3"
+    name: "certscore",
+    version: CERTSCORE_MCP_VERSION
   });
 
   async function createPulseScanTool(input: CreateScanInput) {
@@ -191,9 +194,9 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   server.registerTool(
     "list_findings",
     toolContract("list_findings"),
-    async ({ scanId }: ListFindingsInput) => {
+    async ({ limit, offset, scanId }: ListFindingsInput) => {
       try {
-        return toToolResult(await client.findings.list(scanId));
+        return toToolResult(paginateFindingList(await client.findings.list(scanId), { limit, offset }));
       } catch (error) {
         return toToolError(error);
       }
@@ -203,9 +206,9 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   server.registerTool(
     "get_pre_consent_cookies_trackers",
     toolContract("get_pre_consent_cookies_trackers"),
-    async ({ scanId }: GetPreConsentCookiesTrackersInput) => {
+    async ({ maxRows, scanId }: GetPreConsentCookiesTrackersInput) => {
       try {
-        return toToolResult(await client.scans.preConsentCookiesTrackers(scanId));
+        return toToolResult(limitPreConsentRows(await client.scans.preConsentCookiesTrackers(scanId), { maxRows }));
       } catch (error) {
         return toToolError(error);
       }
@@ -239,9 +242,9 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   server.registerTool(
     "get_latest_domain_pre_consent_cookies_trackers",
     toolContract("get_latest_domain_pre_consent_cookies_trackers"),
-    async ({ domain, scanFrom }: GetLatestDomainPreConsentCookiesTrackersInput) => {
+    async ({ domain, maxRows, scanFrom }: GetLatestDomainPreConsentCookiesTrackersInput) => {
       try {
-        return toToolResult(await client.domains.latestPreConsentCookiesTrackers(domain, { scanFrom }));
+        return toToolResult(limitPreConsentRows(await client.domains.latestPreConsentCookiesTrackers(domain, { scanFrom }), { maxRows }));
       } catch (error) {
         return toToolError(error);
       }

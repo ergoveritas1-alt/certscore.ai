@@ -252,6 +252,7 @@ const CONTRADICTION_IDS = [
 
 const CONSENT_TRACKING_IDS = [
   "preconsent_tracking",
+  "consent_infrastructure__cmp_load_order",
   "consent_mechanism_absent",
   "consent_surface_missing",
   "reject_did_not_reduce_tracking",
@@ -2371,6 +2372,26 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
         ruleId: "evidence.preconsent.review_without_runtime_artifacts"
       });
     }
+    return;
+  }
+  if (packet.unifiedFindingId === "consent_infrastructure__cmp_load_order") {
+    const details = packet.details?.family === "consent_tracking" ? packet.details : null;
+    const hasTimingAnchor =
+      typeof details?.firstClassifiedTrackerAtMs === "number" &&
+      typeof details?.cmpScriptLoadedAtMs === "number" &&
+      typeof details?.cmpGapMs === "number" &&
+      details.cmpGapMs > 0;
+    overrideDecision(decision, {
+      state: hasTimingAnchor ? "confirmed" : "review",
+      lane: "main",
+      tier: hasTimingAnchor && typeof details?.cmpGapMs === "number" && details.cmpGapMs > 3000 ? "headline" : "section",
+      reason: hasTimingAnchor
+        ? "Retained runtime timing anchors show classified tracker activity before CMP infrastructure, so the consent load-order finding can stand on its own."
+        : "CMP load-order review context was retained, but the timing anchors are incomplete.",
+      ruleId: hasTimingAnchor
+        ? "evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"
+        : "evidence.preconsent.review_without_runtime_artifacts"
+    });
     return;
   }
 

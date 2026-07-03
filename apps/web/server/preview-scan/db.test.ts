@@ -71,7 +71,7 @@ test("preview scan initial config marks Lambda v2 DAG dispatch when configured",
   assert.equal(Object.hasOwn(config, "signals"), false);
 });
 
-test("preview scan initial config keeps Lambda-on scans on real regional AWS even when simulator env is set", () => {
+test("preview scan initial config honors simulator env for Lambda-on localhost scans", () => {
   const config = buildPreviewScanInitialConfig({
     env: {
       CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED: "true",
@@ -90,49 +90,50 @@ test("preview scan initial config keeps Lambda-on scans on real regional AWS eve
 
   assert.equal(v2DagLambda?.awsRegion, "eu-west-1");
   assert.equal(v2DagLambda?.functionName, "certscore-v2-dag-ie");
-  assert.equal(v2DagLambda?.resultQueueUrl, "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results");
-  assert.equal(v2DagLambda?.simulatedLocalLambda, false);
+  assert.equal(v2DagLambda?.resultQueueUrl, "local://certscore-v2-dag-lambda-simulated-results");
+  assert.equal(v2DagLambda?.simulatedLocalLambda, true);
 });
 
-test("preview scan initial config fails closed instead of simulating Lambda-on Ireland scans", () => {
-  assert.throws(
-    () =>
-      buildPreviewScanInitialConfig({
-        env: {
-          CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
-          CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
-          CERTSCORE_V2_DAG_LAMBDA_SIMULATED: "true",
-          NEXT_PUBLIC_APP_URL: "http://localhost:3000",
-          NODE_ENV: "development"
-        },
-        hostname: "example.com",
-        localV2DagRunViaLambda: true,
-        normalizedUrl: "https://example.com/",
-        scanFrom: "eu_ie"
-      }),
-    /CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL/
-  );
-});
-
-test("preview scan initial config honors requested Lambda scan location", () => {
+test("preview scan initial config can simulate Lambda-on Ireland scans without a regional queue", () => {
   const config = buildPreviewScanInitialConfig({
     env: {
-      CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED: "true",
-      CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME: "certscore-v2-dag-usw",
-      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-usw-results",
+      CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
+      CERTSCORE_V2_DAG_LAMBDA_SIMULATED: "true",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       NODE_ENV: "development"
     },
     hostname: "example.com",
     localV2DagRunViaLambda: true,
     normalizedUrl: "https://example.com/",
-    scanFrom: "california"
+    scanFrom: "eu_ie"
   });
   const v2DagLambda = config.execution?.v2DagLambda as Record<string, unknown> | undefined;
 
-  assert.equal(v2DagLambda?.awsRegion, "us-west-2");
-  assert.equal(v2DagLambda?.functionName, "certscore-v2-dag-usw");
-  assert.equal(v2DagLambda?.resultQueueUrl, "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-usw-results");
+  assert.equal(v2DagLambda?.awsRegion, "eu-west-1");
+  assert.equal(v2DagLambda?.resultQueueUrl, "local://certscore-v2-dag-lambda-simulated-results");
+  assert.equal(v2DagLambda?.simulatedLocalLambda, true);
+});
+
+test("preview scan initial config honors requested Lambda scan location", () => {
+  const config = buildPreviewScanInitialConfig({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME: "certscore-v2-dag-ie",
+      CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results",
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      NODE_ENV: "development"
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: true,
+    normalizedUrl: "https://example.com/",
+    scanFrom: "eu_ie"
+  });
+  const v2DagLambda = config.execution?.v2DagLambda as Record<string, unknown> | undefined;
+
+  assert.equal(v2DagLambda?.awsRegion, "eu-west-1");
+  assert.equal(v2DagLambda?.functionName, "certscore-v2-dag-ie");
+  assert.equal(v2DagLambda?.resultQueueUrl, "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results");
 });
 
 test("preview Lambda v2 DAG dispatch fails closed when queue region is stale", () => {

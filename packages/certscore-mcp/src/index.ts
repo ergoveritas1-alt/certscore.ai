@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createCertScoreMcpServer } from "./server.js";
+import { CERTSCORE_MCP_VERSION } from "./version.js";
 
 export { createCertScoreMcpServer } from "./server.js";
 export { explainFinding, exportFindings, findingsFromReport } from "./tools.js";
+export { CERTSCORE_MCP_VERSION } from "./version.js";
 
-export const CERTSCORE_MCP_VERSION = "0.1.3";
 const DEFAULT_CERTSCORE_BASE_URL = "https://certscore.ai";
 const MIN_NODE_MAJOR = 20;
 const MAX_NODE_MAJOR_EXCLUSIVE = 25;

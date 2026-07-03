@@ -2,14 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getFullScanQueueAvailabilityFromHeartbeat, resolveScannerServiceHeartbeatSnapshot } from "./full-scan-queue";
 
-function restoreEnv(name: string, value: string | undefined) {
-  if (typeof value === "string") {
-    process.env[name] = value;
-  } else {
-    delete process.env[name];
-  }
-}
-
 test("disables scanning when no scanner heartbeat is present", () => {
   const availability = getFullScanQueueAvailabilityFromHeartbeat(null, Date.parse("2026-03-21T12:00:00.000Z"));
 
@@ -36,44 +28,6 @@ test("enables scanning when the scanner heartbeat is fresh", () => {
     enabled: true,
     reason: null
   });
-});
-
-test("disables local residential geo scans unless explicitly enabled", () => {
-  const previousGeoEnabled = process.env.FULL_SCAN_RESIDENTIAL_GEO_ENABLED;
-  process.env.FULL_SCAN_RESIDENTIAL_GEO_ENABLED = "false";
-
-  try {
-    const availability = getFullScanQueueAvailabilityFromHeartbeat(
-      "2026-03-21T11:59:10.000Z",
-      Date.parse("2026-03-21T12:00:00.000Z"),
-      { scanFrom: "california" }
-    );
-
-    assert.equal(availability.enabled, false);
-    assert.match(availability.reason ?? "", /residential geo scanner configuration/i);
-  } finally {
-    restoreEnv("FULL_SCAN_RESIDENTIAL_GEO_ENABLED", previousGeoEnabled);
-  }
-});
-
-test("allows local residential geo scans when explicitly enabled", () => {
-  const previousGeoEnabled = process.env.FULL_SCAN_RESIDENTIAL_GEO_ENABLED;
-  process.env.FULL_SCAN_RESIDENTIAL_GEO_ENABLED = "true";
-
-  try {
-    const availability = getFullScanQueueAvailabilityFromHeartbeat(
-      "2026-03-21T11:59:10.000Z",
-      Date.parse("2026-03-21T12:00:00.000Z"),
-      { scanFrom: "california" }
-    );
-
-    assert.deepEqual(availability, {
-      enabled: true,
-      reason: null
-    });
-  } finally {
-    restoreEnv("FULL_SCAN_RESIDENTIAL_GEO_ENABLED", previousGeoEnabled);
-  }
 });
 
 test("disables scanning when the scanner heartbeat is stale", () => {

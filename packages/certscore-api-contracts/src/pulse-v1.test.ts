@@ -3,12 +3,17 @@ import test from "node:test";
 import {
   apiV2CreateScanRequestSchema,
   apiV2EvidenceSummarySchema,
+  apiV2FindingDetailSchema,
   apiV2FindingListSchema,
+  apiV2PreConsentCookiesTrackersSchema,
   apiV2ScanResourceSchema,
   buildCertScoreApiV2OpenApiDocument,
   buildPulseChatGptOpenApiDocument,
   buildPulseV1OpenApiDocument,
   certScoreMcpToolContracts,
+  mcpFindingListOutputSchema,
+  mcpPreConsentCookiesTrackersOutputSchema,
+  mcpScanSiteOutputSchema,
   PULSE_SCHEMA_VERSION,
   pulseErrorSchema,
   pulseResponseSchema,
@@ -86,6 +91,76 @@ test("MCP contracts expose the current scoped tool surface", () => {
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_evidence")?.inputSchema.scanId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.inputSchema.findingId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_latest_domain_scan")?.inputSchema.domain);
+  assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.annotations, {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true
+  });
+  assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "get_scan")?.annotations, {
+    readOnlyHint: true,
+    openWorldHint: true
+  });
+  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.description.includes("Deprecated alias"), true);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "list_findings")?.inputSchema.limit);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_pre_consent_cookies_trackers")?.inputSchema.maxRows);
+});
+
+test("MCP output contracts reuse stable API shapes with bounded MCP metadata", () => {
+  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.outputSchema, mcpScanSiteOutputSchema);
+  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "get_scan")?.outputSchema, apiV2ScanResourceSchema);
+  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "list_findings")?.outputSchema, mcpFindingListOutputSchema);
+  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.outputSchema, apiV2FindingDetailSchema);
+  assert.equal(
+    certScoreMcpToolContracts.find((tool) => tool.name === "get_pre_consent_cookies_trackers")?.outputSchema,
+    mcpPreConsentCookiesTrackersOutputSchema
+  );
+
+  assert.doesNotThrow(() =>
+    mcpFindingListOutputSchema.parse({
+      type: "certscore_finding_list",
+      scanId: "scan_123",
+      findings: [],
+      pagination: {
+        limit: 50,
+        offset: 0,
+        returned: 0,
+        total: 0,
+        truncated: false
+      }
+    })
+  );
+  assert.doesNotThrow(() =>
+    mcpPreConsentCookiesTrackersOutputSchema.parse({
+      type: "certscore_pre_consent_cookies_trackers",
+      scanId: "scan_123",
+      domain: "example.com",
+      summary: {
+        rowCount: 0,
+        trackerCount: 0,
+        cookieCount: 0,
+        requestCount: 0,
+        totalRowCount: 12,
+        truncated: true
+      },
+      rows: []
+    })
+  );
+  assert.throws(() =>
+    apiV2PreConsentCookiesTrackersSchema.parse({
+      type: "certscore_pre_consent_cookies_trackers",
+      scanId: "scan_123",
+      domain: "example.com",
+      summary: {
+        rowCount: 0,
+        trackerCount: 0,
+        cookieCount: 0,
+        requestCount: 0,
+        totalRowCount: 12
+      },
+      rows: []
+    })
+  );
 });
 
 test("Pulse v1 schemas accept status and auth error envelopes", () => {
@@ -204,7 +279,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.0");
+  assert.equal(document.info.version, "0.1.1");
   assert.ok(document.paths["/api/v2/scans"]);
   assert.ok(document.paths["/api/v2/scans/{scanId}/findings/{findingId}"]);
   assert.ok(document.paths["/api/v2/domains/{domain}/latest"]);

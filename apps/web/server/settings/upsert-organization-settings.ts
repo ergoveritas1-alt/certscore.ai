@@ -11,7 +11,7 @@ import {
 import { upsertOrganizationSettings } from "./repository";
 
 const settingsSchema = z.object({
-  defaultScanFrom: z.enum(["eu_de", "eu_ie", "california"]).optional(),
+  defaultScanFrom: z.enum(["eu_de", "eu_ie"]).optional(),
   defaultScanFrequency: z.enum(["manual", "hourly", "daily", "weekly", "monthly"]).optional().or(z.literal(""))
 });
 

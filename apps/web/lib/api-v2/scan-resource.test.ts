@@ -149,7 +149,7 @@ test("buildApiV2ScanResource projects a completed scan into public-safe v2 shape
   assert.equal(resource.type, "certscore_scan");
   assert.equal(resource.scanId, "00000000-0000-4000-8000-000000000123");
   assert.equal(resource.domain, "example.com");
-  assert.equal(resource.score, 33);
+  assert.equal(resource.score, 34);
   assert.equal(resource.riskLevel, "significant_review_recommended");
   assert.equal(resource.coverage?.status, "complete");
   assert.equal(resource.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
@@ -309,7 +309,7 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
         id: "pre_consent_tracking_detected",
         label: "Tracking started before consent",
         criticality: "high",
-        confidence: "strong",
+        confidence: "good",
         plainEnglish: "A third-party tracking request was observed before consent.",
         evidence: {
           summary: "Representative tracker request was retained in the public report projection.",
@@ -332,9 +332,11 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
         },
         evidenceDigest: {
           basis: "runtime_observation",
-          phase: "before_consent",
+          phase: "pre_consent",
           exampleCount: 6,
           examplesShown: 6,
+          examplesAvailable: 6,
+          authRequiredForExamples: false,
           hasTimingAnchor: true,
           hasVendorAnchor: true,
           hasConsentContext: true
@@ -349,12 +351,59 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
   assert.equal(list.type, "certscore_finding_list");
   assert.equal(finding?.type, "certscore_finding");
   assert.equal(finding?.criticality, "high");
-  assert.equal(finding?.confidence, "strong");
+  assert.equal(finding?.confidence, "good");
   assert.equal(finding?.evidence.basis, "runtime_observation");
+  assert.equal(finding?.evidence.phase, "pre_consent");
   assert.equal(finding?.evidence.examples?.length, 5);
+  assert.equal(finding?.evidence.examplesShown, 5);
+  assert.equal(finding?.evidence.examplesAvailable, 6);
+  assert.equal(finding?.evidence.authRequiredForExamples, false);
   assert.equal(finding?.evidence.examples?.[0]?.observedAtMs, 123);
   assert.equal("rawRequestBody" in (finding?.evidence.examples?.[0] ?? {}), false);
   assert.equal(finding?.links?.self, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings/pre_consent_tracking_detected");
+});
+
+test("buildApiV2FindingList derives evidence anchors from structured events when digest flags are absent", () => {
+  const list = buildApiV2FindingList({
+    scanId: "00000000-0000-4000-8000-000000000123",
+    findings: [
+      {
+        id: "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
+        label: "Reject path availability needs review",
+        criticality: "medium",
+        confidence: "good",
+        plainEnglish: "A consent control was first seen 2310ms after scan start.",
+        evidence: {
+          summary: "OneTrust evidence was retained.",
+          observedPhase: "before_consent",
+          exampleEvents: [
+            {
+              type: "request",
+              vendorName: "OneTrust",
+              urlHost: "cdn.cookielaw.org",
+              firstSeenMs: 2310,
+              phase: "pre_consent"
+            }
+          ]
+        },
+        evidenceDigest: {
+          basis: "runtime_observation",
+          exampleCount: 1,
+          examplesShown: 1,
+          hasTimingAnchor: false,
+          hasVendorAnchor: false
+        }
+      }
+    ]
+  });
+
+  const finding = list.findings[0];
+  assert.equal(finding?.confidence, "good");
+  assert.equal(finding?.evidence.hasTimingAnchor, true);
+  assert.equal(finding?.evidence.hasVendorAnchor, true);
+  assert.equal(finding?.evidence.phase, "pre_consent");
+  assert.equal(finding?.evidence.examples?.[0]?.vendor, "OneTrust");
+  assert.equal(finding?.evidence.examples?.[0]?.observedAtMs, 2310);
 });
 
 test("buildApiV2FindingDetail uses unknown enums conservatively", () => {

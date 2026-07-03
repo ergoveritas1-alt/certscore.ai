@@ -746,21 +746,11 @@ type RegulatoryLensFinding = {
 
 const CONTEXT_ONLY_REGULATORY_FINDING_SOURCES = new Set(["regulatory_counts", "regulatory_lens_score_driver"]);
 
-const FINANCIAL_CLAIMS_FINDING_IDS = new Set([
-  "simulated_performance_without_disclosure",
-  "unqualified_superlative_claim_detected",
-  "financial_urgency_pressure_tactic_detected",
-  "guaranteed_or_high_return_claims_present",
-  "performance_claims_without_context",
-  "high_risk_product_risk_disclosure_missing"
-]);
-
 const CANONICAL_EVIDENCE_FINDING_IDS = new Set([
   "pre_consent_tracking_detected",
   "reject_tracking_persists_after_reject",
   "third_party_tracking_pre_consent",
   "rtb_cookie_sync_observed",
-  "cpra_cba_opt_out_missing",
   "cross_domain_identifier_sharing_observed",
   "cookie_disclosure_gap",
   "third_party_cookie_pre_consent",
@@ -827,70 +817,6 @@ const GDPR_EPRIVACY_REGULATORY_FINDING_IDS = new Set([
   "tracking_redirect_chain",
   "high_request_density"
 ]);
-
-const CCPA_CPRA_CIPA_REGULATORY_FINDING_IDS = new Set([
-  "cpra_cba_opt_out_missing",
-  "long_lived_cookie_retention_review",
-  "third_party_tracking_pre_consent",
-  "cross_domain_identifier_sharing_observed",
-  "identifier_transmission_detected",
-  "device_data_collection_detected",
-  "telemetry_rich_identification_observed",
-  "rtb_cookie_sync_observed",
-  "multi_vendor_tracking_detected",
-  "large_third_party_footprint",
-  "collection_endpoints_detected",
-  "sensitive_data_collection_with_third_party_tracking_present",
-  "sensitive_collection_surface_observed",
-  "possible_session_replay_on_sensitive_input_surface",
-  "cipa_sensitive_interaction_recording_signal",
-  "cipa_sensitive_communication_interception_signal",
-  "pre_submit_text_capture_detected",
-  "cookie_disclosure_gap",
-  "policy_behavior_contradiction_detected",
-  "policy_clarity_risk",
-  "tracking_redirect_chain"
-]);
-
-const FTC_REGULATORY_FINDING_IDS = new Set([
-  "reject_option_missing_or_hidden",
-  "asymmetric_consent_ui",
-  "forced_consent_interaction",
-  "blocking_overlay_observed",
-  "content_obstructed_by_overlay",
-  "consent_dark_patterns_detected",
-  "repeated_consent_prompt",
-  "popup_or_modal_present",
-  "interstitial_detected",
-  "policy_behavior_contradiction_detected",
-  "policy_clarity_risk",
-  "cookie_disclosure_gap",
-  "reject_tracking_persists_after_reject",
-  "third_party_tracking_pre_consent",
-  "video_content_tracking_exposure",
-  "sensitive_data_collection_with_third_party_tracking_present",
-  "possible_session_replay_on_sensitive_input_surface",
-  "pre_submit_text_capture_detected",
-  "telemetry_rich_identification_observed",
-  "non_cookie_tracking_detected",
-  "high_request_density",
-  "multi_vendor_tracking_detected",
-  "large_third_party_footprint",
-  "collection_endpoints_detected"
-]);
-
-function getFinancialClaimsFindingSummary(finding: CertScoreFinding) {
-  switch (finding.id) {
-    case "simulated_performance_without_disclosure":
-      return "Simulated or hypothetical performance language surfaced without nearby disclosure.";
-    case "unqualified_superlative_claim_detected":
-      return "Unqualified superiority or best-in-class claim surfaced.";
-    case "financial_urgency_pressure_tactic_detected":
-      return "Urgency language appears tied to a conversion step.";
-    default:
-      return finding.shortSummary;
-  }
-}
 
 function compactEvidenceRecord(value: Record<string, unknown> | undefined, keys: string[]) {
   if (!value) {
@@ -1157,18 +1083,6 @@ function filterReviewContextChipsForLens(chips: string[], lens: string | null) {
   if (!lens) {
     return chips;
   }
-  if (/FTC/i.test(lens)) {
-    return chips.filter((chip) =>
-      /FTC|consumer|deception|unfair|disclosure|choice|dark pattern|clarity|substantiation/i.test(chip) &&
-      !/GDPR|ePrivacy|Article 5|EU\b/i.test(chip)
-    );
-  }
-  if (/CCPA|CPRA|CIPA/i.test(lens)) {
-    return chips.filter((chip) =>
-      /CCPA|CPRA|CIPA|California|sale|share|sharing|disclosure|sensitive|session|wiretap|eavesdrop|recording/i.test(chip) &&
-      !/GDPR|ePrivacy|Article 5|EU\b/i.test(chip)
-    );
-  }
   if (/GDPR|ePrivacy/i.test(lens)) {
     return chips.filter((chip) => /GDPR|ePrivacy|Article 5|consent|cookie|tracking/i.test(chip));
   }
@@ -1218,9 +1132,6 @@ function compactObservedCountEvidence(evidence: Record<string, unknown> | null |
 
 const COOKIE_CONTEXT_NOT_TOP_LEVEL_COPY =
   "Cookie timing context was retained, but CertScore did not retain enough classified non-essential tracking/vendor evidence to promote this into a top-level pre-consent tracking finding.";
-
-const THIRD_PARTY_REQUEST_CONTEXT_NOT_TOP_LEVEL_COPY =
-  "Third-party request context was retained, but CertScore did not retain enough classified advertising, sharing, sale/share, or disclosure-gap evidence to promote this into a top-level third-party tracking or sharing finding.";
 
 function hasNonEmptyArrayEvidence(value: Record<string, unknown> | null | undefined, keys: string[]) {
   return keys.some((key) => {
@@ -1326,7 +1237,7 @@ function buildMappedRegulatoryLensFindings(input: {
     .map((finding) =>
       buildRegulatoryLensFindingFromCertFinding(
         finding,
-        finding.id === "cpra_cba_opt_out_missing" ? finding.label : finding.shortSummary,
+        finding.shortSummary,
         input.context
       )
     );
@@ -1340,28 +1251,6 @@ function addMappedFindingId(target: Set<string>, findingIds: Set<string>, findin
 
 function hasAnyFinding(findingIds: Set<string>, ids: string[]) {
   return ids.some((id) => findingIds.has(id));
-}
-
-function shouldMapPreConsentTrackingToFtc(input: {
-  findingIds: Set<string>;
-  hasHealthSensitiveContext: boolean;
-  hasSensitiveGamblingTrackingRisk: boolean;
-  sensitiveTrackingFinding: CertScoreFinding | undefined;
-}) {
-  return (
-    hasAnyFinding(input.findingIds, [
-      "reject_option_missing_or_hidden",
-      "asymmetric_consent_ui",
-      "forced_consent_interaction",
-      "consent_dark_patterns_detected",
-      "policy_behavior_contradiction_detected",
-      "policy_clarity_risk",
-      "cookie_disclosure_gap"
-    ]) ||
-    Boolean(input.sensitiveTrackingFinding) ||
-    input.hasHealthSensitiveContext ||
-    input.hasSensitiveGamblingTrackingRisk
-  );
 }
 
 function shouldMapCrossDomainIdentifierSharingToGdpr(input: {
@@ -1386,27 +1275,6 @@ function shouldMapCrossDomainIdentifierSharingToGdpr(input: {
   );
 }
 
-function shouldMapSessionRecordingToCpra(input: {
-  findingIds: Set<string>;
-  sensitiveTrackingFinding: CertScoreFinding | undefined;
-}) {
-  return (
-    Boolean(input.sensitiveTrackingFinding) ||
-    hasAnyFinding(input.findingIds, [
-      "possible_session_replay_on_sensitive_input_surface",
-      "sensitive_data_collection_with_third_party_tracking_present",
-      "sensitive_collection_surface_observed",
-      "pre_submit_text_capture_detected",
-      "cookie_disclosure_gap",
-      "policy_behavior_contradiction_detected",
-      "policy_clarity_risk",
-      "cpra_cba_opt_out_missing",
-      "cross_domain_identifier_sharing_observed",
-      "rtb_cookie_sync_observed"
-    ])
-  );
-}
-
 function shouldMapConsentDarkPatternsToGdpr(input: {
   beforeConsentCookieCount: number;
   findingIds: Set<string>;
@@ -1423,28 +1291,6 @@ function shouldMapConsentDarkPatternsToGdpr(input: {
       "analytics_cookie_pre_consent",
       "adtech_cookie_pre_consent",
       "rtb_cookie_sync_observed"
-    ])
-  );
-}
-
-function shouldMapProbableFingerprintingToFtc(input: {
-  findingIds: Set<string>;
-  hasHealthSensitiveContext: boolean;
-  hasSensitiveGamblingTrackingRisk: boolean;
-  sensitiveTrackingFinding: CertScoreFinding | undefined;
-}) {
-  return (
-    Boolean(input.sensitiveTrackingFinding) ||
-    input.hasHealthSensitiveContext ||
-    input.hasSensitiveGamblingTrackingRisk ||
-    hasAnyFinding(input.findingIds, [
-      "cookie_disclosure_gap",
-      "policy_behavior_contradiction_detected",
-      "policy_clarity_risk",
-      "reject_option_missing_or_hidden",
-      "asymmetric_consent_ui",
-      "forced_consent_interaction",
-      "consent_dark_patterns_detected"
     ])
   );
 }
@@ -1499,52 +1345,6 @@ function buildMinimalRegulatoryLens(input: {
     summary: input.summary,
     toneClass: input.toneClass ?? tone.toneClass
   } satisfies RegulatoryLens;
-}
-
-function buildFinancialClaimsLens(input: {
-  findings: CertScoreFinding[];
-  forceScored?: boolean;
-}): RegulatoryLens | null {
-  const financialFindings = input.findings.map((finding) =>
-    buildRegulatoryLensFindingFromCertFinding(finding, getFinancialClaimsFindingSummary(finding), {
-      lens: "Financial & commercial claims"
-    })
-  );
-
-  if (financialFindings.length === 0) {
-    return null;
-  }
-
-  const financialSeverityPenalty = input.findings.reduce((total, finding) => {
-    switch (finding.severity) {
-      case "critical":
-        return total + 24;
-      case "high":
-        return total + 20;
-      case "medium":
-        return total + 14;
-      default:
-        return total + 8;
-    }
-  }, 0);
-  const financialScore = clampScore(84 - financialSeverityPenalty - Math.max(0, financialFindings.length - 1) * 6);
-  const financialTone = buildTone(financialScore);
-
-  return {
-    acronym: "Financial & commercial claims",
-    detailTitle: "Claims, urgency, and pricing disclosures",
-    findings: financialFindings,
-    ratingLabel: financialTone.label,
-    score: financialScore,
-    summary: "Commercial claims and pricing language should be reviewed for clearer qualification and disclosure.",
-    toneClass: financialTone.toneClass
-  } satisfies RegulatoryLens;
-}
-
-function hasFinancialRegulatoryBenchmark(value: string | null | undefined) {
-  return /\b(?:forex|futures?|options?|crypto derivatives?|investment signals?|trading signals?|prop trading|funded accounts?|cfd|spread betting|financial advisory|investment newsletter|copy trading|signal service|funded account)\b/i.test(
-    value ?? ""
-  );
 }
 
 function AccessLimitationDetails(input: { notice: ExecutiveAccessLimitationNotice }) {
@@ -1616,8 +1416,6 @@ export function buildRegulatoryLenses(
   }
 ): RegulatoryLens[] {
   const findingIds = new Set(findings.map((finding) => finding.id));
-  const financialClaimFindings = findings.filter((finding) => FINANCIAL_CLAIMS_FINDING_IDS.has(finding.id));
-  const financialRegulatoryBenchmarkActive = hasFinancialRegulatoryBenchmark(options?.benchmarkIndustry);
   const trackingFinding =
     findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
     findings.find((finding) => finding.id === "rtb_cookie_sync_observed") ??
@@ -1627,19 +1425,9 @@ export function buildRegulatoryLenses(
     findings.find((finding) => finding.id === "analytics_cookie_pre_consent") ??
     findings.find((finding) => finding.id === "adtech_cookie_pre_consent") ??
     findings.find((finding) => /pre[- ]consent|before consent/i.test(`${finding.label} ${finding.shortSummary}`));
-  const replayFinding = findings.find((finding) => finding.id === "session_recording_services_detected");
-  const rejectTrackingFinding = findings.find((finding) => finding.id === "reject_tracking_persists_after_reject");
-  const cpraCbaOptOutFinding = findings.find((finding) => finding.id === "cpra_cba_opt_out_missing");
-  const cookieDisclosureFinding = findings.find((finding) => finding.id === "cookie_disclosure_gap");
   const sensitiveTrackingFinding =
     findings.find((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present") ??
     findings.find((finding) => finding.id === "possible_session_replay_on_sensitive_input_surface");
-  const consentFinding =
-    findings.find((finding) => finding.id === "consent_dark_patterns_detected") ??
-    findings.find((finding) => finding.id === "asymmetric_consent_ui") ??
-    findings.find((finding) => finding.id === "reject_option_missing_or_hidden") ??
-    findings.find((finding) => finding.id === "forced_consent_interaction");
-  const clarityFinding = findings.find((finding) => finding.id === "policy_clarity_risk");
   const hasTrackingConcern =
     options?.unifiedContext?.hasTrackingConcern ??
     (findingIds.has("pre_consent_tracking_detected") ||
@@ -1657,8 +1445,6 @@ export function buildRegulatoryLenses(
   const hasPreConsentCookieConcern = beforeConsentCookieCount > 0;
   const retainedCookieContextExplanation =
     !trackingFinding && beforeConsentCookieCount > 0 ? COOKIE_CONTEXT_NOT_TOP_LEVEL_COPY : undefined;
-  const retainedThirdPartyRequestContextExplanation =
-    !trackingFinding && thirdPartyRequestCount > 0 ? THIRD_PARTY_REQUEST_CONTEXT_NOT_TOP_LEVEL_COPY : undefined;
   const beforeConsentCookieEvidence = options?.unifiedContext?.beforeConsentCookieEvidence;
   const noConfirmedCookieBannerWithPreConsentTracking =
     options?.unifiedContext?.cookieBannerPresent === false &&
@@ -1671,67 +1457,12 @@ export function buildRegulatoryLenses(
     findingIds.has("reject_option_missing_or_hidden") ||
     findingIds.has("forced_consent_interaction") ||
     findingIds.has("reject_tracking_persists_after_reject");
-  const hasStrongDarkPatternConcern =
-    findingIds.has("consent_dark_patterns_detected") || findingIds.has("asymmetric_consent_ui");
-  const riskDriverKeys = new Set(options?.regulatoryRisk?.topRiskDrivers.map((driver) => driver.key) ?? []);
-  const benchmarkHaystack = `${options?.benchmarkIndustry ?? ""} ${findings.map((finding) => `${finding.label} ${finding.shortSummary}`).join(" ")}`;
-  const inferredGamblingContext = /\b(gambling|sports betting|sportsbook|casino|wager|betting)\b/i.test(benchmarkHaystack);
-  const inferredHealthContext = /\b(health|medical|patient|symptom|condition|clinical)\b/i.test(benchmarkHaystack);
-  const hasGamblingSensitiveContext =
-    options?.unifiedContext?.hasSensitiveGamblingTrackingRisk === true || inferredGamblingContext;
-  const hasHealthSensitiveContext =
-    options?.unifiedContext?.hasSensitiveHealthTrackingRisk === true || inferredHealthContext;
-  const hasGenericSensitiveTrackingRisk =
-    riskDriverKeys.has("sensitive_context_tracking") ||
-    riskDriverKeys.has("sensitive_context_preconsent");
-  const hasSensitiveHealthTrackingRisk =
-    options?.unifiedContext?.hasSensitiveHealthTrackingRisk ??
-    (riskDriverKeys.has("health_identity_data_broker") ||
-      riskDriverKeys.has("health_dmp_flow") ||
-      riskDriverKeys.has("identity_data_broker_preconsent") ||
-      riskDriverKeys.has("dmp_pre_consent") ||
-      (hasGenericSensitiveTrackingRisk && hasHealthSensitiveContext && !hasGamblingSensitiveContext));
-  const hasSensitiveGamblingTrackingRisk =
-    options?.unifiedContext?.hasSensitiveGamblingTrackingRisk ??
-    (hasGamblingSensitiveContext && (
-      hasGenericSensitiveTrackingRisk ||
-      findingIds.has("session_recording_services_detected") ||
-      hasTrackingConcern
-    ));
-
   const gdprRegulatoryFindingIds = new Set(GDPR_EPRIVACY_REGULATORY_FINDING_IDS);
   if (shouldMapCrossDomainIdentifierSharingToGdpr({ beforeConsentCookieCount, findingIds })) {
     addMappedFindingId(gdprRegulatoryFindingIds, findingIds, "cross_domain_identifier_sharing_observed");
   }
   if (shouldMapConsentDarkPatternsToGdpr({ beforeConsentCookieCount, findingIds, hasTrackingConcern })) {
     addMappedFindingId(gdprRegulatoryFindingIds, findingIds, "consent_dark_patterns_detected");
-  }
-
-  const cpraRegulatoryFindingIds = new Set(CCPA_CPRA_CIPA_REGULATORY_FINDING_IDS);
-  if (shouldMapSessionRecordingToCpra({ findingIds, sensitiveTrackingFinding })) {
-    addMappedFindingId(cpraRegulatoryFindingIds, findingIds, "session_recording_services_detected");
-  }
-
-  const ftcRegulatoryFindingIds = new Set(FTC_REGULATORY_FINDING_IDS);
-  if (
-    shouldMapPreConsentTrackingToFtc({
-      findingIds,
-      hasHealthSensitiveContext,
-      hasSensitiveGamblingTrackingRisk,
-      sensitiveTrackingFinding
-    })
-  ) {
-    addMappedFindingId(ftcRegulatoryFindingIds, findingIds, "pre_consent_tracking_detected");
-  }
-  if (
-    shouldMapProbableFingerprintingToFtc({
-      findingIds,
-      hasHealthSensitiveContext,
-      hasSensitiveGamblingTrackingRisk,
-      sensitiveTrackingFinding
-    })
-  ) {
-    addMappedFindingId(ftcRegulatoryFindingIds, findingIds, "probable_fingerprinting");
   }
 
   const privacyTrackingNotes = mergeRegulatoryLensFindings([
@@ -1754,33 +1485,6 @@ export function buildRegulatoryLenses(
       : null
   ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
 
-  const cpraNotes = mergeRegulatoryLensFindings([
-    ...buildMappedRegulatoryLensFindings({
-      context: { lens: "CCPA / CPRA / CIPA", reason: "mapped_regulatory_finding" },
-      findingIds: cpraRegulatoryFindingIds,
-      findings
-    }),
-    thirdPartyRequestCount > 0
-        ? buildObservedCountLensFinding({
-            count: thirdPartyRequestCount,
-            id: "third_party_request_count",
-            label: `${thirdPartyRequestCount} third-party request records were observed on the initial path.`,
-            metric: "thirdPartyRequestCount",
-            reviewContextCopy: retainedThirdPartyRequestContextExplanation,
-            reviewContextLabel: retainedThirdPartyRequestContextExplanation ? "Why not top-level?" : undefined,
-            source: "regulatory_counts"
-          })
-      : null
-  ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
-
-  const ftcNotes = mergeRegulatoryLensFindings(
-    buildMappedRegulatoryLensFindings({
-      context: { lens: "FTC", reason: "mapped_regulatory_finding" },
-      findingIds: ftcRegulatoryFindingIds,
-      findings
-    })
-  );
-
   const gdprScore = clampScore(
     84 -
       (hasTrackingConcern ? 32 : 0) -
@@ -1790,137 +1494,9 @@ export function buildRegulatoryLenses(
       (sensitiveTrackingFinding ? 12 : 0) -
       (findingIds.has("session_recording_services_detected") ? 10 : 0)
   );
-  const cpraScore = clampScore(
-    82 -
-      (hasTrackingConcern ? 24 : 0) -
-      (cpraCbaOptOutFinding ? 16 : 0) -
-      (findingIds.has("cookie_disclosure_gap") ? 12 : 0) -
-      (beforeConsentCookieCount > 0 ? 12 : 0) -
-      (sensitiveTrackingFinding ? 14 : 0) -
-      (findingIds.has("session_recording_services_detected") ? 10 : 0) -
-      (findingIds.has("policy_clarity_risk") ? 8 : 0)
-  );
-  const ftcScore = clampScore(
-    80 -
-      (hasConsentConcern ? 24 : 0) -
-      (hasTrackingConcern ? 18 : 0) -
-      (findingIds.has("cookie_disclosure_gap") ? 10 : 0) -
-      (hasSensitiveHealthTrackingRisk ? 16 : 0) -
-      (sensitiveTrackingFinding ? 12 : 0) -
-      (beforeConsentCookieCount > 0 ? 8 : 0) -
-      (findingIds.has("session_recording_services_detected") ? 10 : 0)
-  );
-
-  const cpraFindings = cpraNotes.length > 0 || cpraScore >= 72
-    ? cpraNotes
-    : mergeRegulatoryLensFindings([
-        hasTrackingConcern
-          ? buildRegulatoryLensScoreDriver({
-              evidence: {
-                hasTrackingConcern,
-                mappedTopLevelFindingCount: cpraNotes.length,
-                scoreImpact: -24
-              },
-              id: "cpra_tracking_score_driver",
-              label: "Score driver: retained tracking evidence affected California sale/share review."
-            })
-          : null,
-        beforeConsentCookieCount > 0
-          ? buildObservedCountLensFinding({
-              count: beforeConsentCookieCount,
-              evidence: beforeConsentCookieEvidence,
-              id: "cpra_before_consent_cookie_count",
-              label: formatBeforeConsentCookieCountLabel(beforeConsentCookieCount, beforeConsentCookieEvidence),
-              metric: "beforeConsentCookieCount",
-              reviewContextCopy: retainedCookieContextExplanation,
-              reviewContextLabel: retainedCookieContextExplanation ? "Why not top-level?" : undefined,
-              source: "regulatory_counts"
-            })
-          : null,
-        thirdPartyRequestCount > 0
-          ? buildObservedCountLensFinding({
-              count: thirdPartyRequestCount,
-              id: "cpra_third_party_request_count",
-              label: `${thirdPartyRequestCount} third-party request records were observed on the initial path.`,
-              metric: "thirdPartyRequestCount",
-              reviewContextCopy: retainedThirdPartyRequestContextExplanation,
-              reviewContextLabel: retainedThirdPartyRequestContextExplanation ? "Why not top-level?" : undefined,
-              source: "regulatory_counts"
-            })
-          : null,
-        sensitiveTrackingFinding
-          ? buildRegulatoryLensScoreDriver({
-              evidence: { findingId: sensitiveTrackingFinding.id, scoreImpact: -14 },
-              id: "cpra_sensitive_tracking_score_driver",
-              label: "Score driver: sensitive-data tracking context affected California privacy posture."
-            })
-          : null
-      ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
-  const ftcFindings = ftcNotes.length > 0 || ftcScore >= 72
-    ? ftcNotes
-    : mergeRegulatoryLensFindings([
-        hasTrackingConcern
-          ? buildRegulatoryLensScoreDriver({
-              evidence: {
-                hasTrackingConcern,
-                mappedTopLevelFindingCount: ftcNotes.length,
-                scoreImpact: -18
-              },
-              id: "ftc_tracking_score_driver",
-              label: "Score driver: pre-consent tracking or third-party collection affected the FTC-style review."
-            })
-          : null,
-        hasConsentConcern
-          ? buildRegulatoryLensScoreDriver({
-              evidence: {
-                hasConsentConcern,
-                scoreImpact: -24
-              },
-              id: "ftc_consent_choice_score_driver",
-              label: "Score driver: consent-choice design affected the consumer-protection review."
-            })
-          : null,
-        beforeConsentCookieCount > 0
-          ? buildObservedCountLensFinding({
-              count: beforeConsentCookieCount,
-              evidence: beforeConsentCookieEvidence,
-              id: "ftc_before_consent_cookie_count",
-              label: formatBeforeConsentCookieCountLabel(beforeConsentCookieCount, beforeConsentCookieEvidence),
-              metric: "beforeConsentCookieCount",
-              reviewContextCopy: retainedCookieContextExplanation,
-              reviewContextLabel: retainedCookieContextExplanation ? "Why not top-level?" : undefined,
-              source: "regulatory_counts"
-            })
-          : null,
-        sensitiveTrackingFinding
-          ? buildRegulatoryLensScoreDriver({
-              evidence: { findingId: sensitiveTrackingFinding.id, scoreImpact: -12 },
-              id: "ftc_sensitive_tracking_score_driver",
-              label: "Score driver: sensitive-data collection alongside tracking affected the FTC-style review."
-            })
-          : null
-      ].filter((item): item is RegulatoryLensFinding => Boolean(item)));
-
   const gdprDisplay = capContextOnlyLensTone({ findings: privacyTrackingNotes, score: gdprScore, tone: buildTone(gdprScore) });
-  const cpraDisplay = capContextOnlyLensTone({ findings: cpraFindings, score: cpraScore, tone: buildTone(cpraScore) });
-  const ftcDisplay = capContextOnlyLensTone({ findings: ftcFindings, score: ftcScore, tone: buildTone(ftcScore) });
 
   const lenses: RegulatoryLens[] = [
-    {
-      acronym: "CCPA / CPRA / CIPA",
-      detailTitle: "Disclosure and downstream sharing issues",
-      findings: cpraFindings,
-      ratingLabel: cpraDisplay.tone.label,
-      score: cpraDisplay.score,
-      summary: sensitiveTrackingFinding
-        ? "Sensitive-data collection and downstream third-party exposure drive this score."
-        : cpraCbaOptOutFinding
-        ? "Cross-context behavioral advertising and CPRA opt-out posture drive this score."
-        : replayFinding || hasTrackingConcern || hasPreConsentCookieConcern
-        ? "Third-party collection and disclosure posture drives this score."
-        : "No strong sale/share-style signal surfaced in the top findings.",
-      toneClass: cpraDisplay.tone.toneClass
-    },
     {
       acronym: "GDPR / ePrivacy",
       detailTitle: "Consent and tracking issues",
@@ -1941,245 +1517,8 @@ export function buildRegulatoryLenses(
         ? "Sensitive-data collection and tracking exposure are the main issue."
         : "No major consent-triggering issue surfaced in the top findings.",
       toneClass: gdprDisplay.tone.toneClass
-    },
-    {
-      acronym: "FTC",
-      detailTitle: hasStrongDarkPatternConcern ? "Consent UX and disclosure review" : "Choice architecture review signals",
-      findings: ftcFindings,
-      ratingLabel: ftcDisplay.tone.label,
-      score: ftcDisplay.score,
-      summary: hasStrongDarkPatternConcern
-        ? "Choice architecture and disclosure clarity are the main FTC-style concerns."
-        : sensitiveTrackingFinding
-          ? "Sensitive-data collection alongside third-party tracking should be reviewed for consumer-protection context."
-        : hasSensitiveGamblingTrackingRisk
-          ? "High-risk gambling, financial-behavior, and advertising flows warrant FTC-style review."
-        : hasSensitiveHealthTrackingRisk
-          ? "Health-context tracking and advertising/data-broker flows warrant FTC-style review."
-        : hasConsentConcern
-          ? "Consent-choice design should be reviewed for clarity."
-        : cookieDisclosureFinding
-          ? "Cookie disclosures should be reviewed against observed runtime tracking behavior."
-        : hasTrackingConcern || counts.beforeConsentCookieCount > 0
-          ? "Pre-consent tracking and third-party collection should be reviewed for consumer-protection context."
-            : "No strong consumer-protection cue surfaced in the top findings.",
-      toneClass: ftcDisplay.tone.toneClass
     }
   ];
-
-  const dojAdaMapping = options?.agencyMappings?.find((mapping) => mapping.agencyKey === "doj_ada");
-  const accessibilitySignals = options?.accessibilitySignals ?? null;
-  const accessibilityRiskScore = options?.regulatoryRisk?.accessibilityEnforcementRiskScore ?? null;
-  const wcagErrorCountTotal = accessibilitySignals?.wcagErrorCountTotal ?? null;
-  const wcagFormLabelErrorCount = accessibilitySignals?.wcagFormLabelErrorCount ?? null;
-  const wcagKeyboardNavigationIssueCount = accessibilitySignals?.wcagKeyboardNavigationIssueCount ?? null;
-  const wcagMissingAltCount = accessibilitySignals?.wcagMissingAltCount ?? null;
-  const accessibilityStatementPresent = accessibilitySignals?.accessibilityStatementPresent ?? null;
-  const accessibilityClaimMismatchDetected = accessibilitySignals?.accessibilityClaimMismatchDetected ?? null;
-  const accessibilityLitigationRiskScore = accessibilitySignals?.accessibilityLitigationRiskScore ?? null;
-  const adaDemandLetterProbability = accessibilitySignals?.adaDemandLetterProbability ?? null;
-  const strongAdaDriverLabels = new Set([
-    "Accessibility claim mismatch",
-    "High automated WCAG issue count",
-    "Keyboard navigation issues",
-    "Form label accessibility issues",
-    "Elevated accessibility risk",
-    "Elevated ADA demand-letter exposure"
-  ]);
-  const hasStrongAdaDriver = Boolean(
-    dojAdaMapping?.triggeredSignals.some(
-      (signal) => strongAdaDriverLabels.has(signal.label) || signal.key === "accessibility.representative_axe_examples"
-    )
-  );
-  const hasOnlyAccessibilityStatementMissingSignal =
-    accessibilityStatementPresent === false &&
-    accessibilityClaimMismatchDetected !== true &&
-    !((typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 1)) &&
-    !((typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0)) &&
-    !((typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)) &&
-    !((typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5)) &&
-    !((typeof accessibilityLitigationRiskScore === "number" && accessibilityLitigationRiskScore >= 45)) &&
-    !((typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45)) &&
-    !((typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 45)) &&
-    !hasStrongAdaDriver;
-  const hasSignificantAccessibilitySignals =
-    accessibilityClaimMismatchDetected === true ||
-    (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 1) ||
-    (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
-    (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0) ||
-    (typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5) ||
-    (typeof accessibilityLitigationRiskScore === "number" && accessibilityLitigationRiskScore >= 45) ||
-    (typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45) ||
-    (typeof accessibilityRiskScore === "number" && accessibilityRiskScore >= 45);
-  const shouldIncludeAdaLens =
-    dojAdaMapping !== undefined &&
-    (hasSignificantAccessibilitySignals || (hasStrongAdaDriver && !hasOnlyAccessibilityStatementMissingSignal));
-
-  if (!shouldIncludeAdaLens) {
-    lenses.push(
-      buildMinimalRegulatoryLens({
-        acronym: "DOJ / ADA accessibility",
-        detailTitle: "Accessibility and digital access issues",
-        ratingLabel: "Audit-only",
-        score: null,
-        summary: "",
-        toneClass: "border-slate-200 bg-slate-50 text-slate-700"
-      })
-    );
-
-    const financialClaimsLens = buildFinancialClaimsLens({
-      findings: financialClaimFindings,
-      forceScored: financialRegulatoryBenchmarkActive
-    });
-    if (financialClaimsLens) {
-      lenses.push(financialClaimsLens);
-    }
-
-    return lenses;
-  }
-
-  const hasDirectAccessibilityStatementFinding = accessibilityStatementPresent === false;
-  const normalizedAgencyFindingLabels = (dojAdaMapping?.triggeredSignals ?? [])
-    .map((signal) => signal.label)
-    .filter((label) =>
-      hasDirectAccessibilityStatementFinding
-        ? !/accessibility statement (missing|not detected)/i.test(label)
-        : true
-    );
-
-  const wcagViolations = accessibilitySignals?.wcagViolations ?? [];
-  const adaFindings = [
-    typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal > 0
-      ? buildObservedCountLensFinding({
-          count: wcagErrorCountTotal,
-          evidence: wcagViolations.length > 0 ? { violations: wcagViolations } : null,
-          id: "wcag_error_count_total",
-          label: `Automated WCAG issues detected: ${wcagErrorCountTotal}`,
-          metric: "wcagErrorCountTotal",
-          source: "accessibility_signals"
-        })
-      : null,
-    typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0
-      ? buildObservedCountLensFinding({
-          count: wcagKeyboardNavigationIssueCount,
-          id: "wcag_keyboard_navigation_issue_count",
-          label: "Keyboard navigation issues surfaced",
-          metric: "wcagKeyboardNavigationIssueCount",
-          source: "accessibility_signals"
-        })
-      : null,
-    typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0
-      ? buildObservedCountLensFinding({
-          count: wcagFormLabelErrorCount,
-          id: "wcag_form_label_error_count",
-          label: "Form labeling issues surfaced",
-          metric: "wcagFormLabelErrorCount",
-          source: "accessibility_signals"
-        })
-      : null,
-    accessibilityStatementPresent === false
-      ? buildRegulatoryLensFinding({
-          evidence: { observed: false, signal: "accessibilityStatementPresent" },
-          id: "accessibility_statement_not_detected",
-          label: "Accessibility statement not detected"
-        })
-      : null,
-    accessibilityClaimMismatchDetected === true
-      ? buildRegulatoryLensFinding({
-          evidence: { observed: true, signal: "accessibilityClaimMismatchDetected" },
-          id: "accessibility_claim_mismatch",
-          label: "Accessibility claim mismatch surfaced"
-        })
-      : null,
-    typeof accessibilityLitigationRiskScore === "number" && accessibilityLitigationRiskScore >= 45
-      ? buildObservedCountLensFinding({
-          count: accessibilityLitigationRiskScore,
-          id: "accessibility_litigation_risk_score",
-          label: `Elevated accessibility risk score (${accessibilityLitigationRiskScore})`,
-          metric: "accessibilityLitigationRiskScore",
-          source: "accessibility_signals"
-        })
-      : null,
-    typeof adaDemandLetterProbability === "number" && adaDemandLetterProbability >= 45
-      ? buildObservedCountLensFinding({
-          count: adaDemandLetterProbability,
-          id: "ada_demand_letter_probability",
-          label: `Elevated ADA demand-letter exposure score (${adaDemandLetterProbability})`,
-          metric: "adaDemandLetterProbability",
-          source: "accessibility_signals"
-        })
-      : null,
-    typeof wcagMissingAltCount === "number" && wcagMissingAltCount >= 5
-      ? buildObservedCountLensFinding({
-          count: wcagMissingAltCount,
-          id: "wcag_missing_alt_count",
-          label: `${wcagMissingAltCount} missing alt-text issues surfaced`,
-          metric: "wcagMissingAltCount",
-          source: "accessibility_signals"
-        })
-      : null,
-    ...normalizedAgencyFindingLabels.map((label, index) =>
-      buildRegulatoryLensFinding({
-        evidence: {
-          agencyKey: dojAdaMapping?.agencyKey ?? "doj_ada",
-          label,
-          source: "agency_mapping"
-        },
-        id: `agency_signal_${index}`,
-        label
-      })
-    ),
-    ...((dojAdaMapping?.contributingSubscores ?? []).map((subscore) =>
-      buildRegulatoryLensFinding({
-        evidence: {
-          key: subscore.key,
-          label: subscore.label,
-          score: subscore.score,
-          source: "agency_mapping_subscore"
-        },
-        id: `agency_subscore_${subscore.key}`,
-        label: `${subscore.label} subscore ${subscore.score}`
-      })
-    ))
-  ].filter((item): item is RegulatoryLensFinding => Boolean(item));
-
-  const adaScore = clampScore(100 - (accessibilityRiskScore ?? (dojAdaMapping?.relevanceLevel === "limited" ? 35 : 50)));
-  const hasAccessibilityDisclosureGap =
-    accessibilityClaimMismatchDetected === true ||
-    normalizedAgencyFindingLabels.some((label) => /disclosure|claim/i.test(label));
-  const adaSummary =
-    accessibilityClaimMismatchDetected === true
-      ? "Accessibility claims appear inconsistent with observed barriers."
-      : (typeof wcagErrorCountTotal === "number" && wcagErrorCountTotal >= 1) ||
-          (typeof wcagKeyboardNavigationIssueCount === "number" && wcagKeyboardNavigationIssueCount > 0) ||
-          (typeof wcagFormLabelErrorCount === "number" && wcagFormLabelErrorCount > 0)
-        ? hasAccessibilityDisclosureGap
-          ? "Accessibility barriers and disclosure gaps are the main review area."
-          : "Automated accessibility signals are the main review area."
-        : adaScore >= 72
-          ? "No significant issues found."
-          : hasAccessibilityDisclosureGap
-            ? "Accessibility support and disclosure posture needs work."
-            : "Automated accessibility signals are the main review area.";
-  const adaTone = buildTone(adaScore);
-
-  lenses.push({
-    acronym: "DOJ / ADA accessibility",
-    detailTitle: "Accessibility and digital access issues",
-    findings: adaFindings,
-    ratingLabel: adaTone.label,
-    score: adaScore,
-    summary: adaSummary,
-    toneClass: adaTone.toneClass
-  });
-
-  const financialClaimsLens = buildFinancialClaimsLens({
-    findings: financialClaimFindings,
-    forceScored: financialRegulatoryBenchmarkActive
-  });
-  if (financialClaimsLens) {
-    lenses.push(financialClaimsLens);
-  }
 
   return lenses;
 }
@@ -2228,7 +1567,6 @@ export function buildRegulatoryLensesFromUnifiedPackets(
     representativeAccessibilityCoverage.representativeExampleCount > 0
       ? formatRepresentativeAccessibilityCoverage(representativeAccessibilityCoverage)
       : null;
-  const hasDojAdaMapping = options?.agencyMappings?.some((mapping) => mapping.agencyKey === "doj_ada") === true;
   const accessibilityOptions =
     hasRepresentativeAccessibilityEvidence
       ? {
@@ -2238,53 +1576,7 @@ export function buildRegulatoryLensesFromUnifiedPackets(
             wcagErrorCountTotal:
               options?.accessibilitySignals?.wcagErrorCountTotal ??
               Math.max(representativeAccessibilityCoverage.representativeExampleCount, representativeAccessibilityPackets.length)
-          },
-          agencyMappings: [
-            ...(hasDojAdaMapping
-              ? (options?.agencyMappings ?? []).map((mapping) =>
-                  mapping.agencyKey === "doj_ada"
-                    ? {
-                        ...mapping,
-                        triggeredSignals: [
-                          ...mapping.triggeredSignals,
-                          {
-                            key: "accessibility.representative_axe_examples",
-                            label: representativeAccessibilitySummary ?? "Representative axe examples retained"
-                          }
-                        ],
-                        topAgencyRiskDrivers: [
-                          ...mapping.topAgencyRiskDrivers,
-                          representativeAccessibilitySummary ?? "Representative automated accessibility examples were retained."
-                        ]
-                      }
-                    : mapping
-                )
-              : [
-                  ...(options?.agencyMappings ?? []),
-                  {
-                    agencyKey: "doj_ada",
-                    agencyLabel: "U.S. Department of Justice ADA",
-                    shortLabel: "DOJ / ADA",
-                    category: "accessibility",
-                    relevanceLevel: "moderate",
-                    relevanceScore: 64,
-                    rationale: "Representative automated accessibility examples were retained for surfaced ADA/WCAG review.",
-                    helperLabel: "Accessibility evidence retained",
-                    triggeredSignals: [
-                      {
-                        key: "accessibility.representative_axe_examples",
-                        label: representativeAccessibilitySummary ?? "Representative axe examples retained"
-                      }
-                    ],
-                    contributingSubscores: [{ key: "accessibility_examples", label: "Representative accessibility examples", score: 64 }],
-                    topAgencyRiskDrivers: [
-                      representativeAccessibilitySummary ?? "Representative automated accessibility examples were retained."
-                    ],
-                    relatedOverallRiskLevel: "moderate",
-                    isPrimaryAgency: false
-                  } satisfies AgencyMapping
-                ])
-          ]
+          }
         }
       : options;
   const surfacedPackets = packets.filter((packet) => packet.presentationDecision.status === "surface");
@@ -3250,13 +2542,6 @@ function getFindingReferenceLink(finding: CertScoreFinding) {
     };
   }
 
-  if (finding.id === "asymmetric_consent_ui" || finding.id === "consent_dark_patterns_detected") {
-    return {
-      href: "https://www.ftc.gov/system/files/ftc_gov/pdf/P214800%20Dark%20Patterns%20Report%209.14.2022%20-%20FINAL.pdf",
-      label: "FTC guidance on dark patterns"
-    };
-  }
-
   return null;
 }
 
@@ -3616,8 +2901,6 @@ function getPreferredFindingTitleIconKeys(findingId: string): FindingTitleIconKe
       return ["ad-exchange", "arrow-transfer", "chain-link"];
     case "cross_domain_identifier_sharing_observed":
       return ["globe-link", "chain-link", "arrow-transfer"];
-    case "cpra_cba_opt_out_missing":
-      return ["privacy-choice", "shield-balance", "ad-exchange"];
     case "session_recording_services_detected":
       return ["video-capture", "shield-video"];
     case "session_replay_present_with_sensitive_surfaces_observed":
@@ -4330,7 +3613,7 @@ function FindingDetailDisclosure(input: { finding: CertScoreFinding }) {
 
 type TopFindingRegulatoryBadge = {
   label: string;
-  tone: "privacy" | "consumer" | "accessibility" | "neutral";
+  tone: "privacy" | "neutral";
 };
 
 type TopFindingRegulatoryContextDisplay = {
@@ -4380,14 +3663,8 @@ function buildRegulatoryContextBadges(
     }
   };
 
-  if (/\bGDPR\b|ePrivacy|EU\/EEA|PECR|ICO|European Accessibility Act|EN 301 549|Web Accessibility Directive/i.test(haystack)) {
+  if (/\bGDPR\b|ePrivacy|EU\/EEA|PECR|ICO/i.test(haystack)) {
     addBadge("GDPR / ePrivacy", "privacy");
-  }
-  if (/FTC|consumer-protection|consumer protection|dark-pattern|deception|unfairness/i.test(haystack)) {
-    addBadge("FTC", "consumer");
-  }
-  if (/\bADA\b|Section 508|WCAG|accessibility|Title II|Title III/i.test(haystack)) {
-    addBadge("ADA / accessibility", "accessibility");
   }
 
   return badges.slice(0, 4);
@@ -4403,12 +3680,6 @@ function getFindingRegulatoryFilterIds(finding: CertScoreFinding): RegulatoryMap
     if (/GDPR|ePrivacy/i.test(badge.label)) {
       return ["gdpr"];
     }
-    if (/FTC/i.test(badge.label)) {
-      return ["ftc"];
-    }
-    if (/ADA|accessibility/i.test(badge.label)) {
-      return ["ada"];
-    }
     return [];
   });
 }
@@ -4419,10 +3690,6 @@ function makeReportFacingRegulatoryContextCopy(context: FindingRegulatoryContext
 
 function getRegulatoryBadgeToneClasses(tone: TopFindingRegulatoryBadge["tone"]) {
   switch (tone) {
-    case "accessibility":
-      return "border-violet-200 bg-violet-50 text-violet-800";
-    case "consumer":
-      return "border-amber-200 bg-amber-50 text-amber-900";
     case "privacy":
       return "border-sky-200 bg-sky-50 text-sky-800";
     default:
@@ -5204,7 +4471,7 @@ export function ExecutiveSummaryCard(input: {
   const regulatoryLenses = input.unifiedFindings
     ? buildRegulatoryLensesFromUnifiedPackets(input.unifiedFindings, regulatoryCounts, regulatoryOptions)
     : buildRegulatoryLenses(regulatoryFindingInput, regulatoryCounts, regulatoryOptions);
-  const productionRegulatoryLenses = regulatoryLenses.filter((lens) => lens.acronym !== "CCPA / CPRA / CIPA");
+  const productionRegulatoryLenses = regulatoryLenses;
   return (
     <section className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-[0_18px_60px_-32px_rgba(15,23,42,0.18)]">
       <details className="group/executive-summary" data-testid="executive-summary-details" open>

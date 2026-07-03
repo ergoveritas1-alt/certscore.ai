@@ -57,6 +57,8 @@ const findingExample = {
     phase: "before_consent",
     exampleCount: 2,
     examplesShown: 1,
+    examplesAvailable: 2,
+    authRequiredForExamples: false,
     examples: [{ type: "request", vendor: "Example Analytics", urlHost: "analytics.example.test", phase: "before_consent" }],
     hasTimingAnchor: true,
     hasVendorAnchor: true,
@@ -354,7 +356,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
               name: "scanFrom",
               in: "query",
               required: false,
-              schema: { type: "string", enum: ["eu_ie", "california"], default: "eu_ie" },
+              schema: { type: "string", enum: ["eu_ie"], default: "eu_ie" },
               description: "Execution context for selecting matching eligible scans. Invalid values default to eu_ie."
             }
           ],
@@ -437,7 +439,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
               name: "scanFrom",
               in: "query",
               required: false,
-              schema: { type: "string", enum: ["eu_ie", "california"], default: "eu_ie" }
+              schema: { type: "string", enum: ["eu_ie"], default: "eu_ie" }
             }
           ],
           responses: {
@@ -491,7 +493,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
               description:
                 "Use latest to reuse recent eligible scans. Use refresh to request a new scan when eligible; refresh bypasses the 24-hour recent-scan reuse check but not validation or throttles."
             },
-            scanFrom: { type: "string", enum: ["eu_ie", "california"], default: "eu_ie" },
+            scanFrom: { type: "string", enum: ["eu_ie"], default: "eu_ie" },
             callbackUrl: { type: "string", format: "uri" },
             metadata: { type: "object", additionalProperties: { type: "string" } }
           }
@@ -553,7 +555,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scanId: { type: "string" },
             label: { type: "string" },
             criticality: { type: "string" },
-            confidence: { type: "string" },
+            confidence: { type: "string", enum: ["strong", "good", "moderate", "weak", "unknown"] },
             plainEnglish: { type: "string" },
             reviewLenses: { type: "array", items: { type: "string" } },
             evidence: { $ref: "#/components/schemas/EvidenceSummary" },
@@ -572,6 +574,15 @@ export function buildCertScoreApiV2OpenApiDocument() {
             phase: { type: ["string", "null"] },
             exampleCount: { type: "integer", minimum: 0 },
             examplesShown: { type: "integer", minimum: 0 },
+            examplesAvailable: {
+              type: "integer",
+              minimum: 0,
+              description: "Total bounded evidence examples available to this projection before public response caps are applied."
+            },
+            authRequiredForExamples: {
+              type: "boolean",
+              description: "True only when additional public-safe examples are withheld because the caller lacks authorization."
+            },
             examples: {
               type: "array",
               maxItems: 5,

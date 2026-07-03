@@ -36,8 +36,8 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
   );
   const scanFromParameter = body.paths["/api/v1/pulse"].get.parameters.find((parameter: { name: string }) => parameter.name === "scanFrom");
   const geoParameter = body.paths["/api/v1/pulse"].get.parameters.find((parameter: { name: string }) => parameter.name === "geo");
-  assert.deepEqual(scanFromParameter.schema.enum, ["eu_ie", "california"]);
-  assert.deepEqual(geoParameter.schema.enum, ["eu_ie", "california"]);
+  assert.deepEqual(scanFromParameter.schema.enum, ["eu_ie"]);
+  assert.deepEqual(geoParameter.schema.enum, ["eu_ie"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["200"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["202"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["400"]);
@@ -72,7 +72,7 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   const body = await response.json();
   assert.equal(body.openapi, "3.1.1");
   assert.equal(body.info.title, "CertScore Pulse GPT Action API beta");
-  assert.equal(body.info.version, "0.5.1");
+  assert.equal(body.info.version, "0.5.3");
   assert.equal(body.paths["/api/v1/pulse/gpt"].get.operationId, "getPulseForUrl");
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
   assert.equal(body.paths["/api/v1/pulse/gpt/scan/{scanId}"].get.operationId, "getPulseByScanId");
@@ -88,7 +88,7 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; required?: boolean }) => parameter.name === "url" && parameter.required === true));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { maximum?: number } }) => parameter.name === "wait" && parameter.schema.maximum === 35));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "scanFrom" && parameter.schema.enum?.includes("eu_ie")));
-  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "geo" && parameter.schema.enum?.includes("california")));
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "geo" && parameter.schema.enum?.includes("eu_ie")));
   assert.ok(
     body.paths["/api/v1/pulse/gpt"].get.parameters.some(
       (parameter: { name: string; schema: { enum?: string[]; default?: string } }) =>
@@ -199,7 +199,7 @@ test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app 
   const body = JSON.parse(rawBody);
   assert.equal(body.openapi, "3.1.0");
   assert.equal(body.info.title, "CertScore Pulse API beta");
-  assert.equal(body.info.version, "0.5.1");
+  assert.equal(body.info.version, "0.5.3");
   assert.ok(body.paths["/api/v1/pulse"]);
   assert.match(rawBody, /forceNewScan/);
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.responses["429"].content["application/json"].schema.$ref, "#/components/schemas/PulseError");
@@ -217,7 +217,7 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
 
   const body = await response.json();
   assert.equal(body.name, "CertScore Pulse beta");
-  assert.equal(body.version, "0.5.1");
+  assert.equal(body.version, "0.5.3");
   assert.equal(body.api, "https://certscore.ai/api/v1/pulse");
   assert.equal(body.openapi, "https://certscore.ai/api/v1/openapi.json");
   assert.equal(body.chatgptOpenapi, "https://certscore.ai/api/v1/openapi.chatgpt.json");
@@ -253,7 +253,7 @@ test("Pulse health canary route is dependency-free JSON", async () => {
   assert.equal(body.ok, true);
   assert.equal(body.service, "certscore-pulse");
   assert.equal(body.version, "v1");
-  assert.equal(body.betaVersion, "0.5.1");
+  assert.equal(body.betaVersion, "0.5.3");
   assert.match(body.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
 
   const source = readFileSync("apps/web/app/api/v1/pulse-health/route.ts", "utf8");
@@ -275,7 +275,7 @@ test("Pulse self-test route is dependency-free JSON with capabilities", async ()
   assert.equal(body.type, "certscore_pulse_self_test");
   assert.equal(body.service, "certscore_pulse");
   assert.equal(body.version, "v1");
-  assert.equal(body.betaVersion, "0.5.1");
+  assert.equal(body.betaVersion, "0.5.3");
   assert.equal(body.routes.health, "/api/v1/pulse-health");
   assert.equal(body.routes.openapi, "/api/v1/openapi.json");
   assert.equal(body.routes.chatgptOpenapi, "/api/v1/openapi.chatgpt.json");
@@ -292,12 +292,12 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   const source = readFileSync("apps/web/app/api-pulse/page.tsx", "utf8");
 
   assert.match(source, /CertScore Pulse API beta/);
-  assert.match(source, /0\.5\.1/);
+  assert.match(source, /0\.5\.3/);
   assert.match(source, /forceNewScan/);
   assert.match(source, /24-hour reuse/);
   assert.match(source, /scanFrom/);
   assert.match(source, /geo/);
-  assert.match(source, /`eu_ie` or `california`/);
+  assert.match(source, /`eu_ie`/);
   assert.match(source, /1-minute normalized-domain/);
   assert.match(source, /OpenAPI JSON/);
   assert.match(source, /PULSE_FEEDBACK_EMAIL/);
@@ -349,12 +349,12 @@ test("Pulse agent fallback page documents the fetch failure diagnostic contract"
   const source = readFileSync("apps/web/app/api-pulse/agent/page.tsx", "utf8");
 
   assert.match(source, /Agent-readable beta fallback/);
-  assert.match(source, /0\.5\.1/);
+  assert.match(source, /0\.5\.3/);
   assert.match(source, /forceNewScan=true/);
   assert.match(source, /24 hours/);
   assert.match(source, /scanFrom/);
   assert.match(source, /geo/);
-  assert.match(source, /eu_ie<\/code>.*california<\/code>/s);
+  assert.match(source, /eu_ie<\/code>/);
   assert.match(source, /Agent quick start/);
   assert.match(source, /Basic HTTP agents/);
   assert.match(source, /getPulseForUrl/);
@@ -379,11 +379,11 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   const source = readFileSync("apps/web/public/api-pulse-agent-guide.txt", "utf8");
 
   assert.match(source, /CertScore Pulse beta agent guide/);
-  assert.match(source, /0\.5\.1/);
+  assert.match(source, /0\.5\.3/);
   assert.match(source, /forceNewScan=true/);
   assert.match(source, /24-hour reuse/);
   assert.match(source, /scanFrom or geo/);
-  assert.match(source, /eu_ie and california/);
+  assert.match(source, /eu_ie/);
   assert.match(source, /1-minute normalized-domain/);
   assert.match(source, /Basic HTTP agent quick start/);
   assert.match(source, /OpenAPI \/ GPT Action beta quick start/);

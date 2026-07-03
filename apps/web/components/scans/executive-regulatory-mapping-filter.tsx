@@ -3,15 +3,13 @@
 import React from "react";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 
-export type RegulatoryMappingFilterId = "gdpr" | "ftc" | "ada";
+export type RegulatoryMappingFilterId = "gdpr";
 
 const REGULATORY_MAPPING_FILTERS: Array<{
   id: RegulatoryMappingFilterId;
   label: string;
 }> = [
-  { id: "gdpr", label: "GDPR / ePrivacy" },
-  { id: "ftc", label: "FTC" },
-  { id: "ada", label: "ADA / accessibility" }
+  { id: "gdpr", label: "GDPR / ePrivacy" }
 ];
 
 function formatRegulatoryMappingFilterLabel(selectedFilters: RegulatoryMappingFilterId[]) {

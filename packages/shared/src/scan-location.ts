@@ -1,4 +1,4 @@
-export const SCAN_FROM_VALUES = ["default", "eu_de", "eu_ie", "california"] as const;
+export const SCAN_FROM_VALUES = ["default", "eu_de", "eu_ie"] as const;
 
 export type ScanFrom = (typeof SCAN_FROM_VALUES)[number];
 
@@ -48,16 +48,6 @@ export const SCAN_FROM_DEFINITIONS = {
     },
     value: "eu_ie"
   },
-  california: {
-    description: "US-West Lambda scanner",
-    label: "California",
-    requestedGeo: {
-      countryCode: "US",
-      provider: "aws-default",
-      regionCode: "us-west-2"
-    },
-    value: "california"
-  }
 } as const satisfies Record<ScanFrom, ScanFromDefinition>;
 
 export function normalizeScanFrom(value: unknown): ScanFrom {

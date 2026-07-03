@@ -27,7 +27,7 @@ export function GET(request: Request) {
     type: "certscore_pulse_self_test",
     service: "certscore_pulse",
     version: "v1",
-    betaVersion: "0.5.1",
+    betaVersion: "0.5.3",
     timestamp: new Date().toISOString(),
     routes: {
       health: "/api/v1/pulse-health",

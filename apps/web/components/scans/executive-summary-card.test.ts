@@ -60,17 +60,17 @@ function makeRegulatoryRisk(overrides: Partial<RegulatoryRiskAssessment> = {}): 
 
 function makeAgencyMapping(overrides: Partial<AgencyMapping> = {}): AgencyMapping {
   return {
-    agencyKey: "doj_ada",
-    agencyLabel: "U.S. Department of Justice",
-    shortLabel: "DOJ / ADA",
-    category: "accessibility",
+    agencyKey: "gdpr_edpb",
+    agencyLabel: "GDPR / ePrivacy",
+    shortLabel: "GDPR / ePrivacy",
+    category: "privacy",
     relevanceLevel: "moderate",
     relevanceScore: 8,
-    rationale: "This scan surfaced accessibility signals that fit most closely with ADA-related expectations.",
-    helperLabel: "Accessibility and ADA-related web expectations",
-    triggeredSignals: [{ key: "wcagErrorCountTotal", label: "High automated WCAG issue count" }],
-    contributingSubscores: [{ key: "accessibilityEnforcementRiskScore", label: "Accessibility", score: 55 }],
-    topAgencyRiskDrivers: ["High automated WCAG issue count", "Accessibility subscore"],
+    rationale: "This scan surfaced privacy signals that fit GDPR/ePrivacy review context.",
+    helperLabel: "GDPR/ePrivacy review context",
+    triggeredSignals: [{ key: "preConsentTracking", label: "Pre-consent tracking observed" }],
+    contributingSubscores: [{ key: "privacyEnforcementRiskScore", label: "Privacy", score: 55 }],
+    topAgencyRiskDrivers: ["Pre-consent tracking observed", "Cookie disclosure review"],
     relatedOverallRiskLevel: "moderate",
     isPrimaryAgency: true,
     ...overrides
@@ -114,7 +114,7 @@ function makeUnifiedPacket(
     presentation: {
       findingName: unifiedFindingId,
       suggestedFix: "Review retained axe examples.",
-      whyThisMatters: "Automated accessibility issues can create usability and ADA review risk."
+      whyThisMatters: "Automated accessibility issues can create usability review risk."
     },
     presentationDecision: {
       confidenceRationale: "test",
@@ -173,15 +173,10 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
   );
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
-  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
 
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
   assert.equal(gdprLens?.summary, "Pre-consent third-party activity is the main review item.");
   assert.equal(gdprLens?.ratingLabel, "Needs work");
-  assert.equal(cpraLens?.summary, "Third-party collection and disclosure posture drives this score.");
-  assert.equal(ftcLens?.summary, "Choice architecture and disclosure clarity are the main FTC-style concerns.");
-  assert.equal(ftcLens?.ratingLabel, "Needs work");
-  assert.ok(ftcLens?.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
   assert.ok(gdprLens?.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });
 
@@ -241,27 +236,6 @@ test("buildRegulatoryLenses does not call zero-footprint cookie evidence pre-con
   assert.equal(gdprLens?.summary, "Consent and pre-consent cookie/storage evidence are the main issue.");
 });
 
-test("buildRegulatoryLenses keeps pre-consent tracking out of FTC unless paired with choice or disclosure context", () => {
-  const lenses = buildRegulatoryLenses(
-    [
-      makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
-        severity: "critical",
-        shortSummary: "7 third-party requests fired before any consent action."
-      })
-    ],
-    {
-      beforeConsentCookieCount: 20,
-      thirdPartyRequestCount: 7
-    }
-  );
-
-  const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
-
-  assert.ok(gdprLens?.findings.some((finding) => finding.id === "pre_consent_tracking_detected"));
-  assert.equal(ftcLens?.findings.some((finding) => finding.id === "pre_consent_tracking_detected"), false);
-});
-
 test("buildRegulatoryLenses explains degraded lenses even without mapped top-level findings", () => {
   const lenses = buildRegulatoryLenses(
     [],
@@ -276,16 +250,10 @@ test("buildRegulatoryLenses explains degraded lenses even without mapped top-lev
     }
   );
 
-  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
-  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
-
-  assert.equal(cpraLens?.ratingLabel, "Watch");
-  assert.match(regulatoryFindingLabels(cpraLens?.findings ?? []).join(" "), /Score driver: retained tracking evidence/);
-  assert.equal(ftcLens?.ratingLabel, "Watch");
-  assert.match(regulatoryFindingLabels(ftcLens?.findings ?? []).join(" "), /Score driver: pre-consent tracking/);
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
-test("buildRegulatoryLenses keeps post-reject tracking out of GDPR/FTC production lenses while deferred", () => {
+test("buildRegulatoryLenses keeps post-reject tracking out of GDPR production lens while deferred", () => {
   const lenses = buildRegulatoryLenses([
     makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject", {
       confidence: "strong",
@@ -310,29 +278,8 @@ test("buildRegulatoryLenses keeps post-reject tracking out of GDPR/FTC productio
   });
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
 
   assert.equal(gdprLens?.findings.some((finding) => /Non-essential tracking continued after reject/i.test(finding.label)), false);
-  assert.equal(ftcLens?.findings.some((finding) => /Non-essential tracking continued after reject/i.test(finding.label)), false);
-});
-
-test("buildRegulatoryLenses keeps CPRA CBA opt-out evidence in deferred lens context", () => {
-  const lenses = buildRegulatoryLenses(
-    [
-      makeFinding("cpra_cba_opt_out_missing", "CPRA opt-out missing for advertising sharing", {
-        shortSummary: "Cross-context behavioral advertising vendor evidence was retained."
-      })
-    ],
-    {
-      beforeConsentCookieCount: 20,
-      thirdPartyRequestCount: 42
-    }
-  );
-
-  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
-
-  assert.equal(cpraLens?.summary, "Cross-context behavioral advertising and CPRA opt-out posture drive this score.");
-  assert.equal(regulatoryFindingLabels(cpraLens?.findings ?? []).includes("CPRA / privacy choice opt-out review signal"), false);
 });
 
 test("buildRegulatoryLenses maps cross-domain identifiers to GDPR only with tracking or device context", () => {
@@ -366,42 +313,13 @@ test("buildRegulatoryLenses maps cross-domain identifiers to GDPR only with trac
     baseLenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((finding) => finding.id === "cross_domain_identifier_sharing_observed"),
     false
   );
-  assert.ok(
-    baseLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((finding) => finding.id === "cross_domain_identifier_sharing_observed")
-  );
+  assert.deepEqual(baseLenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
   assert.ok(
     trackingLenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((finding) => finding.id === "cross_domain_identifier_sharing_observed")
   );
 });
 
-test("buildRegulatoryLenses uses gambling-specific FTC copy for sensitive tracking on sportsbook benchmarks", () => {
-  const lenses = buildRegulatoryLenses(
-    [
-      makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
-        shortSummary: "Pre-consent tracking was observed on a sports betting or gambling site."
-      }),
-      makeFinding("session_recording_services_detected", "Session replay service signal observed", {
-        shortSummary: "FullStory session replay was observed before consent."
-      })
-    ],
-    {
-      beforeConsentCookieCount: 0,
-      thirdPartyRequestCount: 95
-    },
-    {
-      benchmarkIndustry: "Sports betting / gambling",
-      regulatoryRisk: makeRegulatoryRisk({
-        topRiskDrivers: [{ key: "sensitive_context_tracking", label: "Sensitive-context tracking before consent", impact: 26 }]
-      })
-    }
-  );
-
-  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
-  assert.match(ftcLens?.summary ?? "", /High-risk gambling, financial-behavior, and advertising flows/i);
-  assert.doesNotMatch(ftcLens?.summary ?? "", /Health-context/i);
-});
-
-test("buildRegulatoryLenses does not activate financial claims lens from gambling-sensitive tracking alone", () => {
+test("buildRegulatoryLenses only returns the GDPR/ePrivacy lens for gambling-sensitive tracking context", () => {
   const lenses = buildRegulatoryLenses(
     [
       makeFinding("pre_consent_tracking_detected", "Tracking started before consent", {
@@ -425,8 +343,7 @@ test("buildRegulatoryLenses does not activate financial claims lens from gamblin
     }
   );
 
-  const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
-  assert.equal(financialLens, undefined);
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
 test("buildRegulatoryLenses treats pre-consent cookie findings as GDPR tracking risk", () => {
@@ -464,12 +381,10 @@ test("buildRegulatoryLenses treats pre-consent cookie counts as regulatory track
   );
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
 
   assert.equal(gdprLens?.summary, "Pre-consent third-party activity is the main review item.");
-  assert.equal(cpraLens?.summary, "Third-party collection and disclosure posture drives this score.");
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
   assert.notEqual(gdprLens?.summary, "No major consent-triggering issue surfaced in the top findings.");
-  assert.notEqual(cpraLens?.summary, "No strong sale/share-style signal surfaced in the top findings.");
 });
 
 test("buildRegulatoryLensesFromUnifiedPackets carries cookie vendors into count evidence", () => {
@@ -574,21 +489,14 @@ test("buildRegulatoryLenses uses metric-specific retained-context explanations w
   );
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
   const cookieFinding = gdprLens?.findings.find((finding) => finding.id === "before_consent_cookie_count");
-  const requestFinding = cpraLens?.findings.find((finding) => finding.id === "third_party_request_count");
 
   assert.equal(cookieFinding?.reviewContextLabel, "Why not top-level?");
   assert.equal(
     cookieFinding?.reviewContextCopy,
     "Cookie timing context was retained, but CertScore did not retain enough classified non-essential tracking/vendor evidence to promote this into a top-level pre-consent tracking finding."
   );
-  assert.equal(requestFinding?.label, "18 third-party request records were observed on the initial path.");
-  assert.equal(requestFinding?.reviewContextLabel, "Why not top-level?");
-  assert.equal(
-    requestFinding?.reviewContextCopy,
-    "Third-party request context was retained, but CertScore did not retain enough classified advertising, sharing, sale/share, or disclosure-gap evidence to promote this into a top-level third-party tracking or sharing finding."
-  );
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
 test("buildRegulatoryLenses softens cookie timing copy when attribution arrays are empty", () => {
@@ -676,16 +584,10 @@ test("buildRegulatoryLenses caps count-only privacy lenses at Watch", () => {
   );
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const cpraLens = lenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA");
 
   assert.equal(gdprLens?.ratingLabel, "Watch");
-  assert.equal(cpraLens?.ratingLabel, "Watch");
   assert.match(regulatoryFindingLabels(gdprLens?.findings ?? []).join(" "), /cookie timing records were retained before consent/i);
-  assert.match(regulatoryFindingLabels(cpraLens?.findings ?? []).join(" "), /131 third-party request records were observed/i);
-  assert.equal(
-    cpraLens?.findings.find((finding) => finding.id === "third_party_request_count")?.reviewContextCopy,
-    "Third-party request context was retained, but CertScore did not retain enough classified advertising, sharing, sale/share, or disclosure-gap evidence to promote this into a top-level third-party tracking or sharing finding."
-  );
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
 test("buildRegulatoryLensesFromUnifiedPackets does not convert raw cookie observations into issue copy when canonical count is zero", () => {
@@ -725,7 +627,7 @@ test("buildRegulatoryLensesFromUnifiedPackets does not convert raw cookie observ
 
   assert.equal(labels.some((label) => /cookies were observed before consent/i.test(label)), false);
   assert.equal(labels.some((label) => /classified cookies were observed before consent/i.test(label)), false);
-  assert.ok(labels.some((label) => /third-party request records were observed/i.test(label)));
+  assert.equal(labels.some((label) => /third-party request records were observed/i.test(label)), false);
 });
 
 test("buildRegulatoryLensesFromUnifiedPackets ignores downgraded cookie packets for regulatory issue copy", () => {
@@ -793,7 +695,6 @@ test("buildRegulatoryLenses maps consent-choice review signals into GDPR without
   );
 
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
-  const ftcLens = lenses.find((lens) => lens.acronym === "FTC");
 
   assert.equal(gdprLens?.summary, "No major consent-triggering issue surfaced in the top findings.");
   assert.equal(gdprLens?.ratingLabel, "Strong");
@@ -801,12 +702,10 @@ test("buildRegulatoryLenses maps consent-choice review signals into GDPR without
     "Reject/refusal option not observed or nested",
     "Consent prompt appeared to require interaction"
   ]);
-  assert.equal(ftcLens?.detailTitle, "Choice architecture review signals");
-  assert.equal(ftcLens?.summary, "Consent-choice design should be reviewed for clarity.");
-  assert.doesNotMatch(ftcLens?.detailTitle ?? "", /Dark pattern/i);
+  assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
-test("buildRegulatoryLenses restricts EU-specific note pills outside FTC lens", () => {
+test("buildRegulatoryLenses keeps EU-specific note pills on the GDPR lens", () => {
   const lenses = buildRegulatoryLenses(
     [
       makeFinding("reject_option_missing_or_hidden", "Reject/refusal option not observed or nested", {
@@ -819,14 +718,12 @@ test("buildRegulatoryLenses restricts EU-specific note pills outside FTC lens", 
       thirdPartyRequestCount: 0
     }
   );
-  const ftcFinding = lenses.find((lens) => lens.acronym === "FTC")?.findings.find((finding) => finding.id === "reject_option_missing_or_hidden");
   const gdprFinding = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.find((finding) => finding.id === "reject_option_missing_or_hidden");
 
-  assert.equal(ftcFinding?.reviewContextChips?.some((chip) => /GDPR|ePrivacy|Article 5/i.test(chip)), false);
   assert.ok(gdprFinding?.reviewContextChips?.some((chip) => /GDPR|ePrivacy|Article 5|consent/i.test(chip)));
 });
 
-test("buildRegulatoryLenses maps dark-pattern umbrella to FTC by default and GDPR only with tracking context", () => {
+test("buildRegulatoryLenses maps dark-pattern umbrella only into GDPR/ePrivacy when tracking context is present", () => {
   const baseLenses = buildRegulatoryLenses(
     [
       makeFinding("consent_dark_patterns_detected", "Dark pattern consent signals detected", {
@@ -854,49 +751,13 @@ test("buildRegulatoryLenses maps dark-pattern umbrella to FTC by default and GDP
     baseLenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((finding) => finding.id === "consent_dark_patterns_detected"),
     false
   );
-  assert.ok(baseLenses.find((lens) => lens.acronym === "FTC")?.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
+  assert.deepEqual(baseLenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
   assert.ok(
     trackingLenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((finding) => finding.id === "consent_dark_patterns_detected")
   );
 });
 
-test("buildRegulatoryLenses maps session recording to CCPA only with sensitive or disclosure context", () => {
-  const baseLenses = buildRegulatoryLenses(
-    [
-      makeFinding("session_recording_services_detected", "Session replay service signal observed", {
-        shortSummary: "Session replay tooling was observed."
-      })
-    ],
-    {
-      beforeConsentCookieCount: 0,
-      thirdPartyRequestCount: 3
-    }
-  );
-  const sensitiveLenses = buildRegulatoryLenses(
-    [
-      makeFinding("session_recording_services_detected", "Session replay service signal observed", {
-        shortSummary: "Session replay tooling was observed."
-      }),
-      makeFinding("possible_session_replay_on_sensitive_input_surface", "Possible session replay on a sensitive input surface", {
-        shortSummary: "Session replay appeared near a sensitive input surface."
-      })
-    ],
-    {
-      beforeConsentCookieCount: 0,
-      thirdPartyRequestCount: 3
-    }
-  );
-
-  assert.equal(
-    baseLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((finding) => finding.id === "session_recording_services_detected"),
-    false
-  );
-  assert.ok(
-    sensitiveLenses.find((lens) => lens.acronym === "CCPA / CPRA / CIPA")?.findings.some((finding) => finding.id === "session_recording_services_detected")
-  );
-});
-
-test("buildRegulatoryLenses maps probable fingerprinting to FTC only with sensitive or deceptive context", () => {
+test("buildRegulatoryLenses maps probable fingerprinting only into GDPR/ePrivacy when pre-consent context is present", () => {
   const baseLenses = buildRegulatoryLenses(
     [
       makeFinding("probable_fingerprinting", "Probable browser/device fingerprinting behavior", {
@@ -924,180 +785,7 @@ test("buildRegulatoryLenses maps probable fingerprinting to FTC only with sensit
   );
 
   assert.ok(baseLenses.find((lens) => lens.acronym === "GDPR / ePrivacy")?.findings.some((finding) => finding.id === "probable_fingerprinting"));
-  assert.equal(baseLenses.find((lens) => lens.acronym === "FTC")?.findings.some((finding) => finding.id === "probable_fingerprinting"), false);
-  assert.ok(disclosureLenses.find((lens) => lens.acronym === "FTC")?.findings.some((finding) => finding.id === "probable_fingerprinting"));
-});
-
-test("buildRegulatoryLenses adds DOJ / ADA accessibility when the shared accessibility overlay is materially triggered", () => {
-  const lenses = buildRegulatoryLenses(
-    [],
-    {
-      beforeConsentCookieCount: 0,
-      thirdPartyRequestCount: 0
-    },
-    {
-      accessibilitySignals: {
-        accessibilityClaimMismatchDetected: true,
-        accessibilityLitigationRiskScore: 61,
-        accessibilityStatementPresent: false,
-        wcagErrorCountTotal: 27,
-        wcagFormLabelErrorCount: 4,
-        wcagKeyboardNavigationIssueCount: 3,
-        wcagMissingAltCount: 7
-      },
-      agencyMappings: [makeAgencyMapping()],
-      regulatoryRisk: makeRegulatoryRisk({
-        accessibilityEnforcementRiskScore: 61
-      })
-    }
-  );
-
-  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-  assert.ok(adaLens);
-  assert.equal(adaLens?.summary, "Accessibility claims appear inconsistent with observed barriers.");
-  assert.match(regulatoryFindingLabels(adaLens?.findings ?? []).join(" "), /Automated WCAG issues detected: 27/);
-  assert.match(regulatoryFindingLabels(adaLens?.findings ?? []).join(" "), /Keyboard navigation issues surfaced/);
-  assert.match(regulatoryFindingLabels(adaLens?.findings ?? []).join(" "), /Accessibility statement not detected/);
-  assert.equal(
-    regulatoryFindingLabels(adaLens?.findings ?? []).filter((item) => /accessibility statement/i.test(item)).length,
-    1
-  );
-});
-
-test("buildRegulatoryLenses keeps ADA minimal when accessibility statement is the only missing signal", () => {
-  const lenses = buildRegulatoryLenses(
-    [],
-    {
-      beforeConsentCookieCount: 0,
-      thirdPartyRequestCount: 0
-    },
-    {
-      accessibilitySignals: {
-        accessibilityStatementPresent: false,
-        wcagErrorCountTotal: 0,
-        wcagFormLabelErrorCount: 0,
-        wcagKeyboardNavigationIssueCount: 0,
-        wcagMissingAltCount: 0
-      },
-      agencyMappings: [
-        makeAgencyMapping({
-          relevanceLevel: "limited",
-          triggeredSignals: [{ key: "accessibilityStatementPresent", label: "Accessibility statement missing" }]
-        })
-      ],
-      regulatoryRisk: makeRegulatoryRisk({
-        accessibilityEnforcementRiskScore: 18
-      })
-    }
-  );
-
-  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-  assert.ok(adaLens);
-  assert.equal(adaLens?.minimal, true);
-  assert.equal(adaLens?.ratingLabel, "Audit-only");
-  assert.equal(adaLens?.score, null);
-  assert.equal(adaLens?.summary, "");
-});
-
-test("buildRegulatoryLenses surfaces scored ADA lens when any WCAG errors are present", () => {
-  const lenses = buildRegulatoryLenses(
-    [],
-    {
-      beforeConsentCookieCount: 0,
-      thirdPartyRequestCount: 0
-    },
-    {
-      accessibilitySignals: {
-        accessibilityStatementPresent: true,
-        wcagErrorCountTotal: 2
-      },
-      agencyMappings: [
-        makeAgencyMapping({
-          relevanceLevel: "limited",
-          triggeredSignals: [{ key: "accessibility.representative_axe_examples", label: "Representative axe examples" }]
-        })
-      ],
-      regulatoryRisk: makeRegulatoryRisk({
-        accessibilityEnforcementRiskScore: 18
-      })
-    }
-  );
-
-  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-  const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
-  assert.ok(adaLens);
-  assert.ok(!adaLens?.minimal);
-  assert.equal(adaLens?.ratingLabel, "Strong");
-  assert.equal(typeof adaLens?.score, "number");
-  assert.equal(adaLens?.summary, "Automated accessibility signals are the main review area.");
-  assert.equal(financialLens, undefined);
-});
-
-test("buildRegulatoryLenses keeps ADA minimal and omits blank financial claims when accessibility signals remain low-signal", () => {
-  const lenses = buildRegulatoryLenses(
-    [],
-    {
-      beforeConsentCookieCount: 0,
-      thirdPartyRequestCount: 0
-    },
-    {
-      accessibilitySignals: {
-        accessibilityStatementPresent: true,
-        wcagErrorCountTotal: 0
-      },
-      agencyMappings: [
-        makeAgencyMapping({
-          relevanceLevel: "limited",
-          triggeredSignals: []
-        })
-      ],
-      regulatoryRisk: makeRegulatoryRisk({
-        accessibilityEnforcementRiskScore: 18
-      })
-    }
-  );
-
-  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-  const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
-  assert.ok(adaLens);
-  assert.equal(adaLens?.minimal, true);
-  assert.equal(adaLens?.ratingLabel, "Audit-only");
-  assert.equal(adaLens?.score, null);
-  assert.equal(adaLens?.summary, "");
-  assert.equal(financialLens, undefined);
-});
-
-test("buildRegulatoryLensesFromUnifiedPackets explains representative DOJ ADA axe coverage", () => {
-  const lenses = buildRegulatoryLensesFromUnifiedPackets(
-    [
-      makeUnifiedPacket("accessibility_risk_score", {
-        evidence: {
-          counts: {
-            representativeAxeExampleCount: 2,
-            representativeAxePageCount: 2,
-            representativeAxeRuleCount: 2
-          },
-          entities: { maxAxeImpact: ["serious"] },
-          fetchQuality: null,
-          flags: ["representative_accessibility_examples_retained"],
-          pageUrls: ["https://example.com/", "https://example.com/products"],
-          snippets: ["Representative axe examples: 2 rules across 2 pages; max impact: serious."],
-          sourceUrls: []
-        },
-        summary: "Automated accessibility issues were retained from axe examples."
-      })
-    ],
-    {
-      beforeConsentCookieCount: 0,
-      thirdPartyRequestCount: 0
-    }
-  );
-
-  const adaLens = lenses.find((lens) => lens.acronym === "DOJ / ADA accessibility");
-
-  assert.ok(adaLens);
-  assert.equal(adaLens?.minimal, undefined);
-  assert.match(regulatoryFindingLabels(adaLens?.findings ?? []).join(" "), /Representative axe examples: 2 rules across 2 pages; max impact: serious\./);
+  assert.deepEqual(disclosureLenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
 test("benchmark score explanation uses surfaced findings without percentile claims", () => {
@@ -2108,7 +1796,7 @@ test("ExecutiveSummaryCard frames external coverage context as supplemental only
   assert.doesNotMatch(html, /Tracking started before consent/);
 });
 
-test("ExecutiveSummaryCard renders score-only ADA accessibility as audit-only without the stale 88 rating", () => {
+test("ExecutiveSummaryCard keeps score-only accessibility outside regulatory lenses without the stale 88 rating", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
       accessLimitationNotice: null,
@@ -2157,14 +1845,9 @@ test("ExecutiveSummaryCard renders score-only ADA accessibility as audit-only wi
     })
   );
 
-  assert.doesNotMatch(html, /DOJ \/ ADA accessibility/);
   assert.doesNotMatch(html, /Audit-only/);
-  const adaStart = html.indexOf("DOJ / ADA accessibility");
-  const financialStart = html.indexOf("Financial &amp; commercial claims");
-  assert.equal(adaStart, -1);
-  const adaMarkup = html.slice(adaStart, financialStart > adaStart ? financialStart : undefined);
-  assert.doesNotMatch(adaMarkup, /Not applicable/);
-  assert.doesNotMatch(adaMarkup, />88</);
+  assert.doesNotMatch(html, /Not applicable/);
+  assert.doesNotMatch(html, /Representative automated accessibility examples were retained/);
 });
 
 test("ExecutiveSummaryCard shows benchmark beside clear posture without scanned timestamp pill", () => {
@@ -2275,7 +1958,6 @@ test("ExecutiveSummaryCard withholds scores when the captured page is not repres
   assert.doesNotMatch(html, /Overall score/);
   assert.doesNotMatch(html, /63\/100 overall score/);
   assert.doesNotMatch(html, /Review lenses/);
-  assert.doesNotMatch(html, /CCPA \/ CPRA \/ CIPA/);
   assert.doesNotMatch(html, /Review signal/);
   assert.doesNotMatch(html, /Good evidence/);
   assert.doesNotMatch(html, /Normal public site was not reached/);
@@ -2283,80 +1965,6 @@ test("ExecutiveSummaryCard withholds scores when the captured page is not repres
   assert.doesNotMatch(html, /Review focus/);
   assert.doesNotMatch(html, /Evidence details/);
   assert.doesNotMatch(html, /no-go/i);
-});
-
-test("buildRegulatoryLenses promotes retained financial-promotion findings into the financial claims lens", () => {
-  const lenses = buildRegulatoryLenses(
-    [
-      makeFinding("high_risk_product_risk_disclosure_missing", "High-risk product risk disclosure missing", {
-        section: "Financial & Claims",
-        severity: "medium",
-        shortSummary: "High-risk product marketing surfaced without nearby risk disclosure."
-      })
-    ],
-    {
-      beforeConsentCookieCount: 0,
-      thirdPartyRequestCount: 0
-    },
-    {
-      accessibilitySignals: {
-        accessibilityStatementPresent: true,
-        wcagErrorCountTotal: 0
-      },
-      agencyMappings: [
-        makeAgencyMapping({
-          relevanceLevel: "limited",
-          triggeredSignals: []
-        })
-      ],
-      regulatoryRisk: makeRegulatoryRisk({
-        accessibilityEnforcementRiskScore: 18
-      })
-    }
-  );
-
-  const financialLens = lenses.find((lens) => lens.acronym === "Financial & commercial claims");
-  assert.ok(financialLens);
-  assert.equal(financialLens?.minimal, undefined);
-  assert.equal(financialLens?.ratingLabel, "Watch");
-  assert.match(financialLens?.summary ?? "", /Commercial claims and pricing language should be reviewed/i);
-  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /High-risk product marketing surfaced/i);
-});
-
-test("buildRegulatoryLenses places financial claims directly below DOJ / ADA accessibility in regulatory findings", () => {
-  const lenses = buildRegulatoryLenses(
-    [
-      makeFinding("simulated_performance_without_disclosure", "Simulated performance without disclosure", {
-        severity: "medium",
-        shortSummary: "Backtested performance language surfaced without nearby disclosure."
-      })
-    ],
-    {
-      beforeConsentCookieCount: 0,
-      thirdPartyRequestCount: 0
-    },
-    {
-      accessibilitySignals: {
-        accessibilityStatementPresent: true,
-        wcagErrorCountTotal: 2
-      },
-      agencyMappings: [makeAgencyMapping()],
-      regulatoryRisk: makeRegulatoryRisk({
-        accessibilityEnforcementRiskScore: 18
-      })
-    }
-  );
-
-  assert.deepEqual(
-    lenses.map((lens) => lens.acronym),
-    ["CCPA / CPRA / CIPA", "GDPR / ePrivacy", "FTC", "DOJ / ADA accessibility", "Financial & commercial claims"]
-  );
-
-  const financialLens = lenses.at(-1);
-  assert.equal(financialLens?.detailTitle, "Claims, urgency, and pricing disclosures");
-  assert.match(financialLens?.summary ?? "", /claims|pricing/i);
-  assert.equal(financialLens?.minimal, undefined);
-  assert.match(regulatoryFindingLabels(financialLens?.findings ?? []).join(" "), /Simulated or hypothetical performance language surfaced/);
 });
 
 test("ExecutiveSummaryCard builds regulatory lenses from all findings instead of only top findings", () => {
@@ -3176,7 +2784,6 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
   assert.match(html, /Evidence details/);
   assert.match(html, /Regulatory context/);
   assert.match(html, /GDPR \/ ePrivacy/);
-  assert.doesNotMatch(html, /CCPA \/ CPRA/);
   assert.match(html, /View applicability notes/);
   assert.match(html, /regulatory review context for the scanned report finding/);
   assert.match(html, /Google Tag Manager and HubSpot appeared before recorded consent; first classified signal at 1500ms after page load\. Tracking before a clear user choice can undermine consent expectations\./);
@@ -3211,7 +2818,6 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
   assert.doesNotMatch(
     html,
     new RegExp([
-      `CIPA ${"viol"}ation confirmed`,
       "legal liability",
       `${"viol"}ates?`,
       `${"ill"}egal`,
@@ -3941,10 +3547,8 @@ test("ExecutiveSummaryCard keeps regulatory cookie copy aligned with canonical c
   );
 
   assert.doesNotMatch(html, /Consent and pre-consent tracking risk is the main issue\./);
-  assert.doesNotMatch(html, /CCPA \/ CPRA/);
   assert.doesNotMatch(html, /<span class="block text-xl font-semibold tracking-tight text-slate-900">70<\/span>/);
   assert.doesNotMatch(html, /Third-party collection and disclosure posture drives this score\./);
-  assert.doesNotMatch(html, /FTC/);
   assert.doesNotMatch(html, /Pre-consent tracking and third-party collection should be reviewed for consumer-protection context\./);
   assert.doesNotMatch(html, /64 cookie timing records were retained before consent; vendor\/category attribution was not retained\./);
   assert.doesNotMatch(html, /64 classified cookie records were observed before consent\./);
@@ -4012,7 +3616,7 @@ test("ExecutiveSummaryCard omits generic title icons across top findings with sh
       allFindings: [
         makeFinding("pre_consent_tracking_detected", "Tracking started before consent"),
         makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject"),
-        makeFinding("cpra_cba_opt_out_missing", "CPRA opt-out missing for advertising sharing")
+        makeFinding("cookie_disclosure_gap", "Cookie disclosure gap observed")
       ],
       beforeConsentCookieCount: 0,
       domainBenchmark: null,
@@ -4033,7 +3637,7 @@ test("ExecutiveSummaryCard omits generic title icons across top findings with sh
       topFindings: [
         makeFinding("pre_consent_tracking_detected", "Tracking started before consent"),
         makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject"),
-        makeFinding("cpra_cba_opt_out_missing", "CPRA opt-out missing for advertising sharing")
+        makeFinding("cookie_disclosure_gap", "Cookie disclosure gap observed")
       ],
       topObservedEntities: [],
       trackerSummary: "1 vendor across 1 third-party domain",
@@ -4044,7 +3648,7 @@ test("ExecutiveSummaryCard omits generic title icons across top findings with sh
 
   assert.match(html, /Third-party tracking observed before recorded consent/);
   assert.match(html, /Non-essential tracking continued after reject/);
-  assert.match(html, /CPRA opt-out missing for advertising sharing/);
+  assert.match(html, /Cookie disclosure gap observed/);
   assert.doesNotMatch(html, /data-finding-icon=/);
 });
 

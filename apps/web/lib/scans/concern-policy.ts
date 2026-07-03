@@ -2390,6 +2390,23 @@ export function deriveConcernPolicy(input: {
       };
     }
   }
+  if (suggestedUnifiedFindingId === "consent_infrastructure__cmp_load_order") {
+    const firstClassifiedTrackerAtMs = getNumberEvidence(input.rawEvidence, ["firstClassifiedTrackerAtMs", "first_classified_tracker_at_ms"]);
+    const cmpScriptLoadedAtMs = getNumberEvidence(input.rawEvidence, ["cmpScriptLoadedAtMs", "cmp_script_loaded_at_ms"]);
+    const cmpGapMs = getNumberEvidence(input.rawEvidence, ["cmpGapMs", "cmp_gap_ms"]);
+    const hasLoadOrderGap =
+      firstClassifiedTrackerAtMs !== null &&
+      cmpScriptLoadedAtMs !== null &&
+      cmpGapMs !== null &&
+      cmpGapMs > 0 &&
+      cmpScriptLoadedAtMs > firstClassifiedTrackerAtMs;
+    return {
+      allowedNarrativeTier: hasLoadOrderGap && cmpGapMs > 3000 ? "strong" : hasLoadOrderGap ? "moderate" : "weak",
+      externalSurfacingEligibility: hasLoadOrderGap ? "eligible" : "audit_only",
+      negativeEvidenceFlags: hasLoadOrderGap ? [] : ["missing_preconsent_sequence_evidence"],
+      promotionEligibility: hasLoadOrderGap ? "eligible" : "internal_only"
+    };
+  }
   if (suggestedUnifiedFindingId === "accessibility_risk_score") {
     return {
       allowedNarrativeTier: "weak",
