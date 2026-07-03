@@ -354,26 +354,26 @@ function hasLocalizedArticle13EvidenceContext(
   const normalized = normalizeArticle13Whitespace(value);
   const hasPrivacyDataContext =
     /(?:privacy|personal data|personal information|data protection|processing|controller|policy|notice|rights|privacy policy)/i.test(normalized) ||
-    /(?:datenschutz|personenbezogene daten|traitement|données personnelles|protección de datos|datos personales|protezione dei dati|dati personali|persoonsgegevens|gegevensbescherming|dane osobowe|ochrona danych)/i.test(normalized);
+    /(?:datenschutz|personenbezogene daten|traitement|données personnelles|protección de datos|datos personales|protezione dei dati|dati personali|trattamento dei dati|tuoi dati|suoi dati|persoonsgegevens|gegevensbescherming|dane osobowe|ochrona danych)/i.test(normalized);
   if (!hasPrivacyDataContext) {
     return false;
   }
 
   switch (disclosureType) {
     case "controller_contact":
-      return /(?:controller|privacy contact|data protection contact|verantwortlicher|responsable du traitement|responsable del tratamiento|titolare del trattamento|verwerkingsverantwoordelijke|administrator danych)/i.test(normalized);
+      return /(?:controller|privacy contact|data protection contact|verantwortlicher|verantwortlich für die datenverarbeitung|responsable du traitement|responsable del tratamiento|titolare del trattamento|titolari del trattamento|verwerkingsverantwoordelijke|administrator danych)/i.test(normalized);
     case "dpo_contact":
       return /(?:data protection officer|dpo|datenschutzbeauftrag|délégué à la protection|delegado de protección|responsabile della protezione|functionaris voor gegevensbescherming|inspektor ochrony danych|iod)/i.test(normalized);
     case "processing_purposes":
-      return /(?:purpose|purposes|why we process|we process|we use|zweck|zwecke|verarbeiten|finalité|finalités|tratamos|finalidad|finalità|trattiamo|doeleinden|verwerken|cele|przetwarzamy)/i.test(normalized);
+      return /(?:purpose|purposes|why we process|we process|we use|zweck|zwecke|verarbeiten|verarbeitet|finalité|finalités|tratamos|finalidad|finalità|trattiamo|doeleinden|verwerken|cele|przetwarzamy)/i.test(normalized);
     case "legal_basis":
       return /(?:legal basis|lawful basis|legitimate interest|article 6|rechtsgrundlage|base légale|base jurídica|base legal|base giuridica|basi giuridiche|grondslag|podstawa prawna)/i.test(normalized);
     case "recipients_or_vendor_categories":
       return /(?:recipients?|categories of recipients|service providers?|processors?|third parties|empfänger|dienstleister|destinataires|prestataires|destinatarios|proveedores|destinatari|fornitori|ontvangers|dienstverleners|odbiorcy|dostawcy)/i.test(normalized);
     case "data_retention":
-      return /(?:retention|retain|kept|storage period|how long|aufbewahrung|speichern|conservation|conservons|conservación|conservamos|conservazione|conserviamo|bewaren|bewaartermijn|przechowywania|przechowujemy)/i.test(normalized);
+      return /(?:retention|retain|kept|storage period|how long|aufbewahrung|speichern|gespeichert|conservation|conservons|conservación|conservamos|conservazione|conserviamo|bewaren|bewaartermijn|przechowywania|przechowujemy)/i.test(normalized);
     case "data_subject_rights":
-      return /(?:rights?|right to access|right to erasure|data subject|betroffenenrechte|recht auf|droits?|personnes concernées|derechos?|interesados|diritti?|interessati|rechten|betrokkenen|prawa|osób których dane dotyczą)/i.test(normalized);
+      return /(?:rights?|right to access|right to erasure|data subject|betroffenenrechte|recht auf|droits?|personnes concernées|derechos?|interesados|diritti?|interessati|rechten|betrokkenen|recht om bezwaar te maken|prawa|osób których dane dotyczą)/i.test(normalized);
     case "international_transfers":
       return /(?:international transfer|outside (?:the )?(?:eea|eu|european union)|third countr|standard contractual|übermittlung|drittland|transfert|hors de|transferencia|fuera del|trasferiment|paesi terzi|doorgifte|buiten|transfer|poza|standardowe klauzule)/i.test(normalized);
     case "supervisory_authority":

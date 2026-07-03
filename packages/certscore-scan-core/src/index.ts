@@ -587,6 +587,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       ...(consentFlowResult?.domSnapshots ?? []),
     ],
     networkEvents,
+    networkResponseEvents,
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
     screenshots: [
       ...preConsentResult.screenshots,
@@ -1187,10 +1188,10 @@ function postConsentFlowRuntimeDisabled(input: {
 }
 
 const SCAN_NO_GO_TEXT_PATTERN =
-  /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|detected unusual behaviour[^.]{0,180}(?:bot|browser)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot/i;
+  /access to this site has been denied|access denied|access is temporarily restricted|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|detected unusual (?:behaviour|activity)[^.]{0,180}(?:bot|browser|network)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot|\bzaraz wracamy\b/i;
 
 const SCAN_NO_GO_SECURITY_CHALLENGE_REQUEST_PATTERN =
-  /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])|\/cdn-cgi\/challenge-platform\/|\/cdn-cgi\/challenge|challenges\.cloudflare\.com/i;
+  /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])|\/cdn-cgi\/challenge-platform\/|\/cdn-cgi\/challenge|challenges\.cloudflare\.com|captcha-delivery\.com/i;
 
 const SCAN_NO_GO_NAVIGATION_FAILURE_PATTERN =
   /page\.goto|net::ERR_|ERR_HTTP2_PROTOCOL_ERROR|ERR_QUIC_PROTOCOL_ERROR|navigation timeout|timeout \d+ms exceeded/i;
@@ -1200,6 +1201,7 @@ function buildScanNoGoAssessment(input: {
   domSnapshots: DomSnapshotArtifact[];
   modulesRun: CanonicalEvidenceBundle["modulesRun"];
   networkEvents: NetworkEvent[];
+  networkResponseEvents: NetworkResponseEvent[];
   policySurfaceObservations: PolicySurfaceObservation[];
   screenshots: ScreenshotArtifact[];
 }): {
@@ -1266,13 +1268,16 @@ function buildScanNoGoAssessment(input: {
     ...input.policySurfaceObservations.map((observation) => boundedScanNoGoText(observation.textExcerpt)),
   ].filter((text): text is string => Boolean(text)));
   const matchedText = textCandidates.find((text) => SCAN_NO_GO_TEXT_PATTERN.test(text));
-  if (!matchedText) {
+  const networkChallengeEvidence = detectScanNoGoNetworkChallengeEvidence({
+    networkEvents: input.networkEvents,
+    networkResponseEvents: input.networkResponseEvents,
+  });
+  if (!matchedText && !networkChallengeEvidence) {
     return null;
   }
 
-  const securityChallengeRequestObserved = input.networkEvents.some((event) =>
-    SCAN_NO_GO_SECURITY_CHALLENGE_REQUEST_PATTERN.test(event.url ?? "")
-  );
+  const retainedEvidenceText = matchedText ?? networkChallengeEvidence?.evidenceText ?? "Security challenge evidence observed.";
+  const securityChallengeRequestObserved = Boolean(networkChallengeEvidence);
   const screenshot = input.screenshots
     .filter((artifact) => artifact.consentStateAtTime === "pre_consent")
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs)[0] ?? null;
@@ -1289,13 +1294,13 @@ function buildScanNoGoAssessment(input: {
     screenshot ? "scan_runtime_artifacts.visual_evidence_artifacts" : null,
   ].filter((value): value is string => Boolean(value));
   const shortExplanation = securityChallengeRequestObserved
-    ? `The retained initial-load evidence showed a bot/security challenge instead of the normal public site: "${matchedText}"`
-    : `The retained initial-load evidence showed an access-block page instead of the normal public site: "${matchedText}"`;
+    ? `The retained initial-load evidence showed a bot/security challenge instead of the normal public site: "${retainedEvidenceText}"`
+    : `The retained initial-load evidence showed an access-block page instead of the normal public site: "${retainedEvidenceText}"`;
   const visualAccessReview: VisualAccessReview = {
     artifact_ref: screenshot ? "scan_core:screenshot_pre_consent" : null,
     confidence,
     go_no_go: "NO_GO",
-    key_visual_evidence: [matchedText],
+    key_visual_evidence: [retainedEvidenceText],
     page_state: visualPageState,
     reason_code: primaryReasonCode,
     short_explanation: shortExplanation,
@@ -1311,8 +1316,8 @@ function buildScanNoGoAssessment(input: {
     reasonCodes: [primaryReasonCode, "scan_no_go_corroborated"],
     corroboratorCodes: [
       securityChallengeRequestObserved ? "network_security_challenge_request_observed" : null,
-      securityChallengeRequestObserved ? "network_cloudflare_challenge" : null,
-      "access_block_text_observed",
+      networkChallengeEvidence?.corroboratorCode ?? null,
+      matchedText ? "access_block_text_observed" : null,
       screenshot ? "retained_visual_artifact_available" : null,
     ].filter((value): value is string => Boolean(value)),
     contradictorCodes: [],
@@ -1333,6 +1338,53 @@ function buildScanNoGoAssessment(input: {
     primaryReasonCode,
     scanNoGoAssessment,
     visualAccessReview,
+  };
+}
+
+function detectScanNoGoNetworkChallengeEvidence(input: {
+  networkEvents: NetworkEvent[];
+  networkResponseEvents: NetworkResponseEvent[];
+}): { corroboratorCode: string; evidenceText: string } | null {
+  const challengeRequest = input.networkEvents.find((event) =>
+    SCAN_NO_GO_SECURITY_CHALLENGE_REQUEST_PATTERN.test(event.url ?? "")
+  );
+  if (challengeRequest) {
+    return {
+      corroboratorCode: /captcha-delivery\.com|datadome/i.test(challengeRequest.url ?? "")
+        ? "network_datadome_challenge"
+        : "network_cloudflare_challenge",
+      evidenceText: "Network request to a security challenge endpoint was observed.",
+    };
+  }
+
+  const blockedDatadomeResponse = input.networkResponseEvents.find((event) => {
+    if (event.firstParty !== true) {
+      return false;
+    }
+    const status = event.status ?? 0;
+    if (![401, 403, 407, 409, 429, 451, 503].includes(status)) {
+      return false;
+    }
+    const cookieNames = [
+      ...(event.cookieNamesSet ?? []),
+      ...(event.setCookieMetadata ?? []).map((cookie) => cookie.name),
+    ];
+    const evidenceText = [
+      event.url ?? "",
+      event.responseUrl ?? "",
+      event.hostname ?? "",
+      ...cookieNames,
+      event.responseHeaders?.contentType ?? "",
+    ].join(" ");
+    return /(?:^|\b)datadome(?:\b|$)|captcha-delivery\.com/i.test(evidenceText);
+  });
+  if (!blockedDatadomeResponse) {
+    return null;
+  }
+
+  return {
+    corroboratorCode: "network_datadome_challenge",
+    evidenceText: `First-party document response returned HTTP ${blockedDatadomeResponse.status} with DataDome challenge evidence.`,
   };
 }
 

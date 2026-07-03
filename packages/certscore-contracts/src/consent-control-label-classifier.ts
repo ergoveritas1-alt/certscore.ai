@@ -59,7 +59,7 @@ const PRODUCTION_DEFAULT_CONTEXT_HINT_PATTERN =
   /\b(cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|optional|essential|necessary|cmp|onetrust|trustarc|didomi|usercentrics|cookiebot|optanon|datenschutz|cookies?|einwilligung|zustimmung|präferenzen|einstellungen|choix|confidentialit[eé]|pr[eé]f[eé]rences?|consentement|finalit[eé]s|privacidad|preferencias?|configuraci[oó]n|opciones|consenso|privacy|preferenze|impostazioni|pubblicitarie|tracciamento)\b/i;
 
 const MULTILINGUAL_CONTEXT_HINT_PATTERN =
-  /\b(cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|optional|essential|necessary|cmp|onetrust|trustarc|didomi|usercentrics|cookiebot|optanon|datenschutz|cookies?|einwilligung|zustimmung|präferenzen|einstellungen|choix|confidentialit[eé]|pr[eé]f[eé]rences?|consentement|finalit[eé]s|privacidad|preferencias?|configuraci[oó]n|opciones|consenso|privacy|preferenze|impostazioni|pubblicitarie|tracciamento|toestemming|voorkeuren|instellingen|keuzes|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ay]|preferencj[ae]|ustawieni[ae]|niezb[eę]dne)\b/i;
+  /\b(cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|optional|essential|necessary|cmp|onetrust|trustarc|didomi|usercentrics|cookiebot|optanon|datenschutz|cookies?|einwilligung|zustimmung|präferenzen|einstellungen|choix|confidentialit[eé]|pr[eé]f[eé]rences?|consentement|finalit[eé]s|privacidad|preferencias?|configuraci[oó]n|opciones|consenso|privacy|preferenze|impostazioni|pubblicitarie|tracciamento|toestemming|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie)\b/i;
 
 const PRIVACY_OPT_OUT_HINT_PATTERN =
   /\b(do not sell|do not share|sale|share|targeted advertising|privacy rights?|legitimate interest|berechtigtem interesse|widerspruch|opposition|int[eé]r[eê]t l[eé]gitime|droit d['’]opposition|gerechtvaardigd belang|bezwaar|sprzeciw|uzasadnion(?:y|ego) interes)\b/i;
@@ -72,6 +72,9 @@ const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN =
 
 const NON_ACTIONABLE_REFERENCE_PATTERN =
   /\bpannello delle preferenze pubblicitarie\b/i;
+
+const UTIQ_SCOPED_REJECT_PATTERN =
+  /\butiq\b.*\b(?:ablehnen|widersprechen|reject|decline|refuse|opt(?:\s|-)?out)\b|\b(?:ablehnen|widersprechen|reject|decline|refuse|opt(?:\s|-)?out)\b.*\butiq\b/i;
 
 const CONTINUE_AS_ACCEPT_CONTEXT_PATTERN =
   /\b(?:by\s+(?:using|continuing(?:\s+to\s+use)?|accessing|remaining\s+on)\s+(?:this\s+)?(?:site|website|service|page)|(?:using|continuing(?:\s+to\s+use)?|accessing|remaining\s+on)\s+(?:this\s+)?(?:site|website|service|page)\s+(?:means|constitutes|indicates)|you\s+(?:consent|agree)\s+to\s+(?:these\s+)?cookies?)\b/i;
@@ -137,6 +140,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "decline and subscribe", "reject_with_subscription"),
     equivalent("reject", "subscribe and decline", "reject_with_subscription"),
     equivalent("reject", "reject and subscribe", "reject_with_subscription"),
+    equivalent("reject", "reject all and subscribe", "reject_with_subscription"),
     equivalent("reject", "use necessary cookies only", "necessary_only"),
     equivalent("reject", "necessary cookies only", "necessary_only"),
     equivalent("reject", "essential cookies only", "necessary_only"),
@@ -349,6 +353,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "continuer sans cookies"),
     equivalent("reject", "continuer sans accepter les cookies"),
     equivalent("reject", "continuer sans consentement"),
+    equivalent("reject", "refuser et s'abonner", "reject_with_subscription"),
     equivalent("reject", "uniquement les cookies nécessaires", "necessary_only"),
     equivalent("reject", "cookies nécessaires uniquement", "necessary_only"),
     equivalent("reject", "cookies essentiels uniquement", "necessary_only"),
@@ -374,6 +379,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "gérer mes choix"),
     ...direct("options", "gérer les choix"),
     ...direct("options", "gérer le consentement"),
+    ...direct("options", "gérer mes consentements"),
     ...direct("options", "gérer mes préférences"),
     ...direct("options", "gérer les préférences"),
     ...direct("options", "gérer les cookies"),
@@ -531,6 +537,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "zgadzam się"),
     ...direct("accept", "zezwól"),
     ...direct("accept", "zezwól na wszystkie"),
+    contextual("accept", "przejdź do serwisu", { requiresConsentContext: true }),
     weak("accept", "ok", { requiresConsentContext: true }),
 
     ...direct("reject", "odrzuć"),
@@ -610,6 +617,23 @@ export function classifyConsentControlLabel(
   }
   if (NON_ACTIONABLE_REFERENCE_PATTERN.test(normalizedLabel)) {
     return unknown(["non_actionable_reference_label"]);
+  }
+  if (isUtiqScopedRejectLabel(normalizedLabel)) {
+    return {
+      intent: "privacy_opt_out",
+      confidence: 0.86,
+      matchedTerm: "utiq reject",
+      matchedLocale: "de",
+      matchStrength: "equivalent",
+      variant: "vendor_specific_opt_out",
+      reasonCodes: [
+        "vendor_specific_privacy_opt_out",
+        "matched_privacy_opt_out",
+        "match_strength_equivalent",
+        "context_satisfied",
+      ],
+      contextSatisfied: true,
+    };
   }
   if (PRIVACY_OPT_OUT_HINT_PATTERN.test(`${labelText} ${input.contextText ?? ""}`)) {
     reasonCodes.push("privacy_opt_out_context");
@@ -694,6 +718,13 @@ function weak(
   return { intent, phrase, strength: "weak", ...options };
 }
 
+function isUtiqScopedRejectLabel(normalizedLabel: string) {
+  if (!UTIQ_SCOPED_REJECT_PATTERN.test(normalizedLabel)) {
+    return false;
+  }
+  return !/\b(?:alle|all|cookies?|tracking|nicht erforderliche|optionale|optional|notwendige|necessary|essential)\b/i.test(normalizedLabel);
+}
+
 function termScore(
   term: ConsentControlTerm,
   normalizedLabel: string,
@@ -717,7 +748,11 @@ function termScore(
   if (!contextSatisfied && (term.intent === "options" || term.strength === "contextual")) {
     return 0;
   }
-  return (exact ? 1000 : 500) + phrase.length + strengthRank(term.strength) * 100 + (contextSatisfied ? 50 : 0);
+  return (exact ? 1000 : 500) +
+    phrase.length +
+    strengthRank(term.strength) * 100 +
+    (term.variant === "reject_with_subscription" ? 200 : 0) +
+    (contextSatisfied ? 50 : 0);
 }
 
 function paddedIncludes(normalizedLabel: string, phrase: string) {

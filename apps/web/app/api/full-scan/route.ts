@@ -13,7 +13,8 @@ import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-
 import {
   type LocalV2DagLambdaDebugOverrides,
   normalizeLocalV2DagRunViaLambda,
-  normalizeLocalV2DagScanProfile
+  normalizeLocalV2DagScanProfile,
+  shouldUseLocalhostFullScanQueue
 } from "../../../server/scans/local-v2-dag-scan-config";
 import {
   restrictLocalV2RunViaLambdaForUser,
@@ -112,11 +113,14 @@ export async function POST(request: Request) {
     const forceNewScan = parseForceNewScan(payload?.forceNewScan);
     const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);
     const scanFrom = normalizePublicScanFrom(payload?.scanFrom ?? payload?.geo);
-    const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(
+    const requestedLocalV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(
       payload?.localV2RunViaLambda ?? payload?.localV2DagRunViaLambda ?? payload?.v2RunViaLambda,
       process.env,
       scanFrom
     );
+    const localV2DagRunViaLambda = shouldUseLocalhostFullScanQueue(process.env)
+      ? false
+      : requestedLocalV2DagRunViaLambda;
     const localV2DagLambdaDebugOverrides = parseLocalV2DagLambdaDebugOverrides(
       payload?.localV2DagLambdaDebugOverrides ?? payload?.v2LambdaDebugOverrides
     );

@@ -98,6 +98,130 @@ test("captures Numa-style consentmanager settings and accept without reject", as
   assert.equal(artifact.summary.firstLayerOptions, true);
 });
 
+test("retains multilingual consent classifications as diagnostic-only geometry evidence", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+    <div id="cmpbox" class="cmpbox cmpboxWelcomeGDPR" role="dialog" aria-modal="true" style="position: fixed; left: 100px; top: 100px; width: 560px; padding: 24px; background: white;">
+      <h1>Dbamy o Twoją prywatność</h1>
+      <p>Używamy plików cookie i prosimy o zgodę na personalizację reklam oraz pomiar statystyk.</p>
+      <button type="button">USTAWIENIA ZAAWANSOWANE</button>
+      <button type="button">Przejdź do serwisu</button>
+      <button type="button">AKCEPTUJĘ</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.firstLayerAccept, false);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+
+  const accept = findCandidate(artifact, "AKCEPTUJĘ");
+  assert.equal(accept?.actionType, "other");
+  assert.equal(
+    accept?.diagnosticClassifications?.some((classification) =>
+      classification.classifierProfile === "multilingual_v1" &&
+      classification.productionCredit === false &&
+      classification.actionType === "accept_all" &&
+      classification.matchedLocale === "pl"
+    ),
+    true,
+  );
+
+  const options = findCandidate(artifact, "USTAWIENIA ZAAWANSOWANE");
+  assert.equal(options?.actionType, "other");
+  assert.equal(
+    options?.diagnosticClassifications?.some((classification) =>
+      classification.classifierProfile === "multilingual_v1" &&
+      classification.productionCredit === false &&
+      classification.actionType === "manage_preferences" &&
+      classification.matchedLocale === "pl"
+    ),
+    true,
+  );
+
+  const continueToService = findCandidate(artifact, "Przejdź do serwisu");
+  assert.equal(continueToService?.actionType, "other");
+  assert.equal(
+    continueToService?.diagnosticClassifications?.some((classification) =>
+      classification.classifierProfile === "multilingual_v1" &&
+      classification.productionCredit === false &&
+      classification.actionType === "accept_all" &&
+      classification.matchedLocale === "pl" &&
+      classification.matchStrength === "contextual"
+    ),
+    true,
+  );
+});
+
+test("does not treat generic Dutch settings page chrome as diagnostic consent evidence", async () => {
+  const artifact = await captureFixture(`
+    <header style="height: 56px; display: flex; gap: 16px; align-items: center;">
+      <span>Cookiebeleid en privacy informatie</span>
+      <button type="button" aria-label="Zoeken Instellingen Teletekst NPO Start">Instellingen</button>
+    </header>
+    <main>
+      <h1>NOS Nieuws</h1>
+      <p>Laatste nieuws, sport en evenementen.</p>
+    </main>
+    <footer style="margin-top: 1200px;">
+      <a href="/privacy">Privacy</a>
+      <a href="/cookiebeleid">Cookiebeleid</a>
+    </footer>
+  `);
+
+  const settingsCandidates = artifact.candidates.filter((candidate) =>
+    candidate.label.includes("Instellingen")
+  );
+  assert.equal(settingsCandidates.some((candidate) => (candidate.diagnosticClassifications?.length ?? 0) > 0), false);
+});
+
+test("retains Polish long-form consent buttons as diagnostic-only geometry evidence", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+    <div id="rasp_cmp" role="dialog" aria-label="Plansza RODO" style="position: fixed; left: 208px; top: 175px; width: 950px; height: 550px; display: flex; flex-direction: column; padding: 24px; background: white;">
+      <div class="cmp-intro_description" style="overflow: auto; height: 350px;">
+        <p>Szanowna Użytkowniczko, Szanowny Użytkowniku, zanim klikniesz którykolwiek przycisk prosimy o przeczytanie do końca tej informacji - dotyczy ona Twoich danych osobowych.</p>
+        <p>Klikając "Przejdź do serwisu" udzielasz zgody na przetwarzanie Twoich danych osobowych dotyczących Twojej aktywności w Internecie, identyfikatorów urządzenia oraz plików cookie.</p>
+        <p>Zgoda jest dobrowolna. Możesz jej odmówić lub ograniczyć jej zakres klikając w "Ustawienia zaawansowane".</p>
+        <p>Informacje o celach przetwarzania danych znajdziesz w ustawieniach zaawansowanych, a szczegółową informację o przetwarzaniu danych znajdziesz w polityce prywatności.</p>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px;">
+        <button type="button" aria-label="Ustawienia zaawansowane">USTAWIENIA ZAAWANSOWANE</button>
+        <button type="button" aria-label="Przejdź do serwisu">PRZEJDŹ DO SERWISU</button>
+      </div>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.firstLayerAccept, false);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+
+  const options = findCandidate(artifact, "Ustawienia zaawansowane");
+  assert.equal(options?.actionType, "other");
+  assert.equal(
+    options?.diagnosticClassifications?.some((classification) =>
+      classification.classifierProfile === "multilingual_v1" &&
+      classification.productionCredit === false &&
+      classification.actionType === "manage_preferences" &&
+      classification.matchedLocale === "pl"
+    ),
+    true,
+  );
+
+  const continueToService = findCandidate(artifact, "Przejdź do serwisu");
+  assert.equal(continueToService?.actionType, "other");
+  assert.equal(
+    continueToService?.diagnosticClassifications?.some((classification) =>
+      classification.classifierProfile === "multilingual_v1" &&
+      classification.productionCredit === false &&
+      classification.actionType === "accept_all" &&
+      classification.matchedLocale === "pl"
+    ),
+    true,
+  );
+});
+
 test("keeps NBC-style hidden OneTrust preference center from counting as first-layer controls", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.cookielaw.org/consent/bf1dbc48/otSDKStub.js"></script>
@@ -202,7 +326,7 @@ test("does not count contextual options words in static banner text as first-lay
   assert.equal(artifact.summary.firstLayerAccept, true);
   assert.equal(artifact.summary.firstLayerReject, true);
   assert.equal(artifact.summary.firstLayerOptions, false);
-  assert.equal(staticTextCandidate?.actionType, "other");
+  assert.equal(staticTextCandidate, undefined);
 });
 
 test("captures Microsoft-style Manage cookies as a first-layer options control", async () => {
@@ -257,6 +381,23 @@ test("captures Italian first-layer accept, reject, and options controls", async 
   assert.equal(findCandidate(artifact, "Gestisci preferenze")?.actionType, "manage_preferences");
 });
 
+test("does not count Utiq-scoped refusal as first-layer cookie reject", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" style="position: fixed; left: 120px; top: 80px; width: 760px; padding: 20px; background: white;">
+      <h1>Datenschutz und Nutzungserlebnis</h1>
+      <p>Mit Tracking und Cookies nutzen. Utiq wird für Werbe- und Analysezwecke eingesetzt.</p>
+      <button>ALLE AKZEPTIEREN</button>
+      <button>EINSTELLUNGEN</button>
+      <a href="/utiq-opt-out">für Utiq jetzt ablehnen</a>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(findCandidate(artifact, "für Utiq jetzt ablehnen")?.actionType, "do_not_sell_share");
+});
+
 test("captures duplicated accessible names on first-layer consent buttons", async () => {
   const artifact = await captureFixture(`
     <div role="dialog" style="position: fixed; left: 120px; top: 120px; width: 620px; padding: 20px; background: white;">
@@ -287,7 +428,7 @@ test("captures visible first-layer controls inside a bounded iframe", async () =
               <h1>Personalised advertising - it&apos;s your choice</h1>
               <p>We use cookies and similar technologies. Please choose an option.</p>
               <button>Accept all</button>
-              <button>Reject all and subscribe</button>
+              <button>Reject all</button>
             </div>
           </body>
         </html>

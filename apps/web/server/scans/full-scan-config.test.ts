@@ -445,6 +445,28 @@ test("queued full-scan config routes Lambda-off localhost scans through the simu
   assert.equal(v2DagLambda?.productionFindingIntegration, false);
 });
 
+test("queued full-scan config routes Lambda-off localhost scans to the local queue when enabled", () => {
+  const config = buildQueuedFullScanConfig({
+    env: {
+      CERTSCORE_LOCALHOST_FULL_SCAN_QUEUE_ENABLED: "true",
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      NODE_ENV: "development"
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: false,
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "manual-dashboard"
+  });
+  const v2DagParallel = config.execution?.v2DagParallel as Record<string, unknown> | undefined;
+
+  assert.equal(config.processor, LOCAL_V2_DAG_SCAN_PROCESSOR);
+  assert.equal(v2DagParallel?.tool, "certscore-scan-core");
+  assert.equal(v2DagParallel?.productionFindingIntegration, false);
+  assert.equal(config.execution?.v2DagLambda, undefined);
+});
+
 test("queued full-scan Lambda v2 DAG dispatch fails closed when queue region is stale", () => {
   assert.throws(
     () =>

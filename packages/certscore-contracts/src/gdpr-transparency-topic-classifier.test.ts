@@ -104,11 +104,118 @@ test("classifies representative GDPR Transparency snippets across supported loca
   }
 });
 
+test("classifies encoded fetched policy text without display-layer fallbacks", () => {
+  const examples = [
+    {
+      locale: "it",
+      text: [
+        "RCS MediaGroup S.p.A. e CairoRCS Media S.p.A. sono autonomi Titolari del trattamento dei dati personali raccolti su questo sito.",
+        "Conformemente all'impegno dei Titolari, ti informiamo sulle modalit&agrave;, finalit&agrave; e ambito di comunicazione dei tuoi dati personali.",
+        "RCS tratta i tuoi dati per le seguenti finalit&agrave;.",
+        "L'elenco aggiornato dei soggetti che sono stati destinatari dei tuoi dati pu&ograve; essere richiesto al Titolare del trattamento.",
+      ].join(" "),
+      topics: ["controller_contact", "processing_purposes", "recipients_or_vendor_categories"],
+    },
+    {
+      locale: "es",
+      text: [
+        "El Delegado de Protecci&oacute;n de Datos atiende las consultas relativas al tratamiento de sus datos personales.",
+        "Puede ejercer sus derechos y presentar una reclamaci&oacute;n ante la Agencia Espa&ntilde;ola de Protecci&oacute;n de Datos.",
+      ].join(" "),
+      topics: ["dpo_contact", "supervisory_authority"],
+    },
+  ] as const;
+
+  for (const example of examples) {
+    const classification = classifyGdprTransparencyTopics({
+      text: example.text,
+      localeHints: [example.locale],
+    });
+    for (const topic of example.topics) {
+      const match = classification.matches.find((candidate) => candidate.topic === topic && candidate.matchedLocale === example.locale);
+      assert.ok(
+        match,
+        `${example.locale} encoded policy text should classify ${topic}`,
+      );
+      assert.equal(match.evidenceExcerpt.includes("&agrave;"), false);
+      assert.equal(match.evidenceExcerpt.includes("&ndash;"), false);
+      if (example.locale === "it" && topic === "processing_purposes") {
+        assert.match(match.evidenceExcerpt, /tratta i tuoi dati per le seguenti finalità/i);
+      }
+      if (example.locale === "it" && topic === "recipients_or_vendor_categories") {
+        assert.match(match.evidenceExcerpt, /destinatari dei tuoi dati/i);
+      }
+    }
+  }
+});
+
+test("classifies German GDPR notice intro phrasing from retained policy text", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["de"],
+    text: [
+      "Beim Aufruf einer Website werden personenbezogene Daten verarbeitet.",
+      "Die Datenschutz-Grundverordnung verpflichtet uns dazu, Sie über diese Verarbeitung zu informieren.",
+      "Sie sollen wissen, welche Zwecke wir verfolgen, wie lange Ihre Informationen gespeichert werden,",
+      "auf welcher Rechtsgrundlage die Verarbeitung basiert und welche Empfänger von Daten es geben kann.",
+      "Verantwortlich für die Datenverarbeitung ist die Zeitverlag Gerd Bucerius GmbH & Co. KG.",
+    ].join(" "),
+  });
+
+  const topics = new Set(classification.matches.map((match) => match.topic));
+  for (const topic of [
+    "controller_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+  ] satisfies GdprTransparencyTopic[]) {
+    const match = classification.matches.find((candidate) => candidate.topic === topic);
+    assert.ok(match, `German retained policy intro should classify ${topic}`);
+    assert.equal(match.matchedLocale, "de");
+    assert.equal(match.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+    assert.ok(match.evidenceExcerpt.length <= 360);
+  }
+  assert.equal(topics.size >= 5, true);
+});
+
+test("classifies Polish Article 13 policy wording with explicit processing context", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["pl"],
+    text: [
+      "Polityka prywatności. Administratorem danych osobowych Użytkowników jest spółka.",
+      "Cele oraz podstawy prawne przetwarzania danych w serwisie obejmują świadczenie usług oraz marketing.",
+      "Przetwarzanie odbywa się na podstawie art 6 ust 1 lit b RODO oraz prawnie uzasadnionych interesów.",
+      "Odbiorcy danych i zaufani partnerzy obejmują podmioty świadczące usługi IT.",
+      "Dane osobowe Użytkownika mogą być przekazywane do państw poza Europejski Obszar Gospodarczy.",
+      "Administrator wyznaczył inspektora ochrony danych.",
+      "Użytkownik może złożyć skargę dotyczącą przetwarzania danych osobowych do organu nadzorczego.",
+      "Administrator w niektórych przypadkach wykorzystuje profilowanie dzięki automatycznemu przetwarzaniu danych.",
+    ].join(" "),
+  });
+
+  for (const topic of [
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "international_transfers",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ] satisfies GdprTransparencyTopic[]) {
+    const match = classification.matches.find((candidate) => candidate.topic === topic);
+    assert.ok(match, `Polish policy wording should classify ${topic}`);
+    assert.equal(match.matchedLocale, "pl");
+    assert.equal(match.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+    assert.ok(match.evidenceExcerpt.length <= 360);
+  }
+});
+
 test("classifies DPO, rights, transfers, and automated-decision topics in non-English locales", () => {
   const examples = [
     {
       locale: "de",
-      text: "Der Datenschutzbeauftragter ist erreichbar. Sie haben ein Recht auf Auskunft über personenbezogene Daten. Eine Übermittlung personenbezogener Daten in ein Drittland beruht auf Standardvertragsklauseln für die Übermittlung personenbezogener Daten. Eine automatisierte Entscheidungsfindung mit personenbezogenen Daten findet nicht statt.",
+      text: "Sie können unseren Datenschutzbeauftragten erreichen. Sie haben ein Recht auf Auskunft über personenbezogene Daten. Eine Übermittlung personenbezogener Daten in ein Drittland beruht auf Standardvertragsklauseln für die Übermittlung personenbezogener Daten. Eine automatisierte Entscheidungsfindung mit personenbezogenen Daten findet nicht statt.",
       topics: ["dpo_contact", "data_subject_rights", "international_transfers", "automated_decision_making_or_profiling"],
     },
     {
@@ -318,6 +425,52 @@ test("does not classify generic acronyms, transfer, or necessity text as DPO, tr
   }
 });
 
+test("does not classify generic German data-protection commissioner article text as DPO contact evidence", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["de"],
+    text: "Die Behörde der Datenschutzbeauftragten beaufsichtigt bisher den Nachrichtendienst. Die Datenschutzbeauftragte wehrt sich gegen den Entzug der Kontrolle.",
+  });
+
+  assert.equal(
+    classification.matches.some((match) => match.topic === "dpo_contact"),
+    false,
+    "German public-commissioner/news text should not classify as a site DPO contact",
+  );
+});
+
+test("classifies Dutch retained policy wording without broad generic data-transfer drift", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["nl"],
+    text: [
+      "U kunt een klacht indienen bij de Autoriteit Persoonsgegevens.",
+      "In bepaalde omstandigheden heeft u het recht om bezwaar te maken tegen het verwerken van uw persoonsgegevens.",
+      "In geval van internationale doorgifte van gegevens worden er maatregelen genomen om een adequaat beschermingsniveau te waarborgen.",
+    ].join(" "),
+  });
+
+  for (const topic of [
+    "data_subject_rights",
+    "international_transfers",
+    "supervisory_authority",
+  ] satisfies GdprTransparencyTopic[]) {
+    assert.ok(
+      classification.matches.some((match) => match.topic === topic && match.matchedLocale === "nl"),
+      `Dutch NOS-style policy wording should classify ${topic}`,
+    );
+  }
+
+  const generic = classifyGdprTransparencyTopics({
+    localeHints: ["nl"],
+    text: "Internationale doorgifte van gegevens tussen interne dashboards is een technische productfunctie.",
+  });
+
+  assert.equal(
+    generic.matches.some((match) => match.topic === "international_transfers"),
+    false,
+    "Generic Dutch data-transfer product text should not classify as Article 13 international transfer evidence",
+  );
+});
+
 test("does not classify generic EEA shipping, access, legal, processing, or retention text as transparency evidence", () => {
   const examples = [
     {
@@ -371,6 +524,52 @@ test("does not classify generic EEA shipping, access, legal, processing, or rete
         `${example.locale} generic text should not classify ${topic}`,
       );
     }
+  }
+});
+
+test("does not classify broad personal-data processing statements as processing purposes", () => {
+  const examples = [
+    {
+      locale: "en",
+      text: "Personal data is processed when customers use the account service and related support tools.",
+    },
+    {
+      locale: "de",
+      text: "Bei der Nutzung der Website werden personenbezogene Daten verarbeitet, etwa bei der IP-Adresse oder bei Bestellungen.",
+    },
+    {
+      locale: "fr",
+      text: "Nous traitons vos données personnelles lors de l'utilisation du service et des outils d'assistance.",
+    },
+    {
+      locale: "es",
+      text: "Tratamos datos personales cuando se utiliza el servicio y las herramientas de soporte.",
+    },
+    {
+      locale: "it",
+      text: "Trattiamo dati personali quando usi il servizio e gli strumenti di assistenza.",
+    },
+    {
+      locale: "nl",
+      text: "Wanneer deze partijen persoonsgegevens verwerken buiten de Europese Economische Ruimte, beschermen we de gegevens met standaardclausules.",
+    },
+    {
+      locale: "pl",
+      text: "Przetwarzamy dane osobowe podczas korzystania z serwisu i narzędzi wsparcia.",
+    },
+  ] as const;
+
+  for (const example of examples) {
+    const classification = classifyGdprTransparencyTopics({
+      text: example.text,
+      localeHints: [example.locale],
+    });
+
+    assert.equal(
+      classification.matches.some((match) => match.topic === "processing_purposes"),
+      false,
+      `${example.locale} broad processing statement should not classify processing_purposes`,
+    );
   }
 });
 
@@ -483,7 +682,7 @@ test("classifies privacy-specific DPO, transfer, and retention evidence across s
     },
     {
       locale: "de",
-      text: "Unser Datenschutzbeauftragter ist erreichbar. Wir erklären die Speicherdauer personenbezogener Daten und die Übermittlung personenbezogener Daten in ein Drittland.",
+      text: "Sie können unseren Datenschutzbeauftragten erreichen. Wir erklären die Speicherdauer personenbezogener Daten und die Übermittlung personenbezogener Daten in ein Drittland.",
     },
     {
       locale: "fr",
@@ -631,7 +830,7 @@ test("classifies every GDPR Transparency topic with privacy-specific evidence ac
     },
     {
       locale: "de",
-      text: "Der Verantwortlicher für die Datenverarbeitung nennt den Kontakt zum Datenschutz und den Datenschutzbeauftragten. Wir erklären die Zwecke der Verarbeitung personenbezogener Daten, die Rechtsgrundlage für die Verarbeitung personenbezogener Daten, Kategorien von Empfängern personenbezogener Daten, die Speicherdauer personenbezogener Daten, das Recht auf Auskunft über personenbezogene Daten, die Übermittlung personenbezogener Daten in ein Drittland, das Recht auf Beschwerde bei einer Aufsichtsbehörde und automatisierte Entscheidungsfindung mit personenbezogenen Daten.",
+      text: "Der Verantwortlicher für die Datenverarbeitung nennt den Kontakt zum Datenschutz und den Kontakt zum Datenschutzbeauftragten. Wir erklären die Zwecke der Verarbeitung personenbezogener Daten, die Rechtsgrundlage für die Verarbeitung personenbezogener Daten, Kategorien von Empfängern personenbezogener Daten, die Speicherdauer personenbezogener Daten, das Recht auf Auskunft über personenbezogene Daten, die Übermittlung personenbezogener Daten in ein Drittland, das Recht auf Beschwerde bei einer Aufsichtsbehörde und automatisierte Entscheidungsfindung mit personenbezogenen Daten.",
     },
     {
       locale: "fr",

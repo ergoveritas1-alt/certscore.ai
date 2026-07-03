@@ -26,6 +26,7 @@ export const LOCAL_V2_DAG_LAMBDA_CONSERVATIVE_PRECONSENT_DEFAULTS = {
 } satisfies LocalV2DagLambdaDebugOverrides;
 
 export type LocalV2DagScanEnv = {
+  CERTSCORE_LOCALHOST_FULL_SCAN_QUEUE_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_EU_DE_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_EU_DE_FUNCTION_NAME?: string;
@@ -41,6 +42,7 @@ export type LocalV2DagScanEnv = {
   CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME?: string;
   CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL?: string;
+  NEXT_PUBLIC_CERTSCORE_LOCALHOST_FULL_SCAN_QUEUE_ENABLED?: string;
   NEXT_PUBLIC_APP_URL?: string;
   NODE_ENV?: string;
 };
@@ -68,6 +70,12 @@ export function shouldUseLocalV2DagScanTool(env: LocalV2DagScanEnv = process.env
   }
 
   return isLocalhostUrl(env.NEXT_PUBLIC_APP_URL);
+}
+
+export function shouldUseLocalhostFullScanQueue(env: LocalV2DagScanEnv = process.env) {
+  return shouldUseLocalV2DagScanTool(env) &&
+    (env.CERTSCORE_LOCALHOST_FULL_SCAN_QUEUE_ENABLED === "true" ||
+      env.NEXT_PUBLIC_CERTSCORE_LOCALHOST_FULL_SCAN_QUEUE_ENABLED === "true");
 }
 
 function compactEnvValue(value: string | undefined) {
@@ -225,7 +233,10 @@ export function applyLocalV2DagScanConfig(
     scanFrom?: ScanFrom | null;
   } = {}
 ): SharedScanConfig {
-  const shouldForceSimulatedLocalLambda = options.runViaLambda === false && shouldUseLocalV2DagScanTool(env);
+  const shouldForceSimulatedLocalLambda =
+    options.runViaLambda === false &&
+    shouldUseLocalV2DagScanTool(env) &&
+    !shouldUseLocalhostFullScanQueue(env);
 
   if (!shouldUseLocalV2DagScanTool(env) && options.runViaLambda !== true) {
     return config;

@@ -505,6 +505,15 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     defaultFindingStatus: "Observed",
     notObservedText: "No canonical supervisory-authority complaint disclosure evidence was retained for this scan context.",
     requiresPublicWebCoverage: true
+  },
+  {
+    id: "automated_decision_making_profiling_disclosure",
+    label: "Automated decision-making / profiling disclosure",
+    explanation: "Whether adapter-approved Article 13 evidence retained automated decision-making or profiling disclosure context for review.",
+    findingIds: [],
+    defaultFindingStatus: "Review signal",
+    notObservedText: "No adapter-approved automated decision-making or profiling disclosure evidence was retained for this scan context.",
+    requiresPublicWebCoverage: true
   }
 ];
 
@@ -1444,6 +1453,22 @@ function getBrowserDeviceEntropyEvidenceFromOutcome(outcome: GdprEprivacyCoverag
   return evidence && typeof evidence === "object" && !Array.isArray(evidence)
     ? evidence as Record<string, unknown>
     : null;
+}
+
+function isApprovedMultilingualArticle13ConcernOutcome(outcome: GdprEprivacyCoverageOutcome | undefined) {
+  const concern = outcome?.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern;
+  return concern && typeof concern === "object" && !Array.isArray(concern);
+}
+
+function shouldIncludeChecklistRowDefinition(
+  definition: ChecklistRowDefinition,
+  coverageOutcome: GdprEprivacyCoverageOutcome | undefined
+) {
+  if (definition.id !== "automated_decision_making_profiling_disclosure") {
+    return true;
+  }
+
+  return isApprovedMultilingualArticle13ConcernOutcome(coverageOutcome);
 }
 
 function getStringArrayEntity(values: unknown) {
@@ -3177,7 +3202,9 @@ export function deriveGdprEprivacyCoverageChecklist(
   const projectedFindingsById = new Map((input.projectedFindings ?? []).map((finding) => [finding.id, finding]));
   const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
 
-  const rows = CHECKLIST_ROWS.map((definition) => {
+  const rows = CHECKLIST_ROWS
+    .filter((definition) => shouldIncludeChecklistRowDefinition(definition, input.coverageOutcomes?.[definition.id]))
+    .map((definition) => {
     const directCoverageOutcome = input.coverageOutcomes?.[definition.id];
     const synthesizedPreconsentCookieOutcome =
       definition.id === "pre_consent_cookies_storage"

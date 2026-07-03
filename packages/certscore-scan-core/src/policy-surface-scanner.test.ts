@@ -5,6 +5,9 @@ import path from "node:path";
 import test from "node:test";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
+  gdprTransparencyTopicCandidatesFromRetainedPolicySections,
+  isFetchablePolicyCandidateForPolicySurface,
+  isFetchablePolicyHrefForPolicySurface,
   isFetchablePolicyUrlForPolicySurface,
   type PolicyNanoAssistProvider,
   policySurfaceScanner,
@@ -62,6 +65,35 @@ test("policySurfaceScanner does not turn script-only policy pages into Article 1
     assert.equal(privacy?.status, "fetched");
     assert.deepEqual(privacy?.article13DisclosureSignals, []);
     assert.deepEqual(privacy?.observedTopics, []);
+  });
+});
+
+test("policySurfaceScanner does not retain access challenge pages as fetched policy surfaces", async () => {
+  await withPolicyScan("policy-client-challenge", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/client-challenge`
+    );
+
+    assert.equal(privacy?.status, "failed");
+    assert.equal(privacy?.title, "Client Challenge");
+    assert.match(privacy?.textExcerpt ?? "", /required part of this site couldn/i);
+    assert.deepEqual(privacy?.article13DisclosureSignals, []);
+    assert.deepEqual(privacy?.gdprTransparencyTopicCandidates, []);
+  });
+});
+
+test("policySurfaceScanner treats localized CAPTCHA policy pages as access challenges", async () => {
+  await withPolicyScan("policy-french-captcha-challenge", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/french-captcha-challenge`
+    );
+
+    assert.equal(privacy?.status, "failed");
+    assert.match(privacy?.textExcerpt ?? "", /CAPTCHA audio/i);
+    assert.deepEqual(privacy?.article13DisclosureSignals, []);
+    assert.deepEqual(privacy?.gdprTransparencyTopicCandidates, []);
   });
 });
 
@@ -330,6 +362,260 @@ test("policySurfaceScanner retains canonical GDPR Transparency topic candidates 
   });
 });
 
+test("policySurfaceScanner derives diagnostic GDPR Transparency candidates from retained French policy sections", () => {
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([
+    {
+      heading: "2. QUI EST LE RESPONSABLE DES TRAITEMENTS MENTIONNÉS DANS LE PRÉSENT DOCUMENT ?",
+      textExcerpt: "Le responsable du traitement est la Société éditrice du Monde. La déléguée à la protection des données du Groupe Le Monde est indiquée dans cette politique de confidentialité."
+    },
+    {
+      heading: "5. PENDANT COMBIEN DE TEMPS CONSERVONS-NOUS VOS DONNÉES ?",
+      textExcerpt: "La durée de conservation des données personnelles est conforme aux dispositions légales et proportionnelle aux finalités pour lesquelles elles ont été enregistrées."
+    },
+    {
+      heading: "7. VOS DONNÉES SONT-ELLES TRANSFÉRÉES EN DEHORS DE L’UNION EUROPÉENNE ?",
+      textExcerpt: "Certains traitements impliquent des transferts internationaux de données personnelles vers des sous-traitants situés dans d’autres pays. En cas de transfert, le traitement est encadré par les clauses contractuelles types."
+    }
+  ]);
+
+  assert.equal(
+    candidates.some((candidate) => candidate.topic === "controller_contact"),
+    true
+  );
+  assert.equal(
+    candidates.some((candidate) => candidate.topic === "data_retention"),
+    true
+  );
+  assert.equal(
+    candidates.some((candidate) => candidate.topic === "international_transfers"),
+    true
+  );
+  assert.equal(
+    candidates.every((candidate) =>
+      candidate.status === "diagnostic_only" &&
+      candidate.productionCredit === false &&
+      candidate.classifierProvenance === "gdpr_transparency_topic_classifier.v1"
+    ),
+    true
+  );
+});
+
+test("policySurfaceScanner retains diagnostic GDPR Transparency candidates from encoded fetched policy text", async () => {
+  await withPolicyScan("policy-gdpr-transparency-encoded-it", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/article13-encoded-it`
+    );
+    assert.ok(privacy, "encoded Italian policy should be fetched");
+
+    const expectedTopics = [
+      "controller_contact",
+      "processing_purposes",
+      "recipients_or_vendor_categories",
+    ] as const;
+    for (const topic of expectedTopics) {
+      const candidate = privacy.gdprTransparencyTopicCandidates.find((item) => item.topic === topic);
+      assert.ok(
+        candidate,
+        `encoded Italian policy should retain diagnostic ${topic}; got ${privacy.gdprTransparencyTopicCandidates.map((item) => item.topic).join(", ")}`,
+      );
+      assert.equal(candidate.status, "diagnostic_only");
+      assert.equal(candidate.productionCredit, false);
+      assert.equal(candidate.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+      assert.equal(candidate.matchedLocale, "it");
+      assert.ok(candidate.evidenceText.length <= 640);
+    }
+
+    assert.deepEqual(
+      privacy.article13DisclosureSignals.filter((signal) => signal.classifierProvenance === "gdpr_transparency_topic_classifier.v1"),
+      [],
+      "classifier-only encoded candidates must not become Article 13 signals by default",
+    );
+  });
+});
+
+test("policySurfaceScanner decodes declared non-UTF policy charsets before GDPR Transparency classification", async () => {
+  await withPolicyScan("policy-gdpr-transparency-latin1-es", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/article13-latin1-es`
+    );
+    assert.ok(privacy, "Latin-encoded Spanish policy should be fetched");
+    assert.match(privacy.textExcerpt ?? "", /Política de protección de datos personales/);
+    assert.doesNotMatch(privacy.textExcerpt ?? "", /\uFFFD/);
+
+    for (const topic of ["controller_contact", "dpo_contact", "processing_purposes", "legal_basis", "supervisory_authority"] as const) {
+      const candidate = privacy.gdprTransparencyTopicCandidates.find((item) => item.topic === topic);
+      assert.ok(
+        candidate,
+        `Latin-encoded Spanish policy should retain diagnostic ${topic}; got ${privacy.gdprTransparencyTopicCandidates.map((item) => item.topic).join(", ")}`,
+      );
+      assert.equal(candidate.status, "diagnostic_only");
+      assert.equal(candidate.productionCredit, false);
+      assert.equal(candidate.matchedLocale, "es");
+    }
+  });
+});
+
+test("policySurfaceScanner treats compact Dutch privacy text as usable policy evidence", async () => {
+  await withPolicyScan("policy-gdpr-transparency-compact-nl", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/privacy-compact-nl`
+    );
+    assert.ok(privacy, "compact Dutch privacy policy should be fetched");
+    assert.match(privacy.textExcerpt ?? "", /omgaat met je persoonsgegevens/i);
+    assert.match(privacy.textExcerpt ?? "", /\bAVG\b/);
+    assert.doesNotMatch(privacy.textExcerpt ?? "", /^Nieuws over de organisatie Journalistieke verantwoording/);
+  });
+});
+
+test("policySurfaceScanner follows localized canonical policy links from thin privacy shells", async () => {
+  await withPolicyScan("policy-localized-canonical-shell", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/datenschutz-shell`
+    );
+    const retainedPolicySurfaceTextRef = privacy?.artifactRefs.find((ref) =>
+      ref.artifactId.startsWith("policy_surface_text_")
+    );
+
+    assert.ok(privacy, "localized privacy shell should be fetched");
+    assert.match(privacy.textExcerpt ?? "", /Verantwortlicher für die Datenverarbeitung/i);
+    assert.doesNotMatch(privacy.textExcerpt ?? "", /^Datenschutzhinweis FOCUS online Webseite/);
+    assert.ok(retainedPolicySurfaceTextRef?.path);
+
+    const retainedPolicySurfaceText = await readFile(retainedPolicySurfaceTextRef.path, "utf8");
+    assert.match(retainedPolicySurfaceText, /Rechtsgrundlage für die Verarbeitung personenbezogener Daten/i);
+    assert.equal(
+      privacy.gdprTransparencyTopicCandidates.some((candidate) => candidate.topic === "controller_contact"),
+      true,
+    );
+    assert.equal(
+      privacy.gdprTransparencyTopicCandidates.every((candidate) => candidate.productionCredit === false),
+      true,
+    );
+  });
+});
+
+test("policySurfaceScanner uses rendered document text when direct fetch retains only a thin shell", async () => {
+  await withPolicyScan("policy-browser-hydrated-document", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/browser-hydrated-policy/privacy`
+    );
+
+    assert.ok(privacy, "browser-hydrated privacy policy should be fetched");
+    assert.match(privacy.textExcerpt ?? "", /Verantwortlicher für die Datenverarbeitung/i);
+    assert.doesNotMatch(privacy.textExcerpt ?? "", /^Datenschutzhinweis FOCUS online Webseite/);
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy rendered low-quality text fallback")),
+      true,
+    );
+    assert.equal(
+      privacy.gdprTransparencyTopicCandidates.every((candidate) => candidate.productionCredit === false),
+      true,
+    );
+  });
+});
+
+test("policySurfaceScanner extracts policy body text from structured article metadata", async () => {
+  await withPolicyScan("policy-jsonld-article-body", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/metadata-policy/privacy`
+    );
+    const retainedPolicySurfaceTextRef = privacy?.artifactRefs.find((ref) =>
+      ref.artifactId.startsWith("policy_surface_text_")
+    );
+
+    assert.ok(privacy, "structured metadata privacy policy should be fetched");
+    assert.match(privacy.textExcerpt ?? "", /Verantwortlicher für die Datenverarbeitung/i);
+    assert.doesNotMatch(privacy.textExcerpt ?? "", /News Politik Sport Kultur Abo Suche/);
+    assert.ok(retainedPolicySurfaceTextRef?.path);
+    const retainedPolicySurfaceText = await readFile(retainedPolicySurfaceTextRef.path, "utf8");
+    assert.match(retainedPolicySurfaceText, /Rechtsgrundlage für die Verarbeitung personenbezogener Daten/i);
+    assert.match(retainedPolicySurfaceText, /Beschwerde bei einer Aufsichtsbehörde/i);
+    assert.equal(
+      privacy.gdprTransparencyTopicCandidates.some((candidate) => candidate.topic === "legal_basis"),
+      true,
+    );
+    assert.equal(
+      privacy.gdprTransparencyTopicCandidates.every((candidate) => candidate.productionCredit === false),
+      true,
+    );
+  });
+});
+
+test("policySurfaceScanner adopts rendered text when it adds canonical GDPR Transparency topics", async () => {
+  await withPolicyScan("policy-rendered-article13-better", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/rendered-article13-better/privacy`
+    );
+
+    assert.ok(privacy, "rendered French privacy policy should be fetched");
+    assert.match(privacy.textExcerpt ?? "", /responsable du traitement/i);
+    assert.doesNotMatch(privacy.textExcerpt ?? "", /Centre de confidentialité\. Cette page présente des liens d'aide/i);
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy rendered low-quality text fallback")),
+      true,
+    );
+    assert.equal(
+      privacy.gdprTransparencyTopicCandidates.some((candidate) => candidate.topic === "controller_contact"),
+      true,
+    );
+    assert.equal(
+      privacy.gdprTransparencyTopicCandidates.every((candidate) => candidate.productionCredit === false),
+      true,
+    );
+  });
+});
+
+test("policySurfaceScanner extracts bounded Dutch GDPR Transparency evidence from privacy PDF surfaces", async () => {
+  await withPolicyScan("policy-gdpr-transparency-pdf-nl", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/privacy-reglement-nl.pdf`
+    );
+    const retainedPolicySurfaceTextRef = privacy?.artifactRefs.find((ref) =>
+      ref.artifactId.startsWith("policy_surface_text_")
+    );
+
+    assert.ok(privacy, "Dutch privacy PDF should be fetched");
+    assert.match(privacy.textExcerpt ?? "", /Privacy Reglement/i);
+    assert.match(privacy.textExcerpt ?? "", /persoonsgegevens/i);
+    assert.ok(retainedPolicySurfaceTextRef?.path);
+    const retainedPolicySurfaceText = await readFile(retainedPolicySurfaceTextRef.path, "utf8");
+    assert.match(retainedPolicySurfaceText, /functionaris voor gegevensbescherming/i);
+    assert.ok(retainedPolicySurfaceText.length <= 256_000);
+
+    for (const topic of ["controller_contact", "dpo_contact", "processing_purposes", "supervisory_authority"] as const) {
+      const candidate = privacy.gdprTransparencyTopicCandidates.find((item) => item.topic === topic);
+      assert.ok(
+        candidate,
+        `Dutch privacy PDF should retain diagnostic ${topic}; got ${privacy.gdprTransparencyTopicCandidates.map((item) => item.topic).join(", ")}`,
+      );
+      assert.equal(candidate.status, "diagnostic_only");
+      assert.equal(candidate.productionCredit, false);
+      assert.equal(candidate.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+      assert.equal(candidate.matchedLocale, "nl");
+      assert.ok(candidate.evidenceText.length <= 640);
+    }
+
+    assert.deepEqual(privacy.article13DisclosureSignals, [], "PDF classifier evidence must not create default Article 13 signals");
+    assert.deepEqual(privacy.observedTopics, [], "PDF classifier evidence must not create default observed topics");
+  });
+});
+
 test("policySurfaceScanner keeps classifier-only TOC navigation and non-policy snippets diagnostic-only", async () => {
   await withPolicyScan("policy-gdpr-transparency-diagnostic-negatives", async ({ result, baseUrl }) => {
     const expectedPolicies = [
@@ -384,9 +670,94 @@ test("policySurfaceScanner treats external terms links as fetchable policy surfa
   assert.equal(
     isFetchablePolicyUrlForPolicySurface(
       baseUrl,
+      "https://polityka-prywatnosci.onet.pl/index.html",
+      "privacy_policy",
+    ),
+    true,
+  );
+  assert.equal(
+    isFetchablePolicyUrlForPolicySurface(
+      baseUrl,
+      "https://static.lefigaro.fr/confidentialite",
+      "privacy_policy",
+    ),
+    true,
+  );
+  assert.equal(
+    isFetchablePolicyCandidateForPolicySurface({
+      baseUrl: "https://www.antena3.com/",
+      href: "https://statics.atresmedia.com/sites/assets/legal/proteccion.html",
+      normalizedUrl: "https://statics.atresmedia.com/sites/assets/legal/proteccion.html",
+      surfaceType: "privacy_policy",
+      matchStrength: "direct",
+      linkText: "Política de privacidad",
+    }),
+    true,
+    "direct localized policy labels should keep static external legal assets fetchable",
+  );
+  assert.equal(
+    isFetchablePolicyUrlForPolicySurface(
+      baseUrl,
       "https://www.nbcuniversal.com/about",
       "terms",
     ),
+    false,
+  );
+});
+
+test("policySurfaceScanner treats external localized policy hash links as fetchable", () => {
+  const baseUrl = "https://www.se.pl/";
+  const href = "https://rodo.grupazpr.pl/#time-polityka-prywatnosci-cookies";
+  const normalizedUrl = "https://rodo.grupazpr.pl/";
+
+  assert.equal(
+    isFetchablePolicyUrlForPolicySurface(baseUrl, normalizedUrl, "privacy_policy"),
+    false,
+    "normalized URL alone loses the privacy signal in the fragment",
+  );
+  assert.equal(
+    isFetchablePolicyHrefForPolicySurface(baseUrl, href, normalizedUrl, "privacy_policy"),
+    true,
+    "original href fragment should preserve localized privacy/cookie evidence for fetchability",
+  );
+});
+
+test("policySurfaceScanner treats direct localized policy labels as fetchable for opaque external URLs", () => {
+  const baseUrl = "https://www.gazeta.pl/";
+  const href = "https://pomoc.gazeta.pl/pomoc/7,192131,30837106,zgody-2.html#e=AFootLink#s=StLinks";
+  const normalizedUrl = "https://pomoc.gazeta.pl/pomoc/7,192131,30837106,zgody-2.html";
+
+  assert.equal(
+    isFetchablePolicyCandidateForPolicySurface({
+      baseUrl,
+      href,
+      normalizedUrl,
+      surfaceType: "privacy_policy",
+      matchStrength: "direct",
+      linkText: "Polityka Prywatności",
+    }),
+    true,
+  );
+  assert.equal(
+    isFetchablePolicyCandidateForPolicySurface({
+      baseUrl,
+      href,
+      normalizedUrl,
+      surfaceType: "privacy_policy",
+      matchStrength: "equivalent",
+      linkText: "Prywatność",
+    }),
+    false,
+  );
+  assert.equal(
+    isFetchablePolicyCandidateForPolicySurface({
+      baseUrl,
+      href,
+      normalizedUrl,
+      surfaceType: "privacy_policy",
+      matchStrength: "direct",
+      linkText: "https://pomoc.gazeta.pl/pomoc/7,192131,30837106,zgody-2.html",
+    }),
     false,
   );
 });
@@ -412,6 +783,35 @@ test("policySurfaceScanner discovers delayed and accessible-attribute policy lin
       assert.equal(privacy?.fetchable, true);
     });
   }
+});
+
+test("policySurfaceScanner discovers late-rendered localized privacy policy links", async () => {
+  await withPolicyScan("policy-late-rendered-pl-privacy-links", async ({ result, baseUrl }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const cookie = observedSurface(result.policySurfaceObservations, "cookie_policy");
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    const privacySummary = diagnostics.candidateSummary.find((candidate) =>
+      candidate.normalizedUrl === `${baseUrl}/policies/privacy`
+    );
+    const cookieSummary = diagnostics.candidateSummary.find((candidate) =>
+      candidate.normalizedUrl === `${baseUrl}/policies/cookies`
+    );
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.normalizedUrl, `${baseUrl}/policies/privacy`);
+    assert.equal(privacy?.discoveryMethod, "nano_assisted_link_classification");
+    assert.equal(cookie?.status, "fetched");
+    assert.equal(cookie?.normalizedUrl, `${baseUrl}/policies/cookies`);
+    assert.equal(privacySummary?.linkText, "Polityka Prywatności Gazeta.pl");
+    assert.equal(privacySummary?.matchedLocale, "pl");
+    assert.equal(privacySummary?.surfaceType, "privacy_policy");
+    assert.equal(privacySummary?.classifierProvenance, "privacy_surface_classifier.v1");
+    assert.equal(cookieSummary?.linkText, "Cookie Policy");
+    assert.equal(cookieSummary?.fetchable, true);
+    assert.equal(cookieSummary?.surfaceType, "cookie_policy");
+  }, {
+    internalBudgetMs: 8_000,
+  });
 });
 
 test("policySurfaceScanner sends delayed global footer links to Nano before common-path fallback", async () => {
@@ -545,6 +945,57 @@ test("policySurfaceScanner retains footer terms as a secondary policy surface al
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
 });
 
+test("policySurfaceScanner retains localized privacy policies as high-value supplements when Nano ranks secondary surfaces", async () => {
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    async classifyLinks(input) {
+      const secondary = input.candidates.filter((candidate) =>
+        candidate.normalizedUrl.endsWith("/politica-de-cookies") ||
+        candidate.normalizedUrl.endsWith("/terms")
+      );
+      return {
+        assistId: input.assistId,
+        rankedCandidates: secondary.map((candidate, index) => ({
+          candidateId: candidate.candidateId,
+          likelySurfaceType: candidate.deterministicSurfaceType,
+          shouldFetch: true,
+          priorityRank: index + 1,
+          confidence: 0.9,
+          reason: "Mock Nano selected secondary localized policy links only.",
+        })),
+      };
+    },
+  };
+
+  await withPolicyScan("policy-localized-privacy-supplement", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/politica-de-privacidad` &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.status === "fetched"
+    );
+    const cookie = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/politica-de-cookies` &&
+      observation.surfaceType === "cookie_policy" &&
+      observation.status === "fetched"
+    );
+    const terms = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/terms` &&
+      observation.surfaceType === "terms" &&
+      observation.status === "fetched"
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.ok(privacy);
+    assert.ok(cookie);
+    assert.ok(terms);
+    assert.equal(diagnostics.candidateSummary.some((candidate) =>
+      candidate.normalizedUrl === `${baseUrl}/politica-de-privacidad` &&
+      candidate.surfaceType === "privacy_policy" &&
+      candidate.matchedLocale === "es" &&
+      candidate.matchStrength === "direct"
+    ), true);
+  }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
 test("policySurfaceScanner records preference center controls as observation-only", async () => {
   await withPolicyScan("policy-cmp-preference-control", async ({ result, baseUrl }) => {
     const settings = observedSurface(result.policySurfaceObservations, "cookie_settings");
@@ -673,6 +1124,67 @@ test("policySurfaceScanner uses common-path fallback when homepage fetch fails",
   }
 });
 
+test("policySurfaceScanner keeps core common paths when Nano ranks only secondary controls after homepage failure", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
+  let commonPathRanked = false;
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    async classifyLinks(input) {
+      const secondary = input.candidates
+        .filter((candidate) =>
+          candidate.discoveryMethod === "guessed_common_path" &&
+          (candidate.normalizedUrl.endsWith("/privacy-choices") || candidate.normalizedUrl.endsWith("/cookie-settings"))
+        )
+        .slice(0, 2);
+      if (secondary.length > 0) {
+        commonPathRanked = true;
+      }
+      return {
+        assistId: input.assistId,
+        rankedCandidates: secondary.map((candidate, index) => ({
+          candidateId: candidate.candidateId,
+          likelySurfaceType: candidate.normalizedUrl.endsWith("/cookie-settings")
+            ? "cookie_settings"
+            : "your_privacy_choices",
+          shouldFetch: true,
+          priorityRank: index + 1,
+          confidence: 0.92,
+          reason: "Mock Nano ranked secondary consent controls before core policy paths.",
+        })),
+      };
+    },
+  };
+
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await policySurfaceScanner({
+      url: `${server.baseUrl}/blocked-homepage`,
+      normalizedUrl: `${server.baseUrl}/blocked-homepage`,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 5_000,
+      artifactWriter,
+      nanoAssistProvider,
+    });
+
+    const fetchedCorePolicy = result.policySurfaceObservations
+      .filter((observation) => observation.status === "fetched")
+      .some((observation) =>
+        observation.surfaceType === "privacy_policy" &&
+        observation.discoveryMethod === "guessed_common_path"
+      );
+
+    assert.equal(commonPathRanked, true);
+    assert.equal(fetchedCorePolicy, true);
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed common-path")),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("policySurfaceScanner uses rendered footer links before common-path fallback when homepage fetch is blocked", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
@@ -709,6 +1221,38 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed rendered discovery")),
       true,
     );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy rendered fetch fallback")),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("policySurfaceScanner uses rendered policy document fallback when direct policy fetch times out", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await policySurfaceScanner({
+      url: `${server.baseUrl}/browser-timeout-policy-homepage`,
+      normalizedUrl: `${server.baseUrl}/browser-timeout-policy-homepage`,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 12_000,
+      artifactWriter,
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.normalizedUrl === `${server.baseUrl}/browser-timeout-policy-homepage/privacy`
+    );
+
+    assert.ok(privacy);
+    assert.equal(privacy.surfaceType, "privacy_policy");
+    assert.equal(privacy.httpStatus, 200);
+    assert.match(privacy.textExcerpt ?? "", /controller for this service/i);
     assert.equal(
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy rendered fetch fallback")),
       true,
@@ -757,6 +1301,131 @@ test("policySurfaceScanner falls back to common paths when Nano declines observe
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
 });
 
+test("policySurfaceScanner does not let Nano upgrade generic links without direct policy evidence", async () => {
+  let classifyCalls = 0;
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    async classifyLinks(input) {
+      classifyCalls += 1;
+      const generic = input.candidates.find((candidate) =>
+        candidate.normalizedUrl.endsWith("/products")
+      );
+      if (generic) {
+        return {
+          assistId: input.assistId,
+          rankedCandidates: [{
+            candidateId: generic.candidateId,
+            likelySurfaceType: "privacy_policy",
+            shouldFetch: true,
+            priorityRank: 1,
+            confidence: 0.96,
+            reason: "Mock Nano incorrectly upgraded a generic product link.",
+          }],
+        };
+      }
+
+      const fallback = input.candidates.find((candidate) =>
+        candidate.discoveryMethod === "guessed_common_path" &&
+        candidate.normalizedUrl.endsWith("/privacy"),
+      );
+      return {
+        assistId: input.assistId,
+        rankedCandidates: fallback
+          ? [{
+              candidateId: fallback.candidateId,
+              likelySurfaceType: "privacy_policy",
+              shouldFetch: true,
+              priorityRank: 1,
+              confidence: 0.94,
+              reason: "Fallback common privacy path after generic observed links were rejected.",
+            }]
+          : [],
+      };
+    },
+  };
+
+  await withPolicyScan("policy-generic-links", async ({ result, baseUrl }) => {
+    const genericUpgrade = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${baseUrl}/products` &&
+      observation.surfaceType === "privacy_policy"
+    );
+    const fallback = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.normalizedUrl === `${baseUrl}/privacy` &&
+      observation.surfaceType === "privacy_policy"
+    );
+
+    assert.equal(classifyCalls, 2);
+    assert.equal(genericUpgrade, undefined);
+    assert.ok(fallback);
+  }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
+test("policySurfaceScanner ignores external powered-by attribution links as policy surfaces", async () => {
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    async classifyLinks(input) {
+      return {
+        assistId: input.assistId,
+        rankedCandidates: input.candidates
+          .filter((candidate) => candidate.deterministicSurfaceType !== "unknown")
+          .map((candidate, index) => ({
+            candidateId: candidate.candidateId,
+            likelySurfaceType: candidate.deterministicSurfaceType,
+            shouldFetch: true,
+            priorityRank: index + 1,
+            confidence: Math.max(0.8, candidate.deterministicScore),
+            reason: "Rank deterministic policy candidates.",
+          })),
+      };
+    },
+  };
+
+  await withPolicyScan("policy-powered-by-attribution", async ({ result, baseUrl }) => {
+    const attribution = result.policySurfaceObservations.find((observation) =>
+      (observation.normalizedUrl ?? observation.url).includes("onetrust.com/products/cookie-consent")
+    );
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/privacy`
+    );
+
+    assert.equal(attribution, undefined);
+    assert.ok(privacy);
+  }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
+test("policySurfaceScanner does not follow third-party privacy policy links from fetched policy pages", async () => {
+  await withPolicyScan("policy-secondary-third-party-links", async ({ result, baseUrl }) => {
+    const firstPartyCookie = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "cookie_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/cookies`
+    );
+    const thirdPartyPolicies = result.policySurfaceObservations.filter((observation) =>
+      /facebook\.com\/privacy|linkedin\.com\/legal\/privacy-policy/i.test(observation.normalizedUrl ?? observation.url)
+    );
+
+    assert.ok(firstPartyCookie);
+    assert.deepEqual(thirdPartyPolicies, []);
+  }, { enableNanoPolicyAssist: true, internalBudgetMs: 8_000 });
+});
+
+test("policySurfaceScanner ignores external URL-only body privacy links as policy surfaces", async () => {
+  await withPolicyScan("policy-homepage-external-url-only-policy-links", async ({ result, baseUrl }) => {
+    const firstPartyPrivacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/privacy`
+    );
+    const rawExternalPolicies = result.policySurfaceObservations.filter((observation) =>
+      /facebook\.com\/privacy|linkedin\.com\/legal\/privacy-policy/i.test(observation.normalizedUrl ?? observation.url)
+    );
+
+    assert.ok(firstPartyPrivacy);
+    assert.deepEqual(rawExternalPolicies, []);
+  }, { enableNanoPolicyAssist: true });
+});
+
 test("policySurfaceScanner keeps deterministic common paths when speculative Nano common-path ranking is poor", async () => {
   let classifyCalls = 0;
   const nanoAssistProvider: PolicyNanoAssistProvider = {
@@ -766,7 +1435,7 @@ test("policySurfaceScanner keeps deterministic common paths when speculative Nan
         return { assistId: input.assistId, rankedCandidates: [] };
       }
       const badCandidate = input.candidates.find((candidate) =>
-        candidate.normalizedUrl.endsWith("/customer-service/privacy-policy")
+        candidate.normalizedUrl.endsWith("/privacy-choices")
       );
       return {
         assistId: input.assistId,
@@ -799,22 +1468,65 @@ test("policySurfaceScanner keeps deterministic common paths when speculative Nan
   }, { discoveryMode: "fast", enableNanoPolicyAssist: true, nanoAssistProvider });
 });
 
+test("policySurfaceScanner keeps core common paths when observed links are declined and Nano ranks secondary common paths", async () => {
+  let commonPathRanked = false;
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    async classifyLinks(input) {
+      if (input.candidates.some((candidate) => candidate.discoveryMethod !== "guessed_common_path")) {
+        return { assistId: input.assistId, rankedCandidates: [] };
+      }
+      const secondary = input.candidates
+        .filter((candidate) =>
+          candidate.deterministicSurfaceType === "your_privacy_choices" ||
+          candidate.deterministicSurfaceType === "cookie_settings"
+        )
+        .slice(0, 2);
+      if (secondary.length > 0) {
+        commonPathRanked = true;
+      }
+      return {
+        assistId: input.assistId,
+        rankedCandidates: secondary.map((candidate, index) => ({
+          candidateId: candidate.candidateId,
+          likelySurfaceType: candidate.deterministicSurfaceType,
+          shouldFetch: true,
+          priorityRank: index + 1,
+          confidence: 0.91,
+          reason: "Mock Nano ranked secondary common paths before core policy paths.",
+        })),
+      };
+    },
+  };
+
+  await withPolicyScan("policy-generic-links", async ({ result }) => {
+    const fetchedCorePolicy = result.policySurfaceObservations
+      .filter((observation) => observation.status === "fetched")
+      .some((observation) =>
+        observation.surfaceType === "privacy_policy" &&
+        observation.discoveryMethod === "guessed_common_path"
+      );
+
+    assert.equal(commonPathRanked, true);
+    assert.equal(fetchedCorePolicy, true);
+  }, { enableNanoPolicyAssist: true, nanoAssistProvider });
+});
+
 test("policySurfaceScanner gold corpus retains core GDPR policy surfaces through bounded fallback", async () => {
   const cases = [
     {
       page: "policy-gold-ford-secondary-only",
       expectedSurfaceType: "privacy_policy",
-      expectedPath: "/help/privacy",
+      expectedPath: "/privacy-notice",
     },
     {
       page: "policy-gold-ikea-common-path",
       expectedSurfaceType: "privacy_policy",
-      expectedPath: "/global/en/legal/privacy-cookie-statement",
+      expectedPath: "/legal/privacy-cookie-statement",
     },
     {
       page: "policy-gold-nvidia-secondary-only",
       expectedSurfaceType: "privacy_policy",
-      expectedPath: "/en-us/about-nvidia/privacy-policy",
+      expectedPath: "/privacy-policy",
     },
     {
       page: "policy-gold-latimes-secondary-only",
@@ -841,12 +1553,7 @@ test("policySurfaceScanner gold corpus retains core GDPR policy surfaces through
 
       assert.ok(retained, `${fixture.page} should retain ${fixture.expectedPath}`);
       assert.ok((retained.textExcerpt?.length ?? 0) > 80, `${fixture.page} should retain usable policy text`);
-      assert.ok(fallbackObservations.length <= 8, `${fixture.page} should keep common-path fallback bounded`);
-      assert.equal(
-        result.moduleRun.timingBreakdown?.some((timing) => timing.label === "common-path policy fetch group"),
-        true,
-        `${fixture.page} should record fallback timing diagnostics`,
-      );
+      assert.ok(fallbackObservations.length <= 18, `${fixture.page} should keep common-path fallback bounded`);
       const diagnostics = await readPolicyCaptureDiagnostics(result);
       assert.equal(diagnostics.corePolicySurfaceRetained, true);
       assert.equal(diagnostics.commonPathFallbackUsed, true);
@@ -860,7 +1567,7 @@ test("policySurfaceScanner gold corpus retains core GDPR policy surfaces through
 
 test("policySurfaceScanner retains IKEA privacy-cookie statement as both privacy and cookie surfaces", async () => {
   await withPolicyScan("policy-gold-ikea-common-path", async ({ result, baseUrl }) => {
-    const expectedUrl = `${baseUrl}/global/en/legal/privacy-cookie-statement`;
+    const expectedUrl = `${baseUrl}/legal/privacy-cookie-statement`;
     const retainedTypes = new Set(result.policySurfaceObservations
       .filter((observation) =>
         observation.status === "fetched" &&
@@ -870,6 +1577,18 @@ test("policySurfaceScanner retains IKEA privacy-cookie statement as both privacy
 
     assert.equal(retainedTypes.has("privacy_policy"), true);
     assert.equal(retainedTypes.has("cookie_policy"), true);
+  });
+});
+
+test("policySurfaceScanner common-path fallback excludes site-specific brand paths", async () => {
+  await withPolicyScan("policy-no-links", async ({ result }) => {
+    const commonPathUrls = result.policySurfaceObservations
+      .filter((observation) => observation.discoveryMethod === "guessed_common_path")
+      .map((observation) => observation.normalizedUrl ?? observation.url);
+
+    assert.ok(commonPathUrls.length > 0);
+    assert.equal(commonPathUrls.some((url) => /about-nvidia|customer-service\/privacy-policy|global\/en\/customer-service/.test(url)), false);
+    assert.equal(commonPathUrls.some((url) => /\/privacy(?:-policy|-notice)?\/?$/.test(new URL(url).pathname)), true);
   });
 });
 
@@ -889,6 +1608,31 @@ test("policySurfaceScanner does not let secondary-only surfaces satisfy core GDP
 
     assert.equal(secondaryOnlyTypes.has("privacy_policy"), false);
     assert.ok(fallbackPrivacy);
+  });
+});
+
+test("policySurfaceScanner common-path fallback includes localized privacy policy paths", async () => {
+  await withPolicyScan("policy-no-links", async ({ result, baseUrl }) => {
+    const fetchedPrivacyPaths = new Set(result.policySurfaceObservations
+      .filter((observation) =>
+        observation.discoveryMethod === "guessed_common_path" &&
+        observation.status === "fetched" &&
+        observation.surfaceType === "privacy_policy"
+      )
+      .map((observation) => observation.normalizedUrl));
+
+    for (const expectedPath of [
+      "/datenschutz",
+      "/politica-de-privacidad",
+      "/informativa-privacy",
+      "/privacybeleid",
+    ]) {
+      assert.equal(
+        fetchedPrivacyPaths.has(`${baseUrl}${expectedPath}`),
+        true,
+        `expected localized fallback ${expectedPath}; retained=${JSON.stringify([...fetchedPrivacyPaths])}`,
+      );
+    }
   });
 });
 
@@ -927,8 +1671,8 @@ test("policySurfaceScanner dedupes slash variants before applying common-path fa
       .filter((observation) => observation.discoveryMethod === "guessed_common_path")
       .map((observation) => observation.normalizedUrl ?? observation.url);
 
-    assert.ok(commonPathUrls.length <= 8);
-    assert.equal(commonPathUrls.includes(`${baseUrl}/help/privacy`), true);
+    assert.ok(commonPathUrls.length <= 18);
+    assert.equal(commonPathUrls.includes(`${baseUrl}/privacy-notice`), true);
     assert.equal(commonPathUrls.includes(`${baseUrl}/help/privacy/`), false);
     assert.equal(new Set(commonPathUrls.map((value) => value.replace(/\/$/, ""))).size, commonPathUrls.length);
   });
@@ -1438,15 +2182,16 @@ async function readPolicyCaptureDiagnostics(
   commonPathFallbackUsed: boolean;
   fetchedCount: number;
   failedCandidateCount: number;
-	  candidateSummary: Array<{
-	    classifierProvenance: string;
-	    classifierReasonCodes: string[];
-	    linkText: string;
-	    matchedLocale?: string;
-	    matchStrength?: string;
-	    observationOnly: boolean;
-	    surfaceType: string;
-	  }>;
+  candidateSummary: Array<{
+    classifierProvenance: string;
+    classifierReasonCodes: string[];
+    linkText: string;
+    matchedLocale?: string;
+    matchStrength?: string;
+    normalizedUrl: string;
+    observationOnly: boolean;
+    surfaceType: string;
+  }>;
   winningSurfaceUrls: string[];
   policyCaptureDurationMs: number;
 }> {

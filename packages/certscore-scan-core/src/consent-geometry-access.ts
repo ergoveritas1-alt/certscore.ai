@@ -32,11 +32,12 @@ export interface ConsentGeometryPageAccessInput {
 
 const ACCESS_NO_GO_PATTERNS: Array<{ code: string; pattern: RegExp }> = [
   { code: "access_denied_text", pattern: /\baccess denied\b/i },
+  { code: "temporarily_restricted", pattern: /\baccess is temporarily restricted\b/i },
   { code: "forbidden_text", pattern: /\b(?:403|forbidden)\b/i },
-  { code: "bot_security_check", pattern: /\b(?:additional security check|security verification|security check|security checkpoint|browser verification|verify you are not a bot|checking your browser|human verification|captcha|hcaptcha|i am human|robot or human|press\s*&\s*hold|press and hold|confirm that you'?re human|failed to verify your browser|unable to give you access)\b/i },
+  { code: "bot_security_check", pattern: /\b(?:additional security check|security verification|security check|security checkpoint|browser verification|verify you are not a bot|checking your browser|human verification|captcha|hcaptcha|i am human|robot or human|press\s*&\s*hold|press and hold|confirm that you'?re human|failed to verify your browser|unable to give you access|detected unusual activity)\b/i },
   { code: "cloudflare_challenge", pattern: /\b(?:cloudflare|ray id|cf-browser-verification)\b/i },
   { code: "imperva_challenge", pattern: /\b(?:imperva|incapsula)\b/i },
-  { code: "temporarily_restricted", pattern: /\btemporarily restricted\b/i },
+  { code: "temporary_interstitial", pattern: /\bzaraz wracamy\b/i },
   { code: "rate_limited", pattern: /\b(?:too many requests|rate limit|request blocked)\b/i },
   { code: "generic_error_page", pattern: /\b(?:something went wrong|service unavailable|temporarily unavailable)\b/i },
 ];
@@ -91,10 +92,11 @@ export function classifyConsentGeometryAccess(input: ConsentGeometryPageAccessIn
 export async function collectConsentGeometryPageAccess(
   page: Page,
   httpStatus: number | undefined,
-  options: { supplementalBodyText?: string } = {},
+  options: { frameTextTimeoutMs?: number; supplementalBodyText?: string } = {},
 ): Promise<ConsentGeometryAccessDiagnostic> {
+  const frameTextTimeoutMs = Math.max(50, options.frameTextTimeoutMs ?? 750);
   const frameTexts = await Promise.all(page.frames().slice(0, 12).map((frame) =>
-    frame.evaluate(() => {
+    withTimeout(frame.evaluate(() => {
       function collectOpenShadowText(root: ParentNode, depth = 0): string[] {
         if (depth > 3) {
           return [];
@@ -124,7 +126,8 @@ export async function collectConsentGeometryPageAccess(
           ...collectOpenShadowText(document),
         ].join(" ").slice(0, 4_000),
       };
-    }).catch(() => ({ title: "", bodyText: "" }))
+    }), frameTextTimeoutMs, { title: "", bodyText: "" })
+      .catch(() => ({ title: "", bodyText: "" }))
   ));
   const text = {
     title: frameTexts.map((entry) => entry.title).filter(Boolean).join(" | "),
@@ -137,6 +140,20 @@ export async function collectConsentGeometryPageAccess(
     httpStatus,
     title: text.title,
     bodyText: text.bodyText,
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => {
+      timer = setTimeout(() => resolve(fallback), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
   });
 }
 

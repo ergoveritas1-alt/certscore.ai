@@ -20,9 +20,11 @@ import {
 import { getScanProfile } from "./profiles.js";
 import {
   type FixtureRouteFulfiller,
+  consentUiObservationFromConfirmedGeometryControls,
   consentControlsFromAccessibilityTree,
   preConsentRuntimeScanner,
 } from "./scanners/pre-consent-runtime-scanner.js";
+import type { ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 import { inspectBundle, type BundleInspectionReport } from "./inspector.js";
 import { runScan } from "./index.js";
 import {
@@ -521,6 +523,181 @@ test("pre-consent runtime scanner retains first-layer accept and reject controls
   }
 });
 
+test("pre-consent runtime scanner does not count subscription-only reject labels as first-layer reject proof", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-reject-subscribe-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-reject-subscribe"),
+      path.join(tempRoot, "consent-reject-subscribe"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations.find((candidate) =>
+      candidate.controls.some((control) => control.actionType === "accept_all" || control.actionType === "manage_preferences")
+    ) ?? bundle.consentUiObservations[0];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.equal(
+      observation?.controls.some((control) => control.actionType === "reject_all"),
+      false,
+      "subscription-only reject labels should not satisfy first-layer reject availability",
+    );
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /subscribe/i.test(label)),
+      false,
+      "subscription-only reject labels should not be retained as creditworthy choice labels",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner can retain confirmed first-layer geometry controls without interaction", () => {
+  const observation = consentUiObservationFromConfirmedGeometryControls({
+    artifactPath: "/tmp/ConsentControlGeometryEvidence.json",
+    geometry: geometryFixture([
+      geometryCandidate("Reject all", "reject_all", "confirmed_visible", "first_layer"),
+      geometryCandidate("Accept all", "accept_all", "confirmed_visible", "first_layer"),
+      geometryCandidate("Cookie settings", "manage_preferences", "confirmed_visible", "first_layer"),
+      geometryCandidate("Privacy policy", "policy_link", "footer_or_policy_link", "footer"),
+      geometryCandidate("Hidden reject", "reject_all", "hidden", "first_layer"),
+    ]),
+    scanStartedAtMs: Date.now(),
+    text: "We use cookies to personalize content and measure audiences.",
+  });
+
+  assert.equal(observation?.likelyPresent, true);
+  assert.equal(observation?.acceptControlObserved, true);
+  assert.equal(observation?.rejectControlObserved, true);
+  assert.equal(observation?.managePreferencesControlObserved, true);
+  assert.deepEqual(observation?.visibleChoiceLabels, ["Reject all", "Accept all", "Cookie settings"]);
+  assert.equal(
+    observation?.basis.includes("geometry:confirmed_first_layer_controls"),
+    true,
+    "geometry-derived controls should be explicitly provenance-marked",
+  );
+  assert.equal(
+    observation?.controls.every((control) =>
+      control.visible === true &&
+      typeof control.matchedTerm === "string" &&
+      control.classifierReasonCodes?.some((code) => code.startsWith("intent_"))
+    ),
+    true,
+    "retained geometry controls should keep canonical classifier metadata",
+  );
+  assert.equal(observation?.evidenceRefs[0]?.artifactId, "consent_control_geometry");
+});
+
+test("pre-consent runtime scanner drops composite geometry containers when child controls are retained", () => {
+  const container = {
+    ...geometryCandidate("Manage choices Reject all Accept all", "accept_all", "confirmed_visible", "first_layer"),
+    boundingBox: {
+      bottom: 700,
+      height: 240,
+      left: 300,
+      right: 1000,
+      top: 460,
+      width: 700,
+      x: 300,
+      y: 460,
+    },
+    role: undefined,
+    selectorHint: "#button-group",
+    tagName: "div",
+  };
+  const manage = {
+    ...geometryCandidate("Manage choices", "manage_preferences", "confirmed_visible", "first_layer"),
+    boundingBox: {
+      bottom: 540,
+      height: 48,
+      left: 340,
+      right: 560,
+      top: 492,
+      width: 220,
+      x: 340,
+      y: 492,
+    },
+  };
+  const reject = {
+    ...geometryCandidate("Reject all", "reject_all", "confirmed_visible", "first_layer"),
+    boundingBox: {
+      bottom: 620,
+      height: 48,
+      left: 600,
+      right: 800,
+      top: 572,
+      width: 200,
+      x: 600,
+      y: 572,
+    },
+  };
+  const accept = {
+    ...geometryCandidate("Accept all", "accept_all", "confirmed_visible", "first_layer"),
+    boundingBox: {
+      bottom: 620,
+      height: 48,
+      left: 820,
+      right: 980,
+      top: 572,
+      width: 160,
+      x: 820,
+      y: 572,
+    },
+  };
+
+  const observation = consentUiObservationFromConfirmedGeometryControls({
+    artifactPath: "/tmp/ConsentControlGeometryEvidence.json",
+    geometry: geometryFixture([container, manage, reject, accept]),
+    scanStartedAtMs: Date.now(),
+    text: "We use cookies to personalize content and measure audiences.",
+  });
+
+  assert.equal(observation?.acceptControlObserved, true);
+  assert.equal(observation?.rejectControlObserved, true);
+  assert.equal(observation?.managePreferencesControlObserved, true);
+  assert.deepEqual(observation?.visibleChoiceLabels, ["Manage choices", "Reject all", "Accept all"]);
+  assert.equal(
+    observation?.controls.some((control) => control.selectorHint === "#button-group"),
+    false,
+    "composite button-group containers should not be retained as extra controls",
+  );
+});
+
+test("pre-consent runtime scanner does not retain hidden footer or ambiguous geometry candidates", () => {
+  const observation = consentUiObservationFromConfirmedGeometryControls({
+    geometry: geometryFixture([
+      geometryCandidate("Cookie settings", "manage_preferences", "footer_or_policy_link", "footer"),
+      geometryCandidate("Accept all", "accept_all", "hidden", "first_layer"),
+      geometryCandidate("Learn more", "other", "ambiguous", "first_layer"),
+      geometryCandidate("Reject all", "reject_all", "covered", "first_layer"),
+    ]),
+    scanStartedAtMs: Date.now(),
+    text: "Cookies and settings links appear in page chrome.",
+  });
+
+  assert.equal(observation, null);
+});
+
+test("pre-consent runtime scanner does not retain generic confirmed geometry controls without consent context", () => {
+  const observation = consentUiObservationFromConfirmedGeometryControls({
+    geometry: geometryFixture([
+      geometryCandidate("Accept", "accept_all", "confirmed_visible", "first_layer"),
+      geometryCandidate("Reject", "reject_all", "confirmed_visible", "first_layer"),
+    ], {
+      cmpDetected: false,
+      containerText: "Product beta invite. Accept Reject.",
+    }),
+    scanStartedAtMs: Date.now(),
+    text: "This product beta invitation lets account holders accept or reject the invite.",
+  });
+
+  assert.equal(observation, null);
+});
+
 test("pre-consent runtime scanner inventories German and French first-layer controls through the canonical classifier", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-localized-controls-"));
@@ -544,6 +721,14 @@ test("pre-consent runtime scanner inventories German and French first-layer cont
       ),
       true,
       "scanner should classify German accept controls through the canonical registry",
+    );
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.tagName === "p" ||
+        control.label.startsWith("Mit Klick auf den Button")
+      ),
+      false,
+      "scanner should not retain static explanatory text as a production consent control",
     );
     assert.equal(
       observation?.controls.some((control) =>
@@ -1640,6 +1825,59 @@ test("scan-core emits scan no-go assessment for Cloudflare-style security challe
   }
 });
 
+test("scan-core emits scan no-go assessment for DataDome response challenges", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-datadome-challenge-"));
+  try {
+    const bundle = await runScan({
+      url: server.urlFor("security-datadome-challenge"),
+      profile: "tiny",
+      outDir: path.join(tempRoot, "out"),
+      preConsentScreenshotMode: "always",
+    });
+
+    assert.equal(bundle.scan_no_go_assessment?.decision, "no_go");
+    assert.equal(bundle.scanNoGoAssessment?.decision, "no_go");
+    assert.equal(bundle.visual_access_review?.go_no_go, "NO_GO");
+    assert.equal(bundle.visual_access_review?.page_state, "captcha_or_challenge");
+    assert.ok(bundle.scan_no_go_assessment?.reasonCodes.includes("captcha_or_challenge"));
+    assert.ok(bundle.scan_no_go_assessment?.corroboratorCodes.includes("network_datadome_challenge"));
+    assert.equal(bundle.runtimeCoverage?.coverageStatus, "limited_none");
+    assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("captcha_or_challenge"));
+    assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("scan_no_go_assessment"));
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("scan-core emits scan no-go assessment for temporary access restriction pages", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-temporary-access-restriction-"));
+  try {
+    for (const page of ["security-access-temporarily-restricted", "security-polish-temporary-interstitial"] as const) {
+      const bundle = await runScan({
+        url: server.urlFor(page),
+        profile: "tiny",
+        outDir: path.join(tempRoot, page),
+        preConsentScreenshotMode: "always",
+      });
+
+      assert.equal(bundle.scan_no_go_assessment?.decision, "no_go", page);
+      assert.equal(bundle.scanNoGoAssessment?.decision, "no_go", page);
+      assert.equal(bundle.visual_access_review?.go_no_go, "NO_GO", page);
+      assert.equal(bundle.visual_access_review?.page_state, "access_blocked", page);
+      assert.ok(bundle.scan_no_go_assessment?.reasonCodes.includes("access_denied_or_forbidden_page"), page);
+      assert.equal(bundle.runtimeCoverage?.coverageStatus, "limited_none", page);
+      assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("access_denied_or_forbidden_page"), page);
+      assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("scan_no_go_assessment"), page);
+    }
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("scan-core emits scan no-go assessment when initial navigation fails before evidence capture", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-navigation-no-go-"));
   try {
@@ -2113,6 +2351,130 @@ function resolvedProducts(report: BundleInspectionReport): string[] {
   return [...new Set(report.vendorResolution.resolvedVendors
     .map((vendor) => vendor.product ?? vendor.vendor))]
     .sort();
+}
+
+function geometryFixture(
+  candidates: ConsentControlGeometryArtifact["candidates"],
+  options: { cmpDetected?: boolean; containerText?: string } = {},
+): ConsentControlGeometryArtifact {
+  const cmpDetected = options.cmpDetected ?? true;
+  const containerText = options.containerText ?? "We use cookies. Reject all Accept all Cookie settings.";
+  return {
+    artifactVersion: "consent_control_geometry.v1",
+    capturedAt: new Date().toISOString(),
+    candidates,
+    cmp: {
+      confidence: 0.95,
+      detected: cmpDetected,
+      detections: [],
+      matchedSignals: [],
+      name: cmpDetected ? "Fixture CMP" : undefined,
+      reasonCodes: ["fixture_cmp"],
+    },
+    containers: [{
+      boundingBox: rect(),
+      containerId: "fixture_container",
+      htmlExcerpt: "<section id=\"fixture-cookie-banner\">...</section>",
+      id: "fixture-cookie-banner",
+      intersectsViewport: true,
+      layer: "first_layer",
+      selectorHint: "#fixture-cookie-banner",
+      textExcerpt: containerText,
+    }],
+    pageUrl: "https://fixture.test",
+    sourceScanner: "consent_control_geometry_diagnostic",
+    summary: {
+      cmpDetected,
+      cmpName: cmpDetected ? "Fixture CMP" : undefined,
+      confidence: 0.98,
+      firstLayerAccept: candidates.some((candidate) =>
+        candidate.actionType === "accept_all" && candidate.decisionStatus === "confirmed_visible"
+      ),
+      firstLayerOptions: candidates.some((candidate) =>
+        candidate.actionType === "manage_preferences" && candidate.decisionStatus === "confirmed_visible"
+      ),
+      firstLayerReject: candidates.some((candidate) =>
+        candidate.actionType === "reject_all" && candidate.decisionStatus === "confirmed_visible"
+      ),
+      limitations: [],
+    },
+    viewport: {
+      height: 768,
+      width: 1366,
+    },
+  };
+}
+
+function geometryCandidate(
+  label: string,
+  actionType: ConsentControlGeometryArtifact["candidates"][number]["actionType"],
+  decisionStatus: ConsentControlGeometryArtifact["candidates"][number]["decisionStatus"],
+  layer: ConsentControlGeometryArtifact["candidates"][number]["layer"],
+): ConsentControlGeometryArtifact["candidates"][number] {
+  const classifierIntent =
+    actionType === "accept_all" ? "accept" :
+      actionType === "reject_all" ? "reject" :
+        actionType === "manage_preferences" ? "options" :
+          "unknown";
+  return {
+    actionType,
+    boundingBox: rect(),
+    candidateId: `fixture_${label.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`,
+    classifierConfidence: classifierIntent === "unknown" ? 0.2 : 0.9,
+    classifierReasonCodes: classifierIntent === "unknown" ? ["intent_unknown"] : [`intent_${classifierIntent}`],
+    clippedByScrollableAncestor: false,
+    computedStyle: {
+      display: "block",
+      opacity: "1",
+      pointerEvents: "auto",
+      position: "fixed",
+      visibility: "visible",
+      zIndex: "1000",
+    },
+    decisionStatus,
+    enabled: true,
+    frameContext: {
+      frameKind: "main_frame",
+      frameUrl: "https://fixture.test",
+    },
+    intersectsViewport: decisionStatus !== "dom_present_not_visible",
+    label,
+    layer,
+    matchStrength: classifierIntent === "unknown" ? "weak" : "direct",
+    matchedLocale: "en",
+    matchedTerm: label.toLowerCase(),
+    normalizedLabel: label.toLowerCase(),
+    occlusion: {
+      bottomLeft: true,
+      bottomRight: true,
+      center: decisionStatus !== "covered",
+      checkedPoints: 5,
+      hitSelectorHints: [],
+      topLeft: true,
+      topRight: true,
+    },
+    reasons: [decisionStatus],
+    role: "button",
+    selectorHint: `button[data-fixture="${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}"]`,
+    tagName: "button",
+    viewport: {
+      height: 768,
+      width: 1366,
+    },
+  };
+}
+
+function rect(): ConsentControlGeometryArtifact["candidates"][number]["boundingBox"] {
+  return {
+    bottom: 620,
+    height: 48,
+    left: 32,
+    right: 232,
+    top: 572,
+    width: 200,
+    x: 32,
+    y: 572,
+  };
 }
 
 function pixelBody(): string {

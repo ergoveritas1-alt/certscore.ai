@@ -102,6 +102,7 @@ export async function preConsentRuntimeScanner(
 ): Promise<PreConsentRuntimeScannerResult> {
   const moduleStartedAtMs = Date.now();
   const moduleStartedAt = new Date(moduleStartedAtMs).toISOString();
+  const remainingModuleBudgetMs = () => Math.max(0, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
   const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
   const firstPartyHostname = getHostname(input.normalizedUrl) ?? undefined;
   const firstPartyDomain = getRegistrableDomainFromUrl(input.normalizedUrl) ?? undefined;
@@ -617,10 +618,11 @@ export async function preConsentRuntimeScanner(
         matchSource: "cookie_name",
       });
     }
-    const cmpRuntimeObservations = await recordTiming(
+    const cmpRuntimeObservations = await recordBoundedTiming(
       timingBreakdown,
       "CMP runtime probe",
       "Low-latency cookie, storage, and global CMP probe.",
+      input.waitMode === "fast" ? 1_250 : 2_000,
       async () => {
         vendorResolverInputs.push(...await captureCmpRuntimeProbeInputs({
           page,
@@ -632,6 +634,10 @@ export async function preConsentRuntimeScanner(
           input.scanStartedAtMs,
         );
       },
+      () => buildCmpRuntimeObservations(
+        vendorResolverInputs,
+        input.scanStartedAtMs,
+      ),
     );
     if (shouldRecaptureConsentUiAfterCmpRuntime(consentObservation, domText, cmpRuntimeObservations)) {
       const highConfidenceCmpRuntimeEvidence =
@@ -639,7 +645,7 @@ export async function preConsentRuntimeScanner(
       const cmpRecaptureWaitMs = highConfidenceCmpRuntimeEvidence
         ? 12_000
         : fastWait ? 2_250 : 2_750;
-      const recaptureTimeoutMs = Math.max(
+      const requestedRecaptureTimeoutMs = Math.max(
         highConfidenceCmpRuntimeEvidence
           ? cmpRecaptureWaitMs
           : consentUiBudget.timeoutFor(fastWait ? 1_750 : 2_250),
@@ -647,24 +653,36 @@ export async function preConsentRuntimeScanner(
           ? cmpRecaptureWaitMs
           : fastWait ? 2_500 : 3_000,
       );
-      const recapturedConsentObservation = await recordBoundedTiming(
-        timingBreakdown,
-        "page evidence: consent UI CMP recapture",
-        highConfidenceCmpRuntimeEvidence
-          ? "Adaptive post-CMP first-layer control inventory for high-confidence CMP evidence; exits as soon as actionable controls are retained."
-          : "Short post-CMP first-layer control inventory when CMP evidence is retained but only settings/preferences controls are visible.",
-        recaptureTimeoutMs,
-        () => detectConsentUi(
-          page,
-          input.scanStartedAtMs,
-          Math.min(cmpRecaptureWaitMs, recaptureTimeoutMs),
-          {
-            waitForActionableChoiceControls: true,
-            waitForControlsOnTextOnlySurface: true,
-          },
-        ),
-        () => consentObservation,
-      );
+      const recaptureTimeoutMs = highConfidenceCmpRuntimeEvidence
+        ? requestedRecaptureTimeoutMs
+        : Math.min(requestedRecaptureTimeoutMs, remainingModuleBudgetMs());
+      const recapturedConsentObservation = recaptureTimeoutMs >= 1_000
+        ? await recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: consent UI CMP recapture",
+          highConfidenceCmpRuntimeEvidence
+            ? "Adaptive post-CMP first-layer control inventory for high-confidence CMP evidence; exits as soon as actionable controls are retained."
+            : "Short post-CMP first-layer control inventory when CMP evidence is retained but only settings/preferences controls are visible.",
+          recaptureTimeoutMs,
+          () => detectConsentUi(
+            page,
+            input.scanStartedAtMs,
+            Math.min(cmpRecaptureWaitMs, recaptureTimeoutMs),
+            {
+              waitForActionableChoiceControls: true,
+              waitForControlsOnTextOnlySurface: true,
+            },
+          ),
+          () => consentObservation,
+        )
+        : (() => {
+          recordInstantTiming(
+            timingBreakdown,
+            "page evidence: consent UI CMP recapture skipped",
+            "Skipped post-CMP first-layer control recapture because the pre-consent module budget was exhausted.",
+          );
+          return consentObservation;
+        })();
       if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
         const recaptureBasis = hasActionableConsentChoiceControl(recapturedConsentObservation)
           ? "recapture:post_cmp_first_layer_choice_controls"
@@ -808,16 +826,22 @@ export async function preConsentRuntimeScanner(
       }
     }
 
-    await recordTiming(
-      timingBreakdown,
-      "consent control geometry diagnostic",
-      "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
-      async () => {
+    const geometryBudgetCushionMs = input.internalBudgetMs <= 10_000
+      ? 2_500
+      : input.waitMode === "fast" ? 8_000 : 10_000;
+    if (remainingModuleBudgetMs() >= geometryBudgetCushionMs) {
+      await recordTiming(
+        timingBreakdown,
+        "consent control geometry diagnostic",
+        "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
+        async () => {
         const access = await collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
+          frameTextTimeoutMs: input.waitMode === "fast" ? 250 : 500,
           supplementalBodyText: domText,
         });
         let geometry = await captureConsentControlGeometry(page, {
           screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
+          timeoutMs: input.waitMode === "fast" ? 3_000 : 5_000,
         });
         if (
           !hasConfirmedFirstLayerGeometryControls(geometry) &&
@@ -844,7 +868,7 @@ export async function preConsentRuntimeScanner(
           screenshots.unshift(geometryProofScreenshot);
           rewriteConsentGeometryScreenshotRefs(geometry, geometryProofScreenshot.path);
         }
-        await input.artifactWriter.writeJsonArtifact("ConsentControlGeometryEvidence.json", {
+        const geometryArtifactPath = await input.artifactWriter.writeJsonArtifact("ConsentControlGeometryEvidence.json", {
           ...geometry,
           access,
           egress: buildConsentGeometryEgressDiagnostic(),
@@ -852,10 +876,30 @@ export async function preConsentRuntimeScanner(
           productionFindingIntegration: false,
         });
         consentGeometryDiagnosticWritten = true;
-      },
-    ).catch((error: unknown) => {
-      runtimeErrors.push(`Consent-control geometry diagnostic failed: ${errorMessageFromUnknown(error)}`);
-    });
+        const geometryConsentObservation = consentUiObservationFromConfirmedGeometryControls({
+          artifactPath: geometryArtifactPath,
+          geometry,
+          scanStartedAtMs: input.scanStartedAtMs,
+          text: domText,
+        });
+        if (geometryConsentObservation && isStrongerConsentUiObservation(geometryConsentObservation, consentObservation)) {
+          consentObservation = mergeConsentUiObservations(
+            consentObservation,
+            geometryConsentObservation,
+            "geometry:confirmed_first_layer_controls",
+          );
+        }
+        },
+      ).catch((error: unknown) => {
+        runtimeErrors.push(`Consent-control geometry diagnostic failed: ${errorMessageFromUnknown(error)}`);
+      });
+    } else {
+      recordInstantTiming(
+        timingBreakdown,
+        "consent control geometry diagnostic skipped",
+        "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+      );
+    }
 
     const domPath = await recordTiming(
       timingBreakdown,
@@ -879,32 +923,44 @@ export async function preConsentRuntimeScanner(
       { refId: "dom_text_pre_consent", artifactId: domSnapshot.artifactId, path: domPath },
     ];
 
-    const { observation: transportSecurityObservation, artifactRef: transportSecurityArtifactRef } = await recordBoundedTiming(
-      timingBreakdown,
-      "page evidence: transport security",
-      "Bounded HTTPS, TLS, HTTP redirect, mixed-content, and form transport observation without form submission.",
-      12_000,
-      () => captureTransportSecurityObservation({
-        collectionSurfaceObservations,
-        failedHttpRequests,
-        mixedContentConsoleMessages,
-        networkEvents,
+    const fallbackTransportSecurityObservation = () => ({
+      observation: emptyTransportSecurityObservation({
         normalizedUrl: input.normalizedUrl,
-        page,
         requestedUrl: input.url,
         scanStartedAtMs: input.scanStartedAtMs,
-        artifactWriter: input.artifactWriter,
+        reason: "transport_security_capture_timeout_or_failure",
       }),
-      () => ({
-        observation: emptyTransportSecurityObservation({
-          normalizedUrl: input.normalizedUrl,
-          requestedUrl: input.url,
-          scanStartedAtMs: input.scanStartedAtMs,
-          reason: "transport_security_capture_timeout_or_failure",
-        }),
-        artifactRef: undefined,
-      }),
-    );
+      artifactRef: undefined,
+    });
+    const transportSecurityRemainingMs = remainingModuleBudgetMs();
+    const { observation: transportSecurityObservation, artifactRef: transportSecurityArtifactRef } =
+      transportSecurityRemainingMs >= 1_000
+        ? await recordBoundedTiming(
+          timingBreakdown,
+          "page evidence: transport security",
+          "Bounded HTTPS, TLS, HTTP redirect, mixed-content, and form transport observation without form submission.",
+          Math.min(12_000, transportSecurityRemainingMs),
+          () => captureTransportSecurityObservation({
+            collectionSurfaceObservations,
+            failedHttpRequests,
+            mixedContentConsoleMessages,
+            networkEvents,
+            normalizedUrl: input.normalizedUrl,
+            page,
+            requestedUrl: input.url,
+            scanStartedAtMs: input.scanStartedAtMs,
+            artifactWriter: input.artifactWriter,
+          }),
+          fallbackTransportSecurityObservation,
+        )
+        : (() => {
+          recordInstantTiming(
+            timingBreakdown,
+            "page evidence: transport security skipped",
+            "Skipped bounded transport security observation because the pre-consent module budget was exhausted.",
+          );
+          return fallbackTransportSecurityObservation();
+        })();
 
     return {
       moduleRun: {
@@ -1934,6 +1990,10 @@ async function readConsentUiObservation(
       rejectedReasons.add("classifier_other_unknown");
       return false;
     }
+    if (isStaticTextConsentInventoryControl(control)) {
+      rejectedReasons.add("outside_eligible_surface");
+      return false;
+    }
     if (
       control.inventorySource === "accessibility_tree" &&
       control.actionType === "manage_preferences" &&
@@ -2040,6 +2100,18 @@ type ConsentInventoryProbeDiagnostics = Pick<
   NonNullable<ConsentUiObservation["inventoryDiagnostics"]>,
   "candidateContainerCount" | "candidateControlCount" | "candidateLabels" | "rejectionReasons"
 >;
+
+function isStaticTextConsentInventoryControl(control: ConsentUiInventoryControl): boolean {
+  const tagName = control.tagName?.toLowerCase();
+  if (!tagName || !/^(?:p|span|strong|em|small|h[1-6]|li|dt|dd)$/.test(tagName)) {
+    return false;
+  }
+  const role = control.role?.toLowerCase();
+  if (role === "button" || role === "link") {
+    return false;
+  }
+  return !/(?:button|btn|choice|option|preference|purpose)/i.test(control.selectorHint ?? "");
+}
 
 const CONSENT_DEFAULT_TOGGLE_PROBE_SCRIPT = String.raw`(() => {
   const normalize = (value) => (value ?? "").replace(/\s+/g, " ").trim();
@@ -2739,6 +2811,18 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         const tabIndex = element.getAttribute("tabindex");
         const className = element.getAttribute("class") || "";
         const id = element.getAttribute("id") || "";
+        const tagName = element.tagName.toLowerCase();
+        const staticTextElement = /^(?:p|span|strong|em|small|h[1-6]|li|dt|dd)$/i.test(tagName);
+        const hasExplicitControlSignal = (
+          role === "button" ||
+          role === "link" ||
+          element.hasAttribute("onclick") ||
+          /\b(?:btn|button|choice|option|preference|purpose)\b/i.test(className) ||
+          /(?:btn|button|choice|option|preference|purpose)/i.test(id)
+        );
+        if (staticTextElement && !hasExplicitControlSignal) {
+          return false;
+        }
         return (
           role === "button" ||
           role === "link" ||
@@ -2886,6 +2970,9 @@ function consentUiControlActionTypeFromClassification(
     case "accept":
       return "accept_all";
     case "reject":
+      if (classification.variant === "reject_with_subscription") {
+        return "other";
+      }
       return "reject_all";
     case "options":
       return classification.variant === "save_preferences" ? "save_preferences" : "manage_preferences";
@@ -3151,13 +3238,25 @@ function mergeConsentUiObservations(
   candidate: ConsentUiObservation,
   basis: string,
 ): ConsentUiObservation {
+  const controls = uniqueConsentObservationControls([
+    ...current.controls,
+    ...candidate.controls,
+  ]);
+  const visibleChoiceLabels = unique([
+    ...current.visibleChoiceLabels,
+    ...candidate.visibleChoiceLabels,
+    ...controls.map((control) => control.label),
+  ]).slice(0, 24);
   return {
     ...candidate,
+    acceptControlObserved: current.acceptControlObserved || candidate.acceptControlObserved ||
+      controls.some((control) => control.actionType === "accept_all"),
     basis: unique([
       ...current.basis,
       ...candidate.basis,
       basis,
     ]),
+    controls,
     defaultTogglePurposeLabels: unique([
       ...(current.defaultTogglePurposeLabels ?? []),
       ...(candidate.defaultTogglePurposeLabels ?? []),
@@ -3169,6 +3268,8 @@ function mergeConsentUiObservations(
       ...candidate.evidenceRefs,
     ]),
     nonEssentialDefaultsOff: candidate.nonEssentialDefaultsOff ?? current.nonEssentialDefaultsOff ?? null,
+    managePreferencesControlObserved: current.managePreferencesControlObserved || candidate.managePreferencesControlObserved ||
+      controls.some((control) => control.actionType === "manage_preferences" || control.actionType === "save_preferences"),
     precheckedOptionalPurposeCount: unique([
       ...(current.precheckedOptionalPurposeLabels ?? []),
       ...(candidate.precheckedOptionalPurposeLabels ?? []),
@@ -3177,7 +3278,29 @@ function mergeConsentUiObservations(
       ...(current.precheckedOptionalPurposeLabels ?? []),
       ...(candidate.precheckedOptionalPurposeLabels ?? []),
     ]).slice(0, 10),
+    rejectControlObserved: current.rejectControlObserved || candidate.rejectControlObserved ||
+      controls.some((control) => control.actionType === "reject_all"),
+    visibleChoiceLabels,
   };
+}
+
+function uniqueConsentObservationControls(
+  controls: ConsentUiObservation["controls"],
+): ConsentUiObservation["controls"] {
+  const seen = new Set<string>();
+  const uniqueControls: ConsentUiObservation["controls"] = [];
+  for (const control of controls) {
+    const key = [
+      control.actionType,
+      control.label.trim().toLowerCase(),
+    ].join("|");
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    uniqueControls.push(control);
+  }
+  return uniqueControls.slice(0, 24);
 }
 
 function annotateConsentUiObservation(
@@ -4622,10 +4745,120 @@ function hasBelowFoldFirstLayerGeometryControls(geometry: ConsentControlGeometry
   );
 }
 
-function isAroGeometryAction(actionType: ConsentControlGeometryArtifact["candidates"][number]["actionType"]): boolean {
+type AroGeometryAction = Extract<
+  ConsentControlGeometryArtifact["candidates"][number]["actionType"],
+  "accept_all" | "reject_all" | "manage_preferences"
+>;
+
+const GEOMETRY_CONSENT_OBSERVATION_CONTEXT_PATTERN =
+  /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie/i;
+
+function isAroGeometryAction(
+  actionType: ConsentControlGeometryArtifact["candidates"][number]["actionType"],
+): actionType is AroGeometryAction {
   return actionType === "accept_all" ||
     actionType === "reject_all" ||
     actionType === "manage_preferences";
+}
+
+export function consentUiObservationFromConfirmedGeometryControls(input: {
+  artifactPath?: string;
+  geometry: ConsentControlGeometryArtifact;
+  scanStartedAtMs: number;
+  text?: string;
+}): ConsentUiObservation | null {
+  const text = [
+    input.text,
+    ...input.geometry.containers.map((container) => container.textExcerpt),
+  ].filter(Boolean).join(" ").slice(0, 12_000);
+  if (
+    input.geometry.cmp.detected !== true &&
+    !GEOMETRY_CONSENT_OBSERVATION_CONTEXT_PATTERN.test(text)
+  ) {
+    return null;
+  }
+
+  const controls = input.geometry.candidates
+    .flatMap((candidate): ConsentUiObservation["controls"] => {
+      const actionType = candidate.actionType;
+      if (
+        !isAroGeometryAction(actionType) ||
+        candidate.layer !== "first_layer" ||
+        candidate.decisionStatus !== "confirmed_visible" ||
+        isCompositeConfirmedGeometryControl(candidate, input.geometry.candidates)
+      ) {
+        return [];
+      }
+      return [{
+        actionType,
+        classifierReasonCodes: candidate.classifierReasonCodes,
+        label: candidate.label.slice(0, 120),
+        matchStrength: candidate.matchStrength as ConsentUiObservation["controls"][number]["matchStrength"],
+        matchedLocale: candidate.matchedLocale as ConsentUiObservation["controls"][number]["matchedLocale"],
+        matchedTerm: candidate.matchedTerm,
+        role: candidate.role,
+        selectorHint: candidate.selectorHint,
+        tagName: candidate.tagName.slice(0, 32),
+        visible: true,
+      }];
+    })
+    .filter((control) => control.label.length > 0);
+
+  if (controls.length === 0) {
+    return null;
+  }
+
+  const observation = buildConsentUiObservationFromEvidence({
+    controls,
+    fallbackBasis: ["geometry:confirmed_first_layer_controls"],
+    scanStartedAtMs: input.scanStartedAtMs,
+    text: [
+      text,
+      ...controls.map((control) => control.label),
+    ].filter(Boolean).join(" ").slice(0, 12_000),
+  });
+  observation.evidenceRefs = [{
+    artifactId: "consent_control_geometry",
+    eventType: "consent_control_geometry",
+    label: "Confirmed visible first-layer consent controls from bounded geometry evidence",
+    path: input.artifactPath,
+    refId: "consent_control_geometry_evidence",
+  }];
+  return observation;
+}
+
+function isCompositeConfirmedGeometryControl(
+  candidate: ConsentControlGeometryArtifact["candidates"][number],
+  candidates: ConsentControlGeometryArtifact["candidates"],
+): boolean {
+  if (["button", "a", "input", "select", "textarea"].includes(candidate.tagName.toLowerCase())) {
+    return false;
+  }
+
+  return candidates.some((other) =>
+    other.candidateId !== candidate.candidateId &&
+    isAroGeometryAction(other.actionType) &&
+    other.layer === "first_layer" &&
+    other.decisionStatus === "confirmed_visible" &&
+    geometryBoxContains(candidate.boundingBox, other.boundingBox)
+  );
+}
+
+function geometryBoxContains(
+  parent: ConsentControlGeometryArtifact["candidates"][number]["boundingBox"],
+  child: ConsentControlGeometryArtifact["candidates"][number]["boundingBox"],
+): boolean {
+  if (parent.width <= 0 || parent.height <= 0 || child.width <= 0 || child.height <= 0) {
+    return false;
+  }
+  const tolerancePx = 1;
+  const parentArea = parent.width * parent.height;
+  const childArea = child.width * child.height;
+  return childArea < parentArea * 0.98 &&
+    child.left >= parent.left - tolerancePx &&
+    child.right <= parent.right + tolerancePx &&
+    child.top >= parent.top - tolerancePx &&
+    child.bottom <= parent.bottom + tolerancePx;
 }
 
 async function recaptureConsentGeometryAfterBoundedScroll(
@@ -4664,6 +4897,7 @@ async function recaptureConsentGeometryAfterBoundedScroll(
   await page.waitForTimeout(350).catch(() => undefined);
   return captureConsentControlGeometry(page, {
     screenshotArtifactRef: options.screenshotArtifactRef,
+    timeoutMs: 2_000,
   });
 }
 

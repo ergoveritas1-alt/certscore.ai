@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildConsentGeometryEgressDiagnostic,
   classifyConsentGeometryAccess,
+  collectConsentGeometryPageAccess,
   firstProxyEnv,
   missingRequiredProxyDiagnostic,
 } from "./consent-geometry-access.js";
@@ -66,6 +67,29 @@ test("classifyConsentGeometryAccess marks human challenge copy as no-go", () => 
   assert.ok(diagnostic.reasonCodes.includes("bot_security_check"));
 });
 
+test("classifyConsentGeometryAccess marks temporary access restriction copy as no-go", () => {
+  const diagnostic = classifyConsentGeometryAccess({
+    httpStatus: 200,
+    title: "Access is temporarily restricted",
+    bodyText: "We detected unusual activity from your device or network. Automated activity on your network may be the reason.",
+  });
+
+  assert.equal(diagnostic.status, "rate_limited_or_security_challenge");
+  assert.ok(diagnostic.reasonCodes.includes("temporarily_restricted"));
+  assert.ok(diagnostic.reasonCodes.includes("bot_security_check"));
+});
+
+test("classifyConsentGeometryAccess marks Polish temporary interstitial copy as no-go", () => {
+  const diagnostic = classifyConsentGeometryAccess({
+    httpStatus: 200,
+    title: "TVN24",
+    bodyText: "Zaraz wracamy",
+  });
+
+  assert.equal(diagnostic.status, "access_no_go");
+  assert.ok(diagnostic.reasonCodes.includes("temporary_interstitial"));
+});
+
 test("classifyConsentGeometryAccess marks Imperva hCaptcha copy as no-go", () => {
   const diagnostic = classifyConsentGeometryAccess({
     httpStatus: 200,
@@ -95,6 +119,25 @@ test("classifyConsentGeometryAccess marks navigation timeouts distinctly", () =>
   });
 
   assert.equal(diagnostic.status, "timeout");
+});
+
+test("collectConsentGeometryPageAccess bounds hanging frame text extraction", async () => {
+  const page = {
+    frames: () => [
+      { evaluate: () => new Promise(() => undefined) },
+      { evaluate: async () => ({ title: "Example", bodyText: "Welcome. We use cookies. Accept All." }) },
+    ],
+  };
+
+  const startedAt = Date.now();
+  const diagnostic = await collectConsentGeometryPageAccess(page as never, 200, {
+    frameTextTimeoutMs: 20,
+    supplementalBodyText: "Supplemental privacy text.",
+  });
+
+  assert.equal(diagnostic.status, "loaded");
+  assert.match(diagnostic.textExcerpt ?? "", /We use cookies/);
+  assert.ok(Date.now() - startedAt < 250);
 });
 
 test("egress diagnostic detects configured proxy env without exposing value", () => {

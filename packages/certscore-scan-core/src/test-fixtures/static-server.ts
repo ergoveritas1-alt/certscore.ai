@@ -50,6 +50,7 @@ export type StaticFixturePage =
   | "consent-post-choice-reopen-control"
   | "consent-preference-center-reject-success"
   | "consent-preference-center-toggle-save"
+  | "consent-reject-subscribe"
   | "consent-simple-accept-reject"
   | "consent-tracking-persists-after-reject"
   | "ga-collection"
@@ -68,7 +69,11 @@ export type StaticFixturePage =
   | "policy-international-transfer-recipient-safeguards"
   | "policy-ambiguous-choices"
   | "policy-broken-link"
+  | "policy-browser-hydrated-document"
   | "policy-canonical-near-privacy-center"
+  | "policy-localized-canonical-shell"
+  | "policy-client-challenge"
+  | "policy-french-captcha-challenge"
   | "policy-cookie-link"
   | "policy-do-not-sell-link"
   | "policy-footer-privacy-delayed"
@@ -84,19 +89,30 @@ export type StaticFixturePage =
   | "policy-google-script-noise"
   | "policy-google-script-only"
   | "policy-google-like-late-sections"
+  | "policy-jsonld-article-body"
+  | "policy-homepage-external-url-only-policy-links"
   | "policy-gdpr-transparency-diagnostic-negatives"
+  | "policy-gdpr-transparency-encoded-it"
+  | "policy-gdpr-transparency-compact-nl"
+  | "policy-gdpr-transparency-latin1-es"
+  | "policy-gdpr-transparency-pdf-nl"
   | "policy-gpc-disclosure-late"
   | "policy-gpc-disclosure"
   | "policy-generic-links"
   | "policy-link-aria-title"
   | "policy-latimes-footer-surfaces"
+  | "policy-localized-privacy-supplement"
   | "policy-mature-real-prose"
   | "policy-multilingual-article13-topics"
   | "policy-multilingual-surfaces"
+  | "policy-late-rendered-pl-privacy-links"
   | "policy-neighboring-footer-privacy-noise"
+  | "policy-powered-by-attribution"
+  | "policy-secondary-third-party-links"
   | "policy-onetrust-index-json"
   | "policy-onetrust-notice-json"
   | "policy-privacy-center-link"
+  | "policy-rendered-article13-better"
   | "policy-retention-rights-only"
   | "policy-state-privacy-rights-link"
   | "policy-cmp-preference-control"
@@ -114,7 +130,10 @@ export type StaticFixturePage =
   | "policy-vendor-mentions"
   | "policy-webmd-like-secondary-surfaces"
   | "region-coded-collection-endpoint"
+  | "security-access-temporarily-restricted"
   | "security-cloudflare-challenge"
+  | "security-datadome-challenge"
+  | "security-polish-temporary-interstitial"
   | "site-owned-infrastructure"
   | "third-party-cookie-positive"
   | "unresolved-collection-endpoint";
@@ -175,6 +194,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-post-choice-reopen-control": "consent-post-choice-reopen-control",
   "consent-preference-center-reject-success": "consent-preference-center-reject-success",
   "consent-preference-center-toggle-save": "consent-preference-center-toggle-save",
+  "consent-reject-subscribe": "consent-reject-subscribe",
   "consent-simple-accept-reject": "consent-simple",
   "consent-tracking-persists-after-reject": "consent-persists",
   "ga-collection": "ga-page",
@@ -193,7 +213,11 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-international-transfer-recipient-safeguards": "policy-international-transfer-recipient-safeguards",
   "policy-ambiguous-choices": "policy-ambiguous-choices",
   "policy-broken-link": "policy-broken-link",
+  "policy-browser-hydrated-document": "policy-browser-hydrated-document",
   "policy-canonical-near-privacy-center": "policy-canonical-near-privacy-center",
+  "policy-localized-canonical-shell": "policy-localized-canonical-shell",
+  "policy-client-challenge": "policy-client-challenge",
+  "policy-french-captcha-challenge": "policy-french-captcha-challenge",
   "policy-cookie-link": "policy-cookie-link",
   "policy-do-not-sell-link": "policy-do-not-sell",
   "policy-footer-privacy-delayed": "policy-footer-privacy-delayed",
@@ -209,19 +233,30 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-google-script-noise": "policy-google-script-noise",
   "policy-google-script-only": "policy-google-script-only",
   "policy-google-like-late-sections": "policy-google-like-late-sections",
+  "policy-jsonld-article-body": "policy-jsonld-article-body",
+  "policy-homepage-external-url-only-policy-links": "policy-homepage-external-url-only-policy-links",
   "policy-gdpr-transparency-diagnostic-negatives": "policy-gdpr-transparency-diagnostic-negatives",
+  "policy-gdpr-transparency-encoded-it": "policy-gdpr-transparency-encoded-it",
+  "policy-gdpr-transparency-compact-nl": "policy-gdpr-transparency-compact-nl",
+  "policy-gdpr-transparency-latin1-es": "policy-gdpr-transparency-latin1-es",
+  "policy-gdpr-transparency-pdf-nl": "policy-gdpr-transparency-pdf-nl",
   "policy-gpc-disclosure-late": "policy-gpc-late",
   "policy-gpc-disclosure": "policy-gpc",
   "policy-generic-links": "policy-generic-links",
   "policy-link-aria-title": "policy-link-aria-title",
   "policy-latimes-footer-surfaces": "policy-latimes-footer-surfaces",
+  "policy-localized-privacy-supplement": "policy-localized-privacy-supplement",
   "policy-mature-real-prose": "policy-mature-real-prose",
   "policy-multilingual-article13-topics": "policy-multilingual-article13-topics",
   "policy-multilingual-surfaces": "policy-multilingual-surfaces",
+  "policy-late-rendered-pl-privacy-links": "policy-late-rendered-pl-privacy-links",
   "policy-neighboring-footer-privacy-noise": "policy-neighboring-footer-privacy-noise",
+  "policy-powered-by-attribution": "policy-powered-by-attribution",
+  "policy-secondary-third-party-links": "policy-secondary-third-party-links",
   "policy-onetrust-index-json": "policy-onetrust-index-json",
   "policy-onetrust-notice-json": "policy-onetrust-notice-json",
   "policy-privacy-center-link": "policy-privacy-center",
+  "policy-rendered-article13-better": "policy-rendered-article13-better",
   "policy-retention-rights-only": "policy-retention-rights-only",
   "policy-state-privacy-rights-link": "policy-state-rights",
   "policy-cmp-preference-control": "policy-cmp-preference-control",
@@ -239,7 +274,10 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-vendor-mentions": "policy-vendors",
   "policy-webmd-like-secondary-surfaces": "policy-webmd-like-secondary",
   "region-coded-collection-endpoint": "region-coded-collection",
+  "security-access-temporarily-restricted": "security-access-temporarily-restricted",
   "security-cloudflare-challenge": "security-cloudflare-challenge",
+  "security-datadome-challenge": "security-datadome-challenge",
+  "security-polish-temporary-interstitial": "security-polish-temporary-interstitial",
   "site-owned-infrastructure": "site-infra",
   "third-party-cookie-positive": "third-party-cookie",
   "unresolved-collection-endpoint": "unresolved-page",
@@ -253,6 +291,17 @@ const onePixelGif = Buffer.from(
   "R0lGODlhAQABAPAAAP///wAAACH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==",
   "base64",
 );
+
+const fixturePrivacyPdfNl = createTextPdf([
+  "NOS Privacy Reglement 2026",
+  "In dit Privacy Reglement leest u hoe de organisatie omgaat met uw persoonsgegevens.",
+  "Uw persoonsgegevens worden zorgvuldig en in overeenstemming met de AVG verwerkt.",
+  "Persoonsgegevens worden uitsluitend verwerkt voor het doel waarvoor ze zijn verkregen.",
+  "Wij beschrijven de doeleinden van de verwerking van persoonsgegevens.",
+  "De verwerkingsverantwoordelijke is bereikbaar via privacy@example.test.",
+  "De functionaris voor gegevensbescherming is bereikbaar via dpo@example.test.",
+  "U heeft het recht om klacht in te dienen bij een toezichthoudende autoriteit.",
+].join("\n"));
 
 export async function startStaticFixtureServer(): Promise<StaticFixtureServer> {
   const server = createServer(handleRequest);
@@ -314,9 +363,7 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
   }
 
   if (url.pathname === "/browser-visible-policy-homepage") {
-    const userAgent = request.headers["user-agent"] ?? "";
-    const normalizedUserAgent = Array.isArray(userAgent) ? userAgent.join(" ") : userAgent;
-    if (!normalizedUserAgent || /\bnode\b|\bundici\b/i.test(normalizedUserAgent)) {
+    if (request.headers["sec-fetch-mode"] !== "navigate") {
       response.writeHead(429, { "Content-Type": "text/plain; charset=utf-8" });
       response.end("static fetch blocked");
       return;
@@ -334,9 +381,7 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
   }
 
   if (url.pathname === "/browser-visible-policy-homepage/privacy") {
-    const userAgent = request.headers["user-agent"] ?? "";
-    const normalizedUserAgent = Array.isArray(userAgent) ? userAgent.join(" ") : userAgent;
-    if (!normalizedUserAgent || /\bnode\b|\bundici\b/i.test(normalizedUserAgent)) {
+    if (request.headers["sec-fetch-mode"] !== "navigate") {
       response.writeHead(429, { "Content-Type": "text/plain; charset=utf-8" });
       response.end("policy fetch blocked");
       return;
@@ -356,6 +401,148 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
             <p>You may exercise rights to access, rectification, erasure, restriction, portability, and objection.</p>
             <p>We may transfer personal data outside the European Economic Area using adequacy decisions or standard contractual clauses.</p>
             <p>Our data protection officer can be reached through the privacy office, and you may complain to a supervisory authority.</p>
+          </main>
+        </body>
+      </html>`);
+    return;
+  }
+
+  if (url.pathname === "/browser-timeout-policy-homepage") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+      <html>
+        <head><title>Policy timeout fixture</title></head>
+        <body>
+          <main>Fixture homepage with a policy document that times out for direct fetch.</main>
+          <footer><a href="/browser-timeout-policy-homepage/privacy">Privacy Policy</a></footer>
+        </body>
+      </html>`);
+    return;
+  }
+
+  if (url.pathname === "/browser-timeout-policy-homepage/privacy") {
+    if (request.headers["sec-fetch-mode"] !== "navigate") {
+      const timer = setTimeout(() => {
+        if (!response.destroyed) {
+          response.writeHead(504, { "Content-Type": "text/plain; charset=utf-8" });
+          response.end("policy fetch timed out");
+        }
+      }, 6_000);
+      request.once("close", () => clearTimeout(timer));
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+      <html>
+        <head><title>Privacy Policy</title></head>
+        <body>
+          <main>
+            <h1>Privacy Policy</h1>
+            <p>The controller for this service can be contacted at privacy@example.test.</p>
+            <p>We process personal data to provide services, personalize content, measure performance, and operate customer support.</p>
+            <p>We rely on consent, contract, legal obligation, and legitimate interests as legal bases for processing.</p>
+            <p>Recipients include processors, service providers, analytics providers, advertising partners, and affiliates.</p>
+            <p>We retain personal data only as long as necessary for the purposes described or as required by law.</p>
+            <p>You may exercise rights to access, rectification, erasure, restriction, portability, and objection.</p>
+            <p>We may transfer personal data outside the European Economic Area using standard contractual clauses.</p>
+            <p>Our data protection officer can be reached through the privacy office, and you may complain to a supervisory authority.</p>
+          </main>
+        </body>
+      </html>`);
+    return;
+  }
+
+  if (url.pathname === "/browser-hydrated-policy/privacy") {
+    if (request.headers["sec-fetch-mode"] !== "navigate") {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html>
+        <html lang="de">
+          <head><title>Datenschutzhinweis</title></head>
+          <body><main>Datenschutzhinweis FOCUS online Webseite FOCUS online Subdomains FOCUS online App</main></body>
+        </html>`);
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+      <html lang="de">
+        <head><title>Datenschutzhinweis</title></head>
+        <body>
+          <main>
+            <h1>Datenschutzhinweis</h1>
+            <p>Verantwortlicher für die Datenverarbeitung ist die Fixture GmbH.</p>
+            <p>Wir verarbeiten personenbezogene Daten zur Bereitstellung des Angebots, Analyse und Werbung.</p>
+            <p>Die Rechtsgrundlage für die Verarbeitung personenbezogener Daten umfasst Einwilligung, Vertragserfüllung und berechtigte Interessen.</p>
+            <p>Empfänger personenbezogener Daten sind Dienstleister, die personenbezogene Daten verarbeiten.</p>
+            <p>Sie haben Rechte auf Auskunft, Löschung und Widerspruch.</p>
+          </main>
+        </body>
+      </html>`);
+    return;
+  }
+
+  if (url.pathname === "/metadata-policy/privacy") {
+    const articleBody = [
+      "Datenschutzerklärung. Verantwortlicher für die Datenverarbeitung ist die Fixture Verlag GmbH.",
+      "Unser Datenschutzbeauftragter kann über die Datenschutz Kontaktadresse erreicht werden.",
+      "Wir verarbeiten personenbezogene Daten zur Bereitstellung des Angebots, Analyse und Werbung.",
+      "Die Rechtsgrundlage für die Verarbeitung personenbezogener Daten umfasst Einwilligung, Vertragserfüllung und berechtigte Interessen.",
+      "Empfänger personenbezogener Daten sind Dienstleister, die personenbezogene Daten verarbeiten.",
+      "Wir speichern personenbezogene Daten nur so lange, wie es für die genannten Zwecke erforderlich ist.",
+      "Sie haben Rechte auf Auskunft, Löschung, Berichtigung und Widerspruch gegen die Verarbeitung personenbezogener Daten.",
+      "Personenbezogene Daten können in ein Drittland übermittelt werden, wenn geeignete Garantien bestehen.",
+      "Sie können Beschwerde bei einer Aufsichtsbehörde einlegen.",
+    ].join(" ");
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+      <html lang="de">
+        <head>
+          <title>Datenschutzerklärung</title>
+          <script type="application/ld+json">${JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Article",
+            headline: "Datenschutzerklärung",
+            articleBody,
+          })}</script>
+        </head>
+        <body>
+          <header><svg><text>Logo</text></svg><nav>News Politik Sport Kultur Abo Suche</nav></header>
+          <main><h1>Datenschutzerklärung</h1><p>Diese Seite enthält strukturierte Richtlinieninformationen.</p></main>
+          <footer>Kontakt Impressum Newsletter Werbung</footer>
+        </body>
+      </html>`);
+    return;
+  }
+
+  if (url.pathname === "/rendered-article13-better/privacy") {
+    if (request.headers["sec-fetch-mode"] !== "navigate") {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html>
+        <html lang="fr">
+          <head><title>Politique de confidentialité</title></head>
+          <body>
+            <main>
+              <h1>Politique de confidentialité</h1>
+              <p>Centre de confidentialité. Cette page présente des liens d'aide, les abonnements, les newsletters, les contacts du service client, les paramètres du compte, les offres éditoriales, les espaces lecteurs, les informations commerciales et les rubriques générales du site.</p>
+              <p>La confidentialité est importante pour les lecteurs. Retrouvez également nos applications, nos podcasts, nos conditions de vente, nos pages d'assistance, nos informations de connexion et nos services d'abonnement.</p>
+            </main>
+          </body>
+        </html>`);
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+      <html lang="fr">
+        <head><title>Politique de confidentialité</title></head>
+        <body>
+          <main>
+            <h1>Politique de confidentialité</h1>
+            <p>Le responsable du traitement indique le contact protection des données et le délégué à la protection des données.</p>
+            <p>Nous expliquons les finalités du traitement des données personnelles et la base juridique du traitement des données personnelles.</p>
+            <p>Les catégories de destinataires des données personnelles comprennent les prestataires qui traitent les données personnelles.</p>
+            <p>Nous conservons les données personnelles pendant la durée nécessaire aux finalités décrites dans cette politique.</p>
+            <p>Vous disposez d'un droit d'accès aux données personnelles, de rectification, d'effacement et d'opposition.</p>
+            <p>Les transferts internationaux de données personnelles peuvent être encadrés par des garanties appropriées.</p>
+            <p>Vous pouvez introduire une réclamation auprès d'une autorité de contrôle.</p>
           </main>
         </body>
       </html>`);
@@ -499,6 +686,69 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     return;
   }
 
+  if (url.pathname === "/policies/article13-latin1-es") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=iso-8859-15" });
+    response.end(Buffer.from(`<!doctype html>
+      <html>
+        <head><title>Política de protección de datos personales</title></head>
+        <body>
+          <main>
+            <h1>Política de protección de datos personales</h1>
+            <p>El responsable del tratamiento indica el contacto de protección de datos y el delegado de protección de datos.</p>
+            <p>Explicamos las finalidades del tratamiento de datos personales y la base jurídica del tratamiento de datos personales.</p>
+            <p>Puede presentar una reclamación ante la Agencia Española de Protección de Datos.</p>
+          </main>
+        </body>
+      </html>`, "latin1"));
+    return;
+  }
+
+  if (url.pathname === "/policies/privacy-compact-nl") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+      <html>
+        <head><title>Privacy reglement</title></head>
+        <body>
+          <nav>Nieuws over de organisatie Journalistieke verantwoording Programma’s en platforms Onze mensen Uw vragen en reacties</nav>
+          <main class="privacy-content">
+            <h1>Privacy reglement</h1>
+            <p>In het Privacy Reglement lees je hoe de organisatie omgaat met je persoonsgegevens.</p>
+            <p>Je persoonsgegevens worden zorgvuldig en in overeenstemming met de AVG en andere toepasselijke privacy regelgeving verwerkt.</p>
+            <p>Persoonsgegevens worden uitsluitend verwerkt voor het doel waarvoor ze zijn verkregen.</p>
+          </main>
+        </body>
+      </html>`);
+    return;
+  }
+
+  if (url.pathname === "/datenschutz-shell") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+      <html lang="de">
+        <head><title>Datenschutzhinweis</title></head>
+        <body>
+          <main>
+            <h1>Datenschutzhinweis</h1>
+            <p>FOCUS online Webseite FOCUS online Subdomains FOCUS online App</p>
+            <ul>
+              <li><a href="/static/datenschutzhinweis_fixture.html">Datenschutzhinweis</a></li>
+              <li><a href="/cookie-settings">Datenschutzeinstellungen</a></li>
+            </ul>
+          </main>
+        </body>
+      </html>`);
+    return;
+  }
+
+  if (url.pathname === "/policies/privacy-reglement-nl.pdf") {
+    response.writeHead(200, {
+      "Content-Type": "application/pdf",
+      "Content-Length": String(fixturePrivacyPdfNl.length),
+    });
+    response.end(fixturePrivacyPdfNl);
+    return;
+  }
+
   const policyHtml = policyDocumentHtml(url.pathname);
   if (policyHtml) {
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -511,6 +761,12 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
 }
 
 function serveCase(caseName: StaticFixturePage, response: ServerResponse): void {
+  if (caseName === "security-datadome-challenge") {
+    response.setHeader("Set-Cookie", "datadome=fixture-redacted; Path=/; Max-Age=31536000; SameSite=Lax");
+    response.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(pageHtml(caseName));
+    return;
+  }
   const cookieHeader = cookieForCase(caseName);
   if (cookieHeader) {
     response.setHeader("Set-Cookie", cookieHeader);
@@ -669,6 +925,34 @@ function bodyMarkup(caseName: StaticFixturePage): string {
       <script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>
     `;
   }
+  if (caseName === "security-datadome-challenge") {
+    return `
+      <script>
+        var dd = {
+          rt: "c",
+          host: "geo.captcha-delivery.com",
+          cookie: "fixture-redacted"
+        };
+      </script>
+    `;
+  }
+  if (caseName === "security-access-temporarily-restricted") {
+    return `
+      <section>
+        <h1>Access is temporarily restricted</h1>
+        <p>We detected unusual activity from your device or network.</p>
+        <p>Reasons may include automated activity on your network, JavaScript disabled or not working, or use of developer or inspection tools.</p>
+      </section>
+    `;
+  }
+  if (caseName === "security-polish-temporary-interstitial") {
+    return `
+      <section>
+        <h1>TVN24</h1>
+        <p>Zaraz wracamy</p>
+      </section>
+    `;
+  }
   return "";
 }
 
@@ -707,6 +991,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     postChoiceReopen: caseName === "consent-post-choice-reopen-control",
     preferenceSuccess: caseName === "consent-preference-center-reject-success",
     preferenceToggleSave: caseName === "consent-preference-center-toggle-save",
+    rejectSubscribe: caseName === "consent-reject-subscribe",
     cmpCookie: caseName === "consent-cmp-cookie-persists",
     denyNonEssential: caseName === "consent-deny-non-essential",
     analyticsCategoryControls: caseName === "consent-analytics-category-controls",
@@ -744,6 +1029,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
       </section>
       <div id="banner" role="dialog" aria-label="Cookie consent">
         <p>Wir verwenden Cookies fuer Analyse und Werbung. Vous pouvez gerer vos preferences de cookies.</p>
+        <p tabindex="0">Mit Klick auf den Button akzeptieren Sie diese Vertragsbedingungen. Details in den Datenschutzhinweisen.</p>
         <button id="accept-all" type="button">Alle akzeptieren</button>
         <button id="reject-all" type="button">Tout refuser</button>
         <button id="settings" type="button">Paramètres des cookies</button>
@@ -1054,7 +1340,9 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     `;
   }
   const preferenceOnly = options.preferenceAmbiguous || options.preferenceConfirmSave || options.preferenceSuccess || options.preferenceToggleSave;
-  const rejectLabel = options.denyNonEssential ? "Deny Non-Essential" : "Reject All";
+  const rejectLabel = options.rejectSubscribe
+    ? "Reject all and subscribe"
+    : options.denyNonEssential ? "Deny Non-Essential" : "Reject All";
   const rejectButton = options.noReject || options.ambiguous || options.privacyChoiceOnly || options.acceptEssential || preferenceOnly
     ? ""
     : `<button id="reject-all" type="button">${rejectLabel}</button>`;
@@ -1066,7 +1354,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     : options.ambiguous
     ? `<button id="continue" type="button">Continue</button>`
     : `<button id="accept-all" type="button">Accept All</button>`;
-  const manageButton = options.manage || options.ambiguous || preferenceOnly
+  const manageButton = options.manage || options.ambiguous || preferenceOnly || options.rejectSubscribe
     ? `<button id="settings" type="button">Settings</button>`
     : "";
   const postChoiceFooter = options.postChoiceReopen
@@ -1174,7 +1462,9 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-international-transfer-recipient-safeguards": `<a href="/policies/international-transfer-recipient-safeguards">Privacy Policy</a>`,
     "policy-ambiguous-choices": `<a href="/privacy-choices">Your Choices</a>`,
     "policy-broken-link": `<a href="/policies/missing-privacy">Privacy Policy</a>`,
+    "policy-browser-hydrated-document": `<a href="/browser-hydrated-policy/privacy">Datenschutzhinweis</a>`,
     "policy-canonical-near-privacy-center": `<a href="/privacy-center-shell">Privacy Policy</a>`,
+    "policy-localized-canonical-shell": `<a href="/datenschutz-shell">Datenschutzhinweis</a>`,
     "policy-cookie-link": `<a href="/policies/cookies">Cookie Policy</a>`,
     "policy-do-not-sell-link": `<a href="/do-not-sell-or-share">Do Not Sell or Share My Personal Information</a>`,
     "policy-external-choice-platform": `<a href="/privacy-control/onetrust/choices">Your Privacy Choices</a>`,
@@ -1186,19 +1476,39 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-gold-latimes-secondary-only": `<a href="/gift-subscription-terms">Gift Subscription Terms</a><a href="/subscriber-terms-and-conditions">Subscriber Terms and Conditions</a><a href="/b2b/ai-technology">AI Technology</a>`,
     "policy-gold-nvidia-secondary-only": `<a href="/en-us/ai-data-science/">AI Data Science</a><a href="/en-eu/gtc/pricing/?nvid=fixture">GTC Pricing</a>`,
     "policy-gold-privacy-duplicates": `<a href="/privacy-policy">Privacy Policy</a><a href="/privacy-policy/">Privacy Policy</a>`,
+    "policy-client-challenge": `<a href="/policies/client-challenge">Privacy Policy</a>`,
+    "policy-french-captcha-challenge": `<a href="/policies/french-captcha-challenge">Politique de confidentialité</a>`,
     "policy-footer-privacy": `<a href="/policies/privacy">Privacy Policy</a>`,
     "policy-google-script-noise": `<a href="/policies/google-script-noise">Privacy Policy</a>`,
     "policy-google-script-only": `<a href="/policies/google-script-only">Privacy Policy</a>`,
     "policy-google-like-late-sections": `<a href="/policies/google-like-late-sections">Privacy Policy</a>`,
+    "policy-jsonld-article-body": `<a href="/metadata-policy/privacy">Datenschutzerklärung</a>`,
+    "policy-homepage-external-url-only-policy-links": [
+      `<a href="/policies/privacy">Privacy Policy</a>`,
+      `<main>`,
+      `<p>Partner privacy policies:</p>`,
+      `<a href="https://www.facebook.com/privacy/policy/version/20220104">https://www.facebook.com/privacy/policy/version/20220104</a>`,
+      `<a href="https://fr.linkedin.com/legal/privacy-policy/">https://fr.linkedin.com/legal/privacy-policy/</a>`,
+      `</main>`,
+    ].join(" "),
     "policy-gdpr-transparency-diagnostic-negatives": [
       `<a href="/policies/article13-toc-de">Datenschutzerklärung</a>`,
       `<a href="/policies/article13-nav-fr">Politique de confidentialité</a>`,
       `<a href="/policies/article13-support-pl">Polityka prywatności</a>`,
     ].join(" | "),
+    "policy-gdpr-transparency-encoded-it": `<a href="/policies/article13-encoded-it">Informativa sulla privacy</a>`,
+    "policy-gdpr-transparency-compact-nl": `<a href="/policies/privacy-compact-nl">Privacy reglement</a>`,
+    "policy-gdpr-transparency-latin1-es": `<a href="/policies/article13-latin1-es">Política de privacidad</a>`,
+    "policy-gdpr-transparency-pdf-nl": `<a href="/policies/privacy-reglement-nl.pdf">Privacy reglement PDF</a>`,
     "policy-gpc-disclosure-late": `<a href="/policies/gpc-late">Privacy Policy</a>`,
     "policy-gpc-disclosure": `<a href="/policies/gpc">Privacy Notice</a>`,
     "policy-generic-links": `<a href="/products">Products</a><a href="/about">About us</a>`,
     "policy-link-aria-title": `<a href="/policies/privacy" aria-label="Privacy Policy" title="Privacy Policy"></a>`,
+    "policy-localized-privacy-supplement": [
+      `<a href="/politica-de-privacidad">Política de privacidad</a>`,
+      `<a href="/politica-de-cookies">Política de cookies</a>`,
+      `<a href="/terms">Términos y condiciones</a>`,
+    ].join(" | "),
     "policy-latimes-footer-surfaces": [
       `<a href="/privacy-policy">Privacy Policy</a>`,
       `<a href="/terms">Terms of Service</a>`,
@@ -1227,6 +1537,25 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/policies/pl-cookies">Polityka plików cookie</a>`,
       `<a href="/terms">Terms of Service</a>`,
     ].join(" | "),
+    "policy-late-rendered-pl-privacy-links": [
+      `<span id="late-rendered-privacy-links"></span>`,
+      `<a id="late-hydrated-cookie-policy-link" href="javascript:void">Cookie Policy</a>`,
+      `<script>`,
+      `setTimeout(() => {`,
+      `  const root = document.getElementById("late-rendered-privacy-links");`,
+      `  const privacy = document.createElement("a");`,
+      `  privacy.href = "/policies/privacy";`,
+      `  privacy.textContent = "Polityka Prywatności Gazeta.pl";`,
+      `  root.appendChild(privacy);`,
+      `  document.getElementById("late-hydrated-cookie-policy-link").href = "/policies/cookies";`,
+      `}, 1500);`,
+      `</script>`,
+    ].join(""),
+    "policy-powered-by-attribution": [
+      `<a href="https://www.onetrust.com/products/cookie-consent/">Powered by OneTrust Opens in a new window</a>`,
+      `<a href="/policies/privacy">Privacy Policy</a>`,
+    ].join(" | "),
+    "policy-secondary-third-party-links": `<a href="/policies/privacy-with-third-party-links">Privacy Policy</a>`,
     "policy-neighboring-footer-privacy-noise": [
       `<a href="/contacto/contacte.html">Contacto</a>`,
       `<a href="/accesibilidad.html">Accesibilidad</a>`,
@@ -1246,6 +1575,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,
     "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
+    "policy-rendered-article13-better": `<a href="/rendered-article13-better/privacy">Politique de confidentialité</a>`,
     "policy-privacy-choices-link": `<a href="/privacy-choices">Your Privacy Choices</a>`,
     "policy-static-core-surfaces": [
       `<a href="/policies/privacy">Privacy Policy</a>`,
@@ -1285,9 +1615,17 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Privacy Policy",
       body: "Last updated: May 1, 2026. We use cookies for analytics and advertising. Our service providers include Google Analytics and Meta for measurement and advertising. You may contact privacy@example.test with questions.",
     },
+    "/policies/privacy-with-third-party-links": {
+      title: "Privacy Policy",
+      body: "Last updated: May 1, 2026. We process personal data for analytics and advertising. See our Cookie Policy and partner privacy policies for details.",
+    },
     "/policies/de-datenschutz": {
       title: "Datenschutzerklärung",
       body: "Datenschutzerklärung. Wir verarbeiten personenbezogene Daten, verwenden Cookies für Analyse und Werbung und beantworten Datenschutzanfragen unter privacy@example.test.",
+    },
+    "/static/datenschutzhinweis_fixture.html": {
+      title: "Datenschutzhinweis",
+      body: "Datenschutzhinweis. Verantwortlicher für die Datenverarbeitung ist die Fixture GmbH. Wir verarbeiten personenbezogene Daten für die Bereitstellung des Angebots, Analyse und Werbung. Die Rechtsgrundlage für die Verarbeitung personenbezogener Daten umfasst Einwilligung, Vertragserfüllung und berechtigte Interessen. Empfänger personenbezogener Daten sind Dienstleister, die personenbezogene Daten verarbeiten. Sie haben Rechte auf Auskunft, Löschung und Widerspruch.",
     },
     "/policies/fr-confidentialite": {
       title: "Politique de confidentialité",
@@ -1323,7 +1661,7 @@ function policyDocumentHtml(pathname: string): string | undefined {
     },
     "/policies/article13-de": {
       title: "Datenschutzerklärung",
-      body: "Der Verantwortlicher für die Datenverarbeitung nennt den Kontakt zum Datenschutz und den Datenschutzbeauftragten. Wir erklären die Zwecke der Verarbeitung personenbezogener Daten, die Rechtsgrundlage für die Verarbeitung personenbezogener Daten, Kategorien von Empfängern personenbezogener Daten, die Speicherdauer personenbezogener Daten, das Recht auf Auskunft über personenbezogene Daten, die Übermittlung personenbezogener Daten in ein Drittland, das Recht auf Beschwerde bei einer Aufsichtsbehörde und automatisierte Entscheidungsfindung mit personenbezogenen Daten.",
+      body: "Der Verantwortlicher für die Datenverarbeitung nennt den Kontakt zum Datenschutz und den Kontakt zum Datenschutzbeauftragten. Wir erklären die Zwecke der Verarbeitung personenbezogener Daten, die Rechtsgrundlage für die Verarbeitung personenbezogener Daten, Kategorien von Empfängern personenbezogener Daten, die Speicherdauer personenbezogener Daten, das Recht auf Auskunft über personenbezogene Daten, die Übermittlung personenbezogener Daten in ein Drittland, das Recht auf Beschwerde bei einer Aufsichtsbehörde und automatisierte Entscheidungsfindung mit personenbezogenen Daten.",
     },
     "/policies/article13-fr": {
       title: "Politique de confidentialité",
@@ -1337,9 +1675,30 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Informativa sulla privacy",
       body: "Il titolare del trattamento indica il contatto protezione dati e il responsabile della protezione dei dati. Spieghiamo le finalità del trattamento dei dati personali, la base giuridica del trattamento dei dati personali, le categorie di destinatari dei dati personali, il periodo di conservazione dei dati personali, il diritto di accesso ai dati personali, i trasferimenti internazionali di dati personali, il diritto di proporre reclamo all'autorità di controllo e decisioni automatizzate con dati personali.",
     },
+    "/policies/article13-encoded-it": {
+      title: "Informativa sulla privacy",
+      body: [
+        "RCS MediaGroup S.p.A. e CairoRCS Media S.p.A. sono autonomi Titolari del trattamento dei dati personali raccolti su questo sito.",
+        "Conformemente all'impegno dei Titolari, ti informiamo sulle modalit&agrave;, finalit&agrave; e ambito di comunicazione dei tuoi dati personali.",
+        "RCS tratta i tuoi dati per le seguenti finalit&agrave;, supportate dalle relative basi giuridiche.",
+        "L'elenco aggiornato dei soggetti che sono stati destinatari dei tuoi dati pu&ograve; essere richiesto al Titolare del trattamento.",
+        "Per approfondire consulta https://site.adform.com/privacy-center/platform-privacy/product-and-services-privacy-policy/.",
+        "Ulteriori indicazioni sono disponibili all'indirizzo: https://priv-policy.imrworldwide.com/priv/browser/it/it/optout.html#choices.",
+      ].join(" "),
+    },
     "/policies/article13-nl": {
       title: "Privacybeleid",
       body: "De verwerkingsverantwoordelijke noemt het contact gegevensbescherming en de functionaris voor gegevensbescherming. Wij beschrijven de doeleinden van de verwerking van persoonsgegevens, de rechtsgrondslag voor de verwerking van persoonsgegevens, categorieën van ontvangers van persoonsgegevens, de bewaartermijn van persoonsgegevens, het recht op inzage in persoonsgegevens, internationale doorgiften van persoonsgegevens, het recht om klacht in te dienen bij een toezichthoudende autoriteit en geautomatiseerde besluitvorming met persoonsgegevens.",
+    },
+    "/policies/privacy-compact-nl": {
+      title: "Privacy reglement",
+      body: [
+        "<nav>Nieuws over de organisatie Journalistieke verantwoording Programma’s en platforms Onze mensen Uw vragen en reacties</nav>",
+        "<main><h1>Privacy reglement</h1>",
+        "<p>In het Privacy Reglement lees je hoe de organisatie omgaat met je persoonsgegevens.</p>",
+        "<p>Je persoonsgegevens worden zorgvuldig en in overeenstemming met de AVG en andere toepasselijke privacy regelgeving verwerkt.</p>",
+        "<p>Persoonsgegevens worden uitsluitend verwerkt voor het doel waarvoor ze zijn verkregen.</p></main>",
+      ].join(" "),
     },
     "/policies/article13-pl": {
       title: "Polityka prywatności",
@@ -1423,6 +1782,14 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Privacy Policy",
       body: ";this.gbar_={CONFIG:[[[0,\"www.gstatic.com\",null,\"0\",null,null,0],[]]]};_.z=function(a,b){Object.defineProperties(a,b)};var c=function(){return {privacy:true, rights:Object.keys({access:1})}}; Copyright The Closure Library;",
     },
+    "/policies/client-challenge": {
+      title: "Client Challenge",
+      body: "Client Challenge A required part of this site couldn’t load. This may be due to a browser extension, network issues, or browser settings. Please check your connection, disable any ad blockers, or try using a different browser.",
+    },
+    "/policies/french-captcha-challenge": {
+      title: "Politique de confidentialité",
+      body: "Entrez les caractères affichés dans l'image ci-dessous : Télécharger le CAPTCHA audio Réponse Soumettre",
+    },
     "/policies/google-like-late-sections": {
       title: "Privacy Policy",
       body: [
@@ -1469,9 +1836,37 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Privacy Notice",
       body: "Caltech Privacy Notice. We describe the personal information we collect, the purposes for processing, cookies, analytics, and privacy contact information.",
     },
+    "/datenschutz": {
+      title: "Datenschutzerklärung",
+      body: "Datenschutzerklärung. Wir beschreiben die Verarbeitung personenbezogener Daten, Zwecke, Rechtsgrundlagen, Empfänger, Speicherdauer und Datenschutzrechte.",
+    },
+    "/politique-de-confidentialite": {
+      title: "Politique de confidentialité",
+      body: "Politique de confidentialité. Nous décrivons le traitement des données personnelles, les finalités, la base juridique, les destinataires, la durée de conservation et vos droits.",
+    },
+    "/informativa-privacy": {
+      title: "Informativa sulla privacy",
+      body: "Informativa sulla privacy. Descriviamo il trattamento dei dati personali, le finalità, la base giuridica, i destinatari, la conservazione e i diritti dell'interessato.",
+    },
+    "/privacybeleid": {
+      title: "Privacybeleid",
+      body: "Privacybeleid. Wij beschrijven de verwerking van persoonsgegevens, doeleinden, rechtsgrondslag, ontvangers, bewaartermijnen en uw rechten.",
+    },
+    "/polityka-prywatnosci": {
+      title: "Polityka prywatności",
+      body: "Polityka prywatności. Opisujemy przetwarzanie danych osobowych, cele, podstawę prawną, odbiorców, okres przechowywania i prawa osób, których dane dotyczą.",
+    },
     "/help/privacy": {
       title: "Privacy Policy",
       body: "Ford Privacy Policy. We explain how we collect, use, disclose, and retain personal information. We use cookies and analytics, and privacy choices are available.",
+    },
+    "/legal/privacy-cookie-statement": {
+      title: "Privacy and Cookie Statement",
+      body: "IKEA Privacy and Cookie Statement. We use cookies, analytics, advertising identifiers, and similar technologies. Cookie settings and privacy choices are available.",
+    },
+    "/legal/privacy-cookie-statement/": {
+      title: "Privacy and Cookie Statement",
+      body: "IKEA Privacy and Cookie Statement. We use cookies, analytics, advertising identifiers, and similar technologies. Cookie settings and privacy choices are available.",
     },
     "/global/en/legal/privacy-cookie-statement": {
       title: "Privacy and Cookie Statement",
@@ -1660,6 +2055,24 @@ function policyDocumentHtml(pathname: string): string | undefined {
   const doc = docs[pathname];
   if (!doc) {
     return undefined;
+  }
+  if (pathname === "/policies/privacy-with-third-party-links") {
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(doc.title)}</title>
+  </head>
+  <body>
+    <main>
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+      <p><a href="/policies/cookies">Cookie Policy</a></p>
+      <p><a href="https://www.facebook.com/privacy/policy/">Facebook Privacy Policy</a></p>
+      <p><a href="https://www.linkedin.com/legal/privacy-policy">LinkedIn Privacy Policy</a></p>
+    </main>
+  </body>
+</html>`;
   }
   if (pathname === "/policies/onetrust-shell") {
     return `<!doctype html>
@@ -1850,6 +2263,61 @@ function policyDocumentHtml(pathname: string): string | undefined {
     </main>
   </body>
 </html>`;
+}
+
+function createTextPdf(text: string): Buffer {
+  const lines = text.split(/\r?\n/).flatMap((line) => chunkPdfLine(line, 88));
+  const stream = [
+    "BT",
+    "/F1 10 Tf",
+    "14 TL",
+    "72 720 Td",
+    ...lines.map((line, index) => `${index === 0 ? "" : "T* "}${pdfString(line)} Tj`),
+    "ET",
+  ].join("\n");
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${Buffer.byteLength(stream, "latin1")} >>\nstream\n${stream}\nendstream`,
+  ];
+  let body = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(body, "latin1"));
+    body += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  }
+  const xrefOffset = Buffer.byteLength(body, "latin1");
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) {
+    body += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  }
+  body += `trailer\n<< /Root 1 0 R /Size ${objects.length + 1} >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return Buffer.from(body, "latin1");
+}
+
+function chunkPdfLine(value: string, maxLength: number): string[] {
+  const words = value.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxLength && current) {
+      chunks.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) {
+    chunks.push(current);
+  }
+  return chunks.length > 0 ? chunks : [""];
+}
+
+function pdfString(value: string): string {
+  return `(${value.replace(/[\\()]/g, "\\$&")})`;
 }
 
 function closeServer(server: Server): Promise<void> {

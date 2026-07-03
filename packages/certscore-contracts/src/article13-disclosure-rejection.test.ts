@@ -77,4 +77,68 @@ test("Article 13 rejection contract preserves accepted legacy and multilingual e
     ),
     true,
   );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "Die Datenschutz-Grundverordnung verpflichtet uns, über personenbezogene Datenverarbeitung zu informieren. Sie sollen wissen, welche Zwecke wir verfolgen.",
+      "processing_purposes",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "Beim Aufruf der Website werden personenbezogene Daten verarbeitet. Verantwortlich für die Datenverarbeitung ist die Zeitverlag Gerd Bucerius GmbH & Co. KG.",
+      "controller_contact",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "Die Datenschutz-Grundverordnung verpflichtet uns, über die Verarbeitung zu informieren, etwa wie lange Ihre Informationen gespeichert werden.",
+      "data_retention",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "RCS e CRM sono autonomi Titolari del trattamento dei dati personali raccolti su questo sito ai sensi del GDPR.",
+      "controller_contact",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "Il titolare del trattamento dei suoi dati personali può essere contattato all'indirizzo privacy@example.test.",
+      "controller_contact",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "RCS tratta i tuoi dati per le seguenti finalità, supportate dalle relative basi giuridiche.",
+      "processing_purposes",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "L'elenco aggiornato dei soggetti che sono stati destinatari dei tuoi dati può essere richiesto al Titolare del trattamento.",
+      "recipients_or_vendor_categories",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "In bepaalde omstandigheden heeft u het recht om bezwaar te maken tegen het verwerken van uw persoonsgegevens door ons.",
+      "data_subject_rights",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
 });

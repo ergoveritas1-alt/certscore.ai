@@ -1139,6 +1139,80 @@ test("summarizePolicySurfaces supplements Article 13 signals only from opt-in ac
   });
 });
 
+test("summarizePolicySurfaces uses multilingual policy quality only for opt-in GDPR Transparency candidates", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const dpoEvidence = "satisfacción en el ejercicio de sus derechos ante los responsables de los Datos Personales, puede contactar con nuestro Delegado de Protección de datos a través del mail dpo@example.test";
+  const authorityEvidence = "los Datos Personales, puede contactar con nuestro Delegado de Protección de datos y/o presentar una reclamación ante la Agencia Española de Protección de Datos a través de su página web";
+  const spanishPolicyText = [
+    "Navidad Niños Recetas de cocina Información General Política de cookies Configuración de cookies.",
+    "Esta política de privacidad describe el tratamiento de datos personales de los usuarios.",
+    "El responsable explica los derechos de acceso, rectificación, supresión y oposición sobre sus datos personales.",
+    "Si no obtiene satisfacción en el ejercicio de sus derechos ante los responsables de los Datos Personales,",
+    dpoEvidence,
+    "y/o",
+    authorityEvidence,
+    "También se informa sobre la protección de datos, la base jurídica del tratamiento y otros derechos de privacidad."
+  ].join(" ");
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "spanish-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacidad/",
+      normalizedUrl: "https://example.test/privacidad/",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: spanishPolicyText,
+      observedTopics: [],
+      gdprTransparencyTopicCandidates: [
+        {
+          topic: "dpo_contact",
+          status: "diagnostic_only",
+          evidenceText: dpoEvidence,
+          confidence: 0.9,
+          classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+          matchedLocale: "es",
+          matchedTerm: "delegado de protección de datos",
+          matchStrength: "direct",
+          classifierReasonCodes: ["matched_dpo_contact"],
+          productionCredit: false
+        },
+        {
+          topic: "supervisory_authority",
+          status: "diagnostic_only",
+          evidenceText: authorityEvidence,
+          confidence: 0.9,
+          classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+          matchedLocale: "es",
+          matchedTerm: "presentar una reclamación ante la agencia española de protección de datos",
+          matchStrength: "direct",
+          classifierReasonCodes: ["matched_supervisory_authority"],
+          productionCredit: false
+        }
+      ]
+    }
+  ] as never, "https://example.test/");
+
+  const defaultSummary = summarizePolicySurfaces(surfaces, "example.test");
+  assert.equal(defaultSummary.gdprTransparencyEvidenceProfile, "legacy_only");
+  assert.equal(defaultSummary.gdprTransparencyProductionEvidenceEnabled, false);
+  assert.deepEqual(defaultSummary.article13DisclosureSignals, []);
+
+  const optInSummary = summarizePolicySurfaces(surfaces, "example.test", {
+    gdprTransparencyEvidenceProfile: "gdpr_transparency_multilingual_article13_v1"
+  });
+
+  assert.equal(optInSummary.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
+  assert.equal(optInSummary.gdprTransparencyProductionEvidenceEnabled, true);
+  assert.deepEqual(optInSummary.article13DisclosureTypesObserved, ["dpo_contact", "supervisory_authority"]);
+  assert.equal(optInSummary.article13DisclosureSignals.length, 2);
+  const optInSignals = optInSummary.article13DisclosureSignals as Array<Record<string, unknown>>;
+  assert.equal(optInSignals.every((signal) =>
+    signal.productionCredit === true &&
+    signal.productionCreditProfile === "gdpr_transparency_multilingual_article13_v1" &&
+    signal.matchedLocale === "es"
+  ), true);
+});
+
 test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile metadata from scan config", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -2009,6 +2083,136 @@ test("materializeLocalV2DagScanDetail prefers pre-consent geometry proof screens
     assert.equal(firstLayerChoices?.rejectControlObserved, true);
     assert.equal(firstLayerChoices?.managePreferencesControlObserved, true);
     assert.deepEqual(firstLayerChoices?.preferenceLabels, ["Set up the collection of your data"]);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail does not count reject-and-subscribe geometry labels as reject availability", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/consent-reject-subscribe-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-29T13:42:59.000Z",
+      consentUiObservations: [],
+      cookieEvents: [],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: true,
+        journeySummary: { journeyCount: 0 },
+        preConsentTrackingObserved: false,
+        sessionReplayOrBehavioralAnalyticsObserved: false,
+        thirdPartyCookiesPreConsentObserved: false,
+        thirdPartyVendorsObserved: false
+      },
+      modulesRun: [],
+      networkEvents: [],
+      normalizedUrl: "https://example.test/",
+      policySurfaceObservations: [],
+      runtimeTimeline: [],
+      scanId: "consent-reject-subscribe-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [],
+      startedAt: "2026-06-29T13:42:39.000Z",
+      url: "https://example.test/"
+    }, null, 2)}\n`, "utf8");
+    await writeFile(path.join(outDir, "ConsentControlGeometryEvidence.json"), `${JSON.stringify({
+      artifactVersion: "consent_control_geometry.v1",
+      candidates: [
+        {
+          actionType: "accept_all",
+          boundingBox: { x: 691, y: 631, width: 256, height: 44, top: 631, right: 947, bottom: 675, left: 691 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Accept all",
+          layer: "first_layer",
+          selectorHint: "button.accept-all",
+          tagName: "button"
+        },
+        {
+          actionType: "manage_preferences",
+          boundingBox: { x: 419, y: 631, width: 256, height: 44, top: 631, right: 675, bottom: 675, left: 419 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Cookie settings",
+          layer: "first_layer",
+          selectorHint: "button.settings",
+          tagName: "button"
+        },
+        {
+          actionType: "reject_all",
+          boundingBox: { x: 419, y: 691, width: 528, height: 44, top: 691, right: 947, bottom: 735, left: 419 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Reject all and subscribe",
+          layer: "first_layer",
+          selectorHint: "button.reject-subscribe",
+          tagName: "button"
+        }
+      ],
+      cmp: { detected: true, name: "Consentmanager", confidence: 0.89, reasonCodes: [], matchedSignals: [], detections: [] },
+      containers: [
+        {
+          layer: "first_layer",
+          textExcerpt: "We use cookies and process personal data for advertising purposes. Cookie settings. Accept all. Reject all and subscribe."
+        }
+      ],
+      pageUrl: "https://example.test/",
+      sourceScanner: "consent_control_geometry_diagnostic",
+      summary: {
+        cmpDetected: true,
+        cmpName: "Consentmanager",
+        confidence: 0.89,
+        firstLayerAccept: true,
+        firstLayerOptions: true,
+        firstLayerReject: false,
+        limitations: []
+      }
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        id: "2b56a6bc-ef9a-4b42-98af-56f1a395b612",
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const firstLayerChoices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown> | undefined;
+    const rejectPath = detail.runtimeArtifacts?.rejectPathDepthAndAvailability as Record<string, unknown> | undefined;
+    assert.equal(firstLayerChoices?.acceptControlObserved, true);
+    assert.equal(firstLayerChoices?.managePreferencesControlObserved, true);
+    assert.equal(firstLayerChoices?.rejectControlObserved, false);
+    assert.deepEqual(firstLayerChoices?.rejectLabels, []);
+    assert.equal(
+      (firstLayerChoices?.visibleChoiceLabels as string[] | undefined)?.some((label) => /subscribe/i.test(label)),
+      false,
+    );
+    assert.equal(rejectPath?.rejectControlObserved, false);
+    assert.equal(rejectPath?.rejectAvailableOnFirstLayer, false);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

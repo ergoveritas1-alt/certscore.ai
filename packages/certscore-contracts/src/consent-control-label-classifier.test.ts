@@ -69,6 +69,16 @@ test("classifies observed English options labels", () => {
   const reversedSubscribeReject = classifyConsentControlLabel({ label: "Subscribe and decline" });
   assert.equal(reversedSubscribeReject.intent, "reject");
   assert.equal(reversedSubscribeReject.variant, "reject_with_subscription");
+  const rejectAllSubscribe = classifyConsentControlLabel({ label: "Reject all and subscribe" });
+  assert.equal(rejectAllSubscribe.intent, "reject");
+  assert.equal(rejectAllSubscribe.variant, "reject_with_subscription");
+  assert.equal(rejectAllSubscribe.matchedTerm, "reject all and subscribe");
+  const guardianSubscribeReject = classifyConsentControlLabel({
+    label: "Reject all and subscribe to Guardian Ad-Lite for €5 per month",
+  });
+  assert.equal(guardianSubscribeReject.intent, "reject");
+  assert.equal(guardianSubscribeReject.variant, "reject_with_subscription");
+  assert.equal(guardianSubscribeReject.matchedTerm, "reject all and subscribe");
   assert.equal(classifyConsentControlLabel({
     label: "Customise",
     contextText: "We use cookies and partners for personalised advertising.",
@@ -92,6 +102,9 @@ test("classifies observed Spanish and Italian consent labels", () => {
     label: "Configurar",
     contextText: "Usamos cookies para publicidad y medicion.",
   }).intent, "options");
+  const frenchConsentOptions = classifyConsentControlLabel({ label: "Gérer mes consentements" });
+  assert.equal(frenchConsentOptions.intent, "options");
+  assert.equal(frenchConsentOptions.matchedLocale, "fr");
 
   assert.equal(classifyConsentControlLabel({ label: "Accetta" }).matchedLocale, "it");
   assert.equal(classifyConsentControlLabel({ label: "Accetto" }).intent, "accept");
@@ -130,6 +143,7 @@ test("classifies canonical consent controls across supported privacy evidence lo
     { label: "Configuración de cookies", locale: "es", intent: "options" },
     { label: "Impostazioni cookie", locale: "it", intent: "options" },
     { label: "Cookie-instellingen", locale: "nl", intent: "options" },
+    { label: "Privacy-instellingen", locale: "nl", intent: "options" },
     { label: "Ustawienia plików cookie", locale: "pl", intent: "options" },
   ] as const;
 
@@ -150,9 +164,11 @@ test("keeps Dutch and Polish labels outside default production classifier profil
     "Alles accepteren",
     "Alles weigeren",
     "Cookie-instellingen",
+    "Privacy-instellingen",
     "Akceptuj wszystko",
     "Odrzuć wszystko",
     "Ustawienia plików cookie",
+    "Przejdź do serwisu",
   ]) {
     const classification = classifyConsentControlLabel({ label });
     assert.equal(classification.intent, "unknown", label);
@@ -178,10 +194,44 @@ test("keeps Dutch and Polish context hints outside default production classifier
 
   const multilingualPolish = classifyConsentControlLabel({
     label: "Settings",
-    contextText: "Prosimy o zgodę na preferencje i ustawienia.",
+    contextText: "Prosimy o zgodę na pliki cookie, preferencje i ustawienia.",
     classifierProfile: "multilingual_v1",
   });
   assert.equal(multilingualPolish.intent, "options");
+});
+
+test("does not let generic Dutch or Polish settings labels satisfy multilingual consent context", () => {
+  const genericDutch = classifyConsentControlLabel({
+    label: "Instellingen",
+    contextText: "Zoeken Instellingen Teletekst NPO Start",
+    classifierProfile: "multilingual_v1",
+  });
+  assert.equal(genericDutch.intent, "unknown");
+  assert.equal(genericDutch.contextSatisfied, false);
+
+  const genericPolish = classifyConsentControlLabel({
+    label: "USTAWIENIA ZAAWANSOWANE",
+    contextText: "Menu Program TV Poczta Konto Ustawienia",
+    classifierProfile: "multilingual_v1",
+  });
+  assert.equal(genericPolish.intent, "unknown");
+  assert.equal(genericPolish.contextSatisfied, false);
+
+  const consentDutch = classifyConsentControlLabel({
+    label: "Instellingen",
+    contextText: "Wij vragen toestemming voor cookies en privacy voorkeuren.",
+    classifierProfile: "multilingual_v1",
+  });
+  assert.equal(consentDutch.intent, "options");
+  assert.equal(consentDutch.contextSatisfied, true);
+
+  const consentPolish = classifyConsentControlLabel({
+    label: "USTAWIENIA ZAAWANSOWANE",
+    contextText: "Dbamy o prywatność i używamy plików cookie za zgodą użytkownika.",
+    classifierProfile: "multilingual_v1",
+  });
+  assert.equal(consentPolish.intent, "options");
+  assert.equal(consentPolish.contextSatisfied, true);
 });
 
 test("keeps Dutch and Polish preference context outside default production classifier profile", () => {
@@ -233,6 +283,31 @@ test("requires multilingual profile rather than locale hints alone for Dutch and
   assert.equal(dutchWithProfile.matchedLocale, "nl");
 });
 
+test("classifies contextual Polish continue-to-service consent labels only with multilingual profile", () => {
+  const contextText = "Klikając Przejdź do serwisu udzielasz zgody na przetwarzanie danych osobowych i pliki cookie.";
+
+  assert.equal(classifyConsentControlLabel({
+    label: "Przejdź do serwisu",
+    contextText,
+  }).intent, "unknown");
+
+  assert.equal(classifyConsentControlLabel({
+    label: "Przejdź do serwisu",
+    classifierProfile: "multilingual_v1",
+  }).intent, "unknown");
+
+  const classification = classifyConsentControlLabel({
+    label: "Przejdź do serwisu",
+    contextText,
+    classifierProfile: "multilingual_v1",
+  });
+
+  assert.equal(classification.intent, "accept");
+  assert.equal(classification.matchedLocale, "pl");
+  assert.equal(classification.matchStrength, "contextual");
+  assert.equal(classification.contextSatisfied, true);
+});
+
 test("keeps Dutch and Polish privacy opt-out controls distinct from reject with multilingual profile", () => {
   for (const label of [
     "Bezwaar tegen gerechtvaardigd belang",
@@ -247,11 +322,40 @@ test("keeps Dutch and Polish privacy opt-out controls distinct from reject with 
   }
 });
 
+test("keeps Utiq-scoped refusal distinct from GDPR/ePrivacy reject", () => {
+  const utiqReject = classifyConsentControlLabel({
+    label: "für Utiq jetzt ablehnen",
+    contextText: "Datenschutz und Nutzungserlebnis. Mit Tracking und Cookies nutzen.",
+  });
+
+  assert.equal(utiqReject.intent, "privacy_opt_out");
+  assert.equal(utiqReject.variant, "vendor_specific_opt_out");
+  assert.notEqual(utiqReject.intent, "reject");
+
+  const broadReject = classifyConsentControlLabel({
+    label: "Alle ablehnen",
+    contextText: "Utiq wird im Datenschutzhinweis erwähnt. Wir verwenden Cookies.",
+  });
+  assert.equal(broadReject.intent, "reject");
+});
+
 test("classifies observed French reject-all cookie labels", () => {
   const classification = classifyConsentControlLabel({ label: "Refuser tous les cookies" });
   assert.equal(classification.intent, "reject");
   assert.equal(classification.matchStrength, "direct");
   assert.equal(classification.matchedLocale, "fr");
+
+  const subscriptionReject = classifyConsentControlLabel({ label: "Refuser et s'abonner" });
+  assert.equal(subscriptionReject.intent, "reject");
+  assert.equal(subscriptionReject.variant, "reject_with_subscription");
+  assert.equal(subscriptionReject.matchedTerm, "refuser et s'abonner");
+
+  const compositeSubscriptionChoice = classifyConsentControlLabel({
+    label: "Accepter les cookies ou Refuser et s'abonner",
+  });
+  assert.equal(compositeSubscriptionChoice.intent, "reject");
+  assert.equal(compositeSubscriptionChoice.variant, "reject_with_subscription");
+  assert.equal(compositeSubscriptionChoice.matchedTerm, "refuser et s'abonner");
 });
 
 test("classifies necessary-only labels as reject-equivalent", () => {

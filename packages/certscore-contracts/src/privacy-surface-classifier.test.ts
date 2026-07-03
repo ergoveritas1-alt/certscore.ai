@@ -14,6 +14,7 @@ test("classifies canonical privacy-policy surfaces across supported locales", ()
     ["Política de privacidad", "es"],
     ["Informativa sulla privacy", "it"],
     ["Privacybeleid", "nl"],
+    ["Privacy reglement", "nl"],
     ["Polityka prywatności", "pl"],
   ] as const;
 
@@ -23,6 +24,18 @@ test("classifies canonical privacy-policy surfaces across supported locales", ()
     assert.equal(classification.matchedLocale, locale, linkText);
     assert.equal(classification.reasonCodes.includes("matched_privacy_policy"), true, linkText);
   }
+});
+
+test("classifies Dutch privacy-reglement document links without visible anchor text", () => {
+  const classification = classifyPrivacySurface({
+    linkText: "https://over.example.test/wp-content/uploads/2026/03/NOS-Privacy-Reglement-Maart-2026.pdf",
+    url: "https://over.example.test/wp-content/uploads/2026/03/NOS-Privacy-Reglement-Maart-2026.pdf",
+    surroundingText: "Klik op het document hieronder om het te openen en te downloaden. Privacy reglement persoonsgegevens AVG.",
+  });
+
+  assert.equal(classification.surfaceType, "privacy_policy");
+  assert.equal(classification.reasonCodes.includes("matched_privacy_policy"), true);
+  assert.equal(classification.reasonCodes.includes("matched_url_pattern"), true);
 });
 
 test("classifies canonical cookie-policy and cookie-settings surfaces across supported locales", () => {
@@ -50,8 +63,19 @@ test("classifies canonical cookie-policy and cookie-settings surfaces across sup
   }
 });
 
+test("does not classify generic single-word cookie notification labels as policy surfaces", () => {
+  const classification = classifyPrivacySurface({
+    linkText: "Ga naar cookie melding",
+    url: "https://nos.nl/",
+  });
+
+  assert.equal(classification.surfaceType, "unknown");
+  assert.equal(classification.matchedLocale, undefined);
+});
+
 test("classifies canonical terms surfaces across supported locales", () => {
   const examples = [
+    ["Terms", "en"],
     ["Terms of service", "en"],
     ["Nutzungsbedingungen", "de"],
     ["Conditions d'utilisation", "fr"],
@@ -65,6 +89,15 @@ test("classifies canonical terms surfaces across supported locales", () => {
     const classification = classifyPrivacySurface({ linkText });
     assert.equal(classification.surfaceType, "terms", linkText);
     assert.equal(classification.matchedLocale, locale, linkText);
+  }
+});
+
+test("classifies canonical AI disclosure surfaces", () => {
+  for (const linkText of ["AI disclosure", "AI disclosures"]) {
+    const classification = classifyPrivacySurface({ linkText });
+    assert.equal(classification.surfaceType, "ai_disclosure", linkText);
+    assert.equal(classification.matchedLocale, "en", linkText);
+    assert.equal(classification.matchStrength, "direct", linkText);
   }
 });
 

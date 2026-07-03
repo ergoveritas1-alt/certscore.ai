@@ -96,6 +96,7 @@ const SAMPLE_SCAN_ACCENTS: Record<string, { accent: string; label: string; tone:
   "nbcnews.com": { accent: "bg-violet-400", label: "Media", tone: "from-violet-500/20 to-fuchsia-400/5" },
   "nvidia.com": { accent: "bg-emerald-400", label: "Enterprise", tone: "from-emerald-500/20 to-lime-400/5" }
 };
+const LOCALHOST_FULL_SCAN_QUEUE_ENABLED = process.env.NEXT_PUBLIC_CERTSCORE_LOCALHOST_FULL_SCAN_QUEUE_ENABLED === "true";
 
 function getSampleScanAccent(domain: string) {
   return SAMPLE_SCAN_ACCENTS[domain.toLowerCase()] ?? { accent: "bg-slate-400", label: "Sample", tone: "from-slate-500/20 to-slate-400/5" };
@@ -304,6 +305,12 @@ export function DomainScanForm({
     }
   }, [allowLocalExtensionScan, allowRestrictedScanOptions, defaultScanFrom, scanFrom]);
 
+  useEffect(() => {
+    if (LOCALHOST_FULL_SCAN_QUEUE_ENABLED && !allowRestrictedScanOptions) {
+      setLocalV2RunViaLambda(false);
+    }
+  }, [allowRestrictedScanOptions]);
+
   function resetValidationState() {
     setErrorMessage(null);
     if (!isSubmittingRef.current) {
@@ -437,7 +444,10 @@ export function DomainScanForm({
           domain: submittedDomain,
           forceNewScan: mode === "full" ? freshRescan : false,
           localV2ScanProfile,
-          localV2RunViaLambda: allowRestrictedScanOptions ? localV2RunViaLambda : true,
+          localV2RunViaLambda:
+            allowRestrictedScanOptions || LOCALHOST_FULL_SCAN_QUEUE_ENABLED
+              ? localV2RunViaLambda
+              : true,
           scanFrom: (allowRestrictedScanOptions || scanFrom !== "eu_de" ? scanFrom : "eu_ie") as ServerScanFrom
         }),
         headers: {

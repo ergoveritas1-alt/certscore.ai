@@ -101,6 +101,32 @@ test("checklist consumes approved multilingual GDPR Transparency Article 13 cove
   );
 });
 
+test("checklist keeps automated multilingual GDPR Transparency Article 13 evidence as review-only", () => {
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns: makeChecklistGdprTransparencyConcerns("automated_decision_making_or_profiling"),
+    runtimeArtifacts: {},
+    scanCompleted: true,
+    snapshot: {}
+  });
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+  const automated = byId(items, "automated_decision_making_profiling_disclosure");
+
+  assert.equal(automated.status, "Review signal");
+  assert.equal(automated.assessmentStatus, "review_signal");
+  assert.equal(automated.criticalEvidence.projectedFindings.length, 0);
+  assert.equal(
+    automated.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern !== undefined,
+    true
+  );
+});
+
 function makeCoverageOutcome(
   outcome: Omit<GdprEprivacyCoverageOutcome, "criticalEvidence"> & {
     retainedEvidence?: Record<string, unknown>;

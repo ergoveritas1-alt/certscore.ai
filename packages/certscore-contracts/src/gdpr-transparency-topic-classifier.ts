@@ -101,19 +101,24 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
   ]),
   ...de([
     direct("controller_contact", "verantwortlicher für die datenverarbeitung"),
+    direct("controller_contact", "verantwortlich für die datenverarbeitung"),
     direct("controller_contact", "kontakt zum verantwortlichen für datenschutz"),
     equivalent("controller_contact", "datenschutz kontakt"),
     equivalent("controller_contact", "kontakt zum datenschutz"),
-    direct("dpo_contact", "datenschutzbeauftragter"),
-    direct("dpo_contact", "datenschutzbeauftragten"),
+    equivalent("dpo_contact", "unser datenschutzbeauftragter"),
+    equivalent("dpo_contact", "datenschutzbeauftragten erreichen"),
+    equivalent("dpo_contact", "kontakt zum datenschutzbeauftragten"),
     direct("processing_purposes", "zwecke der verarbeitung personenbezogener daten"),
-    equivalent("processing_purposes", "personenbezogene daten verarbeiten"),
+    equivalent("processing_purposes", "welche zwecke wir verfolgen"),
     direct("legal_basis", "rechtsgrundlage für die verarbeitung personenbezogener daten"),
+    direct("legal_basis", "auf welcher rechtsgrundlage die verarbeitung basiert"),
     equivalent("legal_basis", "berechtigte interessen für die verarbeitung personenbezogener daten"),
     direct("recipients_or_vendor_categories", "empfänger personenbezogener daten"),
+    equivalent("recipients_or_vendor_categories", "welche empfänger von daten es geben kann"),
     equivalent("recipients_or_vendor_categories", "kategorien von empfängern personenbezogener daten"),
     equivalent("recipients_or_vendor_categories", "dienstleister die personenbezogene daten verarbeiten"),
     direct("data_retention", "speicherdauer personenbezogener daten"),
+    equivalent("data_retention", "wie lange ihre informationen gespeichert werden"),
     equivalent("data_retention", "solange dies für die verarbeitung erforderlich ist"),
     direct("data_subject_rights", "recht auf auskunft über personenbezogene daten"),
     equivalent("data_subject_rights", "recht auf löschung personenbezogener daten"),
@@ -132,7 +137,6 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("dpo_contact", "délégué à la protection des données"),
     equivalent("dpo_contact", "contact dpo"),
     direct("processing_purposes", "finalités du traitement des données personnelles"),
-    equivalent("processing_purposes", "traitons vos données personnelles"),
     direct("legal_basis", "base juridique du traitement des données personnelles"),
     equivalent("legal_basis", "intérêt légitime pour traiter les données personnelles"),
     direct("recipients_or_vendor_categories", "destinataires des données personnelles"),
@@ -157,7 +161,6 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("dpo_contact", "delegado de protección de datos"),
     equivalent("dpo_contact", "contacto dpo"),
     direct("processing_purposes", "finalidades del tratamiento de datos personales"),
-    equivalent("processing_purposes", "tratamos datos personales"),
     direct("legal_basis", "base jurídica del tratamiento de datos personales"),
     equivalent("legal_basis", "intereses legítimos para tratar datos personales"),
     direct("recipients_or_vendor_categories", "destinatarios de datos personales"),
@@ -170,22 +173,25 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("international_transfers", "transferencias internacionales de datos personales"),
     equivalent("international_transfers", "datos personales fuera del espacio económico europeo"),
     direct("supervisory_authority", "derecho a presentar una reclamación ante una autoridad de control"),
+    direct("supervisory_authority", "presentar una reclamación ante la agencia española de protección de datos"),
     equivalent("supervisory_authority", "presentar una reclamación ante una autoridad de control"),
     direct("automated_decision_making_or_profiling", "decisiones automatizadas con datos personales"),
     equivalent("automated_decision_making_or_profiling", "elaboración de perfiles de datos personales"),
   ]),
   ...it([
     direct("controller_contact", "titolare del trattamento"),
+    direct("controller_contact", "titolari del trattamento dei dati personali"),
     direct("controller_contact", "contatto del titolare del trattamento"),
     equivalent("controller_contact", "contatto privacy"),
     equivalent("controller_contact", "contatto protezione dati"),
     direct("dpo_contact", "responsabile della protezione dei dati"),
     equivalent("dpo_contact", "contatto dpo"),
     direct("processing_purposes", "finalità del trattamento dei dati personali"),
-    equivalent("processing_purposes", "trattiamo dati personali"),
+    equivalent("processing_purposes", "tratta i tuoi dati per le seguenti finalità"),
     direct("legal_basis", "base giuridica del trattamento dei dati personali"),
     equivalent("legal_basis", "legittimo interesse per trattare dati personali"),
     direct("recipients_or_vendor_categories", "destinatari dei dati personali"),
+    equivalent("recipients_or_vendor_categories", "destinatari dei tuoi dati"),
     equivalent("recipients_or_vendor_categories", "categorie di destinatari dei dati personali"),
     equivalent("recipients_or_vendor_categories", "fornitori di servizi che trattano dati personali"),
     direct("data_retention", "periodo di conservazione dei dati personali"),
@@ -207,46 +213,64 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("dpo_contact", "functionaris voor gegevensbescherming"),
     equivalent("dpo_contact", "contact met fg"),
     direct("processing_purposes", "doeleinden van de verwerking van persoonsgegevens"),
-    equivalent("processing_purposes", "persoonsgegevens verwerken"),
     direct("legal_basis", "rechtsgrondslag voor de verwerking van persoonsgegevens"),
     equivalent("legal_basis", "gerechtvaardigd belang voor verwerking van persoonsgegevens"),
+    equivalent("legal_basis", "gerechtvaardigd belang bij het verwerken van persoonsgegevens"),
     direct("recipients_or_vendor_categories", "ontvangers van persoonsgegevens"),
     equivalent("recipients_or_vendor_categories", "categorieën van ontvangers van persoonsgegevens"),
     equivalent("recipients_or_vendor_categories", "dienstverleners die persoonsgegevens verwerken"),
+    equivalent("recipients_or_vendor_categories", "uw persoonsgegevens niet delen met derden"),
     direct("data_retention", "bewaartermijn van persoonsgegevens"),
     equivalent("data_retention", "bewaren persoonsgegevens"),
+    equivalent("data_retention", "persoonsgegevens niet langer bewaren dan noodzakelijk"),
     direct("data_subject_rights", "recht op inzage in persoonsgegevens"),
     equivalent("data_subject_rights", "recht op verwijdering van persoonsgegevens"),
+    equivalent("data_subject_rights", "bezwaar te maken tegen het verwerken van uw persoonsgegevens"),
     direct("international_transfers", "internationale doorgiften van persoonsgegevens"),
+    equivalent("international_transfers", "internationale doorgifte van gegevens worden er maatregelen genomen om een adequaat beschermingsniveau"),
     equivalent("international_transfers", "persoonsgegevens buiten de europese economische ruimte"),
     direct("supervisory_authority", "recht om klacht in te dienen bij een toezichthoudende autoriteit"),
     equivalent("supervisory_authority", "klacht indienen bij een toezichthoudende autoriteit"),
+    equivalent("supervisory_authority", "klacht indienen bij de autoriteit persoonsgegevens"),
     direct("automated_decision_making_or_profiling", "geautomatiseerde besluitvorming met persoonsgegevens"),
     equivalent("automated_decision_making_or_profiling", "profilering van persoonsgegevens"),
   ]),
   ...pl([
     direct("controller_contact", "administrator danych"),
+    direct("controller_contact", "administratorem danych osobowych"),
     direct("controller_contact", "kontakt do administratora danych"),
     equivalent("controller_contact", "kontakt w sprawie prywatności"),
     equivalent("controller_contact", "kontakt w sprawie ochrony danych"),
     direct("dpo_contact", "inspektor ochrony danych"),
+    direct("dpo_contact", "administrator wyznaczył inspektora ochrony danych"),
     equivalent("dpo_contact", "kontakt z iod"),
     direct("processing_purposes", "cele przetwarzania danych osobowych"),
-    equivalent("processing_purposes", "przetwarzamy dane osobowe"),
+    direct("processing_purposes", "cele oraz podstawy prawne przetwarzania danych"),
+    equivalent("processing_purposes", "przetwarzać dane osobowe użytkowników w celu"),
     direct("legal_basis", "podstawa prawna przetwarzania danych osobowych"),
+    direct("legal_basis", "podstawy prawne przetwarzania danych"),
+    equivalent("legal_basis", "na podstawie art 6 ust 1 lit"),
     equivalent("legal_basis", "uzasadniony interes w przetwarzaniu danych osobowych"),
     direct("recipients_or_vendor_categories", "odbiorcy danych osobowych"),
+    direct("recipients_or_vendor_categories", "odbiorcy danych i zaufani partnerzy"),
     equivalent("recipients_or_vendor_categories", "kategorie odbiorców danych osobowych"),
+    equivalent("recipients_or_vendor_categories", "kategoriom odbiorców"),
     equivalent("recipients_or_vendor_categories", "dostawcy usług przetwarzający dane osobowe"),
     direct("data_retention", "okres przechowywania danych osobowych"),
+    direct("data_retention", "przez jaki okres będą przechowywane twoje dane osobowe"),
     equivalent("data_retention", "przechowujemy dane osobowe"),
     direct("data_subject_rights", "prawo dostępu do danych osobowych"),
     equivalent("data_subject_rights", "prawo do usunięcia danych osobowych"),
+    equivalent("data_subject_rights", "praw osób których dane dotyczą"),
     direct("international_transfers", "transfery międzynarodowe danych osobowych"),
     equivalent("international_transfers", "dane osobowe poza europejski obszar gospodarczy"),
+    equivalent("international_transfers", "dane osobowe użytkownika mogą być przekazywane do państw"),
     direct("supervisory_authority", "prawo do wniesienia skargi do organu nadzorczego"),
+    direct("supervisory_authority", "skargę dotyczącą przetwarzania danych osobowych do organu nadzorczego"),
+    equivalent("supervisory_authority", "organem nadzorczym jest prezes urzędu ochrony danych osobowych"),
     equivalent("supervisory_authority", "wnieść skargę do organu nadzorczego"),
     direct("automated_decision_making_or_profiling", "zautomatyzowane podejmowanie decyzji z użyciem danych osobowych"),
+    equivalent("automated_decision_making_or_profiling", "automatycznemu przetwarzaniu danych"),
     equivalent("automated_decision_making_or_profiling", "profilowanie danych osobowych"),
   ]),
 ];
@@ -309,10 +333,12 @@ export function classifyGdprTransparencyTopics(
 }
 
 export function normalizeGdprTransparencyText(value: string | null | undefined): string {
-  return (value ?? "")
+  return decodeCommonHtmlEntities(value ?? "")
     .normalize("NFKC")
     .replace(/[‘’´`]/g, "'")
     .replace(/[“”]/g, "\"")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
     .replace(/[\u00a0\t\r\n]+/g, " ")
     .replace(/\s*[-–—]\s*/g, "-")
     .replace(/[.,;:!?()[\]{}]+/g, " ")
@@ -320,6 +346,59 @@ export function normalizeGdprTransparencyText(value: string | null | undefined):
     .trim()
     .toLowerCase();
 }
+
+function decodeCommonHtmlEntities(value: string): string {
+  return value
+    .replace(/&#(\d+);/g, (_match, codepoint: string) => {
+      const parsed = Number(codepoint);
+      return Number.isFinite(parsed) ? String.fromCodePoint(parsed) : "";
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_match, codepoint: string) => {
+      const parsed = Number.parseInt(codepoint, 16);
+      return Number.isFinite(parsed) ? String.fromCodePoint(parsed) : "";
+    })
+    .replace(/&([a-z][a-z0-9]+);/gi, (match, entity: string) =>
+      COMMON_HTML_ENTITY_REPLACEMENTS[entity.toLowerCase()] ?? match
+    );
+}
+
+const COMMON_HTML_ENTITY_REPLACEMENTS: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  agrave: "à",
+  aacute: "á",
+  acirc: "â",
+  aring: "å",
+  atilde: "ã",
+  auml: "ä",
+  ccedil: "ç",
+  egrave: "è",
+  eacute: "é",
+  ecirc: "ê",
+  euml: "ë",
+  igrave: "ì",
+  iacute: "í",
+  icirc: "î",
+  iuml: "ï",
+  ntilde: "ñ",
+  ograve: "ò",
+  oacute: "ó",
+  ocirc: "ô",
+  otilde: "õ",
+  ouml: "ö",
+  quot: "\"",
+  rsquo: "'",
+  lsquo: "'",
+  rdquo: "\"",
+  ldquo: "\"",
+  mdash: "-",
+  ndash: "-",
+  nbsp: " ",
+  ugrave: "ù",
+  uacute: "ú",
+  ucirc: "û",
+  uuml: "ü",
+};
 
 function direct(topic: GdprTransparencyTopic, phrase: string): PhraseInput {
   return { phrase, strength: "direct", topic };
@@ -365,17 +444,75 @@ function strengthRank(strength: GdprTransparencyTopicMatchStrength) {
 
 function boundedEvidenceExcerpt(text: string, phrase: string): string {
   const normalizedPhrase = normalizeGdprTransparencyText(phrase);
-  const normalizedText = normalizeGdprTransparencyText(text);
-  const matchIndex = normalizedPhrase ? normalizedText.indexOf(normalizedPhrase) : -1;
-  const sourceText = text.replace(/\s+/g, " ").trim();
+  const sourceText = decodedEvidenceText(text);
   if (!sourceText) {
     return "";
   }
+  const searchIndex = buildEvidenceSearchIndex(sourceText);
+  const matchIndex = normalizedPhrase ? paddedIndexOf(searchIndex.normalized, normalizedPhrase) : -1;
   if (matchIndex < 0) {
     return sourceText.slice(0, MAX_EXCERPT_CHARS);
   }
-  const start = Math.max(0, matchIndex - Math.floor(MAX_EXCERPT_CHARS / 3));
+  const sourceMatchStart = searchIndex.sourceIndexes[matchIndex] ?? 0;
+  const start = Math.max(0, sourceMatchStart - Math.floor(MAX_EXCERPT_CHARS / 3));
   return sourceText.slice(start, start + MAX_EXCERPT_CHARS).trim();
+}
+
+function decodedEvidenceText(text: string): string {
+  return decodeCommonHtmlEntities(text)
+    .normalize("NFKC")
+    .replace(/[‘’´`]/g, "'")
+    .replace(/[“”]/g, "\"")
+    .replace(/[\u00a0\t\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildEvidenceSearchIndex(sourceText: string) {
+  let normalized = "";
+  const sourceIndexes: number[] = [];
+
+  const append = (value: string, sourceIndex: number) => {
+    for (const char of value) {
+      const normalizedChar =
+        /\s/u.test(char) ? " " :
+          /[-–—]/u.test(char) ? "-" :
+            /[.,;:!?()[\]{}]+/u.test(char) ? " " :
+              char
+                .normalize("NFD")
+                .replace(/\p{Diacritic}/gu, "")
+                .toLowerCase();
+      if (!normalizedChar) {
+        continue;
+      }
+      for (const outputChar of normalizedChar) {
+        const collapsedOutput = /\s/u.test(outputChar) ? " " : outputChar;
+        if (collapsedOutput === " " && (normalized.length === 0 || normalized.endsWith(" "))) {
+          continue;
+        }
+        normalized += collapsedOutput;
+        sourceIndexes.push(sourceIndex);
+      }
+    }
+  };
+
+  for (let index = 0; index < sourceText.length;) {
+    const char = sourceText[index] ?? "";
+    append(char.normalize("NFKC"), index);
+    index += char.length;
+  }
+
+  if (normalized.endsWith(" ")) {
+    normalized = normalized.slice(0, -1);
+    sourceIndexes.pop();
+  }
+
+  return { normalized, sourceIndexes };
+}
+
+function paddedIndexOf(normalizedValue: string, phrase: string) {
+  const index = ` ${normalizedValue} `.indexOf(` ${phrase} `);
+  return index < 0 ? -1 : index;
 }
 
 function uniqueStrings(values: Array<string | null | undefined>) {

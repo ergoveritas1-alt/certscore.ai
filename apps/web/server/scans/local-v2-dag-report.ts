@@ -1364,6 +1364,9 @@ export function summarizePolicySurfaces(
   const article13Surfaces = privacySurfaces.filter((row) => !isGenericThirdPartyPrivacySurface(row, rootDomain));
   const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
   const policyTextQuality = assessRetainedPolicyTextQuality(text);
+  const gdprTransparencyPolicyTextQuality = gdprTransparencyProductionEvidenceEnabled
+    ? assessRetainedPolicyTextQuality(text, { multilingual: true })
+    : policyTextQuality;
   const observedPolicyTopicHints = uniqueStrings(article13Surfaces.flatMap((row) => row.surface.observedTopics ?? []));
   const article13SignalCandidates = article13Surfaces.flatMap((row) => {
     const fullPolicyText = readPolicySurfaceTextArtifact(row.surface);
@@ -1395,7 +1398,7 @@ export function summarizePolicySurfaces(
     result: adaptGdprTransparencyTopicCandidatesForProduction({
       isTargetRelevantPrivacyPolicy: true,
       pageUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
-      policyTextQuality: { usable: policyTextQuality.usable },
+      policyTextQuality: { usable: gdprTransparencyPolicyTextQuality.usable },
       profile: gdprTransparencyEvidenceProfile,
       surface: row.surface
     }),
@@ -1427,12 +1430,12 @@ export function summarizePolicySurfaces(
       surfaceUrl: signal.sourceUrl
     }))
   );
-  const validatedArticle13DisclosureSignals = policyTextQuality.usable
-    ? [
-        ...article13SignalCandidates.filter((signal) => retainedArticle13SignalRejectReason(signal.evidenceText ?? "", signal.disclosureType) === null),
-        ...gdprTransparencyAcceptedArticle13Signals
-      ]
-    : [];
+  const validatedArticle13DisclosureSignals = [
+    ...(policyTextQuality.usable
+      ? article13SignalCandidates.filter((signal) => retainedArticle13SignalRejectReason(signal.evidenceText ?? "", signal.disclosureType) === null)
+      : []),
+    ...gdprTransparencyAcceptedArticle13Signals
+  ];
   const dedupedArticle13DisclosureSignals = dedupePolicyDisclosureRows(validatedArticle13DisclosureSignals, {
     excerptKeys: ["selectedPolicySectionExcerpt", "evidenceText"],
     typeKeys: ["disclosureType"]
@@ -1628,7 +1631,7 @@ function buildPolicyTextExtractionHealth(
   };
 }
 
-function assessRetainedPolicyTextQuality(value: string) {
+function assessRetainedPolicyTextQuality(value: string, options: { multilingual?: boolean } = {}) {
   const text = value.replace(/\s+/g, " ").trim();
   if (!text) {
     return {
@@ -1655,10 +1658,18 @@ function assessRetainedPolicyTextQuality(value: string) {
   ].reduce((count, pattern) => count + (pattern.test(text) ? 1 : 0), 0);
   const codeSymbolRatio = (text.match(/[{}[\];=<>]/g) ?? []).length / Math.max(text.length, 1);
   const totalTokens = text.split(/\s+/).filter(Boolean).length;
-  const alphabeticWords = text.match(/\b[A-Za-z][A-Za-z'-]{2,}\b/g) ?? [];
+  const alphabeticWords = options.multilingual
+    ? text.match(/\p{L}[\p{L}'-]{2,}/gu) ?? []
+    : text.match(/\b[A-Za-z][A-Za-z'-]{2,}\b/g) ?? [];
   const alphabeticWordRatio = alphabeticWords.length / Math.max(totalTokens, 1);
-  const naturalLanguageSentenceCount = (text.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length;
-  const policyTermCount = uniqueStrings((lower.match(/\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\b/g) ?? [])).length;
+  const naturalLanguageSentencePattern = options.multilingual
+    ? /\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people|usted(?:es)?|sus?|nuestro|nuestra|usuarios?|personas?|interesados?|datos personales|traitement|données personnelles|personenbezogene daten|dati personali|persoonsgegevens|dane osobowe)\b[^.!?]{20,}[.!?]/giu
+    : /\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi;
+  const naturalLanguageSentenceCount = (text.match(naturalLanguageSentencePattern) ?? []).length;
+  const policyTermPattern = options.multilingual
+    ? /\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis|privacidad|datos personales|protección de datos|tratamiento|responsable|delegado|derechos|reclamación|confidentialit[eé]|donn[eé]es personnelles|responsable du traitement|protection des donn[eé]es|droits|datenschutz|personenbezogene daten|verarbeitung|verantwortlicher|rechte|beschwerde|privacy|dati personali|trattamento|titolare|diritti|reclamo|privacybeleid|persoonsgegevens|verwerking|verwerkingsverantwoordelijke|rechten|klacht|prywatno[śs][ćc]|dane osobowe|przetwarzania|administrator|prawa|skargi)\b/giu
+    : /\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\b/g;
+  const policyTermCount = uniqueStrings((text.match(policyTermPattern) ?? []).map((value) => value.toLowerCase())).length;
   const escapedUrlCount = (text.match(/\\x2f|\\u003c|\\u003e|https?:\\\/\\\//gi) ?? []).length;
   const minifiedTokenCount = (text.match(/[A-Za-z_$][\w$]{0,8}\s*[=:]\s*\S{40,}/g) ?? []).length;
   const reason =
@@ -1838,7 +1849,7 @@ function actionTypeFromRetainedGeometryCandidate(candidate: Record<string, unkno
     classification.intent === "accept"
       ? "accept_all"
       : classification.intent === "reject"
-        ? "reject_all"
+        ? classification.variant === "reject_with_subscription" ? "other" : "reject_all"
         : classification.intent === "options"
           ? classification.variant === "save_preferences" ? "save_preferences" : "manage_preferences"
           : classification.intent === "privacy_opt_out"

@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import {
   classifyConsentControlLabel,
+  type ConsentControlClassifierProfile,
   type ConsentControlLabelClassification,
 } from "@certscore/contracts";
 import {
@@ -119,8 +120,22 @@ export interface ConsentControlCandidateEvidence {
   matchStrength?: string;
   classifierReasonCodes: string[];
   classifierConfidence: number;
+  diagnosticClassifications?: ConsentControlDiagnosticClassification[];
   decisionStatus: ConsentControlDecisionStatus;
   reasons: string[];
+}
+
+export interface ConsentControlDiagnosticClassification {
+  classifierProfile: ConsentControlClassifierProfile;
+  intent: ConsentControlLabelClassification["intent"];
+  actionType: ConsentControlGeometryActionType;
+  matchedTerm?: string;
+  matchedLocale?: string;
+  matchStrength?: string;
+  classifierReasonCodes: string[];
+  classifierConfidence: number;
+  classifierVariant?: string;
+  productionCredit: false;
 }
 
 export interface ConsentControlCmpEvidence {
@@ -160,6 +175,7 @@ interface CaptureConsentControlGeometryOptions {
   screenshotArtifactRef?: string;
   candidateLimit?: number;
   containerLimit?: number;
+  timeoutMs?: number;
 }
 
 interface RawGeometryContainer {
@@ -221,11 +237,19 @@ interface RawGeometryCapture {
 
 const DEFAULT_CANDIDATE_LIMIT = 48;
 const DEFAULT_CONTAINER_LIMIT = 12;
+// Browser-side patterns only broaden candidate/context capture; canonical intent
+// classification and production credit still flow through the contracts classifier.
 const CONSENT_CONTEXT_PATTERN =
   /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie/i;
+const MULTILINGUAL_CONSENT_CONTEXT_PATTERN =
+  /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|toestemming|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie/i;
+const MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN =
+  /consent|tracking|advertising|marketing|optional|essential|necessary|cmp|optanon|onetrust|trustarc|didomi|usercentrics|cookiebot|consentmanager|einwilligung|zustimmung|consentement|finalit[eé]s|consenso|tracciamento|toestemming|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|zgod[ayęą]|niezb[eę]dne|danych osobowych|(?:use|uses|using|gebruiken|gebruikt|używamy|uzywamy|używa|uzywa)[^.]{0,80}cookies?|cookies?[^.]{0,80}(?:tracking|advertising|marketing|consent|preferences|analytics)/i;
+const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN =
+  /preference|preferences|settings|choices|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|paramètres|préférences|finalités|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|voorkeuren|instellingen|keuzes|doeleinden|ustawieni[ae]|preferencj[ae]|wybor(?:y|ów)|cel(?:e|ów)/i;
 const POLICY_LINK_PATTERN = /\b(?:privacy policy|cookie policy|privacy statement|cookie statement|privacy notice|cookie notice|privacy and cookie policy|politique de confidentialit[eé]|politique de confidentialit[eé] et de gestion des cookies|politique|datenschutzerklärung)\b/i;
 const CANDIDATE_ACTION_PRIORITY_PATTERN =
-  /accept|agree|allow|continue|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|necessary|essential|required|technical|akzeptieren|ablehnen|einstellungen|accepter|refuser|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza/i;
+  /accept|agree|allow|continue|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|necessary|essential|required|technical|akzeptieren|ablehnen|einstellungen|accepter|refuser|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
 const STATIC_TEXT_TAG_NAMES = new Set(["p", "span", "strong", "em", "small", "li", "h1", "h2", "h3", "h4", "h5", "h6"]);
 const INTERACTIVE_TAG_NAMES = new Set(["a", "button", "input", "select", "textarea"]);
 const INTERACTIVE_ROLE_PATTERN = /^(button|link|checkbox|radio|switch|tab|menuitem)$/i;
@@ -244,9 +268,15 @@ export async function captureConsentControlGeometry(
     page.mainFrame(),
     ...page.frames().filter((frame) => frame !== page.mainFrame()),
   ].slice(0, 12);
+  const frameTimeoutMs = options.timeoutMs
+    ? Math.max(250, Math.floor(options.timeoutMs / Math.max(frames.length, 1)))
+    : undefined;
   const captures = (await Promise.all(frames.map(async (frame) => {
     try {
-      return await frame.evaluate<RawGeometryCapture, typeof frameInput>(collectConsentGeometryInPage, frameInput);
+      const capture = frame.evaluate<RawGeometryCapture, typeof frameInput>(collectConsentGeometryInPage, frameInput);
+      return frameTimeoutMs
+        ? await promiseWithTimeout(capture, frameTimeoutMs)
+        : await capture;
     } catch {
       return undefined;
     }
@@ -277,6 +307,20 @@ export async function captureConsentControlGeometry(
     candidates,
     summary,
   };
+}
+
+function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  });
 }
 
 function mergeRawGeometryCaptures(
@@ -405,6 +449,7 @@ function buildCandidateEvidence(
 ): ConsentControlCandidateEvidence {
   const classification = classifyCandidate(candidate);
   const actionType = actionTypeForClassification(classification, candidate);
+  const diagnosticClassifications = diagnosticClassificationsForCandidate(candidate);
   const reasons: string[] = [];
   const decisionStatus = decisionStatusForCandidate(candidate, actionType, reasons);
   return {
@@ -439,6 +484,7 @@ function buildCandidateEvidence(
     matchStrength: classification.matchStrength,
     classifierReasonCodes: classification.reasonCodes,
     classifierConfidence: classification.confidence,
+    diagnosticClassifications,
     decisionStatus,
     reasons,
   };
@@ -456,6 +502,62 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
   });
 }
 
+function diagnosticClassificationsForCandidate(candidate: RawGeometryCandidate): ConsentControlDiagnosticClassification[] | undefined {
+  const hasConsentContext = MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN.test(candidate.contextText);
+  const hasPreferenceContext = hasConsentContext &&
+    (candidate.layer === "preference_center" || MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN.test(candidate.contextText));
+  const classifierContextText = hasConsentContext || hasPreferenceContext ? candidate.contextText : "";
+  const classification = classifyConsentControlLabel({
+    label: candidate.label,
+    ariaLabel: candidate.ariaLabel,
+    title: candidate.title,
+    value: candidate.value,
+    contextText: classifierContextText,
+    classifierProfile: "multilingual_v1",
+    hasConsentContext,
+    hasPreferenceContext,
+  });
+  if (classification.intent === "unknown") {
+    return undefined;
+  }
+  if (isLoosePageChromeDiagnostic(candidate, classification)) {
+    return undefined;
+  }
+  return [{
+    classifierProfile: "multilingual_v1",
+    intent: classification.intent,
+    actionType: actionTypeForClassification(classification, candidate),
+    matchedTerm: classification.matchedTerm,
+    matchedLocale: classification.matchedLocale,
+    matchStrength: classification.matchStrength,
+    classifierReasonCodes: classification.reasonCodes,
+    classifierConfidence: classification.confidence,
+    classifierVariant: classification.variant,
+    productionCredit: false,
+  }];
+}
+
+function isLoosePageChromeDiagnostic(
+  candidate: RawGeometryCandidate,
+  classification: ConsentControlLabelClassification,
+) {
+  const matchedTerm = normalizeLabel(classification.matchedTerm ?? "");
+  const label = normalizeLabel(candidate.label);
+  const genericContextualTerms = new Set([
+    "instellingen",
+    "voorkeuren",
+    "keuzes",
+    "ustawienia",
+    "preferencje",
+    "opcje",
+  ]);
+  return classification.matchStrength === "contextual" &&
+    (classification.matchedLocale === "nl" || classification.matchedLocale === "pl") &&
+    genericContextualTerms.has(matchedTerm) &&
+    label === matchedTerm &&
+    !candidate.containerSelectorHint;
+}
+
 function actionTypeForClassification(
   classification: ConsentControlLabelClassification,
   candidate: RawGeometryCandidate,
@@ -467,6 +569,9 @@ function actionTypeForClassification(
     return "accept_all";
   }
   if (classification.intent === "reject") {
+    if (classification.variant === "reject_with_subscription") {
+      return "other";
+    }
     return "reject_all";
   }
   if (classification.intent === "privacy_opt_out") {
@@ -589,9 +694,9 @@ function collectConsentGeometryInPage(input: {
     width: window.innerWidth,
     height: window.innerHeight,
   };
-  const consentPattern = /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie/i;
+  const consentPattern = /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|toestemming|voorkeuren|instellingen|keuzes|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|preferencj[ae]|ustawieni[ae]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie/i;
   const controlLabelPattern =
-    /accept|agree|allow|continue|ok|got it|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|save|cookie|cookies|analytics|necessary|essential|required|technical|akzeptieren|annehmen|ablehnen|einstellungen|verwalten|accepter|refuser|continuer|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza/i;
+    /accept|agree|allow|continue|ok|got it|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|save|cookie|cookies|analytics|necessary|essential|required|technical|akzeptieren|annehmen|ablehnen|einstellungen|verwalten|accepter|refuser|continuer|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|keuzes|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
   const containerSelector = [
     "[role='dialog']",
     "[aria-modal='true']",
@@ -749,6 +854,9 @@ function collectConsentGeometryInPage(input: {
     viewportValue: { width: number; height: number },
     contextPattern: RegExp,
   ): RawGeometryCandidate | null {
+    if (isStaticTextOnlyControlCandidate(element)) {
+      return null;
+    }
     const label = labelFor(element);
     const containerIndex = nearestContainerIndex(element, containerItems);
     const contextRoot = typeof containerIndex === "number" ? containerItems[containerIndex]?.element : nearestContextRoot(element, contextPattern);
@@ -809,6 +917,24 @@ function collectConsentGeometryInPage(input: {
       occlusion: occlusionFor(element, box),
       contextText: contextText.slice(0, 1_000),
     };
+  }
+
+  function isStaticTextOnlyControlCandidate(element: Element): boolean {
+    const tagName = element.tagName.toLowerCase();
+    if (!/^(?:p|span|strong|em|small|h[1-6]|li|dt|dd)$/.test(tagName)) {
+      return false;
+    }
+    const role = (element.getAttribute("role") || "").toLowerCase();
+    if (role === "button" || role === "link") {
+      return false;
+    }
+    const className = element.getAttribute("class") || "";
+    const id = element.getAttribute("id") || "";
+    return !(
+      element.hasAttribute("onclick") ||
+      /\b(?:btn|button|choice|option|preference|purpose)\b/i.test(className) ||
+      /(?:btn|button|choice|option|preference|purpose)/i.test(id)
+    );
   }
 
   function nearestContextRoot(element: Element, pattern: RegExp): Element | undefined {
