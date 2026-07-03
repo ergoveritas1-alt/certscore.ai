@@ -79,6 +79,55 @@ test("uses URL patterns as canonical surface hints without display-layer inferen
   assert.equal(classification.reasonCodes.includes("matched_url_pattern"), true);
 });
 
+test("uses localized URL patterns as canonical surface hints", () => {
+  const examples = [
+    ["https://example.test/datenschutz", "privacy_policy"],
+    ["https://example.test/politique-de-confidentialite", "privacy_policy"],
+    ["https://example.test/politica-de-privacidad", "privacy_policy"],
+    ["https://example.test/informativa-privacy", "privacy_policy"],
+    ["https://example.test/privacybeleid", "privacy_policy"],
+    ["https://example.test/polityka-prywatnosci", "privacy_policy"],
+    ["https://example.test/cookie-richtlinie", "cookie_policy"],
+    ["https://example.test/politica-de-cookies", "cookie_policy"],
+    ["https://example.test/cookiebeleid", "cookie_policy"],
+  ] as const;
+
+  for (const [url, surfaceType] of examples) {
+    const classification = classifyPrivacySurface({ linkText: "Legal", url });
+    assert.equal(classification.surfaceType, surfaceType, url);
+    assert.equal(classification.reasonCodes.includes("matched_url_pattern"), true, url);
+  }
+});
+
+test("does not use neighboring footer text as the matched surface for unrelated links", () => {
+  const surroundingText = "Contacto Aviso legal Politica de privacidad Cookies Accesibilidad";
+
+  assert.equal(
+    classifyPrivacySurface({
+      linkText: "Contacto",
+      surroundingText,
+      url: "https://example.test/contacto/contacte.html",
+    }).surfaceType,
+    "unknown",
+  );
+  assert.equal(
+    classifyPrivacySurface({
+      linkText: "Accesibilidad",
+      surroundingText,
+      url: "https://example.test/accesibilidad.html",
+    }).surfaceType,
+    "accessibility_statement",
+  );
+  assert.equal(
+    classifyPrivacySurface({
+      linkText: "Konto",
+      surroundingText: "Regulamin Polityka prywatnosci Kontakt Konto",
+      url: "https://example.test/auth/v1/sso/auth?continue_url=https%3A%2F%2Fexample.test",
+    }).surfaceType,
+    "unknown",
+  );
+});
+
 test("keeps unrelated labels unknown", () => {
   for (const linkText of ["Home", "Subscribe", "Account settings", "Latest news"]) {
     assert.equal(classifyPrivacySurface({ linkText }).surfaceType, "unknown", linkText);

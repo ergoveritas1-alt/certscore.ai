@@ -196,14 +196,21 @@ const URL_SURFACE_PATTERNS: Array<{
 }> = [
   { surfaceType: "cookie_policy", pattern: /privacy[-_/]cookie[-_/]statement|privacy[-_/]and[-_/]cookies?|privacy[-_/]cookies?/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_-])privacy(?:[-_/]policy|[-_/]notice|[-_/]statement)?(?:$|[/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])datenschutz(?:erkl[aä]rung|information)?(?:$|[\s/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:politique[-_\s/](?:de[-_\s/])?confidentialit[eé]|confidentialit[eé])(?:$|[\s/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:pol[ií]tica[-_\s/](?:de[-_\s/])?privacidad|privacidad)(?:$|[\s/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:informativa[-_\s/](?:sulla[-_\s/])?privacy|privacy)(?:$|[\s/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:privacybeleid|privacyverklaring)(?:$|[\s/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:polityka[-_\s/]prywatno(?:sci|ści)|prywatno(?:sc|ść))(?:$|[\s/?#._-])/i },
   { surfaceType: "cookie_policy", pattern: /(?:^|[/_-])cookies?(?:[-_/]policy|[-_/]notice|[-_/]statement)?(?:$|[/?#._-])/i },
+  { surfaceType: "cookie_policy", pattern: /(?:^|[/_\s-])(?:cookie[-_\s/]richtlinie|politique[-_\s/](?:relative[-_\s/]aux[-_\s/])?cookies|pol[ií]tica[-_\s/](?:de[-_\s/])?cookies|informativa[-_\s/](?:sui[-_\s/])?cookie|cookiebeleid|polityka[-_\s/]plik[oó]w[-_\s/]cookie)(?:$|[\s/?#._-])/i },
   { surfaceType: "cookie_settings", pattern: /(?:^|[/_-])cookie[-_/](?:settings|preferences)(?:$|[/?#._-])/i },
   { surfaceType: "your_privacy_choices", pattern: /(?:your[-_/])?privacy[-_/]choices|yourprivacychoices|adchoices/i },
   { surfaceType: "do_not_sell_or_share", pattern: /do[-_/]not[-_/](?:sell|share)/i },
   { surfaceType: "notice_at_collection", pattern: /notice[-_/]at[-_/]collection/i },
   { surfaceType: "california_notice", pattern: /california[-_/]privacy|state[-_/]privacy/i },
   { surfaceType: "terms", pattern: /(?:^|[/_-])terms(?:[-_/](?:of[-_/]service|and[-_/]conditions|conditions|use))?(?:$|[/?#._-])/i },
-  { surfaceType: "accessibility_statement", pattern: /accessibility(?:[-_/]statement)?/i },
+  { surfaceType: "accessibility_statement", pattern: /accessibility(?:[-_/]statement)?|accesibilidad/i },
   { surfaceType: "ai_disclosure", pattern: /(?:^|[/_-])ai[-_/](?:disclosure|notice|policy)(?:$|[/?#._-])/i },
 ];
 
@@ -232,7 +239,7 @@ export function classifyPrivacySurface(
   const phraseMatch = phrases
     .map((term) => ({
       term,
-      score: phraseScore(term, labelText, normalizedSurrounding, contextSatisfied),
+      score: phraseScore(term, labelText, contextSatisfied),
     }))
     .filter((entry) => entry.score > 0)
     .sort((left, right) =>
@@ -326,7 +333,6 @@ function equivalent(surfaceType: Exclude<PrivacySurfaceType, "unknown">, phrase:
 function phraseScore(
   term: PrivacySurfacePhrase,
   normalizedLabel: string,
-  normalizedSurrounding: string,
   contextSatisfied: boolean,
 ) {
   const phrase = normalizePrivacySurfaceText(term.phrase);
@@ -335,14 +341,13 @@ function phraseScore(
   }
   const exact = normalizedLabel === phrase;
   const labelMatch = !exact && phrase.length >= 5 && paddedIncludes(normalizedLabel, phrase);
-  const surroundingMatch = !exact && !labelMatch && phrase.length >= 8 && paddedIncludes(normalizedSurrounding, phrase);
-  if (!exact && !labelMatch && !surroundingMatch) {
+  if (!exact && !labelMatch) {
     return 0;
   }
   if (term.requiresPrivacyContext && !contextSatisfied) {
     return 0;
   }
-  return (exact ? 1000 : labelMatch ? 650 : 420) +
+  return (exact ? 1000 : 650) +
     phrase.length +
     strengthRank(term.strength) * 80 +
     (contextSatisfied ? 40 : 0);

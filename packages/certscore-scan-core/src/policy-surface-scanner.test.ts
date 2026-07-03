@@ -215,6 +215,46 @@ test("policySurfaceScanner uses canonical privacy-surface classifier across supp
   });
 });
 
+test("policySurfaceScanner does not classify unrelated footer links from neighboring privacy text", async () => {
+  await withPolicyScan("policy-neighboring-footer-privacy-noise", async ({ result, baseUrl }) => {
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    const summaryByText = new Map(diagnostics.candidateSummary.map((candidate) => [candidate.linkText, candidate]));
+    const contact = summaryByText.get("Contacto");
+    const accessibility = summaryByText.get("Accesibilidad");
+    const account = summaryByText.get("Konto");
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/politica-de-privacidad`
+    );
+    const cookie = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "cookie_policy" &&
+      observation.normalizedUrl === `${baseUrl}/politica-de-cookies`
+    );
+
+    assert.equal(contact?.surfaceType ?? "unknown", "unknown");
+    assert.equal(account?.surfaceType ?? "unknown", "unknown");
+    assert.equal(accessibility?.surfaceType ?? "accessibility_statement", "accessibility_statement");
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(cookie?.status, "fetched");
+    assert.equal(
+      result.policySurfaceObservations.some((observation) =>
+        observation.surfaceType === "privacy_policy" &&
+        /contacto|accesibilidad|auth\/v1\/sso/i.test(observation.normalizedUrl)
+      ),
+      false,
+    );
+  }, {
+    discoveryMode: "fast",
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run for deterministic neighboring-footer regression coverage.");
+      },
+    },
+  });
+});
+
 test("policySurfaceScanner retains canonical GDPR Transparency topic candidates across supported locales without default production credit", async () => {
   await withPolicyScan("policy-multilingual-article13-topics", async ({ result, baseUrl }) => {
     const expectedTopics = [

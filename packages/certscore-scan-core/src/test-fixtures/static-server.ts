@@ -93,6 +93,7 @@ export type StaticFixturePage =
   | "policy-mature-real-prose"
   | "policy-multilingual-article13-topics"
   | "policy-multilingual-surfaces"
+  | "policy-neighboring-footer-privacy-noise"
   | "policy-onetrust-index-json"
   | "policy-onetrust-notice-json"
   | "policy-privacy-center-link"
@@ -217,6 +218,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-mature-real-prose": "policy-mature-real-prose",
   "policy-multilingual-article13-topics": "policy-multilingual-article13-topics",
   "policy-multilingual-surfaces": "policy-multilingual-surfaces",
+  "policy-neighboring-footer-privacy-noise": "policy-neighboring-footer-privacy-noise",
   "policy-onetrust-index-json": "policy-onetrust-index-json",
   "policy-onetrust-notice-json": "policy-onetrust-notice-json",
   "policy-privacy-center-link": "policy-privacy-center",
@@ -1225,6 +1227,13 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/policies/pl-cookies">Polityka plików cookie</a>`,
       `<a href="/terms">Terms of Service</a>`,
     ].join(" | "),
+    "policy-neighboring-footer-privacy-noise": [
+      `<a href="/contacto/contacte.html">Contacto</a>`,
+      `<a href="/accesibilidad.html">Accesibilidad</a>`,
+      `<a href="/auth/v1/sso/auth?continue_url=https%3A%2F%2Ffixture.test">Konto</a>`,
+      `<a href="/politica-de-privacidad">Política de privacidad</a>`,
+      `<a href="/politica-de-cookies">Cookies</a>`,
+    ].join(" | "),
     "policy-privacy-center-link": `<a href="/privacy-center">Privacy Center</a>`,
     "policy-retention-rights-only": `<a href="/policies/rights-only">Privacy Policy</a>`,
     "policy-state-privacy-rights-link": `<a href="/state-privacy-rights">State Privacy Rights</a>`,
@@ -1287,6 +1296,14 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/policies/es-privacidad": {
       title: "Política de privacidad",
       body: "Política de privacidad. Tratamos datos personales, usamos cookies para analítica y publicidad, y atendemos solicitudes de privacidad.",
+    },
+    "/politica-de-privacidad": {
+      title: "Política de privacidad",
+      body: "Política de privacidad. Tratamos datos personales y explicamos los fines del tratamiento, la base jurídica, los destinatarios, la conservación y los derechos de privacidad.",
+    },
+    "/politica-de-cookies": {
+      title: "Política de cookies",
+      body: "Política de cookies. Usamos cookies necesarias, analíticas y publicitarias. Puede configurar sus preferencias de cookies desde el panel de consentimiento.",
     },
     "/policies/it-privacy": {
       title: "Informativa sulla privacy",
