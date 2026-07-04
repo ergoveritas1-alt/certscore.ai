@@ -2426,6 +2426,292 @@ test("materializeLocalV2DagScanDetail prefers pre-consent geometry proof screens
   }
 });
 
+test("materializeLocalV2DagScanDetail reclassifies retained Polish consent geometry controls", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/polish-geometry-controls-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-07-04T15:27:12.000Z",
+      consentUiObservations: [
+        {
+          acceptControlObserved: false,
+          basis: ["insufficient_banner_keywords", "recapture:post_cmp_no_first_layer_choice_controls"],
+          confidence: 0.5,
+          controls: [],
+          inventoryDiagnostics: {
+            candidateContainerCount: 1,
+            candidateControlCount: 2,
+            candidateLabels: [
+              "USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji",
+              "AKCEPTUJĘ"
+            ],
+            rejectionReasons: ["classifier_other_unknown"],
+            retainedControlCount: 0,
+            timingMarkers: ["post_wait_inventory"]
+          },
+          layerInspected: "unknown",
+          likelyPresent: false,
+          managePreferencesControlObserved: false,
+          observationId: "consent_ui_pre_consent",
+          rejectControlObserved: false,
+          textExcerpt: "Dbamy o Twoją prywatność. Jeśli wyrazisz zgodę klikając Akceptuję, będziemy przetwarzać dane osobowe i pliki cookie. Jeśli nie chcesz wyrazić zgody, przejdź do Ustawień Zaawansowanych.",
+          visibleChoiceLabels: []
+        }
+      ],
+      cookieEvents: [],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: true,
+        journeySummary: { journeyCount: 0 },
+        preConsentTrackingObserved: false,
+        sessionReplayOrBehavioralAnalyticsObserved: false,
+        thirdPartyCookiesPreConsentObserved: false,
+        thirdPartyVendorsObserved: false
+      },
+      modulesRun: [],
+      networkEvents: [],
+      normalizedUrl: "https://wyborcza.pl/",
+      policySurfaceObservations: [],
+      runtimeTimeline: [],
+      scanId: "polish-geometry-controls-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [],
+      startedAt: "2026-07-04T15:26:23.000Z",
+      url: "https://wyborcza.pl/"
+    }, null, 2)}\n`, "utf8");
+    await writeFile(path.join(outDir, "ConsentControlGeometryEvidence.json"), `${JSON.stringify({
+      artifactVersion: "consent_control_geometry.v1",
+      candidates: [
+        {
+          actionType: "other",
+          boundingBox: { x: 303, y: 520, width: 262, height: 40, top: 520, right: 565, bottom: 560, left: 303 },
+          classifierReasonCodes: ["no_term_match"],
+          decisionStatus: "clipped",
+          enabled: true,
+          intersectsViewport: true,
+          label: "USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji",
+          reasons: ["clipped_by_scrollable_ancestor"],
+          layer: "first_layer",
+          role: null,
+          tagName: "button"
+        },
+        {
+          actionType: "other",
+          boundingBox: { x: 928, y: 520, width: 135, height: 40, top: 520, right: 1063, bottom: 560, left: 928 },
+          classifierReasonCodes: ["no_term_match"],
+          decisionStatus: "clipped",
+          enabled: true,
+          intersectsViewport: true,
+          label: "AKCEPTUJĘ",
+          reasons: ["clipped_by_scrollable_ancestor"],
+          layer: "first_layer",
+          role: null,
+          tagName: "button"
+        },
+        {
+          actionType: "other",
+          boundingBox: { x: 303, y: 520, width: 760, height: 56, top: 520, right: 1063, bottom: 576, left: 303 },
+          classifierReasonCodes: ["no_term_match"],
+          decisionStatus: "ambiguous",
+          enabled: true,
+          intersectsViewport: true,
+          label: "USTAWIENIA ZAAWANSOWANEAKCEPTUJĘ",
+          layer: "first_layer",
+          role: null,
+          tagName: "div"
+        }
+      ],
+      containers: [
+        {
+          boundingBox: { x: 283, y: 90, width: 800, height: 486, top: 90, right: 1083, bottom: 576, left: 283 },
+          layer: "first_layer",
+          textExcerpt: "Dbamy o Twoją prywatność. Jeśli wyrazisz zgodę klikając Akceptuję, będziemy przetwarzać dane osobowe i pliki cookie. Ustawienia Zaawansowane."
+        }
+      ],
+      pageUrl: "https://wyborcza.pl/",
+      sourceScanner: "consent_control_geometry_diagnostic",
+      summary: {
+        cmpDetected: true,
+        cmpName: "Consentmanager",
+        confidence: 0.65,
+        firstLayerAccept: false,
+        firstLayerOptions: false,
+        firstLayerReject: false,
+        limitations: []
+      }
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        id: "47a164c3-957b-4e91-9153-ff63822f35be",
+        domainHostname: "wyborcza.pl",
+        scanConfigJson: {
+          hostname: "wyborcza.pl",
+          normalizedUrl: "https://wyborcza.pl/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const firstLayerChoices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown> | undefined;
+    assert.equal(firstLayerChoices?.acceptControlObserved, true);
+    assert.equal(firstLayerChoices?.managePreferencesControlObserved, true);
+    assert.equal(firstLayerChoices?.rejectControlObserved, false);
+    assert.deepEqual(firstLayerChoices?.visibleChoiceLabels, [
+      "USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji",
+      "AKCEPTUJĘ"
+    ]);
+    assert.deepEqual(firstLayerChoices?.acceptLabels, ["AKCEPTUJĘ"]);
+    assert.deepEqual(firstLayerChoices?.preferenceLabels, [
+      "USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji"
+    ]);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail does not recover clipped controls when confirmed geometry controls exist", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/clipped-geometry-guard-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-07-04T15:27:12.000Z",
+      consentUiObservations: [],
+      cookieEvents: [],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: true,
+        journeySummary: { journeyCount: 0 },
+        preConsentTrackingObserved: false,
+        sessionReplayOrBehavioralAnalyticsObserved: false,
+        thirdPartyCookiesPreConsentObserved: false,
+        thirdPartyVendorsObserved: false
+      },
+      modulesRun: [],
+      networkEvents: [],
+      normalizedUrl: "https://example.test/",
+      policySurfaceObservations: [],
+      runtimeTimeline: [],
+      scanId: "clipped-geometry-guard-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [],
+      startedAt: "2026-07-04T15:26:23.000Z",
+      url: "https://example.test/"
+    }, null, 2)}\n`, "utf8");
+    await writeFile(path.join(outDir, "ConsentControlGeometryEvidence.json"), `${JSON.stringify({
+      artifactVersion: "consent_control_geometry.v1",
+      candidates: [
+        {
+          actionType: "manage_preferences",
+          boundingBox: { x: 120, y: 560, width: 240, height: 38, top: 560, right: 360, bottom: 598, left: 120 },
+          decisionStatus: "clipped",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Cookie settings",
+          layer: "first_layer",
+          reasons: ["clipped_by_scrollable_ancestor"],
+          role: null,
+          tagName: "button"
+        },
+        {
+          actionType: "reject_all",
+          boundingBox: { x: 380, y: 620, width: 160, height: 40, top: 620, right: 540, bottom: 660, left: 380 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Reject all",
+          layer: "first_layer",
+          role: null,
+          tagName: "button"
+        },
+        {
+          actionType: "accept_all",
+          boundingBox: { x: 560, y: 620, width: 160, height: 40, top: 620, right: 720, bottom: 660, left: 560 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Accept all",
+          layer: "first_layer",
+          role: null,
+          tagName: "button"
+        }
+      ],
+      containers: [
+        {
+          boundingBox: { x: 80, y: 80, width: 720, height: 640, top: 80, right: 800, bottom: 720, left: 80 },
+          layer: "first_layer",
+          textExcerpt: "We use cookies for analytics and advertising. Cookie settings."
+        }
+      ],
+      pageUrl: "https://example.test/",
+      sourceScanner: "consent_control_geometry_diagnostic",
+      summary: {
+        cmpDetected: true,
+        cmpName: "Example CMP",
+        confidence: 0.65,
+        firstLayerAccept: true,
+        firstLayerOptions: false,
+        firstLayerReject: true,
+        limitations: ["manage_preferences:Cookie settings:clipped"]
+      }
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        id: "clipped-geometry-guard-fixture",
+        domainHostname: "example.test",
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const firstLayerChoices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown> | undefined;
+    assert.equal(firstLayerChoices?.acceptControlObserved, true);
+    assert.equal(firstLayerChoices?.rejectControlObserved, true);
+    assert.equal(firstLayerChoices?.managePreferencesControlObserved, false);
+    assert.deepEqual(firstLayerChoices?.visibleChoiceLabels, ["Reject all", "Accept all"]);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail does not count reject-and-subscribe geometry labels as reject availability", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

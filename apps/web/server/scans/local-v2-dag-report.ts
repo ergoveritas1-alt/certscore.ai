@@ -8,7 +8,9 @@ import { Readable } from "node:stream";
 import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   classifyConsentControlLabel,
-  type CanonicalEvidenceBundle
+  isProductionCreditworthySupplementalConsentControlClassification,
+  type CanonicalEvidenceBundle,
+  type ConsentControlLabelClassification
 } from "@certscore/contracts";
 import { resolveVendorDisplayCategory, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import {
@@ -1835,7 +1837,28 @@ function positiveGeometryBox(candidate: Record<string, unknown>) {
   );
 }
 
-function actionTypeFromRetainedGeometryCandidate(candidate: Record<string, unknown>, hasConsentContext: boolean) {
+const RETAINED_GEOMETRY_INTERACTIVE_TAG_NAMES = new Set(["button", "input", "select", "textarea"]);
+const RETAINED_GEOMETRY_INTERACTIVE_ROLE_PATTERN = /^(?:button|checkbox|radio|switch|menuitem|option)$/i;
+
+function isRetainedGeometryInteractiveCandidate(candidate: Record<string, unknown>) {
+  const tagName = getString(candidate.tagName)?.toLowerCase() ?? "";
+  const role = getString(candidate.role) ?? "";
+  return RETAINED_GEOMETRY_INTERACTIVE_TAG_NAMES.has(tagName) || RETAINED_GEOMETRY_INTERACTIVE_ROLE_PATTERN.test(role);
+}
+
+function retainedGeometryActionTypeForClassification(classification: ConsentControlLabelClassification) {
+  return classification.intent === "accept"
+    ? "accept_all"
+    : classification.intent === "reject"
+      ? classification.variant === "reject_with_subscription" ? "other" : "reject_all"
+      : classification.intent === "options"
+        ? classification.variant === "save_preferences" ? "save_preferences" : "manage_preferences"
+        : classification.intent === "privacy_opt_out"
+          ? "do_not_sell_share"
+          : null;
+}
+
+function classifyRetainedGeometryCandidate(candidate: Record<string, unknown>, hasConsentContext: boolean) {
   const originalActionType = getString(candidate.actionType);
   const label = getString(candidate.label) ?? "";
   const classification = classifyConsentControlLabel({
@@ -1845,18 +1868,43 @@ function actionTypeFromRetainedGeometryCandidate(candidate: Record<string, unkno
     title: getString(candidate.title) ?? undefined,
     value: getString(candidate.value) ?? undefined
   });
-  const classifiedActionType =
-    classification.intent === "accept"
-      ? "accept_all"
-      : classification.intent === "reject"
-        ? classification.variant === "reject_with_subscription" ? "other" : "reject_all"
-        : classification.intent === "options"
-          ? classification.variant === "save_preferences" ? "save_preferences" : "manage_preferences"
-          : classification.intent === "privacy_opt_out"
-            ? "do_not_sell_share"
-            : null;
+  const classifiedActionType = retainedGeometryActionTypeForClassification(classification);
+  if (classifiedActionType || !hasConsentContext || !isRetainedGeometryInteractiveCandidate(candidate)) {
+    return {
+      actionType: classifiedActionType ?? originalActionType,
+      classification
+    };
+  }
+
+  const multilingualClassification = classifyConsentControlLabel({
+    ariaLabel: getString(candidate.ariaLabel) ?? undefined,
+    classifierProfile: "multilingual_v1",
+    hasConsentContext,
+    hasPreferenceContext: hasConsentContext,
+    label,
+    title: getString(candidate.title) ?? undefined,
+    value: getString(candidate.value) ?? undefined
+  });
+  const supplementalActionType = retainedGeometryActionTypeForClassification(multilingualClassification);
+  const supplementalLabel = [
+    label,
+    getString(candidate.ariaLabel),
+    getString(candidate.title),
+    getString(candidate.value)
+  ].filter(Boolean).join(" ");
+  if (
+    supplementalActionType &&
+    (multilingualClassification.matchedLocale === "nl" || multilingualClassification.matchedLocale === "pl") &&
+    isProductionCreditworthySupplementalConsentControlClassification(supplementalLabel, multilingualClassification)
+  ) {
+    return {
+      actionType: supplementalActionType,
+      classification: multilingualClassification
+    };
+  }
+
   return {
-    actionType: classifiedActionType ?? originalActionType,
+    actionType: originalActionType,
     classification
   };
 }
@@ -1869,10 +1917,24 @@ function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<stri
         getString(container.textExcerpt) ?? ""
       )
     );
-  const controls = getObjectArray(geometryEvidence?.candidates)
+  const candidates = getObjectArray(geometryEvidence?.candidates);
+  const hasConfirmedVisibleCanonicalControl = candidates.some((candidate) =>
+    candidate.layer === "first_layer" &&
+    candidate.enabled !== false &&
+    candidate.intersectsViewport !== false &&
+    positiveGeometryBox(candidate) &&
+    getString(candidate.decisionStatus) === "confirmed_visible" &&
+    (
+      candidate.actionType === "accept_all" ||
+      candidate.actionType === "reject_all" ||
+      candidate.actionType === "manage_preferences" ||
+      candidate.actionType === "save_preferences"
+    )
+  );
+  const controls = candidates
     .map((candidate) => {
       const label = getString(candidate.label);
-      const { actionType, classification } = actionTypeFromRetainedGeometryCandidate(candidate, hasConsentContext);
+      const { actionType, classification } = classifyRetainedGeometryCandidate(candidate, hasConsentContext);
       const geometryVisible =
         candidate.layer === "first_layer" &&
         candidate.enabled !== false &&
@@ -1886,11 +1948,17 @@ function summarizeGeometryFirstLayerConsentChoices(geometryEvidence: Record<stri
         actionType === "save_preferences"
           ? actionType
           : null;
+      const recoverableClippedAction =
+        !hasConfirmedVisibleCanonicalControl &&
+        retainedDecision === "clipped" &&
+        canonicalAction !== null &&
+        isRetainedGeometryInteractiveCandidate(candidate);
       const visible =
         geometryVisible &&
         (
           retainedDecision === "confirmed_visible" ||
-          (retainedDecision === "ambiguous" && canonicalAction !== null)
+          (retainedDecision === "ambiguous" && canonicalAction !== null) ||
+          recoverableClippedAction
         );
       return label && visible && canonicalAction
         ? {
