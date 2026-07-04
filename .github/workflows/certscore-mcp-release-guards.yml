@@ -1,0 +1,58 @@
+name: CertScore MCP Release Guards
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/certscore-mcp-release-guards.yml"
+      - "apps/web/app/.well-known/certscore-ai.json/route.ts"
+      - "apps/web/app/api-pulse/page.tsx"
+      - "apps/web/app/developers/**"
+      - "apps/web/lib/pulse/support-routes.test.ts"
+      - "packages/certscore-api-contracts/src/mcp.ts"
+      - "packages/certscore-mcp/**"
+      - "scripts/smoke-mcp.sh"
+      - "scripts/verify-certscore-mcp-release-guards.ts"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/certscore-mcp-release-guards.yml"
+      - "apps/web/app/.well-known/certscore-ai.json/route.ts"
+      - "apps/web/app/api-pulse/page.tsx"
+      - "apps/web/app/developers/**"
+      - "apps/web/lib/pulse/support-routes.test.ts"
+      - "packages/certscore-api-contracts/src/mcp.ts"
+      - "packages/certscore-mcp/**"
+      - "scripts/smoke-mcp.sh"
+      - "scripts/verify-certscore-mcp-release-guards.ts"
+
+jobs:
+  release-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build MCP dependencies
+        run: |
+          pnpm --filter @certscore/api-contracts build
+          pnpm --filter @certscore/sdk build
+
+      - name: Test MCP package
+        run: |
+          pnpm --filter certscore-mcp typecheck
+          pnpm --filter certscore-mcp test
+          pnpm --filter certscore-mcp build
+
+      - name: Verify release drift guards
+        run: node --import tsx scripts/verify-certscore-mcp-release-guards.ts

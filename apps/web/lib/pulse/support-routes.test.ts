@@ -552,8 +552,22 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.npmPackage, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "npm_developer_preview");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.1.3");
+  assert.equal(aiDiscovery.mcp.currentVersion, "0.1.4");
   assert.equal(aiDiscovery.mcp.install, "npx -y certscore-mcp");
+  assert.deepEqual(aiDiscovery.mcp.currentTools, [
+    "scan_site",
+    "create_scan",
+    "get_scan",
+    "get_scan_status",
+    "get_report",
+    "get_evidence",
+    "export_findings",
+    "list_findings",
+    "get_pre_consent_cookies_trackers",
+    "explain_finding",
+    "get_latest_domain_scan",
+    "get_latest_domain_pre_consent_cookies_trackers"
+  ]);
   assert.equal(
     aiDiscovery.mcp.macosAlternativeInstall,
     "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp"
