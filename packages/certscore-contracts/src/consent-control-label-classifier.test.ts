@@ -436,12 +436,50 @@ test("classifies necessary-only labels as reject-equivalent", () => {
     "Only technically required",
     "Nur notwendige Cookies",
     "Cookies nécessaires uniquement",
+    "Consenti solo i cookie tecnici",
+    "Solo cookie tecnici",
   ]) {
     const classification = classifyConsentControlLabel({ label });
     assert.equal(classification.intent, "reject");
     assert.equal(classification.matchStrength, "equivalent");
     assert.equal(classification.variant, "necessary_only");
   }
+});
+
+test("classifies focused retail cohort consent controls without broadening generic labels", () => {
+  const germanOneTrustOptions = classifyConsentControlLabel({
+    label: "Mehr Informationen, Öffnet das Einstellungscenter-Dialogfeld",
+  });
+  assert.equal(germanOneTrustOptions.intent, "options");
+  assert.equal(germanOneTrustOptions.matchedLocale, "de");
+  assert.equal(germanOneTrustOptions.matchStrength, "direct");
+
+  assert.equal(classifyConsentControlLabel({
+    label: "Mehr Informationen",
+    contextText: "Weitere Informationen über Lieferung, Rückgabe und Kundenservice.",
+  }).intent, "unknown");
+
+  const polishContextText = "Dbamy o Twoją prywatność. Używamy plików cookie i prosimy o zgodę użytkownika.";
+  for (const label of ["Dostosuj zgody", "Dostosuj ustawienia", "Dostosuj preferencje"]) {
+    const classification = classifyConsentControlLabel({
+      label,
+      contextText: polishContextText,
+      classifierProfile: "multilingual_v1",
+    });
+    assert.equal(classification.intent, "options", label);
+    assert.equal(classification.matchedLocale, "pl", label);
+    assert.equal(
+      isProductionCreditworthySupplementalConsentControlClassification(label, classification),
+      true,
+      label,
+    );
+  }
+
+  assert.equal(classifyConsentControlLabel({
+    label: "Dostosuj",
+    contextText: "Dostosuj swój profil sklepu i ustawienia konta.",
+    classifierProfile: "multilingual_v1",
+  }).intent, "unknown");
 });
 
 test("classifies Dutch and Polish necessary-only labels only with multilingual profile", () => {

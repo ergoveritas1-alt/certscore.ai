@@ -251,10 +251,10 @@ const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN =
 const CMP_SELECTOR_CONSENT_CONTEXT_PATTERN =
   /onetrust|optanon|cmpbox|consentmanager|didomi|cookiebot|usercentrics|sourcepoint|sp_message|privacy-mgmt|trustarc/i;
 const CMP_SELECTOR_PREFERENCE_CONTEXT_PATTERN =
-  /pc-btn|preference|preferences|settings|custom|manage|choice|choices|voorkeur|instelling|ustawieni|preferencj/i;
+  /pc-btn|preference|preferences|settings|custom|manage|choice|choices|einstellungscenter|voorkeur|instelling|ustawieni|preferencj|dostosuj/i;
 const POLICY_LINK_PATTERN = /\b(?:privacy policy|cookie policy|privacy statement|cookie statement|privacy notice|cookie notice|privacy and cookie policy|politique de confidentialit[eé]|politique de confidentialit[eé] et de gestion des cookies|politique|datenschutzerklärung)\b/i;
 const CANDIDATE_ACTION_PRIORITY_PATTERN =
-  /accept|agree|allow|continue|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|necessary|essential|required|technical|akzeptieren|ablehnen|einstellungen|accepter|refuser|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
+  /accept|agree|allow|continue|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|necessary|essential|required|technical|akzeptieren|ablehnen|einstellungen|einstellungscenter|accepter|refuser|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|tecnici|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|akceptuj|akceptuję|zaakceptuj|odrzuć|ustawienia|preferencje|dostosuj|zgody|przejdź/i;
 const STATIC_TEXT_TAG_NAMES = new Set(["p", "span", "strong", "em", "small", "li", "h1", "h2", "h3", "h4", "h5", "h6"]);
 const INTERACTIVE_TAG_NAMES = new Set(["a", "button", "input", "select", "textarea"]);
 const INTERACTIVE_ROLE_PATTERN = /^(button|link|checkbox|radio|switch|tab|menuitem)$/i;
@@ -295,9 +295,10 @@ export async function captureConsentControlGeometry(
     containerId: `container_${index}`,
     ...container,
   }));
-  const candidates = raw.candidates.map((candidate, index) =>
+  const builtCandidates = raw.candidates.map((candidate, index) =>
     buildCandidateEvidence(candidate, index, raw.pageUrl, options.screenshotArtifactRef, containers)
   );
+  const candidates = pruneNoisyParentContainerCandidates(builtCandidates);
   const summary = summarizeConsentControlGeometry(candidates, containers, cmp);
 
   return {
@@ -785,6 +786,67 @@ function cmpNoActionableSurfaceLimitationKeys(
   return ["cmp_detected_no_actionable_control_labels_retained"];
 }
 
+function pruneNoisyParentContainerCandidates(
+  candidates: ConsentControlCandidateEvidence[],
+): ConsentControlCandidateEvidence[] {
+  const interactiveChildren = candidates.filter((candidate) =>
+    isInteractiveGeometryCandidate(candidate) &&
+    isActionableConsentGeometryCandidate(candidate) &&
+    candidate.decisionStatus === "confirmed_visible"
+  );
+  if (interactiveChildren.length === 0) {
+    return candidates;
+  }
+
+  return candidates.filter((candidate) => {
+    if (
+      isInteractiveGeometryCandidate(candidate) ||
+      !isActionableConsentGeometryCandidate(candidate) ||
+      candidate.decisionStatus !== "confirmed_visible"
+    ) {
+      return true;
+    }
+    const normalizedParentLabel = normalizeLabel(candidate.label);
+    const containedChildLabels = interactiveChildren
+      .filter((child) =>
+        child.candidateId !== candidate.candidateId &&
+        child.actionType === candidate.actionType &&
+        rectContains(candidate.boundingBox, child.boundingBox) &&
+        normalizedParentLabel.includes(normalizeLabel(child.label))
+      );
+    const distinctActionChildren = new Set(interactiveChildren
+      .filter((child) =>
+        child.candidateId !== candidate.candidateId &&
+        rectContains(candidate.boundingBox, child.boundingBox) &&
+        normalizedParentLabel.includes(normalizeLabel(child.label))
+      )
+      .map((child) => child.actionType));
+
+    return !(containedChildLabels.length > 0 && (candidate.label.length > 80 || distinctActionChildren.size >= 2));
+  });
+}
+
+function isInteractiveGeometryCandidate(candidate: ConsentControlCandidateEvidence): boolean {
+  return INTERACTIVE_TAG_NAMES.has(candidate.tagName) || INTERACTIVE_ROLE_PATTERN.test(candidate.role ?? "");
+}
+
+function isActionableConsentGeometryCandidate(candidate: ConsentControlCandidateEvidence): boolean {
+  return candidate.actionType === "accept_all" ||
+    candidate.actionType === "reject_all" ||
+    candidate.actionType === "manage_preferences";
+}
+
+function rectContains(outer: ConsentControlRect, inner: ConsentControlRect): boolean {
+  return outer.width > 0 &&
+    outer.height > 0 &&
+    inner.width > 0 &&
+    inner.height > 0 &&
+    inner.left >= outer.left &&
+    inner.right <= outer.right &&
+    inner.top >= outer.top &&
+    inner.bottom <= outer.bottom;
+}
+
 function normalizeLabel(label: string): string {
   return label.replace(/\s+/g, " ").trim().toLowerCase();
 }
@@ -804,9 +866,9 @@ function collectConsentGeometryInPage(input: {
     width: window.innerWidth,
     height: window.innerHeight,
   };
-  const consentPattern = /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|toestemming|voorkeuren|instellingen|keuzes|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|preferencj[ae]|ustawieni[ae]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie/i;
+  const consentPattern = /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|einstellungscenter|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|tecnici|toestemming|voorkeuren|instellingen|keuzes|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|preferencj[ae]|ustawieni[ae]|dostosuj|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie/i;
   const controlLabelPattern =
-    /accept|agree|allow|continue|ok|got it|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|save|cookie|cookies|analytics|necessary|essential|required|technical|akzeptieren|annehmen|ablehnen|einstellungen|verwalten|accepter|refuser|continuer|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|keuzes|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
+    /accept|agree|allow|continue|ok|got it|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|save|cookie|cookies|analytics|necessary|essential|required|technical|akzeptieren|annehmen|ablehnen|einstellungen|einstellungscenter|verwalten|accepter|refuser|continuer|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|tecnici|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|keuzes|akceptuj|akceptuję|zaakceptuj|odrzuć|ustawienia|preferencje|dostosuj|zgody|przejdź/i;
   const containerSelector = [
     "[role='dialog']",
     "[aria-modal='true']",

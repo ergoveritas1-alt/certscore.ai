@@ -295,6 +295,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     contextual("options", "konfigurieren", { requiresConsentContext: true }),
     ...direct("options", "präferenzcenter"),
     ...direct("options", "datenschutzcenter"),
+    ...direct("options", "mehr informationen öffnet das einstellungscenter-dialogfeld"),
     contextual("options", "auswahl speichern", { requiresPreferenceContext: true, variant: "save_preferences" }),
     contextual("options", "meine auswahl speichern", { requiresPreferenceContext: true, variant: "save_preferences" }),
     contextual("options", "einstellungen speichern", { requiresPreferenceContext: true, variant: "save_preferences" }),
@@ -474,6 +475,9 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "continua senza cookie"),
     equivalent("reject", "solo cookie necessari", "necessary_only"),
     equivalent("reject", "solo i cookie necessari", "necessary_only"),
+    equivalent("reject", "consenti solo i cookie tecnici", "necessary_only"),
+    equivalent("reject", "solo cookie tecnici", "necessary_only"),
+    equivalent("reject", "solo i cookie tecnici", "necessary_only"),
 
     contextual("options", "preferenze", { requiresConsentContext: true }),
     contextual("options", "impostazioni", { requiresConsentContext: true }),
@@ -563,6 +567,9 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     contextual("options", "opcje", { requiresConsentContext: true }),
     ...direct("options", "ustawienia plików cookie"),
     ...direct("options", "preferencje plików cookie"),
+    ...direct("options", "dostosuj zgody"),
+    ...direct("options", "dostosuj ustawienia"),
+    ...direct("options", "dostosuj preferencje"),
     ...direct("options", "zarządzaj zgodami"),
     ...direct("options", "zarządzaj preferencjami"),
     ...direct("options", "centrum preferencji"),
@@ -730,7 +737,7 @@ export function isProductionCreditworthySupplementalConsentControlClassification
       !/\bprzejd[zź]\b/i.test(normalizedLabel);
   }
   if (classification.intent === "options") {
-    return /(?:centrum preferencji|ustawienia zaawansowane|preferencje plik|ustawienia plik|zarządzaj (?:zgodami|preferencjami))/i.test(normalizedLabel) ||
+    return /(?:centrum preferencji|ustawienia zaawansowane|preferencje plik|ustawienia plik|zarządzaj (?:zgodami|preferencjami)|dostosuj (?:zgody|ustawienia|preferencje))/i.test(normalizedLabel) ||
       (strongMatch && /(?:preferenc|ustawieni|wybor|zgod)/i.test(normalizedLabel));
   }
   if (classification.intent === "reject") {

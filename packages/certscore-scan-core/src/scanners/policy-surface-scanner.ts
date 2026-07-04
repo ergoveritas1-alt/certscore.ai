@@ -20,6 +20,7 @@ const SCENARIO = "policy_surface_review";
 const MAX_CANDIDATES_TO_FETCH = 8;
 const MAX_COMMON_PATH_CANDIDATES_TO_FETCH = 18;
 const COMMON_PATH_BLOCKED_EARLY_STOP_FAILURES = 6;
+const COMMON_PATH_TRANSPORT_EARLY_STOP_FAILURES = 4;
 const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 3;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
@@ -332,19 +333,28 @@ export async function policySurfaceScanner(
     const initialCandidates = linkCandidates.length > 0
       ? linkCandidates
       : commonPathCandidates;
+    if (linkCandidates.length === 0) {
+      diagnosticsCandidates = commonPathCandidates;
+      observedCandidateCount = commonPathCandidates.length;
+      commonPathFallbackUsed = true;
+    }
     let speculativeCommonPathRankedCandidates: PolicySurfaceCandidate[] | undefined;
     let primaryRankedCandidatesFromCommonPath = false;
     const deterministicCoreCoverage =
       input.discoveryMode !== "fast" &&
       hasHighConfidenceDirectStaticCoreCoverage(staticCandidates);
-    let rankedCandidates = input.discoveryMode === "fast" || deterministicCoreCoverage
+    let rankedCandidates = input.discoveryMode === "fast" || deterministicCoreCoverage || linkCandidates.length === 0
       ? await recordPolicyTiming(
         timingBreakdown,
-        "deterministic link ranking",
-        deterministicCoreCoverage
+        linkCandidates.length === 0 ? "deterministic common-path ranking" : "deterministic link ranking",
+        linkCandidates.length === 0
+          ? `Rank ${initialCandidates.length} guessed common policy paths deterministically.`
+          : deterministicCoreCoverage
           ? `Rank ${initialCandidates.length} high-confidence policy candidates deterministically because direct GDPR/ePrivacy surfaces are already present.`
           : `Rank ${initialCandidates.length} policy candidates deterministically for planned-DAG fast mode.`,
-        async () => deterministicFetchFallback(initialCandidates),
+        async () => linkCandidates.length === 0
+          ? deterministicCommonPathFetchFallback(initialCandidates)
+          : deterministicFetchFallback(initialCandidates),
       )
       : await recordPolicyTiming(
         timingBreakdown,
@@ -352,38 +362,19 @@ export async function policySurfaceScanner(
         `Rank ${initialCandidates.length} policy candidates for supported surfaces.`,
         () => rankCandidatesWithRequiredNano(input, initialCandidates),
       );
-    if (input.discoveryMode !== "fast" && linkCandidates.length === 0 && rankedCandidates.length > 0) {
-      rankedCandidates = mergeCommonPathFallbackCandidates(
-        deterministicCommonPathFetchFallback(commonPathCandidates),
-        rankedCandidates,
-      );
-    }
     if (rankedCandidates.length === 0 && input.discoveryMode === "fast") {
       if (shouldSpeculateCommonPathNanoRanking(linkCandidates, commonPathCandidates)) {
-        const [linkNanoRanked, commonPathNanoRanked] = await Promise.allSettled([
-          recordPolicyTiming(
-            timingBreakdown,
-            "Nano link ranking",
-            `Rank ${initialCandidates.length} policy candidates for supported surfaces after deterministic fast-path found no fetchable candidates.`,
-            () => rankCandidatesWithRequiredNano(input, initialCandidates),
-          ),
-          recordPolicyTiming(
-            timingBreakdown,
-            "Nano common-path ranking",
-            `Rank ${commonPathCandidates.length} common policy paths in parallel with fallback link ranking.`,
-            () => rankCandidatesWithRequiredNano(
-              input,
-              commonPathCandidates,
-            ),
-          ),
-        ]);
-        if (linkNanoRanked.status === "rejected") {
-          throw linkNanoRanked.reason;
-        }
-        rankedCandidates = linkNanoRanked.value;
-        speculativeCommonPathRankedCandidates = mergeCommonPathFallbackCandidates(
-          deterministicCommonPathFetchFallback(commonPathCandidates),
-          commonPathNanoRanked.status === "fulfilled" ? commonPathNanoRanked.value : [],
+        rankedCandidates = await recordPolicyTiming(
+          timingBreakdown,
+          "Nano link ranking",
+          `Rank ${initialCandidates.length} policy candidates for supported surfaces after deterministic fast-path found no fetchable candidates.`,
+          () => rankCandidatesWithRequiredNano(input, initialCandidates),
+        );
+        speculativeCommonPathRankedCandidates = await recordPolicyTiming(
+          timingBreakdown,
+          "deterministic common-path ranking",
+          `Rank ${commonPathCandidates.length} common policy paths deterministically in parallel with fallback link ranking.`,
+          async () => deterministicCommonPathFetchFallback(commonPathCandidates),
         );
       } else {
         rankedCandidates = await recordPolicyTiming(
@@ -400,19 +391,11 @@ export async function policySurfaceScanner(
         if (speculativeCommonPathRankedCandidates) {
           rankedCandidates = speculativeCommonPathRankedCandidates;
         } else {
-          const deterministicCommonPathRanked = deterministicCommonPathFetchFallback(commonPathCandidates);
-          const nanoCommonPathRanked = await recordPolicyTiming(
+          rankedCandidates = await recordPolicyTiming(
             timingBreakdown,
-            "Nano common-path ranking",
+            "deterministic common-path ranking",
             `Rank ${commonPathCandidates.length} common policy paths after empty first pass.`,
-            () => rankCandidatesWithRequiredNano(
-              input,
-              commonPathCandidates,
-            ),
-          );
-          rankedCandidates = mergeCommonPathFallbackCandidates(
-            deterministicCommonPathRanked,
-            nanoCommonPathRanked,
+            async () => deterministicCommonPathFetchFallback(commonPathCandidates),
           );
         }
         commonPathFallbackUsed = true;
@@ -494,7 +477,7 @@ export async function policySurfaceScanner(
       observedCandidateCount,
       commonPathFallbackUsed,
       observations,
-      candidates: linkCandidates,
+      candidates: diagnosticsCandidates,
     }));
 
     return {
@@ -718,18 +701,20 @@ async function fetchRankedPolicyCandidates(input: {
   const deterministicCommonPathRanked = input.candidates.every((candidate) => candidate.discoveryMethod === "guessed_common_path")
     ? deterministicCommonPathFetchFallback(input.candidates)
     : [];
-  let rankedCandidates = await recordPolicyTiming(
-    input.timingBreakdown,
-    `${input.labelPrefix} Nano ranking`,
-    `Rank ${input.candidates.length} fallback policy candidates for supported surfaces.`,
-    () => rankCandidatesWithRequiredNano(input.input, input.candidates),
-  );
-  if (deterministicCommonPathRanked.length > 0) {
-    rankedCandidates = mergeCommonPathFallbackCandidates(
-      deterministicCommonPathRanked,
-      rankedCandidates,
+  let rankedCandidates = deterministicCommonPathRanked.length > 0
+    ? await recordPolicyTiming(
+      input.timingBreakdown,
+      `${input.labelPrefix} deterministic ranking`,
+      `Rank ${input.candidates.length} guessed common policy paths deterministically.`,
+      async () => deterministicCommonPathRanked,
+    )
+    : await recordPolicyTiming(
+      input.timingBreakdown,
+      `${input.labelPrefix} Nano ranking`,
+      `Rank ${input.candidates.length} fallback policy candidates for supported surfaces.`,
+      () => rankCandidatesWithRequiredNano(input.input, input.candidates),
     );
-  } else if (rankedCandidates.length === 0) {
+  if (rankedCandidates.length === 0) {
     rankedCandidates = deterministicFetchFallback(input.candidates);
   }
   return fetchPolicyCandidateGroup({
@@ -826,7 +811,15 @@ function shouldStopBlockedCommonPathFallback(
     (result.observation.httpStatus === 401 || result.observation.httpStatus === 403 || result.observation.httpStatus === 429) &&
     observationMatchesScanOrigin(normalizedScanUrl, result.observation)
   ).length;
-  return blockedSameOriginFailures >= COMMON_PATH_BLOCKED_EARLY_STOP_FAILURES;
+  if (blockedSameOriginFailures >= COMMON_PATH_BLOCKED_EARLY_STOP_FAILURES) {
+    return true;
+  }
+  const transportSameOriginFailures = results.filter((result) =>
+    result.observation.status === "failed" &&
+    result.observation.httpStatus === undefined &&
+    observationMatchesScanOrigin(normalizedScanUrl, result.observation)
+  ).length;
+  return transportSameOriginFailures >= COMMON_PATH_TRANSPORT_EARLY_STOP_FAILURES;
 }
 
 function observationMatchesScanOrigin(

@@ -532,6 +532,106 @@ test("captures Italian first-layer accept, reject, and options controls", async 
   assert.equal(findCandidate(artifact, "Gestisci preferenze")?.actionType, "manage_preferences");
 });
 
+test("captures Unieuro-style Italian technical-cookies-only as reject-equivalent", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>
+    <div id="onetrust-consent-sdk">
+      <div id="onetrust-banner-sdk" role="dialog" aria-modal="true" style="position: fixed; left: 120px; top: 120px; width: 720px; padding: 20px; background: white;">
+        <p>Usiamo cookie tecnici e cookie opzionali per pubblicità, tracciamento e misurazione. Puoi gestire le preferenze.</p>
+        <div id="onetrust-button-group">
+          <button id="onetrust-reject-all-handler">Consenti solo i cookie tecnici</button>
+          <button id="onetrust-pc-btn-handler">Gestisci preferenze</button>
+          <button id="onetrust-accept-btn-handler">Accetta tutto</button>
+        </div>
+      </div>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "OneTrust");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  const reject = findCandidate(artifact, "Consenti solo i cookie tecnici");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.matchStrength, "equivalent");
+  assert.equal(reject?.classifierReasonCodes.includes("variant_necessary_only"), true);
+});
+
+test("captures Empik-style Polish customize-consent options control", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+    <div id="cmpbox" class="cmpbox cmpboxWelcomeGDPR" role="dialog" aria-modal="true" style="position: fixed; left: 120px; top: 120px; width: 700px; padding: 24px; background: white;">
+      <h1>Dbamy o Twoją prywatność</h1>
+      <p>Używamy plików cookie i podobnych technologii. Prosimy o zgodę na personalizację reklam i pomiar statystyk.</p>
+      <button type="button">Dostosuj zgody</button>
+      <button type="button">Zaakceptuj zgody</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  const options = findCandidate(artifact, "Dostosuj zgody");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.matchedLocale, "pl");
+  assert.equal(options?.decisionStatus, "confirmed_visible");
+});
+
+test("captures Otto-style German OneTrust preference-center info button as options", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>
+    <div id="onetrust-consent-sdk">
+      <section id="onetrust-banner-sdk" role="dialog" aria-modal="true" style="position: fixed; left: 120px; top: 120px; width: 720px; padding: 20px; background: white;">
+        <p>Wir verwenden Cookies und ähnliche Technologien für Marketing und Analyse.</p>
+        <div id="onetrust-button-group">
+          <button id="onetrust-reject-all-handler">Alle ablehnen</button>
+          <button id="onetrust-pc-btn-handler" aria-label="Mehr Informationen, Öffnet das Einstellungscenter-Dialogfeld">Mehr Informationen</button>
+          <button id="onetrust-accept-btn-handler">Alle akzeptieren</button>
+        </div>
+      </section>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "OneTrust");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  const options = artifact.candidates.find((candidate) =>
+    candidate.ariaLabel === "Mehr Informationen, Öffnet das Einstellungscenter-Dialogfeld"
+  );
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.matchedTerm, "mehr informationen öffnet das einstellungscenter-dialogfeld");
+});
+
+test("suppresses non-interactive parent labels when child consent buttons prove the same controls", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" style="position: fixed; left: 160px; top: 120px; width: 760px; padding: 24px; background: white;">
+      <div data-testid="modal-body" tabindex="0">
+        Personalise your shopping experience. We use cookies for privacy choices and advertising.
+        <button>Reject all cookies</button>
+        <button>Accept all cookies</button>
+        <button>Manage cookies</button>
+      </div>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Reject all cookies")?.actionType, "reject_all");
+  assert.equal(findCandidate(artifact, "Accept all cookies")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Manage cookies")?.actionType, "manage_preferences");
+  assert.equal(
+    artifact.candidates.some((candidate) =>
+      candidate.tagName === "div" &&
+      candidate.label.includes("Personalise your shopping experience")
+    ),
+    false,
+  );
+});
+
 test("does not count Utiq-scoped refusal as first-layer cookie reject", async () => {
   const artifact = await captureFixture(`
     <div role="dialog" style="position: fixed; left: 120px; top: 80px; width: 760px; padding: 20px; background: white;">

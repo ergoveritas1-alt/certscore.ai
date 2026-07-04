@@ -1271,13 +1271,32 @@ test("policySurfaceScanner records privacy center links without clicking prefere
 test("policySurfaceScanner uses common-path fallback when no homepage policy links exist", async () => {
   await withPolicyScan("policy-no-links", async ({ result, baseUrl }) => {
     const fallback = result.policySurfaceObservations.find((observation) =>
-      observation.discoveryMethod === "nano_assisted_link_classification" &&
+      observation.discoveryMethod === "guessed_common_path" &&
       observation.status === "fetched" &&
       observation.normalizedUrl === `${baseUrl}/privacy`,
     );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
 
     assert.ok(fallback);
     assert.equal(fallback.surfaceType, "privacy_policy");
+    assert.equal(diagnostics.observedCandidateCount > 0, true);
+    assert.equal(
+      diagnostics.candidateSummary.some((candidate) =>
+        candidate.discoveryMethod === "guessed_common_path" &&
+        candidate.normalizedUrl === `${baseUrl}/privacy`
+      ),
+      true,
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label === "deterministic common-path ranking"),
+      true,
+    );
+  }, {
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run for guessed common-path fallback.");
+      },
+    },
   });
 });
 
@@ -1334,7 +1353,7 @@ test("policySurfaceScanner keeps blocked common-path fallback bounded", async ()
     const diagnostics = await readPolicyCaptureDiagnostics(result);
 
     assert.equal(result.moduleRun.status, "completed");
-    assert.equal(blockedCommonPathFailures.length, 4);
+    assert.equal(blockedCommonPathFailures.length, 6);
     assert.equal(diagnostics.limitationKeys.includes("policy_access_blocked"), true);
     assert.equal(diagnostics.limitationKeys.includes("common_path_fallback_retained_no_core_surface"), true);
     assert.equal(
@@ -1347,34 +1366,49 @@ test("policySurfaceScanner keeps blocked common-path fallback bounded", async ()
   }
 });
 
-test("policySurfaceScanner keeps core common paths when Nano ranks only secondary controls after homepage failure", async () => {
+test("policySurfaceScanner keeps transport-failed common-path fallback bounded", async () => {
+  const server = await startTransportFailedPolicyServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await policySurfaceScanner({
+      url: `${server.baseUrl}/`,
+      normalizedUrl: `${server.baseUrl}/`,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 8_000,
+      artifactWriter,
+      nanoAssistProvider: {
+        async classifyLinks() {
+          throw new Error("Nano link ranking should not run for guessed common-path fallback.");
+        },
+      },
+    });
+    const transportCommonPathFailures = result.policySurfaceObservations.filter((observation) =>
+      observation.discoveryMethod === "guessed_common_path" &&
+      observation.status === "failed" &&
+      observation.httpStatus === undefined
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(transportCommonPathFailures.length, 6);
+    assert.equal(diagnostics.limitationKeys.includes("common_path_fallback_retained_no_core_surface"), true);
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label === "deterministic common-path ranking"),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("policySurfaceScanner ranks homepage-failed common paths deterministically", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
-  let commonPathRanked = false;
   const nanoAssistProvider: PolicyNanoAssistProvider = {
-    async classifyLinks(input) {
-      const secondary = input.candidates
-        .filter((candidate) =>
-          candidate.discoveryMethod === "guessed_common_path" &&
-          (candidate.normalizedUrl.endsWith("/privacy-choices") || candidate.normalizedUrl.endsWith("/cookie-settings"))
-        )
-        .slice(0, 2);
-      if (secondary.length > 0) {
-        commonPathRanked = true;
-      }
-      return {
-        assistId: input.assistId,
-        rankedCandidates: secondary.map((candidate, index) => ({
-          candidateId: candidate.candidateId,
-          likelySurfaceType: candidate.normalizedUrl.endsWith("/cookie-settings")
-            ? "cookie_settings"
-            : "your_privacy_choices",
-          shouldFetch: true,
-          priorityRank: index + 1,
-          confidence: 0.92,
-          reason: "Mock Nano ranked secondary consent controls before core policy paths.",
-        })),
-      };
+    async classifyLinks() {
+      throw new Error("Nano link ranking should not run for guessed common-path fallback.");
     },
   };
 
@@ -1396,10 +1430,13 @@ test("policySurfaceScanner keeps core common paths when Nano ranks only secondar
         observation.discoveryMethod === "guessed_common_path"
       );
 
-    assert.equal(commonPathRanked, true);
     assert.equal(fetchedCorePolicy, true);
     assert.equal(
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed common-path")),
+      true,
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed common-path deterministic ranking")),
       true,
     );
   } finally {
@@ -1486,29 +1523,15 @@ test("policySurfaceScanner uses rendered policy document fallback when direct po
   }
 });
 
-test("policySurfaceScanner falls back to common paths when Nano declines observed generic links", async () => {
+test("policySurfaceScanner falls back to deterministic common paths when Nano declines observed generic links", async () => {
   let classifyCalls = 0;
   const nanoAssistProvider: PolicyNanoAssistProvider = {
     async classifyLinks(input) {
       classifyCalls += 1;
-      const fallback = input.candidates.find((candidate) =>
-        candidate.discoveryMethod === "guessed_common_path" &&
-        candidate.normalizedUrl.endsWith("/privacy"),
-      );
-      if (!fallback) {
-        return { assistId: input.assistId, rankedCandidates: [] };
+      if (input.candidates.some((candidate) => candidate.discoveryMethod === "guessed_common_path")) {
+        throw new Error("Nano link ranking should not run for guessed common-path fallback.");
       }
-      return {
-        assistId: input.assistId,
-        rankedCandidates: [{
-          candidateId: fallback.candidateId,
-          likelySurfaceType: "privacy_policy",
-          shouldFetch: true,
-          priorityRank: 1,
-          confidence: 0.94,
-          reason: "Fallback common privacy path after generic observed links were declined.",
-        }],
-      };
+      return { assistId: input.assistId, rankedCandidates: [] };
     },
   };
 
@@ -1518,7 +1541,7 @@ test("policySurfaceScanner falls back to common paths when Nano declines observe
       observation.normalizedUrl === `${baseUrl}/privacy`,
     );
 
-    assert.equal(classifyCalls, 2);
+    assert.equal(classifyCalls, 1);
     assert.ok(fallback);
     assert.equal(fallback.surfaceType, "privacy_policy");
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
@@ -1546,23 +1569,10 @@ test("policySurfaceScanner does not let Nano upgrade generic links without direc
         };
       }
 
-      const fallback = input.candidates.find((candidate) =>
-        candidate.discoveryMethod === "guessed_common_path" &&
-        candidate.normalizedUrl.endsWith("/privacy"),
-      );
-      return {
-        assistId: input.assistId,
-        rankedCandidates: fallback
-          ? [{
-              candidateId: fallback.candidateId,
-              likelySurfaceType: "privacy_policy",
-              shouldFetch: true,
-              priorityRank: 1,
-              confidence: 0.94,
-              reason: "Fallback common privacy path after generic observed links were rejected.",
-            }]
-          : [],
-      };
+      if (input.candidates.some((candidate) => candidate.discoveryMethod === "guessed_common_path")) {
+        throw new Error("Nano link ranking should not run for guessed common-path fallback.");
+      }
+      return { assistId: input.assistId, rankedCandidates: [] };
     },
   };
 
@@ -1577,7 +1587,7 @@ test("policySurfaceScanner does not let Nano upgrade generic links without direc
       observation.surfaceType === "privacy_policy"
     );
 
-    assert.equal(classifyCalls, 2);
+    assert.equal(classifyCalls, 1);
     assert.equal(genericUpgrade, undefined);
     assert.ok(fallback);
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
@@ -1649,30 +1659,15 @@ test("policySurfaceScanner ignores external URL-only body privacy links as polic
   }, { enableNanoPolicyAssist: true });
 });
 
-test("policySurfaceScanner keeps deterministic common paths when speculative Nano common-path ranking is poor", async () => {
+test("policySurfaceScanner keeps deterministic common paths without speculative Nano common-path ranking", async () => {
   let classifyCalls = 0;
   const nanoAssistProvider: PolicyNanoAssistProvider = {
     async classifyLinks(input) {
       classifyCalls += 1;
-      if (input.candidates.some((candidate) => candidate.discoveryMethod !== "guessed_common_path")) {
-        return { assistId: input.assistId, rankedCandidates: [] };
+      if (input.candidates.some((candidate) => candidate.discoveryMethod === "guessed_common_path")) {
+        throw new Error("Nano link ranking should not run for guessed common-path fallback.");
       }
-      const badCandidate = input.candidates.find((candidate) =>
-        candidate.normalizedUrl.endsWith("/privacy-choices")
-      );
-      return {
-        assistId: input.assistId,
-        rankedCandidates: badCandidate
-          ? [{
-              candidateId: badCandidate.candidateId,
-              likelySurfaceType: "privacy_policy",
-              shouldFetch: true,
-              priorityRank: 1,
-              confidence: 0.91,
-              reason: "Mock Nano over-prioritized a less reliable common path.",
-            }]
-          : []
-      };
+      return { assistId: input.assistId, rankedCandidates: [] };
     },
   };
 
@@ -1683,7 +1678,7 @@ test("policySurfaceScanner keeps deterministic common paths when speculative Nan
     );
     const diagnostics = await readPolicyCaptureDiagnostics(result);
 
-    assert.equal(classifyCalls, 2);
+    assert.equal(classifyCalls, 1);
     assert.ok(retained);
     assert.equal(retained.surfaceType, "privacy_policy");
     assert.equal(diagnostics.corePolicySurfaceRetained, true);
@@ -1691,33 +1686,13 @@ test("policySurfaceScanner keeps deterministic common paths when speculative Nan
   }, { discoveryMode: "fast", enableNanoPolicyAssist: true, nanoAssistProvider });
 });
 
-test("policySurfaceScanner keeps core common paths when observed links are declined and Nano ranks secondary common paths", async () => {
-  let commonPathRanked = false;
+test("policySurfaceScanner keeps core common paths when observed links are declined", async () => {
   const nanoAssistProvider: PolicyNanoAssistProvider = {
     async classifyLinks(input) {
-      if (input.candidates.some((candidate) => candidate.discoveryMethod !== "guessed_common_path")) {
-        return { assistId: input.assistId, rankedCandidates: [] };
+      if (input.candidates.some((candidate) => candidate.discoveryMethod === "guessed_common_path")) {
+        throw new Error("Nano link ranking should not run for guessed common-path fallback.");
       }
-      const secondary = input.candidates
-        .filter((candidate) =>
-          candidate.deterministicSurfaceType === "your_privacy_choices" ||
-          candidate.deterministicSurfaceType === "cookie_settings"
-        )
-        .slice(0, 2);
-      if (secondary.length > 0) {
-        commonPathRanked = true;
-      }
-      return {
-        assistId: input.assistId,
-        rankedCandidates: secondary.map((candidate, index) => ({
-          candidateId: candidate.candidateId,
-          likelySurfaceType: candidate.deterministicSurfaceType,
-          shouldFetch: true,
-          priorityRank: index + 1,
-          confidence: 0.91,
-          reason: "Mock Nano ranked secondary common paths before core policy paths.",
-        })),
-      };
+      return { assistId: input.assistId, rankedCandidates: [] };
     },
   };
 
@@ -1729,7 +1704,6 @@ test("policySurfaceScanner keeps core common paths when observed links are decli
         observation.discoveryMethod === "guessed_common_path"
       );
 
-    assert.equal(commonPathRanked, true);
     assert.equal(fetchedCorePolicy, true);
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
 });
@@ -2415,6 +2389,7 @@ async function readPolicyCaptureDiagnostics(
   candidateSummary: Array<{
     classifierProvenance: string;
     classifierReasonCodes: string[];
+    discoveryMethod: string;
     linkText: string;
     matchedLocale?: string;
     matchStrength?: string;
@@ -2434,6 +2409,25 @@ async function startBlockedPolicyServer(): Promise<{ baseUrl: string; close: () 
   const server = createServer((_request, response) => {
     response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
     response.end("<!doctype html><html><body><main>Access blocked</main></body></html>");
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => closeServer(server),
+  };
+}
+
+async function startTransportFailedPolicyServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    if (request.url === "/" || request.url === "") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html><body><main>Retail homepage without policy links</main></body></html>");
+      return;
+    }
+    response.destroy();
   });
   await new Promise<void>((resolve) => {
     server.listen(0, "127.0.0.1", resolve);
