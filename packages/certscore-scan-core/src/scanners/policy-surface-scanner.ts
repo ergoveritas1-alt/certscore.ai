@@ -21,6 +21,7 @@ const MAX_CANDIDATES_TO_FETCH = 8;
 const MAX_COMMON_PATH_CANDIDATES_TO_FETCH = 18;
 const COMMON_PATH_BLOCKED_EARLY_STOP_FAILURES = 6;
 const COMMON_PATH_TRANSPORT_EARLY_STOP_FAILURES = 4;
+const COMMON_PATH_APP_SHELL_EARLY_STOP_FETCHES = 3;
 const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 3;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
@@ -674,10 +675,35 @@ function policyCaptureLimitationKeys(input: {
   if (skippedBudget.length > 0) {
     keys.push("policy_fetch_budget_exhausted");
   }
+  if (commonPathAppShellFetchCurtailed(input.observations)) {
+    keys.push("common_path_app_shell_curtailed");
+  }
   if (input.commonPathFallbackUsed && input.coreSurfaceCount === 0) {
     keys.push("common_path_fallback_retained_no_core_surface");
   }
   return uniqueStrings(keys).slice(0, 12);
+}
+
+function commonPathAppShellFetchCurtailed(observations: PolicySurfaceObservation[]) {
+  const shellCounts = new Map<string, number>();
+  for (const observation of observations) {
+    if (observation.discoveryMethod !== "guessed_common_path" || observation.status !== "fetched") {
+      continue;
+    }
+    if (
+      (observation.article13DisclosureSignals ?? []).length > 0 ||
+      (observation.gdprTransparencyTopicCandidates ?? []).length > 0 ||
+      (observation.observedTopics ?? []).length > 0
+    ) {
+      continue;
+    }
+    const signature = appShellObservationSignature(observation);
+    if (!signature) {
+      continue;
+    }
+    shellCounts.set(signature, (shellCounts.get(signature) ?? 0) + 1);
+  }
+  return [...shellCounts.values()].some((count) => count >= COMMON_PATH_APP_SHELL_EARLY_STOP_FETCHES);
 }
 
 function summarizeDocumentBackedPolicySignals(observations: PolicySurfaceObservation[]) {
@@ -834,6 +860,9 @@ function shouldStopBlockedCommonPathFallback(
   normalizedScanUrl: string,
   results: ProcessPolicyCandidateResult[],
 ): boolean {
+  if (shouldStopRepeatedCommonPathAppShellFallback(normalizedScanUrl, results)) {
+    return true;
+  }
   const coreSurfaceRetained = results.some((result) =>
     result.observation.status === "fetched" &&
     (result.observation.surfaceType === "privacy_policy" || result.observation.surfaceType === "cookie_policy")
@@ -855,6 +884,53 @@ function shouldStopBlockedCommonPathFallback(
     observationMatchesScanOrigin(normalizedScanUrl, result.observation)
   ).length;
   return transportSameOriginFailures >= COMMON_PATH_TRANSPORT_EARLY_STOP_FAILURES;
+}
+
+function shouldStopRepeatedCommonPathAppShellFallback(
+  normalizedScanUrl: string,
+  results: ProcessPolicyCandidateResult[],
+): boolean {
+  const shellCounts = new Map<string, number>();
+  for (const result of results) {
+    const observation = result.observation;
+    if (!looksLikeUninformativeCommonPathAppShell(normalizedScanUrl, observation)) {
+      continue;
+    }
+    const signature = appShellObservationSignature(observation);
+    if (!signature) {
+      continue;
+    }
+    const count = (shellCounts.get(signature) ?? 0) + 1;
+    if (count >= COMMON_PATH_APP_SHELL_EARLY_STOP_FETCHES) {
+      return true;
+    }
+    shellCounts.set(signature, count);
+  }
+  return false;
+}
+
+function looksLikeUninformativeCommonPathAppShell(
+  normalizedScanUrl: string,
+  observation: PolicySurfaceObservation,
+): boolean {
+  return observation.discoveryMethod === "guessed_common_path" &&
+    observation.status === "fetched" &&
+    observationMatchesScanOrigin(normalizedScanUrl, observation) &&
+    (observation.article13DisclosureSignals ?? []).length === 0 &&
+    (observation.gdprTransparencyTopicCandidates ?? []).length === 0 &&
+    (observation.observedTopics ?? []).length === 0;
+}
+
+function appShellObservationSignature(observation: Pick<PolicySurfaceObservation, "title" | "textExcerpt">): string | undefined {
+  const title = normalizeWhitespace(observation.title ?? "").toLowerCase();
+  const text = normalizeWhitespace(observation.textExcerpt ?? "").toLowerCase();
+  if (title.length >= 12) {
+    return `title:${title.slice(0, 120)}`;
+  }
+  if (text.length >= 180) {
+    return `text:${text.slice(0, 260)}`;
+  }
+  return undefined;
 }
 
 function observationMatchesScanOrigin(

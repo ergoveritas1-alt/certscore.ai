@@ -265,6 +265,47 @@ test("Article 13 rejection contract accepts Wyborcza-style Polish row-specific e
   }
 });
 
+test("Article 13 rejection contract accepts Dutch healthcare row-specific excerpts", () => {
+  const examples = [
+    {
+      disclosureType: "controller_contact",
+      text: "Privacyverklaring. De organisatie is verantwoordelijk voor de verwerking van persoonsgegevens op deze website.",
+    },
+    {
+      disclosureType: "processing_purposes",
+      text: "In deze privacyverklaring staat waarvoor gebruiken wij uw persoonsgegevens en hoe we jouw persoonsgegevens gebruiken voor zorg en dienstverlening.",
+    },
+    {
+      disclosureType: "processing_purposes",
+      text: "Privacybeleid. Deze tekst beschrijft waarom en hoe wij deze gegevens opslaan wanneer u gebruik maakt van de dienst.",
+    },
+    {
+      disclosureType: "recipients_or_vendor_categories",
+      text: "Privacybeleid. Wij leggen uit aan wie geven wij uw gegevens door en met wie delen wij uw persoonsgegevens.",
+    },
+    {
+      disclosureType: "data_retention",
+      text: "Privacybeleid. Hieronder lees je welke persoonsgegevens we verwerken, wat we hiermee doen en hoe lang we die bewaren.",
+    },
+    {
+      disclosureType: "data_subject_rights",
+      text: "Privacybeleid. Wij leggen uit welke rechten jij hierbij hebt, waaronder het recht om bezwaar te maken tegen het verwerken van persoonsgegevens.",
+    },
+    {
+      disclosureType: "supervisory_authority",
+      text: "Privacybeleid. De Autoriteit Persoonsgegevens ziet erop toe dat organisaties persoonsgegevens volgens de privacywet verwerken.",
+    },
+  ] as const;
+
+  for (const example of examples) {
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(example.text, example.disclosureType, { mode: "multilingual_classifier" }),
+      true,
+      `${example.disclosureType} should be usable`,
+    );
+  }
+});
+
 test("Article 13 rejection contract accepts Spanish and Italian real-style row-specific excerpts", () => {
   const examples = [
     {

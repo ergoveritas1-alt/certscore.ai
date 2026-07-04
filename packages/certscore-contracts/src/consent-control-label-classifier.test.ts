@@ -122,6 +122,49 @@ test("classifies observed Spanish and Italian consent labels", () => {
   }).intent, "unknown");
 });
 
+test("classifies healthcare cohort consent labels only with consent context", () => {
+  const germanReject = classifyConsentControlLabel({
+    label: "Nur erforderliche",
+    contextText: "Wir verwenden Cookies und ähnliche Technologien für Analyse und Marketing.",
+  });
+  assert.equal(germanReject.intent, "reject");
+  assert.equal(germanReject.matchedLocale, "de");
+  assert.equal(germanReject.variant, "necessary_only");
+  assert.equal(germanReject.contextSatisfied, true);
+
+  assert.equal(classifyConsentControlLabel({
+    label: "Nur erforderliche",
+    contextText: "Bitte reichen Sie nur erforderliche Unterlagen ein.",
+  }).intent, "unknown");
+
+  const frenchReject = classifyConsentControlLabel({
+    label: "Non merci",
+    contextText: "Nous utilisons des cookies pour mesurer l'audience et personnaliser le contenu.",
+  });
+  assert.equal(frenchReject.intent, "reject");
+  assert.equal(frenchReject.matchedLocale, "fr");
+  assert.equal(frenchReject.contextSatisfied, true);
+
+  assert.equal(classifyConsentControlLabel({
+    label: "Non merci",
+    contextText: "Inscrivez-vous à notre newsletter santé.",
+  }).intent, "unknown");
+
+  const italianReject = classifyConsentControlLabel({
+    label: "Accetta solo necessari",
+    contextText: "Usiamo cookie tecnici e opzionali per pubblicità, tracciamento e misurazione.",
+  });
+  assert.equal(italianReject.intent, "reject");
+  assert.equal(italianReject.matchedLocale, "it");
+  assert.equal(italianReject.variant, "necessary_only");
+  assert.equal(italianReject.contextSatisfied, true);
+
+  assert.equal(classifyConsentControlLabel({
+    label: "Accetta solo necessari",
+    contextText: "Accetta solo necessari documenti per completare la pratica.",
+  }).intent, "unknown");
+});
+
 test("classifies canonical consent controls across supported privacy evidence locales with multilingual profile", () => {
   const examples = [
     { label: "Accept all", locale: "en", intent: "accept" },

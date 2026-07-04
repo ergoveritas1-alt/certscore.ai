@@ -207,6 +207,63 @@ test("classifies German GDPR notice intro phrasing from retained policy text", (
   assert.equal(topics.size >= 5, true);
 });
 
+test("classifies Dutch healthcare privacy wording without site-specific shortcuts", () => {
+  const examples = [
+    {
+      text: [
+        "In deze privacyverklaring staat hoe we omgaan met jouw privacy en persoonsgegevens.",
+        "Deze dingen staan erin: Welke gegevens de dienst opslaat van jou.",
+        "Waarom en hoe wij deze gegevens opslaan.",
+        "Welke rechten jij hierbij hebt.",
+        "De organisatie is verantwoordelijk voor de verwerking van persoonsgegevens op deze website.",
+      ].join(" "),
+      topics: ["controller_contact", "processing_purposes", "data_subject_rights"],
+    },
+    {
+      text: [
+        "Privacybeleid. Hieronder lees je welke persoonsgegevens we van je verwerken,",
+        "wat we hiermee doen, aan wie geven wij uw gegevens door en hoe lang we die bewaren.",
+        "De Autoriteit Persoonsgegevens ziet erop toe dat organisaties zich aan de privacywet houden.",
+      ].join(" "),
+      topics: ["processing_purposes", "recipients_or_vendor_categories", "data_retention", "supervisory_authority"],
+    },
+    {
+      text: [
+        "Privacyverklaring. Wij leggen uit waarvoor gebruiken wij uw persoonsgegevens,",
+        "met wie delen wij uw persoonsgegevens en welke rechten u heeft.",
+      ].join(" "),
+      topics: ["processing_purposes", "recipients_or_vendor_categories", "data_subject_rights"],
+    },
+  ] as const;
+
+  for (const example of examples) {
+    const classification = classifyGdprTransparencyTopics({
+      text: example.text,
+      localeHints: ["nl"],
+    });
+    for (const topic of example.topics) {
+      const match = classification.matches.find((candidate) => candidate.topic === topic);
+      assert.ok(match, `Dutch healthcare wording should classify ${topic}`);
+      assert.equal(match.matchedLocale, "nl");
+      assert.equal(match.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+      assert.ok(match.evidenceExcerpt.length <= 360);
+    }
+  }
+});
+
+test("keeps generic Dutch healthcare page copy out of GDPR Transparency topics", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["nl"],
+    text: [
+      "Welkom bij de huisartsenzorg. Bekijk informatie over klachten, behandelingen en medicijnen.",
+      "Welke gegevens opslaat in het dossier hangt af van uw afspraak.",
+      "Bewaartermijn van medicijnen en verwijzingen kan verschillen per patiënt.",
+    ].join(" "),
+  });
+
+  assert.deepEqual(classification.matches, []);
+});
+
 test("classifies Polish Article 13 policy wording with explicit processing context", () => {
   const classification = classifyGdprTransparencyTopics({
     localeHints: ["pl"],

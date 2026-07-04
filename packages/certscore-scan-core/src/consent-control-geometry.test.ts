@@ -558,6 +558,66 @@ test("captures Unieuro-style Italian technical-cookies-only as reject-equivalent
   assert.equal(reject?.classifierReasonCodes.includes("variant_necessary_only"), true);
 });
 
+test("captures healthcare cohort German bare necessary-only control", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" aria-modal="true" style="position: fixed; left: 120px; top: 120px; width: 720px; padding: 20px; background: white;">
+      <p>Wir verwenden Cookies und ähnliche Technologien für Analyse, Marketing und externe Inhalte. Sie können die Einwilligung jederzeit ändern.</p>
+      <button type="button">Nur erforderliche</button>
+      <button type="button">Individuelle Einstellungen</button>
+      <button type="button">Alle zulassen</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  const reject = findCandidate(artifact, "Nur erforderliche");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.matchedLocale, "de");
+  assert.equal(reject?.matchStrength, "contextual");
+  assert.equal(reject?.classifierReasonCodes.includes("variant_necessary_only"), true);
+});
+
+test("captures healthcare cohort French contextual no-thanks reject control", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" aria-modal="true" style="position: fixed; left: 160px; top: 120px; width: 720px; padding: 24px; background: white;">
+      <h2>Votre confidentialité</h2>
+      <p>Nous utilisons des cookies pour mesurer l'audience, améliorer le site et personnaliser le contenu.</p>
+      <button type="button">Non merci</button>
+      <button type="button">En savoir plus</button>
+      <button type="button">Accepter</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  const reject = findCandidate(artifact, "Non merci");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.matchedLocale, "fr");
+  assert.equal(reject?.matchStrength, "contextual");
+});
+
+test("captures healthcare cohort Italian necessary-only accept wording as reject-equivalent", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" aria-modal="true" style="position: fixed; left: 120px; top: 120px; width: 720px; padding: 20px; background: white;">
+      <p>Usiamo cookie tecnici e cookie opzionali per pubblicità, tracciamento e misurazione. Puoi gestire le preferenze.</p>
+      <button type="button">Accetta solo necessari</button>
+      <button type="button">Gestisci preferenze</button>
+      <button type="button">Accetta tutto</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  const reject = findCandidate(artifact, "Accetta solo necessari");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.matchedLocale, "it");
+  assert.equal(reject?.matchStrength, "contextual");
+  assert.equal(reject?.classifierReasonCodes.includes("variant_necessary_only"), true);
+});
+
 test("captures Empik-style Polish customize-consent options control", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>

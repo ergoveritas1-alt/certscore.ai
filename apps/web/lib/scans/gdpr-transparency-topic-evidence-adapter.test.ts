@@ -175,6 +175,61 @@ test("explicit GDPR Transparency profile accepts strong direct multilingual cand
   assert.equal(candidates.every((item) => item.productionCredit === false), true);
 });
 
+test("adapter accepts Dutch healthcare Article 13 wording when classifier gates pass", () => {
+  const candidates = [
+    candidate({
+      confidence: 0.82,
+      evidenceText:
+        "Privacybeleid. Hieronder lees je welke persoonsgegevens we van je verwerken, wat we hiermee doen en hoe lang we die bewaren.",
+      matchStrength: "equivalent",
+      matchedLocale: "nl",
+      matchedTerm: "welke persoonsgegevens we van je verwerken wat we hiermee doen",
+      topic: "processing_purposes",
+    }),
+    candidate({
+      confidence: 0.82,
+      evidenceText:
+        "Privacybeleid. Hieronder lees je welke persoonsgegevens we verwerken, wat we hiermee doen en hoe lang we die bewaren.",
+      matchStrength: "equivalent",
+      matchedLocale: "nl",
+      matchedTerm: "hoe lang we die bewaren",
+      topic: "data_retention",
+    }),
+    candidate({
+      confidence: 0.82,
+      evidenceText:
+        "Privacybeleid. De Autoriteit Persoonsgegevens ziet erop toe dat organisaties persoonsgegevens volgens de privacywet verwerken.",
+      matchStrength: "equivalent",
+      matchedLocale: "nl",
+      matchedTerm: "autoriteit persoonsgegevens ziet erop toe",
+      topic: "supervisory_authority",
+    }),
+  ];
+
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates, {
+      textExcerpt:
+        "Privacybeleid. Hieronder lees je welke persoonsgegevens we van je verwerken, wat we hiermee doen en hoe lang we die bewaren. De Autoriteit Persoonsgegevens ziet erop toe dat organisaties persoonsgegevens volgens de privacywet verwerken.",
+    }),
+  });
+
+  assert.equal(result.acceptedProductionSignals.length, 3);
+  assert.deepEqual(
+    result.acceptedProductionSignals.map((signal) => signal.disclosureType).sort(),
+    ["data_retention", "processing_purposes", "supervisory_authority"],
+  );
+  assert.equal(result.acceptedProductionSignals.every((signal) =>
+    signal.matchedLocale === "nl" &&
+    signal.matchStrength === "equivalent" &&
+    signal.productionCredit === true &&
+    signal.productionCreditProfile === GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE
+  ), true);
+  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
+  assert.equal(candidates.every((item) => item.productionCredit === false), true);
+});
+
 test("weak and contextual GDPR Transparency candidates are not production-credit evidence", () => {
   const weak = candidate({
     confidence: 0.93,
