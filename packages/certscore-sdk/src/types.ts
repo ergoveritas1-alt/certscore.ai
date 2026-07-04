@@ -1,13 +1,3 @@
-import type {
-  ApiV2DomainLatestScan,
-  ApiV2FindingDetail,
-  ApiV2FindingList,
-  ApiV2PreConsentCookiesTrackers,
-  ApiV2ScanJob,
-  ApiV2ScanPulse,
-  ApiV2ScanResource
-} from "@certscore/api-contracts";
-
 export type PulseDetail = "tiny" | "quick" | "standard" | "full" | "summary" | "evidence";
 export type NormalizedPulseDetail = "tiny" | "standard" | "full" | "summary" | "evidence";
 export type PulseFormat = "json" | "markdown";
@@ -71,20 +61,172 @@ export interface CreateScanResourceOptions extends ApiV2RequestOptions {
   scanFrom?: ScanFrom;
 }
 
-export type ScanResource = ApiV2ScanResource;
-export type ScanJob = ApiV2ScanJob;
-export type FindingList = ApiV2FindingList;
-export type FindingDetail = ApiV2FindingDetail;
-export type DomainLatestScan = ApiV2DomainLatestScan;
-export type ScanPulse = ApiV2ScanPulse;
-export type PreConsentCookiesTrackers = ApiV2PreConsentCookiesTrackers;
+export interface ApiV2Links {
+  self?: string;
+  status?: string;
+  findings?: string;
+  pulse?: string;
+  report?: string;
+  latestDomainScan?: string;
+  docs?: string;
+  [key: string]: string | undefined;
+}
+
+export interface ScanResource {
+  type: "certscore_scan";
+  scanId: string;
+  domain: string;
+  url?: string | null;
+  status: PulseJobStatus;
+  scanFrom?: ScanFrom;
+  createdAt?: string | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  score?: number | null;
+  riskLevel?: string | null;
+  coverage?: {
+    status?: string;
+    summary?: string;
+    limitations?: string[];
+    [key: string]: unknown;
+  };
+  links?: ApiV2Links;
+  disclaimer?: string;
+  [key: string]: unknown;
+}
+
+export interface ScanJob {
+  type: "certscore_scan_job";
+  jobId: string;
+  scanId?: string | null;
+  scan_id?: string | null;
+  domain?: string | null;
+  status: PulseJobStatus;
+  phase?: string;
+  createdAt?: string;
+  lastUpdatedAt?: string;
+  retryAfterSeconds?: number | null;
+  links?: ApiV2Links;
+  disclaimer?: string;
+  message?: string;
+  statusUrl?: string;
+  nextCheckUrl?: string;
+  resultUrl?: string;
+  [key: string]: unknown;
+}
+
+export interface EvidenceEventSummary {
+  type: "request" | "page" | "accessibility_check" | "policy_surface";
+  vendor?: string | null;
+  urlHost?: string | null;
+  registrableDomain?: string | null;
+  observedAtMs?: number | null;
+  phase?: string | null;
+}
+
+export interface EvidenceSummary {
+  basis: "runtime_observation" | "policy_surface_detection" | "accessibility_check" | "public_report_projection";
+  summary: string;
+  phase?: string | null;
+  exampleCount: number;
+  examplesShown: number;
+  examplesAvailable?: number;
+  authRequiredForExamples?: boolean;
+  examples?: EvidenceEventSummary[];
+  hasTimingAnchor?: boolean;
+  hasVendorAnchor?: boolean;
+}
+
+export interface FindingSummary {
+  type?: "certscore_finding";
+  id: string;
+  scanId?: string;
+  label?: string;
+  criticality?: "critical" | "high" | "medium" | "low" | "info" | "unknown";
+  confidence?: "strong" | "good" | "moderate" | "weak" | "unknown";
+  plainEnglish?: string;
+  evidence?: EvidenceSummary;
+  reviewLenses?: string[];
+  disclaimer?: string;
+  [key: string]: unknown;
+}
+
+export interface FindingDetail extends FindingSummary {
+  type: "certscore_finding";
+}
+
+export interface FindingList {
+  type: "certscore_finding_list";
+  scanId: string;
+  findings: FindingSummary[];
+  links?: ApiV2Links;
+  disclaimer?: string;
+  [key: string]: unknown;
+}
+
+export interface DomainLatestScan {
+  type: "certscore_domain_latest_scan";
+  domain: string;
+  scan: ScanResource | null;
+  links?: ApiV2Links;
+  disclaimer?: string;
+  [key: string]: unknown;
+}
+
+export interface ScanPulse {
+  type: "certscore_scan_pulse";
+  scanId: string;
+  pulse: PulseResult;
+  links?: ApiV2Links;
+  disclaimer?: string;
+  [key: string]: unknown;
+}
+
+export interface PreConsentCookiesTrackersRow {
+  id?: string;
+  kind: "cookie" | "tracker" | "request" | "storage" | "unknown";
+  name?: string | null;
+  vendor?: string | null;
+  host?: string | null;
+  registrableDomain?: string | null;
+  party?: string | null;
+  purpose?: string | null;
+  priority?: "high" | "medium" | "review_needed" | "contextual" | "unknown";
+  confidence?: "high" | "medium" | "low" | "unknown";
+  phase?: "pre_consent";
+  evidenceBasis?: "runtime_observation" | "policy_surface_detection" | "accessibility_check" | "public_report_projection";
+  observedBeforeConsent?: boolean;
+  requestCount?: number;
+  firstObservedAtMs?: number | null;
+  pageUrlHost?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PreConsentCookiesTrackers {
+  type: "certscore_pre_consent_cookies_trackers";
+  scanId: string;
+  domain?: string | null;
+  summary: {
+    rowCount: number;
+    trackerCount: number;
+    cookieCount: number;
+    requestCount: number;
+    totalRowCount?: number;
+    truncated?: boolean;
+    [key: string]: unknown;
+  };
+  rows: PreConsentCookiesTrackersRow[];
+  links?: ApiV2Links;
+  disclaimer?: string;
+  [key: string]: unknown;
+}
 
 export interface ScanResourceClient {
   create(url: string, options?: CreateScanResourceOptions): Promise<ScanResource | ScanJob>;
   get(scanId: string, options?: ApiV2RequestOptions): Promise<ScanResource>;
   preConsentCookiesTrackers(scanId: string, options?: ApiV2RequestOptions): Promise<PreConsentCookiesTrackers>;
   status(scanId: string, options?: ApiV2RequestOptions): Promise<ScanJob>;
-  wait(scan: string | PendingJob | JobStatus, options?: ScanOptions): Promise<PulseResult | string>;
+  wait(scan: string | ScanResource | ScanJob | PendingJob | JobStatus, options?: ScanOptions): Promise<ScanResource>;
 }
 
 export interface FindingResourceClient {

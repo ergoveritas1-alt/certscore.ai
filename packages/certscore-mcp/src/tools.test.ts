@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CertScoreError, type PulseResult } from "@certscore/sdk";
-import { explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, toToolError, toToolResult } from "./tools.js";
+import { boundEvidencePacket, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, toToolError, toToolResult } from "./tools.js";
 
 const report = {
   type: "certscore_pulse",
@@ -122,4 +122,40 @@ test("limitPreConsentRows caps inventory rows and records truncation metadata", 
     totalRowCount: 3,
     truncated: true
   });
+});
+
+test("boundEvidencePacket leaves small evidence packets unchanged", () => {
+  const payload = {
+    type: "certscore_pulse_evidence",
+    scanId: "scan_123",
+    summary: { score: 72 }
+  };
+
+  assert.equal(boundEvidencePacket(payload), payload);
+});
+
+test("boundEvidencePacket truncates oversized evidence packets with MCP metadata", () => {
+  const payload = {
+    type: "certscore_pulse_evidence",
+    scanId: "scan_123",
+    domain: "example.com",
+    summary: { headline: "Automated scan surfaced review signals." },
+    findings: Array.from({ length: 120 }, (_, index) => ({
+      id: `finding_${index}`,
+      evidence: {
+        summary: "x".repeat(3_000),
+        exampleEvents: Array.from({ length: 20 }, () => ({ value: "y".repeat(1_000) }))
+      }
+    })),
+    disclaimer: "Automated public-web observations for review."
+  };
+
+  const result = boundEvidencePacket(payload, 20_000) as Record<string, unknown>;
+  const metadata = result.mcpMetadata as Record<string, unknown>;
+
+  assert.equal(result.scanId, "scan_123");
+  assert.equal(metadata.truncated, true);
+  assert.equal(metadata.maxSerializedChars, 20_000);
+  assert.equal(typeof metadata.originalSerializedChars, "number");
+  assert.ok(JSON.stringify(result).length <= 20_000);
 });

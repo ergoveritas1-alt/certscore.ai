@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=20"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,7 +16,9 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "repository": {
     "type": "git",
@@ -39,8 +44,5 @@
     "consent",
     "runtime-analysis"
   ],
-  "license": "UNLICENSED",
-  "dependencies": {
-    "@certscore/api-contracts": "workspace:*"
-  }
+  "license": "UNLICENSED"
 }

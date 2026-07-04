@@ -254,11 +254,7 @@ importers:
         specifier: ^24.0.0
         version: 24.12.0
 
-  packages/certscore-sdk:
-    dependencies:
-      '@certscore/api-contracts':
-        specifier: workspace:*
-        version: link:../certscore-api-contracts
+  packages/certscore-sdk: {}
 
   packages/certscore-vendor-resolver:
     dependencies:

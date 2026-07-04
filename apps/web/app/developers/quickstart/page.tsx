@@ -50,7 +50,10 @@ SCAN_RESPONSE=$(curl -sS -D /tmp/certscore-create-headers.txt \\
   -X POST https://certscore.ai/api/v2/scans \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
-  -d "{\"url\":\"$TARGET_URL\",\"freshness\":\"latest\",\"scanFrom\":\"eu_ie\"}")
+  --data @- <<JSON
+{"url":"$TARGET_URL","freshness":"latest","scanFrom":"eu_ie"}
+JSON
+)
 
 SCAN_ID=$(printf '%s' "$SCAN_RESPONSE" | jq -r '.scanId // .scan.scanId // empty')
 JOB_ID=$(printf '%s' "$SCAN_RESPONSE" | jq -r '.jobId // empty')

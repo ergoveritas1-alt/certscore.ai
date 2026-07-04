@@ -2,7 +2,7 @@ import { CertScoreClient } from "@certscore/sdk";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
-import { exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
+import { boundEvidencePacket, exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -29,7 +29,7 @@ type ExplainFindingInput = { scanId: string; findingId: string };
 type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_ie" };
 type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_ie" };
 
-function toolContract(name: CertScoreMcpToolName) {
+function toolContract(name: CertScoreMcpToolName): any {
   const contract = certScoreMcpToolContracts.find((candidate) => candidate.name === name);
   if (!contract) {
     throw new Error(`Missing CertScore MCP tool contract: ${name}`);
@@ -54,6 +54,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     name: "certscore",
     version: CERTSCORE_MCP_VERSION
   });
+  const registerTool = server.registerTool.bind(server) as any;
 
   async function createPulseScanTool(input: CreateScanInput) {
     const result = await client.submitScan(input.url, {
@@ -75,7 +76,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     };
   }
 
-  server.registerTool(
+  registerTool(
     "create_scan",
     toolContract("create_scan"),
     async (input: CreateScanInput) => {
@@ -87,7 +88,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
-  server.registerTool(
+  registerTool(
     "scan_site",
     toolContract("scan_site"),
     async (input: CreateScanInput) => {
@@ -104,7 +105,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
-  server.registerTool(
+  registerTool(
     "get_scan",
     toolContract("get_scan"),
     async ({ scanId }: GetScanInput) => {
@@ -116,7 +117,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
-  server.registerTool(
+  registerTool(
     "get_scan_status",
     toolContract("get_scan_status"),
     async ({ jobId, scanId }: GetScanStatusInput) => {
@@ -143,7 +144,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
-  server.registerTool(
+  registerTool(
     "get_report",
     toolContract("get_report"),
     async ({ scanId, detail, format }: GetReportInput) => {
@@ -166,19 +167,19 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
-  server.registerTool(
+  registerTool(
     "get_evidence",
     toolContract("get_evidence"),
     async ({ scanId }: GetEvidenceInput) => {
       try {
-        return toToolResult(await client.getScan(scanId, { detail: "evidence", format: "json" }));
+        return toToolResult(boundEvidencePacket(await client.getScan(scanId, { detail: "evidence", format: "json" })));
       } catch (error) {
         return toToolError(error);
       }
     }
   );
 
-  server.registerTool(
+  registerTool(
     "export_findings",
     toolContract("export_findings"),
     async ({ scanId }: ExportFindingsInput) => {
@@ -191,7 +192,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
-  server.registerTool(
+  registerTool(
     "list_findings",
     toolContract("list_findings"),
     async ({ limit, offset, scanId }: ListFindingsInput) => {
@@ -203,7 +204,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
-  server.registerTool(
+  registerTool(
     "get_pre_consent_cookies_trackers",
     toolContract("get_pre_consent_cookies_trackers"),
     async ({ maxRows, scanId }: GetPreConsentCookiesTrackersInput) => {
@@ -215,7 +216,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
-  server.registerTool(
+  registerTool(
     "explain_finding",
     toolContract("explain_finding"),
     async ({ scanId, findingId }: ExplainFindingInput) => {
@@ -227,7 +228,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
-  server.registerTool(
+  registerTool(
     "get_latest_domain_scan",
     toolContract("get_latest_domain_scan"),
     async ({ domain, scanFrom }: GetLatestDomainScanInput) => {
@@ -239,7 +240,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
-  server.registerTool(
+  registerTool(
     "get_latest_domain_pre_consent_cookies_trackers",
     toolContract("get_latest_domain_pre_consent_cookies_trackers"),
     async ({ domain, maxRows, scanFrom }: GetLatestDomainPreConsentCookiesTrackersInput) => {

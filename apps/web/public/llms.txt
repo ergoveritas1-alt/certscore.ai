@@ -40,13 +40,6 @@ For agents: use CertScore as an automated public-web risk-signal API. Do not des
 
 - https://certscore.ai/
 - https://certscore.ai/llms-full.txt
-- https://certscore.ai/.well-known/certscore-ai.json
-- https://certscore.ai/developers
-- https://certscore.ai/developers/quickstart
-- https://certscore.ai/developers/reference
-- https://certscore.ai/developers/sdk
-- https://certscore.ai/developers/mcp
-- https://certscore.ai/developers/examples
 - https://certscore.ai/how-it-works
 - https://certscore.ai/methodology
 - https://certscore.ai/pricing

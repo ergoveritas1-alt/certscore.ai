@@ -21,17 +21,13 @@ export default function DeveloperMcpPage() {
       <div className="space-y-12">
         <Section eyebrow="External users" title="Current MCP access">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            The MCP server is distributed as an npx-installable developer preview for external MCP clients. Use
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">npx -y certscore-mcp</code> when connecting Claude Desktop,
-            Cursor, Windsurf, or another stdio-compatible MCP client. Homebrew remains available as a macOS alternative.
+            The MCP server is distributed as a Homebrew-installable developer preview for macOS MCP clients. Install the
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">certscore-mcp</code> command before connecting Claude Desktop,
+            Cursor, Windsurf, or another stdio-compatible MCP client.
           </p>
         </Section>
 
-        <Section eyebrow="Install" title="npx setup">
-          <CodeBlock>{`npx -y certscore-mcp --version`}</CodeBlock>
-        </Section>
-
-        <Section eyebrow="macOS alternative" title="Homebrew setup">
+        <Section eyebrow="Install" title="Homebrew setup">
           <CodeBlock>{`brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
 brew install --cask certscore-mcp`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
@@ -61,12 +57,11 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
           </p>
         </Section>
 
-        <Section eyebrow="MCP client config" title="Use npx">
+        <Section eyebrow="MCP client config" title="Use the installed command">
           <CodeBlock>{`{
   "mcpServers": {
     "certscore": {
-      "command": "npx",
-      "args": ["-y", "certscore-mcp"],
+      "command": "certscore-mcp",
       "env": {
         "CERTSCORE_API_KEY": "<token>",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -84,8 +79,7 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
           <CodeBlock>{`{
   "mcpServers": {
     "certscore": {
-      "command": "npx",
-      "args": ["-y", "certscore-mcp"],
+      "command": "certscore-mcp",
       "env": {
         "CERTSCORE_API_KEY": "<token>",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -97,7 +91,7 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
 
         <Section eyebrow="Troubleshooting" title="Common install checks">
           <ul className="max-w-3xl list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
-            <li>If the command is not found, use the npx config or check that Homebrew&apos;s bin directory is on PATH.</li>
+            <li>If the command is not found, reinstall the cask or check that Homebrew&apos;s bin directory is on PATH.</li>
             <li>If the API key is missing, set CERTSCORE_API_KEY in the MCP client environment and rerun doctor.</li>
             <li>If a token is rejected by a tool call, rotate the key or request a scoped API/MCP key from support@certscore.ai.</li>
             <li>If API health is unreachable, check CERTSCORE_BASE_URL and verify that https://certscore.ai/api/v2/health loads.</li>
@@ -110,12 +104,11 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
           <CodeBlock>{`CERTSCORE_API_KEY=<token> pnpm mcp:certscore`}</CodeBlock>
         </Section>
 
-        <Section eyebrow="Claude Desktop" title="npx command config">
+        <Section eyebrow="Claude Desktop" title="Installed command config">
           <CodeBlock>{`{
   "mcpServers": {
     "certscore": {
-      "command": "npx",
-      "args": ["-y", "certscore-mcp"],
+      "command": "certscore-mcp",
       "env": {
         "CERTSCORE_API_KEY": "<token>",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -142,6 +135,13 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Tools" title="Agent-facing tool surface">
+          <p className="mb-4 max-w-3xl text-sm leading-7 text-slate-600">
+            Several tools return or reference Pulse, CertScore&apos;s compact public report projection for agents. See{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-900" href="/developers/reference#what-is-pulse">
+              What is Pulse?
+            </a>{" "}
+            for how it relates to scan resources and findings.
+          </p>
           <div className="grid gap-4 md:grid-cols-2">
             {mcpTools.map(([name, description]) => (
               <div key={name} className="rounded-lg border border-slate-200 bg-white p-4">
@@ -172,9 +172,10 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
 2. get_scan_status when a job is pending.
 3. get_scan after a stable scanId is available.
 4. list_findings for compact structured review.
-5. get_pre_consent_cookies_trackers when the user asks for the Pre-consent Cookies & Trackers table as JSON.
-6. explain_finding for evidence summaries and caveats.
-7. get_latest_domain_scan or get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
+5. get_evidence when a reviewer or agent needs the larger bounded evidence packet.
+6. get_pre_consent_cookies_trackers when the user asks for the Pre-consent Cookies & Trackers table as JSON.
+7. explain_finding for evidence summaries and caveats.
+8. get_latest_domain_scan or get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
           <CodeBlock>{`get_pre_consent_cookies_trackers({
   scanId: "00000000-0000-4000-8000-000000000123"
 })

@@ -1,0 +1,50 @@
+[
+  {
+    "name": "create_scan",
+    "description": "Deprecated compatibility alias of scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links."
+  },
+  {
+    "name": "scan_site",
+    "description": "Start or reuse a CertScore public-web scan for a public URL."
+  },
+  {
+    "name": "get_scan",
+    "description": "Retrieve the API v2 public-safe scan resource for a stable scan ID."
+  },
+  {
+    "name": "get_scan_status",
+    "description": "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId."
+  },
+  {
+    "name": "get_report",
+    "description": "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet."
+  },
+  {
+    "name": "get_evidence",
+    "description": "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."
+  },
+  {
+    "name": "export_findings",
+    "description": "Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows."
+  },
+  {
+    "name": "list_findings",
+    "description": "List API v2 public-safe findings already projected for a scan."
+  },
+  {
+    "name": "get_pre_consent_cookies_trackers",
+    "description": "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan."
+  },
+  {
+    "name": "explain_finding",
+    "description": "Explain a single CertScore finding with public evidence, caveats, and reviewer next steps."
+  },
+  {
+    "name": "get_latest_domain_scan",
+    "description": "Retrieve the latest eligible API v2 public-safe scan for a domain."
+  },
+  {
+    "name": "get_latest_domain_pre_consent_cookies_trackers",
+    "description": "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain."
+  }
+]

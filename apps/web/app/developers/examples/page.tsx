@@ -96,17 +96,8 @@ if (latest.scan) {
   scanFrom: "eu_ie"
 });
 
-const completed = created.type === "certscore_scan_job"
-  ? await certscore.scans.wait(created)
-  : created;
-
-const scanId = typeof completed === "string"
-  ? undefined
-  : completed.scanId;
-
-if (!scanId) {
-  throw new Error("Scan did not return a durable scanId.");
-}
+const completed = await certscore.scans.wait(created);
+const scanId = completed.scanId;
 
 await certscore.scans.status(scanId);
 const table = await certscore.scans.preConsentCookiesTrackers(scanId);

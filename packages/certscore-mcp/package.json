@@ -1,13 +1,13 @@
 {
   "name": "certscore-mcp",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": false,
   "description": "MCP server for CertScore public website risk-signal workflows.",
   "type": "module",
   "main": "./dist/certscore-mcp.mjs",
   "types": "./dist/index.d.ts",
   "bin": {
-    "certscore-mcp": "./dist/certscore-mcp.mjs"
+    "certscore-mcp": "dist/certscore-mcp.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -37,8 +37,8 @@
     "email": "support@certscore.ai"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node ../../node_modules/esbuild/bin/esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js='#!/usr/bin/env node' --outfile=dist/certscore-mcp.mjs",
-    "bundle": "node ../../node_modules/esbuild/bin/esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js='#!/usr/bin/env node' --outfile=dist/certscore-mcp.mjs",
+    "build": "tsc -p tsconfig.json && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js='#!/usr/bin/env node' --outfile=dist/certscore-mcp.mjs",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js='#!/usr/bin/env node' --outfile=dist/certscore-mcp.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test src/*.test.ts",
     "prepack": "pnpm run build",
@@ -48,6 +48,7 @@
     "certscore",
     "pulse",
     "mcp",
+    "modelcontextprotocol",
     "model-context-protocol"
   ],
   "license": "UNLICENSED",

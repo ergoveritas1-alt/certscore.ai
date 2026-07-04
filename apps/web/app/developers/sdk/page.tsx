@@ -19,8 +19,14 @@ export default function DeveloperSdkPage() {
   return (
     <DeveloperShell activePath="/developers/sdk" title="TypeScript SDK" description={description}>
       <div className="space-y-12">
-        <Section eyebrow="Install" title="Add the SDK">
-          <CodeBlock>{`npm install @certscore/sdk`}</CodeBlock>
+        <Section eyebrow="Preview" title="Use the SDK source package">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            The TypeScript SDK is available as a source preview while package distribution remains private. Source and examples live in{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk">
+              packages/certscore-sdk
+            </a>
+            . Use the REST API directly for production integrations until a public package channel is announced.
+          </p>
         </Section>
 
         <Section eyebrow="Resource clients" title="Create a scan and wait for completion">
@@ -35,17 +41,8 @@ const created = await certscore.scans.create("https://example.com", {
   scanFrom: "eu_ie"
 });
 
-const completed = created.type === "certscore_scan_job"
-  ? await certscore.scans.wait(created)
-  : created;
-
-const scanId = typeof completed === "string"
-  ? undefined
-  : completed.scanId;
-
-if (!scanId) {
-  throw new Error("Scan did not return a durable scanId.");
-}
+const completed = await certscore.scans.wait(created);
+const scanId = completed.scanId;
 
 const status = await certscore.scans.status(scanId);
 const findings = await certscore.findings.list(scanId);

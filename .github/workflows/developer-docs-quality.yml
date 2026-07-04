@@ -1,0 +1,44 @@
+name: Developer Docs Quality
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/developer-docs-quality.yml"
+      - "apps/web/app/developers/**"
+      - "packages/certscore-api-contracts/src/openapi-v2.ts"
+      - "packages/certscore-sdk/**"
+      - "scripts/smoke-sdk-package.sh"
+      - "scripts/verify-developer-docs-quality.ts"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/developer-docs-quality.yml"
+      - "apps/web/app/developers/**"
+      - "packages/certscore-api-contracts/src/openapi-v2.ts"
+      - "packages/certscore-sdk/**"
+      - "scripts/smoke-sdk-package.sh"
+      - "scripts/verify-developer-docs-quality.ts"
+
+jobs:
+  docs-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify developer docs quality
+        run: node --import tsx scripts/verify-developer-docs-quality.ts
+
+      - name: Test SDK package and canonical example
+        run: scripts/smoke-sdk-package.sh

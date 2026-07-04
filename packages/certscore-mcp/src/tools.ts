@@ -2,6 +2,10 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { CertScoreError, type JobStatus, type PulseDetail, type PulseFormat, type PulseResult, type TopFinding } from "@certscore/sdk";
 
 const MAX_ERROR_RESPONSE_BODY_CHARS = 2_000;
+export const MAX_EVIDENCE_PACKET_CHARS = 250_000;
+const EVIDENCE_STRING_CHARS = 4_000;
+const EVIDENCE_ARRAY_ITEMS = 40;
+const EVIDENCE_OBJECT_KEYS = 80;
 
 export function toToolResult(payload: unknown): CallToolResult {
   const structuredContent = payload !== null && typeof payload === "object" && !Array.isArray(payload)
@@ -43,6 +47,175 @@ export function toToolError(error: unknown): CallToolResult {
     }),
     isError: true
   };
+}
+
+export function boundEvidencePacket<T>(payload: T, maxSerializedChars = MAX_EVIDENCE_PACKET_CHARS): T | Record<string, unknown> {
+  const originalSerializedChars = measureSerializedChars(payload);
+  if (originalSerializedChars <= maxSerializedChars) {
+    return payload;
+  }
+
+  const compacted = withMcpMetadata(compactEvidenceValue(payload, {
+    arrayItems: EVIDENCE_ARRAY_ITEMS,
+    depth: 8,
+    objectKeys: EVIDENCE_OBJECT_KEYS,
+    stringChars: EVIDENCE_STRING_CHARS
+  }), {
+    maxSerializedChars,
+    originalSerializedChars,
+    strategy: "compact_nested_values",
+    truncated: true
+  });
+  if (measureSerializedChars(compacted) <= maxSerializedChars) {
+    return compacted;
+  }
+
+  const minimal = withMcpMetadata(minimalEvidencePacket(payload), {
+    maxSerializedChars,
+    originalSerializedChars,
+    strategy: "minimal_safe_summary",
+    truncated: true
+  });
+  if (measureSerializedChars(minimal) <= maxSerializedChars) {
+    return minimal;
+  }
+
+  return {
+    type: "certscore_mcp_evidence_packet",
+    scanId: extractScanId(payload),
+    summary: "Evidence packet was too large for MCP transport and was reduced to metadata. Fetch API v2 directly for the full public-safe artifact.",
+    mcpMetadata: {
+      maxSerializedChars,
+      originalSerializedChars,
+      strategy: "metadata_only",
+      truncated: true
+    }
+  };
+}
+
+function measureSerializedChars(value: unknown): number {
+  return JSON.stringify(value)?.length ?? 0;
+}
+
+function compactEvidenceValue(
+  value: unknown,
+  options: { arrayItems: number; depth: number; objectKeys: number; stringChars: number }
+): unknown {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (typeof value === "string") {
+    return value.length > options.stringChars ? `${value.slice(0, options.stringChars)}…[truncated]` : value;
+  }
+  if (typeof value !== "object") {
+    return value;
+  }
+  if (options.depth <= 0) {
+    return "[truncated: depth limit]";
+  }
+  if (Array.isArray(value)) {
+    const items = value.slice(0, options.arrayItems).map((item) => compactEvidenceValue(item, {
+      ...options,
+      depth: options.depth - 1
+    }));
+    if (value.length > options.arrayItems) {
+      items.push({
+        omittedItems: value.length - options.arrayItems,
+        truncated: true
+      });
+    }
+    return items;
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>);
+  const next: Record<string, unknown> = {};
+  for (const [key, nested] of entries.slice(0, options.objectKeys)) {
+    next[key] = compactEvidenceValue(nested, {
+      ...options,
+      depth: options.depth - 1
+    });
+  }
+  if (entries.length > options.objectKeys) {
+    next.__truncatedKeys = entries.length - options.objectKeys;
+  }
+  return next;
+}
+
+function withMcpMetadata(value: unknown, metadata: Record<string, unknown>) {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const existing = record.mcpMetadata !== null && typeof record.mcpMetadata === "object" && !Array.isArray(record.mcpMetadata)
+      ? record.mcpMetadata as Record<string, unknown>
+      : {};
+    return {
+      ...record,
+      mcpMetadata: {
+        ...existing,
+        ...metadata
+      }
+    };
+  }
+  return {
+    type: "certscore_mcp_evidence_packet",
+    value,
+    mcpMetadata: metadata
+  };
+}
+
+function minimalEvidencePacket(payload: unknown) {
+  const record = payload !== null && typeof payload === "object" && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
+  return {
+    type: typeof record.type === "string" ? record.type : "certscore_mcp_evidence_packet",
+    scanId: extractScanId(record),
+    scan_id: typeof record.scan_id === "string" ? record.scan_id : undefined,
+    domain: typeof record.domain === "string" ? record.domain : null,
+    summary: compactEvidenceValue(record.summary ?? null, {
+      arrayItems: 20,
+      depth: 4,
+      objectKeys: 30,
+      stringChars: 1_000
+    }),
+    findings: compactEvidenceValue(record.findings ?? record.topFindings ?? [], {
+      arrayItems: 20,
+      depth: 5,
+      objectKeys: 40,
+      stringChars: 1_000
+    }),
+    evidenceHighlights: compactEvidenceValue(record.evidenceHighlights ?? null, {
+      arrayItems: 20,
+      depth: 5,
+      objectKeys: 40,
+      stringChars: 1_000
+    }),
+    coverage: compactEvidenceValue(record.coverage ?? null, {
+      arrayItems: 20,
+      depth: 4,
+      objectKeys: 30,
+      stringChars: 1_000
+    }),
+    disclaimer: typeof record.disclaimer === "string" ? record.disclaimer : null
+  };
+}
+
+function extractScanId(payload: unknown): string | null {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  if (typeof record.scanId === "string") {
+    return record.scanId;
+  }
+  if (typeof record.scan_id === "string") {
+    return record.scan_id;
+  }
+  const scan = record.scan;
+  const nestedScanId = scan !== null && typeof scan === "object" && !Array.isArray(scan)
+    ? (scan as Record<string, unknown>).scanId
+    : null;
+  if (typeof nestedScanId === "string") {
+    return nestedScanId;
+  }
+  return null;
 }
 
 function truncateErrorResponseBody(value: unknown): unknown {
