@@ -10,9 +10,12 @@ on:
       - "apps/web/app/api-pulse/page.tsx"
       - "apps/web/app/developers/**"
       - "apps/web/lib/pulse/support-routes.test.ts"
+      - "apps/web/public/llms.txt"
+      - "apps/web/public/llms-full.txt"
       - "packages/certscore-api-contracts/src/mcp.ts"
       - "packages/certscore-mcp/**"
       - "scripts/smoke-mcp.sh"
+      - "scripts/verify-llms-discovery-docs.ts"
       - "scripts/verify-certscore-mcp-release-guards.ts"
   push:
     branches:
@@ -27,9 +30,12 @@ on:
       - "apps/web/app/api-pulse/page.tsx"
       - "apps/web/app/developers/**"
       - "apps/web/lib/pulse/support-routes.test.ts"
+      - "apps/web/public/llms.txt"
+      - "apps/web/public/llms-full.txt"
       - "packages/certscore-api-contracts/src/mcp.ts"
       - "packages/certscore-mcp/**"
       - "scripts/smoke-mcp.sh"
+      - "scripts/verify-llms-discovery-docs.ts"
       - "scripts/verify-certscore-mcp-release-guards.ts"
 
 jobs:
@@ -64,3 +70,6 @@ jobs:
 
       - name: Verify release drift guards
         run: node --import tsx scripts/verify-certscore-mcp-release-guards.ts
+
+      - name: Verify LLM discovery docs
+        run: node --import tsx scripts/verify-llms-discovery-docs.ts
