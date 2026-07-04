@@ -694,16 +694,35 @@ export function normalizeConsentControlText(value: string | null | undefined): s
     .toLowerCase();
 }
 
-export function isProductionCreditworthyPolishConsentControlClassification(
+export function isProductionCreditworthySupplementalConsentControlClassification(
   labelValue: string | null | undefined,
   classification: ConsentControlLabelClassification,
 ): boolean {
-  if (classification.matchedLocale !== "pl" || classification.intent === "unknown") {
+  if (classification.intent === "unknown") {
     return false;
   }
   const normalizedLabel = normalizeConsentControlText(labelValue);
   const strongMatch = classification.matchStrength === "direct" || classification.matchStrength === "equivalent";
 
+  if (classification.matchedLocale === "nl") {
+    if (classification.intent === "accept") {
+      return strongMatch &&
+        /\b(?:alles accepteren|alle cookies accepteren|accepteren|akkoord|ik ga akkoord|toestaan|alles toestaan)\b/i.test(normalizedLabel);
+    }
+    if (classification.intent === "options") {
+      return /(?:cookie-instellingen|cookie instellingen|privacy-instellingen|cookies beheren|voorkeuren beheren)/i.test(normalizedLabel) ||
+        (strongMatch && /(?:voorkeuren|instellingen|keuzes)/i.test(normalizedLabel));
+    }
+    if (classification.intent === "reject") {
+      return strongMatch &&
+        /(?:weigeren|niet accepteren|niet toestaan|zonder (?:accepteren|toestemming|cookies)|alleen (?:noodzakelijke|essenti[eë]le))/i.test(normalizedLabel);
+    }
+    return false;
+  }
+
+  if (classification.matchedLocale !== "pl") {
+    return false;
+  }
   if (classification.intent === "accept") {
     return strongMatch &&
       /\b(?:akceptuj(?:e|ę)?|zaakceptuj|zgadzam się|zezwól)\b/i.test(normalizedLabel) &&

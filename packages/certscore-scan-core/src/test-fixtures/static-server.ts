@@ -50,6 +50,7 @@ export type StaticFixturePage =
   | "consent-post-choice-reopen-control"
   | "consent-preference-center-reject-success"
   | "consent-preference-center-toggle-save"
+  | "consent-dutch-controls"
   | "consent-polish-wyborcza-controls"
   | "consent-reject-subscribe"
   | "consent-simple-accept-reject"
@@ -197,6 +198,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-post-choice-reopen-control": "consent-post-choice-reopen-control",
   "consent-preference-center-reject-success": "consent-preference-center-reject-success",
   "consent-preference-center-toggle-save": "consent-preference-center-toggle-save",
+  "consent-dutch-controls": "consent-dutch-controls",
   "consent-polish-wyborcza-controls": "consent-polish-wyborcza-controls",
   "consent-reject-subscribe": "consent-reject-subscribe",
   "consent-simple-accept-reject": "consent-simple",
@@ -1021,6 +1023,21 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
         <p>Używamy plików cookie i prosimy o zgodę na personalizację reklam oraz pomiar statystyk. Możesz zarządzać zgodami w centrum preferencji.</p>
         <button type="button" aria-label="USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji">USTAWIENIA ZAAWANSOWANE</button>
         <button type="button">AKCEPTUJĘ</button>
+      </div>
+    `;
+  }
+  if (caseName === "consent-dutch-controls") {
+    return `
+      <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+      <main>
+        <h1>Nederlandse fixture</h1>
+      </main>
+      <div id="cmpbox" class="cmpbox cmpboxWelcomeGDPR" role="dialog" aria-modal="true" style="position: fixed; left: 80px; top: 80px; width: 680px; padding: 24px; background: white; z-index: 20;">
+        <h2>Wij gebruiken cookies</h2>
+        <p>Wij gebruiken cookies en vragen toestemming voor advertentie- en analysevoorkeuren. U kunt uw cookie-instellingen aanpassen.</p>
+        <button type="button">Cookie-instellingen</button>
+        <button type="button">Alles weigeren</button>
+        <button type="button">Alles accepteren</button>
       </div>
     `;
   }

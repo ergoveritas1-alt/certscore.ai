@@ -18,7 +18,7 @@ import {
   type ConsentUiObservation,
   type VisualCaptureSummary,
   classifyConsentControlLabel,
-  isProductionCreditworthyPolishConsentControlClassification,
+  isProductionCreditworthySupplementalConsentControlClassification,
 } from "@certscore/contracts";
 import { resolveEndpointGeography, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import { writeFile } from "node:fs/promises";
@@ -2318,7 +2318,7 @@ function boundedFrameInventoryRead(frame: Frame): Promise<{
       textExcerpt: string;
     }>(() => {
       const controlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
-      const consentContextPattern = /cookie|cookies|privacy|consent|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i;
+      const consentContextPattern = /cookie|cookies|privacy|consent|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|toestemming|voorkeuren|instellingen|keuzes|zgod|zgoda|pliki cookie|ustawienia|preferencj/i;
       const labelFor = (element: Element) => {
         const aria = element.getAttribute("aria-label");
         const title = element.getAttribute("title");
@@ -2415,7 +2415,7 @@ export type ConsentAccessibilityTreeNode = {
 };
 
 const AX_CONSENT_CONTEXT_PATTERN =
-  /cookie|cookies|privacy|consent|preference|preferences|analytics|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|zgod|zgoda|prywatno|pliki cookie|ustawienia|preferencj/i;
+  /cookie|cookies|privacy|consent|preference|preferences|analytics|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|toestemming|voorkeuren|instellingen|keuzes|zgod|zgoda|prywatno|pliki cookie|ustawienia|preferencj/i;
 
 const AX_CONSENT_CONTAINER_ROLE_PATTERN =
   /^(?:alertdialog|dialog|region|banner)$/i;
@@ -2496,7 +2496,7 @@ export function consentControlsFromAccessibilityTree(
     }
     if (
       classification.intent === "options" &&
-      !/\b(?:we use cookies|use cookies|consent|accept|agree|allow|reject|decline|deny|refuse|analytics|tracking|marketing|privacy settings|privacy preferences|cookie preferences|similar techniques)\b|(?:zgod|akceptuj|odrzu|pliki cookie|prywatno|ustawienia|preferencj|centrum preferencji)/i.test(contextText)
+      !/\b(?:we use cookies|use cookies|consent|accept|agree|allow|reject|decline|deny|refuse|analytics|tracking|marketing|privacy settings|privacy preferences|cookie preferences|similar techniques|toestemming|cookies gebruiken|cookie-instellingen|privacy-instellingen|voorkeuren|instellingen)\b|(?:zgod|akceptuj|odrzu|pliki cookie|prywatno|ustawienia|preferencj|centrum preferencji)/i.test(contextText)
     ) {
       continue;
     }
@@ -2616,9 +2616,9 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
       ].join(",");
       const strongCmpContainerPattern = /(?:^|[\s_-])(?:onetrust|optanon|ot-sdk|trustarc|didomi|usercentrics|cookiebot|consentmanager|cmp)(?:$|[\s_-])/i;
       const strongCmpIdPattern = /(?:onetrust|optanon|ot-sdk|trustarc|didomi|usercentrics|cookiebot|consentmanager|cmp)/i;
-      const consentContextPattern = /cookie|cookies|privacy|consent|analytics|tracking|marketing|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|zgod|zgoda|prywatno|pliki cookie|ustawienia|preferencj/i;
-      const consentSurfaceTextPattern = /cookie|cookies|privacy settings|privacy preferences|analytics preferences|consent preferences|tracking preferences|pliki cookie|ustawienia prywatno|centrum preferencji|zgod[ay]/i;
-      const consentSurfaceActionPattern = /consent|privacy|preference|preferences|setting|settings|choice|choices|accept|reject|decline|allow|manage|ablehnen|akzeptieren|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer|akceptuj|odrzu|ustawienia|preferencj|zarządzaj/i;
+      const consentContextPattern = /cookie|cookies|privacy|consent|analytics|tracking|marketing|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|toestemming|voorkeuren|instellingen|keuzes|zgod|zgoda|prywatno|pliki cookie|ustawienia|preferencj/i;
+      const consentSurfaceTextPattern = /cookie|cookies|privacy settings|privacy preferences|analytics preferences|consent preferences|tracking preferences|toestemming|cookies gebruiken|cookie-instellingen|privacy-instellingen|voorkeuren|pliki cookie|ustawienia prywatno|centrum preferencji|zgod[ay]/i;
+      const consentSurfaceActionPattern = /consent|privacy|preference|preferences|setting|settings|choice|choices|accept|reject|decline|allow|manage|ablehnen|akzeptieren|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer|accepteren|weigeren|toestaan|instellingen|voorkeuren|akceptuj|odrzu|ustawienia|preferencj|zarządzaj/i;
       const labelFor = (element) => {
         const aria = element.getAttribute("aria-label");
         const title = element.getAttribute("title");
@@ -2840,7 +2840,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           (isVisible(element) ? 100 : 0) +
           (hasConsentContext(element) ? 80 : 0) +
           (isFirstLayerPosition(element) ? 40 : 0) +
-          (/\b(?:accept|reject|decline|allow|agree|settings|preferences|options|choices|cookie|cookies|consent|ablehnen|akzeptieren|accepter|refuser)\b|(?:akceptuj|odrzu|ustawienia|preferencj|pliki cookie|zgod)/i.test(label) ? 70 : 0) -
+          (/\b(?:accept|reject|decline|allow|agree|settings|preferences|options|choices|cookie|cookies|consent|ablehnen|akzeptieren|accepter|refuser|accepteren|weigeren|toestaan|instellingen|voorkeuren)\b|(?:akceptuj|odrzu|ustawienia|preferencj|pliki cookie|zgod)/i.test(label) ? 70 : 0) -
           (pageChrome ? 30 : 0)
         );
       };
@@ -2994,7 +2994,7 @@ function classifyRuntimeConsentControlLabel(input: Parameters<typeof classifyCon
     classifierProfile: "multilingual_v1",
     hasConsentContext: true,
   });
-  if (isProductionCreditworthyPolishConsentControlClassification(input.label, multilingualClassification)) {
+  if (isProductionCreditworthySupplementalConsentControlClassification(input.label, multilingualClassification)) {
     return multilingualClassification;
   }
   return defaultClassification;

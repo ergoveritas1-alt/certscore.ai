@@ -4,7 +4,7 @@ import {
   classifyConsentControlLabel,
   consentActionCandidateSchema,
   consentUiObservationSchema,
-  isProductionCreditworthyPolishConsentControlClassification,
+  isProductionCreditworthySupplementalConsentControlClassification,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
@@ -309,16 +309,55 @@ test("classifies contextual Polish continue-to-service consent labels only with 
   assert.equal(classification.contextSatisfied, true);
 });
 
-test("marks only explicit Polish consent-control labels as production creditworthy", () => {
-  const contextText = "Dbamy o Twoją prywatność. Używamy plików cookie i prosimy o zgodę użytkownika.";
+test("marks only explicit Dutch and Polish consent-control labels as supplemental production creditworthy", () => {
+  const dutchContextText = "Wij gebruiken cookies en vragen toestemming voor voorkeuren en instellingen.";
+  const dutchAccept = classifyConsentControlLabel({
+    label: "Alles accepteren",
+    contextText: dutchContextText,
+    classifierProfile: "multilingual_v1",
+  });
+  const dutchReject = classifyConsentControlLabel({
+    label: "Alles weigeren",
+    contextText: dutchContextText,
+    classifierProfile: "multilingual_v1",
+  });
+  const dutchOptions = classifyConsentControlLabel({
+    label: "Cookie-instellingen",
+    contextText: dutchContextText,
+    classifierProfile: "multilingual_v1",
+  });
+  const genericDutchSettings = classifyConsentControlLabel({
+    label: "Instellingen",
+    contextText: "Zoeken Instellingen Teletekst NPO Start",
+    classifierProfile: "multilingual_v1",
+  });
+
+  assert.equal(
+    isProductionCreditworthySupplementalConsentControlClassification("Alles accepteren", dutchAccept),
+    true,
+  );
+  assert.equal(
+    isProductionCreditworthySupplementalConsentControlClassification("Alles weigeren", dutchReject),
+    true,
+  );
+  assert.equal(
+    isProductionCreditworthySupplementalConsentControlClassification("Cookie-instellingen", dutchOptions),
+    true,
+  );
+  assert.equal(
+    isProductionCreditworthySupplementalConsentControlClassification("Instellingen", genericDutchSettings),
+    false,
+  );
+
+  const polishContextText = "Dbamy o Twoją prywatność. Używamy plików cookie i prosimy o zgodę użytkownika.";
   const accept = classifyConsentControlLabel({
     label: "AKCEPTUJĘ",
-    contextText,
+    contextText: polishContextText,
     classifierProfile: "multilingual_v1",
   });
   const options = classifyConsentControlLabel({
     label: "USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji",
-    contextText,
+    contextText: polishContextText,
     classifierProfile: "multilingual_v1",
   });
   const continueToService = classifyConsentControlLabel({
@@ -327,16 +366,16 @@ test("marks only explicit Polish consent-control labels as production creditwort
     classifierProfile: "multilingual_v1",
   });
 
-  assert.equal(isProductionCreditworthyPolishConsentControlClassification("AKCEPTUJĘ", accept), true);
+  assert.equal(isProductionCreditworthySupplementalConsentControlClassification("AKCEPTUJĘ", accept), true);
   assert.equal(
-    isProductionCreditworthyPolishConsentControlClassification(
+    isProductionCreditworthySupplementalConsentControlClassification(
       "USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji",
       options,
     ),
     true,
   );
   assert.equal(
-    isProductionCreditworthyPolishConsentControlClassification("Przejdź do serwisu", continueToService),
+    isProductionCreditworthySupplementalConsentControlClassification("Przejdź do serwisu", continueToService),
     false,
   );
 });

@@ -1,7 +1,7 @@
 import type { Page } from "playwright";
 import {
   classifyConsentControlLabel,
-  isProductionCreditworthyPolishConsentControlClassification,
+  isProductionCreditworthySupplementalConsentControlClassification,
   type ConsentControlClassifierProfile,
   type ConsentControlLabelClassification,
 } from "@certscore/contracts";
@@ -518,7 +518,7 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
     hasConsentContext,
     hasPreferenceContext,
   });
-  if (isPolishProductionGeometryClassification(candidate, multilingualClassification)) {
+  if (isSupplementalProductionGeometryClassification(candidate, multilingualClassification)) {
     return multilingualClassification;
   }
   return defaultClassification;
@@ -580,11 +580,14 @@ function isLoosePageChromeDiagnostic(
     !candidate.containerSelectorHint;
 }
 
-function isPolishProductionGeometryClassification(
+function isSupplementalProductionGeometryClassification(
   candidate: RawGeometryCandidate,
   classification: ConsentControlLabelClassification,
 ): boolean {
-  if (classification.matchedLocale !== "pl" || classification.intent === "unknown") {
+  if (
+    (classification.matchedLocale !== "nl" && classification.matchedLocale !== "pl") ||
+    classification.intent === "unknown"
+  ) {
     return false;
   }
   if (!MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN.test(candidate.contextText)) {
@@ -603,7 +606,7 @@ function isPolishProductionGeometryClassification(
     candidate.title,
     candidate.value,
   ].filter(Boolean).join(" "));
-  return isProductionCreditworthyPolishConsentControlClassification(label, classification);
+  return isProductionCreditworthySupplementalConsentControlClassification(label, classification);
 }
 
 function actionTypeForClassification(

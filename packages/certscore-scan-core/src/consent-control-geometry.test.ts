@@ -251,6 +251,28 @@ test("captures Wyborcza-style Polish Consentmanager accept and advanced settings
   );
 });
 
+test("captures Dutch Consentmanager accept, reject, and settings controls", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+    <div id="cmpbox" class="cmpbox cmpboxWelcomeGDPR" role="dialog" aria-modal="true" style="position: fixed; left: 80px; top: 80px; width: 620px; padding: 24px; background: white;">
+      <h1>Wij gebruiken cookies</h1>
+      <p>Wij gebruiken cookies en vragen toestemming voor advertentie- en analysevoorkeuren. U kunt uw cookie-instellingen aanpassen.</p>
+      <button type="button">Cookie-instellingen</button>
+      <button type="button">Alles weigeren</button>
+      <button type="button">Alles accepteren</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "Consentmanager");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Alles accepteren")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Alles weigeren")?.actionType, "reject_all");
+  assert.equal(findCandidate(artifact, "Cookie-instellingen")?.actionType, "manage_preferences");
+});
+
 test("keeps NBC-style hidden OneTrust preference center from counting as first-layer controls", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.cookielaw.org/consent/bf1dbc48/otSDKStub.js"></script>

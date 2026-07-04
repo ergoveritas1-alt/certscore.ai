@@ -1232,6 +1232,108 @@ test("summarizePolicySurfaces credits French Article 13 candidates through the p
   });
 });
 
+test("summarizePolicySurfaces credits Spanish real-style Article 13 candidates through the production profile by default", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const candidateInputs = [
+    {
+      topic: "processing_purposes",
+      evidenceText: "Tratamos sus datos personales para gestionar su cuenta y prestarle los servicios solicitados.",
+      matchedTerm: "tratamos sus datos personales para",
+    },
+    {
+      topic: "legal_basis",
+      evidenceText: "La legitimación para el tratamiento de sus datos personales incluye el consentimiento, la ejecución del contrato y nuestro interés legítimo.",
+      matchedTerm: "legitimación para el tratamiento de sus datos personales",
+    },
+    {
+      topic: "recipients_or_vendor_categories",
+      evidenceText: "Podemos comunicar sus datos personales a encargados del tratamiento, proveedores de servicios y otros destinatarios.",
+      matchedTerm: "encargados del tratamiento",
+    },
+    {
+      topic: "data_retention",
+      evidenceText: "Sus datos personales serán conservados durante el plazo necesario para las finalidades descritas.",
+      matchedTerm: "datos personales serán conservados",
+    },
+    {
+      topic: "data_subject_rights",
+      evidenceText: "Puede ejercer sus derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad sobre sus datos personales.",
+      matchedTerm: "derechos de acceso rectificación supresión oposición limitación y portabilidad",
+    },
+    {
+      topic: "international_transfers",
+      evidenceText: "Podemos transferir sus datos personales a terceros países usando cláusulas contractuales tipo.",
+      matchedTerm: "cláusulas contractuales tipo",
+    },
+    {
+      topic: "supervisory_authority",
+      evidenceText: "Puede presentar una reclamación ante la Agencia Española de Protección de Datos.",
+      matchedTerm: "presentar una reclamación ante la agencia española de protección de datos",
+    },
+  ];
+  const candidates = candidateInputs.map((candidate) => ({
+    ...candidate,
+    classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+    classifierReasonCodes: [`matched_${candidate.topic}`, "match_strength_equivalent"],
+    confidence: 0.86,
+    matchStrength: "equivalent",
+    matchedLocale: "es",
+    productionCredit: false,
+    status: "diagnostic_only",
+  }));
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "spanish-real-style-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/politica-de-privacidad",
+      normalizedUrl: "https://example.test/politica-de-privacidad",
+      confidence: 0.96,
+      status: "fetched",
+      textExcerpt: [
+        "Política de privacidad. Esta política describe el tratamiento de datos personales de los usuarios.",
+        ...candidateInputs.map((candidate) => candidate.evidenceText),
+      ].join(" "),
+      observedTopics: [],
+      gdprTransparencyTopicCandidates: candidates,
+    },
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+
+  assert.equal(summary.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
+  assert.equal(summary.gdprTransparencyProductionEvidenceEnabled, true);
+  assert.deepEqual(
+    summary.article13DisclosureTypesObserved.sort(),
+    [
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers",
+      "legal_basis",
+      "processing_purposes",
+      "recipients_or_vendor_categories",
+      "supervisory_authority",
+    ],
+  );
+  const acceptedSignals = summary.article13DisclosureSignals as Array<Record<string, unknown>>;
+  assert.equal(acceptedSignals.length, 7);
+  assert.equal(
+    acceptedSignals.every((signal) =>
+      signal.productionCredit === true &&
+      signal.productionCreditProfile === "gdpr_transparency_multilingual_article13_v1" &&
+      signal.matchedLocale === "es"
+    ),
+    true,
+  );
+  assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
+    acceptedCandidateCount: 7,
+    diagnosticCandidateCount: 0,
+    discardedCandidateCount: 0,
+    productionCreditSignalCount: 7,
+    rejectedCandidateCount: 0,
+    sourceCandidateCount: 7,
+  });
+});
+
 test("summarizePolicySurfaces credits Wyborcza-style Polish Article 13 candidates through the production profile by default", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const candidateInputs = [

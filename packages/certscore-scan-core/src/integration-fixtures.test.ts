@@ -1658,6 +1658,42 @@ test("pre-consent runtime scanner retains Wyborcza-style Polish consent controls
   }
 });
 
+test("pre-consent runtime scanner retains explicit Dutch consent controls", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-dutch-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-dutch-controls"),
+      path.join(tempRoot, "consent-dutch-controls"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.layerInspected, "first_layer");
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /Alles accepteren/i.test(label)),
+      true,
+    );
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /Alles weigeren/i.test(label)),
+      true,
+    );
+    assert.equal(
+      observation?.visibleChoiceLabels.some((label) => /Cookie-instellingen/i.test(label)),
+      true,
+    );
+    assert.ok((observation?.inventoryDiagnostics?.retainedControlCount ?? 0) >= 3);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner retains first-layer accept-only consent surface as no reject observed", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-no-reject-"));

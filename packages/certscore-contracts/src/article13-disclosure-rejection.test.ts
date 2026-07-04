@@ -257,6 +257,75 @@ test("Article 13 rejection contract accepts Wyborcza-style Polish row-specific e
   }
 });
 
+test("Article 13 rejection contract accepts Spanish and Italian real-style row-specific excerpts", () => {
+  const examples = [
+    {
+      disclosureType: "processing_purposes",
+      text: "Tratamos sus datos personales para gestionar su cuenta y prestarle los servicios solicitados.",
+    },
+    {
+      disclosureType: "legal_basis",
+      text: "La legitimación para el tratamiento de sus datos personales incluye el consentimiento, la ejecución del contrato y nuestro interés legítimo.",
+    },
+    {
+      disclosureType: "recipients_or_vendor_categories",
+      text: "Podemos comunicar sus datos personales a encargados del tratamiento, proveedores de servicios y otros destinatarios.",
+    },
+    {
+      disclosureType: "data_retention",
+      text: "Sus datos personales serán conservados durante el plazo necesario para las finalidades descritas.",
+    },
+    {
+      disclosureType: "data_subject_rights",
+      text: "Puede ejercer sus derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad sobre sus datos personales.",
+    },
+    {
+      disclosureType: "international_transfers",
+      text: "Podemos transferir sus datos personales a terceros países usando cláusulas contractuales tipo.",
+    },
+    {
+      disclosureType: "supervisory_authority",
+      text: "Puede presentar una reclamación ante la Agencia Española de Protección de Datos.",
+    },
+    {
+      disclosureType: "processing_purposes",
+      text: "I dati personali sono trattati per le seguenti finalità connesse alla fornitura dei servizi.",
+    },
+    {
+      disclosureType: "legal_basis",
+      text: "Le basi giuridiche del trattamento dei dati personali includono il consenso, il contratto e il legittimo interesse.",
+    },
+    {
+      disclosureType: "recipients_or_vendor_categories",
+      text: "Possiamo comunicare i dati personali a responsabili del trattamento, fornitori e soggetti autorizzati al trattamento.",
+    },
+    {
+      disclosureType: "data_retention",
+      text: "I dati personali saranno conservati per il tempo necessario al perseguimento delle finalità indicate.",
+    },
+    {
+      disclosureType: "data_subject_rights",
+      text: "Puoi esercitare i diritti di accesso, rettifica, cancellazione, limitazione, opposizione e portabilità sui dati personali.",
+    },
+    {
+      disclosureType: "international_transfers",
+      text: "Possiamo trasferire i dati personali verso paesi terzi usando clausole contrattuali standard.",
+    },
+    {
+      disclosureType: "supervisory_authority",
+      text: "Puoi proporre reclamo al Garante per la protezione dei dati personali.",
+    },
+  ] as const;
+
+  for (const example of examples) {
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(example.text, example.disclosureType, { mode: "multilingual_classifier" }),
+      true,
+      `${example.disclosureType} should be usable`,
+    );
+  }
+});
+
 test("Article 13 rejection contract rejects DPO nouns without a contact anchor", () => {
   assert.equal(
     article13DisclosureRejectReason(

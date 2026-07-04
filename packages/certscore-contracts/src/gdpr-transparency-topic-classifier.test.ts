@@ -837,6 +837,62 @@ test("classifies BILD-style German Article 13 policy language", () => {
   );
 });
 
+test("classifies Spanish and Italian real-style Article 13 policy language", () => {
+  const examples = [
+    {
+      locale: "es",
+      text: [
+        "Esta política explica el tratamiento de datos personales.",
+        "Tratamos sus datos personales para gestionar su cuenta y prestarle los servicios solicitados.",
+        "La legitimación para el tratamiento de sus datos personales incluye el consentimiento, la ejecución del contrato y nuestro interés legítimo.",
+        "Podemos comunicar sus datos personales a encargados del tratamiento, proveedores de servicios y otros destinatarios.",
+        "Sus datos personales serán conservados durante el plazo necesario para las finalidades descritas.",
+        "Puede ejercer sus derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad sobre sus datos personales.",
+        "Podemos transferir sus datos personales a terceros países usando cláusulas contractuales tipo.",
+        "Puede presentar una reclamación ante la Agencia Española de Protección de Datos.",
+      ].join(" "),
+    },
+    {
+      locale: "it",
+      text: [
+        "Questa informativa descrive il trattamento dei dati personali.",
+        "I dati personali sono trattati per le seguenti finalità connesse alla fornitura dei servizi.",
+        "Le basi giuridiche del trattamento dei dati personali includono il consenso, il contratto e il legittimo interesse.",
+        "Possiamo comunicare i dati personali a responsabili del trattamento, fornitori e soggetti autorizzati al trattamento.",
+        "I dati personali saranno conservati per il tempo necessario al perseguimento delle finalità indicate.",
+        "Puoi esercitare i diritti di accesso, rettifica, cancellazione, limitazione, opposizione e portabilità sui dati personali.",
+        "Possiamo trasferire i dati personali verso paesi terzi usando clausole contrattuali standard.",
+        "Puoi proporre reclamo al Garante per la protezione dei dati personali.",
+      ].join(" "),
+    },
+  ] as const;
+
+  const expectedTopics: GdprTransparencyTopic[] = [
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "supervisory_authority",
+  ];
+
+  for (const example of examples) {
+    const classification = classifyGdprTransparencyTopics({
+      text: example.text,
+      localeHints: [example.locale],
+      maxMatches: 20,
+    });
+
+    for (const topic of expectedTopics) {
+      assert.ok(
+        classification.matches.some((match) => match.topic === topic && match.matchedLocale === example.locale),
+        `${example.locale} should classify ${topic}`,
+      );
+    }
+  }
+});
+
 test("classifies privacy-specific recipients, complaint, and profiling evidence across supported locales", () => {
   const examples = [
     {
