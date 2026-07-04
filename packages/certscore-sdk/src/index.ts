@@ -2,6 +2,8 @@ export { CertScoreClient } from "./client.js";
 export {
   CertScoreApiError,
   CertScoreError,
+  CertScoreScanFailedError,
+  CertScoreTimeoutError,
   InvalidUrlError,
   ScanFailedError,
   ScanTimeoutError,

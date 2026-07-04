@@ -25,17 +25,19 @@ export class CertScoreApiError extends CertScoreError {
   }
 }
 
-export class ScanTimeoutError extends CertScoreError {
+export class CertScoreTimeoutError extends CertScoreError {
   jobId: string;
   scanId?: string;
 
   constructor(message: string, options: { jobId: string; scanId?: string; cause?: unknown }) {
     super(message, { cause: options.cause });
-    this.name = "ScanTimeoutError";
+    this.name = "CertScoreTimeoutError";
     this.jobId = options.jobId;
     this.scanId = options.scanId;
   }
 }
+
+export { CertScoreTimeoutError as ScanTimeoutError };
 
 export class InvalidUrlError extends CertScoreError {
   constructor(message: string, options: { status?: number; code?: string; responseBody?: unknown; cause?: unknown } = {}) {
@@ -57,7 +59,7 @@ export class ThrottledError extends CertScoreError {
   }
 }
 
-export class ScanFailedError extends CertScoreError {
+export class CertScoreScanFailedError extends CertScoreError {
   scanId?: string;
   jobId?: string;
 
@@ -66,8 +68,10 @@ export class ScanFailedError extends CertScoreError {
     options: { scanId?: string | null; jobId?: string | null; status?: number; code?: string; responseBody?: unknown; cause?: unknown } = {}
   ) {
     super(message, options);
-    this.name = "ScanFailedError";
+    this.name = "CertScoreScanFailedError";
     this.scanId = options.scanId ?? undefined;
     this.jobId = options.jobId ?? undefined;
   }
 }
+
+export { CertScoreScanFailedError as ScanFailedError };

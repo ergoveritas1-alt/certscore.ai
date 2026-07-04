@@ -1,4 +1,4 @@
-import { ScanTimeoutError, ThrottledError, ScanFailedError } from "./errors.js";
+import { CertScoreTimeoutError, ThrottledError, CertScoreScanFailedError } from "./errors.js";
 import type { JobStatus, PulseJobStatus } from "./types.js";
 
 export const SUCCESS_STATUSES = new Set<PulseJobStatus>(["completed", "completed_limited"]);
@@ -60,14 +60,14 @@ export function throwForTerminalStatus(status: JobStatus): never {
     });
   }
   if (FAILURE_STATUSES.has(status.status)) {
-    throw new ScanFailedError(status.message ?? `Pulse scan ended with status ${status.status}.`, {
+    throw new CertScoreScanFailedError(status.message ?? `Pulse scan ended with status ${status.status}.`, {
       code: status.status,
       jobId: status.jobId,
       scanId: status.scanId ?? status.scan_id ?? undefined,
       responseBody: status
     });
   }
-  throw new ScanFailedError(`Pulse scan reached unsupported terminal status ${status.status}.`, {
+  throw new CertScoreScanFailedError(`Pulse scan reached unsupported terminal status ${status.status}.`, {
     code: status.status,
     jobId: status.jobId,
     scanId: status.scanId ?? status.scan_id ?? undefined,
@@ -76,5 +76,5 @@ export function throwForTerminalStatus(status: JobStatus): never {
 }
 
 export function throwTimeout(jobId: string, scanId: string | undefined): never {
-  throw new ScanTimeoutError("Timed out waiting for CertScore Pulse scan to complete.", { jobId, scanId });
+  throw new CertScoreTimeoutError("Timed out waiting for CertScore Pulse scan to complete.", { jobId, scanId });
 }

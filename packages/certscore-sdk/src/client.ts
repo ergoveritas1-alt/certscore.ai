@@ -1,4 +1,4 @@
-import { CertScoreApiError, InvalidUrlError, ScanFailedError, ThrottledError } from "./errors.js";
+import { CertScoreApiError, InvalidUrlError, CertScoreScanFailedError, ThrottledError } from "./errors.js";
 import { parseRetryAfter, retryDelayMs, sleep, SUCCESS_STATUSES, throwForTerminalStatus, throwTimeout } from "./poll.js";
 import type {
   CertScoreClientOptions,
@@ -61,7 +61,7 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
-function statusScanId(status: Partial<JobStatus> | Partial<PendingJob>): string | undefined {
+function statusScanId(status: Partial<JobStatus> | Partial<PendingJob> | Partial<ScanJob>): string | undefined {
   return typeof status.scanId === "string" ? status.scanId : typeof status.scan_id === "string" ? status.scan_id : undefined;
 }
 
@@ -278,28 +278,35 @@ export class CertScoreClient {
   }
 
   /** Wait for a Pulse job/status object or retrieve a stable scan by scanId. */
-  async waitForScan(scan: string | PendingJob | JobStatus, options: ScanOptions = {}): Promise<PulseResult | string> {
+  async waitForScan(scan: string | ScanResource | ScanJob | PendingJob | JobStatus, options: ScanOptions = {}): Promise<ScanResource> {
     if (typeof scan === "string") {
-      return this.fetchScan(scan, normalizeDetail(options.detail), normalizeFormat(options.format), options.signal);
+      return this.getScanResource(scan, { signal: options.signal });
     }
-    if (scan.type === "certscore_pulse_completed" && scan.pulse && normalizeFormat(options.format) !== "markdown") {
-      return scan.pulse;
+    if (scan.type === "certscore_scan") {
+      return scan;
+    }
+    if (scan.type === "certscore_pulse_completed") {
+      const completedScanId = statusScanId(scan);
+      if (completedScanId) {
+        return this.getScanResource(completedScanId, { signal: options.signal });
+      }
+      throw new CertScoreScanFailedError("Cannot wait for a completed Pulse response without a durable scanId.", {
+        responseBody: scan
+      });
     }
     if (scan.status === "completed" || scan.status === "completed_limited") {
       const scanId = statusScanId(scan);
       if (scanId) {
-        return this.fetchScan(scanId, normalizeDetail(options.detail), normalizeFormat(options.format), options.signal);
+        return this.getScanResource(scanId, { signal: options.signal });
       }
     }
     if (!scan.jobId) {
-      throw new ScanFailedError("Cannot wait for a scan without a jobId or completed scanId.", {
+      throw new CertScoreScanFailedError("Cannot wait for a scan without a jobId or completed scanId.", {
         scanId: statusScanId(scan),
         responseBody: scan
       });
     }
-    return this.pollUntilComplete(scan as JobStatus, {
-      detail: normalizeDetail(options.detail),
-      format: normalizeFormat(options.format),
+    return this.pollScanResourceUntilComplete(scan as ScanJob | JobStatus, {
       pollIntervalMs: options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
       maxWaitMs: options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS,
       startedAt: Date.now(),
@@ -397,6 +404,52 @@ export class CertScoreClient {
     }
   }
 
+  private async pollScanResourceUntilComplete(
+    initial: ScanJob | JobStatus,
+    options: {
+      pollIntervalMs: number;
+      maxWaitMs: number;
+      startedAt: number;
+      signal?: AbortSignal;
+      onStatusUpdate?: (status: JobStatus) => void;
+    }
+  ): Promise<ScanResource> {
+    let status = initial as JobStatus;
+
+    while (true) {
+      if (SUCCESS_STATUSES.has(status.status)) {
+        const scanId = statusScanId(status);
+        if (scanId) {
+          return this.getScanResource(scanId, { signal: options.signal });
+        }
+        throw new CertScoreScanFailedError("Scan completed without a durable scanId.", {
+          jobId: status.jobId,
+          responseBody: status
+        });
+      }
+      if (status.status === "rate_limited" || status.status === "failed" || status.status === "expired") {
+        throwForTerminalStatus(status);
+      }
+
+      const jobId = status.jobId;
+      const scanId = statusScanId(status);
+      if (Date.now() - options.startedAt >= options.maxWaitMs) {
+        throwTimeout(jobId, scanId);
+      }
+
+      const delay = Math.min(retryDelayMs(status, undefined, options.pollIntervalMs), Math.max(0, options.maxWaitMs - (Date.now() - options.startedAt)));
+      await sleep(delay, options.signal);
+
+      const response = await this.fetch(this.scanResourceStatusUrlFor(status), { signal: options.signal });
+      if (response.status === 202 || response.status === 200 || response.status === 429) {
+        status = (await response.json()) as JobStatus;
+        options.onStatusUpdate?.(status);
+        continue;
+      }
+      return await this.throwForResponse(response);
+    }
+  }
+
   private async fetchCompletedFromStatus(status: JobStatus, detail: PulseDetail, format: PulseFormat, signal?: AbortSignal): Promise<PulseResult | string> {
     const scanId = statusScanId(status);
     if (status.resultUrl) {
@@ -411,7 +464,7 @@ export class CertScoreClient {
     if (scanId) {
       return this.fetchScan(scanId, detail, format, signal);
     }
-    throw new ScanFailedError("Pulse job completed without a result URL or scanId.", {
+    throw new CertScoreScanFailedError("Pulse job completed without a result URL or scanId.", {
       jobId: status.jobId,
       responseBody: status
     });
@@ -433,6 +486,19 @@ export class CertScoreClient {
       return this.resolveApiUrl(candidate);
     }
     return this.url(`/api/v1/pulse/status/${encodeURIComponent(status.jobId)}`);
+  }
+
+  private scanResourceStatusUrlFor(status: ScanJob | JobStatus): URL {
+    const links = asRecord(status.links);
+    const linkStatus = typeof links.status === "string" ? links.status : null;
+    if (linkStatus) {
+      return this.resolveApiUrl(linkStatus);
+    }
+    const scanId = statusScanId(status);
+    if (scanId) {
+      return this.url(`/api/v2/scans/${encodeURIComponent(scanId)}/status`);
+    }
+    return this.statusUrlFor(status as JobStatus);
   }
 
   private async parseCompletedResponse(response: Response, format: PulseFormat): Promise<PulseResult | string> {

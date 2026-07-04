@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { CertScoreClient } from "./client.js";
-import { InvalidUrlError, ScanFailedError, ScanTimeoutError, ThrottledError } from "./errors.js";
+import { CertScoreScanFailedError, CertScoreTimeoutError, InvalidUrlError, ThrottledError } from "./errors.js";
 
 type MockResponse = {
   status: number;
@@ -214,7 +214,7 @@ test("scan timeout includes jobId and scanId", async () => {
     await assert.rejects(
       () => client.scan("https://example.com", { maxWaitMs: 0, pollIntervalMs: 0 }),
       (error: unknown) =>
-        error instanceof ScanTimeoutError && error.jobId === "job_1" && error.scanId === "scan_123"
+        error instanceof CertScoreTimeoutError && error.jobId === "job_1" && error.scanId === "scan_123"
     );
   } finally {
     mock.restore();
@@ -267,12 +267,66 @@ test("failed and expired statuses map to ScanFailedError", async () => {
       const client = new CertScoreClient();
       await assert.rejects(
         () => client.scan("https://example.com", { pollIntervalMs: 0 }),
-        (error: unknown) => error instanceof ScanFailedError && error.jobId === "job_1" && error.scanId === "scan_123"
+        (error: unknown) => error instanceof CertScoreScanFailedError && error.jobId === "job_1" && error.scanId === "scan_123"
       );
     } finally {
       mock.restore();
     }
   }
+});
+
+test("scans.wait resolves to completed API v2 scan resource", async () => {
+  const scanResource = {
+    type: "certscore_scan",
+    scanId: "scan_123",
+    domain: "example.com",
+    status: "completed"
+  };
+  const mock = installFetch([
+    {
+      status: 200,
+      body: { type: "certscore_scan_job", status: "running", jobId: "job_1", scanId: "scan_123" }
+    },
+    {
+      status: 200,
+      body: { type: "certscore_scan_job", status: "completed", jobId: "job_1", scanId: "scan_123" }
+    },
+    { status: 200, body: scanResource }
+  ]);
+
+  try {
+    const updates: string[] = [];
+    const client = new CertScoreClient();
+    const result = await client.scans.wait(
+      { type: "certscore_scan_job", status: "running", jobId: "job_1", scanId: "scan_123" },
+      {
+        pollIntervalMs: 0,
+        onStatusUpdate(status) {
+          updates.push(status.status);
+        }
+      }
+    );
+
+    assert.deepEqual(result, scanResource);
+    assert.deepEqual(updates, ["running", "completed"]);
+    assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123\/status$/);
+    assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/status$/);
+    assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/scan_123$/);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("scans.wait returns a provided completed scan resource without fetching", async () => {
+  const client = new CertScoreClient();
+  const scan = {
+    type: "certscore_scan",
+    scanId: "scan_123",
+    domain: "example.com",
+    status: "completed"
+  } as const;
+
+  assert.equal(await client.scans.wait(scan), scan);
 });
 
 test("resource clients call API v2 read endpoints", async () => {

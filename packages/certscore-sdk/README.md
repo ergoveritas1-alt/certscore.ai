@@ -36,17 +36,8 @@ const created = await certscore.scans.create("https://example.com", {
   scanFrom: "eu_ie"
 });
 
-const completed = created.type === "certscore_scan_job"
-  ? await certscore.scans.wait(created)
-  : created;
-
-const scanId = typeof completed === "string"
-  ? undefined
-  : completed.scanId;
-
-if (!scanId) {
-  throw new Error("Scan did not return a durable scanId.");
-}
+const completed = await certscore.scans.wait(created);
+const scanId = completed.scanId;
 
 const status = await certscore.scans.status(scanId);
 const findings = await certscore.findings.list(scanId);
@@ -106,7 +97,7 @@ Server-side filters are intentionally deferred in the initial version; group or 
 `scan()` calls `/api/v1/pulse` with `wait=60`. If CertScore returns HTTP 202, the SDK polls the returned `statusUrl` or `nextCheckUrl`. It honors `Retry-After` on pending or throttled responses.
 
 ```ts
-import { CertScoreClient, ScanTimeoutError } from "@certscore/sdk";
+import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
 
 const client = new CertScoreClient();
 
@@ -124,7 +115,7 @@ try {
     console.log("Result:", pulse.summary?.headline);
   }
 } catch (error) {
-  if (error instanceof ScanTimeoutError) {
+  if (error instanceof CertScoreTimeoutError) {
     console.log("Resume later with:", error.jobId, error.scanId);
   } else {
     throw error;
@@ -162,9 +153,9 @@ console.log(`https://certscore.ai/scan/${scanId}`);
 import {
   CertScoreApiError,
   CertScoreClient,
+  CertScoreScanFailedError,
+  CertScoreTimeoutError,
   InvalidUrlError,
-  ScanFailedError,
-  ScanTimeoutError,
   ThrottledError
 } from "@certscore/sdk";
 
@@ -177,9 +168,9 @@ try {
     console.error("Invalid URL:", error.message);
   } else if (error instanceof ThrottledError) {
     console.error("Retry after seconds:", error.retryAfterSeconds);
-  } else if (error instanceof ScanTimeoutError) {
+  } else if (error instanceof CertScoreTimeoutError) {
     console.error("Timed out; resume with:", error.jobId, error.scanId);
-  } else if (error instanceof ScanFailedError) {
+  } else if (error instanceof CertScoreScanFailedError) {
     console.error("Scan ended before completion:", error.jobId, error.scanId);
   } else if (error instanceof CertScoreApiError) {
     console.error("API error:", error.status, error.code, error.responseBody);
