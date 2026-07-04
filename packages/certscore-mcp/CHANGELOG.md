@@ -1,5 +1,10 @@
 # certscore-mcp
 
+## 0.1.5
+
+- Moves Homebrew release artifacts to a Linux-built, deterministic GitHub Actions pipeline.
+- Publishes SHA256SUMS alongside the release tarball and verifies GNU tar extraction metadata before upload.
+
 ## 0.1.4
 
 - Added a checked-in MCP tool manifest and release guards for server/docs/tool-surface drift.

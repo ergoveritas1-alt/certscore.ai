@@ -13,8 +13,26 @@ const releaseDir = join(artifactRoot, releaseName);
 const bundlePath = join(releaseDir, "libexec", "certscore-mcp.mjs");
 const wrapperPath = join(releaseDir, "bin", "certscore-mcp");
 const tarballPath = join(artifactRoot, `${releaseName}.tar.gz`);
+const checksumPath = join(artifactRoot, "SHA256SUMS");
 const formulaPath = join(artifactRoot, "certscore-mcp.rb");
 const caskPath = join(artifactRoot, "certscore-mcp-cask.rb");
+const gitCommitDate = process.env.CERTSCORE_MCP_RELEASE_MTIME ?? output("git", ["show", "-s", "--format=%cI", "HEAD"]).trim();
+
+function findGnuTarCommand() {
+  for (const command of ["gtar", "tar"]) {
+    const result = spawnSync(command, ["--version"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: { ...process.env, COPYFILE_DISABLE: "1" }
+    });
+    if (result.status === 0 && /GNU tar/i.test(`${result.stdout}\n${result.stderr}`)) {
+      return command;
+    }
+  }
+  throw new Error("GNU tar is required for deterministic certscore-mcp release archives. On macOS, install it with `brew install gnu-tar`.");
+}
+
+const tarCommand = findGnuTarCommand();
 
 function run(command: string, args: string[]) {
   const result = spawnSync(command, args, {
@@ -38,6 +56,18 @@ function output(command: string, args: string[]) {
     throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status ?? "unknown"}\n${result.stderr}`);
   }
   return result.stdout;
+}
+
+function outputWithStderr(command: string, args: string[]) {
+  const result = spawnSync(command, args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: { ...process.env, COPYFILE_DISABLE: "1" }
+  });
+  if (result.status !== 0) {
+    throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status ?? "unknown"}\n${result.stderr}`);
+  }
+  return `${result.stdout}\n${result.stderr}`;
 }
 
 function runPnpm(args: string[]) {
@@ -110,7 +140,7 @@ writeFileSync(
     "",
     "API key access:",
     "",
-    "MCP clients usually need scan:read, scan:create, and mcp scopes. Request developer-preview access by emailing support@certscore.ai with organization, MCP client, expected workflow, expected request volume, contact email, and requested scopes.",
+    "MCP read tools work with self-serve cs_ro_ keys carrying scan:read and mcp. Sign in at https://certscore.ai, verify email, then request a read-only key from /api/v2/keys/request. MCP scan creation requires scan:create and remains support-gated at support@certscore.ai.",
     "",
     "Verify install:",
     "",
@@ -136,14 +166,31 @@ writeFileSync(
 );
 
 rmSync(tarballPath, { force: true });
-run("tar", ["-czf", tarballPath, "-C", artifactRoot, releaseName]);
-const tarballEntries = output("tar", ["-tzf", tarballPath]).split("\n").filter(Boolean);
+rmSync(checksumPath, { force: true });
+run(tarCommand, [
+  "--sort=name",
+  "--owner=0",
+  "--group=0",
+  "--numeric-owner",
+  `--mtime=${gitCommitDate}`,
+  "-czf",
+  tarballPath,
+  "-C",
+  artifactRoot,
+  releaseName
+]);
+const tarballEntries = output(tarCommand, ["-tzf", tarballPath]).split("\n").filter(Boolean);
 const appleDoubleEntry = tarballEntries.find((entry) => entry.split("/").some((part) => part.startsWith("._")));
 if (appleDoubleEntry) {
   throw new Error(`Homebrew tarball includes an AppleDouble/xattr sidecar entry: ${appleDoubleEntry}`);
 }
+const tarVerboseOutput = outputWithStderr(tarCommand, ["-tvf", tarballPath]);
+if (/LIBARCHIVE\.xattr\.|(^|\/)\._/.test(tarVerboseOutput)) {
+  throw new Error("Homebrew tarball includes AppleDouble or LIBARCHIVE.xattr metadata");
+}
 
 const checksum = sha256(tarballPath);
+writeFileSync(checksumPath, `${checksum}  ${basename(tarballPath)}\n`);
 const releaseUrl = `https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v${version}/${basename(tarballPath)}`;
 writeFileSync(
   formulaPath,
@@ -207,5 +254,6 @@ if (!existsSync(tarballPath)) {
 
 console.log(`Created ${tarballPath}`);
 console.log(`sha256 ${checksum}`);
+console.log(`SHA256SUMS ${checksumPath}`);
 console.log(`Formula template ${formulaPath}`);
 console.log(`Cask template ${caskPath}`);

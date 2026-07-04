@@ -62,6 +62,15 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
           </p>
         </Section>
 
+        <Section eyebrow="Verify download" title="Check the release checksum">
+          <CodeBlock>{`curl -LO https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v{version}/certscore-mcp-v{version}.tar.gz
+curl -LO https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v{version}/SHA256SUMS
+sha256sum --check SHA256SUMS`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Release tarballs are built on Linux by GitHub Actions. The published SHA256SUMS file should match the cask checksum.
+          </p>
+        </Section>
+
         <Section eyebrow="MCP client config" title="Use the installed command">
           <CodeBlock>{`{
   "mcpServers": {

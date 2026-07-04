@@ -1,0 +1,118 @@
+name: CertScore MCP Linux Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example certscore-mcp-v0.1.5"
+        required: true
+        type: string
+  push:
+    tags:
+      - "certscore-mcp-v*"
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Resolve tag
+        id: release
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#certscore-mcp-v}"
+          if [ "$TAG" = "$VERSION" ] || [ -z "$VERSION" ]; then
+            echo "Expected tag shaped certscore-mcp-vX.Y.Z, got $TAG" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Confirm package version matches tag
+        run: |
+          set -euo pipefail
+          PACKAGE_VERSION="$(node -e 'console.log(JSON.parse(require("fs").readFileSync("packages/certscore-mcp/package.json", "utf8")).version)')"
+          if [ "$PACKAGE_VERSION" != "${{ steps.release.outputs.version }}" ]; then
+            echo "packages/certscore-mcp/package.json version $PACKAGE_VERSION does not match ${{ steps.release.outputs.tag }}" >&2
+            exit 1
+          fi
+
+      - name: Build deterministic Homebrew release artifact
+        run: pnpm mcp:certscore:homebrew:build
+
+      - name: Verify release artifact on Linux
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.release.outputs.version }}"
+          RELEASE_DIR="artifacts/certscore-mcp-homebrew/certscore-mcp-v${VERSION}"
+          TARBALL="artifacts/certscore-mcp-homebrew/certscore-mcp-v${VERSION}.tar.gz"
+          SHA256SUMS="artifacts/certscore-mcp-homebrew/SHA256SUMS"
+
+          test -f "$TARBALL"
+          test -f "$SHA256SUMS"
+          "$RELEASE_DIR/bin/certscore-mcp" --version | grep -Fx "$VERSION"
+          "$RELEASE_DIR/bin/certscore-mcp" --help >/dev/null
+          sha256sum --check "$SHA256SUMS"
+
+          if tar tzf "$TARBALL" | grep -E '(^|/)\._'; then
+            echo "AppleDouble entries found in $TARBALL" >&2
+            exit 1
+          fi
+
+          TAR_VERBOSE="$(tar -tvf "$TARBALL" 2>&1)"
+          if printf '%s\n' "$TAR_VERBOSE" | grep -E 'LIBARCHIVE\.xattr\.|(^|/)\._'; then
+            echo "Extended attributes or AppleDouble metadata found in $TARBALL" >&2
+            exit 1
+          fi
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.release.outputs.tag }}"
+          VERSION="${{ steps.release.outputs.version }}"
+          TARBALL="artifacts/certscore-mcp-homebrew/certscore-mcp-v${VERSION}.tar.gz"
+          SHA256SUMS="artifacts/certscore-mcp-homebrew/SHA256SUMS"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --notes "CertScore MCP $VERSION Linux-built Homebrew artifact."
+          fi
+          gh release upload "$TAG" "$TARBALL" "$SHA256SUMS" --clobber
+
+      - name: Copy generated Homebrew metadata
+        run: |
+          cp artifacts/certscore-mcp-homebrew/certscore-mcp-cask.rb Casks/certscore-mcp.rb
+          cp artifacts/certscore-mcp-homebrew/certscore-mcp.rb Formula/certscore-mcp.rb
+
+      - name: Open cask bump pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ github.token }}
+          branch: automation/certscore-mcp-cask-${{ steps.release.outputs.version }}
+          title: "Bump certscore-mcp Homebrew metadata to ${{ steps.release.outputs.version }}"
+          commit-message: "Bump certscore-mcp Homebrew metadata to ${{ steps.release.outputs.version }}"
+          body: |
+            Linux-built CertScore MCP release artifact is available for `${{ steps.release.outputs.tag }}`.
+
+            This PR updates the Homebrew cask/formula to the CI-built tarball and sha256.
+          labels: release, certscore-mcp
+          delete-branch: true

@@ -1,6 +1,6 @@
 {
   "name": "certscore-mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": false,
   "description": "MCP server for CertScore public website risk-signal workflows.",
   "type": "module",
