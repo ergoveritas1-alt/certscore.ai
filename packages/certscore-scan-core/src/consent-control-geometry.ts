@@ -294,7 +294,7 @@ export async function captureConsentControlGeometry(
   const candidates = raw.candidates.map((candidate, index) =>
     buildCandidateEvidence(candidate, index, raw.pageUrl, options.screenshotArtifactRef, containers)
   );
-  const summary = summarizeConsentControlGeometry(candidates, cmp);
+  const summary = summarizeConsentControlGeometry(candidates, containers, cmp);
 
   return {
     artifactVersion: "consent_control_geometry.v1",
@@ -697,6 +697,7 @@ function decisionStatusForCandidate(
 
 function summarizeConsentControlGeometry(
   candidates: ConsentControlCandidateEvidence[],
+  containers: ConsentControlContainerEvidence[],
   cmp: ConsentControlCmpEvidence,
 ): ConsentControlGeometryArtifact["summary"] {
   const confirmedFirstLayer = candidates.filter((candidate) =>
@@ -717,6 +718,7 @@ function summarizeConsentControlGeometry(
   const observedCount = [firstLayerAccept, firstLayerReject, firstLayerOptions].filter(Boolean).length;
   if (cmp.detected && observedCount === 0) {
     limitations.unshift("cmp_detected_without_visible_first_layer_controls");
+    limitations.push(...cmpNoActionableSurfaceLimitationKeys(candidates, containers));
   }
   const boundedLimitations = limitations.slice(0, 12);
   return {
@@ -728,6 +730,34 @@ function summarizeConsentControlGeometry(
     confidence: Math.min(0.98, 0.55 + observedCount * 0.12 + (cmp.detected ? 0.1 : 0)),
     limitations: boundedLimitations,
   };
+}
+
+function cmpNoActionableSurfaceLimitationKeys(
+  candidates: ConsentControlCandidateEvidence[],
+  containers: ConsentControlContainerEvidence[],
+): string[] {
+  if (candidates.length === 0 && containers.length === 0) {
+    return ["cmp_detected_no_control_candidates_or_containers_retained"];
+  }
+  if (containers.length > 0 && candidates.length === 0) {
+    return ["cmp_detected_container_retained_without_control_candidates"];
+  }
+  const actionableCandidates = candidates.filter((candidate) =>
+    candidate.actionType === "accept_all" ||
+    candidate.actionType === "reject_all" ||
+    candidate.actionType === "manage_preferences"
+  );
+  if (actionableCandidates.length > 0) {
+    const statuses = unique(actionableCandidates.map((candidate) => candidate.decisionStatus));
+    return statuses.slice(0, 4).map((status) => `cmp_detected_actionable_candidates_${status}`);
+  }
+  if (candidates.some((candidate) => (candidate.diagnosticClassifications?.length ?? 0) > 0)) {
+    return ["cmp_detected_only_diagnostic_or_rejected_control_labels"];
+  }
+  if (candidates.some((candidate) => candidate.layer === "footer" || candidate.actionType === "policy_link")) {
+    return ["cmp_detected_only_footer_or_policy_control_candidates"];
+  }
+  return ["cmp_detected_no_actionable_control_labels_retained"];
 }
 
 function normalizeLabel(label: string): string {

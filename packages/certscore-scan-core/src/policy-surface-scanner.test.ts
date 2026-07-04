@@ -97,6 +97,43 @@ test("policySurfaceScanner treats localized CAPTCHA policy pages as access chall
   });
 });
 
+test("policySurfaceScanner retains bounded blocked-policy diagnostics", async () => {
+  await withPolicyScan("policy-blocked-surfaces", async ({ result }) => {
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(diagnostics.corePolicySurfaceRetained, false);
+    assert.equal(diagnostics.failedCandidateCount >= 2, true);
+    assert.equal(diagnostics.limitationKeys.includes("policy_access_blocked"), true);
+    assert.equal(diagnostics.limitationKeys.includes("no_core_policy_surface_retained"), true);
+    assert.equal(
+      diagnostics.failureSummary.some((failure) =>
+        failure.status === "failed" &&
+        failure.httpStatus === 403 &&
+        failure.surfaceType === "privacy_policy" &&
+        failure.count >= 1
+      ),
+      true,
+    );
+    assert.equal(
+      diagnostics.failureSummary.some((failure) =>
+        failure.status === "failed" &&
+        failure.httpStatus === 403 &&
+        failure.surfaceType === "cookie_policy" &&
+        failure.count >= 1
+      ),
+      true,
+    );
+  }, {
+    discoveryMode: "fast",
+    internalBudgetMs: 4_000,
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run for blocked direct static policy links.");
+      },
+    },
+  }, { expectCompleted: false });
+});
+
 test("policySurfaceScanner fast mode keeps rendered discovery when static links lack cookie settings controls", async () => {
   await withPolicyScan("policy-footer-privacy", async ({ result }) => {
     const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
@@ -139,6 +176,28 @@ test("policySurfaceScanner fast mode skips rendered discovery when static core s
     nanoAssistProvider: {
       async classifyLinks() {
         throw new Error("Nano link ranking should not run when static core surfaces are complete.");
+      },
+    },
+  });
+});
+
+test("policySurfaceScanner standard mode skips Nano and rendered discovery when static core surfaces are high confidence", async () => {
+  await withPolicyScan("policy-static-core-surfaces", async ({ result }) => {
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(observedSurface(result.policySurfaceObservations, "privacy_policy")?.status, "fetched");
+    assert.equal(observedSurface(result.policySurfaceObservations, "cookie_policy")?.status, "fetched");
+    assert.equal(labels.includes("rendered discovery"), false);
+    assert.equal(labels.includes("rendered discovery skipped"), true);
+    assert.equal(labels.includes("deterministic link ranking"), true);
+    assert.equal(labels.includes("Nano link ranking"), false);
+    assert.equal(diagnostics.corePolicySurfaceRetained, true);
+    assert.deepEqual(diagnostics.limitationKeys, []);
+  }, {
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run when direct static GDPR/ePrivacy surfaces are sufficient.");
       },
     },
   });
@@ -2310,6 +2369,13 @@ async function readPolicyCaptureDiagnostics(
   commonPathFallbackUsed: boolean;
   fetchedCount: number;
   failedCandidateCount: number;
+  failureSummary: Array<{
+    surfaceType: string;
+    status: "failed" | "skipped_budget";
+    httpStatus?: number;
+    count: number;
+  }>;
+  limitationKeys: string[];
   candidateSummary: Array<{
     classifierProvenance: string;
     classifierReasonCodes: string[];

@@ -70,6 +70,7 @@ export type StaticFixturePage =
   | "policy-article13-accordions"
   | "policy-international-transfer-recipient-safeguards"
   | "policy-ambiguous-choices"
+  | "policy-blocked-surfaces"
   | "policy-broken-link"
   | "policy-browser-hydrated-document"
   | "policy-canonical-near-privacy-center"
@@ -219,6 +220,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-article13-accordions": "policy-article13-accordions",
   "policy-international-transfer-recipient-safeguards": "policy-international-transfer-recipient-safeguards",
   "policy-ambiguous-choices": "policy-ambiguous-choices",
+  "policy-blocked-surfaces": "policy-blocked-surfaces",
   "policy-broken-link": "policy-broken-link",
   "policy-browser-hydrated-document": "policy-browser-hydrated-document",
   "policy-canonical-near-privacy-center": "policy-canonical-near-privacy-center",
@@ -427,6 +429,12 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
           <footer><a href="/browser-timeout-policy-homepage/privacy">Privacy Policy</a></footer>
         </body>
       </html>`);
+    return;
+  }
+
+  if (url.pathname === "/policies/blocked-privacy" || url.pathname === "/policies/blocked-cookies") {
+    response.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("policy fetch blocked");
     return;
   }
 
@@ -1500,6 +1508,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-article13-accordions": `<a href="/policies/article13-accordions">Privacy Policy</a>`,
     "policy-international-transfer-recipient-safeguards": `<a href="/policies/international-transfer-recipient-safeguards">Privacy Policy</a>`,
     "policy-ambiguous-choices": `<a href="/privacy-choices">Your Choices</a>`,
+    "policy-blocked-surfaces": `<a href="/policies/blocked-privacy">Privacy Policy</a><a href="/policies/blocked-cookies">Cookie Policy</a>`,
     "policy-broken-link": `<a href="/policies/missing-privacy">Privacy Policy</a>`,
     "policy-browser-hydrated-document": `<a href="/browser-hydrated-policy/privacy">Datenschutzhinweis</a>`,
     "policy-canonical-near-privacy-center": `<a href="/privacy-center-shell">Privacy Policy</a>`,

@@ -298,7 +298,50 @@ test("keeps NBC-style hidden OneTrust preference center from counting as first-l
     artifact.summary.limitations.includes("cmp_detected_without_visible_first_layer_controls"),
     true,
   );
+  assert.equal(
+    artifact.summary.limitations.some((limitation) =>
+      limitation !== "cmp_detected_without_visible_first_layer_controls" &&
+      limitation.startsWith("cmp_detected_")
+    ),
+    true,
+  );
   assert.ok(artifact.candidates.some((candidate) => candidate.decisionStatus === "hidden" || candidate.decisionStatus === "deeper_layer"));
+});
+
+test("records explicit limitation when CMP infrastructure has no retained control candidates", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>
+    <main><h1>News homepage</h1><p>No banner is visible in this pre-consent view.</p></main>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "OneTrust");
+  assert.equal(artifact.summary.firstLayerAccept, false);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.equal(
+    artifact.summary.limitations.includes("cmp_detected_no_control_candidates_or_containers_retained"),
+    true,
+  );
+});
+
+test("records explicit limitation for footer-only privacy settings with CMP infrastructure", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+    <main><h1>Publisher homepage</h1><p>Latest articles and videos.</p></main>
+    <footer style="margin-top: 900px;">
+      <a href="/privacy-settings">Privacy settings</a>
+    </footer>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.firstLayerAccept, false);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.equal(
+    artifact.summary.limitations.includes("cmp_detected_actionable_candidates_footer_or_policy_link"),
+    true,
+  );
 });
 
 test("classifies NBC-style visible Continue button as first-layer accept when consent-by-use text is present", async () => {

@@ -175,6 +175,7 @@ export async function policySurfaceScanner(
   let renderedCandidateCount = 0;
   let observedCandidateCount = 0;
   let commonPathFallbackUsed = false;
+  let diagnosticsCandidates: PolicySurfaceCandidate[] = [];
   const policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget = {
     remainingChars: MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS,
   };
@@ -194,6 +195,7 @@ export async function policySurfaceScanner(
         () => extractRenderedCandidates(input, moduleStartedAtMs),
       );
       renderedCandidateCount = renderedCandidates.length;
+      diagnosticsCandidates = renderedCandidates;
       if (renderedCandidates.length > 0) {
         observedCandidateCount = renderedCandidates.length;
         const renderedResults = await fetchRankedPolicyCandidates({
@@ -225,6 +227,10 @@ export async function policySurfaceScanner(
         }
       }
       const fallbackCandidates = commonPathCandidatesFor(input.normalizedUrl, 0);
+      diagnosticsCandidates = dedupeCandidates([
+        ...renderedCandidates,
+        ...fallbackCandidates,
+      ]);
       commonPathFallbackUsed = true;
       const fallbackResults = await fetchRankedPolicyCandidates({
         input,
@@ -283,14 +289,18 @@ export async function policySurfaceScanner(
       ]),
     );
     staticCandidateCount = staticCandidates.length;
-    const fastStaticCoverage =
-      input.discoveryMode === "fast" &&
-      hasSufficientFetchableStaticGdprCoverage(staticCandidates);
-    const renderedCandidates = fastStaticCoverage
+    diagnosticsCandidates = staticCandidates;
+    const staticGdprCoverage = hasSufficientFetchableStaticGdprCoverage(staticCandidates);
+    const skipRenderedDiscoveryForStaticCoverage =
+      staticGdprCoverage &&
+      (input.discoveryMode === "fast" || hasHighConfidenceDirectStaticCoreCoverage(staticCandidates));
+    const renderedCandidates = skipRenderedDiscoveryForStaticCoverage
       ? await recordPolicyTiming(
         timingBreakdown,
         "rendered discovery skipped",
-        "Skipped rendered policy discovery because static planned-DAG candidates covered required surfaces.",
+        input.discoveryMode === "fast"
+          ? "Skipped rendered policy discovery because static planned-DAG candidates covered required surfaces."
+          : "Skipped rendered policy discovery because direct static GDPR/ePrivacy surfaces were already high-confidence.",
         async () => [] as PolicySurfaceCandidate[],
       )
       : await recordPolicyTiming(
@@ -300,7 +310,7 @@ export async function policySurfaceScanner(
         () => extractRenderedCandidates(input, moduleStartedAtMs),
       );
     renderedCandidateCount = renderedCandidates.length;
-    const linkCandidates = fastStaticCoverage
+    const linkCandidates = skipRenderedDiscoveryForStaticCoverage
       ? staticCandidates
       : await recordPolicyTiming(
         timingBreakdown,
@@ -312,6 +322,7 @@ export async function policySurfaceScanner(
         ]),
       );
     observedCandidateCount = linkCandidates.length;
+    diagnosticsCandidates = linkCandidates;
     const commonPathCandidates = commonPathCandidatesFor(
       input.normalizedUrl,
       linkCandidates.length,
@@ -322,11 +333,16 @@ export async function policySurfaceScanner(
       : commonPathCandidates;
     let speculativeCommonPathRankedCandidates: PolicySurfaceCandidate[] | undefined;
     let primaryRankedCandidatesFromCommonPath = false;
-    let rankedCandidates = input.discoveryMode === "fast"
+    const deterministicCoreCoverage =
+      input.discoveryMode !== "fast" &&
+      hasHighConfidenceDirectStaticCoreCoverage(staticCandidates);
+    let rankedCandidates = input.discoveryMode === "fast" || deterministicCoreCoverage
       ? await recordPolicyTiming(
         timingBreakdown,
         "deterministic link ranking",
-        `Rank ${initialCandidates.length} policy candidates deterministically for planned-DAG fast mode.`,
+        deterministicCoreCoverage
+          ? `Rank ${initialCandidates.length} high-confidence policy candidates deterministically because direct GDPR/ePrivacy surfaces are already present.`
+          : `Rank ${initialCandidates.length} policy candidates deterministically for planned-DAG fast mode.`,
         async () => deterministicFetchFallback(initialCandidates),
       )
       : await recordPolicyTiming(
@@ -430,7 +446,8 @@ export async function policySurfaceScanner(
       linkCandidates.length > 0 &&
       !primaryRankedCandidatesFromCommonPath &&
       !hasRetainedCorePolicyOrControlSurface(observations) &&
-      commonPathCandidates.length > 0
+      commonPathCandidates.length > 0 &&
+      !shouldSkipCommonPathAfterBlockedDirectCore(policyResults.observations)
     ) {
       commonPathFallbackUsed = true;
       const commonPathRankedCandidates = speculativeCommonPathRankedCandidates ??
@@ -485,11 +502,36 @@ export async function policySurfaceScanner(
       artifactRefs,
     };
   } catch (error) {
+    if (!artifactRefs.some((artifactRef) => artifactRef.artifactId === "policy_surface_capture_diagnostics")) {
+      const diagnosticsRef = await tryWritePolicyCaptureDiagnostics({
+        input,
+        moduleStartedAtMs,
+        staticCandidateCount,
+        renderedCandidateCount,
+        observedCandidateCount,
+        commonPathFallbackUsed,
+        observations,
+        candidates: diagnosticsCandidates,
+      });
+      if (diagnosticsRef) {
+        artifactRefs.push(diagnosticsRef);
+      }
+    }
     return {
       moduleRun: moduleRun("failed", moduleStartedAt, moduleStartedAtMs, [error instanceof Error ? error.message : String(error)], timingBreakdown),
       policySurfaceObservations: observations,
       artifactRefs,
     };
+  }
+}
+
+async function tryWritePolicyCaptureDiagnostics(
+  input: Parameters<typeof writePolicyCaptureDiagnostics>[0],
+): Promise<ArtifactRef | undefined> {
+  try {
+    return await writePolicyCaptureDiagnostics(input);
+  } catch {
+    return undefined;
   }
 }
 
@@ -558,6 +600,12 @@ async function writePolicyCaptureDiagnostics(input: {
     commonPathFallbackUsed: input.commonPathFallbackUsed,
     fetchedCount: fetchedObservations.length,
     failedCandidateCount: input.observations.filter((observation) => observation.status === "failed").length,
+    failureSummary: summarizePolicySurfaceFailures(input.observations),
+    limitationKeys: policyCaptureLimitationKeys({
+      observations: input.observations,
+      coreSurfaceCount: coreSurfaces.length,
+      commonPathFallbackUsed: input.commonPathFallbackUsed,
+    }),
     candidateSummary: summarizePolicyCandidates(input.candidates ?? []),
     winningSurfaceUrls: coreSurfaces
       .map((observation) => observation.normalizedUrl ?? observation.url)
@@ -577,6 +625,70 @@ async function writePolicyCaptureDiagnostics(input: {
     relatedEventIds: [],
     label: "Policy surface capture diagnostics",
   };
+}
+
+function summarizePolicySurfaceFailures(observations: PolicySurfaceObservation[]): Array<{
+  surfaceType: PolicySurfaceObservation["surfaceType"];
+  status: "failed" | "skipped_budget";
+  httpStatus?: number;
+  count: number;
+}> {
+  const failures = new Map<string, {
+    surfaceType: PolicySurfaceObservation["surfaceType"];
+    status: "failed" | "skipped_budget";
+    httpStatus?: number;
+    count: number;
+  }>();
+  for (const observation of observations) {
+    if (observation.status !== "failed" && observation.status !== "skipped_budget") {
+      continue;
+    }
+    const key = `${observation.surfaceType}:${observation.status}:${observation.httpStatus ?? "none"}`;
+    const existing = failures.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      failures.set(key, {
+        surfaceType: observation.surfaceType,
+        status: observation.status,
+        httpStatus: observation.httpStatus,
+        count: 1,
+      });
+    }
+  }
+  return [...failures.values()]
+    .sort((left, right) =>
+      left.surfaceType.localeCompare(right.surfaceType) ||
+      left.status.localeCompare(right.status) ||
+      (left.httpStatus ?? 0) - (right.httpStatus ?? 0)
+    )
+    .slice(0, 20);
+}
+
+function policyCaptureLimitationKeys(input: {
+  observations: PolicySurfaceObservation[];
+  coreSurfaceCount: number;
+  commonPathFallbackUsed: boolean;
+}): string[] {
+  const keys: string[] = [];
+  const failed = input.observations.filter((observation) => observation.status === "failed");
+  const skippedBudget = input.observations.filter((observation) => observation.status === "skipped_budget");
+  if (input.coreSurfaceCount === 0 && input.observations.length > 0) {
+    keys.push("no_core_policy_surface_retained");
+  }
+  if (failed.some((observation) => observation.httpStatus === 403 || observation.httpStatus === 401)) {
+    keys.push("policy_access_blocked");
+  }
+  if (failed.some((observation) => observation.httpStatus === 404)) {
+    keys.push("policy_candidate_not_found");
+  }
+  if (skippedBudget.length > 0) {
+    keys.push("policy_fetch_budget_exhausted");
+  }
+  if (input.commonPathFallbackUsed && input.coreSurfaceCount === 0) {
+    keys.push("common_path_fallback_retained_no_core_surface");
+  }
+  return uniqueStrings(keys).slice(0, 12);
 }
 
 interface ProcessPolicyCandidateInput {
@@ -1253,6 +1365,9 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string): 
   let match: RegExpExecArray | null;
   let index = 0;
   while ((match = anchorPattern.exec(html))) {
+    if (isInsideIgnoredStaticMarkup(html, match.index)) {
+      continue;
+    }
     const attrs = match[1] ?? "";
     const href = attr(attrs, "href");
     if (!href) {
@@ -1324,6 +1439,9 @@ function extractControlCandidates(baseUrl: string, html: string, visibleText: st
   let match: RegExpExecArray | null;
   let index = 0;
   while ((match = controlPattern.exec(html))) {
+    if (isInsideIgnoredStaticMarkup(html, match.index)) {
+      continue;
+    }
     const fullTag = match[0] ?? "";
     const attrs = `${match[1] ?? ""} ${match[2] ?? ""}`;
     const href = attr(attrs, "href") ?? attr(attrs, "data-href") ?? attr(attrs, "data-url");
@@ -1382,6 +1500,22 @@ function extractControlCandidates(baseUrl: string, html: string, visibleText: st
     });
   }
   return candidates;
+}
+
+function isInsideIgnoredStaticMarkup(html: string, index: number): boolean {
+  return ["script", "style", "template", "noscript"].some((tagName) =>
+    isInsideHtmlElement(html, index, tagName)
+  );
+}
+
+function isInsideHtmlElement(html: string, index: number, tagName: string): boolean {
+  const before = html.slice(0, index);
+  const open = before.toLowerCase().lastIndexOf(`<${tagName}`);
+  if (open < 0) {
+    return false;
+  }
+  const close = before.toLowerCase().lastIndexOf(`</${tagName}>`);
+  return close < open;
 }
 
 function extractEmbeddedConsentConfigCandidates(baseUrl: string, html: string, visibleText: string): PolicySurfaceCandidate[] {
@@ -2041,6 +2175,24 @@ function hasSufficientFetchableStaticGdprCoverage(candidates: PolicySurfaceCandi
     hasCookieOrControlSurface;
 }
 
+function hasHighConfidenceDirectStaticCoreCoverage(candidates: PolicySurfaceCandidate[]): boolean {
+  const fetchable = deterministicFetchFallback(candidates)
+    .filter((candidate) =>
+      candidate.fetchable &&
+      !candidate.observationOnly &&
+      candidate.deterministicScore >= 0.75 &&
+      policyCandidateQualityScore(candidate) >= 2 &&
+      (
+        candidate.deterministicMatchStrength === "direct" ||
+        candidate.deterministicMatchStrength === "equivalent"
+      ) &&
+      (candidate.domLocation === "footer" || candidate.domLocation === "header" || candidate.domLocation === "nav")
+    );
+  const surfaceTypes = new Set(fetchable.map((candidate) => candidate.deterministicSurfaceType));
+  return surfaceTypes.has("privacy_policy") &&
+    (surfaceTypes.has("cookie_policy") || surfaceTypes.has("consent_preferences") || surfaceTypes.has("cookie_settings"));
+}
+
 function policyFetchLimit(input: PolicySurfaceScannerInput): number {
   return input.discoveryMode === "fast" ? 6 : MAX_CANDIDATES_TO_FETCH;
 }
@@ -2182,6 +2334,23 @@ function isCorePolicyOrControlSurface(observation: Pick<PolicySurfaceObservation
     "consent_preferences",
     "your_privacy_choices",
   ].includes(observation.surfaceType);
+}
+
+function shouldSkipCommonPathAfterBlockedDirectCore(
+  observations: PolicySurfaceObservation[],
+): boolean {
+  const coreFailures = observations.filter((observation) =>
+    isCorePolicyOrControlSurface(observation) &&
+    observation.status === "failed"
+  );
+  if (coreFailures.length === 0) {
+    return false;
+  }
+  const blockedCoreSurfaceTypes = new Set(coreFailures
+    .filter((observation) => observation.httpStatus === 401 || observation.httpStatus === 403 || observation.httpStatus === 429)
+    .map((observation) => observation.surfaceType));
+  return blockedCoreSurfaceTypes.has("privacy_policy") ||
+    blockedCoreSurfaceTypes.has("cookie_policy");
 }
 
 function summarizePolicyCandidates(candidates: PolicySurfaceCandidate[]): Array<{
