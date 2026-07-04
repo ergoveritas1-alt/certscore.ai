@@ -498,6 +498,68 @@ test("classifies Dutch and Polish necessary-only labels only with multilingual p
   }
 });
 
+test("classifies travel cohort Polish and French consent labels with bounded context gates", () => {
+  const polishCookieContext = "Zezwól na cookies. Używamy plików cookie i podobnych technologii w celu świadczenia usług.";
+  const polishAccept = classifyConsentControlLabel({
+    label: "Zezwalam",
+    contextText: polishCookieContext,
+    classifierProfile: "multilingual_v1",
+  });
+  assert.equal(polishAccept.intent, "accept");
+  assert.equal(polishAccept.matchedLocale, "pl");
+  assert.equal(polishAccept.matchStrength, "direct");
+  assert.equal(
+    isProductionCreditworthySupplementalConsentControlClassification("Zezwalam", polishAccept),
+    true,
+  );
+
+  const polishOptions = classifyConsentControlLabel({
+    label: "Ustawienia",
+    contextText: polishCookieContext,
+    classifierProfile: "multilingual_v1",
+  });
+  assert.equal(polishOptions.intent, "options");
+  assert.equal(polishOptions.matchedLocale, "pl");
+  assert.equal(polishOptions.matchStrength, "contextual");
+  assert.equal(
+    isProductionCreditworthySupplementalConsentControlClassification("Ustawienia", polishOptions),
+    true,
+  );
+
+  const polishCookieOptions = classifyConsentControlLabel({
+    label: "Ustawienia Cookies",
+    classifierProfile: "multilingual_v1",
+  });
+  assert.equal(polishCookieOptions.intent, "options");
+  assert.equal(polishCookieOptions.matchedLocale, "pl");
+  assert.equal(polishCookieOptions.matchStrength, "direct");
+
+  const genericAccountSettings = classifyConsentControlLabel({
+    label: "Ustawienia",
+    contextText: "Dostosuj swój profil podróży i ustawienia konta.",
+    classifierProfile: "multilingual_v1",
+  });
+  assert.equal(genericAccountSettings.intent, "unknown");
+  assert.equal(
+    isProductionCreditworthySupplementalConsentControlClassification("Ustawienia", genericAccountSettings),
+    false,
+  );
+
+  const frenchNecessaryOnly = classifyConsentControlLabel({
+    label: "Essentiel uniquement",
+    contextText: "Nous utilisons des cookies pour améliorer votre expérience.",
+  });
+  assert.equal(frenchNecessaryOnly.intent, "reject");
+  assert.equal(frenchNecessaryOnly.matchedLocale, "fr");
+  assert.equal(frenchNecessaryOnly.variant, "necessary_only");
+
+  const genericEssential = classifyConsentControlLabel({
+    label: "Essentiel",
+    contextText: "Guide essentiel pour préparer votre voyage.",
+  });
+  assert.equal(genericEssential.intent, "unknown");
+});
+
 test("classifies decline non-essential cookies as reject", () => {
   const classification = classifyConsentControlLabel({ label: "Decline Non-Essential Cookies" });
   assert.equal(classification.intent, "reject");

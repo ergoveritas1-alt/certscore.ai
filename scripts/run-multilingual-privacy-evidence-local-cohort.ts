@@ -388,15 +388,18 @@ async function summarizeTarget(
   const geometryAccept = booleanOrNull(geometrySummary.firstLayerAccept);
   const geometryReject = booleanOrNull(geometrySummary.firstLayerReject);
   const geometryOptions = booleanOrNull(geometrySummary.firstLayerOptions);
+  const canonicalAccept = hasRetainedConsentAction(consentControls, "accept_all");
+  const canonicalReject = hasRetainedConsentAction(consentControls, "reject_all");
+  const canonicalOptions = hasRetainedConsentAction(consentControls, "manage_preferences");
   const geometryCmpDetected = booleanOrNull(geometrySummary.cmpDetected);
   const consentLimitationKeys = consentLimitationKeysFor({
     diagnosticAcceptLabels,
     diagnosticOptionsLabels,
     diagnosticRejectLabels,
-    geometryAccept,
+    geometryAccept: canonicalAccept || geometryAccept === true,
     geometryCmpDetected,
-    geometryOptions,
-    geometryReject,
+    geometryOptions: canonicalOptions || geometryOptions === true,
+    geometryReject: canonicalReject || geometryReject === true,
     runtimeLimitationKeys: arrayOfStrings(runtimeCoverage.limitationKeys),
     uiControlCount: consentControls.length,
   });
@@ -438,9 +441,9 @@ async function summarizeTarget(
       uiControlCount: consentControls.length,
       uiActionTypes: uniqueStrings(consentControls.map((control) => stringOrUndefined(control.actionType)).filter(isString)),
       cmpRuntimeCount: arrayOfRecords(bundle.cmpRuntimeObservations).length,
-      geometryAccept,
-      geometryReject,
-      geometryOptions,
+      geometryAccept: canonicalAccept || geometryAccept === true,
+      geometryReject: canonicalReject || geometryReject === true,
+      geometryOptions: canonicalOptions || geometryOptions === true,
       geometryCmpDetected,
       diagnosticAcceptLabels,
       diagnosticOptionsLabels,
@@ -766,6 +769,10 @@ function hasDiagnosticConsentSurface(row: CohortRow) {
   return row.consent.diagnosticAcceptLabels.length > 0 ||
     row.consent.diagnosticOptionsLabels.length > 0 ||
     row.consent.diagnosticRejectLabels.length > 0;
+}
+
+function hasRetainedConsentAction(controls: Record<string, unknown>[], actionType: string) {
+  return controls.some((control) => stringOrUndefined(control.actionType) === actionType);
 }
 
 function hasProductionConsentSurface(row: CohortRow) {

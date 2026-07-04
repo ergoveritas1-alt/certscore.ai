@@ -76,7 +76,9 @@ export type StaticFixturePage =
   | "policy-canonical-near-privacy-center"
   | "policy-localized-canonical-shell"
   | "policy-client-challenge"
+  | "policy-document-backed-diagnostic"
   | "policy-french-captcha-challenge"
+  | "policy-security-policy-block-page"
   | "policy-cookie-link"
   | "policy-do-not-sell-link"
   | "policy-footer-privacy-delayed"
@@ -226,7 +228,9 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-canonical-near-privacy-center": "policy-canonical-near-privacy-center",
   "policy-localized-canonical-shell": "policy-localized-canonical-shell",
   "policy-client-challenge": "policy-client-challenge",
+  "policy-document-backed-diagnostic": "policy-document-backed-diagnostic",
   "policy-french-captcha-challenge": "policy-french-captcha-challenge",
+  "policy-security-policy-block-page": "policy-security-policy-block-page",
   "policy-cookie-link": "policy-cookie-link",
   "policy-do-not-sell-link": "policy-do-not-sell",
   "policy-footer-privacy-delayed": "policy-footer-privacy-delayed",
@@ -1525,7 +1529,9 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-gold-nvidia-secondary-only": `<a href="/en-us/ai-data-science/">AI Data Science</a><a href="/en-eu/gtc/pricing/?nvid=fixture">GTC Pricing</a>`,
     "policy-gold-privacy-duplicates": `<a href="/privacy-policy">Privacy Policy</a><a href="/privacy-policy/">Privacy Policy</a>`,
     "policy-client-challenge": `<a href="/policies/client-challenge">Privacy Policy</a>`,
+    "policy-document-backed-diagnostic": `<a href="/policies/document-backed-fr">Charte de confidentialité</a>`,
     "policy-french-captcha-challenge": `<a href="/policies/french-captcha-challenge">Politique de confidentialité</a>`,
+    "policy-security-policy-block-page": `<a href="/policies/security-policy-block">Privacy Policy</a>`,
     "policy-footer-privacy": `<a href="/policies/privacy">Privacy Policy</a>`,
     "policy-google-script-noise": `<a href="/policies/google-script-noise">Privacy Policy</a>`,
     "policy-google-script-only": `<a href="/policies/google-script-only">Privacy Policy</a>`,
@@ -1861,9 +1867,22 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Client Challenge",
       body: "Client Challenge A required part of this site couldn’t load. This may be due to a browser extension, network issues, or browser settings. Please check your connection, disable any ad blockers, or try using a different browser.",
     },
+    "/policies/document-backed-fr": {
+      title: "Charte de confidentialité et cookies",
+      body: [
+        "Charte de confidentialité et cookies.",
+        "Version PDF à télécharger (PDF - Français).",
+        "Version Word à télécharger (WORD - Français).",
+        "Cette page présente une synthèse courte de notre charte.",
+      ].join(" "),
+    },
     "/policies/french-captcha-challenge": {
       title: "Politique de confidentialité",
       body: "Entrez les caractères affichés dans l'image ci-dessous : Télécharger le CAPTCHA audio Réponse Soumettre",
+    },
+    "/policies/security-policy-block": {
+      title: "Access blocked",
+      body: "Access to the website has been blocked. Access to the website has been denied due to security policy. All logs with traffic violations are kept and may be used for further investigation. Please contact our Security Operation Center.",
     },
     "/policies/google-like-late-sections": {
       title: "Privacy Policy",

@@ -359,6 +359,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "cookies nécessaires uniquement", "necessary_only"),
     equivalent("reject", "cookies essentiels uniquement", "necessary_only"),
     equivalent("reject", "cookies strictement nécessaires", "necessary_only"),
+    equivalent("reject", "essentiel uniquement", "necessary_only"),
     equivalent("reject", "seulement les cookies nécessaires", "necessary_only"),
     equivalent("reject", "seulement les cookies essentiels", "necessary_only"),
     equivalent("reject", "accepter uniquement les nécessaires", "necessary_only"),
@@ -541,6 +542,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "zgadzam się"),
     ...direct("accept", "zezwól"),
     ...direct("accept", "zezwól na wszystkie"),
+    ...direct("accept", "zezwalam"),
+    ...direct("accept", "zezwalam na wszystkie"),
     contextual("accept", "przejdź do serwisu", { requiresConsentContext: true }),
     weak("accept", "ok", { requiresConsentContext: true }),
 
@@ -565,6 +568,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     contextual("options", "ustawienia zaawansowane", { requiresConsentContext: true }),
     contextual("options", "preferencje", { requiresConsentContext: true }),
     contextual("options", "opcje", { requiresConsentContext: true }),
+    ...direct("options", "ustawienia cookies"),
     ...direct("options", "ustawienia plików cookie"),
     ...direct("options", "preferencje plików cookie"),
     ...direct("options", "dostosuj zgody"),
@@ -733,11 +737,17 @@ export function isProductionCreditworthySupplementalConsentControlClassification
   }
   if (classification.intent === "accept") {
     return strongMatch &&
-      /\b(?:akceptuj(?:e|ę)?|zaakceptuj|zgadzam się|zezwól)\b/i.test(normalizedLabel) &&
+      /\b(?:akceptuj(?:e|ę)?|zaakceptuj|zgadzam się|zezw[oó]l|zezwalam)\b/i.test(normalizedLabel) &&
       !/\bprzejd[zź]\b/i.test(normalizedLabel);
   }
   if (classification.intent === "options") {
-    return /(?:centrum preferencji|ustawienia zaawansowane|preferencje plik|ustawienia plik|zarządzaj (?:zgodami|preferencjami)|dostosuj (?:zgody|ustawienia|preferencje))/i.test(normalizedLabel) ||
+    return /(?:centrum preferencji|ustawienia zaawansowane|preferencje plik|ustawienia (?:plik|cookies)|zarządzaj (?:zgodami|preferencjami)|dostosuj (?:zgody|ustawienia|preferencje))/i.test(normalizedLabel) ||
+      (
+        classification.matchStrength === "contextual" &&
+        classification.contextSatisfied &&
+        classification.matchedTerm === "ustawienia" &&
+        normalizedLabel === "ustawienia"
+      ) ||
       (strongMatch && /(?:preferenc|ustawieni|wybor|zgod)/i.test(normalizedLabel));
   }
   if (classification.intent === "reject") {

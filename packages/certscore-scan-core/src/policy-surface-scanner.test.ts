@@ -99,6 +99,41 @@ test("policySurfaceScanner treats localized CAPTCHA policy pages as access chall
   });
 });
 
+test("policySurfaceScanner does not retain security block pages as fetched policy surfaces", async () => {
+  await withPolicyScan("policy-security-policy-block-page", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/security-policy-block`
+    );
+
+    assert.equal(privacy?.status, "failed");
+    assert.equal(privacy?.httpStatus, 200);
+    assert.match(privacy?.textExcerpt ?? "", /website has been blocked/i);
+    assert.deepEqual(privacy?.article13DisclosureSignals, []);
+    assert.deepEqual(privacy?.gdprTransparencyTopicCandidates, []);
+  });
+});
+
+test("policySurfaceScanner keeps document-backed policy extraction gaps diagnostic-only", async () => {
+  await withPolicyScan("policy-document-backed-diagnostic", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/document-backed-fr`
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(privacy?.status, "fetched");
+    assert.deepEqual(privacy?.article13DisclosureSignals, []);
+    assert.equal(
+      diagnostics.documentBackedPolicySignals.some((signal) =>
+        signal.url === `${baseUrl}/policies/document-backed-fr` &&
+        signal.reason === "policy_document_linked_but_not_extracted"
+      ),
+      true,
+    );
+  });
+});
+
 test("policySurfaceScanner retains bounded blocked-policy diagnostics", async () => {
   await withPolicyScan("policy-blocked-surfaces", async ({ result }) => {
     const diagnostics = await readPolicyCaptureDiagnostics(result);
@@ -2384,6 +2419,11 @@ async function readPolicyCaptureDiagnostics(
     status: "failed" | "skipped_budget";
     httpStatus?: number;
     count: number;
+  }>;
+  documentBackedPolicySignals: Array<{
+    url: string;
+    surfaceType: string;
+    reason: string;
   }>;
   limitationKeys: string[];
   candidateSummary: Array<{

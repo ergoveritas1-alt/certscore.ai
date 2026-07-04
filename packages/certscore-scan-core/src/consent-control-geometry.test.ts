@@ -578,6 +578,49 @@ test("captures Empik-style Polish customize-consent options control", async () =
   assert.equal(options?.decisionStatus, "confirmed_visible");
 });
 
+test("captures travel cohort Polish Zezwalam and contextual settings controls", async () => {
+  const artifact = await captureFixture(`
+    <div class="cookie-notice" role="dialog" aria-modal="true" style="position: fixed; left: 180px; top: 30px; width: 980px; padding: 24px; background: white;">
+      <h2>Zezwól na cookies</h2>
+      <p>Używamy plików cookie i podobnych technologii w celu świadczenia usług oraz prezentowania promowanych usług zgodnie z zainteresowaniami użytkowników. Więcej informacji w Polityce prywatności.</p>
+      <a href="/cookies" class="cm-link cn-learn-more">Ustawienia</a>
+      <button class="cm-btn cm-btn-success" type="button">Zezwalam</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  const accept = findCandidate(artifact, "Zezwalam");
+  assert.equal(accept?.actionType, "accept_all");
+  assert.equal(accept?.matchedLocale, "pl");
+  assert.equal(accept?.decisionStatus, "confirmed_visible");
+  const options = findCandidate(artifact, "Ustawienia");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.matchedLocale, "pl");
+  assert.equal(options?.decisionStatus, "confirmed_visible");
+});
+
+test("captures French necessary-only first-layer reject control", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" aria-modal="true" style="position: fixed; left: 180px; top: 120px; width: 720px; padding: 24px; background: white;">
+      <h2>Le respect de votre vie privée est une priorité</h2>
+      <p>Nous utilisons des cookies pour améliorer votre expérience, mesurer le trafic et personnaliser le contenu.</p>
+      <button type="button">Essentiel uniquement</button>
+      <button type="button">Personnaliser</button>
+      <button type="button">Accepter tout</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  const reject = findCandidate(artifact, "Essentiel uniquement");
+  assert.equal(reject?.actionType, "reject_all");
+  assert.equal(reject?.matchedLocale, "fr");
+  assert.equal(reject?.matchStrength, "equivalent");
+  assert.equal(reject?.classifierReasonCodes.includes("variant_necessary_only"), true);
+});
+
 test("captures Otto-style German OneTrust preference-center info button as options", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>

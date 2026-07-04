@@ -585,6 +585,7 @@ async function writePolicyCaptureDiagnostics(input: {
     fetchedCount: fetchedObservations.length,
     failedCandidateCount: input.observations.filter((observation) => observation.status === "failed").length,
     failureSummary: summarizePolicySurfaceFailures(input.observations),
+    documentBackedPolicySignals: summarizeDocumentBackedPolicySignals(input.observations),
     limitationKeys: policyCaptureLimitationKeys({
       observations: input.observations,
       coreSurfaceCount: coreSurfaces.length,
@@ -660,7 +661,11 @@ function policyCaptureLimitationKeys(input: {
   if (input.coreSurfaceCount === 0 && input.observations.length > 0) {
     keys.push("no_core_policy_surface_retained");
   }
-  if (failed.some((observation) => observation.httpStatus === 403 || observation.httpStatus === 401)) {
+  if (failed.some((observation) =>
+    observation.httpStatus === 403 ||
+    observation.httpStatus === 401 ||
+    isBlockedPolicyFailureExcerpt(observation.textExcerpt)
+  )) {
     keys.push("policy_access_blocked");
   }
   if (failed.some((observation) => observation.httpStatus === 404)) {
@@ -673,6 +678,36 @@ function policyCaptureLimitationKeys(input: {
     keys.push("common_path_fallback_retained_no_core_surface");
   }
   return uniqueStrings(keys).slice(0, 12);
+}
+
+function summarizeDocumentBackedPolicySignals(observations: PolicySurfaceObservation[]) {
+  return observations
+    .filter((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      (observation.article13DisclosureSignals ?? []).length === 0 &&
+      looksLikePolicyDocumentDownloadReference([
+        observation.title,
+        observation.linkText,
+        observation.textExcerpt,
+        observation.normalizedUrl,
+        observation.url,
+      ].filter(Boolean).join(" "))
+    )
+    .map((observation) => ({
+      url: observation.normalizedUrl ?? observation.url,
+      surfaceType: observation.surfaceType,
+      reason: "policy_document_linked_but_not_extracted",
+    }))
+    .slice(0, 8);
+}
+
+function looksLikePolicyDocumentDownloadReference(value: string) {
+  return /\b(?:pdf|word|docx?|download|t[ée]l[ée]charger|telecharger|version\s+(?:pdf|word))\b/i.test(value);
+}
+
+function isBlockedPolicyFailureExcerpt(value: string | undefined) {
+  return Boolean(value && /\b(?:access to the website has been blocked|security policy|client challenge|captcha|fausse piste|page que vous recherchez est introuvable)\b/i.test(value));
 }
 
 interface ProcessPolicyCandidateInput {
@@ -4417,6 +4452,12 @@ function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
     /\ba required part of this site couldn[’']t load\b/i,
     /\bdisable any ad blockers\b/i,
     /\bplease check your connection\b/i,
+    /\baccess to the website has been blocked\b/i,
+    /\baccess to the website has been denied due to security policy\b/i,
+    /\btraffic violations\b/i,
+    /\bsecurity operation center\b/i,
+    /\bpage que vous recherchez est introuvable\b/i,
+    /\bfausse piste\b/i,
     /\bentrez les caract[èe]res affich[ée]s\b/i,
     /\bt[ée]l[ée]charger le captcha audio\b/i,
     /\bcaptcha\b/i,
