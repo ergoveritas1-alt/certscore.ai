@@ -142,6 +142,13 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Tools" title="Agent-facing tool surface">
+          <p className="mb-4 max-w-3xl text-sm leading-7 text-slate-600">
+            Several tools return or reference Pulse, CertScore&apos;s compact public report projection for agents. See{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-900" href="/developers/reference#what-is-pulse">
+              What is Pulse?
+            </a>{" "}
+            for how it relates to scan resources and findings.
+          </p>
           <div className="grid gap-4 md:grid-cols-2">
             {mcpTools.map(([name, description]) => (
               <div key={name} className="rounded-lg border border-slate-200 bg-white p-4">
@@ -172,9 +179,10 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
 2. get_scan_status when a job is pending.
 3. get_scan after a stable scanId is available.
 4. list_findings for compact structured review.
-5. get_pre_consent_cookies_trackers when the user asks for the Pre-consent Cookies & Trackers table as JSON.
-6. explain_finding for evidence summaries and caveats.
-7. get_latest_domain_scan or get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
+5. get_evidence when a reviewer or agent needs the larger bounded evidence packet.
+6. get_pre_consent_cookies_trackers when the user asks for the Pre-consent Cookies & Trackers table as JSON.
+7. explain_finding for evidence summaries and caveats.
+8. get_latest_domain_scan or get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
           <CodeBlock>{`get_pre_consent_cookies_trackers({
   scanId: "00000000-0000-4000-8000-000000000123"
 })

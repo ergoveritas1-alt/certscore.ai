@@ -49,26 +49,26 @@ export const apiV2Routes = [
   ["GET", "/api/v2/scans/{scanId}/status", "Check scan or job status without inferring from partial evidence."],
   ["GET", "/api/v2/scans/{scanId}/findings", "List already-projected public findings for a scan."],
   ["GET", "/api/v2/scans/{scanId}/findings/{findingId}", "Retrieve one public-safe finding and capped evidence summary."],
+  ["GET", "/api/v2/scans/{scanId}/pulse", "Retrieve the Pulse projection wrapper for a completed public scan."],
   ["GET", "/api/v2/scans/{scanId}/pre-consent-cookies-trackers", "Retrieve Pre-consent Cookies & Trackers report table data as public-safe JSON."],
   ["GET", "/api/v2/domains/{domain}/latest", "Find the latest eligible public scan for a domain."],
   ["GET", "/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers", "Retrieve the latest-domain Pre-consent Cookies & Trackers table projection."],
-  ["GET", "/api/v2/openapi.json", "Fetch the machine-readable API v2 contract."],
   ["GET", "/api/v2/health", "Check API v2 discovery health."]
 ] as const;
 
 export const mcpTools = [
-  ["create_scan", "Deprecated compatibility alias of scan_site for older Pulse workflows."],
-  ["scan_site", "Start or reuse a CertScore scan for a public URL."],
-  ["get_scan", "Retrieve an API v2 public-safe scan resource."],
-  ["get_scan_status", "Check a stable API v2 scan ID, or a just-created job ID before a scan ID is available."],
-  ["get_report", "Retrieve a CertScore Pulse report by stable scan ID."],
-  ["get_evidence", "Retrieve the bounded structured evidence packet for a stable scan ID."],
-  ["export_findings", "Export structured findings from a CertScore Pulse report."],
-  ["list_findings", "Return API v2 public-safe findings for handoff or review."],
-  ["get_pre_consent_cookies_trackers", "Retrieve the public-safe Pre-consent Cookies & Trackers table as compact JSON."],
-  ["explain_finding", "Explain one finding with evidence summaries, caveats, and next steps."],
-  ["get_latest_domain_scan", "Find the latest eligible public scan for a domain."],
-  ["get_latest_domain_pre_consent_cookies_trackers", "Retrieve the latest-domain Pre-consent Cookies & Trackers table projection."]
+  ["create_scan", "Deprecated compatibility alias of scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links."],
+  ["scan_site", "Start or reuse a CertScore public-web scan for a public URL."],
+  ["get_scan", "Retrieve the API v2 public-safe scan resource for a stable scan ID."],
+  ["get_scan_status", "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId."],
+  ["get_report", "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet."],
+  ["get_evidence", "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."],
+  ["export_findings", "Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows."],
+  ["list_findings", "List API v2 public-safe findings already projected for a scan."],
+  ["get_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan."],
+  ["explain_finding", "Explain a single CertScore finding with public evidence, caveats, and reviewer next steps."],
+  ["get_latest_domain_scan", "Retrieve the latest eligible API v2 public-safe scan for a domain."],
+  ["get_latest_domain_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain."]
 ] as const;
 
 export function DeveloperJsonLd({ path, title, description }: { path: string; title: string; description: string }) {

@@ -50,6 +50,17 @@ export default function DeveloperReferencePage() {
           </p>
         </Section>
 
+        <Section id="what-is-pulse" eyebrow="Projection" title="What is Pulse?">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Pulse is CertScore&apos;s compact public projection for agents and developer workflows. It packages the scan summary,
+            top findings, evidence highlights, caveats, links, and disclaimer text derived from the same already-projected public scan
+            resources and findings. API v2 exposes the scan resource as the durable object, while the Pulse wrapper is useful when an
+            agent needs the report-style projection in one response. Response types such as{" "}
+            <code className="rounded bg-white px-1">certscore_pulse</code> and{" "}
+            <code className="rounded bg-white px-1">certscore_pulse_evidence</code> refer to that projection.
+          </p>
+        </Section>
+
         <Section eyebrow="Examples" title="Small response shapes">
           <div className="grid gap-5 lg:grid-cols-2">
             <div className="space-y-3">
