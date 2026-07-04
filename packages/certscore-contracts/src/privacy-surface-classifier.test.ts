@@ -38,6 +38,29 @@ test("classifies Dutch privacy-reglement document links without visible anchor t
   assert.equal(classification.reasonCodes.includes("matched_url_pattern"), true);
 });
 
+test("does not classify generic French confidentiality article headlines as privacy policies", () => {
+  const classification = classifyPrivacySurface({
+    linkText: "Taylor Swift signe des accords de confidentialité",
+    surroundingText: "People Musique Culture Dernières actualités",
+    url: "https://www.20minutes.fr/arts-stars/people/123456-confidentialite-album",
+  });
+
+  assert.equal(classification.surfaceType, "unknown");
+  assert.equal(classification.matchedLocale, undefined);
+});
+
+test("classifies French data-protection policy surfaces with policy context", () => {
+  const classification = classifyPrivacySurface({
+    linkText: "Protection des données personnelles",
+    surroundingText: "Mentions légales Politique de confidentialité Cookies",
+    url: "https://example.test/protection-donnees-personnelles",
+  });
+
+  assert.equal(classification.surfaceType, "privacy_policy");
+  assert.equal(classification.matchedLocale, "fr");
+  assert.equal(classification.reasonCodes.includes("matched_privacy_policy"), true);
+});
+
 test("classifies canonical cookie-policy and cookie-settings surfaces across supported locales", () => {
   const examples = [
     ["Cookie policy", "en", "cookie_policy"],

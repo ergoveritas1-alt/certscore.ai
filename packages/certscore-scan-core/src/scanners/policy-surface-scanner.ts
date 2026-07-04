@@ -19,6 +19,7 @@ const SOURCE_SCANNER = "policy_surface";
 const SCENARIO = "policy_surface_review";
 const MAX_CANDIDATES_TO_FETCH = 8;
 const MAX_COMMON_PATH_CANDIDATES_TO_FETCH = 18;
+const COMMON_PATH_BLOCKED_EARLY_STOP_FAILURES = 6;
 const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 3;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
@@ -755,24 +756,85 @@ async function fetchPolicyCandidateGroup(input: {
     input.timingBreakdown,
     `${input.labelPrefix} fetch group`,
     `Fetch and project up to ${toFetch.length} ranked policy candidates with concurrency ${POLICY_FETCH_CONCURRENCY}. Child fetch/topic timings may overlap and do not sum to wall time.`,
-    () => mapWithConcurrency(
-      toFetch.map((candidate, candidateIndex) => ({ candidate, candidateIndex })),
-      POLICY_FETCH_CONCURRENCY,
-      ({ candidate, candidateIndex }) => processPolicyCandidate({
-        input: input.input,
-        timingBreakdown: input.timingBreakdown,
-        moduleStartedAtMs: input.moduleStartedAtMs,
-        candidate,
-        candidateIndex,
-        policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
-      }),
-    ),
+    () => shouldUseBlockedCommonPathEarlyStop(toFetch)
+      ? fetchCommonPathCandidateGroupWithBlockedEarlyStop({ ...input, toFetch })
+      : mapWithConcurrency(
+          toFetch.map((candidate, candidateIndex) => ({ candidate, candidateIndex })),
+          POLICY_FETCH_CONCURRENCY,
+          ({ candidate, candidateIndex }) => processPolicyCandidate({
+            input: input.input,
+            timingBreakdown: input.timingBreakdown,
+            moduleStartedAtMs: input.moduleStartedAtMs,
+            candidate,
+            candidateIndex,
+            policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
+          }),
+        ),
   );
   return {
     artifactRefs: policyResults.flatMap((result) => result.artifactRefs),
     observations: policyResults.map((result) => result.observation),
     secondaryCandidates: policyResults.flatMap((result) => result.secondaryCandidates),
   };
+}
+
+async function fetchCommonPathCandidateGroupWithBlockedEarlyStop(input: {
+  input: PolicySurfaceScannerInput;
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
+  moduleStartedAtMs: number;
+  toFetch: PolicySurfaceCandidate[];
+  policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
+}): Promise<ProcessPolicyCandidateResult[]> {
+  const results: ProcessPolicyCandidateResult[] = [];
+  for (let start = 0; start < input.toFetch.length; start += POLICY_FETCH_CONCURRENCY) {
+    const batch = input.toFetch.slice(start, start + POLICY_FETCH_CONCURRENCY);
+    const batchResults = await Promise.all(batch.map((candidate, offset) =>
+      processPolicyCandidate({
+        input: input.input,
+        timingBreakdown: input.timingBreakdown,
+        moduleStartedAtMs: input.moduleStartedAtMs,
+        candidate,
+        candidateIndex: start + offset,
+        policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
+      })
+    ));
+    results.push(...batchResults);
+    if (shouldStopBlockedCommonPathFallback(input.input.normalizedUrl, results)) {
+      break;
+    }
+  }
+  return results;
+}
+
+function shouldUseBlockedCommonPathEarlyStop(candidates: PolicySurfaceCandidate[]): boolean {
+  return candidates.length > 0 && candidates.every(isCommonPathFallbackCandidate);
+}
+
+function shouldStopBlockedCommonPathFallback(
+  normalizedScanUrl: string,
+  results: ProcessPolicyCandidateResult[],
+): boolean {
+  const coreSurfaceRetained = results.some((result) =>
+    result.observation.status === "fetched" &&
+    (result.observation.surfaceType === "privacy_policy" || result.observation.surfaceType === "cookie_policy")
+  );
+  if (coreSurfaceRetained) {
+    return false;
+  }
+  const blockedSameOriginFailures = results.filter((result) =>
+    result.observation.status === "failed" &&
+    (result.observation.httpStatus === 401 || result.observation.httpStatus === 403 || result.observation.httpStatus === 429) &&
+    observationMatchesScanOrigin(normalizedScanUrl, result.observation)
+  ).length;
+  return blockedSameOriginFailures >= COMMON_PATH_BLOCKED_EARLY_STOP_FAILURES;
+}
+
+function observationMatchesScanOrigin(
+  normalizedScanUrl: string,
+  observation: Pick<PolicySurfaceObservation, "normalizedUrl" | "url">,
+): boolean {
+  const observationUrl = observation.normalizedUrl ?? observation.url;
+  return typeof observationUrl === "string" && sameOrigin(normalizedScanUrl, observationUrl);
 }
 
 async function processPolicyCandidate({

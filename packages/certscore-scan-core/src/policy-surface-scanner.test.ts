@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -1311,6 +1313,40 @@ test("policySurfaceScanner uses common-path fallback when homepage fetch fails",
   }
 });
 
+test("policySurfaceScanner keeps blocked common-path fallback bounded", async () => {
+  const server = await startBlockedPolicyServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await policySurfaceScanner({
+      url: `${server.baseUrl}/`,
+      normalizedUrl: `${server.baseUrl}/`,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 8_000,
+      artifactWriter,
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const blockedCommonPathFailures = result.policySurfaceObservations.filter((observation) =>
+      observation.discoveryMethod === "guessed_common_path" &&
+      observation.status === "failed" &&
+      observation.httpStatus === 403
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(blockedCommonPathFailures.length, 4);
+    assert.equal(diagnostics.limitationKeys.includes("policy_access_blocked"), true);
+    assert.equal(diagnostics.limitationKeys.includes("common_path_fallback_retained_no_core_surface"), true);
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed common-path")),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("policySurfaceScanner keeps core common paths when Nano ranks only secondary controls after homepage failure", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
@@ -2392,6 +2428,33 @@ async function readPolicyCaptureDiagnostics(
   const ref = result.artifactRefs.find((artifactRef) => artifactRef.artifactId === "policy_surface_capture_diagnostics");
   assert.ok(ref?.path, "policy capture diagnostics artifact should be retained");
   return JSON.parse(await readFile(ref.path, "utf8"));
+}
+
+async function startBlockedPolicyServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+  const server = createServer((_request, response) => {
+    response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
+    response.end("<!doctype html><html><body><main>Access blocked</main></body></html>");
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => closeServer(server),
+  };
+}
+
+function closeServer(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 function createDefaultMockNanoPolicyAssistProvider(): PolicyNanoAssistProvider {

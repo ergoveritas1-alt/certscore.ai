@@ -251,6 +251,59 @@ test("captures Wyborcza-style Polish Consentmanager accept and advanced settings
   );
 });
 
+test("promotes visible Polish OneTrust controls from CMP selector context", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>
+    <div id="onetrust-consent-sdk">
+      <div id="onetrust-banner-sdk" role="dialog" aria-modal="true" style="position: fixed; left: 180px; top: 120px; width: 720px; padding: 24px; background: white;">
+        <h1>Dbamy o Twoją prywatność</h1>
+        <p>Droga Użytkowniczko, Drogi Użytkowniku.</p>
+        <div id="onetrust-button-group">
+          <button id="onetrust-pc-btn-handler" aria-label="Zarządzanie preferencjami, otwiera okno dialogowe centrum preferencji">Zarządzanie preferencjami</button>
+          <button id="onetrust-reject-all-handler">Odrzuć wszystko</button>
+          <button id="onetrust-accept-btn-handler">Akceptuj wszystko</button>
+        </div>
+      </div>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "OneTrust");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Akceptuj wszystko")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Odrzuć wszystko")?.actionType, "reject_all");
+  assert.equal(
+    artifact.candidates.some((candidate) =>
+      candidate.label.startsWith("Zarządzanie preferencjami") &&
+      candidate.actionType === "manage_preferences"
+    ),
+    true,
+  );
+});
+
+test("promotes Polish Consentmanager anchor controls from CMP selector context", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+    <div id="cmpbox" class="cmpbox cmpboxWelcomeGDPR" role="dialog" aria-modal="true" style="position: fixed; left: 90px; top: 90px; width: 620px; padding: 24px; background: white;">
+      <h1>Prywatność</h1>
+      <div class="cmpboxbtns">
+        <a class="cmpboxbtn cmpboxbtncustom" role="button" href="#"><span>Ustawienia zaawansowane</span></a>
+        <a class="cmpboxbtn cmpboxbtnyes" role="button" href="#"><span>Akceptuję</span></a>
+      </div>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "Consentmanager");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Akceptuję")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Ustawienia zaawansowane")?.actionType, "manage_preferences");
+});
+
 test("captures Dutch Consentmanager accept, reject, and settings controls", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>

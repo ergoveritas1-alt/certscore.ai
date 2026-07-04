@@ -248,6 +248,10 @@ const MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN =
   /consent|tracking|advertising|marketing|optional|essential|necessary|cmp|optanon|onetrust|trustarc|didomi|usercentrics|cookiebot|consentmanager|einwilligung|zustimmung|consentement|finalit[eé]s|consenso|tracciamento|toestemming|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|zgod[ayęą]|niezb[eę]dne|danych osobowych|(?:use|uses|using|gebruiken|gebruikt|używamy|uzywamy|używa|uzywa)[^.]{0,80}cookies?|cookies?[^.]{0,80}(?:tracking|advertising|marketing|consent|preferences|analytics)/i;
 const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN =
   /preference|preferences|settings|choices|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|paramètres|préférences|finalités|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|voorkeuren|instellingen|keuzes|doeleinden|ustawieni[ae]|preferencj[ae]|wybor(?:y|ów)|cel(?:e|ów)/i;
+const CMP_SELECTOR_CONSENT_CONTEXT_PATTERN =
+  /onetrust|optanon|cmpbox|consentmanager|didomi|cookiebot|usercentrics|sourcepoint|sp_message|privacy-mgmt|trustarc/i;
+const CMP_SELECTOR_PREFERENCE_CONTEXT_PATTERN =
+  /pc-btn|preference|preferences|settings|custom|manage|choice|choices|voorkeur|instelling|ustawieni|preferencj/i;
 const POLICY_LINK_PATTERN = /\b(?:privacy policy|cookie policy|privacy statement|cookie statement|privacy notice|cookie notice|privacy and cookie policy|politique de confidentialit[eé]|politique de confidentialit[eé] et de gestion des cookies|politique|datenschutzerklärung)\b/i;
 const CANDIDATE_ACTION_PRIORITY_PATTERN =
   /accept|agree|allow|continue|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|necessary|essential|required|technical|akzeptieren|ablehnen|einstellungen|accepter|refuser|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
@@ -505,9 +509,8 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
     return defaultClassification;
   }
 
-  const hasConsentContext = MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN.test(candidate.contextText);
-  const hasPreferenceContext = hasConsentContext &&
-    (candidate.layer === "preference_center" || MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN.test(candidate.contextText));
+  const hasConsentContext = hasSupplementalConsentContext(candidate);
+  const hasPreferenceContext = hasSupplementalPreferenceContext(candidate, hasConsentContext);
   const multilingualClassification = classifyConsentControlLabel({
     label: candidate.label,
     ariaLabel: candidate.ariaLabel,
@@ -525,9 +528,8 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
 }
 
 function diagnosticClassificationsForCandidate(candidate: RawGeometryCandidate): ConsentControlDiagnosticClassification[] | undefined {
-  const hasConsentContext = MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN.test(candidate.contextText);
-  const hasPreferenceContext = hasConsentContext &&
-    (candidate.layer === "preference_center" || MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN.test(candidate.contextText));
+  const hasConsentContext = hasSupplementalConsentContext(candidate);
+  const hasPreferenceContext = hasSupplementalPreferenceContext(candidate, hasConsentContext);
   const classifierContextText = hasConsentContext || hasPreferenceContext ? candidate.contextText : "";
   const classification = classifyConsentControlLabel({
     label: candidate.label,
@@ -590,7 +592,7 @@ function isSupplementalProductionGeometryClassification(
   ) {
     return false;
   }
-  if (!MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN.test(candidate.contextText)) {
+  if (!hasSupplementalConsentContext(candidate)) {
     return false;
   }
   if (isLoosePageChromeDiagnostic(candidate, classification)) {
@@ -607,6 +609,29 @@ function isSupplementalProductionGeometryClassification(
     candidate.value,
   ].filter(Boolean).join(" "));
   return isProductionCreditworthySupplementalConsentControlClassification(label, classification);
+}
+
+function hasSupplementalConsentContext(candidate: RawGeometryCandidate): boolean {
+  return MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN.test(candidate.contextText) ||
+    CMP_SELECTOR_CONSENT_CONTEXT_PATTERN.test(supplementalSelectorContext(candidate));
+}
+
+function hasSupplementalPreferenceContext(candidate: RawGeometryCandidate, hasConsentContext: boolean): boolean {
+  return hasConsentContext &&
+    (
+      candidate.layer === "preference_center" ||
+      MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN.test(candidate.contextText) ||
+      CMP_SELECTOR_PREFERENCE_CONTEXT_PATTERN.test(supplementalSelectorContext(candidate))
+    );
+}
+
+function supplementalSelectorContext(candidate: RawGeometryCandidate): string {
+  return [
+    candidate.selectorHint,
+    candidate.containerSelectorHint,
+    candidate.ariaLabel,
+    candidate.title,
+  ].filter(Boolean).join(" ");
 }
 
 function actionTypeForClassification(

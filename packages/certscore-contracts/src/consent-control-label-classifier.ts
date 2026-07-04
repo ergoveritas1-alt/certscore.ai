@@ -558,6 +558,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("reject", "wyłącz wszystkie"),
 
     contextual("options", "ustawienia", { requiresConsentContext: true }),
+    contextual("options", "ustawienia zaawansowane", { requiresConsentContext: true }),
     contextual("options", "preferencje", { requiresConsentContext: true }),
     contextual("options", "opcje", { requiresConsentContext: true }),
     ...direct("options", "ustawienia plików cookie"),
