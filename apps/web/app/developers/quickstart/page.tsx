@@ -23,18 +23,33 @@ export default function DeveloperQuickstartPage() {
 
         <Section id="api-key-access" eyebrow="Access" title="Get a scoped API key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            CertScore API, SDK, and MCP integrations use bearer API keys. During the developer-preview period, request a scoped key by
+            CertScore API, SDK, and MCP integrations use bearer API keys. Read-only report retrieval and MCP read tools can use a
+            self-serve key after sign-in and email verification. Scan creation keys remain developer-preview and are issued by
             emailing{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>
-            . Include your organization, integration type, expected volume, callback or contact email, and the scopes you need.
+            .
           </p>
+          <CodeBlock>{`Self-serve read-only key:
+1. Sign in at https://certscore.ai/login and verify your email.
+2. POST https://certscore.ai/api/v2/keys/request from the signed-in browser session.
+3. Store the returned cs_ro_ key and use it as CERTSCORE_API_KEY.
+
+curl -X POST https://certscore.ai/api/v2/keys/request \\
+  -H "Content-Type: application/json" \\
+  --data '{"name":"Read-only MCP key"}'`}</CodeBlock>
           <CodeBlock>{`Recommended scopes by integration:
 - REST API read-only: scan:read
 - REST API scan creation: scan:read, scan:create
 - TypeScript SDK: scan:read, scan:create
-- MCP server: scan:read, scan:create, mcp`}</CodeBlock>
+- MCP read tools: scan:read, mcp
+- MCP scan creation: scan:read, scan:create, mcp`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Self-serve keys are prefixed <code className="rounded bg-white px-1">cs_ro_</code>, expire after 90 days, and are limited
+            to read-only report/API access plus MCP. For <code className="rounded bg-white px-1">scan:create</code>, include your
+            organization, integration type, expected volume, callback or contact email, and requested scopes when emailing support.
+          </p>
         </Section>
 
         <Section eyebrow="Health" title="Check the public API surface">

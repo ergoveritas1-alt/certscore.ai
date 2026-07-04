@@ -576,7 +576,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
     "CERTSCORE_API_KEY=<token> certscore-mcp doctor"
   ]);
   assert.equal(aiDiscovery.authentication.docs, "https://certscore.ai/developers/quickstart");
-  assert.equal(aiDiscovery.authentication.accessStatus, "developer_preview_request");
+  assert.equal(aiDiscovery.authentication.accessStatus, "read_only_self_serve_scan_create_request");
   assert.equal(aiDiscovery.authentication.requestEmail, "support@certscore.ai");
   assert.match(aiDiscovery.authentication.requestInstructions, /organization/);
   assert.deepEqual(aiDiscovery.authentication.currentScopes, ["scan:read", "scan:create", "mcp"]);
@@ -584,6 +584,9 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.deepEqual(aiDiscovery.authentication.recommendedScopes.restScanCreation, ["scan:read", "scan:create"]);
   assert.deepEqual(aiDiscovery.authentication.recommendedScopes.typescriptSdk, ["scan:read", "scan:create"]);
   assert.deepEqual(aiDiscovery.authentication.recommendedScopes.mcp, ["scan:read", "scan:create", "mcp"]);
+  assert.equal(aiDiscovery.authentication.selfServeReadOnly.route, "https://certscore.ai/api/v2/keys/request");
+  assert.deepEqual(aiDiscovery.authentication.selfServeReadOnly.issuedScopes, ["scan:read", "mcp"]);
+  assert.equal(aiDiscovery.authentication.selfServeReadOnly.tokenPrefix, "cs_ro_");
   assert.equal(aiDiscovery.rateLimits.docs, "https://certscore.ai/developers/reference");
   assert.equal(aiDiscovery.support.terms, "https://certscore.ai/terms");
   assert.equal(pulseDiscovery.developerHub, "https://certscore.ai/developers");
@@ -615,8 +618,9 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.match(combinedSources, /id="evidence-boundaries"/);
   assert.match(combinedSources, /id="developer-support"/);
   assert.match(combinedSources, /mailto:support@certscore\.ai/);
-  assert.match(combinedSources, /developer-preview access/i);
-  assert.match(combinedSources, /Request an API key/);
+  assert.match(combinedSources, /self-serve/i);
+  assert.match(combinedSources, /POST \/api\/v2\/keys\/request|https:\/\/certscore\.ai\/api\/v2\/keys\/request/);
+  assert.match(combinedSources, /Get an API key/);
   assert.match(combinedSources, /requested scopes/);
   assert.match(combinedSources, /expected request volume|expected volume/);
   assert.match(combinedSources, /feature requests/);

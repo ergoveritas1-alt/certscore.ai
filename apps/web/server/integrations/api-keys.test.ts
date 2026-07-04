@@ -5,10 +5,18 @@ import {
   INTEGRATION_API_KEY_HOURLY_LIMIT,
   INTEGRATION_ORGANIZATION_DAILY_LIMIT,
   INTEGRATION_ORGANIZATION_HOURLY_LIMIT,
+  SELF_SERVE_READ_ONLY_EMAIL_DAILY_ISSUANCE_LIMIT,
+  SELF_SERVE_READ_ONLY_EMAIL_WINDOW_ISSUANCE_LIMIT,
+  SELF_SERVE_READ_ONLY_IP_DAILY_ISSUANCE_LIMIT,
+  SELF_SERVE_READ_ONLY_IP_WINDOW_ISSUANCE_LIMIT,
   decideIntegrationApiKeyUsageLimit,
+  decideSelfServeReadOnlyApiKeyIssuance,
   generateIntegrationApiKey,
+  getEmailDomain,
   getIntegrationApiKeyPrefix,
   hashIntegrationApiKey,
+  hashSelfServeApiKeyRequester,
+  isDisposableEmailDomain,
   isIntegrationApiKeyScope,
   parseBearerToken
 } from "./api-keys";
@@ -23,6 +31,12 @@ test("generateIntegrationApiKey supports live keys", () => {
   const token = generateIntegrationApiKey("cs_live");
   assert.match(token, /^cs_live_[A-Za-z0-9_-]{32,}$/);
   assert.match(getIntegrationApiKeyPrefix(token), /^cs_live_[A-Za-z0-9_-]{8}$/);
+});
+
+test("generateIntegrationApiKey supports read-only self-serve keys", () => {
+  const token = generateIntegrationApiKey("cs_ro");
+  assert.match(token, /^cs_ro_[A-Za-z0-9_-]{32,}$/);
+  assert.match(getIntegrationApiKeyPrefix(token), /^cs_ro_[A-Za-z0-9_-]{8}$/);
 });
 
 test("hashIntegrationApiKey is deterministic and does not expose the raw token", () => {
@@ -50,6 +64,99 @@ test("isIntegrationApiKeyScope only accepts known scoped actions", () => {
   assert.equal(isIntegrationApiKeyScope("pulse:scan"), true);
   assert.equal(isIntegrationApiKeyScope("mcp"), true);
   assert.equal(isIntegrationApiKeyScope("admin"), false);
+});
+
+test("self-serve requester hashing and disposable-domain checks are normalized", () => {
+  assert.equal(hashSelfServeApiKeyRequester("User@Example.COM"), hashSelfServeApiKeyRequester(" user@example.com "));
+  assert.equal(getEmailDomain("User@Example.COM"), "example.com");
+  assert.equal(isDisposableEmailDomain("person@mailinator.com"), true);
+  assert.equal(isDisposableEmailDomain("person@example.com"), false);
+});
+
+test("decideSelfServeReadOnlyApiKeyIssuance requires verified non-disposable email", () => {
+  assert.deepEqual(
+    decideSelfServeReadOnlyApiKeyIssuance({
+      disposableEmailDomain: false,
+      emailDailyIssuedCount: 0,
+      emailVerified: false,
+      emailWindowIssuedCount: 0,
+      ipDailyIssuedCount: 0,
+      ipWindowIssuedCount: 0
+    }),
+    { allowed: false, reason: "unverified_email" }
+  );
+  assert.deepEqual(
+    decideSelfServeReadOnlyApiKeyIssuance({
+      disposableEmailDomain: true,
+      emailDailyIssuedCount: 0,
+      emailVerified: true,
+      emailWindowIssuedCount: 0,
+      ipDailyIssuedCount: 0,
+      ipWindowIssuedCount: 0
+    }),
+    { allowed: false, reason: "disposable_email" }
+  );
+});
+
+test("decideSelfServeReadOnlyApiKeyIssuance enforces email and IP issuance caps", () => {
+  assert.deepEqual(
+    decideSelfServeReadOnlyApiKeyIssuance({
+      disposableEmailDomain: false,
+      emailDailyIssuedCount: SELF_SERVE_READ_ONLY_EMAIL_DAILY_ISSUANCE_LIMIT,
+      emailVerified: true,
+      emailWindowIssuedCount: 0,
+      ipDailyIssuedCount: 0,
+      ipWindowIssuedCount: 0
+    }),
+    { allowed: false, reason: "email_cap", retryAfterSeconds: 86400 }
+  );
+  assert.deepEqual(
+    decideSelfServeReadOnlyApiKeyIssuance({
+      disposableEmailDomain: false,
+      emailDailyIssuedCount: 0,
+      emailVerified: true,
+      emailWindowIssuedCount: SELF_SERVE_READ_ONLY_EMAIL_WINDOW_ISSUANCE_LIMIT,
+      ipDailyIssuedCount: 0,
+      ipWindowIssuedCount: 0
+    }),
+    { allowed: false, reason: "email_cap", retryAfterSeconds: 86400 }
+  );
+  assert.deepEqual(
+    decideSelfServeReadOnlyApiKeyIssuance({
+      disposableEmailDomain: false,
+      emailDailyIssuedCount: 0,
+      emailVerified: true,
+      emailWindowIssuedCount: 0,
+      ipDailyIssuedCount: SELF_SERVE_READ_ONLY_IP_DAILY_ISSUANCE_LIMIT,
+      ipWindowIssuedCount: 0
+    }),
+    { allowed: false, reason: "ip_cap", retryAfterSeconds: 86400 }
+  );
+  assert.deepEqual(
+    decideSelfServeReadOnlyApiKeyIssuance({
+      disposableEmailDomain: false,
+      emailDailyIssuedCount: 0,
+      emailVerified: true,
+      emailWindowIssuedCount: 0,
+      ipDailyIssuedCount: 0,
+      ipWindowIssuedCount: SELF_SERVE_READ_ONLY_IP_WINDOW_ISSUANCE_LIMIT
+    }),
+    { allowed: false, reason: "ip_cap", retryAfterSeconds: 86400 }
+  );
+});
+
+test("decideSelfServeReadOnlyApiKeyIssuance allows verified requests below caps", () => {
+  assert.deepEqual(
+    decideSelfServeReadOnlyApiKeyIssuance({
+      disposableEmailDomain: false,
+      emailDailyIssuedCount: SELF_SERVE_READ_ONLY_EMAIL_DAILY_ISSUANCE_LIMIT - 1,
+      emailVerified: true,
+      emailWindowIssuedCount: SELF_SERVE_READ_ONLY_EMAIL_WINDOW_ISSUANCE_LIMIT - 1,
+      ipDailyIssuedCount: SELF_SERVE_READ_ONLY_IP_DAILY_ISSUANCE_LIMIT - 1,
+      ipWindowIssuedCount: SELF_SERVE_READ_ONLY_IP_WINDOW_ISSUANCE_LIMIT - 1
+    }),
+    { allowed: true }
+  );
 });
 
 test("decideIntegrationApiKeyUsageLimit allows requests below limits", () => {

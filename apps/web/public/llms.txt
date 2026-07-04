@@ -133,12 +133,15 @@ Recommended flow:
 
 API keys use `Authorization: Bearer <token>`. Current integration scopes are `scan:read`, `scan:create`, and `mcp`.
 
-Developer-preview API keys:
-- Request access by emailing support@certscore.ai.
-- Include organization, integration type, expected request volume, contact email, and requested scopes.
+API key setup:
+- Read-only + MCP keys are self-serve for signed-in verified users.
+- Sign in, verify email, then POST https://certscore.ai/api/v2/keys/request from the signed-in browser session.
+- Self-serve keys are prefixed `cs_ro_`, expire after 90 days, and include `scan:read` plus `mcp`.
+- Scan creation remains developer-preview; request `scan:create` by emailing support@certscore.ai.
+- Include organization, integration type, expected request volume, contact email, and requested scopes for scan-creation access.
 - REST API read-only usually needs `scan:read`.
 - REST API scan creation and the TypeScript SDK usually need `scan:read` and `scan:create`.
-- MCP usually needs `scan:read`, `scan:create`, and `mcp`.
+- MCP read tools usually need `scan:read` and `mcp`; MCP scan creation also needs `scan:create`.
 
 ## Important interpretation rules
 

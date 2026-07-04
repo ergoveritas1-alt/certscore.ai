@@ -6,7 +6,11 @@ CertScore outputs are automated public-web observations for review. They are not
 
 ## Build
 
-From the WC01 repo root:
+Release artifacts are built by GitHub Actions on `ubuntu-latest` from tags shaped `certscore-mcp-vX.Y.Z`. The pipeline checks out the
+tag, builds the MCP bundle, creates a deterministic GNU tarball, verifies there are no AppleDouble or xattr entries, writes
+`SHA256SUMS`, uploads both assets to the GitHub release, and opens the Homebrew cask/formula bump PR.
+
+For local rehearsal from the WC01 repo root:
 
 ```bash
 pnpm mcp:certscore:homebrew:build
@@ -14,7 +18,8 @@ pnpm mcp:certscore:homebrew:build
 
 The build creates:
 
-- `artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.4.tar.gz`
+- `artifacts/certscore-mcp-homebrew/certscore-mcp-v{version}.tar.gz`
+- `artifacts/certscore-mcp-homebrew/SHA256SUMS`
 - `artifacts/certscore-mcp-homebrew/certscore-mcp.rb`
 - `artifacts/certscore-mcp-homebrew/certscore-mcp-cask.rb`
 
@@ -31,12 +36,11 @@ The tarball contains:
 
 ## Release
 
-1. Run `pnpm mcp:certscore:homebrew:build`.
-2. Confirm `Casks/certscore-mcp.rb` matches `artifacts/certscore-mcp-homebrew/certscore-mcp-cask.rb`.
-3. Confirm `Formula/certscore-mcp.rb` matches `artifacts/certscore-mcp-homebrew/certscore-mcp.rb`.
-4. Commit and push the cask/formula/source changes.
-5. Create a GitHub release named `certscore-mcp-v0.1.4`.
-6. Upload `artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.4.tar.gz`.
+1. Bump `packages/certscore-mcp/package.json` and `CHANGELOG.md`.
+2. Tag the source commit as `certscore-mcp-v{version}`.
+3. Let `.github/workflows/certscore-mcp-linux-release.yml` create the release tarball and `SHA256SUMS` on Ubuntu.
+4. Review and merge the cask/formula bump PR opened by the workflow.
+5. Bump the well-known manifest only after the release asset and cask/formula bump exist.
 
 Expected user install:
 
@@ -80,9 +84,10 @@ pnpm --filter certscore-mcp test
 pnpm --filter certscore-mcp typecheck
 pnpm --filter certscore-mcp build
 pnpm mcp:certscore:homebrew:build
-artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.4/bin/certscore-mcp --version
-artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.4/bin/certscore-mcp --help
-artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.4/bin/certscore-mcp doctor
+sha256sum --check artifacts/certscore-mcp-homebrew/SHA256SUMS
+artifacts/certscore-mcp-homebrew/certscore-mcp-v$(node -e 'console.log(JSON.parse(require("fs").readFileSync("packages/certscore-mcp/package.json","utf8")).version)')/bin/certscore-mcp --version
+artifacts/certscore-mcp-homebrew/certscore-mcp-v$(node -e 'console.log(JSON.parse(require("fs").readFileSync("packages/certscore-mcp/package.json","utf8")).version)')/bin/certscore-mcp --help
+artifacts/certscore-mcp-homebrew/certscore-mcp-v$(node -e 'console.log(JSON.parse(require("fs").readFileSync("packages/certscore-mcp/package.json","utf8")).version)')/bin/certscore-mcp doctor
 ```
 
 For an end-to-end production operator smoke after release:

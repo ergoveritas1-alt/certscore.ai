@@ -312,8 +312,24 @@ test("create_scan returns async status and scan handles", async () => {
         statusUrl: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
         reportUrl: "https://certscore.ai/scan/scan_123"
       }
+    },
+    {
+      status: 202,
+      body: {
+        type: "certscore_pulse_status",
+        status: "running",
+        jobId: "pulse_job_123",
+        scanId: "scan_123",
+        statusUrl: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
+        reportUrl: "https://certscore.ai/scan/scan_123"
+      }
     }
   ]);
+  const previousConsoleError = console.error;
+  const warnings: string[] = [];
+  console.error = (...args: unknown[]) => {
+    warnings.push(args.map(String).join(" "));
+  };
   try {
     await withMcpClient(async (client) => {
       const result = parseToolJson(
@@ -327,8 +343,14 @@ test("create_scan returns async status and scan handles", async () => {
       assert.equal(result.jobId, "pulse_job_123");
       assert.equal(result.scanId, "scan_123");
       assert.match(mock.calls[0] ?? "", /wait=0/);
+      await client.callTool({
+        name: "create_scan",
+        arguments: { url: "https://example.com", detail: "standard" }
+      });
     });
+    assert.deepEqual(warnings, ["[certscore-mcp] create_scan is deprecated and will be removed in 0.2.0. Use scan_site."]);
   } finally {
+    console.error = previousConsoleError;
     mock.restore();
   }
 });

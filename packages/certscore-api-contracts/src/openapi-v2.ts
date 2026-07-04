@@ -176,6 +176,23 @@ const healthExample = {
   generatedAt: "2026-06-30T00:00:00.000Z"
 } as const;
 
+const selfServeApiKeyExample = {
+  type: "certscore_api_key",
+  key: "cs_ro_example_redacted",
+  tokenPrefix: "cs_ro_example",
+  scopes: ["scan:read", "mcp"],
+  expiresAt: "2026-09-28T00:00:00.000Z",
+  rateLimits: {
+    requestsPerMinute: 60,
+    scanReadsPerDay: 500
+  },
+  usageGuidance: {
+    scanCreateRequiresSupport: true,
+    scanCreateRequestEmail: "support@certscore.ai"
+  },
+  disclaimer: apiV2Disclaimer
+} as const;
+
 const errorContent = {
   "application/json": {
     schema: { $ref: "#/components/schemas/ApiError" },
@@ -229,6 +246,39 @@ export function buildCertScoreApiV2OpenApiDocument() {
     servers: [{ url: "https://certscore.ai" }],
     security: [{ bearerAuth: [] }],
     paths: {
+      "/api/v2/keys/request": {
+        post: {
+          operationId: "requestReadOnlyApiKey",
+          tags: ["Auth"],
+          summary: "Issue a self-serve read-only API key for signed-in verified users.",
+          description:
+            "Creates a 90-day key prefixed cs_ro_ with scan:read and mcp access only. scan:create remains support-gated. " +
+            "The route requires an authenticated CertScore dashboard session with a verified non-disposable email address. " +
+            "Issuance is capped per email and per requester network and every issuance/denial is audited.",
+          security: [],
+          requestBody: {
+            required: false,
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ReadOnlyApiKeyRequest" },
+                examples: { named: { value: { name: "Claude Desktop read-only MCP" } } }
+              }
+            }
+          },
+          responses: {
+            "201": {
+              description: "Read-only API key issued. Store the token immediately; only the hash is retained.",
+              headers: diagnosticHeaders,
+              content: { "application/json": { schema: { $ref: "#/components/schemas/IssuedApiKey" }, examples: { issued: { value: selfServeApiKeyExample } } } }
+            },
+            "400": { description: "Invalid request.", headers: diagnosticHeaders, content: errorContent },
+            "401": { description: "Sign-in required.", headers: diagnosticHeaders, content: errorContent },
+            "403": { description: "Verified non-disposable email required.", headers: diagnosticHeaders, content: errorContent },
+            "429": { description: "Issuance cap reached.", headers: { ...diagnosticHeaders, ...retryAfterHeader }, content: errorContent },
+            "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
+          }
+        }
+      },
       "/api/v2/scans": {
         post: {
           operationId: "createScan",
@@ -496,6 +546,44 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scanFrom: { type: "string", enum: ["eu_ie"], default: "eu_ie" },
             callbackUrl: { type: "string", format: "uri" },
             metadata: { type: "object", additionalProperties: { type: "string" } }
+          }
+        },
+        ReadOnlyApiKeyRequest: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            name: { type: "string", minLength: 2, maxLength: 80 }
+          }
+        },
+        IssuedApiKey: {
+          type: "object",
+          additionalProperties: false,
+          required: ["type", "key", "tokenPrefix", "scopes", "expiresAt", "rateLimits", "usageGuidance", "disclaimer"],
+          properties: {
+            type: { type: "string", const: "certscore_api_key" },
+            key: { type: "string", pattern: "^cs_ro_" },
+            tokenPrefix: { type: "string", pattern: "^cs_ro_" },
+            scopes: { type: "array", items: { type: "string", enum: ["scan:read", "mcp"] } },
+            expiresAt: { type: "string", format: "date-time" },
+            rateLimits: {
+              type: "object",
+              additionalProperties: false,
+              required: ["requestsPerMinute", "scanReadsPerDay"],
+              properties: {
+                requestsPerMinute: { type: "integer", const: 60 },
+                scanReadsPerDay: { type: "integer", const: 500 }
+              }
+            },
+            usageGuidance: {
+              type: "object",
+              additionalProperties: false,
+              required: ["scanCreateRequiresSupport", "scanCreateRequestEmail"],
+              properties: {
+                scanCreateRequiresSupport: { type: "boolean", const: true },
+                scanCreateRequestEmail: { type: "string", const: "support@certscore.ai" }
+              }
+            },
+            disclaimer: { type: "string" }
           }
         },
         ScanJob: {

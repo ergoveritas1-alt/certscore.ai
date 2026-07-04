@@ -37,14 +37,19 @@ brew install --cask certscore-mcp`}</CodeBlock>
 
         <Section eyebrow="Access" title="Use a scoped MCP key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            MCP clients need a CertScore API key with <code className="rounded bg-white px-1">scan:read</code>,{" "}
-            <code className="rounded bg-white px-1">scan:create</code>, and <code className="rounded bg-white px-1">mcp</code> scopes.
-            Request developer-preview access at{" "}
+            MCP read tools work with a self-serve <code className="rounded bg-white px-1">cs_ro_</code> key carrying{" "}
+            <code className="rounded bg-white px-1">scan:read</code> and <code className="rounded bg-white px-1">mcp</code>. Sign in,
+            verify your email, then request the key from <code className="rounded bg-white px-1">/api/v2/keys/request</code>.
+            Tools that create scans require <code className="rounded bg-white px-1">scan:create</code> and remain support-gated at{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>
-            . Include your MCP client, expected workflow, and expected request volume.
+            .
           </p>
+          <CodeBlock>{`Self-serve read-only MCP key:
+1. Sign in at https://certscore.ai/login and verify your email.
+2. POST https://certscore.ai/api/v2/keys/request from the signed-in browser session.
+3. Use the returned cs_ro_ key as CERTSCORE_API_KEY.`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Verify install" title="Run the doctor check">
@@ -54,6 +59,15 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             The doctor command checks the installed binary, Node.js runtime compatibility, the configured CertScore base URL, API v2
             health, and API key presence without printing the token. It does not create scans or inspect raw scanner artifacts.
+          </p>
+        </Section>
+
+        <Section eyebrow="Verify download" title="Check the release checksum">
+          <CodeBlock>{`curl -LO https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v{version}/certscore-mcp-v{version}.tar.gz
+curl -LO https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v{version}/SHA256SUMS
+sha256sum --check SHA256SUMS`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Release tarballs are built on Linux by GitHub Actions. The published SHA256SUMS file should match the cask checksum.
           </p>
         </Section>
 
@@ -189,6 +203,14 @@ get_latest_domain_pre_consent_cookies_trackers({
             legal conclusions. CertScore outputs are automated public-web observations for review. They are not legal advice,
             certification, or a compliance determination. Group Cookies & Trackers rows by vendor, purpose, and host when the user wants
             a short review handoff.
+          </p>
+        </Section>
+
+        <Section eyebrow="Deprecation" title="create_scan removal">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            <code className="rounded bg-white px-1">create_scan</code> is a deprecated compatibility alias. It will be removed in{" "}
+            <code className="rounded bg-white px-1">0.2.0</code>. Use <code className="rounded bg-white px-1">scan_site</code> for
+            scan creation.
           </p>
         </Section>
       </div>
