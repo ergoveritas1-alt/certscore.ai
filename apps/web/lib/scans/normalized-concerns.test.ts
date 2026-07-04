@@ -1490,7 +1490,7 @@ function makeApprovedGdprTransparencyArticle13Signal(
   };
 }
 
-test("default legacy_only creates no multilingual GDPR Transparency normalized concerns", () => {
+test("explicit legacy_only creates no multilingual GDPR Transparency normalized concerns", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
     runtimeArtifacts: {
@@ -1509,7 +1509,7 @@ test("default legacy_only creates no multilingual GDPR Transparency normalized c
   );
 });
 
-test("opt-in adapter-approved GDPR Transparency evidence creates Article 13 normalized concern inputs", () => {
+test("adapter-approved GDPR Transparency evidence creates Article 13 normalized concern inputs", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
     runtimeArtifacts: {

@@ -44,15 +44,34 @@ function surface(candidates: Candidate[], input: Partial<Pick<
   };
 }
 
-test("GDPR Transparency production evidence profile is closed by default", () => {
-  assert.equal(normalizeGdprTransparencyProductionEvidenceProfile(undefined), "legacy_only");
-  assert.equal(normalizeGdprTransparencyProductionEvidenceProfile(""), "legacy_only");
-  assert.equal(normalizeGdprTransparencyProductionEvidenceProfile("multilingual_v1"), "legacy_only");
+test("GDPR Transparency production evidence profile uses multilingual Article 13 evidence by default", () => {
+  assert.equal(
+    normalizeGdprTransparencyProductionEvidenceProfile(undefined),
+    GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+  );
+  assert.equal(
+    normalizeGdprTransparencyProductionEvidenceProfile(""),
+    GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+  );
+  assert.equal(
+    normalizeGdprTransparencyProductionEvidenceProfile("multilingual_v1"),
+    GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+  );
+  assert.equal(normalizeGdprTransparencyProductionEvidenceProfile("legacy_only"), "legacy_only");
   assert.equal(
     normalizeGdprTransparencyProductionEvidenceProfile(GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE),
     GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
   );
-  assert.equal(getGdprTransparencyProductionEvidenceProfileFromEnv({}), "legacy_only");
+  assert.equal(
+    getGdprTransparencyProductionEvidenceProfileFromEnv({}),
+    GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+  );
+  assert.equal(
+    getGdprTransparencyProductionEvidenceProfileFromEnv({
+      CERTSCORE_GDPR_TRANSPARENCY_EVIDENCE_PROFILE: "legacy_only",
+    }),
+    "legacy_only",
+  );
   assert.equal(
     getGdprTransparencyProductionEvidenceProfileFromEnv({
       CERTSCORE_GDPR_TRANSPARENCY_EVIDENCE_PROFILE: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
@@ -251,7 +270,7 @@ test("TOC, navigation, and non-policy candidates are rejected or diagnostic, not
   assert.equal(navigationResult.discardedArticle13DisclosureSignals[0]?.productionCredit, false);
 });
 
-test("candidate-only diagnostic evidence creates no production behavior by default", () => {
+test("candidate-only diagnostic evidence creates production credit by default when adapter gates pass", () => {
   const diagnosticOnly = candidate({
     evidenceText:
       "The legal basis for processing your personal data includes consent, contractual necessity, and legitimate interests.",
@@ -264,11 +283,11 @@ test("candidate-only diagnostic evidence creates no production behavior by defau
     surface: surface([diagnosticOnly]),
   });
 
-  assert.equal(result.profile, "legacy_only");
-  assert.equal(result.productionEvidenceEnabled, false);
-  assert.equal(result.acceptedProductionSignals.length, 0);
+  assert.equal(result.profile, GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE);
+  assert.equal(result.productionEvidenceEnabled, true);
+  assert.equal(result.acceptedProductionSignals.length, 1);
   assert.equal(result.discardedArticle13DisclosureSignals.length, 0);
-  assert.equal(result.dispositions[0]?.disposition, "diagnostic_only");
+  assert.equal(result.dispositions[0]?.disposition, "accepted");
   assert.equal(result.dispositions[0]?.productionCredit, false);
   assert.equal(diagnosticOnly.productionCredit, false);
 });

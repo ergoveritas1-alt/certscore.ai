@@ -104,6 +104,35 @@ test("classifies representative GDPR Transparency snippets across supported loca
   }
 });
 
+test("classifies French Article 13 wording for retention, recipients, purposes, and legal basis", () => {
+  const classification = classifyGdprTransparencyTopics({
+    text: [
+      "Les finalités du traitement comprennent la gestion de votre compte et la fourniture des services demandés.",
+      "La base légale du traitement des données personnelles comprend le consentement, le contrat et l'intérêt légitime.",
+      "Les données personnelles sont conservées pendant la durée nécessaire aux finalités du traitement.",
+      "Nous pouvons communiquer vos données personnelles à nos prestataires et sous-traitants qui agissent pour notre compte.",
+    ].join(" "),
+    localeHints: ["fr"],
+  });
+  const topics = classification.matches.map((match) => match.topic);
+
+  assert.equal(topics.includes("processing_purposes"), true);
+  assert.equal(topics.includes("legal_basis"), true);
+  assert.equal(topics.includes("data_retention"), true);
+  assert.equal(topics.includes("recipients_or_vendor_categories"), true);
+  assert.equal(
+    classification.matches
+      .filter((match) => [
+        "processing_purposes",
+        "legal_basis",
+        "data_retention",
+        "recipients_or_vendor_categories",
+      ].includes(match.topic))
+      .every((match) => match.matchedLocale === "fr" && match.confidence >= 0.8),
+    true,
+  );
+});
+
 test("classifies encoded fetched policy text without display-layer fallbacks", () => {
   const examples = [
     {

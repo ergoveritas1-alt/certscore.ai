@@ -7,7 +7,7 @@ export type GdprTransparencyProductionEvidenceProfile =
   (typeof GDPR_TRANSPARENCY_PRODUCTION_EVIDENCE_PROFILES)[number];
 
 export const DEFAULT_GDPR_TRANSPARENCY_PRODUCTION_EVIDENCE_PROFILE =
-  "legacy_only" satisfies GdprTransparencyProductionEvidenceProfile;
+  "gdpr_transparency_multilingual_article13_v1" satisfies GdprTransparencyProductionEvidenceProfile;
 
 export const GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE =
   "gdpr_transparency_multilingual_article13_v1" satisfies GdprTransparencyProductionEvidenceProfile;
@@ -15,6 +15,9 @@ export const GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE =
 export function normalizeGdprTransparencyProductionEvidenceProfile(
   value: unknown,
 ): GdprTransparencyProductionEvidenceProfile {
+  if (value === "legacy_only") {
+    return "legacy_only";
+  }
   return value === GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE
     ? GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE
     : DEFAULT_GDPR_TRANSPARENCY_PRODUCTION_EVIDENCE_PROFILE;
