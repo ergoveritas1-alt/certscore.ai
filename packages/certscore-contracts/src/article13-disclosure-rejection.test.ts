@@ -103,6 +103,14 @@ test("Article 13 rejection contract preserves accepted legacy and multilingual e
   );
   assert.equal(
     isArticle13DisclosureEvidenceUsable(
+      "Les données personnelles sont conservées pendant la durée nécessaire aux finalités du traitement.",
+      "data_retention",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
       "RCS e CRM sono autonomi Titolari del trattamento dei dati personali raccolti su questo sito ai sensi del GDPR.",
       "controller_contact",
       { mode: "multilingual_classifier" },

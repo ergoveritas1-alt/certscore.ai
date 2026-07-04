@@ -371,7 +371,7 @@ function hasLocalizedArticle13EvidenceContext(
     case "recipients_or_vendor_categories":
       return /(?:recipients?|categories of recipients|service providers?|processors?|third parties|empfänger|dienstleister|destinataires|prestataires|destinatarios|proveedores|destinatari|fornitori|ontvangers|dienstverleners|odbiorcy|dostawcy)/i.test(normalized);
     case "data_retention":
-      return /(?:retention|retain|kept|storage period|how long|aufbewahrung|speichern|gespeichert|conservation|conservons|conservación|conservamos|conservazione|conserviamo|bewaren|bewaartermijn|przechowywania|przechowujemy)/i.test(normalized);
+      return /(?:retention|retain|kept|storage period|how long|aufbewahrung|speichern|gespeichert|conservation|conservons|conserv(?:é|e|és|ées)|durée nécessaire|conservación|conservamos|conservazione|conserviamo|bewaren|bewaartermijn|przechowywania|przechowujemy)/i.test(normalized);
     case "data_subject_rights":
       return /(?:rights?|right to access|right to erasure|data subject|betroffenenrechte|recht auf|droits?|personnes concernées|derechos?|interesados|diritti?|interessati|rechten|betrokkenen|recht om bezwaar te maken|prawa|osób których dane dotyczą)/i.test(normalized);
     case "international_transfers":

@@ -967,7 +967,7 @@ test("summarizePolicySurfaces separates weak Article 13 candidates from validate
   ), true);
 });
 
-test("summarizePolicySurfaces leaves Article 13 signals and observed topics unchanged by default with GDPR Transparency candidates", async () => {
+test("summarizePolicySurfaces accepts GDPR Transparency candidates by default", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const legacySignalText = "The legal basis for processing your personal data includes consent, contract, and legitimate interests.";
   const candidateText = "La base jurídica del tratamiento de datos personales incluye el consentimiento, contrato e intereses legítimos.";
@@ -1013,20 +1013,20 @@ test("summarizePolicySurfaces leaves Article 13 signals and observed topics unch
 
   const summary = summarizePolicySurfaces(surfaces, "example.test");
 
-  assert.equal(summary.gdprTransparencyEvidenceProfile, "legacy_only");
-  assert.equal(summary.gdprTransparencyProductionEvidenceEnabled, false);
+  assert.equal(summary.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
+  assert.equal(summary.gdprTransparencyProductionEvidenceEnabled, true);
   assert.deepEqual(summary.observedTopics, ["legal_basis"]);
   assert.deepEqual(
     summary.article13DisclosureSignals.map((signal) => signal.evidenceText),
-    [legacySignalText]
+    [legacySignalText, candidateText]
   );
   assert.deepEqual(summary.article13DisclosureTypesObserved, ["legal_basis"]);
   assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
-    acceptedCandidateCount: 0,
-    diagnosticCandidateCount: 1,
+    acceptedCandidateCount: 1,
+    diagnosticCandidateCount: 0,
     discardedCandidateCount: 0,
-    productionCreditSignalCount: 0,
-    rejectedCandidateCount: 1,
+    productionCreditSignalCount: 1,
+    rejectedCandidateCount: 0,
     sourceCandidateCount: 1
   });
 });
@@ -1139,7 +1139,100 @@ test("summarizePolicySurfaces supplements Article 13 signals only from opt-in ac
   });
 });
 
-test("summarizePolicySurfaces uses multilingual policy quality only for opt-in GDPR Transparency candidates", async () => {
+test("summarizePolicySurfaces credits French Article 13 candidates through the production profile by default", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const purposesText =
+    "Les finalités du traitement comprennent la gestion de votre compte et la fourniture des services demandés.";
+  const legalBasisText =
+    "La base légale du traitement des données personnelles comprend le consentement, le contrat et l'intérêt légitime.";
+  const retentionText =
+    "Les données personnelles sont conservées pendant la durée nécessaire aux finalités du traitement.";
+  const recipientsText =
+    "Nous pouvons communiquer vos données personnelles à nos prestataires et sous-traitants qui agissent pour notre compte.";
+  const candidates = [
+    {
+      topic: "processing_purposes",
+      evidenceText: purposesText,
+      matchedTerm: "finalités du traitement"
+    },
+    {
+      topic: "legal_basis",
+      evidenceText: legalBasisText,
+      matchedTerm: "base légale du traitement"
+    },
+    {
+      topic: "data_retention",
+      evidenceText: retentionText,
+      matchedTerm: "conservées pendant la durée nécessaire"
+    },
+    {
+      topic: "recipients_or_vendor_categories",
+      evidenceText: recipientsText,
+      matchedTerm: "prestataires et sous-traitants"
+    }
+  ].map((candidate) => ({
+    ...candidate,
+    classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+    classifierReasonCodes: [`matched_${candidate.topic}`, "match_strength_equivalent"],
+    confidence: 0.82,
+    matchStrength: "equivalent",
+    matchedLocale: "fr",
+    productionCredit: false,
+    status: "diagnostic_only"
+  }));
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "lefigaro-style-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://mentions-legales.example.test/page/politique-de-confidentialite",
+      normalizedUrl: "https://mentions-legales.example.test/page/politique-de-confidentialite",
+      confidence: 0.96,
+      status: "fetched",
+      textExcerpt: [
+        "Politique de confidentialité. Cette politique explique le traitement des données personnelles.",
+        purposesText,
+        legalBasisText,
+        retentionText,
+        recipientsText,
+      ].join(" "),
+      observedTopics: [],
+      gdprTransparencyTopicCandidates: candidates
+    }
+  ] as never, "https://lefigaro.fr/");
+
+  const summary = summarizePolicySurfaces(surfaces, "lefigaro.fr");
+
+  assert.equal(summary.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
+  assert.equal(summary.gdprTransparencyProductionEvidenceEnabled, true);
+  assert.deepEqual(
+    summary.article13DisclosureTypesObserved.sort(),
+    [
+      "data_retention",
+      "legal_basis",
+      "processing_purposes",
+      "recipients_or_vendor_categories"
+    ]
+  );
+  const acceptedSignals = summary.article13DisclosureSignals as Array<Record<string, unknown>>;
+  assert.equal(
+    acceptedSignals.every((signal) =>
+      signal.productionCredit === true &&
+      signal.productionCreditProfile === "gdpr_transparency_multilingual_article13_v1" &&
+      signal.matchedLocale === "fr"
+    ),
+    true
+  );
+  assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
+    acceptedCandidateCount: 4,
+    diagnosticCandidateCount: 0,
+    discardedCandidateCount: 0,
+    productionCreditSignalCount: 4,
+    rejectedCandidateCount: 0,
+    sourceCandidateCount: 4
+  });
+});
+
+test("summarizePolicySurfaces uses multilingual policy quality by default for GDPR Transparency candidates", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const dpoEvidence = "satisfacción en el ejercicio de sus derechos ante los responsables de los Datos Personales, puede contactar con nuestro Delegado de Protección de datos a través del mail dpo@example.test";
   const authorityEvidence = "los Datos Personales, puede contactar con nuestro Delegado de Protección de datos y/o presentar una reclamación ante la Agencia Española de Protección de Datos a través de su página web";
@@ -1192,14 +1285,14 @@ test("summarizePolicySurfaces uses multilingual policy quality only for opt-in G
     }
   ] as never, "https://example.test/");
 
-  const defaultSummary = summarizePolicySurfaces(surfaces, "example.test");
-  assert.equal(defaultSummary.gdprTransparencyEvidenceProfile, "legacy_only");
-  assert.equal(defaultSummary.gdprTransparencyProductionEvidenceEnabled, false);
-  assert.deepEqual(defaultSummary.article13DisclosureSignals, []);
-
-  const optInSummary = summarizePolicySurfaces(surfaces, "example.test", {
-    gdprTransparencyEvidenceProfile: "gdpr_transparency_multilingual_article13_v1"
+  const legacySummary = summarizePolicySurfaces(surfaces, "example.test", {
+    gdprTransparencyEvidenceProfile: "legacy_only"
   });
+  assert.equal(legacySummary.gdprTransparencyEvidenceProfile, "legacy_only");
+  assert.equal(legacySummary.gdprTransparencyProductionEvidenceEnabled, false);
+  assert.deepEqual(legacySummary.article13DisclosureSignals, []);
+
+  const optInSummary = summarizePolicySurfaces(surfaces, "example.test");
 
   assert.equal(optInSummary.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
   assert.equal(optInSummary.gdprTransparencyProductionEvidenceEnabled, true);
@@ -1216,12 +1309,10 @@ test("summarizePolicySurfaces uses multilingual policy quality only for opt-in G
 test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile metadata from scan config", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
-  const previousProfile = process.env.CERTSCORE_GDPR_TRANSPARENCY_EVIDENCE_PROFILE;
   const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/gdpr-profile-"));
   const acceptedSpanish = "La base jurídica del tratamiento de datos personales incluye el consentimiento, contrato e intereses legítimos.";
   try {
     process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
-    process.env.CERTSCORE_GDPR_TRANSPARENCY_EVIDENCE_PROFILE = "gdpr_transparency_multilingual_article13_v1";
     await mkdir(outDir, { recursive: true });
     await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
       completedAt: "2026-06-25T02:16:00.000Z",
@@ -1305,12 +1396,37 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
       }
     }));
     const defaultSummary = defaultDetail.runtimeArtifacts?.policyDisclosureSummary as Record<string, unknown> | undefined;
-    assert.equal(defaultSummary?.gdprTransparencyEvidenceProfile, "legacy_only");
-    assert.equal(defaultSummary?.gdprTransparencyProductionEvidenceEnabled, false);
-    assert.deepEqual(defaultSummary?.article13DisclosureSignals, []);
-    assert.equal(defaultDetail.runtimeArtifacts?.gdprTransparencyEvidenceProfile, "legacy_only");
+    const defaultSignals = defaultSummary?.article13DisclosureSignals as Array<Record<string, unknown>> | undefined;
+    assert.equal(defaultSummary?.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
+    assert.equal(defaultSummary?.gdprTransparencyProductionEvidenceEnabled, true);
+    assert.equal(defaultDetail.runtimeArtifacts?.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
+    assert.equal(defaultDetail.runtimeArtifacts?.gdprTransparencyProductionEvidenceEnabled, true);
+    assert.equal(defaultSignals?.length, 1);
+    assert.equal(defaultSignals?.[0]?.productionCredit, true);
+    assert.equal(defaultSignals?.[0]?.matchedLocale, "es");
 
-    process.env.CERTSCORE_GDPR_TRANSPARENCY_EVIDENCE_PROFILE = "legacy_only";
+    const legacyDetail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "example.test",
+        scanConfigJson: {
+          ...baseScanConfig,
+          execution: {
+            ...baseScanConfig.execution,
+            v2DagParallel: {
+              ...baseScanConfig.execution.v2DagParallel,
+              gdprTransparencyEvidenceProfile: "legacy_only"
+            }
+          }
+        }
+      }
+    }));
+    const legacySummary = legacyDetail.runtimeArtifacts?.policyDisclosureSummary as Record<string, unknown> | undefined;
+    assert.equal(legacySummary?.gdprTransparencyEvidenceProfile, "legacy_only");
+    assert.equal(legacySummary?.gdprTransparencyProductionEvidenceEnabled, false);
+    assert.deepEqual(legacySummary?.article13DisclosureSignals, []);
+    assert.equal(legacyDetail.runtimeArtifacts?.gdprTransparencyEvidenceProfile, "legacy_only");
+
     const optInDetail = await materializeLocalV2DagScanDetail(makeScanRecord({
       scan: {
         ...makeScanRecord().scan,
@@ -1341,11 +1457,6 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
       delete process.env.NEXT_PUBLIC_APP_URL;
     } else {
       process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
-    }
-    if (previousProfile === undefined) {
-      delete process.env.CERTSCORE_GDPR_TRANSPARENCY_EVIDENCE_PROFILE;
-    } else {
-      process.env.CERTSCORE_GDPR_TRANSPARENCY_EVIDENCE_PROFILE = previousProfile;
     }
     await rm(outDir, { recursive: true, force: true });
   }
