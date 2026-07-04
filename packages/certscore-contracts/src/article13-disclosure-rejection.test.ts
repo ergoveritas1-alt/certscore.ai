@@ -111,6 +111,14 @@ test("Article 13 rejection contract preserves accepted legacy and multilingual e
   );
   assert.equal(
     isArticle13DisclosureEvidenceUsable(
+      "COMBIEN DE TEMPS CES INFORMATIONS SONT-ELLES CONSERVÉES ? D'une manière générale, vos données personnelles sont conservées en base active pour une durée conforme aux dispositions légales et proportionnelles aux finalités pour lesquelles elles ont été collectées.",
+      "data_retention",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
       "Unseren Datenschutzbeauftragten erreichen Sie unter datenschutzbeauftragter@example.test oder unserer Postadresse mit dem Zusatz Datenschutzbeauftragter.",
       "dpo_contact",
       { mode: "multilingual_classifier" },

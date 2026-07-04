@@ -107,8 +107,12 @@ export function looksLikeArticle13TableOfContents(
 
 export function isGenericArticle13StorageNotRetentionEvidence(value: string) {
   const text = normalizeArticle13Whitespace(value);
-  const hasStorageMechanics = /\b(?:collect|store|storage|cookies?|local storage|databases?|server logs?)\b/i.test(text);
-  const hasRetentionLifecycle = /\b(?:retain|retention|how long|kept for|stored for|delete|deletion|anonymi[sz]e|remove|expires?|as long as necessary|no longer needed|required by law|legal purposes|fraud|abuse)\b/i.test(text);
+  const hasStorageMechanics =
+    /\b(?:collect|store|storage|cookies?|local storage|databases?|server logs?)\b/i.test(text) ||
+    /(?:collect(?:é|e|és|ées)|recogid[ao]s?|raccolt[oi]|verzameld|zbierane)/i.test(text);
+  const hasRetentionLifecycle =
+    /\b(?:retain|retention|how long|kept for|stored for|delete|deletion|anonymi[sz]e|remove|expires?|as long as necessary|no longer needed|required by law|legal purposes|fraud|abuse)\b/i.test(text) ||
+    /(?:aufbewahrung|speichern|gespeichert|solange|erforderlich|gesetzlich|conservation|conservons|conserv(?:é|e|és|ées)|durée|dispositions légales|finalités|conservación|conservamos|plazo|conservazione|conserviamo|periodo|bewaren|bewaartermijn|noodzakelijk|przechowywania|przechowujemy|okres)/i.test(text);
   return hasStorageMechanics && !hasRetentionLifecycle;
 }
 

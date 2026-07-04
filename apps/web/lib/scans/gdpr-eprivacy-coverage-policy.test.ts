@@ -29,25 +29,29 @@ const GDPR_TRANSPARENCY_TOPIC_TO_ROW_ID = {
 
 function makeGdprTransparencyArticle13Signal(input: {
   disclosureType: string;
+  evidenceText?: string;
+  matchedLocale?: string;
+  matchedTerm?: string;
   productionCredit?: boolean;
   productionCreditProfile?: string;
   selectedEvidenceStrength?: string;
   status?: string;
 }) {
+  const evidenceText = input.evidenceText ?? "Localized bounded Article 13 evidence about personal data processing.";
   return {
     classifierProvenance: "gdpr_transparency_topic_classifier.v1",
     classifierReasonCodes: [`matched_${input.disclosureType}`],
     confidence: 0.93,
     disclosureType: input.disclosureType,
     evidenceSource: "gdpr_transparency_topic_candidate",
-    evidenceText: "Localized bounded Article 13 evidence about personal data processing.",
+    evidenceText,
     matchStrength: "direct",
-    matchedLocale: "de",
-    matchedTerm: "personenbezogene daten",
+    matchedLocale: input.matchedLocale ?? "de",
+    matchedTerm: input.matchedTerm ?? "personenbezogene daten",
     productionCredit: input.productionCredit ?? true,
     productionCreditProfile: input.productionCreditProfile ?? "gdpr_transparency_multilingual_article13_v1",
     selectedEvidenceStrength: input.selectedEvidenceStrength ?? "strong",
-    selectedPolicySectionExcerpt: "Localized bounded Article 13 evidence about personal data processing.",
+    selectedPolicySectionExcerpt: evidenceText,
     selectedPolicySectionUrl: "https://example.test/privacy",
     source: "deterministic",
     status: input.status ?? "observed"
@@ -139,6 +143,67 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit t
       `${rowId} should retain normalized concern provenance`
     );
   }
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes credits French retention and recipient Article 13 evidence", () => {
+  const retentionEvidence =
+    "COMBIEN DE TEMPS CES INFORMATIONS SONT-ELLES CONSERVÉES ? D'une manière générale, vos données personnelles sont conservées en base active pour une durée conforme aux dispositions légales et proportionnelles aux finalités pour lesquelles elles ont été collectées.";
+  const recipientsEvidence =
+    "AVEC QUI PARTAGEONS-NOUS CES INFORMATIONS ? Vos données personnelles sont communiquées à nos prestataires et sous-traitants dans la mesure nécessaire à la gestion du Site, de l'Application et des Services souscrits.";
+  const signals = [
+    makeGdprTransparencyArticle13Signal({
+      disclosureType: "data_retention",
+      evidenceText: retentionEvidence,
+      matchedLocale: "fr",
+      matchedTerm: "données personnelles sont conservées"
+    }),
+    makeGdprTransparencyArticle13Signal({
+      disclosureType: "recipients_or_vendor_categories",
+      evidenceText: recipientsEvidence,
+      matchedLocale: "fr",
+      matchedTerm: "prestataires et sous-traitants"
+    })
+  ];
+
+  const summaryOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: signals,
+        gdprTransparencyEvidenceProfile: "gdpr_transparency_multilingual_article13_v1",
+        gdprTransparencyProductionEvidenceEnabled: true,
+        policyTextCoverageMode: "section_targeted",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4200,
+        privacyPolicyUrls: ["https://mentions-legales.example.test/page/politique-de-confidentialite"],
+        retainedPrivacyPolicyTextExcerpt: [retentionEvidence, recipientsEvidence].join(" ")
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(summaryOutcomes.retention_disclosure_observed?.status, "Observed");
+  assert.equal(summaryOutcomes.recipients_vendor_categories_disclosure?.status, "Observed");
+  assert.match(
+    retainedArticle13Signal(summaryOutcomes.retention_disclosure_observed!)?.evidenceText ?? "",
+    /conservées en base active/i
+  );
+  assert.match(
+    retainedArticle13Signal(summaryOutcomes.recipients_vendor_categories_disclosure!)?.evidenceText ?? "",
+    /prestataires et sous-traitants/i
+  );
+
+  const concernOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: makeGdprTransparencyConcerns(signals),
+    runtimeArtifacts: {},
+    snapshot: {}
+  });
+
+  assert.equal(concernOutcomes.retention_disclosure_observed?.status, "Observed");
+  assert.equal(concernOutcomes.recipients_vendor_categories_disclosure?.status, "Observed");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps automated profiling Article 13 evidence in review", () => {
