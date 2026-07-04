@@ -84,7 +84,7 @@ pnpm --filter certscore-mcp test
 pnpm --filter certscore-mcp typecheck
 pnpm --filter certscore-mcp build
 pnpm mcp:certscore:homebrew:build
-sha256sum --check artifacts/certscore-mcp-homebrew/SHA256SUMS
+(cd artifacts/certscore-mcp-homebrew && sha256sum --check SHA256SUMS)
 artifacts/certscore-mcp-homebrew/certscore-mcp-v$(node -e 'console.log(JSON.parse(require("fs").readFileSync("packages/certscore-mcp/package.json","utf8")).version)')/bin/certscore-mcp --version
 artifacts/certscore-mcp-homebrew/certscore-mcp-v$(node -e 'console.log(JSON.parse(require("fs").readFileSync("packages/certscore-mcp/package.json","utf8")).version)')/bin/certscore-mcp --help
 artifacts/certscore-mcp-homebrew/certscore-mcp-v$(node -e 'console.log(JSON.parse(require("fs").readFileSync("packages/certscore-mcp/package.json","utf8")).version)')/bin/certscore-mcp doctor

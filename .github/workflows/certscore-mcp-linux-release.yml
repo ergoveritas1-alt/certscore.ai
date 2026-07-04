@@ -71,7 +71,7 @@ jobs:
           test -f "$SHA256SUMS"
           "$RELEASE_DIR/bin/certscore-mcp" --version | grep -Fx "$VERSION"
           "$RELEASE_DIR/bin/certscore-mcp" --help >/dev/null
-          sha256sum --check "$SHA256SUMS"
+          (cd artifacts/certscore-mcp-homebrew && sha256sum --check SHA256SUMS)
 
           if tar tzf "$TARBALL" | grep -E '(^|/)\._'; then
             echo "AppleDouble entries found in $TARBALL" >&2
