@@ -54,6 +54,7 @@ const discoveryDocument = {
   api: {
     v2Health: "https://certscore.ai/api/v2/health",
     v2Openapi: "https://certscore.ai/api/v2/openapi.json",
+    v2RequestReadOnlyKey: "https://certscore.ai/api/v2/keys/request",
     v2CreateScan: "https://certscore.ai/api/v2/scans",
     v2Scan: "https://certscore.ai/api/v2/scans/{scanId}",
     v2ScanStatus: "https://certscore.ai/api/v2/scans/{scanId}/status",
@@ -136,11 +137,24 @@ const discoveryDocument = {
   ],
   responseFormats: ["application/json", "text/markdown"],
   authentication: {
-    summary: "Bearer API keys are supported for scoped API, SDK, and MCP integrations.",
-    accessStatus: "developer_preview_request",
+    summary:
+      "Bearer API keys are supported for scoped API, SDK, and MCP integrations. Read-only + MCP keys are self-serve for signed-in verified users; scan:create remains support-gated.",
+    accessStatus: "read_only_self_serve_scan_create_request",
+    selfServeReadOnly: {
+      route: "https://certscore.ai/api/v2/keys/request",
+      method: "POST",
+      requirements: ["signed_in_dashboard_session", "verified_email", "non_disposable_email"],
+      issuedScopes: ["scan:read", "mcp"],
+      tokenPrefix: "cs_ro_",
+      expiresInDays: 90,
+      rateLimits: {
+        requestsPerMinute: 60,
+        scanReadsPerDay: 500
+      }
+    },
     requestEmail: "support@certscore.ai",
     requestInstructions:
-      "Email support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes.",
+      "Use /api/v2/keys/request for read-only + MCP access. Email support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes for scan:create.",
     header: "Authorization: Bearer <token>",
     docs: "https://certscore.ai/developers/quickstart",
     currentScopes: ["scan:read", "scan:create", "mcp"],

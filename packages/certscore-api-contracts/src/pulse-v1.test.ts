@@ -101,7 +101,7 @@ test("MCP contracts expose the current scoped tool surface", () => {
     readOnlyHint: true,
     openWorldHint: true
   });
-  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.description.includes("Deprecated alias"), true);
+  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.description.includes("Deprecated compatibility alias"), true);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "list_findings")?.inputSchema.limit);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_pre_consent_cookies_trackers")?.inputSchema.maxRows);
 });
@@ -279,7 +279,8 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.1");
+  assert.equal(document.info.version, "0.1.2");
+  assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/scans"]);
   assert.ok(document.paths["/api/v2/scans/{scanId}/findings/{findingId}"]);
   assert.ok(document.paths["/api/v2/domains/{domain}/latest"]);
@@ -294,7 +295,8 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
     "getScanPreConsentCookiesTrackers",
     "getScanPulse",
     "getScanStatus",
-    "listScanFindings"
+    "listScanFindings",
+    "requestReadOnlyApiKey"
   ]);
   assert.match(document.info.description, /automated public-web observations for review/i);
   assert.match(document.info.description, /not legal advice, certification, or a compliance determination/i);
