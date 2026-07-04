@@ -29,6 +29,8 @@ type ExplainFindingInput = { scanId: string; findingId: string };
 type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_ie" };
 type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_ie" };
 
+let createScanDeprecationWarningPrinted = false;
+
 function toolContract(name: CertScoreMcpToolName): any {
   const contract = certScoreMcpToolContracts.find((candidate) => candidate.name === name);
   if (!contract) {
@@ -81,6 +83,10 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     toolContract("create_scan"),
     async (input: CreateScanInput) => {
       try {
+        if (!createScanDeprecationWarningPrinted) {
+          createScanDeprecationWarningPrinted = true;
+          console.error("[certscore-mcp] create_scan is deprecated and will be removed in 0.2.0. Use scan_site.");
+        }
         return toToolResult(await createPulseScanTool(input));
       } catch (error) {
         return toToolError(error);

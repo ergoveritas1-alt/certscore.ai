@@ -205,6 +205,14 @@ get_latest_domain_pre_consent_cookies_trackers({
             a short review handoff.
           </p>
         </Section>
+
+        <Section eyebrow="Deprecation" title="create_scan removal">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            <code className="rounded bg-white px-1">create_scan</code> is a deprecated compatibility alias. It will be removed in{" "}
+            <code className="rounded bg-white px-1">0.2.0</code>. Use <code className="rounded bg-white px-1">scan_site</code> for
+            scan creation.
+          </p>
+        </Section>
       </div>
     </DeveloperShell>
   );
