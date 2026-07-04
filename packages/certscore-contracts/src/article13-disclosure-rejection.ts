@@ -363,7 +363,8 @@ function hasLocalizedArticle13EvidenceContext(
     case "controller_contact":
       return /(?:controller|privacy contact|data protection contact|verantwortlicher|verantwortlich für die datenverarbeitung|responsable du traitement|responsable del tratamiento|titolare del trattamento|titolari del trattamento|verwerkingsverantwoordelijke|administrator danych)/i.test(normalized);
     case "dpo_contact":
-      return /(?:data protection officer|dpo|datenschutzbeauftrag|délégué à la protection|delegado de protección|responsabile della protezione|functionaris voor gegevensbescherming|inspektor ochrony danych|iod)/i.test(normalized);
+      return /(?:data protection officer|dpo|datenschutzbeauftrag|délégué à la protection|delegado de protección|responsabile della protezione|functionaris voor gegevensbescherming|inspektor ochrony danych|iod)/i.test(normalized) &&
+        /(?:reach|reached|available|contact|email|mail|address|postal|@\w|erreichen|kontakt|unter|postadresse|joignable|répond|repond|adresse|atiende|correo|contattar|contatto|risponde|indirizzo|bereikbaar|helpt|odpowiada|pytania)/i.test(normalized);
     case "processing_purposes":
       return /(?:purpose|purposes|why we process|we process|we use|zweck|zwecke|verarbeiten|verarbeitet|finalité|finalités|tratamos|finalidad|finalità|trattiamo|doeleinden|verwerken|cele|przetwarzamy)/i.test(normalized);
     case "legal_basis":

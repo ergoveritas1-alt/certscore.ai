@@ -111,6 +111,22 @@ test("Article 13 rejection contract preserves accepted legacy and multilingual e
   );
   assert.equal(
     isArticle13DisclosureEvidenceUsable(
+      "Unseren Datenschutzbeauftragten erreichen Sie unter datenschutzbeauftragter@example.test oder unserer Postadresse mit dem Zusatz Datenschutzbeauftragter.",
+      "dpo_contact",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "Il responsabile della protezione dei dati risponde tramite contatto DPO e può essere contattato all'indirizzo privacy@example.test.",
+      "dpo_contact",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
       "RCS e CRM sono autonomi Titolari del trattamento dei dati personali raccolti su questo sito ai sensi del GDPR.",
       "controller_contact",
       { mode: "multilingual_classifier" },
@@ -148,5 +164,24 @@ test("Article 13 rejection contract preserves accepted legacy and multilingual e
       { mode: "multilingual_classifier" },
     ),
     true,
+  );
+});
+
+test("Article 13 rejection contract rejects DPO nouns without a contact anchor", () => {
+  assert.equal(
+    article13DisclosureRejectReason(
+      "Die Behörde der Datenschutzbeauftragten beaufsichtigt bisher den Nachrichtendienst. Die Datenschutzbeauftragte wehrt sich gegen den Entzug der Kontrolle.",
+      "dpo_contact",
+      { mode: "multilingual_classifier" },
+    ),
+    "insufficient_row_specific_terms",
+  );
+  assert.equal(
+    article13DisclosureRejectReason(
+      "Responsabile della Protezione dei Dati Rinvio ad altre informative di ANSA Rinvio alla Privacy Policy dell'App ANSA.",
+      "dpo_contact",
+      { mode: "multilingual_classifier" },
+    ),
+    "insufficient_row_specific_terms",
   );
 });
