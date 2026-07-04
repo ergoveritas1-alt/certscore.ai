@@ -1881,6 +1881,25 @@ test("policySurfaceScanner does not let secondary-only surfaces satisfy core GDP
   });
 });
 
+test("policySurfaceScanner follows bounded privacy common paths when only cookie policy was retained", async () => {
+  await withPolicyScan("policy-cookie-link", async ({ result, baseUrl }) => {
+    const directlyFetchedCookie = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.discoveryMethod !== "guessed_common_path" &&
+      observation.surfaceType === "cookie_policy"
+    );
+    const fallbackPrivacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.discoveryMethod === "guessed_common_path" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/privacy`
+    );
+
+    assert.ok(directlyFetchedCookie);
+    assert.ok(fallbackPrivacy);
+  });
+});
+
 test("policySurfaceScanner common-path fallback includes localized privacy policy paths", async () => {
   await withPolicyScan("policy-no-links", async ({ result, baseUrl }) => {
     const fetchedPrivacyPaths = new Set(result.policySurfaceObservations
@@ -1893,7 +1912,9 @@ test("policySurfaceScanner common-path fallback includes localized privacy polic
 
     for (const expectedPath of [
       "/datenschutz",
+      "/privacy-statement",
       "/politica-de-privacidad",
+      "/politica-privacidad",
       "/informativa-privacy",
       "/privacybeleid",
     ]) {

@@ -878,6 +878,59 @@ test("summarizePolicySurfaces rejects script/config text as Article 13 policy ev
   ), true);
 });
 
+test("summarizePolicySurfaces treats commerce app-shell captures as low-quality policy text", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const commerceShellText = [
+    "GA NAAR HOOFDINHOUD Voor 23:55 besteld, morgen in huis.",
+    "Producten Aanbiedingen Recepten Goed eten Inspiratie Folder Klantenservice Inloggen Winkelwagen.",
+    "Boodschappenlijstjes Kies jouw winkel Producten niet beschikbaar Andere winkel kiezen Bevestigen.",
+    "Nieuwsbrief De beste aanbiedingen, acties, inspiratie en persoonlijke aanbevelingen in je inbox.",
+    "Algemene voorwaarden Privacy statement Actievoorwaarden Cookie informatie Belangrijke veiligheidswaarschuwing."
+  ].join(" ").repeat(3);
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "target-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/voorwaarden/privacy-statement",
+      confidence: 0.88,
+      status: "fetched",
+      textExcerpt: commerceShellText,
+      observedTopics: ["cookies"]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "low_quality_extracted_code_or_config");
+  assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_text_low_quality_or_non_policy_content");
+  assert.equal(summary.policyTextExtractionHealth.policyTextQuality.reason, "low_quality_app_shell_text");
+  assert.deepEqual(summary.article13DisclosureSignals, []);
+  assert.deepEqual(summary.article13DisclosureTypesObserved, []);
+
+  const spanishShellText = [
+    "Supermercado online Pide hoy, recibe hoy Entrega rápida en la franja horaria que mejor te venga.",
+    "Productos Ofertas Recetas Iniciar sesión Pedidos y listas Carrito Atención al cliente.",
+    "Folletos y Tiendas Descubre las mejores ofertas y busca tu tienda más cercana.",
+    "Política de privacidad Política de cookies Aviso legal Condiciones de compra."
+  ].join(" ").repeat(3);
+  const spanishSurfaces = dedupePolicySurfaces([
+    {
+      observationId: "target-privacy-es",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/politica-de-privacidad",
+      confidence: 0.88,
+      status: "fetched",
+      textExcerpt: spanishShellText,
+      observedTopics: ["cookies"]
+    }
+  ] as never, "https://example.test/");
+  const spanishSummary = summarizePolicySurfaces(spanishSurfaces, "example.test");
+
+  assert.equal(spanishSummary.policyTextExtractionHealth.policyTextQuality.reason, "low_quality_app_shell_text");
+  assert.deepEqual(spanishSummary.article13DisclosureSignals, []);
+});
+
 test("summarizePolicySurfaces separates weak Article 13 candidates from validated disclosure signals", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([

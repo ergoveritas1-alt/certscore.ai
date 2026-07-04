@@ -138,9 +138,13 @@ test("uses URL patterns as canonical surface hints without display-layer inferen
 test("uses localized URL patterns as canonical surface hints", () => {
   const examples = [
     ["https://example.test/datenschutz", "privacy_policy"],
+    ["https://example.test/privacy-statement", "privacy_policy"],
     ["https://example.test/politique-de-confidentialite", "privacy_policy"],
+    ["https://example.test/proteccion-de-datos", "privacy_policy"],
     ["https://example.test/politica-de-privacidad", "privacy_policy"],
+    ["https://example.test/politica-privacidad", "privacy_policy"],
     ["https://example.test/informativa-privacy", "privacy_policy"],
+    ["https://example.test/trattamento-dati", "privacy_policy"],
     ["https://example.test/privacybeleid", "privacy_policy"],
     ["https://example.test/polityka-prywatnosci", "privacy_policy"],
     ["https://example.test/cookie-richtlinie", "cookie_policy"],

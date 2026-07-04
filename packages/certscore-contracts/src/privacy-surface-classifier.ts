@@ -201,10 +201,11 @@ const URL_SURFACE_PATTERNS: Array<{
 }> = [
   { surfaceType: "cookie_policy", pattern: /privacy[-_/]cookie[-_/]statement|privacy[-_/]and[-_/]cookies?|privacy[-_/]cookies?/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_-])privacy(?:[-_/]policy|[-_/]notice|[-_/]statement)?(?:$|[/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_-])privacy[-_/]statement(?:$|[/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])datenschutz(?:erkl[aä]rung|information)?(?:$|[\s/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:politique[-_\s/](?:de[-_\s/])?confidentialit[eé]|protection[-_\s/](?:des[-_\s/])?donn[eé]es(?:[-_\s/]personnelles)?)(?:$|[\s/?#._-])/i },
-  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:pol[ií]tica[-_\s/](?:de[-_\s/])?privacidad|privacidad)(?:$|[\s/?#._-])/i },
-  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:informativa[-_\s/](?:sulla[-_\s/])?privacy|privacy)(?:$|[\s/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:pol[ií]tica[-_\s/](?:de[-_\s/])?privacidad|protecci[oó]n[-_\s/](?:de[-_\s/])?datos|privacidad)(?:$|[\s/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:informativa[-_\s/](?:sulla[-_\s/])?privacy|trattamento[-_\s/](?:dei[-_\s/])?dati|privacy)(?:$|[\s/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:privacybeleid|privacyverklaring|privacy[-_\s/]reglement)(?:$|[\s/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:polityka[-_\s/]prywatno(?:sci|ści)|prywatno(?:sc|ść))(?:$|[\s/?#._-])/i },
   { surfaceType: "cookie_policy", pattern: /(?:^|[/_-])cookies?(?:[-_/]policy|[-_/]notice|[-_/]statement)?(?:$|[/?#._-])/i },

@@ -1926,6 +1926,14 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Privacy Policy",
       body: "Effective date: May 1, 2026. We describe cookies, analytics, advertising, and privacy choices for visitors.",
     },
+    "/privacy-statement": {
+      title: "Privacy Statement",
+      body: "Privacy Statement. We describe the personal data we collect, why we process it, how long we retain it, and how you can exercise privacy rights.",
+    },
+    "/privacy-statement/": {
+      title: "Privacy Statement",
+      body: "Privacy Statement. We describe the personal data we collect, why we process it, how long we retain it, and how you can exercise privacy rights.",
+    },
     "/privacy-notice": {
       title: "Privacy Notice",
       body: "Caltech Privacy Notice. We describe the personal information we collect, the purposes for processing, cookies, analytics, and privacy contact information.",
@@ -1938,9 +1946,21 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Politique de confidentialité",
       body: "Politique de confidentialité. Nous décrivons le traitement des données personnelles, les finalités, la base juridique, les destinataires, la durée de conservation et vos droits.",
     },
+    "/politica-privacidad": {
+      title: "Política privacidad",
+      body: "Política de privacidad. Describimos el tratamiento de datos personales, las finalidades, la base jurídica, los destinatarios, la conservación y sus derechos.",
+    },
+    "/proteccion-de-datos": {
+      title: "Protección de datos",
+      body: "Protección de datos. Informamos sobre el responsable del tratamiento, los fines del tratamiento, la base jurídica, los destinatarios y los derechos de las personas interesadas.",
+    },
     "/informativa-privacy": {
       title: "Informativa sulla privacy",
       body: "Informativa sulla privacy. Descriviamo il trattamento dei dati personali, le finalità, la base giuridica, i destinatari, la conservazione e i diritti dell'interessato.",
+    },
+    "/trattamento-dati": {
+      title: "Trattamento dati personali",
+      body: "Informativa sul trattamento dei dati personali. Descriviamo finalità del trattamento, basi giuridiche, destinatari, conservazione e diritti dell'interessato.",
     },
     "/privacybeleid": {
       title: "Privacybeleid",

@@ -19,6 +19,7 @@ const SOURCE_SCANNER = "policy_surface";
 const SCENARIO = "policy_surface_review";
 const MAX_CANDIDATES_TO_FETCH = 8;
 const MAX_COMMON_PATH_CANDIDATES_TO_FETCH = 18;
+const MAX_PRIVACY_ONLY_COMMON_PATH_CANDIDATES_TO_FETCH = 8;
 const COMMON_PATH_BLOCKED_EARLY_STOP_FAILURES = 6;
 const COMMON_PATH_TRANSPORT_EARLY_STOP_FAILURES = 4;
 const COMMON_PATH_APP_SHELL_EARLY_STOP_FETCHES = 3;
@@ -466,6 +467,32 @@ export async function policySurfaceScanner(
       });
       observations.push(...secondaryResults.observations);
       artifactRefs.push(...secondaryResults.artifactRefs);
+    }
+
+    if (
+      !commonPathFallbackUsed &&
+      !hasRetainedFirstPartyPrivacyPolicy(input.normalizedUrl, observations) &&
+      commonPathCandidates.length > 0 &&
+      !shouldSkipCommonPathAfterBlockedDirectCore(observations)
+    ) {
+      commonPathFallbackUsed = true;
+      const attemptedUrls = new Set(observations
+        .map((observation) => observation.normalizedUrl ?? observation.url)
+        .filter((value): value is string => Boolean(value)));
+      const privacyCommonPathCandidates = deterministicCommonPathFetchFallback(commonPathCandidates)
+        .filter((candidate) => candidate.deterministicSurfaceType === "privacy_policy")
+        .filter((candidate) => !attemptedUrls.has(candidate.normalizedUrl))
+        .slice(0, MAX_PRIVACY_ONLY_COMMON_PATH_CANDIDATES_TO_FETCH);
+      const privacyCommonPathResults = await fetchPolicyCandidateGroup({
+        input,
+        timingBreakdown,
+        moduleStartedAtMs,
+        rankedCandidates: privacyCommonPathCandidates,
+        labelPrefix: "privacy-only common-path policy",
+        policySurfaceTextArtifactBudget,
+      });
+      observations.push(...privacyCommonPathResults.observations);
+      artifactRefs.push(...privacyCommonPathResults.artifactRefs);
     }
 
     observations.push(...privacyAliasesForCombinedPrivacyCookieSurfaces(observations));
@@ -2013,6 +2040,8 @@ function commonPolicyPathsFor(baseUrl: string, localeHints: SupportedPrivacyEvid
     "/privacy",
     "/privacy-policy",
     "/privacy-policy/",
+    "/privacy-statement",
+    "/privacy-statement/",
     "/privacy-notice",
   ];
   const genericSecondaryPaths = [
@@ -2046,8 +2075,8 @@ function commonPolicyPathsFor(baseUrl: string, localeHints: SupportedPrivacyEvid
     en: [],
     de: ["/datenschutz", "/datenschutzerklaerung", "/datenschutzerklärung"],
     fr: ["/confidentialite", "/confidentialité", "/politique-de-confidentialite", "/politique-de-confidentialité"],
-    es: ["/privacidad", "/politica-de-privacidad", "/política-de-privacidad"],
-    it: ["/informativa-privacy", "/informativa-sulla-privacy"],
+    es: ["/privacidad", "/politica-de-privacidad", "/política-de-privacidad", "/politica-privacidad", "/proteccion-de-datos", "/protección-de-datos"],
+    it: ["/informativa-privacy", "/informativa-sulla-privacy", "/trattamento-dati", "/trattamento-dei-dati"],
     nl: ["/privacybeleid", "/privacyverklaring"],
     pl: ["/prywatnosc", "/prywatność", "/polityka-prywatnosci", "/polityka-prywatności"],
   };
@@ -2056,6 +2085,7 @@ function commonPolicyPathsFor(baseUrl: string, localeHints: SupportedPrivacyEvid
     "/datenschutz",
     "/politique-de-confidentialite",
     "/politica-de-privacidad",
+    "/politica-privacidad",
     "/informativa-privacy",
     "/privacybeleid",
     "/polityka-prywatnosci",
@@ -2265,7 +2295,7 @@ function commonPathPriority(candidate: PolicySurfaceCandidate): number {
   if (/\/help\/articles\/privacy-hub-home\/?$/.test(path) || /\/poufnosc\/?$/.test(path)) {
     return 4;
   }
-  if (/(?:datenschutz|datenschutzerklaerung|datenschutzerklärung|confidentialit[eé]|politique-de-confidentialit[eé]|privacidad|politica-de-privacidad|política-de-privacidad|informativa-privacy|informativa-sulla-privacy|privacybeleid|privacyverklaring|prywatnosc|prywatność|polityka-prywatnosci|polityka-prywatności)/.test(path)) {
+  if (/(?:privacy-statement|datenschutz|datenschutzerklaerung|datenschutzerklärung|confidentialit[eé]|politique-de-confidentialit[eé]|privacidad|politica-de-privacidad|política-de-privacidad|politica-privacidad|proteccion-de-datos|protección-de-datos|informativa-privacy|informativa-sulla-privacy|trattamento-dati|trattamento-dei-dati|privacybeleid|privacyverklaring|prywatnosc|prywatność|polityka-prywatnosci|polityka-prywatności)/.test(path)) {
     return 5;
   }
   if (path === "/help/privacy" || path === "/help/privacy/") {
@@ -2488,6 +2518,18 @@ function hasRetainedCorePolicyOrControlSurface(observations: PolicySurfaceObserv
   return observations.some((observation) =>
     (observation.status === "fetched" || observation.status === "observed") &&
     isCorePolicyOrControlSurface(observation) &&
+    !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
+  );
+}
+
+function hasRetainedFirstPartyPrivacyPolicy(
+  normalizedScanUrl: string,
+  observations: PolicySurfaceObservation[],
+): boolean {
+  return observations.some((observation) =>
+    (observation.status === "fetched" || observation.status === "observed") &&
+    observation.surfaceType === "privacy_policy" &&
+    observationMatchesScanOrigin(normalizedScanUrl, observation) &&
     !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
   );
 }
@@ -4455,6 +4497,9 @@ function policyTextQualityScore(text: string): number {
   if (/repeated (header|footer) noise|global navigation|footer links about/i.test(normalized)) {
     score -= 80;
   }
+  if (looksLikeCommerceAppShellPolicyText(normalized, quality)) {
+    score -= 160;
+  }
   if (/processing error|loadnotices|privacy center.*error/i.test(normalized)) {
     score -= 120;
   }
@@ -4556,6 +4601,15 @@ function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
     reason = "low_quality_extracted_code_or_config";
   } else if (normalized.length >= 500 && policyTermCount < 2 && topicMatchCount < 1 && naturalLanguageSentenceCount < 2) {
     reason = "low_quality_non_policy_text";
+  } else if (looksLikeCommerceAppShellPolicyText(normalized, {
+    alphabeticWordRatio,
+    codeSignalCount,
+    codeSymbolRatio,
+    naturalLanguageSentenceCount,
+    policyTermCount,
+    usable: true,
+  })) {
+    reason = "low_quality_app_shell_text";
   }
 
   return {
@@ -4567,6 +4621,45 @@ function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
     reason,
     usable: !reason
   };
+}
+
+function looksLikeCommerceAppShellPolicyText(
+  value: string,
+  quality: Pick<
+    PolicyTextQualityAssessment,
+    "alphabeticWordRatio" | "codeSignalCount" | "codeSymbolRatio" | "naturalLanguageSentenceCount" | "policyTermCount" | "usable"
+  >,
+): boolean {
+  const normalized = normalizeWhitespace(value).toLowerCase();
+  if (normalized.length < 700 || normalized.length > 8_000) {
+    return false;
+  }
+  const topicMatchCount = gdprTransparencyTopicMatchCount(normalized);
+  if (topicMatchCount > 0 || quality.policyTermCount >= 3 || quality.naturalLanguageSentenceCount >= 2) {
+    return false;
+  }
+  const commerceShellSignals = [
+    "producten", "aanbiedingen", "recepten", "folder", "winkelwagen", "klantenservice", "inloggen", "boodschappenlijstjes", "gratis bezorging", "bestellen",
+    "products", "offers", "recipes", "basket", "cart", "checkout", "customer service", "sign in", "delivery", "order online",
+    "produits", "offres", "recettes", "panier", "service client", "connexion", "livraison", "commander",
+    "productos", "ofertas", "recetas", "carrito", "atención al cliente", "atencion al cliente", "iniciar sesión", "iniciar sesion", "entrega", "pedido",
+    "prodotti", "offerte", "ricette", "carrello", "servizio clienti", "accedi", "consegna", "ordina",
+    "produkty", "oferty", "przepisy", "koszyk", "obsługa klienta", "obsluga klienta", "zaloguj", "dostawa", "zamów", "zamow",
+  ].filter((term) => normalized.includes(term)).length;
+  const policyShellSignals = [
+    /\bprivacy statement\b/i,
+    /\bcookie informatie\b/i,
+    /\balgemene voorwaarden\b/i,
+    /\bterms\b/i,
+    /\bcookie policy\b/i,
+    /\bprivacy policy\b/i,
+    /\bpolitique de confidentialit[eé]\b/i,
+    /\bpol[ií]tica de privacidad\b/i,
+    /\bpol[ií]tica de cookies\b/i,
+    /\binformativa (?:sulla )?privacy\b/i,
+    /\bpolityka prywatno(?:sci|ści)\b/i,
+  ].filter((pattern) => pattern.test(normalized)).length;
+  return commerceShellSignals >= 2 && policyShellSignals >= 1;
 }
 
 function gdprTransparencyTopicMatchCount(text: string): number {

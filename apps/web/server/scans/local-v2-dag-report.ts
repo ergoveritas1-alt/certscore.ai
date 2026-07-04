@@ -8,6 +8,7 @@ import { Readable } from "node:stream";
 import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   classifyConsentControlLabel,
+  classifyGdprTransparencyTopics,
   isProductionCreditworthySupplementalConsentControlClassification,
   type CanonicalEvidenceBundle,
   type ConsentControlLabelClassification
@@ -1674,6 +1675,10 @@ function assessRetainedPolicyTextQuality(value: string, options: { multilingual?
   const policyTermCount = uniqueStrings((text.match(policyTermPattern) ?? []).map((value) => value.toLowerCase())).length;
   const escapedUrlCount = (text.match(/\\x2f|\\u003c|\\u003e|https?:\\\/\\\//gi) ?? []).length;
   const minifiedTokenCount = (text.match(/[A-Za-z_$][\w$]{0,8}\s*[=:]\s*\S{40,}/g) ?? []).length;
+  const commerceAppShellText = looksLikeCommerceAppShellPolicyText(text, {
+    naturalLanguageSentenceCount,
+    policyTermCount
+  });
   const reason =
     /\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(text) ||
     (codeSignals >= 2 && naturalLanguageSentenceCount < 3) ||
@@ -1682,6 +1687,8 @@ function assessRetainedPolicyTextQuality(value: string, options: { multilingual?
     (minifiedTokenCount >= 2 && naturalLanguageSentenceCount < 4) ||
     (text.length >= 500 && alphabeticWordRatio < 0.42)
       ? "low_quality_extracted_code_or_config"
+      : commerceAppShellText
+        ? "low_quality_app_shell_text"
       : text.length >= 500 && policyTermCount < 2 && naturalLanguageSentenceCount < 2
         ? "low_quality_non_policy_text"
         : undefined;
@@ -1694,6 +1701,44 @@ function assessRetainedPolicyTextQuality(value: string, options: { multilingual?
     reason,
     usable: !reason
   };
+}
+
+function looksLikeCommerceAppShellPolicyText(
+  value: string,
+  quality: { naturalLanguageSentenceCount: number; policyTermCount: number },
+) {
+  const normalized = value.replace(/\s+/g, " ").trim().toLowerCase();
+  if (normalized.length < 700 || normalized.length > 8_000) {
+    return false;
+  }
+  const topicMatchCount = classifyGdprTransparencyTopics({
+    text: normalized.slice(0, 40_000)
+  }).matches.length;
+  if (topicMatchCount > 0 || quality.policyTermCount >= 3 || quality.naturalLanguageSentenceCount >= 2) {
+    return false;
+  }
+  const commerceShellSignals = [
+    "producten", "aanbiedingen", "recepten", "folder", "winkelwagen", "klantenservice", "inloggen", "boodschappenlijstjes", "gratis bezorging", "bestellen",
+    "products", "offers", "recipes", "basket", "cart", "checkout", "customer service", "sign in", "delivery", "order online",
+    "produits", "offres", "recettes", "panier", "service client", "connexion", "livraison", "commander",
+    "productos", "ofertas", "recetas", "carrito", "atención al cliente", "atencion al cliente", "iniciar sesión", "iniciar sesion", "entrega", "pedido",
+    "prodotti", "offerte", "ricette", "carrello", "servizio clienti", "accedi", "consegna", "ordina",
+    "produkty", "oferty", "przepisy", "koszyk", "obsługa klienta", "obsluga klienta", "zaloguj", "dostawa", "zamów", "zamow",
+  ].filter((term) => normalized.includes(term)).length;
+  const policyShellSignals = [
+    /\bprivacy statement\b/i,
+    /\bcookie informatie\b/i,
+    /\balgemene voorwaarden\b/i,
+    /\bterms\b/i,
+    /\bcookie policy\b/i,
+    /\bprivacy policy\b/i,
+    /\bpolitique de confidentialit[eé]\b/i,
+    /\bpol[ií]tica de privacidad\b/i,
+    /\bpol[ií]tica de cookies\b/i,
+    /\binformativa (?:sulla )?privacy\b/i,
+    /\bpolityka prywatno(?:sci|ści)\b/i,
+  ].filter((pattern) => pattern.test(normalized)).length;
+  return commerceShellSignals >= 2 && policyShellSignals >= 1;
 }
 
 function retainedArticle13SignalIsUsable(value: string, disclosureType: string | undefined) {
