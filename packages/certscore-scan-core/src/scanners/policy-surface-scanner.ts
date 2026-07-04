@@ -2583,16 +2583,24 @@ function extractPolicyFacts(text: string): PolicyFacts {
   const observedTopics = unique(rules.filter(([, pattern]) => pattern.test(text)).map(([topic]) => topic));
   const keywords = rules.filter(([, pattern]) => pattern.test(text)).map(([, , keyword]) => keyword);
   const vendors = knownVendorMentions(text);
+  const gdprTransparencyTopicCandidates = gdprTransparencyTopicCandidatesFromText(text);
   const legacyArticle13Signals = article13SignalsFromText(text);
+  const classifierArticle13Signals = article13SignalsFromGdprTransparencyTopicCandidates(gdprTransparencyTopicCandidates, text);
   const article13Signals = mergeArticle13DisclosureSignals({
     ...emptyPolicyFacts(),
-    article13DisclosureSignals: legacyArticle13Signals.article13DisclosureSignals,
-    discardedArticle13DisclosureSignals: legacyArticle13Signals.discardedArticle13DisclosureSignals,
+    article13DisclosureSignals: [
+      ...legacyArticle13Signals.article13DisclosureSignals,
+      ...classifierArticle13Signals.article13DisclosureSignals,
+    ],
+    discardedArticle13DisclosureSignals: [
+      ...legacyArticle13Signals.discardedArticle13DisclosureSignals,
+      ...classifierArticle13Signals.discardedArticle13DisclosureSignals,
+    ],
   }, undefined);
   return {
     observedTopics,
     ...article13Signals,
-    gdprTransparencyTopicCandidates: gdprTransparencyTopicCandidatesFromText(text),
+    gdprTransparencyTopicCandidates,
     retainedArticle13SectionEvidence: [],
     mentionedVendors: vendors,
     mentionedPurposes: unique(observedTopics.filter((topic) => ["analytics", "advertising", "targeted_advertising"].includes(topic))),
@@ -2619,6 +2627,74 @@ function gdprTransparencyTopicCandidatesFromText(text: string): PolicySurfaceObs
     classifierReasonCodes: match.reasonCodes,
     productionCredit: false as const,
   }));
+}
+
+function article13SignalsFromGdprTransparencyTopicCandidates(
+  candidates: PolicySurfaceObservation["gdprTransparencyTopicCandidates"],
+  sourceText: string,
+): Pick<PolicyFacts, "article13DisclosureSignals" | "discardedArticle13DisclosureSignals"> {
+  const article13DisclosureSignals: PolicySurfaceObservation["article13DisclosureSignals"] = [];
+  const discardedArticle13DisclosureSignals: PolicySurfaceObservation["discardedArticle13DisclosureSignals"] = [];
+
+  for (const candidate of candidates) {
+    if (!candidate.productionCredit && candidate.confidence < 0.8) {
+      continue;
+    }
+    if (candidate.matchStrength !== "direct" && candidate.matchStrength !== "equivalent") {
+      continue;
+    }
+    const sourceRejectReason = sharedArticle13DisclosureRejectReason(
+      boundedGdprTransparencyClassifierText(sourceText),
+      candidate.topic,
+      { mode: "multilingual_classifier" },
+    );
+    if (
+      sourceRejectReason === "page_chrome_or_navigation" ||
+      sourceRejectReason === "table_of_contents_only" ||
+      sourceRejectReason === "code_or_non_policy_excerpt"
+    ) {
+      discardedArticle13DisclosureSignals.push({
+        disclosureType: candidate.topic,
+        evidenceText: candidate.evidenceText,
+        rejectReason: sourceRejectReason,
+        confidence: candidate.confidence,
+        source: "deterministic",
+      });
+      continue;
+    }
+    const rejectReason = sharedArticle13DisclosureRejectReason(candidate.evidenceText, candidate.topic, {
+      mode: "multilingual_classifier",
+    });
+    if (rejectReason) {
+      discardedArticle13DisclosureSignals.push({
+        disclosureType: candidate.topic,
+        evidenceText: candidate.evidenceText,
+        rejectReason,
+        confidence: candidate.confidence,
+        source: "deterministic",
+      });
+      continue;
+    }
+    article13DisclosureSignals.push({
+      disclosureType: candidate.topic,
+      status: candidate.confidence >= 0.88 && candidate.matchStrength === "direct" ? "observed" : "partial",
+      evidenceText: candidate.evidenceText,
+      confidence: candidate.confidence,
+      source: "deterministic",
+      evidenceSource: "deterministic",
+      selectedEvidenceStrength: candidate.confidence >= 0.88 ? "strong" : "partial",
+      classifierProvenance: candidate.classifierProvenance,
+      matchedLocale: candidate.matchedLocale,
+      matchedTerm: candidate.matchedTerm,
+      matchStrength: candidate.matchStrength,
+      classifierReasonCodes: candidate.classifierReasonCodes,
+    });
+  }
+
+  return {
+    article13DisclosureSignals,
+    discardedArticle13DisclosureSignals,
+  };
 }
 
 export function gdprTransparencyTopicCandidatesFromRetainedPolicySections(
@@ -2808,8 +2884,15 @@ function policyFactsForFetchedDocument(
   }
   return {
     ...emptyPolicyFacts(),
+    article13DisclosureSignals: facts.article13DisclosureSignals.filter((signal) =>
+      signal.classifierProvenance === "gdpr_transparency_topic_classifier.v1"
+    ),
+    discardedArticle13DisclosureSignals: facts.discardedArticle13DisclosureSignals,
     gdprTransparencyTopicCandidates: facts.gdprTransparencyTopicCandidates,
-    confidence: facts.gdprTransparencyTopicCandidates.length > 0 ? Math.max(0.62, facts.confidence) : facts.confidence,
+    confidence: facts.gdprTransparencyTopicCandidates.length > 0 ||
+      facts.article13DisclosureSignals.some((signal) => signal.classifierProvenance === "gdpr_transparency_topic_classifier.v1")
+      ? Math.max(0.62, facts.confidence)
+      : facts.confidence,
     keywords: facts.keywords,
   };
 }
@@ -3029,7 +3112,11 @@ function mergeArticle13DisclosureSignals(
   const byType = new Map<string, PolicySurfaceObservation["article13DisclosureSignals"][number]>();
   const discardedArticle13DisclosureSignals = [...deterministic.discardedArticle13DisclosureSignals];
   for (const signal of [...deterministic.article13DisclosureSignals, ...(assisted?.article13DisclosureSignals ?? [])]) {
-    const rejectReason = article13DisclosureRejectReason(signal.evidenceText ?? "", signal.disclosureType);
+    const rejectReason = article13DisclosureRejectReason(
+      signal.evidenceText ?? "",
+      signal.disclosureType,
+      signal.classifierProvenance === "gdpr_transparency_topic_classifier.v1" ? "multilingual_classifier" : "scan_core",
+    );
     if (rejectReason) {
       discardedArticle13DisclosureSignals.push({
         disclosureType: signal.disclosureType,
@@ -4156,9 +4243,10 @@ function isArticle13DisclosureEvidenceUsable(
 
 function article13DisclosureRejectReason(
   value: string,
-  disclosureType: PolicySurfaceObservation["article13DisclosureSignals"][number]["disclosureType"]
+  disclosureType: PolicySurfaceObservation["article13DisclosureSignals"][number]["disclosureType"],
+  mode: "scan_core" | "multilingual_classifier" = "scan_core",
 ): PolicySurfaceObservation["discardedArticle13DisclosureSignals"][number]["rejectReason"] | null {
-  return sharedArticle13DisclosureRejectReason(value, disclosureType, { mode: "scan_core" });
+  return sharedArticle13DisclosureRejectReason(value, disclosureType, { mode });
 }
 
 function looksLikePrivacyCenterShell(text: string): boolean {

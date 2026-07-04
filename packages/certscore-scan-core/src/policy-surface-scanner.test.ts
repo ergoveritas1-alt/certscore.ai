@@ -393,7 +393,7 @@ test("policySurfaceScanner does not classify unrelated footer links from neighbo
   });
 });
 
-test("policySurfaceScanner retains canonical GDPR Transparency topic candidates across supported locales without default production credit", async () => {
+test("policySurfaceScanner promotes usable multilingual GDPR Transparency topic evidence into Article 13 signals", async () => {
   await withPolicyScan("policy-multilingual-article13-topics", async ({ result, baseUrl }) => {
     const expectedTopics = [
       "controller_contact",
@@ -441,17 +441,27 @@ test("policySurfaceScanner retains canonical GDPR Transparency topic candidates 
         assert.ok(candidate.evidenceText.length <= 640, `${locale} ${topic} evidence should be bounded`);
       }
 
+      const classifierSignals = privacy.article13DisclosureSignals.filter((signal) =>
+        signal.classifierProvenance === "gdpr_transparency_topic_classifier.v1"
+      );
+      assert.ok(
+        locale === "en" || classifierSignals.length >= 2,
+        `${locale} should promote at least two usable classifier-backed Article 13 signals; got ${classifierSignals.map((signal) => signal.disclosureType).join(", ")}`,
+      );
       assert.equal(
-        privacy.article13DisclosureSignals.some((signal) => signal.classifierProvenance === "gdpr_transparency_topic_classifier.v1"),
-        false,
-        `${locale} classifier candidates must not be promoted to Article 13 signals by default`,
+        classifierSignals.every((signal) =>
+          signal.evidenceText !== undefined &&
+          signal.evidenceText.length <= 640 &&
+          (signal.status === "observed" || signal.status === "partial")
+        ),
+        true,
+        `${locale} classifier Article 13 signals should stay bounded`,
       );
 
       if (locale !== "en") {
         const productionArticle13Topics = expectedTopics.map((topic) =>
           topic === "automated_decision_making_or_profiling" ? "profiling_or_automated_decision_making" : topic
         );
-        assert.deepEqual(privacy.article13DisclosureSignals, [], `${locale} classifier-only matches should not create Article 13 signals`);
         assert.equal(
           privacy.observedTopics.some((topic) => productionArticle13Topics.includes(topic)),
           false,
@@ -533,10 +543,13 @@ test("policySurfaceScanner retains diagnostic GDPR Transparency candidates from 
       assert.ok(candidate.evidenceText.length <= 640);
     }
 
-    assert.deepEqual(
-      privacy.article13DisclosureSignals.filter((signal) => signal.classifierProvenance === "gdpr_transparency_topic_classifier.v1"),
-      [],
-      "classifier-only encoded candidates must not become Article 13 signals by default",
+    assert.equal(
+      privacy.article13DisclosureSignals.some((signal) =>
+        signal.classifierProvenance === "gdpr_transparency_topic_classifier.v1" &&
+        signal.disclosureType === "controller_contact"
+      ),
+      true,
+      "usable encoded classifier evidence should become bounded Article 13 signals",
     );
   });
 });
@@ -717,7 +730,16 @@ test("policySurfaceScanner extracts bounded Dutch GDPR Transparency evidence fro
       assert.ok(candidate.evidenceText.length <= 640);
     }
 
-    assert.deepEqual(privacy.article13DisclosureSignals, [], "PDF classifier evidence must not create default Article 13 signals");
+    for (const topic of ["supervisory_authority"] as const) {
+      assert.equal(
+        privacy.article13DisclosureSignals.some((signal) =>
+          signal.classifierProvenance === "gdpr_transparency_topic_classifier.v1" &&
+          signal.disclosureType === topic
+        ),
+        true,
+        `Dutch privacy PDF should promote usable classifier evidence for ${topic}`,
+      );
+    }
     assert.deepEqual(privacy.observedTopics, [], "PDF classifier evidence must not create default observed topics");
   });
 });

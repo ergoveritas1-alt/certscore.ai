@@ -99,9 +99,18 @@ export function looksLikeArticle13TableOfContents(
   const text = normalizeArticle13Whitespace(value);
   const mode = options.mode ?? "scan_core";
   const tocTokens = mode === "multilingual_classifier"
-    ? (text.match(/\b(?:introduction|information (?:we|google) collects?|why (?:we|google) collects?|your privacy controls|sharing your information|keeping your information|exporting|deleting|retaining|terms|faq|controller|legal basis|recipients|retention|rights|transfers|complaints)\b/gi) ?? []).length
+    ? (text.match(/\b(?:introduction|information (?:we|google) collects?|why (?:we|google) collects?|your privacy controls|sharing your information|keeping your information|exporting|deleting|retaining|terms|faq|controller|legal basis|recipients|retention|rights|transfers|complaints|inhaltsverzeichnis|table des matières|sommaire|navigation de la politique|índice|indice|inhoudsopgave|spis treści|artykuł pomocy|szablon formularza|zwecke der verarbeitung|rechtsgrundlage|kategorien von empfängern|speicherdauer|recht auf auskunft|übermittlung personenbezogener daten|beschwerde bei einer aufsichtsbehörde|finalités du traitement|base juridique|catégories de destinataires|durée de conservation|droit d'accès|transferts internationaux|autorité de contrôle|finalidades del tratamiento|base jurídica|categorías de destinatarios|plazo de conservación|derecho de acceso|transferencias internacionales|autoridad de control|finalità del trattamento|base giuridica|categorie di destinatari|periodo di conservazione|diritto di accesso|trasferimenti internazionali|autorità di controllo|doeleinden van de verwerking|rechtsgrondslag|categorieën van ontvangers|bewaartermijn|recht op inzage|internationale doorgiften|toezichthoudende autoriteit|cele przetwarzania|podstawa prawna|kategorie odbiorców|okres przechowywania|prawo dostępu|transfery międzynarodowe|organ(?:u)? nadzorcz)/gi) ?? []).length
     : (text.match(/\b(?:introduction|information (?:we|google) collects?|why (?:we|google) collects?|your privacy controls|sharing your information|keeping your information|exporting|deleting|retaining|terms|faq)\b/gi) ?? []).length;
-  const hasDisclosureVerb = /\b(?:we|you|our)\s+(?:use|process|collect|retain|keep|store|share|transfer|disclose|provide|may|can|have|request|exercise)\b/i.test(text);
+  const hasDisclosureVerb = mode === "multilingual_classifier"
+    ? /\b(?:we|you|our)\s+(?:use|process|collect|retain|keep|store|share|transfer|disclose|provide|may|can|have|request|exercise)\b/i.test(text) ||
+      /\b(?:wir|sie|ihre|unsere)\s+(?:nutzen|verwenden|verarbeiten|speichern|teilen|übermitteln|erklären|beschreiben)\b/i.test(text) ||
+      /\b(?:nous|vous|notre|nos)\s+(?:utilisons|traitons|collectons|conservons|partageons|transférons|expliquons)\b/i.test(text) ||
+      /\b(?:nosotros|usted|sus|nuestro)\s+(?:usamos|tratamos|recogemos|conservamos|compartimos|transferimos|explicamos)\b/i.test(text) ||
+      /\b(?:noi|tu|suoi|nostri)\s+(?:utilizziamo|trattiamo|raccogliamo|conserviamo|condividiamo|trasferiamo|spieghiamo)\b/i.test(text) ||
+      /\b(?:wij|u|uw|onze)\s+(?:gebruiken|verwerken|bewaren|delen|verstrekken|beschrijven)\b/i.test(text) ||
+      /\b(?:my|użytkownik|twoje|nasze)\s+(?:używamy|przetwarzamy|przechowujemy|udostępniamy|opisujemy)\b/i.test(text) ||
+      /\b(?:erklären|beschreiben|expliquons|explicamos|spieghiamo|beschrijven|opisujemy)\b/i.test(text)
+    : /\b(?:we|you|our)\s+(?:use|process|collect|retain|keep|store|share|transfer|disclose|provide|may|can|have|request|exercise)\b/i.test(text);
   return tocTokens >= 4 && !hasDisclosureVerb;
 }
 

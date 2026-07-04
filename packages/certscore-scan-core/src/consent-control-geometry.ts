@@ -715,6 +715,10 @@ function summarizeConsentControlGeometry(
     .map((candidate) => `${candidate.actionType}:${candidate.label}:${candidate.decisionStatus}`)
     .slice(0, 12);
   const observedCount = [firstLayerAccept, firstLayerReject, firstLayerOptions].filter(Boolean).length;
+  if (cmp.detected && observedCount === 0) {
+    limitations.unshift("cmp_detected_without_visible_first_layer_controls");
+  }
+  const boundedLimitations = limitations.slice(0, 12);
   return {
     firstLayerAccept,
     firstLayerReject,
@@ -722,7 +726,7 @@ function summarizeConsentControlGeometry(
     cmpDetected: cmp.detected,
     cmpName: cmp.name,
     confidence: Math.min(0.98, 0.55 + observedCount * 0.12 + (cmp.detected ? 0.1 : 0)),
-    limitations,
+    limitations: boundedLimitations,
   };
 }
 

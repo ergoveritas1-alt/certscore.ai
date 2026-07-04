@@ -294,6 +294,10 @@ test("keeps NBC-style hidden OneTrust preference center from counting as first-l
   assert.equal(artifact.summary.firstLayerAccept, false);
   assert.equal(artifact.summary.firstLayerReject, false);
   assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.equal(
+    artifact.summary.limitations.includes("cmp_detected_without_visible_first_layer_controls"),
+    true,
+  );
   assert.ok(artifact.candidates.some((candidate) => candidate.decisionStatus === "hidden" || candidate.decisionStatus === "deeper_layer"));
 });
 

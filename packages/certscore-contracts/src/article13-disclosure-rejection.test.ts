@@ -36,6 +36,14 @@ test("Article 13 rejection contract rejects table-of-contents snippets consisten
   );
   assert.equal(
     article13DisclosureRejectReason(
+      "Datenschutzerklärung Inhaltsverzeichnis. Zwecke der Verarbeitung personenbezogener Daten. Rechtsgrundlage für die Verarbeitung personenbezogener Daten. Kategorien von Empfängern personenbezogener Daten. Speicherdauer personenbezogener Daten. Recht auf Auskunft über personenbezogene Daten. Übermittlung personenbezogener Daten in ein Drittland. Recht auf Beschwerde bei einer Aufsichtsbehörde.",
+      "legal_basis",
+      { mode: "multilingual_classifier" },
+    ),
+    "table_of_contents_only",
+  );
+  assert.equal(
+    article13DisclosureRejectReason(
       "Introduction Information Google collects Why Google collects Your privacy controls Sharing your information Keeping your information FAQ",
       "legal_basis",
       { mode: "scan_core" },
