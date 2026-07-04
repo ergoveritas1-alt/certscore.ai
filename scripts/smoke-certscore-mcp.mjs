@@ -12,7 +12,7 @@ if (!apiKey) {
 
 const transport = new StdioClientTransport({
   command: "node",
-  args: ["packages/certscore-mcp/dist/index.js"],
+  args: ["packages/certscore-mcp/dist/certscore-mcp.mjs"],
   env: {
     ...process.env,
     CERTSCORE_API_KEY: apiKey,

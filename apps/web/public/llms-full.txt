@@ -224,7 +224,13 @@ Current command: `certscore-mcp`
 
 Current transport: stdio
 
-Homebrew install:
+npx install:
+
+```bash
+npx -y certscore-mcp --version
+```
+
+Homebrew install on macOS:
 
 ```bash
 brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai

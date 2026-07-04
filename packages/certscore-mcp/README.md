@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. The server is distributed for external MCP clients through Homebrew as `certscore-mcp` and for local WC01 development through `pnpm mcp:certscore`.
+Status: public developer preview. The server is distributed for external MCP clients through `npx -y certscore-mcp`, with Homebrew available as a macOS alternative. Local WC01 development uses `pnpm mcp:certscore`.
 
 Public docs:
 
@@ -29,14 +29,37 @@ The initial MCP surface intentionally does not include account scan browsing or 
 
 ## Configuration
 
-Install with Homebrew:
+Install with npx:
+
+```bash
+npx -y certscore-mcp --version
+```
+
+Use npx from an MCP client:
+
+```json
+{
+  "mcpServers": {
+    "certscore": {
+      "command": "npx",
+      "args": ["-y", "certscore-mcp"],
+      "env": {
+        "CERTSCORE_API_KEY": "YOUR_TOKEN",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}
+```
+
+Install with Homebrew on macOS:
 
 ```bash
 brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
 brew install --cask certscore-mcp
 ```
 
-The cask installs the prebuilt MCP command and avoids requiring local Xcode build tooling for the CertScore package.
+The cask installs the prebuilt MCP command for users who prefer a persistent local binary.
 
 Use the installed command from an MCP client:
 
@@ -98,13 +121,14 @@ The doctor command checks binary startup, version output, Node.js runtime compat
 
 ## MCP Client Examples
 
-Claude Desktop-style config with the Homebrew command:
+Claude Desktop-style config with npx:
 
 ```json
 {
   "mcpServers": {
     "certscore": {
-      "command": "certscore-mcp",
+      "command": "npx",
+      "args": ["-y", "certscore-mcp"],
       "env": {
         "CERTSCORE_API_KEY": "YOUR_TOKEN",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -114,13 +138,14 @@ Claude Desktop-style config with the Homebrew command:
 }
 ```
 
-Cursor config with the Homebrew command:
+Cursor config with npx:
 
 ```json
 {
   "mcpServers": {
     "certscore": {
-      "command": "certscore-mcp",
+      "command": "npx",
+      "args": ["-y", "certscore-mcp"],
       "env": {
         "CERTSCORE_API_KEY": "YOUR_TOKEN",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -136,7 +161,8 @@ Windsurf or generic stdio MCP client config:
 {
   "mcpServers": {
     "certscore": {
-      "command": "certscore-mcp",
+      "command": "npx",
+      "args": ["-y", "certscore-mcp"],
       "env": {
         "CERTSCORE_API_KEY": "YOUR_TOKEN",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -220,7 +246,7 @@ This verifies the Homebrew-installed `certscore-mcp` command against live `https
 
 ## Troubleshooting
 
-- Command not found: run the Homebrew install again and confirm Homebrew's bin directory is on `PATH`.
+- Command not found: use the npx config above, or run the Homebrew install again and confirm Homebrew's bin directory is on `PATH`.
 - Missing API key: set `CERTSCORE_API_KEY` in the MCP client environment and rerun `certscore-mcp doctor`.
 - Bad token: rotate the key or request a scoped API/MCP key from `support@certscore.ai`.
 - API unreachable: check `CERTSCORE_BASE_URL` and verify `https://certscore.ai/api/v2/health`.

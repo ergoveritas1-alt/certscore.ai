@@ -101,6 +101,7 @@ export type StaticFixturePage =
   | "policy-generic-links"
   | "policy-link-aria-title"
   | "policy-large-homepage-legal-footer"
+  | "policy-large-homepage-middle-legal-footer"
   | "policy-latimes-footer-surfaces"
   | "policy-localized-privacy-supplement"
   | "policy-mature-real-prose"
@@ -246,6 +247,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-generic-links": "policy-generic-links",
   "policy-link-aria-title": "policy-link-aria-title",
   "policy-large-homepage-legal-footer": "policy-large-homepage-legal-footer",
+  "policy-large-homepage-middle-legal-footer": "policy-large-homepage-middle-legal-footer",
   "policy-latimes-footer-surfaces": "policy-latimes-footer-surfaces",
   "policy-localized-privacy-supplement": "policy-localized-privacy-supplement",
   "policy-mature-real-prose": "policy-mature-real-prose",
@@ -1511,6 +1513,12 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/legal/page/politique-de-confidentialite">Confidentialité</a>`,
       `<a href="/legal/le-figaro/info-cookies-lefigaro">Info cookies</a>`,
     ].join(" "),
+    "policy-large-homepage-middle-legal-footer": [
+      `<div data-fixture-noise="large-homepage-head">${"Large publisher body content. ".repeat(14_000)}</div>`,
+      `<a href="/corporate-site/datenschutz/datenschutz/artikel-datenschutz-54485502.bild.html">Datenschutz</a>`,
+      `<a href="#">Privacy-Manager</a>`,
+      `<div data-fixture-noise="large-homepage-tail">${"More publisher body content. ".repeat(14_000)}</div>`,
+    ].join(" "),
     "policy-localized-privacy-supplement": [
       `<a href="/politica-de-privacidad">Política de privacidad</a>`,
       `<a href="/politica-de-cookies">Política de cookies</a>`,
@@ -1645,6 +1653,10 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/legal/le-figaro/info-cookies-lefigaro": {
       title: "Info cookies",
       body: "Info cookies. Ce document décrit l'utilisation des cookies nécessaires, des cookies de mesure d'audience, des cookies publicitaires et des partenaires pouvant déposer des traceurs. Vous pouvez paramétrer les cookies depuis le module de consentement.",
+    },
+    "/corporate-site/datenschutz/datenschutz/artikel-datenschutz-54485502.bild.html": {
+      title: "Datenschutz",
+      body: "Datenschutzerklärung. Verantwortlicher für die Datenverarbeitung ist die Fixture GmbH. Wir verarbeiten personenbezogene Daten zur Bereitstellung des Angebots, für Analyse, Werbung und Reichweitenmessung. Die Rechtsgrundlagen umfassen Einwilligung, Vertragserfüllung und berechtigte Interessen. Empfänger personenbezogener Daten sind Dienstleister und Partner. Nutzer haben Rechte auf Auskunft, Berichtigung, Löschung, Widerspruch und Beschwerde. Unser Datenschutzbeauftragter ist über datenschutz@example.test erreichbar.",
     },
     "/policies/es-privacidad": {
       title: "Política de privacidad",

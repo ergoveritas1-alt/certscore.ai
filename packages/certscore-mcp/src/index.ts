@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createCertScoreMcpServer } from "./server.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";

@@ -41,7 +41,7 @@ mkdirSync(join(releaseDir, "libexec"), { recursive: true });
 
 runPnpm(["--filter", "@certscore/api-contracts", "build"]);
 runPnpm(["--filter", "@certscore/sdk", "build"]);
-runPnpm(["--filter", "@certscore/mcp", "build"]);
+runPnpm(["--filter", "certscore-mcp", "build"]);
 
 runPnpm([
   "exec",

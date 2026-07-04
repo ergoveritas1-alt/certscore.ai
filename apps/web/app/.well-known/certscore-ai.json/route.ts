@@ -71,14 +71,16 @@ const discoveryDocument = {
     install: "npm install @certscore/sdk"
   },
   mcp: {
-    distribution: "homebrew",
+    distribution: "npm",
+    npmPackage: "certscore-mcp",
     binary: "certscore-mcp",
-    packageStatus: "homebrew_developer_preview",
+    packageStatus: "npm_developer_preview",
     currentVersion: "0.1.3",
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
-    install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
-    verify: ["certscore-mcp --version", "certscore-mcp --help", "CERTSCORE_API_KEY=<token> certscore-mcp doctor"],
+    install: "npx -y certscore-mcp",
+    macosAlternativeInstall: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
+    verify: ["npx -y certscore-mcp --version", "npx -y certscore-mcp --help", "CERTSCORE_API_KEY=<token> npx -y certscore-mcp doctor"],
     transport: "stdio",
     currentTools: [
       "scan_site",

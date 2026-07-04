@@ -189,18 +189,19 @@ importers:
 
   packages/certscore-mcp:
     dependencies:
-      '@certscore/api-contracts':
-        specifier: workspace:*
-        version: link:../certscore-api-contracts
-      '@certscore/sdk':
-        specifier: workspace:*
-        version: link:../certscore-sdk
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+    devDependencies:
+      '@certscore/api-contracts':
+        specifier: workspace:*
+        version: link:../certscore-api-contracts
+      '@certscore/sdk':
+        specifier: workspace:*
+        version: link:../certscore-sdk
 
   packages/certscore-report-adapter:
     dependencies:

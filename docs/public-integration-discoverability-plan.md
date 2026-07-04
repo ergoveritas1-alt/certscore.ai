@@ -34,7 +34,7 @@ Current public Pulse/discovery assets:
 - `/api/v1/pulse`, `/api/v1/pulse/gpt`, `/api/v1/pulse/status/{jobId}`.
 - `/api/v1/pulse-health` and `/api/v1/pulse-self-test` canaries.
 - `@certscore/sdk` TypeScript SDK package.
-- `@certscore/mcp` developer-preview MCP server package.
+- `certscore-mcp` developer-preview MCP server package.
 - `scripts/smoke-pulse-endpoints.ts`, `scripts/verify-pulse-public.sh`, and `scripts/smoke-certscore-mcp.mjs` smoke coverage.
 
 Primary gaps:
@@ -100,7 +100,7 @@ Follow-up implementation:
 - Added the ChatGPT/GPT Action OpenAPI builder to `@certscore/api-contracts`.
 - Updated `/api/v1/openapi.chatgpt.json` to use the shared builder.
 - Added MCP tool input schemas and current tool metadata to `@certscore/api-contracts`.
-- Updated `@certscore/mcp` to register tool input schemas from the shared contract package.
+- Updated `certscore-mcp` to register tool input schemas from the shared contract package.
 
 ### Phase 3: Resource-Oriented API v2
 

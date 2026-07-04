@@ -183,6 +183,14 @@ test("CertScore MCP server tool metadata stays aligned with shared contracts", a
 
 test("README documents current MCP tool surface and public docs", () => {
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as {
+    bin?: Record<string, string>;
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+    files?: string[];
+    name?: string;
+    private?: boolean;
+  };
 
   for (const tool of [
     "scan_site",
@@ -202,11 +210,22 @@ test("README documents current MCP tool surface and public docs", () => {
 
   assert.match(readme, /https:\/\/certscore\.ai\/developers\/mcp/);
   assert.match(readme, /get_latest_domain_scan/);
+  assert.match(readme, /npx -y certscore-mcp/);
   assert.match(readme, /brew install --cask certscore-mcp/);
   assert.match(readme, /certscore-mcp doctor/);
-  assert.match(readme, /"command": "certscore-mcp"/);
+  assert.match(readme, /"command": "npx"/);
+  assert.match(readme, /"args": \["-y", "certscore-mcp"\]/);
   assert.match(readme, /automated public-web observations for review/i);
   assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
+
+  assert.equal(packageJson.name, "certscore-mcp");
+  assert.equal(packageJson.private, false);
+  assert.equal(packageJson.bin?.["certscore-mcp"], "./dist/certscore-mcp.mjs");
+  assert.deepEqual(packageJson.files, ["dist", "README.md", "LICENSE"]);
+  assert.equal(packageJson.dependencies?.["@certscore/api-contracts"], undefined);
+  assert.equal(packageJson.dependencies?.["@certscore/sdk"], undefined);
+  assert.equal(packageJson.devDependencies?.["@certscore/api-contracts"], "workspace:*");
+  assert.equal(packageJson.devDependencies?.["@certscore/sdk"], "workspace:*");
 });
 
 test("doctor reports healthy API and missing API key without failing", async () => {
@@ -277,7 +296,7 @@ test("version constant stays aligned with package version", () => {
     version: string;
   };
   assert.equal(CERTSCORE_MCP_VERSION, packageJson.version);
-  assert.equal(packageJson.engines?.node, ">=20.0.0 <25.0.0");
+  assert.equal(packageJson.engines?.node, ">=20");
 });
 
 test("create_scan returns async status and scan handles", async () => {

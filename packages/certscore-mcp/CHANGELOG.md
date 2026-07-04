@@ -1,4 +1,4 @@
-# @certscore/mcp
+# certscore-mcp
 
 ## 0.1.3
 

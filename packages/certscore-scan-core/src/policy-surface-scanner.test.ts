@@ -280,6 +280,35 @@ test("policySurfaceScanner keeps footer policy links from oversized publisher ho
   });
 });
 
+test("policySurfaceScanner keeps middle footer policy links from oversized publisher homepages", async () => {
+  await withPolicyScan("policy-large-homepage-middle-legal-footer", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/corporate-site/datenschutz/datenschutz/artikel-datenschutz-54485502.bild.html`
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.ok(privacy);
+    assert.equal(privacy.title, "Datenschutz");
+    assert.equal(diagnostics.corePolicySurfaceRetained, true);
+    assert.equal(
+      diagnostics.candidateSummary.some((candidate) =>
+        candidate.linkText === "Datenschutz" &&
+        candidate.normalizedUrl === `${baseUrl}/corporate-site/datenschutz/datenschutz/artikel-datenschutz-54485502.bild.html`
+      ),
+      true,
+    );
+  }, {
+    discoveryMode: "fast",
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not be needed for middle oversized footer policy links.");
+      },
+    },
+  });
+});
+
 test("policySurfaceScanner does not classify unrelated footer links from neighboring privacy text", async () => {
   await withPolicyScan("policy-neighboring-footer-privacy-noise", async ({ result, baseUrl }) => {
     const diagnostics = await readPolicyCaptureDiagnostics(result);

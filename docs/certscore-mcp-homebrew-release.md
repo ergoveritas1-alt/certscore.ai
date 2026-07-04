@@ -1,6 +1,6 @@
 # CertScore MCP Homebrew Release
 
-CertScore MCP is distributed to external MCP clients as a Homebrew-installed `certscore-mcp` command. This avoids requiring npm package publishing for the MCP server, SDK, or API contracts.
+CertScore MCP is distributed to external MCP clients through `npx -y certscore-mcp`. Homebrew remains a macOS alternative for users who prefer a persistent local command.
 
 CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.
 
@@ -45,7 +45,7 @@ brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscor
 brew install --cask certscore-mcp
 ```
 
-The cask is the preferred public install path because it links the prebuilt command and avoids requiring local Xcode build tooling for the CertScore package. The formula remains tracked for compatibility and local tap inspection.
+The npm package is the preferred public install path. The cask remains tracked for compatibility and local tap inspection.
 
 ## MCP Client Config
 
@@ -53,7 +53,8 @@ The cask is the preferred public install path because it links the prebuilt comm
 {
   "mcpServers": {
     "certscore": {
-      "command": "certscore-mcp",
+      "command": "npx",
+      "args": ["-y", "certscore-mcp"],
       "env": {
         "CERTSCORE_API_KEY": "<token>",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -76,9 +77,9 @@ The doctor command checks the installed command, runtime compatibility, API v2 h
 For local smoke testing before release:
 
 ```bash
-pnpm --filter @certscore/mcp test
-pnpm --filter @certscore/mcp typecheck
-pnpm --filter @certscore/mcp build
+pnpm --filter certscore-mcp test
+pnpm --filter certscore-mcp typecheck
+pnpm --filter certscore-mcp build
 pnpm mcp:certscore:homebrew:build
 artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.3/bin/certscore-mcp --version
 artifacts/certscore-mcp-homebrew/certscore-mcp-v0.1.3/bin/certscore-mcp --help
@@ -95,7 +96,7 @@ The production smoke uses the installed Homebrew command, creates a short-lived 
 
 ## Troubleshooting
 
-- Command not found: run the Homebrew install again and confirm Homebrew's bin directory is on `PATH`.
+- Command not found: use the npx client config, or run the Homebrew install again and confirm Homebrew's bin directory is on `PATH`.
 - Missing API key: set `CERTSCORE_API_KEY` in the MCP client environment and rerun `certscore-mcp doctor`.
 - Bad token: rotate the key or request a scoped API/MCP key from `support@certscore.ai`.
 - API unreachable: check `CERTSCORE_BASE_URL` and verify `https://certscore.ai/api/v2/health`.

@@ -4249,9 +4249,90 @@ function boundedFetchedText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
     return value;
   }
-  const headChars = Math.floor(maxChars * 0.65);
-  const tailChars = Math.max(0, maxChars - headChars);
-  return `${value.slice(0, headChars)}\n\n[CertScore retained tail of oversized response for footer policy discovery.]\n\n${value.slice(value.length - tailChars)}`;
+  const privacySurfaceIndex = anchoredPrivacySurfaceIndex(value, maxChars);
+  if (privacySurfaceIndex === undefined) {
+    const headChars = Math.floor(maxChars * 0.65);
+    const tailChars = Math.max(0, maxChars - headChars);
+    return `${value.slice(0, headChars)}\n\n[CertScore retained tail of oversized response for footer policy discovery.]\n\n${value.slice(value.length - tailChars)}`;
+  }
+
+  const headChars = Math.floor(maxChars * 0.4);
+  const tailChars = Math.floor(maxChars * 0.3);
+  const middleChars = Math.max(0, maxChars - headChars - tailChars);
+  const middleStart = Math.max(0, privacySurfaceIndex - Math.floor(middleChars / 2));
+  const middleEnd = Math.min(value.length, middleStart + middleChars);
+  return retainedResponseRanges(value, [
+    [0, headChars],
+    [middleStart, middleEnd],
+    [Math.max(0, value.length - tailChars), value.length],
+  ]);
+}
+
+function anchoredPrivacySurfaceIndex(value: string, maxChars: number): number | undefined {
+  const lowerValue = value.toLowerCase();
+  const headEnd = Math.floor(maxChars * 0.65);
+  const tailStart = value.length - Math.max(0, maxChars - headEnd);
+  const terms = [
+    "privacy policy",
+    "privacy notice",
+    "privacy statement",
+    "cookie policy",
+    "cookie notice",
+    "datenschutzerklärung",
+    "datenschutzinformation",
+    "datenschutz",
+    "politique de confidentialité",
+    "confidentialité",
+    "política de privacidad",
+    "informativa sulla privacy",
+    "privacybeleid",
+    "polityka prywatności",
+  ];
+
+  for (const term of terms) {
+    let index = lowerValue.indexOf(term, headEnd);
+    while (index >= 0 && index < tailStart) {
+      const anchorStart = lowerValue.lastIndexOf("<a", index);
+      const anchorEnd = lowerValue.indexOf("</a>", index);
+      if (
+        anchorStart >= 0 &&
+        index - anchorStart <= 800 &&
+        anchorEnd >= 0 &&
+        anchorEnd - index <= 800
+      ) {
+        return index;
+      }
+      index = lowerValue.indexOf(term, index + term.length);
+    }
+  }
+
+  return undefined;
+}
+
+function retainedResponseRanges(value: string, ranges: Array<[number, number]>): string {
+  const normalizedRanges = ranges
+    .map(([start, end]) => [Math.max(0, start), Math.min(value.length, end)] as [number, number])
+    .filter(([start, end]) => end > start)
+    .sort(([leftStart], [rightStart]) => leftStart - rightStart);
+  const mergedRanges: Array<[number, number]> = [];
+
+  for (const [start, end] of normalizedRanges) {
+    const previous = mergedRanges[mergedRanges.length - 1];
+    if (previous && start <= previous[1]) {
+      previous[1] = Math.max(previous[1], end);
+      continue;
+    }
+    mergedRanges.push([start, end]);
+  }
+
+  return mergedRanges
+    .map(([start, end], index) => {
+      const prefix = index === 0
+        ? ""
+        : "\n\n[CertScore retained middle/tail of oversized response for policy-surface discovery.]\n\n";
+      return `${prefix}${value.slice(start, end)}`;
+    })
+    .join("");
 }
 
 function titleFromHtml(html: string): string | undefined {

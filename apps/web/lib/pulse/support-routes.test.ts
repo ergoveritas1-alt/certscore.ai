@@ -548,12 +548,21 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.api.docs, "https://certscore.ai/developers/reference");
   assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
   assert.equal(aiDiscovery.mcp.docs, "https://certscore.ai/developers/mcp");
-  assert.equal(aiDiscovery.mcp.distribution, "homebrew");
+  assert.equal(aiDiscovery.mcp.distribution, "npm");
+  assert.equal(aiDiscovery.mcp.npmPackage, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
-  assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
+  assert.equal(aiDiscovery.mcp.packageStatus, "npm_developer_preview");
   assert.equal(aiDiscovery.mcp.currentVersion, "0.1.3");
-  assert.equal(aiDiscovery.mcp.install, "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp");
-  assert.deepEqual(aiDiscovery.mcp.verify, ["certscore-mcp --version", "certscore-mcp --help", "CERTSCORE_API_KEY=<token> certscore-mcp doctor"]);
+  assert.equal(aiDiscovery.mcp.install, "npx -y certscore-mcp");
+  assert.equal(
+    aiDiscovery.mcp.macosAlternativeInstall,
+    "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp"
+  );
+  assert.deepEqual(aiDiscovery.mcp.verify, [
+    "npx -y certscore-mcp --version",
+    "npx -y certscore-mcp --help",
+    "CERTSCORE_API_KEY=<token> npx -y certscore-mcp doctor"
+  ]);
   assert.equal(aiDiscovery.authentication.docs, "https://certscore.ai/developers/quickstart");
   assert.equal(aiDiscovery.authentication.accessStatus, "developer_preview_request");
   assert.equal(aiDiscovery.authentication.requestEmail, "support@certscore.ai");
@@ -602,6 +611,8 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.match(combinedSources, /broken examples/);
   assert.match(combinedSources, /Prompt for coding agents/);
   assert.match(combinedSources, /Prompt for MCP agents/);
+  assert.match(combinedSources, /npx setup/);
+  assert.match(combinedSources, /npx -y certscore-mcp/);
   assert.match(combinedSources, /Homebrew setup/);
   assert.match(combinedSources, /brew tap ergoveritas1-alt\/certscore https:\/\/github\.com\/ergoveritas1-alt\/certscore\.ai/);
   assert.match(combinedSources, /brew install --cask certscore-mcp/);
