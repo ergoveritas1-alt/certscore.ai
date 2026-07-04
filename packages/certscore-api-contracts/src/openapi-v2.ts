@@ -120,6 +120,8 @@ const preConsentCookiesTrackersExample = {
       name: "Example Analytics",
       vendor: "Example Analytics",
       host: "analytics.example.test",
+      domains: ["analytics.example.test"],
+      cookieNames: [],
       registrableDomain: "example.test",
       category: "Analytics",
       purpose: "Analytics",
@@ -130,15 +132,23 @@ const preConsentCookiesTrackersExample = {
       phase: "pre_consent",
       observedBeforeConsent: true,
       evidenceBasis: "public_report_projection",
+      attributionEvidence: {
+        signatureId: "domain_owner:example_analytics:analytics.example.test",
+        matchedOn: "domain",
+        matchedValue: "analytics.example.test"
+      },
+      syncedIdentifiers: [],
       firstObservedAtMs: 1234,
       pageUrlHost: "example.com"
     },
     {
-      id: "cookie:google:advertising:doubleclick-net",
+      id: "cookie:google:advertising:doubleclick-net:_ga",
       kind: "cookie",
       name: "Google",
       vendor: "Google",
       host: "doubleclick.net",
+      domains: ["doubleclick.net"],
+      cookieNames: ["_ga"],
       registrableDomain: "doubleclick.net",
       category: "Advertising",
       purpose: "Advertising",
@@ -149,6 +159,12 @@ const preConsentCookiesTrackersExample = {
       phase: "pre_consent",
       observedBeforeConsent: true,
       evidenceBasis: "public_report_projection",
+      attributionEvidence: {
+        signatureId: "cookie_google_ads_analytics",
+        matchedOn: "cookie_name",
+        matchedValue: "_ga"
+      },
+      syncedIdentifiers: [],
       firstObservedAtMs: 512,
       pageUrlHost: "example.com"
     }
@@ -755,6 +771,16 @@ export function buildCertScoreApiV2OpenApiDocument() {
             name: { type: "string" },
             vendor: { type: ["string", "null"] },
             host: { type: ["string", "null"], description: "Host only; full URLs and query strings are not exposed." },
+            domains: {
+              type: "array",
+              description: "Domain hosts only. Cookie names are exposed separately in cookieNames.",
+              items: { type: "string" }
+            },
+            cookieNames: {
+              type: "array",
+              description: "Cookie names observed for this inventory row. Values are never exposed.",
+              items: { type: "string" }
+            },
             registrableDomain: { type: ["string", "null"] },
             category: { type: ["string", "null"] },
             purpose: { type: ["string", "null"] },
@@ -765,6 +791,26 @@ export function buildCertScoreApiV2OpenApiDocument() {
             phase: { type: "string", const: "pre_consent" },
             observedBeforeConsent: { type: "boolean" },
             evidenceBasis: { type: "string", const: "public_report_projection" },
+            attributionEvidence: {
+              oneOf: [
+                {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["signatureId", "matchedOn", "matchedValue"],
+                  properties: {
+                    signatureId: { type: "string" },
+                    matchedOn: { type: "string", enum: ["cookie_name", "domain", "request_pattern", "id_sync"] },
+                    matchedValue: { type: "string" }
+                  }
+                },
+                { type: "null" }
+              ]
+            },
+            syncedIdentifiers: {
+              type: "array",
+              description: "Known identifier providers observed as sync signals on a row owned by another domain/vendor.",
+              items: { type: "string" }
+            },
             firstObservedAtMs: { type: ["integer", "null"], minimum: 0 },
             pageUrlHost: { type: ["string", "null"] }
           }

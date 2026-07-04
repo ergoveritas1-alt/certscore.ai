@@ -2,7 +2,7 @@ import { z } from "zod";
 import { pulseResponseSchema } from "./pulse-v1.js";
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.2";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.3";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.";
@@ -189,6 +189,8 @@ export const apiV2PreConsentCookiesTrackersRowSchema = z
     name: z.string(),
     vendor: z.string().nullable().optional(),
     host: z.string().nullable().optional(),
+    domains: z.array(z.string()).optional(),
+    cookieNames: z.array(z.string()).optional(),
     registrableDomain: z.string().nullable().optional(),
     category: z.string().nullable().optional(),
     purpose: z.string().nullable().optional(),
@@ -199,6 +201,16 @@ export const apiV2PreConsentCookiesTrackersRowSchema = z
     phase: apiV2PreConsentInventoryPhaseSchema,
     observedBeforeConsent: z.boolean(),
     evidenceBasis: z.literal("public_report_projection"),
+    attributionEvidence: z
+      .object({
+        signatureId: z.string(),
+        matchedOn: z.enum(["cookie_name", "domain", "request_pattern", "id_sync"]),
+        matchedValue: z.string()
+      })
+      .strict()
+      .nullable()
+      .optional(),
+    syncedIdentifiers: z.array(z.string()).optional(),
     firstObservedAtMs: z.number().int().min(0).nullable().optional(),
     pageUrlHost: z.string().nullable().optional()
   })

@@ -449,6 +449,10 @@ test("buildApiV2PreConsentCookiesTrackers matches the shared public report table
   assert.ok(resource.rows.every((row) => row.evidenceBasis === "public_report_projection"));
   assert.ok(resource.rows.every((row) => row.observedBeforeConsent === true));
   assert.ok(resource.rows.every((row) => !row.host?.includes("?")));
+  assert.ok(resource.rows.every((row) => Array.isArray(row.domains)));
+  assert.ok(resource.rows.every((row) => Array.isArray(row.cookieNames)));
+  assert.ok(resource.rows.every((row) => row.domains?.every((domain) => !(row.cookieNames ?? []).includes(domain))));
+  assert.ok(resource.rows.every((row) => row.domains?.every((domain) => domain.includes("."))));
   assert.equal(serialized.includes("must-not-leak"), false);
   assert.equal(serialized.includes("also-must-not-leak"), false);
   assert.equal(serialized.includes("person@example.com"), false);
@@ -510,7 +514,9 @@ test("buildApiV2PreConsentCookiesTrackers maps report table rows without raw val
   assert.ok(resource.rows.every((row) => row.evidenceBasis === "public_report_projection"));
   assert.ok(resource.rows.every((row) => row.phase === "pre_consent"));
   assert.ok(resource.rows.every((row) => !row.host?.includes("?")));
+  assert.ok(resource.rows.every((row) => row.domains?.every((domain) => !(row.cookieNames ?? []).includes(domain))));
   assert.ok(resource.rows.some((row) => row.kind === "tracker" && row.host === "tracker.example.test"));
+  assert.ok(resource.rows.some((row) => row.kind === "cookie" && row.vendor === "Google" && row.cookieNames?.includes("_ga") && row.domains?.includes("doubleclick.net")));
   assert.equal(serialized.includes("secret-cookie-value"), false);
   assert.equal(serialized.includes("person@example.com"), false);
   assert.equal(serialized.includes("rawRequestBody"), false);

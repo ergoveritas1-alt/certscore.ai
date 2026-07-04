@@ -23,6 +23,7 @@ import type { PulseResponse } from "@certscore/api-contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { derivePulseReportScore } from "../pulse/projection";
 import { buildRuntimeInventoryProjectionFromScan, inventoryRegistrableDomain, type InventoryGroupRow } from "../scans/runtime-inventory-projection";
+import { isLikelyCookieName } from "../scans/runtime-vendor-ownership";
 import { absoluteUrl } from "../seo";
 
 export const API_V2_SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
@@ -509,6 +510,14 @@ function sanitizeHost(value: string | null | undefined) {
   }
 }
 
+function sanitizePreConsentDomains(values: readonly string[]) {
+  return [...new Set(values.map(sanitizeHost).filter((host): host is string => Boolean(host && host.includes(".") && !isLikelyCookieName(host))))];
+}
+
+function sanitizePreConsentCookieNames(values: readonly string[]) {
+  return [...new Set(values.map((value) => compactApiText(value, "").slice(0, 120)).filter((value) => value.length > 0 && !value.includes("://")))];
+}
+
 function normalizePreConsentPriority(value: unknown): "high" | "medium" | "review_needed" | "contextual" | "unknown" {
   return value === "high" || value === "medium" || value === "review_needed" || value === "contextual" ? value : "unknown";
 }
@@ -530,26 +539,30 @@ function normalizePreConsentParty(value: InventoryGroupRow["party"]): "first_par
   return "unknown";
 }
 
-function stableInventoryRowId(row: InventoryGroupRow, host: string | null) {
-  return [row.type, row.vendor, row.purpose, host ?? "no-host"]
+function stableInventoryRowId(row: InventoryGroupRow, domains: string[], cookieNames: string[]) {
+  return [row.type, row.vendor, row.purpose, domains.join("|") || "no-domain", cookieNames.join("|") || "no-cookie"]
     .map((part) => compactApiText(part).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "unknown")
     .join(":")
     .slice(0, 220);
 }
 
 function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | null) {
-  const host = sanitizeHost(row.domains[0]);
+  const domains = sanitizePreConsentDomains(row.domains);
+  const cookieNames = sanitizePreConsentCookieNames(row.cookieNames);
+  const host = domains[0] ?? null;
   const registrableDomain = host ? inventoryRegistrableDomain(host) : null;
   const requestCount = row.type === "tracker" && typeof row.requestCount === "number" && Number.isFinite(row.requestCount)
     ? Math.max(0, Math.round(row.requestCount))
     : null;
 
   return {
-    id: stableInventoryRowId(row, host),
+    id: stableInventoryRowId(row, domains, cookieNames),
     kind: row.type,
     name: compactApiText(row.vendor),
     vendor: compactApiText(row.vendor),
     host,
+    domains,
+    cookieNames,
     registrableDomain,
     category: compactApiText(row.purpose),
     purpose: compactApiText(row.purpose),
@@ -560,6 +573,8 @@ function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | n
     phase: "pre_consent" as const,
     observedBeforeConsent: true,
     evidenceBasis: "public_report_projection" as const,
+    attributionEvidence: row.attributionEvidence ?? null,
+    syncedIdentifiers: sanitizePreConsentCookieNames(row.syncedIdentifiers ?? []),
     firstObservedAtMs: finiteInt(row.firstSeenMs),
     pageUrlHost
   };

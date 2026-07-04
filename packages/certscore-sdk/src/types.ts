@@ -188,6 +188,8 @@ export interface PreConsentCookiesTrackersRow {
   name?: string | null;
   vendor?: string | null;
   host?: string | null;
+  domains?: string[];
+  cookieNames?: string[];
   registrableDomain?: string | null;
   party?: string | null;
   purpose?: string | null;
@@ -195,6 +197,12 @@ export interface PreConsentCookiesTrackersRow {
   confidence?: "high" | "medium" | "low" | "unknown";
   phase?: "pre_consent";
   evidenceBasis?: "runtime_observation" | "policy_surface_detection" | "accessibility_check" | "public_report_projection";
+  attributionEvidence?: {
+    signatureId: string;
+    matchedOn: "cookie_name" | "domain" | "request_pattern" | "id_sync";
+    matchedValue: string;
+  } | null;
+  syncedIdentifiers?: string[];
   observedBeforeConsent?: boolean;
   requestCount?: number;
   firstObservedAtMs?: number | null;

@@ -649,13 +649,14 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
 
 function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
-    ["Type", "Vendor", "Category", "Priority", "First seen", "Domain", "Confidence", "Party", "Requests"],
+    ["Type", "Vendor", "Category", "Priority", "First seen", "Cookie name(s)", "Domain", "Confidence", "Party", "Requests"],
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
       row.purpose,
       CONSENT_REVIEW_PRIORITY_LABELS[row.priority],
       formatFirstSeenMs(row.firstSeenMs),
+      row.cookieNames.join(", ") || "—",
       row.domains.join(", ") || "—",
       INVENTORY_CONFIDENCE_LABELS[row.confidence],
       formatGroupedParty(row.party),
@@ -668,12 +669,14 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
 
 function RuntimeInventoryTable({
   cookieRows,
+  firstPartyDomain,
   trackerRows
 }: {
   cookieRows: RuntimeCookieEvidenceRow[];
+  firstPartyDomain?: string | null;
   trackerRows: TrackerInventoryRow[];
 }) {
-  const groupedInventoryRows = buildRuntimeInventoryGroupRows({ cookieRows, trackerRows });
+  const groupedInventoryRows = buildRuntimeInventoryGroupRows({ cookieRows, firstPartyDomain, trackerRows });
   const copyPayload = buildRuntimeInventoryCopyPayload(groupedInventoryRows);
 
   return (
@@ -698,7 +701,7 @@ function RuntimeInventoryTable({
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200 lg:h-[317px]">
             <div className="max-h-[340px] overflow-auto lg:h-full lg:max-h-none">
-            <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-[13px]">
+            <table className="w-full min-w-[1040px] table-fixed border-collapse text-left text-[13px]">
               <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.12em] text-slate-500">
                 <tr>
                   <th className="w-[50px] border-b border-slate-200 px-2.5 py-2 font-semibold">Type</th>
@@ -706,6 +709,7 @@ function RuntimeInventoryTable({
                   <th className="w-[128px] border-b border-slate-200 px-2.5 py-2 font-semibold">Purpose</th>
                   <th className="w-[112px] border-b border-slate-200 px-2.5 py-2 font-semibold">Priority</th>
                   <th className="w-[94px] border-b border-slate-200 px-2.5 py-2 font-semibold">First seen</th>
+                  <th className="w-[150px] border-b border-slate-200 px-2.5 py-2 font-semibold">Cookie names</th>
                   <th className="w-[190px] border-b border-slate-200 px-2.5 py-2 font-semibold">Domain</th>
                   <th className="w-[88px] border-b border-slate-200 px-2.5 py-2 font-semibold">Confidence</th>
                   <th className="w-[58px] border-b border-slate-200 px-2.5 py-2 font-semibold">Party</th>
@@ -728,6 +732,7 @@ function RuntimeInventoryTable({
                       />
                     </td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">{formatFirstSeenMs(row.firstSeenMs)}</td>
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryConfidenceCell confidence={row.confidence} />
@@ -738,7 +743,7 @@ function RuntimeInventoryTable({
                 ))}
                 {groupedInventoryRows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-5 text-center text-slate-500" colSpan={9}>No retained cookie or tracker rows for this scan.</td>
+                    <td className="px-3 py-5 text-center text-slate-500" colSpan={10}>No retained cookie or tracker rows for this scan.</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -7209,6 +7214,7 @@ export function SharedScanDetailView({
           />
           <RuntimeInventoryTable
             cookieRows={cookieInventoryRows}
+            firstPartyDomain={scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost}
             trackerRows={trackerInventoryRows}
           />
           {showRegulatoryChecklistSection ? (

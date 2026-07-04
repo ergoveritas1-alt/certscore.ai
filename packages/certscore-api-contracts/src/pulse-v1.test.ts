@@ -279,7 +279,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.2");
+  assert.equal(document.info.version, "0.1.3");
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/scans"]);
   assert.ok(document.paths["/api/v2/scans/{scanId}/findings/{findingId}"]);

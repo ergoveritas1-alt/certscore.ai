@@ -1,15 +1,26 @@
 import type { RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
+import {
+  findRuntimeCookieNameVendor,
+  findRuntimeEntityOwner,
+  hostsShareRuntimeEntity,
+  isLikelyCookieName,
+  normalizeRuntimeInventoryHost,
+  type RuntimeVendorAttributionEvidence
+} from "./runtime-vendor-ownership";
 
 export type RuntimeCookieReviewPriority = "high" | "medium" | "review_needed" | "contextual";
 export type RuntimeCookieInventoryConfidence = "high" | "medium" | "low";
 
 export type RuntimeCookiePriorityGroupRow = {
+  attributionEvidence?: RuntimeVendorAttributionEvidence | null;
   confidence: RuntimeCookieInventoryConfidence;
+  cookieNames: string[];
   domains: string[];
   firstSeenMs: number | null;
   party: "first_party" | "third_party" | "unknown" | "mixed";
   priority: RuntimeCookieReviewPriority;
   purpose: string;
+  syncedIdentifiers?: string[];
   vendor: string;
 };
 
@@ -19,6 +30,16 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 
 function normalizeInventoryLabel(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function sanitizeCookieDomain(value: string | null | undefined) {
+  const host = normalizeRuntimeInventoryHost(value);
+  return host && !isLikelyCookieName(host) ? host : null;
+}
+
+function sanitizeCookieName(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed && isLikelyCookieName(trimmed) ? trimmed : null;
 }
 
 export function normalizeRuntimeCookiePurpose(value: string | null | undefined) {
@@ -34,6 +55,16 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
     return row.domain ?? row.cookieName;
   }
 
+  const cookieNameVendor = findRuntimeCookieNameVendor(row.cookieName);
+  if (cookieNameVendor) {
+    return cookieNameVendor.vendor;
+  }
+
+  const domainOwner = findRuntimeEntityOwner(row.domain);
+  if (domainOwner) {
+    return domainOwner.vendor;
+  }
+
   const haystack = [
     row.cookieName,
     row.domain,
@@ -41,8 +72,9 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
     row.initiatorDomain,
     row.initiatorUrl
   ].filter(Boolean).join(" ").toLowerCase();
+  const cookieDomainHaystack = [row.cookieName, row.domain].filter(Boolean).join(" ").toLowerCase();
 
-  if (/(^|[^a-z0-9])(_ga|_gid|_gcl|_gads|_gpi|__gads|gcl_|google|googlesyndication|doubleclick|securepubads)/i.test(haystack)) {
+  if (/(^|[^a-z0-9])(_ga|_gid|_gcl|_gads|_gpi|__gads|gcl_|google|googlesyndication|doubleclick|securepubads)/i.test(cookieDomainHaystack)) {
     return "Google";
   }
   if (/(optanon|onetrust|cookielaw)/i.test(haystack)) {
@@ -66,11 +98,20 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
   if (/(stripe|__stripe)/i.test(haystack)) {
     return "Stripe";
   }
-  return row.initiatorVendor ?? row.initiatorDomain ?? row.domain ?? row.cookieName;
+  const domain = sanitizeCookieDomain(row.domain);
+  return domain ?? row.initiatorVendor ?? row.initiatorDomain ?? row.cookieName;
 }
 
 export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {
   const vendorLabel = getRuntimeCookieBrandLabel(row);
+  const cookieNameVendor = findRuntimeCookieNameVendor(row.cookieName);
+  if (cookieNameVendor?.category) {
+    return normalizeInventoryLabel(cookieNameVendor.category);
+  }
+  const domainOwner = findRuntimeEntityOwner(row.domain);
+  if (domainOwner?.category) {
+    return normalizeInventoryLabel(domainOwner.category);
+  }
   const fallbackCategory = row.category;
   if (fallbackCategory && /^[A-Z][A-Za-z /&-]+$/.test(fallbackCategory) && fallbackCategory !== "Unknown") {
     return fallbackCategory;
@@ -122,10 +163,48 @@ export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {
   if (/quantcast/.test(label)) {
     return "Analytics";
   }
+  if (/gemius/.test(label)) {
+    return "Audience measurement";
+  }
+  if (/ad alliance/.test(label)) {
+    return "Advertising";
+  }
+  if (/green.?video/.test(label)) {
+    return "Embedded content";
+  }
   if (/^geolocation$/i.test(fallbackCategory)) {
     return "Functional";
   }
   return normalizeInventoryLabel(fallbackCategory || "unknown");
+}
+
+function getRuntimeCookieAttribution(row: RuntimeCookieEvidenceRow) {
+  const cookieNameVendor = findRuntimeCookieNameVendor(row.cookieName);
+  if (cookieNameVendor) {
+    return {
+      attributionEvidence: cookieNameVendor.attributionEvidence,
+      vendor: cookieNameVendor.vendor
+    };
+  }
+  const domainOwner = findRuntimeEntityOwner(row.domain);
+  if (domainOwner) {
+    return {
+      attributionEvidence: domainOwner.attributionEvidence,
+      vendor: domainOwner.vendor
+    };
+  }
+  return {
+    attributionEvidence: null,
+    vendor: getRuntimeCookieBrandLabel(row)
+  };
+}
+
+function getRuntimeCookieSyncedIdentifiers(row: RuntimeCookieEvidenceRow, vendor: string) {
+  const haystack = [row.initiatorVendor, row.initiatorDomain, row.initiatorUrl].filter(Boolean).join(" ").toLowerCase();
+  if (vendor !== "Google" && /(google|googlesyndication|doubleclick|securepubads|_ga|_gid|gcl_)/i.test(haystack)) {
+    return ["Google"];
+  }
+  return [];
 }
 
 export function getRuntimeCookieReviewPriority(row: RuntimeCookieEvidenceRow): RuntimeCookieReviewPriority {
@@ -141,7 +220,7 @@ export function getRuntimeCookieReviewPriority(row: RuntimeCookieEvidenceRow): R
   if (/^(security|necessary|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {
     return "contextual";
   }
-  if (/^(cdn_static|cdn|functional)$/.test(purpose)) {
+  if (/^(cdn_static|cdn|functional|publisher_infrastructure)$/.test(purpose)) {
     return "contextual";
   }
   if (row.party === "third_party" || row.category === "unknown" || !row.domain) {
@@ -151,6 +230,10 @@ export function getRuntimeCookieReviewPriority(row: RuntimeCookieEvidenceRow): R
 }
 
 export function getRuntimeCookieInventoryConfidence(row: RuntimeCookieEvidenceRow): RuntimeCookieInventoryConfidence {
+  const attribution = getRuntimeCookieAttribution(row);
+  if (attribution.attributionEvidence?.matchedOn === "cookie_name" || attribution.attributionEvidence?.matchedOn === "domain") {
+    return "high";
+  }
   if (row.evidenceGrade === "high" || (row.category !== "unknown" && (row.initiatorVendor || row.initiatorDomain))) {
     return "high";
   }
@@ -196,19 +279,35 @@ function mergePartyValues<T extends string>(left: T, right: T): T | "mixed" {
   return left === right ? left : "mixed";
 }
 
-export function buildRuntimeCookiePriorityGroups(rows: RuntimeCookieEvidenceRow[]) {
+function normalizeCookieParty(row: RuntimeCookieEvidenceRow, firstPartyDomain: string | null | undefined) {
+  if (firstPartyDomain && row.domain && hostsShareRuntimeEntity(row.domain, firstPartyDomain)) {
+    return "first_party";
+  }
+  return row.party;
+}
+
+export function buildRuntimeCookiePriorityGroups(
+  rows: RuntimeCookieEvidenceRow[],
+  options: { firstPartyDomain?: string | null } = {}
+) {
   const grouped = new Map<string, RuntimeCookiePriorityGroupRow>();
   for (const row of rows) {
-    const vendor = getRuntimeCookieBrandLabel(row);
+    const attribution = getRuntimeCookieAttribution(row);
+    const vendor = attribution.vendor;
     const purpose = getRuntimeCookiePurposeLabel(row);
-    const key = `${vendor.toLowerCase()}\u0000${purpose.toLowerCase()}`;
+    const domain = sanitizeCookieDomain(row.domain);
+    const cookieName = sanitizeCookieName(row.cookieName);
+    const key = `${vendor.toLowerCase()}\u0000${purpose.toLowerCase()}\u0000${domain ?? "no-domain"}\u0000${cookieName ?? "no-cookie"}`;
     const candidate: RuntimeCookiePriorityGroupRow = {
+      attributionEvidence: attribution.attributionEvidence,
       confidence: getRuntimeCookieInventoryConfidence(row),
-      domains: row.domain ? [row.domain] : [],
+      cookieNames: cookieName ? [cookieName] : [],
+      domains: domain ? [domain] : [],
       firstSeenMs: getRuntimeCookieFirstSeenMs(row),
-      party: row.party,
+      party: normalizeCookieParty(row, options.firstPartyDomain),
       priority: getRuntimeCookieReviewPriority(row),
       purpose,
+      syncedIdentifiers: getRuntimeCookieSyncedIdentifiers(row, vendor),
       vendor
     };
     const existing = grouped.get(key);
@@ -222,6 +321,7 @@ export function buildRuntimeCookiePriorityGroups(rows: RuntimeCookieEvidenceRow[
         runtimeCookieConfidenceWeight(candidate.confidence) > runtimeCookieConfidenceWeight(existing.confidence)
           ? candidate.confidence
           : existing.confidence,
+      cookieNames: uniqueStrings([...existing.cookieNames, ...candidate.cookieNames]),
       domains: uniqueStrings([...existing.domains, ...candidate.domains]),
       firstSeenMs:
         existing.firstSeenMs !== null && candidate.firstSeenMs !== null
@@ -230,7 +330,8 @@ export function buildRuntimeCookiePriorityGroups(rows: RuntimeCookieEvidenceRow[
       party: mergePartyValues(existing.party, candidate.party),
       priority: runtimeCookiePriorityWeight(candidate.priority) > runtimeCookiePriorityWeight(existing.priority)
         ? candidate.priority
-        : existing.priority
+        : existing.priority,
+      syncedIdentifiers: uniqueStrings([...(existing.syncedIdentifiers ?? []), ...(candidate.syncedIdentifiers ?? [])])
     });
   }
   return [...grouped.values()].sort(compareRuntimeCookiePriorityRows);
