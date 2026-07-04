@@ -128,6 +128,7 @@ export type StaticFixturePage =
   | "policy-notice-at-collection-link"
   | "policy-privacy-choices-link"
   | "policy-static-core-surfaces"
+  | "policy-static-gdpr-surfaces"
   | "policy-static-legacy-plus-rendered-canonical"
   | "policy-url-stub-canonical"
   | "policy-session-replay-disclosure"
@@ -276,6 +277,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-notice-at-collection-link": "policy-notice-at-collection",
   "policy-privacy-choices-link": "policy-privacy-choices",
   "policy-static-core-surfaces": "policy-static-core-surfaces",
+  "policy-static-gdpr-surfaces": "policy-static-gdpr-surfaces",
   "policy-static-legacy-plus-rendered-canonical": "policy-static-legacy-plus-rendered-canonical",
   "policy-url-stub-canonical": "policy-url-stub-canonical",
   "policy-session-replay-disclosure": "policy-session-replay",
@@ -1630,6 +1632,10 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/policies/cookies">Cookie Policy</a>`,
       `<a href="/privacy-choices">Your Privacy Choices</a>`,
       `<a href="/terms">Terms of Service</a>`,
+    ].join(" | "),
+    "policy-static-gdpr-surfaces": [
+      `<a href="/policies/privacy">Privacy Policy</a>`,
+      `<a href="/policies/cookies">Cookie Policy</a>`,
     ].join(" | "),
     "policy-static-legacy-plus-rendered-canonical": [
       `<a href="/intl/en/policies/privacy/">Privacy</a>`,

@@ -592,6 +592,58 @@ test("pre-consent runtime scanner can retain confirmed first-layer geometry cont
   assert.equal(observation?.evidenceRefs[0]?.artifactId, "consent_control_geometry");
 });
 
+test("pre-consent runtime scanner can retain high-confidence in-viewport clipped geometry controls", () => {
+  const observation = consentUiObservationFromConfirmedGeometryControls({
+    artifactPath: "/tmp/ConsentControlGeometryEvidence.json",
+    geometry: geometryFixture([
+      {
+        ...geometryCandidate("USTAWIENIA ZAAWANSOWANE", "manage_preferences", "clipped", "first_layer"),
+        matchedLocale: "pl",
+        matchedTerm: "ustawienia zaawansowane",
+        normalizedLabel: "ustawienia zaawansowane",
+      },
+      {
+        ...geometryCandidate("AKCEPTUJĘ", "accept_all", "clipped", "first_layer"),
+        matchedLocale: "pl",
+        matchedTerm: "akceptuję",
+        normalizedLabel: "akceptuję",
+      },
+    ], {
+      cmpDetected: true,
+      containerText: "Dbamy o Twoją prywatność. Przejdź do Ustawień Zaawansowanych albo kliknij Akceptuję.",
+    }),
+    scanStartedAtMs: Date.now(),
+    text: "Dbamy o Twoją prywatność i używamy plików cookie.",
+  });
+
+  assert.equal(observation?.likelyPresent, true);
+  assert.equal(observation?.acceptControlObserved, true);
+  assert.equal(observation?.managePreferencesControlObserved, true);
+  assert.equal(observation?.basis.includes("geometry:recoverable_clipped_first_layer_controls"), true);
+  assert.deepEqual(observation?.visibleChoiceLabels, ["USTAWIENIA ZAAWANSOWANE", "AKCEPTUJĘ"]);
+});
+
+test("pre-consent runtime scanner keeps clipped geometry diagnostic-only when confirmed controls exist", () => {
+  const observation = consentUiObservationFromConfirmedGeometryControls({
+    artifactPath: "/tmp/ConsentControlGeometryEvidence.json",
+    geometry: geometryFixture([
+      geometryCandidate("Refuser", "reject_all", "confirmed_visible", "first_layer"),
+      geometryCandidate("Accepter", "accept_all", "confirmed_visible", "first_layer"),
+      geometryCandidate("Modifier les paramètres des cookies", "manage_preferences", "clipped", "first_layer"),
+    ], {
+      cmpDetected: true,
+      containerText: "Air France utilise des cookies. Refuser Accepter.",
+    }),
+    scanStartedAtMs: Date.now(),
+    text: "Air France utilise des cookies.",
+  });
+
+  assert.equal(observation?.acceptControlObserved, true);
+  assert.equal(observation?.rejectControlObserved, true);
+  assert.equal(observation?.managePreferencesControlObserved, false);
+  assert.deepEqual(observation?.visibleChoiceLabels, ["Refuser", "Accepter"]);
+});
+
 test("pre-consent runtime scanner drops composite geometry containers when child controls are retained", () => {
   const container = {
     ...geometryCandidate("Manage choices Reject all Accept all", "accept_all", "confirmed_visible", "first_layer"),

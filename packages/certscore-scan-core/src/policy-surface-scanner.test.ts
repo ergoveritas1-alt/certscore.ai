@@ -144,6 +144,28 @@ test("policySurfaceScanner fast mode skips rendered discovery when static core s
   });
 });
 
+test("policySurfaceScanner fast mode skips rendered discovery when static GDPR surfaces are fetchable", async () => {
+  await withPolicyScan("policy-static-gdpr-surfaces", async ({ result, baseUrl }) => {
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const cookie = observedSurface(result.policySurfaceObservations, "cookie_policy");
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(cookie?.status, "fetched");
+    assert.equal(privacy?.normalizedUrl, `${baseUrl}/policies/privacy`);
+    assert.equal(cookie?.normalizedUrl, `${baseUrl}/policies/cookies`);
+    assert.equal(labels.includes("rendered discovery"), false);
+    assert.equal(labels.includes("rendered discovery skipped"), true);
+  }, {
+    discoveryMode: "fast",
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run when static GDPR policy surfaces are sufficient.");
+      },
+    },
+  });
+});
+
 test("policySurfaceScanner fast mode keeps rendered discovery for weak static policy shells", async () => {
   await withPolicyScan("policy-static-legacy-plus-rendered-canonical", async ({ result }) => {
     const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
@@ -155,6 +177,28 @@ test("policySurfaceScanner fast mode keeps rendered discovery for weak static po
     nanoAssistProvider: {
       async classifyLinks() {
         throw new Error("Nano link ranking should not run in fast static coverage mode.");
+      },
+    },
+  });
+});
+
+test("policySurfaceScanner prunes equivalent policy URL variants before fetch", async () => {
+  await withPolicyScan("policy-gold-privacy-duplicates", async ({ result, baseUrl }) => {
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+    const privacyFetches = labels.filter((label) => /^policy fetch \d+$/.test(label));
+    const privacyObservations = result.policySurfaceObservations.filter((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      (observation.normalizedUrl === `${baseUrl}/privacy-policy` || observation.normalizedUrl === `${baseUrl}/privacy-policy/`)
+    );
+
+    assert.equal(privacyFetches.length, 1);
+    assert.equal(privacyObservations.length, 1);
+    assert.equal(observedSurface(result.policySurfaceObservations, "privacy_policy")?.status, "fetched");
+  }, {
+    discoveryMode: "fast",
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run for deterministic duplicate policy candidates.");
       },
     },
   });

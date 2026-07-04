@@ -285,7 +285,7 @@ export async function policySurfaceScanner(
     staticCandidateCount = staticCandidates.length;
     const fastStaticCoverage =
       input.discoveryMode === "fast" &&
-      hasCompleteFetchableStaticCoreCoverage(staticCandidates);
+      hasSufficientFetchableStaticGdprCoverage(staticCandidates);
     const renderedCandidates = fastStaticCoverage
       ? await recordPolicyTiming(
         timingBreakdown,
@@ -637,7 +637,8 @@ async function fetchPolicyCandidateGroup(input: {
   labelPrefix: string;
   policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
 }): Promise<{ observations: PolicySurfaceObservation[]; artifactRefs: ArtifactRef[]; secondaryCandidates: PolicySurfaceCandidate[] }> {
-  const toFetch = input.rankedCandidates.slice(0, candidateGroupFetchLimit(input.rankedCandidates));
+  const rankedCandidates = pruneEquivalentPolicyFetchCandidates(input.rankedCandidates);
+  const toFetch = rankedCandidates.slice(0, candidateGroupFetchLimit(rankedCandidates));
   const policyResults = await recordPolicyTiming(
     input.timingBreakdown,
     `${input.labelPrefix} fetch group`,
@@ -2020,7 +2021,7 @@ function safeUrlPath(value: string): string {
   }
 }
 
-function hasCompleteFetchableStaticCoreCoverage(candidates: PolicySurfaceCandidate[]): boolean {
+function hasSufficientFetchableStaticGdprCoverage(candidates: PolicySurfaceCandidate[]): boolean {
   const fetchable = deterministicFetchFallback(candidates)
     .filter((candidate) =>
       candidate.fetchable &&
@@ -2035,10 +2036,8 @@ function hasCompleteFetchableStaticCoreCoverage(candidates: PolicySurfaceCandida
     surfaceTypes.has("cookie_policy") ||
     surfaceTypes.has("consent_preferences") ||
     surfaceTypes.has("cookie_settings") ||
-    surfaceTypes.has("your_privacy_choices") ||
-    surfaceTypes.has("do_not_sell_or_share");
+    surfaceTypes.has("your_privacy_choices");
   return surfaceTypes.has("privacy_policy") &&
-    surfaceTypes.has("terms") &&
     hasCookieOrControlSurface;
 }
 
@@ -2124,6 +2123,47 @@ function capPolicyCandidatesWithSurfaceDiversity(
   }
 
   return diverse;
+}
+
+function pruneEquivalentPolicyFetchCandidates(
+  candidates: PolicySurfaceCandidate[],
+): PolicySurfaceCandidate[] {
+  const selected = new Map<string, PolicySurfaceCandidate>();
+  const order: string[] = [];
+  for (const candidate of candidates) {
+    const key = equivalentPolicyFetchCandidateKey(candidate);
+    const existing = selected.get(key);
+    if (!existing) {
+      selected.set(key, candidate);
+      order.push(key);
+      continue;
+    }
+    if (policyCandidateFetchPreference(candidate) > policyCandidateFetchPreference(existing)) {
+      selected.set(key, candidate);
+    }
+  }
+  return order
+    .map((key) => selected.get(key))
+    .filter((candidate): candidate is PolicySurfaceCandidate => Boolean(candidate));
+}
+
+function equivalentPolicyFetchCandidateKey(candidate: PolicySurfaceCandidate): string {
+  try {
+    const parsed = new URL(candidate.normalizedUrl);
+    parsed.hash = "";
+    parsed.search = "";
+    parsed.pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+    return `${candidate.deterministicSurfaceType}:${parsed.origin.toLowerCase()}${parsed.pathname.toLowerCase()}`;
+  } catch {
+    return `${candidate.deterministicSurfaceType}:${candidate.normalizedUrl.replace(/[?#].*$/, "").replace(/\/+$/, "").toLowerCase()}`;
+  }
+}
+
+function policyCandidateFetchPreference(candidate: PolicySurfaceCandidate): number {
+  return (candidate.fetchable ? 100 : 0) +
+    (candidate.observationOnly ? -100 : 0) +
+    policyCandidateQualityScore(candidate) * 10 +
+    candidate.deterministicScore;
 }
 
 function hasRetainedCorePolicyOrControlSurface(observations: PolicySurfaceObservation[]): boolean {
