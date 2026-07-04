@@ -4,6 +4,7 @@ import {
   classifyConsentControlLabel,
   consentActionCandidateSchema,
   consentUiObservationSchema,
+  isProductionCreditworthyPolishConsentControlClassification,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
@@ -306,6 +307,38 @@ test("classifies contextual Polish continue-to-service consent labels only with 
   assert.equal(classification.matchedLocale, "pl");
   assert.equal(classification.matchStrength, "contextual");
   assert.equal(classification.contextSatisfied, true);
+});
+
+test("marks only explicit Polish consent-control labels as production creditworthy", () => {
+  const contextText = "Dbamy o Twoją prywatność. Używamy plików cookie i prosimy o zgodę użytkownika.";
+  const accept = classifyConsentControlLabel({
+    label: "AKCEPTUJĘ",
+    contextText,
+    classifierProfile: "multilingual_v1",
+  });
+  const options = classifyConsentControlLabel({
+    label: "USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji",
+    contextText,
+    classifierProfile: "multilingual_v1",
+  });
+  const continueToService = classifyConsentControlLabel({
+    label: "Przejdź do serwisu",
+    contextText: "Klikając Przejdź do serwisu udzielasz zgody na pliki cookie.",
+    classifierProfile: "multilingual_v1",
+  });
+
+  assert.equal(isProductionCreditworthyPolishConsentControlClassification("AKCEPTUJĘ", accept), true);
+  assert.equal(
+    isProductionCreditworthyPolishConsentControlClassification(
+      "USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji",
+      options,
+    ),
+    true,
+  );
+  assert.equal(
+    isProductionCreditworthyPolishConsentControlClassification("Przejdź do serwisu", continueToService),
+    false,
+  );
 });
 
 test("keeps Dutch and Polish privacy opt-out controls distinct from reject with multilingual profile", () => {

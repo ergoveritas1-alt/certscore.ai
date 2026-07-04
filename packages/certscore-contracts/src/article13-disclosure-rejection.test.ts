@@ -204,6 +204,59 @@ test("Article 13 rejection contract accepts BILD-style German row-specific excer
   }
 });
 
+test("Article 13 rejection contract accepts Wyborcza-style Polish row-specific excerpts", () => {
+  const examples = [
+    {
+      disclosureType: "controller_contact",
+      text: "Administratorem danych osobowych przetwarzanych w związku z korzystaniem z Serwisów jest Wyborcza sp. z o.o.",
+    },
+    {
+      disclosureType: "dpo_contact",
+      text: "W każdej sprawie dotyczącej danych osobowych można się skontaktować z naszym Inspektorem Ochrony Danych Osobowych na adres e-mail iod@example.test lub pisemnie z dopiskiem IOD.",
+    },
+    {
+      disclosureType: "processing_purposes",
+      text: "W jakim celu i na jakiej podstawie prawnej przetwarzamy Twoje dane? Dane osobowe przetwarzamy w następujących celach związanych ze świadczeniem usług.",
+    },
+    {
+      disclosureType: "legal_basis",
+      text: "Podstawą prawną przetwarzania danych osobowych jest uzasadniony interes Administratora oraz art. 6 ust. 1 lit. f RODO.",
+    },
+    {
+      disclosureType: "recipients_or_vendor_categories",
+      text: "Dane osobowe możemy przekazywać podmiotom przetwarzającym dane osobowe, partnerom biznesowym i dostawcom usług.",
+    },
+    {
+      disclosureType: "data_retention",
+      text: "Dane osobowe przechowujemy nie dłużej niż jest to niezbędne, do czasu cofnięcia zgody albo do czasu przedawnienia roszczeń.",
+    },
+    {
+      disclosureType: "data_subject_rights",
+      text: "Przysługuje Ci prawo dostępu do danych osobowych, sprostowania, usunięcia, ograniczenia, wniesienia sprzeciwu oraz przenoszenia danych.",
+    },
+    {
+      disclosureType: "international_transfers",
+      text: "Dane osobowe mogą być przekazywane poza Europejskim Obszarem Gospodarczym na podstawie standardowych klauzul umownych.",
+    },
+    {
+      disclosureType: "supervisory_authority",
+      text: "Masz prawo wnieść skargę do organu nadzorczego, którym jest Prezes Urzędu Ochrony Danych Osobowych.",
+    },
+    {
+      disclosureType: "automated_decision_making_or_profiling",
+      text: "W niektórych przypadkach wykorzystujemy profilowanie dla celów marketingowych w ramach przetwarzania danych osobowych.",
+    },
+  ] as const;
+
+  for (const example of examples) {
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(example.text, example.disclosureType, { mode: "multilingual_classifier" }),
+      true,
+      `${example.disclosureType} should be usable`,
+    );
+  }
+});
+
 test("Article 13 rejection contract rejects DPO nouns without a contact anchor", () => {
   assert.equal(
     article13DisclosureRejectReason(

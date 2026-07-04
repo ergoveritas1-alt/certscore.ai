@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import {
   classifyConsentControlLabel,
+  isProductionCreditworthyPolishConsentControlClassification,
   type ConsentControlClassifierProfile,
   type ConsentControlLabelClassification,
 } from "@certscore/contracts";
@@ -491,7 +492,7 @@ function buildCandidateEvidence(
 }
 
 function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabelClassification {
-  return classifyConsentControlLabel({
+  const defaultClassification = classifyConsentControlLabel({
     label: candidate.label,
     ariaLabel: candidate.ariaLabel,
     title: candidate.title,
@@ -500,6 +501,27 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
     hasConsentContext: CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
     hasPreferenceContext: candidate.layer === "preference_center" || /preference|settings|privacy choices/i.test(candidate.contextText),
   });
+  if (defaultClassification.intent !== "unknown") {
+    return defaultClassification;
+  }
+
+  const hasConsentContext = MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN.test(candidate.contextText);
+  const hasPreferenceContext = hasConsentContext &&
+    (candidate.layer === "preference_center" || MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN.test(candidate.contextText));
+  const multilingualClassification = classifyConsentControlLabel({
+    label: candidate.label,
+    ariaLabel: candidate.ariaLabel,
+    title: candidate.title,
+    value: candidate.value,
+    contextText: hasConsentContext || hasPreferenceContext ? candidate.contextText : "",
+    classifierProfile: "multilingual_v1",
+    hasConsentContext,
+    hasPreferenceContext,
+  });
+  if (isPolishProductionGeometryClassification(candidate, multilingualClassification)) {
+    return multilingualClassification;
+  }
+  return defaultClassification;
 }
 
 function diagnosticClassificationsForCandidate(candidate: RawGeometryCandidate): ConsentControlDiagnosticClassification[] | undefined {
@@ -556,6 +578,32 @@ function isLoosePageChromeDiagnostic(
     genericContextualTerms.has(matchedTerm) &&
     label === matchedTerm &&
     !candidate.containerSelectorHint;
+}
+
+function isPolishProductionGeometryClassification(
+  candidate: RawGeometryCandidate,
+  classification: ConsentControlLabelClassification,
+): boolean {
+  if (classification.matchedLocale !== "pl" || classification.intent === "unknown") {
+    return false;
+  }
+  if (!MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN.test(candidate.contextText)) {
+    return false;
+  }
+  if (isLoosePageChromeDiagnostic(candidate, classification)) {
+    return false;
+  }
+  if (!INTERACTIVE_TAG_NAMES.has(candidate.tagName) && !INTERACTIVE_ROLE_PATTERN.test(candidate.role ?? "")) {
+    return false;
+  }
+
+  const label = normalizeLabel([
+    candidate.label,
+    candidate.ariaLabel,
+    candidate.title,
+    candidate.value,
+  ].filter(Boolean).join(" "));
+  return isProductionCreditworthyPolishConsentControlClassification(label, classification);
 }
 
 function actionTypeForClassification(

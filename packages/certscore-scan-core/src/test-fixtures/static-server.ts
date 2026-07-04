@@ -50,6 +50,7 @@ export type StaticFixturePage =
   | "consent-post-choice-reopen-control"
   | "consent-preference-center-reject-success"
   | "consent-preference-center-toggle-save"
+  | "consent-polish-wyborcza-controls"
   | "consent-reject-subscribe"
   | "consent-simple-accept-reject"
   | "consent-tracking-persists-after-reject"
@@ -196,6 +197,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-post-choice-reopen-control": "consent-post-choice-reopen-control",
   "consent-preference-center-reject-success": "consent-preference-center-reject-success",
   "consent-preference-center-toggle-save": "consent-preference-center-toggle-save",
+  "consent-polish-wyborcza-controls": "consent-polish-wyborcza-controls",
   "consent-reject-subscribe": "consent-reject-subscribe",
   "consent-simple-accept-reject": "consent-simple",
   "consent-tracking-persists-after-reject": "consent-persists",
@@ -1008,6 +1010,20 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     leanGuardedImageCookie: caseName === "consent-lean-guarded-image-cookie",
     navigationTimeout: caseName === "consent-navigation-timeout",
   };
+  if (caseName === "consent-polish-wyborcza-controls") {
+    return `
+      <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+      <main>
+        <h1>Wyborcza fixture</h1>
+      </main>
+      <div id="cmpbox" class="cmpbox cmpboxWelcomeGDPR" role="dialog" aria-modal="true" style="position: fixed; left: 80px; top: 80px; width: 680px; padding: 24px; background: white; z-index: 20;">
+        <h2>Dbamy o Twoją prywatność</h2>
+        <p>Używamy plików cookie i prosimy o zgodę na personalizację reklam oraz pomiar statystyk. Możesz zarządzać zgodami w centrum preferencji.</p>
+        <button type="button" aria-label="USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji">USTAWIENIA ZAAWANSOWANE</button>
+        <button type="button">AKCEPTUJĘ</button>
+      </div>
+    `;
+  }
   if (options.lateFirstLayerControls) {
     return `
       <section>

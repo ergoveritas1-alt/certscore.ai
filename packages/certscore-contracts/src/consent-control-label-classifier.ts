@@ -694,6 +694,32 @@ export function normalizeConsentControlText(value: string | null | undefined): s
     .toLowerCase();
 }
 
+export function isProductionCreditworthyPolishConsentControlClassification(
+  labelValue: string | null | undefined,
+  classification: ConsentControlLabelClassification,
+): boolean {
+  if (classification.matchedLocale !== "pl" || classification.intent === "unknown") {
+    return false;
+  }
+  const normalizedLabel = normalizeConsentControlText(labelValue);
+  const strongMatch = classification.matchStrength === "direct" || classification.matchStrength === "equivalent";
+
+  if (classification.intent === "accept") {
+    return strongMatch &&
+      /\b(?:akceptuj(?:e|ę)?|zaakceptuj|zgadzam się|zezwól)\b/i.test(normalizedLabel) &&
+      !/\bprzejd[zź]\b/i.test(normalizedLabel);
+  }
+  if (classification.intent === "options") {
+    return /(?:centrum preferencji|ustawienia zaawansowane|preferencje plik|ustawienia plik|zarządzaj (?:zgodami|preferencjami))/i.test(normalizedLabel) ||
+      (strongMatch && /(?:preferenc|ustawieni|wybor|zgod)/i.test(normalizedLabel));
+  }
+  if (classification.intent === "reject") {
+    return strongMatch &&
+      /(?:odrzu|nie akceptuj|nie zgadzam|tylko (?:niezb[eę]dne|wymagane|konieczne))/i.test(normalizedLabel);
+  }
+  return false;
+}
+
 function direct(intent: Exclude<ConsentControlIntent, "unknown">, phrase: string): TermInput[] {
   return [{ intent, phrase, strength: "direct" }];
 }

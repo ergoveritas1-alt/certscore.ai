@@ -240,6 +240,44 @@ test("classifies Polish Article 13 policy wording with explicit processing conte
   }
 });
 
+test("classifies Wyborcza-style Polish GDPR Transparency disclosures from retained policy text", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["pl"],
+    maxMatches: 20,
+    text: [
+      "Administratorem danych osobowych przetwarzanych w związku z korzystaniem z Serwisów jest Wyborcza sp. z o.o.",
+      "W każdej sprawie dotyczącej danych osobowych można się skontaktować z naszym Inspektorem Ochrony Danych Osobowych na adres e-mail iod@example.test z dopiskiem IOD.",
+      "W jakim celu i na jakiej podstawie prawnej przetwarzamy Twoje dane? Dane osobowe przetwarzamy w następujących celach.",
+      "Podstawą prawną przetwarzania jest uzasadniony interes Administratora oraz art. 6 ust. 1 lit. f RODO.",
+      "Dane możemy przekazywać podmiotom przetwarzającym dane osobowe, partnerom biznesowym i dostawcom usług.",
+      "Dane przechowujemy nie dłużej niż jest to niezbędne, do czasu cofnięcia zgody albo do czasu przedawnienia roszczeń.",
+      "Przysługuje Ci prawo dostępu, sprostowania, usunięcia, ograniczenia, wniesienia sprzeciwu oraz przenoszenia danych.",
+      "Dane mogą być przekazywane poza Europejskim Obszarem Gospodarczym na podstawie standardowych klauzul umownych.",
+      "Masz prawo wnieść skargę do organu nadzorczego, którym jest Prezes Urzędu Ochrony Danych Osobowych.",
+      "W niektórych przypadkach wykorzystujemy profilowanie dla celów marketingowych.",
+    ].join(" "),
+  });
+
+  for (const topic of [
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ] satisfies GdprTransparencyTopic[]) {
+    const match = classification.matches.find((candidate) => candidate.topic === topic);
+    assert.ok(match, `Wyborcza-style Polish policy text should classify ${topic}`);
+    assert.equal(match.matchedLocale, "pl");
+    assert.equal(match.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+    assert.ok(match.evidenceExcerpt.length <= 360);
+  }
+});
+
 test("classifies DPO, rights, transfers, and automated-decision topics in non-English locales", () => {
   const examples = [
     {

@@ -98,7 +98,7 @@ test("captures Numa-style consentmanager settings and accept without reject", as
   assert.equal(artifact.summary.firstLayerOptions, true);
 });
 
-test("retains multilingual consent classifications as diagnostic-only geometry evidence", async () => {
+test("promotes high-confidence Polish consent controls while retaining ambiguous continue evidence as diagnostic-only", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
     <div id="cmpbox" class="cmpbox cmpboxWelcomeGDPR" role="dialog" aria-modal="true" style="position: fixed; left: 100px; top: 100px; width: 560px; padding: 24px; background: white;">
@@ -111,12 +111,13 @@ test("retains multilingual consent classifications as diagnostic-only geometry e
   `);
 
   assert.equal(artifact.summary.cmpDetected, true);
-  assert.equal(artifact.summary.firstLayerAccept, false);
+  assert.equal(artifact.summary.firstLayerAccept, true);
   assert.equal(artifact.summary.firstLayerReject, false);
-  assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.equal(artifact.summary.firstLayerOptions, true);
 
   const accept = findCandidate(artifact, "AKCEPTUJĘ");
-  assert.equal(accept?.actionType, "other");
+  assert.equal(accept?.actionType, "accept_all");
+  assert.equal(accept?.decisionStatus, "confirmed_visible");
   assert.equal(
     accept?.diagnosticClassifications?.some((classification) =>
       classification.classifierProfile === "multilingual_v1" &&
@@ -128,7 +129,8 @@ test("retains multilingual consent classifications as diagnostic-only geometry e
   );
 
   const options = findCandidate(artifact, "USTAWIENIA ZAAWANSOWANE");
-  assert.equal(options?.actionType, "other");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.decisionStatus, "confirmed_visible");
   assert.equal(
     options?.diagnosticClassifications?.some((classification) =>
       classification.classifierProfile === "multilingual_v1" &&
@@ -175,7 +177,7 @@ test("does not treat generic Dutch settings page chrome as diagnostic consent ev
   assert.equal(settingsCandidates.some((candidate) => (candidate.diagnosticClassifications?.length ?? 0) > 0), false);
 });
 
-test("retains Polish long-form consent buttons as diagnostic-only geometry evidence", async () => {
+test("promotes Polish long-form settings controls without treating continue-to-site as accept", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
     <div id="rasp_cmp" role="dialog" aria-label="Plansza RODO" style="position: fixed; left: 208px; top: 175px; width: 950px; height: 550px; display: flex; flex-direction: column; padding: 24px; background: white;">
@@ -195,10 +197,11 @@ test("retains Polish long-form consent buttons as diagnostic-only geometry evide
   assert.equal(artifact.summary.cmpDetected, true);
   assert.equal(artifact.summary.firstLayerAccept, false);
   assert.equal(artifact.summary.firstLayerReject, false);
-  assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.equal(artifact.summary.firstLayerOptions, true);
 
   const options = findCandidate(artifact, "Ustawienia zaawansowane");
-  assert.equal(options?.actionType, "other");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.decisionStatus, "confirmed_visible");
   assert.equal(
     options?.diagnosticClassifications?.some((classification) =>
       classification.classifierProfile === "multilingual_v1" &&
@@ -217,6 +220,32 @@ test("retains Polish long-form consent buttons as diagnostic-only geometry evide
       classification.productionCredit === false &&
       classification.actionType === "accept_all" &&
       classification.matchedLocale === "pl"
+    ),
+    true,
+  );
+});
+
+test("captures Wyborcza-style Polish Consentmanager accept and advanced settings controls", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+    <div id="cmpbox" class="cmpbox cmpboxWelcomeGDPR" role="dialog" aria-modal="true" style="position: fixed; left: 80px; top: 80px; width: 620px; padding: 24px; background: white;">
+      <h1>Dbamy o Twoją prywatność</h1>
+      <p>Używamy plików cookie. Klikając Akceptuję wyrażasz zgodę na personalizację reklam oraz pomiar statystyk. Możesz zarządzać zgodami w centrum preferencji.</p>
+      <button type="button" aria-label="USTAWIENIA ZAAWANSOWANE, otwiera okno dialogowe centrum preferencji">USTAWIENIA ZAAWANSOWANE</button>
+      <button type="button">AKCEPTUJĘ</button>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "Consentmanager");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "AKCEPTUJĘ")?.actionType, "accept_all");
+  assert.equal(
+    artifact.candidates.some((candidate) =>
+      candidate.label.startsWith("USTAWIENIA ZAAWANSOWANE") &&
+      candidate.actionType === "manage_preferences"
     ),
     true,
   );

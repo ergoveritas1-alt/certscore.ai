@@ -1232,6 +1232,126 @@ test("summarizePolicySurfaces credits French Article 13 candidates through the p
   });
 });
 
+test("summarizePolicySurfaces credits Wyborcza-style Polish Article 13 candidates through the production profile by default", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const candidateInputs = [
+    {
+      topic: "controller_contact",
+      evidenceText: "Administratorem danych osobowych przetwarzanych w związku z korzystaniem z Serwisów jest Wyborcza sp. z o.o.",
+      matchedTerm: "administratorem danych osobowych",
+    },
+    {
+      topic: "dpo_contact",
+      evidenceText: "W każdej sprawie dotyczącej danych osobowych można się skontaktować z naszym Inspektorem Ochrony Danych Osobowych na adres e-mail iod@example.test.",
+      matchedTerm: "inspektorem ochrony danych osobowych",
+    },
+    {
+      topic: "processing_purposes",
+      evidenceText: "W jakim celu i na jakiej podstawie prawnej przetwarzamy Twoje dane? Dane osobowe przetwarzamy w następujących celach.",
+      matchedTerm: "w jakim celu i na jakiej podstawie prawnej przetwarzamy twoje dane",
+    },
+    {
+      topic: "legal_basis",
+      evidenceText: "Podstawą prawną przetwarzania danych osobowych jest uzasadniony interes Administratora oraz art. 6 ust. 1 lit. f RODO.",
+      matchedTerm: "podstawą prawną przetwarzania jest",
+    },
+    {
+      topic: "recipients_or_vendor_categories",
+      evidenceText: "Dane osobowe możemy przekazywać podmiotom przetwarzającym dane osobowe, partnerom biznesowym i dostawcom usług.",
+      matchedTerm: "podmiotom przetwarzającym dane osobowe",
+    },
+    {
+      topic: "data_retention",
+      evidenceText: "Dane osobowe przechowujemy nie dłużej niż jest to niezbędne, do czasu cofnięcia zgody albo do czasu przedawnienia roszczeń.",
+      matchedTerm: "do czasu cofnięcia zgody",
+    },
+    {
+      topic: "data_subject_rights",
+      evidenceText: "Przysługuje Ci prawo dostępu do danych osobowych, sprostowania, usunięcia, ograniczenia, wniesienia sprzeciwu oraz przenoszenia danych.",
+      matchedTerm: "prawo do przenoszenia danych",
+    },
+    {
+      topic: "international_transfers",
+      evidenceText: "Dane osobowe mogą być przekazywane poza Europejskim Obszarem Gospodarczym na podstawie standardowych klauzul umownych.",
+      matchedTerm: "standardowe klauzule umowne",
+    },
+    {
+      topic: "supervisory_authority",
+      evidenceText: "Masz prawo wniesienia skargi do organu nadzorczego zajmującego się ochroną danych osobowych, tj. Prezesa Urzędu Ochrony Danych Osobowych.",
+      matchedTerm: "prawo wniesienia skargi do organu nadzorczego",
+    },
+    {
+      topic: "automated_decision_making_or_profiling",
+      evidenceText: "W niektórych przypadkach wykorzystujemy profilowanie dla celów marketingowych w ramach przetwarzania danych osobowych.",
+      matchedTerm: "profilowania dla celów marketingowych",
+    },
+  ];
+  const candidates = candidateInputs.map((candidate) => ({
+    ...candidate,
+    classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+    classifierReasonCodes: [`matched_${candidate.topic}`, "match_strength_equivalent"],
+    confidence: 0.88,
+    matchStrength: "equivalent",
+    matchedLocale: "pl",
+    productionCredit: false,
+    status: "diagnostic_only",
+  }));
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "wyborcza-style-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://wyborcza.pl/privacy",
+      normalizedUrl: "https://wyborcza.pl/privacy",
+      confidence: 0.96,
+      status: "fetched",
+      textExcerpt: [
+        "Polityka prywatności. Dokument opisuje przetwarzanie danych osobowych użytkowników.",
+        ...candidateInputs.map((candidate) => candidate.evidenceText),
+      ].join(" "),
+      observedTopics: [],
+      gdprTransparencyTopicCandidates: candidates,
+    },
+  ] as never, "https://wyborcza.pl/");
+
+  const summary = summarizePolicySurfaces(surfaces, "wyborcza.pl");
+
+  assert.equal(summary.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
+  assert.equal(summary.gdprTransparencyProductionEvidenceEnabled, true);
+  assert.deepEqual(
+    summary.article13DisclosureTypesObserved.sort(),
+    [
+      "automated_decision_making_or_profiling",
+      "controller_contact",
+      "data_retention",
+      "data_subject_rights",
+      "dpo_contact",
+      "international_transfers",
+      "legal_basis",
+      "processing_purposes",
+      "recipients_or_vendor_categories",
+      "supervisory_authority",
+    ],
+  );
+  const acceptedSignals = summary.article13DisclosureSignals as Array<Record<string, unknown>>;
+  assert.equal(acceptedSignals.length, 10);
+  assert.equal(
+    acceptedSignals.every((signal) =>
+      signal.productionCredit === true &&
+      signal.productionCreditProfile === "gdpr_transparency_multilingual_article13_v1" &&
+      signal.matchedLocale === "pl"
+    ),
+    true,
+  );
+  assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
+    acceptedCandidateCount: 10,
+    diagnosticCandidateCount: 0,
+    discardedCandidateCount: 0,
+    productionCreditSignalCount: 10,
+    rejectedCandidateCount: 0,
+    sourceCandidateCount: 10,
+  });
+});
+
 test("summarizePolicySurfaces uses multilingual policy quality by default for GDPR Transparency candidates", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const dpoEvidence = "satisfacción en el ejercicio de sus derechos ante los responsables de los Datos Personales, puede contactar con nuestro Delegado de Protección de datos a través del mail dpo@example.test";
