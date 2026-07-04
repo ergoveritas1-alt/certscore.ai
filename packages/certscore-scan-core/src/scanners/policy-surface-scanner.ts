@@ -11,7 +11,6 @@ import {
   type ScanModuleRun,
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
-import { PDFParse } from "pdf-parse";
 import { chromium, type Browser, type Page } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
@@ -3251,6 +3250,15 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 type FetchTextResult = { documentFormat?: "pdf" | "text"; ok: boolean; status?: number; text: string };
+type PdfParseConstructor = new (input: { data: Uint8Array }) => {
+  destroy(): Promise<void>;
+  getText(input: {
+    first: number;
+    imageBuffer: boolean;
+    imageDataUrl: boolean;
+    pageJoiner: string;
+  }): Promise<{ text: string }>;
+};
 
 async function fetchText(url: string, timeoutMs: number): Promise<FetchTextResult> {
   const startedAtMs = Date.now();
@@ -3336,6 +3344,10 @@ async function extractPdfPolicyText(body: Uint8Array): Promise<string> {
   if (body.length === 0 || body.length > MAX_POLICY_PDF_BYTES) {
     return "";
   }
+  const PDFParse = await loadPdfParser();
+  if (!PDFParse) {
+    return "";
+  }
   const parser = new PDFParse({ data: body });
   try {
     const result = await parser.getText({
@@ -3349,6 +3361,15 @@ async function extractPdfPolicyText(body: Uint8Array): Promise<string> {
     return "";
   } finally {
     await parser.destroy().catch(() => undefined);
+  }
+}
+
+async function loadPdfParser(): Promise<PdfParseConstructor | null> {
+  try {
+    const module = await import("pdf-parse");
+    return module.PDFParse as PdfParseConstructor;
+  } catch {
+    return null;
   }
 }
 
