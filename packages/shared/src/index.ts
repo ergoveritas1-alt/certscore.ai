@@ -6,6 +6,7 @@ export * from "./constants/validation";
 export * from "./access-limitations";
 export * from "./access-limitations.fixtures";
 export * from "./scan-config";
+export * from "./scan-timing-summary";
 export * from "./scan-location";
 export * from "./types/entities";
 export * from "./types/signals";

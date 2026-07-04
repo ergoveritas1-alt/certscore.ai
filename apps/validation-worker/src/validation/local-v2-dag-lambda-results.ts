@@ -12,6 +12,7 @@ import {
   type Message
 } from "@aws-sdk/client-sqs";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { buildScanTimingSummary, type ScanTimingSummary } from "@website-signal-risk-scanner/shared";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -113,6 +114,17 @@ function configuredQueueUrls(options: LocalV2DagLambdaResultPollerOptions) {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+async function readJsonFileIfPresent(filePath: string | null | undefined) {
+  if (!filePath) {
+    return null;
+  }
+  try {
+    return JSON.parse(await readFile(filePath, "utf8")) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function stringValue(value: unknown) {
@@ -503,6 +515,82 @@ async function mirrorLocalV2DagLambdaAuxiliaryArtifacts(input: {
   return input.mirror;
 }
 
+function mirroredArtifactLocalPath(
+  mirror: NonNullable<Awaited<ReturnType<typeof mirrorLocalV2DagLambdaArtifacts>>>,
+  fileName: string
+) {
+  return mirror.mirroredArtifacts.find((artifact) => artifact.fileName === fileName)?.localPath ?? null;
+}
+
+async function buildScanTimingSummaryFromMirror(input: {
+  artifactMirror: NonNullable<Awaited<ReturnType<typeof mirrorLocalV2DagLambdaArtifacts>>>;
+  consumer?: LambdaResultConsumerMetadata;
+  lambdaToWc01ResultRecordedMs: number | null;
+  parsedMessage: LambdaResultMessage;
+  wc01ResultRecordedAt: Date;
+}): Promise<ScanTimingSummary> {
+  const mirrorManifest = await readJsonFileIfPresent(input.artifactMirror.manifestPath);
+  const manifest = await readJsonFileIfPresent(mirroredArtifactLocalPath(input.artifactMirror, "LocalV2DagLambdaManifest.json"));
+  const canonicalEvidenceBundle = await readJsonFileIfPresent(mirroredArtifactLocalPath(input.artifactMirror, "CanonicalEvidenceBundle.json"));
+  const scanCorePhases = await readJsonFileIfPresent(mirroredArtifactLocalPath(input.artifactMirror, "V2ScanCorePhases.json"));
+  const handoffTiming = {
+    artifactMirrorDurationMs: input.artifactMirror.durationMs,
+    artifactMirroredAt: input.wc01ResultRecordedAt.toISOString(),
+    lambdaCompletedAt: input.parsedMessage.completedAt,
+    lambdaToWc01ResultRecordedMs: input.lambdaToWc01ResultRecordedMs,
+    sqsConsumerReceivedAt: input.consumer?.consumerReceivedAt ?? null,
+    sqsQueueRegion: input.consumer?.queueRegion ?? null,
+    sqsSentAt: input.consumer?.sentAt ?? null,
+    wc01ResultRecordedAt: input.wc01ResultRecordedAt.toISOString()
+  };
+  return buildScanTimingSummary({
+    artifactMirror: input.artifactMirror,
+    artifactPointers: input.parsedMessage.artifactPointers ?? {},
+    canonicalEvidenceBundle,
+    createdAt: input.wc01ResultRecordedAt.toISOString(),
+    handoffTiming,
+    lambdaCompletedAt: input.parsedMessage.completedAt,
+    lambdaPhaseTimings: input.parsedMessage.phaseTimings ?? asRecord(manifest).phaseTimings ?? [],
+    mirrorManifest,
+    scanCorePhases
+  });
+}
+
+async function persistScanTimingSummary(input: {
+  context: {
+    domainId: string | null;
+    organizationId: string | null;
+  };
+  resultEventId: string | null;
+  scanId: string;
+  scanTimingSummary: ScanTimingSummary;
+}) {
+  if (input.resultEventId) {
+    await query(
+      `update scan_events
+          set metadata_json = jsonb_set(metadata_json, '{scanTimingSummary}', $2::jsonb, true)
+        where id = $1`,
+      [input.resultEventId, input.scanTimingSummary]
+    );
+  }
+  if (!input.context.domainId || !input.context.organizationId) {
+    return;
+  }
+  await query(
+    `insert into scan_runtime_artifacts (scan_id, organization_id, domain_id, scan_timing_summary)
+     values ($1, $2, $3, $4::jsonb)
+     on conflict (scan_id) do update
+       set scan_timing_summary = excluded.scan_timing_summary,
+           updated_at = timezone('utc', now())`,
+    [
+      input.scanId,
+      input.context.organizationId,
+      input.context.domainId,
+      input.scanTimingSummary
+    ]
+  );
+}
+
 export async function recordLocalV2DagLambdaResult(
   parsedMessage: LambdaResultMessage,
   options: {
@@ -713,6 +801,19 @@ export async function recordLocalV2DagLambdaResult(
         ]
       );
     }
+    const scanTimingSummary = await buildScanTimingSummaryFromMirror({
+      artifactMirror,
+      consumer: options.consumer,
+      lambdaToWc01ResultRecordedMs,
+      parsedMessage,
+      wc01ResultRecordedAt
+    });
+    await persistScanTimingSummary({
+      context,
+      resultEventId,
+      scanId: parsedMessage.scanId,
+      scanTimingSummary
+    });
   }
 }
 

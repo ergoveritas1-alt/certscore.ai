@@ -507,10 +507,12 @@ test("local web poller records Lambda result before marking scan completed", asy
   const eventInsertIndex = source.indexOf("insert into scan_events");
   const completionUpdateIndex = source.indexOf("set completed_at = coalesce");
   const auxiliaryMirrorIndex = source.indexOf("await mirrorLocalV2DagLambdaAuxiliaryArtifacts", completionUpdateIndex);
+  const timingSummaryIndex = source.indexOf("await persistScanTimingSummary", auxiliaryMirrorIndex);
 
   assert.ok(eventInsertIndex >= 0, "expected Lambda result event insert");
   assert.ok(completionUpdateIndex >= 0, "expected scan completion update");
   assert.ok(auxiliaryMirrorIndex >= 0, "expected deferred auxiliary artifact mirror");
+  assert.ok(timingSummaryIndex >= 0, "expected retained scan timing summary persistence");
   assert.ok(
     eventInsertIndex < completionUpdateIndex,
     "scan completion must happen after v2_lambda_result.received exists so completed-scan backfill can see evidence"
@@ -518,5 +520,9 @@ test("local web poller records Lambda result before marking scan completed", asy
   assert.ok(
     completionUpdateIndex < auxiliaryMirrorIndex,
     "auxiliary artifact mirroring must not block report-ready completion"
+  );
+  assert.ok(
+    auxiliaryMirrorIndex < timingSummaryIndex,
+    "scan timing summary must be built after auxiliary timing artifacts are mirrored"
   );
 });

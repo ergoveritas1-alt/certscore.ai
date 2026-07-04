@@ -24,6 +24,7 @@ import {
   getLocalV2DagLambdaTargetEnvironment,
   type LocalV2DagLambdaTargetEnvironment
 } from "./local-v2-dag-scan-config";
+import { buildScanTimingSummary, type ScanTimingSummary } from "@website-signal-risk-scanner/shared";
 
 type SqsPollClient = {
   send(command: DeleteMessageCommand | ReceiveMessageCommand): Promise<DeleteMessageCommandOutput | ReceiveMessageCommandOutput>;
@@ -86,6 +87,17 @@ export function getConfiguredLocalV2DagLambdaResultQueueUrls(env: LocalV2DagLamb
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+async function readJsonFileIfPresent(filePath: string | null | undefined) {
+  if (!filePath) {
+    return null;
+  }
+  try {
+    return JSON.parse(await readFile(filePath, "utf8")) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function messageBody(message: Message) {
@@ -273,6 +285,83 @@ async function mirrorLocalV2DagLambdaAuxiliaryArtifacts(input: {
     targetEnvironment: input.parsedMessage.targetEnvironment
   }, null, 2)}\n`, "utf8");
   return input.mirror;
+}
+
+function mirroredArtifactLocalPath(
+  mirror: NonNullable<Awaited<ReturnType<typeof mirrorLocalV2DagLambdaArtifacts>>>,
+  fileName: string
+) {
+  return mirror.mirroredArtifacts.find((artifact) => artifact.fileName === fileName)?.localPath ?? null;
+}
+
+async function buildScanTimingSummaryFromMirror(input: {
+  artifactMirror: NonNullable<Awaited<ReturnType<typeof mirrorLocalV2DagLambdaArtifacts>>>;
+  consumer?: LocalV2DagLambdaResultConsumerMetadata;
+  lambdaToWc01ResultRecordedMs: number | null;
+  parsedMessage: LocalV2DagLambdaResultMessage;
+  wc01ResultRecordedAt: Date;
+}): Promise<ScanTimingSummary> {
+  const mirrorManifest = await readJsonFileIfPresent(input.artifactMirror.manifestPath);
+  const manifest = await readJsonFileIfPresent(mirroredArtifactLocalPath(input.artifactMirror, "LocalV2DagLambdaManifest.json"));
+  const canonicalEvidenceBundle = await readJsonFileIfPresent(mirroredArtifactLocalPath(input.artifactMirror, "CanonicalEvidenceBundle.json"));
+  const scanCorePhases = await readJsonFileIfPresent(mirroredArtifactLocalPath(input.artifactMirror, "V2ScanCorePhases.json"));
+  const handoffTiming = {
+    artifactMirrorDurationMs: input.artifactMirror.durationMs,
+    artifactMirroredAt: input.wc01ResultRecordedAt.toISOString(),
+    lambdaCompletedAt: input.parsedMessage.completedAt,
+    lambdaToWc01ResultRecordedMs: input.lambdaToWc01ResultRecordedMs,
+    sqsConsumerReceivedAt: input.consumer?.consumerReceivedAt ?? null,
+    sqsQueueRegion: input.consumer?.queueRegion ?? null,
+    sqsSentAt: input.consumer?.sentAt ?? null,
+    wc01ResultRecordedAt: input.wc01ResultRecordedAt.toISOString()
+  };
+  return buildScanTimingSummary({
+    artifactMirror: input.artifactMirror,
+    artifactPointers: input.parsedMessage.artifactPointers ?? {},
+    canonicalEvidenceBundle,
+    createdAt: input.wc01ResultRecordedAt.toISOString(),
+    handoffTiming,
+    lambdaCompletedAt: input.parsedMessage.completedAt,
+    lambdaPhaseTimings: input.parsedMessage.phaseTimings ?? asRecord(manifest).phaseTimings ?? [],
+    mirrorManifest,
+    scanCorePhases
+  });
+}
+
+async function persistScanTimingSummary(input: {
+  context: {
+    domainId: string | null;
+    organizationId: string | null;
+  };
+  resultEventId: string | null;
+  scanId: string;
+  scanTimingSummary: ScanTimingSummary;
+}) {
+  const { query } = await import("@website-signal-risk-scanner/db");
+  if (input.resultEventId) {
+    await query(
+      `update scan_events
+          set metadata_json = jsonb_set(metadata_json, '{scanTimingSummary}', $2::jsonb, true)
+        where id = $1`,
+      [input.resultEventId, input.scanTimingSummary]
+    );
+  }
+  if (!input.context.domainId || !input.context.organizationId) {
+    return;
+  }
+  await query(
+    `insert into scan_runtime_artifacts (scan_id, organization_id, domain_id, scan_timing_summary)
+     values ($1, $2, $3, $4::jsonb)
+     on conflict (scan_id) do update
+       set scan_timing_summary = excluded.scan_timing_summary,
+           updated_at = timezone('utc', now())`,
+    [
+      input.scanId,
+      input.context.organizationId,
+      input.context.domainId,
+      input.scanTimingSummary
+    ]
+  );
 }
 
 async function mirrorAuxiliaryArtifactsFromLambdaManifest(input: {
@@ -552,6 +641,19 @@ export async function recordLocalV2DagLambdaResultEvent(
         ]
       );
     }
+    const scanTimingSummary = await buildScanTimingSummaryFromMirror({
+      artifactMirror,
+      consumer: options.consumer,
+      lambdaToWc01ResultRecordedMs,
+      parsedMessage,
+      wc01ResultRecordedAt
+    });
+    await persistScanTimingSummary({
+      context,
+      resultEventId,
+      scanId: parsedMessage.scanId,
+      scanTimingSummary
+    });
   }
 }
 

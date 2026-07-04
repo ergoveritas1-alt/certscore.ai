@@ -522,6 +522,25 @@ function stripTimestampFields(record: Record<string, unknown>) {
   return next;
 }
 
+function normalizeRuntimeArtifactRecord(record: Record<string, unknown> | null) {
+  if (!record) {
+    return null;
+  }
+  const timingSummary = record.scan_timing_summary;
+  if (
+    timingSummary &&
+    typeof timingSummary === "object" &&
+    !Array.isArray(timingSummary) &&
+    !record.scanTimingSummary
+  ) {
+    return {
+      ...record,
+      scanTimingSummary: timingSummary
+    };
+  }
+  return record;
+}
+
 function hasCaptchaOrSecurityDocumentSource(documentSources: Array<Record<string, unknown>>) {
   return documentSources.some((source) => {
     const text = [
@@ -1210,7 +1229,7 @@ async function loadScanDetailRecord(input: {
         })()
       : baseRuntimeArtifacts;
   const normalizedRuntimeArtifacts = browserExtensionRuntimeArtifacts
-    ? withHybridRuntimeArtifactFallbacks(browserExtensionRuntimeArtifacts) ?? browserExtensionRuntimeArtifacts
+    ? normalizeRuntimeArtifactRecord(withHybridRuntimeArtifactFallbacks(browserExtensionRuntimeArtifacts) ?? browserExtensionRuntimeArtifacts)
     : null;
   const runtimeVendorDisclosureEvidence = deriveRuntimeVendorDisclosureEvidenceFromRetainedSources({
     documentSources: normalizedDocumentSources,

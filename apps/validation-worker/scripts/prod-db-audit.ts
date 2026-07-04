@@ -87,6 +87,11 @@ type TimingEventRow = {
   scan_id: string;
 };
 
+type TimingRuntimeArtifactRow = {
+  scan_id: string;
+  scan_timing_summary: unknown;
+};
+
 type TimingSignalCountRow = {
   nano_signal_count: number;
   scan_id: string;
@@ -567,6 +572,90 @@ function getScannerExecutionStages(scanConfig: unknown) {
       stage: getString(stage.stage)
     }))
     .filter((stage) => stage.stage);
+}
+
+function getRetainedScanTimingSummary(runtimeArtifact: TimingRuntimeArtifactRow | undefined) {
+  const summary = getObject(runtimeArtifact?.scan_timing_summary);
+  return summary.schemaVersion === "certscore.scan_timing_summary.v1" ? summary : null;
+}
+
+function getScannerStagesFromTimingSummary(summary: Record<string, unknown> | null) {
+  if (!summary) {
+    return [];
+  }
+  return getObjectArray(summary.lambdaPhaseTimings)
+    .map((phase) => ({
+      attempts: null,
+      durationMs: getNumber(phase.durationMs),
+      errorCategory: null,
+      outcome: getString(phase.status),
+      recoverable: null,
+      stage: getString(phase.label)
+    }))
+    .filter((stage) => stage.stage);
+}
+
+function getRuntimeBuildPhaseDiagnosticsFromTimingSummary(summary: Record<string, unknown> | null) {
+  if (!summary) {
+    return [];
+  }
+  return getObjectArray(summary.moduleTimings)
+    .map((moduleTiming) => {
+      const phase = getString(moduleTiming.moduleName);
+      const timingBreakdown = getObjectArray(moduleTiming.timingBreakdown);
+      const subtimings = Object.fromEntries(
+        timingBreakdown
+          .map((timing) => [getString(timing.label), getNumber(timing.durationMs)] as const)
+          .filter((entry): entry is readonly [string, number] => Boolean(entry[0]) && entry[1] !== null)
+          .sort(([left], [right]) => left.localeCompare(right))
+      );
+      return {
+        completedAt: null,
+        discoveryDebug: {
+          candidateCount: null,
+          duplicateCount: null,
+          skippedRobotsCount: null
+        },
+        buildPhaseCount: null,
+        durationMs: getNumber(moduleTiming.durationMs),
+        elapsedMs: getNumber(moduleTiming.durationMs),
+        errorCategory: null,
+        historicalHintResolutionDurationMs: null,
+        longestPhase: null,
+        longestPhaseDurationMs: null,
+        phaseDurationsMs: subtimings,
+        phasesByDuration: [],
+        phase,
+        homepageFetchStatus: null,
+        homepageSetupSource: null,
+        homepageSetupWaitMs: null,
+        preflightAttemptFetchTimings: [],
+        preflightAttemptRunTimings: [],
+        preflightAttemptSourceCounts: {},
+        preflightAttemptedSourceCounts: {},
+        preflightHomepageCandidateFetchStatus: null,
+        preflightHomepageCandidateDurationMs: null,
+        preflightHomepageCandidateFinalUrl: null,
+        preflightHomepageCandidateOutcome: null,
+        preflightHomepageCandidatePageUrl: null,
+        preflightHomepageCandidateWaitMs: null,
+        preflightHomepageReuseAccepted: null,
+        preflightHomepageReuseReason: null,
+        preflightVerifiedSourceCounts: {},
+        robotsFetchDurationMs: null,
+        robotsFetchStatus: null,
+        robotsRulesLoaded: null,
+        robotsStatePrefetchUsed: null,
+        robotsStateWaitMs: null,
+        status: getString(moduleTiming.status),
+        subtimings,
+        supplementalDiscoveryTimings: [],
+        targetCount: null,
+        totalTrackedDurationMs: getNumber(moduleTiming.durationMs),
+        verifiedCount: null
+      };
+    })
+    .filter((phase) => phase.phase);
 }
 
 function getBuildPhaseTimingSummary(events: TimingEventRow[]) {
@@ -1811,7 +1900,7 @@ async function runScanTimingAudit(input: AuditInput) {
 async function runScannerPhaseTimingAudit(input: AuditInput) {
   const scans = requireAuditScans(input);
   const scanIds = [...new Set(scans.map((scan) => scan.scanId))];
-  const [scanResult, eventResult] = await Promise.all([
+  const [scanResult, eventResult, runtimeArtifactResult] = await Promise.all([
     query<TimingScanRow>(
       `select id::text as id,
               status,
@@ -1838,11 +1927,20 @@ async function runScannerPhaseTimingAudit(input: AuditInput) {
         order by scan_id, created_at asc`,
       [scanIds],
       { readOnly: true }
+    ),
+    query<TimingRuntimeArtifactRow>(
+      `select scan_id::text as scan_id,
+              scan_timing_summary
+         from scan_runtime_artifacts
+        where scan_id = any($1::uuid[])`,
+      [scanIds],
+      { readOnly: true }
     )
   ]);
   await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
 
   const scansById = new Map(scanResult.rows.map((row) => [row.id, row]));
+  const runtimeArtifactsByScan = new Map(runtimeArtifactResult.rows.map((row) => [row.scan_id, row]));
   const eventsByScan = new Map<string, TimingEventRow[]>();
   for (const event of eventResult.rows) {
     const existing = eventsByScan.get(event.scan_id) ?? [];
@@ -1853,9 +1951,16 @@ async function runScannerPhaseTimingAudit(input: AuditInput) {
   const rows = scans.map((inputScan) => {
     const scan = scansById.get(inputScan.scanId);
     const events = eventsByScan.get(inputScan.scanId) ?? [];
-    const scannerStages = getScannerExecutionStages(scan?.scan_config_json);
+    const scanTimingSummary = getRetainedScanTimingSummary(runtimeArtifactsByScan.get(inputScan.scanId));
+    const scannerStagesFromSummary = getScannerStagesFromTimingSummary(scanTimingSummary);
+    const runtimeBuildPhaseDiagnosticsFromSummary = getRuntimeBuildPhaseDiagnosticsFromTimingSummary(scanTimingSummary);
+    const scannerStages = scannerStagesFromSummary.length > 0
+      ? scannerStagesFromSummary
+      : getScannerExecutionStages(scan?.scan_config_json);
     const buildPhaseTimingSummary = getBuildPhaseTimingSummary(events);
-    const runtimeBuildPhaseDiagnostics = getRuntimeBuildPhaseDiagnostics(events);
+    const runtimeBuildPhaseDiagnostics = runtimeBuildPhaseDiagnosticsFromSummary.length > 0
+      ? runtimeBuildPhaseDiagnosticsFromSummary
+      : getRuntimeBuildPhaseDiagnostics(events);
     const runtimeBrowserPassDiagnostics = getRuntimeBrowserPassDiagnostics(events);
 
     return {
@@ -1869,6 +1974,17 @@ async function runScannerPhaseTimingAudit(input: AuditInput) {
       runtimeBrowserPassDiagnosticCount: runtimeBrowserPassDiagnostics.length,
       runtimeBuildPhaseDiagnostics,
       runtimeBuildPhaseDiagnosticCount: runtimeBuildPhaseDiagnostics.length,
+      scanTimingSummary: scanTimingSummary
+        ? {
+            artifactRefCount: getObjectArray(scanTimingSummary.artifactRefs).length,
+            moduleTimingCount: getObjectArray(scanTimingSummary.moduleTimings).length,
+            scanCorePhaseCount: getObjectArray(scanTimingSummary.scanCorePhases).length,
+            schemaVersion: getString(scanTimingSummary.schemaVersion),
+            truncated: scanTimingSummary.truncated === true,
+            truncation: getObject(scanTimingSummary.truncation)
+          }
+        : null,
+      scanTimingSummarySource: scanTimingSummary ? "scan_runtime_artifacts.scan_timing_summary" : "legacy_events_or_scan_config",
       scanId: inputScan.scanId,
       scannerStages,
       scannerWallMs: millisecondsBetweenIso(scan?.started_at, scan?.completed_at),
@@ -1883,7 +1999,7 @@ async function runScannerPhaseTimingAudit(input: AuditInput) {
     notes: input.notes ?? null,
     readScope: {
       scanCount: scanIds.length,
-      tables: ["scans", "scan_events"]
+      tables: ["scans", "scan_events", "scan_runtime_artifacts"]
     },
     summary: {
       scannerWall: summarizeTiming(rows.map((row) => row.scannerWallMs)),
