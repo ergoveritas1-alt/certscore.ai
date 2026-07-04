@@ -37,8 +37,8 @@
     "email": "support@certscore.ai"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node ../../node_modules/esbuild/bin/esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js='#!/usr/bin/env node' --outfile=dist/certscore-mcp.mjs",
-    "bundle": "node ../../node_modules/esbuild/bin/esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js='#!/usr/bin/env node' --outfile=dist/certscore-mcp.mjs",
+    "build": "tsc -p tsconfig.json && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js='#!/usr/bin/env node' --outfile=dist/certscore-mcp.mjs",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --banner:js='#!/usr/bin/env node' --outfile=dist/certscore-mcp.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "node --import tsx --test src/*.test.ts",
     "prepack": "pnpm run build",
