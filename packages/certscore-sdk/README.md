@@ -4,11 +4,9 @@ Official TypeScript/JavaScript SDK for the CertScore public API, Pulse API, and 
 
 CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.
 
-## Installation
+## Status
 
-```bash
-npm install @certscore/sdk
-```
+The SDK is currently a source preview in this monorepo. Public package distribution is not enabled yet; production integrations should use the REST API directly until a package channel is announced.
 
 ## Quick Start
 
@@ -222,7 +220,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install @certscore/sdk
       - run: node scripts/certscore-pulse-check.mjs
         env:
           TARGET_URL: https://example.com

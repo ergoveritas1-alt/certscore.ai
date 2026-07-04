@@ -193,11 +193,7 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Package:
-
-```bash
-npm install @certscore/sdk
-```
+Status: source preview. Public package distribution is not enabled yet; use the REST API directly for production integrations.
 
 Docs:
 
@@ -223,12 +219,6 @@ console.log(scan.id, scan.status);
 Current command: `certscore-mcp`
 
 Current transport: stdio
-
-npx install:
-
-```bash
-npx -y certscore-mcp --version
-```
 
 Homebrew install on macOS:
 

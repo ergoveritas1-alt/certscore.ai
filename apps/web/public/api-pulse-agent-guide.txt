@@ -58,20 +58,17 @@ https://certscore.ai/api-pulse
 MCP developer-preview stdio server:
 https://certscore.ai/api-pulse#mcp
 
-npx install:
-npx -y certscore-mcp --version
-
 Homebrew install on macOS:
 brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
 brew install --cask certscore-mcp
 
 Installed command:
-npx -y certscore-mcp
+certscore-mcp
 
 Verify installed command:
-npx -y certscore-mcp --version
-npx -y certscore-mcp --help
-CERTSCORE_API_KEY=<token> npx -y certscore-mcp doctor
+certscore-mcp --version
+certscore-mcp --help
+CERTSCORE_API_KEY=<token> certscore-mcp doctor
 
 The doctor command checks binary startup, runtime compatibility, API v2 health, and API key presence without printing secrets.
 

@@ -69,12 +69,6 @@ async function listRuntimeTools() {
   }
 }
 
-async function assertNpmPackageExists(packageName: string) {
-  const encoded = encodeURIComponent(packageName);
-  const response = await fetch(`https://registry.npmjs.org/${encoded}`);
-  assert.equal(response.status, 200, `npm package referenced by public docs must exist: ${packageName}`);
-}
-
 function packageNameFromNpxToken(token: string) {
   if (token.startsWith("@")) {
     const secondAt = token.indexOf("@", 1);
@@ -142,13 +136,9 @@ async function main() {
 
   const packageNames = npxPackagesFromDocs([
     "packages/certscore-mcp/README.md",
-    "apps/web/app/developers/mcp/page.tsx",
-    "apps/web/lib/pulse/support-routes.test.ts"
+    "apps/web/app/developers/mcp/page.tsx"
   ]);
-  assert.deepEqual(packageNames, ["certscore-mcp"], "Public npx examples should reference only certscore-mcp");
-  if (process.env.CERTSCORE_MCP_SKIP_NPM_REGISTRY_CHECK !== "1") {
-    await Promise.all(packageNames.map(assertNpmPackageExists));
-  }
+  assert.deepEqual(packageNames, [], "Public MCP docs should use Homebrew, not npx/npm package examples");
 
   console.log("CertScore MCP release guards passed.");
 }

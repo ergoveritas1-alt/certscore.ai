@@ -98,16 +98,9 @@ function packagesFromDeveloperDocs() {
   return [...packages].sort();
 }
 
-async function assertNpmPackagesExist() {
+function assertNoPublicNpmPackageClaims() {
   const packageNames = packagesFromDeveloperDocs();
-  assert.deepEqual(packageNames, ["@certscore/sdk", "certscore-mcp"]);
-  if (process.env.CERTSCORE_SKIP_NPM_REGISTRY_CHECK === "1") {
-    return;
-  }
-  await Promise.all(packageNames.map(async (packageName) => {
-    const response = await fetch(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`);
-    assert.equal(response.status, 200, `npm package referenced by developer docs must exist: ${packageName}`);
-  }));
+  assert.deepEqual(packageNames, [], "Developer docs should not reference npm/npx packages until a public package channel is enabled");
 }
 
 function referenceRoutes() {
@@ -134,7 +127,7 @@ function assertSdkExampleMirrored() {
 
 async function main() {
   lintShellBlocks();
-  await assertNpmPackagesExist();
+  assertNoPublicNpmPackageClaims();
   assertOpenApiReferenceSync();
   assertSdkExampleMirrored();
   console.log("Developer docs quality guards passed.");

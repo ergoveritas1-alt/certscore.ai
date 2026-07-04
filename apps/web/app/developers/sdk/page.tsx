@@ -19,18 +19,13 @@ export default function DeveloperSdkPage() {
   return (
     <DeveloperShell activePath="/developers/sdk" title="TypeScript SDK" description={description}>
       <div className="space-y-12">
-        <Section eyebrow="Install" title="Add the SDK">
-          <CodeBlock>{`npm install @certscore/sdk`}</CodeBlock>
+        <Section eyebrow="Preview" title="Use the SDK source package">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Current package:{" "}
-            <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://www.npmjs.com/package/@certscore/sdk">
-              @certscore/sdk v0.1.0
-            </a>
-            . Source and examples live in{" "}
+            The TypeScript SDK is available as a source preview while package distribution remains private. Source and examples live in{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk">
               packages/certscore-sdk
             </a>
-            .
+            . Use the REST API directly for production integrations until a public package channel is announced.
           </p>
         </Section>
 

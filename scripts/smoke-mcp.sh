@@ -3,32 +3,40 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null 2>&1 && pwd)"
 VERSION="$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).version)' "$REPO_ROOT/packages/certscore-mcp/package.json")"
-PACKAGE="${CERTSCORE_MCP_PACKAGE:-certscore-mcp@${VERSION}}"
+COMMAND="${CERTSCORE_MCP_COMMAND:-$REPO_ROOT/artifacts/certscore-mcp-homebrew/certscore-mcp-v${VERSION}/bin/certscore-mcp}"
+
+if [[ ! -x "$COMMAND" ]]; then
+  (cd "$REPO_ROOT" && pnpm mcp:certscore:homebrew:build >/dev/null)
+fi
+
+if [[ ! -x "$COMMAND" ]]; then
+  echo "CertScore MCP command is not executable: $COMMAND" >&2
+  echo "Set CERTSCORE_MCP_COMMAND=/path/to/certscore-mcp or build the Homebrew artifact." >&2
+  exit 1
+fi
 
 clean_env() {
   env -i \
     HOME="${HOME:-/tmp}" \
     PATH="${PATH:-/usr/bin:/bin}" \
-    PACKAGE="${PACKAGE}" \
-    npm_config_yes=true \
+    COMMAND="${COMMAND}" \
     "$@"
 }
 
-clean_env npx -y --package "$PACKAGE" certscore-mcp --version | grep -F "$VERSION" >/dev/null
-clean_env npx -y --package "$PACKAGE" certscore-mcp --help | grep -F "certscore-mcp" >/dev/null
-clean_env npx -y --package "$PACKAGE" certscore-mcp doctor | grep -F "CERTSCORE_API_KEY is not set" >/dev/null
+clean_env "$COMMAND" --version | grep -F "$VERSION" >/dev/null
+clean_env "$COMMAND" --help | grep -F "certscore-mcp" >/dev/null
+clean_env "$COMMAND" doctor | grep -F "CERTSCORE_API_KEY is not set" >/dev/null
 
-PACKAGE="$PACKAGE" clean_env node --input-type=module <<'NODE'
+COMMAND="$COMMAND" clean_env node --input-type=module <<'NODE'
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
 
-const child = spawn("npx", ["-y", "--package", process.env.PACKAGE, "certscore-mcp"], {
+const child = spawn(process.env.COMMAND, [], {
   env: {
     HOME: process.env.HOME ?? "/tmp",
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     CERTSCORE_BASE_URL: "http://127.0.0.1:9",
-    CERTSCORE_REQUEST_TIMEOUT_MS: "1000",
-    npm_config_yes: "true"
+    CERTSCORE_REQUEST_TIMEOUT_MS: "1000"
   },
   stdio: ["pipe", "pipe", "pipe"]
 });
@@ -123,4 +131,4 @@ try {
 }
 NODE
 
-echo "CertScore MCP clean-env smoke passed for ${PACKAGE}."
+echo "CertScore MCP clean-env smoke passed for ${COMMAND}."
