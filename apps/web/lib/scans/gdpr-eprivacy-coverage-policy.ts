@@ -5147,12 +5147,17 @@ function buildGdprTransparencyArticle13ConcernOutcome(
   ]) ?? config.disclosureType ?? "unknown";
   const sourceUrl = getString(rawEvidence, ["sourceUrl", "source_url"]);
   const locale = getString(rawEvidence, ["matchedLocale", "matched_locale"]);
+  const evidenceText =
+    getStringArray(rawEvidence, ["policySnippets", "policy_snippets"])[0] ??
+    getString(rawEvidence, ["selectedPolicySectionExcerpt", "selected_policy_section_excerpt", "evidenceText", "evidence_text"]);
   const state = getString(rawEvidence, [
     "gdprTransparencyArticle13ConcernState",
     "gdpr_transparency_article13_concern_state"
   ]) ?? concern.observedValue ?? "ambiguous";
+  const policyDisclosureSummary = getPolicyDisclosureSummary(input.runtimeArtifacts);
   const evidenceRefs = [
     `Evidence: ${config.label}`,
+    evidenceText ? `Excerpt: ${evidenceText}` : null,
     locale ? `Locale: ${locale}` : null,
     sourceUrl ? `Policy URL: ${sourceUrl}` : null
   ].filter((value): value is string => Boolean(value));
@@ -5162,12 +5167,17 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       classifierReasonCodes: rawEvidence.classifierReasonCodes,
       confidence: rawEvidence.confidence,
       disclosureType: topic,
+      evidenceText,
       evidenceSource: "normalized_gdpr_transparency_article13_concern",
       matchStrength: rawEvidence.matchStrength,
       matchedLocale: locale,
+      matchedTerm: rawEvidence.matchedTerm,
       productionCredit: rawEvidence.productionCredit,
       productionCreditProfile: rawEvidence.productionCreditProfile,
+      selectedPolicySectionExcerpt: evidenceText,
+      selectedPolicySectionUrl: sourceUrl,
       selectedEvidenceStrength: rawEvidence.selectedEvidenceStrength,
+      sourceUrl,
       source: "normalized_concern",
       status: concern.regulatoryChecklistEligibility === "observed" ? "observed" : "partial"
     },
@@ -5178,6 +5188,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       state,
       topic
     },
+    ...(policyDisclosureSummary ? { policySurfaceSummary: policyDisclosureSummary } : {}),
     signalObserved: concern.regulatoryChecklistEligibility === "observed" ? true : "partial"
   };
 

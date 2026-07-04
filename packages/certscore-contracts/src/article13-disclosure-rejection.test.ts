@@ -175,6 +175,35 @@ test("Article 13 rejection contract preserves accepted legacy and multilingual e
   );
 });
 
+test("Article 13 rejection contract accepts BILD-style German row-specific excerpts", () => {
+  const examples = [
+    {
+      disclosureType: "legal_basis",
+      text: "IP-Adresse Rechtsgrundlage der Datenverarbeitung ist Art. 6 Abs. 1 lit. b DSGVO sowie Art. 6 Abs. 1 lit. f DSGVO.",
+    },
+    {
+      disclosureType: "international_transfers",
+      text: "Wir verarbeiten personenbezogene Daten auch in Staaten außerhalb des Europäischen Wirtschaftsraumes und nutzen Standardvertragsklauseln der EU-Kommission.",
+    },
+    {
+      disclosureType: "supervisory_authority",
+      text: "Ferner haben Sie ein Beschwerderecht bei der zuständigen Aufsichtsbehörde gemäß DSGVO.",
+    },
+    {
+      disclosureType: "automated_decision_making_or_profiling",
+      text: "Wir verzichten auf eine automatische Entscheidungsfindung oder ein Profiling im Sinne des Art. 22 DSGVO.",
+    },
+  ] as const;
+
+  for (const example of examples) {
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(example.text, example.disclosureType, { mode: "multilingual_classifier" }),
+      true,
+      `${example.disclosureType} should be usable`,
+    );
+  }
+});
+
 test("Article 13 rejection contract rejects DPO nouns without a contact anchor", () => {
   assert.equal(
     article13DisclosureRejectReason(

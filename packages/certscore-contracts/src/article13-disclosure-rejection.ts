@@ -358,7 +358,7 @@ function hasLocalizedArticle13EvidenceContext(
   const normalized = normalizeArticle13Whitespace(value);
   const hasPrivacyDataContext =
     /(?:privacy|personal data|personal information|data protection|processing|controller|policy|notice|rights|privacy policy)/i.test(normalized) ||
-    /(?:datenschutz|personenbezogene daten|traitement|données personnelles|protección de datos|datos personales|protezione dei dati|dati personali|trattamento dei dati|tuoi dati|suoi dati|persoonsgegevens|gegevensbescherming|dane osobowe|ochrona danych)/i.test(normalized);
+    /(?:datenschutz|datenverarbeitung|dsgvo|personenbezogene daten|traitement|données personnelles|protección de datos|datos personales|protezione dei dati|dati personali|trattamento dei dati|tuoi dati|suoi dati|persoonsgegevens|gegevensbescherming|dane osobowe|ochrona danych)/i.test(normalized);
   if (!hasPrivacyDataContext) {
     return false;
   }
@@ -374,17 +374,17 @@ function hasLocalizedArticle13EvidenceContext(
     case "legal_basis":
       return /(?:legal basis|lawful basis|legitimate interest|article 6|rechtsgrundlage|base légale|base jurídica|base legal|base giuridica|basi giuridiche|grondslag|podstawa prawna)/i.test(normalized);
     case "recipients_or_vendor_categories":
-      return /(?:recipients?|categories of recipients|service providers?|processors?|third parties|empfänger|dienstleister|destinataires|prestataires|destinatarios|proveedores|destinatari|fornitori|ontvangers|dienstverleners|odbiorcy|dostawcy)/i.test(normalized);
+      return /(?:recipients?|categories of recipients|service providers?|processors?|third parties|empfänger|dienstleister|drittanbieter|destinataires|prestataires|destinatarios|proveedores|destinatari|fornitori|ontvangers|dienstverleners|odbiorcy|dostawcy)/i.test(normalized);
     case "data_retention":
-      return /(?:retention|retain|kept|storage period|how long|aufbewahrung|speichern|gespeichert|conservation|conservons|conserv(?:é|e|és|ées)|durée nécessaire|conservación|conservamos|conservazione|conserviamo|bewaren|bewaartermijn|przechowywania|przechowujemy)/i.test(normalized);
+      return /(?:retention|retain|kept|storage period|how long|aufbewahrung|speichern|gespeichert|speicherdauer|solange|erforderlich|conservation|conservons|conserv(?:é|e|és|ées)|durée nécessaire|conservación|conservamos|conservazione|conserviamo|bewaren|bewaartermijn|przechowywania|przechowujemy)/i.test(normalized);
     case "data_subject_rights":
       return /(?:rights?|right to access|right to erasure|data subject|betroffenenrechte|recht auf|droits?|personnes concernées|derechos?|interesados|diritti?|interessati|rechten|betrokkenen|recht om bezwaar te maken|prawa|osób których dane dotyczą)/i.test(normalized);
     case "international_transfers":
-      return /(?:international transfer|outside (?:the )?(?:eea|eu|european union)|third countr|standard contractual|übermittlung|drittland|transfert|hors de|transferencia|fuera del|trasferiment|paesi terzi|doorgifte|buiten|transfer|poza|standardowe klauzule)/i.test(normalized);
+      return /(?:international transfer|outside (?:the )?(?:eea|eu|european union)|third countr|standard contractual|übermittlung|drittland|außerhalb des europäischen wirtschaftsraumes|standardvertragsklauseln|transfert|hors de|transferencia|fuera del|trasferiment|paesi terzi|doorgifte|buiten|transfer|poza|standardowe klauzule)/i.test(normalized);
     case "supervisory_authority":
-      return /(?:supervisory authority|data protection authority|lodge a complaint|aufsichtsbehörde|beschwerde|autorité de contrôle|plainte|autoridad de control|reclamación|autorità di controllo|reclamo|toezichthoudende autoriteit|klacht|organ nadzorczy|skarga)/i.test(normalized);
+      return /(?:supervisory authority|data protection authority|lodge a complaint|aufsichtsbehörde|zuständigen aufsichtsbehörde|beschwerderecht|beschwerde|autorité de contrôle|plainte|autoridad de control|reclamación|autorità di controllo|reclamo|toezichthoudende autoriteit|klacht|organ nadzorczy|skarga)/i.test(normalized);
     case "automated_decision_making_or_profiling":
-      return /(?:automated decision|automated processing|profiling|solely automated|automatisierte entscheid|profiling|décision automatisée|profilage|decisiones automatizadas|elaboración de perfiles|decisioni automatizzate|profilazione|geautomatiseerde besluitvorming|profilering|zautomatyzowane podejmowanie decyzji|profilowanie)/i.test(normalized);
+      return /(?:automated decision|automated processing|profiling|solely automated|automatisierte entscheid|automatische entscheid|profiling|décision automatisée|profilage|decisiones automatizadas|elaboración de perfiles|decisioni automatizzate|profilazione|geautomatiseerde besluitvorming|profilering|zautomatyzowane podejmowanie decyzji|profilowanie)/i.test(normalized);
     default:
       return false;
   }

@@ -2334,6 +2334,145 @@ test("materializeLocalV2DagScanDetail does not count reject-and-subscribe geomet
   }
 });
 
+test("materializeLocalV2DagScanDetail retains BILD-style German consent controls without treating paid no-tracking CTA as reject", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/consent-bild-geometry-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-07-04T13:42:59.000Z",
+      cmpRuntimeObservations: [],
+      consentUiObservations: [],
+      cookieEvents: [],
+      derivedRuntimeSignals: {
+        consentBannerLikelyPresent: true,
+        journeySummary: { journeyCount: 0 },
+        preConsentTrackingObserved: false,
+        sessionReplayOrBehavioralAnalyticsObserved: false,
+        thirdPartyCookiesPreConsentObserved: false,
+        thirdPartyVendorsObserved: false
+      },
+      modulesRun: [],
+      networkEvents: [],
+      normalizedUrl: "https://www.bild.de/",
+      policySurfaceObservations: [],
+      runtimeTimeline: [],
+      scanId: "consent-bild-geometry-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [],
+      startedAt: "2026-07-04T13:42:39.000Z",
+      url: "https://www.bild.de/"
+    }, null, 2)}\n`, "utf8");
+    await writeFile(path.join(outDir, "ConsentControlGeometryEvidence.json"), `${JSON.stringify({
+      artifactVersion: "consent_control_geometry.v1",
+      candidates: [
+        {
+          actionType: "accept_all",
+          ariaLabel: "Alle akzeptieren",
+          boundingBox: { x: 322.5, y: 267.45, width: 347.5, height: 40, top: 267.45, right: 670, bottom: 307.45, left: 322.5 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Alle akzeptieren",
+          layer: "first_layer",
+          selectorHint: "button[aria-label=\"Alle akzeptieren\"]",
+          tagName: "button",
+          title: "Alle akzeptieren"
+        },
+        {
+          actionType: "manage_preferences",
+          ariaLabel: "Einstellungen",
+          boundingBox: { x: 322.5, y: 323.45, width: 347.5, height: 40, top: 323.45, right: 670, bottom: 363.45, left: 322.5 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Einstellungen",
+          layer: "first_layer",
+          selectorHint: "button[aria-label=\"Einstellungen\"]",
+          tagName: "button",
+          title: "Einstellungen"
+        },
+        {
+          actionType: "other",
+          ariaLabel: "Jetzt BILD PUR abonnieren",
+          boundingBox: { x: 690, y: 280, width: 347.5, height: 40, top: 280, right: 1037.5, bottom: 320, left: 690 },
+          decisionStatus: "ambiguous",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Jetzt BILD PUR abonnieren",
+          layer: "first_layer",
+          selectorHint: "button.pur-subscribe-cta",
+          tagName: "button",
+          title: "Jetzt BILD PUR abonnieren"
+        }
+      ],
+      cmp: { detected: true, name: "Consentmanager", confidence: 0.95, reasonCodes: [], matchedSignals: [], detections: [] },
+      containers: [
+        {
+          layer: "first_layer",
+          textExcerpt: "Datenschutz und Nutzungserlebnis auf BILD.de. Mit Tracking und Cookies nutzen. Alle akzeptieren. Einstellungen. Ohne Tracking und Cookies nutzen für 3,99 EUR/Monat. Jetzt BILD PUR abonnieren."
+        }
+      ],
+      pageUrl: "https://www.bild.de/",
+      sourceScanner: "consent_control_geometry_diagnostic",
+      summary: {
+        cmpDetected: true,
+        cmpName: "Consentmanager",
+        confidence: 0.95,
+        firstLayerAccept: true,
+        firstLayerOptions: true,
+        firstLayerReject: false,
+        limitations: []
+      }
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        id: "65420177-3b30-4456-96d0-360d4a2f9a1f",
+        domainHostname: "bild.de",
+        scanConfigJson: {
+          hostname: "bild.de",
+          normalizedUrl: "https://www.bild.de/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const firstLayerChoices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown> | undefined;
+    assert.equal(detail.runtimeArtifacts?.cmpFrameworkSignalObserved, true);
+    assert.equal(detail.runtimeArtifacts?.cmp_vendor_name, "Consentmanager");
+    assert.equal(firstLayerChoices?.acceptControlObserved, true);
+    assert.deepEqual(firstLayerChoices?.acceptLabels, ["Alle akzeptieren"]);
+    assert.equal(firstLayerChoices?.managePreferencesControlObserved, true);
+    assert.deepEqual(firstLayerChoices?.preferenceLabels, ["Einstellungen"]);
+    assert.equal(firstLayerChoices?.rejectControlObserved, false);
+    assert.deepEqual(firstLayerChoices?.rejectLabels, []);
+    assert.equal(
+      (firstLayerChoices?.visibleChoiceLabels as string[] | undefined)?.some((label) => /BILD PUR|abonnieren/i.test(label)),
+      false,
+    );
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail promotes retained access-denied pages to scan no-go", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

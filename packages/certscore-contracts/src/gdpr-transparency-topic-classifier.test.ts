@@ -756,6 +756,49 @@ test("classifies privacy-specific DPO, transfer, and retention evidence across s
   }
 });
 
+test("classifies BILD-style German Article 13 policy language", () => {
+  const text = [
+    "Verantwortlich für die Datenverarbeitung gemäß Art. 4 Nr. 7 DSGVO ist die Axel Springer Deutschland GmbH, Axel-Springer-Str. 65, 10888 Berlin.",
+    "Bei Fragen und Anregungen zum Datenschutz können Sie unseren Datenschutzbeauftragten erreichen unter datenschutz@example.test.",
+    "Personenbezogene Daten werden unter anderem zu den Zwecken „Verwendung reduzierter Daten zur Auswahl von Werbeanzeigen“ und „Erstellung von Profilen für personalisierte Werbung“ verarbeitet.",
+    "Rechtsgrundlage der Datenverarbeitung ist Art. 6 Abs. 1 lit. b DSGVO sowie Art. 6 Abs. 1 lit. f DSGVO.",
+    "Informationen zu den eingesetzten Drittanbietern finden Sie in der Liste möglicher Drittanbieter.",
+    "Wir verarbeiten personenbezogene Daten nur, solange dies für den jeweils genannten Zweck erforderlich ist.",
+    "Ihre Rechte als betroffene Person umfassen Auskunft, Berichtigung, Löschung, Einschränkung und Widerspruch.",
+    "Wir verarbeiten personenbezogene Daten auch in Staaten außerhalb des Europäischen Wirtschaftsraumes und nutzen Standardvertragsklauseln der EU-Kommission.",
+    "Ferner haben Sie ein Beschwerderecht bei der zuständigen Aufsichtsbehörde.",
+    "Wir verzichten auf eine automatische Entscheidungsfindung oder ein Profiling im Sinne des Art. 22 DSGVO."
+  ].join(" ");
+
+  const classification = classifyGdprTransparencyTopics({
+    text,
+    localeHints: ["de"],
+    maxMatches: 20,
+  });
+  const topics = classification.matches.map((match) => match.topic);
+
+  assert.deepEqual(
+    new Set(topics),
+    new Set([
+      "controller_contact",
+      "dpo_contact",
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers",
+      "supervisory_authority",
+      "automated_decision_making_or_profiling",
+    ]),
+  );
+  assert.equal(classification.matches.every((match) => match.matchedLocale === "de"), true);
+  assert.equal(
+    classification.matches.every((match) => match.matchStrength === "direct" || match.matchStrength === "equivalent"),
+    true,
+  );
+});
+
 test("classifies privacy-specific recipients, complaint, and profiling evidence across supported locales", () => {
   const examples = [
     {

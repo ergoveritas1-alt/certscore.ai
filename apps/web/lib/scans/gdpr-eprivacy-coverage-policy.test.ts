@@ -61,15 +61,24 @@ function makeGdprTransparencyArticle13Signal(input: {
 function makeGdprTransparencyConcerns(signals: Array<Record<string, unknown>>, profile = "gdpr_transparency_multilingual_article13_v1") {
   return buildNormalizedConcerns({
     reviewFindingCandidates: [],
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: signals,
-        gdprTransparencyEvidenceProfile: profile,
-        gdprTransparencyProductionEvidenceEnabled: profile === "gdpr_transparency_multilingual_article13_v1"
-      }
-    },
+    runtimeArtifacts: makeGdprTransparencyRuntimeArtifacts(signals, profile),
     validationFindings: []
   });
+}
+
+function makeGdprTransparencyRuntimeArtifacts(
+  signals: Array<Record<string, unknown>>,
+  profile = "gdpr_transparency_multilingual_article13_v1"
+) {
+  return {
+    policyDisclosureSummary: {
+      article13DisclosureSignals: signals,
+      privacyPolicyUrls: ["https://example.test/privacy"],
+      retainedPrivacyPolicyTextExcerpt: signals.map((signal) => String(signal.evidenceText ?? "")).join(" "),
+      gdprTransparencyEvidenceProfile: profile,
+      gdprTransparencyProductionEvidenceEnabled: profile === "gdpr_transparency_multilingual_article13_v1"
+    }
+  };
 }
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes marks policy-dependent rows not testable when policy evidence is missing under limited coverage", () => {
@@ -131,7 +140,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit t
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     normalizedConcerns: makeGdprTransparencyConcerns(signals),
-    runtimeArtifacts: {},
+    runtimeArtifacts: makeGdprTransparencyRuntimeArtifacts(signals),
     snapshot: {}
   });
 
@@ -141,6 +150,21 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit t
       outcomes[rowId]?.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern !== undefined,
       true,
       `${rowId} should retain normalized concern provenance`
+    );
+    assert.equal(
+      outcomes[rowId]?.criticalEvidence.retainedEvidence.policySurfaceSummary !== undefined,
+      true,
+      `${rowId} should retain policy summary for policy review highlighting`
+    );
+    assert.equal(
+      typeof retainedArticle13Signal(outcomes[rowId]!)?.evidenceText,
+      "string",
+      `${rowId} should retain row-specific Article 13 evidence text`
+    );
+    assert.equal(
+      outcomes[rowId]?.evidenceRefs.some((ref) => ref.startsWith("Excerpt: ")),
+      true,
+      `${rowId} should carry an excerpt evidence ref`
     );
   }
 });
