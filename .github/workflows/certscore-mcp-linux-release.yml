@@ -108,6 +108,7 @@ jobs:
         with:
           token: ${{ github.token }}
           branch: automation/certscore-mcp-cask-${{ steps.release.outputs.version }}
+          base: main
           title: "Bump certscore-mcp Homebrew metadata to ${{ steps.release.outputs.version }}"
           commit-message: "Bump certscore-mcp Homebrew metadata to ${{ steps.release.outputs.version }}"
           body: |
