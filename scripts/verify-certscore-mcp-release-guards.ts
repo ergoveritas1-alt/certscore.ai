@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -13,6 +14,8 @@ type ManifestTool = {
 
 const repoRoot = process.cwd();
 const manifest = JSON.parse(readFileSync(join(repoRoot, "packages/certscore-mcp/tools.manifest.json"), "utf8")) as ManifestTool[];
+const discoveryRoutePath = "apps/web/app/.well-known/certscore-ai.json/route.ts";
+const caskPath = "Casks/certscore-mcp.rb";
 
 function sortedTools(tools: ManifestTool[]) {
   return [...tools].sort((a, b) => a.name.localeCompare(b.name));
@@ -42,6 +45,83 @@ function extractStringArrayFromSource(sourcePath: string, marker: string) {
   const end = source.indexOf("]", start);
   assert.ok(start > markerIndex && end > start, `${sourcePath} should contain a string array for ${marker}`);
   return [...source.slice(start, end).matchAll(/"([^"]+)"/g)].map((match) => match[1] ?? "");
+}
+
+function extractQuotedStringAfterMarker(sourcePath: string, marker: string) {
+  const source = readFileSync(join(repoRoot, sourcePath), "utf8");
+  const markerIndex = source.indexOf(marker);
+  assert.notEqual(markerIndex, -1, `${sourcePath} should contain ${marker}`);
+  const value = source.slice(markerIndex).match(/:\s*"([^"]+)"/)?.[1];
+  assert.ok(value, `${sourcePath} should contain a quoted string for ${marker}`);
+  return value;
+}
+
+function parseCertScoreMcpCask() {
+  const source = readFileSync(join(repoRoot, caskPath), "utf8");
+  const version = source.match(/^\s*version\s+"([^"]+)"/m)?.[1];
+  const url = source.match(/^\s*url\s+"([^"]+)"/m)?.[1];
+  const sha256 = source.match(/^\s*sha256\s+"([^"]+)"/m)?.[1];
+  assert.ok(version, `${caskPath} should declare version`);
+  assert.ok(url, `${caskPath} should declare url`);
+  assert.ok(sha256, `${caskPath} should declare sha256`);
+  return { sha256, url, version };
+}
+
+function tokenForReleaseLookup() {
+  return process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN ?? "";
+}
+
+function ghReleaseAssetExists(version: string, assetName: string) {
+  const token = tokenForReleaseLookup();
+  if (!token) {
+    return null;
+  }
+  const result = spawnSync("gh", [
+    "release",
+    "view",
+    `certscore-mcp-v${version}`,
+    "--repo",
+    "ergoveritas1-alt/certscore.ai",
+    "--json",
+    "assets",
+  ], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GH_TOKEN: token,
+    },
+  });
+  if (result.status !== 0) {
+    return false;
+  }
+  const payload = JSON.parse(result.stdout) as { assets?: Array<{ name?: string }> };
+  return (payload.assets ?? []).some((asset) => asset.name === assetName);
+}
+
+async function httpReleaseAssetExists(url: string) {
+  const response = await fetch(url, {
+    method: "GET",
+    headers: { "Range": "bytes=0-0" },
+    redirect: "follow"
+  });
+  await response.body?.cancel();
+  return response.ok || response.status === 206;
+}
+
+async function assertReleaseAssetExists(cask: { url: string; version: string }) {
+  const assetName = `certscore-mcp-v${cask.version}.tar.gz`;
+  const ghResult = ghReleaseAssetExists(cask.version, assetName);
+  if (ghResult === true) {
+    return;
+  }
+  if (ghResult === false) {
+    assert.fail(`mcp.releaseAsset drift: GitHub release certscore-mcp-v${cask.version} is missing asset ${assetName}`);
+  }
+  assert.ok(
+    await httpReleaseAssetExists(cask.url),
+    `mcp.releaseAsset drift: ${cask.url} must exist before Casks/certscore-mcp.rb or the AI discovery manifest advertises ${cask.version}`
+  );
 }
 
 async function listRuntimeTools() {
@@ -94,6 +174,8 @@ function npxPackagesFromDocs(paths: string[]) {
 
 async function main() {
   assert.equal(manifest.length, 12, "CertScore MCP manifest should expose exactly 12 tools");
+  const cask = parseCertScoreMcpCask();
+  const discoveryVersion = extractQuotedStringAfterMarker(discoveryRoutePath, "currentVersion:");
 
   assert.deepEqual(
     sortedTools(certScoreMcpToolContracts.map((tool) => ({ name: tool.name, description: tool.description }))),
@@ -110,6 +192,19 @@ async function main() {
   for (const tool of runtimeTools) {
     assert.ok(tool.annotations, `${tool.name} should expose MCP annotations`);
   }
+  const runtimeToolNames = runtimeTools.map((tool) => tool.name).sort();
+
+  assert.equal(
+    discoveryVersion,
+    cask.version,
+    `mcp.currentVersion drift: ${discoveryRoutePath} must match ${caskPath}`
+  );
+  assert.match(
+    cask.url,
+    new RegExp(`/certscore-mcp-v${cask.version.replaceAll(".", "\\.")}/certscore-mcp-v${cask.version.replaceAll(".", "\\.")}\\.tar\\.gz$`),
+    `mcp.caskUrl drift: ${caskPath} URL must point at the declared cask version`
+  );
+  await assertReleaseAssetExists(cask);
 
   for (const [path, marker] of [
     ["apps/web/app/developers/developer-pages.tsx", "export const mcpTools ="],
@@ -123,9 +218,9 @@ async function main() {
   }
 
   assert.deepEqual(
-    extractStringArrayFromSource("apps/web/app/.well-known/certscore-ai.json/route.ts", "currentTools:").sort(),
-    manifest.map((tool) => tool.name).sort(),
-    "AI discovery MCP currentTools must match checked-in manifest"
+    extractStringArrayFromSource(discoveryRoutePath, "currentTools:").sort(),
+    runtimeToolNames,
+    "mcp.currentTools drift: AI discovery MCP currentTools must match built server tools/list names"
   );
 
   const readme = readFileSync(join(repoRoot, "packages/certscore-mcp/README.md"), "utf8");

@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - ".github/workflows/certscore-mcp-release-guards.yml"
+      - "Casks/certscore-mcp.rb"
+      - "Formula/certscore-mcp.rb"
       - "apps/web/app/.well-known/certscore-ai.json/route.ts"
       - "apps/web/app/api-pulse/page.tsx"
       - "apps/web/app/developers/**"
@@ -15,8 +17,12 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "certscore-mcp-v*"
     paths:
       - ".github/workflows/certscore-mcp-release-guards.yml"
+      - "Casks/certscore-mcp.rb"
+      - "Formula/certscore-mcp.rb"
       - "apps/web/app/.well-known/certscore-ai.json/route.ts"
       - "apps/web/app/api-pulse/page.tsx"
       - "apps/web/app/developers/**"
@@ -30,6 +36,8 @@ jobs:
   release-guards:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
