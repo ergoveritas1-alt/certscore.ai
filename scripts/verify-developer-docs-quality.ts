@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -20,10 +20,23 @@ function run(command: string, args: string[], options: { cwd?: string; input?: s
 }
 
 function rgFiles(pattern: string) {
-  return run("rg", ["--files", "apps/web/app/developers", "-g", pattern])
-    .split("\n")
-    .filter(Boolean)
-    .sort();
+  const suffix = pattern.replace(/^\*/, "");
+  const root = join(repoRoot, "apps/web/app/developers");
+  const files: string[] = [];
+  const visit = (directory: string) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const fullPath = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visit(fullPath);
+        continue;
+      }
+      if (entry.isFile() && entry.name.endsWith(suffix)) {
+        files.push(fullPath.slice(repoRoot.length + 1));
+      }
+    }
+  };
+  visit(root);
+  return files.sort();
 }
 
 function decodeTemplate(raw: string) {
