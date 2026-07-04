@@ -1,13 +1,13 @@
 {
   "name": "certscore-mcp",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": false,
   "description": "MCP server for CertScore public website risk-signal workflows.",
   "type": "module",
   "main": "./dist/certscore-mcp.mjs",
   "types": "./dist/index.d.ts",
   "bin": {
-    "certscore-mcp": "./dist/certscore-mcp.mjs"
+    "certscore-mcp": "dist/certscore-mcp.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -48,6 +48,7 @@
     "certscore",
     "pulse",
     "mcp",
+    "modelcontextprotocol",
     "model-context-protocol"
   ],
   "license": "UNLICENSED",

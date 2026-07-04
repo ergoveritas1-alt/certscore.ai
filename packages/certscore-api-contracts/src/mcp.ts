@@ -199,7 +199,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "create_scan",
     title: "Create CertScore Pulse scan",
-    description: "Deprecated alias of scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links.",
+    description: "Deprecated compatibility alias of scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links.",
     inputSchema: mcpCreateScanInputSchema,
     outputSchema: mcpCreateScanOutputSchema,
     annotations: scanCreationAnnotations

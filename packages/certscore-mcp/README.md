@@ -13,17 +13,18 @@ Public docs:
 
 ## Tools
 
-- `scan_site` starts or reuses a CertScore scan for a public URL.
-- `create_scan` remains as a compatibility alias for scan creation.
-- `get_scan` retrieves the API v2 public-safe scan resource by stable scan ID.
-- `get_scan_status` checks a Pulse `jobId` or API v2 `scanId`.
-- `get_report` retrieves a Pulse report by stable scan ID as JSON or markdown.
-- `export_findings` returns structured findings for ticketing, review, or compliance workflows.
-- `list_findings` returns API v2 public-safe findings for a scan.
-- `get_pre_consent_cookies_trackers` returns the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON.
-- `explain_finding` retrieves one API v2 public-safe finding with evidence summary, caveats, and next steps.
-- `get_latest_domain_scan` retrieves the latest eligible API v2 scan for a domain.
-- `get_latest_domain_pre_consent_cookies_trackers` retrieves the latest-domain Cookies & Trackers (Pre-consent) table projection.
+- `create_scan` - Deprecated compatibility alias of scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links.
+- `scan_site` - Start or reuse a CertScore public-web scan for a public URL.
+- `get_scan` - Retrieve the API v2 public-safe scan resource for a stable scan ID.
+- `get_scan_status` - Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId.
+- `get_report` - Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet.
+- `get_evidence` - Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.
+- `export_findings` - Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows.
+- `list_findings` - List API v2 public-safe findings already projected for a scan.
+- `get_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.
+- `explain_finding` - Explain a single CertScore finding with public evidence, caveats, and reviewer next steps.
+- `get_latest_domain_scan` - Retrieve the latest eligible API v2 public-safe scan for a domain.
+- `get_latest_domain_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.
 
 The initial MCP surface intentionally does not include account scan browsing or scan comparison tools.
 
@@ -196,9 +197,10 @@ Local repo config for contributors:
 2. If it returns a `jobId`, call `get_scan_status` until the scan completes.
 3. Call `get_scan` with the stable `scanId`.
 4. Call `list_findings` to route structured findings into review workflows.
-5. Call `get_pre_consent_cookies_trackers` when the user asks for Cookies & Trackers (Pre-consent) table data as JSON.
-6. Call `explain_finding` when a reviewer needs evidence and caveats for a specific finding.
-7. Call `get_latest_domain_scan` or `get_latest_domain_pre_consent_cookies_trackers` when the user asks for latest eligible public data for a domain.
+5. Call `get_evidence` when a reviewer or agent needs the larger bounded evidence packet.
+6. Call `get_pre_consent_cookies_trackers` when the user asks for Cookies & Trackers (Pre-consent) table data as JSON.
+7. Call `explain_finding` when a reviewer needs evidence and caveats for a specific finding.
+8. Call `get_latest_domain_scan` or `get_latest_domain_pre_consent_cookies_trackers` when the user asks for latest eligible public data for a domain.
 
 ```json
 {

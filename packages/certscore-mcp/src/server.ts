@@ -2,7 +2,7 @@ import { CertScoreClient } from "@certscore/sdk";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
-import { exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
+import { boundEvidencePacket, exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, scanIdFromStatus, toToolError, toToolResult } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -171,7 +171,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     toolContract("get_evidence"),
     async ({ scanId }: GetEvidenceInput) => {
       try {
-        return toToolResult(await client.getScan(scanId, { detail: "evidence", format: "json" }));
+        return toToolResult(boundEvidencePacket(await client.getScan(scanId, { detail: "evidence", format: "json" })));
       } catch (error) {
         return toToolError(error);
       }

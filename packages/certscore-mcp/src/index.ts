@@ -1,4 +1,6 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createCertScoreMcpServer } from "./server.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
 
@@ -121,7 +123,19 @@ export async function getCertScoreMcpDoctorReport(options: CertScoreMcpDoctorOpt
   return { exitCode, lines };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function isMainModule() {
+  const entrypoint = process.argv[1];
+  if (!entrypoint) {
+    return false;
+  }
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entrypoint);
+  } catch {
+    return import.meta.url === `file://${entrypoint}`;
+  }
+}
+
+if (isMainModule()) {
   main().catch((error: unknown) => {
     const message = error instanceof Error ? error.stack ?? error.message : String(error);
     console.error(message);

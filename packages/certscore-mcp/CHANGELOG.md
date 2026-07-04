@@ -1,5 +1,12 @@
 # certscore-mcp
 
+## 0.1.4
+
+- Added a checked-in MCP tool manifest and release guards for server/docs/tool-surface drift.
+- Added `get_evidence` transport bounding metadata for oversized Evidence JSON packets.
+- Documented all 12 MCP tools consistently across package and developer docs.
+- Added clean-env npx smoke coverage for install, doctor, tools/list annotations, bounded evidence, and tool-error shape.
+
 ## 0.1.3
 
 - Registered MCP tools from the shared CertScore MCP contract definitions to prevent server/contract metadata drift.

@@ -110,15 +110,18 @@ const detailLevels = [
 ] as const;
 
 const mcpTools = [
-  ["scan_site", "Start or reuse a CertScore scan for a public URL from an agent workflow."],
-  ["create_scan", "Start a CertScore scan for a public URL from an agent or developer workflow."],
+  ["create_scan", "Deprecated compatibility alias of scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links."],
+  ["scan_site", "Start or reuse a CertScore public-web scan for a public URL."],
   ["get_scan", "Retrieve the API v2 public-safe scan resource for a stable scan ID."],
-  ["get_scan_status", "Check a queued Pulse job or API v2 scan without inventing status from partial results."],
-  ["get_report", "Retrieve the evidence-backed Pulse report for a stable scan ID."],
-  ["export_findings", "Return structured findings for ticketing, review, or compliance workflows."],
-  ["list_findings", "Return API v2 public-safe findings for ticketing, review, or compliance workflows."],
-  ["explain_finding", "Explain one finding with public evidence, caveats, and reviewer next steps."],
-  ["get_latest_domain_scan", "Find the latest eligible public scan for a domain."]
+  ["get_scan_status", "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId."],
+  ["get_report", "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet."],
+  ["get_evidence", "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."],
+  ["export_findings", "Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows."],
+  ["list_findings", "List API v2 public-safe findings already projected for a scan."],
+  ["get_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan."],
+  ["explain_finding", "Explain a single CertScore finding with public evidence, caveats, and reviewer next steps."],
+  ["get_latest_domain_scan", "Retrieve the latest eligible API v2 public-safe scan for a domain."],
+  ["get_latest_domain_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain."]
 ] as const;
 
 const exampleMeta = {

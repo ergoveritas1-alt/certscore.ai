@@ -20,11 +20,24 @@ function run(command: string, args: string[]) {
   const result = spawnSync(command, args, {
     cwd: repoRoot,
     encoding: "utf8",
+    env: { ...process.env, COPYFILE_DISABLE: "1" },
     stdio: "inherit"
   });
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status ?? "unknown"}`);
   }
+}
+
+function output(command: string, args: string[]) {
+  const result = spawnSync(command, args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    env: { ...process.env, COPYFILE_DISABLE: "1" }
+  });
+  if (result.status !== 0) {
+    throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status ?? "unknown"}\n${result.stderr}`);
+  }
+  return result.stdout;
 }
 
 function runPnpm(args: string[]) {
@@ -114,8 +127,21 @@ writeFileSync(
   ].join("\n")
 );
 
+writeFileSync(
+  join(releaseDir, "package.json"),
+  `${JSON.stringify({
+    name: "certscore-mcp",
+    version
+  }, null, 2)}\n`
+);
+
 rmSync(tarballPath, { force: true });
 run("tar", ["-czf", tarballPath, "-C", artifactRoot, releaseName]);
+const tarballEntries = output("tar", ["-tzf", tarballPath]).split("\n").filter(Boolean);
+const appleDoubleEntry = tarballEntries.find((entry) => entry.split("/").some((part) => part.startsWith("._")));
+if (appleDoubleEntry) {
+  throw new Error(`Homebrew tarball includes an AppleDouble/xattr sidecar entry: ${appleDoubleEntry}`);
+}
 
 const checksum = sha256(tarballPath);
 const releaseUrl = `https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v${version}/${basename(tarballPath)}`;

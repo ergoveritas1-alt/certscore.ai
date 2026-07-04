@@ -198,6 +198,7 @@ test("README documents current MCP tool surface and public docs", () => {
     "get_scan",
     "get_scan_status",
     "get_report",
+    "get_evidence",
     "export_findings",
     "list_findings",
     "get_pre_consent_cookies_trackers",
@@ -220,7 +221,7 @@ test("README documents current MCP tool surface and public docs", () => {
 
   assert.equal(packageJson.name, "certscore-mcp");
   assert.equal(packageJson.private, false);
-  assert.equal(packageJson.bin?.["certscore-mcp"], "./dist/certscore-mcp.mjs");
+  assert.equal(packageJson.bin?.["certscore-mcp"], "dist/certscore-mcp.mjs");
   assert.deepEqual(packageJson.files, ["dist", "README.md", "LICENSE"]);
   assert.equal(packageJson.dependencies?.["@certscore/api-contracts"], undefined);
   assert.equal(packageJson.dependencies?.["@certscore/sdk"], undefined);
@@ -240,7 +241,7 @@ test("doctor reports healthy API and missing API key without failing", async () 
   });
 
   assert.equal(result.exitCode, 0);
-  assert.match(result.lines.join("\n"), /version 0\.1\.3/);
+  assert.match(result.lines.join("\n"), new RegExp(`version ${CERTSCORE_MCP_VERSION.replaceAll(".", "\\.")}`));
   assert.match(result.lines.join("\n"), /Node\.js 22\.12\.0 is compatible/);
   assert.match(result.lines.join("\n"), /API health reachable/);
   assert.match(result.lines.join("\n"), /CERTSCORE_API_KEY is not set/);
@@ -455,6 +456,38 @@ test("get_evidence retrieves the bounded Evidence JSON artifact", async () => {
       assert.equal(evidence.type, "certscore_pulse_evidence");
       assert.match(mock.calls[0] ?? "", /scanId=scan_123/);
       assert.match(mock.calls[0] ?? "", /detail=evidence/);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("get_evidence bounds oversized Evidence JSON artifacts", async () => {
+  const mock = installFetch([{
+    status: 200,
+    body: {
+      ...pulse,
+      type: "certscore_pulse_evidence",
+      findings: Array.from({ length: 90 }, (_, index) => ({
+        id: `finding_${index}`,
+        evidence: {
+          summary: "x".repeat(2_000),
+          exampleEvents: Array.from({ length: 8 }, () => ({ payload: "y".repeat(1_000) }))
+        }
+      }))
+    }
+  }]);
+  try {
+    await withMcpClient(async (client) => {
+      const result = await client.callTool({ name: "get_evidence", arguments: { scanId: "scan_123" } });
+      const evidence = parseToolJson(result);
+      const metadata = evidence.mcpMetadata as Record<string, unknown>;
+      const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+      assert.equal(evidence.type, "certscore_pulse_evidence");
+      assert.equal(evidence.scanId, "scan_123");
+      assert.equal(metadata.truncated, true);
+      assert.ok(text.length <= 250_000);
     });
   } finally {
     mock.restore();
