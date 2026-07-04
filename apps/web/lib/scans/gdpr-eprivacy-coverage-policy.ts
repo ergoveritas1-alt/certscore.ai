@@ -4965,13 +4965,13 @@ const LEGAL_BASIS_DISCLOSURE_PATTERN =
   /(?:legal|lawful)\s+basis|article\s*6|legitimate interests?|legal obligation|when required by law|vital interests?|public task|performance of (?:a )?contract|contractual necessity|(?:basis for processing|we rely on|based on).{0,160}\b(?:consent|contract|legal obligation|legitimate interest)\b|\bwith your consent\b|\bconsent\b.{0,140}\b(?:personal data|personal information|processing|lawful|legal basis)\b/i;
 
 const RECIPIENTS_VENDOR_CATEGORIES_DISCLOSURE_PATTERN =
-  /recipient|third[- ]part(?:y|ies)|service providers?|vendors?|processors?|subprocessors?|business partners?|advertising partners?|analytics providers?|payment processors?|hosting providers?|cloud providers?|affiliates?/i;
+  /recipient|third[- ]part(?:y|ies)|service providers?|vendors?|processors?|subprocessors?|business partners?|advertising partners?|analytics providers?|payment processors?|hosting providers?|cloud providers?|affiliates?|empfänger|dienstleister|auftragsverarbeiter|destinataires?|prestataires?|sous-traitants?|destinatarios?|proveedores?|encargados?|destinatari|fornitori|responsabili|ontvangers|dienstverleners|verwerkers|odbiorcy|dostawcy|podmioty przetwarzające/i;
 
 const RECIPIENT_VENDOR_CATEGORY_TERMS =
-  /service providers?|vendors?|processors?|subprocessors?|business partners?|advertising partners?|analytics providers?|payment processors?|hosting providers?|cloud providers?|affiliates?|group companies|social networks?|platforms?|law enforcement|regulators?|third[- ]part(?:y|ies)|recipients?/i;
+  /service providers?|vendors?|processors?|subprocessors?|business partners?|advertising partners?|analytics providers?|payment processors?|hosting providers?|cloud providers?|affiliates?|group companies|social networks?|platforms?|law enforcement|regulators?|third[- ]part(?:y|ies)|recipients?|empfänger|dienstleister|auftragsverarbeiter|destinataires?|prestataires?|sous-traitants?|destinatarios?|proveedores?|encargados?|destinatari|fornitori|responsabili|ontvangers|dienstverleners|verwerkers|odbiorcy|dostawcy|podmioty przetwarzające/i;
 
 const RECIPIENT_DISCLOSURE_VERBS =
-  /share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|provide|provided|providing|receive|receives|received|access|accessed|handle|handled|process|processed|processing/i;
+  /share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|provide|provided|providing|receive|receives|received|access|accessed|handle|handled|process|processed|processing|teilen|weitergeben|übermitteln|erhalten|verarbeiten|communiqu|partage|transmis|transfér|trait|compart|comunic|transmit|tratar|condivid|comunicat|trasferit|tratt|delen|verstrekken|ontvangen|verwerken|udostęp|przekaz|przetwarz/i;
 
 const CONTROLLER_CONTACT_DISCLOSURE_PATTERN =
   /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection(?: office| officer)?|contact (?:our )?(?:privacy|data protection)|contact (?:google|us).{0,80}(?:privacy|data protection)|privacy@/i;
@@ -4980,16 +4980,16 @@ const PROCESSING_PURPOSES_DISCLOSURE_PATTERN =
   /purpose(?:s)? (?:of|for|we|to)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|provide (?:our )?services|personalize (?:content|ads|advertising|services|experience)|tailored search results|measure (?:performance|advertising)|perform analytics/i;
 
 const RETENTION_DISCLOSURE_PATTERN =
-  /retaining your information|retain(?:ing)? (?:the |your |personal )?(?:data|information)|retained for|deleted or anonymized|deletion|retention periods?|legal purposes|fraud and abuse prevention|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)|delete your information.{0,120}(?:retention|retain|retained|deleted|anonymized)|keep your.{0,100}(?:as long as necessary|required by law|for)|stored for|kept for|how long|expires?|as long as necessary/i;
+  /retaining your information|retain(?:ing)? (?:the |your |personal )?(?:data|information)|retained for|deleted or anonymized|deletion|retention periods?|legal purposes|fraud and abuse prevention|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)|delete your information.{0,120}(?:retention|retain|retained|deleted|anonymized)|keep your.{0,100}(?:as long as necessary|required by law|for)|stored for|kept for|how long|expires?|as long as necessary|speicherdauer|aufbewahrung|solange|gespeichert|durée de conservation|conserv(?:é|e|és|ées)|durée conforme|dispositions légales|plazo de conservación|conservamos|periodo di conservazione|conserviamo|bewaartermijn|bewaren|okres przechowywania|przechowujemy/i;
 
 const RETENTION_STRONG_HEADING_PATTERN =
-  /\b(?:how long (?:we )?(?:keep|retain)|retention(?: period)?|data retention|storage period|retaining your information)\b/i;
+  /\b(?:how long (?:we )?(?:keep|retain)|retention(?: period)?|data retention|storage period|retaining your information|speicherdauer|aufbewahrung|durée de conservation|combien de temps|plazo de conservación|periodo di conservazione|bewaartermijn|okres przechowywania)\b/i;
 
 const RETENTION_ROW_SPECIFIC_HEADING_PATTERN =
-  /\b(?:how long (?:we )?(?:keep|retain)|retention period|storage period)\b/i;
+  /\b(?:how long (?:we )?(?:keep|retain)|retention period|storage period|speicherdauer|aufbewahrung|durée de conservation|combien de temps|plazo de conservación|periodo di conservazione|bewaartermijn|okres przechowywania)\b/i;
 
 const RETENTION_EXPLICIT_LIFECYCLE_PATTERN =
-  /\b(?:how long (?:we )?(?:keep|retain)|retention periods?|storage period|stored for|kept for|kept until|retained for|retained until|retain(?:ed|ing)? .{0,120}(?:as long as necessary|no longer than necessary|required by law|legal obligations?|legal disputes?|for \d+|for (?:one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|weeks?|months?|years?)|until)|until you unsubscribe|deleted|removed|erased|anonymiz(?:ed|e|ation)|no longer than necessary|cctv recordings? (?:are )?kept)\b/i;
+  /\b(?:how long (?:we )?(?:keep|retain)|retention periods?|storage period|stored for|kept for|kept until|retained for|retained until|retain(?:ed|ing)? .{0,120}(?:as long as necessary|no longer than necessary|required by law|legal obligations?|legal disputes?|for \d+|for (?:one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|weeks?|months?|years?)|until)|until you unsubscribe|deleted|removed|erased|anonymiz(?:ed|e|ation)|no longer than necessary|cctv recordings? (?:are )?kept|speicherdauer|aufbewahrung|gespeichert.{0,120}(?:solange|erforderlich|gesetzlich)|conserv(?:é|e|és|ées).{0,160}(?:durée|finalités|dispositions légales|nécessaire|proportionnelles?)|durée.{0,160}(?:conforme|nécessaire|conservation)|plazo de conservación|conservamos.{0,120}(?:necesario|finalidades|legal)|periodo di conservazione|conserviamo.{0,120}(?:necessario|finalità|legge)|bewaartermijn|bewaren.{0,120}(?:noodzakelijk|wettelijk)|okres przechowywania|przechowujemy.{0,120}(?:niezbędny|prawny))\b/i;
 
 const RETENTION_SECURITY_SAFEGUARD_PATTERN =
   /\b(?:how we keep your personal information safe|protect your personal information|security|safeguards?|encryption|confidential|unauthori[sz]ed access|loss|destruction)\b/i;
@@ -5899,14 +5899,21 @@ function hasSubstantiveRetentionDisclosure(value: string) {
     return false;
   }
   const genericStorageOnly =
-    /\b(?:collect|store|storage|cookies?|local storage|databases?|server logs)\b/i.test(body) &&
-    !/\b(?:retain|retained|retention|retention period|how long|delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove|expires?|kept for|kept until|stored for|as long as|as long as necessary|no longer than necessary|required by law|legal purposes|legal obligations?|legal disputes?|fraud and abuse prevention|no longer needed|no engagement period)\b/i.test(body);
+    (
+      /\b(?:collect|store|storage|cookies?|local storage|databases?|server logs)\b/i.test(body) ||
+      /(?:collect(?:é|e|és|ées)|recogid[ao]s?|raccolt[oi]|verzameld|zbierane)/i.test(body)
+    ) &&
+    !(
+      /\b(?:retain|retained|retention|retention period|how long|delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove|expires?|kept for|kept until|stored for|as long as|as long as necessary|no longer than necessary|required by law|legal purposes|legal obligations?|legal disputes?|fraud and abuse prevention|no longer needed|no engagement period)\b/i.test(body) ||
+      /(?:speicherdauer|aufbewahrung|gespeichert|solange|erforderlich|gesetzlich|conservation|conservons|conserv(?:é|e|és|ées)|durée|dispositions légales|finalités|conservación|conservamos|plazo|conservazione|conserviamo|periodo|bewaren|bewaartermijn|noodzakelijk|przechowywania|przechowujemy|okres)/i.test(body)
+    );
   if (genericStorageOnly) {
     return false;
   }
   return RETENTION_ROW_SPECIFIC_HEADING_PATTERN.test(fullCandidate) ||
     hasExplicitLifecycleSignal ||
     /\b(?:retain|retained|retention|retention period|how long|kept for|kept until|stored for|as long as|as long as necessary|no longer than necessary|required by law|legal purposes|fraud and abuse prevention|no longer needed|no engagement period|expires?)\b/i.test(body) ||
+    /(?:speicherdauer|aufbewahrung|gespeichert.{0,120}(?:solange|erforderlich|gesetzlich)|conserv(?:é|e|és|ées).{0,160}(?:durée|finalités|dispositions légales|nécessaire|proportionnelles?)|durée.{0,160}(?:conforme|nécessaire|conservation)|plazo de conservación|conservamos.{0,120}(?:necesario|finalidades|legal)|periodo di conservazione|conserviamo.{0,120}(?:necessario|finalità|legge)|bewaartermijn|bewaren.{0,120}(?:noodzakelijk|wettelijk)|okres przechowywania|przechowujemy.{0,120}(?:niezbędny|prawny))/i.test(body) ||
     /\b(?:delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove)\b.{0,120}\b(?:automatically|after|when|once|period|retention|no longer|settings|account|inactive|engagement|unsubscribe)\b/i.test(body) ||
     /\b(?:automatically|after|when|once|period|retention|no longer|settings|account|inactive|engagement|unsubscribe)\b.{0,120}\b(?:delet(?:e|ed|ion)|eras(?:e|ed|ure)|anonymiz(?:e|ed|ation)|remove)\b/i.test(body);
 }
@@ -5948,7 +5955,9 @@ function hasSubstantiveRecipientsVendorCategoriesDisclosure(value: string) {
     /\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|provide|provided|providing)\b.{0,240}\b(?:service providers?|vendors?|processors?|subprocessors?|affiliates?|group companies|advertising partners?|analytics providers?|payment processors?|business partners?|social networks?|platforms?|law enforcement|regulators?|third[- ]part(?:y|ies)|recipients?)\b/i.test(body) ||
     /\b(?:service providers?|vendors?|processors?|subprocessors?)\b.{0,80}\b(?:will|may|can|to)?\s*(?:process|receive|access|handle)\b.{0,180}\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:as (?:a )?data processor|under (?:our )?instructions?|on (?:our )?behalf|for us)\b/i.test(body) ||
     /\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:processed|handled|accessed|received)\b.{0,180}\b(?:by|with)\b.{0,80}\b(?:service providers?|vendors?|processors?|subprocessors?)\b.{0,180}\b(?:under (?:our )?instructions?|on (?:our )?behalf|for us)\b/i.test(body) ||
-    /\b(?:categories of (?:third parties|recipients)|third parties with whom we share|recipients of (?:personal )?(?:data|information)|service providers? (?:that|who) (?:process|receive|access|handle|provide|perform|assist)|processors? (?:that|who) process|vendors? (?:that|who) (?:process|receive|access|handle|provide)|affiliates? (?:that|who)? (?:receive|process|access|use|share)|business partners? (?:that|who)? (?:receive|process|access|use|share)|process (?:personal data|personal information|information|data) on our behalf|on our behalf)\b/i.test(body);
+    /\b(?:categories of (?:third parties|recipients)|third parties with whom we share|recipients of (?:personal )?(?:data|information)|service providers? (?:that|who) (?:process|receive|access|handle|provide|perform|assist)|processors? (?:that|who) process|vendors? (?:that|who) (?:process|receive|access|handle|provide)|affiliates? (?:that|who)? (?:receive|process|access|use|share)|business partners? (?:that|who)? (?:receive|process|access|use|share)|process (?:personal data|personal information|information|data) on our behalf|on our behalf)\b/i.test(body) ||
+    /(?:données personnelles|datos personales|dati personali|persoonsgegevens|dane osobowe|personenbezogene daten).{0,180}(?:communiqu|partage|transmis|transfér|compart|comunic|condivid|trasferit|delen|verstrekken|udostęp|przekaz|teilen|weitergeben|übermitteln).{0,240}(?:prestataires?|sous-traitants?|destinataires?|proveedores?|encargados?|destinatarios?|fornitori|responsabili|destinatari|dienstverleners|verwerkers|ontvangers|dostawcy|odbiorcy|empfänger|dienstleister|auftragsverarbeiter)/i.test(body) ||
+    /(?:prestataires?|sous-traitants?|destinataires?|proveedores?|encargados?|destinatarios?|fornitori|responsabili|destinatari|dienstverleners|verwerkers|ontvangers|dostawcy|odbiorcy|empfänger|dienstleister|auftragsverarbeiter).{0,220}(?:trait|tratar|tratt|verwerken|przetwarz|verarbeiten|process).{0,220}(?:données personnelles|datos personales|dati personali|persoonsgegevens|dane osobowe|personenbezogene daten)/i.test(body);
 }
 
 function hasSubstantiveInternationalTransferDisclosure(value: string) {
