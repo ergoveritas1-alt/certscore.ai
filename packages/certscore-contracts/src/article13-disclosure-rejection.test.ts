@@ -401,3 +401,32 @@ test("Article 13 rejection contract rejects DPO nouns without a contact anchor",
     "insufficient_row_specific_terms",
   );
 });
+
+test("Article 13 multilingual retained report accepts row-specific English policy excerpts", () => {
+  const examples = [
+    {
+      disclosureType: "data_subject_rights",
+      text: "You may download a copy of your data through privacy controls.",
+    },
+    {
+      disclosureType: "recipients_or_vendor_categories",
+      text: "We share information with service providers and partners that process data on our behalf.",
+    },
+    {
+      disclosureType: "international_transfers",
+      text: "Data transfers. We may process information on servers outside the European Economic Area using standard contractual clauses.",
+    },
+    {
+      disclosureType: "data_retention",
+      text: "Retaining your information. Some data is deleted or anonymized automatically and some records are retained as long as necessary for legal purposes.",
+    },
+  ] as const;
+
+  for (const example of examples) {
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(example.text, example.disclosureType, { mode: "multilingual_classifier" }),
+      true,
+      `${example.disclosureType} should be usable`,
+    );
+  }
+});

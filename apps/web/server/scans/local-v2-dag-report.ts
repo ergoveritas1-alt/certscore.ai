@@ -1396,17 +1396,23 @@ export function summarizePolicySurfaces(
   const gdprTransparencyProductionEvidenceEnabled =
     gdprTransparencyProductionEvidenceProfileEnabled(gdprTransparencyEvidenceProfile);
   const privacySurfaces = policySurfaces.filter((row) => row.surface.surfaceType === "privacy_policy");
-  const article13Surfaces = policySurfaces.filter((row) =>
-    isArticle13EvidenceSurface(row) &&
-    !isGenericThirdPartyPrivacySurface(row, rootDomain)
+  const targetPrivacyArticle13Surfaces = policySurfaces.filter((row) => isTargetRelevantPrivacyArticle13Surface(row, rootDomain));
+  const hasTargetPrivacyArticle13Surface = targetPrivacyArticle13Surfaces.length > 0;
+  const legacyArticle13Surfaces = policySurfaces.filter((row) =>
+    isTargetRelevantPrivacyArticle13Surface(row, rootDomain) ||
+    isTargetRelevantSupplementalTermsArticle13Surface(row, rootDomain, hasTargetPrivacyArticle13Surface)
   );
-  const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
+  const gdprTransparencyCandidateSurfaces = policySurfaces.filter((row) =>
+    isTargetRelevantPrivacyArticle13Surface(row, rootDomain) ||
+    isTargetRelevantSupplementalGdprCandidateSurface(row, rootDomain, hasTargetPrivacyArticle13Surface)
+  );
+  const text = targetPrivacyArticle13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
   const policyTextQuality = assessRetainedPolicyTextQuality(text);
   const gdprTransparencyPolicyTextQuality = gdprTransparencyProductionEvidenceEnabled
     ? assessRetainedPolicyTextQuality(text, { multilingual: true })
     : policyTextQuality;
-  const observedPolicyTopicHints = uniqueStrings(article13Surfaces.flatMap((row) => row.surface.observedTopics ?? []));
-  const article13SignalCandidates = article13Surfaces.flatMap((row) => {
+  const observedPolicyTopicHints = uniqueStrings(targetPrivacyArticle13Surfaces.flatMap((row) => row.surface.observedTopics ?? []));
+  const article13SignalCandidates = legacyArticle13Surfaces.flatMap((row) => {
     const fullPolicyText = readPolicySurfaceTextArtifact(row.surface);
     return (row.surface.article13DisclosureSignals ?? []).map((signal) => {
       const evidenceText = firstString(signal.evidenceText);
@@ -1432,7 +1438,7 @@ export function summarizePolicySurfaces(
       };
     });
   });
-  const gdprTransparencyAdapterResults = article13Surfaces.map((row) => ({
+  const gdprTransparencyAdapterResults = gdprTransparencyCandidateSurfaces.map((row) => ({
     result: adaptGdprTransparencyTopicCandidatesForProduction({
       isTargetRelevantPrivacyPolicy: true,
       pageUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
@@ -1483,7 +1489,7 @@ export function summarizePolicySurfaces(
     typeKeys: ["disclosureType"]
   });
   const discardedArticle13DisclosureSignals = [
-    ...article13Surfaces.flatMap((row) =>
+    ...legacyArticle13Surfaces.flatMap((row) =>
       (row.surface.discardedArticle13DisclosureSignals ?? []).map((signal) => ({
         confidence: signal.confidence,
         disclosureType: signal.disclosureType,
@@ -1511,8 +1517,8 @@ export function summarizePolicySurfaces(
   ].slice(0, 40);
   const mentionedControls = uniqueStrings(policySurfaces.flatMap((row) => row.surface.mentionedControls ?? []));
   const processingErrorObserved = /processing error|privacy center.*error/i.test(text);
-  const policyTextExtractionHealth = buildPolicyTextExtractionHealth(article13Surfaces, text, processingErrorObserved);
-  const retainedPolicySections = article13Surfaces.flatMap((row) =>
+  const policyTextExtractionHealth = buildPolicyTextExtractionHealth(targetPrivacyArticle13Surfaces, text, processingErrorObserved);
+  const retainedPolicySections = targetPrivacyArticle13Surfaces.flatMap((row) =>
     (row.surface.retainedPolicySections ?? []).map((section) => ({
       charEnd: section.charEnd,
       charStart: section.charStart,
@@ -1522,7 +1528,7 @@ export function summarizePolicySurfaces(
       textExcerpt: section.textExcerpt,
     }))
   ).slice(0, 80);
-  const retainedArticle13SectionEvidence = dedupePolicyDisclosureRows(article13Surfaces.flatMap((row) =>
+  const retainedArticle13SectionEvidence = dedupePolicyDisclosureRows(legacyArticle13Surfaces.flatMap((row) =>
     (row.surface.retainedArticle13SectionEvidence ?? []).map((evidence) => ({
       coverageArea: evidence.coverageArea,
       evidenceSource: evidence.evidenceSource,
@@ -1790,21 +1796,49 @@ function retainedArticle13SignalRejectReason(value: string, disclosureType: stri
   return sharedArticle13DisclosureRejectReason(value, disclosureType, { mode: "multilingual_classifier" });
 }
 
-function isArticle13EvidenceSurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
-  if (row.surface.surfaceType === "privacy_policy") {
-    return true;
-  }
-  if (row.surface.surfaceType !== "cookie_policy" && row.surface.surfaceType !== "terms") {
+function isTargetRelevantPrivacyArticle13Surface(
+  row: ReturnType<typeof dedupePolicySurfaces>[number],
+  rootDomain: string | null
+) {
+  return row.surface.surfaceType === "privacy_policy" && !isGenericThirdPartyPrivacySurface(row, rootDomain);
+}
+
+function isTargetRelevantSupplementalTermsArticle13Surface(
+  row: ReturnType<typeof dedupePolicySurfaces>[number],
+  rootDomain: string | null,
+  hasTargetPrivacyArticle13Surface: boolean
+) {
+  if (!hasTargetPrivacyArticle13Surface || row.surface.surfaceType !== "terms" || isGenericThirdPartyPrivacySurface(row, rootDomain)) {
     return false;
-  }
-  if (row.surface.surfaceType === "cookie_policy" && (row.surface.gdprTransparencyTopicCandidates ?? []).length > 0) {
-    return true;
   }
   return (
     (row.surface.article13DisclosureSignals ?? []).length > 0 ||
-    (row.surface.gdprTransparencyTopicCandidates ?? []).length > 1 ||
-    (row.surface.retainedArticle13SectionEvidence ?? []).length > 0
+    (row.surface.retainedArticle13SectionEvidence ?? []).length > 0 ||
+    (row.surface.observedTopics ?? []).length > 0
   );
+}
+
+const COOKIE_POLICY_GDPR_TRANSPARENCY_TOPICS = new Set(["data_retention"]);
+
+function isTargetRelevantSupplementalGdprCandidateSurface(
+  row: ReturnType<typeof dedupePolicySurfaces>[number],
+  rootDomain: string | null,
+  hasTargetPrivacyArticle13Surface: boolean
+) {
+  if (!hasTargetPrivacyArticle13Surface || isGenericThirdPartyPrivacySurface(row, rootDomain)) {
+    return false;
+  }
+  const candidates = row.surface.gdprTransparencyTopicCandidates ?? [];
+  if (candidates.length === 0) {
+    return false;
+  }
+  if (row.surface.surfaceType === "cookie_policy") {
+    return candidates.some((candidate) => COOKIE_POLICY_GDPR_TRANSPARENCY_TOPICS.has(candidate.topic));
+  }
+  if (row.surface.surfaceType === "terms") {
+    return isTargetRelevantSupplementalTermsArticle13Surface(row, rootDomain, hasTargetPrivacyArticle13Surface);
+  }
+  return false;
 }
 
 function isGenericThirdPartyPrivacySurface(

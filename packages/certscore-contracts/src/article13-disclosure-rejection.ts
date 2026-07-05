@@ -366,7 +366,7 @@ function hasLocalizedArticle13EvidenceContext(
 ) {
   const normalized = normalizeArticle13Whitespace(value);
   const hasPrivacyDataContext =
-    /(?:privacy|personal data|personal information|data protection|processing|controller|policy|notice|rights|privacy policy)/i.test(normalized) ||
+    /(?:privacy|personal data|personal information|data protection|processing|controller|policy|notice|rights|privacy policy|privacy controls|your data|your information|process data|process information|data transfers?|retaining your information|retention)/i.test(normalized) ||
     /(?:datenschutz|datenverarbeitung|dsgvo|personenbezogene daten|traitement|données personnelles|protección de datos|datos personales|protezione dei dati|dati personali|trattamento dei dati|tuoi dati|suoi dati|persoonsgegevens|gegevensbescherming|dane osobowe|danych osobowych|przetwarzanie danych|ochrona danych|ochrony danych|rodo)/i.test(normalized);
   if (!hasPrivacyDataContext) {
     return false;
@@ -387,7 +387,7 @@ function hasLocalizedArticle13EvidenceContext(
     case "data_retention":
       return /(?:retention|retain|kept|storage period|how long|aufbewahrung|speichern|gespeichert|speicherdauer|solange|erforderlich|conservation|conservons|conserv(?:é|e|és|ées)|durée nécessaire|conservación|conservamos|conservaremos|serán conservados|conservazione|conserviamo|saranno conservati|tempo necessario al perseguimento|bewaren|bewaartermijn|przechowywania|przechowujemy|okres przechowywania|nie dłużej niż|cofnięcia zgody|przedawnienia roszczeń)/i.test(normalized);
     case "data_subject_rights":
-      return /(?:rights?|right to access|right to erasure|data subject|betroffenenrechte|recht auf|droits?|personnes concernées|derechos?|acceso|rectificación|supresión|oposición|limitación|portabilidad|interesados|diritti?|accesso|rettifica|cancellazione|limitazione|opposizione|portabilità|interessati|rechten|betrokkenen|recht om bezwaar te maken|prawa|osób których dane dotyczą|przysługuje ci prawo|prawo do (?:dostępu|usunięcia|sprostowania|ograniczenia|sprzeciwu|przenoszenia))/i.test(normalized);
+      return /(?:rights?|right to access|right to erasure|data subject|download a copy|export (?:your )?(?:data|information)|privacy controls|betroffenenrechte|recht auf|droits?|personnes concernées|derechos?|acceso|rectificación|supresión|oposición|limitación|portabilidad|interesados|diritti?|accesso|rettifica|cancellazione|limitazione|opposizione|portabilità|interessati|rechten|betrokkenen|recht om bezwaar te maken|prawa|osób których dane dotyczą|przysługuje ci prawo|prawo do (?:dostępu|usunięcia|sprostowania|ograniczenia|sprzeciwu|przenoszenia))/i.test(normalized);
     case "international_transfers":
       return /(?:international transfer|outside (?:the )?(?:eea|eu|european union)|third countr|standard contractual|übermittlung|drittland|außerhalb des europäischen wirtschaftsraumes|standardvertragsklauseln|transfert|hors de|transferencia|fuera del|terceros países|cláusulas contractuales tipo|trasferiment|paesi terzi|clausole contrattuali standard|doorgifte|buiten|transfer|poza|standardowe klauzule|europejskim obszarem gospodarczym|eog)/i.test(normalized);
     case "supervisory_authority":
