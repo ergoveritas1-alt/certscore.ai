@@ -367,7 +367,7 @@ function hasLocalizedArticle13EvidenceContext(
   const normalized = normalizeArticle13Whitespace(value);
   const hasPrivacyDataContext =
     /(?:privacy|personal data|personal information|data protection|processing|controller|policy|notice|rights|privacy policy)/i.test(normalized) ||
-    /(?:datenschutz|datenverarbeitung|dsgvo|personenbezogene daten|traitement|données personnelles|protección de datos|datos personales|protezione dei dati|dati personali|trattamento dei dati|tuoi dati|suoi dati|persoonsgegevens|gegevensbescherming|dane osobowe|danych osobowych|przetwarzanie danych|ochrona danych)/i.test(normalized);
+    /(?:datenschutz|datenverarbeitung|dsgvo|personenbezogene daten|traitement|données personnelles|protección de datos|datos personales|protezione dei dati|dati personali|trattamento dei dati|tuoi dati|suoi dati|persoonsgegevens|gegevensbescherming|dane osobowe|danych osobowych|przetwarzanie danych|ochrona danych|ochrony danych|rodo)/i.test(normalized);
   if (!hasPrivacyDataContext) {
     return false;
   }

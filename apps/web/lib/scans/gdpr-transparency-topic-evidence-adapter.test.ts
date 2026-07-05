@@ -325,6 +325,61 @@ test("TOC, navigation, and non-policy candidates are rejected or diagnostic, not
   assert.equal(navigationResult.discardedArticle13DisclosureSignals[0]?.productionCredit, false);
 });
 
+test("adapter credits target-relevant supplemental policy surfaces while generic terms stay diagnostic", () => {
+  const termsLegalBasis = candidate({
+    evidenceText:
+      "Privacy terms. The legal basis for processing your personal data includes consent, contractual necessity, and legitimate interests.",
+    matchedLocale: "en",
+    matchedTerm: "legal basis",
+    topic: "legal_basis",
+  });
+  const cookieRetention = candidate({
+    evidenceText:
+      "Cookie privacy policy. We retain personal data stored through cookies only as long as necessary for the purposes described.",
+    matchedLocale: "en",
+    matchedTerm: "retain personal data",
+    topic: "data_retention",
+  });
+
+  const termsResult = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface([termsLegalBasis], {
+      surfaceType: "terms",
+      textExcerpt: "Privacy terms explain legal basis for processing personal data.",
+    }),
+  });
+  const cookieResult = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface([cookieRetention], {
+      surfaceType: "cookie_policy",
+      textExcerpt: "Cookie privacy policy explains retention of personal data.",
+    }),
+  });
+  const genericTermsResult = adaptGdprTransparencyTopicCandidatesForProduction({
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface([termsLegalBasis], {
+      surfaceType: "terms",
+      textExcerpt: "Generic website terms.",
+    }),
+  });
+
+  assert.deepEqual(
+    termsResult.acceptedProductionSignals.map((signal) => signal.disclosureType),
+    ["legal_basis"],
+  );
+  assert.deepEqual(
+    cookieResult.acceptedProductionSignals.map((signal) => signal.disclosureType),
+    ["data_retention"],
+  );
+  assert.deepEqual(genericTermsResult.acceptedProductionSignals, []);
+  assert.equal(genericTermsResult.dispositions[0]?.rejectReason, "non_privacy_policy_surface");
+});
+
 test("candidate-only diagnostic evidence creates production credit by default when adapter gates pass", () => {
   const diagnosticOnly = candidate({
     evidenceText:

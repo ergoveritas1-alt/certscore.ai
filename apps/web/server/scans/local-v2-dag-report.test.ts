@@ -1192,6 +1192,115 @@ test("summarizePolicySurfaces supplements Article 13 signals only from opt-in ac
   });
 });
 
+test("summarizePolicySurfaces uses row-specific supplemental cookie and terms Article 13 evidence", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const termsPurpose =
+    "Privacy terms. We process personal data to manage bookings, provide hospitality services, and operate customer support.";
+  const cookieRetention =
+    "Cookie policy. We retain personal data stored through cookies only as long as necessary for the purposes described.";
+  const genericTermsCandidate =
+    "The legal basis for processing your personal data includes consent and legitimate interests.";
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "target-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://example.test/privacy",
+      normalizedUrl: "https://example.test/privacy",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: "Privacy Policy. We explain how we process personal data.",
+      observedTopics: []
+    },
+    {
+      observationId: "target-terms",
+      surfaceType: "terms",
+      url: "https://example.test/terms",
+      normalizedUrl: "https://example.test/terms",
+      confidence: 0.9,
+      status: "fetched",
+      textExcerpt: termsPurpose,
+      observedTopics: ["processing_purposes"],
+      article13DisclosureSignals: [
+        {
+          disclosureType: "processing_purposes",
+          status: "observed",
+          evidenceText: termsPurpose,
+          confidence: 0.9,
+          source: "deterministic"
+        }
+      ]
+    },
+    {
+      observationId: "target-cookie",
+      surfaceType: "cookie_policy",
+      url: "https://example.test/cookies",
+      normalizedUrl: "https://example.test/cookies",
+      confidence: 0.9,
+      status: "fetched",
+      textExcerpt: cookieRetention,
+      gdprTransparencyTopicCandidates: [
+        {
+          topic: "data_retention",
+          status: "diagnostic_only",
+          evidenceText: cookieRetention,
+          confidence: 0.9,
+          classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+          matchedLocale: "en",
+          matchedTerm: "retain personal data",
+          matchStrength: "direct",
+          classifierReasonCodes: ["matched_data_retention"],
+          productionCredit: false
+        }
+      ]
+    },
+    {
+      observationId: "generic-terms",
+      surfaceType: "terms",
+      url: "https://example.test/site-terms",
+      normalizedUrl: "https://example.test/site-terms",
+      confidence: 0.9,
+      status: "fetched",
+      textExcerpt: genericTermsCandidate,
+      gdprTransparencyTopicCandidates: [
+        {
+          topic: "legal_basis",
+          status: "diagnostic_only",
+          evidenceText: genericTermsCandidate,
+          confidence: 0.93,
+          classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+          matchedLocale: "en",
+          matchedTerm: "legal basis",
+          matchStrength: "direct",
+          classifierReasonCodes: ["matched_legal_basis"],
+          productionCredit: false
+        }
+      ]
+    }
+  ] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+
+  assert.deepEqual(
+    summary.article13DisclosureTypesObserved.sort(),
+    ["data_retention", "processing_purposes"],
+  );
+  assert.equal(
+    summary.article13DisclosureSignals.some((signal) =>
+      signal.disclosureType === "legal_basis" &&
+      signal.evidenceText === genericTermsCandidate
+    ),
+    false,
+  );
+  assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
+    acceptedCandidateCount: 1,
+    diagnosticCandidateCount: 0,
+    discardedCandidateCount: 0,
+    productionCreditSignalCount: 1,
+    rejectedCandidateCount: 0,
+    sourceCandidateCount: 1,
+  });
+});
+
 test("summarizePolicySurfaces credits French Article 13 candidates through the production profile by default", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const purposesText =

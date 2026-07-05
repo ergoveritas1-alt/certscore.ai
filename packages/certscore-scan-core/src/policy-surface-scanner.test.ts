@@ -1350,6 +1350,52 @@ test("policySurfaceScanner uses common-path fallback when homepage fetch fails",
   }
 });
 
+test("policySurfaceScanner bounds slow homepage fetches so common-path fallback can retain policy evidence", async () => {
+  const server = await startSlowHomepagePolicyServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await policySurfaceScanner({
+      url: `${server.baseUrl}/`,
+      normalizedUrl: `${server.baseUrl}/`,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 8_000,
+      artifactWriter,
+      nanoAssistProvider: {
+        async classifyLinks() {
+          throw new Error("Nano link ranking should not run for guessed common-path fallback.");
+        },
+      },
+    });
+    const fallback = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.normalizedUrl === `${server.baseUrl}/privacy`
+    );
+    const homepageFetch = result.moduleRun.timingBreakdown?.find((timing) => timing.label === "homepage fetch");
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.ok(fallback, JSON.stringify({
+      timing: result.moduleRun.timingBreakdown,
+      observations: result.policySurfaceObservations.map((observation) => ({
+        status: observation.status,
+        normalizedUrl: observation.normalizedUrl,
+        surfaceType: observation.surfaceType,
+        httpStatus: observation.httpStatus,
+        error: observation.error,
+      })),
+    }, null, 2));
+    assert.equal(fallback.surfaceType, "privacy_policy");
+    assert.equal((homepageFetch?.durationMs ?? 0) < 4_000, true);
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed common-path")),
+      true,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("policySurfaceScanner keeps blocked common-path fallback bounded", async () => {
   const server = await startBlockedPolicyServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
@@ -1414,6 +1460,10 @@ test("policySurfaceScanner keeps transport-failed common-path fallback bounded",
     assert.equal(
       result.moduleRun.timingBreakdown?.some((timing) => timing.label === "deterministic common-path ranking"),
       true,
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy rendered fetch fallback")),
+      false,
     );
   } finally {
     await server.close();
@@ -2491,6 +2541,44 @@ async function startBlockedPolicyServer(): Promise<{ baseUrl: string; close: () 
   const server = createServer((_request, response) => {
     response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
     response.end("<!doctype html><html><body><main>Access blocked</main></body></html>");
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => closeServer(server),
+  };
+}
+
+async function startSlowHomepagePolicyServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://fixture.local");
+    if (url.pathname === "/" || url.pathname === "") {
+      const timer = setTimeout(() => {
+        if (!response.destroyed) {
+          response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+          response.end("<!doctype html><html><body><main>Slow homepage</main></body></html>");
+        }
+      }, 6_000);
+      request.once("close", () => clearTimeout(timer));
+      return;
+    }
+    if (url.pathname === "/privacy") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><body>
+        <main>
+          <h1>Privacy Policy</h1>
+          <p>The controller for this service can be contacted at privacy@example.test.</p>
+          <p>We process personal data to provide hospitality services and manage bookings.</p>
+          <p>We retain personal data only as long as necessary and as required by law.</p>
+        </main>
+      </body></html>`);
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("not found");
   });
   await new Promise<void>((resolve) => {
     server.listen(0, "127.0.0.1", resolve);

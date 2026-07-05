@@ -1364,7 +1364,10 @@ export function summarizePolicySurfaces(
   const gdprTransparencyProductionEvidenceEnabled =
     gdprTransparencyProductionEvidenceProfileEnabled(gdprTransparencyEvidenceProfile);
   const privacySurfaces = policySurfaces.filter((row) => row.surface.surfaceType === "privacy_policy");
-  const article13Surfaces = privacySurfaces.filter((row) => !isGenericThirdPartyPrivacySurface(row, rootDomain));
+  const article13Surfaces = policySurfaces.filter((row) =>
+    isArticle13EvidenceSurface(row) &&
+    !isGenericThirdPartyPrivacySurface(row, rootDomain)
+  );
   const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
   const policyTextQuality = assessRetainedPolicyTextQuality(text);
   const gdprTransparencyPolicyTextQuality = gdprTransparencyProductionEvidenceEnabled
@@ -1401,7 +1404,11 @@ export function summarizePolicySurfaces(
     result: adaptGdprTransparencyTopicCandidatesForProduction({
       isTargetRelevantPrivacyPolicy: true,
       pageUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
-      policyTextQuality: { usable: gdprTransparencyPolicyTextQuality.usable },
+      policyTextQuality: {
+        usable: assessRetainedPolicyTextQuality(firstString(row.surface.textExcerpt) ?? "", {
+          multilingual: gdprTransparencyProductionEvidenceEnabled,
+        }).usable,
+      },
       profile: gdprTransparencyEvidenceProfile,
       surface: row.surface
     }),
@@ -1535,9 +1542,11 @@ export function summarizePolicySurfaces(
     policySurfaceCount: policySurfaces.length,
     policyTextExtractionHealth,
     policy_text_extraction_health: policyTextExtractionHealth,
-    privacyPolicyPresent: article13Surfaces.length > 0,
+    privacyPolicyPresent: privacySurfaces.some((row) => !isGenericThirdPartyPrivacySurface(row, rootDomain)),
     privacyPolicyTextCharacterCount: text.length,
-    privacyPolicyUrls: uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
+    privacyPolicyUrls: uniqueStrings(privacySurfaces
+      .filter((row) => !isGenericThirdPartyPrivacySurface(row, rootDomain))
+      .map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url)),
     processingErrorObserved,
     retainedPrivacyPolicyTextExcerpt: buildRetainedPolicyDisclosureText(text),
     validatedDisclosureTypesObserved: uniqueStrings(dedupedArticle13DisclosureSignals
@@ -1746,7 +1755,24 @@ function retainedArticle13SignalIsUsable(value: string, disclosureType: string |
 }
 
 function retainedArticle13SignalRejectReason(value: string, disclosureType: string | undefined) {
-  return sharedArticle13DisclosureRejectReason(value, disclosureType, { mode: "retained_report" });
+  return sharedArticle13DisclosureRejectReason(value, disclosureType, { mode: "multilingual_classifier" });
+}
+
+function isArticle13EvidenceSurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
+  if (row.surface.surfaceType === "privacy_policy") {
+    return true;
+  }
+  if (row.surface.surfaceType !== "cookie_policy" && row.surface.surfaceType !== "terms") {
+    return false;
+  }
+  if (row.surface.surfaceType === "cookie_policy" && (row.surface.gdprTransparencyTopicCandidates ?? []).length > 0) {
+    return true;
+  }
+  return (
+    (row.surface.article13DisclosureSignals ?? []).length > 0 ||
+    (row.surface.gdprTransparencyTopicCandidates ?? []).length > 1 ||
+    (row.surface.retainedArticle13SectionEvidence ?? []).length > 0
+  );
 }
 
 function isGenericThirdPartyPrivacySurface(

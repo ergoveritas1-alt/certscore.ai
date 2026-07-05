@@ -223,6 +223,10 @@ test("Article 13 rejection contract accepts Wyborcza-style Polish row-specific e
       text: "W każdej sprawie dotyczącej danych osobowych można się skontaktować z naszym Inspektorem Ochrony Danych Osobowych na adres e-mail iod@example.test lub pisemnie z dopiskiem IOD.",
     },
     {
+      disclosureType: "dpo_contact",
+      text: "Z Administratorem można się kontaktować pisemnie na adres Nocowanie.pl Sp. z o.o. / Inspektor Ochrony Danych / ul. Nałęczowska 14 albo za pomocą poczty elektronicznej.",
+    },
+    {
       disclosureType: "processing_purposes",
       text: "W jakim celu i na jakiej podstawie prawnej przetwarzamy Twoje dane? Dane osobowe przetwarzamy w następujących celach związanych ze świadczeniem usług.",
     },
@@ -237,6 +241,10 @@ test("Article 13 rejection contract accepts Wyborcza-style Polish row-specific e
     {
       disclosureType: "data_retention",
       text: "Dane osobowe przechowujemy nie dłużej niż jest to niezbędne, do czasu cofnięcia zgody albo do czasu przedawnienia roszczeń.",
+    },
+    {
+      disclosureType: "data_retention",
+      text: "Podstawą przetwarzania jest art. 6 ust. 1 lit. f RODO, a dane przechowujemy do czasu przedawnienia roszczeń, nie dłużej niż 6 lat od zakończenia roku kalendarzowego.",
     },
     {
       disclosureType: "data_subject_rights",

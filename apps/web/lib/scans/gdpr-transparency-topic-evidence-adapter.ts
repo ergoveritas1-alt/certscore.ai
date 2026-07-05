@@ -200,7 +200,7 @@ function rejectReasonForCandidate(
   input: GdprTransparencyTopicEvidenceAdapterInput,
   candidate: GdprTransparencyTopicCandidate,
 ): GdprTransparencyAdapterRejectReason | null {
-  if (input.surface.surfaceType !== "privacy_policy" || input.isTargetRelevantPrivacyPolicy === false) {
+  if (!surfaceTypeCanCarryArticle13Evidence(input.surface.surfaceType, input.isTargetRelevantPrivacyPolicy)) {
     return "non_privacy_policy_surface";
   }
   if (input.surface.status !== "fetched") {
@@ -224,6 +224,16 @@ function rejectReasonForCandidate(
   return article13DisclosureRejectReason(candidate.evidenceText, candidate.topic, {
     mode: "multilingual_classifier",
   });
+}
+
+function surfaceTypeCanCarryArticle13Evidence(
+  surfaceType: Pick<PolicySurfaceObservation, "surfaceType">["surfaceType"],
+  isTargetRelevantPrivacyPolicy: boolean | undefined,
+) {
+  if (surfaceType === "privacy_policy") {
+    return isTargetRelevantPrivacyPolicy !== false;
+  }
+  return (surfaceType === "cookie_policy" || surfaceType === "terms") && isTargetRelevantPrivacyPolicy === true;
 }
 
 function rejectReasonToDiscardedArticle13Reason(

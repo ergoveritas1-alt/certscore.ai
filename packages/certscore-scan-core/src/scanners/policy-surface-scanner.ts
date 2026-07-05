@@ -189,14 +189,21 @@ export async function policySurfaceScanner(
       timingBreakdown,
       "homepage fetch",
       "Fetch homepage HTML for static policy link discovery.",
-      () => fetchText(input.normalizedUrl, remainingMs(input, moduleStartedAtMs)),
+      () => fetchText(input.normalizedUrl, homepageFetchMs(input, moduleStartedAtMs)),
     );
     if (!homepage.ok) {
+      const skipRenderedAfterHomepageFailure = shouldSkipRenderedDiscoveryAfterHomepageFailure(input, moduleStartedAtMs);
       const renderedCandidates = await recordPolicyTiming(
         timingBreakdown,
-        "homepage-failed rendered discovery",
-        "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
-        () => extractRenderedCandidates(input, moduleStartedAtMs),
+        skipRenderedAfterHomepageFailure
+          ? "homepage-failed rendered discovery skipped"
+          : "homepage-failed rendered discovery",
+        skipRenderedAfterHomepageFailure
+          ? "Skipped browser-rendered policy link discovery after a failed homepage fetch to preserve budget for common policy paths."
+          : "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
+        () => skipRenderedAfterHomepageFailure
+          ? Promise.resolve([] as PolicySurfaceCandidate[])
+          : extractRenderedCandidates(input, moduleStartedAtMs),
       );
       renderedCandidateCount = renderedCandidates.length;
       diagnosticsCandidates = renderedCandidates;
@@ -1014,7 +1021,7 @@ async function processPolicyCandidate({
     `Fetch ${candidate.deterministicSurfaceType} candidate document.`,
     () => fetchText(candidate.normalizedUrl, remainingPolicyFetchMs(input, moduleStartedAtMs)),
   );
-  if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch(fetched.status, input, moduleStartedAtMs)) {
+  if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch(fetched.status, input, moduleStartedAtMs, candidate)) {
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
       `policy rendered fetch fallback ${candidateIndex + 1}`,
@@ -1247,9 +1254,22 @@ function shouldTryRenderedPolicyDocumentFetch(
   status: number | undefined,
   input: PolicySurfaceScannerInput,
   moduleStartedAtMs: number,
+  candidate: PolicySurfaceCandidate,
 ): boolean {
+  if (status === undefined && isCommonPathFallbackCandidate(candidate)) {
+    return false;
+  }
   return (status === undefined || [401, 403, 429].includes(status)) &&
     remainingMs(input, moduleStartedAtMs) >= 2_500;
+}
+
+function shouldSkipRenderedDiscoveryAfterHomepageFailure(
+  input: PolicySurfaceScannerInput,
+  moduleStartedAtMs: number,
+): boolean {
+  const remaining = remainingMs(input, moduleStartedAtMs);
+  const minimumCommonPathBudgetMs = input.discoveryMode === "fast" ? 2_000 : 5_500;
+  return remaining < minimumCommonPathBudgetMs;
 }
 
 function shouldTryRenderedPolicyDocumentTextFallback(input: {
@@ -5130,6 +5150,13 @@ function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySurfaceCa
 
 function remainingMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
   return Math.max(500, input.internalBudgetMs - (Date.now() - startedAtMs));
+}
+
+function homepageFetchMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
+  const remaining = remainingMs(input, startedAtMs);
+  const reservedForFallback = input.discoveryMode === "fast" ? 1_500 : 4_000;
+  const budgetSlice = Math.floor(input.internalBudgetMs * 0.35);
+  return Math.max(800, Math.min(6_000, budgetSlice, Math.max(800, remaining - reservedForFallback)));
 }
 
 function remainingPolicyFetchMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
