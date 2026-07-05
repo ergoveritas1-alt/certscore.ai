@@ -194,6 +194,12 @@ test("keeps unrelated labels unknown", () => {
   }
 });
 
+test("classifies French visible policy and cookie control labels", () => {
+  assert.equal(classifyPrivacySurface({ linkText: "Données personnelles" }).surfaceType, "privacy_policy");
+  assert.equal(classifyPrivacySurface({ linkText: "Politique Cookie" }).surfaceType, "cookie_policy");
+  assert.equal(classifyPrivacySurface({ linkText: "Paramétrage des cookies" }).surfaceType, "cookie_settings");
+});
+
 test("registry covers every supported locale", () => {
   const registryLocales = new Set(PRIVACY_SURFACE_PHRASE_REGISTRY.map((term) => term.locale));
 

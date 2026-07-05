@@ -268,6 +268,38 @@ test("policySurfaceScanner standard mode trusts high-confidence first-party stat
   });
 });
 
+test("policySurfaceScanner skips guessed fetches after direct linked strong Article 13 policy evidence", async () => {
+  const server = await startDirectLinkedStrongPolicyServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const targetUrl = server.baseUrl.replace("127.0.0.1", "localhost");
+    const result = await policySurfaceScanner({
+      url: `${targetUrl}/`,
+      normalizedUrl: `${targetUrl}/`,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 8_000,
+      artifactWriter,
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(privacy?.status, "fetched");
+    assert.equal((privacy?.article13DisclosureSignals ?? []).length >= 4, true);
+    assert.equal(labels.some((label) => label.startsWith("common-path policy")), false);
+    assert.equal(labels.some((label) => label.startsWith("privacy-only common-path policy")), false);
+    assert.equal(
+      result.policySurfaceObservations.some((observation) => observation.discoveryMethod === "guessed_common_path"),
+      false,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("policySurfaceScanner fast mode skips rendered discovery when static GDPR surfaces are fetchable", async () => {
   await withPolicyScan("policy-static-gdpr-surfaces", async ({ result, baseUrl }) => {
     const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
@@ -1300,6 +1332,50 @@ test("policySurfaceScanner records embedded consent config Manage Cookies labels
   }, { discoveryMode: "fast" });
 });
 
+test("policySurfaceScanner records visible French policy labels as observation-only surfaces", async () => {
+  await withPolicyScan("policy-visible-fr-observation-labels", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      /Données personnelles/i.test(observation.linkText ?? "")
+    );
+    const cookie = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "cookie_policy" &&
+      /Politique Cookie/i.test(observation.linkText ?? "")
+    );
+    const settings = result.policySurfaceObservations.find((observation) =>
+      observation.surfaceType === "cookie_settings" &&
+      /Paramétrage des cookies/i.test(observation.linkText ?? "")
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    const observedSummary = JSON.stringify(result.policySurfaceObservations.map((observation) => ({
+      surfaceType: observation.surfaceType,
+      status: observation.status,
+      linkText: observation.linkText,
+      fetchable: observation.fetchable,
+      clickable: observation.clickable,
+      mayLeadToConsentControls: observation.mayLeadToConsentControls,
+    })), null, 2);
+
+    for (const observation of [privacy, cookie, settings]) {
+      assert.ok(observation, observedSummary);
+      assert.equal(observation?.status, "observed");
+      assert.equal(observation?.normalizedUrl, `${baseUrl}/f/policy-visible-fr-observation-labels`);
+      assert.equal(observation?.fetchable, false);
+      assert.equal(observation?.clickable, false);
+      assert.deepEqual(observation?.article13DisclosureSignals, []);
+    }
+    assert.equal(settings?.mayLeadToConsentControls, true);
+    assert.equal(
+      diagnostics.candidateSummary.filter((candidate) =>
+        candidate.observationOnly === true &&
+        candidate.matchedLocale === "fr" &&
+        ["privacy_policy", "cookie_policy", "cookie_settings"].includes(candidate.surfaceType)
+      ).length,
+      3,
+    );
+  }, { discoveryMode: "fast" });
+});
+
 test("policySurfaceScanner records privacy center links without clicking preference flows", async () => {
   await withPolicyScan("policy-privacy-center-link", async ({ result, baseUrl }) => {
     const center = observedSurface(result.policySurfaceObservations, "consent_preferences");
@@ -1450,6 +1526,40 @@ test("policySurfaceScanner keeps blocked common-path fallback bounded", async ()
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed common-path")),
       true,
     );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("policySurfaceScanner curtails repeated not-found common-path fallback", async () => {
+  const server = await startNotFoundPolicyServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await policySurfaceScanner({
+      url: `${server.baseUrl}/`,
+      normalizedUrl: `${server.baseUrl}/`,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 8_000,
+      artifactWriter,
+      nanoAssistProvider: {
+        async classifyLinks() {
+          throw new Error("Nano link ranking should not run for guessed common-path fallback.");
+        },
+      },
+    });
+    const notFoundCommonPathFailures = result.policySurfaceObservations.filter((observation) =>
+      observation.discoveryMethod === "guessed_common_path" &&
+      observation.status === "failed" &&
+      observation.httpStatus === 404
+    );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(notFoundCommonPathFailures.length, 6);
+    assert.equal(diagnostics.limitationKeys.includes("policy_candidate_not_found"), true);
+    assert.equal(diagnostics.limitationKeys.includes("common_path_fallback_retained_no_core_surface"), true);
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -2598,6 +2708,70 @@ async function startBlockedPolicyServer(): Promise<{ baseUrl: string; close: () 
     server.listen(0, "127.0.0.1", resolve);
   });
   const address = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => closeServer(server),
+  };
+}
+
+async function startNotFoundPolicyServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://fixture.local");
+    if (url.pathname === "/" || url.pathname === "") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html><body><main>Sports homepage without policy links</main></body></html>");
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("not found");
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => closeServer(server),
+  };
+}
+
+async function startDirectLinkedStrongPolicyServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+  let port = 0;
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://fixture.local");
+    if (url.pathname === "/" || url.pathname === "") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><body>
+        <main>Sports federation homepage.</main>
+        <footer><a href="http://127.0.0.1:${port}/parent/privacy">Privacy Policy</a></footer>
+      </body></html>`);
+      return;
+    }
+    if (url.pathname === "/parent/privacy") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><body>
+        <main>
+          <h1>Privacy Policy</h1>
+          <p>The controller can be contacted through the privacy office and the data protection officer can be contacted by email.</p>
+          <p>We process personal data to provide services, manage accounts, personalize content, measure performance, and operate support.</p>
+          <p>We rely on consent, contract, legal obligation, and legitimate interests as legal bases for processing.</p>
+          <p>Recipients include processors, service providers, analytics providers, advertising partners, affiliates, and public authorities where required.</p>
+          <p>We retain personal data only as long as necessary for the purposes described in this notice or as required by law.</p>
+          <p>You may exercise rights to access, rectification, erasure, restriction, portability, and objection.</p>
+          <p>We may transfer personal data outside the European Economic Area using adequacy decisions or standard contractual clauses.</p>
+          <p>You may complain to a supervisory authority about our handling of personal data.</p>
+        </main>
+      </body></html>`);
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("not found");
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  port = address.port;
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
     close: () => closeServer(server),

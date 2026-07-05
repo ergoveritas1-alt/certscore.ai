@@ -21,6 +21,7 @@ const MAX_CANDIDATES_TO_FETCH = 8;
 const MAX_COMMON_PATH_CANDIDATES_TO_FETCH = 18;
 const MAX_PRIVACY_ONLY_COMMON_PATH_CANDIDATES_TO_FETCH = 8;
 const COMMON_PATH_BLOCKED_EARLY_STOP_FAILURES = 6;
+const COMMON_PATH_NOT_FOUND_EARLY_STOP_FAILURES = 6;
 const COMMON_PATH_TRANSPORT_EARLY_STOP_FAILURES = 4;
 const COMMON_PATH_APP_SHELL_EARLY_STOP_FETCHES = 3;
 const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
@@ -296,6 +297,7 @@ export async function policySurfaceScanner(
       async () => dedupeCandidates([
         ...extractCandidates(input.normalizedUrl, candidateHtml, homepageText),
         ...extractControlCandidates(input.normalizedUrl, candidateHtml, homepageText),
+        ...extractVisiblePolicyLabelCandidates(input.normalizedUrl, candidateHtml, homepageText),
         ...extractEmbeddedConsentConfigCandidates(input.normalizedUrl, candidateHtml, homepageText),
       ]),
     );
@@ -466,9 +468,11 @@ export async function policySurfaceScanner(
     observations.push(...policyResults.observations);
     artifactRefs.push(...policyResults.artifactRefs);
     const sufficientGdprEvidenceAfterPrimary = hasSufficientRetainedGdprPolicyEvidence(input.normalizedUrl, observations);
+    const strongDirectPolicyEvidenceAfterPrimary = hasStrongDirectRetainedPolicyEvidenceForBroadFetchStop(observations);
 
     if (
       !sufficientGdprEvidenceAfterPrimary &&
+      !strongDirectPolicyEvidenceAfterPrimary &&
       rankableLinkCandidates.length > 0 &&
       !primaryRankedCandidatesFromCommonPath &&
       !hasRetainedCorePolicyOrControlSurface(observations) &&
@@ -499,7 +503,10 @@ export async function policySurfaceScanner(
       secondarySourceCandidates,
       input.discoveryMode === "fast" ||
         (
-          hasRetainedFirstPartyPolicyEvidenceForBroadFetchStop(input.normalizedUrl, observations) &&
+          (
+            hasRetainedFirstPartyPolicyEvidenceForBroadFetchStop(input.normalizedUrl, observations) ||
+            hasStrongDirectRetainedPolicyEvidenceForBroadFetchStop(observations)
+          ) &&
           !secondarySourceCandidates.some((candidate) =>
             isFirstPartyCookieOrControlPolicyCandidate(input.normalizedUrl, candidate)
           )
@@ -525,6 +532,7 @@ export async function policySurfaceScanner(
       !commonPathFallbackUsed &&
       !hasRetainedFirstPartyPrivacyPolicy(input.normalizedUrl, observations) &&
       !hasRetainedFirstPartyPolicyEvidenceForBroadFetchStop(input.normalizedUrl, observations) &&
+      !hasStrongDirectRetainedPolicyEvidenceForBroadFetchStop(observations) &&
       commonPathCandidates.length > 0 &&
       !shouldSkipCommonPathAfterBlockedDirectCore(observations)
     ) {
@@ -956,6 +964,14 @@ function shouldStopBlockedCommonPathFallback(
     observationMatchesScanOrigin(normalizedScanUrl, result.observation)
   ).length;
   if (blockedSameOriginFailures >= COMMON_PATH_BLOCKED_EARLY_STOP_FAILURES) {
+    return true;
+  }
+  const notFoundSameOriginFailures = results.filter((result) =>
+    result.observation.status === "failed" &&
+    result.observation.httpStatus === 404 &&
+    observationMatchesScanOrigin(normalizedScanUrl, result.observation)
+  ).length;
+  if (notFoundSameOriginFailures >= COMMON_PATH_NOT_FOUND_EARLY_STOP_FAILURES) {
     return true;
   }
   const transportSameOriginFailures = results.filter((result) =>
@@ -1759,6 +1775,104 @@ function extractControlCandidates(baseUrl: string, html: string, visibleText: st
     });
   }
   return candidates;
+}
+
+function extractVisiblePolicyLabelCandidates(baseUrl: string, html: string, visibleText: string): PolicySurfaceCandidate[] {
+  const candidates: PolicySurfaceCandidate[] = [];
+  const elementPattern = /<(div|span|li|p|label)\b([^>]*)>([\s\S]{0,800}?)<\/\1>/gi;
+  let match: RegExpExecArray | null;
+  let index = 0;
+  while ((match = elementPattern.exec(html))) {
+    if (isInsideIgnoredStaticMarkup(html, match.index)) {
+      continue;
+    }
+    const tagName = (match[1] ?? "").toLowerCase();
+    const attrs = match[2] ?? "";
+    const innerHtml = match[3] ?? "";
+    if (/<a\b/i.test(innerHtml) || /<(?:script|style|template|noscript)\b/i.test(innerHtml)) {
+      continue;
+    }
+    const text = normalizeWhitespace([
+      htmlToVisibleText(innerHtml),
+      attr(attrs, "aria-label"),
+      attr(attrs, "title"),
+    ].filter(Boolean).join(" ")).slice(0, 220);
+    if (!isVisiblePolicyLabelText(text)) {
+      continue;
+    }
+    const surroundingTextExcerpt = surroundingText(visibleText, text);
+    const domLocation = domLocationFor(html, match.index);
+    const deterministic = classifySurface({
+      linkText: text,
+      url: baseUrl,
+      surroundingText: surroundingTextExcerpt,
+    });
+    if (deterministic.surfaceType === "unknown" || !isVisiblePolicyLabelCandidateAllowed({
+      attrs,
+      domLocation,
+      surfaceType: deterministic.surfaceType,
+      tagName,
+      text,
+    })) {
+      continue;
+    }
+    candidates.push({
+      candidateId: `policy_visible_label_candidate_${index++}`,
+      url: baseUrl,
+      normalizedUrl: baseUrl,
+      linkText: text,
+      selector: `visible-label:${deterministic.surfaceType}:${stableHash(text).slice(0, 12)}`,
+      surroundingTextExcerpt,
+      domLocation,
+      sameOrigin: true,
+      fetchable: false,
+      clickable: false,
+      mayLeadToConsentControls: isPreferenceControlSurface(deterministic.surfaceType, text),
+      observationOnly: true,
+      deterministicSurfaceType: deterministic.surfaceType,
+      deterministicScore: Math.min(0.78, deterministic.score),
+      deterministicKeywordMatches: deterministic.keywords,
+      ...classifierCandidateFields(deterministic),
+      discoveryMethod: domLocation === "footer"
+        ? "footer_link"
+        : domLocation === "header" || domLocation === "nav"
+          ? "header_link"
+          : "page_text_link",
+    });
+  }
+  return candidates;
+}
+
+function isVisiblePolicyLabelText(value: string): boolean {
+  const normalized = normalizeWhitespace(value);
+  return normalized.length >= 6 &&
+    normalized.length <= 90 &&
+    !/[.!?]\s+\p{L}/u.test(normalized);
+}
+
+function isVisiblePolicyLabelCandidateAllowed(input: {
+  attrs: string;
+  domLocation: PolicySurfaceCandidate["domLocation"];
+  surfaceType: PolicySurfaceObservation["surfaceType"];
+  tagName: string;
+  text: string;
+}): boolean {
+  if (![
+    "privacy_policy",
+    "cookie_policy",
+    "cookie_settings",
+    "consent_preferences",
+  ].includes(input.surfaceType)) {
+    return false;
+  }
+  if (input.domLocation === "footer" || input.domLocation === "header" || input.domLocation === "nav") {
+    return true;
+  }
+  const context = `${input.attrs} ${input.text}`.toLowerCase();
+  if (/(?:cookie|consent|cmp|privacy|confidentialit[eé]|donn[eé]es|datenschutz|privacidad|prywatno|rodo)/i.test(context)) {
+    return input.surfaceType !== "privacy_policy" || /(?:privacy|confidentialit[eé]|donn[eé]es|datenschutz|privacidad|prywatno|rodo)/i.test(context);
+  }
+  return input.tagName === "label" && isPreferenceControlSurface(input.surfaceType, input.text);
 }
 
 function isInsideIgnoredStaticMarkup(html: string, index: number): boolean {
@@ -2737,6 +2851,19 @@ function hasRetainedFirstPartyPolicyEvidenceForBroadFetchStop(
   return hasCookieOrControlSurface || hasRowSpecificTransparencyEvidence;
 }
 
+function hasStrongDirectRetainedPolicyEvidenceForBroadFetchStop(
+  observations: PolicySurfaceObservation[],
+): boolean {
+  return observations.some((observation) =>
+    observation.status === "fetched" &&
+    observation.surfaceType === "privacy_policy" &&
+    observation.fetchable !== false &&
+    observation.discoveryMethod !== "guessed_common_path" &&
+    !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url) &&
+    (observation.article13DisclosureSignals ?? []).length >= 4
+  );
+}
+
 function isCorePolicyOrControlSurface(observation: Pick<PolicySurfaceObservation, "surfaceType">): boolean {
   return [
     "privacy_policy",
@@ -2827,6 +2954,7 @@ function highValueSecondaryCandidatesFromPolicyPage(
   return dedupeCandidates([
     ...extractCandidates(baseUrl, html, visibleText),
     ...extractControlCandidates(baseUrl, html, visibleText),
+    ...extractVisiblePolicyLabelCandidates(baseUrl, html, visibleText),
   ]).filter((candidate) =>
     isHighValuePolicySupplement(candidate) &&
     isSameOriginPolicyPageSupplement(baseUrl, candidate)

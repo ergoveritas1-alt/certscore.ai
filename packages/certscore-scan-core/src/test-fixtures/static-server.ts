@@ -138,6 +138,7 @@ export type StaticFixturePage =
   | "policy-session-replay-disclosure"
   | "policy-vendor-panel-privacy-links"
   | "policy-vendor-mentions"
+  | "policy-visible-fr-observation-labels"
   | "policy-webmd-like-secondary-surfaces"
   | "region-coded-collection-endpoint"
   | "security-access-temporarily-restricted"
@@ -292,6 +293,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-session-replay-disclosure": "policy-session-replay",
   "policy-vendor-panel-privacy-links": "policy-vendor-panel-privacy-links",
   "policy-vendor-mentions": "policy-vendors",
+  "policy-visible-fr-observation-labels": "policy-visible-fr-observation-labels",
   "policy-webmd-like-secondary-surfaces": "policy-webmd-like-secondary",
   "region-coded-collection-endpoint": "region-coded-collection",
   "security-access-temporarily-restricted": "security-access-temporarily-restricted",
@@ -1683,6 +1685,11 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `</section>`,
     ].join(" | "),
     "policy-vendor-mentions": `<a href="/policies/vendors">Privacy Policy</a>`,
+    "policy-visible-fr-observation-labels": [
+      `<span>Données personnelles</span>`,
+      `<span>Politique Cookie</span>`,
+      `<span>Paramétrage des cookies</span>`,
+    ].join(" | "),
     "policy-webmd-like-secondary-surfaces": `<a href="/policies/webmd-like-privacy">Privacy Policy</a>`,
   };
   return `
