@@ -1,5 +1,7 @@
 # APIs.guru Submission
 
+Submitted issue: https://github.com/APIs-guru/openapi-directory/issues/2767
+
 Use this body for an APIs.guru `Add API` issue or pull request.
 
 ```text

@@ -189,6 +189,7 @@ Implemented:
 
 - Added `integrations/postman/certscore-api-v2.postman_collection.json`.
 - Added APIs.guru, Postman Public API Network, and RapidAPI listing drafts under `integrations/api-directories/`.
+- Submitted the APIs.guru listing request: https://github.com/APIs-guru/openapi-directory/issues/2767.
 - Added `/apis.json` and linked it from robots, sitemap, the developer hub, and agent-readable docs.
 - Updated the AI discovery manifest with SDK package metadata, GitHub Action metadata, and MCP published status.
 
@@ -196,7 +197,6 @@ Remaining account-owned actions:
 
 - Publish the GitHub Action through GitHub Marketplace after creating a release/tag.
 - Publish the Postman public workspace and add the final workspace URL to docs.
-- Submit the APIs.guru issue/PR.
 - Create the RapidAPI listing once pricing and account routing are finalized.
 
 ### Phase 4.5: Pre-Deploy Discoverability Hardening
