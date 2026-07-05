@@ -230,6 +230,133 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes credits French retention and reci
   assert.equal(concernOutcomes.recipients_vendor_categories_disclosure?.status, "Observed");
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes credits Lequipe-style French retained Article 13 sections", () => {
+  const sectionEvidence = [
+    {
+      coverageArea: "controller_contact",
+      evidenceSource: "deterministic",
+      selectedEvidenceStrength: "strong",
+      selectedPolicySectionExcerpt: "Qui sommes-nous ? Les supports numériques L'Équipe sont édités par L'Équipe 24/24, responsable du traitement des données personnelles collectées sur le site.",
+      selectedPolicySectionHeading: "Qui sommes-nous ?",
+      selectedPolicySectionUrl: "https://www.lequipe.fr/Page/Politique-de-confidentialite/1183897",
+      signalObserved: "observed"
+    },
+    {
+      coverageArea: "dpo_contact",
+      evidenceSource: "deterministic",
+      selectedEvidenceStrength: "strong",
+      selectedPolicySectionExcerpt: "Politique de confidentialité. Vous pouvez contacter le délégué à la protection des données à l'adresse dpo@example.test pour toute question relative au traitement de vos données.",
+      selectedPolicySectionHeading: "Politique de confidentialité",
+      selectedPolicySectionUrl: "https://www.lequipe.fr/Page/Politique-de-confidentialite/1183897",
+      signalObserved: "observed"
+    },
+    {
+      coverageArea: "processing_purposes",
+      evidenceSource: "deterministic",
+      selectedEvidenceStrength: "strong",
+      selectedPolicySectionExcerpt: "Pourquoi collectons-nous des données vous concernant ? Nous collectons et utilisons vos données personnelles afin de gérer votre compte, personnaliser les contenus, mesurer l'audience et fournir les services demandés.",
+      selectedPolicySectionHeading: "Pourquoi collectons-nous des données vous concernant ?",
+      selectedPolicySectionUrl: "https://www.lequipe.fr/Page/Politique-de-confidentialite/1183897",
+      signalObserved: "observed"
+    },
+    {
+      coverageArea: "recipients_or_vendor_categories",
+      evidenceSource: "deterministic",
+      selectedEvidenceStrength: "strong",
+      selectedPolicySectionExcerpt: "Quels sont les destinataires de vos données ? Sont destinataires des données l'éditeur, les sociétés de son groupe, les prestataires sous-traitants, les partenaires commerciaux et les autorités compétentes.",
+      selectedPolicySectionHeading: "Quels sont les destinataires de vos données ?",
+      selectedPolicySectionUrl: "https://www.lequipe.fr/Page/Politique-de-confidentialite/1183897",
+      signalObserved: "observed"
+    },
+    {
+      coverageArea: "data_subject_rights",
+      evidenceSource: "deterministic",
+      selectedEvidenceStrength: "strong",
+      selectedPolicySectionExcerpt: "De quels droits disposez-vous sur vos données ? Vous disposez d'un droit d'accès, de rectification, d'effacement, d'opposition, de limitation, de portabilité et du droit de retirer votre consentement.",
+      selectedPolicySectionHeading: "De quels droits disposez-vous sur vos données ?",
+      selectedPolicySectionUrl: "https://www.lequipe.fr/Page/Politique-de-confidentialite/1183897",
+      signalObserved: "observed"
+    },
+    {
+      coverageArea: "international_transfers",
+      evidenceSource: "deterministic",
+      selectedEvidenceStrength: "strong",
+      selectedPolicySectionExcerpt: "En cas de transferts des données hors Union Européenne, les transferts internationaux de données personnelles sont encadrés par des clauses contractuelles types et des garanties appropriées.",
+      selectedPolicySectionHeading: "En cas de transferts des données hors Union Européenne",
+      selectedPolicySectionUrl: "https://www.lequipe.fr/Page/Politique-de-confidentialite/1183897",
+      signalObserved: "observed"
+    },
+  ];
+
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        policyTextCoverageMode: "section_targeted",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 6800,
+        privacyPolicyUrls: ["https://www.lequipe.fr/Page/Politique-de-confidentialite/1183897"],
+        retainedArticle13SectionEvidence: sectionEvidence,
+        retainedPolicySections: sectionEvidence.map((evidence, index) => ({
+          charEnd: (index + 1) * 500,
+          charStart: index * 500,
+          heading: evidence.selectedPolicySectionHeading,
+          quality: "strong",
+          sourceUrl: evidence.selectedPolicySectionUrl,
+          textExcerpt: evidence.selectedPolicySectionExcerpt
+        }))
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(outcomes.controller_contact_disclosure?.status, "Observed");
+  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Observed");
+  assert.equal(outcomes.processing_purposes_disclosure?.status, "Observed");
+  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Observed");
+  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Observed");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Observed");
+  assert.match(
+    retainedArticle13Signal(outcomes.recipients_vendor_categories_disclosure!)?.evidenceText ?? "",
+    /prestataires sous-traitants/i
+  );
+  assert.match(
+    retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText ?? "",
+    /clauses contractuelles types/i
+  );
+
+  const sectionOnlyOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        policyTextCoverageMode: "section_targeted",
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 6800,
+        privacyPolicyUrls: ["https://www.lequipe.fr/Page/Politique-de-confidentialite/1183897"],
+        retainedPolicySections: sectionEvidence.map((evidence, index) => ({
+          charEnd: (index + 1) * 500,
+          charStart: index * 500,
+          heading: evidence.selectedPolicySectionHeading,
+          quality: "strong",
+          sourceUrl: evidence.selectedPolicySectionUrl,
+          textExcerpt: evidence.selectedPolicySectionExcerpt
+        }))
+      }
+    },
+    snapshot: {
+      privacy_policy_present: true
+    }
+  });
+
+  assert.equal(sectionOnlyOutcomes.controller_contact_disclosure?.status, "Observed");
+  assert.equal(sectionOnlyOutcomes.processing_purposes_disclosure?.status, "Observed");
+  assert.equal(sectionOnlyOutcomes.recipients_vendor_categories_disclosure?.status, "Observed");
+  assert.equal(sectionOnlyOutcomes.data_subject_rights_disclosure?.status, "Observed");
+  assert.equal(sectionOnlyOutcomes.international_transfers_disclosure?.status, "Observed");
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps automated profiling Article 13 evidence in review", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

@@ -672,6 +672,58 @@ test("policySurfaceScanner derives diagnostic GDPR Transparency candidates from 
   );
 });
 
+test("policySurfaceScanner emits production-grade retained French Article 13 section evidence", async () => {
+  const server = await startLequipeStyleFrenchPolicyServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const result = await policySurfaceScanner({
+      url: server.baseUrl,
+      normalizedUrl: server.baseUrl,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 5_000,
+      artifactWriter,
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      discoveryMode: "fast",
+    });
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${server.baseUrl}/privacy`
+    );
+    const sectionEvidence = privacy?.retainedArticle13SectionEvidence ?? [];
+    const sectionEvidenceFor = (type: string) => sectionEvidence.find((evidence) => evidence.coverageArea === type);
+
+    assert.ok(privacy, "French privacy policy should be fetched");
+    for (const type of [
+      "controller_contact",
+      "dpo_contact",
+      "processing_purposes",
+      "recipients_or_vendor_categories",
+      "data_subject_rights",
+      "international_transfers",
+    ]) {
+      assert.equal(
+        sectionEvidenceFor(type)?.signalObserved,
+        "observed",
+        `${type} should be observed: ${JSON.stringify(sectionEvidenceFor(type))}`,
+      );
+      assert.equal(sectionEvidenceFor(type)?.selectedEvidenceStrength, "strong", `${type} should be strong`);
+    }
+    assert.match(
+      sectionEvidenceFor("recipients_or_vendor_categories")?.selectedPolicySectionExcerpt ?? "",
+      /prestataires sous-traitants/i
+    );
+    assert.match(
+      sectionEvidenceFor("international_transfers")?.selectedPolicySectionExcerpt ?? "",
+      /clauses contractuelles types/i
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("policySurfaceScanner retains diagnostic GDPR Transparency candidates from encoded fetched policy text", async () => {
   await withPolicyScan("policy-gdpr-transparency-encoded-it", async ({ result, baseUrl }) => {
     const privacy = result.policySurfaceObservations.find((observation) =>
@@ -2930,6 +2982,50 @@ async function startSlowHomepagePolicyServer(): Promise<{ baseUrl: string; close
           <p>The controller for this service can be contacted at privacy@example.test.</p>
           <p>We process personal data to provide hospitality services and manage bookings.</p>
           <p>We retain personal data only as long as necessary and as required by law.</p>
+        </main>
+      </body></html>`);
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("not found");
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => closeServer(server),
+  };
+}
+
+async function startLequipeStyleFrenchPolicyServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? "/", "http://fixture.local");
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    if (url.pathname === "/" || url.pathname === "") {
+      response.end(`<!doctype html><html><body>
+        <main>Sport homepage</main>
+        <footer><a href="/privacy">Politique de confidentialité</a></footer>
+      </body></html>`);
+      return;
+    }
+    if (url.pathname === "/privacy") {
+      response.end(`<!doctype html><html><body>
+        <main>
+          <h1>Politique de confidentialité</h1>
+          <h2>Qui sommes-nous ?</h2>
+          <p>Les supports numériques L'Équipe sont édités par L'Équipe 24/24, responsable du traitement des données personnelles collectées sur le site et l'application.</p>
+          <h2>Délégué à la protection des données</h2>
+          <p>Vous pouvez contacter le délégué à la protection des données à l'adresse dpo@example.test pour toute question relative au traitement de vos données personnelles.</p>
+          <h2>Pourquoi collectons-nous des données vous concernant ?</h2>
+          <p>Nous collectons et utilisons vos données personnelles afin de gérer votre compte, personnaliser les contenus, mesurer l'audience et fournir les services demandés.</p>
+          <h2>Quels sont les destinataires de vos données ?</h2>
+          <p>Sont destinataires des données l'éditeur, les sociétés de son groupe, les prestataires sous-traitants, les partenaires commerciaux et les autorités compétentes.</p>
+          <h2>De quels droits disposez-vous sur vos données ?</h2>
+          <p>Vous disposez d'un droit d'accès, de rectification, d'effacement, d'opposition, de limitation, de portabilité et du droit de retirer votre consentement.</p>
+          <h2>En cas de transferts des données hors Union Européenne</h2>
+          <p>Les transferts internationaux de données personnelles sont encadrés par des clauses contractuelles types et des garanties appropriées.</p>
         </main>
       </body></html>`);
       return;

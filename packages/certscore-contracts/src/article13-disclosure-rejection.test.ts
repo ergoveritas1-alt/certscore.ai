@@ -212,6 +212,45 @@ test("Article 13 rejection contract accepts BILD-style German row-specific excer
   }
 });
 
+test("Article 13 rejection contract accepts Lequipe-style French retained sections", () => {
+  const examples = [
+    {
+      disclosureType: "controller_contact",
+      text: "Qui sommes-nous ? Les supports numériques L'Équipe sont édités par L'Équipe 24/24, responsable du traitement des données personnelles collectées sur le site.",
+    },
+    {
+      disclosureType: "dpo_contact",
+      text: "Politique de confidentialité. Vous pouvez contacter le délégué à la protection des données à l'adresse dpo@example.test pour toute question relative au traitement de vos données.",
+    },
+    {
+      disclosureType: "processing_purposes",
+      text: "Pourquoi collectons-nous des données vous concernant ? Nous collectons et utilisons vos données personnelles afin de gérer votre compte, personnaliser les contenus, mesurer l'audience et fournir les services demandés.",
+    },
+    {
+      disclosureType: "recipients_or_vendor_categories",
+      text: "Quels sont les destinataires de vos données ? Sont destinataires des données l'éditeur, les sociétés de son groupe, les prestataires sous-traitants, les partenaires commerciaux et les autorités compétentes.",
+    },
+    {
+      disclosureType: "data_subject_rights",
+      text: "De quels droits disposez-vous sur vos données ? Vous disposez d'un droit d'accès, de rectification, d'effacement, d'opposition, de limitation, de portabilité et du droit de retirer votre consentement.",
+    },
+    {
+      disclosureType: "international_transfers",
+      text: "En cas de transferts des données hors Union Européenne, les transferts internationaux de données personnelles sont encadrés par des clauses contractuelles types et des garanties appropriées.",
+    },
+  ] as const;
+
+  for (const example of examples) {
+    for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+      assert.equal(
+        isArticle13DisclosureEvidenceUsable(example.text, example.disclosureType, { mode }),
+        true,
+        `${mode} should accept ${example.disclosureType}`,
+      );
+    }
+  }
+});
+
 test("Article 13 rejection contract accepts Wyborcza-style Polish row-specific excerpts", () => {
   const examples = [
     {

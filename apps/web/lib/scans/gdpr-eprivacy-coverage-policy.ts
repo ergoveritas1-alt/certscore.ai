@@ -4962,7 +4962,7 @@ type PolicySectionChunk = {
 };
 
 const LEGAL_BASIS_DISCLOSURE_PATTERN =
-  /(?:legal|lawful)\s+basis|article\s*6|legitimate interests?|legal obligation|when required by law|vital interests?|public task|performance of (?:a )?contract|contractual necessity|(?:basis for processing|we rely on|based on).{0,160}\b(?:consent|contract|legal obligation|legitimate interest)\b|\bwith your consent\b|\bconsent\b.{0,140}\b(?:personal data|personal information|processing|lawful|legal basis)\b/i;
+  /(?:legal|lawful)\s+basis|article\s*6|legitimate interests?|legal obligation|when required by law|vital interests?|public task|performance of (?:a )?contract|contractual necessity|(?:basis for processing|we rely on|based on).{0,160}\b(?:consent|contract|legal obligation|legitimate interest)\b|\bwith your consent\b|\bconsent\b.{0,140}\b(?:personal data|personal information|processing|lawful|legal basis)\b|base l[ée]gale|fondement juridique|int[ée]r[êe]t l[ée]gitime|obligation l[ée]gale|ex[ée]cution du contrat|consentement/i;
 
 const RECIPIENTS_VENDOR_CATEGORIES_DISCLOSURE_PATTERN =
   /recipient|third[- ]part(?:y|ies)|service providers?|vendors?|processors?|subprocessors?|business partners?|advertising partners?|analytics providers?|payment processors?|hosting providers?|cloud providers?|affiliates?|empfänger|dienstleister|auftragsverarbeiter|destinataires?|prestataires?|sous-traitants?|destinatarios?|proveedores?|encargados?|destinatari|fornitori|responsabili|ontvangers|dienstverleners|verwerkers|odbiorcy|dostawcy|podmioty przetwarzające/i;
@@ -4974,10 +4974,10 @@ const RECIPIENT_DISCLOSURE_VERBS =
   /share|shared|sharing|disclose|disclosed|disclosing|sell|sold|transfer|transferred|make available|made available|provide|provided|providing|receive|receives|received|access|accessed|handle|handled|process|processed|processing|teilen|weitergeben|übermitteln|erhalten|verarbeiten|communiqu|partage|transmis|transfér|trait|compart|comunic|transmit|tratar|condivid|comunicat|trasferit|tratt|delen|verstrekken|ontvangen|verwerken|udostęp|przekaz|przetwarz/i;
 
 const CONTROLLER_CONTACT_DISCLOSURE_PATTERN =
-  /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection(?: office| officer)?|contact (?:our )?(?:privacy|data protection)|contact (?:google|us).{0,80}(?:privacy|data protection)|privacy@/i;
+  /data controller|\bcontroller\b|privacy (?:contact|office|team|questions|rights)|data protection(?: office| officer)?|contact (?:our )?(?:privacy|data protection)|contact (?:google|us).{0,80}(?:privacy|data protection)|privacy@|responsable du traitement|supports? num[ée]riques? (?:est|sont) [ée]dit[ée]s? par/i;
 
 const PROCESSING_PURPOSES_DISCLOSURE_PATTERN =
-  /purpose(?:s)? (?:of|for|we|to)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|provide (?:our )?services|personalize (?:content|ads|advertising|services|experience)|tailored search results|measure (?:performance|advertising)|perform analytics/i;
+  /purpose(?:s)? (?:of|for|we|to)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|(?:use|processing) of (?:your )?(?:personal )?(?:data|information)|provide (?:our )?services|personalize (?:content|ads|advertising|services|experience)|tailored search results|measure (?:performance|advertising)|perform analytics|finalit[ée]s?|pourquoi collectons-nous|nous (?:utilisons|traitons|collectons).{0,120}donn[ée]es|quelles utilisations seront faites de vos donn[ée]es/i;
 
 const RETENTION_DISCLOSURE_PATTERN =
   /retaining your information|retain(?:ing)? (?:the |your |personal )?(?:data|information)|retained for|deleted or anonymized|deletion|retention periods?|legal purposes|fraud and abuse prevention|retention criteria|storage period|retain.{0,120}(?:as long as necessary|required by law|for the purposes|until|unless|legal purposes|fraud|abuse)|delete your information.{0,120}(?:retention|retain|retained|deleted|anonymized)|keep your.{0,100}(?:as long as necessary|required by law|for)|stored for|kept for|how long|expires?|as long as necessary|speicherdauer|aufbewahrung|solange|gespeichert|durée de conservation|conserv(?:é|e|és|ées)|durée conforme|dispositions légales|plazo de conservación|conservamos|periodo di conservazione|conserviamo|bewaartermijn|bewaren|okres przechowywania|przechowujemy/i;
@@ -4995,10 +4995,10 @@ const RETENTION_SECURITY_SAFEGUARD_PATTERN =
   /\b(?:how we keep your personal information safe|protect your personal information|security|safeguards?|encryption|confidential|unauthori[sz]ed access|loss|destruction)\b/i;
 
 const DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN =
-  /your rights|data subject rights|right to (?:access|delete|erase|erasure|rectif|object|restrict|port)|rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)|access.{0,80}(?:your )?(?:personal )?(?:data|information)|delete your information|delete.{0,80}(?:your )?(?:personal )?(?:data|information)|erasure|correct (?:your )?(?:personal )?(?:data|information)|rectif|portability|object to|restrict (?:the )?processing|export.{0,80}(?:your )?(?:data|information)|review and update|my activity|google takeout|request to remove content|privacy controls|download a copy/i;
+  /your rights|data subject rights|right to (?:access|delete|erase|erasure|rectif|object|restrict|port)|rights? to (?:access|delete|erase|erasure|rectif|object|restrict|port)|access.{0,80}(?:your )?(?:personal )?(?:data|information)|delete your information|delete.{0,80}(?:your )?(?:personal )?(?:data|information)|erasure|correct (?:your )?(?:personal )?(?:data|information)|rectif|portability|object to|restrict (?:the )?processing|export.{0,80}(?:your )?(?:data|information)|review and update|my activity|google takeout|request to remove content|privacy controls|download a copy|droits? (?:d['’]acc[èe]s|d['’]opposition|de rectification|d['’]effacement|[àa] la limitation|[àa] la portabilit[ée])|exercer vos droits|retirer (?:votre )?consentement/i;
 
 const INTERNATIONAL_TRANSFERS_DISCLOSURE_PATTERN =
-  /data transfers?|international transfer|cross-border transfer|transfer.{0,120}(?:personal data|personal information|information|data).{0,160}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies))|(?:personal data|personal information|information|data).{0,120}(?:transfer|transferred|stored|processed|accessed|shared|protected).{0,180}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|usa|eea|european economic area|uk|united kingdom)|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,240}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries)|agreements?.{0,240}(?:personal data|personal information|information|data).{0,240}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|(?:stored|processed|accessed|shared).{0,120}(?:in|from).{0,80}(?:united states|usa|other countries|countries outside|third countries|foreign countries)|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|standard contractual|contractual clauses|sccs?|adequacy|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|transfer mechanisms?|data transfer framework|dpf|privacy shield/i;
+  /data transfers?|international transfer|cross-border transfer|transfer.{0,120}(?:personal data|personal information|information|data).{0,160}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies))|(?:personal data|personal information|information|data).{0,120}(?:transfer|transferred|stored|processed|accessed|shared|protected).{0,180}(?:outside|international|across countries|other countries|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|usa|eea|european economic area|uk|united kingdom)|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,240}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries)|agreements?.{0,240}(?:personal data|personal information|information|data).{0,240}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|(?:stored|processed|accessed|shared).{0,120}(?:in|from).{0,80}(?:united states|usa|other countries|countries outside|third countries|foreign countries)|servers around the world|processed on servers located outside|outside of the country where you live|legal frameworks relating to the transfer of data|standard contractual|contractual clauses|sccs?|adequacy|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|transfer mechanisms?|data transfer framework|dpf|privacy shield|transferts?.{0,220}donn[ée]es.{0,220}(?:hors (?:de )?(?:l['’])?Union Europ[ée]enne|espace [ée]conomique europ[ée]en|pays tiers|clauses contractuelles types|garanties appropri[ée]es)/i;
 
 const SUPERVISORY_AUTHORITY_DISCLOSURE_PATTERN =
   /supervisory authority|data protection authority|local data protection authorit(?:y|ies)|lodge a complaint|formal written complaints?|resolve any complaints?|complain(?:t)? with (?:your )?(?:local )?(?:supervisory|data protection) authority|regulatory authorities|regulators?|ico|cnil|dpc/i;
@@ -5495,7 +5495,7 @@ function getRetainedPolicySectionEvidence(
   summary: Record<string, unknown> | null | undefined,
   disclosureType: string | undefined
 ) {
-  if (disclosureType !== "data_retention") {
+  if (!disclosureType) {
     return null;
   }
   const candidates = getObjectArray(summary, ["retainedPolicySections", "retained_policy_sections"])
@@ -5503,7 +5503,7 @@ function getRetainedPolicySectionEvidence(
       const heading = cleanPolicyDisclosureEvidenceText(getString(section, ["heading"]) ?? "");
       const excerpt = cleanPolicyDisclosureEvidenceText(getString(section, ["textExcerpt", "text_excerpt"]) ?? "");
       const evidenceText = policySectionEvidenceText(heading, excerpt);
-      const selectedEvidenceStrength = retentionPolicySectionEvidenceStrength(heading, excerpt);
+      const selectedEvidenceStrength = policySectionEvidenceStrength(disclosureType, heading, excerpt);
       return {
         evidenceSource: "retained_policy_sections",
         selectedEvidenceStrength,
@@ -5526,6 +5526,52 @@ function getRetainedPolicySectionEvidence(
         disclosureType
       )
     )[0] ?? null;
+}
+
+function policySectionEvidenceStrength(disclosureType: string, heading: string, excerpt: string) {
+  if (disclosureType === "data_retention") {
+    return retentionPolicySectionEvidenceStrength(heading, excerpt);
+  }
+  if (disclosureType === "legal_basis") {
+    return null;
+  }
+  const candidateText = policySectionEvidenceText(heading, excerpt);
+  if (!candidateText || !isPolicyDisclosureEvidenceUsable(candidateText, disclosureType)) {
+    return null;
+  }
+  const disclosurePattern = policyDisclosurePatternForType(disclosureType);
+  const patternMatches = disclosurePattern ? disclosurePattern.test(candidateText) : false;
+  const headingMatches = policyDisclosureSectionHints(disclosureType).some((hint) => {
+    hint.lastIndex = 0;
+    return hint.test(heading);
+  });
+  if (!patternMatches && !headingMatches) {
+    return null;
+  }
+  return headingMatches && patternMatches ? "strong" : "moderate";
+}
+
+function policyDisclosurePatternForType(disclosureType: string) {
+  switch (disclosureType) {
+    case "controller_contact":
+      return CONTROLLER_CONTACT_DISCLOSURE_PATTERN;
+    case "processing_purposes":
+      return PROCESSING_PURPOSES_DISCLOSURE_PATTERN;
+    case "legal_basis":
+      return LEGAL_BASIS_DISCLOSURE_PATTERN;
+    case "recipients_or_vendor_categories":
+      return RECIPIENTS_VENDOR_CATEGORIES_DISCLOSURE_PATTERN;
+    case "data_subject_rights":
+      return DATA_SUBJECT_RIGHTS_DISCLOSURE_PATTERN;
+    case "international_transfers":
+      return INTERNATIONAL_TRANSFERS_DISCLOSURE_PATTERN;
+    case "dpo_contact":
+      return /data protection officer|\bdpo\b|d[ée]l[ée]gu[ée] [àa] la protection des donn[ée]es/i;
+    case "supervisory_authority":
+      return SUPERVISORY_AUTHORITY_DISCLOSURE_PATTERN;
+    default:
+      return null;
+  }
 }
 
 function retentionPolicySectionEvidenceStrength(heading: string, excerpt: string) {
@@ -5696,7 +5742,23 @@ function policySectionHeadingPattern() {
     "Regulatory authorities",
     "Automated decision-making",
     "Automated processing",
-    "Profiling"
+    "Profiling",
+    "Politique de confidentialité",
+    "Qui sommes-nous ?",
+    "Responsable du traitement",
+    "Délégué à la protection des données",
+    "Pourquoi collectons-nous des données vous concernant ?",
+    "Quelles utilisations seront faites de vos données ?",
+    "Finalités du traitement",
+    "Fondement juridique",
+    "Base légale",
+    "Quels sont les destinataires de vos données ?",
+    "Destinataires des données",
+    "Durée de conservation",
+    "De quels droits disposez-vous sur vos données ?",
+    "Pour en savoir plus sur vos droits",
+    "En cas de transferts des données hors Union Européenne",
+    "Transferts internationaux"
   ];
   return new RegExp(`(?:^|[.!?]\\s+|\\n+)(${headings.map(escapeRegExp).join("|")})(?:[.:\\-–—]?\\s+)`, "gi");
 }
@@ -5774,7 +5836,7 @@ function policyChunkSubstantiveScore(text: string, heading?: string) {
   let score = Math.min(text.length, 1_200) / 120;
   const sentenceCount = (text.match(/[.!?](?:\s|$)/g) ?? []).length;
   score += Math.min(sentenceCount, 5) * 2;
-  const substantiveTerms = lower.match(/\b(?:collect|use|process|retain|delete|anonymize|export|access|update|correct|transfer|share|contact|complain|object|restrict|personalize|automated|algorithm|recognize|rights|controller|legal basis|lawful basis|service providers|processors|supervisory authority|data protection authority)\b/g)?.length ?? 0;
+  const substantiveTerms = lower.match(/\b(?:collect|use|process|retain|delete|anonymize|export|access|update|correct|transfer|share|contact|complain|object|restrict|personalize|automated|algorithm|recognize|rights|controller|legal basis|lawful basis|service providers|processors|supervisory authority|data protection authority|traitement|donn[ée]es|finalit[ée]s?|conservation|conserv[ée]es?|droits?|responsable du traitement|destinataires?|prestataires?|sous-traitants?|transferts?|consentement|protection des donn[ée]es)\b/gu)?.length ?? 0;
   score += Math.min(substantiveTerms, 12);
   if (heading && policyChunkNavigationPenalty(heading) < 4) {
     score += 3;
@@ -5808,21 +5870,21 @@ function scorePolicySectionChunkForDisclosure(
 function policyDisclosureSectionHints(disclosureType: string): RegExp[] {
   switch (disclosureType) {
     case "controller_contact":
-      return [/contact/, /controller/, /data protection/, /privacy office/, /privacy contact/, /google llc/];
+      return [/contact/, /controller/, /data protection/, /privacy office/, /privacy contact/, /google llc/, /responsable du traitement/, /qui sommes-nous/, /[ée]diteur/];
     case "processing_purposes":
-      return [/why .*collects? data/, /how we use/, /purpose/, /provide .*services/, /personalize/];
+      return [/why .*collects? data/, /how we use/, /purpose/, /provide .*services/, /personalize/, /finalit[ée]s?/, /pourquoi collectons-nous/, /utilisations?.*donn[ée]es/];
     case "legal_basis":
-      return [/legal basis/, /lawful basis/, /legitimate interests?/, /consent/, /contract/, /article 6/];
+      return [/legal basis/, /lawful basis/, /legitimate interests?/, /consent/, /contract/, /article 6/, /base l[ée]gale/, /fondement juridique/, /int[ée]r[êe]t l[ée]gitime/, /obligation l[ée]gale/];
     case "recipients_or_vendor_categories":
-      return [/share/, /recipients?/, /service providers?/, /processors?/, /partners?/, /affiliates?/];
+      return [/share/, /recipients?/, /service providers?/, /processors?/, /partners?/, /affiliates?/, /destinataires?/, /prestataires?/, /sous-traitants?/, /partenaires commerciaux/];
     case "data_retention":
       return [/how long (?:we )?(?:keep|retain)/, /retaining your information/, /retention periods?/, /storage period/, /stored for/, /kept for/, /kept until/, /until you unsubscribe/, /deleted|removed|erased/, /anonymiz/, /no longer than necessary/, /legal obligations?/, /legal disputes?/, /cctv recordings? (?:are )?kept/];
     case "data_subject_rights":
-      return [/your rights/, /privacy controls/, /access/, /review/, /update/, /correct/, /delete/, /export/, /download a copy/, /object/, /restrict/, /request/];
+      return [/your rights/, /privacy controls/, /access/, /review/, /update/, /correct/, /delete/, /export/, /download a copy/, /object/, /restrict/, /request/, /droits?/, /acc[èe]s/, /rectification/, /effacement/, /opposition/, /limitation/, /portabilit[ée]/];
     case "international_transfers":
-      return [/data transfers?/, /servers around the world/, /outside of the country where you live/, /legal frameworks relating to the transfer of data/, /data protection laws vary among countries/, /data privacy framework/, /standard contractual clauses/];
+      return [/data transfers?/, /servers around the world/, /outside of the country where you live/, /legal frameworks relating to the transfer of data/, /data protection laws vary among countries/, /data privacy framework/, /standard contractual clauses/, /transferts?/, /hors (?:de )?(?:l['’])?Union Europ[ée]enne/, /espace [ée]conomique europ[ée]en/, /clauses contractuelles types/];
     case "dpo_contact":
-      return [/data protection officer/, /\bdpo\b/, /privacy office/, /privacy contact/, /data protection contact/];
+      return [/data protection officer/, /\bdpo\b/, /privacy office/, /privacy contact/, /data protection contact/, /d[ée]l[ée]gu[ée] [àa] la protection des donn[ée]es/];
     case "supervisory_authority":
       return [/regulatory authorities/, /local data protection authorities/, /supervisory authority/, /data protection authority/, /formal written complaints?/, /resolve any complaints?/, /complaint/];
     case "automated_decision_making_or_profiling":
@@ -5931,18 +5993,18 @@ function hasSubstantiveRetentionDisclosure(value: string) {
 
 function hasSubstantiveControllerContactDisclosure(value: string) {
   const body = disclosureEvidenceBodyAfterHeading(value, [
-    /^(?:contact us|data controller|controller|privacy contact|privacy office|data protection officer)[.:;\-–—]?\s*/i
+    /^(?:contact us|data controller|controller|privacy contact|privacy office|data protection officer|responsable du traitement|qui sommes-nous|d[ée]l[ée]gu[ée] [àa] la protection des donn[ée]es)[.:;\-–—]?\s*/i
   ]);
-  return /\b(?:data controller|controller.{0,80}(?:contact|privacy|data protection)|google llc|contact google about privacy questions|contact (?:us|google).{0,120}(?:privacy|data protection)|contact form|privacy office|data protection office|data protection officer|privacy@|postal address|registered address)\b/i.test(body);
+  return /\b(?:data controller|controller.{0,80}(?:contact|privacy|data protection)|google llc|contact google about privacy questions|contact (?:us|google).{0,120}(?:privacy|data protection)|contact form|privacy office|data protection office|data protection officer|privacy@|postal address|registered address|responsable du traitement|supports? num[ée]riques? (?:est|sont) [ée]dit[ée]s? par)\b/i.test(body);
 }
 
 function hasSubstantiveDataSubjectRightsDisclosure(value: string) {
   const body = disclosureEvidenceBodyAfterHeading(value, [
-    /^(?:your rights|data subject rights|privacy controls|exporting and deleting your information)[.:;\-–—]?\s*/i
+    /^(?:your rights|data subject rights|privacy controls|exporting and deleting your information|de quels droits disposez-vous|pour en savoir plus sur vos droits|droits?)[.:;\-–—]?\s*/i
   ]);
-  const rightsVerbMatches = body.match(/\b(?:see|access|take it with you|export|download|correct(?:ions?)?|rectif(?:y|ication)|withdraw consent|opt out|object|restrict|eras(?:e|ed|ure)|delete|remove|exercise (?:your )?privacy rights|exercise (?:your )?rights)\b/gi) ?? [];
+  const rightsVerbMatches = body.match(/\b(?:see|access|take it with you|export|download|correct(?:ions?)?|rectif(?:y|ication)|withdraw consent|opt out|object|restrict|eras(?:e|ed|ure)|delete|remove|exercise (?:your )?privacy rights|exercise (?:your )?rights|acc[èe]s|rectification|effacement|opposition|limitation|portabilit[ée]|retirer|exercer)\b/gi) ?? [];
   return rightsVerbMatches.length >= 2 ||
-    /\b(?:right to (?:access|delete|erasure|rectification|object|restrict|portability)|rights? to (?:access|delete|erasure|rectification|object|restrict|portability)|exercise (?:your )?(?:privacy )?rights|privacy controls|take it with you|withdraw consent|opt out|download a copy|export (?:your )?(?:data|information)|delete (?:your )?(?:data|information)|erase (?:your )?(?:data|information)|access (?:your )?(?:personal )?(?:data|information)|correct(?:ions?)? (?:to )?(?:your )?(?:personal )?(?:data|information)|request to (?:remove|delete|erase|access|correct))\b/i.test(body);
+    /\b(?:right to (?:access|delete|erasure|rectification|object|restrict|portability)|rights? to (?:access|delete|erasure|rectification|object|restrict|portability)|exercise (?:your )?(?:privacy )?rights|privacy controls|take it with you|withdraw consent|opt out|download a copy|export (?:your )?(?:data|information)|delete (?:your )?(?:data|information)|erase (?:your )?(?:data|information)|access (?:your )?(?:personal )?(?:data|information)|correct(?:ions?)? (?:to )?(?:your )?(?:personal )?(?:data|information)|request to (?:remove|delete|erase|access|correct)|droits? (?:d['’]acc[èe]s|d['’]opposition|de rectification|d['’]effacement|[àa] la limitation|[àa] la portabilit[ée])|exercer vos droits|retirer (?:votre )?consentement)\b/i.test(body);
 }
 
 function hasSubstantiveRecipientsVendorCategoriesDisclosure(value: string) {
@@ -5967,7 +6029,7 @@ function hasSubstantiveRecipientsVendorCategoriesDisclosure(value: string) {
     /\b(?:service providers?|vendors?|processors?|subprocessors?)\b.{0,80}\b(?:will|may|can|to)?\s*(?:process|receive|access|handle)\b.{0,180}\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:as (?:a )?data processor|under (?:our )?instructions?|on (?:our )?behalf|for us)\b/i.test(body) ||
     /\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:processed|handled|accessed|received)\b.{0,180}\b(?:by|with)\b.{0,80}\b(?:service providers?|vendors?|processors?|subprocessors?)\b.{0,180}\b(?:under (?:our )?instructions?|on (?:our )?behalf|for us)\b/i.test(body) ||
     /\b(?:categories of (?:third parties|recipients)|third parties with whom we share|recipients of (?:personal )?(?:data|information)|service providers? (?:that|who) (?:process|receive|access|handle|provide|perform|assist)|processors? (?:that|who) process|vendors? (?:that|who) (?:process|receive|access|handle|provide)|affiliates? (?:that|who)? (?:receive|process|access|use|share)|business partners? (?:that|who)? (?:receive|process|access|use|share)|process (?:personal data|personal information|information|data) on our behalf|on our behalf)\b/i.test(body) ||
-    /(?:données personnelles|datos personales|dati personali|persoonsgegevens|dane osobowe|personenbezogene daten).{0,180}(?:communiqu|partage|transmis|transfér|compart|comunic|condivid|trasferit|delen|verstrekken|udostęp|przekaz|teilen|weitergeben|übermitteln).{0,240}(?:prestataires?|sous-traitants?|destinataires?|proveedores?|encargados?|destinatarios?|fornitori|responsabili|destinatari|dienstverleners|verwerkers|ontvangers|dostawcy|odbiorcy|empfänger|dienstleister|auftragsverarbeiter)/i.test(body) ||
+    /(?:données(?: personnelles)?|datos personales|dati personali|persoonsgegevens|dane osobowe|personenbezogene daten).{0,180}(?:communiqu|partage|transmis|transfér|compart|comunic|condivid|trasferit|delen|verstrekken|udostęp|przekaz|teilen|weitergeben|übermitteln|destinataires?).{0,240}(?:prestataires?|sous-traitants?|destinataires?|partenaires commerciaux|soci[ée]t[ée]s? de son groupe|autorit[ée]s comp[ée]tentes|proveedores?|encargados?|destinatarios?|fornitori|responsabili|destinatari|dienstverleners|verwerkers|ontvangers|dostawcy|odbiorcy|empfänger|dienstleister|auftragsverarbeiter)/i.test(body) ||
     /(?:prestataires?|sous-traitants?|destinataires?|proveedores?|encargados?|destinatarios?|fornitori|responsabili|destinatari|dienstverleners|verwerkers|ontvangers|dostawcy|odbiorcy|empfänger|dienstleister|auftragsverarbeiter).{0,220}(?:trait|tratar|tratt|verwerken|przetwarz|verarbeiten|process).{0,220}(?:données personnelles|datos personales|dati personali|persoonsgegevens|dane osobowe|personenbezogene daten)/i.test(body);
 }
 
@@ -5982,17 +6044,17 @@ function hasSubstantiveInternationalTransferDisclosure(value: string) {
     return false;
   }
   const recipientOutsideRegionContext =
-    /\b(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?)\b.{0,260}\b(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|outside (?:your|the user's|the users?|their) countr(?:y|ies)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries|countries outside)\b/i.test(body);
+    /\b(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?|prestataires?|sous-traitants?|destinataires?)\b.{0,260}\b(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|outside (?:your|the user's|the users?|their) countr(?:y|ies)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries|countries outside|hors (?:de )?(?:l['’])?Union Europ[ée]enne|espace [ée]conomique europ[ée]en|pays tiers)\b/i.test(body);
   const personalDataMovementOrProtectionContext =
-    /\b(?:personal data|personal information|information|data)\b/i.test(body) &&
-    /\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted|protect|protected|safeguard|safeguards?|agreements?|contracts?)\b/i.test(body);
+    /\b(?:personal data|personal information|information|data|donn[ée]es)\b/i.test(body) &&
+    /\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted|protect|protected|safeguard|safeguards?|agreements?|contracts?|transferts?|traitement|prot[ée]ger|garanties?|clauses contractuelles)\b/i.test(body);
   if (recipientOutsideRegionContext && personalDataMovementOrProtectionContext) {
     return true;
   }
   return /\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted)\b.{0,180}\b(?:personal data|personal information|information|data)\b.{0,220}\b(?:outside|international|across countries|other countries|third countries|foreign countries|united states|usa|eea|european economic area|uk|united kingdom)\b/i.test(body) ||
     /\b(?:personal data|personal information|information|data)\b.{0,180}\b(?:transfer|transferred|transfers|store|stored|process|processed|access|accessed|share|shared|host|hosted)\b.{0,220}\b(?:outside|international|across countries|other countries|third countries|foreign countries|united states|usa|eea|european economic area|uk|united kingdom)\b/i.test(body) ||
     /\b(?:stored|processed|accessed|shared|hosted)\b.{0,120}\b(?:in|from)\b.{0,120}\b(?:united states|usa|other countries|countries outside|third countries|foreign countries)\b/i.test(body) ||
-    /\b(?:standard contractual clauses?|sccs?|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|data transfer framework|dpf|privacy shield|transfer mechanisms?|legal frameworks relating to the transfer of data)\b/i.test(body);
+    /\b(?:standard contractual clauses?|sccs?|adequacy decisions?|adequate level of protection|uk idta|international data transfer agreement|data transfer framework|dpf|privacy shield|transfer mechanisms?|legal frameworks relating to the transfer of data|clauses contractuelles types|garanties appropri[ée]es|transferts?.{0,160}hors (?:de )?(?:l['’])?Union Europ[ée]enne|transferts? internationaux de donn[ée]es)\b/i.test(body);
 }
 
 function looksLikeCodeOrConfigText(value: string) {
@@ -6028,13 +6090,13 @@ function hasMinimumPolicyProseQuality(value: string) {
     return true;
   }
   const totalTokens = text.split(/\s+/).filter(Boolean).length;
-  const alphabeticWordRatio = (text.match(/\b[A-Za-z][A-Za-z'-]{2,}\b/g) ?? []).length / Math.max(totalTokens, 1);
-  const policyTermCount = new Set((text.toLowerCase().match(/\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\b/g) ?? [])).size;
+  const alphabeticWordRatio = (text.match(/\b[\p{L}][\p{L}'-]{2,}\b/gu) ?? []).length / Math.max(totalTokens, 1);
+  const policyTermCount = new Set((text.toLowerCase().match(/\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis|confidentialit[ée]|donn[ée]es personnelles|traitement|finalit[ée]s?|conservation|droits?|responsable du traitement|destinataires?|prestataires?|sous-traitants?|transferts?)\b/gu) ?? [])).size;
   return alphabeticWordRatio >= 0.42 && (policyTermCount >= 2 || naturalPolicySentenceCount(text) >= 2);
 }
 
 function naturalPolicySentenceCount(value: string) {
-  return (value.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length;
+  return (value.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people|nous|vous|vos|notre|nos|utilisateur(?:s|rice)?s?|personnes?)\b[^.!?]{20,}[.!?]/giu) ?? []).length;
 }
 
 function escapeRegExp(value: string) {
