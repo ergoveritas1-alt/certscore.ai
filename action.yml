@@ -1,0 +1,75 @@
+name: CertScore Pulse
+description: Run a CertScore public-web scan and fail or warn on configured automated review-signal severity.
+author: CertScore.ai
+
+branding:
+  icon: activity
+  color: blue
+
+inputs:
+  target-url:
+    description: Public URL or domain to scan.
+    required: true
+  api-key:
+    description: CertScore API key with scan:read and scan:create scopes.
+    required: true
+  base-url:
+    description: CertScore API base URL.
+    required: false
+    default: https://certscore.ai
+  scan-from:
+    description: Scan execution context for newly queued scans.
+    required: false
+    default: eu_ie
+  freshness:
+    description: Use latest to reuse a recent eligible scan, or refresh to request a new scan when eligible.
+    required: false
+    default: latest
+  fail-on:
+    description: Lowest automated review-signal severity that should fail the workflow. Use none to disable failure.
+    required: false
+    default: critical
+  max-wait-seconds:
+    description: Maximum time to wait for a queued scan.
+    required: false
+    default: "300"
+  poll-interval-seconds:
+    description: Default polling interval when the API does not return Retry-After.
+    required: false
+    default: "10"
+
+outputs:
+  scan-id:
+    description: Completed CertScore scan ID.
+    value: ${{ steps.pulse.outputs.scan-id }}
+  status:
+    description: Final CertScore scan status.
+    value: ${{ steps.pulse.outputs.status }}
+  findings-count:
+    description: Number of public-safe findings returned by the API.
+    value: ${{ steps.pulse.outputs.findings-count }}
+  critical-findings:
+    description: Number of critical automated review signals.
+    value: ${{ steps.pulse.outputs.critical-findings }}
+  high-findings:
+    description: Number of high automated review signals.
+    value: ${{ steps.pulse.outputs.high-findings }}
+  report-url:
+    description: Full CertScore report URL when available.
+    value: ${{ steps.pulse.outputs.report-url }}
+
+runs:
+  using: composite
+  steps:
+    - id: pulse
+      shell: bash
+      env:
+        CERTSCORE_ACTION_TARGET_URL: ${{ inputs.target-url }}
+        CERTSCORE_ACTION_API_KEY: ${{ inputs.api-key }}
+        CERTSCORE_ACTION_BASE_URL: ${{ inputs.base-url }}
+        CERTSCORE_ACTION_SCAN_FROM: ${{ inputs.scan-from }}
+        CERTSCORE_ACTION_FRESHNESS: ${{ inputs.freshness }}
+        CERTSCORE_ACTION_FAIL_ON: ${{ inputs.fail-on }}
+        CERTSCORE_ACTION_MAX_WAIT_SECONDS: ${{ inputs.max-wait-seconds }}
+        CERTSCORE_ACTION_POLL_INTERVAL_SECONDS: ${{ inputs.poll-interval-seconds }}
+      run: node "$GITHUB_ACTION_PATH/actions/pulse-check/check.mjs"
