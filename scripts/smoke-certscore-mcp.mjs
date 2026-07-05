@@ -42,15 +42,14 @@ try {
 
   const created = parseToolJson(
     await client.callTool({
-      name: "create_scan",
+      name: "scan_site",
       arguments: {
         url: smokeUrl,
-        detail: "standard",
         freshness: "latest"
       }
     })
   );
-  console.log(`create_scan status=${created.status} jobId=${created.jobId ?? "none"} scanId=${created.scanId ?? "none"}`);
+  console.log(`scan_site status=${created.status} jobId=${created.jobId ?? "none"} scanId=${created.scanId ?? "none"}`);
 
   const scanId = created.scanId ?? created.pulse?.scanId ?? created.pulse?.scan?.scanId;
   if (scanId) {
@@ -75,7 +74,7 @@ try {
     );
     console.log(`get_scan_status status=${status.status} scanId=${status.scanId ?? "none"}`);
   } else {
-    throw new Error("create_scan returned neither scanId nor jobId.");
+    throw new Error("scan_site returned neither scanId nor jobId.");
   }
 } finally {
   await client.close();

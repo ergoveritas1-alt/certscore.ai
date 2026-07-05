@@ -72,18 +72,20 @@ const discoveryDocument = {
     status: "public_package_not_published"
   },
   mcp: {
-    distribution: "homebrew",
+    distribution: "npm_and_homebrew",
     binary: "certscore-mcp",
-    packageStatus: "homebrew_developer_preview",
-    currentVersion: "0.1.5",
+    packageStatus: "npm_release_candidate",
+    packageName: "@certscore/mcp",
+    registryName: "ai.certscore/mcp",
+    currentVersion: "0.2.0",
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
-    install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
+    install: "npm install -g @certscore/mcp",
+    homebrewInstall: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
     verify: ["certscore-mcp --version", "certscore-mcp --help", "CERTSCORE_API_KEY=<token> certscore-mcp doctor"],
     transport: "stdio",
     currentTools: [
       "scan_site",
-      "create_scan",
       "get_scan",
       "get_scan_status",
       "get_report",
@@ -138,23 +140,23 @@ const discoveryDocument = {
   responseFormats: ["application/json", "text/markdown"],
   authentication: {
     summary:
-      "Bearer API keys are supported for scoped API, SDK, and MCP integrations. Read-only + MCP keys are self-serve for signed-in verified users; scan:create remains support-gated.",
-    accessStatus: "read_only_self_serve_scan_create_request",
-    selfServeReadOnly: {
+      "Bearer API keys are supported for scoped API, SDK, and MCP integrations. Keys with scan:read, scan:create, and mcp are self-serve for signed-in verified users and remain rate limited.",
+    accessStatus: "self_serve_scan_create",
+    selfServeApiKey: {
       route: "https://certscore.ai/api/v2/keys/request",
       method: "POST",
       requirements: ["signed_in_dashboard_session", "verified_email", "non_disposable_email"],
-      issuedScopes: ["scan:read", "mcp"],
-      tokenPrefix: "cs_ro_",
+      issuedScopes: ["scan:read", "scan:create", "mcp"],
+      tokenPrefix: "cs_mcp_",
       expiresInDays: 90,
       rateLimits: {
         requestsPerMinute: 60,
-        scanReadsPerDay: 500
+        scansAndReadsPerDay: 500
       }
     },
     requestEmail: "support@certscore.ai",
     requestInstructions:
-      "Use /api/v2/keys/request for read-only + MCP access. Email support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes for scan:create.",
+      "Use /api/v2/keys/request for self-serve scan, read, and MCP access. Email support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes for higher limits or custom access.",
     header: "Authorization: Bearer <token>",
     docs: "https://certscore.ai/developers/quickstart",
     currentScopes: ["scan:read", "scan:create", "mcp"],

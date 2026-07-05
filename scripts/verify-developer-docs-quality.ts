@@ -97,7 +97,7 @@ function packagesFromDeveloperDocs() {
   const packages = new Set<string>();
   for (const file of rgFiles("*.tsx")) {
     const source = readFileSync(join(repoRoot, file), "utf8");
-    for (const match of source.matchAll(/\bnpm\s+install\s+((?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+(?:@[A-Za-z0-9._-]+)?)/g)) {
+    for (const match of source.matchAll(/\bnpm\s+install(?:\s+-[A-Za-z][A-Za-z0-9._-]*)*\s+((?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+(?:@[A-Za-z0-9._-]+)?)/g)) {
       if (match[1]) {
         packages.add(packageNameFromToken(match[1]));
       }
@@ -111,9 +111,9 @@ function packagesFromDeveloperDocs() {
   return [...packages].sort();
 }
 
-function assertNoPublicNpmPackageClaims() {
+function assertAllowedPublicNpmPackageClaims() {
   const packageNames = packagesFromDeveloperDocs();
-  assert.deepEqual(packageNames, [], "Developer docs should not reference npm/npx packages until a public package channel is enabled");
+  assert.deepEqual(packageNames, ["@certscore/mcp"], "Developer docs should only reference approved public npm packages");
 }
 
 function referenceRoutes() {
@@ -140,7 +140,7 @@ function assertSdkExampleMirrored() {
 
 async function main() {
   lintShellBlocks();
-  assertNoPublicNpmPackageClaims();
+  assertAllowedPublicNpmPackageClaims();
   assertOpenApiReferenceSync();
   assertSdkExampleMirrored();
   console.log("Developer docs quality guards passed.");

@@ -328,7 +328,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /Recommended workflow/);
   assert.match(source, /without changing evidence, concern, finding, or projection logic/);
   assert.match(source, /authenticated MCP smoke/);
-  assert.match(source, /create_scan/);
+  assert.match(source, /scan_site/);
   assert.match(source, /get_scan_status/);
   assert.match(source, /get_report/);
   assert.match(source, /export_findings/);
@@ -548,17 +548,22 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.api.docs, "https://certscore.ai/developers/reference");
   assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
   assert.equal(aiDiscovery.mcp.docs, "https://certscore.ai/developers/mcp");
-  assert.equal(aiDiscovery.mcp.distribution, "homebrew");
+  assert.equal(aiDiscovery.mcp.distribution, "npm_and_homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
-  assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.1.5");
+  assert.equal(aiDiscovery.mcp.packageStatus, "npm_release_candidate");
+  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.0");
+  assert.equal(aiDiscovery.mcp.packageName, "@certscore/mcp");
+  assert.equal(aiDiscovery.mcp.registryName, "ai.certscore/mcp");
   assert.equal(
     aiDiscovery.mcp.install,
+    "npm install -g @certscore/mcp"
+  );
+  assert.equal(
+    aiDiscovery.mcp.homebrewInstall,
     "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp"
   );
   assert.deepEqual(aiDiscovery.mcp.currentTools, [
     "scan_site",
-    "create_scan",
     "get_scan",
     "get_scan_status",
     "get_report",
@@ -576,7 +581,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
     "CERTSCORE_API_KEY=<token> certscore-mcp doctor"
   ]);
   assert.equal(aiDiscovery.authentication.docs, "https://certscore.ai/developers/quickstart");
-  assert.equal(aiDiscovery.authentication.accessStatus, "read_only_self_serve_scan_create_request");
+  assert.equal(aiDiscovery.authentication.accessStatus, "self_serve_scan_create");
   assert.equal(aiDiscovery.authentication.requestEmail, "support@certscore.ai");
   assert.match(aiDiscovery.authentication.requestInstructions, /organization/);
   assert.deepEqual(aiDiscovery.authentication.currentScopes, ["scan:read", "scan:create", "mcp"]);
@@ -584,9 +589,9 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.deepEqual(aiDiscovery.authentication.recommendedScopes.restScanCreation, ["scan:read", "scan:create"]);
   assert.deepEqual(aiDiscovery.authentication.recommendedScopes.typescriptSdk, ["scan:read", "scan:create"]);
   assert.deepEqual(aiDiscovery.authentication.recommendedScopes.mcp, ["scan:read", "scan:create", "mcp"]);
-  assert.equal(aiDiscovery.authentication.selfServeReadOnly.route, "https://certscore.ai/api/v2/keys/request");
-  assert.deepEqual(aiDiscovery.authentication.selfServeReadOnly.issuedScopes, ["scan:read", "mcp"]);
-  assert.equal(aiDiscovery.authentication.selfServeReadOnly.tokenPrefix, "cs_ro_");
+  assert.equal(aiDiscovery.authentication.selfServeApiKey.route, "https://certscore.ai/api/v2/keys/request");
+  assert.deepEqual(aiDiscovery.authentication.selfServeApiKey.issuedScopes, ["scan:read", "scan:create", "mcp"]);
+  assert.equal(aiDiscovery.authentication.selfServeApiKey.tokenPrefix, "cs_mcp_");
   assert.equal(aiDiscovery.rateLimits.docs, "https://certscore.ai/developers/reference");
   assert.equal(aiDiscovery.support.terms, "https://certscore.ai/terms");
   assert.equal(pulseDiscovery.developerHub, "https://certscore.ai/developers");
@@ -600,7 +605,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.match(footer, /href: "\/developers\/sdk", label: "SDK docs"/);
   assert.match(footer, /href: "\/developers\/mcp", label: "MCP docs"/);
   assert.match(llms, /Authorization: Bearer <token>/);
-  assert.match(llms, /Developer and agent integration/);
+  assert.match(llms, /Developers And Agents/);
   assert.match(llms, /https:\/\/certscore\.ai\/api\/v2\/openapi\.json/);
   assert.match(llms, /https:\/\/certscore\.ai\/\.well-known\/certscore-ai\.json/);
   assert.match(llms, /scan:read.*scan:create.*mcp/s);

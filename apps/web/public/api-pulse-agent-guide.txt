@@ -83,15 +83,14 @@ pnpm db:migrate
 pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"
 
 External API/MCP key access:
-Read-only + MCP keys are self-serve for signed-in verified users through POST https://certscore.ai/api/v2/keys/request.
-Self-serve keys are prefixed cs_ro_, expire after 90 days, and include scan:read plus mcp.
-Request scan:create developer-preview access by emailing support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes.
-REST API read-only usually needs scan:read.
+Scan, read, and MCP keys are self-serve for signed-in verified users through POST https://certscore.ai/api/v2/keys/request.
+Self-serve keys are prefixed cs_mcp_, expire after 90 days, and include scan:read, scan:create, and mcp.
+Email support@certscore.ai for higher limits or custom access with organization, integration type, expected request volume, contact email, and requested scopes.
 REST API scan creation and TypeScript SDK workflows usually need scan:read and scan:create.
-MCP read tools usually need scan:read and mcp. MCP scan creation also needs scan:create.
+MCP tools usually need scan:read, scan:create, and mcp.
 
 MCP workflow:
-1. scan_site or create_scan with a public URL.
+1. scan_site with a public URL.
 2. get_scan_status when scan creation returns a jobId, or with a stable scanId for API v2 status.
 3. get_scan with the stable scanId.
 4. list_findings for structured review handoff.

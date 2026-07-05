@@ -39,6 +39,12 @@ test("generateIntegrationApiKey supports read-only self-serve keys", () => {
   assert.match(getIntegrationApiKeyPrefix(token), /^cs_ro_[A-Za-z0-9_-]{8}$/);
 });
 
+test("generateIntegrationApiKey supports MCP self-serve keys", () => {
+  const token = generateIntegrationApiKey("cs_mcp");
+  assert.match(token, /^cs_mcp_[A-Za-z0-9_-]{32,}$/);
+  assert.match(getIntegrationApiKeyPrefix(token), /^cs_mcp_[A-Za-z0-9_-]{8}$/);
+});
+
 test("hashIntegrationApiKey is deterministic and does not expose the raw token", () => {
   const token = "cs_preview_testtokenabcdefghijklmnopqrstuvwxyz123456";
   const hash = hashIntegrationApiKey(token);

@@ -194,17 +194,17 @@ const healthExample = {
 
 const selfServeApiKeyExample = {
   type: "certscore_api_key",
-  key: "cs_ro_example_redacted",
-  tokenPrefix: "cs_ro_example",
-  scopes: ["scan:read", "mcp"],
+  key: "cs_mcp_example_redacted",
+  tokenPrefix: "cs_mcp_example",
+  scopes: ["scan:read", "scan:create", "mcp"],
   expiresAt: "2026-09-28T00:00:00.000Z",
   rateLimits: {
     requestsPerMinute: 60,
-    scanReadsPerDay: 500
+    scansAndReadsPerDay: 500
   },
   usageGuidance: {
-    scanCreateRequiresSupport: true,
-    scanCreateRequestEmail: "support@certscore.ai"
+    scanCreateSelfServe: true,
+    higherVolumeRequestEmail: "support@certscore.ai"
   },
   disclaimer: apiV2Disclaimer
 } as const;
@@ -264,26 +264,26 @@ export function buildCertScoreApiV2OpenApiDocument() {
     paths: {
       "/api/v2/keys/request": {
         post: {
-          operationId: "requestReadOnlyApiKey",
+          operationId: "requestSelfServeApiKey",
           tags: ["Auth"],
-          summary: "Issue a self-serve read-only API key for signed-in verified users.",
+          summary: "Issue a self-serve API key for signed-in verified users.",
           description:
-            "Creates a 90-day key prefixed cs_ro_ with scan:read and mcp access only. scan:create remains support-gated. " +
+            "Creates a 90-day key prefixed cs_mcp_ with scan:read, scan:create, and mcp access. " +
             "The route requires an authenticated CertScore dashboard session with a verified non-disposable email address. " +
-            "Issuance is capped per email and per requester network and every issuance/denial is audited.",
+            "Issuance is capped per email and per requester network, scan creation remains rate limited, and every issuance/denial is audited.",
           security: [],
           requestBody: {
             required: false,
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ReadOnlyApiKeyRequest" },
-                examples: { named: { value: { name: "Claude Desktop read-only MCP" } } }
+                examples: { named: { value: { name: "Claude Desktop MCP" } } }
               }
             }
           },
           responses: {
             "201": {
-              description: "Read-only API key issued. Store the token immediately; only the hash is retained.",
+              description: "Self-serve API key issued. Store the token immediately; only the hash is retained.",
               headers: diagnosticHeaders,
               content: { "application/json": { schema: { $ref: "#/components/schemas/IssuedApiKey" }, examples: { issued: { value: selfServeApiKeyExample } } } }
             },
@@ -577,26 +577,26 @@ export function buildCertScoreApiV2OpenApiDocument() {
           required: ["type", "key", "tokenPrefix", "scopes", "expiresAt", "rateLimits", "usageGuidance", "disclaimer"],
           properties: {
             type: { type: "string", const: "certscore_api_key" },
-            key: { type: "string", pattern: "^cs_ro_" },
-            tokenPrefix: { type: "string", pattern: "^cs_ro_" },
-            scopes: { type: "array", items: { type: "string", enum: ["scan:read", "mcp"] } },
+            key: { type: "string", pattern: "^cs_mcp_" },
+            tokenPrefix: { type: "string", pattern: "^cs_mcp_" },
+            scopes: { type: "array", items: { type: "string", enum: ["scan:read", "scan:create", "mcp"] } },
             expiresAt: { type: "string", format: "date-time" },
             rateLimits: {
               type: "object",
               additionalProperties: false,
-              required: ["requestsPerMinute", "scanReadsPerDay"],
+              required: ["requestsPerMinute", "scansAndReadsPerDay"],
               properties: {
                 requestsPerMinute: { type: "integer", const: 60 },
-                scanReadsPerDay: { type: "integer", const: 500 }
+                scansAndReadsPerDay: { type: "integer", const: 500 }
               }
             },
             usageGuidance: {
               type: "object",
               additionalProperties: false,
-              required: ["scanCreateRequiresSupport", "scanCreateRequestEmail"],
+              required: ["scanCreateSelfServe", "higherVolumeRequestEmail"],
               properties: {
-                scanCreateRequiresSupport: { type: "boolean", const: true },
-                scanCreateRequestEmail: { type: "string", const: "support@certscore.ai" }
+                scanCreateSelfServe: { type: "boolean", const: true },
+                higherVolumeRequestEmail: { type: "string", const: "support@certscore.ai" }
               }
             },
             disclaimer: { type: "string" }

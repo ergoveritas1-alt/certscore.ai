@@ -2,7 +2,7 @@ import { z } from "zod";
 import { pulseResponseSchema } from "./pulse-v1.js";
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.3";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.2.0";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.";

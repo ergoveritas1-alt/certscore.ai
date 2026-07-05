@@ -11,10 +11,28 @@ CertScore.ai is an evidence-based public website scanner for pre-consent trackin
 ## Developers And Agents
 
 - [Developer hub](https://certscore.ai/developers): Entry point for CertScore API, SDK, MCP, and agent workflows.
+- [Developer quickstart](https://certscore.ai/developers/quickstart): Request a self-serve API key and run a health-check, scan, and findings round trip.
 - [API reference](https://certscore.ai/developers/reference): API v2 endpoints for scans, status, findings, and latest-domain resources.
 - [SDK docs](https://certscore.ai/developers/sdk): TypeScript SDK usage for scans, findings, and domain lookups.
 - [MCP server docs](https://certscore.ai/developers/mcp): Model Context Protocol setup for AI agents using CertScore tools.
+- [Integration examples](https://certscore.ai/developers/examples): Agent workflow examples, evidence boundaries, and reusable request patterns.
 - [OpenAPI spec](https://certscore.ai/api/v2/openapi.json): Machine-readable API v2 contract.
+- [AI discovery manifest](https://certscore.ai/.well-known/certscore-ai.json): Machine-readable discovery for API, SDK, MCP, and agent documentation.
+- Use `Authorization: Bearer <token>` with self-serve keys carrying `scan:read`, `scan:create`, and `mcp` scopes.
+
+## Tools
+
+- `scan_site`: Start or reuse a CertScore public-web scan for a public URL.
+- `get_scan`: Retrieve the API v2 public-safe scan resource for a stable scan ID.
+- `get_scan_status`: Check scan status by scanId, or by jobId for a just-created pending scan.
+- `get_report`: Retrieve a summary CertScore Pulse report by stable scan ID.
+- `get_evidence`: Retrieve the bounded structured Evidence JSON packet for a stable scan ID.
+- `export_findings`: Return structured findings from a CertScore Pulse report.
+- `list_findings`: List API v2 public-safe findings already projected for a scan.
+- `get_pre_consent_cookies_trackers`: Retrieve the public-safe Cookies & Trackers (Pre-consent) report table for a scan.
+- `explain_finding`: Explain a single CertScore finding with public evidence, caveats, and reviewer next steps.
+- `get_latest_domain_scan`: Retrieve the latest eligible API v2 public-safe scan for a domain.
+- `get_latest_domain_pre_consent_cookies_trackers`: Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.
 
 ## Findings And Review
 
@@ -24,6 +42,7 @@ CertScore.ai is an evidence-based public website scanner for pre-consent trackin
 
 ## Use CertScore Carefully
 
+- [Terms](https://certscore.ai/terms): Review current service terms.
 - CertScore observes public website behavior and retained evidence.
 - CertScore output should be reviewed with internal policy, vendor configuration, and retained evidence.
 - Do not describe CertScore output as legal advice, certification, or proof of compliance/non-compliance.

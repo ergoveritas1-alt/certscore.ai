@@ -59,14 +59,14 @@ export default function DevelopersPage() {
 
         <Section eyebrow="API key access" title="Get an API key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Use a scoped bearer API key for the REST API, TypeScript SDK, or MCP server. Read-only + MCP access is self-serve for
-            signed-in verified users through <code className="rounded bg-white px-1">POST /api/v2/keys/request</code>. Request{" "}
-            <code className="rounded bg-white px-1">scan:create</code> preview access at{" "}
+            Use a scoped bearer API key for the REST API, TypeScript SDK, or MCP server. Keys with{" "}
+            <code className="rounded bg-white px-1">scan:read</code>, <code className="rounded bg-white px-1">scan:create</code>, and{" "}
+            <code className="rounded bg-white px-1">mcp</code> are self-serve for signed-in verified users through{" "}
+            <code className="rounded bg-white px-1">POST /api/v2/keys/request</code>. For higher limits, email{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>
-            . Include your organization, intended workflow, expected request volume, and requested scopes. Most preview access
-            requests receive a first response within two business days.
+            . Include your organization, intended workflow, expected request volume, contact email, and requested scopes.
           </p>
         </Section>
 

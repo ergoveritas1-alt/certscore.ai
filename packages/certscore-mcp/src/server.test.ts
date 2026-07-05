@@ -148,7 +148,6 @@ test("CertScore MCP server exposes the scoped v1 tool surface", async () => {
     assert.deepEqual(
       tools.tools.map((tool) => tool.name).sort(),
       [
-        "create_scan",
         "explain_finding",
         "export_findings",
         "get_evidence",
@@ -194,7 +193,6 @@ test("README documents current MCP tool surface and public docs", () => {
 
   for (const tool of [
     "scan_site",
-    "create_scan",
     "get_scan",
     "get_scan_status",
     "get_report",
@@ -214,15 +212,14 @@ test("README documents current MCP tool surface and public docs", () => {
   assert.match(readme, /brew install --cask certscore-mcp/);
   assert.match(readme, /certscore-mcp doctor/);
   assert.match(readme, /"command": "certscore-mcp"/);
-  assert.doesNotMatch(readme, /npx -y certscore-mcp/);
-  assert.doesNotMatch(readme, /"command": "npx"/);
+  assert.match(readme, /npm install -g @certscore\/mcp/);
   assert.match(readme, /automated public-web observations for review/i);
   assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
 
-  assert.equal(packageJson.name, "certscore-mcp");
+  assert.equal(packageJson.name, "@certscore/mcp");
   assert.equal(packageJson.private, false);
   assert.equal(packageJson.bin?.["certscore-mcp"], "dist/certscore-mcp.mjs");
-  assert.deepEqual(packageJson.files, ["dist", "README.md", "LICENSE"]);
+  assert.deepEqual(packageJson.files, ["dist", "README.md", "LICENSE", "server.json"]);
   assert.equal(packageJson.dependencies?.["@certscore/api-contracts"], undefined);
   assert.equal(packageJson.dependencies?.["@certscore/sdk"], undefined);
   assert.equal(packageJson.devDependencies?.["@certscore/api-contracts"], "workspace:*");
@@ -298,81 +295,6 @@ test("version constant stays aligned with package version", () => {
   };
   assert.equal(CERTSCORE_MCP_VERSION, packageJson.version);
   assert.equal(packageJson.engines?.node, ">=20");
-});
-
-test("create_scan returns async status and scan handles", async () => {
-  const mock = installFetch([
-    {
-      status: 202,
-      body: {
-        type: "certscore_pulse_status",
-        status: "running",
-        jobId: "pulse_job_123",
-        scanId: "scan_123",
-        statusUrl: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
-        reportUrl: "https://certscore.ai/scan/scan_123"
-      }
-    },
-    {
-      status: 202,
-      body: {
-        type: "certscore_pulse_status",
-        status: "running",
-        jobId: "pulse_job_123",
-        scanId: "scan_123",
-        statusUrl: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
-        reportUrl: "https://certscore.ai/scan/scan_123"
-      }
-    }
-  ]);
-  const previousConsoleError = console.error;
-  const warnings: string[] = [];
-  console.error = (...args: unknown[]) => {
-    warnings.push(args.map(String).join(" "));
-  };
-  try {
-    await withMcpClient(async (client) => {
-      const result = parseToolJson(
-        await client.callTool({
-          name: "create_scan",
-          arguments: { url: "https://example.com", detail: "standard" }
-        })
-      );
-      assert.equal(result.type, "certscore_mcp_scan_created");
-      assert.equal(result.status, "running");
-      assert.equal(result.jobId, "pulse_job_123");
-      assert.equal(result.scanId, "scan_123");
-      assert.match(mock.calls[0] ?? "", /wait=0/);
-      await client.callTool({
-        name: "create_scan",
-        arguments: { url: "https://example.com", detail: "standard" }
-      });
-    });
-    assert.deepEqual(warnings, ["[certscore-mcp] create_scan is deprecated and will be removed in 0.2.0. Use scan_site."]);
-  } finally {
-    console.error = previousConsoleError;
-    mock.restore();
-  }
-});
-
-test("create_scan returns immediate completed Pulse when API responds 200", async () => {
-  const mock = installFetch([{ status: 200, body: pulse }]);
-  try {
-    await withMcpClient(async (client) => {
-      const result = parseToolJson(
-        await client.callTool({
-          name: "create_scan",
-          arguments: { url: "https://example.com" }
-        })
-      );
-      assert.equal(result.completed, true);
-      assert.equal(result.scanId, "scan_123");
-      assert.equal(typeof result.pulse, "object");
-      assert.match(mock.calls[0] ?? "", /freshness=latest/);
-    });
-  } finally {
-    mock.restore();
-  }
 });
 
 test("scan_site uses API v2 scan creation", async () => {
@@ -660,7 +582,7 @@ test("tool errors are returned as structured JSON", async () => {
   ]);
   try {
     await withMcpClient(async (client) => {
-      const raw = await client.callTool({ name: "create_scan", arguments: { url: "::::" } });
+      const raw = await client.callTool({ name: "scan_site", arguments: { url: "::::" } });
       const result = parseToolJson(raw);
       const error = result.error as Record<string, unknown>;
       assert.equal(error.name, "InvalidUrlError");

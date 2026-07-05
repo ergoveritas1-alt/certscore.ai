@@ -73,7 +73,6 @@ test("MCP contracts expose the current scoped tool surface", () => {
   assert.deepEqual(
     certScoreMcpToolContracts.map((tool) => tool.name).sort(),
     [
-      "create_scan",
       "explain_finding",
       "export_findings",
       "get_evidence",
@@ -87,7 +86,6 @@ test("MCP contracts expose the current scoped tool surface", () => {
       "scan_site"
     ]
   );
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.inputSchema.url);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_evidence")?.inputSchema.scanId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.inputSchema.findingId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_latest_domain_scan")?.inputSchema.domain);
@@ -101,7 +99,6 @@ test("MCP contracts expose the current scoped tool surface", () => {
     readOnlyHint: true,
     openWorldHint: true
   });
-  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.description.includes("Deprecated compatibility alias"), true);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "list_findings")?.inputSchema.limit);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_pre_consent_cookies_trackers")?.inputSchema.maxRows);
 });
@@ -279,7 +276,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.3");
+  assert.equal(document.info.version, "0.2.0");
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/scans"]);
   assert.ok(document.paths["/api/v2/scans/{scanId}/findings/{findingId}"]);
@@ -296,7 +293,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
     "getScanPulse",
     "getScanStatus",
     "listScanFindings",
-    "requestReadOnlyApiKey"
+    "requestSelfServeApiKey"
   ]);
   assert.match(document.info.description, /automated public-web observations for review/i);
   assert.match(document.info.description, /not legal advice, certification, or a compliance determination/i);

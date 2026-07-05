@@ -131,13 +131,13 @@ export async function POST(request: Request) {
 
     const expiresAt = expiryFromNow();
     const key = await createIntegrationApiKey({
-      name: body?.name ?? "Self-serve read-only MCP key",
-      scopes: ["pulse:read", "mcp"],
+      name: body?.name ?? "Self-serve MCP scan key",
+      scopes: ["pulse:read", "pulse:scan", "mcp"],
       organizationId: organization.id,
       ownerUserId: user.id,
       createdBy: user.email,
       expiresAt,
-      prefix: "read_only"
+      prefix: "self_serve_mcp"
     });
     await recordSelfServeReadOnlyIssuanceEvent({
       eventType: "self_serve_read_only_issued",
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
       organizationId: organization.id,
       ownerUserId: user.id,
       apiKeyPublicId: key.publicId,
-      metadata: { scopes: ["scan:read", "mcp"], expiresInDays: SELF_SERVE_READ_ONLY_KEY_EXPIRES_IN_DAYS }
+      metadata: { scopes: ["scan:read", "scan:create", "mcp"], expiresInDays: SELF_SERVE_READ_ONLY_KEY_EXPIRES_IN_DAYS }
     });
 
     return apiV2JsonResponse({
@@ -155,15 +155,15 @@ export async function POST(request: Request) {
         type: "certscore_api_key",
         key: key.token,
         tokenPrefix: key.tokenPrefix,
-        scopes: ["scan:read", "mcp"],
+        scopes: ["scan:read", "scan:create", "mcp"],
         expiresAt,
         rateLimits: {
           requestsPerMinute: 60,
-          scanReadsPerDay: 500
+          scansAndReadsPerDay: 500
         },
         usageGuidance: {
-          scanCreateRequiresSupport: true,
-          scanCreateRequestEmail: "support@certscore.ai"
+          scanCreateSelfServe: true,
+          higherVolumeRequestEmail: "support@certscore.ai"
         },
         disclaimer: apiV2Disclaimer
       },

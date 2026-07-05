@@ -4,7 +4,7 @@ import { CodeBlock, DeveloperShell, Section, mcpTools } from "../developer-pages
 
 const description =
   "Connect agents to the CertScore MCP server for website compliance review workflows using scan, status, finding, explanation, and latest-domain tools.";
-const mcpReleaseVersion = "0.1.5";
+const mcpReleaseVersion = "0.2.0";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -22,9 +22,36 @@ export default function DeveloperMcpPage() {
       <div className="space-y-12">
         <Section eyebrow="External users" title="Current MCP access">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            The MCP server is distributed as a Homebrew-installable developer preview for macOS MCP clients. Install the
+            The MCP server is distributed as an npm package and Homebrew-installable command for MCP clients. Install the
             <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">certscore-mcp</code> command before connecting Claude Desktop,
             Cursor, Windsurf, or another stdio-compatible MCP client.
+          </p>
+        </Section>
+
+        <Section eyebrow="MCP client config" title="Recommended npx config">
+          <CodeBlock>{`{
+  "mcpServers": {
+    "certscore": {
+      "command": "npx",
+      "args": ["-y", "@certscore/mcp"],
+      "env": {
+        "CERTSCORE_API_KEY": "<token>",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Use the npm package directly from MCP clients that support stdio commands. This keeps agents on the published package
+            without requiring a separate global install.
+          </p>
+        </Section>
+
+        <Section eyebrow="Install" title="npm global setup">
+          <CodeBlock>{`npm install -g @certscore/mcp
+certscore-mcp --version`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            The npm package publishes the <code className="rounded bg-white px-1">certscore-mcp</code> command for Node.js 20 or newer.
           </p>
         </Section>
 
@@ -46,27 +73,25 @@ tar -xzf "certscore-mcp-v$CERTSCORE_MCP_VERSION.tar.gz" -C "$HOME/.local/opt"
 ln -sf "$HOME/.local/opt/certscore-mcp-v$CERTSCORE_MCP_VERSION/bin/certscore-mcp" "$HOME/.local/bin/certscore-mcp"
 certscore-mcp --version`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            The release tarball runs on Linux, WSL 2, and Git Bash environments with Node.js 20 or newer available on PATH. No native
-            Windows executable or public npm/npx package is published yet.
+            The release tarball runs on Linux, WSL 2, and Git Bash environments with Node.js 20 or newer available on PATH.
           </p>
         </Section>
 
         <Section eyebrow="Access" title="Use a scoped MCP key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            MCP read tools work with a self-serve <code className="rounded bg-white px-1">cs_ro_</code> key carrying{" "}
-            <code className="rounded bg-white px-1">scan:read</code> and <code className="rounded bg-white px-1">mcp</code>. Sign in,
-            verify your email, then request the key from <code className="rounded bg-white px-1">/api/v2/keys/request</code>.
-            Tools that create scans require <code className="rounded bg-white px-1">scan:create</code> and remain support-gated at{" "}
+            MCP tools work with a self-serve <code className="rounded bg-white px-1">cs_mcp_</code> key carrying{" "}
+            <code className="rounded bg-white px-1">scan:read</code>, <code className="rounded bg-white px-1">scan:create</code>, and{" "}
+            <code className="rounded bg-white px-1">mcp</code>. Sign in, verify your email, then request the key from{" "}
+            <code className="rounded bg-white px-1">/api/v2/keys/request</code>. For higher limits or custom access, email{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>
             . Include your organization, MCP client, expected workflow, expected request volume, contact email, and requested scopes.
-            Most preview access requests receive a first response within two business days.
           </p>
-          <CodeBlock>{`Self-serve read-only MCP key:
+          <CodeBlock>{`Self-serve MCP key:
 1. Sign in at https://certscore.ai/login and verify your email.
 2. POST https://certscore.ai/api/v2/keys/request from the signed-in browser session.
-3. Use the returned cs_ro_ key as CERTSCORE_API_KEY.`}</CodeBlock>
+3. Use the returned cs_mcp_ key as CERTSCORE_API_KEY.`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Verify install" title="Run the doctor check">
@@ -110,7 +135,8 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
           <CodeBlock>{`{
   "mcpServers": {
     "certscore": {
-      "command": "certscore-mcp",
+      "command": "npx",
+      "args": ["-y", "@certscore/mcp"],
       "env": {
         "CERTSCORE_API_KEY": "<token>",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -124,7 +150,7 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
           <ul className="max-w-3xl list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
             <li>If the command is not found, reinstall the cask or check that Homebrew&apos;s bin directory is on PATH.</li>
             <li>If the API key is missing, set CERTSCORE_API_KEY in the MCP client environment and rerun doctor.</li>
-            <li>If a token is rejected by a tool call, rotate the key or request a scoped API/MCP key from support@certscore.ai.</li>
+            <li>If a token is rejected by a tool call, rotate the key or request a fresh scoped API/MCP key.</li>
             <li>If API health is unreachable, check CERTSCORE_BASE_URL and verify that https://certscore.ai/api/v2/health loads.</li>
             <li>If Homebrew uses stale metadata, run brew update and reinstall the cask.</li>
             <li>If an old release is cached, run brew reinstall --cask certscore-mcp after updating the tap.</li>
@@ -220,14 +246,6 @@ get_latest_domain_pre_consent_cookies_trackers({
             legal conclusions. CertScore outputs are automated public-web observations for review. They are not legal advice,
             certification, or a compliance determination. Group Cookies & Trackers rows by vendor, purpose, and host when the user wants
             a short review handoff.
-          </p>
-        </Section>
-
-        <Section eyebrow="Deprecation" title="create_scan removal">
-          <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            <code className="rounded bg-white px-1">create_scan</code> is a deprecated compatibility alias. It will be removed in{" "}
-            <code className="rounded bg-white px-1">0.2.0</code>. Use <code className="rounded bg-white px-1">scan_site</code> for
-            scan creation.
           </p>
         </Section>
       </div>

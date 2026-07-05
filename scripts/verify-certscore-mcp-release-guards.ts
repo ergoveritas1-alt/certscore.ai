@@ -173,7 +173,7 @@ function npxPackagesFromDocs(paths: string[]) {
 }
 
 async function main() {
-  assert.equal(manifest.length, 12, "CertScore MCP manifest should expose exactly 12 tools");
+  assert.equal(manifest.length, 11, "CertScore MCP manifest should expose exactly 11 tools");
   const cask = parseCertScoreMcpCask();
   const discoveryVersion = extractQuotedStringAfterMarker(discoveryRoutePath, "currentVersion:");
 
@@ -233,7 +233,7 @@ async function main() {
     "packages/certscore-mcp/README.md",
     "apps/web/app/developers/mcp/page.tsx"
   ]);
-  assert.deepEqual(packageNames, [], "Public MCP docs should use Homebrew, not npx/npm package examples");
+  assert.deepEqual(packageNames, ["@certscore/mcp"], "Public MCP docs should only use the approved npx package");
 
   console.log("CertScore MCP release guards passed.");
 }

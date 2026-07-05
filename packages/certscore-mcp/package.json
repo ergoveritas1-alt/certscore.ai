@@ -1,6 +1,7 @@
 {
-  "name": "certscore-mcp",
-  "version": "0.1.5",
+  "name": "@certscore/mcp",
+  "version": "0.2.0",
+  "mcpName": "ai.certscore/mcp",
   "private": false,
   "description": "MCP server for CertScore public website risk-signal workflows.",
   "type": "module",
@@ -21,7 +22,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "server.json"
   ],
   "publishConfig": {
     "access": "public"
@@ -51,7 +53,7 @@
     "modelcontextprotocol",
     "model-context-protocol"
   ],
-  "license": "UNLICENSED",
+  "license": "proprietary",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.76"

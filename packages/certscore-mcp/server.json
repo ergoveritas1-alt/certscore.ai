@@ -1,0 +1,37 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "ai.certscore/mcp",
+  "title": "CertScore MCP",
+  "description": "MCP server for CertScore public website risk-signal workflows, including scan creation, status checks, findings, bounded evidence, and latest-domain lookups. CertScore outputs are automated public-web observations for review, not legal advice, certification, or a compliance determination.",
+  "repository": {
+    "url": "https://github.com/ergoveritas1-alt/certscore.ai",
+    "source": "github"
+  },
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@certscore/mcp",
+      "version": "0.2.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "CERTSCORE_API_KEY",
+          "description": "CertScore API key with scan:read, scan:create, and mcp scopes.",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "CERTSCORE_BASE_URL",
+          "description": "Optional CertScore API base URL. Defaults to https://certscore.ai.",
+          "isRequired": false,
+          "format": "uri",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

@@ -2,7 +2,9 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. The server is distributed for external macOS MCP clients through Homebrew. Local WC01 development uses `pnpm mcp:certscore`.
+Status: public developer preview. The server is distributed for external MCP clients through npm and Homebrew. Local WC01 development uses `pnpm mcp:certscore`.
+
+<!-- mcp-name: ai.certscore/mcp -->
 
 Public docs:
 
@@ -13,7 +15,6 @@ Public docs:
 
 ## Tools
 
-- `create_scan` - Deprecated compatibility alias of scan_site. Removed in 0.2.0. Use scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links.
 - `scan_site` - Start or reuse a CertScore public-web scan for a public URL.
 - `get_scan` - Retrieve the API v2 public-safe scan resource for a stable scan ID.
 - `get_scan_status` - Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId.
@@ -29,6 +30,30 @@ Public docs:
 The initial MCP surface intentionally does not include account scan browsing or scan comparison tools.
 
 ## Configuration
+
+Recommended MCP client config:
+
+```json
+{
+  "mcpServers": {
+    "certscore": {
+      "command": "npx",
+      "args": ["-y", "@certscore/mcp"],
+      "env": {
+        "CERTSCORE_API_KEY": "YOUR_TOKEN",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}
+```
+
+Install globally with npm if your MCP client requires a persistent command:
+
+```bash
+npm install -g @certscore/mcp
+certscore-mcp --version
+```
 
 Install with Homebrew on macOS:
 
@@ -85,7 +110,7 @@ CERTSCORE_REQUEST_TIMEOUT_MS=300000
 
 ## API Key Access
 
-MCP clients usually need `scan:read`, `scan:create`, and `mcp` scopes. Request developer-preview access by emailing `support@certscore.ai` with your organization, MCP client, expected workflow, expected request volume, contact email, and requested scopes. Most preview access requests receive a first response within two business days.
+MCP clients usually need `scan:read`, `scan:create`, and `mcp` scopes. Sign in to CertScore, verify your email, then request a self-serve `cs_mcp_` key from `POST /api/v2/keys/request`. Self-serve keys include scan creation within the published rate limits. Email `support@certscore.ai` for higher limits or custom access.
 
 ## Verify Install
 
@@ -121,7 +146,8 @@ Cursor config:
 {
   "mcpServers": {
     "certscore": {
-      "command": "certscore-mcp",
+      "command": "npx",
+      "args": ["-y", "@certscore/mcp"],
       "env": {
         "CERTSCORE_API_KEY": "YOUR_TOKEN",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -137,7 +163,8 @@ Windsurf or generic stdio MCP client config:
 {
   "mcpServers": {
     "certscore": {
-      "command": "certscore-mcp",
+      "command": "npx",
+      "args": ["-y", "@certscore/mcp"],
       "env": {
         "CERTSCORE_API_KEY": "YOUR_TOKEN",
         "CERTSCORE_BASE_URL": "https://certscore.ai"
@@ -224,7 +251,7 @@ This verifies the Homebrew-installed `certscore-mcp` command against live `https
 
 - Command not found: run the Homebrew install again and confirm Homebrew's bin directory is on `PATH`.
 - Missing API key: set `CERTSCORE_API_KEY` in the MCP client environment and rerun `certscore-mcp doctor`.
-- Bad token: rotate the key or request a scoped API/MCP key from `support@certscore.ai`.
+- Bad token: rotate the key or request a fresh scoped API/MCP key.
 - API unreachable: check `CERTSCORE_BASE_URL` and verify `https://certscore.ai/api/v2/health`.
 - Homebrew tap stale: run `brew update` and reinstall `certscore-mcp`.
 - Old cached release: run `brew reinstall --cask certscore-mcp` after updating the tap.

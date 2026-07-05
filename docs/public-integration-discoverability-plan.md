@@ -210,7 +210,7 @@ Current v1 behavior:
 - Pulse v1 remains the production scan creation and compatibility entry point.
 - `/api/v1/pulse` supports URL scan/reuse, `scanId` lookup, JSON/markdown formats, detail levels, status polling, GPT Action behavior, throttling, and recent-scan reuse.
 - `@certscore/sdk` keeps `scan`, `submitScan`, `getScan`, and `getJobStatus`.
-- MCP keeps `create_scan`, `get_report`, and `export_findings` compatibility workflows.
+- MCP keeps `scan_site`, `get_report`, and `export_findings` workflows.
 
 Target v2 behavior:
 
@@ -234,7 +234,7 @@ SDK migration:
 MCP migration:
 
 - Prefer `scan_site`, `get_scan`, `get_scan_status`, `list_findings`, `explain_finding`, and `get_latest_domain_scan`.
-- `create_scan`, `get_report`, and `export_findings` remain for compatibility and Pulse-specific workflows.
+- `scan_site`, `get_report`, and `export_findings` remain for Pulse-specific workflows.
 - `get_scan_status` accepts either a Pulse `jobId` or API v2 `scanId`.
 
 Docs and redirects:

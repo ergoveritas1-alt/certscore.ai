@@ -1,5 +1,12 @@
 # certscore-mcp
 
+## 0.2.0
+
+- Removed the deprecated `create_scan` compatibility alias. Use `scan_site`.
+- Prepared npm publishing as `@certscore/mcp` while keeping the `certscore-mcp` binary.
+- Added MCP registry ownership metadata for `ai.certscore/mcp`.
+- Updated access docs for self-serve keys with `scan:read`, `scan:create`, and `mcp` scopes.
+
 ## 0.1.5
 
 - Moves Homebrew release artifacts to a Linux-built, deterministic GitHub Actions pipeline.

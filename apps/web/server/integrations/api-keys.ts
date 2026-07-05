@@ -44,7 +44,8 @@ type IntegrationApiKeyRow = {
 const PREVIEW_TOKEN_PREFIX = "cs_preview";
 const LIVE_TOKEN_PREFIX = "cs_live";
 const READ_ONLY_TOKEN_PREFIX = "cs_ro";
-const API_KEY_PATTERN = /^cs_(?:preview|live|ro)_[A-Za-z0-9_-]{32,}$/;
+const SELF_SERVE_MCP_TOKEN_PREFIX = "cs_mcp";
+const API_KEY_PATTERN = /^cs_(?:preview|live|ro|mcp)_[A-Za-z0-9_-]{32,}$/;
 export const INTEGRATION_API_KEY_HOURLY_LIMIT = 60;
 export const INTEGRATION_API_KEY_DAILY_LIMIT = 500;
 export const INTEGRATION_ORGANIZATION_HOURLY_LIMIT = 300;
@@ -137,10 +138,16 @@ export async function createIntegrationApiKey(input: {
   ownerUserId?: string | null;
   createdBy?: string | null;
   expiresAt?: string | null;
-  prefix?: "preview" | "live" | "read_only";
+  prefix?: "preview" | "live" | "read_only" | "self_serve_mcp";
 }) {
   const token = generateIntegrationApiKey(
-    input.prefix === "live" ? LIVE_TOKEN_PREFIX : input.prefix === "read_only" ? READ_ONLY_TOKEN_PREFIX : PREVIEW_TOKEN_PREFIX
+    input.prefix === "live"
+      ? LIVE_TOKEN_PREFIX
+      : input.prefix === "read_only"
+        ? READ_ONLY_TOKEN_PREFIX
+        : input.prefix === "self_serve_mcp"
+          ? SELF_SERVE_MCP_TOKEN_PREFIX
+          : PREVIEW_TOKEN_PREFIX
   );
   const tokenHash = hashIntegrationApiKey(token);
   const tokenPrefix = getIntegrationApiKeyPrefix(token);

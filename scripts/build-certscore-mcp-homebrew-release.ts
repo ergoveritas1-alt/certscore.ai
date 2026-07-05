@@ -84,7 +84,7 @@ mkdirSync(join(releaseDir, "libexec"), { recursive: true });
 
 runPnpm(["--filter", "@certscore/api-contracts", "build"]);
 runPnpm(["--filter", "@certscore/sdk", "build"]);
-runPnpm(["--filter", "certscore-mcp", "build"]);
+runPnpm(["--filter", "@certscore/mcp", "build"]);
 
 runPnpm([
   "exec",
@@ -140,7 +140,7 @@ writeFileSync(
     "",
     "API key access:",
     "",
-    "MCP read tools work with self-serve cs_ro_ keys carrying scan:read and mcp. Sign in at https://certscore.ai, verify email, then request a read-only key from /api/v2/keys/request. MCP scan creation requires scan:create and remains support-gated at support@certscore.ai.",
+    "MCP tools work with self-serve cs_mcp_ keys carrying scan:read, scan:create, and mcp. Sign in at https://certscore.ai, verify email, then request a key from /api/v2/keys/request. Higher-volume scan creation may require a plan change or support review.",
     "",
     "Verify install:",
     "",
@@ -160,7 +160,8 @@ writeFileSync(
 writeFileSync(
   join(releaseDir, "package.json"),
   `${JSON.stringify({
-    name: "certscore-mcp",
+    name: "@certscore/mcp",
+    mcpName: "ai.certscore/mcp",
     version
   }, null, 2)}\n`
 );
@@ -201,7 +202,7 @@ writeFileSync(
     `  url "${releaseUrl}"`,
     `  sha256 "${checksum}"`,
     `  version "${version}"`,
-    '  license "UNLICENSED"',
+    '  license "proprietary"',
     "",
     '  depends_on "node@22"',
     "",
