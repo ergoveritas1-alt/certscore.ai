@@ -170,6 +170,7 @@ import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-epr
 import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
+import { buildScanEvidenceTriage } from "../../lib/scans/scan-evidence-triage";
 import {
   formatCollectionEndpointType,
 } from "../../lib/scans/tracker-risk";
@@ -6954,6 +6955,10 @@ export function SharedScanDetailView({
     unifiedFindings: findingEvidenceDiagnostics
   });
   const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(gdprEprivacyCoverageChecklist);
+  const scanEvidenceTriage = buildScanEvidenceTriage({
+    gdprEprivacyCoverageItems: reportableGdprEprivacyCoverageChecklist,
+    runtimeArtifacts
+  });
   const gdprEprivacyCoverageScore = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: reportableGdprEprivacyCoverageChecklist
@@ -7237,6 +7242,16 @@ export function SharedScanDetailView({
                   shortLabel: "GDPR/ePrivacy"
                 },
               ]}
+            />
+          ) : null}
+          {showAdvancedDiagnostics ? (
+            <DiagnosticsPanel
+              autoplayObserved={getRecordBoolean(hybridMediaSummary, "autoplayVideoObserved") || getRecordBoolean(hybridMediaSummary, "autoplayAudioObserved")}
+              evidenceTriage={scanEvidenceTriage}
+              forcedActionRequired={getRecordBoolean(hybridUiSummary, "forcedActionRequired")}
+              interstitialDetected={getRecordBoolean(hybridUiSummary, "interstitialDetected")}
+              overlayDetected={getRecordBoolean(hybridUiSummary, "overlayDetected")}
+              popupCount={getRecordNumber(hybridUiSummary, "popupCount") ?? 0}
             />
           ) : null}
           

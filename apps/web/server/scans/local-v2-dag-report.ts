@@ -780,6 +780,24 @@ async function readLocalV2ConsentControlGeometry(outDir: string): Promise<Record
   }
 }
 
+function getPolicySurfaceDiagnosticsV2(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const diagnostics = isRecord(value.policySurfaceDiagnostics) ? value.policySurfaceDiagnostics : value;
+  return diagnostics.schemaVersion === "certscore.policy_surface_diagnostics.v2" ? diagnostics : null;
+}
+
+async function readLocalV2PolicySurfaceDiagnostics(outDir: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await readFile(path.join(resolveLocalV2OutDir(outDir), "PolicySurfaceCaptureDiagnostics.json"), "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    return getPolicySurfaceDiagnosticsV2(parsed);
+  } catch {
+    return null;
+  }
+}
+
 function parseS3Uri(uri: string) {
   if (!uri.startsWith("s3://")) {
     throw new Error("Local v2 DAG Lambda scan artifact URI must be s3://.");
@@ -889,6 +907,20 @@ async function readLocalV2ConsentControlGeometryFromS3(scanArtifactUri: string):
     );
     const parsed: unknown = JSON.parse((await streamToBuffer(response.Body)).toString("utf8"));
     return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function readLocalV2PolicySurfaceDiagnosticsFromS3(scanArtifactUri: string): Promise<Record<string, unknown> | null> {
+  try {
+    const { bucket, key } = parseS3Uri(scanArtifactUri);
+    const diagnosticsKey = `${path.posix.dirname(key)}/auxiliary/PolicySurfaceCaptureDiagnostics.json`;
+    const response = await new S3Client({ region: inferS3ArtifactRegion(bucket) }).send(
+      new GetObjectCommand({ Bucket: bucket, Key: diagnosticsKey })
+    );
+    const parsed: unknown = JSON.parse((await streamToBuffer(response.Body)).toString("utf8"));
+    return getPolicySurfaceDiagnosticsV2(parsed);
   } catch {
     return null;
   }
@@ -2177,6 +2209,65 @@ function hasRetainedFirstLayerConsentControlInventory(choices: ReturnType<typeof
   );
 }
 
+function boundedStringArray(values: unknown, maxItems: number) {
+  return getStringArray(values).map((value) => value.slice(0, 160)).slice(0, maxItems);
+}
+
+function summarizeConsentControlInventoryDiagnostics(
+  bundle: CanonicalEvidenceBundle,
+  geometryEvidence?: Record<string, unknown> | null
+) {
+  const observation = (bundle.consentUiObservations ?? []).find((row) => row.likelyPresent) ??
+    (bundle.consentUiObservations ?? [])[0] ??
+    null;
+  const diagnostics = isRecord(observation?.inventoryDiagnostics) ? observation.inventoryDiagnostics : null;
+  const controls = Array.isArray(observation?.controls) ? observation.controls : [];
+  const geometryCandidates = getObjectArray(geometryEvidence?.candidates);
+  const geometrySummary = getRecord(geometryEvidence, "summary");
+  const candidateLabels = boundedStringArray(diagnostics?.candidateLabels, 12);
+  const rejectionReasons = boundedStringArray(diagnostics?.rejectionReasons, 12);
+  const inventorySources = boundedStringArray(diagnostics?.inventorySources, 8);
+
+  if (!observation && !diagnostics && geometryCandidates.length === 0 && !geometrySummary) {
+    return null;
+  }
+
+  return {
+    schemaVersion: "certscore.consent_control_inventory_triage.v1",
+    observationPresent: Boolean(observation),
+    likelyPresent: typeof observation?.likelyPresent === "boolean" ? observation.likelyPresent : null,
+    layerInspected: getString(observation?.layerInspected) ?? "unknown",
+    acceptControlObserved: observation?.acceptControlObserved === true,
+    rejectControlObserved: observation?.rejectControlObserved === true,
+    managePreferencesControlObserved: observation?.managePreferencesControlObserved === true,
+    retainedControlCount: typeof diagnostics?.retainedControlCount === "number"
+      ? diagnostics.retainedControlCount
+      : controls.length,
+    candidateControlCount: typeof diagnostics?.candidateControlCount === "number"
+      ? diagnostics.candidateControlCount
+      : geometryCandidates.length,
+    candidateContainerCount: typeof diagnostics?.candidateContainerCount === "number"
+      ? diagnostics.candidateContainerCount
+      : null,
+    candidateLabels,
+    rejectionReasons,
+    inventorySources,
+    timingMarkerCount: Array.isArray(diagnostics?.timingMarkers) ? diagnostics.timingMarkers.length : 0,
+    geometry: {
+      candidateCount: geometryCandidates.length,
+      cmpDetected: geometrySummary?.cmpDetected === true,
+      cmpName: getString(geometrySummary?.cmpName),
+      firstLayerAccept: geometrySummary?.firstLayerAccept === true,
+      firstLayerOptions: geometrySummary?.firstLayerOptions === true,
+      firstLayerReject: geometrySummary?.firstLayerReject === true
+    },
+    truncation: {
+      candidateLabelsTruncated: getStringArray(diagnostics?.candidateLabels).length > candidateLabels.length,
+      rejectionReasonsTruncated: getStringArray(diagnostics?.rejectionReasons).length > rejectionReasons.length
+    }
+  };
+}
+
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
   /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|detected unusual behaviour[^.]{0,180}(?:bot|browser)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot/i;
 const LOCAL_V2_VERCEL_SECURITY_CHALLENGE_PATTERN =
@@ -2369,6 +2460,7 @@ function buildMaterializedLocalV2Detail(
     consentControlGeometryEvidence?: Record<string, unknown> | null;
     gdprTransparencyEvidenceProfile?: GdprTransparencyProductionEvidenceProfile | string | null;
     localOutDir?: string | null;
+    policySurfaceDiagnostics?: Record<string, unknown> | null;
     scanArtifactUri?: string | null;
   } = {}
 ): ScanDetailResponse {
@@ -2396,6 +2488,10 @@ function buildMaterializedLocalV2Detail(
   ).concat(geometryCmpName));
   const consentSurfaceLikelyPresent = Boolean(cmpVendorName ?? bundle.derivedRuntimeSignals?.consentBannerLikelyPresent);
   const firstLayerConsentChoices = summarizeFirstLayerConsentChoices(bundle, options.consentControlGeometryEvidence);
+  const consentControlInventoryDiagnostics = summarizeConsentControlInventoryDiagnostics(
+    bundle,
+    options.consentControlGeometryEvidence
+  );
   const runtimeCoverageStatus = bundle.runtimeCoverage?.coverageStatus ?? null;
   const runtimeLimitationKeys = bundle.runtimeCoverage?.limitationKeys ?? [];
   const runtimeObservationCounts = bundle.runtimeCoverage?.observationCounts;
@@ -2756,6 +2852,14 @@ function buildMaterializedLocalV2Detail(
     gdpr_transparency_evidence_profile: policySurfaceSummary.gdprTransparencyEvidenceProfile,
     gdpr_transparency_production_evidence_diagnostics: policySurfaceSummary.gdprTransparencyProductionEvidenceDiagnostics,
     gdpr_transparency_production_evidence_enabled: policySurfaceSummary.gdprTransparencyProductionEvidenceEnabled,
+    ...(options.policySurfaceDiagnostics ? {
+      policySurfaceDiagnostics: options.policySurfaceDiagnostics,
+      policy_surface_diagnostics: options.policySurfaceDiagnostics
+    } : {}),
+    ...(consentControlInventoryDiagnostics ? {
+      consentControlInventoryDiagnostics,
+      consent_control_inventory_diagnostics: consentControlInventoryDiagnostics
+    } : {}),
     policyDisclosureSummary: policySurfaceSummary,
     policy_disclosure_summary: policySurfaceSummary,
     runtimeCoverageStatus: effectiveRuntimeCoverageStatus,
@@ -2987,10 +3091,17 @@ export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResp
   const consentControlGeometryEvidence = localGeometryEvidence ?? (input.scanArtifactUri
     ? await readLocalV2ConsentControlGeometryFromS3(input.scanArtifactUri)
     : null);
+  const localPolicySurfaceDiagnostics = shouldReadLocalOutDir && input.outDir
+    ? await readLocalV2PolicySurfaceDiagnostics(input.outDir)
+    : null;
+  const policySurfaceDiagnostics = localPolicySurfaceDiagnostics ?? (input.scanArtifactUri
+    ? await readLocalV2PolicySurfaceDiagnosticsFromS3(input.scanArtifactUri)
+    : null);
   return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle, {
     consentControlGeometryEvidence,
     gdprTransparencyEvidenceProfile: input.gdprTransparencyEvidenceProfile,
     localOutDir: shouldReadLocalOutDir ? input.outDir : null,
+    policySurfaceDiagnostics,
     scanArtifactUri: input.scanArtifactUri
   }) : scanRecord;
 }

@@ -1846,6 +1846,183 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
   }
 });
 
+test("materializeLocalV2DagScanDetail retains bounded policy and consent triage diagnostics", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/evidence-triage-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-06-30T12:00:05.000Z",
+      consentUiObservations: [
+        {
+          observationId: "consent-ui-1",
+          likelyPresent: true,
+          layerInspected: "first_layer",
+          textExcerpt: "Dbamy o prywatność. Akceptuję. Ustawienia zaawansowane.",
+          controls: [
+            {
+              actionType: "accept_all",
+              label: "Akceptuję",
+              visible: true
+            },
+            {
+              actionType: "manage_preferences",
+              label: "Ustawienia zaawansowane",
+              visible: true
+            }
+          ],
+          inventoryDiagnostics: {
+            candidateContainerCount: 1,
+            candidateControlCount: 2,
+            candidateLabels: ["Akceptuję", "Ustawienia zaawansowane"],
+            inventorySources: ["viewport"],
+            rejectionReasons: ["no_first_layer_reject_control"],
+            retainedControlCount: 2
+          }
+        }
+      ],
+      cookieEvents: [],
+      modulesRun: [],
+      networkEvents: [],
+      normalizedUrl: "https://example.test/",
+      policySurfaceObservations: [
+        {
+          confidence: 0.95,
+          normalizedUrl: "https://example.test/privacy",
+          observationId: "privacy",
+          status: "fetched",
+          surfaceType: "privacy_policy",
+          textExcerpt: "Privacy policy",
+          url: "https://example.test/privacy"
+        }
+      ],
+      runtimeCoverage: {
+        coverageStatus: "usable",
+        limitationKeys: [],
+        observationCounts: {
+          cookiesBeforeConsent: 0,
+          normalizedVendors: 0,
+          thirdPartyRequests: 0
+        }
+      },
+      runtimeTimeline: [],
+      scanId: "evidence-triage-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [],
+      startedAt: "2026-06-30T12:00:00.000Z",
+      url: "https://example.test/"
+    }, null, 2)}\n`, "utf8");
+    await writeFile(path.join(outDir, "ConsentControlGeometryEvidence.json"), `${JSON.stringify({
+      artifactVersion: "consent_control_geometry.v1",
+      candidates: [
+        {
+          actionType: "accept_all",
+          boundingBox: { x: 20, y: 20, width: 140, height: 40, top: 20, right: 160, bottom: 60, left: 20 },
+          decisionStatus: "confirmed_visible",
+          enabled: true,
+          intersectsViewport: true,
+          label: "Akceptuję",
+          layer: "first_layer",
+          tagName: "button"
+        }
+      ],
+      summary: {
+        cmpDetected: true,
+        cmpName: "OneTrust",
+        firstLayerAccept: true,
+        firstLayerOptions: false,
+        firstLayerReject: false
+      }
+    }, null, 2)}\n`, "utf8");
+    await writeFile(path.join(outDir, "PolicySurfaceCaptureDiagnostics.json"), `${JSON.stringify({
+      artifactVersion: "policy_surface_capture_diagnostics.v1",
+      policyCaptureDurationMs: 12_345,
+      policySurfaceDiagnostics: {
+        schemaVersion: "certscore.policy_surface_diagnostics.v2",
+        policyCaptureDurationMs: 12_345,
+        selectedCanonicalPolicyUrls: ["https://example.test/privacy"],
+        summary: {
+          corePolicySurfaceRetained: true,
+          commonPathFallbackUsed: true,
+          observationCounts: {
+            failed: 1,
+            fetched: 1,
+            observedOnly: 0,
+            skippedBudget: 0,
+            total: 2
+          },
+          candidateCounts: {
+            guessedCommonPath: 1,
+            observationOnly: 0,
+            retainedInDiagnostics: 2,
+            total: 2
+          },
+          limitationKeys: ["common_path_not_found_curtailed"]
+        },
+        failureClasses: [
+          {
+            count: 1,
+            failureClass: "repeated_404_common_path_miss",
+            httpStatuses: [404],
+            representativeUrls: ["https://example.test/privacy-policy"]
+          }
+        ],
+        attemptedUrls: [],
+        candidateSummary: [],
+        timingBuckets: [
+          { bucket: "policy fetch group", durationMs: 12_000, rows: 2 }
+        ],
+        truncation: {
+          attemptedUrlCount: 0,
+          attemptedUrlsTruncated: false,
+          candidateCount: 0,
+          candidatesTruncated: false,
+          failureClassesTruncated: false,
+          timingBucketsTruncated: false
+        }
+      }
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        id: "evidence-triage-scan",
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    const policyDiagnostics = detail.runtimeArtifacts?.policySurfaceDiagnostics as Record<string, unknown> | undefined;
+    const consentDiagnostics = detail.runtimeArtifacts?.consentControlInventoryDiagnostics as Record<string, unknown> | undefined;
+    assert.equal(policyDiagnostics?.schemaVersion, "certscore.policy_surface_diagnostics.v2");
+    assert.deepEqual(policyDiagnostics?.selectedCanonicalPolicyUrls, ["https://example.test/privacy"]);
+    assert.equal(consentDiagnostics?.schemaVersion, "certscore.consent_control_inventory_triage.v1");
+    assert.equal(consentDiagnostics?.retainedControlCount, 2);
+    assert.deepEqual(consentDiagnostics?.rejectionReasons, ["no_first_layer_reject_control"]);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail projects row-specific runtime signal summaries", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
