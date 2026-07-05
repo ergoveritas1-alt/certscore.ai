@@ -1,6 +1,6 @@
 const discoveryDocument = {
   name: "CertScore AI and API discovery",
-  version: "2026-06-30",
+  version: "2026-07-05",
   type: "certscore_ai_discovery",
   description:
     "Vendor-neutral discovery document for CertScore public API, SDK, MCP, OpenAPI, and agent-readable documentation.",
@@ -24,6 +24,7 @@ const discoveryDocument = {
   aiDiscovery: {
     conciseGuide: "https://certscore.ai/llms.txt",
     fullGuide: "https://certscore.ai/llms-full.txt",
+    apisJson: "https://certscore.ai/apis.json",
     developerHub: "https://certscore.ai/developers",
     scannerSolutions: "https://certscore.ai/solutions",
     sitemap: "https://certscore.ai/sitemap.xml",
@@ -66,15 +67,36 @@ const discoveryDocument = {
     docs: "https://certscore.ai/developers/reference"
   },
   sdk: {
+    packageName: "@certscore/sdk",
+    packageVersion: "0.2.0",
     docs: "https://certscore.ai/developers/sdk",
     repositoryPath: "packages/certscore-sdk",
-    distribution: "source_preview",
-    status: "public_package_not_published"
+    distribution: "npm",
+    status: "npm_published",
+    install: "npm install @certscore/sdk"
+  },
+  githubAction: {
+    name: "CertScore Pulse",
+    repository: "https://github.com/ergoveritas1-alt/certscore.ai",
+    marketplaceStatus: "action_metadata_ready",
+    actionYml: "action.yml",
+    usage: "uses: ergoveritas1-alt/certscore.ai@v0.2.0",
+    docs: "https://certscore.ai/developers/examples#github-action",
+    inputs: [
+      "target-url",
+      "api-key",
+      "base-url",
+      "scan-from",
+      "freshness",
+      "fail-on",
+      "max-wait-seconds",
+      "poll-interval-seconds"
+    ]
   },
   mcp: {
     distribution: "npm_and_homebrew",
     binary: "certscore-mcp",
-    packageStatus: "npm_release_candidate",
+    packageStatus: "npm_published_registry_active",
     packageName: "@certscore/mcp",
     registryName: "ai.certscore/mcp",
     currentVersion: "0.2.0",

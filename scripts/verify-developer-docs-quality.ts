@@ -113,7 +113,7 @@ function packagesFromDeveloperDocs() {
 
 function assertAllowedPublicNpmPackageClaims() {
   const packageNames = packagesFromDeveloperDocs();
-  assert.deepEqual(packageNames, ["@certscore/mcp"], "Developer docs should only reference approved public npm packages");
+  assert.deepEqual(packageNames, ["@certscore/mcp", "@certscore/sdk"], "Developer docs should only reference approved public npm packages");
 }
 
 function referenceRoutes() {

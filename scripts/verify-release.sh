@@ -106,8 +106,11 @@ function assertNoDuplicateNonCommentLines(text, label) {
   });
 }
 
-function assertNoNpmClaims(text, label) {
-  assert.doesNotMatch(text, /\b(?:npm|npx)\b/i, `${label} should not advertise npm/npx install or execution claims`);
+function assertOnlyApprovedNpmClaims(text, label) {
+  const unexpected = [...text.matchAll(/\b(?:npm|npx)\b[^\n]*/gi)]
+    .map((match) => match[0] ?? "")
+    .filter((line) => !line.includes("@certscore/sdk") && !line.includes("@certscore/mcp"));
+  assert.deepEqual(unexpected, [], `${label} should only advertise approved CertScore npm packages`);
 }
 
 function serializedLength(value) {
@@ -177,8 +180,8 @@ const liveLlmsFull = await liveLlmsFullResponse.text();
 assert.equal(liveManifest?.mcp?.currentVersion, caskVersion, "Live manifest currentVersion must match cask version");
 assert.deepEqual(sorted(liveManifest?.mcp?.currentTools ?? []), sorted(localManifestTools), "Live manifest currentTools must match local manifest currentTools");
 assertNoDuplicateNonCommentLines(liveLlms, "live llms.txt");
-assertNoNpmClaims(liveLlms, "live llms.txt");
-assertNoNpmClaims(liveLlmsFull, "live llms-full.txt");
+assertOnlyApprovedNpmClaims(liveLlms, "live llms.txt");
+assertOnlyApprovedNpmClaims(liveLlmsFull, "live llms-full.txt");
 
 console.log("CertScore release verification passed.");
 NODE

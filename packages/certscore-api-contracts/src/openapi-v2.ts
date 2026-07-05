@@ -253,10 +253,10 @@ export function buildCertScoreApiV2OpenApiDocument() {
   return {
     openapi: "3.1.0",
     info: {
-      title: "CertScore API v2 draft",
+      title: "CertScore API v2",
       version: CERTSCORE_API_V2_SCHEMA_VERSION,
       description:
-        "Draft resource-oriented CertScore public API contract for scans, jobs, findings, domain latest scans, and Pulse projections. " +
+        "Resource-oriented CertScore public API contract for scans, jobs, findings, domain latest scans, and Pulse projections. " +
         apiV2Disclaimer
     },
     servers: [{ url: "https://certscore.ai" }],

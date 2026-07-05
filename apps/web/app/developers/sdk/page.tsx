@@ -19,14 +19,19 @@ export default function DeveloperSdkPage() {
   return (
     <DeveloperShell activePath="/developers/sdk" title="TypeScript SDK" description={description}>
       <div className="space-y-12">
-        <Section eyebrow="Preview" title="Use the SDK source package">
+        <Section eyebrow="Install" title="Install the public npm package">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            The TypeScript SDK is available as a source preview while package distribution remains private. Source and examples live in{" "}
+            The TypeScript SDK is packaged as{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://www.npmjs.com/package/@certscore/sdk">
+              @certscore/sdk
+            </a>
+            . Source and examples live in{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk">
               packages/certscore-sdk
             </a>
-            . Use the REST API directly for production integrations until a public package channel is announced.
+            .
           </p>
+          <CodeBlock>{`npm install @certscore/sdk`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Resource clients" title="Create a scan and wait for completion">
@@ -64,8 +69,11 @@ console.log(status.status, findings.findings.length, preConsentTable.summary.row
               "certscore.findings.list()",
               "certscore.findings.get()",
               "certscore.findings.explain()",
+              "certscore.pulse.get()",
+              "certscore.pulse.evidence()",
               "certscore.domains.latest()",
-              "certscore.domains.latestPreConsentCookiesTrackers()"
+              "certscore.domains.latestPreConsentCookiesTrackers()",
+              "certscore.scan()"
             ].map((client) => (
               <code key={client} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800">
                 {client}

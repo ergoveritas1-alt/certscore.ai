@@ -6,14 +6,21 @@ CertScore outputs are automated public-web observations for review. They are not
 
 ## Status
 
-The SDK is currently a source preview in this monorepo. Public package distribution is not enabled yet; production integrations should use the REST API directly until a package channel is announced.
+The SDK is packaged for public npm distribution as `@certscore/sdk`. Use it for CertScore Pulse and API v2 integrations that need scan creation, status polling, public-safe findings, Pulse projection, and latest-domain workflows.
 
 ## Quick Start
+
+```bash
+pnpm add @certscore/sdk
+```
 
 ```ts
 import { CertScoreClient } from "@certscore/sdk";
 
-const client = new CertScoreClient();
+const client = new CertScoreClient({
+  apiKey: process.env.CERTSCORE_API_KEY
+});
+
 const pulse = await client.scan("https://example.com");
 console.log(pulse.summary?.score, pulse.links?.fullReportUrl);
 ```
@@ -220,9 +227,35 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: ergoveritas1-alt/certscore.ai@v0.2.0
+        with:
+          target-url: https://example.com
+          api-key: ${{ secrets.CERTSCORE_API_KEY }}
+          fail-on: critical
+```
+
+Equivalent custom script:
+
+```yaml
+name: CertScore Pulse
+
+on:
+  deployment_status:
+
+jobs:
+  pulse:
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install @certscore/sdk
       - run: node scripts/certscore-pulse-check.mjs
         env:
           TARGET_URL: https://example.com
+          CERTSCORE_API_KEY: ${{ secrets.CERTSCORE_API_KEY }}
 ```
 
 Example `scripts/certscore-pulse-check.mjs`:

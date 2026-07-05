@@ -18,6 +18,9 @@ CertScore.ai is an evidence-based public website scanner for pre-consent trackin
 - [Integration examples](https://certscore.ai/developers/examples): Agent workflow examples, evidence boundaries, and reusable request patterns.
 - [OpenAPI spec](https://certscore.ai/api/v2/openapi.json): Machine-readable API v2 contract.
 - [AI discovery manifest](https://certscore.ai/.well-known/certscore-ai.json): Machine-readable discovery for API, SDK, MCP, and agent documentation.
+- [APIs.json](https://certscore.ai/apis.json): API directory discovery document.
+- TypeScript SDK package: `@certscore/sdk`.
+- GitHub Action: `uses: ergoveritas1-alt/certscore.ai@v0.2.0`.
 - Use `Authorization: Bearer <token>` with self-serve keys carrying `scan:read`, `scan:create`, and `mcp` scopes.
 
 ## Tools

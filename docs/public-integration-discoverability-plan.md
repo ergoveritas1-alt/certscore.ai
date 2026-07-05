@@ -33,8 +33,12 @@ Current public Pulse/discovery assets:
 - `/api/v1/openapi.chatgpt.json` GPT Action-oriented OpenAPI variant.
 - `/api/v1/pulse`, `/api/v1/pulse/gpt`, `/api/v1/pulse/status/{jobId}`.
 - `/api/v1/pulse-health` and `/api/v1/pulse-self-test` canaries.
-- `@certscore/sdk` TypeScript SDK package.
-- `certscore-mcp` developer-preview MCP server package.
+- `@certscore/sdk@0.2.0` is published on npm with `latest` pointing to `0.2.0`.
+- `@certscore/mcp` is published on npm and active in the Official MCP Registry as `ai.certscore/mcp`.
+- Root `action.yml` exposes a Marketplace-ready CertScore Pulse GitHub Action.
+- `integrations/postman/certscore-api-v2.postman_collection.json` seeds a Postman Public API Network workspace.
+- `integrations/api-directories/` contains APIs.guru, Postman, and RapidAPI submission drafts.
+- `/apis.json` exposes API directory discovery metadata.
 - `scripts/smoke-pulse-endpoints.ts`, `scripts/verify-pulse-public.sh`, and `scripts/smoke-certscore-mcp.mjs` smoke coverage.
 
 Primary gaps:
@@ -42,9 +46,8 @@ Primary gaps:
 - Discovery is Pulse-specific rather than a universal CertScore AI/API integration manifest.
 - `llms.txt` is doing too much; a fuller long-form `llms-full.txt` should exist for agents that can ingest more context.
 - Sitemap/robots should explicitly expose machine-readable public integration assets.
-- API, SDK, MCP, and docs contracts are not yet generated from one canonical schema package.
-- MCP is still a thin Pulse wrapper instead of a resource-oriented CertScore agent interface.
-- The current v1 route mixes scan creation, latest lookup, job polling, GPT Action behavior, projection, markdown, auth, and throttling in one endpoint.
+- Submit the prepared Postman, APIs.guru, RapidAPI, and GitHub Marketplace listings through their account-owned workflows.
+- Add public workspace/listing URLs back to `/developers`, `/llms.txt`, `/llms-full.txt`, and `/.well-known/certscore-ai.json` after the external listings are live.
 
 ## Target Public Information Architecture
 
@@ -64,6 +67,7 @@ Implemented developer paths:
 - `/developers/quickstart`, `/developers/reference`, `/developers/sdk`, `/developers/mcp`, and `/developers/examples` are crawlable server-rendered docs pages.
 - `/api/v2/openapi.json` is the API v2 machine-readable contract.
 - `/api-pulse` remains the Pulse v1 compatibility docs and now links forward to `/developers`.
+- `/apis.json` is the API directory discovery document.
 
 ## Phased Plan
 
@@ -175,6 +179,25 @@ Current implementation:
 - `explain_finding` now retrieves the API v2 finding detail shape.
 - Updated SDK and MCP README files to match the current resource client/tool surface.
 - Added README drift tests for SDK resource clients and MCP tools/public docs.
+- Published `@certscore/sdk@0.2.0` to npm with public package metadata and install-first docs.
+- Added the CertScore Pulse GitHub Action metadata and zero-dependency action runner.
+- Added reusable examples for GitHub Actions, Node SDK review handoff, and MCP client config.
+
+### Phase 4.6: External Distribution Assets
+
+Implemented:
+
+- Added `integrations/postman/certscore-api-v2.postman_collection.json`.
+- Added APIs.guru, Postman Public API Network, and RapidAPI listing drafts under `integrations/api-directories/`.
+- Added `/apis.json` and linked it from robots, sitemap, the developer hub, and agent-readable docs.
+- Updated the AI discovery manifest with SDK package metadata, GitHub Action metadata, and MCP published status.
+
+Remaining account-owned actions:
+
+- Publish the GitHub Action through GitHub Marketplace after creating a release/tag.
+- Publish the Postman public workspace and add the final workspace URL to docs.
+- Submit the APIs.guru issue/PR.
+- Create the RapidAPI listing once pricing and account routing are finalized.
 
 ### Phase 4.5: Pre-Deploy Discoverability Hardening
 

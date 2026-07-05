@@ -547,10 +547,14 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.developerDocs.evidenceBoundaries, "https://certscore.ai/developers/examples#evidence-boundaries");
   assert.equal(aiDiscovery.api.docs, "https://certscore.ai/developers/reference");
   assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
+  assert.equal(aiDiscovery.sdk.packageName, "@certscore/sdk");
+  assert.equal(aiDiscovery.sdk.packageVersion, "0.2.0");
+  assert.equal(aiDiscovery.sdk.status, "npm_published");
+  assert.equal(aiDiscovery.sdk.install, "npm install @certscore/sdk");
   assert.equal(aiDiscovery.mcp.docs, "https://certscore.ai/developers/mcp");
   assert.equal(aiDiscovery.mcp.distribution, "npm_and_homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
-  assert.equal(aiDiscovery.mcp.packageStatus, "npm_release_candidate");
+  assert.equal(aiDiscovery.mcp.packageStatus, "npm_published_registry_active");
   assert.equal(aiDiscovery.mcp.currentVersion, "0.2.0");
   assert.equal(aiDiscovery.mcp.packageName, "@certscore/mcp");
   assert.equal(aiDiscovery.mcp.registryName, "ai.certscore/mcp");

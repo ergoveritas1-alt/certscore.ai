@@ -1,0 +1,65 @@
+{
+  "name": "CertScore API",
+  "description": "CertScore Pulse and API v2 expose automated public-web observations for website risk-signal review, including scan creation, scan status, public-safe findings, Pulse projection, latest-domain lookup, and pre-consent cookies and trackers.",
+  "url": "https://certscore.ai/apis.json",
+  "image": "https://certscore.ai/certscore-mark-dark.png",
+  "tags": [
+    "website risk API",
+    "privacy scan API",
+    "cookie compliance scan API",
+    "public-web observations",
+    "MCP",
+    "OpenAPI"
+  ],
+  "created": "2026-07-05",
+  "modified": "2026-07-05",
+  "specificationVersion": "0.16",
+  "apis": [
+    {
+      "name": "CertScore API v2",
+      "description": "Resource-oriented CertScore API for scans, jobs, public-safe findings, pre-consent cookies and trackers, domain latest scans, and Pulse projections.",
+      "humanURL": "https://certscore.ai/developers",
+      "baseURL": "https://certscore.ai",
+      "tags": [
+        "CertScore",
+        "Pulse",
+        "website risk",
+        "privacy",
+        "consent",
+        "accessibility"
+      ],
+      "properties": [
+        {
+          "type": "OpenAPI",
+          "url": "https://certscore.ai/api/v2/openapi.json"
+        },
+        {
+          "type": "Documentation",
+          "url": "https://certscore.ai/developers/reference"
+        },
+        {
+          "type": "SDK",
+          "url": "https://certscore.ai/developers/sdk"
+        },
+        {
+          "type": "MCP",
+          "url": "https://certscore.ai/developers/mcp"
+        },
+        {
+          "type": "AI Discovery",
+          "url": "https://certscore.ai/.well-known/certscore-ai.json"
+        },
+        {
+          "type": "LLMs.txt",
+          "url": "https://certscore.ai/llms.txt"
+        }
+      ]
+    }
+  ],
+  "maintainers": [
+    {
+      "FN": "CertScore.ai",
+      "email": "support@certscore.ai"
+    }
+  ]
+}

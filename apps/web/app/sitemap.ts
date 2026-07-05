@@ -34,6 +34,7 @@ const staticPaths = [
   "/llms.txt",
   "/llms-full.txt",
   "/.well-known/certscore-ai.json",
+  "/apis.json",
   "/api/v2/health",
   "/api/v2/openapi.json",
   "/faq",

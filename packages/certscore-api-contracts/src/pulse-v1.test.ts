@@ -259,7 +259,7 @@ test("API v2 draft evidence summaries reject raw unbounded fields", () => {
   );
 });
 
-test("API v2 draft OpenAPI locks resource path and operation names", () => {
+test("API v2 OpenAPI locks resource path and operation names", () => {
   const document = buildCertScoreApiV2OpenApiDocument();
   const serialized = JSON.stringify(document);
   const operations: string[] = [];
@@ -276,6 +276,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
+  assert.equal(document.info.title, "CertScore API v2");
   assert.equal(document.info.version, "0.2.0");
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/scans"]);

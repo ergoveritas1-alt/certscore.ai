@@ -1,0 +1,130 @@
+{
+  "info": {
+    "name": "CertScore API v2",
+    "description": "Public CertScore API v2 requests for scan creation, status polling, public-safe findings, latest-domain lookup, and pre-consent cookies and trackers. CertScore outputs are automated public-web observations for review, not legal advice, certification, or a compliance determination.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://certscore.ai"
+    },
+    {
+      "key": "targetUrl",
+      "value": "https://example.com"
+    },
+    {
+      "key": "scanId",
+      "value": ""
+    },
+    {
+      "key": "domain",
+      "value": "example.com"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{CERTSCORE_API_KEY}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v2/health"
+      }
+    },
+    {
+      "name": "OpenAPI",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v2/openapi.json"
+      }
+    },
+    {
+      "name": "Create or Reuse Scan",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "const scanId = body.scanId || (body.scan && body.scan.scanId);",
+              "if (scanId) pm.collectionVariables.set('scanId', scanId);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"{{targetUrl}}\",\n  \"freshness\": \"latest\",\n  \"scanFrom\": \"eu_ie\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v2/scans"
+      }
+    },
+    {
+      "name": "Get Scan",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v2/scans/{{scanId}}"
+      }
+    },
+    {
+      "name": "Get Scan Status",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v2/scans/{{scanId}}/status"
+      }
+    },
+    {
+      "name": "List Findings",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v2/scans/{{scanId}}/findings"
+      }
+    },
+    {
+      "name": "Pre-consent Cookies and Trackers",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v2/scans/{{scanId}}/pre-consent-cookies-trackers"
+      }
+    },
+    {
+      "name": "Pulse Projection",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v2/scans/{{scanId}}/pulse"
+      }
+    },
+    {
+      "name": "Latest Domain Scan",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v2/domains/{{domain}}/latest"
+      }
+    },
+    {
+      "name": "Latest Domain Pre-consent Cookies and Trackers",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v2/domains/{{domain}}/latest/pre-consent-cookies-trackers"
+      }
+    }
+  ]
+}

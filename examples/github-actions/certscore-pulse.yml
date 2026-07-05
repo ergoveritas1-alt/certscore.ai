@@ -1,0 +1,17 @@
+name: CertScore Pulse
+
+on:
+  deployment_status:
+
+jobs:
+  pulse:
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ergoveritas1-alt/certscore.ai@v0.2.0
+        with:
+          target-url: ${{ github.event.deployment_status.target_url }}
+          api-key: ${{ secrets.CERTSCORE_API_KEY }}
+          scan-from: eu_ie
+          freshness: latest
+          fail-on: critical

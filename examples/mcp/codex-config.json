@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "certscore": {
+      "command": "certscore-mcp",
+      "env": {
+        "CERTSCORE_API_KEY": "<token>",
+        "CERTSCORE_BASE_URL": "https://certscore.ai"
+      }
+    }
+  }
+}

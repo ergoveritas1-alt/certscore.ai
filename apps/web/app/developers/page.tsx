@@ -18,6 +18,7 @@ const description =
 const discoveryLinks = [
   ["API v2 OpenAPI", "/api/v2/openapi.json"],
   ["Universal AI manifest", "/.well-known/certscore-ai.json"],
+  ["APIs.json", "/apis.json"],
   ["LLM guide", "/llms.txt"],
   ["Full LLM guide", "/llms-full.txt"],
   ["Sitemap", "/sitemap.xml"]

@@ -11,6 +11,7 @@ Use these canonical discovery resources:
 - Concise LLM guide: https://certscore.ai/llms.txt
 - Full LLM guide: https://certscore.ai/llms-full.txt
 - Universal AI/API manifest: https://certscore.ai/.well-known/certscore-ai.json
+- APIs.json: https://certscore.ai/apis.json
 - Sitemap: https://certscore.ai/sitemap.xml
 - Robots: https://certscore.ai/robots.txt
 - Developer hub: https://certscore.ai/developers
@@ -196,12 +197,18 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: source preview. Public package distribution is not enabled yet; use the REST API directly for production integrations.
+Status: packaged for public npm distribution as `@certscore/sdk`.
 
 Docs:
 
 - https://certscore.ai/developers/sdk
 - https://certscore.ai/developers/quickstart
+
+Install command:
+
+```bash
+npm install @certscore/sdk
+```
 
 Basic use:
 
@@ -209,13 +216,30 @@ Basic use:
 import { CertScoreClient } from "@certscore/sdk";
 
 const certscore = new CertScoreClient({ apiKey: process.env.CERTSCORE_API_KEY });
-const scan = await certscore.scans.create({
-  url: "https://example.com",
-  detail: "standard"
+const created = await certscore.scans.create("https://example.com", {
+  freshness: "latest",
+  scanFrom: "eu_ie"
 });
 
-console.log(scan.id, scan.status);
+const completed = await certscore.scans.wait(created);
+const findings = await certscore.findings.list(completed.scanId);
+
+console.log(completed.scanId, findings.findings.length);
 ```
+
+## GitHub Action
+
+Use the CertScore Pulse action after deployments or on a schedule:
+
+```yaml
+uses: ergoveritas1-alt/certscore.ai@v0.2.0
+with:
+  target-url: https://example.com
+  api-key: ${{ secrets.CERTSCORE_API_KEY }}
+  fail-on: critical
+```
+
+The action fails only on configured automated review-signal severity. It does not make a legal or compliance determination.
 
 ## MCP server
 
@@ -230,7 +254,7 @@ brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscor
 brew install --cask certscore-mcp
 ```
 
-npm install:
+Package install:
 
 ```bash
 npm install -g @certscore/mcp

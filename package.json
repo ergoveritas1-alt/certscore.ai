@@ -47,6 +47,7 @@
     "ops:smoke:findings": "pnpm exec tsx ./scripts/check-live-finding-smoke.ts",
     "ops:smoke:pulse": "BASE_URL=https://certscore.ai node --import tsx ./scripts/smoke-pulse-endpoints.ts",
     "ops:smoke:pulse-production": "BASE_URL=https://certscore.ai node ./scripts/smoke-pulse-production.mjs",
+    "sdk:smoke-package": "bash ./scripts/smoke-sdk-package.sh",
     "ops:smoke:mcp-production": "node --import tsx ./scripts/smoke-certscore-mcp-production.ts",
     "mcp:certscore": "corepack pnpm --filter @certscore/api-contracts build && corepack pnpm --filter @certscore/sdk build && corepack pnpm --filter @certscore/mcp build && node packages/certscore-mcp/dist/certscore-mcp.mjs",
     "mcp:certscore:smoke": "corepack pnpm --filter @certscore/api-contracts build && corepack pnpm --filter @certscore/sdk build && corepack pnpm --filter @certscore/mcp build && node scripts/smoke-certscore-mcp.mjs",

@@ -17,6 +17,7 @@ const publicAllowPaths = [
   "/developers",
   "/developers/",
   "/.well-known/certscore-ai.json",
+  "/apis.json",
   "/api/v2/health",
   "/api/v2/openapi.json",
   "/api/v2/scans/",

@@ -26,19 +26,18 @@ function assertNoDuplicateNonCommentLines(path: string) {
   });
 }
 
-function assertNoNpmInstallClaims(paths: string[]) {
+function assertOnlyApprovedNpmClaims(paths: string[]) {
   for (const path of paths) {
     const source = readPublicFile(path);
-    assert.doesNotMatch(
-      source,
-      /\b(?:npm|npx)\b/i,
-      `${path} should not advertise npm/npx install or execution claims`
-    );
+    const unexpected = [...source.matchAll(/\b(?:npm|npx)\b[^\n]*/gi)]
+      .map((match) => match[0] ?? "")
+      .filter((line) => !line.includes("@certscore/sdk") && !line.includes("@certscore/mcp"));
+    assert.deepEqual(unexpected, [], `${path} should only advertise approved CertScore npm packages`);
   }
 }
 
 assertNoDuplicateNonCommentLines("apps/web/public/llms.txt");
-assertNoNpmInstallClaims([
+assertOnlyApprovedNpmClaims([
   "apps/web/public/llms.txt",
   "apps/web/public/llms-full.txt"
 ]);

@@ -49,6 +49,30 @@ curl https://certscore.ai/api/v2/scans/$SCAN_ID/findings \\
   -H "Authorization: Bearer $CERTSCORE_API_KEY"`}</CodeBlock>
         </Section>
 
+        <Section id="github-action" eyebrow="CI" title="Run CertScore Pulse in GitHub Actions">
+          <CodeBlock>{`name: CertScore Pulse
+
+on:
+  deployment_status:
+
+jobs:
+  pulse:
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ergoveritas1-alt/certscore.ai@v0.2.0
+        with:
+          target-url: \${{ github.event.deployment_status.target_url }}
+          api-key: \${{ secrets.CERTSCORE_API_KEY }}
+          scan-from: eu_ie
+          freshness: latest
+          fail-on: critical`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            The action fails only when CertScore surfaces automated review signals at or above the configured severity threshold.
+            It does not make a legal or compliance determination.
+          </p>
+        </Section>
+
         <Section id="pre-consent-cookies-trackers" eyebrow="Curl" title="Retrieve Pre-consent Cookies & Trackers as JSON">
           <div id="pre-consent-cookies-trackers-json" className="space-y-4">
             <CodeBlock>{`SCAN=$(curl -s -X POST https://certscore.ai/api/v2/scans \\
