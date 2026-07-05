@@ -229,6 +229,8 @@ test("policySurfaceScanner standard mode skips Nano and rendered discovery when 
     assert.equal(labels.includes("rendered discovery skipped"), true);
     assert.equal(labels.includes("deterministic link ranking"), true);
     assert.equal(labels.includes("Nano link ranking"), false);
+    assert.equal(labels.some((label) => label.startsWith("secondary policy")), false);
+    assert.equal(labels.some((label) => label.startsWith("privacy-only common-path policy")), false);
     assert.equal(diagnostics.corePolicySurfaceRetained, true);
     assert.deepEqual(diagnostics.limitationKeys, []);
   }, {
@@ -1038,38 +1040,19 @@ test("policySurfaceScanner discovers late-rendered localized privacy policy link
   });
 });
 
-test("policySurfaceScanner sends delayed global footer links to Nano before common-path fallback", async () => {
-  const classifiedBatches: string[][] = [];
+test("policySurfaceScanner ranks delayed global footer core links deterministically before Nano", async () => {
   const nanoAssistProvider: PolicyNanoAssistProvider = {
-    async classifyLinks(input) {
-      classifiedBatches.push(input.candidates.map((candidate) =>
-        `${candidate.discoveryMethod}:${candidate.normalizedUrl}`,
-      ));
-      const rankedCandidates = input.candidates
-        .filter((candidate) =>
-          candidate.discoveryMethod !== "guessed_common_path" &&
-          candidate.deterministicSurfaceType !== "unknown",
-        )
-        .map((candidate, index) => ({
-          candidateId: candidate.candidateId,
-          likelySurfaceType: candidate.deterministicSurfaceType,
-          shouldFetch: true,
-          priorityRank: index + 1,
-          confidence: 0.9,
-          reason: "Mock Nano selected hydrated global footer link.",
-        }));
-      return { assistId: input.assistId, rankedCandidates };
+    async classifyLinks() {
+      throw new Error("Nano link ranking should not run when rendered footer GDPR/ePrivacy core links are high-confidence.");
     },
   };
 
   await withPolicyScan("policy-global-footer-delayed", async ({ result, baseUrl }) => {
-    const firstBatch = classifiedBatches[0] ?? [];
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
 
-    assert.equal(firstBatch.some((entry) => entry.includes(`${baseUrl}/policies/privacy`)), true);
-    assert.equal(firstBatch.some((entry) => entry.includes(`${baseUrl}/policies/cookies`)), true);
-    assert.equal(firstBatch.some((entry) => entry.includes(`${baseUrl}/privacy-center`)), true);
-    assert.equal(firstBatch.some((entry) => entry.includes(`${baseUrl}/do-not-sell-or-share`)), true);
-    assert.equal(firstBatch.some((entry) => entry.startsWith("guessed_common_path:")), false);
+    assert.equal(labels.includes("rendered discovery"), true);
+    assert.equal(labels.includes("deterministic link ranking"), true);
+    assert.equal(labels.includes("Nano link ranking"), false);
     assert.equal(observedSurface(result.policySurfaceObservations, "privacy_policy")?.status, "fetched");
     assert.equal(observedSurface(result.policySurfaceObservations, "cookie_policy")?.status, "fetched");
     assert.equal(observedSurface(result.policySurfaceObservations, "consent_preferences")?.status, "observed");

@@ -49,9 +49,14 @@ test("canonical bundle retention caps module timing breakdowns before schema val
   const timingBreakdown = compacted.modulesRun[0]?.timingBreakdown ?? [];
 
   assert.equal(timingBreakdown.length, 40);
+  assert.deepEqual(
+    timingBreakdown.slice(34, 39).map((entry) => entry.label),
+    ["policy timing 40", "policy timing 41", "policy timing 42", "policy timing 43", "policy timing 44"],
+  );
+  assert.match(timingBreakdown[34]?.detail ?? "", /original index 40/);
   assert.equal(timingBreakdown[39]?.label, "timing entries truncated");
-  assert.match(timingBreakdown[39]?.detail ?? "", /6 timing breakdown entries omitted/);
-  assert.equal(timingBreakdown[39]?.durationMs, 255);
+  assert.match(timingBreakdown[39]?.detail ?? "", /6 timing breakdown entries omitted after retaining 5 slow tail entries/);
+  assert.equal(timingBreakdown[39]?.durationMs, 225);
 });
 
 function oversizedGoogleLikeBundle(): CanonicalEvidenceBundle {

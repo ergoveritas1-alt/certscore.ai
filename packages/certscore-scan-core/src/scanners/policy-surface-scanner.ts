@@ -345,7 +345,11 @@ export async function policySurfaceScanner(
     const deterministicCoreCoverage =
       input.discoveryMode !== "fast" &&
       hasHighConfidenceDirectStaticCoreCoverage(staticCandidates);
-    let rankedCandidates = input.discoveryMode === "fast" || deterministicCoreCoverage || linkCandidates.length === 0
+    const deterministicMergedCoreCoverage =
+      input.discoveryMode !== "fast" &&
+      !deterministicCoreCoverage &&
+      hasHighConfidenceDirectStaticCoreCoverage(linkCandidates);
+    let rankedCandidates = input.discoveryMode === "fast" || deterministicCoreCoverage || deterministicMergedCoreCoverage || linkCandidates.length === 0
       ? await recordPolicyTiming(
         timingBreakdown,
         linkCandidates.length === 0 ? "deterministic common-path ranking" : "deterministic link ranking",
@@ -353,6 +357,8 @@ export async function policySurfaceScanner(
           ? `Rank ${initialCandidates.length} guessed common policy paths deterministically.`
           : deterministicCoreCoverage
           ? `Rank ${initialCandidates.length} high-confidence policy candidates deterministically because direct GDPR/ePrivacy surfaces are already present.`
+          : deterministicMergedCoreCoverage
+          ? `Rank ${initialCandidates.length} high-confidence static/rendered policy candidates deterministically because direct GDPR/ePrivacy surfaces are already present.`
           : `Rank ${initialCandidates.length} policy candidates deterministically for planned-DAG fast mode.`,
         async () => linkCandidates.length === 0
           ? deterministicCommonPathFetchFallback(initialCandidates)
@@ -427,8 +433,10 @@ export async function policySurfaceScanner(
     });
     observations.push(...policyResults.observations);
     artifactRefs.push(...policyResults.artifactRefs);
+    const sufficientGdprEvidenceAfterPrimary = hasSufficientRetainedGdprPolicyEvidence(input.normalizedUrl, observations);
 
     if (
+      !sufficientGdprEvidenceAfterPrimary &&
       linkCandidates.length > 0 &&
       !primaryRankedCandidatesFromCommonPath &&
       !hasRetainedCorePolicyOrControlSurface(observations) &&
@@ -453,7 +461,9 @@ export async function policySurfaceScanner(
     const secondaryCandidates = mergeSupplementalPolicyCandidates(
       [],
       dedupeCandidates(policyResults.secondaryCandidates),
-      input.discoveryMode === "fast" ? 0 : MAX_SECONDARY_CANDIDATES_TO_FETCH,
+      input.discoveryMode === "fast" || hasSufficientRetainedGdprPolicyEvidence(input.normalizedUrl, observations)
+        ? 0
+        : MAX_SECONDARY_CANDIDATES_TO_FETCH,
       observations,
     );
     if (secondaryCandidates.length > 0) {
@@ -472,6 +482,7 @@ export async function policySurfaceScanner(
     if (
       !commonPathFallbackUsed &&
       !hasRetainedFirstPartyPrivacyPolicy(input.normalizedUrl, observations) &&
+      !hasSufficientRetainedGdprPolicyEvidence(input.normalizedUrl, observations) &&
       commonPathCandidates.length > 0 &&
       !shouldSkipCommonPathAfterBlockedDirectCore(observations)
     ) {
@@ -2532,6 +2543,43 @@ function hasRetainedFirstPartyPrivacyPolicy(
     observationMatchesScanOrigin(normalizedScanUrl, observation) &&
     !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
   );
+}
+
+function hasSufficientRetainedGdprPolicyEvidence(
+  normalizedScanUrl: string,
+  observations: PolicySurfaceObservation[],
+): boolean {
+  const firstPartyFetched = observations.filter((observation) =>
+    (observation.status === "fetched" || observation.status === "observed") &&
+    observationMatchesScanOrigin(normalizedScanUrl, observation) &&
+    !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
+  );
+  const hasPrivacyPolicy = firstPartyFetched.some((observation) =>
+    observation.surfaceType === "privacy_policy"
+  );
+  const hasCookieOrControlSurface = firstPartyFetched.some((observation) =>
+    observation.surfaceType === "cookie_policy" ||
+    observation.surfaceType === "cookie_settings" ||
+    observation.surfaceType === "consent_preferences" ||
+    observation.surfaceType === "your_privacy_choices"
+  );
+  const hasRowSpecificTransparencyEvidence = firstPartyFetched.some((observation) =>
+    (observation.article13DisclosureSignals ?? []).length > 0 ||
+    (observation.observedTopics ?? []).some((topic) =>
+      [
+        "controller_contact",
+        "dpo_contact",
+        "processing_purposes",
+        "data_retention",
+        "data_subject_rights",
+        "recipients_or_vendor_categories",
+        "international_transfers",
+        "legal_basis",
+        "supervisory_authority",
+      ].includes(topic)
+    )
+  );
+  return hasPrivacyPolicy && hasCookieOrControlSurface && hasRowSpecificTransparencyEvidence;
 }
 
 function isCorePolicyOrControlSurface(observation: Pick<PolicySurfaceObservation, "surfaceType">): boolean {

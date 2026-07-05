@@ -802,17 +802,29 @@ function boundModuleRunTimingBreakdown(
   if (!timingBreakdown || timingBreakdown.length <= MAX_MODULE_TIMING_BREAKDOWN_ENTRIES) {
     return moduleRun;
   }
-  const retainedCount = MAX_MODULE_TIMING_BREAKDOWN_ENTRIES - 1;
-  const omitted = timingBreakdown.slice(retainedCount);
+  const slowOmittedCount = Math.min(5, MAX_MODULE_TIMING_BREAKDOWN_ENTRIES - 2);
+  const retainedChronologicalCount = MAX_MODULE_TIMING_BREAKDOWN_ENTRIES - slowOmittedCount - 1;
+  const omittedCandidates = timingBreakdown.slice(retainedChronologicalCount);
+  const slowOmitted = omittedCandidates
+    .map((entry, index) => ({ entry, originalIndex: retainedChronologicalCount + index }))
+    .sort((left, right) => right.entry.durationMs - left.entry.durationMs || left.originalIndex - right.originalIndex)
+    .slice(0, slowOmittedCount)
+    .sort((left, right) => left.originalIndex - right.originalIndex);
+  const retainedSlowIndexes = new Set(slowOmitted.map((entry) => entry.originalIndex));
+  const omitted = omittedCandidates.filter((_, index) => !retainedSlowIndexes.has(retainedChronologicalCount + index));
   const omittedDurationMs = omitted.reduce((total, entry) => total + entry.durationMs, 0);
   return {
     ...moduleRun,
     timingBreakdown: [
-      ...timingBreakdown.slice(0, retainedCount),
+      ...timingBreakdown.slice(0, retainedChronologicalCount),
+      ...slowOmitted.map(({ entry, originalIndex }) => ({
+        ...entry,
+        detail: `${entry.detail ?? ""}${entry.detail ? " " : ""}[Retained from truncated timing tail at original index ${originalIndex}.]`,
+      })),
       {
         label: "timing entries truncated",
         durationMs: omittedDurationMs,
-        detail: `${omitted.length} timing breakdown entries omitted to keep the canonical bundle within the contract cap.`,
+        detail: `${omitted.length} timing breakdown entries omitted after retaining ${slowOmitted.length} slow tail entries to keep the canonical bundle within the contract cap.`,
       },
     ],
   };

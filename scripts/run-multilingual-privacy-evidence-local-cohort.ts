@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { SCHEMA_VERSION, classifyPrivacySurface } from "../packages/certscore-contracts/src/index.js";
 import { runScan, scanProfiles, policySurfaceScanner, type RunScanInput } from "../packages/certscore-scan-core/src/index.js";
@@ -97,6 +97,12 @@ type CohortRow = {
   artifactDir: string;
   status: "completed" | "failed" | "missing_bundle";
   error?: string;
+  partialDiagnostics?: {
+    lastCheckpoint?: string;
+    lastCheckpointStatus?: string;
+    elapsedMs?: number;
+    phaseArtifactPresent: boolean;
+  };
   scanId?: string;
   policy: {
     fetchedCount: number;
@@ -187,13 +193,14 @@ async function main() {
         if (args.scanMode === "policy-surface-only") {
           await runPolicySurfaceOnlyScan(target.url, artifactDir);
         } else {
-          await runScan({
-            url: target.url,
-            profile: args.profile,
-            outDir: artifactDir,
-            consentFlowScreenshotMode: args.consentFlowScreenshotMode,
-            preConsentScreenshotMode: "always",
+          await runScanWithWatchdog({
+            target,
+            artifactDir,
+            args,
           });
+        }
+        if (!existsSync(bundlePath)) {
+          throw new MissingBundleAfterScanError(target.key, partialDiagnosticsFor(artifactDir));
         }
       } else {
         console.log(`[${index + 1}/${targets.length}] summarizing ${target.key}`);
@@ -358,6 +365,7 @@ async function summarizeTarget(
       url: target.url,
       artifactDir,
       status: "missing_bundle",
+      partialDiagnostics: partialDiagnosticsFor(artifactDir),
       policy: emptyPolicySummary(),
       consent: emptyConsentSummary(),
       timing: emptyTimingSummary(),
@@ -473,10 +481,59 @@ function failedRow(target: CohortTarget, artifactDir: string, error: unknown): C
     artifactDir,
     status: "failed",
     error: error instanceof Error ? error.message : String(error),
+    partialDiagnostics: error instanceof MissingBundleAfterScanError
+      ? error.partialDiagnostics
+      : partialDiagnosticsFor(artifactDir),
     policy: emptyPolicySummary(),
     consent: emptyConsentSummary(),
     timing: emptyTimingSummary(),
   };
+}
+
+class MissingBundleAfterScanError extends Error {
+  constructor(
+    key: string,
+    readonly partialDiagnostics: CohortRow["partialDiagnostics"],
+  ) {
+    const checkpoint = partialDiagnostics?.lastCheckpoint
+      ? ` Last checkpoint: ${partialDiagnostics.lastCheckpoint} (${partialDiagnostics.lastCheckpointStatus ?? "unknown"}) at ${partialDiagnostics.elapsedMs ?? "unknown"}ms.`
+      : "";
+    super(`Scan for ${key} completed without writing CanonicalEvidenceBundle.json.${checkpoint}`);
+    this.name = "MissingBundleAfterScanError";
+  }
+}
+
+async function runScanWithWatchdog(input: {
+  args: Args;
+  artifactDir: string;
+  target: CohortTarget;
+}) {
+  const scanProfile = scanProfiles[input.args.profile] ?? scanProfiles.standard;
+  const watchdogMs = Math.max(
+    45_000,
+    Math.min(120_000, scanProfile.internalBudgetMs + 20_000),
+  );
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      runScan({
+        url: input.target.url,
+        profile: input.args.profile,
+        outDir: input.artifactDir,
+        consentFlowScreenshotMode: input.args.consentFlowScreenshotMode,
+        preConsentScreenshotMode: "always",
+      }),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Scan watchdog timed out after ${watchdogMs}ms for ${input.target.key}`));
+        }, watchdogMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 function emptyPolicySummary(): CohortRow["policy"] {
@@ -501,6 +558,30 @@ function emptyTimingSummary(): CohortRow["timing"] {
   return {
     slowPhaseLabels: [],
   };
+}
+
+function partialDiagnosticsFor(artifactDir: string): CohortRow["partialDiagnostics"] {
+  const phaseArtifactPath = path.join(artifactDir, "V2ScanCorePhases.json");
+  if (!existsSync(phaseArtifactPath)) {
+    return {
+      phaseArtifactPresent: false,
+    };
+  }
+  try {
+    const phases = asRecord(JSON.parse(readFileSync(phaseArtifactPath, "utf8")) as unknown);
+    const checkpoints = Array.isArray(phases.checkpoints) ? phases.checkpoints : [];
+    const lastCheckpoint = asRecord(checkpoints[checkpoints.length - 1]);
+    return {
+      elapsedMs: numberOrUndefined(lastCheckpoint.elapsedMs),
+      lastCheckpoint: stringOrUndefined(lastCheckpoint.name),
+      lastCheckpointStatus: stringOrUndefined(lastCheckpoint.status),
+      phaseArtifactPresent: true,
+    };
+  } catch {
+    return {
+      phaseArtifactPresent: true,
+    };
+  }
 }
 
 function emptyConsentSummary(): CohortRow["consent"] {
