@@ -25,7 +25,7 @@ test("policySurfaceScanner discovers footer privacy links and bounded policy fac
     );
 
     assert.equal(privacy?.status, "fetched");
-    assert.equal(privacy?.discoveryMethod, "nano_assisted_link_classification");
+    assert.equal(privacy?.discoveryMethod, "footer_link");
     assert.equal(privacy?.normalizedUrl, `${baseUrl}/policies/privacy`);
     assert.deepEqual(privacy?.mentionedVendors.sort(), ["Google Analytics", "Meta"]);
     assert.equal(privacy?.observedTopics.includes("analytics"), true);
@@ -237,6 +237,32 @@ test("policySurfaceScanner standard mode skips Nano and rendered discovery when 
     nanoAssistProvider: {
       async classifyLinks() {
         throw new Error("Nano link ranking should not run when direct static GDPR/ePrivacy surfaces are sufficient.");
+      },
+    },
+  });
+});
+
+test("policySurfaceScanner standard mode trusts high-confidence first-party static privacy policy links", async () => {
+  await withPolicyScan("policy-static-first-party-privacy-only", async ({ result, baseUrl }) => {
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/education-privacy`
+    );
+
+    assert.ok(privacy);
+    assert.equal((privacy.article13DisclosureSignals ?? []).length > 0, true);
+    assert.equal(labels.includes("rendered discovery"), false);
+    assert.equal(labels.includes("rendered discovery skipped"), true);
+    assert.equal(labels.includes("deterministic link ranking"), true);
+    assert.equal(labels.includes("Nano link ranking"), false);
+    assert.equal(labels.some((label) => label.startsWith("secondary policy")), false);
+    assert.equal(labels.some((label) => label.startsWith("privacy-only common-path policy")), false);
+  }, {
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run for high-confidence first-party static privacy policy links.");
       },
     },
   });
@@ -1025,7 +1051,7 @@ test("policySurfaceScanner discovers late-rendered localized privacy policy link
 
     assert.equal(privacy?.status, "fetched");
     assert.equal(privacy?.normalizedUrl, `${baseUrl}/policies/privacy`);
-    assert.equal(privacy?.discoveryMethod, "nano_assisted_link_classification");
+    assert.equal(privacy?.discoveryMethod, "footer_link");
     assert.equal(cookie?.status, "fetched");
     assert.equal(cookie?.normalizedUrl, `${baseUrl}/policies/cookies`);
     assert.equal(privacySummary?.linkText, "Polityka Prywatności Gazeta.pl");
@@ -1749,6 +1775,32 @@ test("policySurfaceScanner does not follow third-party privacy policy links from
   }, { enableNanoPolicyAssist: true, internalBudgetMs: 8_000 });
 });
 
+test("policySurfaceScanner suppresses third-party CMP vendor-panel privacy links before ranking and fetch", async () => {
+  await withPolicyScan("policy-vendor-panel-privacy-links", async ({ result, baseUrl }) => {
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+    const firstPartyPrivacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/policies/education-privacy`
+    );
+    const vendorPanelPolicies = result.policySurfaceObservations.filter((observation) =>
+      /example-provider|example-aanbieder|example-partner/i.test(observation.normalizedUrl ?? observation.url)
+    );
+
+    assert.ok(firstPartyPrivacy);
+    assert.deepEqual(vendorPanelPolicies, []);
+    assert.equal(labels.includes("rendered discovery"), false);
+    assert.equal(labels.includes("rendered discovery skipped"), true);
+    assert.equal(labels.includes("Nano link ranking"), false);
+  }, {
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run when third-party vendor-panel links are suppressed and first-party privacy is direct.");
+      },
+    },
+  });
+});
+
 test("policySurfaceScanner ignores external URL-only body privacy links as policy surfaces", async () => {
   await withPolicyScan("policy-homepage-external-url-only-policy-links", async ({ result, baseUrl }) => {
     const firstPartyPrivacy = result.policySurfaceObservations.find((observation) =>
@@ -2086,7 +2138,7 @@ test("policySurfaceScanner records mock Nano link ranking and topic extraction m
 });
 
 test("policySurfaceScanner escalates when Nano provider is unavailable", async () => {
-  await withPolicyScan("policy-vendor-mentions", async ({ result }) => {
+  await withPolicyScan("policy-ambiguous-choices", async ({ result }) => {
     assert.equal(result.moduleRun.status, "failed");
     assert.equal(
       result.moduleRun.errors.some((error) => error.includes("Nano policy assist is required")),
@@ -2097,7 +2149,7 @@ test("policySurfaceScanner escalates when Nano provider is unavailable", async (
 });
 
 test("policySurfaceScanner escalates when Nano assist is explicitly disabled", async () => {
-  await withPolicyScan("policy-vendor-mentions", async ({ result }) => {
+  await withPolicyScan("policy-ambiguous-choices", async ({ result }) => {
     assert.equal(result.moduleRun.status, "failed");
     assert.equal(
       result.moduleRun.errors.some((error) => error.includes("cannot be disabled")),

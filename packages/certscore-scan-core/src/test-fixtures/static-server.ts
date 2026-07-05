@@ -131,10 +131,12 @@ export type StaticFixturePage =
   | "policy-notice-at-collection-link"
   | "policy-privacy-choices-link"
   | "policy-static-core-surfaces"
+  | "policy-static-first-party-privacy-only"
   | "policy-static-gdpr-surfaces"
   | "policy-static-legacy-plus-rendered-canonical"
   | "policy-url-stub-canonical"
   | "policy-session-replay-disclosure"
+  | "policy-vendor-panel-privacy-links"
   | "policy-vendor-mentions"
   | "policy-webmd-like-secondary-surfaces"
   | "region-coded-collection-endpoint"
@@ -283,10 +285,12 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-notice-at-collection-link": "policy-notice-at-collection",
   "policy-privacy-choices-link": "policy-privacy-choices",
   "policy-static-core-surfaces": "policy-static-core-surfaces",
+  "policy-static-first-party-privacy-only": "policy-static-first-party-privacy-only",
   "policy-static-gdpr-surfaces": "policy-static-gdpr-surfaces",
   "policy-static-legacy-plus-rendered-canonical": "policy-static-legacy-plus-rendered-canonical",
   "policy-url-stub-canonical": "policy-url-stub-canonical",
   "policy-session-replay-disclosure": "policy-session-replay",
+  "policy-vendor-panel-privacy-links": "policy-vendor-panel-privacy-links",
   "policy-vendor-mentions": "policy-vendors",
   "policy-webmd-like-secondary-surfaces": "policy-webmd-like-secondary",
   "region-coded-collection-endpoint": "region-coded-collection",
@@ -1648,6 +1652,11 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/privacy-choices">Your Privacy Choices</a>`,
       `<a href="/terms">Terms of Service</a>`,
     ].join(" | "),
+    "policy-static-first-party-privacy-only": [
+      `<a href="/policies/education-privacy">Privacy Policy</a>`,
+      `<a href="/about">About</a>`,
+      `<a href="/terms">Terms of Service</a>`,
+    ].join(" | "),
     "policy-static-gdpr-surfaces": [
       `<a href="/policies/privacy">Privacy Policy</a>`,
       `<a href="/policies/cookies">Cookie Policy</a>`,
@@ -1665,6 +1674,14 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<a href="/terms">Terms of Service</a>`,
     ].join(" | "),
     "policy-session-replay-disclosure": `<a href="/policies/session-replay">Privacy Notice</a>`,
+    "policy-vendor-panel-privacy-links": [
+      `<a href="/policies/education-privacy">Privacy Policy</a>`,
+      `<section aria-label="partner disclosures">`,
+      `<a href="https://privacy.example-provider.test/policy">En savoir plus sur ce fournisseur Example Provider Politique de confidentialité</a>`,
+      `<a href="https://privacy.example-aanbieder.test/privacybeleid">Meer informatie over deze aanbieder Example Aanbieder Privacybeleid</a>`,
+      `<a href="https://privacy.example-partner.test/privacy-policy">Learn more about this provider Example Partner Privacy Policy</a>`,
+      `</section>`,
+    ].join(" | "),
     "policy-vendor-mentions": `<a href="/policies/vendors">Privacy Policy</a>`,
     "policy-webmd-like-secondary-surfaces": `<a href="/policies/webmd-like-privacy">Privacy Policy</a>`,
   };
@@ -1687,6 +1704,10 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/policies/privacy-with-third-party-links": {
       title: "Privacy Policy",
       body: "Last updated: May 1, 2026. We process personal data for analytics and advertising. See our Cookie Policy and partner privacy policies for details.",
+    },
+    "/policies/education-privacy": {
+      title: "Privacy Policy",
+      body: "Privacy Policy. The university data controller provides a privacy contact and data protection officer contact. We explain the purposes of processing personal data, the legal basis for processing personal data, categories of recipients of personal data, the retention period for personal data, your right to access your personal data, international transfers of personal data, and the right to lodge a complaint with a supervisory authority.",
     },
     "/policies/de-datenschutz": {
       title: "Datenschutzerklärung",

@@ -301,10 +301,20 @@ export async function policySurfaceScanner(
     );
     staticCandidateCount = staticCandidates.length;
     diagnosticsCandidates = staticCandidates;
-    const staticGdprCoverage = hasSufficientFetchableStaticGdprCoverage(staticCandidates);
+    const rankableStaticCandidates = suppressThirdPartyVendorDisclosurePolicyCandidates(
+      input.normalizedUrl,
+      staticCandidates,
+    );
+    const staticGdprCoverage = hasSufficientFetchableStaticGdprCoverage(input.normalizedUrl, rankableStaticCandidates);
+    const staticFirstPartyPrivacyCoverage = hasHighConfidenceFirstPartyStaticPrivacyPolicy(
+      input.normalizedUrl,
+      rankableStaticCandidates,
+    );
     const skipRenderedDiscoveryForStaticCoverage =
-      staticGdprCoverage &&
-      (input.discoveryMode === "fast" || hasHighConfidenceDirectStaticCoreCoverage(staticCandidates));
+      input.discoveryMode === "fast"
+        ? staticGdprCoverage
+        : staticFirstPartyPrivacyCoverage ||
+          hasHighConfidenceDirectStaticCoreCoverage(input.normalizedUrl, rankableStaticCandidates);
     const renderedCandidates = skipRenderedDiscoveryForStaticCoverage
       ? await recordPolicyTiming(
         timingBreakdown,
@@ -334,15 +344,19 @@ export async function policySurfaceScanner(
       );
     observedCandidateCount = linkCandidates.length;
     diagnosticsCandidates = linkCandidates;
+    const rankableLinkCandidates = suppressThirdPartyVendorDisclosurePolicyCandidates(
+      input.normalizedUrl,
+      linkCandidates,
+    );
     const commonPathCandidates = commonPathCandidatesFor(
       input.normalizedUrl,
-      linkCandidates.length,
+      rankableLinkCandidates.length,
       commonPathLocaleHints(input.normalizedUrl, homepage.text, homepageText),
     );
-    const initialCandidates = linkCandidates.length > 0
-      ? linkCandidates
+    const initialCandidates = rankableLinkCandidates.length > 0
+      ? rankableLinkCandidates
       : commonPathCandidates;
-    if (linkCandidates.length === 0) {
+    if (rankableLinkCandidates.length === 0) {
       diagnosticsCandidates = commonPathCandidates;
       observedCandidateCount = commonPathCandidates.length;
       commonPathFallbackUsed = true;
@@ -351,23 +365,34 @@ export async function policySurfaceScanner(
     let primaryRankedCandidatesFromCommonPath = false;
     const deterministicCoreCoverage =
       input.discoveryMode !== "fast" &&
-      hasHighConfidenceDirectStaticCoreCoverage(staticCandidates);
+      hasHighConfidenceDirectStaticCoreCoverage(input.normalizedUrl, rankableStaticCandidates);
+    const deterministicStaticPrivacyCoverage =
+      input.discoveryMode !== "fast" &&
+      !deterministicCoreCoverage &&
+      hasHighConfidenceFirstPartyStaticPrivacyPolicy(input.normalizedUrl, rankableStaticCandidates);
     const deterministicMergedCoreCoverage =
       input.discoveryMode !== "fast" &&
       !deterministicCoreCoverage &&
-      hasHighConfidenceDirectStaticCoreCoverage(linkCandidates);
-    let rankedCandidates = input.discoveryMode === "fast" || deterministicCoreCoverage || deterministicMergedCoreCoverage || linkCandidates.length === 0
+      !deterministicStaticPrivacyCoverage &&
+      hasHighConfidenceDirectStaticCoreCoverage(input.normalizedUrl, rankableLinkCandidates);
+    let rankedCandidates = input.discoveryMode === "fast" ||
+        deterministicCoreCoverage ||
+        deterministicStaticPrivacyCoverage ||
+        deterministicMergedCoreCoverage ||
+        rankableLinkCandidates.length === 0
       ? await recordPolicyTiming(
         timingBreakdown,
-        linkCandidates.length === 0 ? "deterministic common-path ranking" : "deterministic link ranking",
-        linkCandidates.length === 0
+        rankableLinkCandidates.length === 0 ? "deterministic common-path ranking" : "deterministic link ranking",
+        rankableLinkCandidates.length === 0
           ? `Rank ${initialCandidates.length} guessed common policy paths deterministically.`
-          : deterministicCoreCoverage
+        : deterministicCoreCoverage
           ? `Rank ${initialCandidates.length} high-confidence policy candidates deterministically because direct GDPR/ePrivacy surfaces are already present.`
+          : deterministicStaticPrivacyCoverage
+          ? `Rank ${initialCandidates.length} high-confidence first-party privacy policy candidates deterministically.`
           : deterministicMergedCoreCoverage
           ? `Rank ${initialCandidates.length} high-confidence static/rendered policy candidates deterministically because direct GDPR/ePrivacy surfaces are already present.`
           : `Rank ${initialCandidates.length} policy candidates deterministically for planned-DAG fast mode.`,
-        async () => linkCandidates.length === 0
+        async () => rankableLinkCandidates.length === 0
           ? deterministicCommonPathFetchFallback(initialCandidates)
           : deterministicFetchFallback(initialCandidates),
       )
@@ -378,7 +403,7 @@ export async function policySurfaceScanner(
         () => rankCandidatesWithRequiredNano(input, initialCandidates),
       );
     if (rankedCandidates.length === 0 && input.discoveryMode === "fast") {
-      if (shouldSpeculateCommonPathNanoRanking(linkCandidates, commonPathCandidates)) {
+      if (shouldSpeculateCommonPathNanoRanking(rankableLinkCandidates, commonPathCandidates)) {
         rankedCandidates = await recordPolicyTiming(
           timingBreakdown,
           "Nano link ranking",
@@ -400,8 +425,8 @@ export async function policySurfaceScanner(
         );
       }
     }
-    if (rankedCandidates.length === 0 && linkCandidates.length > 0) {
-      rankedCandidates = deterministicFetchFallback(linkCandidates);
+    if (rankedCandidates.length === 0 && rankableLinkCandidates.length > 0) {
+      rankedCandidates = deterministicFetchFallback(rankableLinkCandidates);
       if (rankedCandidates.length === 0) {
         if (speculativeCommonPathRankedCandidates) {
           rankedCandidates = speculativeCommonPathRankedCandidates;
@@ -444,7 +469,7 @@ export async function policySurfaceScanner(
 
     if (
       !sufficientGdprEvidenceAfterPrimary &&
-      linkCandidates.length > 0 &&
+      rankableLinkCandidates.length > 0 &&
       !primaryRankedCandidatesFromCommonPath &&
       !hasRetainedCorePolicyOrControlSurface(observations) &&
       commonPathCandidates.length > 0 &&
@@ -465,10 +490,20 @@ export async function policySurfaceScanner(
       artifactRefs.push(...commonPathResults.artifactRefs);
     }
 
+    const secondarySourceCandidates = suppressThirdPartyVendorDisclosurePolicyCandidates(
+      input.normalizedUrl,
+      dedupeCandidates(policyResults.secondaryCandidates),
+    );
     const secondaryCandidates = mergeSupplementalPolicyCandidates(
       [],
-      dedupeCandidates(policyResults.secondaryCandidates),
-      input.discoveryMode === "fast" || hasSufficientRetainedGdprPolicyEvidence(input.normalizedUrl, observations)
+      secondarySourceCandidates,
+      input.discoveryMode === "fast" ||
+        (
+          hasRetainedFirstPartyPolicyEvidenceForBroadFetchStop(input.normalizedUrl, observations) &&
+          !secondarySourceCandidates.some((candidate) =>
+            isFirstPartyCookieOrControlPolicyCandidate(input.normalizedUrl, candidate)
+          )
+        )
         ? 0
         : MAX_SECONDARY_CANDIDATES_TO_FETCH,
       observations,
@@ -489,7 +524,7 @@ export async function policySurfaceScanner(
     if (
       !commonPathFallbackUsed &&
       !hasRetainedFirstPartyPrivacyPolicy(input.normalizedUrl, observations) &&
-      !hasSufficientRetainedGdprPolicyEvidence(input.normalizedUrl, observations) &&
+      !hasRetainedFirstPartyPolicyEvidenceForBroadFetchStop(input.normalizedUrl, observations) &&
       commonPathCandidates.length > 0 &&
       !shouldSkipCommonPathAfterBlockedDirectCore(observations)
     ) {
@@ -2382,11 +2417,52 @@ function safeUrlPath(value: string): string {
   }
 }
 
-function hasSufficientFetchableStaticGdprCoverage(candidates: PolicySurfaceCandidate[]): boolean {
+function suppressThirdPartyVendorDisclosurePolicyCandidates(
+  baseUrl: string,
+  candidates: PolicySurfaceCandidate[],
+): PolicySurfaceCandidate[] {
+  return candidates.filter((candidate) =>
+    !isThirdPartyVendorDisclosurePolicyCandidate(baseUrl, candidate)
+  );
+}
+
+function isThirdPartyVendorDisclosurePolicyCandidate(
+  baseUrl: string,
+  candidate: PolicySurfaceCandidate,
+): boolean {
+  if (candidate.sameOrigin || sameOrigin(baseUrl, candidate.normalizedUrl)) {
+    return false;
+  }
+  if (candidate.deterministicSurfaceType !== "privacy_policy" && candidate.deterministicSurfaceType !== "cookie_policy") {
+    return false;
+  }
+
+  const text = normalizeWhitespace([
+    candidate.linkText,
+    candidate.surroundingTextExcerpt,
+  ].filter(Boolean).join(" "));
+
+  return THIRD_PARTY_VENDOR_DISCLOSURE_POLICY_LINK_PATTERNS.some((pattern) =>
+    pattern.test(text)
+  );
+}
+
+const THIRD_PARTY_VENDOR_DISCLOSURE_POLICY_LINK_PATTERNS = [
+  /\blearn more about (?:this )?(?:provider|vendor|partner)\b/i,
+  /\ben savoir plus sur ce fournisseur\b/i,
+  /\bmeer informatie over deze aanbieder\b/i,
+  /\bmehr (?:erfahren|informationen) (?:über|zu) (?:diesen )?(?:anbieter|dienstleister|partner)\b/i,
+  /\bm[aá]s informaci[oó]n sobre (?:este )?(?:proveedor|socio|partner)\b/i,
+  /\bmaggiori informazioni su (?:questo )?(?:fornitore|partner)\b/i,
+  /\bwi[eę]cej informacji o (?:tym )?(?:dostawcy|partnerze)\b/i,
+];
+
+function hasSufficientFetchableStaticGdprCoverage(baseUrl: string, candidates: PolicySurfaceCandidate[]): boolean {
   const fetchable = deterministicFetchFallback(candidates)
     .filter((candidate) =>
       candidate.fetchable &&
       !candidate.observationOnly &&
+      sameOrigin(baseUrl, candidate.normalizedUrl) &&
       policyCandidateQualityScore(candidate) >= 2
     );
   if (fetchable.length === 0) {
@@ -2402,22 +2478,53 @@ function hasSufficientFetchableStaticGdprCoverage(candidates: PolicySurfaceCandi
     hasCookieOrControlSurface;
 }
 
-function hasHighConfidenceDirectStaticCoreCoverage(candidates: PolicySurfaceCandidate[]): boolean {
+function hasHighConfidenceDirectStaticCoreCoverage(baseUrl: string, candidates: PolicySurfaceCandidate[]): boolean {
   const fetchable = deterministicFetchFallback(candidates)
-    .filter((candidate) =>
-      candidate.fetchable &&
-      !candidate.observationOnly &&
-      candidate.deterministicScore >= 0.75 &&
-      policyCandidateQualityScore(candidate) >= 2 &&
-      (
-        candidate.deterministicMatchStrength === "direct" ||
-        candidate.deterministicMatchStrength === "equivalent"
-      ) &&
-      (candidate.domLocation === "footer" || candidate.domLocation === "header" || candidate.domLocation === "nav")
-    );
+    .filter((candidate) => isHighConfidenceFirstPartyStaticCandidate(baseUrl, candidate));
   const surfaceTypes = new Set(fetchable.map((candidate) => candidate.deterministicSurfaceType));
   return surfaceTypes.has("privacy_policy") &&
     (surfaceTypes.has("cookie_policy") || surfaceTypes.has("consent_preferences") || surfaceTypes.has("cookie_settings"));
+}
+
+function hasHighConfidenceFirstPartyStaticPrivacyPolicy(
+  baseUrl: string,
+  candidates: PolicySurfaceCandidate[],
+): boolean {
+  return deterministicFetchFallback(candidates).some((candidate) =>
+    isHighConfidenceFirstPartyStaticCandidate(baseUrl, candidate) &&
+    candidate.deterministicSurfaceType === "privacy_policy"
+  );
+}
+
+function isHighConfidenceFirstPartyStaticCandidate(
+  baseUrl: string,
+  candidate: PolicySurfaceCandidate,
+): boolean {
+  return candidate.fetchable &&
+    !candidate.observationOnly &&
+    sameOrigin(baseUrl, candidate.normalizedUrl) &&
+    candidate.deterministicScore >= 0.75 &&
+    policyCandidateQualityScore(candidate) >= 2 &&
+    (
+      candidate.deterministicMatchStrength === "direct" ||
+      candidate.deterministicMatchStrength === "equivalent"
+    ) &&
+    (candidate.domLocation === "footer" || candidate.domLocation === "header" || candidate.domLocation === "nav");
+}
+
+function isFirstPartyCookieOrControlPolicyCandidate(
+  baseUrl: string,
+  candidate: PolicySurfaceCandidate,
+): boolean {
+  return candidate.fetchable &&
+    !candidate.observationOnly &&
+    sameOrigin(baseUrl, candidate.normalizedUrl) &&
+    (
+      candidate.deterministicSurfaceType === "cookie_policy" ||
+      candidate.deterministicSurfaceType === "cookie_settings" ||
+      candidate.deterministicSurfaceType === "consent_preferences" ||
+      candidate.deterministicSurfaceType === "your_privacy_choices"
+    );
 }
 
 function policyFetchLimit(input: PolicySurfaceScannerInput): number {
@@ -2600,6 +2707,34 @@ function hasSufficientRetainedGdprPolicyEvidence(
     )
   );
   return hasPrivacyPolicy && hasCookieOrControlSurface && hasRowSpecificTransparencyEvidence;
+}
+
+function hasRetainedFirstPartyPolicyEvidenceForBroadFetchStop(
+  normalizedScanUrl: string,
+  observations: PolicySurfaceObservation[],
+): boolean {
+  const firstPartyFetched = observations.filter((observation) =>
+    (observation.status === "fetched" || observation.status === "observed") &&
+    observationMatchesScanOrigin(normalizedScanUrl, observation) &&
+    !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
+  );
+  const hasPrivacyPolicy = firstPartyFetched.some((observation) =>
+    observation.surfaceType === "privacy_policy"
+  );
+  if (!hasPrivacyPolicy) {
+    return false;
+  }
+  const hasCookieOrControlSurface = firstPartyFetched.some((observation) =>
+    observation.surfaceType === "cookie_policy" ||
+    observation.surfaceType === "cookie_settings" ||
+    observation.surfaceType === "consent_preferences" ||
+    observation.surfaceType === "your_privacy_choices"
+  );
+  const hasRowSpecificTransparencyEvidence = firstPartyFetched.some((observation) =>
+    (observation.article13DisclosureSignals ?? []).length >= 4
+  );
+
+  return hasCookieOrControlSurface || hasRowSpecificTransparencyEvidence;
 }
 
 function isCorePolicyOrControlSurface(observation: Pick<PolicySurfaceObservation, "surfaceType">): boolean {
