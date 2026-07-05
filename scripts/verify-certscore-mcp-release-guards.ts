@@ -168,6 +168,12 @@ function npxPackagesFromDocs(paths: string[]) {
         packages.add(packageNameFromNpxToken(token));
       }
     }
+    for (const match of source.matchAll(/"args":\s*\[\s*"-y",\s*"((?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+(?:@[A-Za-z0-9._-]+)?)"/g)) {
+      const token = match[1];
+      if (token) {
+        packages.add(packageNameFromNpxToken(token));
+      }
+    }
   }
   return [...packages].sort();
 }
