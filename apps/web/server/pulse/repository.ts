@@ -119,6 +119,11 @@ export async function createPulseRequest(input: {
         forceNewScan: input.context.forceNewScan ?? false,
         waitSeconds: input.context.waitSeconds,
         mode: input.context.mode,
+        method: input.context.method ?? null,
+        path: input.context.path ?? null,
+        responseStatus: input.context.responseStatus ?? null,
+        routeName: input.context.routeName ?? null,
+        toolHint: input.context.toolHint ?? null,
         source: input.context.source ?? input.context.channel ?? "pulse_api",
         channel: input.context.channel ?? input.context.source ?? "pulse_api"
       },

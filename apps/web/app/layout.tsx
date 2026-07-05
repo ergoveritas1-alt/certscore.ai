@@ -5,7 +5,7 @@ import "./globals.css";
 import { AnalyticsConsentBanner } from "../components/analytics/analytics-consent-banner";
 import { DataLayerClickTracker } from "../components/analytics/data-layer-events";
 import { buildConsentBootstrapScript } from "../lib/analytics/consent-bootstrap";
-import { SITE_NAME, SITE_URL } from "../lib/seo";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "../lib/seo";
 
 const GOOGLE_TAG_ID = "G-B6TQVX35ZB";
 const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim();
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     default: SITE_NAME,
     template: `%s | ${SITE_NAME}`
   },
-  description: "CertScore.ai scans public websites for observable accessibility, privacy, and disclosure signals and tracks changes over time.",
+  description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
   icons: {
     icon: "/icon.svg",
@@ -48,21 +48,6 @@ type RootLayoutProps = {
 };
 
 export default function RootLayout({ children }: RootLayoutProps) {
-  const organizationSchema = {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    name: SITE_NAME,
-    url: SITE_URL,
-    logo: `${SITE_URL}/certscore-header-logo.png`
-  };
-  const websiteSchema = {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: SITE_NAME,
-    url: SITE_URL,
-    description: metadata.description
-  };
-
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
@@ -71,8 +56,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
         </Script>
         <DataLayerClickTracker />
         <AnalyticsConsentBanner />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />
-        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }} />
         {children}
       </body>
     </html>

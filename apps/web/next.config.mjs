@@ -62,6 +62,11 @@ const nextConfig = {
         permanent: true
       },
       {
+        source: "/mcp",
+        destination: "/developers/mcp",
+        permanent: true
+      },
+      {
         source: "/guides/findings",
         destination: "/findings",
         permanent: true

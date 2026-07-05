@@ -4,6 +4,7 @@ export type AdminRequestProvenanceKind =
   | "gpt_action"
   | "internal_import"
   | "internal_system"
+  | "mcp"
   | "unknown"
   | "validation_ops";
 
@@ -48,6 +49,11 @@ const PROVENANCE_BY_KIND: Record<AdminRequestProvenanceKind, Omit<AdminRequestPr
     label: "Internal system",
     tone: "sky"
   },
+  mcp: {
+    className: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100",
+    label: "MCP",
+    tone: "indigo"
+  },
   unknown: {
     className: "bg-slate-50 text-slate-600 ring-1 ring-slate-200",
     label: "Unknown provenance",
@@ -82,6 +88,10 @@ export function classifyAdminRequestProvenance(input: ClassifyAdminRequestProven
 
   if (requestChannel === "gpt action" || requestChannel === "gpt_action" || source === "gpt action" || source === "gpt_action") {
     return adminRequestProvenance("gpt_action");
+  }
+
+  if (requestChannel === "mcp" || source === "mcp") {
+    return adminRequestProvenance("mcp");
   }
 
   if (source.includes("corpus") || source.includes("batch eval") || source.includes("codex scan batch eval")) {

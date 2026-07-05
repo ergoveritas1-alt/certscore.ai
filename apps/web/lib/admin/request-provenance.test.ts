@@ -34,6 +34,16 @@ describe("classifyAdminRequestProvenance", () => {
     );
   });
 
+  it("labels MCP requests before anonymous public requests", () => {
+    assert.equal(
+      classifyAdminRequestProvenance({
+        requestChannel: "mcp",
+        requestedByAnonymous: true
+      }).kind,
+      "mcp"
+    );
+  });
+
   it("labels signed-in workspace scans as authenticated user activity", () => {
     assert.equal(
       classifyAdminRequestProvenance({

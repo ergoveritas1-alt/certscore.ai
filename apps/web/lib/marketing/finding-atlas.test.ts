@@ -3,6 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { getFindingReferenceItems } from "./finding-atlas";
+import {
+  getGdprEprivacyChecklistReferenceItems,
+  getGdprEprivacyChecklistReferencePath,
+  getRegulatoryGapFindingId
+} from "./gdpr-eprivacy-checklist-reference";
+import { GDPR_EPRIVACY_CHECKLIST_ROWS } from "../scans/gdpr-eprivacy-coverage-checklist";
 import { CERT_SCORE_FINDING_REGISTRY } from "../scans/finding-registry";
 import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../scans/rank-findings";
 import {
@@ -168,7 +174,8 @@ test("homepage mini findings carousel copy covers only official executive top fi
   const homepageSource = readFileSync("apps/web/app/(marketing)/page.tsx", "utf8");
   const expectedIds = [...PUBLIC_HOMEPAGE_CAROUSEL_FINDING_IDS].sort();
 
-  assert.match(homepageSource, /const findings = getFindingReferenceItems\(\);/);
+  assert.match(homepageSource, /const findingReferenceItems = getFindingReferenceItems\(\);/);
+  assert.match(homepageSource, /const findings = createHomepageFindingSummaries\(findingReferenceItems\);/);
   assert.match(homepageSource, /<HomepageFindingsOverview findings=\{findings\} \/>/);
   assert.deepEqual(parseHomepageCarouselCopyIds().sort(), expectedIds);
 });
@@ -338,8 +345,10 @@ test("finding atlas index groups all reviewed findings with registry context", (
   const pageSource = readFileSync("apps/web/app/findings/findings-reference-page.tsx", "utf8");
 
   assert.doesNotMatch(pageSource, /CertScore's findings registry explains the automated observations/);
-  assert.match(pageSource, /How to read a finding/);
-  assert.match(pageSource, /Findings are automated public-web observations for review/);
+  assert.match(pageSource, /How to read this reference/);
+  assert.match(pageSource, /CertScore findings and checklist rows are automated public-web observations for review/);
+  assert.match(pageSource, /GDPR\/ePrivacy evidence checklist/);
+  assert.match(pageSource, /regulatory_gap__gdpr_eprivacy__/);
   assert.match(pageSource, /finding references are reviewed periodically/);
   assert.match(source, /Consent and choice architecture/);
   assert.match(source, /Third-party tracking and adtech/);
@@ -1185,7 +1194,7 @@ test("pre-consent finding detail route has SEO and GEO-ready page copy", () => {
   assert.equal(copy.pageTitle, "Third-party tracking observed before recorded consent finding reference");
   assert.match(copy.pageDescription, /classified non-essential/);
   assert.match(copy.pageDescription, /prior consent state associated with that purpose/);
-  assert.match(pageSource, /const headingTitle = activeFinding\?\.title \?\? "CertScore findings reference"/);
+  assert.match(pageSource, /const headingTitle = activeFinding\?\.title \?\? "CertScore findings and evidence checklist reference"/);
   assert.match(pageSource, /<h1[\s\S]*\{headingTitle\}[\s\S]*<\/h1>/);
   assert.match(pageSource, /createPublicArticleSchema/);
   assert.match(pageSource, /createDefinedTermSchema/);
@@ -1210,6 +1219,44 @@ test("finding atlas copy avoids prohibited legal overclaiming", () => {
 
     for (const pattern of PROHIBITED_OVERCLAIM_PATTERNS) {
       assert.doesNotMatch(searchable, pattern, `${finding.id} should not contain ${pattern}`);
+    }
+  }
+});
+
+test("public GDPR/ePrivacy checklist references stay aligned with report checklist rows", () => {
+  const publicRows = getGdprEprivacyChecklistReferenceItems();
+
+  assert.deepEqual(
+    publicRows.map((row) => row.id),
+    GDPR_EPRIVACY_CHECKLIST_ROWS.map((row) => row.id)
+  );
+  assert.ok(publicRows.length > 0);
+
+  for (const row of publicRows) {
+    assert.equal(row.path, getGdprEprivacyChecklistReferencePath(row.id));
+    assert.equal(row.regulatoryGapFindingId, getRegulatoryGapFindingId(row.id));
+    assert.match(row.regulatoryGapFindingId, /^regulatory_gap__gdpr_eprivacy__/);
+    assert.ok(row.retainedEvidenceExamples.length >= 3, `${row.id} should document retained evidence examples`);
+    assert.ok(row.missingEvidenceExamples.length >= 3, `${row.id} should document missing evidence examples`);
+    assert.ok(row.reviewerNotes.length >= 2, `${row.id} should document reviewer notes`);
+  }
+});
+
+test("public GDPR/ePrivacy checklist copy remains evidence-scoped", () => {
+  for (const row of getGdprEprivacyChecklistReferenceItems()) {
+    const searchable = stripAllowedCaveats([
+      row.label,
+      row.explanation,
+      row.notObservedText,
+      row.regulatoryGapFindingId,
+      ...row.retainedEvidenceExamples,
+      ...row.missingEvidenceExamples,
+      ...row.reviewerNotes,
+      ...row.statusReference.flatMap((status) => [status.status, status.meaning])
+    ].join("\n"));
+
+    for (const pattern of PROHIBITED_OVERCLAIM_PATTERNS) {
+      assert.doesNotMatch(searchable, pattern, `${row.id} should not contain ${pattern}`);
     }
   }
 });

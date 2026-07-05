@@ -67,7 +67,7 @@ export type GdprEprivacyCoverageChecklistItem = {
   subchecks?: RegulatoryChecklistSubcheck[];
 };
 
-type ChecklistRowDefinition = {
+export type GdprEprivacyChecklistRowDefinition = {
   id: string;
   label: string;
   explanation: string;
@@ -76,6 +76,8 @@ type ChecklistRowDefinition = {
   notObservedText: string;
   requiresPublicWebCoverage?: boolean;
 };
+
+type ChecklistRowDefinition = GdprEprivacyChecklistRowDefinition;
 
 export type GdprEprivacyCoverageChecklistInput = {
   coverageLimited: boolean;
@@ -100,7 +102,7 @@ export type GdprEprivacyCoverageChecklistInput = {
 
 type ProjectedGdprFinding = NonNullable<GdprEprivacyCoverageChecklistInput["projectedFindings"]>[number];
 
-const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
+export const GDPR_EPRIVACY_CHECKLIST_ROWS: GdprEprivacyChecklistRowDefinition[] = [
   {
     id: "consent_surface_observed",
     label: "Consent mechanism",
@@ -516,6 +518,8 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   }
 ];
+
+const CHECKLIST_ROWS = GDPR_EPRIVACY_CHECKLIST_ROWS;
 
 const SESSION_REPLAY_PARENT_ROW_ID = "session_replay_fingerprinting_review";
 const SESSION_REPLAY_CHILD_ROW_LABELS = new Map([

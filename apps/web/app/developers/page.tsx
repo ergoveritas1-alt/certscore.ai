@@ -65,7 +65,28 @@ export default function DevelopersPage() {
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>
-            . Include your organization, intended workflow, expected request volume, and requested scopes.
+            . Include your organization, intended workflow, expected request volume, and requested scopes. Most preview access
+            requests receive a first response within two business days.
+          </p>
+        </Section>
+
+        <Section eyebrow="Inline quickstart" title="Three-request curl round trip">
+          <CodeBlock>{`export CERTSCORE_API_KEY="cs_live_..."
+
+curl https://certscore.ai/api/v2/health
+
+SCAN_RESPONSE=$(curl -sS -X POST https://certscore.ai/api/v2/scans \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
+  --data '{"url":"https://example.com","freshness":"latest","scanFrom":"eu_ie"}')
+
+SCAN_ID=$(printf '%s' "$SCAN_RESPONSE" | jq -r '.scanId // .scan.scanId // empty')
+
+curl -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
+  "https://certscore.ai/api/v2/scans/$SCAN_ID/findings"`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Scan creation requires a key with <code className="rounded bg-white px-1">scan:create</code>. If the create response
+            returns a queued job instead of a scan ID, poll the returned status link or use the fuller quickstart.
           </p>
         </Section>
 

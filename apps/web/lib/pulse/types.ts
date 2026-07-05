@@ -25,10 +25,15 @@ export type PulseRequestContext = {
   freshness: PulseFreshnessMode;
   forceNewScan?: boolean;
   ipHash: string | null;
+  method?: string | null;
   mode: "url" | "scanId" | "jobId";
+  path?: string | null;
   referer: string | null;
+  responseStatus?: number | null;
+  routeName?: string | null;
   sourceIp: string | null;
   source?: "pulse_api" | "gpt_action" | string | null;
+  toolHint?: string | null;
   userAgent: string | null;
   userId?: string | null;
   accountId?: string | null;

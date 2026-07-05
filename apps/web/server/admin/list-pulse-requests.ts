@@ -100,6 +100,7 @@ export type AdminPulseOverviewCounts = {
   completed: number;
   evidenceJsonDownloads: number;
   feedback: number;
+  mcp: number;
   queuedOrRunning: number;
   rateLimited: number;
   summaryJsonDownloads: number;
@@ -234,6 +235,7 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
     completed: number;
     evidence_json_downloads: number;
     feedback: number;
+    mcp: number;
     queued_or_running: number;
     rate_limited: number;
     summary_json_downloads: number;
@@ -244,6 +246,7 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
        count(*) filter (where status in ('completed', 'completed_limited'))::int as completed,
        count(*) filter (where status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
        count(*) filter (where status = 'rate_limited')::int as rate_limited,
+       count(*) filter (where request_channel = 'mcp')::int as mcp,
        (select count(*)::int from pulse_feedback)::int as feedback,
        (select count(*)::int from pulse_artifact_downloads where artifact_type = 'summary_json')::int as summary_json_downloads,
        (select count(*)::int from pulse_artifact_downloads where artifact_type = 'evidence_json')::int as evidence_json_downloads
@@ -256,6 +259,7 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
     completed: result?.completed ?? 0,
     evidenceJsonDownloads: result?.evidence_json_downloads ?? 0,
     feedback: result?.feedback ?? 0,
+    mcp: result?.mcp ?? 0,
     queuedOrRunning: result?.queued_or_running ?? 0,
     rateLimited: result?.rate_limited ?? 0,
     summaryJsonDownloads: result?.summary_json_downloads ?? 0,
@@ -264,6 +268,7 @@ export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewC
 }
 
 export async function listAdminPulseRequests(input: {
+  channel?: string | null;
   limit?: number;
   offset?: number;
   query?: string | null;
@@ -274,6 +279,7 @@ export async function listAdminPulseRequests(input: {
   const limit = Math.max(1, Math.min(100, input.limit ?? 20));
   const offset = Math.max(0, input.offset ?? 0);
   const search = input.query?.trim() || null;
+  const channel = input.channel?.trim() || null;
   const rows = await query<Record<string, unknown>>(
     `select pr.public_id,
             pr.job_id,
@@ -314,17 +320,18 @@ export async function listAdminPulseRequests(input: {
          where pulse_request_id = pr.public_id
        ) pad on true
       where ($1::text is null or pr.status = $1)
+        and ($2::text is null or pr.request_channel = $2)
         and (
-          $2::text is null
-          or pr.public_id ilike '%' || $2 || '%'
-          or pr.job_id ilike '%' || $2 || '%'
-          or pr.normalized_domain ilike '%' || $2 || '%'
-          or pr.requested_url ilike '%' || $2 || '%'
-          or pr.scan_id::text ilike '%' || $2 || '%'
+          $3::text is null
+          or pr.public_id ilike '%' || $3 || '%'
+          or pr.job_id ilike '%' || $3 || '%'
+          or pr.normalized_domain ilike '%' || $3 || '%'
+          or pr.requested_url ilike '%' || $3 || '%'
+          or pr.scan_id::text ilike '%' || $3 || '%'
         )
       order by pr.requested_at desc
-      limit $3 offset $4`,
-    [input.status ?? null, search, limit, offset],
+      limit $4 offset $5`,
+    [input.status ?? null, channel, search, limit, offset],
     { readOnly: true }
   );
 

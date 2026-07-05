@@ -3,9 +3,8 @@ import Link from "next/link";
 import { Button } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
+import { DEMO_PATH } from "../../lib/marketing/demo-url";
 import { createPageMetadata } from "../../lib/seo";
-
-const BOOK_DEMO_URL = "https://calendly.com/bmasek-w7ou/30min";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Book a Demo",
@@ -28,7 +27,7 @@ export default function BookDemoPage() {
               asChild
               className="border-0 bg-[linear-gradient(135deg,#2563eb_0%,#0f8bd7_100%)] text-white shadow-[0_16px_32px_rgba(37,99,235,0.24)] hover:brightness-[1.05] focus-visible:ring-sky-500"
             >
-              <Link data-analytics-event="hero_book_demo_clicked" href={BOOK_DEMO_URL}>
+              <Link data-analytics-event="hero_book_demo_clicked" href={DEMO_PATH}>
                 Schedule demo
               </Link>
             </Button>

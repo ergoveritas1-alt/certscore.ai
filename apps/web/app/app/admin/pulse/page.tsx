@@ -15,9 +15,11 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const statuses = ["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited"] as const;
+const channels = ["mcp", "gpt_action", "pulse_api"] as const;
 
 type AdminPulsePageProps = {
   searchParams?: Promise<{
+    channel?: string;
     page?: string;
     perPage?: string;
     q?: string;
@@ -27,6 +29,10 @@ type AdminPulsePageProps = {
 
 function normalizeStatus(value: string | undefined): AdminPulseRequestStatus | null {
   return statuses.includes(value as AdminPulseRequestStatus) ? (value as AdminPulseRequestStatus) : null;
+}
+
+function normalizeChannel(value: string | undefined) {
+  return channels.includes(value as (typeof channels)[number]) ? value : null;
 }
 
 function normalizeQuery(value: string | undefined) {
@@ -41,8 +47,11 @@ function formatLabel(value: string | null) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function filterHref(input: { page?: number; pageSize?: number; query?: string | null; status?: string | null }) {
+function filterHref(input: { channel?: string | null; page?: number; pageSize?: number; query?: string | null; status?: string | null }) {
   const params = new URLSearchParams();
+  if (input.channel) {
+    params.set("channel", input.channel);
+  }
   if (input.status) {
     params.set("status", input.status);
   }
@@ -82,6 +91,7 @@ function statusClass(status: string) {
 export default async function AdminPulsePage({ searchParams }: AdminPulsePageProps) {
   const resolved = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolved.status);
+  const activeChannel = normalizeChannel(resolved.channel);
   const activeQuery = normalizeQuery(resolved.q);
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
@@ -89,6 +99,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
     Promise.all([
       getAdminPulseOverviewCounts(),
       listAdminPulseRequests({
+        channel: activeChannel,
         limit: pageSize,
         offset: (page - 1) * pageSize,
         query: activeQuery,
@@ -99,8 +110,9 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 md:grid-cols-7">
+      <div className="grid gap-3 md:grid-cols-8">
         <Metric label="Total" value={counts.total} />
+        <Metric label="MCP" value={counts.mcp} />
         <Metric label="Completed" value={counts.completed} />
         <Metric label="Queued/running" value={counts.queuedOrRunning} />
         <Metric label="Rate limited" value={counts.rateLimited} />
@@ -114,7 +126,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <CardTitle>Pulse Requests</CardTitle>
-              <p className="mt-1 max-w-3xl text-sm text-slate-500">Newest Pulse API and public page requests first.</p>
+              <p className="mt-1 max-w-3xl text-sm text-slate-500">Newest Pulse API, MCP, and public page requests first.</p>
             </div>
             <form action="/app/admin/pulse" className="flex flex-wrap gap-2">
               <input
@@ -131,6 +143,14 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                   </option>
                 ))}
               </select>
+              <select className="min-h-9 rounded-lg border border-slate-300 px-3 text-sm" defaultValue={activeChannel ?? ""} name="channel">
+                <option value="">Any channel</option>
+                {channels.map((channel) => (
+                  <option key={channel} value={channel}>
+                    {formatLabel(channel)}
+                  </option>
+                ))}
+              </select>
               <Button size="sm" type="submit" variant="secondary">
                 Filter
               </Button>
@@ -139,13 +159,22 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
         </CardHeader>
         <CardContent className="space-y-3 pt-0">
           <div className="flex flex-wrap gap-2">
-            <Link className="rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700" href={filterHref({ pageSize, query: activeQuery })}>
-              All
+            <Link className="rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700" href={filterHref({ pageSize, query: activeQuery, status: activeStatus })}>
+              All channels
             </Link>
+            {channels.map((channel) => (
+              <Link
+                className="rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                href={filterHref({ channel, pageSize, query: activeQuery, status: activeStatus })}
+                key={channel}
+              >
+                {formatLabel(channel)}
+              </Link>
+            ))}
             {statuses.map((status) => (
               <Link
                 className="rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-700"
-                href={filterHref({ pageSize, query: activeQuery, status })}
+                href={filterHref({ channel: activeChannel, pageSize, query: activeQuery, status })}
                 key={status}
               >
                 {formatLabel(status)}
@@ -159,7 +188,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
             itemLabel="Pulse requests"
             page={page}
             pageSize={pageSize}
-            searchParams={{ q: activeQuery, status: activeStatus }}
+            searchParams={{ channel: activeChannel, q: activeQuery, status: activeStatus }}
             visibleCount={requests.length}
           />
 
@@ -209,6 +238,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                         <p className="text-xs text-slate-500">
                           {formatLabel(request.freshness)} · {formatLabel(request.resolutionMode)}
                         </p>
+                        <p className="text-xs text-slate-500">Channel: {formatLabel(request.requestChannel)}</p>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                             Scan from: {request.scanFromLabel}

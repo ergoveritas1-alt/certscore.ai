@@ -202,6 +202,7 @@ Current scopes:
             </a>{" "}
             with your organization, integration type, expected volume, and requested scopes. Self-serve keys expire after 90 days, are
             prefixed <code className="rounded bg-white px-1">cs_ro_</code>, and are capped at 60 requests/minute and 500 scan reads/day.
+            Most preview access requests receive a first response within two business days.
             HTTP 202 pending responses and HTTP 429 throttled responses may include <code className="rounded bg-white px-1">Retry-After</code>;
             agents and SDKs should honor that value rather than tight polling.
           </p>

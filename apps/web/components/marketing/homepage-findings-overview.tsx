@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { FindingReferenceItem } from "../../lib/marketing/finding-atlas";
+import type { HomepageFindingSummary } from "../../lib/marketing/homepage-finding-summary";
 import type { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../../lib/scans/rank-findings";
 
 type HomepageFindingsOverviewProps = {
-  findings: FindingReferenceItem[];
+  findings: HomepageFindingSummary[];
 };
 
 type HomepageFindingCarouselCopy = {
@@ -387,52 +387,6 @@ function ArrowIcon({ direction }: { direction: "left" | "right" }) {
   );
 }
 
-function formatPrevalence(finding: FindingReferenceItem) {
-  return finding.benchmark.contextLabel;
-}
-
-function getCondensedEvidence(finding: FindingReferenceItem) {
-  const example = finding.exampleEvidence[0];
-
-  if (!example) {
-    return null;
-  }
-
-  return {
-    title: example.title,
-    lines: example.code.split("\n").slice(0, 3)
-  };
-}
-
-function getReviewLensBadges(finding: FindingReferenceItem) {
-  const context = finding.regulatoryContext;
-
-  if (!context) {
-    return [];
-  }
-
-  const labels = [
-    context.primaryConcern.label,
-    ...context.technicalStandards.map((item) => item.label),
-    ...context.jurisdictionalContexts.map((item) => item.label)
-  ].join(" ");
-  const badges: string[] = [];
-
-  if (/gdpr|eprivacy|pecr|ico|edpb/i.test(labels)) {
-    badges.push("GDPR / ePrivacy");
-  }
-
-  if (/ftc|consumer protection|dark-pattern|privacy claim/i.test(labels)) {
-    badges.push("FTC");
-  }
-
-  if (/ada|wcag|section 508|accessibility|doj|en 301 549/i.test(labels)) {
-    badges.push("DOJ / ADA");
-  }
-
-  return badges;
-}
-
 export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewProps) {
   const defaultIndex = Math.max(0, findings.findIndex((finding) => finding.id === "pre_consent_tracking_detected"));
   const [activeIndex, setActiveIndex] = useState(defaultIndex);
@@ -447,12 +401,12 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
 
   const carouselCopy: HomepageFindingCarouselCopy | undefined =
     HOMEPAGE_FINDING_CAROUSEL_COPY[activeFinding.id as keyof typeof HOMEPAGE_FINDING_CAROUSEL_COPY];
-  const findingOverview = carouselCopy?.overview ?? activeFinding.observed;
-  const regulatoryLabel = carouselCopy?.regulatoryLabel ?? activeFinding.regulatoryContext?.primaryConcern.label;
-  const regulatoryCopy = carouselCopy?.regulatoryCopy ?? activeFinding.regulatoryContext?.primaryConcern.displayCopy;
-  const reviewLensBadges = getReviewLensBadges(activeFinding);
-  const evidence = carouselCopy?.evidence ?? getCondensedEvidence(activeFinding);
-  const visibleReviewQuestions = (carouselCopy?.reviewPrompts ?? activeFinding.reviewQuestions).slice(0, 2);
+  const findingOverview = carouselCopy?.overview ?? activeFinding.overview;
+  const regulatoryLabel = carouselCopy?.regulatoryLabel ?? activeFinding.regulatoryLabel;
+  const regulatoryCopy = carouselCopy?.regulatoryCopy ?? activeFinding.regulatoryCopy;
+  const reviewLensBadges = activeFinding.reviewLensBadges;
+  const evidence = carouselCopy?.evidence ?? activeFinding.evidence;
+  const visibleReviewQuestions = (carouselCopy?.reviewPrompts ?? activeFinding.reviewPrompts).slice(0, 2);
 
   function showPrevious() {
     setActiveIndex((current) => (current === 0 ? findings.length - 1 : current - 1));
@@ -518,7 +472,7 @@ export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewP
                     {activeFinding.criticality} criticality
                   </span>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                    {formatPrevalence(activeFinding)}
+                    {activeFinding.prevalenceLabel}
                   </span>
                 </div>
                 <div>

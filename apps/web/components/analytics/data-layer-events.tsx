@@ -158,6 +158,20 @@ export function DataLayerClickTracker() {
         return;
       }
 
+      if (eventName === "hero_browse_findings_clicked") {
+        pushDataLayerEvent({
+          event: "hero_browse_findings_clicked"
+        });
+        return;
+      }
+
+      if (eventName === "hero_see_scan_checks_clicked") {
+        pushDataLayerEvent({
+          event: "hero_see_scan_checks_clicked"
+        });
+        return;
+      }
+
       if (eventName === "pricing_cta_clicked") {
         pushDataLayerEvent({
           event: "pricing_cta_clicked",

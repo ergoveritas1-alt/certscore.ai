@@ -7,6 +7,7 @@ import {
   projectedFindingsFromPulse
 } from "../../../../../../lib/api-v2/scan-resource";
 import { buildPulseProjection } from "../../../../../../lib/pulse/projection";
+import { recordApiV2McpUsage } from "../../../../../../server/integrations/api-v2-mcp-usage";
 import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
 
 export const dynamic = "force-dynamic";
@@ -59,6 +60,16 @@ export async function GET(request: Request, context: RouteContext) {
         waitSeconds: 0
       })
     );
+
+    await recordApiV2McpUsage({
+      normalizedDomain: scanRecord.scan.domainHostname,
+      requestedUrl,
+      request,
+      responseStatus: 200,
+      routeName: "api-v2-scan-findings",
+      scanId: scanRecord.scan.id,
+      toolHint: "list_findings"
+    });
 
     return apiV2JsonResponse({
       body: buildApiV2FindingList({

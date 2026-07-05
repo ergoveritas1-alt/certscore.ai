@@ -2,6 +2,7 @@ import { normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { apiV2JsonResponse, buildApiV2DomainLatestScan, buildApiV2Error } from "../../../../../../lib/api-v2/scan-resource";
 import { PULSE_MIN_REUSABLE_PAGES_REQUESTED } from "../../../../../../lib/pulse/scan-coverage";
 import { normalizePulseUrl } from "../../../../../../lib/pulse/request";
+import { recordApiV2McpUsage } from "../../../../../../server/integrations/api-v2-mcp-usage";
 import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
 import { findLatestCompletedAnonymousScanForDomain } from "../../../../../../server/pulse/repository";
 
@@ -40,6 +41,17 @@ export async function GET(request: Request, context: RouteContext) {
       scanFrom
     });
     const scanRecord = latestScan ? await getPublicScanRecord(latestScan.id, { logPrefix: "[api-v2-domain-latest]" }) : null;
+
+    await recordApiV2McpUsage({
+      normalizedDomain: normalized.normalizedDomain,
+      normalizedUrl: normalized.normalizedUrl,
+      requestedUrl: normalized.requestedUrl,
+      request,
+      responseStatus: 200,
+      routeName: "api-v2-domain-latest",
+      scanId: scanRecord?.scan.id ?? null,
+      toolHint: "get_latest_domain_scan"
+    });
 
     return apiV2JsonResponse({
       body: buildApiV2DomainLatestScan({

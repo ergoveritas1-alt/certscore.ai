@@ -1,6 +1,7 @@
 import { pulseResponseSchema } from "@certscore/api-contracts";
 import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error, buildApiV2ScanPulse } from "../../../../../../lib/api-v2/scan-resource";
 import { buildPulseProjection } from "../../../../../../lib/pulse/projection";
+import { recordApiV2McpUsage } from "../../../../../../server/integrations/api-v2-mcp-usage";
 import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,16 @@ export async function GET(request: Request, context: RouteContext) {
       resolutionMode: "reused_existing_scan",
       scanRecord,
       waitSeconds: 0
+    });
+
+    await recordApiV2McpUsage({
+      normalizedDomain: scanRecord.scan.domainHostname,
+      requestedUrl,
+      request,
+      responseStatus: 200,
+      routeName: "api-v2-scan-pulse",
+      scanId: scanRecord.scan.id,
+      toolHint: "get_report"
     });
 
     return apiV2JsonResponse({

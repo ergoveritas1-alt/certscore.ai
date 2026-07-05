@@ -121,6 +121,9 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
           <CardContent className="space-y-2 text-sm text-slate-700">
             <Field label="Type" value={request.requestType} />
             <Field label="Channel" value={request.requestChannel} />
+            <Field label="API key" value={getString(request.requestedBy, "apiKeyId") ?? "Not recorded"} />
+            <Field label="Account" value={getString(request.requestedBy, "accountId") ?? "Not recorded"} />
+            <Field label="User" value={getString(request.requestedBy, "userId") ?? "Not recorded"} />
             <Field label="Anonymous" value={String(request.requestedBy.anonymous ?? "unknown")} />
             <Field label="Source IP" value={getString(request.requestContext, "sourceIp") ?? "Not recorded"} />
             <Field label="IP hash" value={getString(request.requestContext, "ipHash") ?? "Not recorded"} />

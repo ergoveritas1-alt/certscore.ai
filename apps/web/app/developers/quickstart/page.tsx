@@ -49,6 +49,7 @@ curl -X POST https://certscore.ai/api/v2/keys/request \\
             Self-serve keys are prefixed <code className="rounded bg-white px-1">cs_ro_</code>, expire after 90 days, and are limited
             to read-only report/API access plus MCP. For <code className="rounded bg-white px-1">scan:create</code>, include your
             organization, integration type, expected volume, callback or contact email, and requested scopes when emailing support.
+            Most preview access requests receive a first response within two business days.
           </p>
         </Section>
 

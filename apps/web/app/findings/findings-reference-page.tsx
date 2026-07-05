@@ -3,6 +3,12 @@ import Link from "next/link";
 import { FindingAtlasBrowser } from "../../components/marketing/findings/finding-atlas-browser";
 import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import {
+  GDPR_EPRIVACY_CHECKLIST_STATUS_REFERENCE,
+  getGdprEprivacyChecklistReferenceGroups,
+  getGdprEprivacyChecklistReferenceItems,
+  type GdprEprivacyChecklistReferenceItem
+} from "../../lib/marketing/gdpr-eprivacy-checklist-reference";
+import {
   FINDING_REFERENCE_CATEGORIES,
   getFindingReferenceItems,
   type FindingReferenceCategory,
@@ -23,19 +29,35 @@ type FindingsReferencePageProps = {
 };
 
 const DEFAULT_FINDING_ID = "pre_consent_tracking_detected";
+const SECTION_IDS = {
+  checklist: "gdpr-eprivacy-checklist-directory",
+  directFindings: "findings-registry-directory",
+  statusLanguage: "checklist-status-language",
+  referenceGuide: "reference-guide",
+  referenceNotes: "reference-notes",
+  relatedReading: "related-reading"
+} as const;
 
 function getFindingPath(findingId: string) {
   return `/findings/${findingId}`;
 }
 
+function anchorSlug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function getChecklistCategoryAnchorId(category: string) {
+  return anchorSlug(category);
+}
+
 function getPageTitle(activeFinding?: FindingReferenceItem) {
-  return activeFinding ? `${activeFinding.title} finding reference` : "CertScore findings reference";
+  return activeFinding ? `${activeFinding.title} finding reference` : "CertScore findings and evidence checklist reference";
 }
 
 function getPageDescription(activeFinding?: FindingReferenceItem) {
   return activeFinding
     ? `${activeFinding.observed} Review the evidence context, methodology, common causes, and reviewer questions for this CertScore finding.`
-    : "Review CertScore findings, evidence, signals, and observations surfaced from public-web runtime scans.";
+    : "Review CertScore direct findings, GDPR/ePrivacy evidence checklist rows, regulatory gap top findings, retained evidence, source-signal limitations, and reviewer context.";
 }
 
 function getPagePath(activeFinding?: FindingReferenceItem) {
@@ -127,15 +149,15 @@ function createFindingSchemas({
           ]
     }),
     createDefinedTermSetSchema({
-      title: "CertScore finding registry",
+      title: "CertScore findings and evidence checklist reference",
       description:
-        "Canonical CertScore finding terms for automated public-web observations, retained evidence, runtime signals, and review-oriented findings.",
+        "Canonical CertScore direct finding terms and GDPR/ePrivacy evidence checklist references for automated public-web observations, retained evidence, runtime signals, and review-oriented findings.",
       path: "/findings",
       terms: findingTermInputs
     }),
     createItemListSchema({
-      name: "CertScore finding registry index",
-      description: "Index of CertScore finding reference pages.",
+      name: "CertScore findings and evidence checklist index",
+      description: "Index of CertScore direct finding reference pages.",
       path: "/findings",
       items: findings.map((finding) => ({
         path: getFindingPath(finding.id),
@@ -206,20 +228,39 @@ function getCategoryIntro(category: FindingReferenceCategory) {
   }
 }
 
-function FindingsRegistryDirectory({ findings }: { findings: FindingReferenceItem[] }) {
-  const groupedFindings = getFindingsByCategory(findings);
+function DirectFindingReferencesSection({ findings }: { findings: FindingReferenceItem[] }) {
+  const featuredFinding = findings.find((finding) => finding.id === DEFAULT_FINDING_ID);
+  const groupedFindings = getFindingsByCategory(findings.filter((finding) => finding.id !== featuredFinding?.id));
 
   return (
-    <section className="mt-8 border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="findings-registry-directory">
+    <section className="mt-8 scroll-mt-24 border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby={SECTION_IDS.directFindings}>
       <div className="max-w-3xl">
-        <h2 id="findings-registry-directory" className="text-xl font-semibold tracking-tight text-slate-950">
-          Finding reference directory
+        <h2 id={SECTION_IDS.directFindings} className="text-xl font-semibold tracking-tight text-slate-950">
+          Direct unified finding references
         </h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Browse every public CertScore finding reference page in the registry. Each page documents observed signals, evidence expectations,
-          common causes, review questions, limitations, and related findings.
+          Browse public direct-finding references that still map to report findings. These pages document observed signals,
+          evidence expectations, common causes, review questions, limitations, and related checklist rows where applicable.
         </p>
       </div>
+
+      {featuredFinding ? (
+        <Link
+          href={getFindingPath(featuredFinding.id)}
+          className="group mt-5 block border border-sky-200 bg-sky-50 p-4 hover:border-sky-300 hover:bg-sky-100"
+        >
+          <span className="inline-flex rounded-full border border-sky-200 bg-white px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+            Featured example
+          </span>
+          <span className="mt-3 block text-base font-semibold leading-6 text-sky-800 group-hover:text-sky-900">
+            {featuredFinding.title}
+          </span>
+          <span className="mt-1 block text-xs leading-5 text-slate-500">
+            {featuredFinding.criticality} priority · {featuredFinding.benchmark.contextLabel}
+          </span>
+          <span className="mt-2 block max-w-3xl text-sm leading-6 text-slate-700">{featuredFinding.observed}</span>
+        </Link>
+      ) : null}
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         {groupedFindings.map((group) => (
@@ -300,12 +341,314 @@ function RelatedFindingsSection({
   );
 }
 
+type TocItem = {
+  children?: Array<{ href: string; label: string }>;
+  href: string;
+  label: string;
+};
+
+function FindingsTableOfContents({ checklistRows }: { checklistRows: GdprEprivacyChecklistReferenceItem[] }) {
+  const checklistCategories = getGdprEprivacyChecklistReferenceGroups().map((group) => ({
+    href: `#${getChecklistCategoryAnchorId(group.category)}`,
+    label: group.category
+  }));
+  const tocItems: TocItem[] = [
+    {
+      children: checklistCategories,
+      href: `#${SECTION_IDS.checklist}`,
+      label: "GDPR/ePrivacy evidence checklist"
+    },
+    {
+      href: `#${SECTION_IDS.directFindings}`,
+      label: `Direct unified finding references (${getFindingReferenceItems().length})`
+    },
+    {
+      href: `#${SECTION_IDS.statusLanguage}`,
+      label: "Checklist status language"
+    },
+    {
+      href: `#${SECTION_IDS.referenceGuide}`,
+      label: "Reference guide"
+    },
+    {
+      href: `#${SECTION_IDS.referenceNotes}`,
+      label: "Reference notes"
+    },
+    {
+      href: `#${SECTION_IDS.relatedReading}`,
+      label: "Related reading"
+    }
+  ];
+
+  const list = (
+    <nav aria-label="Findings page sections">
+      <ul className="space-y-2 text-sm leading-6">
+        {tocItems.map((item) => (
+          <li key={item.href}>
+            <a href={item.href} className="font-semibold text-slate-700 hover:text-sky-700">
+              {item.label}
+            </a>
+            {item.children && item.children.length > 0 ? (
+              <ul className="mt-2 grid gap-1 border-l border-slate-200 pl-3 text-xs leading-5 sm:grid-cols-2 lg:grid-cols-3">
+                {item.children.map((child) => (
+                  <li key={child.href}>
+                    <a href={child.href} className="text-slate-500 hover:text-sky-700">
+                      {child.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+
+  return (
+    <section className="mt-8" aria-label="On this page">
+      <details className="border border-slate-200 bg-white p-4 md:hidden">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-950">On this page</summary>
+        <div className="mt-4">{list}</div>
+      </details>
+      <div className="sticky top-20 z-30 hidden border border-slate-200 bg-white/95 p-4 shadow-sm backdrop-blur md:block">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">On this page</h2>
+          <span className="text-xs text-slate-500">{checklistRows.length} checklist rows</span>
+        </div>
+        {list}
+      </div>
+    </section>
+  );
+}
+
+function EvidenceModelOverview({
+  checklistRowCount,
+  directFindingCount
+}: {
+  checklistRowCount: number;
+  directFindingCount: number;
+}) {
+  const modelItems = [
+    {
+      title: "Direct unified findings",
+      body: `${directFindingCount} public finding references describe direct report findings promoted from retained runtime, public-surface, or accessibility evidence.`
+    },
+    {
+      title: "GDPR/ePrivacy evidence checklist",
+      body: `${checklistRowCount} checklist rows describe what the scan checks, which evidence can support each row, and when coverage remains limited or not testable.`
+    },
+    {
+      title: "Regulatory gap top findings",
+      body: "Checklist rows can be promoted into top findings with IDs like regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking when retained evidence indicates a potential concern."
+    }
+  ];
+
+  return (
+    <div className="border border-slate-200 bg-white p-5 sm:p-6">
+      <div className="max-w-3xl">
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          CertScore now separates direct findings from GDPR/ePrivacy checklist evidence. A checklist row can be observed,
+          projected as a possible gap, retained as a review signal, or marked not testable when source evidence is incomplete.
+        </p>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {modelItems.map((item) => (
+          <section key={item.title} className="border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-semibold text-slate-950">{item.title}</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{item.body}</p>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReferenceGuideSection({
+  checklistRowCount,
+  directFindingCount
+}: {
+  checklistRowCount: number;
+  directFindingCount: number;
+}) {
+  const detailsClass = "group border border-slate-200 bg-white p-4";
+  const summaryClass = "cursor-pointer text-sm font-semibold text-slate-950";
+
+  return (
+    <section className="mt-8 scroll-mt-24 border border-slate-200 bg-slate-50 p-5 sm:p-6" aria-labelledby={SECTION_IDS.referenceGuide}>
+      <div className="max-w-3xl">
+        <h2 id={SECTION_IDS.referenceGuide} className="text-xl font-semibold tracking-tight text-slate-950">
+          Reference guide: how findings and statuses work
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          These notes explain the evidence model without placing the reference material ahead of the catalog.
+        </p>
+      </div>
+      <div className="mt-5 space-y-3">
+        <details className={detailsClass}>
+          <summary className={summaryClass}>How to read this reference</summary>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Use direct findings for specific report findings and GDPR/ePrivacy checklist rows for evidence coverage,
+            source-signal gaps, retained artifacts, and status language used in the scan report.
+          </p>
+        </details>
+        <details className={detailsClass}>
+          <summary className={summaryClass}>How regulatory gap top findings work</summary>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            When checklist evidence indicates a potential concern, the report may surface a top finding with an ID like
+            <code className="mx-1 rounded bg-slate-50 px-1 py-0.5 font-mono text-[12px] text-slate-700">regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking</code>.
+            That is a review signal from retained checklist evidence, not a legal determination.
+          </p>
+        </details>
+        <details className={detailsClass}>
+          <summary className={summaryClass}>Current scan-report evidence model</summary>
+          <div className="mt-3">
+            <EvidenceModelOverview checklistRowCount={checklistRowCount} directFindingCount={directFindingCount} />
+          </div>
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function ChecklistStatusLegend() {
+  return (
+    <section className="mt-8 scroll-mt-24 border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby={SECTION_IDS.statusLanguage}>
+      <div className="max-w-3xl">
+        <h2 id={SECTION_IDS.statusLanguage} className="text-xl font-semibold tracking-tight text-slate-950">
+          Checklist status language
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Statuses describe retained evidence and scan coverage. They are not legal conclusions, certifications, or compliance determinations.
+        </p>
+      </div>
+      <dl className="mt-5 grid gap-3 md:grid-cols-2">
+        {GDPR_EPRIVACY_CHECKLIST_STATUS_REFERENCE.map((item) => (
+          <div key={item.status} className="border border-slate-200 bg-slate-50 p-4">
+            <dt className="text-sm font-semibold text-slate-950">{item.status}</dt>
+            <dd className="mt-2 text-sm leading-6 text-slate-600">{item.meaning}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function GdprEprivacyChecklistDirectory({
+  rows
+}: {
+  rows: GdprEprivacyChecklistReferenceItem[];
+}) {
+  const rowsById = new Map(rows.map((row) => [row.id, row]));
+  const groups = getGdprEprivacyChecklistReferenceGroups();
+
+  return (
+    <section className="mt-8 scroll-mt-24 border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby={SECTION_IDS.checklist}>
+      <div className="max-w-3xl">
+        <h2 id={SECTION_IDS.checklist} className="text-xl font-semibold tracking-tight text-slate-950">
+          GDPR/ePrivacy evidence checklist
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          Browse the public reference for each current GDPR/ePrivacy checklist row. These rows explain retained evidence,
+          missing source signals, coverage limitations, and reviewer context used by the scan report.
+        </p>
+      </div>
+      <div className="mt-5 flex flex-wrap gap-2">
+        {groups.map((group) => (
+          <a
+            key={group.category}
+            href={`#${getChecklistCategoryAnchorId(group.category)}`}
+            className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+          >
+            {group.category}
+          </a>
+        ))}
+      </div>
+      <div className="mt-6 space-y-5">
+        {groups.map((group) => (
+          <section
+            key={group.category}
+            id={getChecklistCategoryAnchorId(group.category)}
+            className="scroll-mt-24"
+          >
+            <h3 className="text-base font-semibold text-slate-950">{group.category}</h3>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              {group.rows.map((groupRow) => {
+                const row = rowsById.get(groupRow.id) ?? groupRow;
+                return (
+                  <Link
+                    key={row.id}
+                    href={row.path}
+                    className="group block border border-slate-200 bg-slate-50 p-4 hover:border-sky-200 hover:bg-sky-50"
+                  >
+                    <span className="block text-sm font-semibold leading-5 text-sky-700 group-hover:text-sky-800">
+                      {row.label}
+                    </span>
+                    <span className="mt-1 block font-mono text-[11px] leading-5 text-slate-500">{row.id}</span>
+                    <span className="mt-2 block text-sm leading-6 text-slate-600">{row.explanation}</span>
+                    <span className="mt-3 inline-flex rounded-full border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-500">
+                      Default signal: {row.defaultStatus}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RelatedChecklistRowsSection({
+  activeFinding,
+  rows
+}: {
+  activeFinding: FindingReferenceItem;
+  rows: GdprEprivacyChecklistReferenceItem[];
+}) {
+  const relatedRows = rows.filter((row) => row.findingIds.includes(activeFinding.id));
+
+  if (relatedRows.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="mt-8 border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="related-checklist-rows">
+      <div className="max-w-3xl">
+        <h2 id="related-checklist-rows" className="text-xl font-semibold tracking-tight text-slate-950">
+          Related GDPR/ePrivacy checklist rows
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          This direct finding can support the following checklist rows when retained evidence passes the report’s coverage rules.
+        </p>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {relatedRows.map((row) => (
+          <Link
+            key={row.id}
+            href={row.path}
+            className="group block border border-slate-200 bg-slate-50 p-4 hover:border-sky-200 hover:bg-sky-50"
+          >
+            <span className="block text-sm font-semibold leading-5 text-sky-700 group-hover:text-sky-800">
+              {row.label}
+            </span>
+            <span className="mt-1 block font-mono text-[11px] leading-5 text-slate-500">{row.regulatoryGapFindingId}</span>
+            <span className="mt-2 block text-sm leading-6 text-slate-600">{row.explanation}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function FindingsReferencePage({ activeFinding }: FindingsReferencePageProps) {
   const findings = getFindingReferenceItems();
+  const checklistRows = getGdprEprivacyChecklistReferenceItems();
   const certscoreGptUrl = getCertScoreGptUrl();
   const initialFindingId = activeFinding?.id ?? DEFAULT_FINDING_ID;
   const { pageDescription, pagePath, pageTitle } = getFindingReferencePageCopy(activeFinding);
-  const headingTitle = activeFinding?.title ?? "CertScore findings reference";
+  const headingTitle = activeFinding?.title ?? "CertScore findings and evidence checklist reference";
   const eyebrow = activeFinding ? "Finding reference" : "Technical reference";
   const schemas = createFindingSchemas({
     activeFinding,
@@ -335,35 +678,37 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
         ) : (
           <div className="space-y-4 text-base leading-7 text-slate-600">
             <p>
-              Findings are automated public-web observations for review. They are not legal conclusions, certifications, compliance determinations, or proof of non-compliance.
+              CertScore findings and checklist rows are automated public-web observations for review. They are not legal conclusions, certifications, compliance determinations, or proof of non-compliance.
             </p>
-            <div className="border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
-              <h2 className="text-sm font-semibold text-slate-950">How to read a finding</h2>
-              <p className="mt-2">
-                Use the badges and evidence tiers together: criticality describes review priority, confidence describes evidence strength, prevalence gives directional calibration context, and regulatory context shows review lenses that may be relevant depending on jurisdiction, purpose, and manual review.
-              </p>
-            </div>
-            <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
-              <h2 className="text-sm font-semibold text-slate-950">How top findings are calibrated</h2>
-              <p className="mt-2">
-                CertScore ranks findings using evidence strength, directness, corroboration, affected surface, and review relevance.
-                Benchmark frequency is market context only. A rare finding is not automatically critical, and a common finding is not automatically low risk.
-                Findings remain automated public-web observations for review, not legal conclusions.
-              </p>
-            </div>
+            <p className="border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+              Use this page to see what a CertScore scan checks. Confirm jurisdiction, user journey, consent state,
+              coverage limitations, and business context before relying on any automated observation.
+            </p>
           </div>
         )}
       </div>
 
-      <div className="mt-10">
-        <FindingAtlasBrowser findings={findings} initialFindingId={initialFindingId} />
-      </div>
+      {!activeFinding ? (
+        <>
+          <FindingsTableOfContents checklistRows={checklistRows} />
+          <GdprEprivacyChecklistDirectory rows={checklistRows} />
+          <DirectFindingReferencesSection findings={findings} />
+          <ChecklistStatusLegend />
+          <ReferenceGuideSection checklistRowCount={checklistRows.length} directFindingCount={findings.length} />
+        </>
+      ) : null}
 
-      {!activeFinding ? <FindingsRegistryDirectory findings={findings} /> : null}
+      {activeFinding ? (
+        <div className="mt-10">
+          <FindingAtlasBrowser findings={findings} initialFindingId={initialFindingId} />
+        </div>
+      ) : null}
+
+      {activeFinding ? <RelatedChecklistRowsSection activeFinding={activeFinding} rows={checklistRows} /> : null}
       {activeFinding ? <RelatedFindingsSection activeFinding={activeFinding} findings={findings} /> : null}
 
-      <section className="mt-8 border border-slate-200 bg-white p-5 sm:p-6">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Reference notes</h2>
+      <section className="mt-8 scroll-mt-24 border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby={SECTION_IDS.referenceNotes}>
+        <h2 id={SECTION_IDS.referenceNotes} className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Reference notes</h2>
         <ul className="mt-3 max-w-3xl space-y-2 text-sm leading-7 text-slate-600">
           {getReferenceNotes(activeFinding).map((note) => (
             <li key={note} className="flex gap-2">
@@ -375,7 +720,8 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
       </section>
 
       {!activeFinding ? (
-        <section className="mt-8 space-y-4 border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600 sm:p-6">
+        <section id={SECTION_IDS.relatedReading} className="mt-8 scroll-mt-24 space-y-4 border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-600 sm:p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">Related reading</h2>
           <p>
             CertScore's finding references are reviewed periodically and updated when material regulatory or accessibility guidance changes.
             Guidance families monitored include EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC

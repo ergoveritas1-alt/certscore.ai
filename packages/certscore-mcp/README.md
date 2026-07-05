@@ -85,7 +85,7 @@ CERTSCORE_REQUEST_TIMEOUT_MS=300000
 
 ## API Key Access
 
-MCP clients usually need `scan:read`, `scan:create`, and `mcp` scopes. Request developer-preview access by emailing `support@certscore.ai` with your organization, MCP client, expected workflow, expected request volume, contact email, and requested scopes.
+MCP clients usually need `scan:read`, `scan:create`, and `mcp` scopes. Request developer-preview access by emailing `support@certscore.ai` with your organization, MCP client, expected workflow, expected request volume, contact email, and requested scopes. Most preview access requests receive a first response within two business days.
 
 ## Verify Install
 

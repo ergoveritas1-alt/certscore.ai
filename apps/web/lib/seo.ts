@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 export const SITE_URL = "https://certscore.ai";
 export const SITE_NAME = "CertScore.ai";
+export const SITE_DESCRIPTION =
+  "CertScore.ai scans public websites for observable accessibility, privacy, and disclosure signals and tracks changes over time.";
 
 type CreatePageMetadataInput = {
   title: string;

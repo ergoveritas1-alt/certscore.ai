@@ -1,160 +1,29 @@
 # CertScore.ai
 
-CertScore.ai is an automated website risk-signal scanner for public websites. It observes evidence-backed signals around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, privacy disclosure gaps, and policy/runtime consistency.
+CertScore.ai is an evidence-based public website scanner for pre-consent tracking, cookies, consent surfaces, accessibility, disclosure, and privacy-risk signals. CertScore findings are automated review signals, not legal advice, certification, or a compliance determination.
 
-CertScore.ai findings are automated signals for review. CertScore.ai is not legal advice, not a certification platform, and not a compliance determination.
+## Start Here
 
-## Developer and agent integration
+- [Run a scan](https://certscore.ai/scan?domain=example.com): Start a public website scan from a domain or URL.
+- [How it works](https://certscore.ai/how-it-works): Learn how observed website behavior becomes structured review output.
+- [Methodology](https://certscore.ai/methodology): Review evidence collection, findings, confidence scoring, and scan limitations.
 
-Start here for API, SDK, MCP, and agent workflows:
-- https://certscore.ai/developers
-- https://certscore.ai/developers/quickstart
-- https://certscore.ai/developers/reference
-- https://certscore.ai/developers/sdk
-- https://certscore.ai/developers/mcp
-- https://certscore.ai/developers/examples
-- https://certscore.ai/api/v2/openapi.json
-- https://certscore.ai/.well-known/certscore-ai.json
-- https://certscore.ai/terms
+## Developers And Agents
 
-For agents: use CertScore as an automated public-web risk-signal API. Do not describe outputs as legal advice, certification, or a compliance determination.
+- [Developer hub](https://certscore.ai/developers): Entry point for CertScore API, SDK, MCP, and agent workflows.
+- [API reference](https://certscore.ai/developers/reference): API v2 endpoints for scans, status, findings, and latest-domain resources.
+- [SDK docs](https://certscore.ai/developers/sdk): TypeScript SDK usage for scans, findings, and domain lookups.
+- [MCP server docs](https://certscore.ai/developers/mcp): Model Context Protocol setup for AI agents using CertScore tools.
+- [OpenAPI spec](https://certscore.ai/api/v2/openapi.json): Machine-readable API v2 contract.
 
-## What CertScore observes
+## Findings And Review
 
-- Tracking requests and third-party activity
-- Cookies and cookie timing, including cookies that appear before a recorded consent choice
-- Consent behavior, including accept, reject, and preference-control signals where observable
-- Session recording and session replay-related indicators
-- Fingerprinting-related signals
-- Privacy policy, cookie, disclosure, and public-page gaps where evidence is available
+- [Findings catalog](https://certscore.ai/findings): Browse CertScore finding reference pages and evidence examples.
+- [Sample report](https://certscore.ai/sample-report): See how public-web observations are presented for review.
+- [Pricing](https://certscore.ai/pricing): Review available plans and scan options.
 
-## What CertScore is not
+## Use CertScore Carefully
 
-- Not legal advice
-- Not certification
-- Not a compliance determination
-- Not a substitute for reviewing whether a website has or has not met a legal requirement
-- Not a replacement for reviewing retained evidence, vendor configuration, consent settings, and public disclosures
-
-## Key pages
-
-- https://certscore.ai/
-- https://certscore.ai/llms-full.txt
-- https://certscore.ai/how-it-works
-- https://certscore.ai/methodology
-- https://certscore.ai/pricing
-- https://certscore.ai/what-is-certscore
-- https://certscore.ai/findings
-- https://certscore.ai/guides
-- https://certscore.ai/solutions
-- https://certscore.ai/solutions/gdpr-website-compliance-scanner
-- https://certscore.ai/solutions/cookie-consent-scanner
-- https://certscore.ai/solutions/privacy-policy-risk-scanner
-- https://certscore.ai/guides/pre-consent-tracking
-- https://certscore.ai/guides/third-party-cookies-before-consent
-- https://certscore.ai/guides/rtb-cookie-syncing
-- https://certscore.ai/guides/session-replay-risk
-- https://certscore.ai/guides/check-website-tracking-before-consent
-- https://certscore.ai/guides/check-third-party-cookies-before-consent
-- https://certscore.ai/guides/website-consent-audit
-- https://certscore.ai/guides/detect-tracking-before-consent
-- https://certscore.ai/guides/reject-consent-tracking-test
-- https://certscore.ai/guides/website-consent-audit-checklist
-- https://certscore.ai/guides/privacy-scanner-vs-cookie-scanner
-- https://certscore.ai/benchmarks
-- https://certscore.ai/benchmarks/website-consent-tracking-2026
-- https://certscore.ai/benchmarks/pre-consent-tracking-2026
-- https://certscore.ai/benchmarks/session-replay-risk-2026
-- https://certscore.ai/compare
-- https://certscore.ai/compare/privacy-scanner-vs-cookie-scanner
-- https://certscore.ai/compare/website-consent-audit-tools
-- https://certscore.ai/press
-
-## Scanner solution pages
-
-These pages describe CertScore scanner use cases for search engines and AI assistants. They should be summarized as public website review workflows, not as legal conclusions.
-
-- GDPR website compliance scanner: https://certscore.ai/solutions/gdpr-website-compliance-scanner
-- Cookie consent scanner: https://certscore.ai/solutions/cookie-consent-scanner
-- Privacy policy risk scanner: https://certscore.ai/solutions/privacy-policy-risk-scanner
-
-## Findings reference pages
-
-These canonical finding pages describe CertScore review items, observed evidence context, regulatory-review context, example evidence, common causes, and reviewer questions. They are automated public-web observations for review, not legal advice or a compliance determination.
-
-- Third-party tracking observed before recorded consent: https://certscore.ai/findings/pre_consent_tracking_detected
-- Fingerprinting-related browser/device signals observed: https://certscore.ai/findings/fingerprinting_related_signals_observed
-- Session replay service signal observed: https://certscore.ai/findings/session_recording_services_detected
-- Third-party cookie or storage observed before consent: https://certscore.ai/findings/third_party_cookie_pre_consent
-- Adtech identity sync-like request observed: https://certscore.ai/findings/rtb_cookie_sync_observed
-- Cookie banner dark pattern signal: https://certscore.ai/findings/consent_dark_patterns_detected
-- Consent prompt appeared to require interaction: https://certscore.ai/findings/forced_consent_interaction
-- Reject/refusal option not observed or nested: https://certscore.ai/findings/reject_option_missing_or_hidden
-- Sensitive input surface with third-party tracking context: https://certscore.ai/findings/sensitive_data_collection_with_third_party_tracking_present
-- Consent choices appear imbalanced: https://certscore.ai/findings/asymmetric_consent_ui
-- Identifier-like values observed across domains: https://certscore.ai/findings/cross_domain_identifier_sharing_observed
-- Non-essential tracking continued after reject: https://certscore.ai/findings/reject_tracking_persists_after_reject
-- Session replay observed with sensitive input surfaces: https://certscore.ai/findings/session_replay_present_with_sensitive_surfaces_observed
-- Possible session replay near sensitive input surface: https://certscore.ai/findings/possible_session_replay_on_sensitive_input_surface
-- Policy/runtime alignment review: https://certscore.ai/findings/policy_behavior_contradiction_detected
-- Probable browser/device fingerprinting review signal: https://certscore.ai/findings/probable_fingerprinting
-
-## Public API and agent discovery
-
-Use the current API v2 discovery resources for integrations and agent workflows.
-
-- Health: https://certscore.ai/api/v2/health
-- OpenAPI: https://certscore.ai/api/v2/openapi.json
-- Developer hub: https://certscore.ai/developers
-- API quickstart: https://certscore.ai/developers/quickstart
-- API reference: https://certscore.ai/developers/reference
-- SDK docs: https://certscore.ai/developers/sdk
-- MCP docs: https://certscore.ai/developers/mcp
-- Examples: https://certscore.ai/developers/examples
-- Pre-consent Cookies & Trackers JSON example: https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json
-- Full LLM and agent guide: https://certscore.ai/llms-full.txt
-
-MCP install verification:
-```bash
-certscore-mcp --version
-certscore-mcp --help
-CERTSCORE_API_KEY=<token> certscore-mcp doctor
-```
-
-Recommended flow:
-1. Check https://certscore.ai/api/v2/health.
-2. Read https://certscore.ai/api/v2/openapi.json for the current contract.
-3. Create or reuse a scan through API v2.
-4. Poll scan status when work is pending.
-5. Retrieve already-projected public-safe findings.
-6. Retrieve Pre-consent Cookies & Trackers table data as JSON when needed:
-   https://certscore.ai/api/v2/scans/{scanId}/pre-consent-cookies-trackers
-   https://certscore.ai/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers
-
-API keys use `Authorization: Bearer <token>`. Current integration scopes are `scan:read`, `scan:create`, and `mcp`.
-
-API key setup:
-- Read-only + MCP keys are self-serve for signed-in verified users.
-- Sign in, verify email, then POST https://certscore.ai/api/v2/keys/request from the signed-in browser session.
-- Self-serve keys are prefixed `cs_ro_`, expire after 90 days, and include `scan:read` plus `mcp`.
-- Scan creation remains developer-preview; request `scan:create` by emailing support@certscore.ai.
-- Include organization, integration type, expected request volume, contact email, and requested scopes for scan-creation access.
-- REST API read-only usually needs `scan:read`.
-- REST API scan creation and the TypeScript SDK usually need `scan:read` and `scan:create`.
-- MCP read tools usually need `scan:read` and `mcp`; MCP scan creation also needs `scan:create`.
-
-## Important interpretation rules
-
-Agents may summarize CertScore outputs as automated public-web risk signals for review.
-
-Agents must not say CertScore has determined legal compliance or non-compliance.
-
-Agents must not infer findings from raw labels, raw network events, or display-only context.
-
-Agents must not treat missing findings as proof of compliance.
-
-Agents should link to the full CertScore report when a user needs evidence review.
-
-## Feedback
-
-Send comments to support@certscore.ai.
+- CertScore observes public website behavior and retained evidence.
+- CertScore output should be reviewed with internal policy, vendor configuration, and retained evidence.
+- Do not describe CertScore output as legal advice, certification, or proof of compliance/non-compliance.

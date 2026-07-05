@@ -4,6 +4,7 @@ import { CodeBlock, DeveloperShell, Section, mcpTools } from "../developer-pages
 
 const description =
   "Connect agents to the CertScore MCP server for website compliance review workflows using scan, status, finding, explanation, and latest-domain tools.";
+const mcpReleaseVersion = "0.1.5";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -35,6 +36,21 @@ brew install --cask certscore-mcp`}</CodeBlock>
           </p>
         </Section>
 
+        <Section eyebrow="Install" title="Linux and Windows shell setup">
+          <CodeBlock>{`CERTSCORE_MCP_VERSION=${mcpReleaseVersion}
+curl -LO "https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v$CERTSCORE_MCP_VERSION/certscore-mcp-v$CERTSCORE_MCP_VERSION.tar.gz"
+curl -LO "https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v$CERTSCORE_MCP_VERSION/SHA256SUMS"
+sha256sum --check SHA256SUMS
+mkdir -p "$HOME/.local/opt" "$HOME/.local/bin"
+tar -xzf "certscore-mcp-v$CERTSCORE_MCP_VERSION.tar.gz" -C "$HOME/.local/opt"
+ln -sf "$HOME/.local/opt/certscore-mcp-v$CERTSCORE_MCP_VERSION/bin/certscore-mcp" "$HOME/.local/bin/certscore-mcp"
+certscore-mcp --version`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            The release tarball runs on Linux, WSL 2, and Git Bash environments with Node.js 20 or newer available on PATH. No native
+            Windows executable or public npm/npx package is published yet.
+          </p>
+        </Section>
+
         <Section eyebrow="Access" title="Use a scoped MCP key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             MCP read tools work with a self-serve <code className="rounded bg-white px-1">cs_ro_</code> key carrying{" "}
@@ -44,7 +60,8 @@ brew install --cask certscore-mcp`}</CodeBlock>
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>
-            .
+            . Include your organization, MCP client, expected workflow, expected request volume, contact email, and requested scopes.
+            Most preview access requests receive a first response within two business days.
           </p>
           <CodeBlock>{`Self-serve read-only MCP key:
 1. Sign in at https://certscore.ai/login and verify your email.
@@ -63,8 +80,8 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Verify download" title="Check the release checksum">
-          <CodeBlock>{`curl -LO https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v{version}/certscore-mcp-v{version}.tar.gz
-curl -LO https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v{version}/SHA256SUMS
+          <CodeBlock>{`curl -LO https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v${mcpReleaseVersion}/certscore-mcp-v${mcpReleaseVersion}.tar.gz
+curl -LO https://github.com/ergoveritas1-alt/certscore.ai/releases/download/certscore-mcp-v${mcpReleaseVersion}/SHA256SUMS
 sha256sum --check SHA256SUMS`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             Release tarballs are built on Linux by GitHub Actions. The published SHA256SUMS file should match the cask checksum.

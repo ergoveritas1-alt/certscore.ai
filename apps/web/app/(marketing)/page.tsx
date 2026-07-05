@@ -6,11 +6,13 @@ import { SiteHeader } from "../../components/layout/site-header";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { HomepageFindingsOverview } from "../../components/marketing/homepage-findings-overview";
 import { PendingButtonLink } from "../../components/ui/pending-link";
+import { DEMO_PATH } from "../../lib/marketing/demo-url";
+import { createHomepageFindingSummaries } from "../../lib/marketing/homepage-finding-summary";
 import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
-import { createPageMetadata, SITE_URL } from "../../lib/seo";
+import { createPageMetadata, SITE_NAME, SITE_URL } from "../../lib/seo";
 
 const SAMPLE_REPORT_URL = "https://certscore.ai/scan/bc6e4dfa-8a25-43f8-822d-a10e89950799";
-const BOOK_DEMO_URL = "https://calendly.com/bmasek-w7ou/30min";
+const HOMEPAGE_LEGAL_POSTURE = "It is not legal advice, certification, or a compliance determination.";
 export const metadata: Metadata = {
   ...createPageMetadata({
     title: "CertScore.ai — Evidence-Based Website Risk Signal Scanner",
@@ -113,48 +115,78 @@ function PersonaIcon({ index }: { index: number }) {
 }
 
 export default async function MarketingHomePage() {
-  const findings = getFindingReferenceItems();
-  const softwareApplicationSchema = {
+  const findingReferenceItems = getFindingReferenceItems();
+  const findings = createHomepageFindingSummaries(findingReferenceItems);
+  const findingsCtaLabel = "See what a scan checks";
+  const homepageSchema = {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: "CertScore.ai",
-    applicationCategory: "BusinessApplication",
-    operatingSystem: "Web",
-    description:
-      "CertScore.ai scans public websites for observable tracking, cookie, consent, accessibility, and privacy risk signals."
-  };
-  const findingRegistrySchema = {
-    "@context": "https://schema.org",
-    "@type": "ItemList",
-    name: "CertScore.ai finding reference pages",
-    itemListElement: findings.map((finding, index) => ({
-      "@type": "ListItem",
-      position: index + 1,
-      url: `${SITE_URL}/findings/${finding.id}`,
-      name: finding.title,
-      identifier: finding.id,
-      description: finding.observed
-    }))
-  };
-  const scannerSolutionsSchema = {
-    "@context": "https://schema.org",
-    "@type": "ItemList",
-    name: "CertScore.ai scanner solution pages",
-    itemListElement: scannerSolutions.map((solution, index) => ({
-      "@type": "ListItem",
-      position: index + 1,
-      url: `${SITE_URL}${solution.href}`,
-      name: solution.title,
-      description: solution.description
-    }))
+    "@graph": [
+      {
+        "@id": `${SITE_URL}#organization`,
+        "@type": "Organization",
+        name: SITE_NAME,
+        url: SITE_URL,
+        logo: `${SITE_URL}/certscore-header-logo.png`
+      },
+      {
+        "@id": `${SITE_URL}#website`,
+        "@type": "WebSite",
+        name: SITE_NAME,
+        url: SITE_URL,
+        description: metadata.description,
+        publisher: { "@id": `${SITE_URL}#organization` },
+        potentialAction: {
+          "@type": "SearchAction",
+          target: {
+            "@type": "EntryPoint",
+            urlTemplate: `${SITE_URL}/scan?domain={domain}`
+          },
+          "query-input": "required name=domain"
+        }
+      },
+      {
+        "@id": `${SITE_URL}#software`,
+        "@type": "SoftwareApplication",
+        name: SITE_NAME,
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        url: SITE_URL,
+        description:
+          `CertScore.ai scans public websites for evidence-based public website signals including pre-consent tracking, cookies, consent surfaces, accessibility, privacy, and disclosure review. ${HOMEPAGE_LEGAL_POSTURE}`,
+        publisher: { "@id": `${SITE_URL}#organization` }
+      },
+      {
+        "@id": `${SITE_URL}/findings#item-list`,
+        "@type": "ItemList",
+        name: "CertScore.ai finding reference pages",
+        itemListElement: findings.map((finding, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          url: `${SITE_URL}/findings/${finding.id}`,
+          name: finding.title,
+          identifier: finding.id,
+          description: finding.overview
+        }))
+      },
+      {
+        "@id": `${SITE_URL}/solutions#item-list`,
+        "@type": "ItemList",
+        name: "CertScore.ai scanner solution pages",
+        itemListElement: scannerSolutions.map((solution, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          url: `${SITE_URL}${solution.href}`,
+          name: solution.title,
+          description: solution.description
+        }))
+      }
+    ]
   };
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareApplicationSchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(findingRegistrySchema) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(scannerSolutionsSchema) }} />
-      <SiteHeader />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homepageSchema) }} />
+      <SiteHeader includeBaseStructuredData={false} />
 
       <section className="border-b border-slate-200 bg-[radial-gradient(circle_at_50%_-12%,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.72)_24%,rgba(238,242,255,0.88)_58%,rgba(244,246,255,0.98)_100%)]">
         <div className="mx-auto grid max-w-6xl gap-10 px-6 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
@@ -174,22 +206,26 @@ export default async function MarketingHomePage() {
               <PendingButtonLink
                 className="w-full border-0 bg-[linear-gradient(135deg,#2563eb_0%,#0f8bd7_100%)] text-white shadow-[0_16px_32px_rgba(37,99,235,0.24)] hover:brightness-[1.05] focus-visible:ring-sky-500 sm:w-auto"
                 data-analytics-event="hero_book_demo_clicked"
-                href={BOOK_DEMO_URL}
+                href={DEMO_PATH}
                 idleContent="Schedule demo"
                 pendingContent="Opening..."
               />
               <PendingButtonLink
                 className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
-                data-analytics-cta-type="sample_report"
-                data-analytics-event="hero_sample_report_clicked"
-                href={SAMPLE_REPORT_URL}
-                idleContent="See Sample Report"
+                data-analytics-cta-type="findings"
+                data-analytics-event="hero_see_scan_checks_clicked"
+                href="/findings"
+                idleContent={findingsCtaLabel}
                 pendingContent="Opening..."
                 variant="secondary"
               />
             </div>
             <p className="max-w-2xl text-xs leading-5 text-slate-500">
-              Built for policy analysts, developers, AI agents and agency/enterprise teams managing regulatory compliance workflows, API integrations, and structured privacy-risk signals.
+              Built for policy analysts, developers,{" "}
+              <Link href="/developers/mcp" className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-sky-700">
+                AI agents using MCP
+              </Link>
+              , and agency/enterprise teams managing regulatory compliance workflows, API integrations, and structured privacy-risk signals.
             </p>
           </div>
 
@@ -299,7 +335,7 @@ export default async function MarketingHomePage() {
                 <PendingButtonLink
                   className="w-full border-0 bg-[linear-gradient(135deg,#2f63ea_0%,#2454db_100%)] text-white shadow-[0_16px_32px_rgba(47,99,234,0.24)] hover:brightness-[1.04] sm:w-auto"
                   data-analytics-event="hero_book_demo_clicked"
-                  href={BOOK_DEMO_URL}
+                  href={DEMO_PATH}
                   idleContent="Schedule demo"
                   pendingContent="Opening..."
                 />

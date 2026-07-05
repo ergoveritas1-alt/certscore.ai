@@ -7,6 +7,7 @@ import {
   projectedFindingsFromPulse
 } from "../../../../../../../lib/api-v2/scan-resource";
 import { buildPulseProjection } from "../../../../../../../lib/pulse/projection";
+import { recordApiV2McpUsage } from "../../../../../../../server/integrations/api-v2-mcp-usage";
 import { getPublicScanRecord } from "../../../../../../../server/scans/get-public-scan-record";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +71,16 @@ export async function GET(request: Request, context: RouteContext) {
         status: 404
       });
     }
+
+    await recordApiV2McpUsage({
+      normalizedDomain: scanRecord.scan.domainHostname,
+      requestedUrl,
+      request,
+      responseStatus: 200,
+      routeName: "api-v2-scan-finding",
+      scanId: scanRecord.scan.id,
+      toolHint: "explain_finding"
+    });
 
     return apiV2JsonResponse({
       body: buildApiV2FindingDetail({

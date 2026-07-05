@@ -21,6 +21,8 @@ export type CertScoreDataLayerEvent =
   | { event: "report_cta_clicked"; cta_type: ReportCtaType }
   | { event: "hero_book_demo_clicked" }
   | { event: "hero_sample_report_clicked" }
+  | { event: "hero_browse_findings_clicked" }
+  | { event: "hero_see_scan_checks_clicked" }
   | { event: "pricing_cta_clicked"; cta_type: PricingCtaType; plan: string }
   | { event: "gpt_cta_clicked"; location: GptCtaLocation; destination: "certscore_gpt"; url: string }
   | { event: "lead_form_submit_attempted"; form_type: LeadFormType }

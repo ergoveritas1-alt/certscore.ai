@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
-
-const BOOK_DEMO_URL = "https://calendly.com/bmasek-w7ou/30min";
+import { CALENDLY_DEMO_URL } from "../../../lib/marketing/demo-url";
 
 export default function BookDemoScheduleRedirectPage() {
-  redirect(BOOK_DEMO_URL);
+  redirect(CALENDLY_DEMO_URL);
 }

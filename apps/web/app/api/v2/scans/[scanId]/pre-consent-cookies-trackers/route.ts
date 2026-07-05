@@ -1,5 +1,6 @@
 import { apiV2PreConsentCookiesTrackersSchema } from "@certscore/api-contracts";
 import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error, buildApiV2PreConsentCookiesTrackers } from "../../../../../../lib/api-v2/scan-resource";
+import { recordApiV2McpUsage } from "../../../../../../server/integrations/api-v2-mcp-usage";
 import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +39,16 @@ export async function GET(request: Request, context: RouteContext) {
         status: 404
       });
     }
+
+    await recordApiV2McpUsage({
+      normalizedDomain: scanRecord.scan.domainHostname,
+      requestedUrl: scanRecord.scan.domainHostname ? `https://${scanRecord.scan.domainHostname}` : null,
+      request,
+      responseStatus: 200,
+      routeName: "api-v2-pre-consent-cookies-trackers",
+      scanId: scanRecord.scan.id,
+      toolHint: "get_pre_consent_cookies_trackers"
+    });
 
     return apiV2JsonResponse({
       body: apiV2PreConsentCookiesTrackersSchema.parse(buildApiV2PreConsentCookiesTrackers(scanRecord)),
