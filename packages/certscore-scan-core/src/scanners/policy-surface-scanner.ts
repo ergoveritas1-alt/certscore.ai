@@ -37,6 +37,10 @@ const MAX_FETCHED_TEXT_CHARS = 500_000;
 const MAX_POLICY_PDF_BYTES = 2_500_000;
 const MAX_POLICY_PDF_PAGES = 12;
 const MAX_POLICY_PDF_TEXT_CHARS = 500_000;
+const MAX_POLICY_DIAGNOSTIC_ATTEMPTED_URLS = 32;
+const MAX_POLICY_DIAGNOSTIC_CANDIDATES = 32;
+const MAX_POLICY_DIAGNOSTIC_FAILURE_CLASSES = 12;
+const MAX_POLICY_DIAGNOSTIC_TIMING_BUCKETS = 12;
 const DEFAULT_POLICY_EXCERPT_KEYWORDS = [
   "personal data",
   "personal information",
@@ -230,6 +234,7 @@ export async function policySurfaceScanner(
             commonPathFallbackUsed,
             observations,
             candidates: renderedCandidates,
+            timingBreakdown,
           }));
           return {
             moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
@@ -267,6 +272,7 @@ export async function policySurfaceScanner(
             ...renderedCandidates,
             ...fallbackCandidates,
           ]),
+          timingBreakdown,
         }));
         return {
           moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
@@ -567,6 +573,7 @@ export async function policySurfaceScanner(
       commonPathFallbackUsed,
       observations,
       candidates: diagnosticsCandidates,
+      timingBreakdown,
     }));
 
     return {
@@ -585,6 +592,7 @@ export async function policySurfaceScanner(
         commonPathFallbackUsed,
         observations,
         candidates: diagnosticsCandidates,
+        timingBreakdown,
       });
       if (diagnosticsRef) {
         artifactRefs.push(diagnosticsRef);
@@ -654,12 +662,23 @@ async function writePolicyCaptureDiagnostics(input: {
   commonPathFallbackUsed: boolean;
   observations: PolicySurfaceObservation[];
   candidates?: PolicySurfaceCandidate[];
+  timingBreakdown?: NonNullable<ScanModuleRun["timingBreakdown"]>;
 }): Promise<ArtifactRef> {
   const fetchedObservations = input.observations.filter((observation) => observation.status === "fetched");
   const coreSurfaces = fetchedObservations.filter((observation) =>
     isCorePolicyOrControlSurface(observation) &&
     !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
   );
+  const limitationKeys = policyCaptureLimitationKeys({
+    observations: input.observations,
+    coreSurfaceCount: coreSurfaces.length,
+    commonPathFallbackUsed: input.commonPathFallbackUsed,
+  });
+  const candidateSummary = summarizePolicyCandidates(input.candidates ?? []);
+  const winningSurfaceUrls = coreSurfaces
+    .map((observation) => observation.normalizedUrl ?? observation.url)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .slice(0, 8);
   const path = await input.input.artifactWriter.writeJsonArtifact("PolicySurfaceCaptureDiagnostics.json", {
     artifactVersion: "policy_surface_capture_diagnostics.v1",
     sourceScanner: SOURCE_SCANNER,
@@ -675,16 +694,21 @@ async function writePolicyCaptureDiagnostics(input: {
     failedCandidateCount: input.observations.filter((observation) => observation.status === "failed").length,
     failureSummary: summarizePolicySurfaceFailures(input.observations),
     documentBackedPolicySignals: summarizeDocumentBackedPolicySignals(input.observations),
-    limitationKeys: policyCaptureLimitationKeys({
+    limitationKeys,
+    candidateSummary,
+    winningSurfaceUrls,
+    policySurfaceDiagnostics: buildPolicySurfaceDiagnosticsV2({
+      normalizedUrl: input.input.normalizedUrl,
       observations: input.observations,
-      coreSurfaceCount: coreSurfaces.length,
+      candidateSummary,
+      candidateCount: input.candidates?.length ?? 0,
       commonPathFallbackUsed: input.commonPathFallbackUsed,
+      coreSurfaceCount: coreSurfaces.length,
+      limitationKeys,
+      selectedCanonicalPolicyUrls: winningSurfaceUrls,
+      timingBreakdown: input.timingBreakdown ?? [],
+      moduleStartedAtMs: input.moduleStartedAtMs,
     }),
-    candidateSummary: summarizePolicyCandidates(input.candidates ?? []),
-    winningSurfaceUrls: coreSurfaces
-      .map((observation) => observation.normalizedUrl ?? observation.url)
-      .filter((value, index, values) => values.indexOf(value) === index)
-      .slice(0, 8),
     policyCaptureDurationMs: Date.now() - input.moduleStartedAtMs,
   });
   return {
@@ -699,6 +723,238 @@ async function writePolicyCaptureDiagnostics(input: {
     relatedEventIds: [],
     label: "Policy surface capture diagnostics",
   };
+}
+
+type PolicySurfaceFailureClass =
+  | "blocked_access"
+  | "repeated_404_common_path_miss"
+  | "common_path_transport_failure"
+  | "privacy_center_shell_with_canonical_doc"
+  | "pdf_or_document_download_reference"
+  | "localized_sparse_policy_prose"
+  | "visible_non_link_policy_control_label_only"
+  | "low_quality_error_shell"
+  | "low_quality_app_shell";
+
+function buildPolicySurfaceDiagnosticsV2(input: {
+  normalizedUrl: string;
+  observations: PolicySurfaceObservation[];
+  candidateSummary: ReturnType<typeof summarizePolicyCandidates>;
+  candidateCount: number;
+  commonPathFallbackUsed: boolean;
+  coreSurfaceCount: number;
+  limitationKeys: string[];
+  selectedCanonicalPolicyUrls: string[];
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
+  moduleStartedAtMs: number;
+}) {
+  const attemptedUrlSummaries = input.observations
+    .filter((observation) => observation.normalizedUrl || observation.url)
+    .map((observation) => ({
+      normalizedUrl: observation.normalizedUrl ?? observation.url,
+      surfaceType: observation.surfaceType,
+      discoveryMethod: observation.discoveryMethod,
+      status: observation.status,
+      httpStatus: observation.httpStatus,
+      failureClass: primaryPolicySurfaceFailureClass(observation),
+    }));
+  const failureClasses = summarizePolicySurfaceFailureClasses(input.observations);
+  const timingBuckets = summarizePolicySurfaceTimingBuckets(input.timingBreakdown);
+
+  return {
+    schemaVersion: "certscore.policy_surface_diagnostics.v2",
+    generatedAt: new Date().toISOString(),
+    normalizedUrl: input.normalizedUrl,
+    summary: {
+      corePolicySurfaceRetained: input.coreSurfaceCount > 0,
+      commonPathFallbackUsed: input.commonPathFallbackUsed,
+      observationCounts: {
+        total: input.observations.length,
+        fetched: input.observations.filter((observation) => observation.status === "fetched").length,
+        failed: input.observations.filter((observation) => observation.status === "failed").length,
+        observedOnly: input.observations.filter((observation) => observation.status === "observed").length,
+        skippedBudget: input.observations.filter((observation) => observation.status === "skipped_budget").length,
+      },
+      candidateCounts: {
+        total: input.candidateCount,
+        retainedInDiagnostics: Math.min(input.candidateSummary.length, MAX_POLICY_DIAGNOSTIC_CANDIDATES),
+        observationOnly: input.candidateSummary.filter((candidate) => candidate.observationOnly).length,
+        guessedCommonPath: input.candidateSummary.filter((candidate) => candidate.discoveryMethod === "guessed_common_path").length,
+      },
+      limitationKeys: input.limitationKeys,
+    },
+    failureClasses,
+    attemptedUrls: attemptedUrlSummaries.slice(0, MAX_POLICY_DIAGNOSTIC_ATTEMPTED_URLS),
+    candidateSummary: input.candidateSummary.slice(0, MAX_POLICY_DIAGNOSTIC_CANDIDATES),
+    timingBuckets,
+    selectedCanonicalPolicyUrls: input.selectedCanonicalPolicyUrls.slice(0, 8),
+    policyCaptureDurationMs: Date.now() - input.moduleStartedAtMs,
+    truncation: {
+      attemptedUrlsTruncated: attemptedUrlSummaries.length > MAX_POLICY_DIAGNOSTIC_ATTEMPTED_URLS,
+      attemptedUrlCount: attemptedUrlSummaries.length,
+      candidatesTruncated: input.candidateSummary.length > MAX_POLICY_DIAGNOSTIC_CANDIDATES,
+      candidateCount: input.candidateSummary.length,
+      failureClassesTruncated: failureClasses.length > MAX_POLICY_DIAGNOSTIC_FAILURE_CLASSES,
+      timingBucketsTruncated: timingBuckets.length > MAX_POLICY_DIAGNOSTIC_TIMING_BUCKETS,
+    },
+  };
+}
+
+function summarizePolicySurfaceFailureClasses(observations: PolicySurfaceObservation[]): Array<{
+  failureClass: PolicySurfaceFailureClass;
+  count: number;
+  representativeUrls: string[];
+  httpStatuses: number[];
+}> {
+  const byClass = new Map<PolicySurfaceFailureClass, {
+    failureClass: PolicySurfaceFailureClass;
+    count: number;
+    representativeUrls: string[];
+    httpStatuses: number[];
+  }>();
+  for (const observation of observations) {
+    const failureClass = primaryPolicySurfaceFailureClass(observation);
+    if (!failureClass) {
+      continue;
+    }
+    const current = byClass.get(failureClass) ?? {
+      failureClass,
+      count: 0,
+      representativeUrls: [],
+      httpStatuses: [],
+    };
+    current.count += 1;
+    const url = observation.normalizedUrl ?? observation.url;
+    if (url && !current.representativeUrls.includes(url) && current.representativeUrls.length < 6) {
+      current.representativeUrls.push(url);
+    }
+    if (
+      typeof observation.httpStatus === "number" &&
+      !current.httpStatuses.includes(observation.httpStatus) &&
+      current.httpStatuses.length < 8
+    ) {
+      current.httpStatuses.push(observation.httpStatus);
+    }
+    byClass.set(failureClass, current);
+  }
+  return [...byClass.values()]
+    .sort((left, right) => right.count - left.count || left.failureClass.localeCompare(right.failureClass))
+    .slice(0, MAX_POLICY_DIAGNOSTIC_FAILURE_CLASSES);
+}
+
+function primaryPolicySurfaceFailureClass(
+  observation: PolicySurfaceObservation,
+): PolicySurfaceFailureClass | undefined {
+  if (observation.status === "observed" && observation.fetchable === false) {
+    return "visible_non_link_policy_control_label_only";
+  }
+  if (
+    observation.status === "failed" &&
+    (
+      observation.httpStatus === 401 ||
+      observation.httpStatus === 403 ||
+      observation.httpStatus === 429 ||
+      isBlockedPolicyFailureExcerpt(observation.textExcerpt)
+    )
+  ) {
+    return "blocked_access";
+  }
+  if (
+    observation.status === "failed" &&
+    observation.discoveryMethod === "guessed_common_path" &&
+    observation.httpStatus === 404
+  ) {
+    return "repeated_404_common_path_miss";
+  }
+  if (
+    observation.status === "failed" &&
+    observation.discoveryMethod === "guessed_common_path" &&
+    observation.httpStatus === undefined
+  ) {
+    return "common_path_transport_failure";
+  }
+  if (
+    observation.status === "failed" &&
+    observation.textExcerpt &&
+    assessPolicyTextQuality(observation.textExcerpt).reason === "low_quality_access_challenge"
+  ) {
+    return "low_quality_error_shell";
+  }
+  if (
+    observation.status === "fetched" &&
+    observation.discoveryMethod === "guessed_common_path" &&
+    (observation.article13DisclosureSignals ?? []).length === 0 &&
+    (observation.gdprTransparencyTopicCandidates ?? []).length === 0 &&
+    (observation.observedTopics ?? []).length === 0 &&
+    Boolean(appShellObservationSignature(observation))
+  ) {
+    return "low_quality_app_shell";
+  }
+  if (
+    observation.status === "fetched" &&
+    observation.surfaceType === "privacy_policy" &&
+    looksLikePolicyDocumentDownloadReference([
+      observation.title,
+      observation.linkText,
+      observation.normalizedUrl,
+      observation.url,
+      observation.textExcerpt,
+    ].filter(Boolean).join(" "))
+  ) {
+    return "pdf_or_document_download_reference";
+  }
+  if (
+    observation.status === "fetched" &&
+    observation.surfaceType === "privacy_policy" &&
+    looksLikePrivacyCenterShell([
+      observation.title,
+      observation.linkText,
+      observation.surroundingTextExcerpt,
+    ].filter(Boolean).join(" ")) &&
+    (observation.article13DisclosureSignals ?? []).length > 0
+  ) {
+    return "privacy_center_shell_with_canonical_doc";
+  }
+  if (
+    observation.status === "fetched" &&
+    observation.surfaceType === "privacy_policy" &&
+    (observation.gdprTransparencyTopicCandidates ?? []).length > 0 &&
+    (observation.article13DisclosureSignals ?? []).length === 0
+  ) {
+    return "localized_sparse_policy_prose";
+  }
+  return undefined;
+}
+
+function summarizePolicySurfaceTimingBuckets(
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
+): Array<{ bucket: string; durationMs: number; rows: number }> {
+  const buckets = new Map<string, { bucket: string; durationMs: number; rows: number }>();
+  for (const timing of timingBreakdown) {
+    const bucket = policySurfaceTimingBucket(timing.label);
+    const current = buckets.get(bucket) ?? { bucket, durationMs: 0, rows: 0 };
+    current.durationMs += Math.max(0, timing.durationMs ?? 0);
+    current.rows += 1;
+    buckets.set(bucket, current);
+  }
+  return [...buckets.values()]
+    .sort((left, right) => right.durationMs - left.durationMs || left.bucket.localeCompare(right.bucket))
+    .slice(0, MAX_POLICY_DIAGNOSTIC_TIMING_BUCKETS);
+}
+
+function policySurfaceTimingBucket(label: string): string {
+  const normalized = label.toLowerCase();
+  if (normalized.includes("nano link ranking")) return "nano_link_ranking";
+  if (normalized.includes("rendered discovery")) return "rendered_discovery";
+  if (normalized.includes("rendered low-quality text fallback")) return "rendered_low_quality_text_fallback";
+  if (normalized.includes("rendered fetch fallback")) return "rendered_fetch_fallback";
+  if (normalized.includes("common-path")) return "common_path_fetch";
+  if (normalized.includes("policy fetch group")) return "policy_fetch_group";
+  if (normalized.includes("policy fetch")) return "policy_fetch";
+  if (normalized.includes("topic extraction")) return "topic_extraction";
+  if (normalized.includes("artifact")) return "artifact_write";
+  if (normalized.includes("homepage")) return "homepage";
+  return "other";
 }
 
 function summarizePolicySurfaceFailures(observations: PolicySurfaceObservation[]): Array<{
@@ -760,8 +1016,31 @@ function policyCaptureLimitationKeys(input: {
   if (failed.some((observation) => observation.httpStatus === 404)) {
     keys.push("policy_candidate_not_found");
   }
+  if (commonPathFailureCount(input.observations, (observation) =>
+    observation.httpStatus === 401 ||
+    observation.httpStatus === 403 ||
+    observation.httpStatus === 429
+  ) >= COMMON_PATH_BLOCKED_EARLY_STOP_FAILURES) {
+    keys.push("common_path_blocked_curtailed");
+  }
+  if (commonPathFailureCount(input.observations, (observation) =>
+    observation.httpStatus === 404
+  ) >= COMMON_PATH_NOT_FOUND_EARLY_STOP_FAILURES) {
+    keys.push("common_path_not_found_curtailed");
+  }
+  if (commonPathFailureCount(input.observations, (observation) =>
+    observation.httpStatus === undefined
+  ) >= COMMON_PATH_TRANSPORT_EARLY_STOP_FAILURES) {
+    keys.push("common_path_transport_curtailed");
+  }
   if (skippedBudget.length > 0) {
     keys.push("policy_fetch_budget_exhausted");
+  }
+  if (input.observations.some((observation) => observation.status === "observed" && observation.fetchable === false)) {
+    keys.push("visible_policy_label_only");
+  }
+  if (summarizeDocumentBackedPolicySignals(input.observations).length > 0) {
+    keys.push("policy_document_download_reference");
   }
   if (commonPathAppShellFetchCurtailed(input.observations)) {
     keys.push("common_path_app_shell_curtailed");
@@ -769,7 +1048,18 @@ function policyCaptureLimitationKeys(input: {
   if (input.commonPathFallbackUsed && input.coreSurfaceCount === 0) {
     keys.push("common_path_fallback_retained_no_core_surface");
   }
-  return uniqueStrings(keys).slice(0, 12);
+  return uniqueStrings(keys).slice(0, 16);
+}
+
+function commonPathFailureCount(
+  observations: PolicySurfaceObservation[],
+  predicate: (observation: PolicySurfaceObservation) => boolean,
+): number {
+  return observations.filter((observation) =>
+    observation.status === "failed" &&
+    observation.discoveryMethod === "guessed_common_path" &&
+    predicate(observation)
+  ).length;
 }
 
 function commonPathAppShellFetchCurtailed(observations: PolicySurfaceObservation[]) {
@@ -2567,6 +2857,7 @@ const THIRD_PARTY_VENDOR_DISCLOSURE_POLICY_LINK_PATTERNS = [
   /\bmeer informatie over deze aanbieder\b/i,
   /\bmehr (?:erfahren|informationen) (?:über|zu) (?:diesen )?(?:anbieter|dienstleister|partner)\b/i,
   /\bm[aá]s informaci[oó]n sobre (?:este )?(?:proveedor|socio|partner)\b/i,
+  /\bper saperne di pi[uù] su (?:questo )?(?:fornitore|partner)\b/i,
   /\bmaggiori informazioni su (?:questo )?(?:fornitore|partner)\b/i,
   /\bwi[eę]cej informacji o (?:tym )?(?:dostawcy|partnerze)\b/i,
 ];
@@ -5093,13 +5384,78 @@ function canonicalPolicyDocumentUrlsFromHtml(html: string, baseUrl: string): str
     if (sameOrigin(baseUrl, normalizedUrl)) score += 2;
     anchors.push({ url: normalizedUrl, score });
   }
+  for (const entry of canonicalPolicyMetadataUrlsFromHtml(html, baseUrl)) {
+    anchors.push(entry);
+  }
   return uniqueStrings(anchors
     .sort((a, b) => b.score - a.score)
     .map((anchor) => anchor.url));
 }
 
+function canonicalPolicyMetadataUrlsFromHtml(html: string, baseUrl: string): Array<{ url: string; score: number }> {
+  const anchors: Array<{ url: string; score: number }> = [];
+  const tagPattern = /<([a-z][\w:-]*)\b([^>]*)>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = tagPattern.exec(html))) {
+    const tagName = (match[1] ?? "").toLowerCase();
+    const attrs = match[2] ?? "";
+    const urlAttrs = [
+      "data-privacy-policy-url",
+      "data-policy-url",
+      "data-document-url",
+      "data-url",
+      "data-href",
+      "content",
+      "href",
+    ];
+    for (const attrName of urlAttrs) {
+      if (attrName === "content" && tagName !== "meta") {
+        continue;
+      }
+      if (attrName === "href" && tagName !== "link") {
+        continue;
+      }
+      const rawUrl = attr(attrs, attrName);
+      if (!rawUrl) {
+        continue;
+      }
+      const normalizedUrl = normalizeUrl(rawUrl, baseUrl);
+      if (!normalizedUrl || normalizedUrl === baseUrl) {
+        continue;
+      }
+      const context = normalizeWhitespace([
+        tagName,
+        attrs.replace(/\s+/g, " ").slice(0, 500),
+        normalizedUrl,
+      ].join(" "));
+      if (!canonicalPrivacyDocumentPattern().test(context)) {
+        continue;
+      }
+      const explicitPrivacyPolicyMetadataAttr = /data-privacy-policy-url|privacyPolicyUrl|privacy-policy-url/i.test(attrName);
+      if (
+        !explicitPrivacyPolicyMetadataAttr &&
+        /privacy\s+(center|settings|choices)|preference|cookie|cookies|do-not-sell|opt-out|unsubscribe|zgody|ustawienia|preferencje/i.test(context)
+      ) {
+        continue;
+      }
+      if (!isFetchablePolicyUrlForPolicySurface(baseUrl, normalizedUrl, "privacy_policy")) {
+        continue;
+      }
+      let score = 2;
+      if (/data-privacy-policy-url|privacyPolicyUrl|privacy-policy-url/i.test(context)) score += 5;
+      if (/rel=["'][^"']*canonical/i.test(attrs)) score += 3;
+      if (/\/privacy-policy\/?$/i.test(normalizedUrl)) score += 4;
+      if (/\/privacy-notice\/?$/i.test(normalizedUrl)) score += 3;
+      if (/datenschutzhinweis|datenschutzerklaerung|datenschutzerklärung|polityka-prywatno(?:sci|ści)|proteccion|protección/i.test(normalizedUrl)) score += 3;
+      if (sameOrigin(baseUrl, normalizedUrl)) score += 2;
+      anchors.push({ url: normalizedUrl, score });
+    }
+  }
+  return anchors;
+}
+
 function canonicalPrivacyDocumentPattern(): RegExp {
-  return /privacy\s+(policy|notice|statement)|\/privacy-policy\b|\/privacy-notice\b|\/privacy\b|datenschutzhinweis|datenschutzerkl[aä]rung|polityka prywatno[śs]ci|polityka-prywatno(?:sci|ści)|pol[ií]tica de privacidad|protecci[oó]n de datos|proteccion\.html|informativa (?:sulla )?privacy|privacybeleid|privacyverklaring/i;
+  return /privacy\s+(policy|notice|statement)|privacy[-_]policy|\/privacy-policy\b|\/privacy-notice\b|\/privacy\b|datenschutzhinweis|datenschutzerkl[aä]rung|polityka prywatno[śs]ci|polityka-prywatno(?:sci|ści)|pol[ií]tica de privacidad|protecci[oó]n de datos|proteccion\.html|informativa (?:sulla )?privacy|privacybeleid|privacyverklaring|charte de confidentialit[eé]|protection des donn[eé]es personnelles|protezione dei dati|ochrona danych osobowych/i;
 }
 
 const TOPIC_EXCERPT_KEYWORD_PRIORITY: Array<{

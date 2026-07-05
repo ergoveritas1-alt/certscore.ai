@@ -784,6 +784,7 @@ test("policySurfaceScanner uses rendered document text when direct fetch retains
       observation.surfaceType === "privacy_policy" &&
       observation.normalizedUrl === `${baseUrl}/browser-hydrated-policy/privacy`
     );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
 
     assert.ok(privacy, "browser-hydrated privacy policy should be fetched");
     assert.match(privacy.textExcerpt ?? "", /Verantwortlicher für die Datenverarbeitung/i);
@@ -794,6 +795,13 @@ test("policySurfaceScanner uses rendered document text when direct fetch retains
     );
     assert.equal(
       privacy.gdprTransparencyTopicCandidates.every((candidate) => candidate.productionCredit === false),
+      true,
+    );
+    assert.equal(
+      diagnostics.policySurfaceDiagnostics?.timingBuckets.some((bucket) =>
+        bucket.bucket === "rendered_low_quality_text_fallback" &&
+        bucket.durationMs >= 0
+      ),
       true,
     );
   });
@@ -1373,6 +1381,15 @@ test("policySurfaceScanner records visible French policy labels as observation-o
       ).length,
       3,
     );
+    assert.equal(diagnostics.limitationKeys.includes("visible_policy_label_only"), true);
+    assert.equal(diagnostics.policySurfaceDiagnostics?.summary.observationCounts.observedOnly, 3);
+    assert.equal(
+      diagnostics.policySurfaceDiagnostics?.failureClasses.some((entry) =>
+        entry.failureClass === "visible_non_link_policy_control_label_only" &&
+        entry.count === 3
+      ),
+      true,
+    );
   }, { discoveryMode: "fast" });
 });
 
@@ -1521,7 +1538,17 @@ test("policySurfaceScanner keeps blocked common-path fallback bounded", async ()
     assert.equal(result.moduleRun.status, "completed");
     assert.equal(blockedCommonPathFailures.length, 6);
     assert.equal(diagnostics.limitationKeys.includes("policy_access_blocked"), true);
+    assert.equal(diagnostics.limitationKeys.includes("common_path_blocked_curtailed"), true);
     assert.equal(diagnostics.limitationKeys.includes("common_path_fallback_retained_no_core_surface"), true);
+    assert.equal(diagnostics.policySurfaceDiagnostics?.schemaVersion, "certscore.policy_surface_diagnostics.v2");
+    assert.equal(
+      diagnostics.policySurfaceDiagnostics?.failureClasses.some((entry) =>
+        entry.failureClass === "blocked_access" &&
+        entry.count === 6 &&
+        entry.httpStatuses.includes(403)
+      ),
+      true,
+    );
     assert.equal(
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed common-path")),
       true,
@@ -1559,7 +1586,16 @@ test("policySurfaceScanner curtails repeated not-found common-path fallback", as
     assert.equal(result.moduleRun.status, "completed");
     assert.equal(notFoundCommonPathFailures.length, 6);
     assert.equal(diagnostics.limitationKeys.includes("policy_candidate_not_found"), true);
+    assert.equal(diagnostics.limitationKeys.includes("common_path_not_found_curtailed"), true);
     assert.equal(diagnostics.limitationKeys.includes("common_path_fallback_retained_no_core_surface"), true);
+    assert.equal(
+      diagnostics.policySurfaceDiagnostics?.failureClasses.some((entry) =>
+        entry.failureClass === "repeated_404_common_path_miss" &&
+        entry.count === 6 &&
+        entry.httpStatuses.includes(404)
+      ),
+      true,
+    );
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -1592,7 +1628,15 @@ test("policySurfaceScanner keeps transport-failed common-path fallback bounded",
 
     assert.equal(result.moduleRun.status, "completed");
     assert.equal(transportCommonPathFailures.length, 6);
+    assert.equal(diagnostics.limitationKeys.includes("common_path_transport_curtailed"), true);
     assert.equal(diagnostics.limitationKeys.includes("common_path_fallback_retained_no_core_surface"), true);
+    assert.equal(
+      diagnostics.policySurfaceDiagnostics?.failureClasses.some((entry) =>
+        entry.failureClass === "common_path_transport_failure" &&
+        entry.count >= 4
+      ),
+      true,
+    );
     assert.equal(
       result.moduleRun.timingBreakdown?.some((timing) => timing.label === "deterministic common-path ranking"),
       true,
@@ -1894,7 +1938,7 @@ test("policySurfaceScanner suppresses third-party CMP vendor-panel privacy links
       observation.normalizedUrl === `${baseUrl}/policies/education-privacy`
     );
     const vendorPanelPolicies = result.policySurfaceObservations.filter((observation) =>
-      /example-provider|example-aanbieder|example-partner/i.test(observation.normalizedUrl ?? observation.url)
+      /example-provider|example-aanbieder|example-fornitore|example-partner/i.test(observation.normalizedUrl ?? observation.url)
     );
 
     assert.ok(firstPartyPrivacy);
@@ -2597,6 +2641,7 @@ test("policySurfaceScanner retains accordion policy disclosures from static DOM"
 test("policySurfaceScanner prefers a canonical policy document linked from a privacy-center shell", async () => {
   await withPolicyScan("policy-canonical-near-privacy-center", async ({ result }) => {
     const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
 
     assert.equal(privacy?.status, "fetched");
     assert.doesNotMatch(privacy?.textExcerpt ?? "", /^Privacy Center/i);
@@ -2609,6 +2654,37 @@ test("policySurfaceScanner prefers a canonical policy document linked from a pri
       signal.disclosureType === "legal_basis" &&
       signal.status === "observed"
     ), true);
+    assert.equal(
+      diagnostics.policySurfaceDiagnostics?.failureClasses.some((entry) =>
+        entry.failureClass === "privacy_center_shell_with_canonical_doc"
+      ),
+      true,
+    );
+  }, { enableNanoPolicyAssist: true });
+});
+
+test("policySurfaceScanner follows canonical privacy document metadata from a privacy-center shell", async () => {
+  await withPolicyScan("policy-privacy-center-metadata-canonical", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal((privacy?.normalizedUrl ?? "").endsWith("/privacy-center-metadata-shell"), true);
+    assert.doesNotMatch(privacy?.textExcerpt ?? "", /^Privacy Center/i);
+    assert.match(privacy?.textExcerpt ?? "", /standard contractual clauses/i);
+    assert.equal(
+      privacy?.article13DisclosureSignals.some((signal) =>
+        signal.disclosureType === "legal_basis" &&
+        signal.status === "observed"
+      ),
+      true,
+    );
+    assert.equal(
+      diagnostics.policySurfaceDiagnostics?.failureClasses.some((entry) =>
+        entry.failureClass === "privacy_center_shell_with_canonical_doc"
+      ),
+      true,
+    );
   }, { enableNanoPolicyAssist: true });
 });
 
@@ -2692,6 +2768,61 @@ async function readPolicyCaptureDiagnostics(
     surfaceType: string;
   }>;
   winningSurfaceUrls: string[];
+  policySurfaceDiagnostics?: {
+    schemaVersion: string;
+    summary: {
+      corePolicySurfaceRetained: boolean;
+      commonPathFallbackUsed: boolean;
+      observationCounts: {
+        total: number;
+        fetched: number;
+        failed: number;
+        observedOnly: number;
+        skippedBudget: number;
+      };
+      candidateCounts: {
+        total: number;
+        retainedInDiagnostics: number;
+        observationOnly: number;
+        guessedCommonPath: number;
+      };
+      limitationKeys: string[];
+    };
+    failureClasses: Array<{
+      failureClass: string;
+      count: number;
+      representativeUrls: string[];
+      httpStatuses: number[];
+    }>;
+    attemptedUrls: Array<{
+      normalizedUrl: string;
+      surfaceType: string;
+      discoveryMethod: string;
+      status: string;
+      httpStatus?: number;
+      failureClass?: string;
+    }>;
+    candidateSummary: Array<{
+      normalizedUrl: string;
+      surfaceType: string;
+      discoveryMethod: string;
+      observationOnly: boolean;
+    }>;
+    timingBuckets: Array<{
+      bucket: string;
+      durationMs: number;
+      rows: number;
+    }>;
+    selectedCanonicalPolicyUrls: string[];
+    truncation: {
+      attemptedUrlCount: number;
+      candidateCount: number;
+      attemptedUrlsTruncated: boolean;
+      candidatesTruncated: boolean;
+      failureClassesTruncated: boolean;
+      timingBucketsTruncated: boolean;
+    };
+  };
   policyCaptureDurationMs: number;
 }> {
   const ref = result.artifactRefs.find((artifactRef) => artifactRef.artifactId === "policy_surface_capture_diagnostics");

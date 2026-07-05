@@ -118,6 +118,7 @@ export type StaticFixturePage =
   | "policy-secondary-third-party-links"
   | "policy-onetrust-index-json"
   | "policy-onetrust-notice-json"
+  | "policy-privacy-center-metadata-canonical"
   | "policy-privacy-center-link"
   | "policy-rendered-article13-better"
   | "policy-retention-rights-only"
@@ -273,6 +274,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-secondary-third-party-links": "policy-secondary-third-party-links",
   "policy-onetrust-index-json": "policy-onetrust-index-json",
   "policy-onetrust-notice-json": "policy-onetrust-notice-json",
+  "policy-privacy-center-metadata-canonical": "policy-privacy-center-metadata-canonical",
   "policy-privacy-center-link": "policy-privacy-center",
   "policy-rendered-article13-better": "policy-rendered-article13-better",
   "policy-retention-rights-only": "policy-retention-rights-only",
@@ -1646,6 +1648,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,
     "policy-onetrust-notice-json": `<a href="/policies/onetrust-shell">Privacy Policy</a>`,
+    "policy-privacy-center-metadata-canonical": `<a href="/privacy-center-metadata-shell">Privacy Policy</a>`,
     "policy-rendered-article13-better": `<a href="/rendered-article13-better/privacy">Politique de confidentialité</a>`,
     "policy-privacy-choices-link": `<a href="/privacy-choices">Your Privacy Choices</a>`,
     "policy-static-core-surfaces": [
@@ -1681,6 +1684,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
       `<section aria-label="partner disclosures">`,
       `<a href="https://privacy.example-provider.test/policy">En savoir plus sur ce fournisseur Example Provider Politique de confidentialité</a>`,
       `<a href="https://privacy.example-aanbieder.test/privacybeleid">Meer informatie over deze aanbieder Example Aanbieder Privacybeleid</a>`,
+      `<a href="https://privacy.example-fornitore.test/privacy-policy">Per saperne di più su questo fornitore Example Fornitore Informativa sulla privacy</a>`,
       `<a href="https://privacy.example-partner.test/privacy-policy">Learn more about this provider Example Partner Privacy Policy</a>`,
       `</section>`,
     ].join(" | "),
@@ -2070,6 +2074,10 @@ function policyDocumentHtml(pathname: string): string | undefined {
       title: "Privacy Center",
       body: "Privacy Center. Visitors can review privacy settings, manage cookie preferences, and find privacy choices.",
     },
+    "/privacy-center-metadata-shell": {
+      title: "Privacy Center",
+      body: "Privacy Center. Visitors can review privacy settings, manage cookie preferences, and find privacy choices.",
+    },
     "/policies/canonical-privacy": {
       title: "Canonical Privacy Policy",
       body: [
@@ -2292,8 +2300,26 @@ function policyDocumentHtml(pathname: string): string | undefined {
     <main class="privacy-center-shell">
       <h1>${escapeHtml(doc.title)}</h1>
       <p>${escapeHtml(doc.body)}</p>
+      <div data-privacy-policy-url="/policies/canonical-privacy" aria-label="Canonical Privacy Policy"></div>
       <p><a href="/policies/canonical-privacy">Privacy Policy</a></p>
       <p><a href="/privacy-choices">Your Privacy Choices</a></p>
+    </main>
+  </body>
+</html>`;
+  }
+  if (pathname === "/privacy-center-metadata-shell") {
+    return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>${escapeHtml(doc.title)}</title>
+  </head>
+  <body>
+    <main class="privacy-center-shell" data-privacy-policy-url="/policies/canonical-privacy">
+      <h1>${escapeHtml(doc.title)}</h1>
+      <p>${escapeHtml(doc.body)}</p>
+      <p><a href="/privacy-choices">Your Privacy Choices</a></p>
+      <button type="button" data-url="/privacy-settings">Privacy settings</button>
     </main>
   </body>
 </html>`;
