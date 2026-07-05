@@ -8,6 +8,7 @@ import type {
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_NANO_MODEL = "gpt-5.4-nano";
+const DEFAULT_NANO_POLICY_ASSIST_TIMEOUT_MS = 8_000;
 
 const surfaceTypes = [
   "privacy_policy",
@@ -79,6 +80,7 @@ interface OpenAiNanoPolicyAssistProviderOptions {
   apiKey: string;
   model?: string;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }
 
 export function createOpenAiNanoPolicyAssistProviderFromEnv(
@@ -99,6 +101,7 @@ export function createOpenAiNanoPolicyAssistProvider(
 ): PolicyNanoAssistProvider {
   const fetchImpl = options.fetchImpl ?? fetch;
   const model = options.model?.trim() || DEFAULT_NANO_MODEL;
+  const timeoutMs = Math.max(1_000, options.timeoutMs ?? DEFAULT_NANO_POLICY_ASSIST_TIMEOUT_MS);
 
   return {
     async classifyLinks(input) {
@@ -141,6 +144,7 @@ export function createOpenAiNanoPolicyAssistProvider(
           },
         },
         maxCompletionTokens: 900,
+        timeoutMs,
       });
       return normalizeLinkClassification(input, parsed);
     },
@@ -175,6 +179,7 @@ export function createOpenAiNanoPolicyAssistProvider(
           },
         },
         maxCompletionTokens: 1200,
+        timeoutMs,
       });
       return normalizeTopicExtraction(input, parsed);
     },
@@ -189,25 +194,39 @@ async function callNanoJson(
     system: string;
     user: unknown;
     maxCompletionTokens: number;
+    timeoutMs: number;
   },
 ): Promise<Record<string, unknown>> {
-  const response = await fetchImpl(OPENAI_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${input.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: input.model,
-      temperature: 0,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: input.system },
-        { role: "user", content: JSON.stringify(input.user, null, 2) },
-      ],
-      max_completion_tokens: input.maxCompletionTokens,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs);
+  let response: Response;
+  try {
+    response = await fetchImpl(OPENAI_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${input.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: input.model,
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: input.system },
+          { role: "user", content: JSON.stringify(input.user, null, 2) },
+        ],
+        max_completion_tokens: input.maxCompletionTokens,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`Nano policy assist request timed out after ${input.timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     throw new Error(`Nano policy assist request failed with status ${response.status}`);
@@ -221,6 +240,10 @@ async function callNanoJson(
   return parsed && typeof parsed === "object" && !Array.isArray(parsed)
     ? parsed as Record<string, unknown>
     : {};
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
 }
 
 function normalizeLinkClassification(

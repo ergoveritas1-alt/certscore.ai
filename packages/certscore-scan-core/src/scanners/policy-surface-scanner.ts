@@ -41,6 +41,13 @@ const MAX_POLICY_DIAGNOSTIC_ATTEMPTED_URLS = 32;
 const MAX_POLICY_DIAGNOSTIC_CANDIDATES = 32;
 const MAX_POLICY_DIAGNOSTIC_FAILURE_CLASSES = 12;
 const MAX_POLICY_DIAGNOSTIC_TIMING_BUCKETS = 12;
+const MIN_POLICY_CANDIDATE_START_BUDGET_MS = 500;
+const MIN_POLICY_RENDERED_FALLBACK_BUDGET_MS = 2_000;
+const MIN_POLICY_NANO_LINK_BUDGET_MS = 900;
+const MIN_POLICY_NANO_TOPIC_BUDGET_MS = 900;
+const MAX_NANO_LINK_RANKING_MS = 8_000;
+const MAX_NANO_TOPIC_EXTRACTION_MS = 4_000;
+const NANO_ASSIST_BUDGET_RESERVE_MS = 750;
 const DEFAULT_POLICY_EXCERPT_KEYWORDS = [
   "personal data",
   "personal information",
@@ -408,7 +415,11 @@ export async function policySurfaceScanner(
         timingBreakdown,
         "Nano link ranking",
         `Rank ${initialCandidates.length} policy candidates for supported surfaces.`,
-        () => rankCandidatesWithRequiredNano(input, initialCandidates),
+        () => rankCandidatesWithRequiredNano(
+          input,
+          initialCandidates,
+          nanoAssistTimeoutMs(input, moduleStartedAtMs, MAX_NANO_LINK_RANKING_MS, NANO_ASSIST_BUDGET_RESERVE_MS),
+        ),
       );
     if (rankedCandidates.length === 0 && input.discoveryMode === "fast") {
       if (shouldSpeculateCommonPathNanoRanking(rankableLinkCandidates, commonPathCandidates)) {
@@ -416,7 +427,11 @@ export async function policySurfaceScanner(
           timingBreakdown,
           "Nano link ranking",
           `Rank ${initialCandidates.length} policy candidates for supported surfaces after deterministic fast-path found no fetchable candidates.`,
-          () => rankCandidatesWithRequiredNano(input, initialCandidates),
+          () => rankCandidatesWithRequiredNano(
+            input,
+            initialCandidates,
+            nanoAssistTimeoutMs(input, moduleStartedAtMs, MAX_NANO_LINK_RANKING_MS, NANO_ASSIST_BUDGET_RESERVE_MS),
+          ),
         );
         speculativeCommonPathRankedCandidates = await recordPolicyTiming(
           timingBreakdown,
@@ -429,7 +444,11 @@ export async function policySurfaceScanner(
           timingBreakdown,
           "Nano link ranking",
           `Rank ${initialCandidates.length} policy candidates for supported surfaces after deterministic fast-path found no fetchable candidates.`,
-          () => rankCandidatesWithRequiredNano(input, initialCandidates),
+          () => rankCandidatesWithRequiredNano(
+            input,
+            initialCandidates,
+            nanoAssistTimeoutMs(input, moduleStartedAtMs, MAX_NANO_LINK_RANKING_MS, NANO_ASSIST_BUDGET_RESERVE_MS),
+          ),
         );
       }
     }
@@ -479,6 +498,7 @@ export async function policySurfaceScanner(
     if (
       !sufficientGdprEvidenceAfterPrimary &&
       !strongDirectPolicyEvidenceAfterPrimary &&
+      hasPolicyWorkBudget(input, moduleStartedAtMs, MIN_POLICY_CANDIDATE_START_BUDGET_MS) &&
       rankableLinkCandidates.length > 0 &&
       !primaryRankedCandidatesFromCommonPath &&
       !hasRetainedCorePolicyOrControlSurface(observations) &&
@@ -536,6 +556,7 @@ export async function policySurfaceScanner(
 
     if (
       !commonPathFallbackUsed &&
+      hasPolicyWorkBudget(input, moduleStartedAtMs, MIN_POLICY_CANDIDATE_START_BUDGET_MS) &&
       !hasRetainedFirstPartyPrivacyPolicy(input.normalizedUrl, observations) &&
       !hasRetainedFirstPartyPolicyEvidenceForBroadFetchStop(input.normalizedUrl, observations) &&
       !hasStrongDirectRetainedPolicyEvidenceForBroadFetchStop(observations) &&
@@ -1151,7 +1172,11 @@ async function fetchRankedPolicyCandidates(input: {
       input.timingBreakdown,
       `${input.labelPrefix} Nano ranking`,
       `Rank ${input.candidates.length} fallback policy candidates for supported surfaces.`,
-      () => rankCandidatesWithRequiredNano(input.input, input.candidates),
+      () => rankCandidatesWithRequiredNano(
+        input.input,
+        input.candidates,
+        nanoAssistTimeoutMs(input.input, input.moduleStartedAtMs, MAX_NANO_LINK_RANKING_MS, NANO_ASSIST_BUDGET_RESERVE_MS),
+      ),
     );
   if (rankedCandidates.length === 0) {
     rankedCandidates = deterministicFetchFallback(input.candidates);
@@ -1180,9 +1205,13 @@ async function fetchPolicyCandidateGroup(input: {
     input.timingBreakdown,
     `${input.labelPrefix} fetch group`,
     `Fetch and project up to ${toFetch.length} ranked policy candidates with concurrency ${POLICY_FETCH_CONCURRENCY}. Child fetch/topic timings may overlap and do not sum to wall time.`,
-    () => shouldUseBlockedCommonPathEarlyStop(toFetch)
-      ? fetchCommonPathCandidateGroupWithBlockedEarlyStop({ ...input, toFetch })
-      : mapWithConcurrency(
+    () => {
+      if (!hasPolicyWorkBudget(input.input, input.moduleStartedAtMs, MIN_POLICY_CANDIDATE_START_BUDGET_MS)) {
+        return Promise.resolve(skippedBudgetCandidateResults(toFetch));
+      }
+      return shouldUseBlockedCommonPathEarlyStop(toFetch)
+        ? fetchCommonPathCandidateGroupWithBlockedEarlyStop({ ...input, toFetch })
+        : mapWithConcurrency(
           toFetch.map((candidate, candidateIndex) => ({ candidate, candidateIndex })),
           POLICY_FETCH_CONCURRENCY,
           ({ candidate, candidateIndex }) => processPolicyCandidate({
@@ -1193,7 +1222,8 @@ async function fetchPolicyCandidateGroup(input: {
             candidateIndex,
             policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
           }),
-        ),
+        );
+    },
   );
   return {
     artifactRefs: policyResults.flatMap((result) => result.artifactRefs),
@@ -1228,6 +1258,17 @@ async function fetchCommonPathCandidateGroupWithBlockedEarlyStop(input: {
     }
   }
   return results;
+}
+
+function skippedBudgetCandidateResults(candidates: PolicySurfaceCandidate[]): ProcessPolicyCandidateResult[] {
+  return candidates.map((candidate) => ({
+    observation: observationFromCandidate(candidate, {
+      status: "skipped_budget",
+      confidence: candidate.assisted?.confidence ?? candidate.deterministicScore,
+    }),
+    artifactRefs: [],
+    secondaryCandidates: [],
+  }));
 }
 
 function shouldUseBlockedCommonPathEarlyStop(candidates: PolicySurfaceCandidate[]): boolean {
@@ -1345,7 +1386,10 @@ async function processPolicyCandidate({
       secondaryCandidates: [],
     };
   }
-  if (Date.now() - moduleStartedAtMs > input.internalBudgetMs) {
+  if (
+    !isCommonPathFallbackCandidate(candidate) &&
+    !hasPolicyWorkBudget(input, moduleStartedAtMs, MIN_POLICY_CANDIDATE_START_BUDGET_MS)
+  ) {
     return {
       observation: observationFromCandidate(candidate, {
         status: "skipped_budget",
@@ -1362,7 +1406,11 @@ async function processPolicyCandidate({
     `Fetch ${candidate.deterministicSurfaceType} candidate document.`,
     () => fetchText(candidate.normalizedUrl, remainingPolicyFetchMs(input, moduleStartedAtMs)),
   );
-  if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch(fetched.status, input, moduleStartedAtMs, candidate)) {
+  if (
+    !fetched.ok &&
+    hasPolicyWorkBudget(input, moduleStartedAtMs, MIN_POLICY_RENDERED_FALLBACK_BUDGET_MS) &&
+    shouldTryRenderedPolicyDocumentFetch(fetched.status, input, moduleStartedAtMs, candidate)
+  ) {
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
       `policy rendered fetch fallback ${candidateIndex + 1}`,
@@ -1399,17 +1447,19 @@ async function processPolicyCandidate({
     surfaceType: candidate.deterministicSurfaceType,
     timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
   });
-  const urlOnlyStubResolution = await recordPolicyTiming(
-    timingBreakdown,
-    `policy url-stub follow ${candidateIndex + 1}`,
-    `Follow ${candidate.deterministicSurfaceType} candidate when fetched policy body only points to a canonical policy URL.`,
-    () => resolveUrlOnlyPolicyStub({
-      currentUrl: candidate.normalizedUrl,
-      visibleText,
-      surfaceType: candidate.deterministicSurfaceType,
-      timeoutMs: remainingPolicyFetchMs(input, moduleStartedAtMs),
-    }),
-  );
+  const urlOnlyStubResolution = hasPolicyWorkBudget(input, moduleStartedAtMs, 900)
+    ? await recordPolicyTiming(
+      timingBreakdown,
+      `policy url-stub follow ${candidateIndex + 1}`,
+      `Follow ${candidate.deterministicSurfaceType} candidate when fetched policy body only points to a canonical policy URL.`,
+      () => resolveUrlOnlyPolicyStub({
+        currentUrl: candidate.normalizedUrl,
+        visibleText,
+        surfaceType: candidate.deterministicSurfaceType,
+        timeoutMs: remainingPolicyFetchMs(input, moduleStartedAtMs),
+      }),
+    )
+    : null;
   if (urlOnlyStubResolution) {
     effectiveCandidate = {
       ...candidate,
@@ -1429,7 +1479,7 @@ async function processPolicyCandidate({
     input,
     moduleStartedAtMs,
     visibleText,
-  })) {
+  }) && hasPolicyWorkBudget(input, moduleStartedAtMs, MIN_POLICY_RENDERED_FALLBACK_BUDGET_MS)) {
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
       `policy rendered low-quality text fallback ${candidateIndex + 1}`,
@@ -1541,11 +1591,16 @@ async function processPolicyCandidate({
         timingBreakdown,
         `Nano topic extraction ${candidateIndex + 1}`,
         `Extract bounded topics for ${effectiveCandidate.deterministicSurfaceType} candidate.`,
-        () => maybeExtractTopics(input, effectiveCandidate, {
-          title,
-          excerpt: nanoAnalysisExcerpt,
-          deterministicTopics: deterministic.observedTopics,
-        }),
+        () => maybeExtractTopics(
+          input,
+          effectiveCandidate,
+          {
+            title,
+            excerpt: nanoAnalysisExcerpt,
+            deterministicTopics: deterministic.observedTopics,
+          },
+          nanoAssistTimeoutMs(input, moduleStartedAtMs, MAX_NANO_TOPIC_EXTRACTION_MS, NANO_ASSIST_BUDGET_RESERVE_MS),
+        ),
       )
     : undefined;
   const merged = mergePolicyFacts(deterministic, topicAssist);
@@ -2439,7 +2494,7 @@ async function waitForRenderedPolicySurfaceCandidate(
 ): Promise<void> {
   const timeoutMs = Math.min(
     input.discoveryMode === "fast" ? 1_200 : 4_500,
-    Math.max(250, remainingMs(input, moduleStartedAtMs) - 1_000),
+    Math.max(250, remainingMs(input, moduleStartedAtMs) - 4_500),
   );
   if (timeoutMs < 250) {
     return;
@@ -3320,6 +3375,7 @@ function surfacePriority(surfaceType: PolicySurfaceObservation["surfaceType"]): 
 async function rankCandidatesWithRequiredNano(
   input: PolicySurfaceScannerInput,
   candidates: PolicySurfaceCandidate[],
+  timeoutMs: number,
 ): Promise<PolicySurfaceCandidate[]> {
   if (input.enableNanoPolicyAssist === false) {
     throw new Error("Nano policy assist cannot be disabled for policy-surface link discovery.");
@@ -3330,11 +3386,26 @@ async function rankCandidatesWithRequiredNano(
 
   const byId = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]));
   const assistId = `nano_policy_links_${stableHash(input.normalizedUrl)}`;
-  const result = await input.nanoAssistProvider.classifyLinks({
-    assistId,
-    pageUrl: input.normalizedUrl,
-    candidates,
+  if (timeoutMs < MIN_POLICY_NANO_LINK_BUDGET_MS) {
+    return [];
+  }
+  const result = await withTimeout(
+    input.nanoAssistProvider.classifyLinks({
+      assistId,
+      pageUrl: input.normalizedUrl,
+      candidates,
+    }),
+    timeoutMs,
+    "nano_policy_link_ranking",
+  ).catch((error) => {
+    if (isTimeoutError(error)) {
+      return undefined;
+    }
+    throw error;
   });
+  if (!result) {
+    return [];
+  }
   const rankedIds = new Set<string>();
   for (const ranked of result.rankedCandidates) {
     const candidate = byId.get(ranked.candidateId);
@@ -3380,19 +3451,35 @@ async function maybeExtractTopics(
   input: PolicySurfaceScannerInput,
   candidate: PolicySurfaceCandidate,
   facts: { title?: string; excerpt: string; deterministicTopics: PolicySurfaceObservation["observedTopics"] },
+  timeoutMs: number,
 ): Promise<AssistedPolicyFacts | undefined> {
   if (!input.enableNanoPolicyAssist || !input.nanoAssistProvider?.extractTopics) {
     return undefined;
   }
+  if (timeoutMs < MIN_POLICY_NANO_TOPIC_BUDGET_MS) {
+    return undefined;
+  }
   const assistId = `nano_policy_topics_${stableHash(candidate.normalizedUrl)}`;
-  const result = await input.nanoAssistProvider.extractTopics({
-    assistId,
-    surfaceUrl: candidate.normalizedUrl,
-    surfaceType: candidate.deterministicSurfaceType,
-    title: facts.title,
-    excerpt: facts.excerpt,
-    deterministicTopicHits: facts.deterministicTopics,
+  const result = await withTimeout(
+    input.nanoAssistProvider.extractTopics({
+      assistId,
+      surfaceUrl: candidate.normalizedUrl,
+      surfaceType: candidate.deterministicSurfaceType,
+      title: facts.title,
+      excerpt: facts.excerpt,
+      deterministicTopicHits: facts.deterministicTopics,
+    }),
+    timeoutMs,
+    "nano_policy_topic_extraction",
+  ).catch((error) => {
+    if (isTimeoutError(error)) {
+      return undefined;
+    }
+    throw error;
   });
+  if (!result) {
+    return undefined;
+  }
   return {
     observedTopics: result.observedTopics,
     article13DisclosureSignals: result.article13DisclosureSignals ?? [],
@@ -5333,7 +5420,13 @@ function isArticle13DisclosureEvidenceUsable(
   value: string,
   disclosureType: PolicySurfaceObservation["article13DisclosureSignals"][number]["disclosureType"]
 ) {
-  return sharedArticle13DisclosureRejectReason(value, disclosureType, { mode: "scan_core" }) === null;
+  return sharedArticle13DisclosureRejectReason(value, disclosureType, {
+    mode: shouldUseMultilingualArticle13Gate(value) ? "multilingual_classifier" : "scan_core",
+  }) === null;
+}
+
+function shouldUseMultilingualArticle13Gate(value: string): boolean {
+  return /(?:donn[ée]es personnelles|finalit[ée]s|base juridique|cat[ée]gories de destinataires|dur[ée]e de conservation|droit d['’]acc[èe]s|transferts internationaux|autorit[ée] de contr[ôo]le|responsable du traitement|personenbezogene daten|zwecke der verarbeitung|rechtsgrundlage|kategorien von empf[aä]ngern|speicherdauer|recht auf auskunft|beschwerde bei einer aufsichtsbeh[oö]rde|datos personales|finalidades del tratamiento|base jur[ií]dica|categor[ií]as de destinatarios|plazo de conservaci[oó]n|derecho de acceso|transferencias internacionales|autoridad de control|dati personali|finalit[aà] del trattamento|base giuridica|categorie di destinatari|periodo di conservazione|diritto di accesso|trasferimenti internazionali|autorità di controllo|persoonsgegevens|doeleinden van de verwerking|rechtsgrondslag|categorie[eë]n van ontvangers|bewaartermijn|recht op inzage|toezichthoudende autoriteit|dane osobowe|cele przetwarzania|podstawa prawna|kategorie odbiorc[oó]w|okres przechowywania|prawo dost[eę]pu|transfery mi[eę]dzynarodowe|organ nadzorczy)/i.test(value);
 }
 
 function article13DisclosureRejectReason(
@@ -5810,6 +5903,27 @@ function remainingMs(input: PolicySurfaceScannerInput, startedAtMs: number): num
   return Math.max(500, input.internalBudgetMs - (Date.now() - startedAtMs));
 }
 
+function remainingBudgetMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
+  return Math.max(0, input.internalBudgetMs - (Date.now() - startedAtMs));
+}
+
+function hasPolicyWorkBudget(
+  input: PolicySurfaceScannerInput,
+  startedAtMs: number,
+  minimumMs: number,
+): boolean {
+  return remainingBudgetMs(input, startedAtMs) >= minimumMs;
+}
+
+function nanoAssistTimeoutMs(
+  input: PolicySurfaceScannerInput,
+  startedAtMs: number,
+  maxTimeoutMs: number,
+  reserveMs: number,
+): number {
+  return Math.max(0, Math.min(maxTimeoutMs, remainingBudgetMs(input, startedAtMs) - reserveMs));
+}
+
 function homepageFetchMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
   const remaining = remainingMs(input, startedAtMs);
   const reservedForFallback = input.discoveryMode === "fast" ? 1_500 : 4_000;
@@ -5819,6 +5933,32 @@ function homepageFetchMs(input: PolicySurfaceScannerInput, startedAtMs: number):
 
 function remainingPolicyFetchMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
   return Math.min(POLICY_FETCH_TIMEOUT_MS, remainingMs(input, startedAtMs));
+}
+
+class PolicyAssistTimeoutError extends Error {
+  constructor(label: string, timeoutMs: number) {
+    super(`${label} timed out after ${timeoutMs}ms`);
+    this.name = "PolicyAssistTimeoutError";
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new PolicyAssistTimeoutError(label, timeoutMs)), Math.max(1, timeoutMs));
+    }),
+  ]).finally(() => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  });
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof PolicyAssistTimeoutError ||
+    (error instanceof Error && /timed out|abort/i.test(error.message));
 }
 
 function elapsed(scanStartedAtMs: number): number {

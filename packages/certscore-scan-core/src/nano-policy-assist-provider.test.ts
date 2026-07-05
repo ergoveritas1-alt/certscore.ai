@@ -166,6 +166,33 @@ test("OpenAI Nano policy provider normalizes topic extraction to allowed bounded
   assert.equal(result?.confidence, 1);
 });
 
+test("OpenAI Nano policy provider aborts slow requests", async () => {
+  const provider = createOpenAiNanoPolicyAssistProvider({
+    apiKey: "test-key",
+    model: "test-nano",
+    timeoutMs: 20,
+    fetchImpl: async (_url, init) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      if (signal?.aborted) {
+        reject(new DOMException("Aborted", "AbortError"));
+        return;
+      }
+      signal?.addEventListener("abort", () => {
+        reject(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+    }),
+  });
+
+  await assert.rejects(
+    () => provider.classifyLinks?.({
+      assistId: "assist_links",
+      pageUrl: "https://example.com/",
+      candidates: [],
+    }),
+    /timed out after 1000ms/,
+  );
+});
+
 function jsonResponse(payload: unknown): Response {
   return new Response(JSON.stringify(payload), {
     status: 200,

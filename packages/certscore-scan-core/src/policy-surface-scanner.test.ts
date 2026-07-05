@@ -2023,6 +2023,33 @@ test("policySurfaceScanner ignores external URL-only body privacy links as polic
   }, { enableNanoPolicyAssist: true });
 });
 
+test("policySurfaceScanner skips Nano ranking and fetch work when policy budget is exhausted", async () => {
+  let classifyCalls = 0;
+  const nanoAssistProvider: PolicyNanoAssistProvider = {
+    async classifyLinks() {
+      classifyCalls += 1;
+      return new Promise(() => undefined);
+    },
+  };
+
+  await withPolicyScan("policy-generic-links", async ({ result }) => {
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+    const skipped = result.policySurfaceObservations.filter((observation) =>
+      observation.status === "skipped_budget"
+    );
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(classifyCalls, 0);
+    assert.equal(labels.includes("Nano link ranking"), true);
+    assert.equal(skipped.length > 0, true);
+  }, {
+    discoveryMode: "fast",
+    enableNanoPolicyAssist: true,
+    internalBudgetMs: 1,
+    nanoAssistProvider,
+  });
+});
+
 test("policySurfaceScanner keeps deterministic common paths without speculative Nano common-path ranking", async () => {
   let classifyCalls = 0;
   const nanoAssistProvider: PolicyNanoAssistProvider = {
