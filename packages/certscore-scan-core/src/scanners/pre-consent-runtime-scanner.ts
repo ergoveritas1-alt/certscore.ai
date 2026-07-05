@@ -1892,7 +1892,7 @@ export async function detectConsentUi(
           current.getAttribute("id"),
           current.getAttribute("class"),
         ].filter(Boolean).join(" ");
-        if (/cookie|cookies|privacy|consent|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i.test(contextText + " " + contextAttrs)) {
+        if (/cookie|cookies|privacy|consent|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|toestemming|voorkeuren|instellingen|privacy-instellingen|cookie-instellingen|prywatno[śs][ćc]|zgod[ayęą]|plik(?:i|ów) cookie|ustawieni[ae]|preferencj[ae]|danych osobowych/i.test(contextText + " " + contextAttrs)) {
           return true;
         }
         current = current.parentElement;
@@ -2881,7 +2881,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           (isVisible(element) ? 100 : 0) +
           (hasConsentContext(element) ? 80 : 0) +
           (isFirstLayerPosition(element) ? 40 : 0) +
-          (/\b(?:accept|reject|decline|allow|agree|settings|preferences|options|choices|cookie|cookies|consent|ablehnen|akzeptieren|accepter|refuser|accepteren|weigeren|toestaan|instellingen|voorkeuren)\b|(?:akceptuj|odrzu|ustawienia|preferencj|pliki cookie|zgod)/i.test(label) ? 70 : 0) -
+          (/\b(?:accept|reject|decline|allow|agree|settings|preferences|options|choices|cookie|cookies|consent|ablehnen|akzeptieren|accepter|refuser|accepteren|weigeren|toestaan|instellingen|voorkeuren|alles accepteren|alles weigeren|cookie-instellingen|privacy-instellingen)\b|(?:akceptuj|akceptuję|odrzu|ustawienia|preferencj|pliki cookie|zgod|prywatno)/i.test(label) ? 70 : 0) -
           (pageChrome ? 30 : 0)
         );
       };
@@ -3059,6 +3059,20 @@ function buildConsentUiObservationFromEvidence(input: {
     "analytics preferences",
     "privacy settings",
     "privacy preferences",
+    "toestemming",
+    "cookie-instellingen",
+    "privacy-instellingen",
+    "voorkeuren",
+    "prywatność",
+    "prywatnosci",
+    "zgoda",
+    "zgodę",
+    "zgode",
+    "pliki cookie",
+    "plików cookie",
+    "plikow cookie",
+    "ustawienia zaawansowane",
+    "preferencje",
     "accept all",
     "reject all",
     "manage preferences",
@@ -3208,8 +3222,8 @@ function likelyLateFirstLayerConsentSurfaceText(text: string): boolean {
   if (!normalized || normalized.length > 12_000) {
     return false;
   }
-  return /\b(?:cookie|cookies|cookie-einstellungen|consent|analytics preferences|privacy settings|privacy preferences|privacy choices)\b/i.test(normalized) &&
-    /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|options|necessary|essential|akzeptieren|ablehnen|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer)\b/i.test(normalized);
+  return /\b(?:cookie|cookies|cookie-einstellungen|consent|analytics preferences|privacy settings|privacy preferences|privacy choices|toestemming|cookie-instellingen|privacy-instellingen|voorkeuren|prywatno[śs][ćc]|zgod[ayęą]|plik(?:i|ów) cookie|danych osobowych)\b/i.test(normalized) &&
+    /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|options|necessary|essential|akzeptieren|ablehnen|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer|accepteren|weigeren|toestemming|voorkeuren|instellingen|akceptuj|akceptuję|odrzu[ćc]|ustawieni[ae]|preferencj[ae]|zgod[ayęą])\b/i.test(normalized);
 }
 
 function hasActionableConsentChoiceControl(observation: ConsentUiObservation): boolean {
@@ -3240,12 +3254,17 @@ function likelyFirstLayerConsentBannerHintText(text: string): boolean {
   if (!normalized || normalized.length > 12_000) {
     return false;
   }
-  const hasConsentSubject = /\b(?:cookie|cookies|cookie-einstellungen|consent|analytics preferences|privacy settings|privacy preferences|privacy choices)\b/i.test(normalized);
-  const hasChoiceLanguage = /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|manage|options|necessary|essential|akzeptieren|ablehnen|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer)\b/i.test(normalized);
+  const hasConsentSubject = /\b(?:cookie|cookies|cookie-einstellungen|consent|analytics preferences|privacy settings|privacy preferences|privacy choices|toestemming|cookie-instellingen|privacy-instellingen|voorkeuren|prywatno[śs][ćc]|zgod[ayęą]|plik(?:i|ów) cookie|danych osobowych)\b/i.test(normalized);
+  const hasChoiceLanguage = /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|manage|options|necessary|essential|akzeptieren|ablehnen|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer|accepteren|weigeren|toestaan|voorkeuren|instellingen|akceptuj|akceptuję|odrzu[ćc]|ustawieni[ae]|preferencj[ae]|zgod[ayęą])\b/i.test(normalized);
   const hasBannerUseLanguage =
     /\bwe use (?:cookies|similar technologies)\b/i.test(normalized) ||
     /\buse cookies\b/i.test(normalized) ||
     /\byour cookie(?:s)?\b/i.test(normalized) ||
+    /\bwij gebruiken cookies\b/i.test(normalized) ||
+    /\bvragen toestemming\b/i.test(normalized) ||
+    /\bużywamy plik[oó]w cookie\b/i.test(normalized) ||
+    /\buzywamy plikow cookie\b/i.test(normalized) ||
+    /\bwyrażasz zgod[ęe]\b/i.test(normalized) ||
     /\banalytics preferences\b/i.test(normalized) ||
     /\bcookie preferences\b/i.test(normalized) ||
     /\bconsent setting\b/i.test(normalized) ||
