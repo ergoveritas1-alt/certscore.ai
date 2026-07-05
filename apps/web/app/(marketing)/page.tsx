@@ -25,24 +25,28 @@ export const metadata: Metadata = {
 
 const personas = [
   {
-    title: "Developers validating tracking behavior",
+    artifact: "API / CI integration",
+    title: "Catch tag regressions before release",
     detail:
-      "Run API-driven scans to confirm tags, pixels, cookies, and consent-state behavior without relying on manual QA alone."
+      "Run repeatable scans in CI or before launch to see whether pixels, cookies, or consent controls changed before a release ships. Keep the API response and evidence timeline with the ticket."
   },
   {
-    title: "Agencies auditing client or competitor sites",
+    artifact: "White-label PDF",
+    title: "Turn audits into client-ready evidence",
     detail:
-      "Run white-label-ready scans that surface observable website behavior without depending on manual inspection alone."
+      "Benchmark a prospect, compare competitors, or package a client review with screenshots, policy surfaces, and retained observations."
   },
   {
-    title: "Digital policy analysts reviewing public privacy surfaces",
+    artifact: "Evidence timeline",
+    title: "Compare policy language to observed behavior",
     detail:
-      "Review pre-consent cookies, storage, tracking, public disclosures, collection surfaces, and consent-control accessibility without depending on brittle post-choice automation."
+      "Review a site's published privacy language against observed pre-consent activity and cite retained evidence when a row needs follow-up."
   },
   {
-    title: "Teams reviewing third-party websites",
+    artifact: "Change monitoring",
+    title: "Screen vendors with repeatable scans",
     detail:
-      "Assess your sites, partners, and diligence targets with runtime evidence structured for enterprise review workflows."
+      "Evaluate a vendor, publisher, or diligence target with timestamped scans that can be rerun as the site changes."
   }
 ];
 
@@ -269,7 +273,12 @@ export default async function MarketingHomePage() {
                     <span>{item.title}</span>
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm text-slate-600">{item.detail}</CardContent>
+                <CardContent className="space-y-4 text-sm text-slate-600">
+                  <p>{item.detail}</p>
+                  <span className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                    {item.artifact}
+                  </span>
+                </CardContent>
               </Card>
             ))}
           </div>

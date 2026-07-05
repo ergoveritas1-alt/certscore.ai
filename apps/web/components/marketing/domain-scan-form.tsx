@@ -2,7 +2,7 @@
 
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
 import { ScanFromSelect, type ScanFrom, type ServerScanFrom } from "../scans/scan-from-select";
 import {
@@ -19,6 +19,7 @@ type DomainScanFormProps = {
   compact?: boolean;
   defaultScanFrom?: ServerScanFrom;
   helperText?: string;
+  initialDomain?: string;
   inputLabel?: string;
   inputPlaceholder?: string;
   emptySubmitDomain?: string;
@@ -275,6 +276,7 @@ export function DomainScanForm({
   defaultScanFrom = "eu_ie",
   emptySubmitDomain = "",
   helperText,
+  initialDomain = "",
   inputLabel = "Website domain",
   inputPlaceholder = "Enter yoursite.com",
   mode = "preview",
@@ -282,7 +284,9 @@ export function DomainScanForm({
   scanSource = "unknown"
 }: DomainScanFormProps) {
   const router = useRouter();
-  const [domain, setDomain] = useState("");
+  const generatedInputId = useId();
+  const generatedScanFromId = useId();
+  const [domain, setDomain] = useState(initialDomain);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [localExtensionStatus, setLocalExtensionStatus] = useState<Bx01Status | null>(null);
   const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
@@ -530,9 +534,18 @@ export function DomainScanForm({
   }
 
   return (
-    <form className={compact ? "space-y-2" : "space-y-4"} onSubmit={(event) => void handleSubmit(event)}>
+    <form
+      action="/scan"
+      className={compact ? "space-y-2" : "space-y-4"}
+      method="get"
+      noValidate
+      onSubmit={(event) => void handleSubmit(event)}
+    >
       <div className="space-y-2">
         <div className="relative z-30">
+          <label className="sr-only" htmlFor={generatedInputId}>
+            {inputLabel}
+          </label>
           <Input
             autoComplete="url"
             className={
@@ -540,14 +553,14 @@ export function DomainScanForm({
                 ? "h-12 rounded-[1.2rem] border-2 border-sky-500 pr-40 text-left text-sm font-semibold shadow-[0_12px_30px_rgba(14,165,233,0.12)] placeholder:text-left focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
                 : "h-14 rounded-[1.6rem] border-2 border-sky-500 pr-32 text-base font-semibold shadow-[0_14px_34px_rgba(14,165,233,0.12)] focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
             }
-            id="domain"
+            id={generatedInputId}
             name="domain"
             onChange={(event) => {
               setDomain(event.target.value);
               resetValidationState();
             }}
             placeholder={inputPlaceholder}
-            type="text"
+            type="url"
             value={domain}
             aria-label={inputLabel}
           />
@@ -557,6 +570,7 @@ export function DomainScanForm({
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
                 freshRescanValue={freshRescan}
+                id={generatedScanFromId}
                 includeLocalV2ScanProfileOption
                 includeFreshRescanOption
                 includeLocalExtension={allowLocalExtensionScan}
@@ -575,6 +589,7 @@ export function DomainScanForm({
               <ScanFromSelect
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
+                id={generatedScanFromId}
                 includeLocalV2ScanProfileOption
                 includeScanFromOptions={false}
                 localV2ScanProfileValue={localV2ScanProfile}
@@ -597,21 +612,22 @@ export function DomainScanForm({
           >
             {isSubmitting ? (
               <span className="text-xs">...</span>
+            ) : compact ? (
+              <span>Scan</span>
             ) : (
-              compact ? (
-                <span>Scan</span>
-              ) : (
+              <>
+                <span className="sr-only">{buttonLabel}</span>
                 <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-                  <path
-                    d="M5 12h14M13 6l6 6-6 6"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                    <path
+                      d="M5 12h14M13 6l6 6-6 6"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                   />
                 </svg>
-              )
+              </>
             )}
           </Button>
         </div>
