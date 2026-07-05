@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -213,23 +213,29 @@ test("handler keeps Lambda scan modules browser-isolated for runtime stability",
 
 test("handler bundle imports without browser-only PDF globals", async () => {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-  const tempDir = await mkdtemp(path.join(repoRoot, "apps/v2-dag-lambda/tmp/bundle-import-"));
-  const outfile = path.join(tempDir, "handler.cjs");
-  await build({
-    bundle: true,
-    entryPoints: [path.join(repoRoot, "apps/v2-dag-lambda/src/handler.ts")],
-    external: ["playwright"],
-    format: "cjs",
-    minify: true,
-    outfile,
-    platform: "node",
-    target: "node22",
-    tsconfig: path.join(repoRoot, "tsconfig.base.json")
-  });
+  const tempParent = path.join(repoRoot, "apps/v2-dag-lambda/tmp");
+  await mkdir(tempParent, { recursive: true });
+  const tempDir = await mkdtemp(path.join(tempParent, "bundle-import-"));
+  try {
+    const outfile = path.join(tempDir, "handler.cjs");
+    await build({
+      bundle: true,
+      entryPoints: [path.join(repoRoot, "apps/v2-dag-lambda/src/handler.ts")],
+      external: ["playwright"],
+      format: "cjs",
+      minify: true,
+      outfile,
+      platform: "node",
+      target: "node22",
+      tsconfig: path.join(repoRoot, "tsconfig.base.json")
+    });
 
-  const requireFromTest = createRequire(import.meta.url);
-  const bundledHandler = requireFromTest(outfile) as { handler?: unknown };
-  assert.equal(typeof bundledHandler.handler, "function");
+    const requireFromTest = createRequire(import.meta.url);
+    const bundledHandler = requireFromTest(outfile) as { handler?: unknown };
+    assert.equal(typeof bundledHandler.handler, "function");
+  } finally {
+    await rm(tempDir, { force: true, recursive: true });
+  }
 });
 
 test("handler rejects wrong contract, processor, unsupported region, VPC, or production-integration flags", () => {

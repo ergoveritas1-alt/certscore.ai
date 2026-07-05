@@ -310,7 +310,9 @@ async function buildScanTimingSummaryFromMirror(input: {
     artifactMirroredAt: input.wc01ResultRecordedAt.toISOString(),
     lambdaCompletedAt: input.parsedMessage.completedAt,
     lambdaToWc01ResultRecordedMs: input.lambdaToWc01ResultRecordedMs,
+    sqsApproximateReceiveCount: input.consumer?.approximateReceiveCount ?? null,
     sqsConsumerReceivedAt: input.consumer?.consumerReceivedAt ?? null,
+    sqsMessageId: input.consumer?.sqsMessageId ?? null,
     sqsQueueRegion: input.consumer?.queueRegion ?? null,
     sqsSentAt: input.consumer?.sentAt ?? null,
     wc01ResultRecordedAt: input.wc01ResultRecordedAt.toISOString()
@@ -362,6 +364,67 @@ async function persistScanTimingSummary(input: {
       input.scanTimingSummary
     ]
   );
+}
+
+async function recordScanTimingSummaryFailure(input: {
+  error: unknown;
+  resultEventId: string | null;
+  stage: string;
+}) {
+  if (!input.resultEventId) {
+    return;
+  }
+  const { query } = await import("@website-signal-risk-scanner/db");
+  await query(
+    `update scan_events
+        set metadata_json = jsonb_set(metadata_json, '{scanTimingSummaryError}', $2::jsonb, true)
+      where id = $1`,
+    [
+      input.resultEventId,
+      {
+        message: input.error instanceof Error ? input.error.message.replace(/\s+/g, " ").slice(0, 500) : String(input.error).replace(/\s+/g, " ").slice(0, 500),
+        recordedAt: new Date().toISOString(),
+        stage: input.stage.slice(0, 80)
+      }
+    ]
+  );
+}
+
+async function persistScanTimingSummaryFromMirror(input: {
+  artifactMirror: NonNullable<Awaited<ReturnType<typeof mirrorLocalV2DagLambdaArtifacts>>>;
+  consumer?: LocalV2DagLambdaResultConsumerMetadata;
+  context: {
+    domainId: string | null;
+    organizationId: string | null;
+  };
+  lambdaToWc01ResultRecordedMs: number | null;
+  parsedMessage: LocalV2DagLambdaResultMessage;
+  resultEventId: string | null;
+  stage: string;
+  wc01ResultRecordedAt: Date;
+}) {
+  try {
+    const scanTimingSummary = await buildScanTimingSummaryFromMirror({
+      artifactMirror: input.artifactMirror,
+      consumer: input.consumer,
+      lambdaToWc01ResultRecordedMs: input.lambdaToWc01ResultRecordedMs,
+      parsedMessage: input.parsedMessage,
+      wc01ResultRecordedAt: input.wc01ResultRecordedAt
+    });
+    await persistScanTimingSummary({
+      context: input.context,
+      resultEventId: input.resultEventId,
+      scanId: input.parsedMessage.scanId,
+      scanTimingSummary
+    });
+  } catch (error) {
+    await recordScanTimingSummaryFailure({ error, resultEventId: input.resultEventId, stage: input.stage });
+    console.warn("[local-v2-dag-lambda-result] scan timing summary persistence failed", {
+      error: error instanceof Error ? error.message : String(error),
+      scanId: input.parsedMessage.scanId,
+      stage: input.stage
+    });
+  }
 }
 
 async function mirrorAuxiliaryArtifactsFromLambdaManifest(input: {
@@ -613,6 +676,16 @@ export async function recordLocalV2DagLambdaResultEvent(
     ]
   );
   if (artifactMirror) {
+    await persistScanTimingSummaryFromMirror({
+      artifactMirror,
+      consumer: options.consumer,
+      context,
+      lambdaToWc01ResultRecordedMs,
+      parsedMessage,
+      resultEventId,
+      stage: "core_artifacts_mirrored",
+      wc01ResultRecordedAt
+    });
     await mirrorLocalV2DagLambdaAuxiliaryArtifacts({
       mirror: artifactMirror,
       parsedMessage,
@@ -641,18 +714,15 @@ export async function recordLocalV2DagLambdaResultEvent(
         ]
       );
     }
-    const scanTimingSummary = await buildScanTimingSummaryFromMirror({
+    await persistScanTimingSummaryFromMirror({
       artifactMirror,
       consumer: options.consumer,
+      context,
       lambdaToWc01ResultRecordedMs,
       parsedMessage,
-      wc01ResultRecordedAt
-    });
-    await persistScanTimingSummary({
-      context,
       resultEventId,
-      scanId: parsedMessage.scanId,
-      scanTimingSummary
+      stage: "auxiliary_artifacts_mirrored",
+      wc01ResultRecordedAt
     });
   }
 }

@@ -33,7 +33,9 @@ test("buildScanTimingSummary parses and bounds Lambda, scan-core, and module tim
       artifactMirroredAt: "2026-07-04T15:27:44.000Z",
       lambdaCompletedAt: "2026-07-04T15:27:43.000Z",
       lambdaToWc01ResultRecordedMs: 1200,
+      sqsApproximateReceiveCount: 3,
       sqsConsumerReceivedAt: "2026-07-04T15:27:43.500Z",
+      sqsMessageId: "message-123",
       sqsQueueRegion: "eu-west-1",
       sqsSentAt: "2026-07-04T15:27:43.100Z",
       wc01ResultRecordedAt: "2026-07-04T15:27:44.200Z"
@@ -67,6 +69,8 @@ test("buildScanTimingSummary parses and bounds Lambda, scan-core, and module tim
   assert.equal(summary.truncation.scanCorePhasesOmitted, 3);
   assert.equal(summary.truncation.modulesOmitted, 2);
   assert.equal(summary.truncation.moduleTimingRowsOmitted, 48);
+  assert.equal(summary.handoffTimings.sqsApproximateReceiveCount, 3);
+  assert.equal(summary.handoffTimings.sqsMessageId, "message-123");
   assert.equal(summary.handoffTimings.sqsQueueRegion, "eu-west-1");
   assert.deepEqual(summary.artifactRefs.map((ref) => ref.kind), ["manifestUri", "scanArtifactUri", "mirrorManifest"]);
 });

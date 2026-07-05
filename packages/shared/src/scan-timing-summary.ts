@@ -55,7 +55,9 @@ export type ScanTimingSummary = {
     artifactMirroredAt?: string | null;
     lambdaCompletedAt?: string | null;
     lambdaToWc01ResultRecordedMs?: number | null;
+    sqsApproximateReceiveCount?: number | null;
     sqsConsumerReceivedAt?: string | null;
+    sqsMessageId?: string | null;
     sqsQueueRegion?: string | null;
     sqsSentAt?: string | null;
     wc01ResultRecordedAt?: string | null;
@@ -310,7 +312,9 @@ export function buildScanTimingSummary(input: BuildScanTimingSummaryInput): Scan
       artifactMirroredAt: boundedIsoString(handoffTiming.artifactMirroredAt),
       lambdaCompletedAt: boundedIsoString(handoffTiming.lambdaCompletedAt) ?? boundedIsoString(input.lambdaCompletedAt),
       lambdaToWc01ResultRecordedMs: boundedNumber(handoffTiming.lambdaToWc01ResultRecordedMs),
+      sqsApproximateReceiveCount: boundedNumber(handoffTiming.sqsApproximateReceiveCount),
       sqsConsumerReceivedAt: boundedIsoString(handoffTiming.sqsConsumerReceivedAt),
+      sqsMessageId: boundedString(handoffTiming.sqsMessageId, 160),
       sqsQueueRegion: boundedString(handoffTiming.sqsQueueRegion, 64),
       sqsSentAt: boundedIsoString(handoffTiming.sqsSentAt),
       wc01ResultRecordedAt: boundedIsoString(handoffTiming.wc01ResultRecordedAt)
