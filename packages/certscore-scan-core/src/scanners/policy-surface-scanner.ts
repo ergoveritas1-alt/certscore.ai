@@ -2853,13 +2853,30 @@ function isThirdPartyVendorDisclosurePolicyCandidate(
 
 const THIRD_PARTY_VENDOR_DISCLOSURE_POLICY_LINK_PATTERNS = [
   /\blearn more about (?:this )?(?:provider|vendor|partner)\b/i,
+  /\b(?:provider|vendor|partner|service provider|advertising partner) (?:details|privacy policy|privacy notice|cookie policy)\b/i,
+  /\b(?:details|information) (?:about|for) (?:this )?(?:provider|vendor|partner|service provider|advertising partner)\b/i,
   /\ben savoir plus sur ce fournisseur\b/i,
+  /\b(?:d[eé]tails?|informations?) (?:du|sur le|sur ce) (?:fournisseur|partenaire)\b/i,
+  /\b(?:fournisseur|partenaire) (?:politique de confidentialit[eé]|charte de confidentialit[eé])\b/i,
   /\bmeer informatie over deze aanbieder\b/i,
+  /\b(?:aanbieder|leverancier|partner) (?:details|privacybeleid|privacyverklaring|cookiebeleid)\b/i,
+  /\b(?:meer informatie|details) over (?:deze )?(?:aanbieder|leverancier|partner)\b/i,
   /\bmehr (?:erfahren|informationen) (?:über|zu) (?:diesen )?(?:anbieter|dienstleister|partner)\b/i,
+  /\b(?:anbieter|dienstleister|partner) (?:details|datenschutzerkl[aä]rung|datenschutzhinweis|cookie[-\s]?richtlinie)\b/i,
   /\bm[aá]s informaci[oó]n sobre (?:este )?(?:proveedor|socio|partner)\b/i,
+  /\b(?:proveedor|socio|partner) (?:detalles|pol[ií]tica de privacidad|pol[ií]tica de cookies)\b/i,
   /\bper saperne di pi[uù] su (?:questo )?(?:fornitore|partner)\b/i,
   /\bmaggiori informazioni su (?:questo )?(?:fornitore|partner)\b/i,
+  /\b(?:fornitore|partner) (?:dettagli|informativa sulla privacy|privacy policy|cookie policy)\b/i,
   /\bwi[eę]cej informacji o (?:tym )?(?:dostawcy|partnerze)\b/i,
+  /\b(?:dostawca|dostawcy|partner|partnerze) (?:szczeg[oó][łl]y|polityka prywatno[śs]ci|polityka plik[oó]w cookie)\b/i,
+  /\b(?:zaufani partnerzy|lista partner[oó]w|lista dostawc[oó]w|partnerzy iab|dostawcy iab)\b/i,
+  /\b(?:trusted partners|vendor list|vendors list|iab vendors|iab partners|partner disclosures|provider disclosures)\b/i,
+  /\b(?:liste des partenaires|liste des fournisseurs|partenaires iab|fournisseurs iab)\b/i,
+  /\b(?:partnerliste|anbieterliste|iab[-\s]anbieter|iab[-\s]partner)\b/i,
+  /\b(?:lista de socios|lista de proveedores|proveedores iab|socios iab)\b/i,
+  /\b(?:lista partner|lista fornitori|fornitori iab|partner iab)\b/i,
+  /\b(?:partnerlijst|leverancierslijst|iab[-\s]aanbieders|iab[-\s]partners)\b/i,
 ];
 
 function hasSufficientFetchableStaticGdprCoverage(baseUrl: string, candidates: PolicySurfaceCandidate[]): boolean {

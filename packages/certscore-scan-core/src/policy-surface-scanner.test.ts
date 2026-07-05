@@ -1938,7 +1938,7 @@ test("policySurfaceScanner suppresses third-party CMP vendor-panel privacy links
       observation.normalizedUrl === `${baseUrl}/policies/education-privacy`
     );
     const vendorPanelPolicies = result.policySurfaceObservations.filter((observation) =>
-      /example-provider|example-aanbieder|example-fornitore|example-partner/i.test(observation.normalizedUrl ?? observation.url)
+      /example-(?:provider|aanbieder|fornitore|partner|vendor|anbieter|fournisseur|proveedor|leverancier|dostawca)/i.test(observation.normalizedUrl ?? observation.url)
     );
 
     assert.ok(firstPartyPrivacy);
