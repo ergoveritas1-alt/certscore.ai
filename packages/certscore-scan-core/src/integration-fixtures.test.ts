@@ -1202,6 +1202,55 @@ test("pre-consent runtime scanner recaptures late settings controls from high-co
   }
 });
 
+test("pre-consent runtime scanner reruns geometry after an inconclusive early geometry pass", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-late-geometry-"));
+  try {
+    const url = server.urlFor("consent-cmp-script-late-settings");
+    const outDir = path.join(tempRoot, "out");
+    const artifactWriter = await createArtifactWriter(outDir);
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 20_000,
+      artifactWriter,
+      routeFulfillers,
+      screenshotMode: "always",
+      waitMode: "fast",
+    });
+    const timingLabels = result.moduleRun.timingBreakdown?.map((entry) => entry.label) ?? [];
+    const geometryArtifact = JSON.parse(
+      await readFile(path.join(outDir, "ConsentControlGeometryEvidence.json"), "utf8"),
+    ) as ConsentControlGeometryArtifact;
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.equal(
+      timingLabels.includes("consent control geometry diagnostic early inconclusive"),
+      true,
+      "empty early geometry should not suppress the later post-screenshot geometry pass",
+    );
+    assert.equal(
+      timingLabels.includes("consent control geometry diagnostic"),
+      true,
+      "scanner should run the later geometry pass after an inconclusive early geometry pass",
+    );
+    assert.equal(
+      geometryArtifact.summary.firstLayerAccept,
+      true,
+      "later geometry pass should retain the delayed accept control",
+    );
+    assert.equal(
+      geometryArtifact.summary.firstLayerOptions,
+      true,
+      "later geometry pass should retain the delayed settings control",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner keeps high-confidence CMP recapture open long enough for very late settings controls", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-cmp-script-very-late-settings-"));

@@ -431,7 +431,14 @@ export async function preConsentRuntimeScanner(
             artifactOnly: true,
             productionFindingIntegration: false,
           });
-          consentGeometryDiagnosticWritten = true;
+          consentGeometryDiagnosticWritten = hasConfirmedFirstLayerGeometryControls(geometry);
+          if (!consentGeometryDiagnosticWritten) {
+            recordInstantTiming(
+              timingBreakdown,
+              "consent control geometry diagnostic early inconclusive",
+              "Early artifact-only consent-control geometry did not retain confirmed first-layer controls, so the post-screenshot geometry pass remains eligible.",
+            );
+          }
           earlyGeometryConsentObservation = consentUiObservationFromConfirmedGeometryControls({
             artifactPath: geometryArtifactPath,
             geometry,
