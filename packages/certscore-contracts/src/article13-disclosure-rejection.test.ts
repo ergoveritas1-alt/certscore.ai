@@ -135,6 +135,38 @@ test("Article 13 rejection contract preserves accepted legacy and multilingual e
   );
   assert.equal(
     isArticle13DisclosureEvidenceUsable(
+      "La politique informe les utilisateurs du recueil de ces données ; des durées de conservation ou lorsque cela n'est pas possible des critères utilisés pour déterminer cette durée.",
+      "data_retention",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "la loi en cas de transfert hors Union Européenne ; - des durées de conservation ou lorsque cela n'est pas possible des critères utilisés pour déterminer cette durée.",
+      "data_retention",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "La politique informe les utilisateurs du recueil de ces données ; des garanties apportées conformément à la loi en cas de transfert hors Union Européenne.",
+      "international_transfers",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "s lie, ou l'intérêt légitime de l'Éditeur ou d'un tiers...) ; - des garanties apportées conformément à la loi en cas de transfert hors Union Européenne ; - des durées de conservation ou lorsque cela n'est pas possible de",
+      "international_transfers",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
       "Unseren Datenschutzbeauftragten erreichen Sie unter datenschutzbeauftragter@example.test oder unserer Postadresse mit dem Zusatz Datenschutzbeauftragter.",
       "dpo_contact",
       { mode: "multilingual_classifier" },

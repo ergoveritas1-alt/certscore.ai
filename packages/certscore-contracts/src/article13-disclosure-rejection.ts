@@ -358,7 +358,7 @@ function hasLocalizedArticle13EvidenceContext(
   const normalized = normalizeArticle13Whitespace(value);
   const hasPrivacyDataContext =
     /(?:privacy|personal data|personal information|data protection|processing|controller|policy|notice|rights|privacy policy)/i.test(normalized) ||
-    /(?:datenschutz|personenbezogene daten|traitement|données personnelles|données à caractère personnel|recueil de ces données|protección de datos|datos personales|protezione dei dati|dati personali|trattamento dei dati|tuoi dati|suoi dati|persoonsgegevens|gegevensbescherming|dane osobowe|ochrona danych)/i.test(normalized);
+    /(?:datenschutz|personenbezogene daten|traitement|données personnelles|données à caractère personnel|recueil de ces données|durées? de conservation|critères utilisés pour déterminer cette durée|transfert hors (?:union européenne|l'union européenne|ue)|protección de datos|datos personales|protezione dei dati|dati personali|trattamento dei dati|tuoi dati|suoi dati|persoonsgegevens|gegevensbescherming|dane osobowe|ochrona danych)/i.test(normalized);
   if (!hasPrivacyDataContext) {
     return false;
   }
