@@ -1,0 +1,67 @@
+name: CertScore Pulse Dogfood
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: Public URL to scan with CertScore Pulse.
+        required: false
+        default: https://certscore.ai
+        type: string
+      fail_on:
+        description: Lowest severity that should fail the workflow.
+        required: false
+        default: none
+        type: choice
+        options:
+          - none
+          - critical
+          - high
+
+concurrency:
+  group: certscore-pulse-dogfood
+  cancel-in-progress: false
+
+jobs:
+  pulse:
+    name: Scan certscore.ai
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Run CertScore Pulse
+        id: pulse
+        uses: ergoveritas1-alt/certscore.ai@v0.2.0
+        with:
+          target-url: ${{ inputs.target_url }}
+          api-key: ${{ secrets.CERTSCORE_API_KEY }}
+          fail-on: ${{ inputs.fail_on }}
+
+      - name: Write workflow summary
+        if: always()
+        env:
+          TARGET_URL: ${{ inputs.target_url }}
+          FAIL_ON: ${{ inputs.fail_on }}
+          SCAN_ID: ${{ steps.pulse.outputs.scan-id }}
+          STATUS: ${{ steps.pulse.outputs.status }}
+          FINDINGS_COUNT: ${{ steps.pulse.outputs.findings-count }}
+          CRITICAL_FINDINGS: ${{ steps.pulse.outputs.critical-findings }}
+          HIGH_FINDINGS: ${{ steps.pulse.outputs.high-findings }}
+          REPORT_URL: ${{ steps.pulse.outputs.report-url }}
+        run: |
+          {
+            echo "## CertScore Pulse dogfood"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Target | ${TARGET_URL} |"
+            echo "| fail-on | ${FAIL_ON} |"
+            echo "| Status | ${STATUS:-not returned} |"
+            echo "| Scan ID | ${SCAN_ID:-not returned} |"
+            echo "| Findings | ${FINDINGS_COUNT:-not returned} |"
+            echo "| Critical findings | ${CRITICAL_FINDINGS:-not returned} |"
+            echo "| High findings | ${HIGH_FINDINGS:-not returned} |"
+            echo "| Report | ${REPORT_URL:-not returned} |"
+          } >> "$GITHUB_STEP_SUMMARY"

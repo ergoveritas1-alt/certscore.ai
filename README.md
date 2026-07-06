@@ -1,4 +1,91 @@
-# CertScore
+# CertScore Pulse GitHub Action
+
+Run a CertScore public-web scan from GitHub Actions and surface automated review signals directly in CI.
+
+CertScore Pulse observes public website evidence for review workflows, including accessibility, privacy, cookie, policy, and disclosure risk signals. It is designed to support engineering and compliance review; it is not legal advice, legal certification, or a definitive compliance determination.
+
+[View the Marketplace listing](https://github.com/marketplace/actions/certscore-pulse)
+
+## Quick start
+
+Add `CERTSCORE_API_KEY` as a GitHub Actions secret, then copy this workflow into `.github/workflows/certscore-pulse.yml`:
+
+```yaml
+name: CertScore Pulse
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  certscore-pulse:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Run CertScore Pulse
+        id: pulse
+        uses: ergoveritas1-alt/certscore.ai@v0.2.0
+        with:
+          target-url: https://example.com
+          api-key: ${{ secrets.CERTSCORE_API_KEY }}
+          fail-on: critical
+
+      - name: Write summary
+        if: always()
+        run: |
+          echo "Scan status: ${{ steps.pulse.outputs.status }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Report: ${{ steps.pulse.outputs.report-url }}" >> "$GITHUB_STEP_SUMMARY"
+```
+
+## Inputs
+
+### `CERTSCORE_API_KEY`
+
+`CERTSCORE_API_KEY` is required. Store it as a repository or organization secret and pass it to the Action through the `api-key` input:
+
+```yaml
+with:
+  api-key: ${{ secrets.CERTSCORE_API_KEY }}
+```
+
+### `fail-on`
+
+Use `fail-on` to choose the lowest automated review-signal severity that should fail the workflow:
+
+```yaml
+with:
+  fail-on: critical
+```
+
+```yaml
+with:
+  fail-on: high
+```
+
+```yaml
+with:
+  fail-on: none
+```
+
+Use `critical` for stricter CI gating, `high` when high-severity review signals should block, and `none` when you want scan results and summaries without failing the workflow.
+
+## Outputs
+
+The Action exposes the completed scan ID, status, public-safe finding counts, critical/high counts, and report URL as step outputs:
+
+```yaml
+${{ steps.pulse.outputs.scan-id }}
+${{ steps.pulse.outputs.status }}
+${{ steps.pulse.outputs.findings-count }}
+${{ steps.pulse.outputs.critical-findings }}
+${{ steps.pulse.outputs.high-findings }}
+${{ steps.pulse.outputs.report-url }}
+```
+
+## CertScore WC01 Monorepo
 
 CertScore (`certscore.ai`) is a production-minded MVP for scanning public websites for potential accessibility, privacy, cookie, policy, and disclosure risk signals. It is a risk signal and monitoring product, not a legal certification platform.
 
