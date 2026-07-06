@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../components/layout/site-footer";
@@ -50,19 +51,30 @@ const scannerSolutions = [
     href: "/solutions/gdpr-website-compliance-scanner",
     title: "GDPR website scanner",
     description:
-      "Review consent, cookie, tracking, policy, and disclosure signals for GDPR/ePrivacy workflows."
+      "Review consent, cookie, tracking, policy, and disclosure signals for GDPR/ePrivacy workflows.",
+    imageAlt:
+      "Sample GDPR website scan report showing executive summary scores, third-party requests, pre-consent cookies, signal snapshot, policy surfaces, and scan timeline.",
+    imageSrc: "/images/gdpr-website-scanner-solution.png",
+    meta: "GDPR / ePrivacy"
   },
   {
     href: "/solutions/cookie-consent-scanner",
     title: "Cookie consent scanner",
     description:
-      "Check cookie timing, CMP behavior, third-party cookies before consent, and reject-path review signals."
+      "Check cookie timing, CMP behavior, third-party cookies before consent, and reject-path review signals.",
+    imageAlt:
+      "Pre-consent cookies and trackers table showing purpose mix, priority mix, vendor rows, first-seen timing, and GDPR ePrivacy checklist rating mix.",
+    imageSrc: "/images/cookie-consent-scanner-solution.png",
+    meta: "Consent controls"
   },
   {
     href: "/solutions/privacy-policy-risk-scanner",
     title: "Privacy policy risk scanner",
     description:
-      "Compare observable website behavior with privacy, cookie, vendor, and disclosure surfaces."
+      "Compare observable website behavior with privacy, cookie, vendor, and disclosure surfaces.",
+    imageAlt: "Policy excerpt modal showing retained privacy policy source URL and matched controller contact disclosure evidence.",
+    imageSrc: "/how-it-works/policy-detail.png",
+    meta: "Policy surfaces"
   }
 ];
 
@@ -212,26 +224,45 @@ export default async function MarketingHomePage() {
 
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-14">
-          <div className="max-w-3xl space-y-3">
-            <Badge tone="neutral">Scanner solutions</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-              Focused pages for the review workflow you need.
-            </h2>
-            <p className="text-sm leading-6 text-slate-600">
-              Start with the scanner category closest to the question: GDPR, cookie consent, or privacy policy risk. Each page explains observable public-web signals for review, not legal conclusions.
-            </p>
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div className="max-w-3xl space-y-3">
+              <Badge tone="neutral">Scanner solutions</Badge>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
+                Focused pages for the review workflow you need.
+              </h2>
+              <p className="text-sm leading-6 text-slate-600">
+                Start with the scanner category closest to the question: GDPR, cookie consent, or privacy policy risk. Each page explains observable public-web signals for review, not legal conclusions.
+              </p>
+            </div>
+            <Link href="/solutions" className="text-sm font-semibold text-slate-900 transition hover:text-sky-700">
+              View all
+            </Link>
           </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <div className="mt-8 grid gap-6 lg:grid-cols-3">
             {scannerSolutions.map((solution) => (
               <Link key={solution.href} href={solution.href} className="group block">
-                <Card className="h-full border-slate-200 bg-slate-50 shadow-none transition group-hover:border-sky-200 group-hover:bg-white group-hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
-                  <CardHeader>
-                    <CardTitle className="text-xl text-slate-950">{solution.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm leading-7 text-slate-600">{solution.description}</p>
-                  </CardContent>
-                </Card>
+                <article className="h-full">
+                  <div className="relative aspect-[1.24] overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-[0_18px_40px_rgba(15,23,42,0.08)] transition group-hover:-translate-y-0.5 group-hover:shadow-[0_22px_48px_rgba(15,23,42,0.12)]">
+                    <Image
+                      src={solution.imageSrc}
+                      alt={solution.imageAlt}
+                      fill
+                      className="object-cover object-top transition duration-300 group-hover:scale-[1.02]"
+                      sizes="(min-width: 1024px) 352px, (min-width: 768px) 45vw, 100vw"
+                    />
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-x-0 bottom-0 h-24 bg-[linear-gradient(180deg,rgba(255,255,255,0)_0%,rgba(248,250,252,0.94)_100%)]"
+                    />
+                  </div>
+                  <div className="pt-4">
+                    <p className="text-xs font-semibold text-slate-500">{solution.meta}</p>
+                    <h3 className="mt-2 text-xl font-semibold leading-tight tracking-tight text-slate-950 group-hover:text-sky-700">
+                      {solution.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{solution.description}</p>
+                  </div>
+                </article>
               </Link>
             ))}
           </div>

@@ -13,51 +13,51 @@ type CarouselSlide = {
 const SLIDES: CarouselSlide[] = [
   {
     src: "/how-it-works/executive-summary.png",
-    alt: "CertScore.ai report executive summary showing score, cookies before consent, third-party requests, and review lenses.",
+    alt: "CertScore.ai scan report executive summary for sample.site showing score, third-party requests, cookies before consent, signal snapshot, policy surfaces, and scan timeline.",
     title: "Executive summary",
-    highlight: "Start with a plain-English readout of the site's highest-level privacy, consent, tracker, and accessibility posture."
+    highlight: "Start with the report-level readout: score, pre-consent activity, consent platform, policy surfaces, and the timeline of observed scan signals."
   },
   {
     src: "/how-it-works/highest-priority-issues.png",
-    alt: "Highest-priority findings cards showing tracking cookies before consent and session recording services detected.",
-    title: "Highest-priority issues",
-    highlight: "Focus first on the findings that are most actionable, with severity, evidence strength, and market-density context."
+    alt: "Pre-consent cookies and trackers section showing purpose mix, priority mix, vendors, first-seen timing, and the GDPR ePrivacy evidence checklist summary.",
+    title: "Pre-consent runtime inventory",
+    highlight: "Review the concrete cookies, storage events, vendors, domains, purposes, priorities, and first-seen timing behind the scan summary."
   },
   {
     src: "/how-it-works/detailed-finding-packets.png",
-    alt: "Detailed review findings list with severity, surface, evidence, and review-status badges.",
-    title: "Detailed finding packets",
-    highlight: "Expand lower-level findings when you need the underlying taxonomy, evidence lane, status, and retained signal context."
+    alt: "GDPR ePrivacy evidence checklist showing rating mix, review summary, consent mechanism row, and expanded evidence packet JSON.",
+    title: "GDPR/ePrivacy evidence checklist",
+    highlight: "Open checklist rows to see whether consent, policy, transparency, and pre-consent runtime evidence was observed, limited, or flagged for review."
   },
   {
     src: "/how-it-works/operational-context.png",
-    alt: "Operational context panel showing observed vendors, infrastructure profile, audience context, and scan warnings.",
-    title: "Operational context",
-    highlight: "Review vendors, scan-pass warnings, infrastructure notes, and audience context that may affect interpretation."
+    alt: "Pre-consent runtime checklist rows showing pre-consent third-party cookies and storage, session replay signal, and device identification or fingerprinting signal status.",
+    title: "Runtime checklist context",
+    highlight: "Use row-specific notes to understand what was retained before consent, what was not observed, and which evidence packet supports each row."
   },
   {
     src: "/how-it-works/review-lenses.png",
-    alt: "Review lens cards grouping findings by GDPR/ePrivacy, accessibility, and public-web disclosure context.",
-    title: "Review lenses",
-    highlight: "See how findings are organized into privacy, consumer-protection, and accessibility review contexts without making legal conclusions."
+    alt: "Third-party services section showing pre-consent third-party tracking, embedded service connections before consent, evidence packets, and correction steps.",
+    title: "Pre-consent service findings",
+    highlight: "Move from the inventory into reviewable findings for tracking, embedded services, and concrete remediation steps tied to retained evidence."
   },
   {
     src: "/how-it-works/supporting-analysis.png",
-    alt: "Supporting analysis section showing finding mix bars and coverage navigation tiles.",
-    title: "Supporting analysis",
-    highlight: "Use the finding mix and coverage navigation to understand where signals clustered across the scan."
+    alt: "Reject decline control finding showing retained evidence that reject was not available on the first layer, JSON packet, and correction steps.",
+    title: "Consent-control evidence",
+    highlight: "Inspect consent-control rows such as reject or decline availability, with the retained evidence packet and repair guidance in the same view."
   },
   {
     src: "/how-it-works/policy-detail.png",
-    alt: "Disclosure clarity finding card with next step, why this matters, how to fix, and JSON evidence section.",
-    title: "Policy detail",
-    highlight: "Review retained disclosure snippets and plain-English remediation guidance when policy language appears weak or generic."
+    alt: "Policy excerpt modal for controller contact disclosure showing retained privacy policy text and highlighted matching evidence.",
+    title: "Retained policy excerpts",
+    highlight: "Open policy-surface evidence to see the retained source URL, matched disclosure text, and highlighted excerpt captured at scan time."
   },
   {
     src: "/how-it-works/evidence-packets.png",
-    alt: "Tracking cookies set before consent finding card with expanded JSON evidence payload.",
-    title: "Evidence packets",
-    highlight: "Open structured JSON evidence when you need auditable details behind a surfaced finding."
+    alt: "Scan options menu showing run via Lambda, fresh re-scan, and scan-from choices for EU-DE, EU-IR, California, and local extension.",
+    title: "Regional scan options",
+    highlight: "Choose the scan path and location before rerunning, so evidence can reflect the region and execution mode you want to review."
   }
 ];
 

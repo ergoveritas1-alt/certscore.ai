@@ -1,10 +1,13 @@
 "use server";
 
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
+import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "../scans/display-state";
+import { getPlatformAdminScanById } from "../scans/get-scan-by-id";
 import {
   loadAdminScanOverviewCounts,
   loadAdminScanListPageData,
@@ -12,6 +15,7 @@ import {
   loadBlockedRunTelemetryRows,
   type AdminBlockedRunTelemetryRow,
   type AdminScanDiagnosticEventRow as ScanDiagnosticEventRow,
+  type AdminScanSnapshotRow,
   type AdminScanRequestRow as ScanRequestRow
 } from "./repository";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
@@ -81,7 +85,7 @@ export type BlockedRunTelemetry = {
 };
 
 export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanListItem[]> {
-  await requirePlatformAdminContext();
+  const adminContext = await requirePlatformAdminContext();
   const activityWindowLimit = Math.max(limit + offset, limit);
   const [scanPageData, scanRequestRows] = await Promise.all([
     loadAdminScanListPageData(activityWindowLimit, 0),
@@ -100,6 +104,11 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
   const snapshotMap = new Map(
     resolvedSnapshots.flatMap((snapshot) => (snapshot.scan_id ? [[snapshot.scan_id, snapshot] as const] : []))
   );
+  const derivedMetricsByScanId = await loadDerivedAdminScanMetricsByScanId({
+    scanRows,
+    snapshotMap,
+    viewerEmail: adminContext.user.email
+  });
   const diagnosticEventMap = new Map<string, ScanDiagnosticEventRow[]>();
   for (const diagnosticEvent of diagnosticEvents) {
     const existing = diagnosticEventMap.get(diagnosticEvent.scan_id) ?? [];
@@ -108,16 +117,26 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
   }
 
   const requestByLinkedScanId = new Map<string, ScanRequestRow>();
+  const latestRequestByLinkedScanId = new Map<string, ScanRequestRow>();
   for (const request of scanRequestRows) {
     const linkedScanId = getLinkedScanIdForRequest(request);
-    if (linkedScanId && request.resolution_mode !== "reused_existing_scan" && !requestByLinkedScanId.has(linkedScanId)) {
-      requestByLinkedScanId.set(linkedScanId, request);
+    if (linkedScanId) {
+      if (!latestRequestByLinkedScanId.has(linkedScanId)) {
+        latestRequestByLinkedScanId.set(linkedScanId, request);
+      }
+      if (request.resolution_mode !== "reused_existing_scan" && !requestByLinkedScanId.has(linkedScanId)) {
+        requestByLinkedScanId.set(linkedScanId, request);
+      }
     }
   }
 
   const scanItems: AdminScanListItem[] = scanRows.map((scan) => {
     const snapshot = snapshotMap.get(scan.id) ?? null;
+    const derivedMetrics = derivedMetricsByScanId.get(scan.id) ?? null;
     const linkedRequest = requestByLinkedScanId.get(scan.id) ?? null;
+    const latestLinkedRequest = latestRequestByLinkedScanId.get(scan.id) ?? null;
+    const totalSignals = getPreferredAdminMetric(snapshot?.total_signals ?? null, derivedMetrics?.totalSignals ?? null);
+    const findingCount = getPreferredAdminMetric(snapshot?.report_finding_count ?? null, derivedMetrics?.findingCount ?? null);
     const normalizedAccessPosture = normalizeAccessPostureSummary({
       accessPostureClass: snapshot?.access_posture_class ?? null,
       highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
@@ -126,13 +145,13 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       pagesScanned: scan.pages_scanned,
       recoverableFindingClasses: snapshot?.recoverable_finding_classes ?? [],
       stopTier: snapshot?.stop_tier ?? null,
-      totalSignals: snapshot?.total_signals ?? null
+      totalSignals
     });
     const accessPosture = deriveAccessPosturePresentation({
       accessPostureClass: normalizedAccessPosture.accessPostureClass,
       highestSuccessfulTier: normalizedAccessPosture.highestSuccessfulTier,
       stopTier: normalizedAccessPosture.stopTier,
-      totalSignals: snapshot?.total_signals ?? null,
+      totalSignals,
       pagesScanned: scan.pages_scanned,
       recoverableFindingClasses: normalizedAccessPosture.recoverableFindingClasses
     });
@@ -158,7 +177,11 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       domainId: scan.domain_id,
       domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
-      requesterIp: selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
+      requesterIp:
+        selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []) ??
+        selectRequesterIpFromScanConfig(scan.scan_config_json) ??
+        (linkedRequest ? selectRequesterIpFromScanRequest(linkedRequest) : null) ??
+        (latestLinkedRequest ? selectRequesterIpFromScanRequest(latestLinkedRequest) : null),
       scanViewHref: getAdminAuthenticatedScanHref(scan.id),
       scanType: scan.scan_type,
       scanFromLabel: getScanFromDisplay(scan.scan_config_json).label,
@@ -169,9 +192,9 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       firstGeneratedAt: scan.created_at,
       completedAt: scan.completed_at,
       pagesScanned: scan.pages_scanned,
-      totalSignals: snapshot?.total_signals ?? null,
-      topFindingCount: null,
-      findingCount: snapshot?.report_finding_count ?? null,
+      totalSignals,
+      topFindingCount: derivedMetrics?.topFindingCount ?? null,
+      findingCount,
       freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? null),
       certscoreOverall: snapshot?.certscore_overall ?? null,
       homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
@@ -208,12 +231,7 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
   const requestContext = getNestedMetadataObject(request.request_context);
   const scanConfig = getNestedMetadataObject(request.scan_config_json);
   const scanFromDisplay = getScanFromDisplay(requestContext ?? scanConfig);
-  const requestedBy = getNestedMetadataObject(request.requested_by);
-  const provenance = requestContext ? getNestedMetadataObject(requestContext.provenance) : null;
-  const requesterIp =
-    (provenance ? getStringMetadataValue(provenance.originIp) : null) ??
-    (requestContext ? getStringMetadataValue(requestContext.originIp) : null) ??
-    (requestedBy ? getStringMetadataValue(requestedBy.ipHash) : null);
+  const requesterIp = selectRequesterIpFromScanRequest(request);
 
   return {
     accessPostureClass: null,
@@ -257,6 +275,83 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     totalSignals: null,
     topFindingCount: null
   };
+}
+
+type DerivedAdminScanMetrics = {
+  findingCount: number;
+  topFindingCount: number;
+  totalSignals: number;
+};
+
+function getPreferredAdminMetric(storedValue: number | null | undefined, derivedValue: number | null | undefined) {
+  if (typeof storedValue === "number" && Number.isFinite(storedValue) && storedValue > 0) {
+    return storedValue;
+  }
+  if (typeof derivedValue === "number" && Number.isFinite(derivedValue)) {
+    return derivedValue;
+  }
+  return typeof storedValue === "number" && Number.isFinite(storedValue) ? storedValue : null;
+}
+
+async function loadDerivedAdminScanMetricsByScanId(input: {
+  scanRows: Array<{ completed_at: string | null; id: string; status: string }>;
+  snapshotMap: Map<string, AdminScanSnapshotRow>;
+  viewerEmail: string | null | undefined;
+}) {
+  const scanIds = input.scanRows.flatMap((scan) => {
+    if (scan.status !== "completed" || !scan.completed_at) {
+      return [];
+    }
+    const snapshot = input.snapshotMap.get(scan.id);
+    const totalSignals = snapshot?.total_signals;
+    const findingCount = snapshot?.report_finding_count;
+    return !totalSignals || !findingCount ? [scan.id] : [];
+  });
+  const derivedMetricsByScanId = new Map<string, DerivedAdminScanMetrics>();
+
+  await Promise.all(
+    scanIds.map(async (scanId) => {
+      const scanRecord = await getPlatformAdminScanById({ scanId, viewerEmail: input.viewerEmail }).catch(() => null);
+      if (!scanRecord) {
+        return;
+      }
+      const packets = buildScanReportUnifiedFindingsForScan(scanRecord);
+      const executive = projectExecutiveFindingsFromUnifiedPackets(packets);
+      derivedMetricsByScanId.set(scanId, {
+        findingCount: packets.length,
+        topFindingCount: executive.topFindings.length,
+        totalSignals: scanRecord.signals.length
+      });
+    })
+  );
+
+  return derivedMetricsByScanId;
+}
+
+function selectRequesterIpFromRequestContext(requestContext: Record<string, unknown> | null, requestedBy?: Record<string, unknown> | null) {
+  const provenance = requestContext ? getNestedMetadataObject(requestContext.provenance) : null;
+  return (
+    (provenance ? getStringMetadataValue(provenance.originIp) ?? getStringMetadataValue(provenance.sourceIp) : null) ??
+    (requestContext ? getStringMetadataValue(requestContext.originIp) ?? getStringMetadataValue(requestContext.sourceIp) : null) ??
+    (requestContext ? getStringMetadataValue(requestContext.ipHash) : null) ??
+    (requestedBy ? getStringMetadataValue(requestedBy.ipHash) : null)
+  );
+}
+
+function selectRequesterIpFromScanRequest(request: ScanRequestRow) {
+  return selectRequesterIpFromRequestContext(
+    getNestedMetadataObject(request.request_context),
+    getNestedMetadataObject(request.requested_by)
+  );
+}
+
+function selectRequesterIpFromScanConfig(scanConfigJson: unknown) {
+  const scanConfig = getNestedMetadataObject(scanConfigJson);
+  const provenance = scanConfig ? getNestedMetadataObject(scanConfig.provenance) : null;
+  return (
+    (provenance ? getStringMetadataValue(provenance.originIp) ?? getStringMetadataValue(provenance.sourceIp) : null) ??
+    (scanConfig ? getStringMetadataValue(scanConfig.originIp) ?? getStringMetadataValue(scanConfig.sourceIp) : null)
+  );
 }
 
 function getLinkedScanIdForRequest(request: ScanRequestRow) {
@@ -304,9 +399,15 @@ function selectRequesterIp(events: ScanDiagnosticEventRow[]) {
     if (directOriginIp) {
       return directOriginIp;
     }
+    const directSourceIp = getStringMetadataValue(metadata.sourceIp);
+    if (directSourceIp) {
+      return directSourceIp;
+    }
 
     const provenance = getNestedMetadataObject(metadata.provenance);
-    const provenanceOriginIp = provenance ? getStringMetadataValue(provenance.originIp) : null;
+    const provenanceOriginIp = provenance
+      ? getStringMetadataValue(provenance.originIp) ?? getStringMetadataValue(provenance.sourceIp)
+      : null;
     if (provenanceOriginIp) {
       return provenanceOriginIp;
     }

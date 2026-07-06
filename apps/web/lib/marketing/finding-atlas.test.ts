@@ -91,17 +91,37 @@ const EXECUTIVE_SUMMARY_TOP_FINDING_ID_STRINGS: readonly string[] = EXECUTIVE_SU
 const PUBLIC_FINDING_REFERENCE_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_ID_STRINGS.filter(
   (findingId) => findingId !== "scan_quality_visual_no_go" && findingId !== "cpra_cba_opt_out_missing"
 );
-const PUBLIC_HOMEPAGE_CAROUSEL_FINDING_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_ID_STRINGS.filter(
-  (findingId) => findingId !== "cpra_cba_opt_out_missing"
-);
+const HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDING_IDS = [
+  "consent_banner_observed",
+  "accept_control_available",
+  "reject_decline_control_available",
+  "options_settings_preferences_control",
+  "consent_platform_identified",
+  "privacy_notice_availability",
+  "cookie_policy_availability",
+  "policy_surface_retained",
+  "controller_contact_disclosure",
+  "processing_purposes_disclosure",
+  "legal_basis_disclosure",
+  "recipients_vendor_categories_disclosed",
+  "retention_disclosure",
+  "data_subject_rights_disclosure",
+  "international_transfer_disclosure",
+  "dpo_privacy_contact_point",
+  "third_party_tracking_before_recorded_consent",
+  "cookies_storage_before_recorded_consent",
+  "ad_vendor_activity_before_recorded_consent",
+  "fingerprinting_signal_before_recorded_consent",
+  "embedded_content_before_recorded_consent"
+] as const;
 
-function parseHomepageCarouselCopyIds() {
+function parseHomepageChecklistCarouselIds() {
   const source = readFileSync("apps/web/components/marketing/homepage-findings-overview.tsx", "utf8");
-  const match = source.match(/const HOMEPAGE_FINDING_CAROUSEL_COPY = \{([\s\S]*?)\n\} satisfies Record/);
+  const match = source.match(/const HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS = \[([\s\S]*?)\n\] satisfies HomepageChecklistFinding\[\];/);
 
-  assert.ok(match, "homepage carousel copy map should be statically parseable");
+  assert.ok(match, "homepage checklist carousel data should be statically parseable");
 
-  return [...(match[1] ?? "").matchAll(/^  ([a-z0-9_]+): \{/gm)].map((entry) => entry[1]);
+  return [...(match[1] ?? "").matchAll(/^\s+id: "([a-z0-9_]+)",$/gm)].map((entry) => entry[1]);
 }
 
 function makePublicHiddenSampleJson(finding: ReturnType<typeof getFindingReferenceItems>[number]) {
@@ -164,13 +184,16 @@ test("finding reference index is exactly the official executive top findings", (
   );
 });
 
-test("homepage mini findings carousel copy covers only official executive top findings", () => {
+test("homepage mini findings carousel is the GDPR/ePrivacy evidence checklist", () => {
   const homepageSource = readFileSync("apps/web/app/(marketing)/page.tsx", "utf8");
-  const expectedIds = [...PUBLIC_HOMEPAGE_CAROUSEL_FINDING_IDS].sort();
+  const expectedIds = [...HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDING_IDS].sort();
+  const componentSource = readFileSync("apps/web/components/marketing/homepage-findings-overview.tsx", "utf8");
 
   assert.match(homepageSource, /const findings = getFindingReferenceItems\(\);/);
   assert.match(homepageSource, /<HomepageFindingsOverview findings=\{findings\} \/>/);
-  assert.deepEqual(parseHomepageCarouselCopyIds().sort(), expectedIds);
+  assert.match(componentSource, /Browse the GDPR\/ePrivacy evidence checklist CertScore\.ai can surface\./);
+  assert.doesNotMatch(componentSource, /HOMEPAGE_FINDING_CAROUSEL_COPY/);
+  assert.deepEqual(parseHomepageChecklistCarouselIds().sort(), expectedIds);
 });
 
 test("public finding references omit deferred CCPA/CPRA context", () => {

@@ -35,22 +35,18 @@ const initialState: UpsertOrganizationSettingsActionState = {
 };
 
 export function ScanLocationSettingsCard({
-  allowRestrictedScanOptions = false,
   lastScanFrom
 }: {
   allowRestrictedScanOptions?: boolean;
   lastScanFrom: ScanFrom;
 }) {
   const [state, action, isPending] = useActionState(upsertOrganizationSettingsAction, initialState);
-  const options = allowRestrictedScanOptions
-    ? SCAN_LOCATION_OPTIONS
-    : SCAN_LOCATION_OPTIONS.filter((option) => option.value !== "eu_de");
-  const selectedScanFrom = allowRestrictedScanOptions || lastScanFrom !== "eu_de" ? lastScanFrom : "eu_ie";
+  const selectedScanFrom = lastScanFrom;
 
   return (
     <form action={action} className="space-y-5">
       <div className="grid gap-3 md:grid-cols-3">
-        {options.map((option) => (
+        {SCAN_LOCATION_OPTIONS.map((option) => (
           <label
             className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4 transition has-[:checked]:border-sky-300 has-[:checked]:bg-sky-50/70 hover:border-slate-300"
             key={option.value}

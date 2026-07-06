@@ -173,7 +173,7 @@ export default async function MonitorSiteStatusPage({ params }: MonitorSiteStatu
                 </Button>
               ) : null}
               <Button asChild>
-                <Link href="/">Run a scan</Link>
+                <Link href="/">Run a free scan</Link>
               </Button>
               <Button asChild variant="secondary">
                 <Link href="/monitor-site">Request another monitor</Link>

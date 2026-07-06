@@ -160,7 +160,10 @@ export async function getPulseGptActionUsage(input: { ipHash: string | null }) {
 }
 
 export async function updatePulseRequestCompleted(input: {
+  normalizedDomain?: string | null;
+  normalizedUrl?: string | null;
   pulseRequestId: string;
+  requestedUrl?: string | null;
   scanId: string;
   resultPulseUrl: string;
   resultReportUrl: string;
@@ -176,10 +179,23 @@ export async function updatePulseRequestCompleted(input: {
             result_report_url = $4,
             response_summary = $5,
             resolution_mode = coalesce($6, resolution_mode),
+            requested_url = coalesce(requested_url, $7),
+            normalized_url = coalesce(normalized_url, $8),
+            normalized_domain = coalesce(normalized_domain, $9),
             completed_at = timezone('utc', now()),
             elapsed_seconds = greatest(0, extract(epoch from (timezone('utc', now()) - requested_at))::int)
       where public_id = $1`,
-    [input.pulseRequestId, input.scanId, input.resultPulseUrl, input.resultReportUrl, input.responseSummary, input.resolutionMode ?? null]
+    [
+      input.pulseRequestId,
+      input.scanId,
+      input.resultPulseUrl,
+      input.resultReportUrl,
+      input.responseSummary,
+      input.resolutionMode ?? null,
+      input.requestedUrl ?? null,
+      input.normalizedUrl ?? null,
+      input.normalizedDomain ?? null
+    ]
   );
 }
 

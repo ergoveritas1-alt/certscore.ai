@@ -43,6 +43,14 @@ export type AdminPulseRequestListItem = {
   sourceIp: string | null;
   sourceIpHash: string | null;
   status: string;
+  pulseScore: number | null;
+  pulseRiskLevel: string | null;
+  pulseIssueCount: number | null;
+  pulseTopFindingCount: number | null;
+  pulseObservationCount: number | null;
+  pulseAutomatedFindingCount: number | null;
+  pulseHighPriorityFindingCount: number | null;
+  pulseEvidenceHighlightCount: number | null;
   snapshotFindingCount: number | null;
   snapshotTotalSignals: number | null;
   summaryJsonDownloads: number;
@@ -138,17 +146,52 @@ function getRequestContextBoolean(value: unknown, key: string) {
   return null;
 }
 
+function getNumberValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function getStringValue(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
 function getFreshRescanRequested(requestContext: Record<string, unknown>) {
   return getRequestContextBoolean(requestContext, "bypassRecentScanReuse") ?? getRequestContextBoolean(requestContext, "forceNewScan");
 }
 
-function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId: Map<string, string[]> = new Map()): AdminPulseRequestListItem {
+type DerivedPulseMetrics = {
+  automatedFindingCount: number;
+  issueCount: number;
+  topFindingCount: number;
+  topFindingIds: string[];
+  totalObservationCount: number;
+};
+
+function mapPulseRequestRow(row: Record<string, unknown>, derivedMetricsByScanId: Map<string, DerivedPulseMetrics> = new Map()): AdminPulseRequestListItem {
   const requestContext = asRecord(row.request_context);
   const requestedBy = asRecord(row.requested_by);
   const responseSummary = asRecord(row.response_summary);
   const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
   const storedTopFindingIds = asStringArray(responseSummary.topFindingIds);
   const scanFromValue = normalizeScanFrom(requestContext.scanFrom ?? asRecord(row.scan_config_json).scanFrom);
+  const fallbackDomain = getStringValue(row.scan_domain_hostname) ?? getStringValue(responseSummary.domain);
+  const normalizedDomain = getStringValue(row.normalized_domain) ?? fallbackDomain;
+  const requestedUrl = getStringValue(row.requested_url) ??
+    getStringValue(responseSummary.requestedUrl) ??
+    getStringValue(row.normalized_url) ??
+    (fallbackDomain ? `https://${fallbackDomain}` : null);
+  const issueCount = getNumberValue(responseSummary.issueCount) ?? getNumberValue(responseSummary.topFindingCount);
+  const topFindingCount = getNumberValue(responseSummary.topFindingCount);
+  const observationCount = getNumberValue(responseSummary.totalObservationCount);
+  const automatedFindingCount = getNumberValue(responseSummary.totalAutomatedFindingCount);
+  const derivedMetrics = scanId ? derivedMetricsByScanId.get(scanId) ?? null : null;
+  const topFindingIds = storedTopFindingIds.length > 0 || !scanId ? storedTopFindingIds : (derivedMetrics?.topFindingIds ?? []);
   return {
     completedAt: typeof row.completed_at === "string" ? row.completed_at : null,
     createdAt: String(row.created_at),
@@ -159,10 +202,10 @@ function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId:
     freshRescanRequested: getFreshRescanRequested(requestContext),
     freshness: getRequestContextString(requestContext, "freshness"),
     jobId: String(row.job_id),
-    normalizedDomain: typeof row.normalized_domain === "string" ? row.normalized_domain : null,
+    normalizedDomain,
     publicId: String(row.public_id),
     requestedAt: String(row.requested_at),
-    requestedUrl: typeof row.requested_url === "string" ? row.requested_url : null,
+    requestedUrl,
     resolutionMode: typeof row.resolution_mode === "string" ? row.resolution_mode : null,
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
@@ -174,27 +217,40 @@ function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId:
     sourceIp: getRequestContextString(requestContext, "sourceIp"),
     sourceIpHash: getRequestContextString(requestContext, "ipHash"),
     status: String(row.status),
+    pulseScore: getNumberValue(responseSummary.score),
+    pulseRiskLevel: getStringValue(responseSummary.riskLevel),
+    pulseIssueCount: issueCount ?? derivedMetrics?.issueCount ?? null,
+    pulseTopFindingCount: topFindingCount ?? derivedMetrics?.topFindingCount ?? null,
+    pulseObservationCount: observationCount ?? derivedMetrics?.totalObservationCount ?? null,
+    pulseAutomatedFindingCount: automatedFindingCount ?? derivedMetrics?.automatedFindingCount ?? null,
+    pulseHighPriorityFindingCount: getNumberValue(responseSummary.highPriorityFindingCount),
+    pulseEvidenceHighlightCount: getNumberValue(responseSummary.evidenceHighlightCount),
     snapshotFindingCount: typeof row.snapshot_finding_count === "number" ? row.snapshot_finding_count : null,
     snapshotTotalSignals: typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
     summaryJsonDownloads: typeof row.summary_json_downloads === "number" ? row.summary_json_downloads : 0,
     evidenceJsonDownloads: typeof row.evidence_json_downloads === "number" ? row.evidence_json_downloads : 0,
-    topFindingIds: storedTopFindingIds.length > 0 || !scanId ? storedTopFindingIds : (topFindingIdsByScanId.get(scanId) ?? [])
+    topFindingIds
   };
 }
 
-async function loadTopFindingIdsByScanId(rows: Record<string, unknown>[]) {
+async function loadDerivedPulseMetricsByScanId(rows: Record<string, unknown>[]) {
   const scanIds = [
     ...new Set(
       rows.flatMap((row) => {
         const responseSummary = asRecord(row.response_summary);
-        if (asStringArray(responseSummary.topFindingIds).length > 0) {
+        if (
+          asStringArray(responseSummary.topFindingIds).length > 0 &&
+          getNumberValue(responseSummary.totalObservationCount) !== null &&
+          getNumberValue(responseSummary.totalAutomatedFindingCount) !== null &&
+          getNumberValue(responseSummary.topFindingCount) !== null
+        ) {
           return [];
         }
         return typeof row.scan_id === "string" && row.scan_id.trim().length > 0 ? [row.scan_id] : [];
       })
     )
   ];
-  const topFindingIdsByScanId = new Map<string, string[]>();
+  const derivedMetricsByScanId = new Map<string, DerivedPulseMetrics>();
   await Promise.all(
     scanIds.map(async (scanId) => {
       const scanRecord = await getAnonymousScanById(scanId).catch(() => null);
@@ -202,10 +258,17 @@ async function loadTopFindingIdsByScanId(rows: Record<string, unknown>[]) {
         return;
       }
       const packets = buildScanReportUnifiedFindingsForScan(scanRecord);
-      topFindingIdsByScanId.set(scanId, projectExecutiveFindingsFromUnifiedPackets(packets).topFindings.map((finding) => finding.id));
+      const topFindings = projectExecutiveFindingsFromUnifiedPackets(packets).topFindings;
+      derivedMetricsByScanId.set(scanId, {
+        automatedFindingCount: packets.length,
+        issueCount: topFindings.length,
+        topFindingCount: topFindings.length,
+        topFindingIds: topFindings.map((finding) => finding.id),
+        totalObservationCount: packets.length
+      });
     })
   );
-  return topFindingIdsByScanId;
+  return derivedMetricsByScanId;
 }
 
 function buildDisplayResponseSummary(input: {
@@ -220,10 +283,10 @@ function buildDisplayResponseSummary(input: {
   return {
     ...responseSummary,
     topFindingIds: input.base.topFindingIds,
-    topFindingCount: input.base.topFindingIds.length,
-    findingCount: input.base.snapshotFindingCount,
+    topFindingCount: input.base.pulseTopFindingCount ?? input.base.topFindingIds.length,
+    findingCount: input.base.pulseAutomatedFindingCount ?? input.base.snapshotFindingCount,
     scanId: input.base.scanId,
-    totalSignals: input.base.snapshotTotalSignals
+    totalSignals: input.base.pulseObservationCount ?? input.base.snapshotTotalSignals
   };
 }
 
@@ -278,6 +341,7 @@ export async function listAdminPulseRequests(input: {
     `select pr.public_id,
             pr.job_id,
             pr.requested_url,
+            pr.normalized_url,
             pr.normalized_domain,
             pr.requested_at,
             pr.request_context,
@@ -295,12 +359,14 @@ export async function listAdminPulseRequests(input: {
             ss.total_signals::int as snapshot_total_signals,
             ss.report_finding_count::int as snapshot_finding_count,
             s.scan_config_json,
+            d.hostname as scan_domain_hostname,
             coalesce(pf.feedback_count, 0)::int as feedback_count,
             coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
             coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
        from pulse_requests pr
        left join scan_snapshots ss on ss.scan_id = pr.scan_id
        left join scans s on s.id = pr.scan_id
+       left join domains d on d.id = s.domain_id
        left join lateral (
          select count(*)::int as feedback_count
            from pulse_feedback
@@ -328,7 +394,8 @@ export async function listAdminPulseRequests(input: {
     { readOnly: true }
   );
 
-  return rows.rows.map((row) => mapPulseRequestRow(row));
+  const derivedMetricsByScanId = await loadDerivedPulseMetricsByScanId(rows.rows);
+  return rows.rows.map((row) => mapPulseRequestRow(row, derivedMetricsByScanId));
 }
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {
@@ -366,11 +433,13 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               pr.created_at,
               pr.updated_at,
               s.scan_config_json,
+              d.hostname as scan_domain_hostname,
               coalesce(pf.feedback_count, 0)::int as feedback_count,
               coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
               coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
          from pulse_requests pr
          left join scans s on s.id = pr.scan_id
+         left join domains d on d.id = s.domain_id
          left join lateral (
            select count(*)::int as feedback_count
              from pulse_feedback
@@ -428,8 +497,8 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
     return null;
   }
 
-  const topFindingIdsByScanId = await loadTopFindingIdsByScanId([request]);
-  const base = mapPulseRequestRow(request, topFindingIdsByScanId);
+  const derivedMetricsByScanId = await loadDerivedPulseMetricsByScanId([request]);
+  const base = mapPulseRequestRow(request, derivedMetricsByScanId);
   return {
     ...base,
     apiVersion: String(request.api_version),
@@ -481,6 +550,7 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
     `select pr.public_id,
             pr.job_id,
             pr.requested_url,
+            pr.normalized_url,
             pr.normalized_domain,
             pr.requested_at,
             pr.request_context,
@@ -494,11 +564,13 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             pr.elapsed_seconds,
             pr.created_at,
             s.scan_config_json,
+            d.hostname as scan_domain_hostname,
             coalesce(pf.feedback_count, 0)::int as feedback_count,
             coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
             coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
        from pulse_requests pr
        left join scans s on s.id = pr.scan_id
+       left join domains d on d.id = s.domain_id
        left join lateral (
          select count(*)::int as feedback_count
            from pulse_feedback
@@ -518,5 +590,6 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
     { readOnly: true }
   );
 
-  return rows.rows.map((row) => mapPulseRequestRow(row));
+  const derivedMetricsByScanId = await loadDerivedPulseMetricsByScanId(rows.rows);
+  return rows.rows.map((row) => mapPulseRequestRow(row, derivedMetricsByScanId));
 }

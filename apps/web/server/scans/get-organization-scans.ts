@@ -1,6 +1,7 @@
 "use server";
 
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { deriveAccessPosturePresentation } from "../../lib/scans/access-posture-presentation";
 import { normalizeAccessPostureSummary } from "../../lib/scans/normalize-access-posture-summary";
 import { deriveScanQualitySummary, type ScanQualityLevel } from "../../lib/scans/scan-quality";
@@ -8,8 +9,10 @@ import { deriveScanStopReason } from "../../lib/scans/scan-stop-reason";
 import { deriveScanExecutionSummary } from "../../lib/scans/scan-timeout-summary";
 import { deriveUnverifiedHomepageReason } from "../../lib/scans/unverified-homepage-reason";
 import { getHybridConsentAuditCompleted, withHybridRuntimeArtifactFallbacks } from "../../lib/scans/hybrid-runtime-evidence";
+import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { getScanFromDisplay } from "../../lib/scans/scan-from";
 import { deriveDisplayCreatedAt } from "./display-state";
+import { getScanById } from "./get-scan-by-id";
 import {
   loadOrganizationScanPageData,
   isMissingComplianceChangeEventsTable,
@@ -114,6 +117,61 @@ function getRecordBoolean(record: Record<string, unknown> | null, key: string) {
 
 function getFreshRescanRequested(requestContext: Record<string, unknown> | null) {
   return getRecordBoolean(requestContext, "bypassRecentScanReuse") ?? getRecordBoolean(requestContext, "forceNewScan");
+}
+
+type DerivedOrganizationScanMetrics = {
+  findingCount: number;
+  topFindingCount: number;
+  totalSignals: number;
+};
+
+function getPreferredMetric(storedValue: number | null | undefined, derivedValue: number | null | undefined, fallbackValue?: number | null) {
+  if (typeof storedValue === "number" && Number.isFinite(storedValue) && storedValue > 0) {
+    return storedValue;
+  }
+  if (typeof derivedValue === "number" && Number.isFinite(derivedValue)) {
+    return derivedValue;
+  }
+  if (typeof fallbackValue === "number" && Number.isFinite(fallbackValue)) {
+    return fallbackValue;
+  }
+  return typeof storedValue === "number" && Number.isFinite(storedValue) ? storedValue : null;
+}
+
+async function loadDerivedOrganizationScanMetricsByScanId(input: {
+  organizationId: string;
+  scanRows: ScanRow[];
+  signalCountMap: Map<string, number>;
+  snapshotMap: Map<string | undefined, SnapshotRow>;
+}) {
+  const scanIds = input.scanRows.flatMap((scan) => {
+    if (scan.status !== "completed" || !scan.completed_at) {
+      return [];
+    }
+    const snapshot = input.snapshotMap.get(scan.id);
+    const totalSignals = snapshot?.total_signals ?? input.signalCountMap.get(scan.id) ?? null;
+    const findingCount = snapshot?.report_finding_count ?? null;
+    return !totalSignals || !findingCount ? [scan.id] : [];
+  });
+  const derivedMetricsByScanId = new Map<string, DerivedOrganizationScanMetrics>();
+
+  await Promise.all(
+    scanIds.map(async (scanId) => {
+      const scanRecord = await getScanById({ organizationId: input.organizationId, scanId }).catch(() => null);
+      if (!scanRecord) {
+        return;
+      }
+      const packets = buildScanReportUnifiedFindingsForScan(scanRecord);
+      const executive = projectExecutiveFindingsFromUnifiedPackets(packets);
+      derivedMetricsByScanId.set(scanId, {
+        findingCount: packets.length,
+        topFindingCount: executive.topFindings.length,
+        totalSignals: scanRecord.signals.length
+      });
+    })
+  );
+
+  return derivedMetricsByScanId;
 }
 
 function deriveLoggedInterruptionReason(scanEvents: ScanDiagnosticEventRow[]) {
@@ -434,6 +492,13 @@ async function loadOrganizationScans(
     }
   }
 
+  const derivedMetricsByScanId = await loadDerivedOrganizationScanMetricsByScanId({
+    organizationId,
+    scanRows,
+    signalCountMap,
+    snapshotMap
+  });
+
   return {
     items: scanRows.map((scan) => {
     const displayDomainId = scan.display_domain_id ?? scan.domain_id;
@@ -448,10 +513,16 @@ async function loadOrganizationScans(
       snapshot,
       diagnosticEventMap.get(scan.id) ?? []
     );
-    const totalSignals =
-      (typeof snapshot?.total_signals === "number" ? snapshot.total_signals : null) ??
-      signalCountMap.get(scan.id) ??
-      null;
+    const derivedMetrics = derivedMetricsByScanId.get(scan.id) ?? null;
+    const totalSignals = getPreferredMetric(
+      typeof snapshot?.total_signals === "number" ? snapshot.total_signals : null,
+      derivedMetrics?.totalSignals ?? null,
+      signalCountMap.get(scan.id) ?? null
+    );
+    const findingCount = getPreferredMetric(
+      typeof snapshot?.report_finding_count === "number" ? snapshot.report_finding_count : null,
+      derivedMetrics?.findingCount ?? null
+    ) ?? 0;
     const normalizedAccessPosture = normalizeAccessPostureSummary({
       accessPostureClass: snapshot?.access_posture_class ?? null,
       highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
@@ -504,8 +575,8 @@ async function loadOrganizationScans(
         consentScore: snapshot?.consent_score ?? null,
         accessibilityScore: snapshot?.accessibility_score ?? null,
         totalSignals,
-        findingCount: snapshot?.report_finding_count ?? 0,
-        topFindingCount: null,
+        findingCount,
+        topFindingCount: derivedMetrics?.topFindingCount ?? null,
         cookieBannerPresent: snapshot?.cookie_banner_present ?? null,
         cmpVendorName: snapshot?.cmp_vendor_name ?? null,
         consentAuditCompleted:

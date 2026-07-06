@@ -104,7 +104,7 @@ export function SolutionPage({ config }: { config: SolutionPageConfig }) {
               className="border-0 bg-[linear-gradient(135deg,#0f8bd7_0%,#1ea7e1_62%,#67c7f0_100%)] text-white shadow-[0_14px_32px_rgba(15,139,215,0.18)] hover:brightness-[1.04]"
             >
               <Link href="/" data-analytics-cta-type="scan" data-analytics-event="solution_cta_clicked">
-                Run a scan
+                Run a free scan
               </Link>
             </Button>
             <Button asChild variant="secondary">

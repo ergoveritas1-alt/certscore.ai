@@ -300,10 +300,7 @@ export function DomainScanForm({
       setLocalExtensionStatus(null);
       setShowExtensionInstructions(false);
     }
-    if (!allowRestrictedScanOptions && scanFrom === "eu_de") {
-      setScanFrom("eu_ie");
-    }
-  }, [allowLocalExtensionScan, allowRestrictedScanOptions, defaultScanFrom, scanFrom]);
+  }, [allowLocalExtensionScan, defaultScanFrom, scanFrom]);
 
   useEffect(() => {
     if (LOCALHOST_FULL_SCAN_QUEUE_ENABLED && !allowRestrictedScanOptions) {
@@ -448,7 +445,7 @@ export function DomainScanForm({
             allowRestrictedScanOptions || LOCALHOST_FULL_SCAN_QUEUE_ENABLED
               ? localV2RunViaLambda
               : true,
-          scanFrom: (allowRestrictedScanOptions || scanFrom !== "eu_de" ? scanFrom : "eu_ie") as ServerScanFrom
+          scanFrom: scanFrom as ServerScanFrom
         }),
         headers: {
           "Content-Type": "application/json"
@@ -538,7 +535,7 @@ export function DomainScanForm({
             className={
               compact
                 ? "h-12 rounded-[1.2rem] border-2 border-sky-500 pr-40 text-left text-sm font-semibold shadow-[0_12px_30px_rgba(14,165,233,0.12)] placeholder:text-left focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
-                : "h-14 rounded-[1.6rem] border-2 border-sky-500 pr-32 text-base font-semibold shadow-[0_14px_34px_rgba(14,165,233,0.12)] focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
+                : "h-14 rounded-[1.6rem] border-2 border-sky-500 pr-48 text-base font-semibold shadow-[0_14px_34px_rgba(14,165,233,0.12)] focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
             }
             id="domain"
             name="domain"
@@ -552,7 +549,7 @@ export function DomainScanForm({
             aria-label={inputLabel}
           />
           {mode === "full" ? (
-            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
+            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[8.1rem] top-1/2 -translate-y-1/2"}>
               <ScanFromSelect
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
@@ -571,7 +568,7 @@ export function DomainScanForm({
               />
             </div>
           ) : (
-            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
+            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[8.1rem] top-1/2 -translate-y-1/2"}>
               <ScanFromSelect
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
@@ -590,7 +587,7 @@ export function DomainScanForm({
             className={
               compact
                 ? "absolute right-2 top-1/2 h-8 -translate-y-1/2 rounded-full border-0 bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
-                : "absolute right-3 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-0 text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]"
+                : "absolute right-3 top-1/2 h-11 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]"
             }
             disabled={isSubmitting}
             type="submit"
@@ -601,16 +598,7 @@ export function DomainScanForm({
               compact ? (
                 <span>Scan</span>
               ) : (
-                <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-                  <path
-                    d="M5 12h14M13 6l6 6-6 6"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                <span className="whitespace-nowrap">Free scan</span>
               )
             )}
           </Button>

@@ -17,8 +17,7 @@ export function restrictScanFromForUser(input: {
   canUseRestrictedScanOptions: boolean;
   scanFrom: unknown;
 }): ScanFrom {
-  const scanFrom = normalizeScanFrom(input.scanFrom);
-  return !input.canUseRestrictedScanOptions && scanFrom === "eu_de" ? "eu_ie" : scanFrom;
+  return normalizeScanFrom(input.scanFrom);
 }
 
 export function restrictLocalV2RunViaLambdaForUser(input: {

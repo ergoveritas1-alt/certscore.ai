@@ -46,7 +46,7 @@ test("ScanFromSelect defaults to EU-IR and keeps Local-extension last", () => {
   assert.equal(SCAN_FROM_OPTIONS.map((option) => option.value).join(","), "eu_de,eu_ie,california,local_extension");
 });
 
-test("ScanFromSelect hides restricted scan controls from non-admin users", () => {
+test("ScanFromSelect exposes EU-DE while hiding restricted controls from non-admin users", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       includeLocalV2ScanProfileOption: true,
@@ -56,9 +56,9 @@ test("ScanFromSelect hides restricted scan controls from non-admin users", () =>
     })
   );
 
-  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_ie"/);
+  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_de"/);
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="true"/);
-  assert.doesNotMatch(html, /EU-DE/);
+  assert.match(html, /EU-DE/);
   assert.doesNotMatch(html, /Run via Lambda/);
 });
 

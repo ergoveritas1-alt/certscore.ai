@@ -87,7 +87,7 @@ test("restricted scan users keep explicit Lambda preference", () => {
   );
 });
 
-test("non-admin users cannot select restricted scan regions", () => {
-  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "eu_de" }), "eu_ie");
+test("all users can select EU-DE scan region", () => {
+  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "eu_de" }), "eu_de");
   assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: true, scanFrom: "eu_de" }), "eu_de");
 });

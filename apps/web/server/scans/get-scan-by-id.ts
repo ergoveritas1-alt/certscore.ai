@@ -1492,4 +1492,13 @@ export async function getAnonymousScanById(scanId: string) {
   });
 }
 
+export async function getPlatformAdminScanById(input: { scanId: string; viewerEmail: string | null | undefined }) {
+  return loadScanDetailRecord({
+    includeUrlscanSupplement: false,
+    organizationId: null,
+    scanId: input.scanId,
+    viewerEmail: input.viewerEmail ?? null
+  });
+}
+
 export type ScanDetailResponse = NonNullable<Awaited<ReturnType<typeof getAnonymousScanById>>>;

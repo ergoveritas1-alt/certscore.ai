@@ -235,11 +235,25 @@ async function buildAndLogCompletedPulse(input: {
     scanId: input.scanRecord.scan.id,
     resultPulseUrl: absoluteUrl(`/api/v1/pulse?scanId=${input.scanRecord.scan.id}`),
     resultReportUrl: absoluteUrl(`/scan/${input.scanRecord.scan.id}`),
+    requestedUrl: input.requestedUrl ?? (input.scanRecord.scan.domainHostname ? `https://${input.scanRecord.scan.domainHostname}` : null),
+    normalizedUrl: input.scanRecord.scan.domainHostname ? `https://${input.scanRecord.scan.domainHostname}` : null,
+    normalizedDomain: input.scanRecord.scan.domainHostname ?? null,
     resolutionMode: input.resolutionMode,
     responseSummary: {
       score: pulseRecord.summary?.score ?? null,
       riskLevel: pulseRecord.summary?.riskLevel ?? null,
+      domain: input.scanRecord.scan.domainHostname ?? null,
+      requestedUrl: input.requestedUrl ?? (input.scanRecord.scan.domainHostname ? `https://${input.scanRecord.scan.domainHostname}` : null),
+      issueCount: pulseRecord.executiveSummary?.issuesToReview ?? null,
+      topFindingCount: Array.isArray(pulseRecord.topFindings) ? pulseRecord.topFindings.length : null,
       topFindingIds: Array.isArray(pulseRecord.topFindings) ? pulseRecord.topFindings.map((finding: any) => finding.id) : [],
+      totalObservationCount: pulseRecord.counts?.totalObservationCount ?? null,
+      totalAutomatedFindingCount: pulseRecord.counts?.totalAutomatedFindingCount ?? null,
+      highPriorityFindingCount: pulseRecord.counts?.highPriorityFindingCount ?? null,
+      evidenceHighlightCount: pulseRecord.counts?.evidenceHighlightCount ?? null,
+      thirdPartyDomainsObserved: pulseRecord.counts?.thirdPartyDomainsObserved ?? null,
+      classifiedTrackerVendors: pulseRecord.counts?.classifiedTrackerVendors ?? null,
+      policyUrlCount: pulseRecord.counts?.policyUrlCount ?? null,
       coverageStatus: pulseRecord.coverage?.status ?? null
     }
   }).catch((error) => console.error("[pulse] request completion update failed", error));

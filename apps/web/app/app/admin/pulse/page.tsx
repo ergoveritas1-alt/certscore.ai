@@ -79,6 +79,10 @@ function statusClass(status: string) {
   return "bg-sky-50 text-sky-700";
 }
 
+function metricValue(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "n/a";
+}
+
 export default async function AdminPulsePage({ searchParams }: AdminPulsePageProps) {
   const resolved = searchParams ? await searchParams : {};
   const activeStatus = normalizeStatus(resolved.status);
@@ -223,11 +227,16 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                         <p className="mt-1 truncate font-mono text-xs text-slate-500">Scan {request.scanId ?? "Not linked"}</p>
                         {request.scanId ? (
                           <p className="mt-1 text-xs text-slate-500">
-                            Signals {request.snapshotTotalSignals ?? 0} · Findings {request.snapshotFindingCount ?? 0} · Top {request.topFindingIds.length}
+                            Score {metricValue(request.pulseScore)} · Issues {metricValue(request.pulseIssueCount)} · Top {metricValue(request.pulseTopFindingCount ?? request.topFindingIds.length)}
+                          </p>
+                        ) : null}
+                        {request.scanId ? (
+                          <p className="mt-1 text-xs text-slate-500">
+                            Observations {metricValue(request.pulseObservationCount ?? request.snapshotTotalSignals)} · Findings {metricValue(request.pulseAutomatedFindingCount ?? request.snapshotFindingCount)} · Evidence {metricValue(request.pulseEvidenceHighlightCount)}
                           </p>
                         ) : null}
                         <p className="mt-1 text-xs text-slate-500">
-                          Feedback {request.feedbackCount} · Summary JSON {request.summaryJsonDownloads} · Evidence JSON {request.evidenceJsonDownloads}
+                          Interactions: Feedback {request.feedbackCount} · Summary JSON {request.summaryJsonDownloads} · Evidence JSON {request.evidenceJsonDownloads}
                         </p>
                         <p className="mt-1 text-xs text-slate-500">{formatAdminDateTime(request.requestedAt)}</p>
                       </td>

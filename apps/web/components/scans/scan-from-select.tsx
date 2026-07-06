@@ -107,9 +107,6 @@ export function ScanFromSelect({
     if (!includeLocalExtension && option.value === "local_extension") {
       return false;
     }
-    if (!allowRestrictedScanOptions && option.value === "eu_de") {
-      return false;
-    }
     return true;
   });
   const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? SCAN_FROM_OPTIONS[0];
