@@ -133,6 +133,35 @@ test("classifies French Article 13 wording for retention, recipients, purposes, 
   );
 });
 
+test("classifies French publisher Article 13 wording for purposes, basis, rights, and transfers", () => {
+  const classification = classifyGdprTransparencyTopics({
+    text: [
+      "POUR QUELLES RAISONS COLLECTONS-NOUS DES DONNÉES PERSONNELLES ?",
+      "Nous collectons des données personnelles pour les raisons principales suivantes : faciliter l'utilisation du Site et gérer les interactions avec des utilisateurs.",
+      "QUEL EST LE FONDEMENT LEGAL POUR LA COLLECTE DE DONNÉES QUE NOUS EFFECTUONS ?",
+      "Nous collectons uniquement des données à caractère personnel lorsque nous disposons d'un fondement légal pour le faire : contrat, intérêt légitime, consentement, obligations légales.",
+      "Vous disposez du droit de demander l'accès, la rectification, l'effacement et l'opposition au traitement de vos données personnelles.",
+      "DES DONNÉES PERSONNELLES SONT-ELLES TRANSFÉRÉES HORS DE L'UNION EUROPÉENNE ?",
+      "Les données peuvent être transférées en dehors de l'Union européenne avec les garanties prévues par la législation applicable.",
+    ].join(" "),
+    localeHints: ["fr"],
+  });
+
+  for (const topic of [
+    "processing_purposes",
+    "legal_basis",
+    "data_subject_rights",
+    "international_transfers",
+  ] satisfies GdprTransparencyTopic[]) {
+    const match = classification.matches.find((candidate) => candidate.topic === topic);
+    assert.ok(match, `French publisher wording should classify ${topic}`);
+    assert.equal(match.matchedLocale, "fr");
+    assert.equal(match.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+    assert.equal(match.reasonCodes.includes(`matched_${topic}`), true);
+    assert.ok(match.confidence >= 0.8);
+  }
+});
+
 test("classifies encoded fetched policy text without display-layer fallbacks", () => {
   const examples = [
     {

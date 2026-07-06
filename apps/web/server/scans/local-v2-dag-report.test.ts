@@ -1195,6 +1195,7 @@ test("summarizePolicySurfaces credits French Article 13 candidates through the p
         legalBasisText,
         retentionText,
         recipientsText,
+        "Cette politique décrit également les informations collectées dans le cadre du site, les services fournis aux utilisateurs, les paramètres de confidentialité disponibles et les modalités de contact pour toute demande relative aux données personnelles. ".repeat(10),
       ].join(" "),
       observedTopics: [],
       gdprTransparencyTopicCandidates: candidates
@@ -1205,6 +1206,7 @@ test("summarizePolicySurfaces credits French Article 13 candidates through the p
 
   assert.equal(summary.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
   assert.equal(summary.gdprTransparencyProductionEvidenceEnabled, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
   assert.deepEqual(
     summary.article13DisclosureTypesObserved.sort(),
     [
@@ -1231,6 +1233,73 @@ test("summarizePolicySurfaces credits French Article 13 candidates through the p
     rejectedCandidateCount: 0,
     sourceCandidateCount: 4
   });
+});
+
+test("summarizePolicySurfaces treats French policy text as usable for legacy Article 13 signals", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const dpoText =
+    "Pour toute question relative à vos données personnelles, vous pouvez contacter le Service DPO à l'adresse dpo@example.test.";
+  const authorityText =
+    "Vous disposez du droit de saisir la CNIL de toute réclamation concernant le traitement des données vous concernant.";
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "lefigaro-style-policy",
+      surfaceType: "privacy_policy",
+      url: "https://mentions-legales.example.test/page/politique-de-confidentialite",
+      normalizedUrl: "https://mentions-legales.example.test/page/politique-de-confidentialite",
+      confidence: 0.96,
+      status: "fetched",
+      textExcerpt: [
+        "Politique de confidentialité. La Société respecte votre droit à la vie privée.",
+        "Cette politique vous informe sur la manière dont sont traitées les données personnelles collectées.",
+        "Pour connaître notre politique en matière de cookies, consultez la notice Info cookies.",
+        "La présente politique concerne les traitements mis en œuvre dans le cadre du site, de l'application et des services proposés aux utilisateurs. ".repeat(8),
+        "QUELLES SONT LES INFORMATIONS COLLECTÉES DANS LE CADRE DU SITE ET DE L'UTILISATION DES SERVICES ?",
+        "Des données personnelles et des données de navigation sont collectées afin de fournir les services demandés.",
+        "POUR QUELLES RAISONS COLLECTONS-NOUS DES DONNÉES PERSONNELLES ?",
+        "Nous collectons des données personnelles pour faciliter l'utilisation du Site, gérer les interactions avec des utilisateurs et afficher de la publicité.",
+        "COMBIEN DE TEMPS CES INFORMATIONS SONT-ELLES CONSERVÉES ?",
+        "Vos données personnelles sont conservées en base active pour une durée conforme aux dispositions légales.",
+        "QUEL EST LE FONDEMENT LEGAL POUR LA COLLECTE DE DONNÉES QUE NOUS EFFECTUONS ?",
+        "Nous disposons d'un fondement légal pour le faire : contrat, intérêt légitime, consentement et obligations légales.",
+        "DES DONNÉES PERSONNELLES SONT-ELLES TRANSFÉRÉES HORS DE L'UNION EUROPÉENNE ?",
+        "Les données peuvent être transférées en dehors de l'Union européenne avec les garanties prévues.",
+        dpoText,
+        authorityText,
+      ].join(" "),
+      observedTopics: [],
+      article13DisclosureSignals: [
+        {
+          disclosureType: "dpo_contact",
+          status: "observed",
+          evidenceText: dpoText,
+          confidence: 0.9,
+          source: "deterministic"
+        },
+        {
+          disclosureType: "supervisory_authority",
+          status: "observed",
+          evidenceText: authorityText,
+          confidence: 0.9,
+          source: "deterministic"
+        }
+      ]
+    }
+  ] as never, "https://lefigaro.fr/");
+
+  const summary = summarizePolicySurfaces(surfaces, "lefigaro.fr");
+
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.notEqual(
+    summary.policyTextExtractionHealth.extractionFailureReason,
+    "privacy_policy_text_low_quality_or_non_policy_content"
+  );
+  assert.deepEqual(
+    summary.article13DisclosureTypesObserved.filter((topic) =>
+      ["dpo_contact", "supervisory_authority"].includes(topic)
+    ).sort(),
+    ["dpo_contact", "supervisory_authority"]
+  );
 });
 
 test("summarizePolicySurfaces uses multilingual policy quality by default for GDPR Transparency candidates", async () => {

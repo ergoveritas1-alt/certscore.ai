@@ -1434,8 +1434,11 @@ export function summarizePolicySurfaces(
       surfaceUrl: signal.sourceUrl
     }))
   );
+  const article13PolicyTextQuality = gdprTransparencyProductionEvidenceEnabled
+    ? gdprTransparencyPolicyTextQuality
+    : policyTextQuality;
   const validatedArticle13DisclosureSignals = [
-    ...(policyTextQuality.usable
+    ...(article13PolicyTextQuality.usable
       ? article13SignalCandidates.filter((signal) => retainedArticle13SignalRejectReason(signal.evidenceText ?? "", signal.disclosureType) === null)
       : []),
     ...gdprTransparencyAcceptedArticle13Signals
@@ -1456,7 +1459,7 @@ export function summarizePolicySurfaces(
       }))
     ),
     ...article13SignalCandidates.flatMap((signal) => {
-      const rejectReason = policyTextQuality.usable
+      const rejectReason = article13PolicyTextQuality.usable
         ? retainedArticle13SignalRejectReason(signal.evidenceText ?? "", signal.disclosureType)
         : "code_or_non_policy_excerpt" as const;
       return rejectReason
@@ -1477,7 +1480,8 @@ export function summarizePolicySurfaces(
     article13Surfaces,
     text,
     processingErrorObserved,
-    rawArticle13Surfaces
+    rawArticle13Surfaces,
+    article13PolicyTextQuality
   );
   const retainedPolicySections = article13Surfaces.flatMap((row) =>
     (row.surface.retainedPolicySections ?? []).map((section) => ({
@@ -1588,7 +1592,8 @@ function buildPolicyTextExtractionHealth(
   article13Surfaces: ReturnType<typeof dedupePolicySurfaces>,
   text: string,
   processingErrorObserved: boolean,
-  rawArticle13Surfaces: readonly LocalV2PolicySurface[] = []
+  rawArticle13Surfaces: readonly LocalV2PolicySurface[] = [],
+  retainedPolicyTextQuality = assessRetainedPolicyTextQuality(text)
 ) {
   const policySurfaceObserved = article13Surfaces.length > 0 || rawArticle13Surfaces.length > 0;
   const policyUrls = uniqueStrings([
@@ -1610,7 +1615,7 @@ function buildPolicyTextExtractionHealth(
   ) || rawArticle13Surfaces.some((surface) =>
     surface.fetchable === false || surface.httpStatus === 401 || surface.httpStatus === 403 || surface.httpStatus === 429
   );
-  const textQuality = assessRetainedPolicyTextQuality(text);
+  const textQuality = retainedPolicyTextQuality;
   const policyTextExtractionStatus =
     !policySurfaceObserved
       ? "not_attempted"
