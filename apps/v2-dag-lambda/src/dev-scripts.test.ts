@@ -137,6 +137,11 @@ test("Dockerfile uses slim Node image, system Chromium, and the local Lambda run
   assert.match(dockerfile, /CMD \["src\/handler\.handler"\]/);
   assert.match(bootstrap, /AWS_LAMBDA_RUNTIME_API/);
   assert.match(bootstrap, /runtime\/invocation\/next/);
+  assert.match(bootstrap, /const keepAlive = setInterval\(\(\) => \{\}, 1 << 30\);/);
+  assert.match(bootstrap, /void main\(\)\.catch/);
+  assert.match(bootstrap, /clearInterval\(keepAlive\)/);
+  assert.doesNotMatch(bootstrap, /^while \(true\) \{/m);
+  assert.doesNotMatch(bootstrap, /^const result = await handler/m);
 });
 
 test("local Lambda zip packages the bundled handler with only Playwright runtime deps", async () => {
