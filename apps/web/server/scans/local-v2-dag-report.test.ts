@@ -1235,6 +1235,77 @@ test("summarizePolicySurfaces credits French Article 13 candidates through the p
   });
 });
 
+test("summarizePolicySurfaces treats compact French Article 13 lists as usable policy text", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const evidence = [
+    "La politique de confidentialité informe les utilisateurs du recueil de ces données.",
+    "- des objectifs du recueil de ces données (finalités) ;",
+    "- de l'identité du ou des responsables de traitement ;",
+    "- de vos droits et de la façon de les exercer ;",
+    "- du fondement juridique justifiant le traitement ;",
+    "- des garanties apportées conformément à la loi en cas de transfert hors Union Européenne ;",
+    "- des durées de conservation ou lorsque cela n'est pas possible des critères utilisés pour déterminer cette durée.",
+    "Ces informations concernent les données collectées dans le cadre du site et des services numériques proposés aux utilisateurs.",
+  ].join(" ");
+  const candidates = [
+    ["processing_purposes", "objectifs du recueil de ces données"],
+    ["controller_contact", "responsables de traitement"],
+    ["data_subject_rights", "vos droits et de la façon de les exercer"],
+    ["legal_basis", "fondement juridique justifiant le traitement"],
+    ["international_transfers", "transfert hors union européenne"],
+    ["data_retention", "critères utilisés pour déterminer cette durée"],
+  ].map(([topic, matchedTerm]) => ({
+    classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+    classifierReasonCodes: [`matched_${topic}`, "match_strength_equivalent"],
+    confidence: 0.82,
+    evidenceText: evidence,
+    matchStrength: "equivalent",
+    matchedLocale: "fr",
+    matchedTerm,
+    productionCredit: false,
+    status: "diagnostic_only",
+    topic
+  }));
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "lequipe-style-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://www.lequipe.example.test/Page/Politique-de-confidentialite/1183897",
+      normalizedUrl: "https://www.lequipe.example.test/Page/Politique-de-confidentialite/1183897",
+      confidence: 0.9,
+      status: "fetched",
+      textExcerpt: evidence,
+      observedTopics: [],
+      gdprTransparencyTopicCandidates: candidates
+    }
+  ] as never, "https://lequipe.fr/");
+
+  const summary = summarizePolicySurfaces(surfaces, "lequipe.fr");
+
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.equal(summary.policyTextExtractionHealth.policyTextQuality.usable, true);
+  assert.equal((summary.policyTextExtractionHealth.policyTextQuality.gdprTransparencyTopicMatchCount ?? 0) >= 3, true);
+  assert.deepEqual(
+    summary.article13DisclosureTypesObserved.sort(),
+    [
+      "controller_contact",
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers",
+      "legal_basis",
+      "processing_purposes"
+    ].sort()
+  );
+  assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
+    acceptedCandidateCount: 6,
+    diagnosticCandidateCount: 0,
+    discardedCandidateCount: 0,
+    productionCreditSignalCount: 6,
+    rejectedCandidateCount: 0,
+    sourceCandidateCount: 6
+  });
+});
+
 test("summarizePolicySurfaces treats French policy text as usable for legacy Article 13 signals", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const dpoText =

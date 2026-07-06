@@ -8,6 +8,7 @@ import { Readable } from "node:stream";
 import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   classifyConsentControlLabel,
+  classifyGdprTransparencyTopics,
   type CanonicalEvidenceBundle
 } from "@certscore/contracts";
 import { resolveVendorDisplayCategory, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
@@ -1616,6 +1617,10 @@ function buildPolicyTextExtractionHealth(
     surface.fetchable === false || surface.httpStatus === 401 || surface.httpStatus === 403 || surface.httpStatus === 429
   );
   const textQuality = retainedPolicyTextQuality;
+  const substantiveTopicEvidenceSatisfiesMinimum =
+    typeof textQuality.gdprTransparencyTopicMatchCount === "number" &&
+    textQuality.gdprTransparencyTopicMatchCount >= 3 &&
+    extractedTextLength >= 500;
   const policyTextExtractionStatus =
     !policySurfaceObserved
       ? "not_attempted"
@@ -1627,7 +1632,7 @@ function buildPolicyTextExtractionHealth(
             ? "blocked"
             : !textQuality.usable
               ? "low_quality_extracted_code_or_config"
-            : extractedTextLength >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
+            : extractedTextLength >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13 || substantiveTopicEvidenceSatisfiesMinimum
               ? "ok"
               : "thin";
   const extractionFailureReason =
@@ -1700,21 +1705,38 @@ function assessRetainedPolicyTextQuality(value: string, options: { multilingual?
   const policyTermCount = uniqueStrings((text.match(policyTermPattern) ?? []).map((value) => value.toLowerCase())).length;
   const escapedUrlCount = (text.match(/\\x2f|\\u003c|\\u003e|https?:\\\/\\\//gi) ?? []).length;
   const minifiedTokenCount = (text.match(/[A-Za-z_$][\w$]{0,8}\s*[=:]\s*\S{40,}/g) ?? []).length;
-  const reason =
-    /\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(text) ||
+  const gdprTransparencyTopicMatchCount = options.multilingual
+    ? classifyGdprTransparencyTopics({ text: text.slice(0, 40_000) })
+      .matches
+      .filter((match) => match.confidence >= 0.8)
+      .length
+    : 0;
+  const hasHardCodeOrConfigSignal =
+    /\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(text);
+  const hasStructuralCodeOrConfigShape =
     (codeSignals >= 2 && naturalLanguageSentenceCount < 3) ||
     (codeSymbolRatio > 0.12 && naturalLanguageSentenceCount < 4) ||
     (escapedUrlCount >= 8 && naturalLanguageSentenceCount < 3) ||
     (minifiedTokenCount >= 2 && naturalLanguageSentenceCount < 4) ||
-    (text.length >= 500 && alphabeticWordRatio < 0.42)
-      ? "low_quality_extracted_code_or_config"
-      : text.length >= 500 && policyTermCount < 2 && naturalLanguageSentenceCount < 2
-        ? "low_quality_non_policy_text"
-        : undefined;
+    (text.length >= 500 && alphabeticWordRatio < 0.42);
+  const hasSubstantiveMultilingualArticle13Evidence =
+    options.multilingual &&
+    text.length >= 500 &&
+    gdprTransparencyTopicMatchCount >= 3 &&
+    !hasHardCodeOrConfigSignal &&
+    codeSignals < 2 &&
+    escapedUrlCount < 8 &&
+    minifiedTokenCount < 2;
+  const reason = hasHardCodeOrConfigSignal || hasStructuralCodeOrConfigShape
+    ? hasSubstantiveMultilingualArticle13Evidence ? undefined : "low_quality_extracted_code_or_config"
+    : text.length >= 500 && policyTermCount < 2 && naturalLanguageSentenceCount < 2 && !hasSubstantiveMultilingualArticle13Evidence
+      ? "low_quality_non_policy_text"
+      : undefined;
   return {
     alphabeticWordRatio,
     codeSignalCount: codeSignals,
     codeSymbolRatio,
+    gdprTransparencyTopicMatchCount,
     naturalLanguageSentenceCount,
     policyTermCount,
     reason,

@@ -940,6 +940,33 @@ test("classifies every GDPR Transparency topic with privacy-specific evidence ac
   }
 });
 
+test("classifies compact French publisher Article 13 disclosure lists", () => {
+  const text = [
+    "La politique informe les utilisateurs du recueil de ces données.",
+    "- des objectifs du recueil de ces données (finalités) ;",
+    "- de l'identité du ou des responsables de traitement ;",
+    "- de vos droits et de la façon de les exercer ;",
+    "- du fondement juridique justifiant le traitement ;",
+    "- des garanties apportées conformément à la loi en cas de transfert hors Union Européenne ;",
+    "- des durées de conservation ou des critères utilisés pour déterminer cette durée.",
+  ].join(" ");
+
+  const classification = classifyGdprTransparencyTopics({ text, localeHints: ["fr"] });
+  const topics = classification.matches.map((match) => match.topic).sort();
+
+  assert.deepEqual(
+    topics,
+    [
+      "controller_contact",
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers",
+      "legal_basis",
+      "processing_purposes",
+    ].sort(),
+  );
+});
+
 test("registry covers every supported locale", () => {
   const registryLocales = new Set(GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY.map((term) => term.locale));
 
