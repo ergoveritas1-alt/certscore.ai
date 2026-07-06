@@ -311,6 +311,7 @@ export async function preConsentRuntimeScanner(
   const screenshots: ScreenshotArtifact[] = [];
   const screenshotErrors: string[] = [];
   let earlyScreenshotCaptured = false;
+  let earlyScreenshotDurationMs = 0;
   let consentGeometryDiagnosticWritten = false;
   let earlyGeometryConsentObservation: ConsentUiObservation | null = null;
   let initialNavigationHttpStatus: number | undefined;
@@ -399,6 +400,7 @@ export async function preConsentRuntimeScanner(
           timeoutMs: input.screenshotTimeoutMs ?? 5_000,
         }),
       );
+      earlyScreenshotDurationMs = lastTimingDurationMs(timingBreakdown, "early screenshot capture");
       screenshots.push({
         artifactId: "screenshot_pre_consent",
         capturedAtMs: elapsed(input.scanStartedAtMs),
@@ -487,7 +489,10 @@ export async function preConsentRuntimeScanner(
         );
       }
     }
-    const networkIdleTimeoutMs = fastWait ? 1_500 : 5_000;
+    const networkIdleTimeoutMs = networkIdleTimeoutForPreConsent({
+      earlyScreenshotDurationMs,
+      fastWait,
+    });
     const settleWaitMs = fastWait ? 350 : 1_000;
     const consentUiWaitTimeoutMs = fastWait ? 1_800 : 3_500;
     const consentUiCaptureTimeoutMs = fastWait ? 3_500 : 5_500;
@@ -505,6 +510,8 @@ export async function preConsentRuntimeScanner(
       "network idle wait",
       fastWait
         ? "Fast planned-DAG post-navigation network quiet wait, timeout is non-fatal."
+        : earlyScreenshotDurationMs >= LONG_SCREENSHOT_OBSERVATION_WINDOW_MS
+          ? "Post-navigation network-idle wait shortened because screenshot capture already provided a long passive observation window; timeout is non-fatal."
         : "Post-navigation network-idle wait, timeout is non-fatal.",
       () =>
       page.waitForLoadState("networkidle", {
@@ -1508,6 +1515,19 @@ function recordInstantTiming(
     detail,
     durationMs: 0,
   });
+}
+
+function lastTimingDurationMs(
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
+  label: string,
+): number {
+  for (let index = timingBreakdown.length - 1; index >= 0; index -= 1) {
+    const timing = timingBreakdown[index];
+    if (timing?.label === label) {
+      return timing.durationMs;
+    }
+  }
+  return 0;
 }
 
 function errorMessage(error: unknown): string {
@@ -3825,6 +3845,23 @@ function emptyTransportSecurityObservation(input: {
   };
 }
 
+const HTTP_REDIRECT_PROBE_TIMEOUT_MS = 3_000;
+const HTTP_REDIRECT_PROBE_HEAD_TIMEOUT_MS = 1_250;
+const LONG_SCREENSHOT_OBSERVATION_WINDOW_MS = 5_000;
+const POST_LONG_SCREENSHOT_NETWORK_IDLE_TIMEOUT_MS = 1_500;
+
+export function networkIdleTimeoutForPreConsent(input: {
+  earlyScreenshotDurationMs: number;
+  fastWait: boolean;
+}): number {
+  if (input.fastWait) {
+    return 1_500;
+  }
+  return input.earlyScreenshotDurationMs >= LONG_SCREENSHOT_OBSERVATION_WINDOW_MS
+    ? POST_LONG_SCREENSHOT_NETWORK_IDLE_TIMEOUT_MS
+    : 5_000;
+}
+
 async function probeHttpRedirect(normalizedUrl: string): Promise<TransportSecurityObservation["httpProbe"]> {
   const inputUrl = originProbeUrl(normalizedUrl, "http");
   if (!inputUrl) {
@@ -3835,7 +3872,7 @@ async function probeHttpRedirect(normalizedUrl: string): Promise<TransportSecuri
   let currentUrl = inputUrl;
   try {
     for (let index = 0; index < 8; index += 1) {
-      const response = await fetchWithTimeout(currentUrl, 8_000);
+      const response = await fetchWithTimeout(currentUrl, HTTP_REDIRECT_PROBE_TIMEOUT_MS);
       const location = response.headers.get("location");
       const isRedirect = response.status >= 300 && response.status < 400 && Boolean(location);
       if (!isRedirect || !location) {
@@ -3949,7 +3986,7 @@ async function probeStrictTls(normalizedUrl: string): Promise<TransportSecurityO
 }
 
 async function fetchWithTimeout(url: string, timeoutMs: number) {
-  const headResponse = await fetchOnceWithTimeout(url, Math.min(2_000, timeoutMs), "HEAD").catch(() => null);
+  const headResponse = await fetchOnceWithTimeout(url, Math.min(HTTP_REDIRECT_PROBE_HEAD_TIMEOUT_MS, timeoutMs), "HEAD").catch(() => null);
   if (headResponse) {
     return headResponse;
   }

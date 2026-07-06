@@ -22,6 +22,7 @@ import {
   type FixtureRouteFulfiller,
   consentUiObservationFromConfirmedGeometryControls,
   consentControlsFromAccessibilityTree,
+  networkIdleTimeoutForPreConsent,
   preConsentRuntimeScanner,
 } from "./scanners/pre-consent-runtime-scanner.js";
 import type { ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
@@ -1846,6 +1847,25 @@ test("pre-consent runtime scanner avoids long post-screenshot consent recapture"
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("pre-consent network idle wait is shortened only after a long screenshot observation window", () => {
+  assert.equal(
+    networkIdleTimeoutForPreConsent({ earlyScreenshotDurationMs: 0, fastWait: false }),
+    5_000,
+  );
+  assert.equal(
+    networkIdleTimeoutForPreConsent({ earlyScreenshotDurationMs: 4_999, fastWait: false }),
+    5_000,
+  );
+  assert.equal(
+    networkIdleTimeoutForPreConsent({ earlyScreenshotDurationMs: 5_000, fastWait: false }),
+    1_500,
+  );
+  assert.equal(
+    networkIdleTimeoutForPreConsent({ earlyScreenshotDurationMs: 20_000, fastWait: true }),
+    1_500,
+  );
 });
 
 test("scan-core emits scan no-go assessment for Cloudflare-style security challenge", async () => {
