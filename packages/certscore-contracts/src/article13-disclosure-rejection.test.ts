@@ -111,6 +111,22 @@ test("Article 13 rejection contract preserves accepted legacy and multilingual e
   );
   assert.equal(
     isArticle13DisclosureEvidenceUsable(
+      "POUR QUELLES RAISONS COLLECTONS-NOUS DES DONNÉES PERSONNELLES ? Nous collectons des données personnelles pour les raisons principales suivantes : faciliter l'utilisation du Site et gérer les interactions avec les utilisateurs.",
+      "processing_purposes",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
+      "QUEL EST LE FONDEMENT LEGAL POUR LA COLLECTE DE DONNÉES QUE NOUS EFFECTUONS ? Nous collectons uniquement des données à caractère personnel lorsque nous disposons d'un fondement légal pour le faire.",
+      "legal_basis",
+      { mode: "multilingual_classifier" },
+    ),
+    true,
+  );
+  assert.equal(
+    isArticle13DisclosureEvidenceUsable(
       "COMBIEN DE TEMPS CES INFORMATIONS SONT-ELLES CONSERVÉES ? D'une manière générale, vos données personnelles sont conservées en base active pour une durée conforme aux dispositions légales et proportionnelles aux finalités pour lesquelles elles ont été collectées.",
       "data_retention",
       { mode: "multilingual_classifier" },

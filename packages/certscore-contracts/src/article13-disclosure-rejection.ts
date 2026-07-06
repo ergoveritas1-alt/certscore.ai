@@ -358,7 +358,7 @@ function hasLocalizedArticle13EvidenceContext(
   const normalized = normalizeArticle13Whitespace(value);
   const hasPrivacyDataContext =
     /(?:privacy|personal data|personal information|data protection|processing|controller|policy|notice|rights|privacy policy)/i.test(normalized) ||
-    /(?:datenschutz|personenbezogene daten|traitement|données personnelles|protección de datos|datos personales|protezione dei dati|dati personali|trattamento dei dati|tuoi dati|suoi dati|persoonsgegevens|gegevensbescherming|dane osobowe|ochrona danych)/i.test(normalized);
+    /(?:datenschutz|personenbezogene daten|traitement|données personnelles|données à caractère personnel|protección de datos|datos personales|protezione dei dati|dati personali|trattamento dei dati|tuoi dati|suoi dati|persoonsgegevens|gegevensbescherming|dane osobowe|ochrona danych)/i.test(normalized);
   if (!hasPrivacyDataContext) {
     return false;
   }
@@ -370,9 +370,9 @@ function hasLocalizedArticle13EvidenceContext(
       return /(?:data protection officer|dpo|datenschutzbeauftrag|délégué à la protection|delegado de protección|responsabile della protezione|functionaris voor gegevensbescherming|inspektor ochrony danych|iod)/i.test(normalized) &&
         /(?:reach|reached|available|contact|email|mail|address|postal|@\w|erreichen|kontakt|unter|postadresse|joignable|répond|repond|adresse|atiende|correo|contattar|contatto|risponde|indirizzo|bereikbaar|helpt|odpowiada|pytania)/i.test(normalized);
     case "processing_purposes":
-      return /(?:purpose|purposes|why we process|we process|we use|zweck|zwecke|verarbeiten|verarbeitet|finalité|finalités|tratamos|finalidad|finalità|trattiamo|doeleinden|verwerken|cele|przetwarzamy)/i.test(normalized);
+      return /(?:purpose|purposes|why we process|we process|we use|zweck|zwecke|verarbeiten|verarbeitet|finalité|finalités|pour quelles raisons|raisons principales|collectons des données personnelles|tratamos|finalidad|finalità|trattiamo|doeleinden|verwerken|cele|przetwarzamy)/i.test(normalized);
     case "legal_basis":
-      return /(?:legal basis|lawful basis|legitimate interest|article 6|rechtsgrundlage|base légale|base jurídica|base legal|base giuridica|basi giuridiche|grondslag|podstawa prawna)/i.test(normalized);
+      return /(?:legal basis|lawful basis|legitimate interest|article 6|rechtsgrundlage|base légale|base juridique|fondement légal|fondement legal|intérêt légitime|interet legitime|base jurídica|base legal|base giuridica|basi giuridiche|grondslag|podstawa prawna)/i.test(normalized);
     case "recipients_or_vendor_categories":
       return /(?:recipients?|categories of recipients|service providers?|processors?|third parties|empfänger|dienstleister|destinataires|prestataires|destinatarios|proveedores|destinatari|fornitori|ontvangers|dienstverleners|odbiorcy|dostawcy)/i.test(normalized);
     case "data_retention":
