@@ -326,7 +326,68 @@ export async function preConsentRuntimeScanner(
     );
     initialNavigationHttpStatus = navigationResponse?.status();
     const fastWait = input.waitMode === "fast";
-    if ((input.screenshotMode ?? "always") === "always") {
+    const screenshotMode = input.screenshotMode ?? "always";
+    const preScreenshotGeometryBudgetMs = fastWait ? 2_500 : 3_500;
+    if (screenshotMode === "always" && remainingModuleBudgetMs() >= preScreenshotGeometryBudgetMs) {
+      await recordTiming(
+        timingBreakdown,
+        "consent control geometry diagnostic pre-screenshot",
+        "Artifact-only consent-control geometry diagnostic before screenshot capture can alter or close the page.",
+        async () => {
+          await resetViewportForConsentGeometry(page);
+          const access = await collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
+            frameTextTimeoutMs: input.waitMode === "fast" ? 150 : 300,
+            supplementalBodyText: "",
+          });
+          let geometry = await captureConsentControlGeometry(page, {
+            timeoutMs: input.waitMode === "fast" ? 1_750 : 2_750,
+          });
+          if (
+            !hasConfirmedFirstLayerGeometryControls(geometry) &&
+            hasBelowFoldFirstLayerGeometryControls(geometry)
+          ) {
+            const recapturedGeometry = await recaptureConsentGeometryAfterBoundedScroll(page, geometry, {});
+            if (recapturedGeometry && confirmedFirstLayerGeometryControlCount(recapturedGeometry) > confirmedFirstLayerGeometryControlCount(geometry)) {
+              recapturedGeometry.summary.limitations = [
+                "recapture:bounded_scroll_to_below_fold_first_layer_controls",
+                ...recapturedGeometry.summary.limitations,
+              ].slice(0, 12);
+              geometry = recapturedGeometry;
+            }
+          }
+          const geometryArtifactPath = await input.artifactWriter.writeJsonArtifact("ConsentControlGeometryEvidence.json", {
+            ...geometry,
+            access,
+            egress: buildConsentGeometryEgressDiagnostic(),
+            artifactOnly: true,
+            productionFindingIntegration: false,
+          });
+          consentGeometryDiagnosticWritten = hasConfirmedFirstLayerGeometryControls(geometry);
+          if (!consentGeometryDiagnosticWritten) {
+            recordInstantTiming(
+              timingBreakdown,
+              "consent control geometry diagnostic pre-screenshot inconclusive",
+              "Pre-screenshot artifact-only consent-control geometry did not retain confirmed first-layer controls, so later geometry passes remain eligible.",
+            );
+          }
+          earlyGeometryConsentObservation = consentUiObservationFromConfirmedGeometryControls({
+            artifactPath: geometryArtifactPath,
+            geometry,
+            scanStartedAtMs: input.scanStartedAtMs,
+          });
+          await resetViewportForConsentGeometry(page);
+        },
+      ).catch((error: unknown) => {
+        runtimeErrors.push(`Pre-screenshot consent-control geometry diagnostic failed: ${errorMessageFromUnknown(error)}`);
+      });
+    } else if (screenshotMode === "always") {
+      recordInstantTiming(
+        timingBreakdown,
+        "consent control geometry diagnostic pre-screenshot skipped",
+        "Skipped pre-screenshot artifact-only consent-control geometry diagnostic because the pre-consent module budget was already low.",
+      );
+    }
+    if (screenshotMode === "always") {
       const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
       const screenshotCapture = await recordTiming(
         timingBreakdown,
@@ -350,7 +411,7 @@ export async function preConsentRuntimeScanner(
       earlyScreenshotCaptured = true;
       visualCapture = visualCaptureFromScreenshotSummary(screenshotCapture, screenshotPath);
       const immediateGeometryBudgetMs = fastWait ? 2_750 : 3_750;
-      if (remainingModuleBudgetMs() >= immediateGeometryBudgetMs) {
+      if (!consentGeometryDiagnosticWritten && remainingModuleBudgetMs() >= immediateGeometryBudgetMs) {
         await recordTiming(
           timingBreakdown,
           "consent control geometry diagnostic immediate",
@@ -417,8 +478,12 @@ export async function preConsentRuntimeScanner(
       } else {
         recordInstantTiming(
           timingBreakdown,
-          "consent control geometry diagnostic immediate skipped",
-          "Skipped immediate artifact-only consent-control geometry diagnostic because the pre-consent module budget was already low.",
+          consentGeometryDiagnosticWritten
+            ? "consent control geometry diagnostic immediate skipped retained"
+            : "consent control geometry diagnostic immediate skipped",
+          consentGeometryDiagnosticWritten
+            ? "Skipped immediate artifact-only consent-control geometry diagnostic because pre-screenshot geometry already retained confirmed controls."
+            : "Skipped immediate artifact-only consent-control geometry diagnostic because the pre-consent module budget was already low.",
         );
       }
     }

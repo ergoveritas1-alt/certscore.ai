@@ -73,7 +73,7 @@ test("pre-consent scanner recaptures below-fold consent geometry before proof sc
   }
 });
 
-test("pre-consent scanner captures transient first-layer geometry immediately after early screenshot", async () => {
+test("pre-consent scanner captures transient first-layer geometry before risky screenshot capture", async () => {
   const server = await startServer(`
     <!doctype html>
     <html>
@@ -125,8 +125,8 @@ test("pre-consent scanner captures transient first-layer geometry immediately af
 
     assert.equal(result.moduleRun.status, "completed", result.moduleRun.errors.join("; "));
     assert.ok(
-      result.moduleRun.timingBreakdown?.some((entry) => entry.label === "consent control geometry diagnostic immediate"),
-      "expected immediate geometry pass after early screenshot",
+      result.moduleRun.timingBreakdown?.some((entry) => entry.label === "consent control geometry diagnostic pre-screenshot"),
+      "expected pre-screenshot geometry pass before early screenshot capture",
     );
 
     const geometry = JSON.parse(
