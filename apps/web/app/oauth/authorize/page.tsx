@@ -93,7 +93,7 @@ export default async function AuthorizePage({ searchParams }: AuthorizePageProps
               <p className="font-semibold text-slate-900">Requested scopes</p>
               <p className="mt-2 font-mono text-xs">{requestedScope}</p>
             </div>
-            <form action="/oauth/authorize" className="flex gap-3" method="post">
+            <form action="/api/v2/oauth/authorize" className="flex gap-3" method="post">
               <input name="client_id" type="hidden" value={clientId} />
               <input name="redirect_uri" type="hidden" value={redirectUri} />
               <input name="scope" type="hidden" value={requestedScope} />

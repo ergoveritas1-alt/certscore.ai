@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 import { normalizeOAuthScopes, oauthScopeString } from "@certscore/mcp-auth";
-import { getCurrentUser } from "../../../server/auth";
-import { bootstrapAppUserSession } from "../../../server/bootstrap-user";
+import { getCurrentUser } from "../../../../../server/auth";
+import { bootstrapAppUserSession } from "../../../../../server/bootstrap-user";
 import {
   createAuthorizationCode,
   getMcpOAuthClient,
   redirectUriAllowed,
   restrictMcpOAuthScopes
-} from "../../../server/oauth/mcp-oauth";
+} from "../../../../../server/oauth/mcp-oauth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
