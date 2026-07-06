@@ -249,7 +249,9 @@ const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN =
   /preference|preferences|settings|choices|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|paramètres|préférences|finalités|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|voorkeuren|instellingen|keuzes|doeleinden|ustawieni[ae]|preferencj[ae]|wybor(?:y|ów)|cel(?:e|ów)/i;
 const POLICY_LINK_PATTERN = /\b(?:privacy policy|cookie policy|privacy statement|cookie statement|privacy notice|cookie notice|privacy and cookie policy|politique de confidentialit[eé]|politique de confidentialit[eé] et de gestion des cookies|politique|datenschutzerklärung)\b/i;
 const CANDIDATE_ACTION_PRIORITY_PATTERN =
-  /accept|agree|allow|continue|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|necessary|essential|required|technical|akzeptieren|ablehnen|einstellungen|accepter|refuser|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
+  /accept|agree|allow|continue|reject|decline|deny|settings|setup|set up|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|necessary|essential|required|technical|akzeptieren|ablehnen|einstellungen|accepter|refuser|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
+const CONSENT_GEOMETRY_FRAME_URL_PATTERN =
+  /consent|privacy|cookie|cookies|cmp|choice|choices|preference|preferences|didomi|sourcepoint|trustarc|onetrust|optanon|quantcast|usercentrics|cookiebot|privacy-center|privacy_center|sp_message/i;
 const STATIC_TEXT_TAG_NAMES = new Set(["p", "span", "strong", "em", "small", "li", "h1", "h2", "h3", "h4", "h5", "h6"]);
 const INTERACTIVE_TAG_NAMES = new Set(["a", "button", "input", "select", "textarea"]);
 const INTERACTIVE_ROLE_PATTERN = /^(button|link|checkbox|radio|switch|tab|menuitem)$/i;
@@ -264,12 +266,9 @@ export async function captureConsentControlGeometry(
     containerLimit: options.containerLimit ?? DEFAULT_CONTAINER_LIMIT,
     registrySelectors,
   };
-  const frames = [
-    page.mainFrame(),
-    ...page.frames().filter((frame) => frame !== page.mainFrame()),
-  ].slice(0, 12);
+  const frames = prioritizedConsentGeometryFrames(page).slice(0, 12);
   const frameTimeoutMs = options.timeoutMs
-    ? Math.max(250, Math.floor(options.timeoutMs / Math.max(frames.length, 1)))
+    ? Math.max(750, Math.floor(options.timeoutMs / Math.max(Math.min(frames.length, 4), 1)))
     : undefined;
   const captures = (await Promise.all(frames.map(async (frame) => {
     try {
@@ -307,6 +306,22 @@ export async function captureConsentControlGeometry(
     candidates,
     summary,
   };
+}
+
+function prioritizedConsentGeometryFrames(page: Page) {
+  const mainFrame = page.mainFrame();
+  const childFrames = page.frames().filter((frame) => frame !== mainFrame);
+  const scoreFrame = (frame: ReturnType<Page["mainFrame"]>) => {
+    const url = frame.url();
+    return CONSENT_GEOMETRY_FRAME_URL_PATTERN.test(url) ? 1 : 0;
+  };
+  return [
+    mainFrame,
+    ...childFrames
+      .map((frame, index) => ({ frame, index, score: scoreFrame(frame) }))
+      .sort((left, right) => right.score - left.score || left.index - right.index)
+      .map((item) => item.frame),
+  ];
 }
 
 function promiseWithTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | undefined> {
@@ -696,7 +711,7 @@ function collectConsentGeometryInPage(input: {
   };
   const consentPattern = /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|toestemming|voorkeuren|instellingen|keuzes|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|preferencj[ae]|ustawieni[ae]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie/i;
   const controlLabelPattern =
-    /accept|agree|allow|continue|ok|got it|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|save|cookie|cookies|analytics|necessary|essential|required|technical|akzeptieren|annehmen|ablehnen|einstellungen|verwalten|accepter|refuser|continuer|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|keuzes|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
+    /accept|agree|allow|continue|ok|got it|reject|decline|deny|settings|setup|set up|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|save|cookie|cookies|analytics|necessary|essential|required|technical|akzeptieren|annehmen|ablehnen|einstellungen|verwalten|accepter|refuser|continuer|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|keuzes|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
   const containerSelector = [
     "[role='dialog']",
     "[aria-modal='true']",

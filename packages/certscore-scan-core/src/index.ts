@@ -1135,6 +1135,10 @@ export function deriveRuntimeCoverageSummary(input: {
     limitationKeys.push("cmp_runtime_without_actionable_surface");
     notes.push("CMP runtime evidence was observed, but no actionable consent surface or first-layer controls were retained in bounded capture.");
   }
+  if (consentUiCaptureTimedOutWithoutControls(input)) {
+    limitationKeys.push("consent_ui_capture_timed_out");
+    notes.push("First-layer consent UI capture timed out before retaining actionable controls; absence of consent-control findings should be treated as coverage-limited.");
+  }
   if (postConsentFlowRuntimeDisabled(input)) {
     limitationKeys.push("post_consent_flow_runtime_disabled");
     notes.push("Post-consent consent-flow runtime is intentionally disabled; action completion and post-action behavior comparisons are explicit not-testable limitations.");
@@ -1155,6 +1159,17 @@ export function deriveRuntimeCoverageSummary(input: {
     silentEmpty,
     notes,
   };
+}
+
+function consentUiCaptureTimedOutWithoutControls(input: {
+  consentUiObservations?: ConsentUiObservation[];
+}) {
+  return (input.consentUiObservations ?? []).some((observation) =>
+    observation.likelyPresent === false &&
+    observation.basis.includes("bounded_capture_timeout_or_failure") &&
+    observation.controls.length === 0 &&
+    observation.visibleChoiceLabels.length === 0
+  );
 }
 
 function cmpRuntimeObservedWithoutActionableConsentSurface(input: {

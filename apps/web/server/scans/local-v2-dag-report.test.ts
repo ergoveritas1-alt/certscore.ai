@@ -1374,6 +1374,21 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
       startedAt: "2026-06-25T02:15:50.000Z",
       url: "https://example.test/"
     }, null, 2)}\n`, "utf8");
+    await writeFile(path.join(outDir, "ConsentControlGeometryEvidence.json"), `${JSON.stringify({
+      artifactVersion: "consent_control_geometry.v1",
+      artifactOnly: true,
+      productionFindingIntegration: false,
+      containers: [],
+      candidates: [],
+      summary: {
+        firstLayerAccept: false,
+        firstLayerReject: false,
+        firstLayerOptions: false,
+        cmpDetected: false,
+        confidence: 0.55,
+        limitations: []
+      }
+    }, null, 2)}\n`, "utf8");
 
     const baseScanConfig = {
       hostname: "example.test",
@@ -3221,6 +3236,21 @@ test("materializeLocalV2DagScanDetail marks artifact-only consent and policy bud
       startedAt: "2026-07-06T00:08:00.000Z",
       url: "https://lefigaro.fr/"
     }, null, 2)}\n`, "utf8");
+    await writeFile(path.join(outDir, "ConsentControlGeometryEvidence.json"), `${JSON.stringify({
+      artifactVersion: "consent_control_geometry.v1",
+      artifactOnly: true,
+      productionFindingIntegration: false,
+      containers: [],
+      candidates: [],
+      summary: {
+        firstLayerAccept: false,
+        firstLayerReject: false,
+        firstLayerOptions: false,
+        cmpDetected: false,
+        confidence: 0.55,
+        limitations: []
+      }
+    }, null, 2)}\n`, "utf8");
 
     const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
       scan: {
@@ -3251,6 +3281,7 @@ test("materializeLocalV2DagScanDetail marks artifact-only consent and policy bud
       detail.snapshot?.runtime_limitation_keys,
       [
         "consent_ui_capture_timed_out",
+        "consent_control_geometry_empty_after_visual_capture",
         "consent_control_geometry_skipped_budget",
         "policy_surface_skipped_budget",
         "privacy_policy_skipped_budget",

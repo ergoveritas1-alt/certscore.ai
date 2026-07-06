@@ -92,6 +92,11 @@ test("classifies observed English options labels", () => {
     label: "Personalise",
     contextText: "Data privacy at Dailymotion. We use cookies and partners for advertising measurement.",
   }).intent, "options");
+  assert.equal(classifyConsentControlLabel({
+    label: "SET UP",
+    contextText: "Make a choice for your data. We and our partners use cookies and equivalent technology.",
+  }).intent, "options");
+  assert.equal(classifyConsentControlLabel({ label: "Continue without accepting" }).intent, "reject");
 });
 
 test("classifies observed Spanish and Italian consent labels", () => {

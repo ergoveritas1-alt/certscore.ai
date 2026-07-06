@@ -310,6 +310,29 @@ test("captures Dailymotion-style Personalise as a first-layer options control", 
   assert.equal(findCandidate(artifact, "Personalise")?.decisionStatus, "confirmed_visible");
 });
 
+test("captures Le Figaro-style setup, accept, and continue-without-accepting controls", async () => {
+  const artifact = await captureFixture(`
+    <div role="dialog" aria-label="Make a choice for your data" style="position: fixed; inset: 0; display: flex; align-items: start; justify-content: center; background: rgba(42,58,76,.45);">
+      <section style="width: 560px; min-height: 520px; padding: 32px; background: white;">
+        <a href="#continue" style="float: right;">Continue without accepting</a>
+        <h1>Make a choice for your data</h1>
+        <p>We and our 250 partners use cookies or equivalent technology to store and/or access information on your device.</p>
+        <div style="display: flex; gap: 16px; margin-top: 280px;">
+          <button>SET UP</button>
+          <button>ACCEPT ALL</button>
+        </div>
+      </section>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Continue without accepting")?.actionType, "reject_all");
+  assert.equal(findCandidate(artifact, "SET UP")?.actionType, "manage_preferences");
+  assert.equal(findCandidate(artifact, "ACCEPT ALL")?.actionType, "accept_all");
+});
+
 test("does not count contextual options words in static banner text as first-layer options", async () => {
   const artifact = await captureFixture(`
     <div role="dialog" style="position: fixed; left: 260px; top: 160px; width: 620px; padding: 24px; background: white;">

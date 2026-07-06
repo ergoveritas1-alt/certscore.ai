@@ -2007,6 +2007,7 @@ function v2ArtifactOnlyProductionRowsWereEmpty(scanRecord: ScanDetailResponse) {
 function buildLocalV2EvidenceQualityLimitationKeys(input: {
   bundle: CanonicalEvidenceBundle;
   firstLayerConsentControlInventoryRetained: boolean;
+  geometryEvidence?: Record<string, unknown> | null;
   policySurfaces: ReturnType<typeof dedupePolicySurfaces>;
   scanRecord: ScanDetailResponse;
 }) {
@@ -2020,6 +2021,11 @@ function buildLocalV2EvidenceQualityLimitationKeys(input: {
     input.bundle,
     /consent control geometry diagnostic skipped|pre-consent module budget was exhausted/i
   );
+  const geometryRetainedWithoutCandidates =
+    isRecord(input.geometryEvidence) &&
+    consentGeometrySummary(input.geometryEvidence) !== null &&
+    getObjectArray(input.geometryEvidence.candidates).length === 0;
+  const preConsentScreenshotRetained = (input.bundle.screenshots ?? []).some(isPreConsentScreenshotArtifact);
   const policySkippedBudget = input.policySurfaces.some((row) => row.surface.status === "skipped_budget") ||
     (input.bundle.policySurfaceObservations ?? []).some((surface) => surface.status === "skipped_budget");
   const privacyPolicySkippedBudget = (input.bundle.policySurfaceObservations ?? []).some((surface) =>
@@ -2035,6 +2041,9 @@ function buildLocalV2EvidenceQualityLimitationKeys(input: {
   return uniqueStrings([
     consentTimedOutWithoutControls && !input.firstLayerConsentControlInventoryRetained
       ? "consent_ui_capture_timed_out"
+      : null,
+    consentTimedOutWithoutControls && geometryRetainedWithoutCandidates && preConsentScreenshotRetained
+      ? "consent_control_geometry_empty_after_visual_capture"
       : null,
     geometrySkippedBudget && !input.firstLayerConsentControlInventoryRetained
       ? "consent_control_geometry_skipped_budget"
@@ -2424,6 +2433,7 @@ function buildMaterializedLocalV2Detail(
   const evidenceQualityLimitationKeys = buildLocalV2EvidenceQualityLimitationKeys({
     bundle,
     firstLayerConsentControlInventoryRetained,
+    geometryEvidence: options.consentControlGeometryEvidence,
     policySurfaces,
     scanRecord
   });
