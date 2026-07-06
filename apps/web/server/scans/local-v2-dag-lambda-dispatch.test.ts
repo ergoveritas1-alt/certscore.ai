@@ -57,14 +57,63 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     profile: "tiny",
+    regionalRealIpEgress: {
+      egressId: "decodo-eu-ie",
+      provider: "decodo-residential",
+      requestedGeo: {
+        countryCode: "IE",
+        provider: "decodo-residential",
+        regionCode: "eu-west-1"
+      },
+      required: true,
+      scanFrom: "eu_ie"
+    },
     resultHandoff: "sqs",
     resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
+    requestedGeo: {
+      countryCode: "IE",
+      provider: "decodo-residential",
+      regionCode: "eu-west-1"
+    },
     scanId: "scan-local-1",
+    scanFrom: "eu_ie",
     scannerRuntime: "certscore-v2-dag-parallel-path",
     targetEnvironment: "local",
     targetUrl: "https://example.com/",
     vpcMode: "none"
   });
+});
+
+test("builds a California v2 DAG Lambda dispatch payload for us-west-2 SQS handoff", () => {
+  const scanConfig = buildQueuedFullScanConfig({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME: "certscore-v2-dag-ca",
+      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-ca-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      NODE_ENV: "development"
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: true,
+    localV2DagScanProfile: "tiny",
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    scanFrom: "california",
+    source: "manual-dashboard"
+  });
+  const payload = buildLocalV2DagLambdaDispatchPayload({
+    localCallbackUrl: null,
+    scanConfig,
+    scanId: "scan-local-ca"
+  });
+
+  assert.equal(payload.awsRegion, "us-west-2");
+  assert.equal(payload.functionName, "certscore-v2-dag-ca");
+  assert.equal(payload.scanFrom, "california");
+  assert.equal(payload.regionalRealIpEgress?.egressId, "decodo-us-ca");
+  assert.equal(payload.resultQueueUrl, "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-ca-results");
 });
 
 test("builds local Lambda dispatch payload with bounded debug overrides", () => {

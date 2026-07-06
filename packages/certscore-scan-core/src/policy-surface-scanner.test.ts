@@ -1162,6 +1162,33 @@ test("policySurfaceScanner uses common-path fallback when no homepage policy lin
   });
 });
 
+test("policySurfaceScanner retains canonical privacy path through fast prefetch before Nano ranking", async () => {
+  await withPolicyScan(
+    "policy-no-links",
+    async ({ result, baseUrl }) => {
+      const privacy = result.policySurfaceObservations.find((observation) =>
+        observation.status === "fetched" &&
+        observation.normalizedUrl === `${baseUrl}/privacy`
+      );
+      const timingLabels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+      const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+      assert.equal(result.moduleRun.status, "completed");
+      assert.equal(privacy?.surfaceType, "privacy_policy");
+      assert.equal(privacy?.discoveryMethod, "guessed_common_path");
+      assert.equal(timingLabels.some((label) => label === "fast canonical policy prefetch batch 1"), true);
+      assert.equal(timingLabels.some((label) => label === "fast canonical policy prefetch batch 2"), false);
+      assert.equal(timingLabels.some((label) => /Nano link ranking/.test(label)), false);
+      assert.equal(diagnostics.fastCanonicalPrefetchRan, true);
+      assert.equal(diagnostics.fastCanonicalPrefetchCandidateCount > 0, true);
+      assert.equal(diagnostics.winningSurfaceUrls.includes(`${baseUrl}/privacy`), true);
+      assert.equal(diagnostics.winningSurfaceUrls.length <= 3, true);
+    },
+    { discoveryMode: "fast", nanoAssistProvider: undefined },
+    { useDefaultNanoProvider: false },
+  );
+});
+
 test("policySurfaceScanner uses common-path fallback when homepage fetch fails", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
@@ -2250,6 +2277,8 @@ async function readPolicyCaptureDiagnostics(
   coreSurfaceTypes: string[];
   observedCandidateCount: number;
   commonPathFallbackUsed: boolean;
+  fastCanonicalPrefetchRan: boolean;
+  fastCanonicalPrefetchCandidateCount: number;
   fetchedCount: number;
   failedCandidateCount: number;
   candidateSummary: Array<{

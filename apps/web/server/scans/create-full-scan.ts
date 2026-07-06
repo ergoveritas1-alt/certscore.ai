@@ -37,6 +37,8 @@ import { buildQueuedFullScanConfig } from "./full-scan-config";
 import {
   normalizeLocalV2DagRunViaLambda,
   normalizeLocalV2DagScanProfile,
+  regionalRealIpEgressUnavailableMessage,
+  requiresRegionalRealIpEgress,
   type LocalV2DagScanProfile
 } from "./local-v2-dag-scan-config";
 import {
@@ -468,6 +470,20 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     source: input.source ?? "manual-dashboard"
   });
   const localV2DagLambdaDispatch = summarizeLocalV2DagLambdaDispatchForEvent(scanConfig);
+  if (requiresRegionalRealIpEgress(scanFrom) && !localV2DagLambdaDispatch) {
+    const message = regionalRealIpEgressUnavailableMessage(scanFrom);
+    await logRequest({
+      errorCode: "regional_real_ip_egress_unavailable",
+      errorMessage: message,
+      resolutionMode: "regional_real_ip_egress_unavailable",
+      status: "rejected"
+    });
+
+    return {
+      error: message,
+      scanId: null
+    };
+  }
   const queueMetadata = getFullScanQueueMetadata({
     provenance: input.provenance,
     scanType: input.scanType ?? "full"

@@ -12,13 +12,18 @@ export function consentFlowRuntimeScannerPlaceholder(startedAt: string, reason?:
   };
 }
 
-export function policySurfaceScannerPlaceholder(startedAt: string, reason?: string): ScanModuleRun {
+export function policySurfaceScannerPlaceholder(
+  startedAt: string,
+  reason?: string,
+  timingBreakdown?: ScanModuleRun["timingBreakdown"],
+): ScanModuleRun {
   return {
     moduleName: "policySurfaceScanner",
     status: reason ? "skipped_budget" : "not_run",
     startedAt,
     completedAt: startedAt,
     durationMs: 0,
+    timingBreakdown,
     evidenceRefs: [],
     errors: [reason ?? "Placeholder only. Policy-surface scanner is not implemented in phase 1."],
   };

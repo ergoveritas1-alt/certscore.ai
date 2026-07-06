@@ -77,3 +77,15 @@ test("ScanFromSelect exposes restricted scan controls to admin users", () => {
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="false"/);
   assert.match(html, /EU-DE/);
 });
+
+test("ScanFromSelect renders California with a flag marker instead of raw text", () => {
+  const html = renderToStaticMarkup(
+    createElement(ScanFromSelect, {
+      value: "california",
+      variant: "field"
+    })
+  );
+
+  assert.match(html, /data-scan-from-flag="california"/);
+  assert.doesNotMatch(html, />california</);
+});

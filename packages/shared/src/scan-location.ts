@@ -1,4 +1,4 @@
-export const SCAN_FROM_VALUES = ["default", "eu_de", "eu_ie"] as const;
+export const SCAN_FROM_VALUES = ["default", "eu_de", "eu_ie", "california"] as const;
 
 export type ScanFrom = (typeof SCAN_FROM_VALUES)[number];
 
@@ -8,9 +8,16 @@ export type RequestedGeoTarget = {
   regionCode: string | null;
 };
 
+export type RealIpEgressRequirement = {
+  id: string;
+  provider: "decodo-residential";
+  required: boolean;
+};
+
 export type ScanFromDefinition = {
   description: string;
   label: string;
+  realIpEgress: RealIpEgressRequirement | null;
   requestedGeo: RequestedGeoTarget;
   value: ScanFrom;
 };
@@ -26,25 +33,51 @@ export const SCAN_FROM_DEFINITIONS = {
       provider: "aws-default",
       regionCode: null
     },
+    realIpEgress: null,
     value: "default"
   },
+  california: {
+    description: "California real-IP Lambda scanner",
+    label: "California",
+    requestedGeo: {
+      countryCode: "US",
+      provider: "decodo-residential",
+      regionCode: "us-west-2"
+    },
+    realIpEgress: {
+      id: "decodo-us-ca",
+      provider: "decodo-residential",
+      required: true
+    },
+    value: "california"
+  },
   eu_de: {
-    description: "Frankfurt Lambda scanner",
+    description: "Germany real-IP Lambda scanner",
     label: "EU-DE",
     requestedGeo: {
       countryCode: "DE",
-      provider: "aws-default",
+      provider: "decodo-residential",
       regionCode: "eu-central-1"
+    },
+    realIpEgress: {
+      id: "decodo-eu-de",
+      provider: "decodo-residential",
+      required: true
     },
     value: "eu_de"
   },
   eu_ie: {
-    description: "Dublin Lambda scanner",
+    description: "Ireland real-IP Lambda scanner",
     label: "EU-IR",
     requestedGeo: {
       countryCode: "IE",
-      provider: "aws-default",
+      provider: "decodo-residential",
       regionCode: "eu-west-1"
+    },
+    realIpEgress: {
+      id: "decodo-eu-ie",
+      provider: "decodo-residential",
+      required: true
     },
     value: "eu_ie"
   },

@@ -23,7 +23,11 @@ import {
   isLocalV2DagLambdaIntentSimulated,
   summarizeLocalV2DagLambdaDispatchForEvent
 } from "./local-v2-dag-lambda-dispatch";
-import type { LocalV2DagScanProfile } from "./local-v2-dag-scan-config";
+import {
+  regionalRealIpEgressUnavailableMessage,
+  requiresRegionalRealIpEgress,
+  type LocalV2DagScanProfile
+} from "./local-v2-dag-scan-config";
 import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-simulated-dispatch";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
@@ -165,6 +169,32 @@ export async function createAnonymousFullScan(input: {
     source: input.provenance?.source ?? "marketing-anonymous-full-scan"
   });
   const localV2DagLambdaDispatch = summarizeLocalV2DagLambdaDispatchForEvent(scanConfig);
+  if (requiresRegionalRealIpEgress(scanFrom) && !localV2DagLambdaDispatch) {
+    const message = regionalRealIpEgressUnavailableMessage(scanFrom);
+    await recordScanRequest({
+      normalizedDomain: input.hostname,
+      normalizedUrl: input.normalizedUrl,
+      organizationId: null,
+      requestChannel: input.provenance?.source ?? "marketing-anonymous-full-scan",
+      requestedBy: { anonymous: true },
+      requestedUrl: input.normalizedUrl,
+      requestContext: {
+        bypassRecentScanReuse,
+        coveragePlanCode,
+        localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
+        minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
+        pagesRequested,
+        provenance: input.provenance ?? null,
+        scanFrom
+      },
+      errorCode: "regional_real_ip_egress_unavailable",
+      errorMessage: message,
+      resolutionMode: "regional_real_ip_egress_unavailable",
+      status: "rejected"
+    }).catch((error) => logScanRequestFailure("anonymous_regional_real_ip_egress_unavailable", error));
+
+    throw new Error(message);
+  }
   const queueMetadata = getFullScanQueueMetadata({
     provenance: input.provenance,
     scanType: "full"

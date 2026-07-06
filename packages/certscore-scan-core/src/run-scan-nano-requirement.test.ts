@@ -60,4 +60,6 @@ test("runScan bounds planned-parallel policy output instead of waiting unbounded
   assert.doesNotMatch(requiredExpression, /!consentFlowEnabled/);
   assert.match(source, /planned_parallel_policy_output_deadline_elapsed/);
   assert.match(source, /policyOutputGraceMs/);
+  assert.match(source, /policy_surface_output_budget_elapsed/);
+  assert.match(source, /canonicalPathPrefetchRan/);
 });

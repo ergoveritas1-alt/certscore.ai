@@ -306,8 +306,25 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     orchestrationMode: "sharded",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
+    regionalRealIpEgress: {
+      egressId: "decodo-eu-ie",
+      provider: "decodo-residential",
+      requestedGeo: {
+        countryCode: "IE",
+        provider: "decodo-residential",
+        regionCode: "eu-west-1"
+      },
+      required: true,
+      scanFrom: "eu_ie"
+    },
+    requestedGeo: {
+      countryCode: "IE",
+      provider: "decodo-residential",
+      regionCode: "eu-west-1"
+    },
     resultHandoff: "sqs",
     resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
+    scanFrom: "eu_ie",
     scannerRuntime: "certscore-v2-dag-parallel-path",
     simulatedLocalLambda: false,
     targetEnvironment: "local",
@@ -325,10 +342,13 @@ test("queued full-scan config uses location-specific Lambda functions and result
     CERTSCORE_V2_DAG_LAMBDA_EU_IE_ENABLED: "true",
     CERTSCORE_V2_DAG_LAMBDA_EU_IE_FUNCTION_NAME: "certscore-v2-dag-ie",
     CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results",
+    CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED: "true",
+    CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME: "certscore-v2-dag-ca",
+    CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-ca-results",
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     NODE_ENV: "development"
   } as const;
-  const build = (scanFrom: "eu_de" | "eu_ie") =>
+  const build = (scanFrom: "eu_de" | "eu_ie" | "california") =>
     buildQueuedFullScanConfig({
       env,
       hostname: "example.com",
@@ -341,24 +361,37 @@ test("queued full-scan config uses location-specific Lambda functions and result
     }).execution?.v2DagLambda as Record<string, unknown> | undefined;
 
   assert.deepEqual(
-    ["eu_de", "eu_ie"].map((scanFrom) => {
-      const v2DagLambda = build(scanFrom as "eu_de" | "eu_ie");
+    ["eu_de", "eu_ie", "california"].map((scanFrom) => {
+      const v2DagLambda = build(scanFrom as "eu_de" | "eu_ie" | "california");
       return {
         awsRegion: v2DagLambda?.awsRegion,
+        egressId: (v2DagLambda?.regionalRealIpEgress as Record<string, unknown> | undefined)?.egressId,
         functionName: v2DagLambda?.functionName,
-        resultQueueUrl: v2DagLambda?.resultQueueUrl
+        resultQueueUrl: v2DagLambda?.resultQueueUrl,
+        scanFrom: v2DagLambda?.scanFrom
       };
     }),
     [
       {
         awsRegion: "eu-central-1",
+        egressId: "decodo-eu-de",
         functionName: "certscore-v2-dag-de",
-        resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-de-results"
+        resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-de-results",
+        scanFrom: "eu_de"
       },
       {
         awsRegion: "eu-west-1",
+        egressId: "decodo-eu-ie",
         functionName: "certscore-v2-dag-ie",
-        resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results"
+        resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results",
+        scanFrom: "eu_ie"
+      },
+      {
+        awsRegion: "us-west-2",
+        egressId: "decodo-us-ca",
+        functionName: "certscore-v2-dag-ca",
+        resultQueueUrl: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-ca-results",
+        scanFrom: "california"
       }
     ]
   );

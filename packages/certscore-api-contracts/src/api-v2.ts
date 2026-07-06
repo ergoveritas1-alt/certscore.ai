@@ -9,7 +9,7 @@ export const apiV2Disclaimer =
 
 export const apiV2ScanStatusSchema = z.enum(["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited"]);
 export const apiV2ScanFreshnessSchema = z.enum(["latest", "refresh"]);
-export const apiV2ScanFromSchema = z.enum(["eu_ie"]);
+export const apiV2ScanFromSchema = z.enum(["eu_ie", "eu_de", "california"]);
 export const apiV2FindingCriticalitySchema = z.enum(["critical", "high", "medium", "low", "info", "unknown"]);
 export const apiV2FindingConfidenceSchema = z.enum(["strong", "good", "moderate", "weak", "unknown"]);
 export const apiV2EvidenceBasisSchema = z.enum(["runtime_observation", "policy_surface_detection", "accessibility_check", "public_report_projection"]);

@@ -102,7 +102,7 @@ function riskLevelFromScore(score: number | null) {
 }
 
 function publicScanFrom(value: string | null | undefined) {
-  return value === "eu_ie" ? value : undefined;
+  return value === "eu_ie" || value === "eu_de" || value === "california" ? value : undefined;
 }
 
 function normalizeScanStatus(value: string | null | undefined) {

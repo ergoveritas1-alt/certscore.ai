@@ -40,9 +40,26 @@ export type LocalV2DagLambdaDispatchPayload = {
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   debugOverrides?: LocalV2DagLambdaDebugOverrides;
+  regionalRealIpEgress?: {
+    egressId: string;
+    provider: "decodo-residential";
+    required: boolean;
+    requestedGeo?: {
+      countryCode: string | null;
+      provider: string;
+      regionCode: string | null;
+    };
+    scanFrom: "eu_de" | "eu_ie" | "california";
+  };
   resultHandoff: "sqs";
   resultQueueUrl: string;
+  requestedGeo?: {
+    countryCode: string | null;
+    provider: string;
+    regionCode: string | null;
+  };
   scanId: string;
+  scanFrom?: "default" | "eu_de" | "eu_ie" | "california";
   scannerRuntime: typeof LOCAL_V2_DAG_SCANNER_RUNTIME;
   strongEvidenceMode?: "webmd";
   targetEnvironment: "local" | "production";
@@ -313,6 +330,55 @@ function parseAwsRegion(value: unknown): LocalV2DagLambdaAwsRegion {
   throw new Error("Local v2 DAG Lambda dispatch must target eu-central-1, eu-west-1, or us-west-2.");
 }
 
+function parseScanFrom(value: unknown): LocalV2DagLambdaDispatchPayload["scanFrom"] | undefined {
+  return value === "default" || value === "eu_de" || value === "eu_ie" || value === "california"
+    ? value
+    : undefined;
+}
+
+function parseRequestedGeo(value: unknown): LocalV2DagLambdaDispatchPayload["requestedGeo"] | undefined {
+  const record = asRecord(value);
+  const provider = compactString(record.provider);
+  if (!provider) {
+    return undefined;
+  }
+  return {
+    countryCode: compactString(record.countryCode),
+    provider,
+    regionCode: compactString(record.regionCode)
+  };
+}
+
+function parseRegionalRealIpEgress(value: unknown): LocalV2DagLambdaDispatchPayload["regionalRealIpEgress"] | undefined {
+  const record = asRecord(value);
+  const egressId = compactString(record.egressId);
+  const scanFrom = parseScanFrom(record.scanFrom);
+  const requestedGeo = parseRequestedGeo(record.requestedGeo);
+  if (!egressId || !scanFrom || scanFrom === "default") {
+    return undefined;
+  }
+  return {
+    egressId,
+    provider: "decodo-residential",
+    required: record.required !== false,
+    ...(requestedGeo ? { requestedGeo } : {}),
+    scanFrom
+  };
+}
+
+function expectedAwsRegionForScanFrom(scanFrom: LocalV2DagLambdaDispatchPayload["scanFrom"]): LocalV2DagLambdaAwsRegion | null {
+  if (scanFrom === "eu_ie") {
+    return "eu-west-1";
+  }
+  if (scanFrom === "california") {
+    return "us-west-2";
+  }
+  if (scanFrom === "eu_de") {
+    return "eu-central-1";
+  }
+  return null;
+}
+
 function parseQueueRegion(queueUrl: string): LocalV2DagLambdaAwsRegion {
   try {
     const hostname = new URL(queueUrl).hostname;
@@ -327,6 +393,9 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   const record = asRecord(typeof event === "string" ? JSON.parse(event) : event);
   const coordinatorPlanSummary = parseCoordinatorPlanSummary(record.coordinatorPlanSummary);
   const debugOverrides = parseDebugOverrides(record.debugOverrides);
+  const regionalRealIpEgress = parseRegionalRealIpEgress(record.regionalRealIpEgress);
+  const requestedGeo = parseRequestedGeo(record.requestedGeo);
+  const scanFrom = parseScanFrom(record.scanFrom);
   const payload: LocalV2DagLambdaDispatchPayload = {
     artifactOnly: true,
     awsRegion: parseAwsRegion(record.awsRegion),
@@ -343,9 +412,12 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     ...(coordinatorPlanSummary ? { coordinatorPlanSummary } : {}),
     ...(debugOverrides ? { debugOverrides } : {}),
+    ...(regionalRealIpEgress ? { regionalRealIpEgress } : {}),
     resultHandoff: "sqs",
     resultQueueUrl: requireString(record, "resultQueueUrl"),
+    ...(requestedGeo ? { requestedGeo } : {}),
     scanId: requireString(record, "scanId"),
+    ...(scanFrom ? { scanFrom } : {}),
     scannerRuntime: LOCAL_V2_DAG_SCANNER_RUNTIME,
     ...(record.strongEvidenceMode === "webmd" || asRecord(record.debugOverrides).strongEvidenceMode === "webmd" ? { strongEvidenceMode: "webmd" as const } : {}),
     targetEnvironment: record.targetEnvironment === "production" ? "production" : "local",
@@ -371,6 +443,10 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   }
   if (record.artifactOnly !== true || record.productionFindingIntegration !== false) {
     throw new Error("Local v2 DAG Lambda dispatch must remain artifact-only and non-production.");
+  }
+  const expectedRegion = expectedAwsRegionForScanFrom(payload.scanFrom);
+  if (expectedRegion && payload.awsRegion !== expectedRegion) {
+    throw new Error(`regional_real_ip_egress_mismatch: scanFrom=${payload.scanFrom}; expectedAwsRegion=${expectedRegion}; actualAwsRegion=${payload.awsRegion}`);
   }
   if (payload.orchestrationMode === "worker" && !payload.workerLane) {
     throw new Error("Local v2 DAG Lambda worker dispatch requires a workerLane.");
@@ -519,7 +595,8 @@ export async function runLocalV2DagLambdaArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
-  await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot));
+  await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot, payload));
+  assertRegionalRealIpEgressAvailable(payload);
 
   const bundle = await runLocalV2DagLambdaScanBundle(payload, {
     artifactRoot,
@@ -552,7 +629,7 @@ async function runLocalV2DagLambdaScanBundle(
   return timeLambdaPhase(options.phaseTimings, phaseLabel(options.phaseLabelPrefix, "scan"), () => runScan({
     browserReuseMode: "per_module",
     outDir: options.artifactRoot,
-    policyOutputGraceMs: 5_000,
+    policyOutputGraceMs: 12_000,
     policyPlanningDeadlineMs: 3_000,
     postConsentFlowsEnabled: false,
     preConsentScreenshotMode: options.preConsentScreenshotMode,
@@ -624,25 +701,23 @@ function writeJson(filePath: string, value: unknown) {
   return writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-async function writeEgressPreflightArtifact(artifactRoot: string) {
+async function writeEgressPreflightArtifact(artifactRoot: string, payload: LocalV2DagLambdaDispatchPayload) {
   const startedAt = Date.now();
   const startedAtIso = new Date(startedAt).toISOString();
   const egressLabel = firstTrimmedRuntimeEnv(process.env, [
     "SCAN_EGRESS_LABEL",
     "CERTSCORE_V2_DAG_LAMBDA_EGRESS_LABEL",
   ]);
-  const proxyServer = firstTrimmedRuntimeEnv(process.env, [
-    "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
-    "SCAN_PROXY_SERVER",
-    "CERTSCORE_CHROMIUM_PROXY_SERVER",
-  ]);
-  const proxyEnabled = scanProxyEnabledEnv(process.env) && Boolean(proxyServer);
+  const proxyEnabled = chromiumProxyConfigured(process.env);
   const artifact = {
     artifactVersion: "certscore.v2.lambda-egress-preflight.v1",
     checkedAt: new Date().toISOString(),
     completedAt: null as string | null,
     durationMs: 0,
     egressLabel: egressLabel ? egressLabel.slice(0, 80) : null,
+    regionalRealIpEgress: payload.regionalRealIpEgress ?? null,
+    requestedGeo: payload.requestedGeo ?? payload.regionalRealIpEgress?.requestedGeo ?? null,
+    requestedScanFrom: payload.scanFrom ?? null,
     proxyModeEnabled: proxyEnabled,
     probeStatus: "skipped" as "available" | "failed" | "skipped",
     provider: null as string | null,
@@ -696,6 +771,23 @@ async function writeEgressPreflightArtifact(artifactRoot: string) {
   }
 }
 
+export function assertRegionalRealIpEgressAvailable(
+  payload: LocalV2DagLambdaDispatchPayload,
+  env: NodeJS.ProcessEnv = process.env
+) {
+  if (payload.regionalRealIpEgress?.required !== true) {
+    return;
+  }
+
+  if (chromiumProxyConfigured(env)) {
+    return;
+  }
+
+  throw new Error(
+    `regional_real_ip_egress_unavailable: scanFrom=${payload.regionalRealIpEgress.scanFrom}; egressId=${payload.regionalRealIpEgress.egressId}; proxyConfigured=false`
+  );
+}
+
 function parseEgressProbeResponse(text: string) {
   try {
     const value = JSON.parse(text);
@@ -738,7 +830,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
-  await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot));
+  await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot, payload));
+  assertRegionalRealIpEgressAvailable(payload);
 
   const strongWebMdMode = isStrongWebMdEvidenceMode(payload, scanTuning);
   const coordinatorBundle = await runLocalV2DagLambdaScanBundle(payload, {
@@ -1234,11 +1327,6 @@ function uniqueStrings<T extends string>(values: T[]): T[] {
 
 export function buildLocalV2DagLambdaRuntimeDiagnostics(env: NodeJS.ProcessEnv = process.env) {
   const memorySizeMb = Number.parseInt(env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ?? "", 10);
-  const proxyServer = firstTrimmedRuntimeEnv(env, [
-    "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
-    "SCAN_PROXY_SERVER",
-    "CERTSCORE_CHROMIUM_PROXY_SERVER",
-  ]);
   const scanProxyEnabled = scanProxyEnabledEnv(env);
   const egressLabel = firstTrimmedRuntimeEnv(env, [
     "SCAN_EGRESS_LABEL",
@@ -1254,7 +1342,7 @@ export function buildLocalV2DagLambdaRuntimeDiagnostics(env: NodeJS.ProcessEnv =
       "CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD",
       "CERTSCORE_CHROMIUM_PROXY_PASSWORD",
     ])),
-    chromiumProxyConfigured: scanProxyEnabled && Boolean(proxyServer),
+    chromiumProxyConfigured: chromiumProxyConfigured(env),
     chromiumSingleProcessEnabled: lambdaChromiumSingleProcessEnabled(env),
     egressLabel: egressLabel ? egressLabel.slice(0, 80) : null,
     memorySizeMb: Number.isFinite(memorySizeMb) ? memorySizeMb : null,
@@ -1268,6 +1356,14 @@ export function buildLocalV2DagLambdaRuntimeDiagnostics(env: NodeJS.ProcessEnv =
 function scanProxyEnabledEnv(env: NodeJS.ProcessEnv = process.env) {
   const value = env.SCAN_PROXY_ENABLED?.trim().toLowerCase();
   return value !== "false" && value !== "0" && value !== "off";
+}
+
+function chromiumProxyConfigured(env: NodeJS.ProcessEnv = process.env) {
+  return scanProxyEnabledEnv(env) && Boolean(firstTrimmedRuntimeEnv(env, [
+    "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
+    "SCAN_PROXY_SERVER",
+    "CERTSCORE_CHROMIUM_PROXY_SERVER",
+  ]));
 }
 
 function chromiumContextDiagnostics(env: NodeJS.ProcessEnv) {
@@ -1638,6 +1734,9 @@ async function writeManifest(input: {
     pointers: input.pointers,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
+    regionalRealIpEgress: input.payload.regionalRealIpEgress ?? null,
+    requestedGeo: input.payload.requestedGeo ?? input.payload.regionalRealIpEgress?.requestedGeo ?? null,
+    scanFrom: input.payload.scanFrom ?? null,
     runtimeDiagnostics: buildLocalV2DagLambdaRuntimeDiagnostics(),
     scanTuning: input.scanTuning,
     ...(input.payload.debugOverrides ? { debugOverrides: input.payload.debugOverrides } : {}),

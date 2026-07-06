@@ -1,4 +1,9 @@
-import { normalizeScanFrom, type ScanFrom, type SharedScanConfig } from "@website-signal-risk-scanner/shared";
+import {
+  getScanFromDefinition,
+  normalizeScanFrom,
+  type ScanFrom,
+  type SharedScanConfig
+} from "@website-signal-risk-scanner/shared";
 
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 export const LOCAL_V2_DAG_SCAN_PROFILE = "standard";
@@ -110,6 +115,9 @@ export function getLocalV2DagLambdaAwsRegionForScanFrom(value: unknown): LocalV2
   if (scanFrom === "eu_ie") {
     return "eu-west-1";
   }
+  if (scanFrom === "california") {
+    return "us-west-2";
+  }
   return "eu-central-1";
 }
 
@@ -122,11 +130,41 @@ function lambdaRegionEnv(input: { env: LocalV2DagScanEnv; scanFrom?: ScanFrom })
       resultQueueUrl: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL ?? input.env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL
     };
   }
+  if (scanFrom === "california") {
+    return {
+      enabled: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_ENABLED ?? input.env.CERTSCORE_V2_DAG_LAMBDA_ENABLED,
+      functionName: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_FUNCTION_NAME ?? input.env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME,
+      resultQueueUrl: input.env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL ?? input.env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL
+    };
+  }
   return {
     enabled: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_DE_ENABLED ?? input.env.CERTSCORE_V2_DAG_LAMBDA_ENABLED,
     functionName: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_DE_FUNCTION_NAME ?? input.env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME,
     resultQueueUrl: input.env.CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL ?? input.env.CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL
   };
+}
+
+function regionalRealIpEgressForScanFrom(scanFrom: ScanFrom) {
+  const definition = getScanFromDefinition(scanFrom);
+  return definition.realIpEgress
+    ? {
+        egressId: definition.realIpEgress.id,
+        provider: definition.realIpEgress.provider,
+        required: definition.realIpEgress.required,
+        requestedGeo: definition.requestedGeo,
+        scanFrom
+      }
+    : null;
+}
+
+export function requiresRegionalRealIpEgress(scanFrom: ScanFrom) {
+  return getScanFromDefinition(scanFrom).realIpEgress?.required === true;
+}
+
+export function regionalRealIpEgressUnavailableMessage(scanFrom: ScanFrom) {
+  const definition = getScanFromDefinition(scanFrom);
+  const egressId = definition.realIpEgress?.id ?? "unknown";
+  return `Scan location ${definition.label} requires regional real-IP Lambda egress (${egressId}); no regional Lambda dispatch was retained, so no fallback scanner execution was started.`;
 }
 
 export function normalizeLocalV2DagRunViaLambda(value: unknown, env: LocalV2DagScanEnv = process.env, scanFrom?: ScanFrom) {
@@ -233,9 +271,11 @@ export function applyLocalV2DagScanConfig(
   }
 
   const profile = normalizeLocalV2DagScanProfile(options.profile);
+  const scanFrom = normalizeScanFrom(options.scanFrom ?? config.scanFrom);
+  const regionalRealIpEgress = regionalRealIpEgressForScanFrom(scanFrom);
   const lambdaConfig =
     options.runViaLambda || shouldForceSimulatedLocalLambda
-      ? assertLocalV2DagLambdaConfigured(env, options.scanFrom ?? undefined, {
+      ? assertLocalV2DagLambdaConfigured(env, scanFrom, {
           allowSimulatedLocalLambda: true,
           forceSimulatedLocalLambda: shouldForceSimulatedLocalLambda
         })
@@ -273,8 +313,11 @@ export function applyLocalV2DagScanConfig(
               orchestrationMode: lambdaConfig.orchestrationMode,
               processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
               productionFindingIntegration: false,
+              ...(regionalRealIpEgress ? { regionalRealIpEgress } : {}),
+              requestedGeo: getScanFromDefinition(scanFrom).requestedGeo,
               resultHandoff: "sqs",
               resultQueueUrl: lambdaConfig.resultQueueUrl,
+              scanFrom,
               scannerRuntime: "certscore-v2-dag-parallel-path",
               simulatedLocalLambda: lambdaConfig.simulatedLocalLambda,
               targetEnvironment: lambdaConfig.targetEnvironment,

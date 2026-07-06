@@ -1626,6 +1626,10 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
 
 function policyDocumentHtml(pathname: string): string | undefined {
   const docs: Record<string, { title: string; body: string }> = {
+    "/privacy": {
+      title: "Privacy Policy",
+      body: "Last updated: May 1, 2026. We process personal data for analytics, advertising, service delivery, and support. We rely on consent, contract, legal obligation, and legitimate interests. Recipients include processors, service providers, analytics providers, advertising partners, and affiliates. We retain personal data only as long as necessary and respond to privacy requests at privacy@example.test.",
+    },
     "/policies/privacy": {
       title: "Privacy Policy",
       body: "Last updated: May 1, 2026. We use cookies for analytics and advertising. Our service providers include Google Analytics and Meta for measurement and advertising. You may contact privacy@example.test with questions.",
@@ -1846,10 +1850,6 @@ function policyDocumentHtml(pathname: string): string | undefined {
         "We may transfer personal data outside the European Economic Area using adequacy decisions, standard contractual clauses, or comparable safeguards.",
         "You may contact our data protection officer and may complain to a supervisory authority if you have concerns about our handling of personal data.",
       ].join(" "),
-    },
-    "/privacy": {
-      title: "Privacy Policy",
-      body: "Last updated: May 1, 2026. We use cookies for analytics and advertising. Our service providers include Google Analytics and Meta for measurement and advertising.",
     },
     "/privacy-policy": {
       title: "Privacy Policy",

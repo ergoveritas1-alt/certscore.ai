@@ -41,3 +41,17 @@ test("ScanPageHeader places scan source badge above the created timestamp row", 
     /<\/div><div class="flex flex-wrap items-center gap-1\.5 text-sm font-normal text-slate-400">Created Jun 4, 2026, 8:13 AM PDT \(scan time: 5 sec\)<\/div>/
   );
 });
+
+test("ScanPageHeader renders California scan source with the California flag marker", () => {
+  const html = renderToStaticMarkup(
+    createElement(ScanPageHeader, {
+      scanFromLabel: "California",
+      scanFromValue: "california",
+      status: "completed",
+      title: "Scan: example.com"
+    })
+  );
+
+  assert.match(html, /data-scan-from-flag="california"/);
+  assert.doesNotMatch(html, />california</);
+});

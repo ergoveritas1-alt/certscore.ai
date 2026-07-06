@@ -9,7 +9,6 @@ import { PendingButtonLink } from "../../components/ui/pending-link";
 import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
-const SAMPLE_REPORT_URL = "https://certscore.ai/scan/bc6e4dfa-8a25-43f8-822d-a10e89950799";
 const BOOK_DEMO_URL = "https://calendly.com/bmasek-w7ou/30min";
 export const metadata: Metadata = {
   ...createPageMetadata({
@@ -176,10 +175,10 @@ export default async function MarketingHomePage() {
               />
               <PendingButtonLink
                 className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
-                data-analytics-cta-type="sample_report"
-                data-analytics-event="hero_sample_report_clicked"
-                href={SAMPLE_REPORT_URL}
-                idleContent="See Sample Report"
+                data-analytics-cta-type="findings"
+                data-analytics-event="hero_findings_clicked"
+                href="/findings"
+                idleContent="Explore Findings"
                 pendingContent="Opening..."
                 variant="secondary"
               />
@@ -296,10 +295,10 @@ export default async function MarketingHomePage() {
                 />
                 <PendingButtonLink
                   className="w-full border border-white/12 bg-white/8 text-white hover:bg-white/12 sm:w-auto"
-                  data-analytics-cta-type="sample_report"
-                  data-analytics-event="hero_sample_report_clicked"
-                  href={SAMPLE_REPORT_URL}
-                  idleContent="See Sample Report"
+                  data-analytics-cta-type="findings"
+                  data-analytics-event="hero_findings_clicked"
+                  href="/findings"
+                  idleContent="Explore Findings"
                   pendingContent="Opening..."
                   variant="secondary"
                 />

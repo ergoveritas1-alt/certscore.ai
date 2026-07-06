@@ -2,7 +2,7 @@ export type PulseDetail = "tiny" | "quick" | "standard" | "full" | "summary" | "
 export type NormalizedPulseDetail = "tiny" | "standard" | "full" | "summary" | "evidence";
 export type PulseFormat = "json" | "markdown";
 export type FreshnessMode = "latest" | "refresh";
-export type ScanFrom = "eu_ie" | "california";
+export type ScanFrom = "eu_ie" | "eu_de" | "california";
 
 export type PulseJobStatus =
   | "queued"

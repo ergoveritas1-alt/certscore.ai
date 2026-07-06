@@ -32,6 +32,21 @@ const MAX_FETCHED_TEXT_CHARS = 500_000;
 const MAX_POLICY_PDF_BYTES = 2_500_000;
 const MAX_POLICY_PDF_PAGES = 12;
 const MAX_POLICY_PDF_TEXT_CHARS = 500_000;
+const FAST_CANONICAL_PREFETCH_CONCURRENCY = 3;
+const FAST_CANONICAL_PREFETCH_TIMEOUT_MS = 1_800;
+const FAST_CANONICAL_PREFETCH_PATHS = [
+  "/privacy",
+  "/privacy-policy",
+  "/privacy-notice",
+  "/cookie-policy",
+  "/cookies",
+  "/privacy/cookies",
+  "/confidentialite",
+  "/politique-de-confidentialite",
+  "/donnees-personnelles",
+  "/conditions-generales",
+  "/terms",
+] as const;
 const DEFAULT_POLICY_EXCERPT_KEYWORDS = [
   "personal data",
   "personal information",
@@ -137,6 +152,8 @@ interface PolicySurfaceCandidate {
   deterministicClassifierReasonCodes: string[];
   deterministicClassifierProvenance: "privacy_surface_classifier.v1";
   discoveryMethod: PolicySurfaceObservation["discoveryMethod"];
+  fetchTimeoutMs?: number;
+  skipRenderedFallback?: boolean;
   rankedFromCommonPath?: boolean;
   assisted?: NanoLinkClassificationResult["rankedCandidates"][number];
 }
@@ -175,6 +192,8 @@ export async function policySurfaceScanner(
   let renderedCandidateCount = 0;
   let observedCandidateCount = 0;
   let commonPathFallbackUsed = false;
+  let fastCanonicalPrefetchRan = false;
+  let fastCanonicalPrefetchCandidateCount = 0;
   const policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget = {
     remainingChars: MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS,
   };
@@ -214,6 +233,8 @@ export async function policySurfaceScanner(
             renderedCandidateCount,
             observedCandidateCount,
             commonPathFallbackUsed,
+            fastCanonicalPrefetchRan,
+            fastCanonicalPrefetchCandidateCount,
             observations,
             candidates: renderedCandidates,
           }));
@@ -244,6 +265,8 @@ export async function policySurfaceScanner(
           renderedCandidateCount,
           observedCandidateCount,
           commonPathFallbackUsed,
+          fastCanonicalPrefetchRan,
+          fastCanonicalPrefetchCandidateCount,
           observations,
           candidates: dedupeCandidates([
             ...renderedCandidates,
@@ -283,6 +306,41 @@ export async function policySurfaceScanner(
       ]),
     );
     staticCandidateCount = staticCandidates.length;
+    if (input.discoveryMode === "fast" && staticCandidates.length === 0) {
+      const fastCanonicalCandidates = fastCanonicalPrefetchCandidatesFor(input.normalizedUrl);
+      fastCanonicalPrefetchRan = true;
+      fastCanonicalPrefetchCandidateCount = fastCanonicalCandidates.length;
+      const fastCanonicalResults = await fetchPolicyCandidateBatchesUntilCore({
+        input,
+        timingBreakdown,
+        moduleStartedAtMs,
+        rankedCandidates: fastCanonicalCandidates,
+        labelPrefix: "fast canonical policy prefetch",
+        policySurfaceTextArtifactBudget,
+      });
+      observations.push(...fastCanonicalResults.observations);
+      artifactRefs.push(...fastCanonicalResults.artifactRefs);
+      if (hasRetainedCorePolicyOrControlSurface(observations)) {
+        observedCandidateCount = fastCanonicalCandidates.length;
+        artifactRefs.push(await writePolicyCaptureDiagnostics({
+          input,
+          moduleStartedAtMs,
+          staticCandidateCount,
+          renderedCandidateCount,
+          observedCandidateCount,
+          commonPathFallbackUsed,
+          fastCanonicalPrefetchRan,
+          fastCanonicalPrefetchCandidateCount,
+          observations,
+          candidates: fastCanonicalCandidates,
+        }));
+        return {
+          moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
+          policySurfaceObservations: observations,
+          artifactRefs,
+        };
+      }
+    }
     const fastStaticCoverage =
       input.discoveryMode === "fast" &&
       hasCompleteFetchableStaticCoreCoverage(staticCandidates);
@@ -475,6 +533,8 @@ export async function policySurfaceScanner(
       renderedCandidateCount,
       observedCandidateCount,
       commonPathFallbackUsed,
+      fastCanonicalPrefetchRan,
+      fastCanonicalPrefetchCandidateCount,
       observations,
       candidates: linkCandidates,
     }));
@@ -537,6 +597,8 @@ async function writePolicyCaptureDiagnostics(input: {
   renderedCandidateCount: number;
   observedCandidateCount: number;
   commonPathFallbackUsed: boolean;
+  fastCanonicalPrefetchRan?: boolean;
+  fastCanonicalPrefetchCandidateCount?: number;
   observations: PolicySurfaceObservation[];
   candidates?: PolicySurfaceCandidate[];
 }): Promise<ArtifactRef> {
@@ -556,6 +618,8 @@ async function writePolicyCaptureDiagnostics(input: {
     staticCandidateCount: input.staticCandidateCount,
     renderedCandidateCount: input.renderedCandidateCount,
     commonPathFallbackUsed: input.commonPathFallbackUsed,
+    fastCanonicalPrefetchRan: input.fastCanonicalPrefetchRan === true,
+    fastCanonicalPrefetchCandidateCount: input.fastCanonicalPrefetchCandidateCount ?? 0,
     fetchedCount: fetchedObservations.length,
     failedCandidateCount: input.observations.filter((observation) => observation.status === "failed").length,
     candidateSummary: summarizePolicyCandidates(input.candidates ?? []),
@@ -629,6 +693,45 @@ async function fetchRankedPolicyCandidates(input: {
   });
 }
 
+async function fetchPolicyCandidateBatchesUntilCore(input: {
+  input: PolicySurfaceScannerInput;
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
+  moduleStartedAtMs: number;
+  rankedCandidates: PolicySurfaceCandidate[];
+  labelPrefix: string;
+  policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
+}): Promise<{ observations: PolicySurfaceObservation[]; artifactRefs: ArtifactRef[]; secondaryCandidates: PolicySurfaceCandidate[] }> {
+  const observations: PolicySurfaceObservation[] = [];
+  const artifactRefs: ArtifactRef[] = [];
+  const secondaryCandidates: PolicySurfaceCandidate[] = [];
+  const candidates = input.rankedCandidates.slice(0, FAST_CANONICAL_PREFETCH_PATHS.length);
+
+  for (let index = 0; index < candidates.length; index += FAST_CANONICAL_PREFETCH_CONCURRENCY) {
+    const batch = candidates.slice(index, index + FAST_CANONICAL_PREFETCH_CONCURRENCY);
+    const batchResults = await recordPolicyTiming(
+      input.timingBreakdown,
+      `${input.labelPrefix} batch ${Math.floor(index / FAST_CANONICAL_PREFETCH_CONCURRENCY) + 1}`,
+      `Fetch up to ${batch.length} deterministic same-origin policy candidates with concurrency ${FAST_CANONICAL_PREFETCH_CONCURRENCY}; stop after a usable core surface is retained.`,
+      () => Promise.all(batch.map((candidate, offset) => processPolicyCandidate({
+        input: input.input,
+        timingBreakdown: input.timingBreakdown,
+        moduleStartedAtMs: input.moduleStartedAtMs,
+        candidate,
+        candidateIndex: index + offset,
+        policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
+      }))),
+    );
+    observations.push(...batchResults.map((result) => result.observation));
+    artifactRefs.push(...batchResults.flatMap((result) => result.artifactRefs));
+    secondaryCandidates.push(...batchResults.flatMap((result) => result.secondaryCandidates));
+    if (hasRetainedCorePolicyOrControlSurface(observations)) {
+      break;
+    }
+  }
+
+  return { observations, artifactRefs, secondaryCandidates };
+}
+
 async function fetchPolicyCandidateGroup(input: {
   input: PolicySurfaceScannerInput;
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
@@ -695,9 +798,9 @@ async function processPolicyCandidate({
     timingBreakdown,
     `policy fetch ${candidateIndex + 1}`,
     `Fetch ${candidate.deterministicSurfaceType} candidate document.`,
-    () => fetchText(candidate.normalizedUrl, remainingPolicyFetchMs(input, moduleStartedAtMs)),
+    () => fetchText(candidate.normalizedUrl, remainingPolicyFetchMsForCandidate(input, moduleStartedAtMs, candidate)),
   );
-  if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch(fetched.status, input, moduleStartedAtMs)) {
+  if (!candidate.skipRenderedFallback && !fetched.ok && shouldTryRenderedPolicyDocumentFetch(fetched.status, input, moduleStartedAtMs)) {
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
       `policy rendered fetch fallback ${candidateIndex + 1}`,
@@ -732,7 +835,9 @@ async function processPolicyCandidate({
     html: fetched.text,
     baseUrl: candidate.normalizedUrl,
     surfaceType: candidate.deterministicSurfaceType,
-    timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
+    timeoutMs: candidate.skipRenderedFallback
+      ? remainingPolicyFetchMsForCandidate(input, moduleStartedAtMs, candidate)
+      : Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
   });
   const urlOnlyStubResolution = await recordPolicyTiming(
     timingBreakdown,
@@ -742,7 +847,7 @@ async function processPolicyCandidate({
       currentUrl: candidate.normalizedUrl,
       visibleText,
       surfaceType: candidate.deterministicSurfaceType,
-      timeoutMs: remainingPolicyFetchMs(input, moduleStartedAtMs),
+      timeoutMs: remainingPolicyFetchMsForCandidate(input, moduleStartedAtMs, candidate),
     }),
   );
   if (urlOnlyStubResolution) {
@@ -758,7 +863,7 @@ async function processPolicyCandidate({
     title = titleFromHtml(fetchedHtml);
     visibleText = urlOnlyStubResolution.visibleText;
   }
-  if (shouldTryRenderedPolicyDocumentTextFallback({
+  if (!candidate.skipRenderedFallback && shouldTryRenderedPolicyDocumentTextFallback({
     candidate: effectiveCandidate,
     documentFormat: fetched.documentFormat,
     input,
@@ -1709,6 +1814,37 @@ function commonPathCandidatesFor(
       discoveryMethod: "guessed_common_path" as const,
     };
   }).filter((candidate) => candidate.deterministicScore > 0.2);
+}
+
+function fastCanonicalPrefetchCandidatesFor(baseUrl: string): PolicySurfaceCandidate[] {
+  return FAST_CANONICAL_PREFETCH_PATHS.map((path, offset) => {
+    const normalizedUrl = normalizeUrl(path, baseUrl) ?? baseUrl;
+    const linkText = commonPolicyPathLabel(path);
+    const deterministic = classifyCommonPathSurface(linkText, normalizedUrl);
+    return {
+      candidateId: `fast_canonical_policy_candidate_${offset}`,
+      url: path,
+      normalizedUrl,
+      linkText,
+      domLocation: "body" as const,
+      sameOrigin: true,
+      fetchable: true,
+      clickable: false,
+      mayLeadToConsentControls: deterministic.surfaceType === "your_privacy_choices" || deterministic.surfaceType === "cookie_settings",
+      observationOnly: false,
+      deterministicSurfaceType: deterministic.surfaceType,
+      deterministicScore: Math.max(0, deterministic.score - 0.05),
+      deterministicKeywordMatches: deterministic.keywords,
+      ...classifierCandidateFields(deterministic),
+      discoveryMethod: "guessed_common_path" as const,
+      fetchTimeoutMs: FAST_CANONICAL_PREFETCH_TIMEOUT_MS,
+      skipRenderedFallback: true,
+    };
+  }).filter((candidate) =>
+    candidate.deterministicSurfaceType !== "unknown" &&
+    candidate.deterministicScore >= 0.45 &&
+    sameOrigin(baseUrl, candidate.normalizedUrl)
+  );
 }
 
 function commonPolicyPathsFor(baseUrl: string, localeHints: SupportedPrivacyEvidenceLocale[]): string[] {
@@ -4528,6 +4664,14 @@ function remainingMs(input: PolicySurfaceScannerInput, startedAtMs: number): num
 
 function remainingPolicyFetchMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
   return Math.min(POLICY_FETCH_TIMEOUT_MS, remainingMs(input, startedAtMs));
+}
+
+function remainingPolicyFetchMsForCandidate(
+  input: PolicySurfaceScannerInput,
+  startedAtMs: number,
+  candidate: PolicySurfaceCandidate,
+): number {
+  return Math.min(candidate.fetchTimeoutMs ?? POLICY_FETCH_TIMEOUT_MS, remainingMs(input, startedAtMs));
 }
 
 function elapsed(scanStartedAtMs: number): number {

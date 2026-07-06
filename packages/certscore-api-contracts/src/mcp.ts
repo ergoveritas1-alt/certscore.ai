@@ -15,7 +15,7 @@ export const mcpPulseDetailSchema = z.enum(["tiny", "quick", "standard", "full",
 export const mcpGptSafePulseDetailSchema = z.enum(["tiny", "standard", "summary"]);
 export const mcpPulseFormatSchema = z.enum(["json", "markdown"]);
 export const mcpPulseFreshnessSchema = z.enum(["latest", "refresh"]);
-export const mcpScanFromSchema = z.enum(["eu_ie"]);
+export const mcpScanFromSchema = z.enum(["eu_ie", "eu_de", "california"]);
 
 export const mcpCreateScanInputSchema = {
   url: z.string().min(1).describe("Public URL or domain to scan."),

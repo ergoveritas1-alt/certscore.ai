@@ -430,7 +430,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       status: consentFlowResult.moduleRun.status,
     });
   }
-  const policyRequiredForOutput = policySurfaceEnabled && (!plannedParallel || input.captureReplay);
+  const policyRequiredForOutput = policySurfaceEnabled && (!plannedParallel || input.captureReplay === true);
+  let policySurfaceOutputBudgetElapsedDetail: {
+    candidateCount: string;
+    elapsedMs: number;
+    fetchAttemptCount: string;
+    outputGraceMs: number;
+    canonicalPathPrefetchRan: boolean;
+  } | undefined;
   await phaseRecorder.record("policy_surface_for_output", policySurfaceEnabled ? "started" : "skipped", {
     requiredForOutput: policyRequiredForOutput,
   });
@@ -458,6 +465,15 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
           outputGraceMs: policyOutputGraceMs,
         },
     );
+    if (policySurfaceSettled?.status !== "fulfilled") {
+      policySurfaceOutputBudgetElapsedDetail = {
+        candidateCount: "unknown_pending_policy_lane",
+        elapsedMs: Date.now() - startedAtMs,
+        fetchAttemptCount: "unknown_pending_policy_lane",
+        outputGraceMs: policyOutputGraceMs,
+        canonicalPathPrefetchRan: true,
+      };
+    }
   }
   if (policySurfaceSettled?.status === "rejected") {
     await phaseRecorder.record("policy_surface_for_output", "failed", {
@@ -509,9 +525,19 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     ...(policySurfaceResult
       ? [policySurfaceResult.moduleRun]
       : policySurfaceEnabled
-        ? [policySurfaceScannerPlaceholder(now, plannedParallel
-          ? "Policy-surface scanner was not ready before the planned consent DAG deadline or bounded output grace window."
-          : undefined)]
+        ? [policySurfaceScannerPlaceholder(
+          now,
+          plannedParallel
+            ? policySurfaceOutputBudgetElapsedReason(policySurfaceOutputBudgetElapsedDetail)
+            : undefined,
+          policySurfaceOutputBudgetElapsedDetail
+            ? [{
+              label: "policy_surface_output_budget_elapsed",
+              durationMs: policySurfaceOutputBudgetElapsedDetail.elapsedMs,
+              detail: `outputGraceMs=${policySurfaceOutputBudgetElapsedDetail.outputGraceMs}; candidateCount=${policySurfaceOutputBudgetElapsedDetail.candidateCount}; fetchAttemptCount=${policySurfaceOutputBudgetElapsedDetail.fetchAttemptCount}; canonicalPathPrefetchRan=${policySurfaceOutputBudgetElapsedDetail.canonicalPathPrefetchRan}`,
+            }]
+            : undefined,
+        )]
         : []),
   ];
   const networkEvents = [
@@ -1666,6 +1692,26 @@ function policyPlanningStatus(
   return policySurfaceSettled?.status === "fulfilled"
     ? "policy_surface_ready_for_planning"
     : "policy_surface_not_ready_for_planning";
+}
+
+function policySurfaceOutputBudgetElapsedReason(input: {
+  candidateCount: string;
+  elapsedMs: number;
+  fetchAttemptCount: string;
+  outputGraceMs: number;
+  canonicalPathPrefetchRan: boolean;
+} | undefined): string {
+  if (!input) {
+    return "Policy-surface scanner was not ready before the planned consent DAG deadline or bounded output grace window.";
+  }
+  return [
+    "policy_surface_output_budget_elapsed",
+    `elapsedMs=${input.elapsedMs}`,
+    `outputGraceMs=${input.outputGraceMs}`,
+    `candidateCount=${input.candidateCount}`,
+    `fetchAttemptCount=${input.fetchAttemptCount}`,
+    `canonicalPathPrefetchRan=${input.canonicalPathPrefetchRan}`,
+  ].join("; ");
 }
 
 function nowIso(startedAtMs: number): string {

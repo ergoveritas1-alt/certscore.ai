@@ -36,8 +36,8 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
   );
   const scanFromParameter = body.paths["/api/v1/pulse"].get.parameters.find((parameter: { name: string }) => parameter.name === "scanFrom");
   const geoParameter = body.paths["/api/v1/pulse"].get.parameters.find((parameter: { name: string }) => parameter.name === "geo");
-  assert.deepEqual(scanFromParameter.schema.enum, ["eu_ie"]);
-  assert.deepEqual(geoParameter.schema.enum, ["eu_ie"]);
+  assert.deepEqual(scanFromParameter.schema.enum, ["eu_ie", "eu_de", "california"]);
+  assert.deepEqual(geoParameter.schema.enum, ["eu_ie", "eu_de", "california"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["200"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["202"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["400"]);

@@ -1,4 +1,8 @@
-import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
+import type {
+  RequestedGeoTarget,
+  ScanFrom,
+  SharedScanConfig
+} from "@website-signal-risk-scanner/shared";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
@@ -29,9 +33,18 @@ export type LocalV2DagLambdaDispatchPayload = {
   orchestrationMode?: "single" | "sharded";
   productionFindingIntegration: false;
   profile: LocalV2DagScanProfile;
+  regionalRealIpEgress?: {
+    egressId: string;
+    provider: "decodo-residential";
+    required: boolean;
+    requestedGeo: RequestedGeoTarget;
+    scanFrom: ScanFrom;
+  };
   resultHandoff: "sqs";
   resultQueueUrl: string;
   scanId: string;
+  requestedGeo?: RequestedGeoTarget;
+  scanFrom?: ScanFrom;
   scannerRuntime: "certscore-v2-dag-parallel-path";
   targetEnvironment: LocalV2DagLambdaTargetEnvironment;
   targetUrl: string;
@@ -247,9 +260,16 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     profile: getProfile(config),
+    ...(asRecord(intent.regionalRealIpEgress) && Object.keys(asRecord(intent.regionalRealIpEgress)).length > 0
+      ? { regionalRealIpEgress: asRecord(intent.regionalRealIpEgress) as LocalV2DagLambdaDispatchPayload["regionalRealIpEgress"] }
+      : {}),
     resultHandoff: "sqs",
     resultQueueUrl: requireString(intent.resultQueueUrl, "resultQueueUrl"),
     scanId: requireString(input.scanId, "scanId"),
+    ...(asRecord(intent.requestedGeo) && Object.keys(asRecord(intent.requestedGeo)).length > 0
+      ? { requestedGeo: asRecord(intent.requestedGeo) as RequestedGeoTarget }
+      : {}),
+    ...(typeof intent.scanFrom === "string" ? { scanFrom: intent.scanFrom as ScanFrom } : {}),
     scannerRuntime: "certscore-v2-dag-parallel-path",
     targetEnvironment:
       intent.targetEnvironment === "production" ? "production" : "local",

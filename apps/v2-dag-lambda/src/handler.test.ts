@@ -14,6 +14,7 @@ import { parseLocalV2DagLambdaResultMessage } from "../../web/server/scans/local
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  assertRegionalRealIpEgressAvailable,
   artifactPointersFromS3Keys,
   buildLocalV2DagLambdaRuntimeDiagnostics,
   buildLocalV2DagLambdaScanTuning,
@@ -68,6 +69,74 @@ test("handler accepts the approved regional Lambda dispatch targets", () => {
     awsRegion: "us-west-2",
     resultQueueUrl: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-usw-results"
   })).awsRegion, "us-west-2");
+});
+
+test("handler rejects regional real-IP dispatches aimed at the wrong AWS region", () => {
+  assert.throws(
+    () => parseLocalV2DagLambdaDispatchPayload(validPayload({
+      awsRegion: "eu-central-1",
+      resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-results",
+      scanFrom: "california",
+      requestedGeo: {
+        countryCode: "US",
+        provider: "decodo-residential",
+        regionCode: "us-west-2"
+      },
+      regionalRealIpEgress: {
+        egressId: "decodo-us-ca",
+        provider: "decodo-residential",
+        requestedGeo: {
+          countryCode: "US",
+          provider: "decodo-residential",
+          regionCode: "us-west-2"
+        },
+        required: true,
+        scanFrom: "california"
+      }
+    })),
+    /regional_real_ip_egress_mismatch/
+  );
+});
+
+test("handler fails closed when a required regional real-IP proxy is not configured", () => {
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    awsRegion: "eu-west-1",
+    resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-results",
+    scanFrom: "eu_ie",
+    requestedGeo: {
+      countryCode: "IE",
+      provider: "decodo-residential",
+      regionCode: "eu-west-1"
+    },
+    regionalRealIpEgress: {
+      egressId: "decodo-eu-ie",
+      provider: "decodo-residential",
+      requestedGeo: {
+        countryCode: "IE",
+        provider: "decodo-residential",
+        regionCode: "eu-west-1"
+      },
+      required: true,
+      scanFrom: "eu_ie"
+    }
+  }));
+
+  assert.throws(
+    () => assertRegionalRealIpEgressAvailable(payload, {
+      SCAN_PROXY_ENABLED: "false"
+    } as NodeJS.ProcessEnv),
+    /regional_real_ip_egress_unavailable/
+  );
+  assert.doesNotThrow(() => assertRegionalRealIpEgressAvailable(payload, {
+    CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER: "http://proxy.example:8080"
+  } as NodeJS.ProcessEnv));
+});
+
+test("handler keeps production policy-surface output grace bounded but nonzero", async () => {
+  const source = await readFile(new URL("./handler.ts", import.meta.url), "utf8");
+
+  assert.match(source, /policyOutputGraceMs:\s*12_000/);
+  assert.doesNotMatch(source, /policyOutputGraceMs:\s*5_000/);
 });
 
 test("handler exposes bounded Lambda runtime diagnostics for quality A/B runs", () => {

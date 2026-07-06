@@ -149,6 +149,9 @@ test("demo CTA events dispatch after analytics consent is granted", () => {
   pushDataLayerEvent({
     event: "hero_sample_report_clicked"
   });
+  pushDataLayerEvent({
+    event: "hero_findings_clicked"
+  });
 
   assert.deepEqual(mockWindow.dataLayer, [
     {
@@ -156,6 +159,9 @@ test("demo CTA events dispatch after analytics consent is granted", () => {
     },
     {
       event: "hero_sample_report_clicked"
+    },
+    {
+      event: "hero_findings_clicked"
     }
   ]);
 });
