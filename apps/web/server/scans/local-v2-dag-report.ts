@@ -1403,7 +1403,10 @@ export function summarizePolicySurfaces(
     result: adaptGdprTransparencyTopicCandidatesForProduction({
       isTargetRelevantPrivacyPolicy: true,
       pageUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
-      policyTextQuality: { usable: gdprTransparencyPolicyTextQuality.usable },
+      policyTextQuality: {
+        usable: gdprTransparencyPolicyTextQuality.usable ||
+          hasCreditworthyGdprTransparencyTopicCandidate(row.surface)
+      },
       profile: gdprTransparencyEvidenceProfile,
       surface: row.surface
     }),
@@ -1579,6 +1582,23 @@ function gdprTransparencyAdapterDiagnostics(
     rejectedCandidateCount: diagnosticCandidateCount + discardedCandidateCount,
     sourceCandidateCount: results.reduce((count, result) => count + result.dispositions.length, 0)
   };
+}
+
+function hasCreditworthyGdprTransparencyTopicCandidate(surface: LocalV2PolicySurface) {
+  if (surface.status !== "fetched" || surface.surfaceType !== "privacy_policy") {
+    return false;
+  }
+
+  return (surface.gdprTransparencyTopicCandidates ?? []).some((candidate) =>
+    candidate.classifierProvenance === "gdpr_transparency_topic_classifier.v1" &&
+    candidate.productionCredit === false &&
+    candidate.confidence >= 0.8 &&
+    (candidate.matchStrength === "direct" || candidate.matchStrength === "equivalent") &&
+    (candidate.classifierReasonCodes ?? []).includes(`matched_${candidate.topic}`) &&
+    sharedArticle13DisclosureRejectReason(candidate.evidenceText, candidate.topic, {
+      mode: "multilingual_classifier"
+    }) === null
+  );
 }
 
 function buildRetainedPolicyDisclosureText(text: string) {

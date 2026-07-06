@@ -15,6 +15,14 @@ import {
 } from "./scanners/policy-surface-scanner.js";
 import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixtures/static-server.js";
 
+test("policySurfaceScanner closes rendered policy contexts when sharing a browser", async () => {
+  const source = await readFile(new URL("./scanners/policy-surface-scanner.ts", import.meta.url), "utf8");
+
+  assert.match(source, /type BrowserContext/);
+  assert.match(source, /let context: BrowserContext \| undefined;/);
+  assert.match(source, /await context\?\.close\(\)\.catch\(\(\) => undefined\);/);
+});
+
 test("policySurfaceScanner discovers footer privacy links and bounded policy facts", async () => {
   await withPolicyScan("policy-footer-privacy", async ({ result, baseUrl }) => {
     const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");

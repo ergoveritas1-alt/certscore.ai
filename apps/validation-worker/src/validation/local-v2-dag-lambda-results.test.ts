@@ -9,6 +9,7 @@ import test from "node:test";
 import {
   getLambdaResultTargetEnvironment,
   getManualSmokeResultScanId,
+  markStaleAcceptedLocalV2DagLambdaScansFailed,
   mirrorLocalV2DagLambdaArtifacts
 } from "./local-v2-dag-lambda-results";
 
@@ -138,4 +139,15 @@ test("validation worker mirrors completed Lambda artifacts for production-target
 
   assert.doesNotMatch(source, /targetEnvironment\s*!==\s*"local"/);
   assert.match(source, /input\.parsedMessage\.status\s*!==\s*"completed"/);
+});
+
+test("validation worker repairs accepted Lambda scans that never hand off a result", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+
+  assert.equal(typeof markStaleAcceptedLocalV2DagLambdaScansFailed, "function");
+  assert.match(source, /v2_lambda_dispatch\.accepted/);
+  assert.match(source, /v2_lambda_result\.timeout/);
+  assert.match(source, /stale_accepted_lambda_result_missing/);
+  assert.match(source, /Local v2 DAG Lambda did not return a result within/);
+  assert.match(source, /markStaleAcceptedLocalV2DagLambdaScansFailed\(\{/);
 });

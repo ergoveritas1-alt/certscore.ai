@@ -430,8 +430,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       status: consentFlowResult.moduleRun.status,
     });
   }
-  const policyRequiredForOutput = policySurfaceEnabled && (!plannedParallel || !consentFlowEnabled || input.captureReplay);
-  await phaseRecorder.record("policy_surface_for_output", policyRequiredForOutput ? "started" : "skipped");
+  const policyRequiredForOutput = policySurfaceEnabled && (!plannedParallel || input.captureReplay);
+  await phaseRecorder.record("policy_surface_for_output", policySurfaceEnabled ? "started" : "skipped", {
+    requiredForOutput: policyRequiredForOutput,
+  });
   if (policyRequiredForOutput) {
     policySurfaceSettled ??= await policySurfaceResultPromise;
   } else if (policySurfaceEnabled) {
@@ -443,6 +445,19 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     if (policyOutputGraceMs > 0) {
       await phaseRecorder.record("policy_surface_output_grace", policySurfaceSettled?.status === "fulfilled" ? "completed" : "skipped");
     }
+    await phaseRecorder.record(
+      "policy_surface_for_output",
+      policySurfaceSettled?.status === "fulfilled" ? "completed" : "skipped",
+      policySurfaceSettled?.status === "fulfilled"
+        ? {
+          durationMs: policySurfaceSettled.value.moduleRun.durationMs,
+          status: policySurfaceSettled.value.moduleRun.status,
+        }
+        : {
+          reason: "planned_parallel_policy_output_deadline_elapsed",
+          outputGraceMs: policyOutputGraceMs,
+        },
+    );
   }
   if (policySurfaceSettled?.status === "rejected") {
     await phaseRecorder.record("policy_surface_for_output", "failed", {
@@ -451,7 +466,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     throw policySurfaceSettled.reason;
   }
   const policySurfaceResult = policySurfaceSettled?.value;
-  if (policySurfaceResult) {
+  if (policySurfaceResult && policyRequiredForOutput) {
     await phaseRecorder.record("policy_surface_for_output", "completed", {
       durationMs: policySurfaceResult.moduleRun.durationMs,
       status: policySurfaceResult.moduleRun.status,
@@ -494,7 +509,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     ...(policySurfaceResult
       ? [policySurfaceResult.moduleRun]
       : policySurfaceEnabled
-        ? [policySurfaceScannerPlaceholder(now, plannedParallel && consentFlowEnabled
+        ? [policySurfaceScannerPlaceholder(now, plannedParallel
           ? "Policy-surface scanner was not ready before the planned consent DAG deadline or bounded output grace window."
           : undefined)]
         : []),

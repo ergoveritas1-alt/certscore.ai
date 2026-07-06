@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -49,4 +49,15 @@ test("runScan escalates before policy scan when Nano policy credentials are miss
     }
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("runScan bounds planned-parallel policy output instead of waiting unbounded", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const requiredExpression = source.match(/const policyRequiredForOutput = ([^;]+);/)?.[1] ?? "";
+
+  assert.match(requiredExpression, /!plannedParallel/);
+  assert.match(requiredExpression, /input\.captureReplay/);
+  assert.doesNotMatch(requiredExpression, /!consentFlowEnabled/);
+  assert.match(source, /planned_parallel_policy_output_deadline_elapsed/);
+  assert.match(source, /policyOutputGraceMs/);
 });

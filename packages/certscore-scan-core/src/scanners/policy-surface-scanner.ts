@@ -11,7 +11,7 @@ import {
   type ScanModuleRun,
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
 
@@ -972,10 +972,11 @@ async function fetchRenderedPolicyDocumentText(input: {
   timeoutMs: number;
 }): Promise<FetchTextResult> {
   let browser: Browser | undefined;
+  let context: BrowserContext | undefined;
   const ownsBrowser = !input.input.browser;
   try {
     browser = input.input.browser ?? await chromium.launch(chromiumLaunchOptions({ headless: true }));
-    const context = await browser.newContext(chromiumContextOptions());
+    context = await browser.newContext(chromiumContextOptions());
     const page = await context.newPage();
     const response = await page.goto(input.url, {
       waitUntil: "domcontentloaded",
@@ -1008,6 +1009,7 @@ async function fetchRenderedPolicyDocumentText(input: {
   } catch {
     return { ok: false, text: "" };
   } finally {
+    await context?.close().catch(() => undefined);
     if (ownsBrowser) {
       await browser?.close().catch(() => undefined);
     }
@@ -1432,10 +1434,11 @@ async function extractRenderedCandidates(
     return [];
   }
   let browser: Browser | undefined;
+  let context: BrowserContext | undefined;
   const ownsBrowser = !input.browser;
   try {
     browser = input.browser ?? await chromium.launch(chromiumLaunchOptions({ headless: true }));
-    const context = await browser.newContext(chromiumContextOptions());
+    context = await browser.newContext(chromiumContextOptions());
     const page = await context.newPage();
     const navigationTimeoutMs = input.discoveryMode === "fast" ? 4_000 : 8_000;
     await page.goto(input.normalizedUrl, {
@@ -1628,6 +1631,7 @@ async function extractRenderedCandidates(
   } catch {
     return [];
   } finally {
+    await context?.close().catch(() => undefined);
     if (ownsBrowser) {
       await browser?.close().catch(() => undefined);
     }

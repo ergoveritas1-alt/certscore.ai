@@ -1235,6 +1235,92 @@ test("summarizePolicySurfaces credits French Article 13 candidates through the p
   });
 });
 
+test("summarizePolicySurfaces credits Le Figaro retained GDPR Transparency candidates", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const lefigaroCandidates = [
+    {
+      evidenceText: "POUR QUELLES RAISONS COLLECTONS-NOUS DES DONNÉES PERSONNELLES ? Nous collectons des données personnelles pour les raisons principales suivantes : faciliter l'utilisation du Site, de l'Application et des Services, gérer les interactions avec des utilisateurs.",
+      matchedTerm: "nous collectons des données personnelles pour les raisons principales suivantes",
+      topic: "processing_purposes"
+    },
+    {
+      evidenceText: "QUEL EST LE FONDEMENT LEGAL POUR LA COLLECTE DE DONNÉES QUE NOUS EFFECTUONS ? Nous collectons uniquement des données à caractère personnel lorsque nous disposons d'un fondement légal pour le faire.",
+      matchedTerm: "fondement légal pour la collecte de données",
+      topic: "legal_basis"
+    },
+    {
+      evidenceText: "DES DONNÉES PERSONNELLES SONT-ELLES TRANSFÉRÉES HORS DE L'UNION EUROPÉENNE ? Les données peuvent être transférées en dehors de l'Union européenne avec les garanties prévues par la législation applicable.",
+      matchedTerm: "transférées en dehors de l'union européenne",
+      topic: "international_transfers"
+    },
+    {
+      evidenceText: "COMBIEN DE TEMPS CES INFORMATIONS SONT-ELLES CONSERVÉES ? Vos données personnelles sont conservées en base active pour une durée conforme aux dispositions légales et proportionnelles aux finalités.",
+      matchedTerm: "données personnelles sont conservées",
+      topic: "data_retention"
+    },
+    {
+      evidenceText: "AVEC QUI PARTAGEONS-NOUS CES INFORMATIONS ? Vos données personnelles sont communiquées à nos prestataires et sous-traitants dans la mesure nécessaire à la gestion du Site, de l'Application et des Services.",
+      matchedTerm: "prestataires et sous-traitants",
+      topic: "recipients_or_vendor_categories"
+    },
+    {
+      evidenceText: "Vous disposez du droit de demander l'accès, la rectification, l'effacement et l'opposition au traitement de vos données personnelles.",
+      matchedTerm: "vous disposez du droit de",
+      topic: "data_subject_rights"
+    }
+  ].map((candidate) => ({
+    ...candidate,
+    classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+    classifierReasonCodes: [`matched_${candidate.topic}`, "match_strength_equivalent"],
+    confidence: 0.82,
+    matchStrength: "equivalent",
+    matchedLocale: "fr",
+    productionCredit: false,
+    status: "diagnostic_only"
+  }));
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "lefigaro-prod-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://mentions-legales.lefigaro.fr/page/politique-de-confidentialite",
+      normalizedUrl: "https://mentions-legales.lefigaro.fr/page/politique-de-confidentialite",
+      confidence: 0.96,
+      status: "fetched",
+      textExcerpt: [
+        "nfidentialité ‍ La Société du Figaro respecte votre droit à la vie privée. Cette politique de confidentialité vous informe sur la manière dont sont traitées les données personnelles collectées dans le cadre du site Internet www.lefigaro.fr.",
+        ...lefigaroCandidates.map((candidate) => candidate.evidenceText),
+        "Cette politique décrit également les services proposés, les listes d'information, la publicité, les préférences de confidentialité et les coordonnées utiles pour exercer des droits relatifs aux données personnelles. ".repeat(8)
+      ].join(" "),
+      observedTopics: ["controller_contact", "dpo_contact"],
+      gdprTransparencyTopicCandidates: lefigaroCandidates
+    }
+  ] as never, "https://lefigaro.fr/");
+
+  const summary = summarizePolicySurfaces(surfaces, "lefigaro.fr");
+
+  assert.equal(summary.gdprTransparencyProductionEvidenceEnabled, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.deepEqual(
+    summary.article13DisclosureTypesObserved.sort(),
+    [
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers",
+      "legal_basis",
+      "processing_purposes",
+      "recipients_or_vendor_categories"
+    ].sort()
+  );
+  assert.equal(
+    (summary.article13DisclosureSignals as Array<Record<string, unknown>>).every((signal) =>
+      signal.productionCredit === true &&
+      signal.productionCreditProfile === "gdpr_transparency_multilingual_article13_v1" &&
+      signal.matchedLocale === "fr"
+    ),
+    true
+  );
+});
+
 test("summarizePolicySurfaces treats compact French Article 13 lists as usable policy text", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const evidence = [

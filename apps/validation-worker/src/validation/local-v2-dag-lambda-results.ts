@@ -21,6 +21,7 @@ const PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 const RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
+const DEFAULT_STALE_ACCEPTED_LAMBDA_TIMEOUT_MS = 18 * 60 * 1000;
 
 type LambdaResultStatus = "completed" | "failed";
 type LambdaTargetEnvironment = "local" | "production";
@@ -73,6 +74,7 @@ export type LocalV2DagLambdaResultPollerOptions = {
   pollMs: number;
   queueUrl?: string;
   queueUrls?: Array<string | null | undefined>;
+  staleAcceptedTimeoutMs?: number;
   targetEnvironment: LambdaTargetEnvironment;
 };
 
@@ -822,6 +824,91 @@ async function pollOnce(input: {
   return { deleted, failed, handled, received: messages.length };
 }
 
+export async function markStaleAcceptedLocalV2DagLambdaScansFailed(input: {
+  staleAcceptedTimeoutMs?: number;
+  targetEnvironment: LambdaTargetEnvironment;
+}) {
+  const staleAcceptedTimeoutMs = Math.max(
+    60_000,
+    input.staleAcceptedTimeoutMs ?? DEFAULT_STALE_ACCEPTED_LAMBDA_TIMEOUT_MS
+  );
+  const failedAt = new Date().toISOString();
+  const errorMessage =
+    `Local v2 DAG Lambda did not return a result within ${Math.round(staleAcceptedTimeoutMs / 60_000)} minutes after dispatch acceptance; the scan likely timed out before SQS handoff.`;
+  const rows = await query<{
+    id: string;
+    domainId: string | null;
+    organizationId: string | null;
+  }>(
+    `
+      update scans s
+         set status = 'failed',
+             completed_at = coalesce(s.completed_at, $1::timestamptz),
+             error_message = coalesce(s.error_message, $2),
+             updated_at = now()
+       where s.status = 'running'
+         and s.scan_config_json->>'processor' = $3
+         and exists (
+           select 1
+             from scan_events accepted
+            where accepted.scan_id = s.id
+              and accepted.event_type = 'v2_lambda_dispatch.accepted'
+              and accepted.created_at < now() - ($4::int * interval '1 millisecond')
+              and coalesce(accepted.metadata_json->>'targetEnvironment', accepted.metadata_json->>'target_environment', $5) = $5
+         )
+         and not exists (
+           select 1
+             from scan_events terminal
+            where terminal.scan_id = s.id
+              and terminal.event_type in (
+                'v2_lambda_result.received',
+                'v2_lambda_result.failed',
+                'v2_lambda_dispatch.failed',
+                'v2_lambda_result.timeout'
+              )
+         )
+       returning s.id::text as "id",
+                 s.domain_id::text as "domainId",
+                 s.organization_id::text as "organizationId"
+    `,
+    [failedAt, errorMessage, PROCESSOR, staleAcceptedTimeoutMs, input.targetEnvironment]
+  );
+
+  for (const row of rows.rows) {
+    await query(
+      `
+        insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+        values ($1, $2, $3, 'v2_lambda_result.timeout', $4, $5)
+      `,
+      [
+        row.id,
+        row.domainId,
+        row.organizationId,
+        "Local v2 DAG Lambda timed out before result handoff.",
+        {
+          failedAt,
+          processor: PROCESSOR,
+          reason: "stale_accepted_lambda_result_missing",
+          source: "validation-worker-local-v2-dag-lambda-result-poller",
+          staleAcceptedTimeoutMs,
+          targetEnvironment: input.targetEnvironment
+        }
+      ]
+    );
+  }
+
+  const repairedCount = rows.rowCount ?? 0;
+  if (repairedCount > 0) {
+    console.warn("[validation-worker] marked stale accepted v2 DAG Lambda scans failed", {
+      count: repairedCount,
+      staleAcceptedTimeoutMs,
+      targetEnvironment: input.targetEnvironment
+    });
+  }
+
+  return repairedCount;
+}
+
 export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResultPollerOptions) {
   const queueUrls = configuredQueueUrls(options);
   if (!options.enabled || queueUrls.length === 0) {
@@ -861,6 +948,10 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
           { failed: 0, handled: 0, received: 0 }
         );
         void result;
+        await markStaleAcceptedLocalV2DagLambdaScansFailed({
+          staleAcceptedTimeoutMs: options.staleAcceptedTimeoutMs,
+          targetEnvironment: options.targetEnvironment
+        });
       } catch (error) {
         console.error("[validation-worker] v2 DAG Lambda result poll failed", {
           error: error instanceof Error ? error.message : String(error)
