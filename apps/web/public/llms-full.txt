@@ -221,7 +221,49 @@ console.log(scan.id, scan.status);
 
 Current command: `certscore-mcp`
 
-Current transport: stdio
+Local transport: stdio
+
+Remote transport: Streamable HTTP
+
+Remote endpoint: https://mcp.certscore.ai/mcp
+
+Remote OAuth issuer: https://certscore.ai
+
+Remote authorization metadata:
+
+```text
+https://certscore.ai/.well-known/oauth-authorization-server
+```
+
+Remote protected resource metadata:
+
+```text
+https://mcp.certscore.ai/.well-known/oauth-protected-resource
+```
+
+Remote MCP clients use OAuth with PKCE. Do not claim Anthropic approval, directory listing, or connector certification unless CertScore's current docs explicitly say that approval is complete.
+
+Remote MCP predeploy checks:
+
+```bash
+CERTSCORE_OAUTH_JWT_SECRET=<shared-secret> \
+MCP_PUBLIC_URL=https://mcp.certscore.ai \
+OAUTH_ISSUER=https://certscore.ai \
+CERTSCORE_MCP_HTTP_BEARER_TOKEN=<oauth-access-token> \
+pnpm ops:check:mcp-http-deploy -- --live
+
+CERTSCORE_MCP_HTTP_BEARER_TOKEN=<oauth-access-token> \
+pnpm mcp:certscore:http:tools-diff -- --mcp-url=https://mcp.certscore.ai/mcp
+```
+
+Use `--require-scan-create` only with a token minted by the production reviewer/test account after an active scan-create DB grant has been added. The tools-diff check compares the deployed Streamable HTTP tool list against the local stdio server schemas and annotations.
+
+Remote MCP OAuth launch notes:
+
+- Access tokens are signed with a shared HS256 secret held only by the web app and MCP HTTP service.
+- Revoking a scan-create grant blocks the next authorization or refresh; already-issued access tokens may carry the scope for up to one hour.
+- Dynamic client registration is per-IP rate limited, and unused clients with no codes or refresh tokens are cleaned up after 30 days.
+- Refresh tokens rotate on every use; reuse of an already-rotated token revokes the refresh-token family.
 
 Homebrew install on macOS:
 
@@ -259,7 +301,6 @@ MCP client config:
 Current tools:
 
 - `scan_site`
-- `create_scan`
 - `get_scan`
 - `get_scan_status`
 - `get_report`

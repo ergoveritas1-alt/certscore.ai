@@ -1,4 +1,4 @@
-import type { RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
+import { getFableCookieHint, type RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
 
 export type RuntimeCookieReviewPriority = "high" | "medium" | "review_needed" | "contextual";
 export type RuntimeCookieInventoryConfidence = "high" | "medium" | "low";
@@ -30,6 +30,11 @@ export function getRuntimeCookieFirstSeenMs(row: RuntimeCookieEvidenceRow) {
 }
 
 export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
+  const fableHint = getFableCookieHint(row.cookieName, row.domain);
+  if (fableHint) {
+    return fableHint.provider;
+  }
+
   if (/^(c_code|countrycode|statecode|geodata|geo_country|trp-country|trp-language)$/i.test(row.cookieName)) {
     return row.domain ?? row.cookieName;
   }
@@ -124,6 +129,12 @@ export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {
   }
   if (/^geolocation$/i.test(fallbackCategory)) {
     return "Functional";
+  }
+  if (/^(functional|site_functionality|privacy_preference|geolocation)$/i.test(fallbackCategory ?? "")) {
+    return "Functional";
+  }
+  if (/^necessary$/i.test(fallbackCategory ?? "")) {
+    return "Security";
   }
   return normalizeInventoryLabel(fallbackCategory || "unknown");
 }

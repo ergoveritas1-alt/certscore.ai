@@ -121,6 +121,18 @@ certscore-mcp --help
 CERTSCORE_API_KEY=<token> certscore-mcp doctor
 ```
 
+Remote MCP server:
+- Endpoint: https://mcp.certscore.ai/mcp
+- Transport: Streamable HTTP
+- OAuth issuer: https://certscore.ai
+- Authorization metadata: https://certscore.ai/.well-known/oauth-authorization-server
+- Protected resource metadata: https://mcp.certscore.ai/.well-known/oauth-protected-resource
+- Remote clients use OAuth with PKCE. Do not imply Anthropic approval or directory listing unless CertScore docs explicitly say it is approved.
+- Predeploy checks:
+  - `CERTSCORE_MCP_HTTP_BEARER_TOKEN=<oauth-access-token> pnpm ops:check:mcp-http-deploy -- --live`
+  - `CERTSCORE_MCP_HTTP_BEARER_TOKEN=<oauth-access-token> pnpm mcp:certscore:http:tools-diff -- --mcp-url=https://mcp.certscore.ai/mcp`
+  - Add `--require-scan-create` only with a token minted by the production reviewer/test account after an active scan-create DB grant has been added.
+
 Recommended flow:
 1. Check https://certscore.ai/api/v2/health.
 2. Read https://certscore.ai/api/v2/openapi.json for the current contract.

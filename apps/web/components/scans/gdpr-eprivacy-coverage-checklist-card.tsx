@@ -192,17 +192,22 @@ function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageCheckl
     getRecord(evidence.rowSpecificSectionEvidence) ??
     getRecord(evidence.row_specific_section_evidence);
   const summary = getRecord(evidence.policySurfaceSummary) ?? getRecord(evidence.policy_surface_summary);
-  if (!summary) {
-    return null;
-  }
+  const topicCandidatesForRow = getGdprTransparencyTopicCandidatesForRow(evidence, summary, item);
+  const allTopicCandidates = getGdprTransparencyTopicCandidates(evidence, summary);
   const fullRetainedPolicyText =
-    getString(summary.retainedPrivacyPolicyTextExcerpt) ??
-    getString(summary.retained_privacy_policy_text_excerpt) ??
+    getString(summary?.retainedPrivacyPolicyTextExcerpt) ??
+    getString(summary?.retained_privacy_policy_text_excerpt) ??
     "";
   const retainedPolicySurfaceSnippetText = uniqueStrings([
     fullRetainedPolicyText,
-    getString(summary.selectedPolicySectionExcerpt),
-    getString(summary.selected_policy_section_excerpt),
+    getString(summary?.selectedPolicySectionExcerpt),
+    getString(summary?.selected_policy_section_excerpt),
+    getString(article13Signal?.evidenceText),
+    getString(article13Signal?.evidence_text),
+    getString(article13Signal?.selectedPolicySectionExcerpt),
+    getString(article13Signal?.selected_policy_section_excerpt),
+    getString(article13Signal?.supportingContactContext),
+    getString(article13Signal?.supporting_contact_context),
     ...getPolicySummaryArticle13Signals(summary).flatMap((signal) => [
       getString(signal.evidenceText),
       getString(signal.evidence_text),
@@ -210,6 +215,12 @@ function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageCheckl
       getString(signal.selected_policy_section_excerpt),
       getString(signal.supportingContactContext),
       getString(signal.supporting_contact_context)
+    ]),
+    ...allTopicCandidates.flatMap((candidate) => [
+      getString(candidate.evidenceText),
+      getString(candidate.evidence_text),
+      getString(candidate.selectedPolicySectionExcerpt),
+      getString(candidate.selected_policy_section_excerpt)
     ])
   ].filter((value): value is string => Boolean(value))).join("\n\n");
   const snippets = dedupePolicyHighlightSnippets([
@@ -230,14 +241,20 @@ function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageCheckl
     getString(article13Signal?.selected_policy_section_excerpt),
     getString(article13Signal?.evidenceText),
     getString(article13Signal?.evidence_text),
+    ...topicCandidatesForRow.flatMap((candidate) => [
+      getString(candidate.selectedPolicySectionExcerpt),
+      getString(candidate.selected_policy_section_excerpt),
+      getString(candidate.evidenceText),
+      getString(candidate.evidence_text)
+    ]),
     ...getPolicySummaryArticle13SignalsForRow(summary, item).flatMap((signal) => [
       getString(signal.selectedPolicySectionExcerpt),
       getString(signal.selected_policy_section_excerpt),
       getString(signal.evidenceText),
       getString(signal.evidence_text)
     ]),
-    getString(summary.selectedPolicySectionExcerpt),
-    getString(summary.selected_policy_section_excerpt),
+    getString(summary?.selectedPolicySectionExcerpt),
+    getString(summary?.selected_policy_section_excerpt),
     ...getPolicySummaryArticle13Signals(summary).flatMap((signal) => [
       getString(signal.evidenceText),
       getString(signal.evidence_text),
@@ -263,10 +280,26 @@ function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageCheckl
     return null;
   }
   const sourceUrl = [
-    ...getStringArray(summary.privacyPolicyUrls),
-    ...getStringArray(summary.privacy_policy_urls),
-    getString(summary.selectedPolicySectionUrl),
-    getString(summary.selected_policy_section_url)
+    ...getStringArray(summary?.privacyPolicyUrls),
+    ...getStringArray(summary?.privacy_policy_urls),
+    getString(summary?.selectedPolicySectionUrl),
+    getString(summary?.selected_policy_section_url),
+    getString(article13Signal?.surfaceUrl),
+    getString(article13Signal?.surface_url),
+    getString(article13Signal?.sourceUrl),
+    getString(article13Signal?.source_url),
+    getString(article13Signal?.pageUrl),
+    getString(article13Signal?.page_url),
+    ...topicCandidatesForRow.flatMap((candidate) => [
+      getString(candidate.selectedPolicySectionUrl),
+      getString(candidate.selected_policy_section_url),
+      getString(candidate.surfaceUrl),
+      getString(candidate.surface_url),
+      getString(candidate.sourceUrl),
+      getString(candidate.source_url),
+      getString(candidate.pageUrl),
+      getString(candidate.page_url)
+    ])
   ].find(Boolean) ?? null;
   return {
     capturedText,
@@ -310,10 +343,15 @@ function getGdprTransparencyPolicySnippets(item: GdprEprivacyCoverageChecklistIt
     getRecord(evidence.rowSpecificSectionEvidence) ??
     getRecord(evidence.row_specific_section_evidence);
   const summary = getRecord(evidence.policySurfaceSummary) ?? getRecord(evidence.policy_surface_summary);
+  const topicCandidatesForRow = getGdprTransparencyTopicCandidatesForRow(evidence, summary, item);
   const primarySnippets = dedupePolicyHighlightSnippets([
     ...[
       getString(article13Signal?.evidenceText),
-      getString(article13Signal?.evidence_text)
+      getString(article13Signal?.evidence_text),
+      ...topicCandidatesForRow.flatMap((candidate) => [
+        getString(candidate.evidenceText),
+        getString(candidate.evidence_text)
+      ])
     ].filter((value): value is string => Boolean(value))
       .map((value) => makePolicyHighlightSnippet(
         alignPolicyEvidenceSnippetToCompleteSentence(cleanEvidenceText(value)),
@@ -353,6 +391,12 @@ function getGdprTransparencyPolicySnippets(item: GdprEprivacyCoverageChecklistIt
     getString(article13Signal?.selected_policy_section_excerpt),
     getString(rowSpecificSectionEvidence?.selectedPolicySectionExcerpt),
     getString(rowSpecificSectionEvidence?.selected_policy_section_excerpt),
+    ...topicCandidatesForRow.flatMap((candidate) => [
+      getString(candidate.evidenceText),
+      getString(candidate.evidence_text),
+      getString(candidate.selectedPolicySectionExcerpt),
+      getString(candidate.selected_policy_section_excerpt)
+    ]),
     ...getPolicySummaryArticle13SignalsForRow(summary, item).flatMap((signal) => [
       getString(signal.evidenceText),
       getString(signal.evidence_text),
@@ -390,6 +434,38 @@ function getPolicySummaryArticle13Signals(summary: Record<string, unknown> | nul
   return [
     ...getRecordArray(summary.article13DisclosureSignals),
     ...getRecordArray(summary.article_13_disclosure_signals)
+  ];
+}
+
+function getGdprTransparencyTopicCandidatesForRow(
+  evidence: Record<string, unknown>,
+  summary: Record<string, unknown> | null,
+  item: GdprEprivacyCoverageChecklistItem
+) {
+  const disclosureType = getArticle13DisclosureTypeForChecklistRow(item);
+  if (!disclosureType) {
+    return [];
+  }
+  return getGdprTransparencyTopicCandidates(evidence, summary).filter((candidate) =>
+    getString(candidate.topic) === disclosureType ||
+    getString(candidate.disclosureType) === disclosureType ||
+    getString(candidate.disclosure_type) === disclosureType
+  );
+}
+
+function getGdprTransparencyTopicCandidates(
+  evidence: Record<string, unknown>,
+  summary: Record<string, unknown> | null
+) {
+  return [
+    ...getRecordArray(evidence.gdprTransparencyTopicCandidates),
+    ...getRecordArray(evidence.gdpr_transparency_topic_candidates),
+    ...[
+      getRecord(evidence.gdprTransparencyTopicCandidate),
+      getRecord(evidence.gdpr_transparency_topic_candidate)
+    ].filter((candidate): candidate is Record<string, unknown> => Boolean(candidate)),
+    ...getRecordArray(summary?.gdprTransparencyTopicCandidates),
+    ...getRecordArray(summary?.gdpr_transparency_topic_candidates)
   ];
 }
 

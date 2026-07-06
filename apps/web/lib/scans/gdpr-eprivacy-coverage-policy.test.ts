@@ -142,6 +142,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit t
       true,
       `${rowId} should retain normalized concern provenance`
     );
+    assert.match(
+      retainedArticle13Signal(outcomes[rowId]!)?.evidenceText ?? "",
+      /Localized bounded Article 13 evidence/,
+      `${rowId} should retain a row-specific excerpt for policy review`
+    );
   }
 });
 
@@ -204,6 +209,14 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes credits French retention and reci
 
   assert.equal(concernOutcomes.retention_disclosure_observed?.status, "Observed");
   assert.equal(concernOutcomes.recipients_vendor_categories_disclosure?.status, "Observed");
+  assert.match(
+    retainedArticle13Signal(concernOutcomes.retention_disclosure_observed!)?.evidenceText ?? "",
+    /conservées en base active/i
+  );
+  assert.match(
+    retainedArticle13Signal(concernOutcomes.recipients_vendor_categories_disclosure!)?.evidenceText ?? "",
+    /prestataires et sous-traitants/i
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps automated profiling Article 13 evidence in review", () => {

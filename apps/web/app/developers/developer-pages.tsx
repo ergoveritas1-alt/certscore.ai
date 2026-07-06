@@ -58,7 +58,6 @@ export const apiV2Routes = [
 ] as const;
 
 export const mcpTools = [
-  ["create_scan", "Deprecated compatibility alias of scan_site. Removed in 0.2.0. Use scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links."],
   ["scan_site", "Start or reuse a CertScore public-web scan for a public URL."],
   ["get_scan", "Retrieve the API v2 public-safe scan resource for a stable scan ID."],
   ["get_scan_status", "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId."],

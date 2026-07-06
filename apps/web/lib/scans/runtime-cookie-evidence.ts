@@ -71,7 +71,240 @@ function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
 
+export type FableCookieHint = {
+  category:
+    | "advertising"
+    | "analytics"
+    | "functional"
+    | "geolocation"
+    | "necessary"
+    | "privacy_preference";
+  provider: string;
+  priority: "high" | "medium" | "contextual" | "review_needed";
+};
+
+const FABLE_COOKIE_DOMAIN_HINTS: Array<FableCookieHint & {
+  cookieName: RegExp;
+  domain: RegExp;
+}> = [
+  { cookieName: /^(?:MR|MUID|SRM_B)$/i, domain: /(^|\.)bing\.com$/i, category: "advertising", provider: "Microsoft Bing UET", priority: "high" },
+  { cookieName: /^(?:ANONCHK|CLID|MR|MUID|SM)$/i, domain: /(^|\.)clarity\.ms$/i, category: "analytics", provider: "Microsoft Clarity", priority: "medium" },
+  { cookieName: /^UID$/i, domain: /(^|\.)(?:doubleclick\.net|ipredictive\.com|lightboxcdn\.com|pubmatic\.com)$/i, category: "advertising", provider: "Adtech", priority: "high" },
+  { cookieName: /^UID$/i, domain: /(^|\.)(?:scorecardresearch\.com|latimes\.com)$/i, category: "analytics", provider: "Comscore / ScorecardResearch", priority: "medium" },
+  { cookieName: /^XID$/i, domain: /(^|\.)(?:liadm\.com|linkedin\.com|nbcnews\.com)$/i, category: "advertising", provider: "Adtech", priority: "high" },
+  { cookieName: /^XID$/i, domain: /(^|\.)(?:scorecardresearch\.com|latimes\.com)$/i, category: "analytics", provider: "Comscore / ScorecardResearch", priority: "medium" },
+  { cookieName: /^adEdition$/i, domain: /(^|\.)smartadserver\.com$/i, category: "advertising", provider: "Smart AdServer (Equativ)", priority: "high" },
+  { cookieName: /^adEdition$/i, domain: /(^|\.)rubiconproject\.com$/i, category: "advertising", provider: "Magnite / Rubicon Project", priority: "high" },
+  { cookieName: /^adEdition$/i, domain: /(^|\.)tapad\.com$/i, category: "advertising", provider: "Tapad", priority: "high" },
+  { cookieName: /^adEdition$/i, domain: /(^|\.)nbcuni\.com$|^app\.mps\.vsnt\.net$/i, category: "advertising", provider: "NBCUniversal ad platform (MPS)", priority: "high" },
+  { cookieName: /^geo_country$/i, domain: /(^|\.)adidas\.com$/i, category: "geolocation", provider: "Adidas", priority: "contextual" },
+];
+
+const FABLE_COOKIE_NAME_HINTS: Record<string, FableCookieHint> = {
+  a3: { category: "advertising", provider: "Yahoo", priority: "high" },
+  aka_a2: { category: "necessary", provider: "Akamai Adaptive Acceleration", priority: "contextual" },
+  apc: { category: "advertising", provider: "Xandr / AppNexus", priority: "high" },
+  awsalb: { category: "necessary", provider: "AWS Application Load Balancer", priority: "contextual" },
+  cdipartners: { category: "advertising", provider: "Conversant / Dotomi", priority: "high" },
+  cdiuser: { category: "advertising", provider: "Conversant / Dotomi", priority: "high" },
+  cmid: { category: "advertising", provider: "Index Exchange / Casale", priority: "high" },
+  cmpro: { category: "advertising", provider: "Index Exchange / Casale", priority: "high" },
+  cmps: { category: "advertising", provider: "Index Exchange / Casale", priority: "high" },
+  co_lang: { category: "functional", provider: "CAMPUSonline", priority: "contextual" },
+  co_profile: { category: "functional", provider: "CAMPUSonline", priority: "contextual" },
+  dotomitest: { category: "advertising", provider: "Conversant / Dotomi", priority: "high" },
+  fastab: { category: "functional", provider: "Publisher A/B check", priority: "contextual" },
+  gclb: { category: "necessary", provider: "Google Cloud Load Balancer", priority: "contextual" },
+  grecaptcha: { category: "necessary", provider: "Google reCAPTCHA", priority: "contextual" },
+  ide: { category: "advertising", provider: "Google DoubleClick", priority: "high" },
+  idsync: { category: "advertising", provider: "Yahoo / Blis", priority: "high" },
+  ingresscookie: { category: "necessary", provider: "Kubernetes ingress", priority: "contextual" },
+  iqpdata: { category: "advertising", provider: "Intent IQ", priority: "high" },
+  iqver: { category: "advertising", provider: "Intent IQ", priority: "high" },
+  kadusercookie: { category: "advertising", provider: "PubMatic", priority: "high" },
+  ktpcacookie: { category: "advertising", provider: "PubMatic", priority: "high" },
+  oau: { category: "advertising", provider: "Criteo", priority: "high" },
+  phpsessid: { category: "necessary", provider: "PHP session", priority: "contextual" },
+  psessionid: { category: "necessary", provider: "CAMPUSonline session", priority: "contextual" },
+  secgpc: { category: "privacy_preference", provider: "Global Privacy Control flag", priority: "contextual" },
+  syncrtb4: { category: "advertising", provider: "PubMatic", priority: "high" },
+  tdcpm: { category: "advertising", provider: "The Trade Desk", priority: "high" },
+  tdid: { category: "advertising", provider: "The Trade Desk", priority: "high" },
+  tapad_3way_syncs: { category: "advertising", provider: "Tapad", priority: "high" },
+  tapad_did: { category: "advertising", provider: "Tapad", priority: "high" },
+  tapad_ts: { category: "advertising", provider: "Tapad", priority: "high" },
+  testifcookiep: { category: "advertising", provider: "Weborama / ad sync", priority: "high" },
+  tipmix: { category: "necessary", provider: "Azure Traffic Manager", priority: "contextual" },
+  v: { category: "necessary", provider: "Etsy", priority: "contextual" },
+  visitorid: { category: "analytics", provider: "WebMD / Yahoo", priority: "medium" },
+  wppldoc: { category: "functional", provider: "Fandango", priority: "contextual" },
+  xandr_panid: { category: "advertising", provider: "Xandr / AppNexus", priority: "high" },
+  "__host-next-auth.csrf-token": { category: "necessary", provider: "NextAuth.js", priority: "contextual" },
+  "__secure-next-auth.callback-url": { category: "necessary", provider: "NextAuth.js", priority: "contextual" },
+  "__cf_bm": { category: "necessary", provider: "Cloudflare Bot Management", priority: "contextual" },
+  "__cflb": { category: "necessary", provider: "Cloudflare Load Balancer", priority: "contextual" },
+  "__eoi": { category: "advertising", provider: "Google Ad Manager", priority: "high" },
+  "__gads": { category: "advertising", provider: "Google Ad Manager", priority: "high" },
+  "__gpi": { category: "advertising", provider: "Google Ad Manager", priority: "high" },
+  "_abck": { category: "necessary", provider: "Akamai Bot Manager / Edge", priority: "contextual" },
+  "_cfuvid": { category: "necessary", provider: "Cloudflare", priority: "contextual" },
+  "_dd_s_v2": { category: "analytics", provider: "Datadog RUM", priority: "medium" },
+  "_lc2_fpi": { category: "advertising", provider: "Lotame", priority: "high" },
+  "_li_ss": { category: "advertising", provider: "LiveIntent", priority: "high" },
+  ab: { category: "advertising", provider: "Neustar / AGKN", priority: "high" },
+  ac_r: { category: "advertising", provider: "Yahoo", priority: "high" },
+  acx: { category: "advertising", provider: "Primis", priority: "high" },
+  "ad-id": { category: "advertising", provider: "Amazon Ads", priority: "high" },
+  "ad-privacy": { category: "advertising", provider: "Amazon Ads", priority: "high" },
+  admtr: { category: "advertising", provider: "Zeta Global (Rezync)", priority: "high" },
+  ak_bmsc: { category: "necessary", provider: "Akamai Bot Manager / Edge", priority: "contextual" },
+  akaas_nbcnews: { category: "necessary", provider: "Akamai", priority: "contextual" },
+  akacd_phased_www_adidas_com_generic: { category: "necessary", provider: "Akamai", priority: "contextual" },
+  akacd_shop_ford_com_pr: { category: "necessary", provider: "Akamai", priority: "contextual" },
+  akacd_www_ford_com_pr: { category: "necessary", provider: "Akamai", priority: "contextual" },
+  akamai_generated_location: { category: "geolocation", provider: "Akamai edge geolocation", priority: "contextual" },
+  akamai_location: { category: "geolocation", provider: "Akamai edge geolocation", priority: "contextual" },
+  akamai_set_zip: { category: "geolocation", provider: "Akamai edge geolocation", priority: "contextual" },
+  anj: { category: "advertising", provider: "Xandr / AppNexus", priority: "high" },
+  audit: { category: "advertising", provider: "LiveRamp", priority: "high" },
+  audit_p: { category: "advertising", provider: "LiveRamp", priority: "high" },
+  b: { category: "advertising", provider: "Magnite / Rubicon", priority: "high" },
+  bcookie: { category: "advertising", provider: "LinkedIn Insight Tag", priority: "high" },
+  bito: { category: "advertising", provider: "Beeswax", priority: "high" },
+  bitoissecure: { category: "advertising", provider: "Beeswax", priority: "high" },
+  bm_s: { category: "necessary", provider: "Akamai Bot Manager / Edge", priority: "contextual" },
+  bm_sc: { category: "necessary", provider: "Akamai Bot Manager / Edge", priority: "contextual" },
+  bm_so: { category: "necessary", provider: "Akamai Bot Manager / Edge", priority: "contextual" },
+  bm_ss: { category: "necessary", provider: "Akamai Bot Manager / Edge", priority: "contextual" },
+  bm_sv: { category: "necessary", provider: "Akamai Bot Manager / Edge", priority: "contextual" },
+  bm_sz: { category: "necessary", provider: "Akamai Bot Manager / Edge", priority: "contextual" },
+  c_code: { category: "geolocation", provider: "NVIDIA", priority: "contextual" },
+  c_sid: { category: "analytics", provider: "Comscore", priority: "medium" },
+  cf_clearance: { category: "necessary", provider: "Cloudflare", priority: "contextual" },
+  chkchromeab67sec: { category: "functional", provider: "Publisher A/B check", priority: "contextual" },
+  "color-palette": { category: "functional", provider: "Site preference", priority: "contextual" },
+  country: { category: "geolocation", provider: "OpenAI", priority: "contextual" },
+  countrycode: { category: "geolocation", provider: "Publisher geo preference", priority: "contextual" },
+  csuuid: { category: "advertising", provider: "Throtle", priority: "high" },
+  cto_bundle: { category: "advertising", provider: "Criteo", priority: "high" },
+  custom_data: { category: "advertising", provider: "Yahoo", priority: "high" },
+  "data-bs": { category: "advertising", provider: "NYT / ad sync", priority: "high" },
+  "data-cl": { category: "advertising", provider: "PulsePoint / ad sync", priority: "high" },
+  "data-co": { category: "advertising", provider: "LiveIntent / ad sync", priority: "high" },
+  "data-mf": { category: "advertising", provider: "Zeta Rezync / ad sync", priority: "high" },
+  "data-p": { category: "advertising", provider: "Media.net / ad sync", priority: "high" },
+  "data-rbh": { category: "advertising", provider: "StackAdapt / ad sync", priority: "high" },
+  "data-rk": { category: "advertising", provider: "NYT / ad sync", priority: "high" },
+  "data-ttd": { category: "advertising", provider: "The Trade Desk sync", priority: "high" },
+  datadome: { category: "necessary", provider: "DataDome", priority: "contextual" },
+  did: { category: "advertising", provider: "LiveRamp", priority: "high" },
+  didts: { category: "advertising", provider: "LiveRamp", priority: "high" },
+  "et-ppvid": { category: "analytics", provider: "New York Times", priority: "medium" },
+  eud: { category: "advertising", provider: "LiveRamp", priority: "high" },
+  euds: { category: "advertising", provider: "LiveRamp", priority: "high" },
+  exp_ebid: { category: "functional", provider: "Etsy", priority: "contextual" },
+  geodata: { category: "geolocation", provider: "Publisher geo preference", priority: "contextual" },
+  geoedition: { category: "geolocation", provider: "Publisher geo preference", priority: "contextual" },
+  geo_coordinates: { category: "geolocation", provider: "Adidas", priority: "contextual" },
+  geo_ip: { category: "geolocation", provider: "Adidas", priority: "contextual" },
+  geo_postcode: { category: "geolocation", provider: "Adidas", priority: "contextual" },
+  geo_state: { category: "geolocation", provider: "Adidas", priority: "contextual" },
+  "gpp-string": { category: "privacy_preference", provider: "IAB GPP consent string", priority: "contextual" },
+  gtinfo: { category: "geolocation", provider: "WebMD", priority: "contextual" },
+  i: { category: "advertising", provider: "OpenX", priority: "high" },
+  idx: { category: "advertising", provider: "LiveIntent", priority: "high" },
+  intentiq: { category: "advertising", provider: "Intent IQ", priority: "high" },
+  intentiqcdate: { category: "advertising", provider: "Intent IQ", priority: "high" },
+  "jkidd-p": { category: "advertising", provider: "New York Times", priority: "high" },
+  "jkidd-s": { category: "advertising", provider: "New York Times", priority: "high" },
+  khaos: { category: "advertising", provider: "Magnite / Rubicon", priority: "high" },
+  khaos_p: { category: "advertising", provider: "Magnite / Rubicon", priority: "high" },
+  ktcid: { category: "advertising", provider: "Kargo", priority: "high" },
+  li_sugr: { category: "advertising", provider: "LinkedIn", priority: "high" },
+  lidc: { category: "advertising", provider: "LinkedIn Insight Tag", priority: "high" },
+  lidid: { category: "advertising", provider: "LiveIntent", priority: "high" },
+  locale: { category: "functional", provider: "OpenAI", priority: "contextual" },
+  long: { category: "geolocation", provider: "Adidas", priority: "contextual" },
+  lrt_wrk: { category: "functional", provider: "WebMD", priority: "contextual" },
+  mc: { category: "advertising", provider: "Quantcast / Media.net", priority: "high" },
+  ng_geolocation: { category: "geolocation", provider: "Publisher geo preference", priority: "contextual" },
+  novaexp: { category: "advertising", provider: "Novatiq", priority: "high" },
+  novasig: { category: "advertising", provider: "Novatiq", priority: "high" },
+  novasyncts: { category: "advertising", provider: "Novatiq", priority: "high" },
+  novauid: { category: "advertising", provider: "Novatiq", priority: "high" },
+  "nyt-a": { category: "analytics", provider: "New York Times", priority: "medium" },
+  "nyt-gdpr": { category: "privacy_preference", provider: "New York Times", priority: "contextual" },
+  "nyt-geo": { category: "geolocation", provider: "New York Times", priority: "contextual" },
+  "nyt-jkidd": { category: "advertising", provider: "New York Times", priority: "high" },
+  "nyt-purr": { category: "privacy_preference", provider: "New York Times", priority: "contextual" },
+  "nyt-traceid": { category: "necessary", provider: "New York Times", priority: "contextual" },
+  "oai-did": { category: "necessary", provider: "OpenAI", priority: "contextual" },
+  obuid: { category: "advertising", provider: "Outbrain", priority: "high" },
+  onesite_country: { category: "geolocation", provider: "Adidas", priority: "contextual" },
+  pbw: { category: "advertising", provider: "Magnite / Rubicon", priority: "high" },
+  pid: { category: "advertising", provider: "Smart AdServer (Equativ)", priority: "high" },
+  "purr-cache": { category: "privacy_preference", provider: "New York Times", priority: "contextual" },
+  "purr-pref-agent": { category: "privacy_preference", provider: "New York Times", priority: "contextual" },
+  pxrc: { category: "advertising", provider: "LiveRamp", priority: "high" },
+  "receive-cookie-deprecation": { category: "functional", provider: "Chrome Privacy Sandbox", priority: "contextual" },
+  rlas3: { category: "advertising", provider: "LiveRamp", priority: "high" },
+  rud: { category: "advertising", provider: "LiveRamp", priority: "high" },
+  ruds: { category: "advertising", provider: "LiveRamp", priority: "high" },
+  "sa-user-id": { category: "advertising", provider: "StackAdapt", priority: "high" },
+  "sa-user-id-v2": { category: "advertising", provider: "StackAdapt", priority: "high" },
+  "sa-user-id-v3": { category: "advertising", provider: "StackAdapt", priority: "high" },
+  "sa-user-id-v4": { category: "advertising", provider: "StackAdapt", priority: "high" },
+  sasd: { category: "advertising", provider: "Smart AdServer (Equativ)", priority: "high" },
+  sasd2: { category: "advertising", provider: "Smart AdServer (Equativ)", priority: "high" },
+  "sd-session-id": { category: "advertising", provider: "StackAdapt", priority: "high" },
+  searchcity: { category: "geolocation", provider: "Publisher preference", priority: "contextual" },
+  searchlocation: { category: "geolocation", provider: "Publisher preference", priority: "contextual" },
+  searchstate: { category: "geolocation", provider: "Publisher preference", priority: "contextual" },
+  sessionactive: { category: "analytics", provider: "New York Times", priority: "medium" },
+  sessionindex: { category: "analytics", provider: "New York Times", priority: "medium" },
+  statecode: { category: "geolocation", provider: "Publisher geo preference", priority: "contextual" },
+  stx_user_id: { category: "advertising", provider: "Sharethrough", priority: "high" },
+  t_gid: { category: "advertising", provider: "Taboola", priority: "high" },
+  t_pt_gid: { category: "advertising", provider: "Taboola", priority: "high" },
+  taboola_session_id: { category: "advertising", provider: "Taboola", priority: "high" },
+  test_cookie: { category: "advertising", provider: "Google DoubleClick", priority: "high" },
+  "theme-options": { category: "functional", provider: "Site preference", priority: "contextual" },
+  tluid: { category: "advertising", provider: "TripleLift", priority: "high" },
+  tuuid: { category: "advertising", provider: "Improve Digital / BidSwitch", priority: "high" },
+  tuuid_lu: { category: "advertising", provider: "Improve Digital / BidSwitch", priority: "high" },
+  uid: { category: "advertising", provider: "Criteo / adtech", priority: "high" },
+  uids: { category: "advertising", provider: "Xandr / AppNexus (Prebid)", priority: "high" },
+  userinfo: { category: "functional", provider: "Ford", priority: "contextual" },
+  usp_status: { category: "privacy_preference", provider: "US Privacy (CCPA) status", priority: "contextual" },
+  uuid: { category: "advertising", provider: "MediaMath / adtech", priority: "high" },
+  uuid2: { category: "advertising", provider: "Xandr / AppNexus", priority: "high" },
+  "visitor-id": { category: "advertising", provider: "Adtech", priority: "high" },
+  wbdfch: { category: "functional", provider: "Warner Bros. Discovery", priority: "contextual" },
+  "x-ms-routing-name": { category: "necessary", provider: "Azure", priority: "contextual" },
+  zip: { category: "geolocation", provider: "Publisher preference", priority: "contextual" },
+  "zync-uuid": { category: "advertising", provider: "Zeta Global (Rezync)", priority: "high" },
+};
+
+function normalizeFableCookieKey(value: string) {
+  return value.toLowerCase().replace(/^_grecaptcha$/, "grecaptcha");
+}
+
+export function getFableCookieHint(name: string, domain: string | null = null): FableCookieHint | null {
+  const normalizedDomain = domain?.replace(/^\./, "").toLowerCase() ?? "";
+  for (const hint of FABLE_COOKIE_DOMAIN_HINTS) {
+    if (hint.cookieName.test(name) && hint.domain.test(normalizedDomain)) {
+      return hint;
+    }
+  }
+  return FABLE_COOKIE_NAME_HINTS[normalizeFableCookieKey(name)] ?? null;
+}
+
 export function classifyRuntimeCookieCategory(name: string, domain: string | null = null) {
+  const fableHint = getFableCookieHint(name, domain);
+  if (fableHint) {
+    return fableHint.category;
+  }
+
   const normalized = `${name} ${domain ?? ""}`.toLowerCase();
   if (isFunctionalCookieExcludedFromTrackingEvidence(name, domain)) {
     return "necessary";
@@ -119,6 +352,13 @@ export function classifyRuntimeCookieCategory(name: string, domain: string | nul
 }
 
 export function isFunctionalCookieExcludedFromTrackingEvidence(name: string | null | undefined, domain: string | null = null) {
+  if (name) {
+    const fableHint = getFableCookieHint(name, domain);
+    if (fableHint && fableHint.priority === "contextual") {
+      return true;
+    }
+  }
+
   const normalized = `${name ?? ""} ${domain ?? ""}`.toLowerCase();
   return /(^|\b)(optanonconsent|optanonalertboxclosed|cookieconsent|euconsent-v2|tcfv2|cmapi_cookie_privacy|notice_preferences|notice_gdpr_prefs|cookieyes-consent|didomi_token|geo_country|trp-country|trp-language|__cf_bm|cf_clearance|bigipserver|awsalb|awsalbcors|awsalbtg|akaalb|usp-google|bm_sz|bm_sv|bm_mi|ak_bmsc|_abck|csrf|xsrf|phpsessid|jsessionid)|(^|\b)_sp_/.test(
     normalized
@@ -130,6 +370,11 @@ export function isNonEssentialCookieCategory(category: string | null | undefined
 }
 
 function inferCookieProvider(name: string, domain: string | null = null) {
+  const fableHint = getFableCookieHint(name, domain);
+  if (fableHint) {
+    return fableHint.provider;
+  }
+
   const normalized = `${name} ${domain ?? ""}`.toLowerCase();
   if (/^_ga|^_gid|^_gat|ga_|goog|gtm|doubleclick/.test(normalized)) {
     return "Google";

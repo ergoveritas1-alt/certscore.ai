@@ -66,9 +66,9 @@ jobs:
 
       - name: Test MCP package
         run: |
-          pnpm --filter certscore-mcp typecheck
-          pnpm --filter certscore-mcp test
-          pnpm --filter certscore-mcp build
+          pnpm --filter @certscore/mcp typecheck
+          pnpm --filter @certscore/mcp test
+          pnpm --filter @certscore/mcp build
 
       - name: Verify release drift guards
         run: node --import tsx scripts/verify-certscore-mcp-release-guards.ts

@@ -5151,8 +5151,14 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     "gdprTransparencyArticle13ConcernState",
     "gdpr_transparency_article13_concern_state"
   ]) ?? concern.observedValue ?? "ambiguous";
+  const evidenceText =
+    getString(rawEvidence, ["evidenceText", "evidence_text"]) ??
+    getStringArray(rawEvidence, ["policySnippets", "policy_snippets"])[0] ??
+    concern.evidenceBundle.policySnippets[0] ??
+    null;
   const evidenceRefs = [
     `Evidence: ${config.label}`,
+    evidenceText ? `Excerpt: ${evidenceText}` : null,
     locale ? `Locale: ${locale}` : null,
     sourceUrl ? `Policy URL: ${sourceUrl}` : null
   ].filter((value): value is string => Boolean(value));
@@ -5162,13 +5168,17 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       classifierReasonCodes: rawEvidence.classifierReasonCodes,
       confidence: rawEvidence.confidence,
       disclosureType: topic,
+      evidenceText,
       evidenceSource: "normalized_gdpr_transparency_article13_concern",
       matchStrength: rawEvidence.matchStrength,
       matchedLocale: locale,
       productionCredit: rawEvidence.productionCredit,
       productionCreditProfile: rawEvidence.productionCreditProfile,
       selectedEvidenceStrength: rawEvidence.selectedEvidenceStrength,
+      selectedPolicySectionExcerpt: evidenceText,
+      selectedPolicySectionUrl: sourceUrl,
       source: "normalized_concern",
+      sourceUrl,
       status: concern.regulatoryChecklistEligibility === "observed" ? "observed" : "partial"
     },
     gdprTransparencyArticle13Concern: {

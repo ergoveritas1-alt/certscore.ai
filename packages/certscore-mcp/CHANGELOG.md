@@ -1,5 +1,15 @@
 # certscore-mcp
 
+## 0.2.1
+
+- Aligns the local package with the published scoped npm package name `@certscore/mcp`.
+- Includes `server.json` in the npm package for MCP registry submission.
+- Keeps the 0.2.x tool surface at 11 tools; `create_scan` remains removed.
+
+## 0.2.0
+
+- Removed the deprecated `create_scan` compatibility alias. Use `scan_site` for scan creation.
+
 ## 0.1.5
 
 - Moves Homebrew release artifacts to a Linux-built, deterministic GitHub Actions pipeline.
@@ -9,7 +19,7 @@
 
 - Added a checked-in MCP tool manifest and release guards for server/docs/tool-surface drift.
 - Added `get_evidence` transport bounding metadata for oversized Evidence JSON packets.
-- Documented all 12 MCP tools consistently across package and developer docs.
+- Documented the MCP tool surface consistently across package and developer docs.
 - Added clean-env npx smoke coverage for install, doctor, tools/list annotations, bounded evidence, and tool-error shape.
 
 ## 0.1.3

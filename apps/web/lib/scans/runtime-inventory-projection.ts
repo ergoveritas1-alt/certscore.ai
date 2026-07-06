@@ -1,5 +1,10 @@
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 import {
+  resolveVendorDisplayCategory,
+  resolveVendorObservations,
+  type VendorResolverInput
+} from "../../../../packages/certscore-vendor-resolver/src/index";
+import {
   isKnownCmpInfrastructureHost,
   isKnownCmpVendorLabel
 } from "../../../../packages/shared/src/known-cmps";
@@ -17,6 +22,7 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 
 export type ConsentReviewPriority = RuntimeCookieReviewPriority;
 export type InventoryConfidence = RuntimeCookieInventoryConfidence;
+export type InventoryMacroCategory = "Advertising" | "Analytics" | "Essential" | "Functional" | "Unknown";
 
 export type TrackerInventoryRow = {
   category: string;
@@ -37,6 +43,7 @@ export type CookieInventoryGroupRow = {
   confidence: InventoryConfidence;
   domains: string[];
   firstSeenMs: number | null;
+  macroCategory: InventoryMacroCategory;
   party: "first_party" | "third_party" | "unknown" | "mixed";
   priority: ConsentReviewPriority;
   purpose: string;
@@ -47,6 +54,7 @@ export type TrackerInventoryGroupRow = {
   confidence: InventoryConfidence;
   domains: string[];
   firstSeenMs: number | null;
+  macroCategory: InventoryMacroCategory;
   party: "3rd" | "—" | "mixed";
   priority: ConsentReviewPriority;
   purpose: string;
@@ -192,6 +200,17 @@ function trackerMatchedHosts(tracker: ScanDetailResponse["trackerVendors"][numbe
   ].map(normalizeInventoryHostname));
 }
 
+function resolveTrackerHostsForInventory(hosts: string[]) {
+  const hostnames = uniqueStrings(hosts.map(normalizeInventoryHostname));
+  const inputs: VendorResolverInput[] = hostnames.map((hostname): VendorResolverInput => ({
+    hostname,
+    matchSource: "network_request",
+    type: "request",
+    url: hostname ? `https://${hostname}/` : undefined
+  }));
+  return resolveVendorObservations(inputs);
+}
+
 export function buildTrackerInventoryRows(input: {
   domains: string[];
   firstPartyDomain?: string | null;
@@ -254,6 +273,39 @@ export function buildTrackerInventoryRows(input: {
 
   for (const entity of input.topObservedEntities) {
     if (isFirstPartyHost(entity.label) || isCoveredByResolvedVendorHost(entity.label)) {
+      continue;
+    }
+    const entityDomains = input.domains.includes(entity.label) ? [entity.label] : [entity.label];
+    const resolvedObservations = resolveTrackerHostsForInventory(entityDomains);
+    if (resolvedObservations.length > 0) {
+      for (const observation of resolvedObservations) {
+        const domains = uniqueStrings([
+          ...observation.matchedHostnames,
+          ...entityDomains.map(normalizeInventoryHostname)
+        ]);
+        addRow({
+          category: observation.purpose,
+          confidence: observation.confidence,
+          domains,
+          firstSeenMs: null,
+          label: observation.product || observation.vendor || observation.entity,
+          observedVia: ["request", "canonical resolver"],
+          party: getTrackerParty(domains),
+          preConsent:
+            input.preConsentVendors.includes(entity.label) ||
+            (observation.product ? input.preConsentVendors.includes(observation.product) : false) ||
+            input.preConsentVendors.includes(observation.vendor),
+          regulatoryRelevance: observation.regulatoryRelevance,
+          requestCount: entity.requestCount,
+          source: "canonical vendor resolver",
+          vendorDisplayCategory: resolveVendorDisplayCategory({
+            product: observation.product,
+            purpose: observation.purpose,
+            regulatoryRelevance: observation.regulatoryRelevance,
+            vendor: observation.vendor
+          })
+        });
+      }
       continue;
     }
     addRow({
@@ -407,6 +459,43 @@ function normalizeInventoryPurpose(value: string | null | undefined) {
   return (value ?? "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
 }
 
+export function deriveInventoryMacroCategory(input: {
+  priority?: ConsentReviewPriority | null;
+  purpose?: string | null;
+  vendor?: string | null;
+}): InventoryMacroCategory {
+  const purpose = normalizeInventoryPurpose(input.purpose);
+  const vendor = (input.vendor ?? "").toLowerCase();
+
+  if (/^(advertising|advertising_measurement|audience_measurement|retargeting|fingerprinting|marketing_automation)$/.test(purpose)) {
+    return "Advertising";
+  }
+  if (/^(analytics|session_replay|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics|a_b_testing|experimentation)$/.test(purpose)) {
+    return "Analytics";
+  }
+  if (/^(security|necessary|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {
+    return "Essential";
+  }
+  if (/^(tag_management|tag_manager|functional|customer_support|personalization|personalisation|embedded_content)$/.test(purpose)) {
+    return "Functional";
+  }
+  if (/^(cdn|cdn_static)$/.test(purpose)) {
+    return /instagram|vimeo|maps|font|sportradar|trustmary|iterate|medallia|piano|usable|jw player/.test(vendor)
+      ? "Functional"
+      : "Essential";
+  }
+  if (input.priority === "contextual") {
+    return "Essential";
+  }
+  if (input.priority === "high") {
+    return "Advertising";
+  }
+  if (input.priority === "medium") {
+    return "Analytics";
+  }
+  return "Unknown";
+}
+
 export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {
   const purpose = normalizeInventoryPurpose(getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance));
   const confidence = getTrackerInventoryConfidence(row);
@@ -427,7 +516,7 @@ export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): Conse
   if (/^(analytics|experimentation|personalization|personalisation|a_b_testing|embedded_content|tag_management|tag_manager|marketing_automation)$/.test(purpose)) {
     return row.preConsent ? "medium" : "contextual";
   }
-  if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics)$/.test(purpose)) {
+  if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics|customer_support)$/.test(purpose)) {
     return "contextual";
   }
   if (/^(cdn_static|cdn|functional)$/.test(purpose)) {
@@ -526,7 +615,14 @@ export function formatGroupedParty(value: CookieInventoryGroupRow["party"] | Tra
 }
 
 export function buildCookieInventoryGroupRows(rows: RuntimeCookieEvidenceRow[]) {
-  return buildRuntimeCookiePriorityGroups(rows);
+  return buildRuntimeCookiePriorityGroups(rows).map((row) => ({
+    ...row,
+    macroCategory: deriveInventoryMacroCategory({
+      priority: row.priority,
+      purpose: row.purpose,
+      vendor: row.vendor
+    })
+  }));
 }
 
 export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
@@ -538,6 +634,11 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
       confidence: getTrackerInventoryConfidence(row),
       domains: row.domains,
       firstSeenMs: row.firstSeenMs,
+      macroCategory: deriveInventoryMacroCategory({
+        priority: getTrackerConsentReviewPriority(row),
+        purpose,
+        vendor: row.label
+      }),
       party: formatTrackerParty(row),
       priority: getTrackerConsentReviewPriority(row),
       purpose,

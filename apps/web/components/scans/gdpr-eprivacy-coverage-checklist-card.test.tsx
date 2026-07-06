@@ -974,6 +974,93 @@ test("GdprEprivacyCoverageChecklistCard shows captured policy review button for 
   assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Pre-consent 3rd party tracking"/);
 });
 
+test("GdprEprivacyCoverageChecklistCard shows policy review for observed Article 13 rows without policy summary", () => {
+  const html = renderToStaticMarkup(
+    createElement(GdprEprivacyCoverageChecklistCard, {
+      defaultOpen: true,
+      items: [
+        makeChecklistItem({
+          assessmentStatus: "checked",
+          criticalEvidence: {
+            retainedEvidence: {
+              article13Signal: {
+                disclosureType: "controller_contact",
+                evidenceText:
+                  "Privacy contact point: for privacy-related questions, data-protection questions, or privacy rights requests, contact CertScore.ai at privacy@certscore.ai.",
+                source: "adapter_approved_multilingual_article13",
+                status: "observed",
+                surfaceUrl: "https://example.test/privacy"
+              }
+            }
+          },
+          evidenceState: "observed",
+          id: "controller_contact_disclosure",
+          label: "Controller/contact disclosure",
+          status: "Observed"
+        })
+      ],
+      showSummaryStrip: false
+    })
+  );
+
+  assert.match(html, /aria-label="Open captured privacy policy for Controller\/contact disclosure"/);
+  assert.match(html, /privacy@certscore\.ai/);
+});
+
+test("GdprEprivacyCoverageChecklistCard shows policy review for observed multilingual topic-candidate rows", () => {
+  const examples = [
+    ["en", "Legal basis. We process personal data when we have consent, a contract, legitimate interests, or a legal obligation."],
+    ["de", "Rechtsgrundlage. Wir verarbeiten personenbezogene Daten auf Grundlage von Einwilligung, Vertrag, berechtigten Interessen oder rechtlicher Verpflichtung."],
+    ["fr", "QUEL EST LE FONDEMENT LEGAL POUR LA COLLECTE DE DONNÉES ? Nous collectons des données personnelles lorsque nous disposons d'un fondement légal."],
+    ["es", "Base jurídica. Tratamos datos personales cuando existe consentimiento, contrato, interés legítimo u obligación legal."],
+    ["it", "Base giuridica. Trattiamo dati personali quando abbiamo consenso, contratto, interesse legittimo o obbligo legale."],
+    ["nl", "Rechtsgrond. Wij verwerken persoonsgegevens op basis van toestemming, overeenkomst, gerechtvaardigd belang of wettelijke verplichting."],
+    ["pl", "Podstawa prawna. Przetwarzamy dane osobowe na podstawie zgody, umowy, prawnie uzasadnionego interesu lub obowiązku prawnego."]
+  ] as const;
+
+  for (const [locale, evidenceText] of examples) {
+    const html = renderToStaticMarkup(
+      createElement(GdprEprivacyCoverageChecklistCard, {
+        defaultOpen: true,
+        items: [
+          makeChecklistItem({
+            assessmentStatus: "checked",
+            criticalEvidence: {
+              retainedEvidence: {
+                policySurfaceSummary: {
+                  gdprTransparencyTopicCandidates: [
+                    {
+                      confidence: 0.82,
+                      evidenceText,
+                      matchedLocale: locale,
+                      selectedPolicySectionUrl: `https://example.test/privacy-${locale}`,
+                      status: "diagnostic_only",
+                      topic: "legal_basis"
+                    }
+                  ],
+                  privacyPolicyUrls: [`https://example.test/privacy-${locale}`]
+                },
+                signalObserved: true
+              }
+            },
+            evidenceState: "observed",
+            id: "legal_basis_disclosure_observed",
+            label: "Legal basis disclosure",
+            status: "Observed"
+          })
+        ],
+        showSummaryStrip: false
+      })
+    );
+
+    assert.match(
+      html,
+      /aria-label="Open captured privacy policy for Legal basis disclosure"/,
+      `${locale} topic candidate should show policy review`
+    );
+  }
+});
+
 test("GdprEprivacyCoverageChecklistCard shows policy review for every not-confirmed transparency row with retained summary snippets", () => {
   const rows = [
     ["controller_contact_disclosure", "Controller/contact disclosure", "controller_contact", "The controller of your information is Example Media, and you can contact privacy@example.test about this policy."],

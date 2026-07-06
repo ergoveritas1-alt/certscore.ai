@@ -13,7 +13,6 @@ Public docs:
 
 ## Tools
 
-- `create_scan` - Deprecated compatibility alias of scan_site. Removed in 0.2.0. Use scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links.
 - `scan_site` - Start or reuse a CertScore public-web scan for a public URL.
 - `get_scan` - Retrieve the API v2 public-safe scan resource for a stable scan ID.
 - `get_scan_status` - Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId.
@@ -26,7 +25,7 @@ Public docs:
 - `get_latest_domain_scan` - Retrieve the latest eligible API v2 public-safe scan for a domain.
 - `get_latest_domain_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.
 
-The initial MCP surface intentionally does not include account scan browsing or scan comparison tools.
+The initial MCP surface intentionally does not include account scan browsing, scan comparison tools, or the removed `create_scan` compatibility alias.
 
 ## Configuration
 

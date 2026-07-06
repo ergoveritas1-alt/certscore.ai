@@ -19,10 +19,12 @@ WORKDIR /app
 
 COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY apps/browser-extension/package.json ./apps/browser-extension/package.json
+COPY apps/mcp/package.json ./apps/mcp/package.json
 COPY apps/v2-dag-lambda/package.json ./apps/v2-dag-lambda/package.json
 COPY apps/validation-worker/package.json ./apps/validation-worker/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/certscore-contracts/package.json ./packages/certscore-contracts/package.json
+COPY packages/certscore-mcp-auth/package.json ./packages/certscore-mcp-auth/package.json
 COPY packages/certscore-mcp/package.json ./packages/certscore-mcp/package.json
 COPY packages/certscore-report-adapter/package.json ./packages/certscore-report-adapter/package.json
 COPY packages/certscore-review-engine/package.json ./packages/certscore-review-engine/package.json

@@ -1,9 +1,5 @@
 [
   {
-    "name": "create_scan",
-    "description": "Deprecated compatibility alias of scan_site. Removed in 0.2.0. Use scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links."
-  },
-  {
     "name": "scan_site",
     "description": "Start or reuse a CertScore public-web scan for a public URL."
   },

@@ -129,6 +129,7 @@ import {
   buildRuntimeInventoryGroupRows,
   buildTrackerInventoryGroupRows,
   buildTrackerInventoryRows,
+  deriveInventoryMacroCategory,
   formatGroupedParty,
   getTrackerConsentReviewPriority,
   isCmpOrFunctionalVendorDomain,
@@ -649,11 +650,12 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
 
 function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
-    ["Type", "Vendor", "Category", "Priority", "First seen", "Domain", "Confidence", "Party", "Requests"],
+    ["Type", "Vendor", "Purpose", "Category", "Priority", "First seen", "Domain", "Confidence", "Party", "Requests"],
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
       row.purpose,
+      getRuntimeInventoryMacroCategory(row),
       CONSENT_REVIEW_PRIORITY_LABELS[row.priority],
       formatFirstSeenMs(row.firstSeenMs),
       row.domains.join(", ") || "—",
@@ -664,6 +666,14 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   ];
 
   return copyRows.map((row) => row.map(formatInventoryCellForCopy).join("\t")).join("\n");
+}
+
+function getRuntimeInventoryMacroCategory(row: InventoryGroupRow) {
+  return row.macroCategory ?? deriveInventoryMacroCategory({
+    priority: row.priority,
+    purpose: row.purpose,
+    vendor: row.vendor
+  });
 }
 
 function RuntimeInventoryTable({
@@ -698,18 +708,19 @@ function RuntimeInventoryTable({
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200 lg:h-[317px]">
             <div className="max-h-[340px] overflow-auto lg:h-full lg:max-h-none">
-            <table className="w-full min-w-[920px] table-fixed border-collapse text-left text-[13px]">
-              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.12em] text-slate-500">
+            <table className="w-full min-w-[1120px] table-fixed border-collapse text-left text-[13px]">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>
-                  <th className="w-[50px] border-b border-slate-200 px-2.5 py-2 font-semibold">Type</th>
-                  <th className="w-[180px] border-b border-slate-200 px-2.5 py-2 font-semibold">Vendor</th>
-                  <th className="w-[128px] border-b border-slate-200 px-2.5 py-2 font-semibold">Purpose</th>
-                  <th className="w-[112px] border-b border-slate-200 px-2.5 py-2 font-semibold">Priority</th>
-                  <th className="w-[94px] border-b border-slate-200 px-2.5 py-2 font-semibold">First seen</th>
-                  <th className="w-[190px] border-b border-slate-200 px-2.5 py-2 font-semibold">Domain</th>
-                  <th className="w-[88px] border-b border-slate-200 px-2.5 py-2 font-semibold">Confidence</th>
-                  <th className="w-[58px] border-b border-slate-200 px-2.5 py-2 font-semibold">Party</th>
-                  <th className="w-[60px] border-b border-slate-200 px-2.5 py-2 font-semibold">Req.</th>
+                  <th className="w-[50px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Type</th>
+                  <th className="w-[190px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Vendor</th>
+                  <th className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Purpose</th>
+                  <th className="w-[120px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Category</th>
+                  <th className="w-[130px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Priority</th>
+                  <th className="w-[98px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">First seen</th>
+                  <th className="w-[210px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Domain</th>
+                  <th className="w-[96px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Confidence</th>
+                  <th className="w-[64px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Party</th>
+                  <th className="w-[62px] whitespace-nowrap border-b border-slate-200 px-2.5 py-2 font-semibold">Req.</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
@@ -722,6 +733,7 @@ function RuntimeInventoryTable({
                       <InventoryVendorCell label={row.vendor} />
                     </td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">{row.purpose}</td>
+                    <td className="truncate whitespace-nowrap px-2.5 py-1.5">{getRuntimeInventoryMacroCategory(row)}</td>
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryPriorityCell
                         priority={row.priority}
@@ -738,7 +750,7 @@ function RuntimeInventoryTable({
                 ))}
                 {groupedInventoryRows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-5 text-center text-slate-500" colSpan={9}>No retained cookie or tracker rows for this scan.</td>
+                    <td className="px-3 py-5 text-center text-slate-500" colSpan={10}>No retained cookie or tracker rows for this scan.</td>
                   </tr>
                 ) : null}
               </tbody>

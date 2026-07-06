@@ -1412,6 +1412,15 @@ export function summarizePolicySurfaces(
     }),
     row
   }));
+  const gdprTransparencyTopicCandidates = article13Surfaces.flatMap((row) => {
+    const sourceUrl = row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url;
+    return (row.surface.gdprTransparencyTopicCandidates ?? []).map((candidate) => ({
+      ...candidate,
+      selectedPolicySectionExcerpt: candidate.evidenceText,
+      selectedPolicySectionUrl: sourceUrl,
+      surfaceUrl: sourceUrl
+    }));
+  }).slice(0, 40);
   const gdprTransparencyProductionEvidenceDiagnostics =
     gdprTransparencyAdapterDiagnostics(gdprTransparencyAdapterResults.map((row) => row.result));
   const gdprTransparencyAcceptedArticle13Signals = gdprTransparencyAdapterResults.flatMap(({ result }) =>
@@ -1537,6 +1546,8 @@ export function summarizePolicySurfaces(
     gdprTransparencyEvidenceProfile,
     gdprTransparencyProductionEvidenceDiagnostics,
     gdprTransparencyProductionEvidenceEnabled,
+    gdprTransparencyTopicCandidates,
+    gdpr_transparency_topic_candidates: gdprTransparencyTopicCandidates,
     retainedArticle13SectionEvidence,
     retainedPolicySections,
     mentionedControls,

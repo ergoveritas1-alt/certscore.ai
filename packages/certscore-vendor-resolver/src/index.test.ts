@@ -813,6 +813,171 @@ test("resolves security performance and support endpoints as non-tracker purpose
   );
 });
 
+test("resolves Fable Microsoft cookie aliases with host context", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "cookie",
+      cookieName: "MUID",
+      hostname: ".bing.com",
+    },
+    {
+      type: "cookie",
+      cookieName: "CLID",
+      hostname: ".clarity.ms",
+    },
+    {
+      type: "cookie",
+      cookieName: "MUID",
+      hostname: "example.com",
+    },
+  ]);
+
+  assertResolved(observations, "Microsoft", "Microsoft Advertising / Bing UET", "advertising");
+  assertResolved(observations, "Microsoft", "Microsoft Clarity", "session_replay");
+  assert.equal(
+    observations.some((item) =>
+      item.product === "Microsoft Advertising / Bing UET" &&
+      item.matchedHostnames.includes("example.com"),
+    ),
+    false,
+  );
+});
+
+test("reclassifies Fable security cookies as security infrastructure", () => {
+  const observations = resolveVendorObservations([
+    { type: "cookie", cookieName: "__cf_bm", hostname: ".linkedin.com" },
+    { type: "cookie", cookieName: "_cfuvid", hostname: ".theathletic.com" },
+    { type: "cookie", cookieName: "bm_sv", hostname: "example.com" },
+    { type: "cookie", cookieName: "datadome", hostname: ".taboola.com" },
+  ]);
+
+  assertResolved(observations, "Cloudflare", "Cloudflare Bot Management", "security");
+  assertResolved(observations, "Akamai", "Akamai Bot Manager / Edge", "security");
+  assertResolved(observations, "DataDome", "DataDome Bot Protection", "security");
+});
+
+test("resolves Fable functional CDN and consent-management host aliases", () => {
+  const observations = resolveVendorObservations([
+    request("https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js", "cdnjs.cloudflare.com"),
+    request("https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js", "cdn.datatables.net"),
+    request("https://code.jquery.com/jquery-3.7.1.min.js", "code.jquery.com"),
+    request("https://geolocation.onetrust.com/cookieconsentpub/v1/geo/location", "geolocation.onetrust.com"),
+    request("https://launchpad.privacymanager.io/latest/launchpad.js", "launchpad.privacymanager.io"),
+    request("https://vitals.vercel-insights.com/v1/vitals", "vitals.vercel-insights.com"),
+  ]);
+
+  assertResolved(observations, "Cloudflare", "cdnjs", "infrastructure");
+  assertResolved(observations, "DataTables", "DataTables CDN", "infrastructure");
+  assertResolved(observations, "jQuery", "jQuery CDN", "infrastructure");
+  assertResolved(observations, "OneTrust", "OneTrust CMP", "consent_management");
+  assertResolved(observations, "LiveRamp", "LiveRamp Privacy Manager", "consent_management");
+  assertResolved(observations, "Vercel", "Vercel Analytics", "analytics");
+});
+
+test("resolves Fable adtech and analytics host aliases", () => {
+  const observations = resolveVendorObservations([
+    request("https://ib.adnxs.com/getuid", "ib.adnxs.com"),
+    request("https://ad.turn.com/r/call", "ad.turn.com"),
+    request("https://prg.smartadserver.com/sync", "prg.smartadserver.com"),
+    { type: "cookie", cookieName: "sync_cookie_csrf", hostname: ".mc.yandex.com" },
+    request("https://hbxlp.media.net/pixel", "hbxlp.media.net"),
+    request("https://match.sharethrough.com/sync", "match.sharethrough.com"),
+    request("https://creativecdn.com/tags", "creativecdn.com"),
+    request("https://tr.blismedia.com/pixel", "tr.blismedia.com"),
+    request("https://ups.analytics.yahoo.com/ups/55912/sync", "ups.analytics.yahoo.com"),
+    request("https://ak.sail-horizon.com/spm/spm.v1.min.js", "ak.sail-horizon.com"),
+    request("https://www.lightboxcdn.com/creative.js", "www.lightboxcdn.com"),
+    request("https://c.tvpixel.com/pixel", "c.tvpixel.com"),
+    request("https://cd71891d94494d13b6b2adab650716f6.mediatailor.us-west-2.amazonaws.com/v1/manifest", "cd71891d94494d13b6b2adab650716f6.mediatailor.us-west-2.amazonaws.com"),
+    request("https://efcad85fded269f462c434c4c5f84654a17d4a77.cws.conviva.com/0/wsg", "efcad85fded269f462c434c4c5f84654a17d4a77.cws.conviva.com"),
+    request("https://jssdkcdns.mparticle.com/js/v2.js", "jssdkcdns.mparticle.com"),
+    request("https://experiments.parsely.com/exp.js", "experiments.parsely.com"),
+    request("https://static.chartbeat.com/js/chartbeat.js", "static.chartbeat.com"),
+    request("https://user-sync.fwmrm.net/sync", "user-sync.fwmrm.net"),
+    request("https://sync.bfmio.com/sync", "sync.bfmio.com"),
+  ]);
+
+  assertResolved(observations, "Xandr", "Xandr / AppNexus", "advertising");
+  assertResolved(observations, "Amobee", "Turn", "advertising");
+  assertResolved(observations, "Equativ", "Smart AdServer", "advertising");
+  assertResolved(observations, "Yandex", "Yandex Ads", "advertising");
+  assertResolved(observations, "Media.net", "Media.net", "advertising");
+  assertResolved(observations, "Sharethrough", "Sharethrough", "advertising");
+  assertResolved(observations, "RTB House", "RTB House", "advertising");
+  assertResolved(observations, "Blis", "Blis", "advertising");
+  assertResolved(observations, "Yahoo", "Yahoo Advertising", "advertising");
+  assertResolved(observations, "Sailthru", "Sailthru", "advertising");
+  assertResolved(observations, "Lightbox", "Lightbox", "advertising");
+  assertResolved(observations, "Innovid", "TV Pixel", "advertising");
+  assertResolved(observations, "AWS", "AWS MediaTailor", "advertising");
+  assertResolved(observations, "Conviva", "Conviva", "analytics");
+  assertResolved(observations, "mParticle", "mParticle", "analytics");
+  assertResolved(observations, "Parse.ly", "Parse.ly", "analytics");
+  assertResolved(observations, "Chartbeat", "Chartbeat", "analytics");
+  assertResolved(observations, "FreeWheel", "FreeWheel", "advertising");
+  assertResolved(observations, "Beachfront", "Beachfront", "advertising");
+});
+
+test("resolves extended Fable adtech host and cookie aliases", () => {
+  const observations = resolveVendorObservations([
+    request("https://tags.srv.stackadapt.com/events.js", "tags.srv.stackadapt.com"),
+    { type: "cookie", cookieName: "IQPData", hostname: ".intentiq.com" },
+    request("https://i.liadm.com/sync", "i.liadm.com"),
+    { type: "cookie", cookieName: "novauid", hostname: ".novatiq.com" },
+    request("https://sync.3lift.com/sync", "sync.3lift.com"),
+    request("https://live.rezync.com/sync", "live.rezync.com"),
+    request("https://bh.contextweb.com/pixel", "bh.contextweb.com"),
+    request("https://pixel-sync.sitescout.com/sync", "pixel-sync.sitescout.com"),
+    request("https://um.simpli.fi/sync", "um.simpli.fi"),
+    request("https://sync.go.sonobi.com/sync", "sync.go.sonobi.com"),
+    request("https://sync.teads.tv/sync", "sync.teads.tv"),
+    request("https://ads.yieldmo.com/pixel", "ads.yieldmo.com"),
+    request("https://static.ads-twitter.com/uwt.js", "static.ads-twitter.com"),
+  ]);
+
+  assertResolved(observations, "StackAdapt", "StackAdapt", "advertising");
+  assertResolved(observations, "Intent IQ", "Intent IQ", "advertising");
+  assertResolved(observations, "LiveIntent", "LiveIntent", "advertising");
+  assertResolved(observations, "Novatiq", "Novatiq", "advertising");
+  assertResolved(observations, "TripleLift", "TripleLift", "advertising");
+  assertResolved(observations, "Zeta Global", "Zeta Global / Rezync", "advertising");
+  assertResolved(observations, "PulsePoint", "PulsePoint / ContextWeb", "advertising");
+  assertResolved(observations, "SiteScout", "SiteScout", "advertising");
+  assertResolved(observations, "Simpli.fi", "Simpli.fi", "advertising");
+  assertResolved(observations, "Sonobi", "Sonobi", "advertising");
+  assertResolved(observations, "Teads", "Teads", "advertising");
+  assertResolved(observations, "Yieldmo", "Yieldmo", "advertising");
+  assertResolved(observations, "X", "Twitter / X Ads Pixel", "advertising");
+});
+
+test("resolves extended Fable functional asset and support host aliases", () => {
+  const observations = resolveVendorObservations([
+    request("https://widgets.media.sportradar.com/widget.js", "widgets.media.sportradar.com"),
+    request("https://embed.trustmary.com/widget.js", "embed.trustmary.com"),
+    request("https://use.typekit.net/abc.css", "use.typekit.net"),
+    request("https://kit.fontawesome.com/abc.js", "kit.fontawesome.com"),
+    request("https://maps.googleapis.com/maps/api/js", "maps.googleapis.com"),
+    request("https://player.vimeo.com/video/123", "player.vimeo.com"),
+    request("https://cdn.jwplayer.com/libraries/player.js", "cdn.jwplayer.com"),
+    request("https://a40.usablenet.com/pt/accessibility.js", "a40.usablenet.com"),
+    request("https://images.ctfassets.net/image.png", "images.ctfassets.net"),
+    request("https://d15kdpgjg3unno.cloudfront.net/app.js", "d15kdpgjg3unno.cloudfront.net"),
+    request("https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js", "ajax.googleapis.com"),
+  ]);
+
+  assertResolved(observations, "Sportradar", "Sportradar Widgets", "infrastructure");
+  assertResolved(observations, "Trustmary", "Trustmary Reviews Widget", "customer_support");
+  assertResolved(observations, "Adobe", "Adobe Fonts / Typekit", "infrastructure");
+  assertResolved(observations, "Font Awesome", "Font Awesome Kit", "infrastructure");
+  assertResolved(observations, "Google", "Google Maps / Places", "infrastructure");
+  assertResolved(observations, "Vimeo", "Vimeo Player", "infrastructure");
+  assertResolved(observations, "JW Player", "JW Player", "infrastructure");
+  assertResolved(observations, "UsableNet", "UsableNet Accessibility", "infrastructure");
+  assertResolved(observations, "Contentful", "Contentful Assets", "infrastructure");
+  assertResolved(observations, "AWS", "CloudFront Distribution", "infrastructure");
+  assertResolved(observations, "Google", "Google Hosted Libraries", "infrastructure");
+});
+
 test("does not turn generic static or low-confidence endpoints into vendor observations", () => {
   const observations = resolveVendorObservations([
     request("https://static.examplecdn.com/app.js", "static.examplecdn.com"),

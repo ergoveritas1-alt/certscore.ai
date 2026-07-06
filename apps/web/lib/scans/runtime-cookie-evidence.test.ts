@@ -37,6 +37,18 @@ test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("QSI_ReplaySession_Info_ZN_abc", ".qualtrics.com"), "session_replay");
 });
 
+test("applies Fable cookie category hints with contextual host exceptions", () => {
+  assert.equal(classifyRuntimeCookieCategory("sa-user-id-v3", ".srv.stackadapt.com"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("IQPData", ".intentiq.com"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("receive-cookie-deprecation", ".rubiconproject.com"), "functional");
+  assert.equal(classifyRuntimeCookieCategory("geo_postcode", "www.adidas.com"), "geolocation");
+  assert.equal(classifyRuntimeCookieCategory("gpp-string", ".nytimes.com"), "privacy_preference");
+  assert.equal(classifyRuntimeCookieCategory("MUID", ".bing.com"), "advertising");
+  assert.equal(classifyRuntimeCookieCategory("MUID", ".clarity.ms"), "analytics");
+  assert.equal(classifyRuntimeCookieCategory("UID", ".scorecardresearch.com"), "analytics");
+  assert.equal(classifyRuntimeCookieCategory("UID", ".doubleclick.net"), "advertising");
+});
+
 test("filters consent security and infrastructure cookies from tracking evidence", () => {
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("OptanonConsent", ".webmd.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("OptanonAlertBoxClosed", ".webmd.com"), true);
@@ -52,6 +64,54 @@ test("filters consent security and infrastructure cookies from tracking evidence
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("BIGipServerpool", ".example.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("akaalb_usp-google", "www.sbtech.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("_ga", ".example.com"), false);
+});
+
+test("uses Fable low and exempt cookie suggestions as contextual inventory", () => {
+  const groups = buildRuntimeCookiePriorityGroups([
+    {
+      category: classifyRuntimeCookieCategory("geo_postcode", "www.adidas.com"),
+      cookieName: "geo_postcode",
+      domain: "www.adidas.com",
+      evidenceGrade: "high",
+      firstObservedAtMs: 50,
+      initiatorDomain: null,
+      initiatorUrl: null,
+      initiatorVendor: null,
+      nonEssential: false,
+      party: "first_party",
+      responseUrl: null,
+      setAtMs: 50,
+      setMethod: "browser_snapshot",
+      sourceRequestUrl: null,
+      timingBasis: "browser_snapshot",
+      timingEvidence: "before_consent_cookie_write"
+    },
+    {
+      category: classifyRuntimeCookieCategory("sa-user-id-v3", ".srv.stackadapt.com"),
+      cookieName: "sa-user-id-v3",
+      domain: ".srv.stackadapt.com",
+      evidenceGrade: "high",
+      firstObservedAtMs: 75,
+      initiatorDomain: null,
+      initiatorUrl: null,
+      initiatorVendor: null,
+      nonEssential: true,
+      party: "third_party",
+      responseUrl: null,
+      setAtMs: 75,
+      setMethod: "browser_snapshot",
+      sourceRequestUrl: null,
+      timingBasis: "browser_snapshot",
+      timingEvidence: "before_consent_cookie_write"
+    }
+  ]);
+
+  const adidas = groups.find((row) => row.vendor === "Adidas");
+  const stackAdapt = groups.find((row) => row.vendor === "StackAdapt");
+  assert.equal(adidas?.purpose, "Functional");
+  assert.equal(adidas?.priority, "contextual");
+  assert.equal(stackAdapt?.purpose, "Advertising");
+  assert.equal(stackAdapt?.priority, "high");
 });
 
 test("rates pre-consent tag-management and marketing-automation cookies as medium priority", () => {
@@ -122,7 +182,7 @@ test("groups NVIDIA region and Akamai bot cookies as contextual inventory", () =
     }
   });
   const groups = buildRuntimeCookiePriorityGroups(inventory.rows);
-  const regionCookie = groups.find((row) => row.vendor === "nvidia.com");
+  const regionCookie = groups.find((row) => row.vendor === "NVIDIA");
   const akamaiCookie = groups.find((row) => row.vendor === "Akamai Bot Manager / Edge");
 
   assert.equal(regionCookie?.purpose, "Functional");

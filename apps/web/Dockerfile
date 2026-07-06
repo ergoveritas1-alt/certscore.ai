@@ -22,6 +22,7 @@ COPY apps/validation-worker/package.json ./apps/validation-worker/package.json
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/certscore-api-contracts/package.json ./packages/certscore-api-contracts/package.json
 COPY packages/certscore-contracts/package.json ./packages/certscore-contracts/package.json
+COPY packages/certscore-mcp-auth/package.json ./packages/certscore-mcp-auth/package.json
 COPY packages/certscore-mcp/package.json ./packages/certscore-mcp/package.json
 COPY packages/certscore-report-adapter/package.json ./packages/certscore-report-adapter/package.json
 COPY packages/certscore-review-engine/package.json ./packages/certscore-review-engine/package.json
@@ -47,6 +48,7 @@ COPY packages/db ./packages/db
 COPY packages/validation-shared ./packages/validation-shared
 COPY packages/certscore-api-contracts ./packages/certscore-api-contracts
 COPY packages/certscore-contracts ./packages/certscore-contracts
+COPY packages/certscore-mcp-auth ./packages/certscore-mcp-auth
 COPY packages/certscore-vendor-resolver ./packages/certscore-vendor-resolver
 COPY scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
 COPY scripts/insert-integration-api-key.mjs ./scripts/insert-integration-api-key.mjs
@@ -65,6 +67,7 @@ RUN rm -rf \
   ./packages/validation-shared/dist \
   ./packages/certscore-api-contracts/dist \
   ./packages/certscore-contracts/dist \
+  ./packages/certscore-mcp-auth/dist \
   ./packages/certscore-vendor-resolver/dist
 
 RUN pnpm --filter @website-signal-risk-scanner/shared build
@@ -73,6 +76,7 @@ RUN pnpm --filter @website-signal-risk-scanner/db build
 RUN pnpm --filter @website-signal-risk-scanner/validation-shared build
 RUN pnpm --filter @certscore/api-contracts build
 RUN pnpm --filter @certscore/contracts build
+RUN pnpm --filter @certscore/mcp-auth build
 RUN pnpm --filter @certscore/vendor-resolver build
 RUN pnpm --filter @website-signal-risk-scanner/web build
 
@@ -102,6 +106,8 @@ COPY --from=builder /app/packages/certscore-api-contracts/package.json ./package
 COPY --from=builder /app/packages/certscore-api-contracts/dist ./packages/certscore-api-contracts/dist
 COPY --from=builder /app/packages/certscore-contracts/package.json ./packages/certscore-contracts/package.json
 COPY --from=builder /app/packages/certscore-contracts/dist ./packages/certscore-contracts/dist
+COPY --from=builder /app/packages/certscore-mcp-auth/package.json ./packages/certscore-mcp-auth/package.json
+COPY --from=builder /app/packages/certscore-mcp-auth/dist ./packages/certscore-mcp-auth/dist
 COPY --from=builder /app/packages/certscore-vendor-resolver/package.json ./packages/certscore-vendor-resolver/package.json
 COPY --from=builder /app/packages/certscore-vendor-resolver/dist ./packages/certscore-vendor-resolver/dist
 COPY --from=builder /app/scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
@@ -118,6 +124,7 @@ RUN mkdir -p /app/runtime-node_modules \
 RUN mkdir -p /app/node_modules/@certscore \
   && ln -sfn ../../packages/certscore-api-contracts /app/node_modules/@certscore/api-contracts \
   && ln -sfn ../../packages/certscore-contracts /app/node_modules/@certscore/contracts \
+  && ln -sfn ../../packages/certscore-mcp-auth /app/node_modules/@certscore/mcp-auth \
   && ln -sfn ../../packages/certscore-vendor-resolver /app/node_modules/@certscore/vendor-resolver
 
 EXPOSE 3000

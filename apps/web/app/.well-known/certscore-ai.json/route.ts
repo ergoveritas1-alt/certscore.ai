@@ -77,6 +77,14 @@ const discoveryDocument = {
     packageStatus: "homebrew_developer_preview",
     currentVersion: "0.1.5",
     docs: "https://certscore.ai/developers/mcp",
+    remote: {
+      endpoint: "https://mcp.certscore.ai/mcp",
+      transport: "streamable_http",
+      oauthIssuer: "https://certscore.ai",
+      authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
+      protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
+      approvalStatus: "not_claimed"
+    },
     repositoryPath: "packages/certscore-mcp",
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
     verify: ["certscore-mcp --version", "certscore-mcp --help", "CERTSCORE_API_KEY=<token> certscore-mcp doctor"],

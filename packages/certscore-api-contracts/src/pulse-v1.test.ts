@@ -73,7 +73,6 @@ test("MCP contracts expose the current scoped tool surface", () => {
   assert.deepEqual(
     certScoreMcpToolContracts.map((tool) => tool.name).sort(),
     [
-      "create_scan",
       "explain_finding",
       "export_findings",
       "get_evidence",
@@ -87,7 +86,8 @@ test("MCP contracts expose the current scoped tool surface", () => {
       "scan_site"
     ]
   );
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.inputSchema.url);
+  assert.equal(certScoreMcpToolContracts.some((tool) => tool.name === "create_scan"), false);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema.url);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_evidence")?.inputSchema.scanId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.inputSchema.findingId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_latest_domain_scan")?.inputSchema.domain);
@@ -101,7 +101,6 @@ test("MCP contracts expose the current scoped tool surface", () => {
     readOnlyHint: true,
     openWorldHint: true
   });
-  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.description.includes("Deprecated compatibility alias"), true);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "list_findings")?.inputSchema.limit);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_pre_consent_cookies_trackers")?.inputSchema.maxRows);
 });

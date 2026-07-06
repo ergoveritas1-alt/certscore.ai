@@ -19,7 +19,23 @@ export default function DeveloperMcpPage() {
   return (
     <DeveloperShell activePath="/developers/mcp" title="MCP server" description={description}>
       <div className="space-y-12">
-        <Section eyebrow="External users" title="Current MCP access">
+        <Section eyebrow="Remote server" title="Streamable HTTP endpoint">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            CertScore provides a remote MCP endpoint at <code className="rounded bg-white px-1">https://mcp.certscore.ai/mcp</code>.
+            Remote clients authenticate through OAuth with PKCE. The endpoint exposes the same tool surface as the local stdio server.
+            Read tools use OAuth by default; scan creation still requires the separate scan-creation scope and may remain support-gated.
+          </p>
+          <CodeBlock>{`MCP endpoint: https://mcp.certscore.ai/mcp
+OAuth issuer: https://certscore.ai
+Authorization metadata: https://certscore.ai/.well-known/oauth-authorization-server
+Protected resource metadata: https://mcp.certscore.ai/.well-known/oauth-protected-resource`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Remote sessions are in-memory and expire after the configured service TTL. CertScore does not claim Anthropic directory
+            approval or connector listing status until that review is complete.
+          </p>
+        </Section>
+
+        <Section eyebrow="External users" title="Local stdio access">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             The MCP server is distributed as a Homebrew-installable developer preview for macOS MCP clients. Install the
             <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">certscore-mcp</code> command before connecting Claude Desktop,
@@ -118,6 +134,35 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
           <CodeBlock>{`CERTSCORE_API_KEY=<token> pnpm mcp:certscore`}</CodeBlock>
         </Section>
 
+        <Section eyebrow="Local development" title="Run the remote MCP service from this repo">
+          <CodeBlock>{`CERTSCORE_OAUTH_JWT_SECRET=<shared-secret> pnpm mcp:certscore:http`}</CodeBlock>
+        </Section>
+
+        <Section eyebrow="Predeploy" title="Verify remote readiness">
+          <CodeBlock>{`CERTSCORE_OAUTH_JWT_SECRET=<shared-secret> \
+MCP_PUBLIC_URL=https://mcp.certscore.ai \
+OAUTH_ISSUER=https://certscore.ai \
+CERTSCORE_MCP_HTTP_BEARER_TOKEN=<oauth-access-token> \
+pnpm ops:check:mcp-http-deploy -- --live
+
+CERTSCORE_MCP_HTTP_BEARER_TOKEN=<oauth-access-token> \
+pnpm mcp:certscore:http:tools-diff -- --mcp-url=https://mcp.certscore.ai/mcp`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            For connector-directory review, run the readiness check with <code className="rounded bg-white px-1">--require-scan-create</code>{" "}
+            using an OAuth token minted by the production reviewer/test account after an active scan-create grant has been added. The
+            tools-diff check compares the deployed Streamable HTTP tool list against the local stdio server schemas and annotations.
+          </p>
+        </Section>
+
+        <Section eyebrow="Security" title="OAuth launch notes">
+          <ul className="max-w-3xl list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
+            <li>Production access tokens are signed with a shared HS256 secret held only by the web app and MCP HTTP service.</li>
+            <li>Revoking a scan-create grant blocks the next authorization or refresh; already-issued access tokens may carry the scope for up to one hour.</li>
+            <li>Dynamic client registration is per-IP rate limited, and unused clients with no codes or refresh tokens are cleaned up after 30 days.</li>
+            <li>Refresh tokens rotate on every use; reuse of an already-rotated token revokes the refresh-token family.</li>
+          </ul>
+        </Section>
+
         <Section eyebrow="Claude Desktop" title="Installed command config">
           <CodeBlock>{`{
   "mcpServers": {
@@ -206,11 +251,10 @@ get_latest_domain_pre_consent_cookies_trackers({
           </p>
         </Section>
 
-        <Section eyebrow="Deprecation" title="create_scan removal">
+        <Section eyebrow="Compatibility" title="create_scan removed">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            <code className="rounded bg-white px-1">create_scan</code> is a deprecated compatibility alias. It will be removed in{" "}
-            <code className="rounded bg-white px-1">0.2.0</code>. Use <code className="rounded bg-white px-1">scan_site</code> for
-            scan creation.
+            <code className="rounded bg-white px-1">create_scan</code> was a deprecated compatibility alias and is no longer advertised.
+            Use <code className="rounded bg-white px-1">scan_site</code> for scan creation.
           </p>
         </Section>
       </div>
