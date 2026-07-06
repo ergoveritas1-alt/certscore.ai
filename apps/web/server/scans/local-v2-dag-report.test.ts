@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
+import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 import type { ScanDetailResponse } from "./get-scan-by-id";
@@ -3104,6 +3105,178 @@ test("materializeLocalV2DagScanDetail keeps missing reject actionable when runti
     assert.equal(rejectPath?.assessmentStatus, "review_signal");
     assert.notEqual(rejectPath?.evidenceState, "not_testable");
     assert.match(rejectPath?.limitation ?? "", /partial concern/i);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail marks artifact-only consent and policy budget gaps as coverage limited", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/coverage-limited-"));
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), `${JSON.stringify({
+      completedAt: "2026-07-06T00:08:40.000Z",
+      consentUiObservations: [
+        {
+          acceptControlObserved: false,
+          basis: ["bounded_capture_timeout_or_failure"],
+          confidence: 0,
+          controls: [],
+          likelyPresent: false,
+          managePreferencesControlObserved: false,
+          observationId: "consent_ui_pre_consent",
+          rejectControlObserved: false,
+          textExcerpt: "",
+          visibleChoiceLabels: []
+        }
+      ],
+      cookieEvents: [],
+      modulesRun: [
+        {
+          moduleId: "preConsentRuntimeScanner",
+          status: "completed",
+          timingBreakdown: [
+            {
+              durationMs: 0,
+              label: "consent control geometry diagnostic skipped",
+              detail: "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted."
+            }
+          ]
+        },
+        {
+          moduleId: "policySurfaceScanner",
+          status: "completed",
+          timingBreakdown: [
+            {
+              durationMs: 37337,
+              label: "rendered policy discovery"
+            }
+          ]
+        }
+      ],
+      networkEvents: [
+        {
+          consentStateAtTime: "pre_consent",
+          hostname: "pagead2.googlesyndication.com",
+          isThirdParty: true,
+          thirdParty: true,
+          timestampMs: 9380,
+          url: "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"
+        }
+      ],
+      normalizedUrl: "https://lefigaro.fr/",
+      normalizedVendorObservations: [
+        {
+          category: "advertising",
+          confidence: 0.92,
+          displayName: "Google AdSense",
+          hostname: "pagead2.googlesyndication.com",
+          observedVia: ["network_request"],
+          vendorName: "Google AdSense"
+        }
+      ],
+      policySurfaceObservations: [
+        {
+          confidence: 0.91,
+          normalizedUrl: "https://mentions-legales.lefigaro.fr/page/politique-de-confidentialite",
+          observationId: "policy-privacy",
+          surfaceType: "privacy_policy",
+          status: "skipped_budget",
+          url: "https://mentions-legales.lefigaro.fr/page/politique-de-confidentialite"
+        }
+      ],
+      runtimeCoverage: {
+        coverageStatus: "usable",
+        fallbackModesUsed: [],
+        limitationKeys: [],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 1,
+          normalizedVendors: 1,
+          thirdPartyRequests: 1
+        },
+        silentEmpty: false
+      },
+      scanId: "lefigaro-budget-fixture",
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [
+        {
+          artifactId: "screenshot_pre_consent",
+          capturedAtMs: 900,
+          consentStateAtTime: "pre_consent",
+          pagePhase: "domcontentloaded",
+          path: "/tmp/certscore-v2/lefigaro-budget-fixture/screenshot-pre-consent.png",
+          url: "https://lefigaro.fr/"
+        }
+      ],
+      startedAt: "2026-07-06T00:08:00.000Z",
+      url: "https://lefigaro.fr/"
+    }, null, 2)}\n`, "utf8");
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "lefigaro.fr",
+        scanConfigJson: {
+          hostname: "lefigaro.fr",
+          normalizedUrl: "https://lefigaro.fr/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }));
+
+    assert.equal(detail.runtimeArtifacts?.runtime_counts_retained, true);
+    assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_partial");
+    assert.equal(detail.snapshot?.coverage_level, "limited_partial");
+    assert.equal(detail.snapshot?.scan_outcome, "content_capture_degraded");
+    assert.deepEqual(
+      detail.snapshot?.runtime_limitation_keys,
+      [
+        "consent_ui_capture_timed_out",
+        "consent_control_geometry_skipped_budget",
+        "policy_surface_skipped_budget",
+        "privacy_policy_skipped_budget",
+        "v2_artifact_only_production_rows_empty"
+      ]
+    );
+
+    const runtimeCoverage = detail.runtimeArtifacts?.runtimeCoverage as Record<string, unknown> | undefined;
+    assert.equal(runtimeCoverage?.coverageStatus, "limited_partial");
+    assert.deepEqual(runtimeCoverage?.limitationKeys, detail.snapshot?.runtime_limitation_keys);
+
+    const policySummary = detail.runtimeArtifacts?.policyDisclosureSummary as Record<string, unknown> | undefined;
+    const policyHealth = policySummary?.policyTextExtractionHealth as Record<string, unknown> | undefined;
+    assert.equal(policyHealth?.policySurfaceObserved, true);
+    assert.equal(policyHealth?.policyTextExtractionStatus, "skipped_budget");
+    assert.equal(policyHealth?.extractionFailureReason, "privacy_policy_surface_budget_exhausted");
+
+    const concerns = buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts: detail.runtimeArtifacts,
+      validationFindings: []
+    });
+    const coverageConcern = concerns.find((concern) =>
+      concern.originKey === "scan_quality.runtime_coverage.limited_partial"
+    );
+    assert.ok(coverageConcern);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

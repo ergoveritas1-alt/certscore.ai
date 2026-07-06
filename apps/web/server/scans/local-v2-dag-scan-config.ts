@@ -22,7 +22,7 @@ export type LocalV2DagLambdaDebugOverrides = {
 
 export const LOCAL_V2_DAG_LAMBDA_CONSERVATIVE_PRECONSENT_DEFAULTS = {
   scenarioConcurrency: 1,
-  scenarioResourceMode: "cmp_safe"
+  scenarioResourceMode: "normal"
 } satisfies LocalV2DagLambdaDebugOverrides;
 
 export type LocalV2DagScanEnv = {

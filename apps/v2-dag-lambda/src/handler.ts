@@ -552,8 +552,8 @@ async function runLocalV2DagLambdaScanBundle(
   return timeLambdaPhase(options.phaseTimings, phaseLabel(options.phaseLabelPrefix, "scan"), () => runScan({
     browserReuseMode: "per_module",
     outDir: options.artifactRoot,
-    policyOutputGraceMs: 1_000,
-    policyPlanningDeadlineMs: 1_500,
+    policyOutputGraceMs: 5_000,
+    policyPlanningDeadlineMs: 3_000,
     postConsentFlowsEnabled: false,
     preConsentScreenshotMode: options.preConsentScreenshotMode,
     preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
@@ -1340,7 +1340,7 @@ function scenarioResourceModeEnv(value: string | undefined): "normal" | "lean" |
   if (value === "normal" || value === "lean" || value === "cmp_safe") {
     return value;
   }
-  return "cmp_safe";
+  return "normal";
 }
 
 function consentFlowScreenshotModeEnv(value: string | undefined): "auto" | "none" {

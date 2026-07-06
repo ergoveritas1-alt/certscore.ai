@@ -200,7 +200,7 @@ async function main() {
     process.env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS = String(LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_SCREENSHOT_TIMEOUT_MS);
     process.env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS = String(LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS);
     process.env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY = "1";
-    process.env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE = "cmp_safe";
+    process.env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE = "normal";
 
     const payload = {
       artifactOnly: true,
@@ -399,7 +399,7 @@ function parseArgs(argv: string[]): Args {
       oneTrustHiddenActionMode: "diagnostic",
       preActionObservationMs: 5000,
       scenarioConcurrency: 1,
-      scenarioResourceMode: "cmp_safe",
+      scenarioResourceMode: "normal",
       strongEvidenceMode: "webmd"
     },
     functionName: "certscore-v2-dag-local-lambda",

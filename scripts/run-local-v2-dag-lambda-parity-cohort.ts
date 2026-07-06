@@ -1280,7 +1280,7 @@ function defaultLocalLambdaParityDebugOverrides() {
     oneTrustHiddenActionMode: "diagnostic",
     preActionObservationMs: 5000,
     scenarioConcurrency: 1,
-    scenarioResourceMode: "cmp_safe",
+    scenarioResourceMode: "normal",
     strongEvidenceMode: "webmd",
   };
 }

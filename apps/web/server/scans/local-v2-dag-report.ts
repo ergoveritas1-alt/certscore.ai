@@ -1353,6 +1353,7 @@ export function summarizePolicySurfaces(
   rootDomain: string | null,
   options: {
     gdprTransparencyEvidenceProfile?: GdprTransparencyProductionEvidenceProfile | string | null;
+    rawPolicySurfaces?: readonly LocalV2PolicySurface[];
   } = {}
 ) {
   const gdprTransparencyEvidenceProfile = normalizeGdprTransparencyProductionEvidenceProfile(
@@ -1362,6 +1363,9 @@ export function summarizePolicySurfaces(
     gdprTransparencyProductionEvidenceProfileEnabled(gdprTransparencyEvidenceProfile);
   const privacySurfaces = policySurfaces.filter((row) => row.surface.surfaceType === "privacy_policy");
   const article13Surfaces = privacySurfaces.filter((row) => !isGenericThirdPartyPrivacySurface(row, rootDomain));
+  const rawArticle13Surfaces = (options.rawPolicySurfaces ?? []).filter((surface) =>
+    surface.surfaceType === "privacy_policy"
+  );
   const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
   const policyTextQuality = assessRetainedPolicyTextQuality(text);
   const gdprTransparencyPolicyTextQuality = gdprTransparencyProductionEvidenceEnabled
@@ -1469,7 +1473,12 @@ export function summarizePolicySurfaces(
   ].slice(0, 40);
   const mentionedControls = uniqueStrings(policySurfaces.flatMap((row) => row.surface.mentionedControls ?? []));
   const processingErrorObserved = /processing error|privacy center.*error/i.test(text);
-  const policyTextExtractionHealth = buildPolicyTextExtractionHealth(article13Surfaces, text, processingErrorObserved);
+  const policyTextExtractionHealth = buildPolicyTextExtractionHealth(
+    article13Surfaces,
+    text,
+    processingErrorObserved,
+    rawArticle13Surfaces
+  );
   const retainedPolicySections = article13Surfaces.flatMap((row) =>
     (row.surface.retainedPolicySections ?? []).map((section) => ({
       charEnd: section.charEnd,
@@ -1578,18 +1587,28 @@ function buildRetainedPolicyDisclosureText(text: string) {
 function buildPolicyTextExtractionHealth(
   article13Surfaces: ReturnType<typeof dedupePolicySurfaces>,
   text: string,
-  processingErrorObserved: boolean
+  processingErrorObserved: boolean,
+  rawArticle13Surfaces: readonly LocalV2PolicySurface[] = []
 ) {
-  const policySurfaceObserved = article13Surfaces.length > 0;
-  const policyUrls = uniqueStrings(article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url));
+  const policySurfaceObserved = article13Surfaces.length > 0 || rawArticle13Surfaces.length > 0;
+  const policyUrls = uniqueStrings([
+    ...article13Surfaces.map((row) => row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url),
+    ...rawArticle13Surfaces.map((surface) => surface.normalizedUrl ?? surface.url)
+  ]);
   const extractedTextLength = text.length;
-  const statusValues = article13Surfaces.map((row) => row.surface.status);
+  const statusValues = [
+    ...article13Surfaces.map((row) => row.surface.status),
+    ...rawArticle13Surfaces.map((surface) => surface.status)
+  ];
   const nanoInvoked = article13Surfaces.some((row) =>
     (row.surface.assistMetadata ?? []).some((metadata) => metadata.modelAssistProvider === "nano")
   );
   const hasFailedSurface = statusValues.some((status) => status === "failed");
+  const hasSkippedBudgetSurface = statusValues.some((status) => status === "skipped_budget");
   const hasBlockedSurface = article13Surfaces.some((row) =>
     row.surface.fetchable === false || row.surface.httpStatus === 401 || row.surface.httpStatus === 403 || row.surface.httpStatus === 429
+  ) || rawArticle13Surfaces.some((surface) =>
+    surface.fetchable === false || surface.httpStatus === 401 || surface.httpStatus === 403 || surface.httpStatus === 429
   );
   const textQuality = assessRetainedPolicyTextQuality(text);
   const policyTextExtractionStatus =
@@ -1597,13 +1616,15 @@ function buildPolicyTextExtractionHealth(
       ? "not_attempted"
       : processingErrorObserved || hasFailedSurface
         ? "errored"
-        : hasBlockedSurface
-          ? "blocked"
-          : !textQuality.usable
-            ? "low_quality_extracted_code_or_config"
-          : extractedTextLength >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
-            ? "ok"
-            : "thin";
+        : hasSkippedBudgetSurface
+          ? "skipped_budget"
+          : hasBlockedSurface
+            ? "blocked"
+            : !textQuality.usable
+              ? "low_quality_extracted_code_or_config"
+            : extractedTextLength >= MIN_PRIVACY_POLICY_TEXT_CHARS_FOR_ARTICLE13
+              ? "ok"
+              : "thin";
   const extractionFailureReason =
     policyTextExtractionStatus === "ok"
       ? undefined
@@ -1611,11 +1632,13 @@ function buildPolicyTextExtractionHealth(
         ? "privacy_policy_surface_not_observed"
         : policyTextExtractionStatus === "blocked"
           ? "privacy_policy_fetch_blocked"
-          : policyTextExtractionStatus === "errored"
-            ? "privacy_policy_text_processing_error"
-            : policyTextExtractionStatus === "low_quality_extracted_code_or_config"
-              ? "privacy_policy_text_low_quality_or_non_policy_content"
-              : "privacy_policy_text_below_minimum_length";
+          : policyTextExtractionStatus === "skipped_budget"
+            ? "privacy_policy_surface_budget_exhausted"
+            : policyTextExtractionStatus === "errored"
+              ? "privacy_policy_text_processing_error"
+              : policyTextExtractionStatus === "low_quality_extracted_code_or_config"
+                ? "privacy_policy_text_low_quality_or_non_policy_content"
+                : "privacy_policy_text_below_minimum_length";
 
   return {
     extractedTextLength,
@@ -1958,6 +1981,70 @@ function summarizeConsentDefaultToggleEvidence(observation: CanonicalEvidenceBun
       : 0,
     precheckedOptionalPurposeLabels: uniqueStrings(getStringArray(observation?.precheckedOptionalPurposeLabels)).slice(0, 10)
   };
+}
+
+function moduleTimingBreakdown(bundle: CanonicalEvidenceBundle) {
+  return (bundle.modulesRun ?? []).flatMap((moduleRun) => moduleRun.timingBreakdown ?? []);
+}
+
+function moduleTimingTextIncludes(bundle: CanonicalEvidenceBundle, pattern: RegExp) {
+  return moduleTimingBreakdown(bundle).some((timing) =>
+    pattern.test(`${timing.label ?? ""} ${timing.detail ?? ""}`)
+  );
+}
+
+function v2ArtifactOnlyProductionRowsWereEmpty(scanRecord: ScanDetailResponse) {
+  return (
+    scanRecord.signals.length === 0 &&
+    scanRecord.trackerVendors.length === 0 &&
+    scanRecord.preconsentViolations.length === 0 &&
+    scanRecord.policyEnrichment.length === 0 &&
+    Object.keys(scanRecord.runtimeArtifacts ?? {}).length === 0 &&
+    Object.keys(scanRecord.snapshot ?? {}).length === 0
+  );
+}
+
+function buildLocalV2EvidenceQualityLimitationKeys(input: {
+  bundle: CanonicalEvidenceBundle;
+  firstLayerConsentControlInventoryRetained: boolean;
+  policySurfaces: ReturnType<typeof dedupePolicySurfaces>;
+  scanRecord: ScanDetailResponse;
+}) {
+  const consentTimedOutWithoutControls = (input.bundle.consentUiObservations ?? []).some((observation) =>
+    observation.likelyPresent === false &&
+    getStringArray(observation.basis).includes("bounded_capture_timeout_or_failure") &&
+    (observation.controls ?? []).length === 0 &&
+    (observation.visibleChoiceLabels ?? []).length === 0
+  );
+  const geometrySkippedBudget = moduleTimingTextIncludes(
+    input.bundle,
+    /consent control geometry diagnostic skipped|pre-consent module budget was exhausted/i
+  );
+  const policySkippedBudget = input.policySurfaces.some((row) => row.surface.status === "skipped_budget") ||
+    (input.bundle.policySurfaceObservations ?? []).some((surface) => surface.status === "skipped_budget");
+  const privacyPolicySkippedBudget = (input.bundle.policySurfaceObservations ?? []).some((surface) =>
+    surface.surfaceType === "privacy_policy" && surface.status === "skipped_budget"
+  );
+  const runtimeFailed = (input.bundle.runtimeCoverage?.limitationKeys ?? []).includes("pre_consent_runtime_failed");
+  const artifactSignalsRetained =
+    (input.bundle.networkEvents ?? []).length > 0 ||
+    (input.bundle.cookieEvents ?? []).length > 0 ||
+    (input.bundle.normalizedVendorObservations ?? []).length > 0 ||
+    (input.bundle.policySurfaceObservations ?? []).length > 0;
+
+  return uniqueStrings([
+    consentTimedOutWithoutControls && !input.firstLayerConsentControlInventoryRetained
+      ? "consent_ui_capture_timed_out"
+      : null,
+    geometrySkippedBudget && !input.firstLayerConsentControlInventoryRetained
+      ? "consent_control_geometry_skipped_budget"
+      : null,
+    policySkippedBudget ? "policy_surface_skipped_budget" : null,
+    privacyPolicySkippedBudget ? "privacy_policy_skipped_budget" : null,
+    !runtimeFailed && artifactSignalsRetained && v2ArtifactOnlyProductionRowsWereEmpty(input.scanRecord)
+      ? "v2_artifact_only_production_rows_empty"
+      : null
+  ]);
 }
 
 function summarizeFirstLayerConsentChoices(
@@ -2331,8 +2418,25 @@ function buildMaterializedLocalV2Detail(
     options.gdprTransparencyEvidenceProfile
   );
   const policySurfaceSummary = summarizePolicySurfaces(policySurfaces, rootDomain, {
-    gdprTransparencyEvidenceProfile
+    gdprTransparencyEvidenceProfile,
+    rawPolicySurfaces: bundle.policySurfaceObservations ?? []
   });
+  const evidenceQualityLimitationKeys = buildLocalV2EvidenceQualityLimitationKeys({
+    bundle,
+    firstLayerConsentControlInventoryRetained,
+    policySurfaces,
+    scanRecord
+  });
+  const evidenceQualityLimited = !localV2NoGo && evidenceQualityLimitationKeys.length > 0;
+  const materializedRuntimeCoverageStatus = localV2NoGo
+    ? "limited_none"
+    : evidenceQualityLimited
+      ? "limited_partial"
+      : effectiveRuntimeCoverageStatus;
+  const materializedRuntimeLimitationKeys = uniqueStrings([
+    ...effectiveRuntimeLimitationKeys,
+    ...evidenceQualityLimitationKeys
+  ]);
   const collectionSurfaceSummary = summarizeCollectionSurfaces(bundle);
   const transportSecuritySummary = summarizeTransportSecurity(bundle);
   const privacySurface = policySurfaces.find((row) => row.surface.surfaceType === "privacy_policy");
@@ -2353,6 +2457,26 @@ function buildMaterializedLocalV2Detail(
     counts[vendor.vendorCategory] = (counts[vendor.vendorCategory] ?? 0) + 1;
     return counts;
   }, {});
+  const materializedRuntimeCoverage = {
+    ...(bundle.runtimeCoverage ?? {}),
+    artifactOnly: true,
+    coverageStatus: materializedRuntimeCoverageStatus,
+    limitationKeys: materializedRuntimeLimitationKeys,
+    notes: uniqueStrings([
+      ...(bundle.runtimeCoverage?.notes ?? []),
+      evidenceQualityLimited
+        ? "Artifact-only v2 evidence was retained, but consent-control and/or GDPR transparency coverage was incomplete. Treat the production report as coverage-limited."
+        : null
+    ]),
+    observationCounts: {
+      ...(bundle.runtimeCoverage?.observationCounts ?? {}),
+      cookiesBeforeConsent: cookiesBeforeConsentCount,
+      normalizedVendors: reportableVendorRows.length,
+      thirdPartyRequests: thirdPartyRequestCount
+    },
+    productionFindingIntegration: false,
+    runtimeCountsRetained: effectiveRuntimeCountsRetained
+  };
   const score =
     !runtimeCountsRetained
       ? 55
@@ -2619,12 +2743,16 @@ function buildMaterializedLocalV2Detail(
     gdpr_transparency_production_evidence_enabled: policySurfaceSummary.gdprTransparencyProductionEvidenceEnabled,
     policyDisclosureSummary: policySurfaceSummary,
     policy_disclosure_summary: policySurfaceSummary,
-    runtimeCoverageStatus: effectiveRuntimeCoverageStatus,
-    runtime_coverage_status: effectiveRuntimeCoverageStatus,
+    runtimeCoverage: materializedRuntimeCoverage,
+    runtimeCoverageSummary: materializedRuntimeCoverage,
+    runtime_coverage: materializedRuntimeCoverage,
+    runtime_coverage_summary: materializedRuntimeCoverage,
+    runtimeCoverageStatus: materializedRuntimeCoverageStatus,
+    runtime_coverage_status: materializedRuntimeCoverageStatus,
     runtimeCountsRetained: effectiveRuntimeCountsRetained,
     runtime_counts_retained: effectiveRuntimeCountsRetained,
-    runtimeLimitationKeys: effectiveRuntimeLimitationKeys,
-    runtime_limitation_keys: effectiveRuntimeLimitationKeys,
+    runtimeLimitationKeys: materializedRuntimeLimitationKeys,
+    runtime_limitation_keys: materializedRuntimeLimitationKeys,
     visualCaptureFailureReason: visualCapture.failureReason,
     visualCaptureMethod: visualCapture.captureMethod,
     visualCaptureNotes: visualCapture.notes,
@@ -2721,6 +2849,14 @@ function buildMaterializedLocalV2Detail(
           ? "Homepage visual error shell"
           : "Homepage capture failed"
     } : {
+      ...(evidenceQualityLimited ? {
+        coverage_level: "limited_partial",
+        incomplete_pages: true,
+        scan_outcome: "content_capture_degraded",
+        stop_reason_code: "local_v2_artifact_coverage_limited",
+        stop_reason_detail: "The retained artifact-only v2 evidence was incomplete for consent-control and/or GDPR transparency coverage.",
+        stop_reason_label: "Evidence coverage limited"
+      } : {}),
       homepage_fetch_status: "success"
     }),
     legal_coverage_score: localV2NoGo ? null : score,
@@ -2731,8 +2867,9 @@ function buildMaterializedLocalV2Detail(
     privacy_score: localV2NoGo ? null : score,
     registered_domain: rootDomain,
     runtime_counts_retained: effectiveRuntimeCountsRetained,
-    runtime_coverage_status: effectiveRuntimeCoverageStatus,
-    runtime_limitation_keys: effectiveRuntimeLimitationKeys,
+    runtime_coverage: materializedRuntimeCoverage,
+    runtime_coverage_status: materializedRuntimeCoverageStatus,
+    runtime_limitation_keys: materializedRuntimeLimitationKeys,
     third_party_cookie_count: runtimeEvidenceReportable ? preconsentCookies.filter((event) => event.cookieParty === "third_party" || event.thirdParty === true).length : 0,
     third_party_cookie_set_before_consent: runtimeEvidenceReportable ? preconsentCookies.length > 0 : false,
     third_party_request_count: runtimeEvidenceReportable ? thirdPartyRequestCount : 0,

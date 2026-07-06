@@ -71,7 +71,7 @@ test("dev image setup uses local names and refuses non-dev resource names", asyn
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS: "15000"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS: "15000"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY: "1"/);
-  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE: "cmp_safe"/);
+  assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE: "normal"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT/);
   assert.match(setupScript, /CERTSCORE_CHROMIUM_ACCEPT_LANGUAGE/);
   assert.match(setupScript, /CERTSCORE_CHROMIUM_LOCALE/);

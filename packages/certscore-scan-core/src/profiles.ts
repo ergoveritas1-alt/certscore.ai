@@ -25,8 +25,8 @@ export const scanProfiles: Record<ScanProfile["profileId"], ScanProfile> = {
   standard: {
     profileId: "standard",
     label: "Standard runtime and policy scan",
-    targetDurationMs: 30_000,
-    internalBudgetMs: 35_000,
+    targetDurationMs: 45_000,
+    internalBudgetMs: 50_000,
     enabledModules: ["preConsentRuntimeScanner", "policySurfaceScanner"],
   },
   consent: {

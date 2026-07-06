@@ -298,7 +298,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
     debugOverrides: {
       scenarioConcurrency: 1,
-      scenarioResourceMode: "cmp_safe"
+      scenarioResourceMode: "normal"
     },
     dispatchState: "pending_dispatch",
     functionName: "certscore-v2-dag-dev",
@@ -513,7 +513,7 @@ test("queued full-scan config can dispatch v2 DAG Lambda outside localhost when 
   assert.equal(v2DagLambda?.productionFindingIntegration, false);
   assert.deepEqual(v2DagLambda?.debugOverrides, {
     scenarioConcurrency: 1,
-    scenarioResourceMode: "cmp_safe"
+    scenarioResourceMode: "normal"
   });
 });
 

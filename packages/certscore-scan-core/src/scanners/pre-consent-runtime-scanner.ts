@@ -312,6 +312,7 @@ export async function preConsentRuntimeScanner(
   const screenshotErrors: string[] = [];
   let earlyScreenshotCaptured = false;
   let consentGeometryDiagnosticWritten = false;
+  let earlyGeometryConsentObservation: ConsentUiObservation | null = null;
   let initialNavigationHttpStatus: number | undefined;
   const fallbackConsentUiObservations: ConsentUiObservation[] = [];
   const fallbackDomSnapshots: DomSnapshotArtifact[] = [];
@@ -393,6 +394,61 @@ export async function preConsentRuntimeScanner(
       `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation, network-idle, and settle windows.`,
     );
 
+    const earlyGeometryBudgetMs = fastWait ? 3_000 : 4_000;
+    if (remainingModuleBudgetMs() >= earlyGeometryBudgetMs) {
+      await recordTiming(
+        timingBreakdown,
+        "consent control geometry diagnostic early",
+        "Artifact-only bounded consent-control geometry diagnostic before slower storage/script/body probes can exhaust the pre-consent module budget.",
+        async () => {
+          const access = await collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
+            frameTextTimeoutMs: input.waitMode === "fast" ? 200 : 400,
+            supplementalBodyText: "",
+          });
+          let geometry = await captureConsentControlGeometry(page, {
+            screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
+            timeoutMs: input.waitMode === "fast" ? 2_500 : 3_500,
+          });
+          if (
+            !hasConfirmedFirstLayerGeometryControls(geometry) &&
+            hasBelowFoldFirstLayerGeometryControls(geometry)
+          ) {
+            const recapturedGeometry = await recaptureConsentGeometryAfterBoundedScroll(page, geometry, {
+              screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
+            });
+            if (recapturedGeometry && confirmedFirstLayerGeometryControlCount(recapturedGeometry) > confirmedFirstLayerGeometryControlCount(geometry)) {
+              recapturedGeometry.summary.limitations = [
+                "recapture:bounded_scroll_to_below_fold_first_layer_controls",
+                ...recapturedGeometry.summary.limitations,
+              ].slice(0, 12);
+              geometry = recapturedGeometry;
+            }
+          }
+          const geometryArtifactPath = await input.artifactWriter.writeJsonArtifact("ConsentControlGeometryEvidence.json", {
+            ...geometry,
+            access,
+            egress: buildConsentGeometryEgressDiagnostic(),
+            artifactOnly: true,
+            productionFindingIntegration: false,
+          });
+          consentGeometryDiagnosticWritten = true;
+          earlyGeometryConsentObservation = consentUiObservationFromConfirmedGeometryControls({
+            artifactPath: geometryArtifactPath,
+            geometry,
+            scanStartedAtMs: input.scanStartedAtMs,
+          });
+        },
+      ).catch((error: unknown) => {
+        runtimeErrors.push(`Early consent-control geometry diagnostic failed: ${errorMessageFromUnknown(error)}`);
+      });
+    } else {
+      recordInstantTiming(
+        timingBreakdown,
+        "consent control geometry diagnostic early skipped",
+        "Skipped early artifact-only consent-control geometry diagnostic because the pre-consent module budget was already low.",
+      );
+    }
+
     const [storageSnapshot, scripts, frames, apiAccesses, initialConsentObservation, collectionSurfaceObservations, initialDomText] =
       await recordTiming(timingBreakdown, "page evidence capture", "Storage, scripts, iframes, browser API access, collection surfaces, consent UI, and DOM text capture.", () => Promise.all([
         recordBoundedTiming(
@@ -457,6 +513,13 @@ export async function preConsentRuntimeScanner(
         controls: [],
         fallbackBasis: ["bounded_capture_timeout_or_failure", "dom_text_fallback_after_consent_ui_timeout"],
       });
+    }
+    if (earlyGeometryConsentObservation && isStrongerConsentUiObservation(earlyGeometryConsentObservation, consentObservation)) {
+      consentObservation = mergeConsentUiObservations(
+        consentObservation,
+        earlyGeometryConsentObservation,
+        "geometry:confirmed_first_layer_controls",
+      );
     }
     if (shouldRecaptureTextBackedConsentUiAfterSettle(consentObservation, domText)) {
       const recaptureTimeoutMs = consentUiBudget.timeoutFor(fastWait ? 1_000 : 1_500);
@@ -829,7 +892,7 @@ export async function preConsentRuntimeScanner(
     const geometryBudgetCushionMs = input.internalBudgetMs <= 10_000
       ? 2_500
       : input.waitMode === "fast" ? 8_000 : 10_000;
-    if (remainingModuleBudgetMs() >= geometryBudgetCushionMs) {
+    if (!consentGeometryDiagnosticWritten && remainingModuleBudgetMs() >= geometryBudgetCushionMs) {
       await recordTiming(
         timingBreakdown,
         "consent control geometry diagnostic",
@@ -893,6 +956,12 @@ export async function preConsentRuntimeScanner(
       ).catch((error: unknown) => {
         runtimeErrors.push(`Consent-control geometry diagnostic failed: ${errorMessageFromUnknown(error)}`);
       });
+    } else if (consentGeometryDiagnosticWritten) {
+      recordInstantTiming(
+        timingBreakdown,
+        "consent control geometry diagnostic retained early",
+        "Skipped duplicate artifact-only consent-control geometry diagnostic because the early geometry pass already retained the evidence.",
+      );
     } else {
       recordInstantTiming(
         timingBreakdown,

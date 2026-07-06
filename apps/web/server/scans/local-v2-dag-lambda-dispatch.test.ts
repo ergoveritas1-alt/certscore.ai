@@ -48,7 +48,7 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
     contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
     debugOverrides: {
       scenarioConcurrency: 1,
-      scenarioResourceMode: "cmp_safe"
+      scenarioResourceMode: "normal"
     },
     functionName: "certscore-v2-dag-dev",
     hostname: "example.com",
