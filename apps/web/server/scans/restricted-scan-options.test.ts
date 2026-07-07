@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { restrictLocalV2RunViaLambdaForUser, restrictScanFromForUser } from "./restricted-scan-options";
 
-test("non-admin users are forced to Lambda by default", () => {
+test("non-admin users are not routed to artifact-only Lambda by default", () => {
   assert.equal(
     restrictLocalV2RunViaLambdaForUser({
       canUseRestrictedScanOptions: false,
@@ -12,7 +12,18 @@ test("non-admin users are forced to Lambda by default", () => {
       },
       localV2DagRunViaLambda: false
     }),
-    true
+    false
+  );
+  assert.equal(
+    restrictLocalV2RunViaLambdaForUser({
+      canUseRestrictedScanOptions: false,
+      env: {
+        NEXT_PUBLIC_APP_URL: "https://certscore.ai",
+        NODE_ENV: "production"
+      },
+      localV2DagRunViaLambda: true
+    }),
+    false
   );
 });
 
@@ -54,7 +65,7 @@ test("localhost queue flag is ignored outside localhost and in production", () =
       },
       localV2DagRunViaLambda: false
     }),
-    true
+    false
   );
   assert.equal(
     restrictLocalV2RunViaLambdaForUser({
@@ -66,7 +77,7 @@ test("localhost queue flag is ignored outside localhost and in production", () =
       },
       localV2DagRunViaLambda: false
     }),
-    true
+    false
   );
 });
 
@@ -87,7 +98,7 @@ test("restricted scan users keep explicit Lambda preference", () => {
   );
 });
 
-test("all users can select EU-DE scan region", () => {
-  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "eu_de" }), "eu_de");
+test("only restricted users can select regional artifact-only scan locations", () => {
+  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "eu_de" }), "default");
   assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: true, scanFrom: "eu_de" }), "eu_de");
 });

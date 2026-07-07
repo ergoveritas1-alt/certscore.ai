@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../../lib/scans/rank-findings";
+import { detectInternalArtifactOnlyReportGap } from "./internal-artifact-report-gap";
 import { buildOpsInterruptionSummary } from "./ops-interruption-summary";
 import { OPS_SCAN_STATUS_FINDING_IDS } from "./ops-status-finding-ids";
 
@@ -106,4 +107,46 @@ test("ops interruption summary classifies robots and timeout snapshots", () => {
 
   assert.deepEqual(robots.categories, ["scans_with_any_interruption", "robots_or_policy_block"]);
   assert.deepEqual(timeout.categories, ["scans_with_any_interruption", "timeout_or_navigation_failure"]);
+});
+
+test("detectInternalArtifactOnlyReportGap flags completed v2 artifact-only scans without snapshots", () => {
+  const gap = detectInternalArtifactOnlyReportGap({
+    events: [
+      {
+        event_type: "v2_lambda_result.received",
+        metadata_json: {
+          artifactOnly: true,
+          productionFindingIntegration: false,
+          resultStatus: "completed"
+        }
+      }
+    ],
+    scanStatus: "completed",
+    snapshotPresent: false
+  });
+
+  assert.deepEqual(gap, {
+    code: "internal_v2_artifact_only_no_snapshot",
+    message: "Completed internal v2 artifact-only scan has no production snapshot/report materialization.",
+    reportMaterializationExpected: false
+  });
+});
+
+test("detectInternalArtifactOnlyReportGap stays quiet for scans with snapshots", () => {
+  assert.equal(
+    detectInternalArtifactOnlyReportGap({
+      events: [
+        {
+          event_type: "v2_lambda_result.received",
+          metadata_json: {
+            artifactOnly: true,
+            productionFindingIntegration: false
+          }
+        }
+      ],
+      scanStatus: "completed",
+      snapshotPresent: true
+    }),
+    null
+  );
 });

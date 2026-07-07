@@ -259,7 +259,7 @@ export async function createAnonymousFullScan(input: {
     domainId: domain.id,
     eventType: FULL_SCAN_EVENT_TYPES.queued,
     message: localV2DagLambdaDispatch
-      ? "Scan accepted for local v2 DAG Lambda artifact-only execution."
+      ? "Scan accepted for internal v2 DAG Lambda artifact-only diagnostic execution."
       : "Scan queued and awaiting scanner pickup.",
     metadataJson: {
       pagesRequested,
@@ -275,7 +275,13 @@ export async function createAnonymousFullScan(input: {
       githubRunId: input.provenance?.githubRunId ?? null,
       githubWorkflow: input.provenance?.githubWorkflow ?? null,
       provenance: input.provenance ?? null,
-      localV2DagLambdaDispatch
+      localV2DagLambdaDispatch,
+      ...(localV2DagLambdaDispatch
+        ? {
+            reportMaterializationExpected: false,
+            reportMaterializationReason: "internal_v2_artifact_only"
+          }
+        : {})
     },
     organizationId: null,
     scanId: scan.id
@@ -285,7 +291,7 @@ export async function createAnonymousFullScan(input: {
       domainId: domain.id,
       eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
       message:
-        "Local v2 DAG Lambda dispatch requested for the artifact-only v2 DAG scanner.",
+        "Internal v2 DAG Lambda dispatch requested for the artifact-only diagnostic scanner.",
       metadataJson: localV2DagLambdaDispatch,
       organizationId: null,
       scanId: scan.id
@@ -297,7 +303,7 @@ export async function createAnonymousFullScan(input: {
     await insertQueuedFullScanEvent({
       domainId: domain.id,
       eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
-      message: "Invoking local v2 DAG Lambda for artifact-only scan execution.",
+      message: "Invoking internal v2 DAG Lambda for artifact-only diagnostic scan execution.",
       metadataJson: localV2DagLambdaDispatch,
       organizationId: null,
       scanId: scan.id
@@ -315,8 +321,8 @@ export async function createAnonymousFullScan(input: {
         domainId: domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
         message: simulatedLocalLambda
-          ? "Local simulated Lambda completed the v2 DAG artifact-only scan invocation."
-          : "AWS Lambda accepted the local v2 DAG artifact-only scan invocation.",
+          ? "Local simulated Lambda completed the internal v2 DAG artifact-only diagnostic invocation."
+          : "AWS Lambda accepted the internal v2 DAG artifact-only diagnostic invocation.",
         metadataJson: {
           ...localV2DagLambdaDispatch,
           invocationRequestId: dispatchResult.invocationRequestId,
@@ -329,11 +335,11 @@ export async function createAnonymousFullScan(input: {
         scanId: scan.id
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Local v2 DAG Lambda dispatch failed.";
+      const message = error instanceof Error ? error.message : "Internal v2 DAG Lambda dispatch failed.";
       await insertQueuedFullScanEvent({
         domainId: domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
-        message: "Local v2 DAG Lambda dispatch failed; no fallback scanner execution was started.",
+        message: "Internal v2 DAG Lambda dispatch failed; no fallback scanner execution was started.",
         metadataJson: {
           ...localV2DagLambdaDispatch,
           errorMessage: message,

@@ -6,6 +6,7 @@ import {
 } from "@website-signal-risk-scanner/shared";
 
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
+export const INTERNAL_V2_DAG_ARTIFACT_MODE = "internal-v2-dag-artifact-v1";
 export const LOCAL_V2_DAG_SCAN_PROFILE = "standard";
 export const LOCAL_V2_DAG_SCAN_PROFILES = ["standard", "tiny"] as const;
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1";
@@ -287,6 +288,7 @@ export function applyLocalV2DagScanConfig(
       ...(config.execution ?? {}),
       v2DagParallel: {
         artifactOnly: true,
+        internalArtifactMode: INTERNAL_V2_DAG_ARTIFACT_MODE,
         localOnly: true,
         plannedParallel: true,
         postConsentFlowsEnabled: false,
@@ -309,6 +311,7 @@ export function applyLocalV2DagScanConfig(
               dispatchState: "pending_dispatch",
               functionName: lambdaConfig.functionName,
               debugOverrides: lambdaDebugOverridesForDispatch(options.lambdaDebugOverrides),
+              internalArtifactMode: INTERNAL_V2_DAG_ARTIFACT_MODE,
               localOnly: lambdaConfig.targetEnvironment === "local",
               orchestrationMode: lambdaConfig.orchestrationMode,
               processor: LOCAL_V2_DAG_SCAN_PROCESSOR,

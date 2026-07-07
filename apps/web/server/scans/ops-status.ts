@@ -3,6 +3,7 @@ import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { buildScanReportUnifiedFindings } from "../../components/scans/shared-scan-detail-view";
 import { getAnonymousScanById, getScanById } from "./get-scan-by-id";
+import { detectInternalArtifactOnlyReportGap } from "./internal-artifact-report-gap";
 import { asAccessPostureClass, buildOpsInterruptionSummary } from "./ops-interruption-summary";
 import { OPS_SCAN_STATUS_FINDING_IDS } from "./ops-status-finding-ids";
 
@@ -172,6 +173,11 @@ async function loadOpsScanStatusCore(input: { organizationId: string | null; sca
       ) &&
       getMetadataNumber(event.metadata_json, "findingCount") !== null
   );
+  const reportMaterializationGap = detectInternalArtifactOnlyReportGap({
+    events,
+    scanStatus: scan.status,
+    snapshotPresent: Boolean(snapshot)
+  });
 
   return {
     accessPosture: {
@@ -236,6 +242,7 @@ async function loadOpsScanStatusCore(input: { organizationId: string | null; sca
       totalSignals: snapshot?.total_signals ?? null
     },
     interruptionSummary: buildOpsInterruptionSummary({ events, scan, snapshot }),
+    reportMaterializationGap,
     workflow: {
       latestFindingCount: newestUnifiedEvent ? getMetadataNumber(newestUnifiedEvent.metadata_json, "findingCount") : null,
       latestFindingStageAt: newestUnifiedEvent ? toIsoTimestamp(newestUnifiedEvent.created_at) : null

@@ -17,6 +17,10 @@ export function restrictScanFromForUser(input: {
   canUseRestrictedScanOptions: boolean;
   scanFrom: unknown;
 }): ScanFrom {
+  if (!input.canUseRestrictedScanOptions) {
+    return "default";
+  }
+
   return normalizeScanFrom(input.scanFrom);
 }
 
@@ -29,5 +33,5 @@ export function restrictLocalV2RunViaLambdaForUser(input: {
     return input.localV2DagRunViaLambda;
   }
 
-  return shouldUseLocalhostFullScanQueue(input.env) ? false : true;
+  return false;
 }

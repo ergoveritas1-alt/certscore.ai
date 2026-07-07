@@ -152,6 +152,7 @@ test("localhost scan configs use the local v2 planned-parallel DAG processor onl
   assert.equal(config.profile, "standard");
   assert.deepEqual(config.execution?.v2DagParallel as Record<string, unknown> | undefined, {
     artifactOnly: true,
+    internalArtifactMode: "internal-v2-dag-artifact-v1",
     localOnly: true,
     plannedParallel: true,
     postConsentFlowsEnabled: false,
@@ -302,6 +303,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     },
     dispatchState: "pending_dispatch",
     functionName: "certscore-v2-dag-dev",
+    internalArtifactMode: "internal-v2-dag-artifact-v1",
     localOnly: true,
     orchestrationMode: "sharded",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
