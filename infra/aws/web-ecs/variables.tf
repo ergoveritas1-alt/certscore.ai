@@ -154,6 +154,12 @@ variable "better_auth_secret_arn" {
   default     = ""
 }
 
+variable "certscore_oauth_jwt_secret_arn" {
+  description = "Optional Secrets Manager ARN containing CERTSCORE_OAUTH_JWT_SECRET for MCP OAuth access tokens."
+  type        = string
+  default     = ""
+}
+
 variable "google_client_id_secret_arn" {
   description = "Optional Secrets Manager ARN containing GOOGLE_CLIENT_ID."
   type        = string

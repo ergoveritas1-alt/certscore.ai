@@ -14,6 +14,22 @@ const sessions = new McpHttpSessionStore({
   ttlSeconds: env.SESSION_TTL_SECONDS
 });
 
+function installSseKeepalive(res: ServerResponse) {
+  const keepalive = setInterval(() => {
+    if (res.writableEnded || res.destroyed) {
+      clearInterval(keepalive);
+      return;
+    }
+    const contentType = String(res.getHeader("Content-Type") ?? "").toLowerCase();
+    if (res.headersSent && contentType.includes("text/event-stream")) {
+      res.write(":ka\n\n");
+    }
+  }, 25_000);
+
+  res.on("close", () => clearInterval(keepalive));
+  res.on("finish", () => clearInterval(keepalive));
+}
+
 function json(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
@@ -151,6 +167,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
     for (const [key, value] of Object.entries(corsHeaders(req))) {
       res.setHeader(key, value);
     }
+    installSseKeepalive(res);
     await transport.handleRequest(req, res, parsedBody);
     if (transport.sessionId) {
       sessions.set(transport.sessionId, {
@@ -176,6 +193,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse) {
   for (const [key, value] of Object.entries(corsHeaders(req))) {
     res.setHeader(key, value);
   }
+  installSseKeepalive(res);
   await session.transport.handleRequest(req, res, parsedBody);
   if (req.method === "DELETE" && sessionId) {
     sessions.delete(sessionId);

@@ -30,6 +30,7 @@ locals {
   web_secret_arns = compact([
     var.database_url_secret_arn,
     var.better_auth_secret_arn,
+    var.certscore_oauth_jwt_secret_arn,
     var.google_client_id_secret_arn,
     var.google_client_secret_secret_arn,
     var.openai_api_key_secret_arn,
@@ -87,6 +88,7 @@ locals {
     var.billing_alert_to_email_secret_arn != "" ? [{ name = "BILLING_ALERT_TO_EMAIL", valueFrom = var.billing_alert_to_email_secret_arn }] : [],
     var.google_client_id_secret_arn != "" ? [{ name = "GOOGLE_CLIENT_ID", valueFrom = var.google_client_id_secret_arn }] : [],
     var.google_client_secret_secret_arn != "" ? [{ name = "GOOGLE_CLIENT_SECRET", valueFrom = var.google_client_secret_secret_arn }] : [],
+    var.certscore_oauth_jwt_secret_arn != "" ? [{ name = "CERTSCORE_OAUTH_JWT_SECRET", valueFrom = var.certscore_oauth_jwt_secret_arn }] : [],
     var.openai_api_key_secret_arn != "" ? [{ name = "OPENAI_API_KEY", valueFrom = var.openai_api_key_secret_arn }] : [],
     var.privacy_request_to_email_secret_arn != "" ? [{ name = "PRIVACY_REQUEST_TO_EMAIL", valueFrom = var.privacy_request_to_email_secret_arn }] : []
     ,

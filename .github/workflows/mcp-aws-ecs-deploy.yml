@@ -1,0 +1,236 @@
+name: MCP AWS ECS Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".dockerignore"
+      - ".github/workflows/mcp-aws-ecs-deploy.yml"
+      - "apps/mcp/**"
+      - "infra/aws/mcp/**"
+      - "packages/certscore-api-contracts/**"
+      - "packages/certscore-mcp-auth/**"
+      - "packages/certscore-mcp/**"
+      - "packages/certscore-sdk/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "turbo.json"
+      - "!apps/mcp/**/*.test.ts"
+      - "!packages/certscore-mcp/**/*.test.ts"
+  workflow_dispatch:
+
+concurrency:
+  group: mcp-aws-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-mcp-aws:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ${{ vars.AWS_MCP_REGION || 'us-west-2' }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_MCP_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
+      ECR_MCP_REPOSITORY: ${{ vars.AWS_MCP_ECR_REPOSITORY }}
+      ECS_CLUSTER_NAME: ${{ vars.AWS_MCP_ECS_CLUSTER }}
+      ECS_SERVICE_NAME: ${{ vars.AWS_MCP_ECS_SERVICE }}
+      ECS_CONTAINER_NAME: ${{ vars.AWS_MCP_ECS_CONTAINER || 'mcp-http' }}
+      ECS_LOG_GROUP: ${{ vars.AWS_MCP_ECS_LOG_GROUP }}
+      MCP_TARGET_GROUP_ARN: ${{ vars.AWS_MCP_TARGET_GROUP_ARN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Report deploy-triggering changes
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && -n "${{ github.event.before }}" ]]; then
+            base_ref="${{ github.event.before }}"
+          else
+            base_ref="$(git rev-parse HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+          fi
+          if ! git cat-file -e "${base_ref}^{commit}" 2>/dev/null; then
+            base_ref="$(git rev-parse HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+          fi
+
+          echo "Deploy trigger: MCP HTTP"
+          echo "Base ref: ${base_ref}"
+          echo "Head ref: ${GITHUB_SHA}"
+          echo
+          echo "Changed files considered by this deploy:"
+          git diff --name-only "${base_ref}" "${GITHUB_SHA}" | sed 's/^/  - /'
+
+      - name: Validate deploy configuration
+        run: |
+          test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_MCP_ROLE_TO_ASSUME or AWS_ROLE_TO_ASSUME" && exit 1)
+          test -n "${ECR_MCP_REPOSITORY}" || (echo "Missing var AWS_MCP_ECR_REPOSITORY" && exit 1)
+          test -n "${ECS_CLUSTER_NAME}" || (echo "Missing var AWS_MCP_ECS_CLUSTER" && exit 1)
+          test -n "${ECS_SERVICE_NAME}" || (echo "Missing var AWS_MCP_ECS_SERVICE" && exit 1)
+          test -n "${ECS_CONTAINER_NAME}" || (echo "Missing var AWS_MCP_ECS_CONTAINER" && exit 1)
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck MCP HTTP
+        run: pnpm --filter @certscore/mcp-http typecheck
+
+      - name: Test MCP HTTP
+        run: pnpm --filter @certscore/mcp-http test
+
+      - name: Build and push MCP image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          MCP_IMAGE="${REGISTRY}/${ECR_MCP_REPOSITORY}"
+          MCP_CACHE="${MCP_IMAGE}:buildcache"
+          docker buildx build \
+            --provenance=false \
+            --sbom=false \
+            --cache-from "type=registry,ref=${MCP_CACHE}" \
+            --cache-to "type=registry,ref=${MCP_CACHE},mode=max" \
+            -f apps/mcp/Dockerfile \
+            --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
+            --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
+            --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
+            --build-arg BUILD_RUNTIME_TARGET="ecs-fargate" \
+            -t "${MCP_IMAGE}:${GITHUB_SHA}" \
+            -t "${MCP_IMAGE}:latest" \
+            --push \
+            .
+
+          echo "MCP_IMAGE=${MCP_IMAGE}" >> "${GITHUB_ENV}"
+
+      - name: Register MCP task definition
+        run: |
+          current_task_definition="$(
+            aws ecs describe-services \
+              --cluster "${ECS_CLUSTER_NAME}" \
+              --services "${ECS_SERVICE_NAME}" \
+              --query 'services[0].taskDefinition' \
+              --output text
+          )"
+
+          aws ecs describe-task-definition --task-definition "${current_task_definition}" \
+            | jq '.taskDefinition
+              | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
+              | .containerDefinitions = (.containerDefinitions | map(
+                  if .name == env.ECS_CONTAINER_NAME
+                  then .image = "\(env.MCP_IMAGE):\(env.GITHUB_SHA)"
+                  else .
+                  end
+                ))' > /tmp/mcp-task-definition.json
+
+          task_definition_arn="$(
+            aws ecs register-task-definition \
+              --cli-input-json file:///tmp/mcp-task-definition.json \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text
+          )"
+
+          echo "MCP_TASK_DEFINITION_ARN=${task_definition_arn}" >> "${GITHUB_ENV}"
+          echo "Registered ${task_definition_arn}"
+
+      - name: Update MCP ECS service
+        run: |
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --service "${ECS_SERVICE_NAME}" \
+            --task-definition "${MCP_TASK_DEFINITION_ARN}" \
+            --force-new-deployment >/dev/null
+
+      - name: Wait for MCP ECS service to stabilize
+        run: |
+          aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}"
+
+      - name: Check MCP target health
+        if: ${{ env.MCP_TARGET_GROUP_ARN != '' }}
+        run: |
+          aws elbv2 describe-target-health \
+            --target-group-arn "${MCP_TARGET_GROUP_ARN}" \
+            --query 'TargetHealthDescriptions[].{Target:Target.Id,Port:Target.Port,State:TargetHealth.State,Reason:TargetHealth.Reason,Description:TargetHealth.Description}' \
+            --output table
+
+          unhealthy_count="$(
+            aws elbv2 describe-target-health \
+              --target-group-arn "${MCP_TARGET_GROUP_ARN}" \
+              --query 'length(TargetHealthDescriptions[?TargetHealth.State!=`healthy`])' \
+              --output text
+          )"
+          if [[ "${unhealthy_count}" != "0" ]]; then
+            echo "MCP target group has unhealthy targets."
+            exit 1
+          fi
+
+      - name: Print MCP deployment summary
+        run: |
+          echo "MCP task definition: ${MCP_TASK_DEFINITION_ARN}"
+          echo "MCP image: ${MCP_IMAGE}:${GITHUB_SHA}"
+          echo
+          echo "Manual Cloudflare steps:"
+          echo "1. CNAME mcp.certscore.ai -> the MCP ALB DNS name from Terraform output alb_dns_name, proxied."
+          echo "2. Keep SSL/TLS mode Full or Full Strict."
+          echo "3. Add a cache-bypass rule for mcp.certscore.ai/*."
+          echo "4. Disable transformations/performance features for mcp.certscore.ai/* that could buffer streaming responses."
+          echo "5. Purge Cloudflare cache for mcp.certscore.ai."
+
+      - name: Print ECS diagnostics on failure
+        if: ${{ failure() }}
+        run: |
+          echo "::group::ECS service"
+          aws ecs describe-services --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}" || true
+          echo "::endgroup::"
+
+          echo "::group::Recent ECS service events"
+          aws ecs describe-services \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_SERVICE_NAME}" \
+            --query 'services[0].events[0:10].[createdAt,message]' \
+            --output table || true
+          echo "::endgroup::"
+
+          if [[ -n "${MCP_TARGET_GROUP_ARN}" ]]; then
+            echo "::group::Target health"
+            aws elbv2 describe-target-health --target-group-arn "${MCP_TARGET_GROUP_ARN}" || true
+            echo "::endgroup::"
+          fi
+
+          if [[ -n "${ECS_LOG_GROUP}" ]]; then
+            echo "::group::Recent MCP logs"
+            aws logs filter-log-events \
+              --log-group-name "${ECS_LOG_GROUP}" \
+              --start-time "$(( ($(date +%s) - 900) * 1000 ))" \
+              --filter-pattern 'source=mcp-http' \
+              --max-items 50 || true
+            echo "::endgroup::"
+          fi
