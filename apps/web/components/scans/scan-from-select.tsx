@@ -7,9 +7,15 @@ import { ScanFromMarker } from "./scan-from-icons";
 
 export const SCAN_FROM_OPTIONS = [
   {
-    description: "Run from CertScore's Frankfurt Lambda scanner.",
+    description: "Run through the standard production scanner queue.",
+    icon: "cloud",
+    label: "Default production scan",
+    value: "default"
+  },
+  {
+    description: "Internal EU-DE diagnostic scanner. Artifact-only; does not produce a customer report.",
     flag: "🇩🇪",
-    label: "EU-DE",
+    label: "EU-DE diagnostic",
     value: "eu_de"
   },
   {
@@ -104,6 +110,9 @@ export function ScanFromSelect({
   const menuRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const options = SCAN_FROM_OPTIONS.filter((option) => {
+    if (!allowRestrictedScanOptions && option.value !== "default" && option.value !== "local_extension") {
+      return false;
+    }
     if (!includeLocalExtension && option.value === "local_extension") {
       return false;
     }

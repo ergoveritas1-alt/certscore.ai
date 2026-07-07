@@ -36,8 +36,8 @@ test("OpenAPI route returns valid Pulse API JSON", async () => {
   );
   const scanFromParameter = body.paths["/api/v1/pulse"].get.parameters.find((parameter: { name: string }) => parameter.name === "scanFrom");
   const geoParameter = body.paths["/api/v1/pulse"].get.parameters.find((parameter: { name: string }) => parameter.name === "geo");
-  assert.deepEqual(scanFromParameter.schema.enum, ["eu_ie", "eu_de", "california"]);
-  assert.deepEqual(geoParameter.schema.enum, ["eu_ie", "eu_de", "california"]);
+  assert.deepEqual(scanFromParameter.schema.enum, ["default"]);
+  assert.deepEqual(geoParameter.schema.enum, ["default"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["200"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["202"]);
   assert.ok(body.paths["/api/v1/pulse"].get.responses["400"]);
@@ -87,8 +87,8 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.equal(body.paths["/api/v1/pulse-self-test"].get.description.length < 300, true);
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; required?: boolean }) => parameter.name === "url" && parameter.required === true));
   assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { maximum?: number } }) => parameter.name === "wait" && parameter.schema.maximum === 35));
-  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "scanFrom" && parameter.schema.enum?.includes("eu_ie")));
-  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "geo" && parameter.schema.enum?.includes("eu_ie")));
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "scanFrom" && parameter.schema.enum?.includes("default")));
+  assert.ok(body.paths["/api/v1/pulse/gpt"].get.parameters.some((parameter: { name: string; schema: { enum?: string[] } }) => parameter.name === "geo" && parameter.schema.enum?.includes("default")));
   assert.ok(
     body.paths["/api/v1/pulse/gpt"].get.parameters.some(
       (parameter: { name: string; schema: { enum?: string[]; default?: string } }) =>

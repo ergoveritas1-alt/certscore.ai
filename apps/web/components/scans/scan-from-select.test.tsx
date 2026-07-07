@@ -34,7 +34,7 @@ test("ScanFromSelect defaults Lambda and fresh re-scan options on", () => {
   assert.match(html, /<input[^>]*name="forceNewScan"[^>]*value="true"/);
 });
 
-test("ScanFromSelect defaults to EU-IR and keeps Local-extension last", () => {
+test("ScanFromSelect defaults public users to the production scan and keeps Local-extension last", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       includeLocalExtension: true,
@@ -42,11 +42,12 @@ test("ScanFromSelect defaults to EU-IR and keeps Local-extension last", () => {
     })
   );
 
-  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_ie"/);
-  assert.equal(SCAN_FROM_OPTIONS.map((option) => option.value).join(","), "eu_de,eu_ie,california,local_extension");
+  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="default"/);
+  assert.match(html, /Default production scan/);
+  assert.equal(SCAN_FROM_OPTIONS.map((option) => option.value).join(","), "default,eu_de,eu_ie,california,local_extension");
 });
 
-test("ScanFromSelect exposes EU-DE while hiding restricted controls from non-admin users", () => {
+test("ScanFromSelect hides EU-DE diagnostic scans from non-admin users", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       includeLocalV2ScanProfileOption: true,
@@ -56,13 +57,13 @@ test("ScanFromSelect exposes EU-DE while hiding restricted controls from non-adm
     })
   );
 
-  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_de"/);
+  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="default"/);
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="true"/);
-  assert.match(html, /EU-DE/);
+  assert.doesNotMatch(html, /EU-DE diagnostic/);
   assert.doesNotMatch(html, /Run via Lambda/);
 });
 
-test("ScanFromSelect exposes restricted scan controls to admin users", () => {
+test("ScanFromSelect exposes artifact-only EU-DE diagnostic scan controls to admin users", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       allowRestrictedScanOptions: true,
@@ -75,12 +76,13 @@ test("ScanFromSelect exposes restricted scan controls to admin users", () => {
 
   assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_de"/);
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="false"/);
-  assert.match(html, /EU-DE/);
+  assert.match(html, /EU-DE diagnostic/);
 });
 
 test("ScanFromSelect renders California with a flag marker instead of raw text", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
+      allowRestrictedScanOptions: true,
       value: "california",
       variant: "field"
     })

@@ -58,15 +58,15 @@ export function buildPulseChatGptOpenApiDocument() {
               name: "scanFrom",
               in: "query",
               required: false,
-              description: "Geo execution context for newly queued public scans. Existing scans are returned with their recorded context. Alias: geo.",
-              schema: { type: "string", enum: ["eu_ie", "eu_de", "california"], default: "eu_ie" }
+              description: "Execution context for newly queued public scans. Public requests use the default production scanner. Existing scans are returned with their recorded context. Alias: geo.",
+              schema: { type: "string", enum: ["default"], default: "default" }
             },
             {
               name: "geo",
               in: "query",
               required: false,
-              description: "Alias for scanFrom. Allowed values: eu_ie, eu_de, california.",
-              schema: { type: "string", enum: ["eu_ie", "eu_de", "california"], default: "eu_ie" }
+              description: "Alias for scanFrom. Public requests use the default production scanner.",
+              schema: { type: "string", enum: ["default"], default: "default" }
             },
             {
               name: "wait",
