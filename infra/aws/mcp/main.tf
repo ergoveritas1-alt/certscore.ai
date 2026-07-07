@@ -4,6 +4,7 @@ data "aws_iam_openid_connect_provider" "github_actions" {
 
 locals {
   prefix           = var.project_name
+  enable_serving   = var.enable_dedicated_serving_layer
   create_cluster   = trimspace(var.existing_ecs_cluster_name) == ""
   ecs_cluster_name = local.create_cluster ? aws_ecs_cluster.mcp[0].name : var.existing_ecs_cluster_name
   common_tags      = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "mcp-ecs" })
@@ -27,6 +28,8 @@ locals {
 }
 
 resource "aws_security_group" "alb" {
+  count = local.enable_serving ? 1 : 0
+
   name        = "${local.prefix}-alb"
   description = "Public ingress for CertScore MCP"
   vpc_id      = var.existing_vpc_id
@@ -56,6 +59,8 @@ resource "aws_security_group" "alb" {
 }
 
 resource "aws_security_group" "ecs_tasks" {
+  count = local.enable_serving ? 1 : 0
+
   name        = "${local.prefix}-ecs"
   description = "MCP ECS task networking"
   vpc_id      = var.existing_vpc_id
@@ -64,7 +69,7 @@ resource "aws_security_group" "ecs_tasks" {
     from_port       = 3004
     to_port         = 3004
     protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
+    security_groups = [aws_security_group.alb[0].id]
   }
 
   egress {
@@ -78,10 +83,12 @@ resource "aws_security_group" "ecs_tasks" {
 }
 
 resource "aws_lb" "mcp" {
+  count = local.enable_serving ? 1 : 0
+
   name               = substr(replace("${local.prefix}-alb", "/[^a-zA-Z0-9-]/", "-"), 0, 32)
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
+  security_groups    = [aws_security_group.alb[0].id]
   subnets            = var.public_subnet_ids
   idle_timeout       = 600
 
@@ -89,6 +96,8 @@ resource "aws_lb" "mcp" {
 }
 
 resource "aws_lb_target_group" "mcp" {
+  count = local.enable_serving ? 1 : 0
+
   name        = substr(replace("${local.prefix}-tg", "/[^a-zA-Z0-9-]/", "-"), 0, 32)
   port        = 3004
   protocol    = "HTTP"
@@ -111,7 +120,9 @@ resource "aws_lb_target_group" "mcp" {
 }
 
 resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.mcp.arn
+  count = local.enable_serving ? 1 : 0
+
+  load_balancer_arn = aws_lb.mcp[0].arn
   port              = 80
   protocol          = "HTTP"
 
@@ -127,7 +138,9 @@ resource "aws_lb_listener" "http" {
 }
 
 resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.mcp.arn
+  count = local.enable_serving ? 1 : 0
+
+  load_balancer_arn = aws_lb.mcp[0].arn
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
@@ -135,7 +148,7 @@ resource "aws_lb_listener" "https" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.mcp.arn
+    target_group_arn = aws_lb_target_group.mcp[0].arn
   }
 }
 
@@ -412,6 +425,8 @@ resource "aws_ecs_task_definition" "mcp" {
 }
 
 resource "aws_ecs_service" "mcp" {
+  count = local.enable_serving ? 1 : 0
+
   name                   = local.prefix
   cluster                = local.ecs_cluster_name
   task_definition        = aws_ecs_task_definition.mcp.arn
@@ -421,12 +436,12 @@ resource "aws_ecs_service" "mcp" {
 
   network_configuration {
     assign_public_ip = var.assign_public_ip
-    security_groups  = [aws_security_group.ecs_tasks.id]
+    security_groups  = [aws_security_group.ecs_tasks[0].id]
     subnets          = var.private_subnet_ids
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.mcp.arn
+    target_group_arn = aws_lb_target_group.mcp[0].arn
     container_name   = "mcp-http"
     container_port   = 3004
   }
@@ -444,6 +459,8 @@ resource "aws_ecs_service" "mcp" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "mcp_no_healthy_targets" {
+  count = local.enable_serving ? 1 : 0
+
   alarm_name          = "${local.prefix}-no-healthy-targets"
   alarm_description   = "CertScore MCP target group has no healthy ALB targets."
   comparison_operator = "LessThanThreshold"
@@ -458,14 +475,16 @@ resource "aws_cloudwatch_metric_alarm" "mcp_no_healthy_targets" {
   ok_actions          = var.alarm_actions
 
   dimensions = {
-    LoadBalancer = aws_lb.mcp.arn_suffix
-    TargetGroup  = aws_lb_target_group.mcp.arn_suffix
+    LoadBalancer = aws_lb.mcp[0].arn_suffix
+    TargetGroup  = aws_lb_target_group.mcp[0].arn_suffix
   }
 
   tags = local.common_tags
 }
 
 resource "aws_cloudwatch_metric_alarm" "mcp_unhealthy_targets" {
+  count = local.enable_serving ? 1 : 0
+
   alarm_name          = "${local.prefix}-unhealthy-targets"
   alarm_description   = "CertScore MCP target group has unhealthy ALB targets."
   comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -480,8 +499,8 @@ resource "aws_cloudwatch_metric_alarm" "mcp_unhealthy_targets" {
   ok_actions          = var.alarm_actions
 
   dimensions = {
-    LoadBalancer = aws_lb.mcp.arn_suffix
-    TargetGroup  = aws_lb_target_group.mcp.arn_suffix
+    LoadBalancer = aws_lb.mcp[0].arn_suffix
+    TargetGroup  = aws_lb_target_group.mcp[0].arn_suffix
   }
 
   tags = local.common_tags

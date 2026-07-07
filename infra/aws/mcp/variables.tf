@@ -16,6 +16,12 @@ variable "github_actions_subjects" {
   default     = ["repo:ergoveritas1-alt/certscore.ai:*"]
 }
 
+variable "enable_dedicated_serving_layer" {
+  description = "Whether to run the legacy dedicated MCP ECS service and ALB. Keep disabled after mcp.certscore.ai moved to the shared web ALB."
+  type        = bool
+  default     = false
+}
+
 variable "existing_vpc_id" {
   description = "Existing VPC id for the MCP stack."
   type        = string
@@ -63,13 +69,13 @@ variable "image_tag" {
 variable "mcp_cpu" {
   description = "CPU units for the MCP task."
   type        = number
-  default     = 512
+  default     = 256
 }
 
 variable "mcp_memory" {
   description = "Memory for the MCP task."
   type        = number
-  default     = 1024
+  default     = 512
 }
 
 variable "mcp_desired_count" {

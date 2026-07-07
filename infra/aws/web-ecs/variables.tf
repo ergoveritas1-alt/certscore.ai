@@ -274,6 +274,71 @@ variable "web_desired_count" {
   default     = 1
 }
 
+variable "mcp_domain_name" {
+  description = "Public hostname for the CertScore MCP service routed through the shared web ALB."
+  type        = string
+  default     = "mcp.certscore.ai"
+}
+
+variable "mcp_certificate_arn" {
+  description = "ACM certificate ARN in aws_region that covers mcp_domain_name. Required before enabling the shared-ALB MCP HTTPS route."
+  type        = string
+  default     = ""
+}
+
+variable "mcp_cpu" {
+  description = "CPU units for the MCP task."
+  type        = number
+  default     = 256
+}
+
+variable "mcp_memory" {
+  description = "Memory for the MCP task."
+  type        = number
+  default     = 512
+}
+
+variable "mcp_desired_count" {
+  description = "Desired MCP task count. Keep at 1 until stream sessions use sticky sessions or external session storage."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.mcp_desired_count == 1
+    error_message = "Launch MCP with one task. Scaling beyond one task requires sticky sessions or external session storage."
+  }
+}
+
+variable "mcp_assign_public_ip" {
+  description = "Whether MCP ECS tasks should receive public IPs. Keep true until the web VPC has NAT or VPC endpoints for outbound API calls."
+  type        = bool
+  default     = true
+}
+
+variable "mcp_session_ttl_seconds" {
+  description = "SESSION_TTL_SECONDS runtime value for MCP."
+  type        = number
+  default     = 1800
+}
+
+variable "mcp_session_max_count" {
+  description = "SESSION_MAX_COUNT runtime value for MCP."
+  type        = number
+  default     = 500
+}
+
+variable "mcp_cors_allowed_origins" {
+  description = "CORS_ALLOWED_ORIGINS runtime value for MCP."
+  type        = string
+  default     = "https://certscore.ai,https://www.certscore.ai,https://claude.ai,https://api.anthropic.com"
+}
+
+variable "mcp_certscore_request_timeout_ms" {
+  description = "CERTSCORE_REQUEST_TIMEOUT_MS runtime value for MCP."
+  type        = number
+  default     = 30000
+}
+
 variable "full_scan_queue_allow_degraded_heartbeat" {
   description = "Allow the web app to accept full-scan queue requests when scanner heartbeat is stale; requires external worker wake-up monitoring."
   type        = bool

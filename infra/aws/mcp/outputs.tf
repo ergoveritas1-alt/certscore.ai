@@ -1,6 +1,6 @@
 output "alb_dns_name" {
-  description = "DNS name of the MCP ALB. Point mcp.certscore.ai at this value in Cloudflare."
-  value       = aws_lb.mcp.dns_name
+  description = "DNS name of the legacy dedicated MCP ALB, when enabled."
+  value       = try(aws_lb.mcp[0].dns_name, null)
 }
 
 output "ecs_cluster_name" {
@@ -9,8 +9,8 @@ output "ecs_cluster_name" {
 }
 
 output "ecs_service_name" {
-  description = "ECS service name for the MCP service."
-  value       = aws_ecs_service.mcp.name
+  description = "Legacy dedicated ECS service name for the MCP service, when enabled."
+  value       = try(aws_ecs_service.mcp[0].name, null)
 }
 
 output "ecr_repository_name" {
@@ -34,6 +34,6 @@ output "log_group_name" {
 }
 
 output "target_group_arn" {
-  description = "ALB target group ARN for MCP health checks."
-  value       = aws_lb_target_group.mcp.arn
+  description = "Legacy dedicated ALB target group ARN for MCP health checks, when enabled."
+  value       = try(aws_lb_target_group.mcp[0].arn, null)
 }

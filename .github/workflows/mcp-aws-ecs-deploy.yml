@@ -9,6 +9,7 @@ on:
       - ".github/workflows/mcp-aws-ecs-deploy.yml"
       - "apps/mcp/**"
       - "infra/aws/mcp/**"
+      - "infra/aws/web-ecs/**"
       - "packages/certscore-api-contracts/**"
       - "packages/certscore-mcp-auth/**"
       - "packages/certscore-mcp/**"
@@ -34,13 +35,13 @@ jobs:
       id-token: write
 
     env:
-      AWS_REGION: ${{ vars.AWS_MCP_REGION || 'us-west-2' }}
+      AWS_REGION: ${{ vars.AWS_MCP_REGION || vars.AWS_REGION || 'us-west-1' }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_MCP_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
-      ECR_MCP_REPOSITORY: ${{ vars.AWS_MCP_ECR_REPOSITORY }}
-      ECS_CLUSTER_NAME: ${{ vars.AWS_MCP_ECS_CLUSTER }}
-      ECS_SERVICE_NAME: ${{ vars.AWS_MCP_ECS_SERVICE }}
+      ECR_MCP_REPOSITORY: ${{ vars.AWS_MCP_ECR_REPOSITORY || 'certscore-web-mcp' }}
+      ECS_CLUSTER_NAME: ${{ vars.AWS_MCP_ECS_CLUSTER || 'certscore-web-cluster' }}
+      ECS_SERVICE_NAME: ${{ vars.AWS_MCP_ECS_SERVICE || 'certscore-web-mcp' }}
       ECS_CONTAINER_NAME: ${{ vars.AWS_MCP_ECS_CONTAINER || 'mcp-http' }}
-      ECS_LOG_GROUP: ${{ vars.AWS_MCP_ECS_LOG_GROUP }}
+      ECS_LOG_GROUP: ${{ vars.AWS_MCP_ECS_LOG_GROUP || '/ecs/certscore-web/mcp' }}
       MCP_TARGET_GROUP_ARN: ${{ vars.AWS_MCP_TARGET_GROUP_ARN }}
 
     steps:
@@ -197,12 +198,8 @@ jobs:
           echo "MCP task definition: ${MCP_TASK_DEFINITION_ARN}"
           echo "MCP image: ${MCP_IMAGE}:${GITHUB_SHA}"
           echo
-          echo "Manual Cloudflare steps:"
-          echo "1. CNAME mcp.certscore.ai -> the MCP ALB DNS name from Terraform output alb_dns_name, proxied."
-          echo "2. Keep SSL/TLS mode Full or Full Strict."
-          echo "3. Add a cache-bypass rule for mcp.certscore.ai/*."
-          echo "4. Disable transformations/performance features for mcp.certscore.ai/* that could buffer streaming responses."
-          echo "5. Purge Cloudflare cache for mcp.certscore.ai."
+          echo "MCP should be routed by host rule on the shared CertScore web ALB."
+          echo "Cloudflare CNAME should remain: mcp.certscore.ai -> certscore-web-alb-527275258.us-west-1.elb.amazonaws.com, proxied."
 
       - name: Print ECS diagnostics on failure
         if: ${{ failure() }}
