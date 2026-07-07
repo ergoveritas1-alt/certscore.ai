@@ -1375,17 +1375,17 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const privacyChoiceSurfaceOnly =
     isPrivacyChoiceSurfaceOnly(consentControlLifecycle) ||
     (structuredContaminationDetected && !simpleCookieNoticeWithChoice && !retainedInitialCookieConsentLayerEvidence);
+  const broadConsentSurfaceSignalObserved =
+    getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
+    getBoolean(hybridRuntimeEvidence, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
+    getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true;
   const consentSurfaceObserved =
     (!privacyChoiceSurfaceOnly || simpleCookieNoticeWithChoice || retainedInitialCookieConsentLayerEvidence) &&
     (
       simpleCookieNoticeWithChoice ||
       retainedInitialCookieConsentLayerEvidence ||
-      getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
-      getBoolean(hybridRuntimeEvidence, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
-      getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true ||
       getBoolean(firstLayerConsentChoices, ["capturedBeforeInteraction", "captured_before_interaction"]) === true ||
-      visibleChoiceLabels.length > 0 ||
-      layerInspected === "first_layer"
+      (visibleChoiceLabels.length > 0 && layerInspected === "first_layer")
     );
 
   if (noticeGateEvidence.gateObserved) {
@@ -1488,13 +1488,13 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     );
   }
 
-    if (privacyChoiceSurfaceOnly && hasRuntimeCapture(input)) {
-      return makeOutcome(
-        "consent_surface_observed",
-        "Not confirmed",
-        "Privacy/ad-choice surface observed; GDPR consent banner not confirmed.",
-        [
-          "Evidence: consent control lifecycle",
+  if (privacyChoiceSurfaceOnly && hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "consent_surface_observed",
+      "Not confirmed",
+      "Privacy/ad-choice surface observed; GDPR consent banner not confirmed.",
+      [
+        "Evidence: consent control lifecycle",
         getString(consentControlLifecycle, ["surfacePurpose", "surface_purpose"]) ? `Surface purpose: ${getString(consentControlLifecycle, ["surfacePurpose", "surface_purpose"])}` : null,
         getString(consentControlLifecycle, ["privacyControlPlacement", "privacy_control_placement"]) ? `Placement: ${getString(consentControlLifecycle, ["privacyControlPlacement", "privacy_control_placement"])}` : null,
         ...visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5),
@@ -1532,6 +1532,29 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
             getString(rejectPathEvidence, ["privacyControlPlacement", "privacy_control_placement"]) ??
             "unknown",
           consentControlLifecycleEvidence: consentControlLifecycle ?? undefined,
+          layerInspected,
+          visibleChoiceLabels: compactArray(visibleChoiceLabels, 5)
+        }
+      }
+    );
+  }
+
+  if (broadConsentSurfaceSignalObserved && hasRuntimeCapture(input)) {
+    return makeOutcome(
+      "consent_surface_observed",
+      "Not confirmed",
+      "Runtime evidence suggested a possible consent surface, but CertScore did not retain an actionable first-layer GDPR/ePrivacy cookie banner or CMP preference surface.",
+      [
+        "Evidence: retained consent surface observation",
+        layerInspected ? `Layer inspected: ${layerInspected}` : null,
+        ...visibleChoiceLabels.map((label) => `Visible choice: ${label}`).slice(0, 5)
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          consentSurfaceObserved: false,
+          consentSurfaceDecisionStates: ["broad_consent_surface_signal_unconfirmed"],
+          firstLayerCookieConsentBannerObserved: false,
+          gdprEprivacyConsentSurfaceObserved: "unconfirmed",
           layerInspected,
           visibleChoiceLabels: compactArray(visibleChoiceLabels, 5)
         }

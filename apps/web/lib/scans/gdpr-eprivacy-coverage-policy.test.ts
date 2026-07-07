@@ -1996,6 +1996,45 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes marks retained consent surfaces a
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not observe broad consent surface booleans without retained controls", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "hybrid_auto_local_evidence",
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      consentSurfaceObserved: true,
+      consent_surface_observed: true,
+      hybridRuntimeEvidence: {
+        consentSummary: {
+          bannerPresent: true
+        }
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true,
+      pages_scanned: 1
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Not confirmed");
+  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /did not retain an actionable first-layer GDPR\/ePrivacy cookie banner/i);
+  assert.equal(
+    outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.gdprEprivacyConsentSurfaceObserved,
+    "unconfirmed"
+  );
+  assert.deepEqual(
+    outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.consentSurfaceDecisionStates,
+    ["broad_consent_surface_signal_unconfirmed"]
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes confirms simple cookie notices despite stale unknown-purpose demotion", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

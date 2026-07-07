@@ -475,7 +475,7 @@ test("deriveGdprEprivacyCoverageChecklist rates pre-consent 3rd party cookie sto
   const row = byId(items, "pre_consent_cookies_storage");
   assert.equal(row.status, "Gap observed");
   assert.equal(row.criticalEvidence.retainedEvidence.cookieStoragePriority, "high");
-  assert.match(row.explanation, /Google - Advertising \(0.950s\)/);
+  assert.match(row.explanation, /Google DoubleClick - Advertising \(0.950s\)/);
   assert.match(row.criticalEvidence.statusBasis, /High priority.*Advertising/);
 });
 
