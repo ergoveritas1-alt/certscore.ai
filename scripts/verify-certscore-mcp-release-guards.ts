@@ -207,6 +207,7 @@ async function main() {
   for (const tool of runtimeTools) {
     assert.ok(tool.title, `${tool.name} should expose MCP title`);
     assert.ok(tool.annotations, `${tool.name} should expose MCP annotations`);
+    assert.equal(tool.annotations.title, tool.title, `${tool.name} should expose matching annotations.title`);
   }
   const runtimeToolNames = runtimeTools.map((tool) => tool.name).sort();
 

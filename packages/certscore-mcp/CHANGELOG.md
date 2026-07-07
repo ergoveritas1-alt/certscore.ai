@@ -1,5 +1,9 @@
 # certscore-mcp
 
+## 0.2.4
+
+- Mirrors each MCP tool display title into `annotations.title` so Claude directory submission validation recognizes all 11 human-readable tool titles.
+
 ## 0.2.3
 
 - Adds human-readable MCP tool titles for all 11 tools so connector directory review does not fall back to raw tool names.

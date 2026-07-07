@@ -107,6 +107,7 @@ test("MCP contracts expose the current scoped tool surface", () => {
     assert.equal(typeof tool.title, "string", `${tool.name} should expose a title`);
     assert.ok(tool.title.length > 0, `${tool.name} should expose a non-empty title`);
     assert.equal(tool.title.endsWith("."), false, `${tool.name} title should not end with a period`);
+    assert.equal(tool.annotations.title, tool.title, `${tool.name} should expose the same title in annotations`);
   }
   assert.match(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.description ?? "", /https:\/\/certscore\.ai\/api\/v2\/openapi\.json/);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema.url);
@@ -114,12 +115,14 @@ test("MCP contracts expose the current scoped tool surface", () => {
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.inputSchema.findingId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_latest_domain_scan")?.inputSchema.domain);
   assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.annotations, {
+    title: "Scan site",
     readOnlyHint: false,
     destructiveHint: true,
     idempotentHint: false,
     openWorldHint: true
   });
   assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "get_scan")?.annotations, {
+    title: "Get CertScore scan",
     readOnlyHint: true,
     openWorldHint: true
   });

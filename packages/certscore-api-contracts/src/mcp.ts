@@ -75,17 +75,23 @@ export const mcpGetLatestDomainPreConsentCookiesTrackersInputSchema = {
   maxRows: z.number().int().min(1).max(200).optional().describe("Maximum inventory rows to return. Defaults to 200.")
 } as const;
 
-const scanCreationAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: true,
-  idempotentHint: false,
-  openWorldHint: true
-} as const;
+function scanCreationAnnotations(title: string) {
+  return {
+    title,
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true
+  } as const;
+}
 
-const readOnlyOpenWorldAnnotations = {
-  readOnlyHint: true,
-  openWorldHint: true
-} as const;
+function readOnlyOpenWorldAnnotations(title: string) {
+  return {
+    title,
+    readOnlyHint: true,
+    openWorldHint: true
+  } as const;
+}
 
 export const mcpToolErrorPayloadSchema = z
   .object({
@@ -202,7 +208,7 @@ export const certScoreMcpToolContracts = [
     description: "Start or reuse a CertScore public-web scan for a public URL. API docs: https://certscore.ai/api/v2/openapi.json",
     inputSchema: mcpCreateScanInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
-    annotations: scanCreationAnnotations
+    annotations: scanCreationAnnotations("Scan site")
   },
   {
     name: "get_scan",
@@ -210,7 +216,7 @@ export const certScoreMcpToolContracts = [
     description: "Retrieve the API v2 public-safe scan resource for a stable scan ID.",
     inputSchema: mcpGetScanInputSchema,
     outputSchema: apiV2ScanResourceSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyOpenWorldAnnotations("Get CertScore scan")
   },
   {
     name: "get_scan_status",
@@ -218,7 +224,7 @@ export const certScoreMcpToolContracts = [
     description: "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId.",
     inputSchema: mcpGetScanStatusInputSchema,
     outputSchema: mcpScanStatusOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyOpenWorldAnnotations("Get CertScore scan status")
   },
   {
     name: "get_report",
@@ -226,7 +232,7 @@ export const certScoreMcpToolContracts = [
     description: "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet.",
     inputSchema: mcpGetReportInputSchema,
     outputSchema: mcpReportOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyOpenWorldAnnotations("Get CertScore report")
   },
   {
     name: "get_evidence",
@@ -234,7 +240,7 @@ export const certScoreMcpToolContracts = [
     description: "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.",
     inputSchema: mcpGetEvidenceInputSchema,
     outputSchema: pulseResponseSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyOpenWorldAnnotations("Get CertScore evidence")
   },
   {
     name: "export_findings",
@@ -242,7 +248,7 @@ export const certScoreMcpToolContracts = [
     description: "Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows.",
     inputSchema: mcpExportFindingsInputSchema,
     outputSchema: mcpFindingsExportOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyOpenWorldAnnotations("Export CertScore findings")
   },
   {
     name: "list_findings",
@@ -250,7 +256,7 @@ export const certScoreMcpToolContracts = [
     description: "List API v2 public-safe findings already projected for a scan.",
     inputSchema: mcpListFindingsInputSchema,
     outputSchema: mcpFindingListOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyOpenWorldAnnotations("List CertScore findings")
   },
   {
     name: "get_pre_consent_cookies_trackers",
@@ -258,7 +264,7 @@ export const certScoreMcpToolContracts = [
     description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.",
     inputSchema: mcpGetPreConsentCookiesTrackersInputSchema,
     outputSchema: mcpPreConsentCookiesTrackersOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyOpenWorldAnnotations("Get pre-consent cookies & trackers")
   },
   {
     name: "explain_finding",
@@ -266,7 +272,7 @@ export const certScoreMcpToolContracts = [
     description: "Explain a single CertScore finding with public evidence, caveats, and reviewer next steps.",
     inputSchema: mcpExplainFindingInputSchema,
     outputSchema: apiV2FindingDetailSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyOpenWorldAnnotations("Explain CertScore finding")
   },
   {
     name: "get_latest_domain_scan",
@@ -274,7 +280,7 @@ export const certScoreMcpToolContracts = [
     description: "Retrieve the latest eligible API v2 public-safe scan for a domain.",
     inputSchema: mcpGetLatestDomainScanInputSchema,
     outputSchema: apiV2DomainLatestScanSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyOpenWorldAnnotations("Get latest domain scan")
   },
   {
     name: "get_latest_domain_pre_consent_cookies_trackers",
@@ -282,6 +288,6 @@ export const certScoreMcpToolContracts = [
     description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.",
     inputSchema: mcpGetLatestDomainPreConsentCookiesTrackersInputSchema,
     outputSchema: mcpPreConsentCookiesTrackersOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyOpenWorldAnnotations("Get latest pre-consent cookies & trackers")
   }
 ] as const;
