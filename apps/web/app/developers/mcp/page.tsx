@@ -35,6 +35,35 @@ Protected resource metadata: https://mcp.certscore.ai/.well-known/oauth-protecte
           </p>
         </Section>
 
+        <Section eyebrow="Claude" title="Connect in Claude">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Claude can connect directly to the hosted CertScore MCP server. You do not need to create an API key or paste OAuth
+            credentials for the standard Claude connector flow.
+          </p>
+          <CodeBlock>{`1. In Claude, go to Settings > Connectors > Add custom connector.
+2. Enter https://mcp.certscore.ai/mcp as the URL.
+3. Leave the OAuth Client ID and Client Secret fields blank.
+4. Save. Claude redirects you to certscore.ai to sign in or create a free account and approve access.
+5. Once connected, ask Claude to use CertScore.`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            CertScore supports Dynamic Client Registration, so Claude registers itself automatically when those OAuth fields are blank.
+            New connections receive <code className="rounded bg-white px-1">scan:read</code> and{" "}
+            <code className="rounded bg-white px-1">mcp</code> by default, which is enough to look up existing scans, findings, and
+            reports for any domain. Scan creation requires <code className="rounded bg-white px-1">scan:create</code>, which is granted
+            on request to protect scan quota; email{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:developers@certscore.ai">
+              developers@certscore.ai
+            </a>{" "}
+            to request access.
+          </p>
+          <CodeBlock>{`Try:
+"Scan mozilla.org and summarize the privacy/cookie risk signals"
+"What's the latest CertScore scan of example.com show?"`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            If you only need to query existing data from a non-Claude MCP client, use the self-serve read-only key path below.
+          </p>
+        </Section>
+
         <Section eyebrow="Directory review" title="Reviewer access for scan creation">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             The remote connector works read-only by default. <code className="rounded bg-white px-1">scan:create</code> is grant-gated
