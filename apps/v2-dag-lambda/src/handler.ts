@@ -101,10 +101,14 @@ export type LocalV2DagLambdaResultMessage = {
     message: string;
   };
   handlerTiming?: LocalV2DagLambdaHandlerTiming;
+  observedOutboundIp?: string;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
+  egressId?: string;
+  egressProvider?: string;
   scanId: string;
+  scannerRegion?: LocalV2DagLambdaAwsRegion;
   scannerGitSha?: string;
   scannerImageTag?: string;
   scannerRuntimeVersion?: string;
@@ -140,6 +144,13 @@ type LocalV2DagLambdaHandlerTiming = {
   scanPhaseDurationMs?: number;
   scanPhaseLabel?: string;
   scanPhaseStartedAt?: string;
+};
+
+type LocalV2DagLambdaEgressMetadata = {
+  egressId?: string;
+  egressProvider?: string;
+  observedOutboundIp?: string;
+  scannerRegion?: LocalV2DagLambdaAwsRegion;
 };
 type LocalV2DagLambdaWorkerLane = "coordinator" | "consent_flows" | "accept_gpc" | "accept_only" | "reject_manage";
 type LocalV2DagLambdaDebugOverrides = {
@@ -212,6 +223,7 @@ type LambdaInvokeClient = {
 type ArtifactChainResult = {
   artifactMetadata?: LocalV2DagLambdaResultMessage["artifactMetadata"];
   artifactPointers?: LocalV2DagLambdaResultMessage["artifactPointers"];
+  egressMetadata?: LocalV2DagLambdaEgressMetadata;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
 };
 
@@ -587,6 +599,7 @@ export async function runLocalV2DagLambdaArtifactChain(
 ): Promise<{
   artifactMetadata: LocalV2DagLambdaArtifactMetadata;
   artifactPointers: LocalV2DagLambdaArtifactPointers;
+  egressMetadata?: LocalV2DagLambdaEgressMetadata;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
   shards?: LocalV2DagLambdaShardResult[];
 }> {
@@ -595,7 +608,7 @@ export async function runLocalV2DagLambdaArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
-  await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot, payload));
+  const egressMetadata = await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot, payload));
   assertRegionalRealIpEgressAvailable(payload);
 
   const bundle = await runLocalV2DagLambdaScanBundle(payload, {
@@ -611,6 +624,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     bundle,
     payload,
     phaseTimings,
+    egressMetadata,
     s3Client: options.s3Client,
     scanTuning
   });
@@ -645,6 +659,7 @@ async function runLocalV2DagLambdaScanBundle(
 async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   artifactRoot: string;
   bundle: CanonicalEvidenceBundle;
+  egressMetadata?: LocalV2DagLambdaEgressMetadata;
   payload: LocalV2DagLambdaDispatchPayload;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
   s3Client?: S3PutClient;
@@ -652,6 +667,7 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
 }): Promise<{
   artifactMetadata: LocalV2DagLambdaArtifactMetadata;
   artifactPointers: LocalV2DagLambdaArtifactPointers;
+  egressMetadata?: LocalV2DagLambdaEgressMetadata;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
 }> {
   const { artifactRoot, bundle, payload, phaseTimings, scanTuning } = input;
@@ -689,6 +705,7 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   return {
     artifactMetadata,
     artifactPointers: pointers,
+    ...(input.egressMetadata ? { egressMetadata: input.egressMetadata } : {}),
     phaseTimings
   };
 }
@@ -701,7 +718,10 @@ function writeJson(filePath: string, value: unknown) {
   return writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-async function writeEgressPreflightArtifact(artifactRoot: string, payload: LocalV2DagLambdaDispatchPayload) {
+async function writeEgressPreflightArtifact(
+  artifactRoot: string,
+  payload: LocalV2DagLambdaDispatchPayload
+): Promise<LocalV2DagLambdaEgressMetadata> {
   const startedAt = Date.now();
   const startedAtIso = new Date(startedAt).toISOString();
   const egressLabel = firstTrimmedRuntimeEnv(process.env, [
@@ -738,7 +758,9 @@ async function writeEgressPreflightArtifact(artifactRoot: string, payload: Local
     artifact.completedAt = new Date(completedAt).toISOString();
     artifact.durationMs = completedAt - startedAt;
     await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
-    return;
+    return buildLocalV2DagLambdaEgressMetadata(payload, {
+      egressLabel: artifact.egressLabel
+    });
   }
 
   let browser;
@@ -769,6 +791,34 @@ async function writeEgressPreflightArtifact(artifactRoot: string, payload: Local
     artifact.durationMs = completedAt - startedAt;
     await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
   }
+  return buildLocalV2DagLambdaEgressMetadata(payload, {
+    egressLabel: artifact.egressLabel,
+    observedOutboundIp: artifact.observed?.ip
+  });
+}
+
+function buildLocalV2DagLambdaEgressMetadata(
+  payload: LocalV2DagLambdaDispatchPayload,
+  observed?: {
+    egressLabel?: string | null;
+    egressProvider?: string | null;
+    observedOutboundIp?: string | null;
+  }
+): LocalV2DagLambdaEgressMetadata {
+  const egressLabel = compactString(observed?.egressLabel)
+    ?? firstTrimmedRuntimeEnv(process.env, ["SCAN_EGRESS_LABEL", "CERTSCORE_V2_DAG_LAMBDA_EGRESS_LABEL"]);
+  const egressId = compactString(egressLabel) ?? compactString(payload.regionalRealIpEgress?.egressId);
+  const observedOutboundIp = compactString(observed?.observedOutboundIp);
+  const egressProvider = egressId
+    ? compactString(observed?.egressProvider) ?? "aws-ec2-proxy-eip"
+    : compactString(payload.regionalRealIpEgress?.provider) ?? compactString(payload.requestedGeo?.provider);
+
+  return {
+    ...(egressId ? { egressId: egressId.slice(0, 80) } : {}),
+    ...(egressProvider ? { egressProvider: egressProvider.slice(0, 80) } : {}),
+    ...(observedOutboundIp ? { observedOutboundIp: observedOutboundIp.slice(0, 80) } : {}),
+    scannerRegion: payload.awsRegion
+  };
 }
 
 export function assertRegionalRealIpEgressAvailable(
@@ -823,6 +873,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
 ): Promise<{
   artifactMetadata: LocalV2DagLambdaArtifactMetadata;
   artifactPointers: LocalV2DagLambdaArtifactPointers;
+  egressMetadata?: LocalV2DagLambdaEgressMetadata;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
 }> {
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
@@ -830,7 +881,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
-  await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot, payload));
+  const egressMetadata = await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot, payload));
   assertRegionalRealIpEgressAvailable(payload);
 
   const strongWebMdMode = isStrongWebMdEvidenceMode(payload, scanTuning);
@@ -857,6 +908,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       bundle: coordinatorBundle,
       payload,
       phaseTimings,
+      egressMetadata,
       s3Client: options.s3Client,
       scanTuning
     });
@@ -917,6 +969,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     bundle,
     payload: coordinatorPlanSummary ? { ...payload, coordinatorPlanSummary } : payload,
     phaseTimings,
+    egressMetadata,
     s3Client: options.s3Client,
     scanTuning
   });
@@ -1757,6 +1810,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
   artifactMetadata?: LocalV2DagLambdaResultMessage["artifactMetadata"];
   artifactPointers?: LocalV2DagLambdaResultMessage["artifactPointers"];
   completedAt: Date;
+  egressMetadata?: LocalV2DagLambdaEgressMetadata;
   error?: { code?: string; message: string };
   handlerTiming?: LocalV2DagLambdaHandlerTiming;
   payload: LocalV2DagLambdaDispatchPayload;
@@ -1771,6 +1825,11 @@ export function buildLocalV2DagLambdaResultMessage(input: {
     completedAt: input.completedAt.toISOString(),
     contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
     ...(input.error ? { error: sanitizeError(input.error) } : {}),
+    ...buildLocalV2DagLambdaEgressMetadata(input.payload, {
+      egressLabel: input.egressMetadata?.egressId,
+      egressProvider: input.egressMetadata?.egressProvider,
+      observedOutboundIp: input.egressMetadata?.observedOutboundIp
+    }),
     ...(input.handlerTiming ? { handlerTiming: input.handlerTiming } : {}),
     ...(input.phaseTimings ? { phaseTimings: input.phaseTimings } : {}),
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
@@ -1875,6 +1934,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       artifactMetadata: artifactResult.artifactMetadata,
       artifactPointers: artifactResult.artifactPointers,
       completedAt,
+      egressMetadata: artifactResult.egressMetadata,
       handlerTiming: buildLocalV2DagLambdaHandlerTiming({
         artifactChainCompletedAt,
         artifactChainStartedAt,

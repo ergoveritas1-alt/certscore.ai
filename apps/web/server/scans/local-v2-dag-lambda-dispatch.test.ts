@@ -249,6 +249,9 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
         scanPhaseLabel: "scan",
         scanPhaseStartedAt: "2026-06-15T17:59:55.300Z"
       },
+      egressId: "eu-de-ec2-proxy-t4g-micro",
+      egressProvider: "aws-ec2-proxy-eip",
+      observedOutboundIp: "3.79.106.160",
       phaseTimings: [{
         completedAt: "2026-06-15T18:00:00.000Z",
         durationMs: 42.4,
@@ -259,6 +262,7 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
       scanId: "scan-local-1",
+      scannerRegion: "eu-central-1",
       scannerGitSha: "abc123scanner",
       scannerImageTag: "scanner-image:abc123scanner",
       scannerRuntimeVersion: "v2-dag-runtime.1",
@@ -277,6 +281,10 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
   assert.equal(parsed.scannerGitSha, "abc123scanner");
   assert.equal(parsed.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(parsed.scannerRuntimeVersion, "v2-dag-runtime.1");
+  assert.equal(parsed.scannerRegion, "eu-central-1");
+  assert.equal(parsed.egressId, "eu-de-ec2-proxy-t4g-micro");
+  assert.equal(parsed.egressProvider, "aws-ec2-proxy-eip");
+  assert.equal(parsed.observedOutboundIp, "3.79.106.160");
   assert.deepEqual(parsed.phaseTimings, [{
     completedAt: "2026-06-15T18:00:00.000Z",
     durationMs: 42,

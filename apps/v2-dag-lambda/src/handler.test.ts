@@ -345,6 +345,12 @@ test("handler emits a validated completed SQS result without production findings
         manifestUri: "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json",
         scanArtifactUri: "s3://certscore-dev-artifacts/v2/scan-local-1/CanonicalEvidenceBundle.json"
       },
+      egressMetadata: {
+        egressId: "eu-de-ec2-proxy-t4g-micro",
+        egressProvider: "aws-ec2-proxy-eip",
+        observedOutboundIp: "3.79.106.160",
+        scannerRegion: "eu-central-1"
+      },
       phaseTimings: [{ durationMs: 123, label: "scan", status: "completed" }]
     }),
     sqsClient: {
@@ -376,6 +382,10 @@ test("handler emits a validated completed SQS result without production findings
   assert.equal(result.scannerGitSha, "abc123scanner");
   assert.equal(result.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(result.scannerRuntimeVersion, "v2-dag-runtime.1");
+  assert.equal(result.scannerRegion, "eu-central-1");
+  assert.equal(result.egressId, "eu-de-ec2-proxy-t4g-micro");
+  assert.equal(result.egressProvider, "aws-ec2-proxy-eip");
+  assert.equal(result.observedOutboundIp, "3.79.106.160");
   assert.equal(Object.hasOwn(result, "findings"), false);
   assert.equal(Object.hasOwn(result, "checklistRows"), false);
   assert.equal(Object.hasOwn(result, "score"), false);
@@ -390,6 +400,10 @@ test("handler emits a validated completed SQS result without production findings
   assert.equal(parsed.scannerGitSha, "abc123scanner");
   assert.equal(parsed.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(parsed.scannerRuntimeVersion, "v2-dag-runtime.1");
+  assert.equal(parsed.scannerRegion, "eu-central-1");
+  assert.equal(parsed.egressId, "eu-de-ec2-proxy-t4g-micro");
+  assert.equal(parsed.egressProvider, "aws-ec2-proxy-eip");
+  assert.equal(parsed.observedOutboundIp, "3.79.106.160");
   assert.deepEqual(parsed.phaseTimings, [{ durationMs: 123, label: "scan", status: "completed" }]);
   assert.deepEqual(parsed.handlerTiming, {
     artifactChainCompletedAt: "2026-06-15T18:00:00.000Z",

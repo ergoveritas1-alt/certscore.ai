@@ -121,10 +121,14 @@ export type LocalV2DagLambdaResultMessage = {
     message: string;
   };
   handlerTiming?: LocalV2DagLambdaHandlerTiming;
+  observedOutboundIp?: string;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
+  egressId?: string;
+  egressProvider?: string;
   scanId: string;
+  scannerRegion?: string;
   scannerGitSha?: string;
   scannerImageTag?: string;
   scannerRuntimeVersion?: string;
@@ -497,6 +501,22 @@ export function parseLocalV2DagLambdaResultMessage(
   const handlerTiming = parseHandlerTiming(record.handlerTiming);
   if (handlerTiming) {
     parsed.handlerTiming = handlerTiming;
+  }
+  const egressId = stringValue(record.egressId);
+  if (egressId) {
+    parsed.egressId = egressId.slice(0, 80);
+  }
+  const egressProvider = stringValue(record.egressProvider);
+  if (egressProvider) {
+    parsed.egressProvider = egressProvider.slice(0, 80);
+  }
+  const observedOutboundIp = stringValue(record.observedOutboundIp);
+  if (observedOutboundIp) {
+    parsed.observedOutboundIp = observedOutboundIp.slice(0, 80);
+  }
+  const scannerRegion = stringValue(record.scannerRegion);
+  if (scannerRegion) {
+    parsed.scannerRegion = scannerRegion.slice(0, 80);
   }
   const scannerGitSha = stringValue(record.scannerGitSha);
   if (scannerGitSha) {

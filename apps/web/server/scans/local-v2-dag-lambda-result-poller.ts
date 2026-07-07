@@ -471,6 +471,12 @@ export async function recordLocalV2DagLambdaResultEvent(
             : {}),
           lambdaPhaseTimings: parsedMessage.phaseTimings ?? [],
           ...(parsedMessage.handlerTiming ? { lambdaHandlerTiming: parsedMessage.handlerTiming } : {}),
+          egress: {
+            egressId: parsedMessage.egressId ?? null,
+            egressProvider: parsedMessage.egressProvider ?? null,
+            observedOutboundIp: parsedMessage.observedOutboundIp ?? null,
+            scannerRegion: parsedMessage.scannerRegion ?? null
+          },
           processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
           productionFindingIntegration: false,
           resultStatus: parsedMessage.status,
@@ -513,6 +519,10 @@ export async function recordLocalV2DagLambdaResultEvent(
     `update scans
         set completed_at = coalesce(completed_at, $2::timestamptz),
             error_message = case when $3 = 'failed' then $4 else error_message end,
+            scanner_region = coalesce($5, scanner_region),
+            egress_id = coalesce($6, egress_id),
+            egress_provider = coalesce($7, egress_provider),
+            observed_outbound_ip = coalesce($8, observed_outbound_ip),
             status = case when $3 = 'failed' then 'failed' else 'completed' end
       where id = $1
         and status in ('queued', 'running')`,
@@ -520,7 +530,11 @@ export async function recordLocalV2DagLambdaResultEvent(
       parsedMessage.scanId,
       parsedMessage.completedAt,
       parsedMessage.status,
-      parsedMessage.error?.message ?? null
+      parsedMessage.error?.message ?? null,
+      parsedMessage.scannerRegion ?? null,
+      parsedMessage.egressId ?? null,
+      parsedMessage.egressProvider ?? null,
+      parsedMessage.observedOutboundIp ?? null
     ]
   );
   if (artifactMirror) {

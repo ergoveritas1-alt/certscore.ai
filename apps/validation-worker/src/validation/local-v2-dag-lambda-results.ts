@@ -32,8 +32,12 @@ type LambdaResultMessage = {
   completedAt: string;
   error?: { code?: string; message: string };
   handlerTiming?: LambdaHandlerTiming;
+  observedOutboundIp?: string;
   phaseTimings?: unknown[];
+  egressId?: string;
+  egressProvider?: string;
   scanId: string;
+  scannerRegion?: string;
   scannerGitSha?: string;
   scannerImageTag?: string;
   scannerRuntimeVersion?: string;
@@ -196,8 +200,14 @@ function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: Lambda
       ? { error: { ...(stringValue(errorRecord.code) ? { code: stringValue(errorRecord.code) as string } : {}), message: errorMessage } }
       : {}),
     ...(handlerTiming ? { handlerTiming } : {}),
+    ...(stringValue(record.egressId) ? { egressId: (stringValue(record.egressId) as string).slice(0, 80) } : {}),
+    ...(stringValue(record.egressProvider) ? { egressProvider: (stringValue(record.egressProvider) as string).slice(0, 80) } : {}),
+    ...(stringValue(record.observedOutboundIp)
+      ? { observedOutboundIp: (stringValue(record.observedOutboundIp) as string).slice(0, 80) }
+      : {}),
     phaseTimings: Array.isArray(record.phaseTimings) ? record.phaseTimings : [],
     scanId,
+    ...(stringValue(record.scannerRegion) ? { scannerRegion: (stringValue(record.scannerRegion) as string).slice(0, 80) } : {}),
     ...(stringValue(record.scannerGitSha) ? { scannerGitSha: (stringValue(record.scannerGitSha) as string).slice(0, 80) } : {}),
     ...(stringValue(record.scannerImageTag) ? { scannerImageTag: (stringValue(record.scannerImageTag) as string).slice(0, 160) } : {}),
     ...(stringValue(record.scannerRuntimeVersion)
@@ -657,6 +667,12 @@ export async function recordLocalV2DagLambdaResult(
           ...(parsedMessage.handlerTiming && Object.keys(parsedMessage.handlerTiming).length > 0
             ? { lambdaHandlerTiming: parsedMessage.handlerTiming }
             : {}),
+          egress: {
+            egressId: parsedMessage.egressId ?? null,
+            egressProvider: parsedMessage.egressProvider ?? null,
+            observedOutboundIp: parsedMessage.observedOutboundIp ?? null,
+            scannerRegion: parsedMessage.scannerRegion ?? null
+          },
           processor: PROCESSOR,
           productionFindingIntegration: false,
           resultStatus: parsedMessage.status,
@@ -676,6 +692,10 @@ export async function recordLocalV2DagLambdaResult(
     `update scans
         set completed_at = coalesce(completed_at, $2::timestamptz),
             error_message = case when $3 = 'failed' then $4 else error_message end,
+            scanner_region = coalesce($5, scanner_region),
+            egress_id = coalesce($6, egress_id),
+            egress_provider = coalesce($7, egress_provider),
+            observed_outbound_ip = coalesce($8, observed_outbound_ip),
             status = case when $3 = 'failed' then 'failed' else 'completed' end
       where id = $1
         and status in ('queued', 'running')`,
@@ -683,7 +703,11 @@ export async function recordLocalV2DagLambdaResult(
       parsedMessage.scanId,
       parsedMessage.completedAt,
       parsedMessage.status,
-      parsedMessage.error?.message ?? null
+      parsedMessage.error?.message ?? null,
+      parsedMessage.scannerRegion ?? null,
+      parsedMessage.egressId ?? null,
+      parsedMessage.egressProvider ?? null,
+      parsedMessage.observedOutboundIp ?? null
     ]
   );
   if (artifactMirror) {

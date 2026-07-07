@@ -134,6 +134,19 @@ test("validation worker records Lambda result event before marking scan complete
   );
 });
 
+test("validation worker persists Lambda egress metadata onto scan rows", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+
+  assert.match(source, /scanner_region = coalesce\(\$5, scanner_region\)/);
+  assert.match(source, /egress_id = coalesce\(\$6, egress_id\)/);
+  assert.match(source, /egress_provider = coalesce\(\$7, egress_provider\)/);
+  assert.match(source, /observed_outbound_ip = coalesce\(\$8, observed_outbound_ip\)/);
+  assert.match(source, /parsedMessage\.scannerRegion/);
+  assert.match(source, /parsedMessage\.egressId/);
+  assert.match(source, /parsedMessage\.egressProvider/);
+  assert.match(source, /parsedMessage\.observedOutboundIp/);
+});
+
 test("validation worker mirrors completed Lambda artifacts for production-target results", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
