@@ -6,7 +6,7 @@ import {
   createAuthorizationCode,
   getMcpOAuthClient,
   redirectUriAllowed,
-  restrictMcpOAuthScopes
+  resolveMcpOAuthRequestedScopes
 } from "../../../../../server/oauth/mcp-oauth";
 
 export const dynamic = "force-dynamic";
@@ -51,22 +51,33 @@ export async function POST(request: Request) {
     });
   }
   const { organization, user } = await bootstrapAppUserSession(sessionUser);
-  const scopes = await restrictMcpOAuthScopes(requestedScopes.filter((scope) => client.scope.includes(scope)), {
-    clientId,
-    organizationId: organization.id,
-    ownerUserId: user.id
+  const scopeResolution = await resolveMcpOAuthRequestedScopes({
+    client,
+    requestedScopes,
+    context: {
+      clientId,
+      organizationId: organization.id,
+      ownerUserId: user.id
+    }
   });
+  if (scopeResolution.deniedScopes.length > 0) {
+    redirectWithParams(redirectUri, {
+      error: "invalid_scope",
+      error_description: `Requested scopes are not available: ${oauthScopeString(scopeResolution.deniedScopes)}.`,
+      state
+    });
+  }
   const code = await createAuthorizationCode({
     clientId,
     codeChallenge,
     organizationId: organization.id,
     ownerUserId: user.id,
     redirectUri,
-    scopes
+    scopes: scopeResolution.approvedScopes
   });
   redirectWithParams(redirectUri, {
     code,
-    scope: oauthScopeString(scopes),
+    scope: oauthScopeString(scopeResolution.approvedScopes),
     state
   });
 }

@@ -4,8 +4,6 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import {
   CERTSCORE_OAUTH_CREATE_SCOPE,
-  CERTSCORE_OAUTH_MCP_SCOPE,
-  CERTSCORE_OAUTH_READ_SCOPE,
   generateOpaqueToken,
   mapOAuthScopesToIntegrationScopes,
   normalizeOAuthScopes,
@@ -13,6 +11,13 @@ import {
   signCertScoreAccessToken,
   type CertScoreOAuthScope
 } from "@certscore/mcp-auth";
+import {
+  normalizeMcpOAuthClientScopes,
+  resolveMcpOAuthScopeRequest,
+  type McpOAuthScopeResolution
+} from "./mcp-oauth-scopes";
+
+export { normalizeMcpOAuthClientScopes, resolveMcpOAuthScopeRequest, type McpOAuthScopeResolution };
 
 export type McpOAuthClient = {
   clientId: string;
@@ -85,17 +90,6 @@ export function getMcpJwtSecret() {
   return secret;
 }
 
-export function normalizeMcpOAuthClientScopes(scopes: string[] | readonly string[]) {
-  const normalized = normalizeOAuthScopes([...scopes]);
-  if (!normalized.includes(CERTSCORE_OAUTH_READ_SCOPE)) {
-    normalized.unshift(CERTSCORE_OAUTH_READ_SCOPE);
-  }
-  if (!normalized.includes(CERTSCORE_OAUTH_MCP_SCOPE)) {
-    normalized.push(CERTSCORE_OAUTH_MCP_SCOPE);
-  }
-  return Array.from(new Set(normalized));
-}
-
 export async function hasMcpOAuthScanCreateGrant(context: McpOAuthGrantContext) {
   const clientId = context.clientId?.trim() || null;
   const organizationId = context.organizationId?.trim() || null;
@@ -128,6 +122,18 @@ export async function restrictMcpOAuthScopes(scopes: string[] | readonly string[
     return normalized;
   }
   return normalized.filter((scope) => scope !== CERTSCORE_OAUTH_CREATE_SCOPE);
+}
+
+export async function resolveMcpOAuthRequestedScopes(input: {
+  client: Pick<McpOAuthClient, "scope">;
+  requestedScopes: readonly string[];
+  context: McpOAuthGrantContext;
+}) {
+  return resolveMcpOAuthScopeRequest({
+    clientScopes: input.client.scope,
+    requestedScopes: input.requestedScopes,
+    scanCreateGranted: await hasMcpOAuthScanCreateGrant(input.context)
+  });
 }
 
 export function getRequesterIp(request: Request) {
@@ -253,11 +259,7 @@ export async function createAuthorizationCode(input: {
       input.clientId,
       input.redirectUri,
       input.codeChallenge,
-      await restrictMcpOAuthScopes(input.scopes, {
-        clientId: input.clientId,
-        organizationId: input.organizationId,
-        ownerUserId: input.ownerUserId
-      }),
+      normalizeOAuthScopes([...input.scopes]),
       input.organizationId,
       input.ownerUserId,
       AUTHORIZATION_CODE_TTL_SECONDS

@@ -4,7 +4,7 @@ import { normalizeOAuthScopes, oauthScopeString } from "@certscore/mcp-auth";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { getCurrentUser } from "../../../server/auth";
 import { bootstrapAppUserSession } from "../../../server/bootstrap-user";
-import { getMcpOAuthClient, redirectUriAllowed, restrictMcpOAuthScopes } from "../../../server/oauth/mcp-oauth";
+import { getMcpOAuthClient, redirectUriAllowed, resolveMcpOAuthRequestedScopes } from "../../../server/oauth/mcp-oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -67,13 +67,21 @@ export default async function AuthorizePage({ searchParams }: AuthorizePageProps
     redirect(`/login?next=${encodeURIComponent(currentAuthorizePath(params))}`);
   }
   const { organization, user } = await bootstrapAppUserSession(sessionUser);
-  const requestedScope = oauthScopeString(
-    await restrictMcpOAuthScopes(rawRequestedScopes.filter((scope) => client.scope.includes(scope)), {
+  const scopeResolution = await resolveMcpOAuthRequestedScopes({
+    client,
+    requestedScopes: rawRequestedScopes,
+    context: {
       clientId,
       organizationId: organization.id,
       ownerUserId: user.id
-    })
-  );
+    }
+  });
+  if (scopeResolution.deniedScopes.length > 0) {
+    return invalidRequest(
+      `This OAuth client requested scopes that are not available for this account: ${oauthScopeString(scopeResolution.deniedScopes)}.`
+    );
+  }
+  const requestedScope = oauthScopeString(scopeResolution.approvedScopes);
 
   return (
     <main className="min-h-screen bg-slate-50">
