@@ -25,7 +25,20 @@ export default function DeveloperSdkPage() {
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk">
               packages/certscore-sdk
             </a>
-            . Use the REST API directly for production integrations until a public package channel is announced.
+            . Use the REST API v2 contract directly for production integrations until a public SDK package channel is announced. The MCP
+            server is distributed separately as <code className="rounded bg-slate-100 px-1">@certscore/mcp</code> and through the remote
+            endpoint at <code className="rounded bg-slate-100 px-1">https://mcp.certscore.ai/mcp</code>.
+          </p>
+        </Section>
+
+        <Section eyebrow="Access" title="API keys and scopes">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            The SDK sends <code className="rounded bg-slate-100 px-1">Authorization: Bearer &lt;token&gt;</code>. Read-only workflows need{" "}
+            <code className="rounded bg-slate-100 px-1">scan:read</code>. Creating scans requires{" "}
+            <code className="rounded bg-slate-100 px-1">scan:create</code>, which is support-gated for launch. New scan requests may use{" "}
+            <code className="rounded bg-slate-100 px-1">scanFrom</code> values <code className="rounded bg-slate-100 px-1">eu_ie</code>,{" "}
+            <code className="rounded bg-slate-100 px-1">eu_de</code>, or{" "}
+            <code className="rounded bg-slate-100 px-1">california</code>.
           </p>
         </Section>
 
@@ -47,10 +60,20 @@ const scanId = completed.scanId;
 const status = await certscore.scans.status(scanId);
 const findings = await certscore.findings.list(scanId);
 const preConsentTable = await certscore.scans.preConsentCookiesTrackers(scanId);
+const pulseProjection = await certscore.pulse.get(scanId);
+const pulseEvidence = await certscore.pulse.evidence(scanId);
 const latest = await certscore.domains.latest("example.com");
 const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
 
-console.log(status.status, findings.findings.length, preConsentTable.summary.rowCount, latest.scan?.scanId, latestPreConsentTable.summary.rowCount);`}</CodeBlock>
+console.log(
+  status.status,
+  findings.findings.length,
+  preConsentTable.summary.rowCount,
+  pulseProjection.type,
+  pulseEvidence.type,
+  latest.scan?.scanId,
+  latestPreConsentTable.summary.rowCount
+);`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Available clients" title="SDK surface">
@@ -64,8 +87,11 @@ console.log(status.status, findings.findings.length, preConsentTable.summary.row
               "certscore.findings.list()",
               "certscore.findings.get()",
               "certscore.findings.explain()",
+              "certscore.pulse.get()",
+              "certscore.pulse.evidence()",
               "certscore.domains.latest()",
-              "certscore.domains.latestPreConsentCookiesTrackers()"
+              "certscore.domains.latestPreConsentCookiesTrackers()",
+              "certscore.scan()"
             ].map((client) => (
               <code key={client} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800">
                 {client}

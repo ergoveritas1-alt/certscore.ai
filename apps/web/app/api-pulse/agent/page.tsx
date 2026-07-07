@@ -21,6 +21,10 @@ const endpoints = [
   ["Health canary", "https://certscore.ai/api/v1/pulse-health"],
   ["OpenAPI JSON", "https://certscore.ai/api/v1/openapi.json"],
   ["ChatGPT Action beta schema", "https://certscore.ai/api/v1/openapi.chatgpt.json"],
+  ["API v2 OpenAPI JSON", "https://certscore.ai/api/v2/openapi.json"],
+  ["Developer API v2 reference", "https://certscore.ai/developers/reference"],
+  ["TypeScript SDK docs", "https://certscore.ai/developers/sdk"],
+  ["MCP server docs", "https://certscore.ai/developers/mcp"],
   ["Universal AI/API discovery JSON", "https://certscore.ai/.well-known/certscore-ai.json"],
   ["Discovery JSON", "https://certscore.ai/.well-known/certscore-pulse"],
   ["Full LLM guide", "https://certscore.ai/llms-full.txt"],
@@ -63,6 +67,10 @@ export default function PulseAgentFallbackPage() {
 
         <section className="mt-8 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-7 text-slate-800">
           <h2 className="font-semibold text-slate-950">Agent quick start</h2>
+          <p className="mt-2">
+            Pulse v1 remains the compatibility endpoint for concise URL summaries. For resource-oriented scan, finding, latest-domain,
+            TypeScript SDK, and MCP workflows, prefer the API v2 reference and developer docs linked below.
+          </p>
           <h3 className="mt-3 font-semibold text-slate-950">Basic HTTP agents</h3>
           <ol className="mt-3 list-decimal space-y-2 pl-5">
             <li>
@@ -85,7 +93,8 @@ export default function PulseAgentFallbackPage() {
             <li>
               Use <code className="rounded bg-white px-1">scanFrom</code> or{" "}
               <code className="rounded bg-white px-1">geo</code> to select the scan location. Accepted values are{" "}
-              <code className="rounded bg-white px-1">eu_ie</code>.
+              <code className="rounded bg-white px-1">eu_ie</code>, <code className="rounded bg-white px-1">eu_de</code>, and{" "}
+              <code className="rounded bg-white px-1">california</code>.
             </li>
             <li>
               For a quick check, use <code className="rounded bg-white px-1">format=markdown</code> and{" "}

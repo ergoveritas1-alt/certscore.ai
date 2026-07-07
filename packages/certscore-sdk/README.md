@@ -13,10 +13,31 @@ The SDK is currently a source preview in this monorepo. Public package distribut
 ```ts
 import { CertScoreClient } from "@certscore/sdk";
 
-const client = new CertScoreClient();
-const pulse = await client.scan("https://example.com");
-console.log(pulse.summary?.score, pulse.links?.fullReportUrl);
+const certscore = new CertScoreClient({
+  apiKey: process.env.CERTSCORE_API_KEY
+});
+
+const created = await certscore.scans.create("https://example.com", {
+  freshness: "latest",
+  scanFrom: "eu_ie"
+});
+
+const completed = await certscore.scans.wait(created);
+const findings = await certscore.findings.list(completed.scanId);
+
+console.log(completed.status, findings.findings.length);
 ```
+
+`certscore.scan()` remains available as a Pulse v1 compatibility helper when you want one call to return a concise Pulse projection.
+
+## Authentication and scopes
+
+The SDK sends `Authorization: Bearer <token>` when `apiKey` is configured.
+
+- Read-only workflows need `scan:read`.
+- Creating scans needs `scan:create`.
+- MCP clients also use the `mcp` scope, but SDK calls do not require it.
+- Self-serve read-only keys are issued through the CertScore dashboard/API. `scan:create` is support-gated for launch.
 
 ## Resource Clients
 
@@ -97,7 +118,9 @@ Server-side filters are intentionally deferred in the initial version; group or 
 ```ts
 import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
 
-const client = new CertScoreClient();
+const client = new CertScoreClient({
+  apiKey: process.env.CERTSCORE_API_KEY
+});
 
 try {
   const pulse = await client.scan("https://example.com", {
@@ -126,6 +149,10 @@ try {
 `scanId` is the durable audit/cache handle. `scan_id` may appear in API responses as a compatibility alias, but new integrations should store `scanId`.
 
 ```ts
+const client = new CertScoreClient({
+  apiKey: process.env.CERTSCORE_API_KEY
+});
+
 const pulse = await client.scan("https://example.com");
 const scanId = pulse.scanId;
 
@@ -157,7 +184,9 @@ import {
   ThrottledError
 } from "@certscore/sdk";
 
-const client = new CertScoreClient();
+const client = new CertScoreClient({
+  apiKey: process.env.CERTSCORE_API_KEY
+});
 
 try {
   await client.scan("https://example.com", { freshness: "refresh" });
@@ -223,6 +252,7 @@ jobs:
       - run: node scripts/certscore-pulse-check.mjs
         env:
           TARGET_URL: https://example.com
+          CERTSCORE_API_KEY: ${{ secrets.CERTSCORE_API_KEY }}
 ```
 
 Example `scripts/certscore-pulse-check.mjs`:
@@ -230,7 +260,9 @@ Example `scripts/certscore-pulse-check.mjs`:
 ```js
 import { CertScoreClient } from "@certscore/sdk";
 
-const client = new CertScoreClient();
+const client = new CertScoreClient({
+  apiKey: process.env.CERTSCORE_API_KEY
+});
 const pulse = await client.scan(process.env.TARGET_URL, {
   detail: "standard"
 });
@@ -257,6 +289,7 @@ This CI example fails only on critical automated review signals surfaced by Cert
 - `detail` supports `tiny`, `quick`, `standard`, and `full`; `quick` is an alias for `tiny`.
 - `format` supports `json` and `markdown`.
 - `freshness` supports `latest` and `refresh`.
+- `scanFrom` supports `eu_ie`, `eu_de`, and `california` for newly queued public scans.
 - `wait` accepts `0` to `80` seconds and only controls the current HTTP request hold window.
 - HTTP 202 and 429 may include `Retry-After`; the SDK uses it for polling/retry timing.
 - Terminal usable statuses are `completed` and `completed_limited`.

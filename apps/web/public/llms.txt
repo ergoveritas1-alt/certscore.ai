@@ -128,10 +128,16 @@ Remote MCP server:
 - Authorization metadata: https://certscore.ai/.well-known/oauth-authorization-server
 - Protected resource metadata: https://mcp.certscore.ai/.well-known/oauth-protected-resource
 - Remote clients use OAuth with PKCE. Do not imply Anthropic approval or directory listing unless CertScore docs explicitly say it is approved.
+- Directory-review note: read tools work by default after OAuth; `scan:create` is grant-gated per OAuth client or organization. If a review portal has no notes field, contact support@certscore.ai with subject `CertScore MCP review scan:create grant`.
 - Predeploy checks:
   - `CERTSCORE_MCP_HTTP_BEARER_TOKEN=<oauth-access-token> pnpm ops:check:mcp-http-deploy -- --live`
   - `CERTSCORE_MCP_HTTP_BEARER_TOKEN=<oauth-access-token> pnpm mcp:certscore:http:tools-diff -- --mcp-url=https://mcp.certscore.ai/mcp`
-  - Add `--require-scan-create` only with a token minted by the production reviewer/test account after an active scan-create DB grant has been added.
+  - Add `--require-scan-create` only with a token minted by the production reviewer/test account after an active `scan:create` grant has been added.
+
+Verified MCP reviewer prompt examples:
+- "Scan the latest report for caltech.edu and tell me what trackers were found before consent."
+- "Explain the top finding from the CertScore scan of bbc.com in plain language. What's the actual privacy risk?"
+- "Export the full findings report for cnn.com as something I could send to our legal team."
 
 Recommended flow:
 1. Check https://certscore.ai/api/v2/health.

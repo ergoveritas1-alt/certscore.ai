@@ -243,6 +243,13 @@ https://mcp.certscore.ai/.well-known/oauth-protected-resource
 
 Remote MCP clients use OAuth with PKCE. Do not claim Anthropic approval, directory listing, or connector certification unless CertScore's current docs explicitly say that approval is complete.
 
+Directory-review access note:
+
+- Remote MCP read tools work by default after OAuth authorization.
+- `scan:create` is grant-gated per OAuth client or organization to protect scan quota.
+- For connector-directory review, connect the reviewer test account first; CertScore support can then grant `scan:create` to the registered OAuth client ID.
+- If the submission portal does not provide a reviewer-notes field, contact support@certscore.ai with subject `CertScore MCP review scan:create grant`.
+
 Remote MCP predeploy checks:
 
 ```bash
@@ -256,7 +263,7 @@ CERTSCORE_MCP_HTTP_BEARER_TOKEN=<oauth-access-token> \
 pnpm mcp:certscore:http:tools-diff -- --mcp-url=https://mcp.certscore.ai/mcp
 ```
 
-Use `--require-scan-create` only with a token minted by the production reviewer/test account after an active scan-create DB grant has been added. The tools-diff check compares the deployed Streamable HTTP tool list against the local stdio server schemas and annotations.
+Use `--require-scan-create` only with a token minted by the production reviewer/test account after an active `scan:create` grant has been added. The tools-diff check compares the deployed Streamable HTTP tool list against the local stdio server schemas and annotations.
 
 Remote MCP OAuth launch notes:
 
@@ -310,6 +317,14 @@ Current tools:
 - `explain_finding`
 - `get_latest_domain_scan`
 - `get_latest_domain_pre_consent_cookies_trackers`
+
+Verified reviewer prompt examples:
+
+- "Scan the latest report for caltech.edu and tell me what trackers were found before consent."
+- "Explain the top finding from the CertScore scan of bbc.com in plain language. What's the actual privacy risk?"
+- "Export the full findings report for cnn.com as something I could send to our legal team."
+
+These domains have completed public API-visible scans and can be used for read-only MCP demonstrations without triggering a new scan.
 
 Local command:
 

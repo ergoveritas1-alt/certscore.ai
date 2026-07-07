@@ -71,8 +71,8 @@ const parameters = [
   ["format", "`json` or `markdown`. Defaults to `json`."],
   ["detail", "`summary`, `evidence`, `tiny`, `quick`, `standard`, or `full`. Defaults to `summary`. `quick` is an alias for `tiny`."],
   ["freshness", "`latest` or `refresh`. Defaults to `latest`."],
-  ["scanFrom", "`eu_ie`. Selects the geo execution context for newly queued public scans. Defaults to `eu_ie`."],
-  ["geo", "Alias for `scanFrom`; accepts `eu_ie`."],
+  ["scanFrom", "`eu_ie`, `eu_de`, or `california`. Selects the geo execution context for newly queued public scans. Defaults to `eu_ie`."],
+  ["geo", "Alias for `scanFrom`; accepts `eu_ie`, `eu_de`, or `california`."],
   ["forceNewScan", "`true` or `1` bypasses the 24-hour recent-scan reuse check. It does not bypass throttles or validation."],
   [
     "wait",
@@ -639,12 +639,12 @@ Summary JSON is best for concise agent output. Markdown is best for conversation
 
         <Card id="mcp" className="border-violet-200 bg-violet-50 shadow-none">
           <CardHeader>
-            <CardTitle>MCP preview</CardTitle>
+            <CardTitle>MCP server</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 text-sm leading-7 text-slate-700">
             <p>
-              CertScore MCP is a developer-preview stdio server for teams that want to run Pulse checks inside AI development,
-              security, and ops workflows. It uses the same evidence-backed Pulse surface: automated public-web observations for
+              CertScore MCP exposes the same public-safe API v2 and Pulse projections through a remote Streamable HTTP endpoint for
+              hosted clients and a local stdio command for local development tools. It uses automated public-web observations for
               review, with stable scan and finding IDs.
             </p>
             <div className="grid gap-3 md:grid-cols-2">
@@ -656,22 +656,29 @@ Summary JSON is best for concise agent output. Markdown is best for conversation
               ))}
             </div>
             <p>
-              The first preview is intentionally narrow: create a scan, check status, retrieve a report, export findings, and explain
-              a specific finding. Account browsing and drift comparison tools are not part of the initial MCP scope.
+              The current tool surface is intentionally narrow: create a scan, check status, retrieve reports and evidence, export
+              findings, explain a specific finding, and read latest-domain projections. Account browsing and drift comparison tools
+              are not part of the MCP scope.
             </p>
-            <CodeBlock>{`Local stdio preview:
-CERTSCORE_API_KEY=<token> pnpm mcp:certscore
+            <CodeBlock>{`Remote MCP endpoint:
+https://mcp.certscore.ai/mcp
+
+OAuth issuer:
+https://certscore.ai
+
+Protected resource metadata:
+https://mcp.certscore.ai/.well-known/oauth-protected-resource`}</CodeBlock>
+            <CodeBlock>{`Local stdio:
+brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
+brew install --cask certscore-mcp
+CERTSCORE_API_KEY=<token> certscore-mcp doctor
 
 Optional:
 CERTSCORE_BASE_URL=https://certscore.ai
 CERTSCORE_REQUEST_TIMEOUT_MS=300000
 
-Live smoke:
-CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke
-
-Generate preview key:
-pnpm db:migrate
-pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
+Repository smoke:
+CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke`}</CodeBlock>
             <CodeBlock>{`Example MCP client config:
 {
   "mcpServers": {
@@ -691,25 +698,23 @@ pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"`}</CodeBlock>
               stable scan with `get_scan`, then use `list_findings` or `explain_finding` for review and ticketing.
             </p>
             <p>
-              Preview keys are scoped to `pulse:read`, `pulse:scan`, and `mcp`; CertScore validates bearer tokens before request
-              attribution and rate-limit policy, without changing evidence, concern, finding, or projection logic.
-            </p>
-            <p>
-              Operators should apply the integration-key migration, generate a scoped preview key, and run authenticated MCP smoke
-              before promoting the preview beyond internal use.
+              Read-only MCP access uses `scan:read` and `mcp`. Starting a scan requires `scan:create`; remote OAuth scan creation is
+              grant-gated per client or organization so review clients can be enabled without opening public write access. CertScore
+              validates bearer tokens before request attribution and rate-limit policy, without changing evidence, concern, finding, or
+              projection logic.
             </p>
             <div className="flex flex-wrap gap-3">
               <a
                 className="inline-flex w-fit rounded-full border border-violet-300 bg-white px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100"
-                href={`mailto:${PULSE_FEEDBACK_EMAIL}?subject=CertScore%20MCP%20preview`}
+                href={`mailto:${PULSE_FEEDBACK_EMAIL}?subject=CertScore%20MCP%20access`}
               >
-                Request MCP preview
+                Request MCP access
               </a>
               <Link
                 className="inline-flex w-fit rounded-full border border-violet-300 bg-white px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100"
-                href="/api-pulse#quick-start"
+                href="/developers/mcp"
               >
-                View Pulse API quick start
+                View MCP docs
               </Link>
             </div>
           </CardContent>
@@ -973,7 +978,7 @@ Content-Type: application/json
               Agent fallback page
             </Link>
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api-pulse#mcp">
-              MCP preview
+              MCP server
             </Link>
             <Link className="rounded-full border border-slate-300 px-3 py-2 font-semibold text-slate-700" href="/api-pulse-agent-guide.txt">
               Agent text guide

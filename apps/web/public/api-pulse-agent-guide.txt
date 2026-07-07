@@ -1,6 +1,6 @@
 # CertScore Pulse beta agent guide
 
-Last updated: 2026-05-19
+Last updated: 2026-07-07
 
 CertScore Pulse provides automated public-web observations for review. Outputs are not legal advice, certification, or a compliance determination.
 
@@ -55,8 +55,26 @@ https://certscore.ai/api/v1/pulse/gpt?url=https://kbdlab.io&format=markdown&deta
 Canonical documentation:
 https://certscore.ai/api-pulse
 
-MCP developer-preview stdio server:
-https://certscore.ai/api-pulse#mcp
+Developer API v2 reference:
+https://certscore.ai/developers/reference
+
+API v2 OpenAPI:
+https://certscore.ai/api/v2/openapi.json
+
+TypeScript SDK docs:
+https://certscore.ai/developers/sdk
+
+MCP developer docs:
+https://certscore.ai/developers/mcp
+
+Remote MCP endpoint:
+https://mcp.certscore.ai/mcp
+
+Remote OAuth issuer:
+https://certscore.ai
+
+Remote protected resource metadata:
+https://mcp.certscore.ai/.well-known/oauth-protected-resource
 
 Homebrew install on macOS:
 brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai
@@ -78,25 +96,30 @@ CERTSCORE_API_KEY=<token> pnpm mcp:certscore
 MCP live smoke:
 CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke
 
-MCP preview key generation:
-pnpm db:migrate
-pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"
-
 External API/MCP key access:
 Read-only + MCP keys are self-serve for signed-in verified users through POST https://certscore.ai/api/v2/keys/request.
 Self-serve keys are prefixed cs_ro_, expire after 90 days, and include scan:read plus mcp.
-Request scan:create developer-preview access by emailing support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes.
+Request scan:create access by emailing support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes.
 REST API read-only usually needs scan:read.
 REST API scan creation and TypeScript SDK workflows usually need scan:read and scan:create.
 MCP read tools usually need scan:read and mcp. MCP scan creation also needs scan:create.
+Repository-only key generation commands may exist for internal smoke tests, but public API, SDK, and MCP integrations should use the self-serve read-only key route or support-granted scan:create access.
 
 MCP workflow:
-1. scan_site or create_scan with a public URL.
+1. scan_site with a public URL.
 2. get_scan_status when scan creation returns a jobId, or with a stable scanId for API v2 status.
 3. get_scan with the stable scanId.
 4. list_findings for structured review handoff.
 5. explain_finding for evidence summaries, caveats, and next steps.
 6. get_latest_domain_scan to find the latest eligible public scan for a domain.
+
+Directory-review access note:
+Read-only MCP tools work by default after OAuth. scan:create is grant-gated per OAuth client or organization to protect scan quota. If a connector submission portal does not provide a reviewer-notes field, contact support@certscore.ai with subject "CertScore MCP review scan:create grant".
+
+Verified MCP reviewer prompt examples:
+- Scan the latest report for caltech.edu and tell me what trackers were found before consent.
+- Explain the top finding from the CertScore scan of bbc.com in plain language. What's the actual privacy risk?
+- Export the full findings report for cnn.com as something I could send to our legal team.
 
 Plain browser-readable fallback:
 https://certscore.ai/api-pulse/agent
@@ -162,7 +185,7 @@ Expected public response contracts:
 - HTTP 429 throttled responses include Retry-After when retry timing is known.
 - Pulse uses freshness=latest and freshness=refresh. There is no refresh=true parameter.
 - freshness=latest reuses a recent eligible scan before queueing a new scan. freshness=refresh requests a new scan when eligible and bypasses the 24-hour reuse check.
-- Use scanFrom or geo to select the geo execution context for newly queued public scans. Allowed value is eu_ie. Existing scans are returned with their recorded scan context.
+- Use scanFrom or geo to select the geo execution context for newly queued public scans. Allowed values are eu_ie, eu_de, and california. Existing scans are returned with their recorded scan context.
 - Pulse reuses an eligible completed scan from the prior 24 hours before queueing a new scan when freshness=latest. Time comparisons use UTC instants.
 - Use forceNewScan=true only as a compatibility override for freshness=refresh. It does not bypass validation or the 1-minute normalized-domain scan-generation throttle.
 - New Pulse scan generation is throttled to one submitted scan job per normalized domain every 1 minute. A throttled request returns HTTP 429, Retry-After when known, and support guidance at support@certscore.ai.

@@ -35,6 +35,22 @@ Protected resource metadata: https://mcp.certscore.ai/.well-known/oauth-protecte
           </p>
         </Section>
 
+        <Section eyebrow="Directory review" title="Reviewer access for scan creation">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            The remote connector works read-only by default. <code className="rounded bg-white px-1">scan:create</code> is grant-gated
+            per OAuth client or organization to protect scan quota. Directory reviewers can connect the test account first, then
+            CertScore support can grant <code className="rounded bg-white px-1">scan:create</code> to the registered OAuth client ID so
+            the write tool is testable. If a submission portal does not provide a reviewer-notes field, contact{" "}
+            <a
+              className="font-semibold text-sky-700 hover:text-sky-900"
+              href="mailto:support@certscore.ai?subject=CertScore%20MCP%20review%20scan%3Acreate%20grant"
+            >
+              support@certscore.ai
+            </a>{" "}
+            with subject <code className="rounded bg-white px-1">CertScore MCP review scan:create grant</code>.
+          </p>
+        </Section>
+
         <Section eyebrow="External users" title="Local stdio access">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             The MCP server is distributed as a Homebrew-installable developer preview for macOS MCP clients. Install the
@@ -149,7 +165,7 @@ CERTSCORE_MCP_HTTP_BEARER_TOKEN=<oauth-access-token> \
 pnpm mcp:certscore:http:tools-diff -- --mcp-url=https://mcp.certscore.ai/mcp`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             For connector-directory review, run the readiness check with <code className="rounded bg-white px-1">--require-scan-create</code>{" "}
-            using an OAuth token minted by the production reviewer/test account after an active scan-create grant has been added. The
+            using an OAuth token minted by the production reviewer/test account after an active <code className="rounded bg-white px-1">scan:create</code> grant has been added. The
             tools-diff check compares the deployed Streamable HTTP tool list against the local stdio server schemas and annotations.
           </p>
         </Section>
@@ -248,6 +264,19 @@ get_latest_domain_pre_consent_cookies_trackers({
             legal conclusions. CertScore outputs are automated public-web observations for review. They are not legal advice,
             certification, or a compliance determination. Group Cookies & Trackers rows by vendor, purpose, and host when the user wants
             a short review handoff.
+          </p>
+        </Section>
+
+        <Section eyebrow="Examples" title="Verified prompts for reviewers">
+          <CodeBlock>{`Scan the latest report for caltech.edu and tell me what trackers were found before consent.
+
+Explain the top finding from the CertScore scan of bbc.com in plain language. What's the actual privacy risk?
+
+Export the full findings report for cnn.com as something I could send to our legal team.`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            These prompts exercise latest-domain lookup, pre-consent cookie/tracker retrieval, finding explanation, and bounded report
+            export. The domains have completed public API-visible scans so reviewer demos can start with read-only tool calls and avoid
+            cold-start scan timing.
           </p>
         </Section>
 

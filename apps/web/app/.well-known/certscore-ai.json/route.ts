@@ -72,9 +72,9 @@ const discoveryDocument = {
     status: "public_package_not_published"
   },
   mcp: {
-    distribution: "homebrew",
+    distribution: "remote_streamable_http_and_homebrew_stdio",
     binary: "certscore-mcp",
-    packageStatus: "homebrew_developer_preview",
+    packageStatus: "public_remote_endpoint_and_stdio_package_live",
     currentVersion: "0.2.2",
     docs: "https://certscore.ai/developers/mcp",
     remote: {
@@ -101,6 +101,11 @@ const discoveryDocument = {
       "explain_finding",
       "get_latest_domain_scan",
       "get_latest_domain_pre_consent_cookies_trackers"
+    ],
+    reviewerPromptExamples: [
+      "Scan the latest report for caltech.edu and tell me what trackers were found before consent.",
+      "Explain the top finding from the CertScore scan of bbc.com in plain language. What's the actual privacy risk?",
+      "Export the full findings report for cnn.com as something I could send to our legal team."
     ]
   },
   recommendedAgentWorkflow: [

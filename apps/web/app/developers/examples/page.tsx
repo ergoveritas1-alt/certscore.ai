@@ -121,6 +121,18 @@ get_latest_domain_pre_consent_cookies_trackers({
 })`}</CodeBlock>
         </Section>
 
+        <Section id="mcp-reviewer-prompts" eyebrow="MCP" title="Verified reviewer prompts">
+          <CodeBlock>{`Scan the latest report for caltech.edu and tell me what trackers were found before consent.
+
+Explain the top finding from the CertScore scan of bbc.com in plain language. What's the actual privacy risk?
+
+Export the full findings report for cnn.com as something I could send to our legal team.`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            These prompts use completed public API-visible scans and exercise the same latest-domain, findings, explanation, and report
+            export paths exposed through the MCP server. They are intended as read-only demonstrations for connector review.
+          </p>
+        </Section>
+
         <Section id="evidence-boundaries" eyebrow="Boundaries" title="Evidence boundaries">
           <CodeBlock>{`Use CertScore as an automated public-web risk-signal API.
 

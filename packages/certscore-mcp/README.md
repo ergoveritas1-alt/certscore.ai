@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. The server is distributed for external macOS MCP clients through Homebrew. Local WC01 development uses `pnpm mcp:certscore`.
+Status: public remote endpoint plus local stdio package. Remote clients can use `https://mcp.certscore.ai/mcp`; external macOS MCP clients can use the Homebrew-distributed stdio command. Local WC01 development uses `pnpm mcp:certscore`.
 
 Public docs:
 
@@ -60,12 +60,9 @@ Run from this monorepo for local development:
 CERTSCORE_API_KEY=... pnpm mcp:certscore
 ```
 
-Generate a scoped preview key after applying DB migrations:
-
-```bash
-pnpm db:migrate
-pnpm mcp:certscore:generate-key -- --name "CertScore MCP preview"
-```
+Public API/MCP access uses self-serve read-only keys from `POST https://certscore.ai/api/v2/keys/request` or support-granted
+`scan:create` access. Repository-only key generation commands may exist for internal smoke tests, but they are not the public
+integration path.
 
 Run the built package directly after local build:
 
@@ -80,11 +77,11 @@ CERTSCORE_BASE_URL=https://certscore.ai
 CERTSCORE_REQUEST_TIMEOUT_MS=300000
 ```
 
-`CERTSCORE_API_KEY` should be a scoped CertScore API token for the workspace or preview user. The MCP server passes it to Pulse as a bearer token and does not persist it.
+`CERTSCORE_API_KEY` should be a scoped CertScore API token for the workspace or integration user. The MCP server passes it to Pulse as a bearer token and does not persist it.
 
 ## API Key Access
 
-MCP clients usually need `scan:read`, `scan:create`, and `mcp` scopes. Request developer-preview access by emailing `support@certscore.ai` with your organization, MCP client, expected workflow, expected request volume, contact email, and requested scopes.
+MCP clients usually need `scan:read` and `mcp` for read workflows. Starting scans also requires `scan:create`, which is grant-gated for launch. Request scan creation access by emailing `support@certscore.ai` with your organization, MCP client, expected workflow, expected request volume, contact email, and requested scopes.
 
 ## Verify Install
 
@@ -217,7 +214,7 @@ For the full production operator smoke, run from the WC01 repo:
 pnpm ops:smoke:mcp-production
 ```
 
-This verifies the Homebrew-installed `certscore-mcp` command against live `https://certscore.ai`. It creates a short-lived preview key, stores only the hash in production through the approved ECS/Fargate path, checks required tools, requests a fresh EU-IR scan with `freshness: "refresh"` and `scanFrom: "eu_ie"`, requires non-empty findings and pre-consent cookies/trackers rows, runs `explain_finding`, and revokes the temporary key afterward. It exercises existing public-safe API/MCP projections only.
+This verifies the Homebrew-installed `certscore-mcp` command against live `https://certscore.ai`. It creates a short-lived internal smoke key, stores only the hash in production through the approved ECS/Fargate path, checks required tools, requests a fresh EU-IE scan with `freshness: "refresh"` and `scanFrom: "eu_ie"`, requires non-empty findings and pre-consent cookies/trackers rows, runs `explain_finding`, and revokes the temporary key afterward. It exercises existing public-safe API/MCP projections only.
 
 ## Troubleshooting
 

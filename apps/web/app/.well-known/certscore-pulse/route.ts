@@ -19,10 +19,17 @@ const discoveryDocument = {
   gptActionApi: "https://certscore.ai/api/v1/pulse/gpt",
   openapi: "https://certscore.ai/api/v1/openapi.json",
   chatgptOpenapi: "https://certscore.ai/api/v1/openapi.chatgpt.json",
+  apiV2Openapi: "https://certscore.ai/api/v2/openapi.json",
   docs: "https://certscore.ai/api-pulse",
   developerHub: "https://certscore.ai/developers",
   developerReference: "https://certscore.ai/developers/reference",
   developerMcpDocs: "https://certscore.ai/developers/mcp",
+  developerSdkDocs: "https://certscore.ai/developers/sdk",
+  apiV2CreateScan: "https://certscore.ai/api/v2/scans",
+  apiV2Scan: "https://certscore.ai/api/v2/scans/{scanId}",
+  apiV2ScanStatus: "https://certscore.ai/api/v2/scans/{scanId}/status",
+  apiV2Findings: "https://certscore.ai/api/v2/scans/{scanId}/findings",
+  apiV2DomainLatest: "https://certscore.ai/api/v2/domains/{domain}/latest",
   preConsentCookiesTrackersJsonDocs: "https://certscore.ai/developers/examples#pre-consent-cookies-trackers-json",
   preConsentCookiesTrackersJsonApi: "https://certscore.ai/api/v2/scans/{scanId}/pre-consent-cookies-trackers",
   latestDomainPreConsentCookiesTrackersJsonApi: "https://certscore.ai/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers",
@@ -35,6 +42,7 @@ const discoveryDocument = {
   formats: ["json", "markdown"],
   detailLevels: ["tiny", "standard", "full"],
   detailAliases: { quick: "tiny" },
+  scanFromValues: ["eu_ie", "eu_de", "california"],
   example: "https://certscore.ai/api/v1/pulse?url=https://kbdlab.io",
   statusExample: "https://certscore.ai/api/v1/pulse/status/pulse_job_123",
   recommendedCalls: {
@@ -62,7 +70,7 @@ const discoveryDocument = {
   retryBehavior:
     "HTTP 202 pending responses include Retry-After when a polling delay is recommended. HTTP 429 throttled responses include Retry-After when retry timing is known.",
   freshness:
-    "Use freshness=latest for eligible completed results within the 24-hour reuse window. Use forceNewScan=true to bypass the 24-hour reuse check. New scan generation remains subject to the 5-minute normalized-domain throttle.",
+    "Use freshness=latest for eligible completed results within the 24-hour reuse window. Use freshness=refresh to request a new scan when eligible and bypass the reuse check. forceNewScan=true is a compatibility override with the same reuse-bypass behavior. New scan generation remains subject to the 1-minute normalized-domain throttle.",
   agentFetchLimitations:
     "Some agent environments may fail before receiving an HTTP response because of DNS, sandbox, TLS, proxy, or fetch-layer limitations. If a request fails before exposing an HTTP status, response body, or x-certscore-* diagnostic headers, do not conclude CertScore Pulse is unavailable. First try /api/v1/pulse-self-test, /api/v1/pulse-health, /api-pulse-agent-guide.txt, /.well-known/certscore-pulse, and /api/v1/openapi.chatgpt.json. If those also fail without HTTP status or CertScore diagnostic headers, report it as a client/network fetch limitation rather than a CertScore API result.",
   feedbackEmail: "support@certscore.ai",
