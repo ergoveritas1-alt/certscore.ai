@@ -320,7 +320,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
     "getScanPulse",
     "getScanStatus",
     "listScanFindings",
-    "requestReadOnlyApiKey"
+    "requestApiKey"
   ]);
   assert.match(document.info.description, /automated public-web observations for review/i);
   assert.match(document.info.description, /not legal advice, certification, or a compliance determination/i);

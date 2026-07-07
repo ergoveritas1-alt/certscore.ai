@@ -9,6 +9,7 @@ import {
   SELF_SERVE_READ_ONLY_EMAIL_WINDOW_ISSUANCE_LIMIT,
   SELF_SERVE_READ_ONLY_IP_DAILY_ISSUANCE_LIMIT,
   SELF_SERVE_READ_ONLY_IP_WINDOW_ISSUANCE_LIMIT,
+  SELF_SERVE_SCAN_CREATE_DAILY_LIMIT,
   decideIntegrationApiKeyUsageLimit,
   decideSelfServeReadOnlyApiKeyIssuance,
   generateIntegrationApiKey,
@@ -37,6 +38,12 @@ test("generateIntegrationApiKey supports read-only self-serve keys", () => {
   const token = generateIntegrationApiKey("cs_ro");
   assert.match(token, /^cs_ro_[A-Za-z0-9_-]{32,}$/);
   assert.match(getIntegrationApiKeyPrefix(token), /^cs_ro_[A-Za-z0-9_-]{8}$/);
+});
+
+test("generateIntegrationApiKey supports read-write self-serve keys", () => {
+  const token = generateIntegrationApiKey("cs_rw");
+  assert.match(token, /^cs_rw_[A-Za-z0-9_-]{32,}$/);
+  assert.match(getIntegrationApiKeyPrefix(token), /^cs_rw_[A-Za-z0-9_-]{8}$/);
 });
 
 test("hashIntegrationApiKey is deterministic and does not expose the raw token", () => {
@@ -157,6 +164,10 @@ test("decideSelfServeReadOnlyApiKeyIssuance allows verified requests below caps"
     }),
     { allowed: true }
   );
+});
+
+test("self-serve scan-create default daily limit is conservative", () => {
+  assert.equal(SELF_SERVE_SCAN_CREATE_DAILY_LIMIT, 5);
 });
 
 test("decideIntegrationApiKeyUsageLimit allows requests below limits", () => {

@@ -98,12 +98,13 @@ CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke
 
 External API/MCP key access:
 Read-only + MCP keys are self-serve for signed-in verified users through POST https://certscore.ai/api/v2/keys/request.
-Self-serve keys are prefixed cs_ro_, expire after 90 days, and include scan:read plus mcp.
-Request scan:create access by emailing support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes.
+Self-serve read-only keys are prefixed cs_ro_, expire after 90 days, and include scan:read plus mcp.
+Self-serve scan-creation keys are prefixed cs_rw_, expire after 90 days, and include scan:read, scan:create, and mcp.
+cs_rw_ keys are limited to 5 fresh scan creations/day for launch. Email support@certscore.ai for higher volume.
 REST API read-only usually needs scan:read.
 REST API scan creation and TypeScript SDK workflows usually need scan:read and scan:create.
 MCP read tools usually need scan:read and mcp. MCP scan creation also needs scan:create.
-Repository-only key generation commands may exist for internal smoke tests, but public API, SDK, and MCP integrations should use the self-serve read-only key route or support-granted scan:create access.
+Repository-only key generation commands may exist for internal smoke tests, but public API, SDK, and MCP integrations should use the self-serve key route or support-granted higher-volume scan:create access.
 
 MCP workflow:
 1. scan_site with a public URL.

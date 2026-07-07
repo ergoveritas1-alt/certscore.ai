@@ -25,8 +25,11 @@ import { buildPulseStatus } from "../../../../lib/pulse/status";
 import { PULSE_MIN_REUSABLE_PAGES_REQUESTED, PULSE_SCAN_COVERAGE_PLAN_CODE } from "../../../../lib/pulse/scan-coverage";
 import {
   checkIntegrationApiKeyUsageLimit,
+  getSelfServeScanCreateUsage,
   parseBearerToken,
+  SELF_SERVE_SCAN_CREATE_DAILY_LIMIT,
   validateCertScoreBearerToken,
+  type IntegrationApiKeyRecord,
   type IntegrationApiKeyScope
 } from "../../../../server/integrations/api-keys";
 import { checkDomainDns } from "../../../../server/domains/domain-dns";
@@ -360,6 +363,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const rawUrl = url.searchParams.get("url")?.trim() || null;
   const bearer = parseBearerToken(request);
   let apiKeyContext: { apiKeyId?: string | null; accountId?: string | null; userId?: string | null; channel?: string; source?: string } = {};
+  let authenticatedKey: IntegrationApiKeyRecord | null = null;
   if (bearer.provided) {
     if (!bearer.token) {
       return pulseJson(
@@ -390,6 +394,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         routeName
       );
     }
+    authenticatedKey = auth.key;
     const usageLimit = await checkIntegrationApiKeyUsageLimit({ key: auth.key });
     if (!usageLimit.allowed) {
       return pulseJson(
@@ -681,6 +686,30 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         requestContext: contextBase,
         routeOptions: { gptAction, routeName }
       });
+    }
+
+    if (authenticatedKey?.tokenPrefix.startsWith("cs_rw_")) {
+      const scanCreateUsage = await getSelfServeScanCreateUsage({ apiKeyPublicId: authenticatedKey.publicId });
+      if (scanCreateUsage.dailyCount >= scanCreateUsage.dailyLimit) {
+        await updatePulseRequestRateLimited({ pulseRequestId: publicId, retryAfterSeconds: 86400, scanId: latestScan?.id ?? null });
+        return pulseJson(
+          buildPulseError({
+            code: "rate_limited",
+            message: `This self-serve scan creation key has reached its ${SELF_SERVE_SCAN_CREATE_DAILY_LIMIT}/day scan creation limit. Try again tomorrow or contact support@certscore.ai for higher volume.`,
+            retryAfterSeconds: 86400,
+            resolution: {
+              label: "Request higher volume",
+              url: "mailto:support@certscore.ai"
+            },
+            url: rawUrl,
+            detail,
+            format
+          }),
+          { headers: { "Cache-Control": "no-store", "Retry-After": "86400" }, status: 429 },
+          requestId,
+          routeName
+        );
+      }
     }
 
     const throttle = await claimPulseDomainScanCreation({

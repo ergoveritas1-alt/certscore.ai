@@ -251,7 +251,8 @@ export async function updatePulseRequestQueued(input: {
             phase = 'queued',
             scan_id = $2,
             result_pulse_url = $3,
-            result_report_url = $4
+            result_report_url = $4,
+            resolution_mode = 'queued_new_scan'
       where public_id = $1`,
     [input.pulseRequestId, input.scanId, input.resultPulseUrl, input.resultReportUrl]
   );

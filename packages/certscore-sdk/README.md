@@ -4,9 +4,11 @@ Official TypeScript/JavaScript SDK for the CertScore public API, Pulse API, and 
 
 CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.
 
-## Status
+## Install
 
-The SDK is currently a source preview in this monorepo. Public package distribution is not enabled yet; production integrations should use the REST API directly until a package channel is announced.
+```bash
+npm install @certscore/sdk
+```
 
 ## Quick Start
 
@@ -37,7 +39,9 @@ The SDK sends `Authorization: Bearer <token>` when `apiKey` is configured.
 - Read-only workflows need `scan:read`.
 - Creating scans needs `scan:create`.
 - MCP clients also use the `mcp` scope, but SDK calls do not require it.
-- Self-serve read-only keys are issued through the CertScore dashboard/API. `scan:create` is support-gated for launch.
+- Self-serve read-only keys are prefixed `cs_ro_`.
+- Self-serve scan-creation keys are prefixed `cs_rw_`, expire after 90 days, and are conservatively capped for launch.
+- Higher-volume scan creation is available through support at `support@certscore.ai`.
 
 ## Resource Clients
 

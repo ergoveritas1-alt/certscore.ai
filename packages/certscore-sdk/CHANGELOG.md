@@ -1,5 +1,16 @@
 # @certscore/sdk
 
+## 0.2.1
+
+- Aligned the repo package with the already-published npm package and refreshed install-first SDK documentation.
+- Documented self-serve `cs_rw_` scan-creation keys for low-volume REST/SDK trials.
+
+## 0.2.0
+
+- Prepared the SDK for public npm distribution as `@certscore/sdk`.
+- Added public package metadata, public publish config, and install-first README guidance.
+- Documented the CertScore Pulse GitHub Action workflow as the recommended CI entry point.
+
 ## 0.1.0
 
 - Prepared the TypeScript SDK as a source-preview package for future public distribution.

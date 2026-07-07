@@ -45,16 +45,19 @@ type IntegrationApiKeyRow = {
 const PREVIEW_TOKEN_PREFIX = "cs_preview";
 const LIVE_TOKEN_PREFIX = "cs_live";
 const READ_ONLY_TOKEN_PREFIX = "cs_ro";
-const API_KEY_PATTERN = /^cs_(?:preview|live|ro)_[A-Za-z0-9_-]{32,}$/;
+const READ_WRITE_TOKEN_PREFIX = "cs_rw";
+const API_KEY_PATTERN = /^cs_(?:preview|live|ro|rw)_[A-Za-z0-9_-]{32,}$/;
 export const INTEGRATION_API_KEY_HOURLY_LIMIT = 60;
 export const INTEGRATION_API_KEY_DAILY_LIMIT = 500;
 export const INTEGRATION_ORGANIZATION_HOURLY_LIMIT = 300;
 export const INTEGRATION_ORGANIZATION_DAILY_LIMIT = 2500;
 export const SELF_SERVE_READ_ONLY_KEY_EXPIRES_IN_DAYS = 90;
+export const SELF_SERVE_SCAN_CREATE_KEY_EXPIRES_IN_DAYS = readPositiveIntEnv("SELF_SERVE_SCAN_CREATE_KEY_EXPIRES_IN_DAYS", 90);
 export const SELF_SERVE_READ_ONLY_EMAIL_DAILY_ISSUANCE_LIMIT = 2;
 export const SELF_SERVE_READ_ONLY_EMAIL_WINDOW_ISSUANCE_LIMIT = 5;
 export const SELF_SERVE_READ_ONLY_IP_DAILY_ISSUANCE_LIMIT = 3;
 export const SELF_SERVE_READ_ONLY_IP_WINDOW_ISSUANCE_LIMIT = 15;
+export const SELF_SERVE_SCAN_CREATE_DAILY_LIMIT = readPositiveIntEnv("SELF_SERVE_SCAN_CREATE_DAILY_LIMIT", 5);
 
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "10minutemail.com",
@@ -66,6 +69,11 @@ const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "yopmail.com"
 ]);
 
+function readPositiveIntEnv(name: string, fallback: number) {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export function generateIntegrationApiKey(prefix = PREVIEW_TOKEN_PREFIX) {
   return `${prefix}_${randomBytes(32).toString("base64url")}`;
 }
@@ -75,8 +83,10 @@ export function hashIntegrationApiKey(token: string) {
 }
 
 export function getIntegrationApiKeyPrefix(token: string) {
-  const parts = token.split("_");
-  return parts.length >= 3 ? `${parts[0]}_${parts[1]}_${parts[2]?.slice(0, 8)}` : token.slice(0, 20);
+  const match = token.match(/^(cs_(?:preview|live|ro|rw))_(.+)$/);
+  const prefix = match?.[1];
+  const secret = match?.[2];
+  return prefix && secret ? `${prefix}_${secret.slice(0, 8)}` : token.slice(0, 20);
 }
 
 export function hashSelfServeApiKeyRequester(value: string) {
@@ -138,10 +148,16 @@ export async function createIntegrationApiKey(input: {
   ownerUserId?: string | null;
   createdBy?: string | null;
   expiresAt?: string | null;
-  prefix?: "preview" | "live" | "read_only";
+  prefix?: "preview" | "live" | "read_only" | "read_write";
 }) {
   const token = generateIntegrationApiKey(
-    input.prefix === "live" ? LIVE_TOKEN_PREFIX : input.prefix === "read_only" ? READ_ONLY_TOKEN_PREFIX : PREVIEW_TOKEN_PREFIX
+    input.prefix === "live"
+      ? LIVE_TOKEN_PREFIX
+      : input.prefix === "read_only"
+        ? READ_ONLY_TOKEN_PREFIX
+        : input.prefix === "read_write"
+          ? READ_WRITE_TOKEN_PREFIX
+          : PREVIEW_TOKEN_PREFIX
   );
   const tokenHash = hashIntegrationApiKey(token);
   const tokenPrefix = getIntegrationApiKeyPrefix(token);
@@ -257,10 +273,15 @@ export async function getSelfServeReadOnlyIssuanceCounts(input: {
 export async function recordSelfServeReadOnlyIssuanceEvent(input: {
   eventType:
     | "self_serve_read_only_issued"
+    | "self_serve_scan_create_issued"
     | "self_serve_read_only_denied_unverified_email"
     | "self_serve_read_only_denied_disposable_email"
     | "self_serve_read_only_denied_email_cap"
-    | "self_serve_read_only_denied_ip_cap";
+    | "self_serve_read_only_denied_ip_cap"
+    | "self_serve_scan_create_denied_unverified_email"
+    | "self_serve_scan_create_denied_disposable_email"
+    | "self_serve_scan_create_denied_email_cap"
+    | "self_serve_scan_create_denied_ip_cap";
   emailHash: string;
   emailDomain: string;
   requesterIpHash: string | null;
@@ -290,6 +311,23 @@ export async function recordSelfServeReadOnlyIssuanceEvent(input: {
       JSON.stringify(input.metadata ?? {})
     ]
   );
+}
+
+export async function getSelfServeScanCreateUsage(input: {
+  apiKeyPublicId: string;
+}) {
+  const row = await queryOne<{ daily_count: number | string | null }>(
+    `select count(*)::int as daily_count
+       from pulse_requests
+      where requested_by->>'apiKeyId' = $1
+        and request_context->>'mode' = 'url'
+        and scan_id is not null
+        and requested_at > timezone('utc', now()) - interval '1 day'
+        and coalesce(resolution_mode, '') in ('created_new_scan', 'queued_new_scan')`,
+    [input.apiKeyPublicId],
+    { readOnly: true }
+  );
+  return { dailyCount: Number(row?.daily_count ?? 0), dailyLimit: SELF_SERVE_SCAN_CREATE_DAILY_LIMIT };
 }
 
 export async function listIntegrationApiKeysForOrganization(organizationId: string) {

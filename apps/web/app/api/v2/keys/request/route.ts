@@ -6,6 +6,8 @@ import { getBetterAuthVerificationStatus } from "../../../../../server/better-au
 import { bootstrapAppUserSession } from "../../../../../server/bootstrap-user";
 import {
   SELF_SERVE_READ_ONLY_KEY_EXPIRES_IN_DAYS,
+  SELF_SERVE_SCAN_CREATE_DAILY_LIMIT,
+  SELF_SERVE_SCAN_CREATE_KEY_EXPIRES_IN_DAYS,
   createIntegrationApiKey,
   decideSelfServeReadOnlyApiKeyIssuance,
   getEmailDomain,
@@ -20,7 +22,9 @@ export const revalidate = 0;
 
 const requestBodySchema = z
   .object({
-    name: z.string().trim().min(2).max(80).optional()
+    access: z.enum(["read_only", "scan_create"]).optional(),
+    name: z.string().trim().min(2).max(80).optional(),
+    scopes: z.array(z.enum(["scan:read", "scan:create", "mcp"])).optional()
   })
   .optional();
 
@@ -33,20 +37,28 @@ function getRequesterIp(request: Request) {
   return forwardedFor || request.headers.get("x-real-ip")?.trim() || null;
 }
 
-function expiryFromNow() {
-  return new Date(Date.now() + SELF_SERVE_READ_ONLY_KEY_EXPIRES_IN_DAYS * 24 * 60 * 60 * 1000).toISOString();
+function expiryFromNow(days: number) {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
-function denialEventType(reason: "unverified_email" | "disposable_email" | "email_cap" | "ip_cap") {
+function requestedAccess(body: z.infer<typeof requestBodySchema>) {
+  if (body?.access === "scan_create" || body?.scopes?.includes("scan:create")) {
+    return "scan_create" as const;
+  }
+  return "read_only" as const;
+}
+
+function denialEventType(reason: "unverified_email" | "disposable_email" | "email_cap" | "ip_cap", access: "read_only" | "scan_create") {
+  const prefix = access === "scan_create" ? "self_serve_scan_create" : "self_serve_read_only";
   switch (reason) {
     case "unverified_email":
-      return "self_serve_read_only_denied_unverified_email" as const;
+      return `${prefix}_denied_unverified_email` as const;
     case "disposable_email":
-      return "self_serve_read_only_denied_disposable_email" as const;
+      return `${prefix}_denied_disposable_email` as const;
     case "email_cap":
-      return "self_serve_read_only_denied_email_cap" as const;
+      return `${prefix}_denied_email_cap` as const;
     case "ip_cap":
-      return "self_serve_read_only_denied_ip_cap" as const;
+      return `${prefix}_denied_ip_cap` as const;
   }
 }
 
@@ -80,6 +92,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const access = requestedAccess(body);
     const sessionUser = await getCurrentUser();
     if (!sessionUser) {
       return apiV2JsonResponse({
@@ -107,7 +120,7 @@ export async function POST(request: Request) {
 
     if (!decision.allowed) {
       await recordSelfServeReadOnlyIssuanceEvent({
-        eventType: denialEventType(decision.reason),
+        eventType: denialEventType(decision.reason, access),
         emailHash,
         emailDomain,
         requesterIpHash,
@@ -129,25 +142,33 @@ export async function POST(request: Request) {
       });
     }
 
-    const expiresAt = expiryFromNow();
+    const keyScopes = access === "scan_create" ? (["pulse:read", "pulse:scan", "mcp"] as const) : (["pulse:read", "mcp"] as const);
+    const responseScopes = access === "scan_create" ? (["scan:read", "scan:create", "mcp"] as const) : (["scan:read", "mcp"] as const);
+    const expiresInDays = access === "scan_create" ? SELF_SERVE_SCAN_CREATE_KEY_EXPIRES_IN_DAYS : SELF_SERVE_READ_ONLY_KEY_EXPIRES_IN_DAYS;
+    const expiresAt = expiryFromNow(expiresInDays);
     const key = await createIntegrationApiKey({
-      name: body?.name ?? "Self-serve read-only MCP key",
-      scopes: ["pulse:read", "mcp"],
+      name: body?.name ?? (access === "scan_create" ? "Self-serve scan creation API key" : "Self-serve read-only MCP key"),
+      scopes: [...keyScopes],
       organizationId: organization.id,
       ownerUserId: user.id,
       createdBy: user.email,
       expiresAt,
-      prefix: "read_only"
+      prefix: access === "scan_create" ? "read_write" : "read_only"
     });
     await recordSelfServeReadOnlyIssuanceEvent({
-      eventType: "self_serve_read_only_issued",
+      eventType: access === "scan_create" ? "self_serve_scan_create_issued" : "self_serve_read_only_issued",
       emailHash,
       emailDomain,
       requesterIpHash,
       organizationId: organization.id,
       ownerUserId: user.id,
       apiKeyPublicId: key.publicId,
-      metadata: { scopes: ["scan:read", "mcp"], expiresInDays: SELF_SERVE_READ_ONLY_KEY_EXPIRES_IN_DAYS }
+      metadata: {
+        access,
+        scopes: responseScopes,
+        expiresInDays,
+        ...(access === "scan_create" ? { scanCreatesPerDay: SELF_SERVE_SCAN_CREATE_DAILY_LIMIT } : {})
+      }
     });
 
     return apiV2JsonResponse({
@@ -155,15 +176,18 @@ export async function POST(request: Request) {
         type: "certscore_api_key",
         key: key.token,
         tokenPrefix: key.tokenPrefix,
-        scopes: ["scan:read", "mcp"],
+        scopes: responseScopes,
         expiresAt,
         rateLimits: {
           requestsPerMinute: 60,
-          scanReadsPerDay: 500
+          scanReadsPerDay: 500,
+          ...(access === "scan_create" ? { scanCreatesPerDay: SELF_SERVE_SCAN_CREATE_DAILY_LIMIT } : {})
         },
         usageGuidance: {
-          scanCreateRequiresSupport: true,
-          scanCreateRequestEmail: "support@certscore.ai"
+          scanCreateRequiresSupport: access !== "scan_create",
+          scanCreateRequestEndpoint: "https://certscore.ai/api/v2/keys/request",
+          scanCreateRequestEmail: "support@certscore.ai",
+          higherVolumeRequestEmail: "support@certscore.ai"
         },
         disclaimer: apiV2Disclaimer
       },

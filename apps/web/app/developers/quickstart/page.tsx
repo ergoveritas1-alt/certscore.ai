@@ -23,9 +23,10 @@ export default function DeveloperQuickstartPage() {
 
         <Section id="api-key-access" eyebrow="Access" title="Get a scoped API key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            CertScore API, SDK, and MCP integrations use bearer API keys. Read-only report retrieval and MCP read tools can use a
-            self-serve key after sign-in and email verification. Scan creation keys remain developer-preview and are issued by
-            emailing{" "}
+            CertScore API, SDK, and MCP integrations use bearer API keys. Signed-in verified users can request self-serve keys after
+            email verification: <code className="rounded bg-white px-1">cs_ro_</code> for read-only + MCP access, or{" "}
+            <code className="rounded bg-white px-1">cs_rw_</code> for low-volume scan creation. Higher-volume scan creation is available
+            by emailing{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>
@@ -38,7 +39,12 @@ export default function DeveloperQuickstartPage() {
 
 curl -X POST https://certscore.ai/api/v2/keys/request \\
   -H "Content-Type: application/json" \\
-  --data '{"name":"Read-only MCP key"}'`}</CodeBlock>
+  --data '{"name":"Read-only MCP key"}'
+
+Self-serve scan-creation key:
+curl -X POST https://certscore.ai/api/v2/keys/request \\
+  -H "Content-Type: application/json" \\
+  --data '{"name":"SDK trial scan key","access":"scan_create"}'`}</CodeBlock>
           <CodeBlock>{`Recommended scopes by integration:
 - REST API read-only: scan:read
 - REST API scan creation: scan:read, scan:create
@@ -46,9 +52,10 @@ curl -X POST https://certscore.ai/api/v2/keys/request \\
 - MCP read tools: scan:read, mcp
 - MCP scan creation: scan:read, scan:create, mcp`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Self-serve keys are prefixed <code className="rounded bg-white px-1">cs_ro_</code>, expire after 90 days, and are limited
-            to read-only report/API access plus MCP. For <code className="rounded bg-white px-1">scan:create</code>, include your
-            organization, integration type, expected volume, callback or contact email, and requested scopes when emailing support.
+            Self-serve keys expire after 90 days. <code className="rounded bg-white px-1">cs_rw_</code> keys include{" "}
+            <code className="rounded bg-white px-1">scan:create</code> and are limited to 5 fresh scan creations per day for launch.
+            Include your organization, integration type, expected volume, callback or contact email, and requested scopes when emailing
+            support for higher volume.
           </p>
         </Section>
 

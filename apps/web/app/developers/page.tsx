@@ -60,8 +60,9 @@ export default function DevelopersPage() {
         <Section eyebrow="API key access" title="Get an API key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             Use a scoped bearer API key for the REST API, TypeScript SDK, or MCP server. Read-only + MCP access is self-serve for
-            signed-in verified users through <code className="rounded bg-white px-1">POST /api/v2/keys/request</code>. Request{" "}
-            <code className="rounded bg-white px-1">scan:create</code> preview access at{" "}
+            signed-in verified users through <code className="rounded bg-white px-1">POST /api/v2/keys/request</code>. Low-volume{" "}
+            <code className="rounded bg-white px-1">scan:create</code> keys are self-serve through the same endpoint; request higher
+            volume at{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>

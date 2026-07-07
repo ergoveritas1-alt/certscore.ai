@@ -178,17 +178,20 @@ const healthExample = {
 
 const selfServeApiKeyExample = {
   type: "certscore_api_key",
-  key: "cs_ro_example_redacted",
-  tokenPrefix: "cs_ro_example",
-  scopes: ["scan:read", "mcp"],
+  key: "cs_rw_example_redacted",
+  tokenPrefix: "cs_rw_example",
+  scopes: ["scan:read", "scan:create", "mcp"],
   expiresAt: "2026-09-28T00:00:00.000Z",
   rateLimits: {
     requestsPerMinute: 60,
-    scanReadsPerDay: 500
+    scanReadsPerDay: 500,
+    scanCreatesPerDay: 5
   },
   usageGuidance: {
-    scanCreateRequiresSupport: true,
-    scanCreateRequestEmail: "support@certscore.ai"
+    scanCreateRequiresSupport: false,
+    scanCreateRequestEndpoint: "https://certscore.ai/api/v2/keys/request",
+    scanCreateRequestEmail: "support@certscore.ai",
+    higherVolumeRequestEmail: "support@certscore.ai"
   },
   disclaimer: apiV2Disclaimer
 } as const;
@@ -248,11 +251,12 @@ export function buildCertScoreApiV2OpenApiDocument() {
     paths: {
       "/api/v2/keys/request": {
         post: {
-          operationId: "requestReadOnlyApiKey",
+          operationId: "requestApiKey",
           tags: ["Auth"],
-          summary: "Issue a self-serve read-only API key for signed-in verified users.",
+          summary: "Issue a self-serve API key for signed-in verified users.",
           description:
-            "Creates a 90-day key prefixed cs_ro_ with scan:read and mcp access only. scan:create remains support-gated. " +
+            "Creates a 90-day key. The default is a cs_ro_ key with scan:read and mcp access. Request access=scan_create or include scan:create in scopes to receive a low-volume cs_rw_ key with scan:read, scan:create, and mcp. " +
+            "Higher-volume scan creation remains support-gated. " +
             "The route requires an authenticated CertScore dashboard session with a verified non-disposable email address. " +
             "Issuance is capped per email and per requester network and every issuance/denial is audited.",
           security: [],
@@ -261,13 +265,16 @@ export function buildCertScoreApiV2OpenApiDocument() {
             content: {
               "application/json": {
                 schema: { $ref: "#/components/schemas/ReadOnlyApiKeyRequest" },
-                examples: { named: { value: { name: "Claude Desktop read-only MCP" } } }
+                examples: {
+                  readOnly: { value: { name: "Claude Desktop read-only MCP" } },
+                  scanCreate: { value: { name: "SDK trial scan key", access: "scan_create" } }
+                }
               }
             }
           },
           responses: {
             "201": {
-              description: "Read-only API key issued. Store the token immediately; only the hash is retained.",
+              description: "API key issued. Store the token immediately; only the hash is retained.",
               headers: diagnosticHeaders,
               content: { "application/json": { schema: { $ref: "#/components/schemas/IssuedApiKey" }, examples: { issued: { value: selfServeApiKeyExample } } } }
             },
@@ -552,7 +559,9 @@ export function buildCertScoreApiV2OpenApiDocument() {
           type: "object",
           additionalProperties: false,
           properties: {
-            name: { type: "string", minLength: 2, maxLength: 80 }
+            access: { type: "string", enum: ["read_only", "scan_create"], default: "read_only" },
+            name: { type: "string", minLength: 2, maxLength: 80 },
+            scopes: { type: "array", items: { type: "string", enum: ["scan:read", "scan:create", "mcp"] } }
           }
         },
         IssuedApiKey: {
@@ -561,9 +570,9 @@ export function buildCertScoreApiV2OpenApiDocument() {
           required: ["type", "key", "tokenPrefix", "scopes", "expiresAt", "rateLimits", "usageGuidance", "disclaimer"],
           properties: {
             type: { type: "string", const: "certscore_api_key" },
-            key: { type: "string", pattern: "^cs_ro_" },
-            tokenPrefix: { type: "string", pattern: "^cs_ro_" },
-            scopes: { type: "array", items: { type: "string", enum: ["scan:read", "mcp"] } },
+            key: { type: "string", pattern: "^cs_(ro|rw)_" },
+            tokenPrefix: { type: "string", pattern: "^cs_(ro|rw)_" },
+            scopes: { type: "array", items: { type: "string", enum: ["scan:read", "scan:create", "mcp"] } },
             expiresAt: { type: "string", format: "date-time" },
             rateLimits: {
               type: "object",
@@ -571,7 +580,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
               required: ["requestsPerMinute", "scanReadsPerDay"],
               properties: {
                 requestsPerMinute: { type: "integer", const: 60 },
-                scanReadsPerDay: { type: "integer", const: 500 }
+                scanReadsPerDay: { type: "integer", const: 500 },
+                scanCreatesPerDay: { type: "integer", const: 5 }
               }
             },
             usageGuidance: {
@@ -579,8 +589,10 @@ export function buildCertScoreApiV2OpenApiDocument() {
               additionalProperties: false,
               required: ["scanCreateRequiresSupport", "scanCreateRequestEmail"],
               properties: {
-                scanCreateRequiresSupport: { type: "boolean", const: true },
-                scanCreateRequestEmail: { type: "string", const: "support@certscore.ai" }
+                scanCreateRequiresSupport: { type: "boolean" },
+                scanCreateRequestEndpoint: { type: "string", const: "https://certscore.ai/api/v2/keys/request" },
+                scanCreateRequestEmail: { type: "string", const: "support@certscore.ai" },
+                higherVolumeRequestEmail: { type: "string", const: "support@certscore.ai" }
               }
             },
             disclaimer: { type: "string" }

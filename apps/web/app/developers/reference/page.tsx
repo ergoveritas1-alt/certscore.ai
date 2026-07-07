@@ -195,13 +195,15 @@ Current scopes:
 - mcp`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             Scoped integrations use bearer API keys. Read-only + MCP keys are self-serve for signed-in verified users through{" "}
-            <code className="rounded bg-white px-1">POST /api/v2/keys/request</code>. Scan creation keys remain developer-preview;
-            request those at{" "}
+            <code className="rounded bg-white px-1">POST /api/v2/keys/request</code>. Low-volume scan creation keys are also
+            self-serve by requesting <code className="rounded bg-white px-1">access=scan_create</code>. Request higher-volume scan
+            creation at{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>{" "}
-            with your organization, integration type, expected volume, and requested scopes. Self-serve keys expire after 90 days, are
-            prefixed <code className="rounded bg-white px-1">cs_ro_</code>, and are capped at 60 requests/minute and 500 scan reads/day.
+            with your organization, integration type, expected volume, and requested scopes. Self-serve keys expire after 90 days.{" "}
+            <code className="rounded bg-white px-1">cs_ro_</code> keys are capped at 60 requests/minute and 500 scan reads/day;{" "}
+            <code className="rounded bg-white px-1">cs_rw_</code> keys add 5 fresh scan creations/day for launch.
             HTTP 202 pending responses and HTTP 429 throttled responses may include <code className="rounded bg-white px-1">Retry-After</code>;
             agents and SDKs should honor that value rather than tight polling.
           </p>

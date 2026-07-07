@@ -102,18 +102,19 @@ brew install --cask certscore-mcp`}</CodeBlock>
         <Section eyebrow="Access" title="Use a scoped MCP key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             MCP read tools work with a self-serve <code className="rounded bg-white px-1">cs_ro_</code> key carrying{" "}
-            <code className="rounded bg-white px-1">scan:read</code> and <code className="rounded bg-white px-1">mcp</code>. Sign in,
-            verify your email, then request the key from <code className="rounded bg-white px-1">/api/v2/keys/request</code>.
-            Tools that create scans require <code className="rounded bg-white px-1">scan:create</code> and remain support-gated at{" "}
-            <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
-              support@certscore.ai
-            </a>
-            .
+            <code className="rounded bg-white px-1">scan:read</code> and <code className="rounded bg-white px-1">mcp</code>. Local stdio
+            clients that need low-volume scan creation can request a <code className="rounded bg-white px-1">cs_rw_</code> key from the
+            same endpoint. Remote Claude OAuth scan creation still uses the separate per-client grant flow above.
           </p>
           <CodeBlock>{`Self-serve read-only MCP key:
 1. Sign in at https://certscore.ai/login and verify your email.
 2. POST https://certscore.ai/api/v2/keys/request from the signed-in browser session.
-3. Use the returned cs_ro_ key as CERTSCORE_API_KEY.`}</CodeBlock>
+3. Use the returned cs_ro_ key as CERTSCORE_API_KEY.
+
+Self-serve local scan-creation key:
+curl -X POST https://certscore.ai/api/v2/keys/request \\
+  -H "Content-Type: application/json" \\
+  --data '{"name":"Local MCP scan key","access":"scan_create"}'`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Verify install" title="Run the doctor check">
