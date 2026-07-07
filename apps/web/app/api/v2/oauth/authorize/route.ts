@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { normalizeOAuthScopes, oauthScopeString } from "@certscore/mcp-auth";
+import { oauthScopeString } from "@certscore/mcp-auth";
 import { getCurrentUser } from "../../../../../server/auth";
 import { bootstrapAppUserSession } from "../../../../../server/bootstrap-user";
 import {
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   const decision = String(form.get("decision") ?? "");
   const codeChallenge = String(form.get("code_challenge") ?? "");
   const codeChallengeMethod = String(form.get("code_challenge_method") ?? "");
-  const requestedScopes = normalizeOAuthScopes(String(form.get("scope") ?? ""));
+  const requestedScopes = String(form.get("scope") ?? "").split(/\s+/).filter(Boolean);
   const client = clientId ? await getMcpOAuthClient(clientId) : null;
 
   if (!client || !redirectUri || !redirectUriAllowed(client, redirectUri) || !codeChallenge || codeChallengeMethod !== "S256") {
@@ -60,6 +60,13 @@ export async function POST(request: Request) {
       ownerUserId: user.id
     }
   });
+  if (scopeResolution.invalidScopes.length > 0) {
+    redirectWithParams(redirectUri, {
+      error: "invalid_scope",
+      error_description: `Requested scopes are not supported: ${scopeResolution.invalidScopes.join(" ")}.`,
+      state
+    });
+  }
   if (scopeResolution.deniedScopes.length > 0) {
     redirectWithParams(redirectUri, {
       error: "invalid_scope",

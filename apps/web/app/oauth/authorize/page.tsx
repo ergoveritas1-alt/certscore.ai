@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { normalizeOAuthScopes, oauthScopeString } from "@certscore/mcp-auth";
+import { oauthScopeString } from "@certscore/mcp-auth";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { getCurrentUser } from "../../../server/auth";
 import { bootstrapAppUserSession } from "../../../server/bootstrap-user";
@@ -53,7 +53,7 @@ export default async function AuthorizePage({ searchParams }: AuthorizePageProps
   const codeChallenge = first(params.code_challenge);
   const codeChallengeMethod = first(params.code_challenge_method);
   const state = first(params.state) ?? "";
-  const rawRequestedScopes = normalizeOAuthScopes(first(params.scope));
+  const rawRequestedScopes = first(params.scope)?.split(/\s+/).filter(Boolean) ?? [];
 
   if (responseType !== "code" || !clientId || !redirectUri || !codeChallenge || codeChallengeMethod !== "S256") {
     return invalidRequest("This OAuth request is missing a valid client, redirect URI, or PKCE S256 challenge.");
@@ -76,6 +76,11 @@ export default async function AuthorizePage({ searchParams }: AuthorizePageProps
       ownerUserId: user.id
     }
   });
+  if (scopeResolution.invalidScopes.length > 0) {
+    return invalidRequest(
+      `This OAuth client requested unsupported scopes: ${scopeResolution.invalidScopes.join(" ")}.`
+    );
+  }
   if (scopeResolution.deniedScopes.length > 0) {
     return invalidRequest(
       `This OAuth client requested scopes that are not available for this account: ${oauthScopeString(scopeResolution.deniedScopes)}.`

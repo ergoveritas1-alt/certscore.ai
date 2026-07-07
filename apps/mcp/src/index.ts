@@ -47,7 +47,8 @@ function publicMetadata() {
     resource: env.MCP_PUBLIC_URL,
     authorization_servers: [issuer],
     bearer_methods_supported: ["header"],
-    scopes_supported: ["scan:read", "scan:create", "mcp"],
+    scopes_supported: ["scan:read", "mcp"],
+    grant_gated_scopes: ["scan:create"],
     resource_documentation: `${issuer}/developers/mcp`
   };
 }

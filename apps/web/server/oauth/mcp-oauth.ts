@@ -129,11 +129,24 @@ export async function resolveMcpOAuthRequestedScopes(input: {
   requestedScopes: readonly string[];
   context: McpOAuthGrantContext;
 }) {
-  return resolveMcpOAuthScopeRequest({
+  const resolution = resolveMcpOAuthScopeRequest({
     clientScopes: input.client.scope,
     requestedScopes: input.requestedScopes,
     scanCreateGranted: await hasMcpOAuthScanCreateGrant(input.context)
   });
+  if (resolution.downgradedScopes.length > 0) {
+    console.info(
+      JSON.stringify({
+        event: "oauth_scope_downgraded",
+        source: "mcp-oauth",
+        clientId: input.context.clientId ?? null,
+        organizationId: input.context.organizationId ?? null,
+        ownerUserId: input.context.ownerUserId ?? null,
+        droppedScopes: resolution.downgradedScopes
+      })
+    );
+  }
+  return resolution;
 }
 
 export function getRequesterIp(request: Request) {

@@ -169,12 +169,14 @@ const discoveryDocument = {
       "Use /api/v2/keys/request for read-only + MCP access. Email support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes for scan:create.",
     header: "Authorization: Bearer <token>",
     docs: "https://certscore.ai/developers/quickstart",
-    currentScopes: ["scan:read", "scan:create", "mcp"],
+    currentScopes: ["scan:read", "mcp"],
+    grantGatedScopes: ["scan:create"],
     recommendedScopes: {
       restReadOnly: ["scan:read"],
       restScanCreation: ["scan:read", "scan:create"],
       typescriptSdk: ["scan:read", "scan:create"],
-      mcp: ["scan:read", "scan:create", "mcp"]
+      mcpReadOnly: ["scan:read", "mcp"],
+      mcpScanCreation: ["scan:read", "scan:create", "mcp"]
     }
   },
   rateLimits: {

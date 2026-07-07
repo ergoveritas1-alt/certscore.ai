@@ -20,9 +20,11 @@ test("scan:create can be approved for a read-only registered client when a grant
     CERTSCORE_OAUTH_MCP_SCOPE
   ]);
   assert.deepEqual(resolution.deniedScopes, []);
+  assert.deepEqual(resolution.downgradedScopes, []);
+  assert.deepEqual(resolution.invalidScopes, []);
 });
 
-test("scan:create is denied explicitly instead of silently dropped when no grant exists", () => {
+test("ungranted scan:create is downgraded while default scopes proceed", () => {
   const resolution = resolveMcpOAuthScopeRequest({
     clientScopes: [CERTSCORE_OAUTH_READ_SCOPE, CERTSCORE_OAUTH_MCP_SCOPE],
     requestedScopes: [CERTSCORE_OAUTH_READ_SCOPE, CERTSCORE_OAUTH_CREATE_SCOPE, CERTSCORE_OAUTH_MCP_SCOPE],
@@ -30,5 +32,20 @@ test("scan:create is denied explicitly instead of silently dropped when no grant
   });
 
   assert.deepEqual(resolution.approvedScopes, [CERTSCORE_OAUTH_READ_SCOPE, CERTSCORE_OAUTH_MCP_SCOPE]);
-  assert.deepEqual(resolution.deniedScopes, [CERTSCORE_OAUTH_CREATE_SCOPE]);
+  assert.deepEqual(resolution.deniedScopes, []);
+  assert.deepEqual(resolution.downgradedScopes, [CERTSCORE_OAUTH_CREATE_SCOPE]);
+  assert.deepEqual(resolution.invalidScopes, []);
+});
+
+test("unsupported scopes are invalid instead of silently dropped", () => {
+  const resolution = resolveMcpOAuthScopeRequest({
+    clientScopes: [CERTSCORE_OAUTH_READ_SCOPE, CERTSCORE_OAUTH_MCP_SCOPE],
+    requestedScopes: [CERTSCORE_OAUTH_READ_SCOPE, "profile", CERTSCORE_OAUTH_MCP_SCOPE],
+    scanCreateGranted: false
+  });
+
+  assert.deepEqual(resolution.approvedScopes, [CERTSCORE_OAUTH_READ_SCOPE, CERTSCORE_OAUTH_MCP_SCOPE]);
+  assert.deepEqual(resolution.deniedScopes, []);
+  assert.deepEqual(resolution.downgradedScopes, []);
+  assert.deepEqual(resolution.invalidScopes, ["profile"]);
 });

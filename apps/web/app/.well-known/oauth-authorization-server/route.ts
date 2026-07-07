@@ -11,7 +11,7 @@ export const revalidate = 0;
 
 export async function GET() {
   const issuer = getMcpOAuthIssuer();
-  const scopesSupported = [CERTSCORE_OAUTH_READ_SCOPE, CERTSCORE_OAUTH_CREATE_SCOPE, CERTSCORE_OAUTH_MCP_SCOPE];
+  const scopesSupported = [CERTSCORE_OAUTH_READ_SCOPE, CERTSCORE_OAUTH_MCP_SCOPE];
   return NextResponse.json(
     {
       issuer,
@@ -23,6 +23,7 @@ export async function GET() {
       token_endpoint_auth_methods_supported: ["none"],
       code_challenge_methods_supported: ["S256"],
       scopes_supported: scopesSupported,
+      grant_gated_scopes: [CERTSCORE_OAUTH_CREATE_SCOPE],
       service_documentation: `${issuer}/developers/mcp`
     },
     {
