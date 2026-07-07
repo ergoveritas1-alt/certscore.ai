@@ -15,6 +15,9 @@ export const metadata: Metadata = createPageMetadata({
   title: "CertScore MCP server"
 });
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default function DeveloperMcpPage() {
   return (
     <DeveloperShell activePath="/developers/mcp" title="MCP server" description={description}>
