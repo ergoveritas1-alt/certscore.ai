@@ -4,13 +4,13 @@ export type ScanFrom = (typeof SCAN_FROM_VALUES)[number];
 
 export type RequestedGeoTarget = {
   countryCode: string | null;
-  provider: "aws-default" | "decodo-residential";
+  provider: "aws-default" | "aws-ec2-proxy-eip";
   regionCode: string | null;
 };
 
 export type RealIpEgressRequirement = {
   id: string;
-  provider: "decodo-residential";
+  provider: "aws-ec2-proxy-eip";
   required: boolean;
 };
 
@@ -41,12 +41,12 @@ export const SCAN_FROM_DEFINITIONS = {
     label: "California",
     requestedGeo: {
       countryCode: "US",
-      provider: "decodo-residential",
+      provider: "aws-ec2-proxy-eip",
       regionCode: "us-west-2"
     },
     realIpEgress: {
-      id: "decodo-us-ca",
-      provider: "decodo-residential",
+      id: "us-ca-ec2-proxy-t4g-micro",
+      provider: "aws-ec2-proxy-eip",
       required: true
     },
     value: "california"
@@ -56,12 +56,12 @@ export const SCAN_FROM_DEFINITIONS = {
     label: "EU-DE",
     requestedGeo: {
       countryCode: "DE",
-      provider: "decodo-residential",
+      provider: "aws-ec2-proxy-eip",
       regionCode: "eu-central-1"
     },
     realIpEgress: {
-      id: "decodo-eu-de",
-      provider: "decodo-residential",
+      id: "eu-de-ec2-proxy-t4g-micro",
+      provider: "aws-ec2-proxy-eip",
       required: true
     },
     value: "eu_de"
@@ -71,12 +71,12 @@ export const SCAN_FROM_DEFINITIONS = {
     label: "EU-IR",
     requestedGeo: {
       countryCode: "IE",
-      provider: "decodo-residential",
+      provider: "aws-ec2-proxy-eip",
       regionCode: "eu-west-1"
     },
     realIpEgress: {
-      id: "decodo-eu-ie",
-      provider: "decodo-residential",
+      id: "eu-ie-ec2-proxy-t4g-micro",
+      provider: "aws-ec2-proxy-eip",
       required: true
     },
     value: "eu_ie"

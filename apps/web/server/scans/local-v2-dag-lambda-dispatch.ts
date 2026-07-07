@@ -35,7 +35,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   profile: LocalV2DagScanProfile;
   regionalRealIpEgress?: {
     egressId: string;
-    provider: "decodo-residential";
+    provider: RequestedGeoTarget["provider"];
     required: boolean;
     requestedGeo: RequestedGeoTarget;
     scanFrom: ScanFrom;

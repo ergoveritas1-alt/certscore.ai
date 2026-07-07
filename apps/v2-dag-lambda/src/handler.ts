@@ -42,7 +42,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   debugOverrides?: LocalV2DagLambdaDebugOverrides;
   regionalRealIpEgress?: {
     egressId: string;
-    provider: "decodo-residential";
+    provider: string;
     required: boolean;
     requestedGeo?: {
       countryCode: string | null;
@@ -359,7 +359,7 @@ function parseRegionalRealIpEgress(value: unknown): LocalV2DagLambdaDispatchPayl
   }
   return {
     egressId,
-    provider: "decodo-residential",
+    provider: compactString(record.provider) ?? requestedGeo?.provider ?? "aws-ec2-proxy-eip",
     required: record.required !== false,
     ...(requestedGeo ? { requestedGeo } : {}),
     scanFrom

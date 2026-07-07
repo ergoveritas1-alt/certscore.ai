@@ -307,11 +307,11 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     regionalRealIpEgress: {
-      egressId: "decodo-eu-ie",
-      provider: "decodo-residential",
+      egressId: "eu-ie-ec2-proxy-t4g-micro",
+      provider: "aws-ec2-proxy-eip",
       requestedGeo: {
         countryCode: "IE",
-        provider: "decodo-residential",
+        provider: "aws-ec2-proxy-eip",
         regionCode: "eu-west-1"
       },
       required: true,
@@ -319,7 +319,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     },
     requestedGeo: {
       countryCode: "IE",
-      provider: "decodo-residential",
+      provider: "aws-ec2-proxy-eip",
       regionCode: "eu-west-1"
     },
     resultHandoff: "sqs",
@@ -374,21 +374,21 @@ test("queued full-scan config uses location-specific Lambda functions and result
     [
       {
         awsRegion: "eu-central-1",
-        egressId: "decodo-eu-de",
+        egressId: "eu-de-ec2-proxy-t4g-micro",
         functionName: "certscore-v2-dag-de",
         resultQueueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-de-results",
         scanFrom: "eu_de"
       },
       {
         awsRegion: "eu-west-1",
-        egressId: "decodo-eu-ie",
+        egressId: "eu-ie-ec2-proxy-t4g-micro",
         functionName: "certscore-v2-dag-ie",
         resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results",
         scanFrom: "eu_ie"
       },
       {
         awsRegion: "us-west-2",
-        egressId: "decodo-us-ca",
+        egressId: "us-ca-ec2-proxy-t4g-micro",
         functionName: "certscore-v2-dag-ca",
         resultQueueUrl: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-ca-results",
         scanFrom: "california"

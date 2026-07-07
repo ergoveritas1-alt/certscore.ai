@@ -79,15 +79,15 @@ test("handler rejects regional real-IP dispatches aimed at the wrong AWS region"
       scanFrom: "california",
       requestedGeo: {
         countryCode: "US",
-        provider: "decodo-residential",
+        provider: "aws-ec2-proxy-eip",
         regionCode: "us-west-2"
       },
       regionalRealIpEgress: {
-        egressId: "decodo-us-ca",
-        provider: "decodo-residential",
+        egressId: "us-ca-ec2-proxy-t4g-micro",
+        provider: "aws-ec2-proxy-eip",
         requestedGeo: {
           countryCode: "US",
-          provider: "decodo-residential",
+          provider: "aws-ec2-proxy-eip",
           regionCode: "us-west-2"
         },
         required: true,
@@ -105,15 +105,15 @@ test("handler fails closed when a required regional real-IP proxy is not configu
     scanFrom: "eu_ie",
     requestedGeo: {
       countryCode: "IE",
-      provider: "decodo-residential",
+      provider: "aws-ec2-proxy-eip",
       regionCode: "eu-west-1"
     },
     regionalRealIpEgress: {
-      egressId: "decodo-eu-ie",
-      provider: "decodo-residential",
+      egressId: "eu-ie-ec2-proxy-t4g-micro",
+      provider: "aws-ec2-proxy-eip",
       requestedGeo: {
         countryCode: "IE",
-        provider: "decodo-residential",
+        provider: "aws-ec2-proxy-eip",
         regionCode: "eu-west-1"
       },
       required: true,

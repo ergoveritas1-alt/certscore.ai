@@ -58,11 +58,11 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
     productionFindingIntegration: false,
     profile: "tiny",
     regionalRealIpEgress: {
-      egressId: "decodo-eu-ie",
-      provider: "decodo-residential",
+      egressId: "eu-ie-ec2-proxy-t4g-micro",
+      provider: "aws-ec2-proxy-eip",
       requestedGeo: {
         countryCode: "IE",
-        provider: "decodo-residential",
+        provider: "aws-ec2-proxy-eip",
         regionCode: "eu-west-1"
       },
       required: true,
@@ -72,7 +72,7 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
     resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
     requestedGeo: {
       countryCode: "IE",
-      provider: "decodo-residential",
+      provider: "aws-ec2-proxy-eip",
       regionCode: "eu-west-1"
     },
     scanId: "scan-local-1",
@@ -112,7 +112,7 @@ test("builds a California v2 DAG Lambda dispatch payload for us-west-2 SQS hando
   assert.equal(payload.awsRegion, "us-west-2");
   assert.equal(payload.functionName, "certscore-v2-dag-ca");
   assert.equal(payload.scanFrom, "california");
-  assert.equal(payload.regionalRealIpEgress?.egressId, "decodo-us-ca");
+  assert.equal(payload.regionalRealIpEgress?.egressId, "us-ca-ec2-proxy-t4g-micro");
   assert.equal(payload.resultQueueUrl, "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-ca-results");
 });
 
