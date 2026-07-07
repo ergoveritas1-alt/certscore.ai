@@ -87,6 +87,28 @@ test("MCP contracts expose the current scoped tool surface", () => {
     ]
   );
   assert.equal(certScoreMcpToolContracts.some((tool) => tool.name === "create_scan"), false);
+  assert.deepEqual(
+    Object.fromEntries(certScoreMcpToolContracts.map((tool) => [tool.name, tool.title])),
+    {
+      explain_finding: "Explain CertScore finding",
+      export_findings: "Export CertScore findings",
+      get_evidence: "Get CertScore evidence",
+      get_latest_domain_pre_consent_cookies_trackers: "Get latest pre-consent cookies & trackers",
+      get_latest_domain_scan: "Get latest domain scan",
+      get_pre_consent_cookies_trackers: "Get pre-consent cookies & trackers",
+      get_report: "Get CertScore report",
+      get_scan: "Get CertScore scan",
+      get_scan_status: "Get CertScore scan status",
+      list_findings: "List CertScore findings",
+      scan_site: "Scan site"
+    }
+  );
+  for (const tool of certScoreMcpToolContracts) {
+    assert.equal(typeof tool.title, "string", `${tool.name} should expose a title`);
+    assert.ok(tool.title.length > 0, `${tool.name} should expose a non-empty title`);
+    assert.equal(tool.title.endsWith("."), false, `${tool.name} title should not end with a period`);
+  }
+  assert.match(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.description ?? "", /https:\/\/certscore\.ai\/api\/v2\/openapi\.json/);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema.url);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_evidence")?.inputSchema.scanId);
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.inputSchema.findingId);

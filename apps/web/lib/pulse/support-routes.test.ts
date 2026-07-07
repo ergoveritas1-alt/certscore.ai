@@ -557,7 +557,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.distribution, "remote_streamable_http_and_homebrew_stdio");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "public_remote_endpoint_and_stdio_package_live");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.2");
+  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.3");
   assert.equal(
     aiDiscovery.mcp.install,
     "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp"

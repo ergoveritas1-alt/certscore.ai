@@ -9,6 +9,12 @@ import { certScoreMcpToolContracts } from "../packages/certscore-api-contracts/s
 
 type ManifestTool = {
   name: string;
+  title: string;
+  description: string;
+};
+
+type DocumentedTool = {
+  name: string;
   description: string;
 };
 
@@ -20,6 +26,14 @@ const caskPath = "Casks/certscore-mcp.rb";
 
 function sortedTools(tools: ManifestTool[]) {
   return [...tools].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function sortedDocumentedTools(tools: DocumentedTool[]) {
+  return [...tools].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function manifestDescriptions() {
+  return manifest.map((tool) => ({ name: tool.name, description: tool.description }));
 }
 
 function extractToolListFromSource(sourcePath: string, marker: string) {
@@ -179,18 +193,19 @@ async function main() {
   const discoveryVersion = extractQuotedStringAfterMarker(discoveryRoutePath, "currentVersion:");
 
   assert.deepEqual(
-    sortedTools(certScoreMcpToolContracts.map((tool) => ({ name: tool.name, description: tool.description }))),
+    sortedTools(certScoreMcpToolContracts.map((tool) => ({ name: tool.name, title: tool.title, description: tool.description }))),
     sortedTools(manifest),
     "Shared MCP tool contracts must match checked-in manifest"
   );
 
   const runtimeTools = await listRuntimeTools();
   assert.deepEqual(
-    sortedTools(runtimeTools.map((tool) => ({ name: tool.name, description: tool.description ?? "" }))),
+    sortedTools(runtimeTools.map((tool) => ({ name: tool.name, title: tool.title ?? "", description: tool.description ?? "" }))),
     sortedTools(manifest),
     "Runtime MCP tools/list output must match checked-in manifest"
   );
   for (const tool of runtimeTools) {
+    assert.ok(tool.title, `${tool.name} should expose MCP title`);
     assert.ok(tool.annotations, `${tool.name} should expose MCP annotations`);
   }
   const runtimeToolNames = runtimeTools.map((tool) => tool.name).sort();
@@ -212,8 +227,8 @@ async function main() {
     ["apps/web/app/api-pulse/page.tsx", "const mcpTools ="]
   ] as const) {
     assert.deepEqual(
-      sortedTools(extractToolListFromSource(path, marker)),
-      sortedTools(manifest),
+      sortedDocumentedTools(extractToolListFromSource(path, marker)),
+      sortedDocumentedTools(manifestDescriptions()),
       `${path} MCP docs must match checked-in manifest`
     );
   }

@@ -1,5 +1,10 @@
 # certscore-mcp
 
+## 0.2.3
+
+- Adds human-readable MCP tool titles for all 11 tools so connector directory review does not fall back to raw tool names.
+- References the API v2 OpenAPI document from the `scan_site` description.
+
 ## 0.2.2
 
 - Marks `scan_site` as destructive in MCP tool annotations because it can create persistent scans and enqueue background work.

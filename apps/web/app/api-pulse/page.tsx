@@ -110,7 +110,7 @@ const detailLevels = [
 ] as const;
 
 const mcpTools = [
-  ["scan_site", "Start or reuse a CertScore public-web scan for a public URL."],
+  ["scan_site", "Start or reuse a CertScore public-web scan for a public URL. API docs: https://certscore.ai/api/v2/openapi.json"],
   ["get_scan", "Retrieve the API v2 public-safe scan resource for a stable scan ID."],
   ["get_scan_status", "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId."],
   ["get_report", "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet."],

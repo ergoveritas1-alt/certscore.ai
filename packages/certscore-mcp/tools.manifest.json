@@ -1,46 +1,57 @@
 [
   {
     "name": "scan_site",
-    "description": "Start or reuse a CertScore public-web scan for a public URL."
+    "title": "Scan site",
+    "description": "Start or reuse a CertScore public-web scan for a public URL. API docs: https://certscore.ai/api/v2/openapi.json"
   },
   {
     "name": "get_scan",
+    "title": "Get CertScore scan",
     "description": "Retrieve the API v2 public-safe scan resource for a stable scan ID."
   },
   {
     "name": "get_scan_status",
+    "title": "Get CertScore scan status",
     "description": "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId."
   },
   {
     "name": "get_report",
+    "title": "Get CertScore report",
     "description": "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet."
   },
   {
     "name": "get_evidence",
+    "title": "Get CertScore evidence",
     "description": "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."
   },
   {
     "name": "export_findings",
+    "title": "Export CertScore findings",
     "description": "Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows."
   },
   {
     "name": "list_findings",
+    "title": "List CertScore findings",
     "description": "List API v2 public-safe findings already projected for a scan."
   },
   {
     "name": "get_pre_consent_cookies_trackers",
+    "title": "Get pre-consent cookies & trackers",
     "description": "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan."
   },
   {
     "name": "explain_finding",
+    "title": "Explain CertScore finding",
     "description": "Explain a single CertScore finding with public evidence, caveats, and reviewer next steps."
   },
   {
     "name": "get_latest_domain_scan",
+    "title": "Get latest domain scan",
     "description": "Retrieve the latest eligible API v2 public-safe scan for a domain."
   },
   {
     "name": "get_latest_domain_pre_consent_cookies_trackers",
+    "title": "Get latest pre-consent cookies & trackers",
     "description": "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain."
   }
 ]

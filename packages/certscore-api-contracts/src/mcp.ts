@@ -199,7 +199,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "scan_site",
     title: "Scan site",
-    description: "Start or reuse a CertScore public-web scan for a public URL.",
+    description: "Start or reuse a CertScore public-web scan for a public URL. API docs: https://certscore.ai/api/v2/openapi.json",
     inputSchema: mcpCreateScanInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: scanCreationAnnotations
@@ -214,7 +214,7 @@ export const certScoreMcpToolContracts = [
   },
   {
     name: "get_scan_status",
-    title: "Get CertScore Pulse scan status",
+    title: "Get CertScore scan status",
     description: "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId.",
     inputSchema: mcpGetScanStatusInputSchema,
     outputSchema: mcpScanStatusOutputSchema,
@@ -222,7 +222,7 @@ export const certScoreMcpToolContracts = [
   },
   {
     name: "get_report",
-    title: "Get CertScore Pulse report",
+    title: "Get CertScore report",
     description: "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet.",
     inputSchema: mcpGetReportInputSchema,
     outputSchema: mcpReportOutputSchema,
@@ -230,7 +230,7 @@ export const certScoreMcpToolContracts = [
   },
   {
     name: "get_evidence",
-    title: "Get CertScore Pulse evidence",
+    title: "Get CertScore evidence",
     description: "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.",
     inputSchema: mcpGetEvidenceInputSchema,
     outputSchema: pulseResponseSchema,
@@ -254,7 +254,7 @@ export const certScoreMcpToolContracts = [
   },
   {
     name: "get_pre_consent_cookies_trackers",
-    title: "Get pre-consent cookies and trackers",
+    title: "Get pre-consent cookies & trackers",
     description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.",
     inputSchema: mcpGetPreConsentCookiesTrackersInputSchema,
     outputSchema: mcpPreConsentCookiesTrackersOutputSchema,
@@ -278,7 +278,7 @@ export const certScoreMcpToolContracts = [
   },
   {
     name: "get_latest_domain_pre_consent_cookies_trackers",
-    title: "Get latest domain pre-consent cookies and trackers",
+    title: "Get latest pre-consent cookies & trackers",
     description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.",
     inputSchema: mcpGetLatestDomainPreConsentCookiesTrackersInputSchema,
     outputSchema: mcpPreConsentCookiesTrackersOutputSchema,

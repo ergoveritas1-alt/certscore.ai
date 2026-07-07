@@ -75,7 +75,7 @@ const discoveryDocument = {
     distribution: "remote_streamable_http_and_homebrew_stdio",
     binary: "certscore-mcp",
     packageStatus: "public_remote_endpoint_and_stdio_package_live",
-    currentVersion: "0.2.2",
+    currentVersion: "0.2.3",
     docs: "https://certscore.ai/developers/mcp",
     remote: {
       endpoint: "https://mcp.certscore.ai/mcp",

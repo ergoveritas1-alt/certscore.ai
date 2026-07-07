@@ -174,6 +174,8 @@ test("CertScore MCP server tool metadata stays aligned with shared contracts", a
       const listed = byName.get(contract.name);
       assert.ok(listed, `Expected listed MCP tool ${contract.name}`);
       assert.equal(listed.title, contract.title);
+      assert.equal(typeof listed.title, "string", `Expected ${contract.name} to expose a title`);
+      assert.ok(listed.title.length > 0, `Expected ${contract.name} to expose a non-empty title`);
       assert.equal(listed.description, contract.description);
       assert.deepEqual(listed.annotations, contract.annotations);
       assert.equal(listed.outputSchema?.type, "object");
