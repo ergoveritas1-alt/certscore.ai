@@ -75,7 +75,7 @@ const discoveryDocument = {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
-    currentVersion: "0.1.5",
+    currentVersion: "0.2.1",
     docs: "https://certscore.ai/developers/mcp",
     remote: {
       endpoint: "https://mcp.certscore.ai/mcp",
@@ -91,7 +91,6 @@ const discoveryDocument = {
     transport: "stdio",
     currentTools: [
       "scan_site",
-      "create_scan",
       "get_scan",
       "get_scan_status",
       "get_report",

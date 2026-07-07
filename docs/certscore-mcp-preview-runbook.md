@@ -70,8 +70,8 @@ pnpm mcp:certscore:smoke
 
 Expected behavior:
 
-- MCP client lists the five scoped tools.
-- `create_scan` returns either a completed scan or an async `jobId`/`scanId`.
+- MCP client lists the expected CertScore tools.
+- `scan_site` returns either a completed scan or an async `jobId`/`scanId`.
 - `get_report` runs when a stable `scanId` is available.
 - If the scan is still async, `get_scan_status` returns the public-safe job status.
 

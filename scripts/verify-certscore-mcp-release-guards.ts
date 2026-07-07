@@ -14,6 +14,7 @@ type ManifestTool = {
 
 const repoRoot = process.cwd();
 const manifest = JSON.parse(readFileSync(join(repoRoot, "packages/certscore-mcp/tools.manifest.json"), "utf8")) as ManifestTool[];
+const packageJson = JSON.parse(readFileSync(join(repoRoot, "packages/certscore-mcp/package.json"), "utf8")) as { version: string };
 const discoveryRoutePath = "apps/web/app/.well-known/certscore-ai.json/route.ts";
 const caskPath = "Casks/certscore-mcp.rb";
 
@@ -173,7 +174,7 @@ function npxPackagesFromDocs(paths: string[]) {
 }
 
 async function main() {
-  assert.equal(manifest.length, 12, "CertScore MCP manifest should expose exactly 12 tools");
+  assert.equal(manifest.length, 11, "CertScore MCP manifest should expose exactly 11 tools");
   const cask = parseCertScoreMcpCask();
   const discoveryVersion = extractQuotedStringAfterMarker(discoveryRoutePath, "currentVersion:");
 
@@ -196,8 +197,8 @@ async function main() {
 
   assert.equal(
     discoveryVersion,
-    cask.version,
-    `mcp.currentVersion drift: ${discoveryRoutePath} must match ${caskPath}`
+    packageJson.version,
+    `mcp.currentVersion drift: ${discoveryRoutePath} must match packages/certscore-mcp/package.json`
   );
   assert.match(
     cask.url,
