@@ -56,7 +56,7 @@ type EcsContext = {
   logPrefix: string | null;
 };
 
-type SmokeKey = {
+export type SmokeKey = {
   token: string;
   tokenHash: string;
   tokenPrefix: string;
@@ -104,7 +104,7 @@ export function createSmokeKey(createdBy: string, ttlHours = 24): SmokeKey {
   };
 }
 
-function getEcsContext(): EcsContext {
+export function getEcsContext(): EcsContext {
   const region = process.env.AWS_REGION?.trim() || DEFAULT_REGION;
   const cluster = process.env.ECS_CLUSTER_NAME?.trim() || DEFAULT_CLUSTER;
   const service = process.env.ECS_CERTSCORE_SERVICE_NAME?.trim() || DEFAULT_SERVICE;
@@ -147,7 +147,7 @@ function getEcsContext(): EcsContext {
   };
 }
 
-function runEcsOneOff(context: EcsContext, command: string[], environment: Array<{ name: string; value: string }>) {
+export function runEcsOneOff(context: EcsContext, command: string[], environment: Array<{ name: string; value: string }>) {
   const overrides = JSON.stringify({
     containerOverrides: [
       {
@@ -196,7 +196,7 @@ function runEcsOneOff(context: EcsContext, command: string[], environment: Array
   return taskArn;
 }
 
-function insertProductionKey(context: EcsContext, key: SmokeKey) {
+export function insertProductionKey(context: EcsContext, key: SmokeKey) {
   runEcsOneOff(
     context,
     ["node", "./apps/web/scripts/insert-integration-api-key.mjs"],
@@ -213,7 +213,7 @@ function insertProductionKey(context: EcsContext, key: SmokeKey) {
   console.log(`Inserted temporary production key hash prefix=${key.tokenPrefix} expiresAt=${key.expiresAt}`);
 }
 
-function revokeProductionKeys(context: EcsContext, createdBy: string) {
+export function revokeProductionKeys(context: EcsContext, createdBy: string) {
   const cleanupCode = [
     "const pg=require('pg');",
     "const client=new pg.Client({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL_MODE==='disable'?false:{rejectUnauthorized:false}});",

@@ -328,7 +328,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /Recommended workflow/);
   assert.match(source, /without changing evidence, concern, finding, or projection logic/);
   assert.match(source, /authenticated MCP smoke/);
-  assert.match(source, /create_scan/);
+  assert.match(source, /scan_site/);
   assert.match(source, /get_scan_status/);
   assert.match(source, /get_report/);
   assert.match(source, /export_findings/);
@@ -551,14 +551,13 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.distribution, "homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.1.5");
+  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.2");
   assert.equal(
     aiDiscovery.mcp.install,
     "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp"
   );
   assert.deepEqual(aiDiscovery.mcp.currentTools, [
     "scan_site",
-    "create_scan",
     "get_scan",
     "get_scan_status",
     "get_report",

@@ -1,5 +1,9 @@
 # certscore-mcp
 
+## 0.2.2
+
+- Marks `scan_site` as destructive in MCP tool annotations because it can create persistent scans and enqueue background work.
+
 ## 0.2.1
 
 - Aligns the local package with the published scoped npm package name `@certscore/mcp`.

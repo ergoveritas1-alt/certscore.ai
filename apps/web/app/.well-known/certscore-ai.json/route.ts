@@ -75,7 +75,7 @@ const discoveryDocument = {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
-    currentVersion: "0.2.1",
+    currentVersion: "0.2.2",
     docs: "https://certscore.ai/developers/mcp",
     remote: {
       endpoint: "https://mcp.certscore.ai/mcp",
