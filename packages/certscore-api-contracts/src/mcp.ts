@@ -123,7 +123,10 @@ export const mcpScanSiteOutputSchema = z
     jobId: z.string().optional(),
     domain: z.string().nullable().optional(),
     status: apiV2ScanStatusSchema,
-    scanFrom: apiV2ScanFromSchema.optional()
+    scanFrom: apiV2ScanFromSchema.optional(),
+    startedAt: z.string().nullable().optional(),
+    completedAt: z.string().nullable().optional(),
+    scanTimeSeconds: z.number().nullable().optional()
   })
   .passthrough();
 
@@ -135,6 +138,9 @@ export const mcpScanStatusOutputSchema = z
     scan_id: z.string().nullable().optional(),
     domain: z.string().nullable().optional(),
     status: z.union([apiV2ScanStatusSchema, pulseStatusSchema.shape.status]).optional(),
+    startedAt: z.string().nullable().optional(),
+    completedAt: z.string().nullable().optional(),
+    scanTimeSeconds: z.number().nullable().optional(),
     error: mcpToolErrorPayloadSchema.shape.error.optional()
   })
   .passthrough();
@@ -208,7 +214,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "scan_site",
     title: "Scan site",
-    description: "Start or reuse a CertScore public-web scan for a public URL.",
+    description: "Start or reuse a CertScore public-web scan for a public URL. API v2 responses may include startedAt, completedAt, and scanTimeSeconds.",
     inputSchema: mcpCreateScanInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: scanCreationAnnotations
@@ -216,7 +222,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "get_scan",
     title: "Get CertScore scan",
-    description: "Retrieve the API v2 public-safe scan resource for a stable scan ID.",
+    description: "Retrieve the API v2 public-safe scan resource for a stable scan ID, including startedAt, completedAt, and scanTimeSeconds when available.",
     inputSchema: mcpGetScanInputSchema,
     outputSchema: apiV2ScanResourceSchema,
     annotations: readOnlyOpenWorldAnnotations
@@ -224,7 +230,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "get_scan_status",
     title: "Get CertScore Pulse scan status",
-    description: "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId.",
+    description: "Pass scanId (preferred, API v2) to retrieve status and scan timing fields. Pass jobId only for a just-created scan that has not yet returned a scanId.",
     inputSchema: mcpGetScanStatusInputSchema,
     outputSchema: mcpScanStatusOutputSchema,
     annotations: readOnlyOpenWorldAnnotations

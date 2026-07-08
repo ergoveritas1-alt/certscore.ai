@@ -1,6 +1,7 @@
 {
-  "name": "certscore-mcp",
-  "version": "0.1.5",
+  "name": "@certscore/mcp",
+  "version": "0.2.5",
+  "mcpName": "ai.certscore/mcp",
   "private": false,
   "description": "MCP server for CertScore public website risk-signal workflows.",
   "type": "module",
@@ -16,12 +17,21 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/certscore-mcp.mjs"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    },
+    "./version": {
+      "types": "./dist/version.d.ts",
+      "import": "./dist/version.js"
     }
   },
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "server.json"
   ],
   "publishConfig": {
     "access": "public"
@@ -51,7 +61,7 @@
     "modelcontextprotocol",
     "model-context-protocol"
   ],
-  "license": "UNLICENSED",
+  "license": "proprietary",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.76"

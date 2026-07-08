@@ -166,6 +166,19 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
           </div>
         </Section>
 
+        <Section eyebrow="Timing" title="Scan timing fields">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            API v2 MCP tools return <code className="rounded bg-white px-1">startedAt</code>,{" "}
+            <code className="rounded bg-white px-1">completedAt</code>, and{" "}
+            <code className="rounded bg-white px-1">scanTimeSeconds</code> when CertScore has enough timing evidence. Treat{" "}
+            <code className="rounded bg-white px-1">scanTimeSeconds: null</code> as unavailable rather than zero.
+          </p>
+          <CodeBlock>{`const scan = await get_scan({ scanId });
+const status = await get_scan_status({ scanId });
+
+// scan.scanTimeSeconds and status.scanTimeSeconds are numbers or null.`}</CodeBlock>
+        </Section>
+
         <Section eyebrow="Choosing an integration" title="MCP vs REST API vs SDK">
           <div className="grid gap-5 md:grid-cols-3">
             {[

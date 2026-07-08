@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "ai.certscore/mcp",
+  "description": "MCP server for CertScore public website risk-signal workflows.",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/ergoveritas1-alt/certscore.ai",
+    "source": "github"
+  },
+  "version": "0.2.5",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@certscore/mcp",
+      "version": "0.2.5",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "node"
+    }
+  ]
+}

@@ -1,5 +1,11 @@
 # certscore-mcp
 
+## 0.2.5
+
+- Rebuilt the MCP server against `@certscore/sdk@0.2.3`.
+- Documented API v2 scan timing fields returned by `scan_site`, `get_scan`, and `get_scan_status`: `startedAt`, `completedAt`, and `scanTimeSeconds`.
+- Clarified that `scanTimeSeconds: null` means timing is unavailable and should not be displayed as `0`.
+
 ## 0.1.5
 
 - Moves Homebrew release artifacts to a Linux-built, deterministic GitHub Actions pipeline.

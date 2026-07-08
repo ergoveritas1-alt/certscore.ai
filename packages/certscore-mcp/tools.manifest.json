@@ -5,15 +5,15 @@
   },
   {
     "name": "scan_site",
-    "description": "Start or reuse a CertScore public-web scan for a public URL."
+    "description": "Start or reuse a CertScore public-web scan for a public URL. API v2 responses may include startedAt, completedAt, and scanTimeSeconds."
   },
   {
     "name": "get_scan",
-    "description": "Retrieve the API v2 public-safe scan resource for a stable scan ID."
+    "description": "Retrieve the API v2 public-safe scan resource for a stable scan ID, including startedAt, completedAt, and scanTimeSeconds when available."
   },
   {
     "name": "get_scan_status",
-    "description": "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId."
+    "description": "Pass scanId (preferred, API v2) to retrieve status and scan timing fields. Pass jobId only for a just-created scan that has not yet returned a scanId."
   },
   {
     "name": "get_report",

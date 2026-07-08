@@ -28,6 +28,16 @@ Public docs:
 
 The initial MCP surface intentionally does not include account scan browsing or scan comparison tools.
 
+## Scan Timing Fields
+
+MCP tools backed by API v2 scan resources return scan timing when CertScore has enough timing evidence:
+
+- `startedAt`
+- `completedAt`
+- `scanTimeSeconds`
+
+This applies to `scan_site` when it returns an API v2 scan resource or job, `get_scan`, and `get_scan_status` when called with a `scanId`. `scanTimeSeconds: null` means timing is unavailable or incomplete and should not be displayed as `0`.
+
 ## Configuration
 
 Install with Homebrew on macOS:

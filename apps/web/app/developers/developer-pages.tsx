@@ -59,9 +59,9 @@ export const apiV2Routes = [
 
 export const mcpTools = [
   ["create_scan", "Deprecated compatibility alias of scan_site. Removed in 0.2.0. Use scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links."],
-  ["scan_site", "Start or reuse a CertScore public-web scan for a public URL."],
-  ["get_scan", "Retrieve the API v2 public-safe scan resource for a stable scan ID."],
-  ["get_scan_status", "Pass scanId (preferred, API v2). Pass jobId only for a just-created scan that has not yet returned a scanId."],
+  ["scan_site", "Start or reuse a CertScore public-web scan for a public URL. API v2 responses may include startedAt, completedAt, and scanTimeSeconds."],
+  ["get_scan", "Retrieve the API v2 public-safe scan resource for a stable scan ID, including startedAt, completedAt, and scanTimeSeconds when available."],
+  ["get_scan_status", "Pass scanId (preferred, API v2) to retrieve status and scan timing fields. Pass jobId only for a just-created scan that has not yet returned a scanId."],
   ["get_report", "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet."],
   ["get_evidence", "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."],
   ["export_findings", "Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows."],

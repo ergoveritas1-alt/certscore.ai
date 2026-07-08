@@ -219,14 +219,18 @@ test("README documents current MCP tool surface and public docs", () => {
   assert.match(readme, /automated public-web observations for review/i);
   assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
 
-  assert.equal(packageJson.name, "certscore-mcp");
+  assert.equal(packageJson.name, "@certscore/mcp");
   assert.equal(packageJson.private, false);
   assert.equal(packageJson.bin?.["certscore-mcp"], "dist/certscore-mcp.mjs");
-  assert.deepEqual(packageJson.files, ["dist", "README.md", "LICENSE"]);
+  assert.deepEqual(packageJson.files, ["dist", "README.md", "LICENSE", "server.json"]);
   assert.equal(packageJson.dependencies?.["@certscore/api-contracts"], undefined);
   assert.equal(packageJson.dependencies?.["@certscore/sdk"], undefined);
   assert.equal(packageJson.devDependencies?.["@certscore/api-contracts"], "workspace:*");
   assert.equal(packageJson.devDependencies?.["@certscore/sdk"], "workspace:*");
+
+  assert.match(readme, /scanTimeSeconds/);
+  assert.match(readme, /scanTimeSeconds: null/);
+  assert.match(readme, /should not be displayed as `0`/);
 });
 
 test("doctor reports healthy API and missing API key without failing", async () => {
@@ -422,7 +426,7 @@ test("get_scan_status returns normalized scanId", async () => {
   }
 });
 
-test("get_scan_status supports API v2 scanId status", async () => {
+test("get_scan_status supports API v2 scanId status with timing fields", async () => {
   const mock = installFetch([
     {
       status: 200,
@@ -430,7 +434,10 @@ test("get_scan_status supports API v2 scanId status", async () => {
         type: "certscore_scan_job",
         jobId: "00000000-0000-4000-8000-000000000123",
         scanId: "00000000-0000-4000-8000-000000000123",
-        status: "completed"
+        status: "completed",
+        startedAt: "2026-07-08T12:00:00.000Z",
+        completedAt: "2026-07-08T12:00:34.000Z",
+        scanTimeSeconds: 34
       }
     }
   ]);
@@ -444,6 +451,9 @@ test("get_scan_status supports API v2 scanId status", async () => {
       );
       assert.equal(result.type, "certscore_scan_job");
       assert.equal(result.scanId, "00000000-0000-4000-8000-000000000123");
+      assert.equal(result.startedAt, "2026-07-08T12:00:00.000Z");
+      assert.equal(result.completedAt, "2026-07-08T12:00:34.000Z");
+      assert.equal(result.scanTimeSeconds, 34);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status/);
     });
   } finally {
@@ -562,7 +572,7 @@ test("export_findings uses full Pulse detail and explain_finding uses API v2 fin
   }
 });
 
-test("API v2 MCP tools return scan, findings, and latest domain resources", async () => {
+test("API v2 MCP tools return scan timing, findings, and latest domain resources", async () => {
   const mock = installFetch([
     {
       status: 200,
@@ -570,7 +580,10 @@ test("API v2 MCP tools return scan, findings, and latest domain resources", asyn
         type: "certscore_scan",
         scanId: "scan_123",
         domain: "example.com",
-        status: "completed"
+        status: "completed",
+        startedAt: "2026-07-08T12:00:00.000Z",
+        completedAt: "2026-07-08T12:00:05.100Z",
+        scanTimeSeconds: 5.1
       }
     },
     {
@@ -623,6 +636,9 @@ test("API v2 MCP tools return scan, findings, and latest domain resources", asyn
       );
 
       assert.equal(scan.type, "certscore_scan");
+      assert.equal(scan.startedAt, "2026-07-08T12:00:00.000Z");
+      assert.equal(scan.completedAt, "2026-07-08T12:00:05.100Z");
+      assert.equal(scan.scanTimeSeconds, 5.1);
       assert.equal(findings.type, "certscore_finding_list");
       assert.deepEqual((findings.findings as Array<{ id: string }>).map((finding) => finding.id), ["finding_2"]);
       assert.deepEqual(findings.pagination, {
