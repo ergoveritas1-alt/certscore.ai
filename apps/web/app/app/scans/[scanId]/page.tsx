@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
+import type { ServerScanFrom } from "../../../../components/scans/scan-from-select";
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
@@ -34,6 +35,10 @@ type ScanDetailPageProps = {
 
 const RECENT_SCAN_REUSED_MESSAGE =
   "CertScore found a completed scan for this website from the past 24 hours, so this request opened the existing report instead of starting a duplicate scan.";
+
+function getReportScanFromDefault(value: string | null | undefined): ServerScanFrom {
+  return value === "eu_de" || value === "eu_ie" || value === "california" ? value : "eu_ie";
+}
 
 function canViewCapturedImage(input: { isPlatformAdmin: boolean; role: string | null | undefined }) {
   return input.isPlatformAdmin || input.role === "admin" || input.role === "advanced";
@@ -137,7 +142,8 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
                   allowRestrictedScanOptions={allowRestrictedScanOptions}
                   buttonLabel="Scan"
                   compact
-                  defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
+                  defaultScanFrom={getReportScanFromDefault(displayScanRecord.scan.scanFromValue ?? organizationSettings?.defaultScanFrom)}
+                  emptySubmitDomain={scanDomainLabel}
                   inputLabel="Scan another website"
                   inputPlaceholder="Enter another site"
                   mode="full"

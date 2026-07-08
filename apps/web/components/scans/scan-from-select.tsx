@@ -7,12 +7,6 @@ import { ScanFromMarker } from "./scan-from-icons";
 
 export const SCAN_FROM_OPTIONS = [
   {
-    description: "Run through the standard production scanner queue.",
-    icon: "cloud",
-    label: "Default production scan",
-    value: "default"
-  },
-  {
     description: "Run from CertScore's Frankfurt Lambda scanner.",
     flag: "🇩🇪",
     label: "EU-DE",
@@ -40,6 +34,7 @@ export const SCAN_FROM_OPTIONS = [
 
 export type ScanFrom = (typeof SCAN_FROM_OPTIONS)[number]["value"];
 export type ServerScanFrom = Exclude<ScanFrom, "local_extension">;
+const DEFAULT_SELECTABLE_SCAN_FROM = "eu_ie" satisfies ServerScanFrom;
 
 type ScanFromSelectProps = {
   allowRestrictedScanOptions?: boolean;
@@ -104,7 +99,7 @@ export function ScanFromSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
-  const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(true);
+  const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(false);
   const [uncontrolledLocalV2RunViaLambda, setUncontrolledLocalV2RunViaLambda] = useState(true);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -115,7 +110,11 @@ export function ScanFromSelect({
     }
     return true;
   });
-  const selectedOption = options.find((option) => option.value === value) ?? options[0] ?? SCAN_FROM_OPTIONS[0];
+  const selectedOption =
+    options.find((option) => option.value === value) ??
+    options.find((option) => option.value === DEFAULT_SELECTABLE_SCAN_FROM) ??
+    options[0] ??
+    SCAN_FROM_OPTIONS[0];
   const selectedValue = selectedOption.value;
   const freshRescan = freshRescanValue ?? uncontrolledFreshRescan;
   const localV2RunViaLambda = allowRestrictedScanOptions
@@ -162,7 +161,7 @@ export function ScanFromSelect({
       const width = variant === "icon" ? Math.min(320, viewportWidth - viewportPadding * 2) : Math.min(288, viewportWidth - viewportPadding * 2);
       const desiredLeft = variant === "icon" ? buttonRect.right - width + 96 : buttonRect.left;
       const left = Math.min(Math.max(viewportPadding, desiredLeft), Math.max(viewportPadding, viewportWidth - width - viewportPadding));
-      const measuredHeight = menuRef.current?.offsetHeight;
+      const measuredHeight = menuRef.current?.scrollHeight;
       const targetHeight = measuredHeight && measuredHeight > 0
         ? measuredHeight
         : includeFreshRescanOption
@@ -269,8 +268,45 @@ export function ScanFromSelect({
                 width: menuPosition?.width ?? (variant === "icon" ? 320 : 288)
               }}
             >
-              {includeFreshRescanOption || showLocalV2RunViaLambdaOption ? (
+              {includeScanFromOptions ? (
                 <div className="pb-1">
+                  <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Scan from</div>
+                  <div role="listbox" aria-label="Scan from">
+                    {menuOptions.map((option) => {
+                      const isSelected = option.value === value;
+                      return (
+                        <button
+                          aria-selected={isSelected}
+                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
+                          key={option.value}
+                          onClick={() => selectScanFrom(option.value)}
+                          role="option"
+                          title={option.description}
+                          type="button"
+                        >
+                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-base leading-none">
+                            <ScanFromMarker
+                              flag={"flag" in option ? option.flag : undefined}
+                              icon={"icon" in option ? option.icon : undefined}
+                              selected={isSelected}
+                            />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className={isSelected ? "block text-sm font-semibold text-slate-950" : "block text-sm font-semibold text-slate-700"}>{option.label}</span>
+                          </span>
+                          {isSelected ? (
+                            <svg aria-hidden="true" className="h-4 w-4 text-sky-600" fill="none" viewBox="0 0 20 20">
+                              <path d="m4.5 10.5 3.25 3.25 7.75-8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" />
+                            </svg>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+              {includeFreshRescanOption || showLocalV2RunViaLambdaOption ? (
+                <div className={includeScanFromOptions ? "border-t border-slate-200/70 pt-1" : "pb-1"}>
                   <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
                   {showLocalV2RunViaLambdaOption ? (
                     <label
@@ -334,43 +370,6 @@ export function ScanFromSelect({
                       </span>
                     </label>
                   ) : null}
-                </div>
-              ) : null}
-              {includeScanFromOptions ? (
-                <div className={includeFreshRescanOption || showLocalV2RunViaLambdaOption ? "border-t border-slate-200/70 pt-1" : ""}>
-                  <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Scan from</div>
-                  <div role="listbox" aria-label="Scan from">
-                    {menuOptions.map((option) => {
-                      const isSelected = option.value === value;
-                      return (
-                        <button
-                          aria-selected={isSelected}
-                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-slate-50 focus-visible:bg-slate-50 focus-visible:outline-none"
-                          key={option.value}
-                          onClick={() => selectScanFrom(option.value)}
-                          role="option"
-                          title={option.description}
-                          type="button"
-                        >
-                          <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-base leading-none">
-                            <ScanFromMarker
-                              flag={"flag" in option ? option.flag : undefined}
-                              icon={"icon" in option ? option.icon : undefined}
-                              selected={isSelected}
-                            />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className={isSelected ? "block text-sm font-semibold text-slate-950" : "block text-sm font-semibold text-slate-700"}>{option.label}</span>
-                          </span>
-                          {isSelected ? (
-                            <svg aria-hidden="true" className="h-4 w-4 text-sky-600" fill="none" viewBox="0 0 20 20">
-                              <path d="m4.5 10.5 3.25 3.25 7.75-8" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" />
-                            </svg>
-                          ) : null}
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
               ) : null}
             </div>,

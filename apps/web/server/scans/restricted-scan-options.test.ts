@@ -117,3 +117,8 @@ test("all users can select regional scan locations", () => {
   assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "california" }), "california");
   assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: true, scanFrom: "eu_de" }), "eu_de");
 });
+
+test("legacy default scan selections are routed to the regional default", () => {
+  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "default" }), "eu_ie");
+  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: true, scanFrom: "default" }), "eu_ie");
+});

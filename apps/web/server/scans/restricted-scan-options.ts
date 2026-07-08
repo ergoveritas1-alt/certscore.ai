@@ -1,4 +1,4 @@
-import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import { DEFAULT_SCAN_FROM, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { parsePlatformAdminEmails } from "../admin/platform-admin-core";
 import { requiresRegionalRealIpEgress, type LocalV2DagScanEnv } from "./local-v2-dag-scan-config";
 
@@ -18,7 +18,8 @@ export function restrictScanFromForUser(input: {
   scanFrom: unknown;
 }): ScanFrom {
   void input.canUseRestrictedScanOptions;
-  return normalizeScanFrom(input.scanFrom);
+  const scanFrom = normalizeScanFrom(input.scanFrom);
+  return scanFrom === "default" ? DEFAULT_SCAN_FROM : scanFrom;
 }
 
 export function restrictLocalV2RunViaLambdaForUser(input: {

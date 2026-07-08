@@ -8,6 +8,7 @@ import { buildScanReportUnifiedFindings } from "../../../../components/scans/sha
 import { AgentSummaryActions, ShareReportActions } from "../../../../components/scans/share-report-actions";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { LocalV2DagScanProgressCard } from "../../../../components/scans/scan-submit-progress";
+import type { ServerScanFrom } from "../../../../components/scans/scan-from-select";
 import {
   hasPendingBrowserExtensionNormalization,
   hasPendingPostCompletionFindingWork
@@ -35,6 +36,10 @@ type PublicScanDetailPageProps = {
 
 function getPublicScanDomainLabel(domainHostname: string | null) {
   return domainHostname?.trim() || "Public website";
+}
+
+function getReportScanFromDefault(value: string | null | undefined): ServerScanFrom {
+  return value === "eu_de" || value === "eu_ie" || value === "california" ? value : "eu_ie";
 }
 
 export async function generateMetadata({ params }: PublicScanDetailPageProps): Promise<Metadata> {
@@ -159,6 +164,8 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
                   <DomainScanForm
                     buttonLabel="Scan"
                     compact
+                    defaultScanFrom={getReportScanFromDefault(displayScanRecord.scan.scanFromValue)}
+                    emptySubmitDomain={publicScanDomainLabel}
                     inputLabel="Scan another website"
                     inputPlaceholder="Enter another site"
                     mode="full"
