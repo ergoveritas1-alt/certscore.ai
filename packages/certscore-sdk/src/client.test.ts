@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { CertScoreClient } from "./client.js";
 import { CertScoreScanFailedError, CertScoreTimeoutError, InvalidUrlError, ThrottledError } from "./errors.js";
+import { CertScore } from "./index.js";
 
 type MockResponse = {
   status: number;
@@ -58,6 +59,12 @@ const pulse = {
   links: { fullReportUrl: "https://certscore.ai/scan/scan_123" },
   disclaimer: "CertScore provides automated public-web observations for review."
 } as const;
+
+test("CertScore is a friendly alias for CertScoreClient", () => {
+  assert.equal(CertScore, CertScoreClient);
+  const client = new CertScore();
+  assert.ok(client instanceof CertScoreClient);
+});
 
 test("scan returns immediate 200 JSON", async () => {
   const mock = installFetch([{ status: 200, body: pulse }]);

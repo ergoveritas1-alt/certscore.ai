@@ -32,9 +32,28 @@ export default function DeveloperQuickstartPage() {
             </a>
             .
           </p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <h3 className="font-semibold text-slate-950">Dashboard path</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Sign in, verify email, then open{" "}
+                <a className="font-semibold text-sky-700 hover:text-sky-900" href="/app/settings">
+                  Settings &gt; Developer API keys
+                </a>{" "}
+                and choose read-only or read + create scans.
+              </p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <h3 className="font-semibold text-slate-950">Automation path</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Use <code className="rounded bg-white px-1">POST /api/v2/keys/request</code> from a signed-in browser session when you
+                want to script key creation.
+              </p>
+            </div>
+          </div>
           <CodeBlock>{`Self-serve read-only key:
 1. Sign in at https://certscore.ai/login and verify your email.
-2. POST https://certscore.ai/api/v2/keys/request from the signed-in browser session.
+2. Open https://certscore.ai/app/settings and create a read-only key.
 3. Store the returned cs_ro_ key and use it as CERTSCORE_API_KEY.
 
 curl -X POST https://certscore.ai/api/v2/keys/request \\
@@ -46,11 +65,12 @@ curl -X POST https://certscore.ai/api/v2/keys/request \\
   -H "Content-Type: application/json" \\
   --data '{"name":"SDK trial scan key","access":"scan_create"}'`}</CodeBlock>
           <CodeBlock>{`Recommended scopes by integration:
-- REST API read-only: scan:read
-- REST API scan creation: scan:read, scan:create
-- TypeScript SDK: scan:read, scan:create
-- MCP read tools: scan:read, mcp
-- MCP scan creation: scan:read, scan:create, mcp`}</CodeBlock>
+- cs_ro_: scan:read, mcp
+- cs_rw_: scan:read, scan:create, mcp
+- REST/SDK read-only: use cs_ro_
+- REST/SDK scan creation: use cs_rw_
+- Claude/remote MCP read tools: OAuth grants scan:read + mcp by default
+- Claude/remote MCP scan creation: grant-gated scan:create per OAuth client`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             Self-serve keys expire after 90 days. <code className="rounded bg-white px-1">cs_rw_</code> keys include{" "}
             <code className="rounded bg-white px-1">scan:create</code> and are limited to 5 fresh scan creations per day for launch.

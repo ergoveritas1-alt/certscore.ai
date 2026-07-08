@@ -1,5 +1,11 @@
 # @certscore/sdk
 
+## 0.2.2
+
+- Added `CertScore` as a friendly alias for `CertScoreClient`.
+- Added the `certscore-sdk-doctor` CLI smoke check.
+- Expanded first-run and error-handling documentation for self-serve `cs_ro_` and `cs_rw_` keys.
+
 ## 0.2.1
 
 - Aligned the repo package with the already-published npm package and refreshed install-first SDK documentation.

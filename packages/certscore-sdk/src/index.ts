@@ -1,4 +1,4 @@
-export { CertScoreClient } from "./client.js";
+export { CertScoreClient, CertScoreClient as CertScore } from "./client.js";
 export {
   CertScoreApiError,
   CertScoreError,

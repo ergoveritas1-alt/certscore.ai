@@ -180,7 +180,8 @@ API key setup and onboarding:
 
 - https://certscore.ai/developers/quickstart
 - Read-only + MCP keys are self-serve for signed-in verified users.
-- Sign in, verify email, then POST https://certscore.ai/api/v2/keys/request from the signed-in browser session.
+- Sign in, verify email, then create keys from https://certscore.ai/app/settings under Developer API keys.
+- Automation can POST https://certscore.ai/api/v2/keys/request from a signed-in browser session.
 - Self-serve read-only keys are prefixed `cs_ro_`, expire after 90 days, and include `scan:read` plus `mcp`.
 - Self-serve scan-creation keys are prefixed `cs_rw_`, expire after 90 days, and include `scan:read`, `scan:create`, and `mcp`.
 - `cs_rw_` keys are limited to 5 fresh scan creations/day for launch. Email support@certscore.ai for higher volume.
@@ -197,6 +198,8 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 ## TypeScript SDK
 
 Install: `npm install @certscore/sdk`.
+Use `import { CertScore } from "@certscore/sdk"` for short examples or `CertScoreClient` for the canonical class name.
+Run `CERTSCORE_API_KEY=... npx -y @certscore/sdk@latest certscore-sdk-doctor` to check SDK setup without creating a scan.
 
 Docs:
 
@@ -206,9 +209,9 @@ Docs:
 Basic use:
 
 ```ts
-import { CertScoreClient } from "@certscore/sdk";
+import { CertScore } from "@certscore/sdk";
 
-const certscore = new CertScoreClient({ apiKey: process.env.CERTSCORE_API_KEY });
+const certscore = new CertScore({ apiKey: process.env.CERTSCORE_API_KEY });
 const created = await certscore.scans.create("https://example.com", {
   freshness: "latest",
   scanFrom: "eu_ie"

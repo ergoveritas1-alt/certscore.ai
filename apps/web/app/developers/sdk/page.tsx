@@ -27,13 +27,43 @@ export default function DeveloperSdkPage() {
           <CodeBlock>{`npm install @certscore/sdk`}</CodeBlock>
         </Section>
 
+        <Section eyebrow="First run" title="Scan a site, wait, and list findings">
+          <CodeBlock>{`npm install @certscore/sdk
+export CERTSCORE_API_KEY="cs_rw_..."
+
+node --input-type=module <<'JS'
+import { CertScore } from "@certscore/sdk";
+
+const certscore = new CertScore({
+  apiKey: process.env.CERTSCORE_API_KEY
+});
+
+const created = await certscore.scans.create("https://example.com", {
+  freshness: "latest",
+  scanFrom: "eu_ie"
+});
+
+const completed = await certscore.scans.wait(created);
+const findings = await certscore.findings.list(completed.scanId);
+
+console.log({
+  scanId: completed.scanId,
+  status: completed.status,
+  findings: findings.findings.length,
+  report: completed.links?.report
+});
+JS`}</CodeBlock>
+        </Section>
+
         <Section eyebrow="Access" title="API keys and scopes">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             The SDK sends <code className="rounded bg-slate-100 px-1">Authorization: Bearer &lt;token&gt;</code>. Read-only workflows need{" "}
             <code className="rounded bg-slate-100 px-1">scan:read</code>. Creating scans requires{" "}
-            <code className="rounded bg-slate-100 px-1">scan:create</code>. Signed-in verified users can request a low-volume{" "}
-            <code className="rounded bg-slate-100 px-1">cs_rw_</code> key from{" "}
-            <code className="rounded bg-slate-100 px-1">/api/v2/keys/request</code>; higher-volume scan creation is available through{" "}
+            <code className="rounded bg-slate-100 px-1">scan:create</code>. Signed-in verified users can create{" "}
+            <code className="rounded bg-slate-100 px-1">cs_ro_</code> and <code className="rounded bg-slate-100 px-1">cs_rw_</code> keys
+            from <a className="font-semibold text-sky-700 hover:text-sky-900" href="/app/settings">Settings &gt; Developer API keys</a>.
+            Automation can also use <code className="rounded bg-slate-100 px-1">POST /api/v2/keys/request</code> from a signed-in session.
+            Higher-volume scan creation is available through{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>
@@ -42,6 +72,16 @@ export default function DeveloperSdkPage() {
             <code className="rounded bg-slate-100 px-1">eu_de</code>, or{" "}
             <code className="rounded bg-slate-100 px-1">california</code>.
           </p>
+          <div className="grid gap-4 pt-2 md:grid-cols-2">
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <h3 className="font-semibold text-slate-950">cs_ro_</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Read existing scans, findings, reports, latest-domain resources, and MCP read tools.</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <h3 className="font-semibold text-slate-950">cs_rw_</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Everything in cs_ro_, plus 5 fresh scan creations/day for SDK and REST trials.</p>
+            </div>
+          </div>
         </Section>
 
         <Section eyebrow="Resource clients" title="Create a scan and wait for completion">
@@ -76,6 +116,46 @@ console.log(
   latest.scan?.scanId,
   latestPreConsentTable.summary.rowCount
 );`}</CodeBlock>
+        </Section>
+
+        <Section eyebrow="Smoke test" title="Check your SDK setup without creating a scan">
+          <CodeBlock>{`CERTSCORE_API_KEY="cs_ro_or_cs_rw_..." npx -y @certscore/sdk@latest certscore-sdk-doctor
+
+# Machine-readable output:
+CERTSCORE_API_KEY="cs_ro_or_cs_rw_..." npx -y @certscore/sdk@latest certscore-sdk-doctor --json`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            The doctor command checks API v2 health and a read request using your key. It does not create scans or verify scan-create quota.
+          </p>
+        </Section>
+
+        <Section eyebrow="Errors" title="Handle the common cases">
+          <CodeBlock>{`import {
+  CertScore,
+  CertScoreApiError,
+  CertScoreScanFailedError,
+  CertScoreTimeoutError,
+  ThrottledError
+} from "@certscore/sdk";
+
+const certscore = new CertScore({ apiKey: process.env.CERTSCORE_API_KEY });
+
+try {
+  const created = await certscore.scans.create("https://example.com", { scanFrom: "eu_ie" });
+  const completed = await certscore.scans.wait(created, { maxWaitMs: 300_000 });
+  console.log(completed.scanId);
+} catch (error) {
+  if (error instanceof ThrottledError) {
+    console.log("Retry after", error.retryAfterSeconds ?? "a short delay");
+  } else if (error instanceof CertScoreTimeoutError) {
+    console.log("Resume with", error.scanId ?? error.jobId);
+  } else if (error instanceof CertScoreScanFailedError) {
+    console.log("Scan ended before completion", error.scanId ?? error.jobId);
+  } else if (error instanceof CertScoreApiError && error.status === 401) {
+    console.log("Check CERTSCORE_API_KEY and scopes.");
+  } else {
+    throw error;
+  }
+}`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Available clients" title="SDK surface">

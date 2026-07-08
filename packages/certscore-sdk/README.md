@@ -13,9 +13,9 @@ npm install @certscore/sdk
 ## Quick Start
 
 ```ts
-import { CertScoreClient } from "@certscore/sdk";
+import { CertScore } from "@certscore/sdk";
 
-const certscore = new CertScoreClient({
+const certscore = new CertScore({
   apiKey: process.env.CERTSCORE_API_KEY
 });
 
@@ -30,6 +30,7 @@ const findings = await certscore.findings.list(completed.scanId);
 console.log(completed.status, findings.findings.length);
 ```
 
+`CertScoreClient` is the canonical class name; `CertScore` is a friendly alias for shorter examples.
 `certscore.scan()` remains available as a Pulse v1 compatibility helper when you want one call to return a concise Pulse projection.
 
 ## Authentication and scopes
@@ -41,7 +42,24 @@ The SDK sends `Authorization: Bearer <token>` when `apiKey` is configured.
 - MCP clients also use the `mcp` scope, but SDK calls do not require it.
 - Self-serve read-only keys are prefixed `cs_ro_`.
 - Self-serve scan-creation keys are prefixed `cs_rw_`, expire after 90 days, and are conservatively capped for launch.
+- Create keys from CertScore Settings > Developer API keys, or by posting to `/api/v2/keys/request` from a signed-in browser session.
 - Higher-volume scan creation is available through support at `support@certscore.ai`.
+
+| Key | Default scopes | Use |
+| --- | --- | --- |
+| `cs_ro_` | `scan:read`, `mcp` | Read existing scans, findings, reports, latest-domain resources, and MCP read tools. |
+| `cs_rw_` | `scan:read`, `scan:create`, `mcp` | Everything in `cs_ro_`, plus 5 fresh scan creations/day for SDK and REST trials. |
+
+## Doctor
+
+Check your install and key without creating a scan:
+
+```bash
+CERTSCORE_API_KEY="cs_ro_or_cs_rw_..." npx -y @certscore/sdk@latest certscore-sdk-doctor
+CERTSCORE_API_KEY="cs_ro_or_cs_rw_..." npx -y @certscore/sdk@latest certscore-sdk-doctor --json
+```
+
+The doctor checks API v2 health and a read request. It intentionally does not create scans or consume `scan:create` quota.
 
 ## Resource Clients
 

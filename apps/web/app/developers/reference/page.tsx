@@ -189,15 +189,22 @@ GET /api/v2/domains/{domain}/latest/pre-consent-cookies-trackers
         <Section eyebrow="Auth" title="API keys, scopes, and rate limits">
           <CodeBlock>{`Authorization: Bearer <token>
 
-Current scopes:
+Key types:
+- cs_ro_: scan:read, mcp
+- cs_rw_: scan:read, scan:create, mcp
+
+OAuth scopes:
 - scan:read
 - scan:create
 - mcp`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Scoped integrations use bearer API keys. Read-only + MCP keys are self-serve for signed-in verified users through{" "}
-            <code className="rounded bg-white px-1">POST /api/v2/keys/request</code>. Low-volume scan creation keys are also
-            self-serve by requesting <code className="rounded bg-white px-1">access=scan_create</code>. Request higher-volume scan
-            creation at{" "}
+            Scoped REST and SDK integrations use bearer API keys. Signed-in verified users can create keys from{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-900" href="/app/settings">
+              Settings &gt; Developer API keys
+            </a>
+            . Read-only + MCP keys are also available through <code className="rounded bg-white px-1">POST /api/v2/keys/request</code>
+            from a signed-in session. Low-volume scan creation keys use <code className="rounded bg-white px-1">access=scan_create</code>.
+            Request higher-volume scan creation at{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>{" "}

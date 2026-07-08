@@ -3,6 +3,7 @@ import { AdminSettingsCard } from "../../../components/settings/admin-settings-c
 import { ApiKeysCard } from "../../../components/settings/api-keys-card";
 import { EmailVerificationCard } from "../../../components/settings/email-verification-card";
 import { ScanLocationSettingsCard } from "../../../components/settings/scan-location-settings-card";
+import { SelfServeApiKeyCard } from "../../../components/settings/self-serve-api-key-card";
 import { SCAN_ACCESS, formatScanThrottleIntervalLabel } from "../../../lib/scan-access";
 import { isPlatformAdminEmail } from "../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../server/auth";
@@ -177,6 +178,18 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <Card className="border border-slate-200 bg-white">
+        <CardHeader>
+          <CardTitle>Developer API keys</CardTitle>
+          <p className="text-sm text-slate-600">
+            Create self-serve keys for the REST API, TypeScript SDK, and local MCP clients. Keys are shown once.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <SelfServeApiKeyCard />
+        </CardContent>
+      </Card>
 
       {isPlatformAdmin ? (
         <>
