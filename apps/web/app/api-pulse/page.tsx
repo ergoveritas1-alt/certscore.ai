@@ -125,7 +125,7 @@ const mcpTools = [
 
 const exampleMeta = {
   apiVersion: "v1",
-  schemaVersion: "0.5.3",
+  schemaVersion: "0.5.4",
   pulseVersion: "2026-05-18",
   projectionVersion: "pulse-public-v1",
   generatedAt: "2026-05-18T23:15:32Z",
@@ -147,7 +147,6 @@ const exampleCapabilities = {
     "third_party_requests",
     "consent_enforcement_gaps",
     "cookie_activity",
-    "accessibility_signals",
     "disclosure_inconsistencies"
   ],
   doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
@@ -319,7 +318,7 @@ const responseExamples = [
       scanStatus: "completed",
       findings: [exampleFinding],
       reviewContext: {
-        disclaimer: "Findings are organized by privacy, consumer protection, accessibility, and other review contexts. These are automated signals for review, not legal determinations.",
+        disclaimer: "Current findings are organized around GDPR/ePrivacy privacy, consent, tracking, cookie, and disclosure review contexts. These are automated signals for review, not legal determinations.",
         lenses: [
           {
             name: "GDPR / ePrivacy",
@@ -446,7 +445,7 @@ const responseExamples = [
     title: "Markdown response",
     language: "markdown",
     value:
-      "# CertScore Pulse\n\n| Field | Value |\n|---|---|\n| Domain | kbdlab.io |\n| Score | 72/100 |\n| Risk level | Review recommended |\n| High-priority findings | 1 |\n| Total observations | 3 |\n| Scan completed | 2026-05-18T23:15:31Z |\n| Coverage status | Partial |\n\n## Summary\n\nAutomated scan surfaced consent-timing and third-party collection review signals.\n\n## Highest-priority findings\n\n1. Tracking started before consent\n\n## Privacy and consent signals\n\n- Tracker footprint: 7 third-party domains observed; 2 classified tracker vendors identified.\n\n## Cookie and third-party request activity\n\n- Vendor mix: cdn infra 1 · session replay 1\n\n## Accessibility signals\n\n- Accessibility-related findings: 0\n\n## Disclosure and trust signals\n\n- Policy surfaces: 2 policy URLs covered.\n\n## Coverage and limitations\n\nCoverage was limited; absence of findings should not be interpreted as absence of risk.\n\n## Links\n\nFull report: https://certscore.ai/scan/scan_abc123\n\n## Disclaimer\n\n" +
+      "# CertScore Pulse\n\n| Field | Value |\n|---|---|\n| Domain | kbdlab.io |\n| Score | 72/100 |\n| Risk level | Review recommended |\n| High-priority findings | 1 |\n| Total observations | 3 |\n| Scan completed | 2026-05-18T23:15:31Z |\n| Coverage status | Partial |\n\n## Summary\n\nAutomated scan surfaced consent-timing and third-party collection review signals.\n\n## Highest-priority findings\n\n1. Tracking started before consent\n\n## Privacy and consent signals\n\n- Tracker footprint: 7 third-party domains observed; 2 classified tracker vendors identified.\n\n## Cookie and third-party request activity\n\n- Vendor mix: cdn infra 1 · session replay 1\n\n## Disclosure and policy signals\n\n- Policy surfaces: 2 policy URLs covered.\n\n## Coverage and limitations\n\nCoverage was limited; absence of findings should not be interpreted as absence of risk.\n\n## Links\n\nFull report: https://certscore.ai/scan/scan_abc123\n\n## Disclaimer\n\n" +
       PULSE_STANDARD_DISCLAIMER
   }
 ] as const;
@@ -904,8 +903,7 @@ https://certscore.ai/api/v1/pulse?scanId=<scanId>&format=markdown`}</CodeBlock>
 ## Highest-priority findings
 ## Privacy and consent signals
 ## Cookie and third-party request activity
-## Accessibility signals
-## Disclosure and trust signals
+## Disclosure and policy signals
 ## Coverage and limitations
 ## Links
 ## Disclaimer`}</CodeBlock>

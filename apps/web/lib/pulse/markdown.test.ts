@@ -60,8 +60,8 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
   assert.match(markdown, /## Highest-priority findings/);
   assert.match(markdown, /## Privacy and consent signals/);
   assert.match(markdown, /## Cookie and third-party request activity/);
-  assert.match(markdown, /## Accessibility signals/);
-  assert.match(markdown, /## Disclosure and trust signals/);
+  assert.doesNotMatch(markdown, /## Accessibility signals/);
+  assert.match(markdown, /## Disclosure and policy signals/);
   assert.match(markdown, /## Coverage and limitations/);
   assert.match(markdown, /automated runtime analysis of public websites/);
   assert.match(markdown, /No top automated findings were surfaced in this scan\./);

@@ -669,7 +669,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
           additionalProperties: false,
           required: ["basis", "summary", "exampleCount", "examplesShown"],
           properties: {
-            basis: { type: "string", enum: ["runtime_observation", "policy_surface_detection", "accessibility_check", "public_report_projection"] },
+            basis: { type: "string", enum: ["runtime_observation", "policy_surface_detection", "public_report_projection"] },
             summary: { type: "string" },
             phase: { type: ["string", "null"] },
             exampleCount: { type: "integer", minimum: 0 },
@@ -690,7 +690,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
                 type: "object",
                 additionalProperties: false,
                 properties: {
-                  type: { type: "string", enum: ["request", "page", "accessibility_check", "policy_surface"] },
+                  type: { type: "string", enum: ["request", "page", "policy_surface"] },
                   vendor: { type: ["string", "null"] },
                   urlHost: { type: ["string", "null"] },
                   registrableDomain: { type: ["string", "null"] },

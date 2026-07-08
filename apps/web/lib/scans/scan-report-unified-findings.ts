@@ -57,6 +57,11 @@ import {
 } from "./scan-report-review-findings";
 import { groupSnapshotFieldsByPrimaryCategory } from "./signal-taxonomy";
 import { buildRuntimeCookieInventory, type RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
+import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
+import {
+  isCurrentGdprEprivacyFindingId,
+  isCurrentGdprEprivacyReportFinding
+} from "./current-report-scope";
 
 export type ScanReportUnifiedFindingSectionDraft = {
   categories?: Array<{
@@ -120,6 +125,46 @@ export type ScanReportUnifiedFindingStateDependencies = {
 
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
+
+function isCurrentScanReportUnifiedFinding(finding: UnifiedFindingDisplayPacket) {
+  return isCurrentGdprEprivacyReportFinding({
+    family: finding.details?.family,
+    id: finding.unifiedFindingId
+  });
+}
+
+function isCurrentScanReportValidationFinding(finding: Record<string, unknown>) {
+  const ruleKey = firstPresent(
+    typeof finding.ruleKey === "string" ? finding.ruleKey : null,
+    typeof finding.rule_key === "string" ? finding.rule_key : null
+  );
+  const findingId = firstPresent(
+    typeof finding.findingId === "string" ? finding.findingId : null,
+    typeof finding.finding_id === "string" ? finding.finding_id : null,
+    typeof finding.unifiedFindingId === "string" ? finding.unifiedFindingId : null,
+    typeof finding.unified_finding_id === "string" ? finding.unified_finding_id : null
+  );
+  const category = typeof finding.category === "string" ? finding.category : null;
+  const family = firstPresent(
+    typeof finding.findingFamily === "string" ? finding.findingFamily : null,
+    typeof finding.finding_family === "string" ? finding.finding_family : null
+  );
+  const evidenceJson = finding.evidence_json && typeof finding.evidence_json === "object"
+    ? finding.evidence_json as Record<string, unknown>
+    : null;
+  const evidenceFindingId = typeof evidenceJson?.unifiedFindingId === "string" ? evidenceJson.unifiedFindingId : null;
+  const knownFindingId = firstPresent(findingId, evidenceFindingId);
+
+  if (
+    /^(?:financial_review|accessibility_review|commercial_review)\./i.test(ruleKey ?? "") ||
+    /^(?:financial|accessibility|commercial)(?:_|$)/i.test(family ?? "") ||
+    /^(?:financial|accessibility)$/i.test(category ?? "")
+  ) {
+    return false;
+  }
+
+  return isCurrentGdprEprivacyFindingId(knownFindingId);
 }
 
 function firstPresent<T>(...values: Array<T | null | undefined>): T | null {
@@ -1335,6 +1380,44 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   if (scanNoGoAssessment) {
     return candidates;
   }
+  const runtimeVendorDisclosureRows = getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts)
+    .filter((row) =>
+      row.parentFindingId === "policy_behavior_conflict" ||
+      row.parentFindingId === "policy_behavior_contradiction_detected"
+    );
+  if (runtimeVendorDisclosureRows.length > 0) {
+    const unmatchedVendors = uniqueStrings(
+      runtimeVendorDisclosureRows.flatMap((row) => row.unmatchedRuntimeVendors)
+    );
+    const unmatchedDomains = uniqueStrings(
+      runtimeVendorDisclosureRows.flatMap((row) => row.unmatchedRuntimeDomains)
+    );
+    candidates.push({
+      categoryId: "data_handling_disclosures",
+      description:
+        "Retained runtime vendor disclosure evidence found runtime vendors or domains that were not clearly matched in reviewed public privacy or cookie disclosure surfaces.",
+      fallbackEvidence: {
+        runtime_vendor_disclosure_evidence: runtimeVendorDisclosureRows,
+        runtimeVendorDisclosureEvidence: runtimeVendorDisclosureRows,
+        signalKey: "privacy.runtime_vendor_not_disclosed",
+        signalLabel: "Runtime vendor not clearly disclosed",
+        signalValue: true,
+        unifiedFindingId: "policy_behavior_conflict"
+      },
+      id: "runtime-derived-signal-privacy.runtime_vendor_not_disclosed.policy_runtime_alignment",
+      linkedValidationFinding: null,
+      observedValue:
+        unmatchedVendors.length > 0
+          ? unmatchedVendors.slice(0, 4).join(", ")
+          : unmatchedDomains.slice(0, 4).join(", "),
+      severity: "medium",
+      signalKey: "privacy.runtime_vendor_not_disclosed",
+      signalLabel: "Runtime vendor not clearly disclosed",
+      signalSource: "runtime_artifact_signal",
+      sourceType: "signal",
+      title: "Runtime vendor disclosure evidence"
+    });
+  }
   const visualAccessReview = getRuntimeObject(input.runtimeArtifacts, ["visualAccessReview", "visual_access_review"]);
   const visualAccessGoNoGo = getRuntimeString(visualAccessReview, ["goNoGo", "go_no_go"]);
   const visualAccessPageState = getRuntimeString(visualAccessReview, ["pageState", "page_state"]);
@@ -2474,6 +2557,7 @@ export function buildScanReportUnifiedFindingState(
   const linkedValidationFindingIds = getLinkedValidationFindingIds(reviewFindingCandidates);
   const unlinkedValidationFindings = scanRecord.validationFindings.filter(
     (finding) =>
+      isCurrentScanReportValidationFinding(finding as Record<string, unknown>) &&
       !linkedValidationFindingIds.has(String(finding.id ?? "")) &&
       !reviewFindingCandidates.some((candidate) => candidateCoversValidationFinding(candidate, finding as Record<string, unknown>))
   );
@@ -2534,6 +2618,7 @@ export function selectOwnerUnifiedFindings(state: ScanReportUnifiedFindingState)
             selectOwnerUnifiedFindingsForSection(state.globalUnifiedFindings, section.sectionCategoryIds)
           )
         )
+        .filter(isCurrentScanReportUnifiedFinding)
         .map((finding) => [finding.unifiedFindingId, finding])
     ).values()
   ];

@@ -20,7 +20,10 @@ import {
 import { classifyConsentControlLabel } from "@certscore/contracts";
 import type { UnifiedFindingPacket } from "./unified-findings";
 import { hasConcreteCookieRetentionReviewEvidence } from "./cookie-retention-review";
-import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
+import {
+  evaluateRuntimeVendorDisclosureEvidence,
+  getRuntimeVendorDisclosureEvidence
+} from "./runtime-vendor-disclosure";
 
 export type EvidenceRequirementType =
   | "consentTimelineSequence"
@@ -1443,6 +1446,23 @@ function hasSensitiveThirdPartyTrackingEvidence(rawEvidence: Record<string, unkn
   return hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence);
 }
 
+function evaluatePolicyBehaviorContradictionRequirement(rawEvidence: Record<string, unknown> | null | undefined) {
+  const contradictionDecision = evaluatePolicyBehaviorContradictionEvidence(rawEvidence);
+  if (contradictionDecision.eligible) {
+    return contradictionDecision;
+  }
+
+  const runtimeVendorDisclosureDecision = evaluateRuntimeVendorDisclosureEvidence(rawEvidence, "policy_behavior_conflict");
+  if (runtimeVendorDisclosureDecision.disposition === "eligible") {
+    return {
+      eligible: true,
+      negativeEvidenceFlags: []
+    };
+  }
+
+  return contradictionDecision;
+}
+
 function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Record<string, unknown> | null | undefined) {
   switch (type) {
     case "consentTimelineSequence":
@@ -1476,7 +1496,7 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
     case "conflictBridge":
       return hasConflictBridge(rawEvidence);
     case "policyBehaviorContradictionEvidence":
-      return evaluatePolicyBehaviorContradictionEvidence(rawEvidence).eligible;
+      return evaluatePolicyBehaviorContradictionRequirement(rawEvidence).eligible;
     case "negativeEvidenceSearchScope":
       return hasNegativeEvidenceSearchScope(rawEvidence);
     case "sessionReplayVendorEvidence":
@@ -1599,7 +1619,7 @@ export function evaluateFindingEvidenceContractForRawEvidence(
 	    .map((requirement) => requirement.type)
 	    .filter((type) => !satisfiedRequirements.includes(type));
 	  const policyBehaviorContradictionDecision = allRequirements.includes("policyBehaviorContradictionEvidence")
-	    ? evaluatePolicyBehaviorContradictionEvidence(rawEvidence)
+	    ? evaluatePolicyBehaviorContradictionRequirement(rawEvidence)
 	    : null;
 
 	  const negativeEvidenceFlags = orderNegativeEvidenceFlags([

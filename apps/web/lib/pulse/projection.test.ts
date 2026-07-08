@@ -29,7 +29,7 @@ function pulseScanRecord(overrides: Record<string, unknown> = {}) {
 test("Pulse projection does not cap top findings by detail level", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
-  assert.match(source, /const topFindings = regulatoryGapTopFindings\.length > 0 \? regulatoryGapTopFindings : executive\.topFindings/);
+  assert.match(source, /const topFindings = \(regulatoryGapTopFindings\.length > 0 \? regulatoryGapTopFindings : executive\.topFindings\)\.filter/);
   assert.match(source, /reportSurface\.topFindings\.map\(/);
   assert.doesNotMatch(source, /topFindings = executive\.topFindings\.slice\(/);
   assert.doesNotMatch(source, /input\.detail === "tiny" \? 3 : 5/);
@@ -97,4 +97,14 @@ test("Pulse projection exposes Summary JSON and Evidence JSON artifacts", () => 
   assert.match(adminSource, /pulse_artifact_downloads/);
   assert.match(adminSource, /summary_json_downloads/);
   assert.match(adminSource, /evidence_json_downloads/);
+});
+
+test("Pulse projection applies the current GDPR/ePrivacy report scope", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /isCurrentGdprEprivacyReportFinding/);
+  assert.match(source, /const allFindings = \[/);
+  assert.match(source, /const topFindings =/);
+  assert.match(source, /currentReportGroupedFindings/);
+  assert.doesNotMatch(source, /accessibility_check/);
 });

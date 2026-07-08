@@ -7445,7 +7445,7 @@ function enabledReplayAuxiliaryProbes(input: ConsentFlowRuntimeScannerInput): {
   if (!input.captureReplay) {
     return { accessibility: false, form: false };
   }
-  const mode = input.captureReplayAuxiliaryProbes ?? "all";
+  const mode = input.captureReplayAuxiliaryProbes ?? "form";
   return {
     accessibility: mode === "all" || mode === "accessibility",
     form: mode === "all" || mode === "form",

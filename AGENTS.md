@@ -16,6 +16,8 @@ CertScore is a risk-signal and monitoring product, not a legal certification pla
 - **`WC01` (this repo)** — product web flows, scan creation, reporting, validation, and control-plane workflows.
 - **`WS01` (external repo)** — standalone scanner runtime, crawler identity, scheduled scans, heartbeat behavior, and scanner deploy flow. Do not add scanner runtime logic here.
 
+Current production scan report, Pulse, API v2 findings, SDK, and MCP reporting surfaces are scoped to GDPR/ePrivacy privacy, consent, tracking, cookie, and disclosure review signals unless the user explicitly approves a scope expansion. Do not surface accessibility, financial-promotion, high-risk product marketing, gambling/sports-betting, or other non-GDPR/ePrivacy findings in those current report/API surfaces. Keep upstream evidence capture when it materially supports GDPR/ePrivacy evidence quality, coverage diagnostics, or policy/runtime interpretation; do not remove retained artifacts or scanner context merely because a non-current report category is no longer surfaced.
+
 ### Canonical scan-to-report flow
 
 All new scan-to-report logic must preserve the canonical CertScore pipeline:

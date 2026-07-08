@@ -1410,7 +1410,11 @@ export async function createScanForValidationRun(runId: string) {
   return scan.id as string;
 }
 
-export async function loadCompletedScanArtifacts(scanId: string) {
+export async function loadCompletedScanArtifacts(
+  scanId: string,
+  options: { includeNonGdprReviewArtifacts?: boolean } = {}
+) {
+  const includeNonGdprReviewArtifacts = options.includeNonGdprReviewArtifacts !== false;
   const optionalOne = <T extends Record<string, unknown>>(text: string, values: unknown[] = []) =>
     queryOne<T>(text, values, { readOnly: true })
       .then((data) => ({ data, error: null as { message?: string; code?: string | null } | null }))
@@ -1419,6 +1423,10 @@ export async function loadCompletedScanArtifacts(scanId: string) {
     query<T>(text, values, { readOnly: true })
       .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
       .catch((error) => ({ data: [] as T[], error: { message: getErrorMessage(error) } }));
+  const skippedOptionalMany = Promise.resolve({
+    data: [] as Array<Record<string, unknown>>,
+    error: null as { message?: string; code?: string | null } | null
+  });
 
   let scan: Record<string, unknown> | null;
   let snapshot: Record<string, unknown> | null;
@@ -1463,6 +1471,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
         `select category, signal_key, signal_label, signal_value_json, value_type, population_source, population_status, confidence, evidence_refs, provenance_json, observed_at
            from scan_signals
           where scan_id = $1
+            ${includeNonGdprReviewArtifacts ? "" : "and signal_key not like 'financial.%' and signal_key not like 'accessibility.%' and signal_key not like 'commercial.%'"}
           order by category asc, signal_key asc`,
         [scanId],
         { readOnly: true }
@@ -1500,7 +1509,7 @@ export async function loadCompletedScanArtifacts(scanId: string) {
           where scan_id = $1`,
         [scanId]
       ),
-      optionalMany<Record<string, unknown>>(
+      includeNonGdprReviewArtifacts ? optionalMany<Record<string, unknown>>(
         `select id, signal_key, page_url, page_type, page_role, evidence_refs, payload
            from scan_signal_hits
           where scan_id = $1
@@ -1530,17 +1539,17 @@ export async function loadCompletedScanArtifacts(scanId: string) {
             "financial.past_performance_disclaimer_text_present"
           ]
         ]
-      ),
-      optionalMany<Record<string, unknown>>(
+      ) : skippedOptionalMany,
+      includeNonGdprReviewArtifacts ? optionalMany<Record<string, unknown>>(
         `select evidence_id, page_url, page_type, page_role, matched_text, metadata
            from scan_page_evidence
           where scan_id = $1`,
         [scanId]
-      ),
-      optionalMany<Record<string, unknown>>(
+      ) : skippedOptionalMany,
+      includeNonGdprReviewArtifacts ? optionalMany<Record<string, unknown>>(
         `select * from scan_accessibility_rule_examples where scan_id = $1 order by created_at asc`,
         [scanId]
-      )
+      ) : skippedOptionalMany
     ]);
   } catch (error) {
     throw new Error(`Failed to load validation scan ${scanId}: ${getErrorMessage(error)}`);
@@ -1578,7 +1587,12 @@ export async function loadCompletedScanArtifacts(scanId: string) {
   const storedBrowserExtensionSignalRows = rawSignalRows.filter((signal) => signal.population_source === "browser_extension_bx01");
   const storedNanoSignalRows = rawSignalRows.filter((signal) => signal.population_source === "nano");
   const storedValidationSignalRows = rawSignalRows.filter((signal) => signal.population_source === "validation");
-  const fallbackFinancialEvidence = extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArtifactsRecord);
+  const fallbackFinancialEvidence = includeNonGdprReviewArtifacts
+    ? extractFallbackFinancialEvidenceFromRuntimeArtifacts(runtimeArtifactsRecord)
+    : {
+        pageEvidence: [] as Array<Record<string, unknown>>,
+        signalHits: [] as Array<Record<string, unknown>>
+      };
   const loadedPageEvidence = pageEvidenceError ? [] : pageEvidenceResult.data;
   const loadedSignalHits = signalHitsError ? [] : signalHitsResult.data;
   const normalizedDocumentSources = documentSourcesError ? [] : documentSourcesResult.data;

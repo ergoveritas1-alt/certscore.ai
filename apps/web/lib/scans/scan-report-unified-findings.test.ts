@@ -349,82 +349,6 @@ test("cross-border transfer endpoint plus retained vendor disclosure mismatch pr
   assert.equal(checklist.find((row) => row.id === "cross_border_endpoint_review")?.status, "Gap observed");
 });
 
-test("contrast snapshot signal surfaces from persisted axe count and representative examples", () => {
-  const candidates = buildReviewFindings({
-    issues: [],
-    prioritizedAccessibilityRuleRows: [
-      {
-        description: "Detected contrast failures in large text.",
-        help: "Elements must meet enhanced color contrast ratio thresholds",
-        helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast-enhanced",
-        impact: "serious",
-        nodeCount: 2,
-        pageUrl: "https://example.com/",
-        representativeSelectors: [".hero-title"],
-        ruleCode: "color-contrast-enhanced",
-        ruleGroup: "wcag2aaa",
-        severity: "high",
-        weightedPriority: 32
-      }
-    ],
-    sectionId: "perceivability_barriers",
-    sectionItems: [
-      {
-        key: "accessibility.wcag_contrast_failures_count",
-        label: "WCAG contrast failures",
-        relation: "primary",
-        source: "snapshot_signal",
-        value: 2
-      }
-    ]
-  });
-
-  const packets = buildUnifiedFindingDisplayPackets({
-    reviewFindingCandidates: candidates,
-    validationFindings: [],
-    validationFindingLookup: new Map()
-  });
-  const packet = packets.find((finding) => finding.unifiedFindingId === "visual_contrast_accessibility_issue");
-
-  assert.equal(packet?.presentationDecision.status, "surface");
-  assert.equal(packet?.evidence?.counts?.count, 2);
-  assert.equal(packet?.evidence?.flags?.includes("representative_accessibility_examples_retained"), true);
-  assert.ok(packet?.evidence?.snippets?.some((snippet) => /color-contrast-enhanced\/wcag2aaa/i.test(snippet)));
-});
-
-test("accessibility snapshot signal tolerates persisted axe rows without rule metadata", () => {
-  assert.doesNotThrow(() =>
-    buildReviewFindings({
-      issues: [],
-      prioritizedAccessibilityRuleRows: [
-        {
-          description: "Persisted axe evidence row without normalized rule metadata.",
-          help: null,
-          helpUrl: null,
-          impact: null,
-          nodeCount: 1,
-          pageUrl: "https://example.com/",
-          representativeSelectors: [],
-          ruleCode: undefined,
-          ruleGroup: undefined,
-          severity: "medium",
-          weightedPriority: 1
-        } as never
-      ],
-      sectionId: "perceivability_barriers",
-      sectionItems: [
-        {
-          key: "accessibility.wcag_contrast_failures_count",
-          label: "WCAG contrast failures",
-          relation: "primary",
-          source: "snapshot_signal",
-          value: 1
-        }
-      ]
-    })
-  );
-});
-
 test("consent audit reject-tracking finding retains post-reject runtime evidence", () => {
   const issues = buildSectionReviewIssues({
     accessibilityIssueRows: [],
@@ -2912,10 +2836,7 @@ test("runtime vendor disclosure evidence surfaces through canonical policy/runti
   const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "policy_behavior_conflict");
 
   assert.equal(packet?.presentationDecision.status, "surface");
-  assert.deepEqual(packet?.evidence?.entities?.findingSubtype, [
-    "runtime_vendor_not_disclosed",
-    "consent_governance_disclosure_gap"
-  ]);
+  assert.deepEqual(packet?.evidence?.entities?.findingSubtype, ["runtime_vendor_not_disclosed"]);
   assert.deepEqual(packet?.evidence?.entities?.unmatchedRuntimeVendors, ["Microsoft Clarity"]);
 });
 
@@ -2985,83 +2906,76 @@ test("runtime reject path depth does not infer forced consent from reject-path e
   assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
 });
 
-test("high-risk gambling section review retains concrete offer and disclosure adjacency evidence", () => {
-  const issues = buildSectionReviewIssues({
-    accessibilityIssueRows: [],
-    consentAuditFindings: [],
-    policyBehaviorContradictions: [],
-    preconsentViolationRows: [],
-    runtimeArtifacts: {
-      rendered_text:
-        `DraftKings Sportsbook. Get $1,000 in bonus bets when you sign up today. Start betting now. ${"Featured games and league content. ".repeat(30)} Responsible gaming resources are available in the footer. Terms and conditions apply on a separate promotions page.`,
-      third_party_request_domains: ["www.draftkings.com"]
-    },
-    scanReportReviewIssues: [],
-    sectionId: "high_risk_product_marketing_disclosures",
-    snapshot: {
-      final_url: "https://www.draftkings.com/",
-      registered_domain: "draftkings.com"
-    }
-  });
-  const packets = buildUnifiedFindingDisplayPackets({
-    reviewFindingCandidates: issues.map((issue) => ({
-      description: issue.description,
-      evidence: issue.evidence ?? [],
-      fallbackEvidence: issue.fallbackEvidence,
-      observedValue: issue.evidence?.[0] ?? null,
-      severity: issue.severity,
-      sourceType: "issue",
-      title: issue.title
-    })),
-    validationFindings: [],
-    validationFindingLookup: new Map()
-  });
-  const packet = packets.find((finding) => finding.unifiedFindingId === "high_risk_product_risk_disclosure_missing");
-
-  assert.ok(packet?.evidence?.entities?.offerSnippets?.some((snippet) => snippet.includes("$1,000 in bonus bets")));
-  assert.deepEqual(packet?.evidence?.entities?.responsibleGamblingDisclosureAdjacent, ["false"]);
-  assert.deepEqual(packet?.evidence?.entities?.termsDisclosureAdjacent, ["false"]);
-});
-
-test("high-risk gambling section review retains concrete offer from page evidence rows", () => {
-  const issues = buildSectionReviewIssues({
-    accessibilityIssueRows: [],
-    consentAuditFindings: [],
-    pageEvidenceRows: [
+test("current scan report builder excludes non-GDPR product and accessibility sections", () => {
+  const state = debugBuildScanReportUnifiedFindingStateForScan({
+    accessibilityRuleCounts: [
       {
-        evidence_id: "home-offer-1",
-        matched_text: "Get $1,000 in bonus bets when you sign up today.",
-        page_url: "https://www.draftkings.com/"
+        description: "Buttons must have discernible text",
+        example_count: 8,
+        impact: "serious",
+        rule_id: "button-name",
+        weighted_priority: 20
       }
     ],
-    policyBehaviorContradictions: [],
-    preconsentViolationRows: [],
+    accessibilityRuleExamples: [
+      {
+        description: "Buttons must have discernible text",
+        impact: "serious",
+        rule_id: "button-name",
+        selector: "button.icon"
+      }
+    ],
+    events: [],
+    macroEnrichment: null,
+    mergedSignals: [],
+    pageEvidence: [],
+    policyEnrichment: [],
+    policyReviewQueue: [],
+    preconsentViolations: [],
     runtimeArtifacts: {
+      rendered_text:
+        `DraftKings Sportsbook. Get $1,000 in bonus bets when you sign up today. Start betting now. ${"League content. ".repeat(10)}`,
       third_party_request_domains: ["www.draftkings.com"]
     },
-    scanReportReviewIssues: [],
-    sectionId: "high_risk_product_marketing_disclosures",
+    scan: {},
+    signalHits: [],
+    signals: [],
     snapshot: {
       final_url: "https://www.draftkings.com/",
       registered_domain: "draftkings.com"
-    }
-  });
-  const packets = buildUnifiedFindingDisplayPackets({
-    reviewFindingCandidates: issues.map((issue) => ({
-      description: issue.description,
-      evidence: issue.evidence ?? [],
-      fallbackEvidence: issue.fallbackEvidence,
-      observedValue: issue.evidence?.[0] ?? null,
-      severity: issue.severity,
-      sourceType: "issue",
-      title: issue.title
-    })),
-    validationFindings: [],
-    validationFindingLookup: new Map()
-  });
-  const packet = packets.find((finding) => finding.unifiedFindingId === "high_risk_product_risk_disclosure_missing");
+    },
+    trackerVendors: [],
+    validationFindings: [
+      {
+        category: "financial",
+        evidence_json: {
+          unifiedFindingId: "high_risk_product_risk_disclosure_missing"
+        },
+        id: "legacy-financial-1",
+        rule_key: "financial_review.high_risk_product_without_local_loss_risk_disclosure",
+        severity: "medium",
+        title: "High-risk gambling promotion disclosure review"
+      },
+      {
+        category: "accessibility",
+        evidence_json: {},
+        id: "legacy-accessibility-1",
+        rule_key: "accessibility_review.contrast_failures",
+        severity: "medium",
+        title: "Contrast failures"
+      }
+    ]
+  } as never);
+  const reportFindings = buildScanReportUnifiedFindings(state);
 
-  assert.ok(packet?.evidence?.entities?.offerSnippets?.some((snippet) => snippet.includes("$1,000 in bonus bets")));
+  assert.equal(
+    reportFindings.some((finding) => finding.unifiedFindingId === "high_risk_product_risk_disclosure_missing"),
+    false
+  );
+  assert.equal(
+    reportFindings.some((finding) => finding.details?.family === "accessibility"),
+    false
+  );
 });
 
 test("supplemental runtime request evidence without consent timing stays out of surfaced packets", () => {

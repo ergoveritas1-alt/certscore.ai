@@ -31,7 +31,7 @@ export function buildPulseChatGptOpenApiDocument() {
           tags: ["Pulse"],
           summary: "Retrieve a GPT-safe CertScore Pulse summary for a public URL.",
           description:
-            "Scan a public website URL with CertScore Pulse and return automated privacy, consent, tracking, accessibility, and disclosure observations. Summary JSON is the default; evidence returns a bounded structured evidence packet. Not legal advice or a compliance determination.",
+            "Scan a public website URL with CertScore Pulse and return automated GDPR/ePrivacy privacy, consent, tracking, cookie, and disclosure observations. Summary JSON is the default; evidence returns a bounded structured evidence packet. Not legal advice or a compliance determination.",
           parameters: [
             {
               name: "url",

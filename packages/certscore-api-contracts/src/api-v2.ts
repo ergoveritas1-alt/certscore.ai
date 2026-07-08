@@ -12,7 +12,7 @@ export const apiV2ScanFreshnessSchema = z.enum(["latest", "refresh"]);
 export const apiV2ScanFromSchema = z.enum(["eu_ie", "eu_de", "california"]);
 export const apiV2FindingCriticalitySchema = z.enum(["critical", "high", "medium", "low", "info", "unknown"]);
 export const apiV2FindingConfidenceSchema = z.enum(["strong", "good", "moderate", "weak", "unknown"]);
-export const apiV2EvidenceBasisSchema = z.enum(["runtime_observation", "policy_surface_detection", "accessibility_check", "public_report_projection"]);
+export const apiV2EvidenceBasisSchema = z.enum(["runtime_observation", "policy_surface_detection", "public_report_projection"]);
 export const apiV2PreConsentInventoryKindSchema = z.enum(["cookie", "tracker", "request", "storage", "unknown"]);
 export const apiV2PreConsentInventoryPhaseSchema = z.literal("pre_consent");
 export const apiV2PreConsentInventoryPrioritySchema = z.enum(["high", "medium", "review_needed", "contextual", "unknown"]);
@@ -99,7 +99,7 @@ export const apiV2ScanResourceSchema = z
 
 export const apiV2EvidenceEventSummarySchema = z
   .object({
-    type: z.enum(["request", "page", "accessibility_check", "policy_surface"]),
+    type: z.enum(["request", "page", "policy_surface"]),
     vendor: z.string().nullable().optional(),
     urlHost: z.string().nullable().optional(),
     registrableDomain: z.string().nullable().optional(),

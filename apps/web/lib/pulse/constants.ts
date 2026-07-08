@@ -1,5 +1,5 @@
 export const PULSE_API_VERSION = "v1";
-export const PULSE_SCHEMA_VERSION = "0.5.3";
+export const PULSE_SCHEMA_VERSION = "0.5.4";
 export const PULSE_VERSION = "2026-05-18";
 export const PULSE_PROJECTION_VERSION = "pulse-public-v1";
 export const PULSE_SOURCE = "certscore.ai";
@@ -13,7 +13,7 @@ export const PULSE_SHORT_DISCLAIMER =
   "Automated public-web observations for review. Not legal advice, certification, or a compliance determination.";
 
 export const PULSE_REVIEW_CONTEXT_DISCLAIMER =
-  "Findings are organized by privacy, consumer protection, accessibility, and other review contexts. These are automated signals for review, not legal determinations.";
+  "Current findings are organized around GDPR/ePrivacy privacy, consent, tracking, cookie, and disclosure review contexts. These are automated signals for review, not legal determinations.";
 
 export const PULSE_COVERAGE_LIMITATION_COPY =
   "Coverage may be affected by bot defenses, geography, consent flow branching, lazy loading, protected routes, authenticated-only areas, or other runtime conditions. Absence of findings should not be interpreted as absence of risk.";
@@ -26,7 +26,6 @@ export const PULSE_CAPABILITIES = {
     "third_party_requests",
     "consent_enforcement_gaps",
     "cookie_activity",
-    "accessibility_signals",
     "disclosure_inconsistencies"
   ],
   doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
@@ -35,7 +34,7 @@ export const PULSE_CAPABILITIES = {
 export const PULSE_AGENT_DO_NOT_CALL_THIS = ["legal_advice", "certification", "compliance_determination"] as const;
 
 export const PULSE_PURPOSE_STATEMENT =
-  "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.";
+  "CertScore Pulse uses automated runtime analysis of public websites to detect GDPR/ePrivacy review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, and disclosure inconsistencies.";
 
 export const PULSE_USAGE_GUIDANCE = {
   allowedSummary: "Automated scan surfaced review signals.",
@@ -55,7 +54,6 @@ export const PULSE_STATUS_STEPS = [
   "homepage_loading",
   "consent_surface_detection",
   "runtime_observation",
-  "accessibility_checks",
   "policy_surface_detection",
   "evidence_normalization",
   "finding_projection",

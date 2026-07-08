@@ -10,7 +10,6 @@ const capabilities = {
     "third_party_requests",
     "consent_enforcement_gaps",
     "cookie_activity",
-    "accessibility_signals",
     "disclosure_inconsistencies"
   ],
   doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
@@ -27,7 +26,7 @@ export function GET(request: Request) {
     type: "certscore_pulse_self_test",
     service: "certscore_pulse",
     version: "v1",
-    betaVersion: "0.5.3",
+    betaVersion: "0.5.4",
     timestamp: new Date().toISOString(),
     routes: {
       health: "/api/v1/pulse-health",

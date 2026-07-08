@@ -55,8 +55,8 @@ type PulseFindingLike = {
 };
 type ApiV2FindingCriticalityValue = "critical" | "high" | "medium" | "low" | "info" | "unknown";
 type ApiV2FindingConfidenceValue = "strong" | "good" | "moderate" | "weak" | "unknown";
-type ApiV2EvidenceBasisValue = "runtime_observation" | "policy_surface_detection" | "accessibility_check" | "public_report_projection";
-type ApiV2EvidenceEventTypeValue = "request" | "page" | "accessibility_check" | "policy_surface";
+type ApiV2EvidenceBasisValue = "runtime_observation" | "policy_surface_detection" | "public_report_projection";
+type ApiV2EvidenceEventTypeValue = "request" | "page" | "policy_surface";
 type PulseStatusLike = {
   jobId: string;
   scanId?: string | null;
@@ -130,13 +130,13 @@ function normalizeConfidence(value: unknown): ApiV2FindingConfidenceValue {
 }
 
 function normalizeEvidenceBasis(value: unknown): ApiV2EvidenceBasisValue {
-  return value === "runtime_observation" || value === "policy_surface_detection" || value === "accessibility_check" || value === "public_report_projection"
+  return value === "runtime_observation" || value === "policy_surface_detection" || value === "public_report_projection"
     ? value
     : "public_report_projection";
 }
 
 function normalizeEvidenceEventType(value: unknown): ApiV2EvidenceEventTypeValue {
-  return value === "request" || value === "accessibility_check" || value === "policy_surface" ? value : "page";
+  return value === "request" || value === "policy_surface" ? value : "page";
 }
 
 function stringOrNull(value: unknown) {

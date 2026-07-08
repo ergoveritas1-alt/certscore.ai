@@ -71,7 +71,7 @@ export interface BuildConsentScenarioPlanInput {
 export function buildConsentScenarioPlan(input: BuildConsentScenarioPlanInput): ConsentScenarioPlan {
   const captureReplay = input.captureReplay === true;
   const auxiliaryProbes = captureReplay
-    ? input.captureReplayAuxiliaryProbes ?? "all"
+    ? input.captureReplayAuxiliaryProbes ?? "form"
     : "none";
   const formProbeEnabled = auxiliaryProbes === "all" || auxiliaryProbes === "form";
   const accessibilityProbeEnabled = auxiliaryProbes === "all" || auxiliaryProbes === "accessibility";

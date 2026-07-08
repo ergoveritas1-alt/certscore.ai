@@ -116,7 +116,7 @@ export interface ScanJob {
 }
 
 export interface EvidenceEventSummary {
-  type: "request" | "page" | "accessibility_check" | "policy_surface";
+  type: "request" | "page" | "policy_surface";
   vendor?: string | null;
   urlHost?: string | null;
   registrableDomain?: string | null;
@@ -125,7 +125,7 @@ export interface EvidenceEventSummary {
 }
 
 export interface EvidenceSummary {
-  basis: "runtime_observation" | "policy_surface_detection" | "accessibility_check" | "public_report_projection";
+  basis: "runtime_observation" | "policy_surface_detection" | "public_report_projection";
   summary: string;
   phase?: string | null;
   exampleCount: number;
@@ -194,7 +194,7 @@ export interface PreConsentCookiesTrackersRow {
   priority?: "high" | "medium" | "review_needed" | "contextual" | "unknown";
   confidence?: "high" | "medium" | "low" | "unknown";
   phase?: "pre_consent";
-  evidenceBasis?: "runtime_observation" | "policy_surface_detection" | "accessibility_check" | "public_report_projection";
+  evidenceBasis?: "runtime_observation" | "policy_surface_detection" | "public_report_projection";
   observedBeforeConsent?: boolean;
   requestCount?: number;
   firstObservedAtMs?: number | null;

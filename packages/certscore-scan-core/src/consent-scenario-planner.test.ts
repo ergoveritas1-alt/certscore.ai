@@ -143,7 +143,7 @@ test("planner schedules CMP probes when runtime evidence has a visible preferenc
   ));
 });
 
-test("planner schedules privacy opt-out and replay probes when eligible", () => {
+test("planner schedules privacy opt-out and explicit replay probes when eligible", () => {
   const plan = buildConsentScenarioPlan({
     baseline: {
       bannerLikelyPresent: false,
@@ -151,6 +151,7 @@ test("planner schedules privacy opt-out and replay probes when eligible", () => 
       actionCandidates: [],
     },
     captureReplay: true,
+    captureReplayAuxiliaryProbes: "all",
     privacyControlUrls: ["https://example.test/privacy"],
     policyPlanningStatus: "policy_surface_ready_for_planning",
     policyPrivacyControlUrlCount: 1,
@@ -163,6 +164,24 @@ test("planner schedules privacy opt-out and replay probes when eligible", () => 
   ));
   assert.ok(plan.plannedScenarios.some((item) => item.scenario === "form_collection_probe"));
   assert.ok(plan.plannedScenarios.some((item) => item.scenario === "accessibility_probe"));
+});
+
+test("planner keeps form replay probe but skips accessibility probe by default", () => {
+  const plan = buildConsentScenarioPlan({
+    baseline: {
+      bannerLikelyPresent: false,
+      textExcerpt: "Your Privacy Choices and Do Not Sell or Share My Personal Information",
+      actionCandidates: [],
+    },
+    captureReplay: true,
+    privacyControlUrls: ["https://example.test/privacy"],
+    policyPlanningStatus: "policy_surface_ready_for_planning",
+    policyPrivacyControlUrlCount: 1,
+  });
+
+  assert.ok(plan.plannedScenarios.some((item) => item.scenario === "privacy_opt_out_flow"));
+  assert.ok(plan.plannedScenarios.some((item) => item.scenario === "form_collection_probe"));
+  assert.ok(plan.skippedScenarios.some((item) => item.scenario === "accessibility_probe"));
 });
 
 test("planner schedules URL-seeded privacy opt-out in normal consent mode", () => {

@@ -1,8 +1,8 @@
 const discoveryDocument = {
   name: "CertScore Pulse beta",
-  version: "0.5.3",
+  version: "0.5.4",
   description:
-    "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.",
+    "CertScore Pulse uses automated runtime analysis of public websites to detect GDPR/ePrivacy review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, and disclosure inconsistencies.",
   capabilities: {
     method: "automated_runtime_analysis",
     observes: [
@@ -10,7 +10,6 @@ const discoveryDocument = {
       "third_party_requests",
       "consent_enforcement_gaps",
       "cookie_activity",
-      "accessibility_signals",
       "disclosure_inconsistencies"
     ],
     doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
@@ -60,8 +59,7 @@ const discoveryDocument = {
       "Highest-priority findings",
       "Privacy and consent signals",
       "Cookie and third-party request activity",
-      "Accessibility signals",
-      "Disclosure and trust signals",
+      "Disclosure and policy signals",
       "Coverage and limitations",
       "Links",
       "Disclaimer"

@@ -46,7 +46,6 @@ import {
 import { enrichUnknownScanVendors } from "./vendor-enrichment";
 import { buildValidationWorkerDocumentHeaders } from "../web-bot-auth";
 import { getWorkerEnv } from "../env";
-import { runAccessibilityValidationJob } from "./run-accessibility-validation-job";
 import { deriveFinancialCommercialExpectedFindingIds } from "@website-signal-risk-scanner/validation-shared";
 import { cleanupRuntimeScanArtifacts, getRuntimeScanArtifactOptions } from "./runtime-scan-artifacts";
 
@@ -125,8 +124,10 @@ async function deriveAndPersistUnifiedFindingsForScan(input: {
   validationRunId?: string | null;
 }) {
   if (input.suppressWorkflowEvents) {
-    const refreshedArtifacts = await loadCompletedScanArtifacts(input.scanId);
-    const findings = deriveValidationFindings(refreshedArtifacts);
+    const refreshedArtifacts = await loadCompletedScanArtifacts(input.scanId, {
+      includeNonGdprReviewArtifacts: false
+    });
+    const findings = deriveCurrentScanReportValidationFindings(refreshedArtifacts);
     const targetRun = input.validationRunId ? { id: input.validationRunId } : await ensureCompletedValidationRunForScan(input.scanId);
     await replaceValidationRunFindings(targetRun.id, findings);
     return findings;
@@ -142,7 +143,9 @@ async function deriveAndPersistUnifiedFindingsForScan(input: {
     scanId: input.scanId
   }).catch(() => undefined);
 
-  const refreshedArtifacts = await loadCompletedScanArtifacts(input.scanId);
+  const refreshedArtifacts = await loadCompletedScanArtifacts(input.scanId, {
+    includeNonGdprReviewArtifacts: false
+  });
 
   await appendScanWorkflowEvent({
     eventType: SCAN_EVENT_TYPES.signalMergeCompleted,
@@ -176,7 +179,7 @@ async function deriveAndPersistUnifiedFindingsForScan(input: {
       ),
       ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {})
     }),
-    deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
+    deriveFindings: () => deriveCurrentScanReportValidationFindings(refreshedArtifacts),
     scanId: input.scanId
   });
 
@@ -1548,6 +1551,8 @@ type ValidationArtifactBundle = {
   snapshot: Record<string, unknown> | null;
   trackerVendors: Array<Record<string, unknown>>;
 };
+
+type ValidationFindingDerivationScope = "all" | "gdpr_eprivacy";
 
 function getAccessibilityStringValue(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
@@ -4878,13 +4883,17 @@ function deriveAccessibilitySectionFindings(input: {
   );
 }
 
-export function deriveValidationFindings(input: ValidationArtifactBundle) {
+function deriveValidationFindingsForScope(
+  input: ValidationArtifactBundle,
+  scope: ValidationFindingDerivationScope
+) {
   const rawPolicyEnrichmentRows = input.rawPolicyEnrichmentRows ?? input.policyEnrichments ?? [];
   const policySemanticRows = input.policySemanticRows ?? input.policySemanticInputs ?? input.policyEnrichments ?? [];
   const policyEnrichmentsById = new Map(
     rawPolicyEnrichmentRows.map((row) => [String(row.id ?? ""), row])
   );
   const findings: ValidationFindingRow[] = [];
+  const includeNonGdprReviewFamilies = scope === "all";
 
   const findSemanticRowForReview = (reviewItem: Record<string, unknown>) => {
     const enrichment = policyEnrichmentsById.get(String(reviewItem.policy_enrichment_id ?? "")) ?? null;
@@ -4981,9 +4990,13 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
       runtimeArtifacts: input.runtimeArtifacts,
       snapshot: input.snapshot
     }),
-    ...deriveFinancialValidationFindings(input),
-    ...deriveFinancialCommercialClaimFindings(input),
-    ...deriveFinancialContextTextClaimFindings(input),
+    ...(includeNonGdprReviewFamilies
+      ? [
+          ...deriveFinancialValidationFindings(input),
+          ...deriveFinancialCommercialClaimFindings(input),
+          ...deriveFinancialContextTextClaimFindings(input)
+        ]
+      : []),
     ...deriveRuntimePrivacyFindings({
       policySemanticRows,
       preconsentViolations: input.preconsentViolations,
@@ -5001,13 +5014,19 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
       policyReviewQueue: input.policyReviewQueue,
       snapshot: input.snapshot
     }),
-    ...deriveAccessibilitySectionFindings({
-      accessibilityRuleExamples: input.accessibilityRuleExamples ?? [],
-      snapshot: input.snapshot
-    })
+    ...(includeNonGdprReviewFamilies
+      ? [
+          ...deriveAccessibilitySectionFindings({
+            accessibilityRuleExamples: input.accessibilityRuleExamples ?? [],
+            snapshot: input.snapshot
+          })
+        ]
+      : [])
   );
 
-  const promotedFinancialSectionFindings = promoteSectionFinancialReviewFindings(findings);
+  const promotedFinancialSectionFindings = includeNonGdprReviewFamilies
+    ? promoteSectionFinancialReviewFindings(findings)
+    : findings;
   const deduped = [...new Map(promotedFinancialSectionFindings.map((finding) => [buildFindingComparisonKey({
     category: finding.category,
     page_url: finding.pageUrl,
@@ -5024,6 +5043,20 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
     ? withoutLowSignalNoise.filter((finding) => !isMetaSectionFinding(finding.ruleKey))
     : withoutLowSignalNoise;
   const sortBucket = buildFindingSortBucket(filtered.map((finding) => finding.ruleKey));
+
+  if (!includeNonGdprReviewFamilies) {
+    return filtered
+      .sort(
+        (left, right) =>
+          sortBucket(left.ruleKey) - sortBucket(right.ruleKey) ||
+          severityWeight(right.severity) - severityWeight(left.severity) ||
+          left.ruleKey.localeCompare(right.ruleKey)
+      )
+      .map((finding, index) => ({
+        ...finding,
+        rank: index + 1
+      }));
+  }
 
   const macroNormalizedOutput =
     input.macroEnrichment?.normalized_output_json && typeof input.macroEnrichment.normalized_output_json === "object"
@@ -5068,6 +5101,14 @@ export function deriveValidationFindings(input: ValidationArtifactBundle) {
       ...finding,
       rank: index + 1
     }));
+}
+
+export function deriveValidationFindings(input: ValidationArtifactBundle) {
+  return deriveValidationFindingsForScope(input, "all");
+}
+
+export function deriveCurrentScanReportValidationFindings(input: ValidationArtifactBundle) {
+  return deriveValidationFindingsForScope(input, "gdpr_eprivacy");
 }
 
 export async function enqueueValidationCollect(runId: string) {
@@ -6696,7 +6737,9 @@ export async function processValidationCollectJob(validationRunId: string) {
       });
     }
 
-    const artifacts = await loadCompletedScanArtifacts(run.scan_id);
+    const artifacts = await loadCompletedScanArtifacts(run.scan_id, {
+      includeNonGdprReviewArtifacts: false
+    });
     const scanStatus = String(artifacts.scan?.status ?? "");
 
     const collectAction = determineValidationCollectAction(scanStatus || null);
@@ -6785,7 +6828,9 @@ export async function processValidationRankJob(validationRunId: string) {
       });
     });
 
-    const artifacts = await loadCompletedScanArtifacts(scanId);
+    const artifacts = await loadCompletedScanArtifacts(scanId, {
+      includeNonGdprReviewArtifacts: false
+    });
     await persistDerivedNanoPolicySignals({
       policySemanticRows: artifacts.policySemanticRows ?? artifacts.policySemanticInputs ?? artifacts.policyEnrichments ?? [],
       policyReviewQueue: artifacts.policyReviewQueue,
@@ -6844,7 +6889,9 @@ export async function processValidationVerdictJob(validationRunId: string) {
     }
 
     const findings = await loadValidationRunFindings(validationRunId);
-    const scanArtifacts = await loadCompletedScanArtifacts(run.scan_id);
+    const scanArtifacts = await loadCompletedScanArtifacts(run.scan_id, {
+      includeNonGdprReviewArtifacts: false
+    });
 
     for (const batch of chunkRows(findings, VALIDATION_VERDICT_BATCH_SIZE)) {
       await Promise.all(

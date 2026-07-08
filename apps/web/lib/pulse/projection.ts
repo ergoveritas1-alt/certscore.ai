@@ -11,6 +11,7 @@ import { getAssessmentDirection, getEvidenceLabel } from "../scans/gdpr-eprivacy
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../scans/gdpr-eprivacy-checklist-rationale";
 import { buildRegulatoryGapTopFindings } from "../scans/regulatory-gap-top-findings";
 import { buildNormalizedConcerns } from "../scans/normalized-concerns";
+import { isCurrentGdprEprivacyReportFinding } from "../scans/current-report-scope";
 import { buildPromotionGradePreconsentRequests } from "../scans/preconsent-public-evidence";
 import { buildRuntimeCookieInventory } from "../scans/runtime-cookie-evidence";
 import {
@@ -235,8 +236,18 @@ function buildPulseReportSurface(input: {
   const allFindings = [
     ...regulatoryGapTopFindings,
     ...executive.findings.filter((finding) => !regulatoryGapFindingIds.has(finding.id))
-  ];
-  const topFindings = regulatoryGapTopFindings.length > 0 ? regulatoryGapTopFindings : executive.topFindings;
+  ].filter((finding) =>
+    isCurrentGdprEprivacyReportFinding({
+      id: finding.id,
+      section: finding.section
+    })
+  );
+  const topFindings = (regulatoryGapTopFindings.length > 0 ? regulatoryGapTopFindings : executive.topFindings).filter((finding) =>
+    isCurrentGdprEprivacyReportFinding({
+      id: finding.id,
+      section: finding.section
+    })
+  );
   const gdprEprivacyScore = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: reportableGdprRows
@@ -591,7 +602,7 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     Boolean(firstRequest?.vendor);
   const hasConsentContext = Boolean(details.consentState || details.consentInteraction || /consent|reject|pre_consent/i.test(finding.id));
   const hasPolicyAnchor = Boolean(details.policyEvidence || details.policyEvidenceDetails || details.policyRuntimeConflict);
-  const basis = finding.section === "Accessibility" ? "accessibility_check" : hasPolicyAnchor ? "policy_surface_detection" : "runtime_observation";
+  const basis = hasPolicyAnchor ? "policy_surface_detection" : "runtime_observation";
   const summary = finding.evidencePreview[0] ?? finding.shortSummary;
   const anchorUrl = absoluteUrl(`/scan/${scanId}#finding-${finding.id}`);
   const exampleCount = Math.max(finding.evidencePreview.length, examples.length);
@@ -666,6 +677,20 @@ function toPulseFinding(finding: CertScoreFinding, scanId: string) {
     anchorUrl: evidence.anchorUrl,
     nextStep: display.remediation || "Review the retained evidence and confirm expected site behavior."
   };
+}
+
+function currentReportGroupedFindings(executive: ReturnType<typeof projectExecutiveFindingsFromUnifiedPackets>) {
+  return executive.groupedFindings
+    .map((group) => ({
+      section: group.section,
+      findings: group.findings.filter((finding) =>
+        isCurrentGdprEprivacyReportFinding({
+          id: finding.id,
+          section: finding.section
+        })
+      )
+    }))
+    .filter((group) => group.findings.length > 0);
 }
 
 function recordArray(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -1000,8 +1025,8 @@ function buildEvidenceArtifact(input: {
       ),
       publicReportProjection: {
         surfacedFindingCount: input.allFindings.length,
-        surfacedPacketCount: input.executive.surfacedPackets.length,
-        groupedFindings: input.executive.groupedFindings.map((group) => ({
+        surfacedPacketCount: input.allFindings.length,
+        groupedFindings: currentReportGroupedFindings(input.executive).map((group) => ({
           section: group.section,
           findingIds: group.findings.map((finding) => finding.id)
         }))
@@ -1112,9 +1137,6 @@ function buildSummary(input: {
       }
       if (/third|tracking|vendor|request/i.test(finding.id)) {
         return "third_party_collection";
-      }
-      if (/accessibility|contrast|keyboard|label|alternative/i.test(finding.id)) {
-        return "accessibility";
       }
       if (/policy|disclosure|terms/i.test(finding.id)) {
         return "policy_surfaces";
@@ -1430,8 +1452,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     },
     publicReportProjection: {
       surfacedFindingCount: allFindings.length,
-      surfacedPacketCount: executive.surfacedPackets.length,
-      groupedFindings: executive.groupedFindings.map((group) => ({
+      surfacedPacketCount: allFindings.length,
+      groupedFindings: currentReportGroupedFindings(executive).map((group) => ({
         section: group.section,
         findingIds: group.findings.map((finding) => finding.id)
       }))

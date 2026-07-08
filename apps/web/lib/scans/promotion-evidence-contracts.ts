@@ -10,6 +10,7 @@ import {
 import { isPromotionGradePreconsentRequestRow } from "./preconsent-public-evidence";
 import { evaluateSaleShareRuntimeCoherence } from "./sale-share-runtime-coherence";
 import { classifyConsentControlLabel, type ConsentControlIntent } from "@certscore/contracts";
+import { evaluateRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 
 type ContractDecision = {
   allowedNarrativeTier: "weak" | "moderate" | "strong";
@@ -2500,6 +2501,16 @@ export function hasConcreteSensitiveThirdPartyTrackingArtifact(rawEvidence: Reco
 }
 
 export function evaluatePolicyBehaviorConflictContract(rawEvidence: Record<string, unknown> | null | undefined): ContractDecision | null {
+  const runtimeVendorDisclosureReview = evaluateRuntimeVendorDisclosureEvidence(rawEvidence, "policy_behavior_conflict");
+  if (runtimeVendorDisclosureReview.disposition === "eligible") {
+    return {
+      allowedNarrativeTier: runtimeVendorDisclosureReview.confidence === "strong" ? "strong" : "moderate",
+      externalSurfacingEligibility: "eligible",
+      negativeEvidenceFlags: ["runtime_vendor_not_disclosed"],
+      promotionEligibility: "eligible"
+    };
+  }
+
   const recomputedDecision = evaluatePolicyBehaviorContradictionEvidence(rawEvidence);
   if (!recomputedDecision.eligible) {
     const alignmentDecision = evaluatePolicyRuntimeAlignmentReviewEvidence(rawEvidence);

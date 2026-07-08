@@ -1,11 +1,11 @@
 import { z } from "zod";
 
 export const PULSE_API_VERSION = "v1";
-export const PULSE_SCHEMA_VERSION = "0.5.3";
+export const PULSE_SCHEMA_VERSION = "0.5.4";
 export const PULSE_SOURCE = "certscore.ai";
 
 export const PULSE_PURPOSE_STATEMENT =
-  "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.";
+  "CertScore Pulse uses automated runtime analysis of public websites to detect GDPR/ePrivacy review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, and disclosure inconsistencies.";
 
 export const PULSE_STANDARD_DISCLAIMER =
   "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.";
@@ -18,7 +18,6 @@ export const PULSE_CAPABILITIES = {
     "third_party_requests",
     "consent_enforcement_gaps",
     "cookie_activity",
-    "accessibility_signals",
     "disclosure_inconsistencies"
   ],
   doesNotProvide: ["legal_advice", "certification", "compliance_determination"]
