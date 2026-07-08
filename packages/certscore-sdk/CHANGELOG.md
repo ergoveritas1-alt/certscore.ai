@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.3
+
+- Expose API v2 scan timing fields in packaged SDK declarations: `startedAt`, `completedAt`, and `scanTimeSeconds`.
+- Keep scan timing nullable when the API has insufficient timing evidence instead of encouraging client-side `0.0` fallbacks.
+
 ## 0.1.0
 
 - Prepared the TypeScript SDK as a source-preview package for future public distribution.

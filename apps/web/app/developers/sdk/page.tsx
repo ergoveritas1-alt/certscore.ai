@@ -19,14 +19,19 @@ export default function DeveloperSdkPage() {
   return (
     <DeveloperShell activePath="/developers/sdk" title="TypeScript SDK" description={description}>
       <div className="space-y-12">
-        <Section eyebrow="Preview" title="Use the SDK source package">
+        <Section eyebrow="Package" title="Install the TypeScript SDK">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            The TypeScript SDK is available as a source preview while package distribution remains private. Source and examples live in{" "}
+            The TypeScript SDK is published as{" "}
+            <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://www.npmjs.com/package/@certscore/sdk">
+              @certscore/sdk
+            </a>
+            . Use version <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">0.2.3</code> or newer for API v2 scan timing fields. Source and examples live in{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk">
               packages/certscore-sdk
             </a>
-            . Use the REST API directly for production integrations until a public package channel is announced.
+            .
           </p>
+          <CodeBlock>{`npm install @certscore/sdk`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Resource clients" title="Create a scan and wait for completion">
@@ -51,6 +56,20 @@ const latest = await certscore.domains.latest("example.com");
 const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
 
 console.log(status.status, findings.findings.length, preConsentTable.summary.rowCount, latest.scan?.scanId, latestPreConsentTable.summary.rowCount);`}</CodeBlock>
+        </Section>
+
+        <Section eyebrow="Timing" title="Read scan runtime fields">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            API v2 scan resources and status responses include <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">startedAt</code>,{" "}
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">completedAt</code>, and{" "}
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">scanTimeSeconds</code> when timing evidence is available. Treat{" "}
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">null</code> as unavailable rather than zero.
+          </p>
+          <CodeBlock>{`const scan = await certscore.scans.get(scanId);
+const status = await certscore.scans.status(scanId);
+
+console.log(scan.startedAt, scan.completedAt, scan.scanTimeSeconds);
+console.log(status.startedAt, status.completedAt, status.scanTimeSeconds);`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Available clients" title="SDK surface">

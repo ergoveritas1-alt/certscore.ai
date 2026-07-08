@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { CertScoreClient } from "./client.js";
@@ -95,6 +96,18 @@ test("README documents current SDK resource clients", () => {
   assert.match(readme, /resource-oriented API v2 clients/i);
   assert.match(readme, /automated public-web observations for review/i);
   assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
+});
+
+test("packaged declarations expose API v2 scan timing fields", () => {
+  execFileSync("pnpm", ["run", "build"], {
+    cwd: new URL("..", import.meta.url),
+    stdio: "ignore"
+  });
+  const declarations = readFileSync(new URL("../dist/types.d.ts", import.meta.url), "utf8");
+
+  assert.match(declarations, /startedAt\?: string \| null;/);
+  assert.match(declarations, /completedAt\?: string \| null;/);
+  assert.match(declarations, /scanTimeSeconds\?: number \| null;/);
 });
 
 test("pulse.evidence retrieves the bounded Evidence JSON artifact", async () => {

@@ -6,7 +6,11 @@ CertScore outputs are automated public-web observations for review. They are not
 
 ## Status
 
-The SDK is currently a source preview in this monorepo. Public package distribution is not enabled yet; production integrations should use the REST API directly until a package channel is announced.
+The SDK is published as `@certscore/sdk` on npm. Use version `0.2.3` or newer when you need API v2 scan timing fields.
+
+```bash
+npm install @certscore/sdk
+```
 
 ## Quick Start
 
@@ -51,8 +55,16 @@ const pulseEvidence = await certscore.pulse.evidence(scanId);
 const latestDomainScan = await certscore.domains.latest("example.com");
 const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
 
-console.log(status.status, preConsentTable.summary.rowCount, explanation?.title, pulseProjection.disclaimer, pulseEvidence.type, latestDomainScan.scan?.id, latestPreConsentTable.rows.length);
+console.log(status.status, preConsentTable.summary.rowCount, explanation?.title, pulseProjection.disclaimer, pulseEvidence.type, latestDomainScan.scan?.scanId, latestPreConsentTable.rows.length);
 ```
+
+`certscore.scans.get()`, `certscore.scans.status()`, and `certscore.scans.wait()` expose scan timing where the API has enough evidence:
+
+- `startedAt`
+- `completedAt`
+- `scanTimeSeconds`
+
+`scanTimeSeconds` is `null` when timing is unavailable or incomplete. Client code should not coerce that value to `0`; reserve `0` only for an explicit numeric API value.
 
 Available resource clients:
 
