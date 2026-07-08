@@ -21,6 +21,16 @@ export const blockPageFixtures: Record<string, BlockClassifierInput> = {
       server: "cloudflare"
     }
   },
+  kasada403Challenge: {
+    title: "403 Forbidden",
+    normalizedTextExcerpt: "Request blocked. Protected by Kasada.",
+    contentLength: 256,
+    headers: {
+      "cf-ray": "67890",
+      "x-kpsdk-cd": "1",
+      server: "cloudflare"
+    }
+  },
   loginAuthWall: {
     title: "Sign in required",
     normalizedTextExcerpt: "Please log in to continue to this page.",

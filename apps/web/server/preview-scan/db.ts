@@ -15,6 +15,10 @@ import {
   type LocalV2DagScanEnv,
   type LocalV2DagScanProfile
 } from "../scans/local-v2-dag-scan-config";
+import {
+  lookupTrancoRankMetadata,
+  withTrancoRankMetadata
+} from "../scans/tranco-rank-metadata";
 
 export type PreviewDomainRow = {
   id: string;
@@ -267,13 +271,23 @@ export async function createPreviewScanRecord(input: {
   normalizedUrl: string;
   scanFrom?: ScanFrom;
 }) {
-  const initialConfig = buildPreviewScanInitialConfig({
+  const trancoRankMetadata = await lookupTrancoRankMetadata({
+    hostname: input.hostname,
+    normalizedUrl: input.normalizedUrl
+  }).catch((error) => {
+    console.error("[web] preview Tranco rank metadata lookup failed", {
+      error: error instanceof Error ? error.message : String(error),
+      hostname: input.hostname
+    });
+    return null;
+  });
+  const initialConfig = withTrancoRankMetadata(buildPreviewScanInitialConfig({
     hostname: input.hostname,
     localV2DagScanProfile: input.localV2DagScanProfile,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda,
     normalizedUrl: input.normalizedUrl,
     scanFrom: input.scanFrom
-  });
+  }), trancoRankMetadata);
   const queueMetadata = getPreviewScanQueueMetadata();
 
   let scan: PreviewScanRow | null;

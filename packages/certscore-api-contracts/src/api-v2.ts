@@ -64,6 +64,9 @@ export const apiV2ScanJobSchema = z
     status: apiV2ScanStatusSchema,
     phase: z.string().optional(),
     createdAt: z.string().optional(),
+    startedAt: z.string().nullable().optional(),
+    completedAt: z.string().nullable().optional(),
+    scanTimeSeconds: z.number().nullable().optional(),
     lastUpdatedAt: z.string().optional(),
     retryAfterSeconds: z.number().int().nullable().optional(),
     links: apiV2LinksSchema.optional(),
@@ -82,6 +85,7 @@ export const apiV2ScanResourceSchema = z
     createdAt: z.string().nullable().optional(),
     startedAt: z.string().nullable().optional(),
     completedAt: z.string().nullable().optional(),
+    scanTimeSeconds: z.number().nullable().optional(),
     score: z.number().int().min(0).max(100).nullable().optional(),
     riskLevel: z.string().nullable().optional(),
     coverage: z

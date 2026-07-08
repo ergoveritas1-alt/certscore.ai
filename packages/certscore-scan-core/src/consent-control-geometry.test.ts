@@ -98,6 +98,33 @@ test("captures Numa-style consentmanager settings and accept without reject", as
   assert.equal(artifact.summary.firstLayerOptions, true);
 });
 
+test("captures OneTrust optional-cookie noun-phrase controls as first-layer accept and reject", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>
+    <div id="onetrust-consent-sdk">
+      <section id="onetrust-banner-sdk" role="dialog" aria-label="Cookie settings" style="position: fixed; left: 80px; top: 80px; width: 560px; padding: 24px; background: white;">
+        <p>We use cookies to provide necessary site functions and optional cookies for analytics and personalization.</p>
+        <div id="onetrust-button-group">
+          <button id="onetrust-pc-btn-handler">Manage Cookies</button>
+          <button id="onetrust-reject-all-handler">Reject Optional Cookies</button>
+          <button id="onetrust-accept-btn-handler">Accept Optional Cookies</button>
+        </div>
+      </section>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "OneTrust");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+
+  const accept = findCandidate(artifact, "Accept Optional Cookies");
+  assert.equal(accept?.actionType, "accept_all");
+  assert.equal(accept?.matchedTerm, "accept optional cookies");
+  assert.equal(accept?.decisionStatus, "confirmed_visible");
+});
+
 test("retains multilingual consent classifications as diagnostic-only geometry evidence", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
@@ -379,6 +406,34 @@ test("captures Italian first-layer accept, reject, and options controls", async 
   assert.equal(findCandidate(artifact, "Accetta")?.actionType, "accept_all");
   assert.equal(findCandidate(artifact, "Rifiuta")?.actionType, "reject_all");
   assert.equal(findCandidate(artifact, "Gestisci preferenze")?.actionType, "manage_preferences");
+});
+
+test("captures Spanish Didomi pay-or-consent controls rendered as styled elements", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://sdk.privacy-center.org/loader.js"></script>
+    <div id="didomi-host">
+      <section
+        role="dialog"
+        aria-label="Panel de consentimiento de Didomi"
+        style="position: fixed; left: 120px; top: 90px; width: 720px; padding: 24px; background: white;"
+      >
+        <p>Usamos cookies y datos personales para publicidad personalizada, medición y contenido. Puedes configurar cookies o continuar con publicidad.</p>
+        <div class="didomi-components-button didomi-button-highlight didomi-accept" tabindex="0">Aceptar y continuar</div>
+        <div class="didomi-components-button didomi-button-standard didomi-reject" tabindex="0">Rechazar y pagar</div>
+        <div class="didomi-components-button didomi-button-standard didomi-preferences" tabindex="0">Configurar cookies</div>
+      </section>
+    </div>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "Didomi");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+  assert.equal(findCandidate(artifact, "Aceptar y continuar")?.actionType, "accept_all");
+  assert.equal(findCandidate(artifact, "Aceptar y continuar")?.decisionStatus, "confirmed_visible");
+  assert.equal(findCandidate(artifact, "Rechazar y pagar")?.actionType, "reject_all");
+  assert.equal(findCandidate(artifact, "Configurar cookies")?.actionType, "manage_preferences");
 });
 
 test("does not count Utiq-scoped refusal as first-layer cookie reject", async () => {

@@ -6,6 +6,7 @@ import {
   type SharedPriorDocumentSource,
   type SharedPriorScanAccelerationConfig,
   type SharedScanConfig,
+  type SharedTrancoRankMetadata,
   type ScanFrom
 } from "@website-signal-risk-scanner/shared";
 import {
@@ -38,6 +39,7 @@ export type BuildQueuedFullScanConfigInput = {
   profile: string;
   scanFrom?: ScanFrom;
   source: string;
+  trancoRankMetadata?: SharedTrancoRankMetadata | null;
 };
 
 export type QueuedFullScanPriorScanAcceleration = {
@@ -106,6 +108,13 @@ export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput)
     profile: input.profile,
     requestedGeo: scanFromDefinition.requestedGeo,
     scanFrom,
+    ...(input.trancoRankMetadata
+      ? {
+          siteMetadata: {
+            tranco: input.trancoRankMetadata
+          }
+        }
+      : {}),
     source: input.source
   }), input.env, {
     lambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,

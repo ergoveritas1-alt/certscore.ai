@@ -1855,7 +1855,7 @@ test("scan-core emits scan no-go assessment for temporary access restriction pag
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-temporary-access-restriction-"));
   try {
-    for (const page of ["security-access-temporarily-restricted", "security-polish-temporary-interstitial"] as const) {
+    for (const page of ["security-access-temporarily-restricted", "security-kasada-challenge", "security-polish-temporary-interstitial"] as const) {
       const bundle = await runScan({
         url: server.urlFor(page),
         profile: "tiny",
@@ -1866,10 +1866,19 @@ test("scan-core emits scan no-go assessment for temporary access restriction pag
       assert.equal(bundle.scan_no_go_assessment?.decision, "no_go", page);
       assert.equal(bundle.scanNoGoAssessment?.decision, "no_go", page);
       assert.equal(bundle.visual_access_review?.go_no_go, "NO_GO", page);
-      assert.equal(bundle.visual_access_review?.page_state, "access_blocked", page);
-      assert.ok(bundle.scan_no_go_assessment?.reasonCodes.includes("access_denied_or_forbidden_page"), page);
+      if (page === "security-kasada-challenge") {
+        assert.equal(bundle.visual_access_review?.page_state, "captcha_or_challenge", page);
+        assert.ok(bundle.scan_no_go_assessment?.reasonCodes.includes("captcha_or_challenge"), page);
+        assert.ok(bundle.scan_no_go_assessment?.corroboratorCodes.includes("network_kasada_challenge"), page);
+      } else {
+        assert.equal(bundle.visual_access_review?.page_state, "access_blocked", page);
+        assert.ok(bundle.scan_no_go_assessment?.reasonCodes.includes("access_denied_or_forbidden_page"), page);
+      }
       assert.equal(bundle.runtimeCoverage?.coverageStatus, "limited_none", page);
-      assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("access_denied_or_forbidden_page"), page);
+      assert.ok(
+        bundle.runtimeCoverage?.limitationKeys.includes(page === "security-kasada-challenge" ? "captcha_or_challenge" : "access_denied_or_forbidden_page"),
+        page,
+      );
       assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("scan_no_go_assessment"), page);
     }
   } finally {

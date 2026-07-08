@@ -135,6 +135,7 @@ export type StaticFixturePage =
   | "security-access-temporarily-restricted"
   | "security-cloudflare-challenge"
   | "security-datadome-challenge"
+  | "security-kasada-challenge"
   | "security-polish-temporary-interstitial"
   | "site-owned-infrastructure"
   | "third-party-cookie-positive"
@@ -281,6 +282,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "security-access-temporarily-restricted": "security-access-temporarily-restricted",
   "security-cloudflare-challenge": "security-cloudflare-challenge",
   "security-datadome-challenge": "security-datadome-challenge",
+  "security-kasada-challenge": "security-kasada-challenge",
   "security-polish-temporary-interstitial": "security-polish-temporary-interstitial",
   "site-owned-infrastructure": "site-infra",
   "third-party-cookie-positive": "third-party-cookie",
@@ -771,6 +773,14 @@ function serveCase(caseName: StaticFixturePage, response: ServerResponse): void 
     response.end(pageHtml(caseName));
     return;
   }
+  if (caseName === "security-kasada-challenge") {
+    response.writeHead(403, {
+      "Content-Type": "text/html; charset=utf-8",
+      "x-kpsdk-cd": "fixture"
+    });
+    response.end(pageHtml(caseName));
+    return;
+  }
   const cookieHeader = cookieForCase(caseName);
   if (cookieHeader) {
     response.setHeader("Set-Cookie", cookieHeader);
@@ -938,6 +948,15 @@ function bodyMarkup(caseName: StaticFixturePage): string {
           cookie: "fixture-redacted"
         };
       </script>
+    `;
+  }
+  if (caseName === "security-kasada-challenge") {
+    return `
+      <section>
+        <h1>403 Forbidden</h1>
+        <p>Request blocked. Protected by Kasada.</p>
+        <p>x-kpsdk-cd: fixture</p>
+      </section>
     `;
   }
   if (caseName === "security-access-temporarily-restricted") {

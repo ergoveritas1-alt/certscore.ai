@@ -151,6 +151,7 @@ test("buildApiV2ScanResource projects a completed scan into public-safe v2 shape
   assert.equal(resource.domain, "example.com");
   assert.equal(resource.score, 34);
   assert.equal(resource.riskLevel, "significant_review_recommended");
+  assert.equal(resource.scanTimeSeconds, 9);
   assert.equal(resource.coverage?.status, "complete");
   assert.equal(resource.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });
@@ -178,6 +179,9 @@ test("buildApiV2ScanStatus exposes public scan status links", () => {
   assert.equal(status.jobId, "00000000-0000-4000-8000-000000000123");
   assert.equal(status.status, "completed");
   assert.equal(status.phase, "completed");
+  assert.equal(status.startedAt, "2026-06-30T12:00:01.000Z");
+  assert.equal(status.completedAt, "2026-06-30T12:00:10.000Z");
+  assert.equal(status.scanTimeSeconds, 9);
   assert.equal(status.retryAfterSeconds, null);
   assert.equal(status.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });
@@ -189,6 +193,15 @@ test("buildApiV2ScanStatus degrades unknown scan states to running", () => {
   assert.equal(status.phase, "runtime_observation");
   assert.equal(status.retryAfterSeconds, 30);
   assert.equal(status.links?.findings, undefined);
+});
+
+test("buildApiV2ScanStatus leaves runtime duration unknown instead of zero when timestamps are incomplete", () => {
+  const status = buildApiV2ScanStatus(fixture({ completedAt: null, startedAt: null, status: "running" }));
+
+  assert.equal(status.status, "running");
+  assert.equal(status.startedAt, null);
+  assert.equal(status.completedAt, null);
+  assert.equal(status.scanTimeSeconds, null);
 });
 
 test("buildApiV2ScanJobFromPulseStatus maps pending Pulse jobs to v2 status", () => {
@@ -208,6 +221,24 @@ test("buildApiV2ScanJobFromPulseStatus maps pending Pulse jobs to v2 status", ()
   assert.equal(status.status, "queued");
   assert.equal(status.retryAfterSeconds, 45);
   assert.equal(status.links?.status, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status");
+});
+
+test("buildApiV2ScanJobFromPulseStatus preserves completed status timing for SDK consumers", () => {
+  const status = buildApiV2ScanJobFromPulseStatus({
+    jobId: "pulse_job_123",
+    scanId: "00000000-0000-4000-8000-000000000123",
+    domain: "example.com",
+    status: "completed",
+    phase: "completed",
+    createdAt: "2026-06-30T12:00:00.000Z",
+    startedAt: "2026-06-30T12:00:01.000Z",
+    completedAt: "2026-06-30T12:00:06.100Z"
+  });
+
+  assert.equal(status.status, "completed");
+  assert.equal(status.startedAt, "2026-06-30T12:00:01.000Z");
+  assert.equal(status.completedAt, "2026-06-30T12:00:06.100Z");
+  assert.equal(status.scanTimeSeconds, 5.1);
 });
 
 test("buildApiV2ErrorFromPulse maps Pulse throttles to v2 rate-limit errors", () => {

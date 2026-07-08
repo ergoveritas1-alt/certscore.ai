@@ -56,6 +56,7 @@ import {
 import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-simulated-dispatch";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
+import { lookupTrancoRankMetadata } from "./tranco-rank-metadata";
 import { upsertOrganizationSettings } from "../settings/repository";
 
 export type CreateFullScanActionState = {
@@ -455,6 +456,16 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     });
     return null;
   });
+  const trancoRankMetadata = await lookupTrancoRankMetadata({
+    hostname: domainRecord.domain.hostname,
+    normalizedUrl: domainRecord.domain.normalizedUrl
+  }).catch((error) => {
+    console.error("[web] full-scan Tranco rank metadata lookup failed", {
+      error: error instanceof Error ? error.message : String(error),
+      hostname: domainRecord.domain.hostname
+    });
+    return null;
+  });
   const scanConfig = buildQueuedFullScanConfig({
     hostname: domainRecord.domain.hostname,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
@@ -465,7 +476,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     priorScanAcceleration,
     profile: planLimits.scanProfile,
     scanFrom,
-    source: input.source ?? "manual-dashboard"
+    source: input.source ?? "manual-dashboard",
+    trancoRankMetadata
   });
   const localV2DagLambdaDispatch = summarizeLocalV2DagLambdaDispatchForEvent(scanConfig);
   const queueMetadata = getFullScanQueueMetadata({

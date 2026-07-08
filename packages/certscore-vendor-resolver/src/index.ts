@@ -434,6 +434,18 @@ const rules: VendorRule[] = [
     basisLabel: "klaviyo_marketing_automation_runtime",
   },
   {
+    entity: "Datability Solutions Private Limited",
+    vendor: "iZooto",
+    product: "iZooto Web Push",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "marketing_automation", "push_notifications", "audience_engagement"],
+    confidence: 0.91,
+    hostPatterns: [/^(?:cdn|cdnimg|err|events?|api|l|www)\.izooto\.com$/i, /^izooto\.com$/i],
+    urlPatterns: [/\/(?:scripts?\/)?(?:sdk\/)?izooto(?:\.min)?\.js\b/i, /\/(?:event|events|push|subscribe|notification|webpush)\b/i],
+    storageKeyPatterns: [/^izooto/i, /^_izooto/i],
+    basisLabel: "izooto_web_push_runtime",
+  },
+  {
     entity: "HubSpot, Inc.",
     vendor: "HubSpot",
     product: "HubSpot Ads Pixel",
@@ -545,6 +557,28 @@ const rules: VendorRule[] = [
     hostPatterns: [/^www\.redditstatic\.com$/i, /^alb\.reddit\.com$/i, /^pixel-config\.reddit\.com$/i],
     urlPatterns: [/\/pixel/i, /\/r\/pixel/i, /\/v\d+\/config\b/i],
     basisLabel: "reddit_pixel_endpoint",
+  },
+  {
+    entity: "X Corp.",
+    vendor: "X/Twitter",
+    product: "X/Twitter Social Widgets",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "social_embed", "cross_site_tracking"],
+    confidence: 0.93,
+    hostPatterns: [/^platform\.twitter\.com$/i, /^syndication\.twitter\.com$/i, /^cdn\.syndication\.twimg\.com$/i],
+    urlPatterns: [/\/widgets\.js\b/i, /\/embed/i, /\/timeline/i, /\/tweet/i],
+    basisLabel: "twitter_social_widget_runtime",
+  },
+  {
+    entity: "X Corp.",
+    vendor: "X/Twitter",
+    product: "Twitter Pixel",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "ad_measurement", "cross_site_tracking"],
+    confidence: 0.94,
+    hostPatterns: [/^static\.ads-twitter\.com$/i, /^analytics\.twitter\.com$/i, /^t\.co$/i],
+    urlPatterns: [/\/uwt\.js\b/i, /\/i\/adsct\b/i, /\/adsct\b/i],
+    basisLabel: "twitter_pixel_endpoint",
   },
   {
     entity: "Tapad, Inc.",
@@ -1281,7 +1315,7 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   if (/hubspot analytics/.test(haystack)) {
     return "Analytics";
   }
-  if (/klaviyo|hubspot|marketing_automation|marketing automation|email_personalization|email personalization|lead_capture|lead capture|crm/.test(haystack)) {
+  if (/klaviyo|izooto|hubspot|marketing_automation|marketing automation|push_notifications|push notifications|email_personalization|email personalization|lead_capture|lead capture|crm/.test(haystack)) {
     return "Marketing automation";
   }
   if (/piano|tinypass|cxense|personalization|personalisation|paywall|subscription|audience_management/.test(haystack)) {

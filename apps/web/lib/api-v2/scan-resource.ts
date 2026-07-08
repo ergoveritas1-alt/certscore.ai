@@ -65,8 +65,10 @@ type PulseStatusLike = {
   status?: string;
   phase?: string | null;
   createdAt?: string;
+  startedAt?: string | null;
   lastUpdatedAt?: string | null;
   completedAt?: string | null;
+  scanTimeSeconds?: number | null;
   retryAfterSeconds?: number | null;
   resultUrl?: string | null;
   reportUrl?: string | null;
@@ -86,6 +88,10 @@ function finiteScore(value: unknown) {
 
 function finiteInt(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : null;
+}
+
+function finiteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : null;
 }
 
 function riskLevelFromScore(score: number | null) {
@@ -148,6 +154,22 @@ function dateStringOrNull(value: unknown) {
     return Number.isNaN(value.getTime()) ? null : value.toISOString();
   }
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function scanTimeSecondsFromTimestamps(startedAt: unknown, completedAt: unknown) {
+  const started = dateStringOrNull(startedAt);
+  const completed = dateStringOrNull(completedAt);
+  if (!started || !completed) {
+    return null;
+  }
+
+  const startedMs = new Date(started).getTime();
+  const completedMs = new Date(completed).getTime();
+  if (!Number.isFinite(startedMs) || !Number.isFinite(completedMs)) {
+    return null;
+  }
+
+  return Math.max(0, Number(((completedMs - startedMs) / 1000).toFixed(1)));
 }
 
 function eventObservedAtMs(event: Record<string, unknown>) {
@@ -247,6 +269,7 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
   const scan = scanRecord.scan;
   const domain = scan.domainHostname ?? "unknown";
   const score = derivePulseReportScore({ scanRecord });
+  const scanTimeSeconds = scanTimeSecondsFromTimestamps(scan.startedAt, scan.completedAt);
   const resource = {
     type: "certscore_scan",
     scanId: scan.id,
@@ -257,6 +280,7 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
     createdAt: dateStringOrNull(scan.createdAt),
     startedAt: dateStringOrNull(scan.startedAt),
     completedAt: dateStringOrNull(scan.completedAt),
+    scanTimeSeconds,
     score,
     riskLevel: riskLevelFromScore(score),
     coverage: deriveCoverage(scanRecord),
@@ -280,6 +304,7 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJ
   const scan = scanRecord.scan;
   const status = normalizeScanStatus(scan.status);
   const retryAfterSeconds = status === "completed" || status === "completed_limited" || status === "failed" || status === "expired" ? null : 30;
+  const scanTimeSeconds = scanTimeSecondsFromTimestamps(scan.startedAt, scan.completedAt);
   const resource = {
     type: "certscore_scan_job",
     jobId: scan.id,
@@ -288,6 +313,9 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJ
     status,
     phase: status === "completed" || status === "completed_limited" ? "completed" : status === "failed" ? "failed" : "runtime_observation",
     createdAt: dateStringOrNull(scan.createdAt) ?? undefined,
+    startedAt: dateStringOrNull(scan.startedAt),
+    completedAt: dateStringOrNull(scan.completedAt),
+    scanTimeSeconds,
     lastUpdatedAt: dateStringOrNull(scan.completedAt ?? scan.startedAt ?? scan.createdAt) ?? undefined,
     retryAfterSeconds,
     links: {
@@ -306,6 +334,7 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJ
 export function buildApiV2ScanJobFromPulseStatus(status: PulseStatusLike): ApiV2ScanJob {
   const scanId = status.scanId ?? status.scan_id ?? null;
   const normalizedStatus = normalizeScanStatus(status.status);
+  const scanTimeSeconds = finiteNumber(status.scanTimeSeconds) ?? scanTimeSecondsFromTimestamps(status.startedAt, status.completedAt);
   const resource = {
     type: "certscore_scan_job",
     jobId: status.jobId,
@@ -314,6 +343,9 @@ export function buildApiV2ScanJobFromPulseStatus(status: PulseStatusLike): ApiV2
     status: normalizedStatus,
     phase: status.phase ?? (normalizedStatus === "completed" || normalizedStatus === "completed_limited" ? "completed" : "queued"),
     createdAt: dateStringOrNull(status.createdAt) ?? undefined,
+    startedAt: dateStringOrNull(status.startedAt),
+    completedAt: dateStringOrNull(status.completedAt),
+    scanTimeSeconds,
     lastUpdatedAt: dateStringOrNull(status.lastUpdatedAt ?? status.completedAt ?? status.createdAt) ?? undefined,
     retryAfterSeconds: status.retryAfterSeconds ?? (normalizedStatus === "completed" || normalizedStatus === "completed_limited" ? null : 30),
     links: {

@@ -62,6 +62,13 @@ test("classifies British spelling choice controls as options", () => {
 test("classifies observed English options labels", () => {
   assert.equal(classifyConsentControlLabel({ label: "I Accept" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Accept", ariaLabel: "Accept" }).intent, "accept");
+  const optionalAccept = classifyConsentControlLabel({ label: "Accept Optional Cookies" });
+  assert.equal(optionalAccept.intent, "accept");
+  assert.equal(optionalAccept.matchedTerm, "accept optional cookies");
+  assert.equal(optionalAccept.matchStrength, "direct");
+  assert.equal(classifyConsentControlLabel({ label: "Accept Non-Essential Cookies" }).intent, "accept");
+  assert.equal(classifyConsentControlLabel({ label: "Allow Optional Cookies" }).intent, "accept");
+  assert.equal(classifyConsentControlLabel({ label: "Optional Cookies" }).intent, "unknown");
   assert.equal(classifyConsentControlLabel({ label: "Deny", ariaLabel: "Deny" }).intent, "reject");
   const subscribeReject = classifyConsentControlLabel({ label: "Decline and subscribe" });
   assert.equal(subscribeReject.intent, "reject");
@@ -393,6 +400,18 @@ test("classifies decline non-essential cookies as reject", () => {
   assert.equal(classification.intent, "reject");
   assert.equal(classification.matchedTerm, "decline non-essential cookies");
   assert.equal(classification.matchStrength, "direct");
+});
+
+test("classifies short non-essential reject labels in concatenated banner text", () => {
+  const standalone = classifyConsentControlLabel({ label: "Reject Non-Essential" });
+  assert.equal(standalone.intent, "reject");
+  assert.equal(standalone.matchedTerm, "reject non-essential");
+  assert.equal(standalone.matchStrength, "direct");
+
+  const concatenated = classifyConsentControlLabel({ label: "Save Accept All Reject Non-Essential" });
+  assert.equal(concatenated.intent, "reject");
+  assert.equal(concatenated.matchedTerm, "reject non-essential");
+  assert.equal(concatenated.matchStrength, "direct");
 });
 
 test("classifies category-scoped analytics controls without broadening plain category labels", () => {

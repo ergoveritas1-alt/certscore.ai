@@ -22,6 +22,7 @@ test("registry includes first-wave CMP vendors", () => {
     "Sourcepoint",
     "Didomi",
     "Quantcast Choice",
+    "Seznam CMP",
     "Google Funding Choices",
     "Termly",
     "Osano",
@@ -59,6 +60,20 @@ test("detects Usercentrics service domains", () => {
   assert.equal(getKnownCmpVendorForHost("app.usercentrics.eu"), "Usercentrics");
   assert.equal(getKnownCmpVendorForHost("api.usercentrics.eu"), "Usercentrics");
   assert.equal(getKnownCmpVendorForHost("consent-api.service.consent.usercentrics.eu"), "Usercentrics");
+});
+
+test("detects Seznam CMP infrastructure by host, URL, and cookie", () => {
+  assert.equal(getKnownCmpVendorForHost("cmp.seznam.cz"), "Seznam CMP");
+  assert.equal(getKnownCmpVendorForHost("cmp.seznamzpravy.cz"), "Seznam CMP");
+  assert.equal(
+    getKnownCmpVendorName({
+      urls: ["https://cmp.seznamzpravy.cz/cmp.js"],
+      cookieNames: ["sznlbr"],
+    }),
+    "Seznam CMP",
+  );
+  assert.equal(isKnownCmpInfrastructureUrl("https://cmp.seznam.cz/static/cmp.js"), true);
+  assert.equal(isKnownCmpCookieName("sznlbr"), true);
 });
 
 test("detects Transcend and Airgap consent infrastructure", () => {

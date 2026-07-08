@@ -33,7 +33,7 @@ export type ScanStopReasonCode =
   | "fallback_source_confirmed"
   | "no_pages_scanned";
 
-export type BlockVendorGuess = "akamai" | "cloudflare" | "fastly" | "imperva" | "unknown";
+export type BlockVendorGuess = "akamai" | "cloudflare" | "fastly" | "imperva" | "kasada" | "unknown";
 
 export type BlockPageClassification =
   | "vendor_interstitial_probable"
@@ -186,7 +186,8 @@ const CHALLENGE_PHRASES = [
   "press and hold",
   "security check",
   "ddos protection by",
-  "bot verification"
+  "bot verification",
+  "protected by kasada"
 ];
 
 const CAPTCHA_PHRASES = [
@@ -278,13 +279,18 @@ export function classifyBlockedResponse(input: BlockClassifierInput): BlockClass
     joinedText.includes("akamai") ||
     Object.keys(headers).some((key) => key.startsWith("akamai"));
   const impervaPresent = joinedText.includes("imperva") || joinedText.includes("incapsula");
+  const kasadaPresent =
+    joinedText.includes("kasada") ||
+    joinedText.includes("x-kpsdk") ||
+    Object.keys(headers).some((key) => key.startsWith("x-kpsdk"));
   const fastlyPresent = serverHeader.includes("fastly") || joinedText.includes("fastly");
   const interstitialMarkerPresent =
     input.interstitialMarkerPresent === true ||
     hasAnyPhrase(joinedText, CHALLENGE_PHRASES) ||
     cfRayPresent ||
     akamaiMarkerPresent ||
-    impervaPresent;
+    impervaPresent ||
+    kasadaPresent;
   const captchaMarkerPresent =
     input.captchaMarkerPresent === true || hasAnyPhrase(joinedText, CAPTCHA_PHRASES);
   const authWallSuspected = hasAnyPhrase(joinedText, LOGIN_PHRASES);
@@ -294,7 +300,9 @@ export function classifyBlockedResponse(input: BlockClassifierInput): BlockClass
   const contentLengthBucket = getContentLengthBucket(input.contentLength ?? joinedText.length);
 
   const vendorGuess: BlockVendorGuess =
-    cfRayPresent || serverHeader.includes("cloudflare")
+    kasadaPresent || serverHeader.includes("kasada")
+      ? "kasada"
+      : cfRayPresent || serverHeader.includes("cloudflare")
       ? "cloudflare"
       : akamaiMarkerPresent || serverHeader.includes("akamai")
         ? "akamai"

@@ -27,6 +27,7 @@ import type { LocalV2DagScanProfile } from "./local-v2-dag-scan-config";
 import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-simulated-dispatch";
 import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
+import { lookupTrancoRankMetadata } from "./tranco-rank-metadata";
 
 type ScanQueueProvenance = {
   githubActor?: string | null;
@@ -152,6 +153,16 @@ export async function createAnonymousFullScan(input: {
     });
     return null;
   });
+  const trancoRankMetadata = await lookupTrancoRankMetadata({
+    hostname: input.hostname,
+    normalizedUrl: input.normalizedUrl
+  }).catch((error) => {
+    console.error("[web] anonymous full-scan Tranco rank metadata lookup failed", {
+      error: error instanceof Error ? error.message : String(error),
+      hostname: input.hostname
+    });
+    return null;
+  });
   const scanConfig = buildQueuedFullScanConfig({
     hostname: input.hostname,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
@@ -162,7 +173,8 @@ export async function createAnonymousFullScan(input: {
     priorScanAcceleration,
     profile: planLimits.scanProfile,
     scanFrom,
-    source: input.provenance?.source ?? "marketing-anonymous-full-scan"
+    source: input.provenance?.source ?? "marketing-anonymous-full-scan",
+    trancoRankMetadata
   });
   const localV2DagLambdaDispatch = summarizeLocalV2DagLambdaDispatchForEvent(scanConfig);
   const queueMetadata = getFullScanQueueMetadata({

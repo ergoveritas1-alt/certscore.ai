@@ -102,6 +102,32 @@ test("classifyConsentGeometryAccess marks Imperva hCaptcha copy as no-go", () =>
   assert.ok(diagnostic.reasonCodes.includes("imperva_challenge"));
 });
 
+test("classifyConsentGeometryAccess marks Cloudflare broken-origin SSL pages as access no-go", () => {
+  const diagnostic = classifyConsentGeometryAccess({
+    httpStatus: 526,
+    title: "Invalid SSL certificate",
+    bodyText: "Error 526 Ray ID: abc123 SSL handshake failed. Cloudflare is unable to establish an SSL connection to the origin server.",
+  });
+
+  assert.equal(diagnostic.status, "access_no_go");
+  assert.ok(diagnostic.reasonCodes.includes("http_status_526"));
+  assert.ok(diagnostic.reasonCodes.includes("cloudflare_challenge"));
+  assert.ok(diagnostic.reasonCodes.includes("cloudflare_origin_error"));
+});
+
+test("classifyConsentGeometryAccess marks Kasada WAF pages as security no-go", () => {
+  const diagnostic = classifyConsentGeometryAccess({
+    httpStatus: 403,
+    title: "403 Forbidden",
+    bodyText: "Request blocked. Protected by Kasada. x-kpsdk-cd: 1.",
+  });
+
+  assert.equal(diagnostic.status, "rate_limited_or_security_challenge");
+  assert.ok(diagnostic.reasonCodes.includes("http_status_403"));
+  assert.ok(diagnostic.reasonCodes.includes("forbidden_text"));
+  assert.ok(diagnostic.reasonCodes.includes("kasada_challenge"));
+});
+
 test("classifyConsentGeometryAccess leaves ordinary pages eligible for A/R/O", () => {
   const diagnostic = classifyConsentGeometryAccess({
     httpStatus: 200,

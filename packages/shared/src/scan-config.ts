@@ -46,6 +46,22 @@ export type SharedPriorScanAccelerationConfig = {
   sourceScanId: string;
 };
 
+export type SharedTrancoRankMetadata = {
+  lookupHostname: string;
+  lookupRegistrableDomain?: string | null;
+  matchType: "exact_hostname" | "hostname_without_www" | "registrable_domain" | "candidate_hostname";
+  rank: number;
+  rankBand?: string | null;
+  matchedHostname: string;
+  source: "validation_targets";
+  sourceUpdatedAt?: string | null;
+};
+
+export type SharedSiteMetadataConfig = {
+  tranco?: SharedTrancoRankMetadata;
+  [key: string]: unknown;
+};
+
 export type SharedCaliforniaPrivacyScanConfig = {
   exercisePrivacyChoicePath?: boolean;
   forceGpcVerification?: boolean;
@@ -71,6 +87,7 @@ export type SharedScanConfig = {
   profile?: string;
   requestedGeo?: RequestedGeoTarget;
   scanFrom?: ScanFrom;
+  siteMetadata?: SharedSiteMetadataConfig;
   source?: string;
   triggerMode?: string;
 };
@@ -89,6 +106,7 @@ type BuildSharedFullScanConfigInput = {
   profile: string;
   requestedGeo?: RequestedGeoTarget;
   scanFrom?: ScanFrom;
+  siteMetadata?: SharedSiteMetadataConfig;
   source: string;
   triggerMode?: string;
 };
@@ -107,6 +125,7 @@ export function buildSharedFullScanConfig(input: BuildSharedFullScanConfigInput)
     ...(input.post403Policy ? { post403Policy: input.post403Policy } : {}),
     ...(input.requestedGeo ? { requestedGeo: input.requestedGeo } : {}),
     ...(input.scanFrom ? { scanFrom: input.scanFrom } : {}),
+    ...(input.siteMetadata ? { siteMetadata: input.siteMetadata } : {}),
     ...(input.triggerMode ? { triggerMode: input.triggerMode } : {}),
     maxPages: input.maxPages,
     processor: input.processor,

@@ -133,6 +133,40 @@ test("queued full-scan config carries prior scan acceleration only as execution 
   assert.equal(Object.hasOwn(config, "signals"), false);
 });
 
+test("queued full-scan config carries Tranco rank as site metadata only", () => {
+  const config = buildQueuedFullScanConfig({
+    hostname: "www.example.com",
+    maxPages: 3,
+    normalizedUrl: "https://www.example.com/",
+    profile: "homepage",
+    source: "manual-dashboard",
+    trancoRankMetadata: {
+      lookupHostname: "www.example.com",
+      lookupRegistrableDomain: "example.com",
+      matchType: "registrable_domain",
+      matchedHostname: "example.com",
+      rank: 123,
+      rankBand: "top_1k",
+      source: "validation_targets",
+      sourceUpdatedAt: "2026-07-08T00:00:00.000Z"
+    }
+  });
+
+  assert.deepEqual(config.siteMetadata?.tranco, {
+    lookupHostname: "www.example.com",
+    lookupRegistrableDomain: "example.com",
+    matchType: "registrable_domain",
+    matchedHostname: "example.com",
+    rank: 123,
+    rankBand: "top_1k",
+    source: "validation_targets",
+    sourceUpdatedAt: "2026-07-08T00:00:00.000Z"
+  });
+  assert.equal(Object.hasOwn(config.execution ?? {}, "tranco"), false);
+  assert.equal(Object.hasOwn(config, "findings"), false);
+  assert.equal(Object.hasOwn(config, "signals"), false);
+});
+
 test("localhost scan configs use the local v2 planned-parallel DAG processor only", () => {
   const config = applyLocalV2DagScanConfig(
     {

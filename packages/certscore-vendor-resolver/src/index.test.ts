@@ -724,6 +724,45 @@ test("resolves Klaviyo as marketing automation with high-confidence vendor ident
   assert.equal(resolveVendorDisplayCategory(klaviyo), "Marketing automation");
 });
 
+test("classifies iZooto web-push runtime without letting Cloudflare cookies erase the vendor", () => {
+  const observations = resolveVendorObservations([
+    request("https://cdn.izooto.com/scripts/sdk/izooto.js", "cdn.izooto.com"),
+    {
+      type: "cookie",
+      cookieName: "__cf_bm",
+      hostname: "cdn.izooto.com",
+    },
+  ]);
+
+  const izooto = observations.find((item) => item.vendor === "iZooto");
+  assert.ok(izooto);
+  assert.equal(izooto.product, "iZooto Web Push");
+  assert.equal(izooto.purpose, "advertising");
+  assert.equal(izooto.regulatoryRelevance.includes("push_notifications"), true);
+  assert.equal(izooto.matchedHostnames.includes("cdn.izooto.com"), true);
+  assert.equal(resolveVendorDisplayCategory(izooto), "Marketing automation");
+  assertResolved(observations, "Cloudflare", "Cloudflare Bot Management", "security");
+});
+
+test("classifies X/Twitter widget runtime without letting Cloudflare cookies erase the vendor", () => {
+  const observations = resolveVendorObservations([
+    request("https://platform.twitter.com/widgets.js", "platform.twitter.com"),
+    {
+      type: "cookie",
+      cookieName: "__cf_bm",
+      hostname: "platform.twitter.com",
+    },
+  ]);
+
+  const twitter = observations.find((item) => item.product === "X/Twitter Social Widgets");
+  assert.ok(twitter);
+  assert.equal(twitter.vendor, "X/Twitter");
+  assert.equal(twitter.purpose, "advertising");
+  assert.equal(twitter.regulatoryRelevance.includes("social_embed"), true);
+  assert.equal(resolveVendorDisplayCategory(twitter), "Advertising");
+  assertResolved(observations, "Cloudflare", "Cloudflare Bot Management", "security");
+});
+
 test("assigns canonical display categories for CNN-style technologies", () => {
   assert.equal(resolveVendorDisplayCategory({ vendor: "Google", product: "Google Sign-in", purpose: "infrastructure", regulatoryRelevance: ["authentication"] }), "Authentication");
   assert.equal(resolveVendorDisplayCategory({ vendor: "Stripe", product: "Stripe.js", purpose: "security", regulatoryRelevance: ["payment_processing"] }), "Payment processors");

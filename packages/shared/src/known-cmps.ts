@@ -179,6 +179,20 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     urlPatterns: [/qc-cmp/i, /quantcast\.mgr\.consensu\.org/i]
   },
   {
+    aliases: ["Seznam CMP", "Seznam Consent", "Seznam TCF CMP"],
+    canonicalName: "Seznam CMP",
+    cookieNames: ["sznlbr", "euconsent-v2"],
+    domains: ["cmp.seznam.cz", "cmp.seznamzpravy.cz"],
+    domSelectors: ["[id*='seznam-cmp' i]", "[class*='seznam-cmp' i]"],
+    evidenceTreatment: "cmp_infrastructure",
+    globalNames: ["__tcfapi"],
+    reopenControlHints: ["nastavit souhlas", "nastavit cookies", "seznam cmp"],
+    role: "consent management platform",
+    standards: ["tcf"],
+    storageKeys: ["sznlbr", "euconsent-v2"],
+    urlPatterns: [/cmp\.seznam(?:zpravy)?\.cz/i, /seznam.*cmp/i]
+  },
+  {
     aliases: ["Funding Choices", "Google Consent Management Solutions"],
     canonicalName: "Google Funding Choices",
     cookieNames: ["FCCDCF", "FCNEC"],

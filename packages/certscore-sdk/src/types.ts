@@ -82,6 +82,7 @@ export interface ScanResource {
   createdAt?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
+  scanTimeSeconds?: number | null;
   score?: number | null;
   riskLevel?: string | null;
   coverage?: {
@@ -104,6 +105,9 @@ export interface ScanJob {
   status: PulseJobStatus;
   phase?: string;
   createdAt?: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  scanTimeSeconds?: number | null;
   lastUpdatedAt?: string;
   retryAfterSeconds?: number | null;
   links?: ApiV2Links;

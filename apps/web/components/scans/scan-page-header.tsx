@@ -42,6 +42,21 @@ function getScanFromMarkerInput(value: string | undefined) {
   }
 }
 
+function getScanSourceContext(value: string | undefined) {
+  switch (value) {
+    case "eu_de":
+    case "eu":
+      return "Scan executed from Germany (EU); regional consent interfaces can differ for visitors in other locations.";
+    case "eu_ie":
+    case "uk":
+      return "Scan executed from Ireland (EU); regional consent interfaces can differ for visitors in other locations.";
+    case "california":
+      return "Scan executed from California; regional consent interfaces can differ for visitors in other locations.";
+    default:
+      return null;
+  }
+}
+
 function ScanOriginIcon() {
   return (
     <svg aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 16 16">
@@ -65,6 +80,7 @@ export function ScanPageHeader({
   title
 }: ScanPageHeaderProps) {
   const scanFromMarker = getScanFromMarkerInput(scanFromValue);
+  const scanSourceContext = getScanSourceContext(scanFromValue);
 
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -85,6 +101,7 @@ export function ScanPageHeader({
           ) : null}
         </div>
         {createdAtLabel ? <div className="flex flex-wrap items-center gap-1.5 text-sm font-normal text-slate-400">{createdAtLabel}</div> : null}
+        {scanSourceContext ? <p className="max-w-3xl text-xs leading-5 text-slate-500">{scanSourceContext}</p> : null}
         {actionsPlacement === "belowTitle" ? actions : null}
         {autoRefresh}
       </div>

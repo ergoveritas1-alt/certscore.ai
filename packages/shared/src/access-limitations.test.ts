@@ -18,6 +18,17 @@ test("classifies a cloudflare-like challenge page", () => {
   assert.equal(result.challengeSuspected, true);
 });
 
+test("classifies Kasada WAF challenge markers even behind Cloudflare", () => {
+  const result = classifyBlockedResponse({
+    ...blockPageFixtures.kasada403Challenge
+  });
+
+  assert.equal(result.classification, "vendor_interstitial_probable");
+  assert.equal(result.vendorGuess, "kasada");
+  assert.equal(result.challengeSuspected, true);
+  assert.equal(result.interstitialMarkerPresent, true);
+});
+
 test("classifies an auth wall", () => {
   const result = classifyBlockedResponse({
     ...blockPageFixtures.loginAuthWall

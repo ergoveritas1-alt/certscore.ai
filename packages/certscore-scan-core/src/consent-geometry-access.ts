@@ -36,7 +36,9 @@ const ACCESS_NO_GO_PATTERNS: Array<{ code: string; pattern: RegExp }> = [
   { code: "forbidden_text", pattern: /\b(?:403|forbidden)\b/i },
   { code: "bot_security_check", pattern: /\b(?:additional security check|security verification|security check|security checkpoint|browser verification|verify you are not a bot|checking your browser|human verification|captcha|hcaptcha|i am human|robot or human|press\s*&\s*hold|press and hold|confirm that you'?re human|failed to verify your browser|unable to give you access|detected unusual activity)\b/i },
   { code: "cloudflare_challenge", pattern: /\b(?:cloudflare|ray id|cf-browser-verification)\b/i },
+  { code: "cloudflare_origin_error", pattern: /\b(?:ssl handshake failed|invalid ssl certificate|origin is unreachable|web server is down|connection timed out|cloudflare 52[0-6])\b/i },
   { code: "imperva_challenge", pattern: /\b(?:imperva|incapsula)\b/i },
+  { code: "kasada_challenge", pattern: /\b(?:kasada|x-kpsdk|protected by kasada)\b/i },
   { code: "temporary_interstitial", pattern: /\bzaraz wracamy\b/i },
   { code: "rate_limited", pattern: /\b(?:too many requests|rate limit|request blocked)\b/i },
   { code: "generic_error_page", pattern: /\b(?:something went wrong|service unavailable|temporarily unavailable)\b/i },
@@ -46,10 +48,12 @@ const RATE_LIMIT_OR_SECURITY_PATTERNS = new Set([
   "bot_security_check",
   "cloudflare_challenge",
   "imperva_challenge",
+  "kasada_challenge",
   "rate_limited",
 ]);
 
 const HTTP_ACCESS_NO_GO_STATUSES = new Set([401, 403, 407, 409, 451]);
+const HTTP_BROKEN_ORIGIN_STATUSES = new Set([520, 521, 522, 523, 524, 525, 526, 530]);
 const HTTP_TIMEOUT_STATUSES = new Set([408, 504]);
 const HTTP_RATE_LIMIT_OR_SECURITY_STATUSES = new Set([429, 503]);
 
@@ -224,6 +228,12 @@ function classifyAccessStatus(input: {
     HTTP_TIMEOUT_STATUSES.has(input.httpStatus)
   ) {
     return "timeout";
+  }
+  if (
+    typeof input.httpStatus === "number" &&
+    HTTP_BROKEN_ORIGIN_STATUSES.has(input.httpStatus)
+  ) {
+    return "access_no_go";
   }
   if (
     typeof input.httpStatus === "number" &&

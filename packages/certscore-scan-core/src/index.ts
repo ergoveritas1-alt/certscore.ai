@@ -1188,10 +1188,10 @@ function postConsentFlowRuntimeDisabled(input: {
 }
 
 const SCAN_NO_GO_TEXT_PATTERN =
-  /access to this site has been denied|access denied|access is temporarily restricted|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|detected unusual (?:behaviour|activity)[^.]{0,180}(?:bot|browser|network)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot|\bzaraz wracamy\b/i;
+  /access to this site has been denied|access denied|access is temporarily restricted|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|protected by kasada|x-kpsdk|detected unusual (?:behaviour|activity)[^.]{0,180}(?:bot|browser|network)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot|\bzaraz wracamy\b/i;
 
 const SCAN_NO_GO_SECURITY_CHALLENGE_REQUEST_PATTERN =
-  /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])|\/cdn-cgi\/challenge-platform\/|\/cdn-cgi\/challenge|challenges\.cloudflare\.com|captcha-delivery\.com/i;
+  /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])|\/cdn-cgi\/challenge-platform\/|\/cdn-cgi\/challenge|challenges\.cloudflare\.com|captcha-delivery\.com|x-kpsdk|kasada/i;
 
 const SCAN_NO_GO_NAVIGATION_FAILURE_PATTERN =
   /page\.goto|net::ERR_|ERR_HTTP2_PROTOCOL_ERROR|ERR_QUIC_PROTOCOL_ERROR|navigation timeout|timeout \d+ms exceeded/i;
@@ -1350,14 +1350,16 @@ function detectScanNoGoNetworkChallengeEvidence(input: {
   );
   if (challengeRequest) {
     return {
-      corroboratorCode: /captcha-delivery\.com|datadome/i.test(challengeRequest.url ?? "")
+      corroboratorCode: /kasada|x-kpsdk/i.test(challengeRequest.url ?? "")
+        ? "network_kasada_challenge"
+        : /captcha-delivery\.com|datadome/i.test(challengeRequest.url ?? "")
         ? "network_datadome_challenge"
         : "network_cloudflare_challenge",
       evidenceText: "Network request to a security challenge endpoint was observed.",
     };
   }
 
-  const blockedDatadomeResponse = input.networkResponseEvents.find((event) => {
+  const blockedWafResponse = input.networkResponseEvents.find((event) => {
     if (event.firstParty !== true) {
       return false;
     }
@@ -1376,15 +1378,26 @@ function detectScanNoGoNetworkChallengeEvidence(input: {
       ...cookieNames,
       event.responseHeaders?.contentType ?? "",
     ].join(" ");
-    return /(?:^|\b)datadome(?:\b|$)|captcha-delivery\.com/i.test(evidenceText);
+    return /(?:^|\b)datadome(?:\b|$)|captcha-delivery\.com|kasada|x-kpsdk/i.test(evidenceText);
   });
-  if (!blockedDatadomeResponse) {
+  if (!blockedWafResponse) {
     return null;
   }
 
+  const responseEvidenceText = [
+    blockedWafResponse.url ?? "",
+    blockedWafResponse.responseUrl ?? "",
+    blockedWafResponse.hostname ?? "",
+    ...(blockedWafResponse.cookieNamesSet ?? []),
+    ...(blockedWafResponse.setCookieMetadata ?? []).map((cookie) => cookie.name),
+    blockedWafResponse.responseHeaders?.contentType ?? "",
+  ].join(" ");
+
   return {
-    corroboratorCode: "network_datadome_challenge",
-    evidenceText: `First-party document response returned HTTP ${blockedDatadomeResponse.status} with DataDome challenge evidence.`,
+    corroboratorCode: /kasada|x-kpsdk/i.test(responseEvidenceText)
+      ? "network_kasada_challenge"
+      : "network_datadome_challenge",
+    evidenceText: `First-party document response returned HTTP ${blockedWafResponse.status} with WAF challenge evidence.`,
   };
 }
 

@@ -32,12 +32,28 @@ test("ScanPageHeader places scan source badge above the created timestamp row", 
   );
 
   assert.match(html, /Scan source/);
+  assert.match(html, /Scan executed from Germany \(EU\); regional consent interfaces can differ/);
   assert.doesNotMatch(html, /Scanned from/);
   assert.doesNotMatch(html, />EU</);
   assert.ok(html.indexOf("Limited") < html.indexOf("Scan source: EU"));
   assert.ok(html.indexOf("Scan source: EU") < html.indexOf("Created Jun 4, 2026"));
+  assert.ok(html.indexOf("Created Jun 4, 2026") < html.indexOf("Scan executed from Germany"));
   assert.match(
     html,
     /<\/div><div class="flex flex-wrap items-center gap-1\.5 text-sm font-normal text-slate-400">Created Jun 4, 2026, 8:13 AM PDT \(scan time: 5 sec\)<\/div>/
   );
+});
+
+test("ScanPageHeader shows no regional context for default scan source", () => {
+  const html = renderToStaticMarkup(
+    createElement(ScanPageHeader, {
+      createdAtLabel: "Created Jun 4, 2026, 8:13 AM PDT",
+      scanFromLabel: "Default",
+      scanFromValue: "default",
+      status: "completed",
+      title: "Scan: example.edu"
+    })
+  );
+
+  assert.doesNotMatch(html, /regional consent interfaces can differ/);
 });
