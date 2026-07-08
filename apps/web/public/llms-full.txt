@@ -221,6 +221,8 @@ const scan = await certscore.scans.wait(created);
 console.log(scan.scanId, scan.status);
 ```
 
+For browser-like bot scans, call `certscore.scans.create()` first, store the returned `scanId` and queued/running status, then poll with `certscore.scans.status()` or `certscore.scans.wait()`. Track submit latency, queue time, scanner runtime from `createdAt`/`startedAt`/`completedAt`, and SDK wall time separately. Do not treat the wall time of `certscore.scan()` as scanner runtime; `certscore.scan()` is a blocking Pulse v1 compatibility helper that waits for and fetches the completed Pulse projection.
+
 ## MCP server
 
 Current command: `certscore-mcp`

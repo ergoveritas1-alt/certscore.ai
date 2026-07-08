@@ -24,6 +24,8 @@ const created = await certscore.scans.create("https://example.com", {
   scanFrom: "eu_ie"
 });
 
+console.log("Queued scan:", created.scanId, created.status);
+
 const completed = await certscore.scans.wait(created);
 const findings = await certscore.findings.list(completed.scanId);
 
@@ -31,7 +33,7 @@ console.log(completed.status, findings.findings.length);
 ```
 
 `CertScoreClient` is the canonical class name; `CertScore` is a friendly alias for shorter examples.
-`certscore.scan()` remains available as a Pulse v1 compatibility helper when you want one call to return a concise Pulse projection.
+`certscore.scan()` remains available as a Pulse v1 compatibility helper when you want one call to wait for and return a concise Pulse projection. Bot and dashboard-style integrations should prefer `certscore.scans.create()` so scan submission returns quickly and polling is tracked separately.
 
 ## Authentication and scopes
 
@@ -97,6 +99,79 @@ const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTra
 console.log(status.status, preConsentTable.summary.rowCount, explanation?.title, pulseProjection.disclaimer, pulseEvidence.type, latestDomainScan.scan?.id, latestPreConsentTable.rows.length);
 ```
 
+## Browser-style Bot Workflow
+
+For bots, batch jobs, and dashboards, treat scan submission, scan lifecycle, and result fetching as separate steps. This matches the browser flow: create the scan quickly, persist the durable `scanId`, poll status in the background, then fetch findings and report projections after completion.
+
+```ts
+import { CertScoreClient, type ScanJob } from "@certscore/sdk";
+
+const certscore = new CertScoreClient({
+  apiKey: process.env.CERTSCORE_API_KEY
+});
+
+const timings = {
+  submittedAtMs: Date.now(),
+  submitLatencyMs: 0,
+  queuedSeconds: null as number | null,
+  scannerRuntimeSeconds: null as number | null,
+  sdkWallSeconds: null as number | null
+};
+
+const created = await certscore.scans.create("https://example.com", {
+  freshness: "latest",
+  scanFrom: "eu_ie",
+  metadata: { source: "bot" }
+});
+timings.submitLatencyMs = Date.now() - timings.submittedAtMs;
+
+await saveScanRow({
+  scanId: created.scanId,
+  status: created.status,
+  submitLatencyMs: timings.submitLatencyMs
+});
+
+const completed = await certscore.scans.wait(created, {
+  pollIntervalMs: 5_000,
+  onStatusUpdate(status: ScanJob) {
+    void updateScanRow(status.scanId ?? created.scanId, { status: status.status, phase: status.phase });
+  }
+});
+
+timings.sdkWallSeconds = (Date.now() - timings.submittedAtMs) / 1000;
+timings.queuedSeconds = secondsBetween(completed.createdAt, completed.startedAt);
+timings.scannerRuntimeSeconds = secondsBetween(completed.startedAt, completed.completedAt);
+
+const [findings, preConsentTable, pulse] = await Promise.all([
+  certscore.findings.list(completed.scanId),
+  certscore.scans.preConsentCookiesTrackers(completed.scanId),
+  certscore.pulse.get(completed.scanId)
+]);
+
+await updateScanRow(completed.scanId, {
+  status: completed.status,
+  score: completed.score,
+  findingCount: findings.findings.length,
+  trackerCount: preConsentTable.summary.trackerCount,
+  cookieCount: preConsentTable.summary.cookieCount,
+  requestCount: preConsentTable.summary.requestCount,
+  reportUrl: completed.links?.report ?? pulse.pulse.links?.fullReportUrl,
+  timings
+});
+
+function secondsBetween(start?: string | null, end?: string | null) {
+  if (!start || !end) return null;
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  return Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, (endMs - startMs) / 1000) : null;
+}
+
+declare function saveScanRow(row: Record<string, unknown>): Promise<void>;
+declare function updateScanRow(scanId: string | null | undefined, row: Record<string, unknown>): Promise<void>;
+```
+
+Use `sdkWallSeconds` for bot throughput and timeout tuning. Use `queuedSeconds` and `scannerRuntimeSeconds` for scanner-performance triage. Avoid treating the full `await certscore.scan(...)` duration as scanner runtime.
+
 Available resource clients:
 
 - `certscore.scans.create()`
@@ -135,7 +210,9 @@ Server-side filters are intentionally deferred in the initial version; group or 
 
 ## Async Lifecycle
 
-`scan()` calls `/api/v1/pulse` with `wait=60`. If CertScore returns HTTP 202, the SDK polls the returned `statusUrl` or `nextCheckUrl`. It honors `Retry-After` on pending or throttled responses.
+`scan()` calls `/api/v1/pulse` with `wait=60`. It is a blocking Pulse v1 compatibility helper for simple scripts: if CertScore returns HTTP 202, the SDK polls the returned `statusUrl` or `nextCheckUrl`, then fetches the completed Pulse projection. It honors `Retry-After` on pending or throttled responses.
+
+For production bots that need browser-like behavior or accurate timing metrics, prefer the Browser-style Bot Workflow above instead of measuring the wall time of `scan()`.
 
 ```ts
 import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
@@ -175,17 +252,18 @@ const client = new CertScoreClient({
   apiKey: process.env.CERTSCORE_API_KEY
 });
 
-const pulse = await client.scan("https://example.com");
-const scanId = pulse.scanId;
+const created = await client.scans.create("https://example.com");
+const completed = await client.scans.wait(created);
+const scanId = completed.scanId;
 
 await appDb.pulseScans.upsert({
   domain: "example.com",
   scanId,
-  reportUrl: pulse.links?.fullReportUrl
+  reportUrl: completed.links?.report
 });
 
 // Later:
-const cachedPulse = await client.getScan(scanId!, { detail: "full" });
+const cachedPulse = await client.pulse.get(scanId);
 ```
 
 Use the full report URL for human review:
@@ -285,11 +363,13 @@ import { CertScoreClient } from "@certscore/sdk";
 const client = new CertScoreClient({
   apiKey: process.env.CERTSCORE_API_KEY
 });
-const pulse = await client.scan(process.env.TARGET_URL, {
-  detail: "standard"
+const created = await client.scans.create(process.env.TARGET_URL, {
+  freshness: "latest"
 });
+const completed = await client.scans.wait(created);
+const pulse = await client.pulse.get(completed.scanId);
 
-const criticalFindings = (pulse.topFindings ?? []).filter(
+const criticalFindings = (pulse.pulse.topFindings ?? []).filter(
   (finding) => finding.criticality === "critical"
 );
 

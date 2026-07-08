@@ -43,6 +43,8 @@ const created = await certscore.scans.create("https://example.com", {
   scanFrom: "eu_ie"
 });
 
+console.log("Queued scan:", created.scanId, created.status);
+
 const completed = await certscore.scans.wait(created);
 const findings = await certscore.findings.list(completed.scanId);
 
@@ -53,6 +55,67 @@ console.log({
   report: completed.links?.report
 });
 JS`}</CodeBlock>
+        </Section>
+
+        <Section eyebrow="Bot workflow" title="Track submission separately from scan runtime">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Browser scans create a job quickly and watch progress separately. Bots should use the same resource flow instead of measuring
+            the wall time of the blocking Pulse helper as scanner runtime.
+          </p>
+          <CodeBlock>{`import { CertScoreClient } from "@certscore/sdk";
+
+const certscore = new CertScoreClient({
+  apiKey: process.env.CERTSCORE_API_KEY
+});
+
+const submittedAtMs = Date.now();
+const created = await certscore.scans.create("https://example.com", {
+  freshness: "latest",
+  scanFrom: "eu_ie",
+  metadata: { source: "bot" }
+});
+
+const submitLatencyMs = Date.now() - submittedAtMs;
+await saveScanRow({
+  scanId: created.scanId,
+  status: created.status,
+  submitLatencyMs
+});
+
+const completed = await certscore.scans.wait(created, {
+  pollIntervalMs: 5_000,
+  onStatusUpdate(status) {
+    void updateScanRow(status.scanId ?? created.scanId, {
+      status: status.status,
+      phase: status.phase
+    });
+  }
+});
+
+const timings = {
+  sdkWallSeconds: (Date.now() - submittedAtMs) / 1000,
+  queuedSeconds: secondsBetween(completed.createdAt, completed.startedAt),
+  scannerRuntimeSeconds: secondsBetween(completed.startedAt, completed.completedAt)
+};
+
+const [findings, preConsentTable] = await Promise.all([
+  certscore.findings.list(completed.scanId),
+  certscore.scans.preConsentCookiesTrackers(completed.scanId)
+]);
+
+await updateScanRow(completed.scanId, {
+  status: completed.status,
+  findingCount: findings.findings.length,
+  trackerCount: preConsentTable.summary.trackerCount,
+  cookieCount: preConsentTable.summary.cookieCount,
+  requestCount: preConsentTable.summary.requestCount,
+  timings
+});
+
+function secondsBetween(start, end) {
+  if (!start || !end) return null;
+  return Math.max(0, (Date.parse(end) - Date.parse(start)) / 1000);
+}`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Access" title="API keys and scopes">
@@ -91,12 +154,19 @@ const certscore = new CertScoreClient({
   apiKey: process.env.CERTSCORE_API_KEY
 });
 
+const submittedAtMs = Date.now();
 const created = await certscore.scans.create("https://example.com", {
   freshness: "latest",
-  scanFrom: "eu_ie"
+  scanFrom: "eu_ie",
+  metadata: { source: "sdk-example" }
 });
 
-const completed = await certscore.scans.wait(created);
+const completed = await certscore.scans.wait(created, {
+  pollIntervalMs: 5_000,
+  onStatusUpdate(status) {
+    console.log("scan status", status.scanId ?? created.scanId, status.status, status.phase ?? "");
+  }
+});
 const scanId = completed.scanId;
 
 const status = await certscore.scans.status(scanId);
@@ -104,8 +174,20 @@ const findings = await certscore.findings.list(scanId);
 const preConsentTable = await certscore.scans.preConsentCookiesTrackers(scanId);
 const latest = await certscore.domains.latest("example.com");
 const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
+const timings = {
+  sdkWallSeconds: Math.round((Date.now() - submittedAtMs) / 100) / 10,
+  queuedSeconds: secondsBetween(completed.createdAt, completed.startedAt),
+  scannerRuntimeSeconds: secondsBetween(completed.startedAt, completed.completedAt)
+};
 
-console.log(status.status, findings.findings.length, preConsentTable.summary.rowCount, latest.scan?.scanId, latestPreConsentTable.summary.rowCount);`}</CodeBlock>
+console.log(status.status, findings.findings.length, preConsentTable.summary.rowCount, latest.scan?.scanId, latestPreConsentTable.summary.rowCount, timings);
+
+function secondsBetween(start?: string | null, end?: string | null) {
+  if (!start || !end) return null;
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  return Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, Math.round((endMs - startMs) / 100) / 10) : null;
+}`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Smoke test" title="Check your SDK setup without creating a scan">

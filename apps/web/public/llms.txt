@@ -164,6 +164,7 @@ API key setup:
 - TypeScript SDK install: `npm install @certscore/sdk`.
 - SDK short import: `import { CertScore } from "@certscore/sdk"`.
 - SDK setup check: `CERTSCORE_API_KEY=... npx -y @certscore/sdk@latest certscore-sdk-doctor`.
+- Browser-like SDK bot scans should use `certscore.scans.create()` first, store `scanId`, poll status separately, and track submit latency, queue time, scanner runtime, and SDK wall time as separate metrics. Do not treat the wall time of `certscore.scan()` as scanner runtime.
 
 ## Important interpretation rules
 

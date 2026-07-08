@@ -100,6 +100,12 @@ test("README documents current SDK resource clients", () => {
   }
 
   assert.match(readme, /resource-oriented API v2 clients/i);
+  assert.match(readme, /Browser-style Bot Workflow/i);
+  assert.match(readme, /submitLatencyMs/i);
+  assert.match(readme, /queuedSeconds/i);
+  assert.match(readme, /scannerRuntimeSeconds/i);
+  assert.match(readme, /sdkWallSeconds/i);
+  assert.match(readme, /Avoid treating the full `await certscore\.scan\(\.\.\.\)` duration as scanner runtime/i);
   assert.match(readme, /automated public-web observations for review/i);
   assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
 });
@@ -471,6 +477,7 @@ test("scans.create uses API v2 scan creation", async () => {
     assert.equal(pending.type, "certscore_scan_job");
     assert.equal(pending.status, "queued");
     assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
+    assert.doesNotMatch(mock.calls[0] ?? "", /\/api\/v1\/pulse|wait=60/);
     assert.equal(mock.callDetails[0]?.method, "POST");
     assert.deepEqual(JSON.parse(String(mock.callDetails[0]?.body)), {
       freshness: "refresh",

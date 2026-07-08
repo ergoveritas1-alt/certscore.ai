@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## Unreleased
+
+- Documented the browser-style async bot workflow with separate submit latency, queue time, scanner runtime, and SDK wall-time measurements.
+- Updated the canonical resource workflow example to use API v2 scan creation, background polling, and lifecycle timing instead of treating a blocking Pulse call as scanner runtime.
+
 ## 0.2.2
 
 - Added `CertScore` as a friendly alias for `CertScoreClient`.
