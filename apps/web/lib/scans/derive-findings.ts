@@ -237,7 +237,7 @@ function isSameSiteHostAlias(left: string | null, right: string | null) {
 }
 
 function looksLikeAdtechHost(host: string) {
-  return /(adnxs|appnexus|infolinks|rtmark|media\.net|doubleclick|taboola|outbrain|criteo|pubmatic|rubicon|adsrvr|google-analytics|googletagmanager|plausible|cloudflareinsights|casalemedia|gumgum|3lift|bidswitch|id5-sync|openx|tapad|mathtag|scorecardresearch|quantserve|crwdcntrl)/i.test(
+  return /(adnxs|appnexus|infolinks|rtmark|media\.net|doubleclick|taboola|outbrain|criteo|pubmatic|rubicon|adsrvr|google-analytics|googletagmanager|hm\.baidu|plausible|cloudflareinsights|casalemedia|gumgum|3lift|bidswitch|id5-sync|openx|tapad|mathtag|scorecardresearch|quantserve|crwdcntrl)/i.test(
     host
   );
 }

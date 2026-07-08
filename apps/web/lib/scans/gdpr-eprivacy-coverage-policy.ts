@@ -811,6 +811,23 @@ function hasSimpleFirstLayerCookieNoticeWithAcceptReject(input: GdprEprivacyCove
   );
 }
 
+function hasContextualFirstLayerConsentChoiceEvidence(evidence: ReturnType<typeof getFirstLayerConsentChoiceEvidence>) {
+  const contextText = evidence.surfaceText.join(" ");
+  return evidence.visibleChoiceLabels.some((label) => {
+    const classification = classifyConsentControlLabel({
+      label,
+      contextText,
+      hasConsentContext: evidence.cookieNoticeTextObserved,
+      hasPreferenceContext: evidence.cookieNoticeTextObserved
+    });
+    return (
+      classification.contextSatisfied &&
+      classification.intent !== "unknown" &&
+      classification.intent !== "privacy_opt_out"
+    );
+  });
+}
+
 function getStructuredFirstLayerChoiceControls(firstLayerChoices: Record<string, unknown> | null | undefined) {
   return getObjectArray(firstLayerChoices, ["controls"]).filter((control) =>
     getBoolean(control, ["visible"]) !== false
@@ -1379,13 +1396,20 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     getBoolean(input.runtimeArtifacts, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
     getBoolean(hybridRuntimeEvidence, ["consentSurfaceObserved", "consent_surface_observed"]) === true ||
     getBoolean(input.snapshot, ["cookie_banner_present", "cookieBannerPresent", "consent_surface_observed", "consentSurfaceObserved"]) === true;
+  const retainedContextualFirstLayerConsentChoiceEvidence =
+    hasContextualFirstLayerConsentChoiceEvidence(simpleCookieNoticeEvidence);
   const consentSurfaceObserved =
     (!privacyChoiceSurfaceOnly || simpleCookieNoticeWithChoice || retainedInitialCookieConsentLayerEvidence) &&
     (
       simpleCookieNoticeWithChoice ||
       retainedInitialCookieConsentLayerEvidence ||
-      getBoolean(firstLayerConsentChoices, ["capturedBeforeInteraction", "captured_before_interaction"]) === true ||
-      (visibleChoiceLabels.length > 0 && layerInspected === "first_layer")
+      (
+        retainedContextualFirstLayerConsentChoiceEvidence &&
+        (
+          getBoolean(firstLayerConsentChoices, ["capturedBeforeInteraction", "captured_before_interaction"]) === true ||
+          layerInspected === "first_layer"
+        )
+      )
     );
 
   if (noticeGateEvidence.gateObserved) {

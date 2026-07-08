@@ -2035,6 +2035,62 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not observe broad consent su
   );
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat generic first-layer labels as consent surface evidence", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          phase: "hybrid_auto_local_evidence",
+          status: "ok"
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      consentSurfaceObserved: true,
+      hybridRuntimeEvidence: {
+        consentSummary: {
+          bannerPresent: true,
+          textSnippet: "jquery.cookie.js navigation utilities loaded."
+        },
+        consentUiPathEvidence: {
+          layerInspected: "first_layer"
+        },
+        firstLayerConsentChoices: {
+          capturedBeforeInteraction: true,
+          layerInspected: "first_layer",
+          visibleChoiceLabels: ["Start reading", "Latest updates"]
+        }
+      },
+      rejectPathDepthAndAvailability: {
+        firstLayerConsentChoices: {
+          capturedBeforeInteraction: true,
+          layerInspected: "first_layer",
+          visibleChoiceLabels: ["Start reading", "Latest updates"]
+        },
+        gdprEprivacyConsentSurfaceObserved: "unconfirmed",
+        layerInspected: "first_layer"
+      }
+    },
+    snapshot: {
+      cookie_banner_present: true,
+      pages_scanned: 1
+    }
+  });
+
+  assert.equal(outcomes.consent_surface_observed?.status, "Not confirmed");
+  assert.match(outcomes.consent_surface_observed?.limitation ?? "", /did not retain an actionable first-layer GDPR\/ePrivacy cookie banner/i);
+  assert.equal(
+    outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.gdprEprivacyConsentSurfaceObserved,
+    "unconfirmed"
+  );
+  assert.deepEqual(
+    outcomes.consent_surface_observed?.criticalEvidence.retainedEvidence.visibleChoiceLabels,
+    ["Start reading", "Latest updates"]
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes confirms simple cookie notices despite stale unknown-purpose demotion", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

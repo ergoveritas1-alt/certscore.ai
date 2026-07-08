@@ -58,6 +58,32 @@ test("projects Fable CDN hosts from top observed entities through the canonical 
   assert.equal(byVendor.get("jQuery CDN")?.priority, "contextual");
 });
 
+test("projects Baidu and Cloudflare analytics hosts from top observed entities", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: ["hm.baidu.com", "static.cloudflareinsights.com"],
+    firstPartyDomain: "mangatown.com",
+    preConsentVendors: ["hm.baidu.com", "static.cloudflareinsights.com"],
+    resolvedVendors: [],
+    sessionReplayVendors: [],
+    trackerVendors: [],
+    topObservedEntities: [
+      { category: "unknown", label: "hm.baidu.com", requestCount: 2 },
+      { category: "unknown", label: "static.cloudflareinsights.com", requestCount: 1 },
+    ],
+    unresolvedHosts: [],
+  });
+
+  const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
+  const byVendor = new Map(groupedRows.map((row) => [row.vendor, row]));
+
+  assert.equal(byVendor.get("Baidu Analytics")?.purpose, "Audience measurement");
+  assert.equal(byVendor.get("Baidu Analytics")?.priority, "high");
+  assert.equal(byVendor.get("Baidu Analytics")?.party, "3rd");
+  assert.equal(byVendor.get("Cloudflare Web Analytics")?.purpose, "Analytics");
+  assert.equal(byVendor.get("Cloudflare Web Analytics")?.priority, "medium");
+  assert.equal(byVendor.get("Cloudflare Web Analytics")?.party, "3rd");
+});
+
 test("keeps first-party Akamai security tracker inventory contextual", () => {
   const rows = buildTrackerInventoryRows({
     domains: [],

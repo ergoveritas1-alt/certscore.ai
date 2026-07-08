@@ -60,6 +60,39 @@ test("resolves Google Analytics from collection endpoint and cookie", () => {
   );
 });
 
+test("resolves Baidu Analytics and Cloudflare Web Analytics beacon endpoints", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      url: "https://hm.baidu.com/hm.js?59317e5849f38e9ec82d03f6fb1a84d7",
+      hostname: "hm.baidu.com",
+    },
+    {
+      type: "script",
+      url: "https://hm.baidu.com/hm.js?40da850f11b3ae73db643f7a577c2c60",
+      hostname: "hm.baidu.com",
+    },
+    {
+      type: "script",
+      url: "https://static.cloudflareinsights.com/beacon.min.js",
+      hostname: "static.cloudflareinsights.com",
+    },
+  ]);
+
+  assertResolved(observations, "Baidu", "Baidu Analytics", "analytics");
+  assertResolved(observations, "Cloudflare", "Cloudflare Web Analytics", "analytics");
+
+  const baidu = observations.find((item) => item.product === "Baidu Analytics");
+  assert.ok(baidu);
+  assert.equal(baidu.regulatoryRelevance.includes("audience_measurement"), true);
+  assert.deepEqual(baidu.matchedHostnames, ["hm.baidu.com"]);
+
+  const cloudflareAnalytics = observations.find((item) => item.product === "Cloudflare Web Analytics");
+  assert.ok(cloudflareAnalytics);
+  assert.equal(cloudflareAnalytics.regulatoryRelevance.includes("performance_monitoring"), true);
+  assert.equal(resolveVendorDisplayCategory(cloudflareAnalytics), "Analytics");
+});
+
 test("resolves non-essential vendors from bounded storage keys", () => {
   const observations = resolveVendorObservations([
     {
