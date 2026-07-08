@@ -98,7 +98,9 @@ test("restricted scan users keep explicit Lambda preference", () => {
   );
 });
 
-test("only restricted users can select regional artifact-only scan locations", () => {
-  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "eu_de" }), "default");
+test("all users can select regional scan locations", () => {
+  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "eu_de" }), "eu_de");
+  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "eu_ie" }), "eu_ie");
+  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "california" }), "california");
   assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: true, scanFrom: "eu_de" }), "eu_de");
 });

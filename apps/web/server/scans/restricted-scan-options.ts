@@ -1,6 +1,6 @@
 import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { parsePlatformAdminEmails } from "../admin/platform-admin-core";
-import { shouldUseLocalhostFullScanQueue, type LocalV2DagScanEnv } from "./local-v2-dag-scan-config";
+import type { LocalV2DagScanEnv } from "./local-v2-dag-scan-config";
 
 function isPlatformAdminEmail(email: string | null | undefined) {
   return email ? parsePlatformAdminEmails(process.env.CERTSCORE_ADMIN_EMAILS).has(email.toLowerCase()) : false;
@@ -17,10 +17,7 @@ export function restrictScanFromForUser(input: {
   canUseRestrictedScanOptions: boolean;
   scanFrom: unknown;
 }): ScanFrom {
-  if (!input.canUseRestrictedScanOptions) {
-    return "default";
-  }
-
+  void input.canUseRestrictedScanOptions;
   return normalizeScanFrom(input.scanFrom);
 }
 

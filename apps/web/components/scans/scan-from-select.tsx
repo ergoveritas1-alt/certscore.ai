@@ -13,9 +13,9 @@ export const SCAN_FROM_OPTIONS = [
     value: "default"
   },
   {
-    description: "Internal EU-DE diagnostic scanner. Artifact-only; does not produce a customer report.",
+    description: "Run from CertScore's Frankfurt Lambda scanner.",
     flag: "🇩🇪",
-    label: "EU-DE diagnostic",
+    label: "EU-DE",
     value: "eu_de"
   },
   {
@@ -110,9 +110,6 @@ export function ScanFromSelect({
   const menuRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const options = SCAN_FROM_OPTIONS.filter((option) => {
-    if (!allowRestrictedScanOptions && option.value !== "default" && option.value !== "local_extension") {
-      return false;
-    }
     if (!includeLocalExtension && option.value === "local_extension") {
       return false;
     }
