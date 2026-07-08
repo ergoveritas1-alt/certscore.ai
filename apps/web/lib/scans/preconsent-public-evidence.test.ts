@@ -12,6 +12,13 @@ function row(input: {
   vendorName: string;
   vendorCategory?: string;
   firstSeenMs?: number;
+  frameUrl?: string;
+  finalUrl?: string;
+  initiatorHost?: string;
+  initiatorType?: string;
+  initiatorUrl?: string;
+  redirectChain?: string[];
+  resourceType?: string;
 }) {
   return {
     requestUrl: input.url,
@@ -22,7 +29,14 @@ function row(input: {
     runtimePhase: "pre_consent",
     confidence: 0.95,
     firstSeenMs: input.firstSeenMs ?? 10,
-    firstPartyOrThirdParty: "third_party"
+    firstPartyOrThirdParty: "third_party",
+    ...(input.frameUrl ? { frameUrl: input.frameUrl } : {}),
+    ...(input.finalUrl ? { finalUrl: input.finalUrl } : {}),
+    ...(input.initiatorHost ? { initiatorHost: input.initiatorHost } : {}),
+    ...(input.initiatorType ? { initiatorType: input.initiatorType } : {}),
+    ...(input.initiatorUrl ? { initiatorUrl: input.initiatorUrl } : {}),
+    ...(input.redirectChain ? { redirectChain: input.redirectChain } : {}),
+    ...(input.resourceType ? { resourceType: input.resourceType } : {})
   };
 }
 
@@ -31,9 +45,16 @@ test("uses canonical endpoint attribution for retained pre-consent example reque
     rows: [
       row({
         hostname: "cdn.privacy-mgmt.com",
-        url: "https://cdn.privacy-mgmt.com/wrapperMessagingWithoutDetection.js",
+        url: "https://cdn.privacy-mgmt.com/wrapperMessagingWithoutDetection.js?token=secret",
         vendorName: "Amazon Ads",
-        firstSeenMs: 1
+        firstSeenMs: 1,
+        frameUrl: "https://cmp.example/frame.html?session=secret",
+        finalUrl: "https://cdn.privacy-mgmt.com/wrapperMessagingWithoutDetection.js?token=secret",
+        initiatorHost: "example.com",
+        initiatorType: "script",
+        initiatorUrl: "https://example.com/app.js?debug=secret",
+        redirectChain: ["https://privacy-mgmt.example/redirect?token=secret"],
+        resourceType: "script"
       }),
       row({
         hostname: "images.ctfassets.net",
@@ -130,15 +151,58 @@ test("uses canonical endpoint attribution for retained pre-consent example reque
         url: "https://fonts.googleapis.com/css2?family=Roboto",
         vendorName: "Google Analytics",
         firstSeenMs: 17
+      }),
+      row({
+        hostname: "www.google.com",
+        url: "https://www.google.com/recaptcha/api.js?render=site-key",
+        vendorName: "Google Fonts",
+        firstSeenMs: 18
+      }),
+      row({
+        hostname: "static.tildacdn.com",
+        url: "https://static.tildacdn.com/css/tilda-grid-3.0.min.css",
+        vendorName: "jsDelivr CDN",
+        firstSeenMs: 19
+      }),
+      row({
+        hostname: "events.framer.com",
+        url: "https://events.framer.com/script",
+        vendorName: "Google Fonts",
+        firstSeenMs: 20
+      }),
+      row({
+        hostname: "consent.trustarc.com",
+        url: "https://consent.trustarc.com/notice?domain=example.com",
+        vendorName: "Google Tag Manager",
+        firstSeenMs: 21
+      }),
+      row({
+        hostname: "images.ctfassets.net",
+        url: "https://images.ctfassets.net/site/another-image.png",
+        vendorName: "Google Tag Manager",
+        firstSeenMs: 22
       })
     ],
-    maxItems: 17
+    maxItems: 22
   });
 
   assert.equal(requests[0]?.vendorName, "Sourcepoint CMP");
   assert.equal(requests[0]?.vendorCategory, "cmp");
+  assert.equal(requests[0]?.rawObservedVendor, "Amazon Ads");
+  assert.equal(requests[0]?.rawObservedVendorCategory, "advertising");
+  assert.equal(requests[0]?.resolvedEndpointVendor, "Sourcepoint CMP");
+  assert.equal(requests[0]?.resolvedEndpointVendorCategory, "cmp");
+  assert.equal(requests[0]?.requestUrl, "https://cdn.privacy-mgmt.com/wrapperMessagingWithoutDetection.js?redacted=1");
+  assert.equal(requests[0]?.frameUrl, "https://cmp.example/frame.html?redacted=1");
+  assert.equal(requests[0]?.finalUrl, "https://cdn.privacy-mgmt.com/wrapperMessagingWithoutDetection.js?redacted=1");
+  assert.equal(requests[0]?.initiatorHost, "example.com");
+  assert.equal(requests[0]?.initiatorType, "script");
+  assert.equal(requests[0]?.initiatorUrl, "https://example.com/app.js?redacted=1");
+  assert.deepEqual(requests[0]?.redirectChain, ["https://privacy-mgmt.example/redirect?redacted=1"]);
+  assert.equal(requests[0]?.resourceType, "script");
   assert.equal(requests[0]?.relatedOrInitiatingVendor, "Amazon Ads");
   assert.match(requests[0]?.vendorAttributionBasis ?? "", /canonical_vendor_resolver/);
+  assert.deepEqual(requests[0]?.projectionWarnings, ["canonical_endpoint_vendor_replaced_raw_vendor"]);
 
   assert.equal(requests[1]?.vendorName, "Contentful Assets");
   assert.equal(requests[1]?.vendorCategory, "infrastructure");
@@ -203,6 +267,31 @@ test("uses canonical endpoint attribution for retained pre-consent example reque
   assert.equal(requests[16]?.vendorName, "Google Fonts");
   assert.equal(requests[16]?.vendorCategory, "infrastructure");
   assert.equal(requests[16]?.relatedOrInitiatingVendor, "Google Analytics");
+
+  assert.equal(requests[17]?.vendorName, "Google reCAPTCHA");
+  assert.equal(requests[17]?.vendorCategory, "security");
+  assert.equal(requests[17]?.requestUrl, "https://www.google.com/recaptcha/api.js?redacted=1");
+  assert.equal(requests[17]?.relatedOrInitiatingVendor, "Google Fonts");
+
+  assert.equal(requests[18]?.vendorName, "Tilda CDN");
+  assert.equal(requests[18]?.vendorCategory, "infrastructure");
+  assert.equal(requests[18]?.relatedOrInitiatingVendor, "jsDelivr CDN");
+
+  assert.equal(requests[19]?.vendorName, "Framer Analytics");
+  assert.equal(requests[19]?.vendorCategory, "analytics");
+  assert.equal(requests[19]?.relatedOrInitiatingVendor, "Google Fonts");
+
+  assert.equal(requests[20]?.vendorName, "TrustArc CMP");
+  assert.equal(requests[20]?.vendorCategory, "cmp");
+  assert.equal(requests[20]?.relatedOrInitiatingVendor, "Google Tag Manager");
+
+  assert.equal(requests[21]?.vendorName, "Contentful Assets");
+  assert.equal(requests[21]?.vendorCategory, "infrastructure");
+  assert.equal(requests[21]?.relatedOrInitiatingVendor, "Google Tag Manager");
+  assert.deepEqual(
+    requests.filter((request) => request.hostname === "images.ctfassets.net").map((request) => request.vendorName),
+    ["Contentful Assets", "Contentful Assets"]
+  );
 });
 
 test("resolves Batch 3 through 6 endpoint hosts through the canonical vendor resolver", () => {
@@ -327,6 +416,22 @@ test("resolves Batch 3 through 6 endpoint hosts through the canonical vendor res
     }
   );
   assert.deepEqual(
+    inferDirectEndpointVendorFromUrl("https://events.framer.com/script"),
+    {
+      vendorName: "Framer Analytics",
+      vendorCategory: "analytics",
+      basis: "canonical_vendor_resolver"
+    }
+  );
+  assert.deepEqual(
+    inferDirectEndpointVendorFromUrl("https://consent.trustarc.com/notice?domain=example.com"),
+    {
+      vendorName: "TrustArc CMP",
+      vendorCategory: "cmp",
+      basis: "canonical_vendor_resolver"
+    }
+  );
+  assert.deepEqual(
     inferDirectEndpointVendorFromUrl("https://dpm.demdex.net/id?d_orgid=example"),
     {
       vendorName: "Adobe Audience Manager / Experience Cloud",
@@ -334,6 +439,117 @@ test("resolves Batch 3 through 6 endpoint hosts through the canonical vendor res
       basis: "canonical_vendor_resolver"
     }
   );
+  assert.deepEqual(
+    inferDirectEndpointVendorFromUrl("https://www.google.com/recaptcha/api.js?render=site-key"),
+    {
+      vendorName: "Google reCAPTCHA",
+      vendorCategory: "security",
+      basis: "canonical_vendor_resolver"
+    }
+  );
+  assert.deepEqual(
+    inferDirectEndpointVendorFromUrl("https://static.tildacdn.com/css/tilda-grid-3.0.min.css"),
+    {
+      vendorName: "Tilda CDN",
+      vendorCategory: "infrastructure",
+      basis: "canonical_vendor_resolver"
+    }
+  );
+});
+
+test("suppresses borrowed host-bound vendor labels on unresolved endpoint hosts", () => {
+  const requests = buildPromotionGradePreconsentRequests({
+    rows: [
+      row({
+        hostname: "newcreatework.monster",
+        url: "https://newcreatework.monster/pjs/YIFOL5Ph.js",
+        vendorName: "jsDelivr CDN",
+        vendorCategory: "tracking",
+        firstSeenMs: 1
+      }),
+      row({
+        hostname: "adxserve.com",
+        url: "https://www.adxserve.com/adx/www/delivery/afr.php?zoneid=104",
+        vendorName: "Google Fonts",
+        vendorCategory: "advertising",
+        firstSeenMs: 2
+      }),
+      row({
+        hostname: "cdn.jsdelivr.net",
+        url: "https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css",
+        vendorName: "HubSpot Scripts",
+        vendorCategory: "tracking",
+        firstSeenMs: 3
+      }),
+      row({
+        hostname: "http2.mlstatic.com",
+        url: "https://http2.mlstatic.com/storage/example.js",
+        vendorName: "Hotjar",
+        vendorCategory: "session_replay",
+        firstSeenMs: 4
+      }),
+      row({
+        hostname: "http2.mlstatic.com",
+        url: "https://http2.mlstatic.com/storage/signin.js",
+        vendorName: "Google Sign-in",
+        vendorCategory: "tracking",
+        firstSeenMs: 5
+      }),
+      row({
+        hostname: "assets.example.test",
+        url: "https://assets.example.test/vendor/react.js",
+        vendorName: "unpkg CDN",
+        vendorCategory: "tracking",
+        firstSeenMs: 6
+      }),
+      row({
+        hostname: "securepubads.g.doubleclick.net",
+        url: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+        vendorName: "Google Publisher Tag",
+        vendorCategory: "advertising",
+        firstSeenMs: 7
+      })
+    ],
+    maxItems: 7
+  });
+
+  assert.equal(requests[0]?.vendorName, "newcreatework.monster");
+  assert.equal(requests[0]?.vendorCategory, "unknown");
+  assert.equal(requests[0]?.rawObservedVendor, "jsDelivr CDN");
+  assert.equal(requests[0]?.resolvedEndpointVendor, null);
+  assert.equal(requests[0]?.relatedOrInitiatingVendor, "jsDelivr CDN");
+  assert.match(requests[0]?.vendorAttributionBasis ?? "", /borrowed_host_bound_vendor_suppressed/);
+  assert.deepEqual(requests[0]?.projectionWarnings, ["borrowed_host_bound_vendor_suppressed"]);
+
+  assert.equal(requests[1]?.vendorName, "adxserve.com");
+  assert.equal(requests[1]?.vendorCategory, "unknown");
+  assert.equal(requests[1]?.requestUrl, "https://www.adxserve.com/adx/www/delivery/afr.php?redacted=1");
+  assert.equal(requests[1]?.relatedOrInitiatingVendor, "Google Fonts");
+  assert.match(requests[1]?.vendorAttributionBasis ?? "", /borrowed_host_bound_vendor_suppressed/);
+
+  assert.equal(requests[2]?.vendorName, "jsDelivr CDN");
+  assert.equal(requests[2]?.vendorCategory, "infrastructure");
+  assert.equal(requests[2]?.relatedOrInitiatingVendor, "HubSpot Scripts");
+  assert.match(requests[2]?.vendorAttributionBasis ?? "", /canonical_vendor_resolver/);
+
+  assert.equal(requests[3]?.vendorName, "http2.mlstatic.com");
+  assert.equal(requests[3]?.vendorCategory, "unknown");
+  assert.equal(requests[3]?.relatedOrInitiatingVendor, "Hotjar");
+  assert.match(requests[3]?.vendorAttributionBasis ?? "", /borrowed_host_bound_vendor_suppressed/);
+
+  assert.equal(requests[4]?.vendorName, "http2.mlstatic.com");
+  assert.equal(requests[4]?.vendorCategory, "unknown");
+  assert.equal(requests[4]?.relatedOrInitiatingVendor, "Google Sign-in");
+  assert.match(requests[4]?.vendorAttributionBasis ?? "", /borrowed_host_bound_vendor_suppressed/);
+
+  assert.equal(requests[5]?.vendorName, "assets.example.test");
+  assert.equal(requests[5]?.vendorCategory, "unknown");
+  assert.equal(requests[5]?.relatedOrInitiatingVendor, "unpkg CDN");
+  assert.match(requests[5]?.vendorAttributionBasis ?? "", /borrowed_host_bound_vendor_suppressed/);
+
+  assert.equal(requests[6]?.vendorName, "Google Publisher Tag");
+  assert.equal(requests[6]?.vendorCategory, "advertising");
+  assert.equal(requests[6]?.relatedOrInitiatingVendor, null);
 });
 
 test("executive evidence projection does not borrow request vendors by list position", () => {

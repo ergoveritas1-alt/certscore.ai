@@ -126,6 +126,22 @@ export interface EvidenceEventSummary {
   registrableDomain?: string | null;
   observedAtMs?: number | null;
   phase?: string | null;
+  requestUrl?: string | null;
+  rawObservedVendor?: string | null;
+  rawObservedVendorCategory?: string | null;
+  resolvedEndpointVendor?: string | null;
+  resolvedEndpointVendorCategory?: string | null;
+  vendorAttributionBasis?: string | null;
+  relatedOrInitiatingVendor?: string | null;
+  resourceType?: string | null;
+  scannedPageUrl?: string | null;
+  frameUrl?: string | null;
+  finalUrl?: string | null;
+  initiatorHost?: string | null;
+  initiatorType?: string | null;
+  initiatorUrl?: string | null;
+  redirectChain?: string[];
+  projectionWarnings?: string[];
 }
 
 export interface EvidenceSummary {
@@ -137,8 +153,11 @@ export interface EvidenceSummary {
   examplesAvailable?: number;
   authRequiredForExamples?: boolean;
   examples?: EvidenceEventSummary[];
+  projectionWarnings?: string[];
   hasTimingAnchor?: boolean;
   hasVendorAnchor?: boolean;
+  hasConsentContext?: boolean;
+  hasPolicyAnchor?: boolean;
 }
 
 export interface FindingSummary {

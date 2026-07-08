@@ -348,10 +348,26 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
           exampleEvents: [
             {
               type: "request",
-              vendor: "Example Analytics",
+              vendor: "Sourcepoint CMP",
               urlHost: "analytics.example.test",
               registrableDomain: "example.test",
               timestampMs: 123,
+              requestUrl: "https://analytics.example.test/collect?email=person@example.com&token=secret",
+              rawObservedVendor: "Amazon Ads",
+              rawObservedVendorCategory: "advertising",
+              resolvedEndpointVendor: "Sourcepoint CMP",
+              resolvedEndpointVendorCategory: "cmp",
+              vendorAttributionBasis: "canonical_endpoint",
+              relatedOrInitiatingVendor: "Amazon Ads",
+              scannedPageUrl: "https://example.com/?session=secret",
+              frameUrl: "https://frame.example.test/embed?uid=secret",
+              finalUrl: "https://analytics.example.test/final?uid=secret",
+              initiatorHost: "www.example.com",
+              initiatorType: "script",
+              initiatorUrl: "https://www.example.com/app.js?build=secret",
+              redirectChain: ["https://analytics.example.test/start?uid=secret"],
+              resourceType: "script",
+              projectionWarnings: ["canonical_endpoint_vendor_replaced_raw_vendor"],
               rawRequestBody: "must not be copied"
             },
             { type: "request", urlHost: "cdn.example.test" },
@@ -370,7 +386,8 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
           authRequiredForExamples: false,
           hasTimingAnchor: true,
           hasVendorAnchor: true,
-          hasConsentContext: true
+          hasConsentContext: true,
+          projectionWarnings: ["canonical_endpoint_vendor_replaced_raw_vendor"]
         },
         reviewLenses: ["GDPR / ePrivacy", "FTC"],
         nextStep: "Review retained evidence."
@@ -390,6 +407,22 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
   assert.equal(finding?.evidence.examplesAvailable, 6);
   assert.equal(finding?.evidence.authRequiredForExamples, false);
   assert.equal(finding?.evidence.examples?.[0]?.observedAtMs, 123);
+  assert.equal(finding?.evidence.examples?.[0]?.vendor, "Sourcepoint CMP");
+  assert.equal(finding?.evidence.examples?.[0]?.requestUrl, "https://analytics.example.test/collect?redacted=1");
+  assert.equal(finding?.evidence.examples?.[0]?.rawObservedVendor, "Amazon Ads");
+  assert.equal(finding?.evidence.examples?.[0]?.resolvedEndpointVendor, "Sourcepoint CMP");
+  assert.equal(finding?.evidence.examples?.[0]?.vendorAttributionBasis, "canonical_endpoint");
+  assert.equal(finding?.evidence.examples?.[0]?.relatedOrInitiatingVendor, "Amazon Ads");
+  assert.equal(finding?.evidence.examples?.[0]?.scannedPageUrl, "https://example.com/?redacted=1");
+  assert.equal(finding?.evidence.examples?.[0]?.frameUrl, "https://frame.example.test/embed?redacted=1");
+  assert.equal(finding?.evidence.examples?.[0]?.finalUrl, "https://analytics.example.test/final?redacted=1");
+  assert.equal(finding?.evidence.examples?.[0]?.initiatorHost, "www.example.com");
+  assert.equal(finding?.evidence.examples?.[0]?.initiatorType, "script");
+  assert.equal(finding?.evidence.examples?.[0]?.initiatorUrl, "https://www.example.com/app.js?redacted=1");
+  assert.deepEqual(finding?.evidence.examples?.[0]?.redirectChain, ["https://analytics.example.test/start?redacted=1"]);
+  assert.equal(finding?.evidence.examples?.[0]?.resourceType, "script");
+  assert.deepEqual(finding?.evidence.examples?.[0]?.projectionWarnings, ["canonical_endpoint_vendor_replaced_raw_vendor"]);
+  assert.deepEqual(finding?.evidence.projectionWarnings, ["canonical_endpoint_vendor_replaced_raw_vendor"]);
   assert.equal("rawRequestBody" in (finding?.evidence.examples?.[0] ?? {}), false);
   assert.equal(finding?.links?.self, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings/pre_consent_tracking_detected");
 });

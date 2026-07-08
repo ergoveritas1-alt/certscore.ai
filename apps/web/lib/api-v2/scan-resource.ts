@@ -37,6 +37,7 @@ type PulseFindingLike = {
     summary?: string;
     observedPhase?: string | null;
     exampleEvents?: Array<Record<string, unknown>>;
+    projectionWarnings?: string[];
   };
   evidenceDigest?: {
     basis?: string;
@@ -49,6 +50,7 @@ type PulseFindingLike = {
     hasVendorAnchor?: boolean;
     hasConsentContext?: boolean;
     hasPolicyAnchor?: boolean;
+    projectionWarnings?: string[];
   };
   reviewLenses?: string[];
   nextStep?: string;
@@ -149,6 +151,54 @@ function stringOrNull(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
+function boundedStringOrNull(value: unknown, maxLength = 2048) {
+  const stringValue = stringOrNull(value);
+  if (!stringValue) {
+    return null;
+  }
+  return stringValue.length > maxLength ? stringValue.slice(0, maxLength) : stringValue;
+}
+
+function boundedStrings(value: unknown, limit: number, maxLength = 120) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const output: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const stringValue = boundedStringOrNull(item, maxLength);
+    if (!stringValue || seen.has(stringValue)) {
+      continue;
+    }
+    seen.add(stringValue);
+    output.push(stringValue);
+    if (output.length >= limit) {
+      break;
+    }
+  }
+  return output;
+}
+
+function safeApiUrl(value: unknown) {
+  const url = stringOrNull(value);
+  if (!url) {
+    return null;
+  }
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    if (parsed.search) {
+      parsed.search = "?redacted=1";
+    }
+    parsed.hash = "";
+    return boundedStringOrNull(parsed.toString(), 2048);
+  } catch {
+    return null;
+  }
+}
+
 function dateStringOrNull(value: unknown) {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value.toISOString();
@@ -188,16 +238,33 @@ function eventVendor(event: Record<string, unknown>) {
 
 function buildApiV2EvidenceExamples(finding: PulseFindingLike) {
   const events = Array.isArray(finding.evidence?.exampleEvents) ? finding.evidence.exampleEvents : [];
-  return events.slice(0, 5).map((event) =>
-    apiV2EvidenceEventSummarySchema.parse({
+  return events.slice(0, 5).map((event) => {
+    const redirectChain = boundedStrings(event.redirectChain, 10, 2048).map((url) => safeApiUrl(url)).filter((url): url is string => url !== null);
+    return apiV2EvidenceEventSummarySchema.parse({
       type: normalizeEvidenceEventType(event.type),
       vendor: eventVendor(event),
       urlHost: stringOrNull(event.urlHost),
       registrableDomain: stringOrNull(event.registrableDomain),
       observedAtMs: eventObservedAtMs(event),
-      phase: stringOrNull(event.phase ?? finding.evidenceDigest?.phase ?? finding.evidence?.observedPhase)
-    })
-  );
+      phase: stringOrNull(event.phase ?? finding.evidenceDigest?.phase ?? finding.evidence?.observedPhase),
+      requestUrl: safeApiUrl(event.requestUrl ?? event.url),
+      rawObservedVendor: boundedStringOrNull(event.rawObservedVendor, 160),
+      rawObservedVendorCategory: boundedStringOrNull(event.rawObservedVendorCategory, 120),
+      resolvedEndpointVendor: boundedStringOrNull(event.resolvedEndpointVendor, 160),
+      resolvedEndpointVendorCategory: boundedStringOrNull(event.resolvedEndpointVendorCategory, 120),
+      vendorAttributionBasis: boundedStringOrNull(event.vendorAttributionBasis, 120),
+      relatedOrInitiatingVendor: boundedStringOrNull(event.relatedOrInitiatingVendor, 160),
+      resourceType: boundedStringOrNull(event.resourceType, 80),
+      scannedPageUrl: safeApiUrl(event.scannedPageUrl),
+      frameUrl: safeApiUrl(event.frameUrl),
+      finalUrl: safeApiUrl(event.finalUrl),
+      initiatorHost: boundedStringOrNull(event.initiatorHost, 253),
+      initiatorType: boundedStringOrNull(event.initiatorType, 80),
+      initiatorUrl: safeApiUrl(event.initiatorUrl),
+      ...(redirectChain.length > 0 ? { redirectChain } : {}),
+      projectionWarnings: boundedStrings(event.projectionWarnings, 12, 120)
+    });
+  });
 }
 
 function buildApiV2EvidenceSummary(finding: PulseFindingLike) {
@@ -209,6 +276,7 @@ function buildApiV2EvidenceSummary(finding: PulseFindingLike) {
   const sourceEvents = Array.isArray(finding.evidence?.exampleEvents) ? finding.evidence.exampleEvents : [];
   const eventVendorAnchor = sourceEvents.some((event) => eventVendor(event) !== null);
   const firstExamplePhase = examples.map((example) => stringOrNull(example.phase)).find((phase): phase is string => phase !== null);
+  const projectionWarnings = boundedStrings([...(finding.evidenceDigest?.projectionWarnings ?? []), ...(finding.evidence?.projectionWarnings ?? [])], 20, 120);
 
   return {
     basis: normalizeEvidenceBasis(finding.evidenceDigest?.basis),
@@ -219,6 +287,7 @@ function buildApiV2EvidenceSummary(finding: PulseFindingLike) {
     examplesAvailable,
     authRequiredForExamples: finding.evidenceDigest?.authRequiredForExamples === true,
     ...(examples.length > 0 ? { examples } : {}),
+    ...(projectionWarnings.length > 0 ? { projectionWarnings } : {}),
     hasTimingAnchor: eventTimingAnchor || finding.evidenceDigest?.hasTimingAnchor === true,
     hasVendorAnchor: eventVendorAnchor || finding.evidenceDigest?.hasVendorAnchor === true,
     ...(finding.evidenceDigest?.hasConsentContext !== undefined ? { hasConsentContext: finding.evidenceDigest.hasConsentContext } : {}),

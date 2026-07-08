@@ -2,7 +2,7 @@ import { z } from "zod";
 import { pulseResponseSchema } from "./pulse-v1.js";
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.2";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.3";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.";
@@ -108,7 +108,23 @@ export const apiV2EvidenceEventSummarySchema = z
     urlHost: z.string().nullable().optional(),
     registrableDomain: z.string().nullable().optional(),
     observedAtMs: z.number().int().nullable().optional(),
-    phase: z.string().nullable().optional()
+    phase: z.string().nullable().optional(),
+    requestUrl: z.string().max(2048).nullable().optional(),
+    rawObservedVendor: z.string().max(160).nullable().optional(),
+    rawObservedVendorCategory: z.string().max(120).nullable().optional(),
+    resolvedEndpointVendor: z.string().max(160).nullable().optional(),
+    resolvedEndpointVendorCategory: z.string().max(120).nullable().optional(),
+    vendorAttributionBasis: z.string().max(120).nullable().optional(),
+    relatedOrInitiatingVendor: z.string().max(160).nullable().optional(),
+    resourceType: z.string().max(80).nullable().optional(),
+    scannedPageUrl: z.string().max(2048).nullable().optional(),
+    frameUrl: z.string().max(2048).nullable().optional(),
+    finalUrl: z.string().max(2048).nullable().optional(),
+    initiatorHost: z.string().max(253).nullable().optional(),
+    initiatorType: z.string().max(80).nullable().optional(),
+    initiatorUrl: z.string().max(2048).nullable().optional(),
+    redirectChain: z.array(z.string().max(2048)).max(10).optional(),
+    projectionWarnings: z.array(z.string().max(120)).max(12).optional()
   })
   .strict();
 
@@ -122,6 +138,7 @@ export const apiV2EvidenceSummarySchema = z
     examplesAvailable: z.number().int().min(0).optional(),
     authRequiredForExamples: z.boolean().optional(),
     examples: z.array(apiV2EvidenceEventSummarySchema).max(5).optional(),
+    projectionWarnings: z.array(z.string().max(120)).max(20).optional(),
     hasTimingAnchor: z.boolean().optional(),
     hasVendorAnchor: z.boolean().optional(),
     hasConsentContext: z.boolean().optional(),

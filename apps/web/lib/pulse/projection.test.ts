@@ -99,20 +99,78 @@ test("Pulse projection exposes Summary JSON and Evidence JSON artifacts", () => 
   assert.match(adminSource, /evidence_json_downloads/);
 });
 
+test("Pulse evidence JSON includes diagnostic metadata and projection warnings", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /CANONICAL_VENDOR_RESOLVER_VERSION/);
+  assert.match(source, /canonicalResolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION/);
+  assert.match(source, /projectionWarnings/);
+  assert.match(source, /canonical_endpoint_vendor_replaced_raw_vendor/);
+  assert.match(source, /request_event_missing_url/);
+  assert.match(source, /projectionDiagnostics/);
+  assert.match(source, /domainsRejected/);
+  assert.match(source, /hostsRejected/);
+  assert.match(source, /policy_surface_url_recovered_from_alternate_field/);
+});
+
 test("Pulse evidence inventory filters display hostnames and deduplicates vendor rows", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
   assert.match(source, /function scanRecordVendors/);
   assert.match(source, /isInventoryDisplayHostname\(vendor\.scriptHost\)/);
+  assert.match(source, /row\.domains\.filter\(isInventoryDisplayHostname\)\.slice\(0, 4\)/);
   assert.match(source, /const rows = new Map/);
+  assert.match(source, /const vendors = scanRecordVendors\(input\.scanRecord\)/);
+  assert.match(source, /total: vendors\.length/);
   assert.doesNotMatch(source, /return scanRecord\.trackerVendors\.map/);
+  assert.doesNotMatch(source, /total: input\.scanRecord\.trackerVendors\.length/);
 });
 
 test("Pulse example events do not borrow vendors by list position", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
   assert.match(source, /inferDirectEndpointVendorFromUrl/);
+  assert.match(source, /rawObservedVendor/);
+  assert.match(source, /resolvedEndpointVendor/);
+  assert.match(source, /relatedOrInitiatingVendor/);
+  assert.match(source, /requestUrl: safeUrl/);
+  assert.match(source, /initiatorUrl: safeUrl/);
+  assert.match(source, /frameUrl: safeUrl/);
+  assert.match(source, /redirectChain/);
+  assert.match(source, /resourceType/);
+  assert.match(source, /registrableDomain: getUrlRegistrableDomain/);
   assert.doesNotMatch(source, /const firstVendor = vendors\[0\]/);
   assert.doesNotMatch(source, /firstVendor\?\.name/);
   assert.doesNotMatch(source, /asStringArray\(details\.runtimeVendors\)\[0\]/);
+});
+
+test("Pulse full JSON policy surfaces use all retained policy URL field shapes", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /function policySurfaceUrl/);
+  assert.match(source, /row\.policy_page_url/);
+  assert.match(source, /row\.policyPageUrl/);
+  assert.match(source, /row\.page_url/);
+  assert.match(source, /row\.pageUrl/);
+  assert.match(source, /row\.source_url/);
+  assert.match(source, /row\.sourceUrl/);
+  assert.doesNotMatch(source, /url:\s*typeof row\.policy_page_url === "string" \? row\.policy_page_url : null/);
+});
+
+test("Pulse evidence digest keeps runtime basis for runtime-anchored findings", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /canonicalPhase \|\| hasTimingAnchor \|\| hasVendorAnchor/);
+  assert.doesNotMatch(source, /hasPolicyAnchor \? "policy_surface_detection" : "runtime_observation"/);
+});
+
+test("Pulse evidence JSON exposes bounded cookie setter context", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /initiatorDomain: row\.initiatorDomain/);
+  assert.match(source, /initiatorUrl: safeUrl\(row\.initiatorUrl\)/);
+  assert.match(source, /initiatorVendor: row\.initiatorVendor/);
+  assert.match(source, /responseUrl: safeUrl\(row\.responseUrl\)/);
+  assert.match(source, /sourceRequestUrl: safeUrl\(row\.sourceRequestUrl\)/);
+  assert.match(source, /setMethod: row\.setMethod/);
 });

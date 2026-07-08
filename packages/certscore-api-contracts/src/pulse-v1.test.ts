@@ -210,7 +210,24 @@ test("API v2 draft schemas accept resource-oriented public-safe shapes", () => {
     summary: "A public-safe request summary was retained.",
     exampleCount: 1,
     examplesShown: 1,
-    examples: [{ type: "request", vendor: "Example Analytics", urlHost: "analytics.example.test", phase: "before_consent" }]
+    projectionWarnings: ["canonical_endpoint_vendor_replaced_raw_vendor"],
+    examples: [
+      {
+        type: "request",
+        vendor: "Canonical Analytics",
+        urlHost: "analytics.example.test",
+        phase: "before_consent",
+        requestUrl: "https://analytics.example.test/collect?redacted=1",
+        rawObservedVendor: "Borrowed Label",
+        rawObservedVendorCategory: "advertising",
+        resolvedEndpointVendor: "Canonical Analytics",
+        resolvedEndpointVendorCategory: "analytics",
+        vendorAttributionBasis: "canonical_endpoint",
+        initiatorHost: "www.example.com",
+        redirectChain: ["https://analytics.example.test/start?redacted=1"],
+        projectionWarnings: ["canonical_endpoint_vendor_replaced_raw_vendor"]
+      }
+    ]
   });
   const findingList = apiV2FindingListSchema.parse({
     type: "certscore_finding_list",
@@ -232,6 +249,8 @@ test("API v2 draft schemas accept resource-oriented public-safe shapes", () => {
   assert.equal(createRequest.url, "https://example.com");
   assert.equal(scan.score, 88);
   assert.equal(findingList.findings[0]?.evidence.examples?.[0]?.urlHost, "analytics.example.test");
+  assert.equal(findingList.findings[0]?.evidence.examples?.[0]?.resolvedEndpointVendor, "Canonical Analytics");
+  assert.deepEqual(findingList.findings[0]?.evidence.projectionWarnings, ["canonical_endpoint_vendor_replaced_raw_vendor"]);
 });
 
 test("API v2 draft evidence summaries reject raw unbounded fields", () => {
@@ -260,6 +279,15 @@ test("API v2 draft evidence summaries reject raw unbounded fields", () => {
       ]
     })
   );
+  assert.throws(() =>
+    apiV2EvidenceSummarySchema.parse({
+      basis: "runtime_observation",
+      summary: "Raw body on example should fail strict parsing.",
+      exampleCount: 1,
+      examplesShown: 1,
+      examples: [{ type: "request", rawRequestBody: "not public safe" }]
+    })
+  );
 });
 
 test("API v2 draft OpenAPI locks resource path and operation names", () => {
@@ -279,7 +307,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.2");
+  assert.equal(document.info.version, "0.1.3");
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/scans"]);
   assert.ok(document.paths["/api/v2/scans/{scanId}/findings/{findingId}"]);
@@ -310,6 +338,8 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   assert.ok(document.paths["/api/v2/domains/{domain}/latest"].get.responses["200"].content["application/json"].examples.latest);
   assert.ok(document.paths["/api/v2/scans/{scanId}/pulse"].get.responses["200"].content["application/json"].examples.pulse);
   assert.ok(document.paths["/api/v2/health"].get.responses["200"].content["application/json"].examples.ok);
+  assert.match(serialized, /rawObservedVendor/);
+  assert.match(serialized, /projectionWarnings/);
   assert.equal(document.paths["/api/v2/scans"].post.responses["429"].headers["Retry-After"].description, "Recommended retry or polling delay in seconds.");
   assert.ok(document.paths["/api/v2/scans"].post.responses["500"].content["application/json"].examples.internalError);
   assert.doesNotMatch(serialized, /raw DOM|raw request body|stack trace|DATABASE_URL|AUTH_SECRET|internal-only/i);

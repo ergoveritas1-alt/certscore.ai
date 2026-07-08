@@ -7,8 +7,20 @@ export type PromotionGradePreconsentRequest = {
   registrableDomain: string;
   vendorName: string;
   vendorCategory: string;
+  rawObservedVendor: string | null;
+  rawObservedVendorCategory: string | null;
+  resolvedEndpointVendor: string | null;
+  resolvedEndpointVendorCategory: string | null;
   vendorAttributionBasis: string | null;
   relatedOrInitiatingVendor: string | null;
+  projectionWarnings: string[];
+  frameUrl: string | null;
+  finalUrl: string | null;
+  initiatorHost: string | null;
+  initiatorType: string | null;
+  initiatorUrl: string | null;
+  redirectChain: string[];
+  resourceType: string | null;
   classificationBasis: string | null;
   collectionEndpointType: string | null;
   firstPartyOrThirdParty: string | null;
@@ -60,6 +72,10 @@ const SERVICE_CLASSIFICATIONS = new Set([
 
 const SERVICE_HOST_PATTERN =
   /(?:^|\.)cdn\.cookielaw\.org$|(?:^|\.)geolocation\.onetrust\.com$|(?:^|\.)ajax\.googleapis\.com$|(?:^|\.)cdn\.jwplayer\.com$|(?:^|\.)assets\.adobedtm\.com$/i;
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -126,6 +142,16 @@ function getBoolean(row: Record<string, unknown>, keys: string[]) {
   return null;
 }
 
+function getStringArray(row: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+    }
+  }
+  return [];
+}
+
 function getUrlHostname(value: string | null | undefined) {
   if (!value || !/^https?:\/\//i.test(value)) {
     return null;
@@ -139,6 +165,45 @@ function getUrlHostname(value: string | null | undefined) {
 
 function hostMatches(hostname: string, domain: string) {
   return hostname === domain || hostname.endsWith(`.${domain}`);
+}
+
+function safeEvidenceUrl(value: string) {
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    if (url.search) {
+      url.search = "?redacted=1";
+    }
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return value.replace(/[?#].*$/, "").slice(0, 500);
+  }
+}
+
+const HOST_BOUND_VENDOR_DOMAINS: Array<{ pattern: RegExp; domains: string[] }> = [
+  { pattern: /^(?:google\s+fonts)$/i, domains: ["fonts.googleapis.com", "fonts.gstatic.com"] },
+  { pattern: /^(?:google\s+tag\s+manager|gtm)$/i, domains: ["googletagmanager.com"] },
+  { pattern: /^google\s+static\s+assets$/i, domains: ["gstatic.com"] },
+  { pattern: /^microsoft\s+clarity$/i, domains: ["clarity.ms"] },
+  { pattern: /^hotjar$/i, domains: ["hotjar.com", "hotjar.io"] },
+  { pattern: /^google\s+sign-?in$/i, domains: ["accounts.google.com", "google.com", "gstatic.com"] },
+  { pattern: /^google\s+publisher\s+tag$/i, domains: ["googletagservices.com", "securepubads.g.doubleclick.net", "pubads.g.doubleclick.net"] },
+  { pattern: /^jsdelivr(?:\s+cdn)?$/i, domains: ["jsdelivr.net"] },
+  { pattern: /^cdnjs(?:\s+cdn)?$/i, domains: ["cdnjs.cloudflare.com"] },
+  { pattern: /^unpkg(?:\s+cdn)?$/i, domains: ["unpkg.com"] },
+  { pattern: /^hubspot\s+scripts$/i, domains: ["hubspot.com", "hs-scripts.com", "hs-analytics.net", "hs-banner.com", "hscollectedforms.net", "hsforms.com"] },
+  { pattern: /^amazon\s+ads$/i, domains: ["amazon-adsystem.com"] }
+];
+
+function isHostBoundVendorBorrowed(hostname: string, vendorName: string | null | undefined) {
+  if (!vendorName) {
+    return false;
+  }
+  const normalizedHost = hostname.replace(/^www\./i, "").toLowerCase();
+  const rule = HOST_BOUND_VENDOR_DOMAINS.find((candidate) => candidate.pattern.test(vendorName.trim()));
+  return Boolean(rule && !rule.domains.some((domain) => hostMatches(normalizedHost, domain)));
 }
 
 function canonicalPurposeToEvidenceCategory(purpose: string | null | undefined) {
@@ -328,23 +393,36 @@ export function buildPromotionGradePreconsentRequests(input: {
     const hostname = getString(row, ["hostname", "host", "domain"]) ?? getUrlHostname(requestUrl);
     const endpointVendor = inferDirectEndpointVendorFromUrl(requestUrl);
     const rowVendorName = getString(row, ["vendorName", "vendor_name", "vendor", "matchedVendorName", "matched_vendor_name", "name"]);
-    const vendorName = endpointVendor?.vendorName ?? rowVendorName;
-    const vendorCategory = endpointVendor?.vendorCategory ?? getCategory(row);
+    const rowVendorCategory = getCategory(row);
+    const rowVendorLooksBorrowed = Boolean(hostname && !endpointVendor && isHostBoundVendorBorrowed(hostname, rowVendorName));
+    const vendorName = endpointVendor?.vendorName ?? (rowVendorLooksBorrowed ? hostname : rowVendorName);
+    const vendorCategory = endpointVendor?.vendorCategory ?? (rowVendorLooksBorrowed ? "unknown" : rowVendorCategory);
     if (!requestUrl || !hostname || !vendorName || !vendorCategory) {
       continue;
     }
+    const projectionWarnings = uniqueStrings([
+      endpointVendor && rowVendorName && endpointVendor.vendorName !== rowVendorName
+        ? "canonical_endpoint_vendor_replaced_raw_vendor"
+        : null,
+      rowVendorLooksBorrowed ? "borrowed_host_bound_vendor_suppressed" : null
+    ]);
     const key = `${requestUrl.toLowerCase()}|${vendorName.toLowerCase()}`;
     if (seen.has(key)) {
       continue;
     }
     seen.add(key);
+    const scannedPageUrl = getString(row, ["scannedPageUrl", "scanned_page_url", "pageUrl", "page_url"]) ?? input.scannedPageUrl ?? null;
     requests.push({
-      scannedPageUrl: getString(row, ["scannedPageUrl", "scanned_page_url", "pageUrl", "page_url"]) ?? input.scannedPageUrl ?? null,
-      requestUrl,
+      scannedPageUrl: scannedPageUrl ? safeEvidenceUrl(scannedPageUrl) : null,
+      requestUrl: safeEvidenceUrl(requestUrl),
       hostname,
       registrableDomain: getUrlRegistrableDomain(hostname) ?? hostname,
       vendorName,
       vendorCategory,
+      rawObservedVendor: rowVendorName,
+      rawObservedVendorCategory: rowVendorCategory,
+      resolvedEndpointVendor: endpointVendor?.vendorName ?? null,
+      resolvedEndpointVendorCategory: endpointVendor?.vendorCategory ?? null,
       vendorAttributionBasis: endpointVendor && rowVendorName && endpointVendor.vendorName !== rowVendorName
         ? `${getString(row, [
             "vendorAttributionBasis",
@@ -356,6 +434,17 @@ export function buildPromotionGradePreconsentRequests(input: {
             "matchedSignatureId",
             "matched_signature_id"
           ]) ?? "request_row_vendor"}:${endpointVendor.basis}`
+        : rowVendorLooksBorrowed
+        ? `${getString(row, [
+            "vendorAttributionBasis",
+            "vendor_attribution_basis",
+            "classificationBasis",
+            "classification_basis",
+            "evidenceSource",
+            "evidence_source",
+            "matchedSignatureId",
+            "matched_signature_id"
+          ]) ?? "request_row_vendor"}:borrowed_host_bound_vendor_suppressed`
         : getString(row, [
             "vendorAttributionBasis",
             "vendor_attribution_basis",
@@ -366,7 +455,15 @@ export function buildPromotionGradePreconsentRequests(input: {
             "matchedSignatureId",
             "matched_signature_id"
           ]),
-      relatedOrInitiatingVendor: endpointVendor && rowVendorName && endpointVendor.vendorName !== rowVendorName ? rowVendorName : null,
+      relatedOrInitiatingVendor: (endpointVendor && rowVendorName && endpointVendor.vendorName !== rowVendorName) || rowVendorLooksBorrowed ? rowVendorName : null,
+      projectionWarnings,
+      frameUrl: getString(row, ["frameUrl", "frame_url"]) ? safeEvidenceUrl(getString(row, ["frameUrl", "frame_url"]) ?? "") : null,
+      finalUrl: getString(row, ["finalUrl", "final_url"]) ? safeEvidenceUrl(getString(row, ["finalUrl", "final_url"]) ?? "") : null,
+      initiatorHost: getString(row, ["initiatorHost", "initiator_host"]),
+      initiatorType: getString(row, ["initiatorType", "initiator_type", "initiator"]),
+      initiatorUrl: getString(row, ["initiatorUrl", "initiator_url"]) ? safeEvidenceUrl(getString(row, ["initiatorUrl", "initiator_url"]) ?? "") : null,
+      redirectChain: getStringArray(row, ["redirectChain", "redirect_chain"]).slice(0, 8).map(safeEvidenceUrl),
+      resourceType: getString(row, ["resourceType", "resource_type"]),
       classificationBasis: getString(row, ["classificationBasis", "classification_basis", "evidenceSource", "evidence_source"]),
       collectionEndpointType: getString(row, ["collectionEndpointType", "collection_endpoint_type"]),
       firstPartyOrThirdParty: getString(row, ["firstPartyOrThirdParty", "first_party_or_third_party", "party"]),

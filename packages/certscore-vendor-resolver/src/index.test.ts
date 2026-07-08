@@ -440,6 +440,7 @@ test("classifies Framer, YouTube image CDN, Statuspage, Intercom, and common CDN
     request("https://cdnjs.cloudflare.com/ajax/libs/example/1.0.0/example.min.js", "cdnjs.cloudflare.com"),
     request("https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css", "maxcdn.bootstrapcdn.com"),
     request("https://unpkg.com/react@18/umd/react.production.min.js", "unpkg.com"),
+    request("https://static.tildacdn.com/css/tilda-grid-3.0.min.css", "static.tildacdn.com"),
     request("https://use.typekit.net/abcd123.css", "use.typekit.net"),
     request("https://d2pu3v2r6r77j3.cloudfront.net/app.js", "d2pu3v2r6r77j3.cloudfront.net"),
   ]);
@@ -451,6 +452,7 @@ test("classifies Framer, YouTube image CDN, Statuspage, Intercom, and common CDN
   assertResolved(observations, "cdnjs", "cdnjs CDN", "infrastructure");
   assertResolved(observations, "BootstrapCDN", "BootstrapCDN", "infrastructure");
   assertResolved(observations, "unpkg", "unpkg CDN", "infrastructure");
+  assertResolved(observations, "Tilda", "Tilda CDN", "infrastructure");
   assertResolved(observations, "Adobe", "Adobe Fonts / Typekit", "infrastructure");
   assertResolved(observations, "Amazon CloudFront", "CloudFront Distribution", "infrastructure");
 
@@ -463,6 +465,20 @@ test("classifies Framer, YouTube image CDN, Statuspage, Intercom, and common CDN
   assert.ok(youtube);
   assert.equal(resolveVendorDisplayCategory(youtube), "CDN");
   assert.equal(youtube.matchedHostnames.includes("img.youtube.com"), true);
+});
+
+test("classifies Google reCAPTCHA as security runtime", () => {
+  const observations = resolveVendorObservations([
+    request("https://www.google.com/recaptcha/api.js?render=site-key", "www.google.com"),
+    request("https://www.google.com/recaptcha/api2/anchor?k=site-key", "www.google.com"),
+    request("https://www.google.com/recaptcha/api2/webworker.js", "www.google.com"),
+  ]);
+
+  assertResolved(observations, "Google", "Google reCAPTCHA", "security");
+  const recaptcha = observations.find((item) => item.product === "Google reCAPTCHA");
+  assert.ok(recaptcha);
+  assert.equal(resolveVendorDisplayCategory(recaptcha), "Security");
+  assert.equal(recaptcha.matchedHostnames.includes("www.google.com"), true);
 });
 
 test("keeps native ad hosts when generic cookie names also match exchange rules", () => {

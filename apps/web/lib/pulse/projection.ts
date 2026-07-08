@@ -13,8 +13,10 @@ import { buildRegulatoryGapTopFindings } from "../scans/regulatory-gap-top-findi
 import { buildNormalizedConcerns } from "../scans/normalized-concerns";
 import {
   buildPromotionGradePreconsentRequests,
+  getUrlRegistrableDomain,
   inferDirectEndpointVendorFromUrl
 } from "../scans/preconsent-public-evidence";
+import { CANONICAL_VENDOR_RESOLVER_VERSION } from "@certscore/vendor-resolver";
 import { buildRuntimeCookieInventory } from "../scans/runtime-cookie-evidence";
 import {
   buildTrackerInventoryGroupRows,
@@ -93,6 +95,10 @@ function capArray<T>(items: T[], limit: number) {
   };
 }
 
+function boundedStrings(values: Array<string | null | undefined>, limit: number) {
+  return uniqueStrings(values).slice(0, Math.max(0, limit));
+}
+
 function safeUrl(value: unknown) {
   if (typeof value !== "string" || value.trim().length === 0) {
     return null;
@@ -109,6 +115,61 @@ function safeUrl(value: unknown) {
   } catch {
     return value.replace(/[?#].*$/, "");
   }
+}
+
+function rejectionReasonForDisplayHostname(value: string | null | undefined) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return "invalid_hostname";
+  }
+  const trimmed = value.trim();
+  if (trimmed.startsWith("_")) {
+    return "cookie_name_like";
+  }
+  if (trimmed.startsWith(".")) {
+    return isInventoryDisplayHostname(trimmed.slice(1)) ? "cookie_domain_token" : "css_selector_like";
+  }
+  if (trimmed.startsWith("#")) {
+    return "css_selector_like";
+  }
+  if (!trimmed.includes(".")) {
+    return "missing_dot";
+  }
+  return "invalid_hostname";
+}
+
+function rejectedDisplayHostnameRows(values: Array<string | null | undefined>) {
+  return values.flatMap((value) => {
+    if (!value || isInventoryDisplayHostname(value)) {
+      return [];
+    }
+    return [{
+      value: value.slice(0, 120),
+      reason: rejectionReasonForDisplayHostname(value)
+    }];
+  });
+}
+
+function policySurfaceUrl(row: Record<string, unknown>) {
+  return safeUrl(
+    row.policy_page_url ??
+    row.policyPageUrl ??
+    row.page_url ??
+    row.pageUrl ??
+    row.source_url ??
+    row.sourceUrl ??
+    row.url
+  );
+}
+
+function policySurfaceUrlRecoveredFromAlternateField(row: Record<string, unknown>) {
+  return typeof row.policy_page_url !== "string" && Boolean(
+    row.policyPageUrl ??
+    row.page_url ??
+    row.pageUrl ??
+    row.source_url ??
+    row.sourceUrl ??
+    row.url
+  );
 }
 
 function safeRecordSubset(record: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -266,7 +327,7 @@ function buildPulseReportSurface(input: {
       purpose: row.purpose,
       priority: row.priority,
       firstSeenMs: row.firstSeenMs,
-      domains: row.domains.slice(0, 4)
+      domains: row.domains.filter(isInventoryDisplayHostname).slice(0, 4)
     }));
 
   return {
@@ -523,6 +584,7 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     : [];
   const vendors = Array.isArray(details.vendors) ? details.vendors : [];
   const firstRequest = representativeRequests[0];
+  const firstRequestRecord = asRecord(firstRequest);
   const firstRequestUrl =
     typeof firstRequest?.requestUrl === "string"
       ? firstRequest.requestUrl
@@ -546,7 +608,20 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
         requestUrl: request.requestUrl,
         vendor: request.vendorName,
         vendorCategory: request.vendorCategory,
+        rawObservedVendor: request.rawObservedVendor,
+        rawObservedVendorCategory: request.rawObservedVendorCategory,
+        resolvedEndpointVendor: request.resolvedEndpointVendor,
+        resolvedEndpointVendorCategory: request.resolvedEndpointVendorCategory,
         vendorAttributionBasis: request.vendorAttributionBasis,
+        relatedOrInitiatingVendor: request.relatedOrInitiatingVendor,
+        projectionWarnings: request.projectionWarnings,
+        frameUrl: request.frameUrl,
+        finalUrl: request.finalUrl,
+        initiatorHost: request.initiatorHost,
+        initiatorType: request.initiatorType,
+        initiatorUrl: request.initiatorUrl,
+        redirectChain: request.redirectChain,
+        resourceType: request.resourceType,
         urlHost: request.hostname,
         registrableDomain: request.registrableDomain,
         timestampMs: request.firstSeenMs,
@@ -563,10 +638,27 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
           phase: firstRequest.runtimePhase ?? (firstRequest.preConsent ? "pre_consent" : null),
           vendor: firstRequestEndpointVendor?.vendorName ?? firstRequest.vendor ?? null,
           vendorCategory: firstRequestEndpointVendor?.vendorCategory ?? firstRequest.vendorCategory ?? firstRequest.category ?? null,
+          rawObservedVendor: firstRequest.vendor ?? null,
+          rawObservedVendorCategory: firstRequest.vendorCategory ?? firstRequest.category ?? null,
+          resolvedEndpointVendor: firstRequestEndpointVendor?.vendorName ?? null,
+          resolvedEndpointVendorCategory: firstRequestEndpointVendor?.vendorCategory ?? null,
           vendorAttributionBasis: firstRequestEndpointVendor && firstRequest.vendor && firstRequestEndpointVendor.vendorName !== firstRequest.vendor
             ? `${firstRequest.vendorAttributionBasis ?? "request_row_vendor"}:${firstRequestEndpointVendor.basis}`
             : firstRequest.vendorAttributionBasis ?? firstRequestEndpointVendor?.basis ?? null,
+          relatedOrInitiatingVendor: firstRequestEndpointVendor && firstRequest.vendor && firstRequestEndpointVendor.vendorName !== firstRequest.vendor ? firstRequest.vendor : null,
+          projectionWarnings: firstRequestEndpointVendor && firstRequest.vendor && firstRequestEndpointVendor.vendorName !== firstRequest.vendor
+            ? ["canonical_endpoint_vendor_replaced_raw_vendor"]
+            : [],
+          requestUrl: safeUrl(firstRequestUrl),
+          frameUrl: safeUrl(recordValue(firstRequestRecord, "frameUrl") ?? recordValue(firstRequestRecord, "frame_url")),
+          finalUrl: safeUrl(recordValue(firstRequestRecord, "finalUrl") ?? recordValue(firstRequestRecord, "final_url")),
+          initiatorHost: stringValue(recordValue(firstRequestRecord, "initiatorHost") ?? recordValue(firstRequestRecord, "initiator_host")),
+          initiatorType: stringValue(recordValue(firstRequestRecord, "initiatorType") ?? recordValue(firstRequestRecord, "initiator_type") ?? recordValue(firstRequestRecord, "initiator")),
+          initiatorUrl: safeUrl(recordValue(firstRequestRecord, "initiatorUrl") ?? recordValue(firstRequestRecord, "initiator_url")),
+          redirectChain: asStringArray(recordValue(firstRequestRecord, "redirectChain") ?? recordValue(firstRequestRecord, "redirect_chain")).slice(0, 8).map(safeUrl).filter((url): url is string => Boolean(url)),
+          resourceType: stringValue(recordValue(firstRequestRecord, "resourceType") ?? recordValue(firstRequestRecord, "resource_type")),
           urlHost: firstRequest.hostname ?? null,
+          registrableDomain: getUrlRegistrableDomain(firstRequest.hostname ?? firstRequestUrl),
           timestampMs: firstRequest.firstSeenMs ?? null
         }
       : null,
@@ -576,8 +668,23 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
           phase: runtimePhase ?? null,
           vendor: firstRuntimeRequestEndpointVendor?.vendorName ?? null,
           vendorCategory: firstRuntimeRequestEndpointVendor?.vendorCategory ?? null,
+          rawObservedVendor: null,
+          rawObservedVendorCategory: null,
+          resolvedEndpointVendor: firstRuntimeRequestEndpointVendor?.vendorName ?? null,
+          resolvedEndpointVendorCategory: firstRuntimeRequestEndpointVendor?.vendorCategory ?? null,
           vendorAttributionBasis: firstRuntimeRequestEndpointVendor?.basis ?? null,
+          relatedOrInitiatingVendor: null,
+          projectionWarnings: [],
+          requestUrl: safeUrl(firstRuntimeRequestUrl),
+          frameUrl: null,
+          finalUrl: null,
+          initiatorHost: null,
+          initiatorType: null,
+          initiatorUrl: null,
+          redirectChain: [],
+          resourceType: null,
           urlHost: safeHostname(firstRuntimeRequestUrl),
+          registrableDomain: getUrlRegistrableDomain(firstRuntimeRequestUrl),
           timestampMs: null
         }
       : null,
@@ -592,6 +699,10 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
       : null
   ].filter(Boolean).slice(0, 3);
   const exampleEvents = examples as Array<Record<string, unknown>>;
+  const projectionWarnings = boundedStrings([
+    ...exampleEvents.flatMap((event) => asStringArray(event.projectionWarnings)),
+    ...exampleEvents.map((event) => event.type === "request" && !stringValue(event.requestUrl) ? "request_event_missing_url" : null)
+  ], 12);
   const canonicalPhase =
     canonicalEvidencePhase(runtimePhase) ??
     exampleEvents.map(eventEvidencePhase).find((phase): phase is string => phase !== null) ??
@@ -609,7 +720,13 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     Boolean(firstRequest?.vendor);
   const hasConsentContext = Boolean(details.consentState || details.consentInteraction || /consent|reject|pre_consent/i.test(finding.id));
   const hasPolicyAnchor = Boolean(details.policyEvidence || details.policyEvidenceDetails || details.policyRuntimeConflict);
-  const basis = finding.section === "Accessibility" ? "accessibility_check" : hasPolicyAnchor ? "policy_surface_detection" : "runtime_observation";
+  const basis = finding.section === "Accessibility"
+    ? "accessibility_check"
+    : canonicalPhase || hasTimingAnchor || hasVendorAnchor
+      ? "runtime_observation"
+      : hasPolicyAnchor
+        ? "policy_surface_detection"
+        : "runtime_observation";
   const summary = finding.evidencePreview[0] ?? finding.shortSummary;
   const anchorUrl = absoluteUrl(`/scan/${scanId}#finding-${finding.id}`);
   const exampleCount = Math.max(finding.evidencePreview.length, examples.length);
@@ -618,6 +735,7 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     summary,
     observedPhase,
     exampleEvents: examples,
+    projectionWarnings,
     consentContext: details.consentState
       ? {
           bannerSeen: (details.consentState as { cmpDetected?: boolean | null }).cmpDetected ?? null,
@@ -636,7 +754,8 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
       hasTimingAnchor,
       hasVendorAnchor,
       hasConsentContext,
-      hasPolicyAnchor
+      hasPolicyAnchor,
+      projectionWarnings
     },
     anchorUrl
   };
@@ -675,6 +794,7 @@ function toPulseFinding(finding: CertScoreFinding, scanId: string) {
       summary: evidence.summary,
       observedPhase: evidence.observedPhase,
       exampleEvents: evidence.exampleEvents,
+      projectionWarnings: evidence.projectionWarnings,
       consentContext: evidence.consentContext,
       fullEvidenceUrl: evidence.fullEvidenceUrl
     },
@@ -984,11 +1104,16 @@ function buildEvidenceArtifact(input: {
       : null
   }));
   const findings = input.allFindings.map((finding) => toPulseFinding(finding, scanRecord.scan.id));
+  const rejectedTrackerHostRows = rejectedDisplayHostnameRows(scanRecord.trackerVendors.map((vendor) => vendor.scriptHost));
+  const rejectedTrackerDomainRows = rejectedDisplayHostnameRows(input.reportSurface.trackerInventoryRows.flatMap((row) => row.domains));
 
   return {
     type: "certscore_pulse_evidence",
     meta: {
       ...(asRecord(input.base.meta) ?? {}),
+      projectionVersion: PULSE_PROJECTION_VERSION,
+      schemaVersion: PULSE_SCHEMA_VERSION,
+      canonicalResolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
       evidenceSafety: "bounded_structured_public_evidence"
     },
     domain: input.base.domain,
@@ -1004,6 +1129,16 @@ function buildEvidenceArtifact(input: {
       "Raw cookie values, raw request/response bodies, sensitive payloads, full DOM, raw Nano reasoning, and unredacted query values are not included.",
       "CertScore outputs are automated public-web observations for review and are not legal advice or a compliance determination."
     ],
+    projectionDiagnostics: {
+      projectionWarnings: capArray(
+        boundedStrings(findings.flatMap((finding) => asStringArray(finding.evidence?.projectionWarnings)), 50),
+        50
+      ),
+      domainFiltering: {
+        domainsRejected: capArray(rejectedTrackerDomainRows, 40),
+        hostsRejected: capArray(rejectedTrackerHostRows, 40)
+      }
+    },
     projectedFindings: capArray(findings, 100),
     gdprEprivacyChecklistRows: capArray(checklistRows, 120),
     retainedEvidence: {
@@ -1045,6 +1180,12 @@ function buildEvidenceArtifact(input: {
         nonEssential: row.nonEssential,
         firstObservedAtMs: row.firstObservedAtMs,
         setAtMs: row.setAtMs,
+        initiatorDomain: row.initiatorDomain,
+        initiatorUrl: safeUrl(row.initiatorUrl),
+        initiatorVendor: row.initiatorVendor,
+        responseUrl: safeUrl(row.responseUrl),
+        sourceRequestUrl: safeUrl(row.sourceRequestUrl),
+        setMethod: row.setMethod,
         timingBasis: row.timingBasis,
         evidenceGrade: row.evidenceGrade,
         timingEvidence: row.timingEvidence
@@ -1091,8 +1232,11 @@ function buildEvidenceArtifact(input: {
     policySurfaceCoverage: capArray(
       scanRecord.policyEnrichment.map((row) => ({
         type: typeof row.policy_page_type === "string" ? row.policy_page_type : "policy_surface",
-        url: safeUrl(row.policy_page_url),
-        title: typeof row.policy_page_title === "string" ? row.policy_page_title.slice(0, 160) : null
+        url: policySurfaceUrl(row as unknown as Record<string, unknown>),
+        title: typeof row.policy_page_title === "string" ? row.policy_page_title.slice(0, 160) : null,
+        projectionWarnings: policySurfaceUrlRecoveredFromAlternateField(row as unknown as Record<string, unknown>)
+          ? ["policy_surface_url_recovered_from_alternate_field"]
+          : []
       })),
       80
     ),
@@ -1216,7 +1360,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       0;
   const policySurfaces = input.scanRecord.policyEnrichment.slice(0, 8).map((row) => ({
     type: typeof row.policy_page_type === "string" ? row.policy_page_type : "policy_surface",
-    url: typeof row.policy_page_url === "string" ? row.policy_page_url : null
+    url: policySurfaceUrl(row as unknown as Record<string, unknown>)
   }));
   const executiveSummary = {
     completionSummary: summary.completionSummary,
@@ -1305,6 +1449,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       schemaVersion: PULSE_SCHEMA_VERSION,
       pulseVersion: PULSE_VERSION,
       projectionVersion: PULSE_PROJECTION_VERSION,
+      canonicalResolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
       generatedAt: generated,
       source: PULSE_SOURCE,
       format: input.format,
@@ -1454,14 +1599,17 @@ export function buildPulseProjection(input: PulseProjectionInput) {
         findingIds: group.findings.map((finding) => finding.id)
       }))
     },
-    trackerFootprint: {
-      vendors: scanRecordVendors(input.scanRecord).slice(0, 10),
-      cap: { shown: Math.min(10, input.scanRecord.trackerVendors.length), total: input.scanRecord.trackerVendors.length, truncated: input.scanRecord.trackerVendors.length > 10 }
-    },
+    trackerFootprint: (() => {
+      const vendors = scanRecordVendors(input.scanRecord);
+      return {
+        vendors: vendors.slice(0, 10),
+        cap: { shown: Math.min(10, vendors.length), total: vendors.length, truncated: vendors.length > 10 }
+      };
+    })(),
     policySurfaces: {
       surfaces: input.scanRecord.policyEnrichment.slice(0, 10).map((row) => ({
         type: typeof row.policy_page_type === "string" ? row.policy_page_type : "policy_surface",
-        url: typeof row.policy_page_url === "string" ? row.policy_page_url : null
+        url: policySurfaceUrl(row as unknown as Record<string, unknown>)
       })),
       cap: { shown: Math.min(10, input.scanRecord.policyEnrichment.length), total: input.scanRecord.policyEnrichment.length, truncated: input.scanRecord.policyEnrichment.length > 10 }
     },

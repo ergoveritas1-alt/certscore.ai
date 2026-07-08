@@ -6,6 +6,8 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-08";
+
 export type VendorResolverEvidenceType =
   | "request"
   | "response"
@@ -121,6 +123,18 @@ const rules: VendorRule[] = [
     confidence: 0.9,
     hostPatterns: [/^gstatic\.com$/i, /^(?!fonts\.)[^.]+\.gstatic\.com$/i],
     basisLabel: "google_static_assets_infrastructure",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "Google",
+    product: "Google reCAPTCHA",
+    purpose: "security",
+    regulatoryRelevance: ["bot_detection", "fraud_prevention", "third_party_runtime"],
+    confidence: 0.94,
+    hostPatterns: [/^(?:www\.)?google\.com$/i, /^www\.recaptcha\.net$/i, /^www\.gstatic\.com$/i],
+    urlPatterns: [/\/recaptcha\/(?:api|api2|enterprise)\b/i, /\/recaptcha\/releases\//i],
+    requireUrlPatternMatch: true,
+    basisLabel: "google_recaptcha_security_runtime",
   },
   {
     entity: "Adobe Inc.",
@@ -1108,6 +1122,16 @@ const rules: VendorRule[] = [
     confidence: 0.9,
     hostPatterns: [/^unpkg\.com$/i],
     basisLabel: "unpkg_cdn_host",
+  },
+  {
+    entity: "Tilda Publishing",
+    vendor: "Tilda",
+    product: "Tilda CDN",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "script_delivery", "style_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/\.tildacdn\.com$/i],
+    basisLabel: "tilda_cdn_host",
   },
   {
     entity: "Amazon Web Services, Inc.",

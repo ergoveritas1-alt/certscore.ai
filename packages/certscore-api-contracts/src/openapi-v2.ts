@@ -694,9 +694,51 @@ export function buildCertScoreApiV2OpenApiDocument() {
                   urlHost: { type: ["string", "null"] },
                   registrableDomain: { type: ["string", "null"] },
                   observedAtMs: { type: ["integer", "null"] },
-                  phase: { type: ["string", "null"] }
+                  phase: { type: ["string", "null"] },
+                  requestUrl: {
+                    type: ["string", "null"],
+                    maxLength: 2048,
+                    description: "Public-safe request URL sample with query parameters redacted."
+                  },
+                  rawObservedVendor: {
+                    type: ["string", "null"],
+                    maxLength: 160,
+                    description: "Original bounded vendor label retained before canonical endpoint resolution."
+                  },
+                  rawObservedVendorCategory: { type: ["string", "null"], maxLength: 120 },
+                  resolvedEndpointVendor: {
+                    type: ["string", "null"],
+                    maxLength: 160,
+                    description: "Canonical endpoint-resolved vendor label when available."
+                  },
+                  resolvedEndpointVendorCategory: { type: ["string", "null"], maxLength: 120 },
+                  vendorAttributionBasis: { type: ["string", "null"], maxLength: 120 },
+                  relatedOrInitiatingVendor: { type: ["string", "null"], maxLength: 160 },
+                  resourceType: { type: ["string", "null"], maxLength: 80 },
+                  scannedPageUrl: { type: ["string", "null"], maxLength: 2048 },
+                  frameUrl: { type: ["string", "null"], maxLength: 2048 },
+                  finalUrl: { type: ["string", "null"], maxLength: 2048 },
+                  initiatorHost: { type: ["string", "null"], maxLength: 253 },
+                  initiatorType: { type: ["string", "null"], maxLength: 80 },
+                  initiatorUrl: { type: ["string", "null"], maxLength: 2048 },
+                  redirectChain: {
+                    type: "array",
+                    maxItems: 10,
+                    items: { type: "string", maxLength: 2048 }
+                  },
+                  projectionWarnings: {
+                    type: "array",
+                    maxItems: 12,
+                    items: { type: "string", maxLength: 120 }
+                  }
                 }
               }
+            },
+            projectionWarnings: {
+              type: "array",
+              maxItems: 20,
+              items: { type: "string", maxLength: 120 },
+              description: "Diagnostic projection warnings for reviewer workflows; they do not affect finding status or severity."
             },
             hasTimingAnchor: { type: "boolean" },
             hasVendorAnchor: { type: "boolean" },
