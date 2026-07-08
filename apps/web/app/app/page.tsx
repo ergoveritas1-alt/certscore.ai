@@ -11,7 +11,7 @@ import {
   getPlanLimits
 } from "../../server/plans/get-plan-limits";
 import { withServerTiming } from "../../server/performance/log-server-timing";
-import { getOrganizationScans } from "../../server/scans/get-organization-scans";
+import { getOrganizationScansSummary } from "../../server/scans/get-organization-scans";
 import { getOrganizationSettings } from "../../server/settings/get-organization-settings";
 import { canUseRestrictedScanOptions } from "../../server/scans/restricted-scan-options";
 import type { ServerScanFrom } from "../../components/scans/scan-from-select";
@@ -54,7 +54,7 @@ export default async function DashboardPage() {
     Promise.all([
       getPlanLimits(organization.plan),
       getOrganizationManualRescanLimitOverride(organization.id),
-      getOrganizationScans(organization.id, 100),
+      getOrganizationScansSummary(organization.id, 100),
       getOrganizationSettings(organization.id)
     ])
   );

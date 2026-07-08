@@ -411,6 +411,7 @@ async function loadOrganizationScans(
     to?: number;
     limit?: number;
     includeCount?: boolean;
+    includeDerivedMetrics?: boolean;
   }
 ) {
   const {
@@ -492,12 +493,15 @@ async function loadOrganizationScans(
     }
   }
 
-  const derivedMetricsByScanId = await loadDerivedOrganizationScanMetricsByScanId({
-    organizationId,
-    scanRows,
-    signalCountMap,
-    snapshotMap
-  });
+  const derivedMetricsByScanId =
+    input?.includeDerivedMetrics === false
+      ? new Map<string, DerivedOrganizationScanMetrics>()
+      : await loadDerivedOrganizationScanMetricsByScanId({
+          organizationId,
+          scanRows,
+          signalCountMap,
+          snapshotMap
+        });
 
   return {
     items: scanRows.map((scan) => {
@@ -619,6 +623,14 @@ async function loadOrganizationScans(
 
 export async function getOrganizationScans(organizationId: string, limit?: number) {
   const result = await loadOrganizationScans(organizationId, { limit });
+  return result.items;
+}
+
+export async function getOrganizationScansSummary(organizationId: string, limit?: number) {
+  const result = await loadOrganizationScans(organizationId, {
+    limit,
+    includeDerivedMetrics: false
+  });
   return result.items;
 }
 
