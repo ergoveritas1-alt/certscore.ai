@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { buildCertScoreApiV2OpenApiDocument } from "../packages/certscore-api-contracts/src/openapi-v2.js";
 
 const repoRoot = process.cwd();
+const allowedPublicNpmPackages = new Set(["@certscore/sdk"]);
 
 function run(command: string, args: string[], options: { cwd?: string; input?: string } = {}) {
   const result = spawnSync(command, args, {
@@ -111,9 +112,14 @@ function packagesFromDeveloperDocs() {
   return [...packages].sort();
 }
 
-function assertNoPublicNpmPackageClaims() {
+function assertPublicNpmPackageClaimsAreAllowed() {
   const packageNames = packagesFromDeveloperDocs();
-  assert.deepEqual(packageNames, [], "Developer docs should not reference npm/npx packages until a public package channel is enabled");
+  const disallowed = packageNames.filter((packageName) => !allowedPublicNpmPackages.has(packageName));
+  assert.deepEqual(
+    disallowed,
+    [],
+    `Developer docs should only reference approved public npm packages. Found: ${packageNames.join(", ")}`
+  );
 }
 
 function referenceRoutes() {
@@ -140,7 +146,7 @@ function assertSdkExampleMirrored() {
 
 async function main() {
   lintShellBlocks();
-  assertNoPublicNpmPackageClaims();
+  assertPublicNpmPackageClaimsAreAllowed();
   assertOpenApiReferenceSync();
   assertSdkExampleMirrored();
   console.log("Developer docs quality guards passed.");

@@ -102,20 +102,10 @@ const scanId = completed.scanId;
 const status = await certscore.scans.status(scanId);
 const findings = await certscore.findings.list(scanId);
 const preConsentTable = await certscore.scans.preConsentCookiesTrackers(scanId);
-const pulseProjection = await certscore.pulse.get(scanId);
-const pulseEvidence = await certscore.pulse.evidence(scanId);
 const latest = await certscore.domains.latest("example.com");
 const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
 
-console.log(
-  status.status,
-  findings.findings.length,
-  preConsentTable.summary.rowCount,
-  pulseProjection.type,
-  pulseEvidence.type,
-  latest.scan?.scanId,
-  latestPreConsentTable.summary.rowCount
-);`}</CodeBlock>
+console.log(status.status, findings.findings.length, preConsentTable.summary.rowCount, latest.scan?.scanId, latestPreConsentTable.summary.rowCount);`}</CodeBlock>
         </Section>
 
         <Section eyebrow="Smoke test" title="Check your SDK setup without creating a scan">
