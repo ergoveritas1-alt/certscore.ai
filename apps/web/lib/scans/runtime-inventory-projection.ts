@@ -157,8 +157,12 @@ function normalizeInventoryHostname(value: string | null | undefined) {
   if (!value) {
     return null;
   }
+  if (!isDisplayHostnameCandidate(value)) {
+    return null;
+  }
   const hostname = getTldtsHostname(value.includes("://") ? value : `https://${value}`);
-  return hostname?.replace(/^www\./, "").toLowerCase() ?? null;
+  const normalized = hostname?.replace(/^www\./, "").toLowerCase() ?? null;
+  return isInventoryDisplayHostname(normalized) ? normalized : null;
 }
 
 export function inventoryRegistrableDomain(value: string | null | undefined) {
@@ -167,6 +171,21 @@ export function inventoryRegistrableDomain(value: string | null | undefined) {
     return null;
   }
   return getTldtsDomain(hostname, { allowPrivateDomains: true }) ?? hostname;
+}
+
+function isDisplayHostnameCandidate(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 &&
+    !trimmed.startsWith(".") &&
+    !trimmed.startsWith("_") &&
+    !/\s/.test(trimmed);
+}
+
+export function isInventoryDisplayHostname(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+  return /^[a-z0-9](?:[a-z0-9-]*\.)+[a-z0-9-]{2,}$/i.test(value.trim());
 }
 
 function getStringArrayFromRecord(row: Record<string, unknown>, keys: string[]) {
@@ -253,17 +272,18 @@ export function buildTrackerInventoryRows(input: {
   };
 
   for (const entity of input.topObservedEntities) {
-    if (isFirstPartyHost(entity.label) || isCoveredByResolvedVendorHost(entity.label)) {
+    const entityHost = normalizeInventoryHostname(entity.label);
+    if (!entityHost || isFirstPartyHost(entityHost) || isCoveredByResolvedVendorHost(entityHost)) {
       continue;
     }
     addRow({
       category: entity.category || "tracker",
       confidence: null,
-      domains: input.domains.includes(entity.label) ? [entity.label] : [],
+      domains: input.domains.includes(entityHost) ? [entityHost] : [],
       firstSeenMs: null,
       label: entity.label,
       observedVia: ["request"],
-      party: getTrackerParty(input.domains.includes(entity.label) ? [entity.label] : []),
+      party: getTrackerParty(input.domains.includes(entityHost) ? [entityHost] : []),
       preConsent: input.preConsentVendors.includes(entity.label),
       requestCount: entity.requestCount,
       source: "runtime requests"
@@ -315,17 +335,18 @@ export function buildTrackerInventoryRows(input: {
     });
   }
   for (const host of input.unresolvedHosts) {
-    if (isFirstPartyHost(host) || isCoveredByResolvedVendorHost(host)) {
+    const unresolvedHost = normalizeInventoryHostname(host);
+    if (!unresolvedHost || isFirstPartyHost(unresolvedHost) || isCoveredByResolvedVendorHost(unresolvedHost)) {
       continue;
     }
     addRow({
       category: "unresolved_host",
       confidence: null,
-      domains: [host],
+      domains: [unresolvedHost],
       firstSeenMs: null,
-      label: host,
+      label: unresolvedHost,
       observedVia: ["host"],
-      party: getTrackerParty([host]),
+      party: getTrackerParty([unresolvedHost]),
       preConsent: false,
       requestCount: null,
       source: "host inventory"

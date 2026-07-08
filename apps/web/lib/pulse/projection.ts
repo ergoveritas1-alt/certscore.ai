@@ -11,11 +11,15 @@ import { getAssessmentDirection, getEvidenceLabel } from "../scans/gdpr-eprivacy
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../scans/gdpr-eprivacy-checklist-rationale";
 import { buildRegulatoryGapTopFindings } from "../scans/regulatory-gap-top-findings";
 import { buildNormalizedConcerns } from "../scans/normalized-concerns";
-import { buildPromotionGradePreconsentRequests } from "../scans/preconsent-public-evidence";
+import {
+  buildPromotionGradePreconsentRequests,
+  inferDirectEndpointVendorFromUrl
+} from "../scans/preconsent-public-evidence";
 import { buildRuntimeCookieInventory } from "../scans/runtime-cookie-evidence";
 import {
   buildTrackerInventoryGroupRows,
-  buildTrackerInventoryRows
+  buildTrackerInventoryRows,
+  isInventoryDisplayHostname
 } from "../scans/runtime-inventory-projection";
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
@@ -519,8 +523,16 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     : [];
   const vendors = Array.isArray(details.vendors) ? details.vendors : [];
   const firstRequest = representativeRequests[0];
-  const firstVendor = vendors[0];
+  const firstRequestUrl =
+    typeof firstRequest?.requestUrl === "string"
+      ? firstRequest.requestUrl
+      : typeof firstRequest?.url === "string"
+        ? firstRequest.url
+        : null;
+  const firstRequestEndpointVendor = inferDirectEndpointVendorFromUrl(firstRequestUrl);
   const runtimeRequestUrls = asStringArray(details.runtimeRequestUrls);
+  const firstRuntimeRequestUrl = runtimeRequestUrls[0] ?? null;
+  const firstRuntimeRequestEndpointVendor = inferDirectEndpointVendorFromUrl(firstRuntimeRequestUrl);
   const sourceUrls = asStringArray(details.sourceUrls);
   const pageUrls = asStringArray(details.pageUrls);
   const runtimePhase =
@@ -549,17 +561,23 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
       ? {
           type: "request",
           phase: firstRequest.runtimePhase ?? (firstRequest.preConsent ? "pre_consent" : null),
-          vendor: firstRequest.vendor ?? firstVendor?.name ?? null,
+          vendor: firstRequestEndpointVendor?.vendorName ?? firstRequest.vendor ?? null,
+          vendorCategory: firstRequestEndpointVendor?.vendorCategory ?? firstRequest.vendorCategory ?? firstRequest.category ?? null,
+          vendorAttributionBasis: firstRequestEndpointVendor && firstRequest.vendor && firstRequestEndpointVendor.vendorName !== firstRequest.vendor
+            ? `${firstRequest.vendorAttributionBasis ?? "request_row_vendor"}:${firstRequestEndpointVendor.basis}`
+            : firstRequest.vendorAttributionBasis ?? firstRequestEndpointVendor?.basis ?? null,
           urlHost: firstRequest.hostname ?? null,
           timestampMs: firstRequest.firstSeenMs ?? null
         }
       : null,
-    runtimeRequestUrls[0]
+    firstRuntimeRequestUrl
       ? {
           type: "request",
           phase: runtimePhase ?? null,
-          vendor: asStringArray(details.runtimeVendors)[0] ?? null,
-          urlHost: safeHostname(runtimeRequestUrls[0]),
+          vendor: firstRuntimeRequestEndpointVendor?.vendorName ?? null,
+          vendorCategory: firstRuntimeRequestEndpointVendor?.vendorCategory ?? null,
+          vendorAttributionBasis: firstRuntimeRequestEndpointVendor?.basis ?? null,
+          urlHost: safeHostname(firstRuntimeRequestUrl),
           timestampMs: null
         }
       : null,
@@ -1455,11 +1473,34 @@ export function buildPulseProjection(input: PulseProjectionInput) {
 }
 
 function scanRecordVendors(scanRecord: ScanDetailResponse) {
-  return scanRecord.trackerVendors.map((vendor) => ({
-    name: vendor.vendorName,
-    category: vendor.vendorCategory,
-    host: vendor.scriptHost,
-    beforeConsent: vendor.beforeConsent,
-    confidence: vendor.confidence
-  }));
+  const rows = new Map<string, {
+    name: string;
+    category: string;
+    host: string | null;
+    beforeConsent: boolean | null;
+    confidence: number;
+  }>();
+  for (const vendor of scanRecord.trackerVendors) {
+    const host = isInventoryDisplayHostname(vendor.scriptHost) ? vendor.scriptHost : null;
+    const key = `${vendor.vendorName.toLowerCase()}\u0000${host ?? ""}\u0000${vendor.vendorCategory.toLowerCase()}`;
+    const existing = rows.get(key);
+    if (!existing) {
+      rows.set(key, {
+        name: vendor.vendorName,
+        category: vendor.vendorCategory,
+        host,
+        beforeConsent: vendor.beforeConsent,
+        confidence: vendor.confidence
+      });
+      continue;
+    }
+    rows.set(key, {
+      ...existing,
+      beforeConsent: existing.beforeConsent === true || vendor.beforeConsent === true
+        ? true
+        : existing.beforeConsent ?? vendor.beforeConsent,
+      confidence: Math.max(existing.confidence, vendor.confidence)
+    });
+  }
+  return [...rows.values()];
 }

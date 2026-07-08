@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildRuntimeInventoryGroupRows,
   buildTrackerInventoryRows,
+  isInventoryDisplayHostname,
 } from "./runtime-inventory-projection";
 
 test("projects Adobe Launch host as tag management instead of unknown tracker", () => {
@@ -59,4 +60,135 @@ test("keeps first-party Akamai security tracker inventory contextual", () => {
   assert.equal(akamaiRow?.purpose, "Security");
   assert.equal(akamaiRow?.priority, "contextual");
   assert.equal(akamaiRow?.party, "—");
+});
+
+test("filters cookie names and cookie-domain tokens out of tracker display domains", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: ["region1.google-analytics.com", "_ga", ".seel.com", "__cf_bm"],
+    firstPartyDomain: "seel.com",
+    preConsentVendors: ["Google Analytics", "Cloudflare Bot Management"],
+    resolvedVendors: [],
+    sessionReplayVendors: [],
+    trackerVendors: [
+      {
+        beforeConsent: true,
+        confidence: 0.95,
+        detectionSource: "vendor resolver",
+        scriptHost: "region1.google-analytics.com",
+        vendorCategory: "analytics",
+        vendorName: "Google Analytics",
+      },
+      {
+        beforeConsent: true,
+        confidence: 0.93,
+        detectionSource: "vendor resolver",
+        scriptHost: "__cf_bm",
+        vendorCategory: "security",
+        vendorName: "Cloudflare Bot Management",
+      },
+      {
+        beforeConsent: true,
+        confidence: 0.93,
+        detectionSource: "vendor resolver",
+        scriptHost: ".seel.com",
+        vendorCategory: "analytics",
+        vendorName: "Google Analytics",
+      },
+      {
+        beforeConsent: true,
+        confidence: 0.93,
+        detectionSource: "vendor resolver",
+        scriptHost: "qc005",
+        vendorCategory: "cmp",
+        vendorName: "Quantcast Choice CMP",
+      },
+      {
+        beforeConsent: true,
+        confidence: 0.93,
+        detectionSource: "vendor resolver",
+        scriptHost: "permutive-consent",
+        vendorCategory: "advertising",
+        vendorName: "Permutive",
+      },
+      {
+        beforeConsent: true,
+        confidence: 0.93,
+        detectionSource: "vendor resolver",
+        scriptHost: "didomi",
+        vendorCategory: "cmp",
+        vendorName: "Didomi CMP",
+      },
+      {
+        beforeConsent: true,
+        confidence: 0.93,
+        detectionSource: "vendor resolver",
+        scriptHost: "iubenda",
+        vendorCategory: "cmp",
+        vendorName: "Iubenda CMP",
+      },
+    ] as never,
+    topObservedEntities: [],
+    unresolvedHosts: ["_ga_jkt0kkxlxe", "qc005", "didomi", "iubenda", "permutive-consent", ".osano-cm-window__dialog"],
+  });
+
+  const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
+  const googleAnalytics = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Google Analytics");
+  const cloudflare = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Cloudflare Bot Management");
+  const quantcastChoice = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Quantcast Choice CMP");
+  const permutive = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Permutive");
+  const didomi = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Didomi CMP");
+  const iubenda = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Iubenda CMP");
+
+  assert.deepEqual(googleAnalytics?.domains, ["region1.google-analytics.com"]);
+  assert.deepEqual(cloudflare?.domains, []);
+  assert.deepEqual(quantcastChoice?.domains, []);
+  assert.deepEqual(permutive?.domains, []);
+  assert.deepEqual(didomi?.domains, []);
+  assert.deepEqual(iubenda?.domains, []);
+  assert.equal(groupedRows.some((row) => row.type === "tracker" && row.vendor === "_ga_jkt0kkxlxe"), false);
+  assert.equal(isInventoryDisplayHostname("_ga"), false);
+  assert.equal(isInventoryDisplayHostname(".seel.com"), false);
+  assert.equal(isInventoryDisplayHostname("__cf_bm"), false);
+  assert.equal(isInventoryDisplayHostname("qc005"), false);
+  assert.equal(isInventoryDisplayHostname("didomi"), false);
+  assert.equal(isInventoryDisplayHostname("iubenda"), false);
+  assert.equal(isInventoryDisplayHostname("permutive-consent"), false);
+  assert.equal(isInventoryDisplayHostname(".osano-cm-window__dialog"), false);
+  assert.equal(isInventoryDisplayHostname("region1.google-analytics.com"), true);
+});
+
+test("deduplicates tracker inventory rows by vendor host and purpose", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: ["snap.licdn.com"],
+    firstPartyDomain: "example.com",
+    preConsentVendors: ["LinkedIn Insight Tag"],
+    resolvedVendors: [],
+    sessionReplayVendors: [],
+    trackerVendors: [
+      {
+        beforeConsent: true,
+        confidence: 0.95,
+        detectionSource: "vendor resolver",
+        scriptHost: "snap.licdn.com",
+        vendorCategory: "advertising",
+        vendorName: "LinkedIn Insight Tag",
+      },
+      {
+        beforeConsent: true,
+        confidence: 0.85,
+        detectionSource: "vendor resolver",
+        scriptHost: "snap.licdn.com",
+        vendorCategory: "advertising",
+        vendorName: "LinkedIn Insight Tag",
+      },
+    ] as never,
+    topObservedEntities: [],
+    unresolvedHosts: [],
+  });
+
+  const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows })
+    .filter((row) => row.type === "tracker" && row.vendor === "LinkedIn Insight Tag");
+
+  assert.equal(groupedRows.length, 1);
+  assert.deepEqual(groupedRows[0]?.domains, ["snap.licdn.com"]);
 });

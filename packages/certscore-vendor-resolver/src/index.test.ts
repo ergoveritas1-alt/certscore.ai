@@ -202,6 +202,32 @@ test("resolves Consentmanager CDN as consent management CMP", () => {
   assert.equal(resolveVendorDisplayCategory(observation), "Cookie compliance");
 });
 
+test("resolves Osano CMP endpoints as consent management", () => {
+  const observations = resolveVendorObservations([
+    request("https://cmp.osano.com/consent-manager/example/osano.js", "cmp.osano.com"),
+    {
+      type: "cmp_runtime",
+      domSelector: ".osano-cm-window__dialog",
+      hostname: "osano",
+      matchSource: "dom_selector",
+    },
+  ]);
+
+  assertResolved(observations, "Osano", "Osano CMP", "consent_management");
+  const osano = observations.find((item) => item.product === "Osano CMP");
+  assert.ok(osano);
+  assert.equal(resolveVendorDisplayCategory(osano), "Cookie compliance");
+  assert.equal(osano.matchedHostnames.includes("cmp.osano.com"), true);
+  assert.equal(osano.matchedHostnames.includes("osano"), false);
+  assert.equal(
+    osano.matchSources.some((source) =>
+      source.matchedField === "dom_selector" &&
+      source.matchedValueRedacted === ".osano-cm-window__dialog"
+    ),
+    true,
+  );
+});
+
 test("resolves CMP runtime probes from canonical registry markers", () => {
   const observations = resolveVendorObservations([
     {
@@ -272,10 +298,18 @@ test("resolves session replay libraries by product-specific evidence", () => {
       type: "script",
       url: "https://rs.fullstory.com/s/fs.js",
     },
+    {
+      type: "script",
+      url: "https://static.hotjar.com/c/hotjar-123456.js?sv=6",
+      hostname: "static.hotjar.com",
+    },
   ]);
 
-  assert.equal(observations[0]?.product, "FullStory");
-  assert.equal(observations[0]?.purpose, "session_replay");
+  assertResolved(observations, "FullStory", "FullStory", "session_replay");
+  assertResolved(observations, "Hotjar", "Hotjar", "session_replay");
+  const hotjar = observations.find((item) => item.product === "Hotjar");
+  assert.ok(hotjar);
+  assert.equal(hotjar.matchedHostnames.includes("static.hotjar.com"), true);
 });
 
 test("resolves Microsoft Clarity collection host without generic collect matching", () => {
@@ -358,6 +392,188 @@ test("classifies LinkedIn Insight Tag, Ads Pixel, and cookies as advertising", (
   assert.equal(adsPixel.purpose, "advertising");
   assert.equal(resolveVendorDisplayCategory(adsPixel), "Advertising");
   assert.equal(insight.matchedCookieNames.includes("li_sugr"), true);
+});
+
+test("classifies LinkedIn and ZoomInfo tracking even when Cloudflare utility cookies are written", () => {
+  const observations = resolveVendorObservations([
+    request("https://snap.licdn.com/li.lms-analytics/insight.min.js", "snap.licdn.com"),
+    request("https://px.ads.linkedin.com/collect/?pid=123", "px.ads.linkedin.com"),
+    request("https://ws.zoominfo.com/pixel/collect?company=example", "ws.zoominfo.com"),
+    {
+      type: "cookie",
+      cookieName: "__cf_bm",
+      hostname: "linkedin.com",
+    },
+    {
+      type: "cookie",
+      cookieName: "__cf_bm",
+      hostname: "zoominfo.com",
+    },
+  ]);
+
+  assertResolved(observations, "LinkedIn", "LinkedIn Insight Tag", "advertising");
+  assertResolved(observations, "LinkedIn", "LinkedIn Ads Pixel", "advertising");
+  assertResolved(observations, "ZoomInfo", "ZoomInfo WebSights", "analytics");
+
+  const zoomInfo = observations.find((item) => item.product === "ZoomInfo WebSights");
+  assert.ok(zoomInfo);
+  assert.equal(resolveVendorDisplayCategory(zoomInfo), "Analytics");
+  assert.equal(zoomInfo.regulatoryRelevance.includes("b2b_intent_data"), true);
+  assert.equal(zoomInfo.matchedHostnames.includes("ws.zoominfo.com"), true);
+
+  const cloudflare = observations.find((item) => item.product === "Cloudflare Bot Management");
+  assert.ok(cloudflare);
+  assert.equal(cloudflare.vendor, "Cloudflare");
+  assert.equal(cloudflare.purpose, "security");
+  assert.deepEqual(cloudflare.matchedHostnames, []);
+  assert.deepEqual(cloudflare.matchedCookieNames, ["__cf_bm"]);
+});
+
+test("classifies Framer, YouTube image CDN, Statuspage, Intercom, and common CDN hosts without borrowing unrelated vendors", () => {
+  const observations = resolveVendorObservations([
+    request("https://events.framer.com/script?v=2", "events.framer.com"),
+    request("https://i.ytimg.com/vi/example/hqdefault.jpg", "i.ytimg.com"),
+    request("https://img.youtube.com/vi/example/hqdefault.jpg", "img.youtube.com"),
+    request("https://cdn.statuspage.io/se-v2.js", "cdn.statuspage.io"),
+    request("https://5b4dcn321xtp.statuspage.io/api/v2/status.json", "5b4dcn321xtp.statuspage.io"),
+    request("https://js.intercomcdn.com/frame-modern.js", "js.intercomcdn.com"),
+    request("https://cdnjs.cloudflare.com/ajax/libs/example/1.0.0/example.min.js", "cdnjs.cloudflare.com"),
+    request("https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css", "maxcdn.bootstrapcdn.com"),
+    request("https://unpkg.com/react@18/umd/react.production.min.js", "unpkg.com"),
+    request("https://use.typekit.net/abcd123.css", "use.typekit.net"),
+    request("https://d2pu3v2r6r77j3.cloudfront.net/app.js", "d2pu3v2r6r77j3.cloudfront.net"),
+  ]);
+
+  assertResolved(observations, "Framer", "Framer Analytics", "analytics");
+  assertResolved(observations, "YouTube", "YouTube Image CDN", "infrastructure");
+  assertResolved(observations, "Atlassian Statuspage", "Statuspage", "infrastructure");
+  assertResolved(observations, "Intercom", "Intercom Messenger", "customer_support");
+  assertResolved(observations, "cdnjs", "cdnjs CDN", "infrastructure");
+  assertResolved(observations, "BootstrapCDN", "BootstrapCDN", "infrastructure");
+  assertResolved(observations, "unpkg", "unpkg CDN", "infrastructure");
+  assertResolved(observations, "Adobe", "Adobe Fonts / Typekit", "infrastructure");
+  assertResolved(observations, "Amazon CloudFront", "CloudFront Distribution", "infrastructure");
+
+  const framer = observations.find((item) => item.product === "Framer Analytics");
+  assert.ok(framer);
+  assert.notEqual(framer.vendor, "Google Fonts");
+  assert.equal(resolveVendorDisplayCategory(framer), "Analytics");
+
+  const youtube = observations.find((item) => item.product === "YouTube Image CDN");
+  assert.ok(youtube);
+  assert.equal(resolveVendorDisplayCategory(youtube), "CDN");
+  assert.equal(youtube.matchedHostnames.includes("img.youtube.com"), true);
+});
+
+test("keeps native ad hosts when generic cookie names also match exchange rules", () => {
+  const observations = resolveVendorObservations([
+    request("https://content.adriver.ru/cgi-bin/erle.cgi?sid=1", "content.adriver.ru"),
+    request("https://yandex.com/ads/system/context.js", "yandex.com"),
+    {
+      type: "cookie",
+      cookieName: "uid",
+      hostname: "content.adriver.ru",
+    },
+    {
+      type: "cookie",
+      cookieName: "i",
+      hostname: "yandex.com",
+    },
+  ]);
+
+  assertResolved(observations, "AdRiver", "AdRiver", "advertising");
+  assertResolved(observations, "Yandex", "Yandex Ads / Metrica", "advertising");
+
+  const adriver = observations.find((item) => item.product === "AdRiver");
+  assert.ok(adriver);
+  assert.equal(adriver.matchedHostnames.includes("content.adriver.ru"), true);
+
+  const yandex = observations.find((item) => item.product === "Yandex Ads / Metrica");
+  assert.ok(yandex);
+  assert.equal(yandex.matchedHostnames.includes("yandex.com"), true);
+
+  const criteo = observations.find((item) => item.product === "Criteo");
+  assert.ok(criteo);
+  assert.deepEqual(criteo.matchedHostnames, []);
+  assert.deepEqual(criteo.matchedCookieNames, ["uid"]);
+
+  const openX = observations.find((item) => item.product === "OpenX");
+  assert.ok(openX);
+  assert.deepEqual(openX.matchedHostnames, []);
+  assert.deepEqual(openX.matchedCookieNames, ["i"]);
+});
+
+test("classifies Contentful assets and VK Mail.ru ad endpoints", () => {
+  const observations = resolveVendorObservations([
+    request("https://images.ctfassets.net/site/image.png", "images.ctfassets.net"),
+    request("https://top-fwz1.mail.ru/counter?id=123", "top-fwz1.mail.ru"),
+  ]);
+
+  assertResolved(observations, "Contentful", "Contentful Assets", "infrastructure");
+  assertResolved(observations, "VK / Mail.ru", "VK / Mail.ru Ads", "advertising");
+
+  const contentful = observations.find((item) => item.product === "Contentful Assets");
+  assert.ok(contentful);
+  assert.equal(resolveVendorDisplayCategory(contentful), "CDN");
+
+  const mailRu = observations.find((item) => item.product === "VK / Mail.ru Ads");
+  assert.ok(mailRu);
+  assert.equal(resolveVendorDisplayCategory(mailRu), "Advertising");
+});
+
+test("does not attach cookie or storage identifiers as matched hostnames", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "cookie",
+      cookieName: "euconsent-v2",
+      hostname: "qc005",
+    },
+    {
+      type: "cmp_runtime",
+      storageKey: "permutive-consent",
+      hostname: "permutive-consent",
+      matchSource: "storage_key",
+    },
+    {
+      type: "cookie",
+      cookieName: "didomi_token",
+      hostname: "didomi",
+    },
+    {
+      type: "cmp_runtime",
+      storageKey: "iubenda",
+      hostname: "iubenda",
+      matchSource: "storage_key",
+    },
+  ]);
+
+  const quantcastChoice = observations.find((item) => item.product === "Quantcast Choice CMP");
+  assert.ok(quantcastChoice);
+  assert.deepEqual(quantcastChoice.matchedHostnames, []);
+  assert.equal(quantcastChoice.matchedCookieNames.includes("euconsent-v2"), true);
+
+  const permutive = observations.find((item) => item.product === "Permutive");
+  assert.ok(permutive);
+  assert.deepEqual(permutive.matchedHostnames, []);
+
+  const didomi = observations.find((item) => item.product === "Didomi CMP");
+  assert.ok(didomi);
+  assert.deepEqual(didomi.matchedHostnames, []);
+  assert.equal(didomi.matchedCookieNames.includes("didomi_token"), true);
+
+  const iubenda = observations.find((item) => item.product === "Iubenda CMP");
+  assert.ok(iubenda);
+  assert.deepEqual(iubenda.matchedHostnames, []);
+});
+
+test("classifies VWO and Claydar marketing analytics endpoints", () => {
+  const observations = resolveVendorObservations([
+    request("https://dev.visualwebsiteoptimizer.com/j.php?a=123", "dev.visualwebsiteoptimizer.com"),
+    request("https://api.claydar.com/collect", "api.claydar.com"),
+  ]);
+
+  assertResolved(observations, "VWO", "Visual Website Optimizer", "analytics");
+  assertResolved(observations, "Claydar", "Claydar", "analytics");
 });
 
 test("classifies HubSpot runtime families without collapsing consent tooling into marketing", () => {
@@ -669,6 +885,10 @@ test("resolves CNN-style detected technologies from canonical registry sources",
   assert.equal(pianoTinypass.regulatoryRelevance.includes("cdn"), true);
   assert.equal(pianoTinypass.regulatoryRelevance.includes("script_delivery"), true);
   assertResolved(observations, "Cloudflare", "Cloudflare Bot Management", "security");
+  const cloudflare = observations.find((item) => item.product === "Cloudflare Bot Management");
+  assert.ok(cloudflare);
+  assert.deepEqual(cloudflare.matchedHostnames, []);
+  assert.deepEqual(cloudflare.matchedCookieNames, ["__cf_bm"]);
 });
 
 test("resolves DatoCMS and Mux image hosts as content infrastructure by default", () => {
@@ -741,7 +961,12 @@ test("classifies iZooto web-push runtime without letting Cloudflare cookies eras
   assert.equal(izooto.regulatoryRelevance.includes("push_notifications"), true);
   assert.equal(izooto.matchedHostnames.includes("cdn.izooto.com"), true);
   assert.equal(resolveVendorDisplayCategory(izooto), "Marketing automation");
-  assertResolved(observations, "Cloudflare", "Cloudflare Bot Management", "security");
+  const cloudflare = observations.find((item) => item.product === "Cloudflare Bot Management");
+  assert.ok(cloudflare);
+  assert.equal(cloudflare.vendor, "Cloudflare");
+  assert.equal(cloudflare.purpose, "security");
+  assert.deepEqual(cloudflare.matchedHostnames, []);
+  assert.deepEqual(cloudflare.matchedCookieNames, ["__cf_bm"]);
 });
 
 test("classifies X/Twitter widget runtime without letting Cloudflare cookies erase the vendor", () => {
@@ -759,8 +984,14 @@ test("classifies X/Twitter widget runtime without letting Cloudflare cookies era
   assert.equal(twitter.vendor, "X/Twitter");
   assert.equal(twitter.purpose, "advertising");
   assert.equal(twitter.regulatoryRelevance.includes("social_embed"), true);
+  assert.equal(twitter.matchedHostnames.includes("platform.twitter.com"), true);
   assert.equal(resolveVendorDisplayCategory(twitter), "Advertising");
-  assertResolved(observations, "Cloudflare", "Cloudflare Bot Management", "security");
+  const cloudflare = observations.find((item) => item.product === "Cloudflare Bot Management");
+  assert.ok(cloudflare);
+  assert.equal(cloudflare.vendor, "Cloudflare");
+  assert.equal(cloudflare.purpose, "security");
+  assert.deepEqual(cloudflare.matchedHostnames, []);
+  assert.deepEqual(cloudflare.matchedCookieNames, ["__cf_bm"]);
 });
 
 test("assigns canonical display categories for CNN-style technologies", () => {

@@ -1,3 +1,5 @@
+import { resolveVendorObservations } from "@certscore/vendor-resolver";
+
 export type PromotionGradePreconsentRequest = {
   scannedPageUrl?: string | null;
   requestUrl: string;
@@ -139,10 +141,72 @@ function hostMatches(hostname: string, domain: string) {
   return hostname === domain || hostname.endsWith(`.${domain}`);
 }
 
+function canonicalPurposeToEvidenceCategory(purpose: string | null | undefined) {
+  if (!purpose) {
+    return null;
+  }
+  const normalized = purpose.toLowerCase();
+  if (normalized === "consent_management") {
+    return "cmp";
+  }
+  if (normalized === "tag_management") {
+    return "tag_management";
+  }
+  if (normalized === "performance_monitoring") {
+    return "performance_monitoring";
+  }
+  if (normalized === "customer_support") {
+    return "customer_support";
+  }
+  if (normalized === "session_replay") {
+    return "session_replay";
+  }
+  if (normalized === "infrastructure") {
+    return "infrastructure";
+  }
+  if (normalized === "security") {
+    return "security";
+  }
+  if (normalized === "analytics") {
+    return "analytics";
+  }
+  if (normalized === "advertising") {
+    return "advertising";
+  }
+  return normalized;
+}
+
+function inferCanonicalEndpointVendorFromUrl(url: string | null | undefined): DirectEndpointVendorMatch | null {
+  const hostname = getUrlHostname(url);
+  if (!url || !hostname) {
+    return null;
+  }
+  const observation = resolveVendorObservations([{
+    type: "request",
+    url,
+    hostname,
+    sourceEventType: "network_request",
+    matchSource: "network_request"
+  }])[0];
+  const vendorCategory = canonicalPurposeToEvidenceCategory(observation?.purpose);
+  if (!observation || !vendorCategory) {
+    return null;
+  }
+  return {
+    vendorName: observation.product || observation.vendor,
+    vendorCategory,
+    basis: "canonical_vendor_resolver"
+  };
+}
+
 export function inferDirectEndpointVendorFromUrl(url: string | null | undefined): DirectEndpointVendorMatch | null {
   const hostname = getUrlHostname(url);
   if (!hostname) {
     return null;
+  }
+  const canonicalMatch = inferCanonicalEndpointVendorFromUrl(url);
+  if (canonicalMatch) {
+    return canonicalMatch;
   }
 
   const directHostMatches: Array<{ domain: string; vendorName: string; vendorCategory: string; basis: string }> = [

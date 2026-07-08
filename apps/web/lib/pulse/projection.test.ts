@@ -98,3 +98,21 @@ test("Pulse projection exposes Summary JSON and Evidence JSON artifacts", () => 
   assert.match(adminSource, /summary_json_downloads/);
   assert.match(adminSource, /evidence_json_downloads/);
 });
+
+test("Pulse evidence inventory filters display hostnames and deduplicates vendor rows", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /function scanRecordVendors/);
+  assert.match(source, /isInventoryDisplayHostname\(vendor\.scriptHost\)/);
+  assert.match(source, /const rows = new Map/);
+  assert.doesNotMatch(source, /return scanRecord\.trackerVendors\.map/);
+});
+
+test("Pulse example events do not borrow vendors by list position", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /inferDirectEndpointVendorFromUrl/);
+  assert.doesNotMatch(source, /const firstVendor = vendors\[0\]/);
+  assert.doesNotMatch(source, /firstVendor\?\.name/);
+  assert.doesNotMatch(source, /asStringArray\(details\.runtimeVendors\)\[0\]/);
+});

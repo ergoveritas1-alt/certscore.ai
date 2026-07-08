@@ -85,6 +85,7 @@ interface VendorRule {
   storageKeyPatterns?: RegExp[];
   domSelectorPatterns?: RegExp[];
   requireUrlPatternMatch?: boolean;
+  suppressCookieMatchedHostname?: boolean;
   basisLabel: string;
 }
 
@@ -120,6 +121,27 @@ const rules: VendorRule[] = [
     confidence: 0.9,
     hostPatterns: [/^gstatic\.com$/i, /^(?!fonts\.)[^.]+\.gstatic\.com$/i],
     basisLabel: "google_static_assets_infrastructure",
+  },
+  {
+    entity: "Adobe Inc.",
+    vendor: "Adobe",
+    product: "Adobe Fonts / Typekit",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "font_delivery", "third_party_runtime"],
+    confidence: 0.92,
+    hostPatterns: [/^use\.typekit\.net$/i, /^p\.typekit\.net$/i],
+    basisLabel: "adobe_fonts_typekit_cdn",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "YouTube",
+    product: "YouTube Image CDN",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "media_delivery", "embedded_content", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^i\.ytimg\.com$/i, /^img\.youtube\.com$/i],
+    urlPatterns: [/\/(?:vi|an_webp|sb|s_p|ggpht)\//i],
+    basisLabel: "youtube_image_cdn_infrastructure",
   },
   {
     entity: "Google LLC",
@@ -251,8 +273,44 @@ const rules: VendorRule[] = [
     hostPatterns: [/\.criteo\.com$/i, /\.criteo\.net$/i],
     urlPatterns: [/\/r\/d/i, /\/dis\/dis\.aspx/i],
     cookiePatterns: [/^uid$/i, /^cto_bundle$/i],
+    suppressCookieMatchedHostname: true,
     storageKeyPatterns: [/criteo/i],
     basisLabel: "criteo_endpoint_or_cookie",
+  },
+  {
+    entity: "AdRiver LLC",
+    vendor: "AdRiver",
+    product: "AdRiver",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "ad_delivery", "ad_measurement"],
+    confidence: 0.92,
+    hostPatterns: [/\.adriver\.ru$/i, /^adriver\.ru$/i],
+    urlPatterns: [/\/(?:cgi-bin|images|js|banners|ad|erle)\b/i],
+    basisLabel: "adriver_ad_endpoint",
+  },
+  {
+    entity: "Yandex LLC",
+    vendor: "Yandex",
+    product: "Yandex Ads / Metrica",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "analytics", "ad_measurement", "cross_site_tracking"],
+    confidence: 0.93,
+    hostPatterns: [/\.yandex\.(?:ru|com|net)$/i, /^yandex\.(?:ru|com|net)$/i],
+    urlPatterns: [/\/(?:watch|metrika|metrika_match|ads|yabs|sync|setuid)\b/i],
+    cookiePatterns: [/^yabs-sid$/i, /^sync_cookie_csrf$/i, /^yandexuid$/i, /^yuid/i],
+    basisLabel: "yandex_ads_metrica_endpoint_or_cookie",
+  },
+  {
+    entity: "VK Company Limited",
+    vendor: "VK / Mail.ru",
+    product: "VK / Mail.ru Ads",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "analytics", "ad_measurement"],
+    confidence: 0.9,
+    hostPatterns: [/\.mail\.ru$/i, /^mail\.ru$/i, /\.mytarget\.ru$/i],
+    urlPatterns: [/\/(?:counter|top|tracker|ads?|sync|pixel)\b/i],
+    cookiePatterns: [/^tmr_lvid/i, /^top100_id$/i],
+    basisLabel: "vk_mail_ru_ads_endpoint_or_cookie",
   },
   {
     entity: "Permutive Ltd",
@@ -326,6 +384,7 @@ const rules: VendorRule[] = [
     hostPatterns: [/\.openx\.net$/i],
     urlPatterns: [/\/w\/1\.0\//i, /\/sync/i],
     cookiePatterns: [/^i$/i, /^pd$/i],
+    suppressCookieMatchedHostname: true,
     basisLabel: "openx_endpoint_or_cookie",
   },
   {
@@ -1021,6 +1080,46 @@ const rules: VendorRule[] = [
     basisLabel: "jsdelivr_cdn_host",
   },
   {
+    entity: "Cloudflare, Inc.",
+    vendor: "cdnjs",
+    product: "cdnjs CDN",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "script_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^cdnjs\.cloudflare\.com$/i],
+    basisLabel: "cdnjs_cdn_host",
+  },
+  {
+    entity: "Cloudflare, Inc.",
+    vendor: "BootstrapCDN",
+    product: "BootstrapCDN",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "script_delivery", "style_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^maxcdn\.bootstrapcdn\.com$/i, /^stackpath\.bootstrapcdn\.com$/i],
+    basisLabel: "bootstrapcdn_host",
+  },
+  {
+    entity: "npm, Inc.",
+    vendor: "unpkg",
+    product: "unpkg CDN",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "script_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^unpkg\.com$/i],
+    basisLabel: "unpkg_cdn_host",
+  },
+  {
+    entity: "Amazon Web Services, Inc.",
+    vendor: "Amazon CloudFront",
+    product: "CloudFront Distribution",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "content_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^d[a-z0-9]{8,}\.cloudfront\.net$/i, /\.cloudfront\.net$/i],
+    basisLabel: "aws_cloudfront_distribution_host",
+  },
+  {
     entity: "DatoCMS",
     vendor: "DatoCMS",
     product: "DatoCMS Assets",
@@ -1029,6 +1128,16 @@ const rules: VendorRule[] = [
     confidence: 0.92,
     hostPatterns: [/^www\.datocms-assets\.com$/i],
     basisLabel: "datocms_assets_cdn_host",
+  },
+  {
+    entity: "Contentful GmbH",
+    vendor: "Contentful",
+    product: "Contentful Assets",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "media_delivery", "content_delivery", "third_party_runtime"],
+    confidence: 0.92,
+    hostPatterns: [/^images\.ctfassets\.net$/i, /^assets\.ctfassets\.net$/i, /\.ctfassets\.net$/i],
+    basisLabel: "contentful_assets_cdn_host",
   },
   {
     entity: "Mux, Inc.",
@@ -1077,6 +1186,19 @@ const rules: VendorRule[] = [
     basisLabel: "optimizely_experimentation_runtime",
   },
   {
+    entity: "Wingify Software Pvt. Ltd.",
+    vendor: "VWO",
+    product: "Visual Website Optimizer",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "experimentation", "ab_testing", "personalization"],
+    confidence: 0.92,
+    hostPatterns: [/\.visualwebsiteoptimizer\.com$/i, /^dev\.visualwebsiteoptimizer\.com$/i],
+    urlPatterns: [/\/(?:j\.php|track|collect|settings|visitor|event)\b/i],
+    cookiePatterns: [/^_vis_opt_/i, /^_vwo/i],
+    storageKeyPatterns: [/^_vwo/i, /^vwo/i],
+    basisLabel: "vwo_experimentation_runtime",
+  },
+  {
     entity: "Cloudflare, Inc.",
     vendor: "Cloudflare",
     product: "Cloudflare Bot Management",
@@ -1084,6 +1206,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["security", "bot_detection", "fraud_prevention"],
     confidence: 0.93,
     cookiePatterns: [/^__cf_bm$/i, /^cf_clearance$/i, /^cf_chl_/i],
+    suppressCookieMatchedHostname: true,
     basisLabel: "cloudflare_bot_management_cookie",
   },
   {
@@ -1108,6 +1231,60 @@ const rules: VendorRule[] = [
     urlPatterns: [/\/taglw\.js\b/i, /\/Home\/Index\b/i],
     cookiePatterns: [/^(pi|tp|u)$/i],
     basisLabel: "bombora_ml314_visitor_insights",
+  },
+  {
+    entity: "ZoomInfo Technologies LLC",
+    vendor: "ZoomInfo",
+    product: "ZoomInfo WebSights",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "b2b_intent_data", "lead_enrichment", "cross_site_tracking"],
+    confidence: 0.91,
+    hostPatterns: [/\.zoominfo\.com$/i, /^zoominfo\.com$/i, /\.zi-scripts\.com$/i],
+    urlPatterns: [/\/(?:pixel|collect|track|analytics|websights|visitor|tag)\b/i, /\/zi(?:-tag)?\.js\b/i],
+    basisLabel: "zoominfo_websights_b2b_tracking_endpoint",
+  },
+  {
+    entity: "Claydar, Inc.",
+    vendor: "Claydar",
+    product: "Claydar",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "marketing_analytics", "lead_enrichment", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/\.claydar\.com$/i, /^api\.claydar\.com$/i],
+    urlPatterns: [/\/(?:collect|track|analytics|event|visitor|pixel)\b/i],
+    basisLabel: "claydar_marketing_analytics_endpoint",
+  },
+  {
+    entity: "Framer B.V.",
+    vendor: "Framer",
+    product: "Framer Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "site_measurement", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^events\.framer\.com$/i],
+    urlPatterns: [/\/(?:script|event|collect|track)\b/i],
+    basisLabel: "framer_analytics_endpoint",
+  },
+  {
+    entity: "Atlassian Pty Ltd",
+    vendor: "Atlassian Statuspage",
+    product: "Statuspage",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["status_monitoring", "availability", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/\.statuspage\.io$/i],
+    basisLabel: "atlassian_statuspage_infrastructure",
+  },
+  {
+    entity: "Intercom, Inc.",
+    vendor: "Intercom",
+    product: "Intercom Messenger",
+    purpose: "customer_support",
+    regulatoryRelevance: ["customer_support", "chat_widget", "third_party_runtime"],
+    confidence: 0.92,
+    hostPatterns: [/\.intercomcdn\.com$/i, /\.intercom\.io$/i],
+    urlPatterns: [/\/(?:widget|messenger|frame|launcher|app)\b/i],
+    basisLabel: "intercom_messenger_runtime",
   },
   {
     entity: "Usercentrics A/S",
@@ -1525,6 +1702,16 @@ export function resolveVendorObservations(
         matchedUrl,
       });
       const matchedUrls = matchedUrl && url ? [url] : [];
+      const matchedHostnames = hostname && isMatchedHostnameCandidate(hostname) && shouldAttachMatchedHostname(rule, {
+        matchedHost,
+        matchedUrl,
+        matchedCookie,
+        matchedGlobal,
+        matchedStorageKey,
+        matchedDomSelector,
+      })
+        ? [hostname]
+        : [];
       const matchSources = matchSourcesForInput({
         input,
         rule,
@@ -1561,7 +1748,7 @@ export function resolveVendorObservations(
           ]),
           matchedHostnames: unique([
             ...existing.matchedHostnames,
-            ...(hostname ? [hostname] : []),
+            ...matchedHostnames,
           ]),
           matchedUrls: unique([...existing.matchedUrls, ...matchedUrls]),
           matchedCookieNames: unique([
@@ -1584,7 +1771,7 @@ export function resolveVendorObservations(
         matchedEvidenceIds: input.evidenceId ? [input.evidenceId] : [],
         matchedEvidenceRefs,
         matchSources,
-        matchedHostnames: hostname ? [hostname] : [],
+        matchedHostnames,
         matchedUrls,
         matchedCookieNames: cookieName ? [cookieName] : [],
       });
@@ -1708,6 +1895,29 @@ function matchSourcesForInput(input: {
     }));
   }
   return sources;
+}
+
+function shouldAttachMatchedHostname(rule: VendorRule, match: {
+  matchedCookie: boolean;
+  matchedDomSelector: boolean;
+  matchedGlobal: boolean;
+  matchedHost: boolean;
+  matchedStorageKey: boolean;
+  matchedUrl: boolean;
+}): boolean {
+  if (!rule.suppressCookieMatchedHostname) {
+    return true;
+  }
+  return match.matchedHost ||
+    match.matchedUrl ||
+    match.matchedGlobal ||
+    match.matchedStorageKey ||
+    match.matchedDomSelector ||
+    !match.matchedCookie;
+}
+
+function isMatchedHostnameCandidate(value: string) {
+  return /^[a-z0-9](?:[a-z0-9-]*\.)+[a-z0-9-]{2,}$/i.test(value.trim());
 }
 
 function matchSource(input: {

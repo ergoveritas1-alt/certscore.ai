@@ -86,6 +86,14 @@ import {
   type ScanExecutionProvenanceRecord
 } from "./scan-execution-provenance";
 
+function normalizeTrackerScriptHostForDisplay(value: unknown) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+  const trimmed = value.trim().replace(/^www\./i, "").toLowerCase();
+  return /^[a-z0-9](?:[a-z0-9-]*\.)+[a-z0-9-]{2,}$/i.test(trimmed) ? trimmed : null;
+}
+
 export type ScanDetailRecord = {
   id: string;
   domainId: string | null;
@@ -948,7 +956,7 @@ async function loadScanDetailRecord(input: {
         firstPartyOrThirdParty: String(tracker.first_party_or_third_party),
         collectionEndpointType: String(tracker.collection_endpoint_type ?? "unknown"),
         beforeConsent: typeof tracker.before_consent === "boolean" ? tracker.before_consent : null,
-        scriptHost: (tracker.script_host as string | null) ?? null,
+        scriptHost: normalizeTrackerScriptHostForDisplay(tracker.script_host),
         matchedSignatureId: (tracker.matched_signature_id as string | null) ?? null
       }) satisfies ScanTrackerVendorRecord
   );
@@ -961,7 +969,7 @@ async function loadScanDetailRecord(input: {
         detectionSource: tracker.detectionSource,
         firstPartyOrThirdParty: tracker.firstPartyOrThirdParty,
         matchedSignatureId: tracker.matchedSignatureId,
-        scriptHost: tracker.scriptHost,
+        scriptHost: normalizeTrackerScriptHostForDisplay(tracker.scriptHost),
         vendorCategory: tracker.vendorCategory,
         vendorName: tracker.vendorName
       }) satisfies ScanTrackerVendorRecord

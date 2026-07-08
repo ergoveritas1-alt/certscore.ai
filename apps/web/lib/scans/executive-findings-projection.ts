@@ -1892,7 +1892,6 @@ function getRepresentativeRequestDetails(urls: string[], vendors: string[], requ
     const vendor =
       getRecordString(requestPurposeRow ?? {}, ["vendor", "vendorName", "vendor_name"]) ??
       inferVendorNameFromUrl(url, vendors) ??
-      vendors[index] ??
       null;
     const category =
       getRecordString(requestPurposeRow ?? {}, ["category", "vendorCategory", "vendor_category"]) ??
@@ -2422,7 +2421,6 @@ function buildPreConsentTrackingEvidenceDetails(
     });
     const rowVendor = getRecordString(matchedRow ?? {}, ["vendor", "vendorName", "name", "label"]) ??
       inferVendorNameFromUrl(url, vendors) ??
-      vendors[index] ??
       null;
     const endpointVendorMatch = inferDirectEndpointVendorFromUrl(url);
     const endpointVendor = endpointVendorMatch?.vendorName ?? null;
