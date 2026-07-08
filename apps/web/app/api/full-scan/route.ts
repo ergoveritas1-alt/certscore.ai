@@ -190,7 +190,8 @@ export async function POST(request: Request) {
       });
       const publicLocalV2DagRunViaLambda = restrictLocalV2RunViaLambdaForUser({
         canUseRestrictedScanOptions: false,
-        localV2DagRunViaLambda
+        localV2DagRunViaLambda,
+        scanFrom: publicScanFrom
       });
 
       if (!firstDomain) {

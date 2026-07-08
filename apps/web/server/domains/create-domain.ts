@@ -89,7 +89,8 @@ export async function createOrQueueDomainScan(input: {
   });
   const localV2DagRunViaLambda = restrictLocalV2RunViaLambdaForUser({
     canUseRestrictedScanOptions: allowRestrictedScanOptions,
-    localV2DagRunViaLambda: input.localV2DagRunViaLambda
+    localV2DagRunViaLambda: input.localV2DagRunViaLambda,
+    scanFrom: defaultScanFrom
   });
 
   const { hostname, normalizedUrl } = parsedInput.data;

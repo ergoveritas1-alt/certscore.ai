@@ -46,7 +46,8 @@ export async function rescanDomainAction(
   });
   const localV2DagRunViaLambda = restrictLocalV2RunViaLambdaForUser({
     canUseRestrictedScanOptions: allowRestrictedScanOptions,
-    localV2DagRunViaLambda: normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom)
+    localV2DagRunViaLambda: normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom),
+    scanFrom
   });
 
   if (domainId.length === 0) {

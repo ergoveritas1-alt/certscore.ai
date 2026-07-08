@@ -27,6 +27,19 @@ test("non-admin users are not routed to artifact-only Lambda by default", () => 
   );
 });
 
+test("non-admin regional scans keep Lambda routing because regional egress requires it", () => {
+  for (const scanFrom of ["eu_de", "eu_ie", "california"] as const) {
+    assert.equal(
+      restrictLocalV2RunViaLambdaForUser({
+        canUseRestrictedScanOptions: false,
+        localV2DagRunViaLambda: false,
+        scanFrom
+      }),
+      true
+    );
+  }
+});
+
 test("non-admin localhost scans can be routed to the local queue by feature flag", () => {
   assert.equal(
     restrictLocalV2RunViaLambdaForUser({

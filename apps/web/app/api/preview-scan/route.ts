@@ -36,7 +36,8 @@ export async function POST(request: Request) {
         payload?.localV2RunViaLambda ?? payload?.localV2DagRunViaLambda ?? payload?.v2RunViaLambda,
         process.env,
         scanFrom
-      )
+      ),
+      scanFrom
     });
     const dnsStatus = await checkDomainDns(result.data.hostname);
 
