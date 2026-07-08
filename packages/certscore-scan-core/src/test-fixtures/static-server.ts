@@ -122,6 +122,12 @@ export type StaticFixturePage =
   | "policy-manage-cookies-footer-anchor"
   | "policy-manage-cookies-embedded-config"
   | "policy-no-links"
+  | "policy-no-links-ar"
+  | "policy-no-links-es"
+  | "policy-no-links-fi"
+  | "policy-no-links-ja"
+  | "policy-no-links-pl"
+  | "policy-no-links-tr"
   | "policy-noisy-policy-body"
   | "policy-notice-at-collection-link"
   | "policy-privacy-choices-link"
@@ -268,6 +274,12 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-manage-cookies-footer-anchor": "policy-manage-cookies-footer-anchor",
   "policy-manage-cookies-embedded-config": "policy-manage-cookies-embedded-config",
   "policy-no-links": "policy-no-links",
+  "policy-no-links-ar": "policy-no-links-ar",
+  "policy-no-links-es": "policy-no-links-es",
+  "policy-no-links-fi": "policy-no-links-fi",
+  "policy-no-links-ja": "policy-no-links-ja",
+  "policy-no-links-pl": "policy-no-links-pl",
+  "policy-no-links-tr": "policy-no-links-tr",
   "policy-noisy-policy-body": "policy-noisy-policy-body",
   "policy-notice-at-collection-link": "policy-notice-at-collection",
   "policy-privacy-choices-link": "policy-privacy-choices",
@@ -831,6 +843,17 @@ function headMarkup(caseName: StaticFixturePage): string {
       `<link rel="stylesheet" href="https://static.examplecdn.com/app.css">`,
       `<script src="https://static.examplecdn.com/app.js"></script>`,
     ].join("\n");
+  }
+  const noLinkLocale = ({
+    "policy-no-links-ar": "ar",
+    "policy-no-links-es": "es",
+    "policy-no-links-fi": "fi",
+    "policy-no-links-ja": "ja",
+    "policy-no-links-pl": "pl",
+    "policy-no-links-tr": "tr",
+  } as Partial<Record<StaticFixturePage, string>>)[caseName];
+  if (noLinkLocale) {
+    return `<meta http-equiv="content-language" content="${noLinkLocale}">`;
   }
   return "";
 }
@@ -1586,6 +1609,12 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-manage-cookies-footer-anchor": `<main><p>News homepage</p></main><footer><a href="#" id="manage-cookies">Manage Cookies</a></footer>`,
     "policy-manage-cookies-embedded-config": `<main><p>News homepage</p></main><script>window.CONSENT_CONFIG={consentLinkTitle:{en:"Manage Cookies+"},privacyCenterLinkTitle:{en:"Privacy Policy"}};</script>`,
     "policy-no-links": "",
+    "policy-no-links-ar": "",
+    "policy-no-links-es": "",
+    "policy-no-links-fi": "",
+    "policy-no-links-ja": "",
+    "policy-no-links-pl": "",
+    "policy-no-links-tr": "",
     "policy-noisy-policy-body": `<a href="/policies/noisy-privacy">Privacy Policy</a>`,
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,
@@ -1673,6 +1702,54 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/politica-de-cookies": {
       title: "Política de cookies",
       body: "Política de cookies. Usamos cookies necesarias, analíticas y publicitarias. Puede configurar sus preferencias de cookies desde el panel de consentimiento.",
+    },
+    "/kvkk": {
+      title: "KVKK Aydınlatma Metni",
+      body: "KVKK Aydınlatma Metni. Kişisel verileri hizmet sunumu, analiz ve reklam amaçlarıyla işleriz. Veri sorumlusu, işleme amaçları, hukuki sebepler, alıcı grupları, saklama süreleri ve veri sahibi hakları bu metinde açıklanır.",
+    },
+    "/cerez-politikasi": {
+      title: "Çerez Politikası",
+      body: "Çerez Politikası. Zorunlu, analitik ve reklam çerezleri kullanırız. Çerez tercihlerinizi izin yönetim panelinden değiştirebilirsiniz.",
+    },
+    "/tietosuojaseloste": {
+      title: "Tietosuojaseloste",
+      body: "Tietosuojaseloste. Käsittelemme henkilötietoja palvelun tarjoamiseen, analytiikkaan ja mainontaan. Rekisterinpitäjä, käsittelyn tarkoitukset, oikeusperusteet, vastaanottajat, säilytysajat ja rekisteröidyn oikeudet kuvataan tässä selosteessa.",
+    },
+    "/evasteet": {
+      title: "Evästeet",
+      body: "Evästeet. Käytämme välttämättömiä, analytiikka- ja mainosevästeitä. Evästeasetuksia voi hallita suostumusasetuksissa.",
+    },
+    "/polityka-prywatnosci": {
+      title: "Polityka prywatności",
+      body: "Polityka prywatności. Przetwarzamy dane osobowe w celu świadczenia usług, analityki i reklamy. Administrator danych, cele przetwarzania, podstawa prawna, odbiorcy, okres przechowywania oraz prawa osób są opisane w tej polityce.",
+    },
+    "/polityka-cookie": {
+      title: "Polityka cookie",
+      body: "Polityka cookie. Używamy niezbędnych, analitycznych i reklamowych plików cookie. Preferencje plików cookie można zmienić w panelu zgody.",
+    },
+    "/ja/privacy": {
+      title: "プライバシーポリシー",
+      body: "プライバシーポリシー。サービス提供、分析、広告のために個人情報を処理します。管理者、処理目的、法的根拠、受領者、保存期間、利用者の権利について説明します。",
+    },
+    "/kojin-joho": {
+      title: "個人情報の取り扱い",
+      body: "個人情報の取り扱い。サービス提供、分析、広告のために個人情報を処理します。管理者、処理目的、法的根拠、受領者、保存期間、利用者の権利について説明します。",
+    },
+    "/ja/cookies": {
+      title: "クッキーポリシー",
+      body: "クッキーポリシー。必要なクッキー、分析クッキー、広告クッキーを使用します。クッキー設定は同意管理画面で変更できます。",
+    },
+    "/ar/privacy": {
+      title: "سياسة الخصوصية",
+      body: "سياسة الخصوصية. نعالج البيانات الشخصية لتقديم الخدمة والتحليلات والإعلانات. توضح هذه السياسة المراقب وأغراض المعالجة والأساس القانوني والمستلمين وفترات الاحتفاظ وحقوق أصحاب البيانات.",
+    },
+    "/siyasat-khususiyya": {
+      title: "سياسة الخصوصية",
+      body: "سياسة الخصوصية. نعالج البيانات الشخصية لتقديم الخدمة والتحليلات والإعلانات. توضح هذه السياسة المراقب وأغراض المعالجة والأساس القانوني والمستلمين وفترات الاحتفاظ وحقوق أصحاب البيانات.",
+    },
+    "/ar/cookies": {
+      title: "سياسة ملفات تعريف الارتباط",
+      body: "سياسة ملفات تعريف الارتباط. نستخدم ملفات تعريف ارتباط ضرورية وتحليلية وإعلانية. يمكن إدارة إعدادات ملفات تعريف الارتباط من مركز التفضيلات.",
     },
     "/policies/it-privacy": {
       title: "Informativa sulla privacy",
@@ -1878,10 +1955,6 @@ function policyDocumentHtml(pathname: string): string | undefined {
     "/privacybeleid": {
       title: "Privacybeleid",
       body: "Privacybeleid. Wij beschrijven de verwerking van persoonsgegevens, doeleinden, rechtsgrondslag, ontvangers, bewaartermijnen en uw rechten.",
-    },
-    "/polityka-prywatnosci": {
-      title: "Polityka prywatności",
-      body: "Polityka prywatności. Opisujemy przetwarzanie danych osobowych, cele, podstawę prawną, odbiorców, okres przechowywania i prawa osób, których dane dotyczą.",
     },
     "/help/privacy": {
       title: "Privacy Policy",

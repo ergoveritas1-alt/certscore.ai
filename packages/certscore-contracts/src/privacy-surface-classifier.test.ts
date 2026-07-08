@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   classifyPrivacySurface,
+  PRIVACY_SURFACE_LOCALE_REGISTRY,
   PRIVACY_SURFACE_PHRASE_REGISTRY,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
@@ -23,6 +24,36 @@ test("classifies canonical privacy-policy surfaces across supported locales", ()
     assert.equal(classification.surfaceType, "privacy_policy", linkText);
     assert.equal(classification.matchedLocale, locale, linkText);
     assert.equal(classification.reasonCodes.includes("matched_privacy_policy"), true, linkText);
+  }
+});
+
+test("classifies canonical privacy-policy labels across all supported locales", () => {
+  for (const definition of PRIVACY_SURFACE_LOCALE_REGISTRY) {
+    const linkText = definition.privacyPolicyPhrases[0];
+    assert.ok(linkText, `${definition.locale} should define a privacy policy phrase`);
+    const classification = classifyPrivacySurface({
+      linkText,
+      localeHints: [definition.locale],
+    });
+
+    assert.equal(classification.surfaceType, "privacy_policy", definition.locale);
+    assert.equal(classification.matchedLocale, definition.locale, linkText);
+    assert.equal(classification.reasonCodes.includes("matched_privacy_policy"), true, linkText);
+  }
+});
+
+test("classifies canonical cookie-policy labels across all supported locales", () => {
+  for (const definition of PRIVACY_SURFACE_LOCALE_REGISTRY) {
+    const linkText = definition.cookiePolicyPhrases[0];
+    assert.ok(linkText, `${definition.locale} should define a cookie policy phrase`);
+    const classification = classifyPrivacySurface({
+      linkText,
+      localeHints: [definition.locale],
+    });
+
+    assert.equal(classification.surfaceType, "cookie_policy", definition.locale);
+    assert.equal(classification.matchedLocale, definition.locale, linkText);
+    assert.equal(classification.reasonCodes.includes("matched_cookie_policy"), true, linkText);
   }
 });
 
@@ -120,9 +151,70 @@ test("uses localized URL patterns as canonical surface hints", () => {
     ["https://example.test/informativa-privacy", "privacy_policy"],
     ["https://example.test/privacybeleid", "privacy_policy"],
     ["https://example.test/polityka-prywatnosci", "privacy_policy"],
+    ["https://example.test/politika-privatnosti", "privacy_policy"],
     ["https://example.test/cookie-richtlinie", "cookie_policy"],
     ["https://example.test/politica-de-cookies", "cookie_policy"],
     ["https://example.test/cookiebeleid", "cookie_policy"],
+  ] as const;
+
+  for (const [url, surfaceType] of examples) {
+    const classification = classifyPrivacySurface({ linkText: "Legal", url });
+    assert.equal(classification.surfaceType, surfaceType, url);
+    assert.equal(classification.reasonCodes.includes("matched_url_pattern"), true, url);
+  }
+});
+
+test("classifies Croatian privacy-policy URL patterns as supported locale paths", () => {
+  const classification = classifyPrivacySurface({
+    linkText: "Politika privatnosti",
+    url: "https://n1info.hr/politika-privatnosti/",
+    localeHints: ["hr"],
+  });
+
+  assert.equal(classification.surfaceType, "privacy_policy");
+  assert.equal(classification.matchedLocale, "hr");
+  assert.equal(classification.reasonCodes.includes("matched_privacy_policy"), true);
+});
+
+test("classifies canonical privacy-policy path slugs across all supported locales", () => {
+  for (const definition of PRIVACY_SURFACE_LOCALE_REGISTRY) {
+    const slug = definition.privacyPolicyPathSlugs[0];
+    assert.ok(slug, `${definition.locale} should define a privacy policy path slug`);
+    const classification = classifyPrivacySurface({
+      linkText: "Legal",
+      url: `https://example.test/${encodeURI(slug)}`,
+    });
+
+    assert.equal(classification.surfaceType, "privacy_policy", `${definition.locale}:${slug}`);
+    assert.equal(classification.reasonCodes.includes("matched_url_pattern"), true, `${definition.locale}:${slug}`);
+  }
+});
+
+test("classifies expanded English, German, and French policy surface slugs", () => {
+  const examples = [
+    ["https://example.test/legal/privacy-policy", "privacy_policy"],
+    ["https://example.test/policies/privacy", "privacy_policy"],
+    ["https://example.test/data-privacy", "privacy_policy"],
+    ["https://example.test/legal/cookie-policy", "cookie_policy"],
+    ["https://example.test/cookie-declaration", "cookie_policy"],
+    ["https://example.test/terms-of-use", "terms"],
+    ["https://example.test/legal/terms-of-service", "terms"],
+    ["https://example.de/datenschutzerklarung-dsgvo", "privacy_policy"],
+    ["https://example.de/rechtliches/datenschutz", "privacy_policy"],
+    ["https://example.de/datenschutz/cookies", "cookie_policy"],
+    ["https://example.de/cookie-einstellungen", "cookie_policy"],
+    ["https://example.de/allgemeine-geschaftsbedingungen", "terms"],
+    ["https://example.fr/protection-des-donnees", "privacy_policy"],
+    ["https://example.fr/politique-de-vie-privee", "privacy_policy"],
+    ["https://example.fr/mentions-legales/cookies", "cookie_policy"],
+    ["https://example.fr/declaration-cookies", "cookie_policy"],
+    ["https://example.fr/conditions-generales-utilisation", "terms"],
+    ["https://example.tr/kvkk", "privacy_policy"],
+    ["https://example.fi/evasteet", "cookie_policy"],
+    ["https://example.fi/kayttoehdot", "terms"],
+    ["https://example.pl/regulamin", "terms"],
+    ["https://example.hu/aszf", "terms"],
+    ["https://example.fr/mentions-legales", "privacy_policy"],
   ] as const;
 
   for (const [url, surfaceType] of examples) {
@@ -169,8 +261,12 @@ test("keeps unrelated labels unknown", () => {
 
 test("registry covers every supported locale", () => {
   const registryLocales = new Set(PRIVACY_SURFACE_PHRASE_REGISTRY.map((term) => term.locale));
+  const localeRegistryLocales = new Set(PRIVACY_SURFACE_LOCALE_REGISTRY.map((term) => term.locale));
 
   for (const locale of SUPPORTED_PRIVACY_EVIDENCE_LOCALES) {
     assert.equal(registryLocales.has(locale), true, locale);
+    assert.equal(localeRegistryLocales.has(locale), true, locale);
   }
+  assert.equal(SUPPORTED_PRIVACY_EVIDENCE_LOCALES.length, 40);
+  assert.equal(localeRegistryLocales.size, 40);
 });

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { PRIVACY_SURFACE_LOCALE_REGISTRY } from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
   gdprTransparencyTopicCandidatesFromRetainedPolicySections,
@@ -10,6 +11,7 @@ import {
   isFetchablePolicyHrefForPolicySurface,
   isFetchablePolicyUrlForPolicySurface,
   type PolicyNanoAssistProvider,
+  policySurfaceCommonPathRankingPreviewForTest,
   policySurfaceScanner,
   wwwFallbackUrlForPolicyFetch,
 } from "./scanners/policy-surface-scanner.js";
@@ -1708,29 +1710,81 @@ test("policySurfaceScanner does not let secondary-only surfaces satisfy core GDP
   });
 });
 
-test("policySurfaceScanner common-path fallback includes localized privacy policy paths", async () => {
+test("policySurfaceScanner keeps each locale's primary localized common paths inside the bounded fallback ranking", () => {
+  for (const definition of PRIVACY_SURFACE_LOCALE_REGISTRY) {
+    const rankedPaths = new Set(
+      policySurfaceCommonPathRankingPreviewForTest([definition.locale])
+        .map((candidate) => candidate.path.replace(/\/+$/, "") || "/"),
+    );
+    const expectedGroups = [
+      localeSpecificSlugOptions(definition.privacyPolicyPathSlugs),
+      localeSpecificSlugOptions(definition.cookiePolicyPathSlugs),
+    ].filter((slugs) => slugs.length > 0);
+
+    assert.ok(expectedGroups.length > 0, `${definition.locale} should have localized path slugs to rank`);
+    for (const slugs of expectedGroups) {
+      assert.equal(
+        slugs.some((slug) => rankedPaths.has(`/${slug.replace(/^\/+|\/+$/g, "")}`)),
+        true,
+        `${definition.locale} should keep one of ${slugs.map((slug) => `/${slug}`).join(", ")} within common-path fallback cap`,
+      );
+    }
+  }
+});
+
+test("policySurfaceScanner keeps localized common-path guesses behind locale profile hints", async () => {
   await withPolicyScan("policy-no-links", async ({ result, baseUrl }) => {
-    const fetchedPrivacyPaths = new Set(result.policySurfaceObservations
+    const observedPrivacyPaths = new Set(result.policySurfaceObservations
       .filter((observation) =>
-        observation.discoveryMethod === "guessed_common_path" &&
-        observation.status === "fetched" &&
         observation.surfaceType === "privacy_policy"
       )
       .map((observation) => observation.normalizedUrl));
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
 
-    for (const expectedPath of [
-      "/datenschutz",
-      "/politica-de-privacidad",
-      "/informativa-privacy",
-      "/privacybeleid",
-    ]) {
-      assert.equal(
-        fetchedPrivacyPaths.has(`${baseUrl}${expectedPath}`),
-        true,
-        `expected localized fallback ${expectedPath}; retained=${JSON.stringify([...fetchedPrivacyPaths])}`,
-      );
-    }
+    assert.equal(observedPrivacyPaths.has(`${baseUrl}/privacy`), true);
+    assert.equal(observedPrivacyPaths.has(`${baseUrl}/datenschutz`), true);
+    assert.equal(observedPrivacyPaths.has(`${baseUrl}/politica-de-privacidad`), false);
+    assert.equal(observedPrivacyPaths.has(`${baseUrl}/informativa-privacy`), false);
+    assert.equal(observedPrivacyPaths.has(`${baseUrl}/privacybeleid`), false);
+    assert.deepEqual(diagnostics.localeProfile.localeHints, []);
   });
+
+  await withPolicyScan("policy-no-links-es", async ({ result, baseUrl }) => {
+    const observedPrivacyPaths = new Set(result.policySurfaceObservations
+      .filter((observation) =>
+        observation.surfaceType === "privacy_policy"
+      )
+      .map((observation) => observation.normalizedUrl));
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+    assert.equal(diagnostics.localeProfile.primaryLocale, "es");
+    assert.equal(diagnostics.localeProfile.localeHints.includes("es"), true);
+    assert.equal(observedPrivacyPaths.has(`${baseUrl}/politica-de-privacidad`), true);
+  });
+
+  for (const [page, locale, expectedPaths] of [
+    ["policy-no-links-pl", "pl", ["/polityka-prywatnosci", "/polityka-cookie"]],
+    ["policy-no-links-ja", "ja", ["/kojin-joho", "/ja/cookies"]],
+    ["policy-no-links-ar", "ar", ["/siyasat-khususiyya", "/ar/cookies"]],
+    ["policy-no-links-tr", "tr", ["/kvkk", "/cerez-politikasi"]],
+    ["policy-no-links-fi", "fi", ["/tietosuojaseloste", "/evasteet"]],
+  ] as const) {
+    await withPolicyScan(page, async ({ result, baseUrl }) => {
+      const observedPaths = new Set(result.policySurfaceObservations
+        .filter((observation) =>
+          observation.status === "fetched" &&
+          (observation.surfaceType === "privacy_policy" || observation.surfaceType === "cookie_policy")
+        )
+        .map((observation) => observation.normalizedUrl));
+      const diagnostics = await readPolicyCaptureDiagnostics(result);
+
+      assert.equal(diagnostics.localeProfile.primaryLocale, locale);
+      assert.equal(diagnostics.localeProfile.localeHints.includes(locale), true);
+      for (const expectedPath of expectedPaths) {
+        assert.equal(observedPaths.has(`${baseUrl}${expectedPath}`), true, expectedPath);
+      }
+    });
+  }
 });
 
 test("policySurfaceScanner retains visible terms links across policy gold corpus", async () => {
@@ -2260,6 +2314,40 @@ async function withPolicyScan(
   }
 }
 
+const GENERIC_COMMON_PATH_SLUGS = new Set([
+  "about/cookies",
+  "about/privacy",
+  "cookie",
+  "cookie-declaration",
+  "cookie-notice",
+  "cookie-policy",
+  "cookie-statement",
+  "cookies",
+  "cookies-policy",
+  "data-privacy",
+  "en/cookie-policy",
+  "en/privacy",
+  "legal/privacy-policy",
+  "legal/cookie-policy",
+  "legal/cookies",
+  "legal/privacy",
+  "policies/cookies",
+  "policies/privacy",
+  "privacy",
+  "privacy-cookies",
+  "privacy-notice",
+  "privacy-policy",
+  "privacy-statement",
+]);
+
+function localeSpecificSlugOptions(slugs: string[]): string[] {
+  const normalizedSlugs = slugs
+    .map((slug) => slug.replace(/^\/+|\/+$/g, "").toLowerCase())
+    .filter(Boolean);
+  const specificSlugs = normalizedSlugs.filter((slug) => !GENERIC_COMMON_PATH_SLUGS.has(slug));
+  return specificSlugs.length > 0 ? specificSlugs : normalizedSlugs.slice(0, 3);
+}
+
 function observedSurface(
   observations: Awaited<ReturnType<typeof policySurfaceScanner>>["policySurfaceObservations"],
   surfaceType: string,
@@ -2281,6 +2369,13 @@ async function readPolicyCaptureDiagnostics(
   fastCanonicalPrefetchCandidateCount: number;
   fetchedCount: number;
   failedCandidateCount: number;
+  localeProfile: {
+    candidateLocales: string[];
+    confidence: string;
+    evidence: Array<{ locale: string; source: string; value: string; weight: number }>;
+    localeHints: string[];
+    primaryLocale?: string;
+  };
   candidateSummary: Array<{
     classifierProvenance: string;
     classifierReasonCodes: string[];

@@ -6,10 +6,12 @@ import {
   type DirectVsInferred,
   type EvidenceRef,
   type PolicySurfaceObservation,
+  PRIVACY_SURFACE_LOCALE_REGISTRY,
   type PrivacySurfaceClassification,
   type PrivacySurfaceMatchStrength,
   type ScanModuleRun,
   type SupportedPrivacyEvidenceLocale,
+  isSupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
@@ -41,10 +43,7 @@ const FAST_CANONICAL_PREFETCH_PATHS = [
   "/cookie-policy",
   "/cookies",
   "/privacy/cookies",
-  "/confidentialite",
-  "/politique-de-confidentialite",
-  "/donnees-personnelles",
-  "/conditions-generales",
+  "/datenschutz",
   "/terms",
 ] as const;
 const DEFAULT_POLICY_EXCERPT_KEYWORDS = [
@@ -180,6 +179,21 @@ interface PolicySurfaceTextArtifactBudget {
   remainingChars: number;
 }
 
+interface PolicySurfaceLocaleEvidence {
+  source: "content_language" | "html_lang" | "hreflang" | "tld" | "visible_text" | "policy_link_label";
+  value: string;
+  locale: SupportedPrivacyEvidenceLocale;
+  weight: number;
+}
+
+interface PolicySurfaceLocaleProfile {
+  candidateLocales: SupportedPrivacyEvidenceLocale[];
+  confidence: "high" | "medium" | "low" | "unknown";
+  evidence: PolicySurfaceLocaleEvidence[];
+  localeHints: SupportedPrivacyEvidenceLocale[];
+  primaryLocale?: SupportedPrivacyEvidenceLocale;
+}
+
 export async function policySurfaceScanner(
   input: PolicySurfaceScannerInput,
 ): Promise<PolicySurfaceScannerResult> {
@@ -194,6 +208,7 @@ export async function policySurfaceScanner(
   let commonPathFallbackUsed = false;
   let fastCanonicalPrefetchRan = false;
   let fastCanonicalPrefetchCandidateCount = 0;
+  let localeProfile = policySurfaceLocaleProfile(input.normalizedUrl, "", "", []);
   const policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget = {
     remainingChars: MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS,
   };
@@ -235,6 +250,7 @@ export async function policySurfaceScanner(
             commonPathFallbackUsed,
             fastCanonicalPrefetchRan,
             fastCanonicalPrefetchCandidateCount,
+            localeProfile,
             observations,
             candidates: renderedCandidates,
           }));
@@ -245,7 +261,7 @@ export async function policySurfaceScanner(
           };
         }
       }
-      const fallbackCandidates = commonPathCandidatesFor(input.normalizedUrl, 0);
+      const fallbackCandidates = commonPathCandidatesFor(input.normalizedUrl, 0, localeProfile.localeHints);
       commonPathFallbackUsed = true;
       const fallbackResults = await fetchRankedPolicyCandidates({
         input,
@@ -267,6 +283,7 @@ export async function policySurfaceScanner(
           commonPathFallbackUsed,
           fastCanonicalPrefetchRan,
           fastCanonicalPrefetchCandidateCount,
+          localeProfile,
           observations,
           candidates: dedupeCandidates([
             ...renderedCandidates,
@@ -306,8 +323,15 @@ export async function policySurfaceScanner(
       ]),
     );
     staticCandidateCount = staticCandidates.length;
+    localeProfile = policySurfaceLocaleProfile(
+      input.normalizedUrl,
+      homepage.text,
+      homepageText,
+      staticCandidates,
+      homepage.contentLanguage,
+    );
     if (input.discoveryMode === "fast" && staticCandidates.length === 0) {
-      const fastCanonicalCandidates = fastCanonicalPrefetchCandidatesFor(input.normalizedUrl);
+      const fastCanonicalCandidates = fastCanonicalPrefetchCandidatesFor(input.normalizedUrl, localeProfile.localeHints);
       fastCanonicalPrefetchRan = true;
       fastCanonicalPrefetchCandidateCount = fastCanonicalCandidates.length;
       const fastCanonicalResults = await fetchPolicyCandidateBatchesUntilCore({
@@ -331,6 +355,7 @@ export async function policySurfaceScanner(
           commonPathFallbackUsed,
           fastCanonicalPrefetchRan,
           fastCanonicalPrefetchCandidateCount,
+          localeProfile,
           observations,
           candidates: fastCanonicalCandidates,
         }));
@@ -373,7 +398,7 @@ export async function policySurfaceScanner(
     const commonPathCandidates = commonPathCandidatesFor(
       input.normalizedUrl,
       linkCandidates.length,
-      commonPathLocaleHints(input.normalizedUrl, homepage.text, homepageText),
+      localeProfile.localeHints,
     );
     const initialCandidates = linkCandidates.length > 0
       ? linkCandidates
@@ -535,6 +560,7 @@ export async function policySurfaceScanner(
       commonPathFallbackUsed,
       fastCanonicalPrefetchRan,
       fastCanonicalPrefetchCandidateCount,
+      localeProfile,
       observations,
       candidates: linkCandidates,
     }));
@@ -599,6 +625,7 @@ async function writePolicyCaptureDiagnostics(input: {
   commonPathFallbackUsed: boolean;
   fastCanonicalPrefetchRan?: boolean;
   fastCanonicalPrefetchCandidateCount?: number;
+  localeProfile?: PolicySurfaceLocaleProfile;
   observations: PolicySurfaceObservation[];
   candidates?: PolicySurfaceCandidate[];
 }): Promise<ArtifactRef> {
@@ -620,6 +647,7 @@ async function writePolicyCaptureDiagnostics(input: {
     commonPathFallbackUsed: input.commonPathFallbackUsed,
     fastCanonicalPrefetchRan: input.fastCanonicalPrefetchRan === true,
     fastCanonicalPrefetchCandidateCount: input.fastCanonicalPrefetchCandidateCount ?? 0,
+    localeProfile: input.localeProfile ?? policySurfaceLocaleProfile(input.input.normalizedUrl, "", "", []),
     fetchedCount: fetchedObservations.length,
     failedCandidateCount: input.observations.filter((observation) => observation.status === "failed").length,
     candidateSummary: summarizePolicyCandidates(input.candidates ?? []),
@@ -704,7 +732,7 @@ async function fetchPolicyCandidateBatchesUntilCore(input: {
   const observations: PolicySurfaceObservation[] = [];
   const artifactRefs: ArtifactRef[] = [];
   const secondaryCandidates: PolicySurfaceCandidate[] = [];
-  const candidates = input.rankedCandidates.slice(0, FAST_CANONICAL_PREFETCH_PATHS.length);
+  const candidates = input.rankedCandidates;
 
   for (let index = 0; index < candidates.length; index += FAST_CANONICAL_PREFETCH_CONCURRENCY) {
     const batch = candidates.slice(index, index + FAST_CANONICAL_PREFETCH_CONCURRENCY);
@@ -1756,9 +1784,8 @@ async function waitForRenderedPolicySurfaceCandidate(
     return;
   }
 
-  await page.waitForFunction(() => {
-    const textPattern = /\b(?:privacy policy|privacy notice|cookie policy|cookie notice|datenschutzerkl[aä]rung|politique de confidentialit[eé]|pol[ií]tica de privacidad|informativa (?:sulla )?privacy|privacybeleid|privacyverklaring|polityka prywatno[śs]ci|ustawienia prywatno[śs]ci)\b/i;
-    const hrefPattern = /(?:privacy|cookie|datenschutz|confidentialit[eé]|privacidad|informativa|privacybeleid|privacyverklaring|prywatno(?:sc|sci|ść|ści)|polityka-prywatno(?:sci|ści))/i;
+  const renderedHints = renderedPolicySurfaceHints();
+  await page.waitForFunction(({ textHints, hrefHints }) => {
     const elements = document.querySelectorAll("a[href], button, [role='button'], [role='link'], [aria-label], [title]");
     for (const element of elements) {
       const href = element.getAttribute("href") ??
@@ -1775,15 +1802,31 @@ async function waitForRenderedPolicySurfaceCandidate(
         element.getAttribute("title"),
         href,
       ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-      if (textPattern.test(text) || hrefPattern.test(href)) {
+      const lowerText = text.toLowerCase();
+      const lowerHref = href.toLowerCase();
+      if (textHints.some((hint) => lowerText.includes(hint)) || hrefHints.some((hint) => lowerHref.includes(hint))) {
         return true;
       }
     }
     return false;
-  }, undefined, {
+  }, renderedHints, {
     polling: 250,
     timeout: timeoutMs,
   }).catch(() => undefined);
+}
+
+function renderedPolicySurfaceHints(): { hrefHints: string[]; textHints: string[] } {
+  return {
+    hrefHints: uniqueStrings(PRIVACY_SURFACE_LOCALE_REGISTRY.flatMap((entry) => [
+      ...entry.privacyPolicyPathSlugs,
+      ...entry.cookiePolicyPathSlugs,
+    ]).map((hint) => hint.toLowerCase()).filter((hint) => hint.length >= 4)),
+    textHints: uniqueStrings(PRIVACY_SURFACE_LOCALE_REGISTRY.flatMap((entry) => [
+      ...entry.privacyPolicyPhrases,
+      ...entry.cookiePolicyPhrases,
+      ...(entry.cookieSettingsPhrases ?? []),
+    ]).map((hint) => hint.toLowerCase()).filter((hint) => hint.length >= 4)),
+  };
 }
 
 function commonPathCandidatesFor(
@@ -1816,8 +1859,11 @@ function commonPathCandidatesFor(
   }).filter((candidate) => candidate.deterministicScore > 0.2);
 }
 
-function fastCanonicalPrefetchCandidatesFor(baseUrl: string): PolicySurfaceCandidate[] {
-  return FAST_CANONICAL_PREFETCH_PATHS.map((path, offset) => {
+function fastCanonicalPrefetchCandidatesFor(
+  baseUrl: string,
+  localeHints: SupportedPrivacyEvidenceLocale[] = [],
+): PolicySurfaceCandidate[] {
+  return fastCanonicalPolicyPathsFor(localeHints).map((path, offset) => {
     const normalizedUrl = normalizeUrl(path, baseUrl) ?? baseUrl;
     const linkText = commonPolicyPathLabel(path);
     const deterministic = classifyCommonPathSurface(linkText, normalizedUrl);
@@ -1853,6 +1899,7 @@ function commonPolicyPathsFor(baseUrl: string, localeHints: SupportedPrivacyEvid
     "/privacy-policy",
     "/privacy-policy/",
     "/privacy-notice",
+    "/datenschutz",
   ];
   const genericSecondaryPaths = [
     "/help/privacy",
@@ -1881,30 +1928,34 @@ function commonPolicyPathsFor(baseUrl: string, localeHints: SupportedPrivacyEvid
     "/terms",
     "/accessibility",
   ];
-  const localizedByLocale: Record<SupportedPrivacyEvidenceLocale, string[]> = {
-    en: [],
-    de: ["/datenschutz", "/datenschutzerklaerung", "/datenschutzerklärung"],
-    fr: ["/confidentialite", "/confidentialité", "/politique-de-confidentialite", "/politique-de-confidentialité"],
-    es: ["/privacidad", "/politica-de-privacidad", "/política-de-privacidad"],
-    it: ["/informativa-privacy", "/informativa-sulla-privacy"],
-    nl: ["/privacybeleid", "/privacyverklaring"],
-    pl: ["/prywatnosc", "/prywatność", "/polityka-prywatnosci", "/polityka-prywatności"],
-  };
-  const hintedLocalePaths = uniqueStrings(localeHints.flatMap((locale) => localizedByLocale[locale] ?? []));
-  const fallbackLocalePaths = [
-    "/datenschutz",
-    "/politique-de-confidentialite",
-    "/politica-de-privacidad",
-    "/informativa-privacy",
-    "/privacybeleid",
-    "/polityka-prywatnosci",
-  ];
+  const hintedLocalePaths = uniqueStrings(localeHints.flatMap(localizedPolicyPathsForLocale));
   return uniqueStrings([
     ...genericCorePaths,
-    ...(hintedLocalePaths.length > 0 ? hintedLocalePaths : fallbackLocalePaths),
+    ...hintedLocalePaths,
     ...knownPublisherPrivacyCenterUrls(baseUrl),
     ...genericSecondaryPaths,
   ]);
+}
+
+function fastCanonicalPolicyPathsFor(localeHints: SupportedPrivacyEvidenceLocale[]): string[] {
+  return uniqueStrings([
+    ...FAST_CANONICAL_PREFETCH_PATHS,
+    ...localeHints.flatMap((locale) => localizedPolicyPathsForLocale(locale).slice(0, 4)),
+  ]);
+}
+
+function localizedPolicyPathsForLocale(locale: SupportedPrivacyEvidenceLocale): string[] {
+  const definition = PRIVACY_SURFACE_LOCALE_REGISTRY.find((entry) => entry.locale === locale);
+  if (!definition) {
+    return [];
+  }
+  return [
+    ...definition.privacyPolicyPathSlugs,
+    ...definition.cookiePolicyPathSlugs,
+    ...(definition.termsPathSlugs ?? []),
+  ]
+    .filter((path) => !/^privacy(?:-|$)|^cookie(?:-|$)|^cookies?$/.test(path))
+    .map((path) => path.startsWith("/") ? path : `/${path}`);
 }
 
 function commonPolicyPathLabel(path: string): string {
@@ -1932,43 +1983,113 @@ function knownPublisherPrivacyCenterUrls(baseUrl: string): string[] {
   }
 }
 
-function commonPathLocaleHints(
+function policySurfaceLocaleProfile(
   baseUrl: string,
   html: string,
   visibleText: string,
-): SupportedPrivacyEvidenceLocale[] {
-  const hints: SupportedPrivacyEvidenceLocale[] = [];
-  const add = (locale: SupportedPrivacyEvidenceLocale) => {
-    if (!hints.includes(locale)) {
-      hints.push(locale);
+  candidates: PolicySurfaceCandidate[],
+  contentLanguage?: string,
+): PolicySurfaceLocaleProfile {
+  const evidence: PolicySurfaceLocaleEvidence[] = [];
+  const addEvidence = (
+    source: PolicySurfaceLocaleEvidence["source"],
+    locale: SupportedPrivacyEvidenceLocale | undefined,
+    value: string | undefined,
+    weight: number,
+  ) => {
+    if (!locale || !value) {
+      return;
     }
+    evidence.push({ source, value, locale, weight });
   };
+
   try {
     const hostname = new URL(baseUrl).hostname.toLowerCase();
-    if (hostname.endsWith(".de")) add("de");
-    if (hostname.endsWith(".fr")) add("fr");
-    if (hostname.endsWith(".es")) add("es");
-    if (hostname.endsWith(".it")) add("it");
-    if (hostname.endsWith(".nl")) add("nl");
-    if (hostname.endsWith(".pl")) add("pl");
+    for (const definition of PRIVACY_SURFACE_LOCALE_REGISTRY) {
+      if (definition.tldHints?.some((suffix) => hostname.endsWith(suffix))) {
+        addEvidence("tld", definition.locale, hostname, definition.locale === "en" ? 1 : 3);
+      }
+    }
   } catch {
     // Ignore malformed fixture URLs.
   }
-  const htmlLang = /\blang=["']?([a-z]{2})(?:[-_][a-z]{2})?/i.exec(html)?.[1]?.toLowerCase();
-  if (htmlLang === "de") add("de");
-  if (htmlLang === "fr") add("fr");
-  if (htmlLang === "es") add("es");
-  if (htmlLang === "it") add("it");
-  if (htmlLang === "nl") add("nl");
-  if (htmlLang === "pl") add("pl");
+
+  if (contentLanguage) {
+    for (const token of contentLanguage.split(",")) {
+      const locale = localeFromLanguageTag(token.trim());
+      addEvidence("content_language", locale, token.trim(), 4);
+    }
+  }
+
+  const htmlLangPattern = /\blang=["']?([a-z]{2,3}(?:[-_][a-z0-9]{2,8})?)/gi;
+  let htmlLangMatch: RegExpExecArray | null;
+  while ((htmlLangMatch = htmlLangPattern.exec(html))) {
+    const value = htmlLangMatch[1] ?? "";
+    addEvidence("html_lang", localeFromLanguageTag(value), value, 6);
+  }
+
+  const hreflangPattern = /\bhreflang=["']?([a-z]{2,3}(?:[-_][a-z0-9]{2,8})?)/gi;
+  let hreflangMatch: RegExpExecArray | null;
+  while ((hreflangMatch = hreflangPattern.exec(html))) {
+    const value = hreflangMatch[1] ?? "";
+    addEvidence("hreflang", localeFromLanguageTag(value), value, 2);
+  }
+
+  const metaContentLanguagePattern = /http-equiv=["']content-language["'][^>]*content=["']([^"']+)["']/gi;
+  let metaContentLanguageMatch: RegExpExecArray | null;
+  while ((metaContentLanguageMatch = metaContentLanguagePattern.exec(html))) {
+    const value = metaContentLanguageMatch[1] ?? "";
+    addEvidence("content_language", localeFromLanguageTag(value), value, 4);
+  }
+
+  for (const candidate of candidates) {
+    addEvidence("policy_link_label", candidate.deterministicMatchedLocale, candidate.linkText, 4);
+  }
+
   const haystack = `${html.slice(0, 20_000)} ${visibleText.slice(0, 20_000)}`.toLowerCase();
-  if (/\b(?:datenschutz|personenbezogene daten)\b/.test(haystack)) add("de");
-  if (/\b(?:confidentialit[eé]|donn[eé]es personnelles)\b/.test(haystack)) add("fr");
-  if (/\b(?:privacidad|datos personales)\b/.test(haystack)) add("es");
-  if (/\b(?:informativa sulla privacy|dati personali)\b/.test(haystack)) add("it");
-  if (/\b(?:privacybeleid|persoonsgegevens)\b/.test(haystack)) add("nl");
-  if (/\b(?:polityka prywatno[śs]ci|dane osobowe|rodo)\b/.test(haystack)) add("pl");
-  return hints;
+  for (const definition of PRIVACY_SURFACE_LOCALE_REGISTRY) {
+    const terms = definition.visibleTextHints ?? definition.contextTerms;
+    if (terms.some((term) => term.length >= 4 && localeHintIncludes(haystack, term))) {
+      addEvidence("visible_text", definition.locale, terms.find((term) => localeHintIncludes(haystack, term)), 2);
+    }
+  }
+
+  const totals = new Map<SupportedPrivacyEvidenceLocale, number>();
+  for (const item of evidence) {
+    totals.set(item.locale, (totals.get(item.locale) ?? 0) + item.weight);
+  }
+  const ranked = [...totals.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+  const [primaryLocale, primaryScore = 0] = ranked[0] ?? [];
+  const localeHints = ranked
+    .filter(([, score]) => score >= 3)
+    .map(([locale]) => locale)
+    .slice(0, 3);
+
+  return {
+    candidateLocales: ranked.map(([locale]) => locale).slice(0, 5),
+    confidence: primaryScore >= 6 ? "high" : primaryScore >= 3 ? "medium" : primaryScore > 0 ? "low" : "unknown",
+    evidence,
+    localeHints,
+    primaryLocale,
+  };
+}
+
+function localeFromLanguageTag(value: string | undefined): SupportedPrivacyEvidenceLocale | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const primary = value.toLowerCase().split(/[;,\s]/)[0]?.replace("_", "-").split("-")[0];
+  const normalized = primary === "no" ? "nb" : primary;
+  return isSupportedPrivacyEvidenceLocale(normalized) ? normalized : undefined;
+}
+
+function localeHintIncludes(haystack: string, term: string): boolean {
+  const normalizedTerm = term.toLowerCase();
+  if (!/^[\p{L}\p{N}\s-]+$/u.test(normalizedTerm)) {
+    return haystack.includes(normalizedTerm);
+  }
+  return new RegExp(`(?:^|\\s)${escapeRegExp(normalizedTerm)}(?:\\s|$)`, "iu").test(haystack);
 }
 
 function classifyCommonPathSurface(path: string, normalizedUrl: string): ReturnType<typeof classifySurface> {
@@ -2020,7 +2141,7 @@ function shouldSpeculateCommonPathNanoRanking(
 }
 
 function deterministicCommonPathFetchFallback(candidates: PolicySurfaceCandidate[]): PolicySurfaceCandidate[] {
-  return dedupeCommonPathCandidates(candidates)
+  const rankedCandidates = dedupeCommonPathCandidates(candidates)
     .filter((candidate) =>
       candidate.fetchable &&
       candidate.deterministicSurfaceType !== "unknown" &&
@@ -2032,8 +2153,73 @@ function deterministicCommonPathFetchFallback(candidates: PolicySurfaceCandidate
       policyCandidateQualityScore(right) - policyCandidateQualityScore(left) ||
       right.deterministicScore - left.deterministicScore ||
       left.normalizedUrl.localeCompare(right.normalizedUrl),
-    )
-    .slice(0, MAX_COMMON_PATH_CANDIDATES_TO_FETCH);
+    );
+  return capCommonPathCandidatesWithLocaleSurfaceDiversity(rankedCandidates, MAX_COMMON_PATH_CANDIDATES_TO_FETCH);
+}
+
+export function policySurfaceCommonPathRankingPreviewForTest(
+  localeHints: SupportedPrivacyEvidenceLocale[],
+): Array<{
+  matchedLocale?: SupportedPrivacyEvidenceLocale;
+  normalizedUrl: string;
+  path: string;
+  surfaceType: PolicySurfaceObservation["surfaceType"];
+}> {
+  return deterministicCommonPathFetchFallback(
+    commonPathCandidatesFor("https://fixture.certscore.test", 0, localeHints),
+  ).map((candidate) => ({
+    matchedLocale: candidate.deterministicMatchedLocale,
+    normalizedUrl: candidate.normalizedUrl,
+    path: safeUrlPath(candidate.normalizedUrl),
+    surfaceType: candidate.deterministicSurfaceType,
+  }));
+}
+
+function capCommonPathCandidatesWithLocaleSurfaceDiversity(
+  rankedCandidates: PolicySurfaceCandidate[],
+  limit: number,
+): PolicySurfaceCandidate[] {
+  if (rankedCandidates.length <= limit) {
+    return rankedCandidates;
+  }
+  const selected = rankedCandidates.slice(0, limit);
+  const selectedKeys = new Set(selected.map((candidate) => commonPathCandidateKey(candidate.normalizedUrl)));
+  const requiredSurfaceTypes: Array<PolicySurfaceObservation["surfaceType"]> = ["privacy_policy", "cookie_policy"];
+
+  for (const surfaceType of requiredSurfaceTypes) {
+    const required = rankedCandidates.find((candidate) =>
+      candidate.deterministicSurfaceType === surfaceType &&
+      isLocaleSpecificCommonPath(candidate)
+    );
+    if (!required) {
+      continue;
+    }
+    const requiredKey = commonPathCandidateKey(required.normalizedUrl);
+    if (selectedKeys.has(requiredKey)) {
+      continue;
+    }
+    const replacementIndex = findCommonPathReplacementIndex(selected);
+    if (replacementIndex < 0) {
+      continue;
+    }
+    selectedKeys.delete(commonPathCandidateKey(selected[replacementIndex]?.normalizedUrl ?? ""));
+    selected[replacementIndex] = required;
+    selectedKeys.add(requiredKey);
+  }
+
+  return selected;
+}
+
+function findCommonPathReplacementIndex(
+  candidates: PolicySurfaceCandidate[],
+): number {
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const candidate = candidates[index];
+    if (candidate && !isLocaleSpecificCommonPath(candidate)) {
+      return index;
+    }
+  }
+  return candidates.length - 1;
 }
 
 function mergeCommonPathFallbackCandidates(
@@ -2104,6 +2290,9 @@ function commonPathPriority(candidate: PolicySurfaceCandidate): number {
   if (/\/help\/articles\/privacy-hub-home\/?$/.test(path) || /\/poufnosc\/?$/.test(path)) {
     return 4;
   }
+  if (isLocaleSpecificCommonPath(candidate)) {
+    return 5;
+  }
   if (/(?:datenschutz|datenschutzerklaerung|datenschutzerklärung|confidentialit[eé]|politique-de-confidentialit[eé]|privacidad|politica-de-privacidad|política-de-privacidad|informativa-privacy|informativa-sulla-privacy|privacybeleid|privacyverklaring|prywatnosc|prywatność|polityka-prywatnosci|polityka-prywatności)/.test(path)) {
     return 5;
   }
@@ -2123,6 +2312,26 @@ function commonPathPriority(candidate: PolicySurfaceCandidate): number {
     return 50;
   }
   return 10;
+}
+
+function isLocaleSpecificCommonPath(candidate: PolicySurfaceCandidate): boolean {
+  const locale = candidate.deterministicMatchedLocale;
+  if (!locale || locale === "en") {
+    return false;
+  }
+  const path = safeUrlPath(candidate.normalizedUrl).replace(/^\/+|\/+$/g, "").toLowerCase();
+  if (!path) {
+    return false;
+  }
+  const definition = PRIVACY_SURFACE_LOCALE_REGISTRY.find((entry) => entry.locale === locale);
+  if (!definition) {
+    return false;
+  }
+  return [
+    ...definition.privacyPolicyPathSlugs,
+    ...definition.cookiePolicyPathSlugs,
+    ...(definition.termsPathSlugs ?? []),
+  ].some((slug) => slug.replace(/^\/+|\/+$/g, "").toLowerCase() === path);
 }
 
 function policyCandidateQualityScore(candidate: PolicySurfaceCandidate): number {
@@ -3389,7 +3598,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-type FetchTextResult = { documentFormat?: "pdf" | "text"; ok: boolean; status?: number; text: string };
+type FetchTextResult = { contentLanguage?: string; documentFormat?: "pdf" | "text"; ok: boolean; status?: number; text: string };
 type PdfParseConstructor = new (input: { data: Uint8Array }) => {
   destroy(): Promise<void>;
   getText(input: {
@@ -3430,6 +3639,7 @@ async function fetchTextOnce(url: string, timeoutMs: number): Promise<FetchTextR
       redirect: "follow",
     });
     const contentType = response.headers.get("content-type") ?? "";
+    const contentLanguage = response.headers.get("content-language") ?? undefined;
     const isTextResponse = /text|html|json/i.test(contentType);
     const isPdfResponse = isPdfPolicyResponse(url, contentType) && !isTextResponse;
     if (!response.ok || (!isTextResponse && !isPdfResponse)) {
@@ -3442,6 +3652,7 @@ async function fetchTextOnce(url: string, timeoutMs: number): Promise<FetchTextR
     const body = new Uint8Array(await response.arrayBuffer());
     if (isPdfResponse) {
       return {
+        contentLanguage,
         documentFormat: "pdf",
         ok: true,
         status: response.status,
@@ -3449,6 +3660,7 @@ async function fetchTextOnce(url: string, timeoutMs: number): Promise<FetchTextR
       };
     }
     return {
+      contentLanguage,
       documentFormat: "text",
       ok: true,
       status: response.status,
@@ -4333,10 +4545,10 @@ function canonicalPolicyDocumentUrlsFromHtml(html: string, baseUrl: string): str
     }
     let score = 1;
     if (/privacy\s+policy/i.test(linkText)) score += 4;
-    if (/datenschutzhinweis|datenschutzerkl[aä]rung|polityka prywatno[śs]ci|pol[ií]tica de privacidad/i.test(linkText)) score += 4;
+    if (canonicalPrivacyDocumentPattern().test(linkText)) score += 4;
     if (/\/privacy-policy\/?$/i.test(normalizedUrl)) score += 4;
     if (/\/privacy-notice\/?$/i.test(normalizedUrl)) score += 3;
-    if (/datenschutzhinweis|datenschutzerklaerung|datenschutzerklärung|polityka-prywatno(?:sci|ści)|proteccion|protección/i.test(normalizedUrl)) score += 3;
+    if (canonicalPrivacyDocumentPattern().test(normalizedUrl)) score += 3;
     if (sameOrigin(baseUrl, normalizedUrl)) score += 2;
     anchors.push({ url: normalizedUrl, score });
   }
@@ -4346,7 +4558,20 @@ function canonicalPolicyDocumentUrlsFromHtml(html: string, baseUrl: string): str
 }
 
 function canonicalPrivacyDocumentPattern(): RegExp {
-  return /privacy\s+(policy|notice|statement)|\/privacy-policy\b|\/privacy-notice\b|\/privacy\b|datenschutzhinweis|datenschutzerkl[aä]rung|polityka prywatno[śs]ci|polityka-prywatno(?:sci|ści)|pol[ií]tica de privacidad|protecci[oó]n de datos|proteccion\.html|informativa (?:sulla )?privacy|privacybeleid|privacyverklaring/i;
+  return new RegExp(canonicalPrivacyDocumentTerms().map(escapeRegExp).join("|"), "i");
+}
+
+function canonicalPrivacyDocumentTerms(): string[] {
+  return uniqueStrings([
+    "privacy policy",
+    "/privacy-policy",
+    "privacy notice",
+    "/privacy-notice",
+    ...PRIVACY_SURFACE_LOCALE_REGISTRY.flatMap((entry) => [
+      ...entry.privacyPolicyPhrases,
+      ...entry.privacyPolicyPathSlugs,
+    ]),
+  ].filter((value) => value.length >= 4));
 }
 
 const TOPIC_EXCERPT_KEYWORD_PRIORITY: Array<{
@@ -4555,7 +4780,13 @@ export function isFetchablePolicyUrlForPolicySurface(
   if (surfaceType === "terms") {
     return /terms|legal|conditions|user-agreement|service-agreement/i.test(url);
   }
-  return /privacy|consent|onetrust|cookiebot|didomi|trustarc|datenschutz|confidentialit[eé]|privacidad|informativa|privacybeleid|privacyverklaring|prywatno(?:sc|sci|ść|ści)|polityka-prywatno(?:sci|ści)|poufnosc|poufność/i.test(url);
+  if (/privacy|consent|onetrust|cookiebot|didomi|trustarc|datenschutz|confidentialit[eé]|privacidad|informativa|privacybeleid|privacyverklaring|prywatno(?:sc|sci|ść|ści)|polityka-prywatno(?:sci|ści)|politika-privatnosti|poufnosc|poufność/i.test(url)) {
+    return true;
+  }
+  const normalizedUrl = decodeUrlForPolicyMatching(url);
+  return PRIVACY_SURFACE_LOCALE_REGISTRY
+    .flatMap((entry) => [...entry.privacyPolicyPathSlugs, ...entry.cookiePolicyPathSlugs])
+    .some((slug) => normalizedUrl.includes(slug.toLowerCase()));
 }
 
 export function isFetchablePolicyHrefForPolicySurface(
@@ -4601,6 +4832,14 @@ export function isFetchablePolicyCandidateForPolicySurface(input: {
 
   const label = input.linkText.trim();
   return Boolean(label) && !/^https?:\/\//i.test(label);
+}
+
+function decodeUrlForPolicyMatching(url: string): string {
+  try {
+    return decodeURIComponent(url).toLowerCase();
+  } catch {
+    return url.toLowerCase();
+  }
 }
 
 function sameOrigin(left: string, right: string): boolean {
