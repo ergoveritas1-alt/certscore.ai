@@ -42,7 +42,12 @@ type RecentScanAvailabilityPayload = {
   hasRecentReusableScan?: boolean | null;
 };
 
-function parseScanSubmitPayload(raw: string): ScanSubmitPayload {
+function looksLikeHtmlDocument(raw: string) {
+  const prefix = raw.trimStart().slice(0, 120).toLowerCase();
+  return prefix.startsWith("<!doctype html") || prefix.startsWith("<html") || prefix.includes("<html");
+}
+
+export function parseScanSubmitPayload(raw: string): ScanSubmitPayload {
   if (!raw.trim()) {
     return {};
   }
@@ -51,6 +56,13 @@ function parseScanSubmitPayload(raw: string): ScanSubmitPayload {
     const parsed: unknown = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed as ScanSubmitPayload : {};
   } catch {
+    if (looksLikeHtmlDocument(raw)) {
+      return {
+        code: "non_json_response",
+        error: "The scan service returned an unexpected response. Please try again."
+      };
+    }
+
     return { error: raw.slice(0, 240) };
   }
 }

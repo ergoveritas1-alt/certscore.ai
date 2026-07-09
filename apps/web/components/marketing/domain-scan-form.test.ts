@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildRecentScanAvailabilityUrl, getScanSubmitDestination } from "./domain-scan-form";
+import { buildRecentScanAvailabilityUrl, getScanSubmitDestination, parseScanSubmitPayload } from "./domain-scan-form";
 
 test("getScanSubmitDestination prefers public scanUrl for anonymous full scans", () => {
   assert.equal(
@@ -36,5 +36,15 @@ test("buildRecentScanAvailabilityUrl targets the full scan reuse availability ch
   assert.equal(
     buildRecentScanAvailabilityUrl({ domain: "https://example.com/path?a=1", scanFrom: "eu_ie" }),
     "/api/full-scan/reuse-availability?domain=https%3A%2F%2Fexample.com%2Fpath%3Fa%3D1&scanFrom=eu_ie"
+  );
+});
+
+test("parseScanSubmitPayload does not surface raw HTML error documents", () => {
+  assert.deepEqual(
+    parseScanSubmitPayload('<!DOCTYPE html> <!--[if lt IE 7]> <html class="no-js ie6 oldie" lang="en-US">'),
+    {
+      code: "non_json_response",
+      error: "The scan service returned an unexpected response. Please try again."
+    }
   );
 });
