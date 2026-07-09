@@ -71,6 +71,9 @@ importers:
       '@certscore/contracts':
         specifier: workspace:*
         version: link:../../packages/certscore-contracts
+      '@certscore/vendor-resolver':
+        specifier: workspace:*
+        version: link:../../packages/certscore-vendor-resolver
       '@website-signal-risk-scanner/db':
         specifier: workspace:*
         version: link:../../packages/db

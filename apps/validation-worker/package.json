@@ -36,6 +36,7 @@
     "@aws-sdk/client-s3": "3.1069.0",
     "@aws-sdk/client-sqs": "3.1069.0",
     "@certscore/contracts": "workspace:*",
+    "@certscore/vendor-resolver": "workspace:*",
     "@website-signal-risk-scanner/db": "workspace:*",
     "@website-signal-risk-scanner/shared": "workspace:*",
     "@website-signal-risk-scanner/validation-shared": "workspace:*",

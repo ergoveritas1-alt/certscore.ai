@@ -111,9 +111,14 @@ function packagesFromDeveloperDocs() {
   return [...packages].sort();
 }
 
-function assertNoPublicNpmPackageClaims() {
+const approvedPublicNpmPackages = new Set([
+  "@certscore/sdk"
+]);
+
+function assertOnlyApprovedPublicNpmPackageClaims() {
   const packageNames = packagesFromDeveloperDocs();
-  assert.deepEqual(packageNames, [], "Developer docs should not reference npm/npx packages until a public package channel is enabled");
+  const unapproved = packageNames.filter((packageName) => !approvedPublicNpmPackages.has(packageName));
+  assert.deepEqual(unapproved, [], "Developer docs should not reference unapproved npm/npx packages");
 }
 
 function referenceRoutes() {
@@ -140,7 +145,7 @@ function assertSdkExampleMirrored() {
 
 async function main() {
   lintShellBlocks();
-  assertNoPublicNpmPackageClaims();
+  assertOnlyApprovedPublicNpmPackageClaims();
   assertOpenApiReferenceSync();
   assertSdkExampleMirrored();
   console.log("Developer docs quality guards passed.");
