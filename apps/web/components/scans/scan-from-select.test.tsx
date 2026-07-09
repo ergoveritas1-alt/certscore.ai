@@ -53,7 +53,7 @@ test("ScanFromSelect defaults to EU-IR and keeps Local-extension last", () => {
   );
 
   assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_ie"/);
-  assert.equal(SCAN_FROM_OPTIONS.map((option) => option.value).join(","), "eu_de,eu_ie,california,local_extension");
+  assert.equal(SCAN_FROM_OPTIONS.map((option) => option.value).join(","), "eu_ie,eu_de,california,local_extension");
 });
 
 test("ScanFromSelect maps legacy default values to the selectable regional default", () => {
