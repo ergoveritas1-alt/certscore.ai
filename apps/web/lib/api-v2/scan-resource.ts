@@ -6,6 +6,7 @@ import {
   apiV2FindingSummarySchema,
   apiV2PreConsentCookiesTrackersSchema,
   apiV2ScanJobSchema,
+  apiV2ScanDiagnosticsSchema,
   apiV2ScanPulseSchema,
   apiV2ScanResourceSchema,
   apiV2Disclaimer,
@@ -16,6 +17,7 @@ import {
   type ApiV2FindingSummary,
   type ApiV2PreConsentCookiesTrackers,
   type ApiV2ScanJob,
+  type ApiV2ScanDiagnostics,
   type ApiV2ScanPulse,
   type ApiV2ScanResource
 } from "@certscore/api-contracts";
@@ -99,6 +101,37 @@ function finiteInt(value: unknown) {
 
 function finiteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : null;
+}
+
+function plainRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function diagnosticLane(name: string): "scanner" | "browser" | "policy" | "persistence" {
+  if (/policy|discovery|crawl/i.test(name)) {
+    return /policy/i.test(name) ? "policy" : "scanner";
+  }
+  if (/browser|runtime|visual|network/i.test(name)) {
+    return "browser";
+  }
+  if (/persist|diff|artifact/i.test(name)) {
+    return "persistence";
+  }
+  return "scanner";
+}
+
+function diagnosticOffset(value: unknown, startedAtMs: number | null) {
+  if (typeof value !== "string" || startedAtMs === null) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? Math.max(0, Math.round(timestamp - startedAtMs)) : null;
+}
+
+function diagnosticOutcome(value: unknown): "success" | "degraded" | "failed" | "unknown" {
+  return value === "success" || value === "degraded" || value === "failed" ? value : "unknown";
 }
 
 function riskLevelFromScore(score: number | null) {
@@ -204,6 +237,13 @@ function safeApiUrl(value: unknown) {
   }
 }
 
+function safeDocumentApiUrl(value: unknown) {
+  const url = safeApiUrl(value);
+  return url && !/\.(?:avif|bmp|css|gif|ico|jpe?g|js|mjs|map|mp3|mp4|ogg|pdf|png|svg|webm|webp|woff2?)(?:$|[?#])/i.test(url)
+    ? url
+    : null;
+}
+
 function dateStringOrNull(value: unknown) {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value.toISOString();
@@ -245,6 +285,7 @@ function buildApiV2EvidenceExamples(finding: PulseFindingLike) {
   const events = Array.isArray(finding.evidence?.exampleEvents) ? finding.evidence.exampleEvents : [];
   return events.slice(0, 5).map((event) => {
     const redirectChain = boundedStrings(event.redirectChain, 10, 2048).map((url) => safeApiUrl(url)).filter((url): url is string => url !== null);
+    const documentUrl = safeDocumentApiUrl(event.documentUrl ?? event.pageUrl ?? event.scannedPageUrl);
     return apiV2EvidenceEventSummarySchema.parse({
       type: normalizeEvidenceEventType(event.type),
       vendor: eventVendor(event),
@@ -252,6 +293,8 @@ function buildApiV2EvidenceExamples(finding: PulseFindingLike) {
       registrableDomain: stringOrNull(event.registrableDomain),
       observedAtMs: eventObservedAtMs(event),
       phase: stringOrNull(event.phase ?? finding.evidenceDigest?.phase ?? finding.evidence?.observedPhase),
+      documentUrl,
+      pageContextId: boundedStringOrNull(event.pageContextId, 120),
       requestUrl: safeApiUrl(event.requestUrl ?? event.url),
       rawObservedVendor: boundedStringOrNull(event.rawObservedVendor, 160),
       rawObservedVendorCategory: boundedStringOrNull(event.rawObservedVendorCategory, 120),
@@ -260,7 +303,7 @@ function buildApiV2EvidenceExamples(finding: PulseFindingLike) {
       vendorAttributionBasis: boundedStringOrNull(event.vendorAttributionBasis, 120),
       relatedOrInitiatingVendor: boundedStringOrNull(event.relatedOrInitiatingVendor, 160),
       resourceType: boundedStringOrNull(event.resourceType, 80),
-      scannedPageUrl: safeApiUrl(event.scannedPageUrl),
+      scannedPageUrl: documentUrl,
       frameUrl: safeApiUrl(event.frameUrl),
       finalUrl: safeApiUrl(event.finalUrl),
       initiatorHost: boundedStringOrNull(event.initiatorHost, 253),
@@ -362,6 +405,7 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
       self: absoluteUrl(`/api/v2/scans/${scan.id}`),
       status: absoluteUrl(`/api/v2/scans/${scan.id}/status`),
       findings: absoluteUrl(`/api/v2/scans/${scan.id}/findings`),
+      diagnostics: absoluteUrl(`/api/v2/scans/${scan.id}/diagnostics`),
       preConsentCookiesTrackers: absoluteUrl(`/api/v2/scans/${scan.id}/pre-consent-cookies-trackers`),
       pulse: absoluteUrl(`/api/v2/scans/${scan.id}/pulse`),
       report: absoluteUrl(`/scan/${scan.id}`),
@@ -372,6 +416,84 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
   } satisfies ApiV2ScanResource;
 
   return apiV2ScanResourceSchema.parse(resource);
+}
+
+export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2ScanDiagnostics {
+  const scan = scanRecord.scan;
+  const startedAtMs = scan.startedAt ? Date.parse(scan.startedAt) : Number.NaN;
+  const scanStart = Number.isFinite(startedAtMs) ? startedAtMs : null;
+  const totalWallMs = scanStart !== null && scan.completedAt && Number.isFinite(Date.parse(scan.completedAt))
+    ? Math.max(0, Math.round(Date.parse(scan.completedAt) - scanStart))
+    : null;
+  const executionStages = scan.executionSummary?.stages ?? [];
+  const runtimeArtifacts = plainRecord(scanRecord.runtimeArtifacts);
+  const buildPhaseSummaries = Array.isArray(runtimeArtifacts?.buildPhaseSummaries)
+    ? runtimeArtifacts.buildPhaseSummaries.map(plainRecord).filter((value): value is Record<string, unknown> => value !== null)
+    : [];
+  const phases = [
+    ...executionStages.map((stage) => ({
+      name: stage.stage,
+      lane: diagnosticLane(stage.stage),
+      startedAtMs: diagnosticOffset(stage.startedAt, scanStart),
+      completedAtMs: diagnosticOffset(stage.completedAt, scanStart),
+      durationMs: finiteInt(stage.durationMs) ?? 0,
+      outcome: diagnosticOutcome(stage.outcome)
+    })),
+    ...buildPhaseSummaries.map((phase) => {
+      const name = typeof phase.phase === "string" ? phase.phase : "unknown_phase";
+      return {
+        name,
+        lane: diagnosticLane(name),
+        startedAtMs: diagnosticOffset(phase.startedAt, scanStart),
+        completedAtMs: diagnosticOffset(phase.completedAt, scanStart),
+        durationMs: finiteInt(phase.durationMs) ?? 0,
+        outcome: diagnosticOutcome(phase.outcome)
+      };
+    })
+  ]
+    .sort((left, right) => (left.startedAtMs ?? Number.MAX_SAFE_INTEGER) - (right.startedAtMs ?? Number.MAX_SAFE_INTEGER))
+    .slice(0, 20);
+
+  const discoveryEvent = [...scanRecord.events].reverse().find((event) => {
+    const metadata = plainRecord(event.metadataJson);
+    return event.eventType === "runtime.build_phase_diagnostic" && metadata?.phase === "page_discovery_fetch" && metadata?.status === "ok";
+  });
+  const discoveryMetadata = plainRecord(discoveryEvent?.metadataJson);
+  const discoveryDebug = plainRecord(discoveryMetadata?.discoveryDebug);
+  const subtimings = plainRecord(discoveryMetadata?.subtimings);
+  const prefetchTargets = Array.isArray(discoveryDebug?.prefetchTargets) ? discoveryDebug.prefetchTargets : [];
+  const uniquePrefetchUrls = new Set(
+    prefetchTargets.flatMap((target) => {
+      const record = plainRecord(target);
+      return typeof record?.url === "string" ? [record.url] : [];
+    })
+  );
+  const policyPhase = phases.find((phase) => phase.name === "policy_enrichment");
+
+  return apiV2ScanDiagnosticsSchema.parse({
+    type: "certscore_scan_diagnostics",
+    schemaVersion: "scan-diagnostics.v1",
+    scanId: scan.id,
+    generatedAt: scan.completedAt ?? null,
+    totalWallMs,
+    phases,
+    policyDiscovery: {
+      candidatesDiscovered: finiteInt(discoveryDebug?.candidateCount),
+      candidatesAfterDeduplication: uniquePrefetchUrls.size > 0 ? uniquePrefetchUrls.size : null,
+      requestsStarted: finiteInt(discoveryDebug?.prefetchTargetCount) ?? finiteInt(discoveryMetadata?.prefetchTargetCount) ?? (uniquePrefetchUrls.size > 0 ? uniquePrefetchUrls.size : null),
+      successfulDocuments: finiteInt(subtimings?.prefetchedPageCount),
+      timeouts: finiteInt(discoveryMetadata?.timeoutCount),
+      phaseWallMs: policyPhase?.durationMs ?? null,
+      maxConcurrency: finiteInt(discoveryMetadata?.staticFetchConcurrency),
+      shortCircuitReason: boundedStringOrNull(discoveryMetadata?.skipReason, 160)
+    },
+    links: {
+      self: absoluteUrl(`/api/v2/scans/${scan.id}/diagnostics`),
+      scan: absoluteUrl(`/api/v2/scans/${scan.id}`),
+      findings: absoluteUrl(`/api/v2/scans/${scan.id}/findings`)
+    },
+    disclaimer: apiV2Disclaimer
+  });
 }
 
 export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJob {

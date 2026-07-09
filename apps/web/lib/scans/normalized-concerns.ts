@@ -164,6 +164,7 @@ export type NormalizedConcernNegativeEvidenceFlag =
   | "boilerplate_policy_anchor"
   | "policy_semantic_review_incomplete"
   | "runtime_tracking_review_incomplete"
+  | "runtime_page_context_invalid"
   | "possible_policy_runtime_mismatch"
   | "policy_runtime_alignment_review_signal"
   | "insufficient_evidence_for_policy_behavior_conflict"

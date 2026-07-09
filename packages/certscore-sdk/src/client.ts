@@ -19,6 +19,7 @@ import type {
   PulseResourceClient,
   PulseResult,
   ScanJob,
+  ScanDiagnostics,
   ScanOptions,
   ScanPulse,
   ScanResource,
@@ -122,6 +123,7 @@ export class CertScoreClient {
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
     this.scans = {
       create: (url, scanOptions) => this.createScanResource(url, scanOptions),
+      diagnostics: (scanId, scanOptions) => this.getScanDiagnostics(scanId, scanOptions),
       get: (scanId, scanOptions) => this.getScanResource(scanId, scanOptions),
       preConsentCookiesTrackers: (scanId, scanOptions) => this.getPreConsentCookiesTrackers(scanId, scanOptions),
       status: (scanId, scanOptions) => this.getScanStatus(scanId, scanOptions),
@@ -227,6 +229,11 @@ export class CertScoreClient {
   /** Retrieve the API v2 scan resource for an eligible public scan. */
   async getScanResource(scanId: string, options: { signal?: AbortSignal } = {}): Promise<ScanResource> {
     return this.fetchJson<ScanResource>(`/api/v2/scans/${encodeURIComponent(scanId)}`, options);
+  }
+
+  /** Retrieve bounded phase and policy-discovery timings for an eligible public scan. */
+  async getScanDiagnostics(scanId: string, options: { signal?: AbortSignal } = {}): Promise<ScanDiagnostics> {
+    return this.fetchJson<ScanDiagnostics>(`/api/v2/scans/${encodeURIComponent(scanId)}/diagnostics`, options);
   }
 
   /** Retrieve API v2 status for an eligible public scan. */

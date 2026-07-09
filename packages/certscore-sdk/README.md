@@ -42,6 +42,7 @@ const completed = await certscore.scans.wait(created);
 const scanId = completed.scanId;
 
 const status = await certscore.scans.status(scanId);
+const diagnostics = await certscore.scans.diagnostics(scanId);
 const findings = await certscore.findings.list(scanId);
 const preConsentTable = await certscore.scans.preConsentCookiesTrackers(scanId);
 const firstFinding = findings.findings[0]
@@ -55,7 +56,7 @@ const pulseEvidence = await certscore.pulse.evidence(scanId);
 const latestDomainScan = await certscore.domains.latest("example.com");
 const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("example.com");
 
-console.log(status.status, preConsentTable.summary.rowCount, explanation?.title, pulseProjection.disclaimer, pulseEvidence.type, latestDomainScan.scan?.scanId, latestPreConsentTable.rows.length);
+console.log(status.status, diagnostics.totalWallMs, diagnostics.policyDiscovery.phaseWallMs, preConsentTable.summary.rowCount, explanation?.title, pulseProjection.disclaimer, pulseEvidence.type, latestDomainScan.scan?.scanId, latestPreConsentTable.rows.length);
 ```
 
 `certscore.scans.get()`, `certscore.scans.status()`, and `certscore.scans.wait()` expose scan timing where the API has enough evidence:
@@ -69,6 +70,7 @@ console.log(status.status, preConsentTable.summary.rowCount, explanation?.title,
 Available resource clients:
 
 - `certscore.scans.create()`
+- `certscore.scans.diagnostics()`
 - `certscore.scans.get()`
 - `certscore.scans.preConsentCookiesTrackers()`
 - `certscore.scans.status()`

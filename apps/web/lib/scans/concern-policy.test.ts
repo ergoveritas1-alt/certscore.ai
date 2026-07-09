@@ -2843,6 +2843,29 @@ test("deriveConcernPolicy applies consentTimeline gate to validation-rule pre-co
   assert.ok(policy.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"));
 });
 
+test("deriveConcernPolicy keeps invalid runtime page context audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "runtime_privacy.preconsent_tracking_observed",
+      originType: "validation_rule",
+      suggestedUnifiedFindingId: "preconsent_tracking",
+      title: "Tracking observed before consent"
+    }),
+    evidenceStrengthFlags: ["direct_runtime", "structured_validation"],
+    rawEvidence: {
+      preconsent_tracker_evidence_urls: ["https://www.googletagmanager.com/gtm.js"],
+      preconsent_tracker_vendors: ["Google Tag Manager"],
+      preconsent_tracking_detected: true,
+      runtime_page_context_valid: false
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.ok(policy.negativeEvidenceFlags.includes("runtime_page_context_invalid"));
+});
+
 test("deriveConcernPolicy keeps pre-consent evidence without consentTimeline audit-only", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({

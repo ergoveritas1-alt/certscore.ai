@@ -2611,7 +2611,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes makes reject path not testable wi
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes keeps missing reject partial when no accept control is retained", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not infer missing reject from tracking without a confirmed banner", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -2636,8 +2636,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps missing reject partial when
   });
 
   const rejectPath = outcomes.reject_all_path_availability;
-  assert.equal(rejectPath?.status, "Review signal");
-  assert.match(rejectPath?.limitation ?? "", /partial concern/i);
+  assert.equal(rejectPath?.status, "Not confirmed");
+  assert.match(rejectPath?.limitation ?? "", /cannot be assessed from tracking activity alone/i);
   assert.equal(rejectPath?.criticalEvidence.retainedEvidence.preconsentCookieOrTrackingActivityObserved, true);
   assert.equal(rejectPath?.criticalEvidence.retainedEvidence.rejectControlObserved, false);
   assert.equal(rejectPath?.criticalEvidence.retainedEvidence.rejectPathAvailabilityEvidenceRetained, false);
@@ -2718,7 +2718,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats banner-only cookie notice 
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /did not include a structured first-layer reject/i);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes keeps missing reject partial when first-layer controls are incomplete", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes does not infer missing reject when first-layer controls are incomplete", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -2755,8 +2755,8 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps missing reject partial when
   });
 
   const outcome = outcomes.reject_all_path_availability;
-  assert.equal(outcome?.status, "Review signal");
-  assert.match(outcome?.limitation ?? "", /partial concern/i);
+  assert.equal(outcome?.status, "Not confirmed");
+  assert.match(outcome?.limitation ?? "", /cannot be assessed from CMP presence or tracking activity alone/i);
   assert.equal(outcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, true);
   assert.equal(outcome?.criticalEvidence.retainedEvidence.preconsentCookieOrTrackingActivityObserved, true);
   assert.equal(outcome?.criticalEvidence.retainedEvidence.rejectControlObserved, false);
@@ -2812,21 +2812,21 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes carries CMP expectation for missi
   });
 
   const rejectOutcome = outcomes.reject_all_path_availability;
-  assert.equal(rejectOutcome?.status, "Review signal");
-  assert.equal(rejectOutcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, true);
+  assert.equal(rejectOutcome?.status, "Not confirmed");
+  assert.equal(rejectOutcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, false);
   assert.equal(rejectOutcome?.criticalEvidence.retainedEvidence.cmpSignalObserved, true);
   assert.equal(rejectOutcome?.criticalEvidence.retainedEvidence.rejectControlObserved, false);
 
   const acceptOutcome = outcomes.accept_consent_control;
-  assert.equal(acceptOutcome?.status, "Review signal");
-  assert.equal(acceptOutcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, true);
+  assert.equal(acceptOutcome?.status, "Not confirmed");
+  assert.equal(acceptOutcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, false);
   assert.equal(acceptOutcome?.criticalEvidence.retainedEvidence.cmpSignalObserved, true);
   assert.equal(acceptOutcome?.criticalEvidence.retainedEvidence.acceptControlObserved, false);
   assert.equal(acceptOutcome?.criticalEvidence.retainedEvidence.acceptControlEvidenceRetained, false);
 
   const optionsOutcome = outcomes.options_settings_preferences_control;
-  assert.equal(optionsOutcome?.status, "Review signal");
-  assert.equal(optionsOutcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, true);
+  assert.equal(optionsOutcome?.status, "Not confirmed");
+  assert.equal(optionsOutcome?.criticalEvidence.retainedEvidence.consentSurfaceObserved, false);
   assert.equal(optionsOutcome?.criticalEvidence.retainedEvidence.cmpSignalObserved, true);
   assert.equal(optionsOutcome?.criticalEvidence.retainedEvidence.optionsControlObserved, false);
   assert.equal(optionsOutcome?.criticalEvidence.retainedEvidence.optionsControlEvidenceRetained, false);

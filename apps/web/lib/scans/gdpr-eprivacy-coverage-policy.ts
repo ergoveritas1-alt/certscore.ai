@@ -3174,8 +3174,8 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     if (preconsentCookieOrTrackingActivityObserved) {
       return makeOutcome(
         "reject_all_path_availability",
-        "Review signal",
-        "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer reject, decline, refuse, or continue-without-accepting option. Treat this as a partial concern unless retained first-layer controls also show an accept path without an equally available refusal path.",
+        "Not confirmed",
+        "CertScore retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Reject-path availability cannot be assessed from tracking activity alone.",
         [
           "Evidence: retained pre-consent cookie/tracking activity",
           "Evidence: no structured first-layer reject option retained",
@@ -3185,7 +3185,7 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
           retainedEvidence: {
             cmpSignalObserved: cmpEvidence.cmpObserved,
             cmpVendorName: cmpEvidence.cmpVendorName,
-            consentSurfaceObserved: cmpEvidence.cmpObserved,
+            consentSurfaceObserved: false,
             firstLayerCookieConsentBannerObserved: false,
             gdprEprivacyConsentSurfaceObserved: "unconfirmed",
             preconsentCookieOrTrackingActivityObserved: true,
@@ -3364,8 +3364,8 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
     if (hasObservedPreconsentCookieOrTrackingActivity(input)) {
       return makeOutcome(
         "reject_all_path_availability",
-        "Review signal",
-        "CertScore retained a consent/CMP surface signal and pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer reject, decline, refuse, or continue-without-accepting option. Treat this as a partial concern unless retained first-layer controls also show an accept path without an equally available refusal path.",
+        "Not confirmed",
+        "CertScore retained a consent/CMP runtime signal and pre-consent cookie or tracking activity, but no structured first-layer consent controls were confirmed. Reject-path availability cannot be assessed from CMP presence or tracking activity alone.",
         [
           "Evidence: consent surface observed",
           "Evidence: retained pre-consent cookie/tracking activity",
@@ -3503,8 +3503,8 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
 
     return makeOutcome(
       "options_settings_preferences_control",
-      "Review signal",
-      "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer options, settings, or preferences control.",
+      preconsentCookieOrTrackingActivityObserved ? "Not confirmed" : "Not observed",
+      "CertScore retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Options/settings/preferences availability cannot be assessed from tracking activity alone.",
       [
         "Evidence: retained pre-consent cookie/tracking activity",
         "Evidence: no structured first-layer options/settings/preferences control retained",
@@ -3514,7 +3514,7 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
         retainedEvidence: {
           cmpSignalObserved: cmpEvidence.cmpObserved,
           cmpVendorName: cmpEvidence.cmpVendorName,
-          consentSurfaceObserved: cmpEvidence.cmpObserved,
+          consentSurfaceObserved: false,
           firstLayerCookieConsentBannerObserved: false,
           gdprEprivacyConsentSurfaceObserved: "unconfirmed",
           optionsControlObserved: false,
@@ -3584,9 +3584,9 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
   ) {
     return makeOutcome(
       "options_settings_preferences_control",
-      preconsentCookieOrTrackingActivityObserved ? "Review signal" : "Not observed",
+      preconsentCookieOrTrackingActivityObserved ? "Not confirmed" : "Not observed",
       preconsentCookieOrTrackingActivityObserved
-        ? "CertScore retained a consent/CMP surface signal and pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer options, settings, or preferences control."
+        ? "CertScore retained a consent/CMP runtime signal and pre-consent cookie or tracking activity, but no structured first-layer consent controls were confirmed. Options/settings/preferences availability cannot be assessed from CMP presence or tracking activity alone."
         : "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer options, settings, or preferences control. CertScore does not infer options availability from screenshot pixels.",
       [
         "Evidence: consent surface observed",
@@ -3702,8 +3702,8 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
 
     return makeOutcome(
       "accept_consent_control",
-      "Review signal",
-      "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer accept, accept-all, or allow-all control.",
+      preconsentCookieOrTrackingActivityObserved ? "Not confirmed" : "Not observed",
+      "CertScore retained pre-consent cookie or tracking activity, but no first-layer GDPR/ePrivacy consent banner was confirmed. Accept-control availability cannot be assessed from tracking activity alone.",
       [
         "Evidence: retained pre-consent cookie/tracking activity",
         "Evidence: no structured first-layer accept consent control retained",
@@ -3715,7 +3715,7 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
           acceptControlEvidenceRetained: false,
           cmpSignalObserved: cmpEvidence.cmpObserved,
           cmpVendorName: cmpEvidence.cmpVendorName,
-          consentSurfaceObserved: cmpEvidence.cmpObserved,
+          consentSurfaceObserved: false,
           firstLayerCookieConsentBannerObserved: false,
           gdprEprivacyConsentSurfaceObserved: "unconfirmed",
           preconsentCookieOrTrackingActivityObserved: true,
@@ -3783,9 +3783,9 @@ function deriveAcceptConsentControlOutcome(input: GdprEprivacyCoveragePolicyInpu
   ) {
     return makeOutcome(
       "accept_consent_control",
-      preconsentCookieOrTrackingActivityObserved ? "Review signal" : "Not observed",
+      preconsentCookieOrTrackingActivityObserved ? "Not confirmed" : "Not observed",
       preconsentCookieOrTrackingActivityObserved
-        ? "CertScore retained a consent/CMP surface signal and pre-consent cookie or tracking activity, but did not retain structured evidence of a first-layer accept consent control."
+        ? "CertScore retained a consent/CMP runtime signal and pre-consent cookie or tracking activity, but no structured first-layer consent controls were confirmed. Accept-control availability cannot be assessed from CMP presence or tracking activity alone."
         : "A consent/CMP surface was observed, but the retained runtime evidence did not include a structured first-layer accept consent control. CertScore does not infer accept availability from screenshot pixels.",
       [
         "Evidence: consent surface observed",

@@ -48,6 +48,8 @@ export type {
   ReviewLens,
   ScanFrom,
   ScanJob,
+  ScanDiagnosticPhase,
+  ScanDiagnostics,
   ScanOptions,
   ScanPulse,
   ScanResource,

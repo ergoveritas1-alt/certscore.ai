@@ -359,6 +359,24 @@ export function buildCertScoreApiV2OpenApiDocument() {
           }
         }
       },
+      "/api/v2/scans/{scanId}/diagnostics": {
+        get: {
+          operationId: "getScanDiagnostics",
+          tags: ["Scans"],
+          summary: "Retrieve bounded scan phase and policy-discovery diagnostics.",
+          parameters: [{ name: "scanId", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": {
+              description: "Bounded scan diagnostics.",
+              headers: diagnosticHeaders,
+              content: { "application/json": { schema: { $ref: "#/components/schemas/ScanDiagnostics" } } }
+            },
+            "400": { description: "Invalid scan ID.", headers: diagnosticHeaders, content: errorContent },
+            "404": { description: "Scan not found.", headers: diagnosticHeaders, content: errorContent },
+            "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
+          }
+        }
+      },
       "/api/v2/scans/{scanId}/findings": {
         get: {
           operationId: "listScanFindings",
@@ -632,6 +650,52 @@ export function buildCertScoreApiV2OpenApiDocument() {
             disclaimer: { type: "string" }
           }
         },
+        ScanDiagnostics: {
+          type: "object",
+          additionalProperties: false,
+          required: ["type", "schemaVersion", "scanId", "generatedAt", "totalWallMs", "phases", "policyDiscovery"],
+          properties: {
+            type: { type: "string", const: "certscore_scan_diagnostics" },
+            schemaVersion: { type: "string", const: "scan-diagnostics.v1" },
+            scanId: { type: "string" },
+            generatedAt: { type: ["string", "null"] },
+            totalWallMs: { type: ["integer", "null"], minimum: 0 },
+            phases: {
+              type: "array",
+              maxItems: 20,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["name", "lane", "startedAtMs", "completedAtMs", "durationMs", "outcome"],
+                properties: {
+                  name: { type: "string", maxLength: 120 },
+                  lane: { type: "string", enum: ["scanner", "browser", "policy", "persistence"] },
+                  startedAtMs: { type: ["integer", "null"], minimum: 0 },
+                  completedAtMs: { type: ["integer", "null"], minimum: 0 },
+                  durationMs: { type: "integer", minimum: 0 },
+                  outcome: { type: "string", enum: ["success", "degraded", "failed", "unknown"] }
+                }
+              }
+            },
+            policyDiscovery: {
+              type: "object",
+              additionalProperties: false,
+              required: ["candidatesDiscovered", "candidatesAfterDeduplication", "requestsStarted", "successfulDocuments", "timeouts", "phaseWallMs", "maxConcurrency", "shortCircuitReason"],
+              properties: {
+                candidatesDiscovered: { type: ["integer", "null"], minimum: 0 },
+                candidatesAfterDeduplication: { type: ["integer", "null"], minimum: 0 },
+                requestsStarted: { type: ["integer", "null"], minimum: 0 },
+                successfulDocuments: { type: ["integer", "null"], minimum: 0 },
+                timeouts: { type: ["integer", "null"], minimum: 0 },
+                phaseWallMs: { type: ["integer", "null"], minimum: 0 },
+                maxConcurrency: { type: ["integer", "null"], minimum: 1, maximum: 16 },
+                shortCircuitReason: { type: ["string", "null"], maxLength: 160 }
+              }
+            },
+            links: { $ref: "#/components/schemas/Links" },
+            disclaimer: { type: "string" }
+          }
+        },
         FindingList: {
           type: "object",
           additionalProperties: true,
@@ -695,6 +759,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
                   registrableDomain: { type: ["string", "null"] },
                   observedAtMs: { type: ["integer", "null"] },
                   phase: { type: ["string", "null"] },
+                  documentUrl: { type: ["string", "null"], maxLength: 2048 },
+                  pageContextId: { type: ["string", "null"], maxLength: 120 },
                   requestUrl: {
                     type: ["string", "null"],
                     maxLength: 2048,

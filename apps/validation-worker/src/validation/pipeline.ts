@@ -3757,7 +3757,6 @@ function deriveRuntimePrivacyFindings(input: {
   const consentSurfaceObserved =
     runtime?.consent_surface_observed === true ||
     consentSummary?.bannerPresent === true ||
-    consentSummary?.cmpDetected === true ||
     getRecordBoolean(snapshot, "cookie_banner_present");
   const consentActionableChoiceObserved =
     runtime?.consent_actionable_choice_observed === true ||
@@ -3774,18 +3773,30 @@ function deriveRuntimePrivacyFindings(input: {
     ...(Array.isArray(vendorSummary?.normalizedVendors) ? vendorSummary.normalizedVendors : [])
   ]);
   const hybridNavigationSummary = getRecord(hybrid?.navigationSummary);
-  const runtimeFindingPageUrl =
-    getStringValue(hybridNavigationSummary, "finalUrl") ??
-    getStringValue(hybridNavigationSummary, "initialUrl") ??
-    getStringValue(snapshot, "final_url") ??
-    getStringValue(snapshot, "finalUrl") ??
-    getStringValue(snapshot, "page_url") ??
-    getStringValue(snapshot, "pageUrl") ??
-    getStringValue(snapshot, "homepage_url") ??
-    getStringValue(snapshot, "homepageUrl") ??
-    getStringValue(snapshot, "canonical_url") ??
-    getStringValue(snapshot, "canonicalUrl") ??
-    null;
+  const runtimeFindingPageUrlCandidates = [
+    getStringValue(hybridNavigationSummary, "finalUrl"),
+    getStringValue(hybridNavigationSummary, "initialUrl"),
+    getStringValue(snapshot, "final_url"),
+    getStringValue(snapshot, "finalUrl"),
+    getStringValue(snapshot, "page_url"),
+    getStringValue(snapshot, "pageUrl"),
+    getStringValue(snapshot, "homepage_url"),
+    getStringValue(snapshot, "homepageUrl"),
+    getStringValue(snapshot, "canonical_url"),
+    getStringValue(snapshot, "canonicalUrl")
+  ];
+  const runtimeFindingPageUrl = runtimeFindingPageUrlCandidates.find((candidate) => {
+    if (!candidate || /\.(?:avif|bmp|css|gif|ico|jpe?g|js|mjs|map|mp3|mp4|ogg|pdf|png|svg|webm|webp|woff2?)(?:$|[?#])/i.test(candidate)) {
+      return false;
+    }
+    try {
+      const parsed = new URL(candidate);
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch {
+      return false;
+    }
+  }) ?? null;
+  const runtimePageContextValid = runtimeFindingPageUrl !== null;
   const rtbCookieSyncObservations = getRtbCookieSyncObservations(hybrid, rtbDomains, {
     scannedPageUrl: runtimeFindingPageUrl
   });
@@ -3850,6 +3861,7 @@ function deriveRuntimePrivacyFindings(input: {
         consent_actionable_choice_observed: consentActionableChoiceObserved,
         consent_surface_observed: consentSurfaceObserved,
         domain_policy_coverage: domainPolicyCoverage,
+        document_url: runtimeFindingPageUrl,
         explicit_privacy_controls_disclosed: explicitPrivacyControlsDisclosed,
         initial_cookie_names: initialCookieNames,
         preconsent_tracking_detected: preconsentTrackingDetected,
@@ -3857,6 +3869,7 @@ function deriveRuntimePrivacyFindings(input: {
         preconsent_violation_vendors: attributedPreconsentVendors,
         preconsent_tracker_evidence_urls: preconsentRuntimeRequestUrls,
         runtimeRequestUrls: preconsentRuntimeRequestUrls,
+        runtime_page_context_valid: runtimePageContextValid,
         runtimeVendors,
         third_party_cookie_count: thirdPartyCookieCount,
         third_party_request_domains: rawThirdPartyDomains,
@@ -3868,7 +3881,7 @@ function deriveRuntimePrivacyFindings(input: {
         total_tracker_count: totalTrackerCount,
         total_vendor_count: totalVendorCount
       },
-      pageUrl: null,
+      pageUrl: runtimeFindingPageUrl,
       ruleKey: "runtime_privacy.preconsent_tracking_observed",
       severity,
       title
@@ -3931,17 +3944,19 @@ function deriveRuntimePrivacyFindings(input: {
             ? { contradictionEvidence: consentGatedTrackingContradictionEvidence }
             : {}),
           domain_policy_coverage: domainPolicyCoverage,
+          document_url: runtimeFindingPageUrl,
           preconsent_tracking_detected: preconsentTrackingDetected,
           preconsent_violation_vendors: attributedPreconsentVendors,
           rtb_cookie_sync_domains: rtbDomains,
           runtimeRequestUrls: [...new Set([...preconsentRuntimeRequestUrls, ...rtbRequestUrls])],
+          runtime_page_context_valid: runtimePageContextValid,
           runtimeVendors,
           third_party_cookie_count: thirdPartyCookieCount,
           third_party_request_count: thirdPartyRequestCount,
           third_party_request_domain_count: rawThirdPartyDomains.length,
           third_party_vendors_before_consent: thirdPartyVendorsBeforeConsent
         },
-        pageUrl: null,
+        pageUrl: runtimeFindingPageUrl,
         ruleKey: "runtime_privacy.consent_gated_tracking_claim_conflict",
         severity: "high",
         title: "Consent-gated tracking claim conflicts with runtime behavior"

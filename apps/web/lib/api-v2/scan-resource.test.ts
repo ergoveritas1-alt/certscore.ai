@@ -9,6 +9,7 @@ import {
   buildApiV2PreConsentCookiesTrackers,
   buildApiV2ScanJobFromPulseStatus,
   buildApiV2ScanPulse,
+  buildApiV2ScanDiagnostics,
   buildApiV2ScanResource,
   buildApiV2ScanStatus,
   projectedFindingsFromPulse
@@ -162,6 +163,79 @@ test("buildApiV2ScanResource marks partial coverage without exposing raw evidenc
   assert.equal(resource.coverage?.status, "partial");
   assert.deepEqual(resource.coverage?.limitations, ["Automated public-web scan only."]);
   assert.equal("rawEvidence" in resource, false);
+});
+
+test("buildApiV2ScanDiagnostics projects bounded phase and policy discovery timings", () => {
+  const scanRecord = {
+    ...fixture({
+      executionSummary: {
+        completedAt: "2026-06-30T12:00:10.000Z",
+        contractVersion: "scanner-execution.v1",
+        degradedStages: [],
+        failureCategory: null,
+        lifecycle: "completed",
+        startedAt: "2026-06-30T12:00:01.000Z",
+        updatedAt: "2026-06-30T12:00:10.000Z",
+        stages: [
+          {
+            attempts: 1,
+            completedAt: "2026-06-30T12:00:05.000Z",
+            durationMs: 3000,
+            errorCategory: null,
+            message: null,
+            metadata: null,
+            outcome: "success",
+            recoverable: false,
+            stage: "runtime_snapshot_capture",
+            startedAt: "2026-06-30T12:00:02.000Z"
+          }
+        ]
+      }
+    }),
+    events: [
+      {
+        eventType: "runtime.build_phase_diagnostic",
+        metadataJson: {
+          discoveryDebug: {
+            candidateCount: 20,
+            prefetchTargets: [
+              { url: "https://example.com/privacy" },
+              { url: "https://example.com/privacy" },
+              { url: "https://example.com/cookies" }
+            ]
+          },
+          phase: "page_discovery_fetch",
+          prefetchTargetCount: 3,
+          staticFetchConcurrency: 3,
+          status: "ok",
+          subtimings: { prefetchedPageCount: 2 }
+        }
+      }
+    ],
+    runtimeArtifacts: {
+      buildPhaseSummaries: [
+        {
+          attempts: 1,
+          completedAt: "2026-06-30T12:00:07.200Z",
+          durationMs: 1200,
+          error: null,
+          outcome: "success",
+          phase: "policy_enrichment",
+          startedAt: "2026-06-30T12:00:06.000Z"
+        }
+      ]
+    }
+  } as unknown as ScanDetailResponse;
+
+  const diagnostics = buildApiV2ScanDiagnostics(scanRecord);
+  assert.equal(diagnostics.totalWallMs, 9000);
+  assert.equal(diagnostics.phases.find((phase) => phase.name === "runtime_snapshot_capture")?.lane, "browser");
+  assert.equal(diagnostics.policyDiscovery.candidatesDiscovered, 20);
+  assert.equal(diagnostics.policyDiscovery.candidatesAfterDeduplication, 2);
+  assert.equal(diagnostics.policyDiscovery.requestsStarted, 3);
+  assert.equal(diagnostics.policyDiscovery.successfulDocuments, 2);
+  assert.equal(diagnostics.policyDiscovery.phaseWallMs, 1200);
+  assert.equal(diagnostics.policyDiscovery.maxConcurrency, 3);
 });
 
 test("buildApiV2Error returns the shared error envelope", () => {
@@ -359,6 +433,7 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
               resolvedEndpointVendorCategory: "cmp",
               vendorAttributionBasis: "canonical_endpoint",
               relatedOrInitiatingVendor: "Amazon Ads",
+              pageContextId: "primary_document",
               scannedPageUrl: "https://example.com/?session=secret",
               frameUrl: "https://frame.example.test/embed?uid=secret",
               finalUrl: "https://analytics.example.test/final?uid=secret",
@@ -370,7 +445,12 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
               projectionWarnings: ["canonical_endpoint_vendor_replaced_raw_vendor"],
               rawRequestBody: "must not be copied"
             },
-            { type: "request", urlHost: "cdn.example.test" },
+            {
+              type: "request",
+              urlHost: "cdn.example.test",
+              scannedPageUrl: "https://img.example.test/favicon.ico",
+              requestUrl: "https://img.example.test/logo.png"
+            },
             { type: "request", urlHost: "tag.example.test" },
             { type: "request", urlHost: "pixel.example.test" },
             { type: "request", urlHost: "ads.example.test" },
@@ -413,7 +493,12 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
   assert.equal(finding?.evidence.examples?.[0]?.resolvedEndpointVendor, "Sourcepoint CMP");
   assert.equal(finding?.evidence.examples?.[0]?.vendorAttributionBasis, "canonical_endpoint");
   assert.equal(finding?.evidence.examples?.[0]?.relatedOrInitiatingVendor, "Amazon Ads");
+  assert.equal(finding?.evidence.examples?.[0]?.documentUrl, "https://example.com/?redacted=1");
+  assert.equal(finding?.evidence.examples?.[0]?.pageContextId, "primary_document");
   assert.equal(finding?.evidence.examples?.[0]?.scannedPageUrl, "https://example.com/?redacted=1");
+  assert.equal(finding?.evidence.examples?.[1]?.documentUrl, null);
+  assert.equal(finding?.evidence.examples?.[1]?.scannedPageUrl, null);
+  assert.equal(finding?.evidence.examples?.[1]?.requestUrl, "https://img.example.test/logo.png");
   assert.equal(finding?.evidence.examples?.[0]?.frameUrl, "https://frame.example.test/embed?redacted=1");
   assert.equal(finding?.evidence.examples?.[0]?.finalUrl, "https://analytics.example.test/final?redacted=1");
   assert.equal(finding?.evidence.examples?.[0]?.initiatorHost, "www.example.com");

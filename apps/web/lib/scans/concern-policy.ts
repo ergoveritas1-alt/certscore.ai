@@ -2495,6 +2495,18 @@ export function deriveConcernPolicy(input: {
   if (consentActionableChoiceObserved === false) {
     negativeEvidenceFlags.add("no_consent_actionable_choice_observed");
   }
+  const runtimePageContextValid = getBooleanEvidence(input.rawEvidence, [
+    "runtimePageContextValid",
+    "runtime_page_context_valid"
+  ]);
+  if (isPreconsentConcern(input.concern) && runtimePageContextValid === false) {
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "runtime_page_context_invalid"],
+      promotionEligibility: "internal_only"
+    };
+  }
 
   if (isLowConfidencePolicyExtractionConcern(input.concern)) {
     const policyPageType = getConcernPolicyPageType(input.concern, input.rawEvidence);

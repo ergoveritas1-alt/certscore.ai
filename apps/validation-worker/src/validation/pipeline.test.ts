@@ -5316,6 +5316,10 @@ test("pre-consent runtime finding filters canonical CookieYes and Transcend CMP 
           consentSummary: {
             cmpDetected: true
           },
+          navigationSummary: {
+            finalUrl: "https://img.example.com/favicon.ico",
+            initialUrl: "https://www.example.com/"
+          },
           networkSummary: {
             totalRequestCount: 80
           },
@@ -5379,6 +5383,10 @@ test("pre-consent runtime finding filters canonical CookieYes and Transcend CMP 
   const finding = findings.find((item) => item.ruleKey === "runtime_privacy.preconsent_tracking_observed");
   assert.ok(finding);
   assert.equal(finding.evidence.cmp_vendor_name, "CookieYes");
+  assert.equal(finding.evidence.consent_surface_observed, false);
+  assert.equal(finding.evidence.document_url, "https://www.example.com/");
+  assert.equal(finding.evidence.runtime_page_context_valid, true);
+  assert.equal(finding.pageUrl, "https://www.example.com/");
   assert.deepEqual(finding.evidence.preconsent_tracker_evidence_urls, [
     "https://connect.facebook.net/en_US/fbevents.js"
   ]);

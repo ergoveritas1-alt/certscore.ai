@@ -119,6 +119,36 @@ export interface ScanJob {
   [key: string]: unknown;
 }
 
+export interface ScanDiagnosticPhase {
+  name: string;
+  lane: "scanner" | "browser" | "policy" | "persistence";
+  startedAtMs: number | null;
+  completedAtMs: number | null;
+  durationMs: number;
+  outcome: "success" | "degraded" | "failed" | "unknown";
+}
+
+export interface ScanDiagnostics {
+  type: "certscore_scan_diagnostics";
+  schemaVersion: "scan-diagnostics.v1";
+  scanId: string;
+  generatedAt: string | null;
+  totalWallMs: number | null;
+  phases: ScanDiagnosticPhase[];
+  policyDiscovery: {
+    candidatesDiscovered: number | null;
+    candidatesAfterDeduplication: number | null;
+    requestsStarted: number | null;
+    successfulDocuments: number | null;
+    timeouts: number | null;
+    phaseWallMs: number | null;
+    maxConcurrency: number | null;
+    shortCircuitReason: string | null;
+  };
+  links?: ApiV2Links;
+  disclaimer?: string;
+}
+
 export interface EvidenceEventSummary {
   type: "request" | "page" | "accessibility_check" | "policy_surface";
   vendor?: string | null;
@@ -126,6 +156,8 @@ export interface EvidenceEventSummary {
   registrableDomain?: string | null;
   observedAtMs?: number | null;
   phase?: string | null;
+  documentUrl?: string | null;
+  pageContextId?: string | null;
   requestUrl?: string | null;
   rawObservedVendor?: string | null;
   rawObservedVendorCategory?: string | null;
@@ -246,6 +278,7 @@ export interface PreConsentCookiesTrackers {
 
 export interface ScanResourceClient {
   create(url: string, options?: CreateScanResourceOptions): Promise<ScanResource | ScanJob>;
+  diagnostics(scanId: string, options?: ApiV2RequestOptions): Promise<ScanDiagnostics>;
   get(scanId: string, options?: ApiV2RequestOptions): Promise<ScanResource>;
   preConsentCookiesTrackers(scanId: string, options?: ApiV2RequestOptions): Promise<PreConsentCookiesTrackers>;
   status(scanId: string, options?: ApiV2RequestOptions): Promise<ScanJob>;

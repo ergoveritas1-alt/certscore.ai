@@ -109,6 +109,8 @@ export const apiV2EvidenceEventSummarySchema = z
     registrableDomain: z.string().nullable().optional(),
     observedAtMs: z.number().int().nullable().optional(),
     phase: z.string().nullable().optional(),
+    documentUrl: z.string().max(2048).nullable().optional(),
+    pageContextId: z.string().max(120).nullable().optional(),
     requestUrl: z.string().max(2048).nullable().optional(),
     rawObservedVendor: z.string().max(160).nullable().optional(),
     rawObservedVendorCategory: z.string().max(120).nullable().optional(),
@@ -203,6 +205,44 @@ export const apiV2ScanPulseSchema = z
   })
   .passthrough();
 
+export const apiV2ScanDiagnosticPhaseSchema = z
+  .object({
+    name: z.string().max(120),
+    lane: z.enum(["scanner", "browser", "policy", "persistence"]),
+    startedAtMs: z.number().int().min(0).nullable(),
+    completedAtMs: z.number().int().min(0).nullable(),
+    durationMs: z.number().int().min(0),
+    outcome: z.enum(["success", "degraded", "failed", "unknown"])
+  })
+  .strict();
+
+export const apiV2PolicyDiscoveryDiagnosticsSchema = z
+  .object({
+    candidatesDiscovered: z.number().int().min(0).nullable(),
+    candidatesAfterDeduplication: z.number().int().min(0).nullable(),
+    requestsStarted: z.number().int().min(0).nullable(),
+    successfulDocuments: z.number().int().min(0).nullable(),
+    timeouts: z.number().int().min(0).nullable(),
+    phaseWallMs: z.number().int().min(0).nullable(),
+    maxConcurrency: z.number().int().min(1).max(16).nullable(),
+    shortCircuitReason: z.string().max(160).nullable()
+  })
+  .strict();
+
+export const apiV2ScanDiagnosticsSchema = z
+  .object({
+    type: z.literal("certscore_scan_diagnostics"),
+    schemaVersion: z.literal("scan-diagnostics.v1"),
+    scanId: z.string(),
+    generatedAt: z.string().nullable(),
+    totalWallMs: z.number().int().min(0).nullable(),
+    phases: z.array(apiV2ScanDiagnosticPhaseSchema).max(20),
+    policyDiscovery: apiV2PolicyDiscoveryDiagnosticsSchema,
+    links: apiV2LinksSchema.optional(),
+    disclaimer: z.string().optional()
+  })
+  .strict();
+
 export const apiV2PreConsentCookiesTrackersRowSchema = z
   .object({
     id: z.string(),
@@ -255,5 +295,6 @@ export type ApiV2FindingDetail = z.infer<typeof apiV2FindingDetailSchema>;
 export type ApiV2FindingList = z.infer<typeof apiV2FindingListSchema>;
 export type ApiV2DomainLatestScan = z.infer<typeof apiV2DomainLatestScanSchema>;
 export type ApiV2ScanPulse = z.infer<typeof apiV2ScanPulseSchema>;
+export type ApiV2ScanDiagnostics = z.infer<typeof apiV2ScanDiagnosticsSchema>;
 export type ApiV2PreConsentCookiesTrackers = z.infer<typeof apiV2PreConsentCookiesTrackersSchema>;
 export type ApiV2Error = z.infer<typeof apiV2ErrorSchema>;

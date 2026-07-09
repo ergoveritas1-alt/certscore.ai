@@ -356,6 +356,27 @@ test("resource clients call API v2 read endpoints", async () => {
     {
       status: 200,
       body: {
+        type: "certscore_scan_diagnostics",
+        schemaVersion: "scan-diagnostics.v1",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        generatedAt: "2026-06-30T12:00:10.000Z",
+        totalWallMs: 9000,
+        phases: [],
+        policyDiscovery: {
+          candidatesDiscovered: null,
+          candidatesAfterDeduplication: null,
+          requestsStarted: null,
+          successfulDocuments: null,
+          timeouts: null,
+          phaseWallMs: null,
+          maxConcurrency: null,
+          shortCircuitReason: null
+        }
+      }
+    },
+    {
+      status: 200,
+      body: {
         type: "certscore_scan_job",
         jobId: "00000000-0000-4000-8000-000000000123",
         scanId: "00000000-0000-4000-8000-000000000123",
@@ -429,6 +450,7 @@ test("resource clients call API v2 read endpoints", async () => {
   try {
     const client = new CertScoreClient({ baseUrl: "https://certscore.ai/" });
     const scan = await client.scans.get("00000000-0000-4000-8000-000000000123");
+    const diagnostics = await client.scans.diagnostics("00000000-0000-4000-8000-000000000123");
     const status = await client.scans.status("00000000-0000-4000-8000-000000000123");
     const inventory = await client.scans.preConsentCookiesTrackers("00000000-0000-4000-8000-000000000123");
     const findings = await client.findings.list("00000000-0000-4000-8000-000000000123");
@@ -438,6 +460,8 @@ test("resource clients call API v2 read endpoints", async () => {
     const latestInventory = await client.domains.latestPreConsentCookiesTrackers("example.com", { scanFrom: "california" });
 
     assert.equal(scan.type, "certscore_scan");
+    assert.equal(diagnostics.type, "certscore_scan_diagnostics");
+    assert.equal(diagnostics.totalWallMs, 9000);
     assert.equal(status.type, "certscore_scan_job");
     assert.equal(inventory.type, "certscore_pre_consent_cookies_trackers");
     assert.equal(findings.type, "certscore_finding_list");
@@ -446,13 +470,14 @@ test("resource clients call API v2 read endpoints", async () => {
     assert.equal(latest.type, "certscore_domain_latest_scan");
     assert.equal(latestInventory.type, "certscore_pre_consent_cookies_trackers");
     assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
-    assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status$/);
-    assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/pre-consent-cookies-trackers$/);
-    assert.match(mock.calls[3] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/findings$/);
-    assert.match(mock.calls[4] ?? "", /\/findings\/pre_consent_tracking_detected$/);
-    assert.match(mock.calls[5] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/pulse$/);
-    assert.match(mock.calls[6] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=california$/);
-    assert.match(mock.calls[7] ?? "", /\/api\/v2\/domains\/example.com\/latest\/pre-consent-cookies-trackers\?scanFrom=california$/);
+    assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/diagnostics$/);
+    assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status$/);
+    assert.match(mock.calls[3] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/pre-consent-cookies-trackers$/);
+    assert.match(mock.calls[4] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/findings$/);
+    assert.match(mock.calls[5] ?? "", /\/findings\/pre_consent_tracking_detected$/);
+    assert.match(mock.calls[6] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/pulse$/);
+    assert.match(mock.calls[7] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=california$/);
+    assert.match(mock.calls[8] ?? "", /\/api\/v2\/domains\/example.com\/latest\/pre-consent-cookies-trackers\?scanFrom=california$/);
   } finally {
     mock.restore();
   }
