@@ -33,7 +33,7 @@ type ScanDetailPageProps = {
 };
 
 const RECENT_SCAN_REUSED_MESSAGE =
-  "Showing last scan for this site. Choose scan option to re-fresh with new scan.";
+  "Recently scanned. Select Fresh re-scan to run a new scan.";
 
 function canViewCapturedImage(input: { isPlatformAdmin: boolean; role: string | null | undefined }) {
   return input.isPlatformAdmin || input.role === "admin" || input.role === "advanced";

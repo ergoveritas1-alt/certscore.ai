@@ -103,7 +103,7 @@ const GENERIC_SCAN_ERROR_MESSAGES: Record<ScanMode, string> = {
   full: "The full scan could not be started. Please try again.",
   preview: "The preview scan could not be started. Please try again."
 };
-const RECENT_SCAN_REUSED_MESSAGE = "Showing last scan for this site. Choose scan option to re-fresh with new scan.";
+const RECENT_SCAN_REUSED_MESSAGE = "Recently scanned. Select Fresh re-scan to run a new scan.";
 
 const FULL_SCAN_ERROR_MESSAGES: Record<string, string> = {
   active_scan_exists: "A scan is already queued or running for this site. Open scan history or try again shortly.",

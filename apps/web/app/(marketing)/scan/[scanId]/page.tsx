@@ -86,7 +86,7 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
 }
 
 const RECENT_SCAN_REUSED_MESSAGE =
-  "Showing last scan for this site. Choose scan option to re-fresh with new scan.";
+  "Recently scanned. Select Fresh re-scan to run a new scan.";
 
 export default async function PublicScanDetailPage({ params, searchParams }: PublicScanDetailPageProps) {
   const { scanId } = await params;
