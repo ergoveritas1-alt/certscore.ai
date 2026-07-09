@@ -297,11 +297,13 @@ function buildPulseReportSurface(input: {
     }
   });
   const regulatoryGapFindingIds = new Set(regulatoryGapTopFindings.map((finding) => finding.id));
+  const publicExecutiveFindings = executive.findings.filter(isPublicPulseApiFinding);
+  const publicExecutiveTopFindings = executive.topFindings.filter(isPublicPulseApiFinding);
   const allFindings = [
     ...regulatoryGapTopFindings,
-    ...executive.findings.filter((finding) => !regulatoryGapFindingIds.has(finding.id))
+    ...publicExecutiveFindings.filter((finding) => !regulatoryGapFindingIds.has(finding.id))
   ];
-  const topFindings = regulatoryGapTopFindings.length > 0 ? regulatoryGapTopFindings : executive.topFindings;
+  const topFindings = regulatoryGapTopFindings.length > 0 ? regulatoryGapTopFindings : publicExecutiveTopFindings;
   const gdprEprivacyScore = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: reportableGdprRows
@@ -315,7 +317,7 @@ function buildPulseReportSurface(input: {
   const score = boundedScore(gdprEprivacyScore ?? executiveScore ?? deriveRegulatoryRiskDisplayScore(scanRecord));
   const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);
   const preConsentTrackerRows = groupedTrackerRows
-    .filter((row) => row.firstSeenMs !== null || /high|medium|review/i.test(row.priority))
+    .filter((row) => row.firstSeenMs !== null)
     .sort((left, right) => {
       const leftMs = left.firstSeenMs ?? Number.MAX_SAFE_INTEGER;
       const rightMs = right.firstSeenMs ?? Number.MAX_SAFE_INTEGER;
@@ -517,6 +519,15 @@ function getFindingReviewLenses(finding: CertScoreFinding) {
   return [...lenses];
 }
 
+const PUBLIC_PULSE_DIAGNOSTIC_FINDING_IDS = new Set([
+  "scan_quality_visual_no_go"
+]);
+
+export function isPublicPulseApiFinding(finding: Pick<CertScoreFinding, "id" | "section">) {
+  return PUBLIC_PULSE_DIAGNOSTIC_FINDING_IDS.has(finding.id) ||
+    /consent|cookie|privacy|tracking|vendor|fingerprinting/i.test(`${finding.section} ${finding.id}`);
+}
+
 function getFindingReviewLensLinks(finding: CertScoreFinding, scanId: string) {
   return getFindingReviewLenses(finding).map((name) => ({
     name,
@@ -568,7 +579,50 @@ function eventEvidencePhase(event: Record<string, unknown>) {
   return null;
 }
 
-function buildEvidence(finding: CertScoreFinding, scanId: string) {
+const POLICY_ANCHOR_KEYS = [
+  "policyUrl",
+  "policy_url",
+  "policyPageUrl",
+  "policy_page_url",
+  "documentUrl",
+  "document_url",
+  "sourceUrl",
+  "source_url",
+  "url",
+  "policySnippet",
+  "policy_snippet",
+  "policyText",
+  "policy_text",
+  "matchedPolicyText",
+  "matched_policy_text"
+];
+
+function recordHasPolicyAnchorValue(record: Record<string, unknown> | null) {
+  if (!record) {
+    return false;
+  }
+  return POLICY_ANCHOR_KEYS.some((key) => {
+    const value = record[key];
+    if (typeof value === "string") {
+      return value.trim().length > 0;
+    }
+    if (Array.isArray(value)) {
+      return value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
+    }
+    return false;
+  });
+}
+
+export function hasMeaningfulPolicyAnchor(details: Record<string, unknown>) {
+  const policyEvidence = asRecord(details.policyEvidence);
+  const policyEvidenceDetails = asRecord(details.policyEvidenceDetails);
+  const policyRuntimeConflict = asRecord(details.policyRuntimeConflict);
+  return recordHasPolicyAnchorValue(policyEvidence) ||
+    recordHasPolicyAnchorValue(policyEvidenceDetails) ||
+    recordHasPolicyAnchorValue(policyRuntimeConflict);
+}
+
+function buildEvidence(finding: CertScoreFinding, scanId: string, options: { coverageLimitedByNoGo?: boolean } = {}) {
   const details = finding.evidenceDetails ?? {};
   const representativeRequests = Array.isArray(details.representativeRequests) ? details.representativeRequests : [];
   const promotionGradePreconsentRequests = finding.id === "pre_consent_tracking_detected"
@@ -600,6 +654,76 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
   const runtimePhase =
     (asRecord(details.policyRuntimeConflict)?.runtimeAnchor as { phase?: string } | undefined)?.phase ??
     (typeof recordValue(details.trackingEvidence, "phase") === "string" ? String(recordValue(details.trackingEvidence, "phase")) : null);
+  const allowFallbackRequestExamples = finding.id !== "pre_consent_tracking_detected";
+  const fallbackExamples = allowFallbackRequestExamples
+    ? [
+        firstRequest
+          ? {
+              type: "request",
+              phase: firstRequest.runtimePhase ?? (firstRequest.preConsent ? "pre_consent" : null),
+              vendor: firstRequestEndpointVendor?.vendorName ?? firstRequest.vendor ?? null,
+              vendorCategory: firstRequestEndpointVendor?.vendorCategory ?? firstRequest.vendorCategory ?? firstRequest.category ?? null,
+              rawObservedVendor: firstRequest.vendor ?? null,
+              rawObservedVendorCategory: firstRequest.vendorCategory ?? firstRequest.category ?? null,
+              resolvedEndpointVendor: firstRequestEndpointVendor?.vendorName ?? null,
+              resolvedEndpointVendorCategory: firstRequestEndpointVendor?.vendorCategory ?? null,
+              vendorAttributionBasis: firstRequestEndpointVendor && firstRequest.vendor && firstRequestEndpointVendor.vendorName !== firstRequest.vendor
+                ? `${firstRequest.vendorAttributionBasis ?? "request_row_vendor"}:${firstRequestEndpointVendor.basis}`
+                : firstRequest.vendorAttributionBasis ?? firstRequestEndpointVendor?.basis ?? null,
+              relatedOrInitiatingVendor: firstRequestEndpointVendor && firstRequest.vendor && firstRequestEndpointVendor.vendorName !== firstRequest.vendor ? firstRequest.vendor : null,
+              projectionWarnings: firstRequestEndpointVendor && firstRequest.vendor && firstRequestEndpointVendor.vendorName !== firstRequest.vendor
+                ? ["canonical_endpoint_vendor_replaced_raw_vendor"]
+                : [],
+              requestUrl: safeUrl(firstRequestUrl),
+              frameUrl: safeUrl(recordValue(firstRequestRecord, "frameUrl") ?? recordValue(firstRequestRecord, "frame_url")),
+              finalUrl: safeUrl(recordValue(firstRequestRecord, "finalUrl") ?? recordValue(firstRequestRecord, "final_url")),
+              initiatorHost: stringValue(recordValue(firstRequestRecord, "initiatorHost") ?? recordValue(firstRequestRecord, "initiator_host")),
+              initiatorType: stringValue(recordValue(firstRequestRecord, "initiatorType") ?? recordValue(firstRequestRecord, "initiator_type") ?? recordValue(firstRequestRecord, "initiator")),
+              initiatorUrl: safeUrl(recordValue(firstRequestRecord, "initiatorUrl") ?? recordValue(firstRequestRecord, "initiator_url")),
+              redirectChain: asStringArray(recordValue(firstRequestRecord, "redirectChain") ?? recordValue(firstRequestRecord, "redirect_chain")).slice(0, 8).map(safeUrl).filter((url): url is string => Boolean(url)),
+              resourceType: stringValue(recordValue(firstRequestRecord, "resourceType") ?? recordValue(firstRequestRecord, "resource_type")),
+              urlHost: firstRequest.hostname ?? null,
+              registrableDomain: getUrlRegistrableDomain(firstRequest.hostname ?? firstRequestUrl),
+              timestampMs: firstRequest.firstSeenMs ?? null
+            }
+          : null,
+        firstRuntimeRequestUrl
+          ? {
+              type: "request",
+              phase: runtimePhase ?? null,
+              vendor: firstRuntimeRequestEndpointVendor?.vendorName ?? null,
+              vendorCategory: firstRuntimeRequestEndpointVendor?.vendorCategory ?? null,
+              rawObservedVendor: null,
+              rawObservedVendorCategory: null,
+              resolvedEndpointVendor: firstRuntimeRequestEndpointVendor?.vendorName ?? null,
+              resolvedEndpointVendorCategory: firstRuntimeRequestEndpointVendor?.vendorCategory ?? null,
+              vendorAttributionBasis: firstRuntimeRequestEndpointVendor?.basis ?? null,
+              relatedOrInitiatingVendor: null,
+              projectionWarnings: [],
+              requestUrl: safeUrl(firstRuntimeRequestUrl),
+              frameUrl: null,
+              finalUrl: null,
+              initiatorHost: null,
+              initiatorType: null,
+              initiatorUrl: null,
+              redirectChain: [],
+              resourceType: null,
+              urlHost: safeHostname(firstRuntimeRequestUrl),
+              registrableDomain: getUrlRegistrableDomain(firstRuntimeRequestUrl),
+              timestampMs: null
+            }
+          : null,
+        sourceUrls[0] || pageUrls[0]
+          ? {
+              type: "page",
+              phase: null,
+              vendor: null,
+              urlHost: safeHostname(sourceUrls[0] ?? pageUrls[0]),
+              timestampMs: null
+            }
+          : null
+      ].filter(Boolean).slice(0, 3)
+    : [];
   const examples = promotionGradePreconsentRequests.length > 0
     ? promotionGradePreconsentRequests.map((request) => ({
         type: "request",
@@ -631,75 +755,13 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
         consentInteractionRecorded: request.consentInteractionRecorded,
         confidence: request.confidence
       }))
-    : [
-    firstRequest
-      ? {
-          type: "request",
-          phase: firstRequest.runtimePhase ?? (firstRequest.preConsent ? "pre_consent" : null),
-          vendor: firstRequestEndpointVendor?.vendorName ?? firstRequest.vendor ?? null,
-          vendorCategory: firstRequestEndpointVendor?.vendorCategory ?? firstRequest.vendorCategory ?? firstRequest.category ?? null,
-          rawObservedVendor: firstRequest.vendor ?? null,
-          rawObservedVendorCategory: firstRequest.vendorCategory ?? firstRequest.category ?? null,
-          resolvedEndpointVendor: firstRequestEndpointVendor?.vendorName ?? null,
-          resolvedEndpointVendorCategory: firstRequestEndpointVendor?.vendorCategory ?? null,
-          vendorAttributionBasis: firstRequestEndpointVendor && firstRequest.vendor && firstRequestEndpointVendor.vendorName !== firstRequest.vendor
-            ? `${firstRequest.vendorAttributionBasis ?? "request_row_vendor"}:${firstRequestEndpointVendor.basis}`
-            : firstRequest.vendorAttributionBasis ?? firstRequestEndpointVendor?.basis ?? null,
-          relatedOrInitiatingVendor: firstRequestEndpointVendor && firstRequest.vendor && firstRequestEndpointVendor.vendorName !== firstRequest.vendor ? firstRequest.vendor : null,
-          projectionWarnings: firstRequestEndpointVendor && firstRequest.vendor && firstRequestEndpointVendor.vendorName !== firstRequest.vendor
-            ? ["canonical_endpoint_vendor_replaced_raw_vendor"]
-            : [],
-          requestUrl: safeUrl(firstRequestUrl),
-          frameUrl: safeUrl(recordValue(firstRequestRecord, "frameUrl") ?? recordValue(firstRequestRecord, "frame_url")),
-          finalUrl: safeUrl(recordValue(firstRequestRecord, "finalUrl") ?? recordValue(firstRequestRecord, "final_url")),
-          initiatorHost: stringValue(recordValue(firstRequestRecord, "initiatorHost") ?? recordValue(firstRequestRecord, "initiator_host")),
-          initiatorType: stringValue(recordValue(firstRequestRecord, "initiatorType") ?? recordValue(firstRequestRecord, "initiator_type") ?? recordValue(firstRequestRecord, "initiator")),
-          initiatorUrl: safeUrl(recordValue(firstRequestRecord, "initiatorUrl") ?? recordValue(firstRequestRecord, "initiator_url")),
-          redirectChain: asStringArray(recordValue(firstRequestRecord, "redirectChain") ?? recordValue(firstRequestRecord, "redirect_chain")).slice(0, 8).map(safeUrl).filter((url): url is string => Boolean(url)),
-          resourceType: stringValue(recordValue(firstRequestRecord, "resourceType") ?? recordValue(firstRequestRecord, "resource_type")),
-          urlHost: firstRequest.hostname ?? null,
-          registrableDomain: getUrlRegistrableDomain(firstRequest.hostname ?? firstRequestUrl),
-          timestampMs: firstRequest.firstSeenMs ?? null
-        }
-      : null,
-    firstRuntimeRequestUrl
-      ? {
-          type: "request",
-          phase: runtimePhase ?? null,
-          vendor: firstRuntimeRequestEndpointVendor?.vendorName ?? null,
-          vendorCategory: firstRuntimeRequestEndpointVendor?.vendorCategory ?? null,
-          rawObservedVendor: null,
-          rawObservedVendorCategory: null,
-          resolvedEndpointVendor: firstRuntimeRequestEndpointVendor?.vendorName ?? null,
-          resolvedEndpointVendorCategory: firstRuntimeRequestEndpointVendor?.vendorCategory ?? null,
-          vendorAttributionBasis: firstRuntimeRequestEndpointVendor?.basis ?? null,
-          relatedOrInitiatingVendor: null,
-          projectionWarnings: [],
-          requestUrl: safeUrl(firstRuntimeRequestUrl),
-          frameUrl: null,
-          finalUrl: null,
-          initiatorHost: null,
-          initiatorType: null,
-          initiatorUrl: null,
-          redirectChain: [],
-          resourceType: null,
-          urlHost: safeHostname(firstRuntimeRequestUrl),
-          registrableDomain: getUrlRegistrableDomain(firstRuntimeRequestUrl),
-          timestampMs: null
-        }
-      : null,
-    sourceUrls[0] || pageUrls[0]
-      ? {
-          type: "page",
-          phase: null,
-          vendor: null,
-          urlHost: safeHostname(sourceUrls[0] ?? pageUrls[0]),
-          timestampMs: null
-        }
-      : null
-  ].filter(Boolean).slice(0, 3);
+    : fallbackExamples;
   const exampleEvents = examples as Array<Record<string, unknown>>;
   const projectionWarnings = boundedStrings([
+    options.coverageLimitedByNoGo ? "coverage_limited_by_scan_quality_no_go" : null,
+    finding.id === "pre_consent_tracking_detected" && promotionGradePreconsentRequests.length === 0 && representativeRequests.length > 0
+      ? "promotion_grade_preconsent_request_not_available"
+      : null,
     ...exampleEvents.flatMap((event) => asStringArray(event.projectionWarnings)),
     ...exampleEvents.map((event) => event.type === "request" && !stringValue(event.requestUrl) ? "request_event_missing_url" : null)
   ], 12);
@@ -719,7 +781,7 @@ function buildEvidence(finding: CertScoreFinding, scanId: string) {
     asStringArray(details.runtimeVendors).length > 0 ||
     Boolean(firstRequest?.vendor);
   const hasConsentContext = Boolean(details.consentState || details.consentInteraction || /consent|reject|pre_consent/i.test(finding.id));
-  const hasPolicyAnchor = Boolean(details.policyEvidence || details.policyEvidenceDetails || details.policyRuntimeConflict);
+  const hasPolicyAnchor = hasMeaningfulPolicyAnchor(details);
   const basis = finding.section === "Accessibility"
     ? "accessibility_check"
     : canonicalPhase || hasTimingAnchor || hasVendorAnchor
@@ -772,7 +834,7 @@ function safeHostname(value: string | null | undefined) {
   }
 }
 
-function toPulseFinding(finding: CertScoreFinding, scanId: string) {
+function toPulseFinding(finding: CertScoreFinding, scanId: string, options: { coverageLimitedByNoGo?: boolean } = {}) {
   const display = getPublicReportFindingDisplay({
     confidence: finding.confidence,
     findingId: finding.id,
@@ -782,14 +844,26 @@ function toPulseFinding(finding: CertScoreFinding, scanId: string) {
     severity: finding.severity,
     title: finding.label
   });
-  const evidence = buildEvidence(finding, scanId);
+  const applyNoGoCoverageFraming =
+    options.coverageLimitedByNoGo &&
+    finding.id !== "scan_quality_visual_no_go" &&
+    getFindingReviewLenses(finding).includes("GDPR / ePrivacy");
+  const evidence = buildEvidence(finding, scanId, {
+    coverageLimitedByNoGo: applyNoGoCoverageFraming
+  });
+  const plainEnglish = applyNoGoCoverageFraming
+    ? `Coverage-limited: ${finding.shortSummary}`
+    : finding.shortSummary;
+  const nextStep = applyNoGoCoverageFraming
+    ? `Treat this as coverage-limited until a representative scan reaches the normal public site. ${display.remediation || "Review the retained evidence and confirm expected site behavior."}`
+    : display.remediation || "Review the retained evidence and confirm expected site behavior.";
 
   return {
     id: finding.id,
     label: display.title,
     criticality: display.criticality,
-    confidence: finding.confidence,
-    plainEnglish: finding.shortSummary,
+    confidence: applyNoGoCoverageFraming ? "moderate" : finding.confidence,
+    plainEnglish,
     evidence: {
       summary: evidence.summary,
       observedPhase: evidence.observedPhase,
@@ -802,7 +876,7 @@ function toPulseFinding(finding: CertScoreFinding, scanId: string) {
     reviewLenses: getFindingReviewLenses(finding),
     reviewLensLinks: getFindingReviewLensLinks(finding, scanId),
     anchorUrl: evidence.anchorUrl,
-    nextStep: display.remediation || "Review the retained evidence and confirm expected site behavior."
+    nextStep
   };
 }
 
@@ -1103,7 +1177,8 @@ function buildEvidenceArtifact(input: {
         ])
       : null
   }));
-  const findings = input.allFindings.map((finding) => toPulseFinding(finding, scanRecord.scan.id));
+  const coverageLimitedByNoGo = input.allFindings.some((finding) => finding.id === "scan_quality_visual_no_go");
+  const findings = input.allFindings.map((finding) => toPulseFinding(finding, scanRecord.scan.id, { coverageLimitedByNoGo }));
   const rejectedTrackerHostRows = rejectedDisplayHostnameRows(scanRecord.trackerVendors.map((vendor) => vendor.scriptHost));
   const rejectedTrackerDomainRows = rejectedDisplayHostnameRows(input.reportSurface.trackerInventoryRows.flatMap((row) => row.domains));
 
@@ -1334,7 +1409,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const executive = reportSurface.executive;
   const allFindings = reportSurface.allFindings;
   const score = reportSurface.score;
-  const topFindings = reportSurface.topFindings.map((finding) => toPulseFinding(finding, scan.id));
+  const coverageLimitedByNoGo = allFindings.some((finding) => finding.id === "scan_quality_visual_no_go");
+  const topFindings = reportSurface.topFindings.map((finding) => toPulseFinding(finding, scan.id, { coverageLimitedByNoGo }));
   const benchmark = input.scanRecord.domainBenchmark
     ? `${input.scanRecord.domainBenchmark.industry} / ${input.scanRecord.domainBenchmark.estimatedRankLabel}`
     : null;
@@ -1580,7 +1656,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
 
   return {
     ...standard,
-    findings: allFindings.map((finding) => toPulseFinding(finding, scan.id)),
+    findings: allFindings.map((finding) => toPulseFinding(finding, scan.id, { coverageLimitedByNoGo })),
     reviewContext: {
       ...standard.reviewContext,
       lenses: standard.reviewContext.lenses.map((lens) => ({

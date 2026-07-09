@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { assessPulseScanRecordQuality } from "./projection";
+import {
+  assessPulseScanRecordQuality,
+  hasMeaningfulPolicyAnchor,
+  isPublicPulseApiFinding
+} from "./projection";
 
 function pulseScanRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -29,10 +33,35 @@ function pulseScanRecord(overrides: Record<string, unknown> = {}) {
 test("Pulse projection does not cap top findings by detail level", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
-  assert.match(source, /const topFindings = regulatoryGapTopFindings\.length > 0 \? regulatoryGapTopFindings : executive\.topFindings/);
+  assert.match(source, /const publicExecutiveTopFindings = executive\.topFindings\.filter\(isPublicPulseApiFinding\)/);
+  assert.match(source, /const topFindings = regulatoryGapTopFindings\.length > 0 \? regulatoryGapTopFindings : publicExecutiveTopFindings/);
   assert.match(source, /reportSurface\.topFindings\.map\(/);
   assert.doesNotMatch(source, /topFindings = executive\.topFindings\.slice\(/);
   assert.doesNotMatch(source, /input\.detail === "tiny" \? 3 : 5/);
+});
+
+test("Pulse public API scope excludes non-GDPR product risk findings", () => {
+  assert.equal(
+    isPublicPulseApiFinding({
+      id: "high_risk_product_risk_disclosure_missing",
+      section: "Financial & Claims"
+    }),
+    false
+  );
+  assert.equal(
+    isPublicPulseApiFinding({
+      id: "pre_consent_tracking_detected",
+      section: "Privacy & Tracking"
+    }),
+    true
+  );
+  assert.equal(
+    isPublicPulseApiFinding({
+      id: "scan_quality_visual_no_go",
+      section: "Runtime & Diagnostics"
+    }),
+    true
+  );
 });
 
 test("Pulse quality gate rejects completed shells with no retained public evidence", () => {
@@ -111,6 +140,8 @@ test("Pulse evidence JSON includes diagnostic metadata and projection warnings",
   assert.match(source, /domainsRejected/);
   assert.match(source, /hostsRejected/);
   assert.match(source, /policy_surface_url_recovered_from_alternate_field/);
+  assert.match(source, /coverage_limited_by_scan_quality_no_go/);
+  assert.match(source, /promotion_grade_preconsent_request_not_available/);
 });
 
 test("Pulse evidence inventory filters display hostnames and deduplicates vendor rows", () => {
@@ -162,6 +193,22 @@ test("Pulse evidence digest keeps runtime basis for runtime-anchored findings", 
 
   assert.match(source, /canonicalPhase \|\| hasTimingAnchor \|\| hasVendorAnchor/);
   assert.doesNotMatch(source, /hasPolicyAnchor \? "policy_surface_detection" : "runtime_observation"/);
+});
+
+test("Pulse evidence digest requires a real policy anchor", () => {
+  assert.equal(hasMeaningfulPolicyAnchor({ policyRuntimeConflict: {} }), false);
+  assert.equal(hasMeaningfulPolicyAnchor({ policyEvidence: { coveredTypes: ["privacy_policy"] } }), false);
+  assert.equal(hasMeaningfulPolicyAnchor({ policyEvidence: { policyUrl: "https://example.com/privacy" } }), true);
+  assert.equal(hasMeaningfulPolicyAnchor({ policyRuntimeConflict: { policySnippet: "Cookies may be used." } }), true);
+});
+
+test("Pulse no-go scans add coverage-limited framing to projected finding evidence", () => {
+  const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
+
+  assert.match(source, /coverageLimitedByNoGo/);
+  assert.match(source, /Coverage-limited:/);
+  assert.match(source, /confidence: applyNoGoCoverageFraming \? "moderate" : finding\.confidence/);
+  assert.match(source, /scan_quality_visual_no_go/);
 });
 
 test("Pulse evidence JSON exposes bounded cookie setter context", () => {

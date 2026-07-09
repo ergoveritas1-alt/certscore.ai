@@ -565,6 +565,53 @@ test("suppresses borrowed host-bound vendor labels on unresolved endpoint hosts"
   assert.equal(requests[7]?.relatedOrInitiatingVendor, null);
 });
 
+test("does not promote generic or unknown static bundle rows as pre-consent tracking evidence", () => {
+  const requests = buildPromotionGradePreconsentRequests({
+    rows: [
+      {
+        requestUrl: "https://assets.prod.abebookscdn.com/cdn/com/scripts/vendor/react18.bundle-8d00f21452.js",
+        hostname: "assets.prod.abebookscdn.com",
+        vendorCategory: "tracking",
+        rawObservedVendor: null,
+        resolvedEndpointVendor: null,
+        essentiality: "non_essential",
+        runtimePhase: "pre_consent",
+        confidence: 0.95,
+        firstSeenMs: 974,
+        firstPartyOrThirdParty: "third_party"
+      },
+      {
+        requestUrl: "https://assets.prod.abebookscdn.com/cdn/com/scripts/vendor/react18.bundle-8d00f21452.js",
+        hostname: "assets.prod.abebookscdn.com",
+        vendorName: "tracking",
+        vendorCategory: "tracking",
+        essentiality: "non_essential",
+        runtimePhase: "pre_consent",
+        confidence: 0.95,
+        firstSeenMs: 974,
+        firstPartyOrThirdParty: "third_party"
+      },
+      {
+        requestUrl: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+        hostname: "securepubads.g.doubleclick.net",
+        vendorName: "tracking",
+        vendorCategory: "tracking",
+        essentiality: "non_essential",
+        runtimePhase: "pre_consent",
+        confidence: 0.95,
+        firstSeenMs: 975,
+        firstPartyOrThirdParty: "third_party"
+      }
+    ],
+    maxItems: 3
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.hostname, "securepubads.g.doubleclick.net");
+  assert.equal(requests[0]?.vendorName, "Google Publisher Tag");
+  assert.equal(requests[0]?.resolvedEndpointVendor, "Google Publisher Tag");
+});
+
 test("executive evidence projection does not borrow request vendors by list position", () => {
   const source = readFileSync(new URL("./executive-findings-projection.ts", import.meta.url), "utf8");
 

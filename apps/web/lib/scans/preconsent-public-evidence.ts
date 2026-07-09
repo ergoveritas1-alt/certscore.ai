@@ -73,6 +73,15 @@ const SERVICE_CLASSIFICATIONS = new Set([
 const SERVICE_HOST_PATTERN =
   /(?:^|\.)cdn\.cookielaw\.org$|(?:^|\.)geolocation\.onetrust\.com$|(?:^|\.)ajax\.googleapis\.com$|(?:^|\.)cdn\.jwplayer\.com$|(?:^|\.)assets\.adobedtm\.com$/i;
 
+const GENERIC_VENDOR_LABELS = new Set([
+  "advertising",
+  "analytics",
+  "marketing",
+  "tracker",
+  "tracking",
+  "unknown"
+]);
+
 function uniqueStrings(values: Array<string | null | undefined>) {
   return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0))];
 }
@@ -308,6 +317,11 @@ function normalizeToken(value: string | null | undefined) {
   return value?.trim().toLowerCase().replace(/[\s-]+/g, "_") ?? null;
 }
 
+function isGenericVendorLabel(value: string | null | undefined) {
+  const normalized = normalizeToken(value);
+  return Boolean(normalized && GENERIC_VENDOR_LABELS.has(normalized));
+}
+
 function confidenceValue(row: Record<string, unknown>) {
   const numeric = getNumber(row, ["confidence", "classificationConfidence", "classification_confidence"]);
   if (numeric !== null) {
@@ -351,12 +365,14 @@ export function isPromotionGradePreconsentRequestRow(value: unknown) {
   const vendor = getString(value, ["vendorName", "vendor_name", "vendor", "matchedVendorName", "matched_vendor_name", "name"]);
   const category = getCategory(value);
   const classification = normalizeToken(getString(value, ["classification", "serviceClass", "service_class", "requestClass", "request_class"]));
+  const endpointVendor = inferDirectEndpointVendorFromUrl(requestUrl);
+  const hasPromotionGradeVendor = Boolean(endpointVendor || (vendor && !isGenericVendorLabel(vendor)));
 
   return Boolean(
     requestUrl &&
       /^https?:\/\//i.test(requestUrl) &&
       hostname &&
-      vendor &&
+      hasPromotionGradeVendor &&
       category &&
       PROMOTION_TRACKING_CATEGORIES.has(category) &&
       isNonEssential(value) &&
