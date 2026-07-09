@@ -14,6 +14,7 @@ import { withServerTiming } from "../../server/performance/log-server-timing";
 import { getOrganizationScans } from "../../server/scans/get-organization-scans";
 import { getOrganizationSettings } from "../../server/settings/get-organization-settings";
 import { canUseRestrictedScanOptions } from "../../server/scans/restricted-scan-options";
+import type { ServerScanFrom } from "../../components/scans/scan-from-select";
 
 function formatDate(value: string | null) {
   if (!value) {
@@ -27,6 +28,19 @@ function formatDate(value: string | null) {
     year: "numeric",
     timeZone: "America/Los_Angeles"
   }).format(date);
+}
+
+function getDashboardScanFromDefault(value: string | null | undefined): ServerScanFrom {
+  return value === "eu_de" || value === "eu_ie" || value === "california" ? value : "eu_ie";
+}
+
+function isCompletedWithin24Hours(completedAt: string | null) {
+  if (!completedAt) {
+    return false;
+  }
+
+  const completedAtMs = Date.parse(completedAt);
+  return Number.isFinite(completedAtMs) && Date.now() - completedAtMs >= 0 && Date.now() - completedAtMs <= 24 * 60 * 60 * 1000;
 }
 
 export default async function DashboardPage() {
@@ -57,6 +71,12 @@ export default async function DashboardPage() {
     scanUsage.monthlyLimit === null ? null : Math.max(0, scanUsage.monthlyLimit - scanUsage.monthlyScansUsed);
   const remainingScansLabel = remainingScans === null ? "Unlimited scans" : `${remainingScans} scans`;
   const remainingPercentLabel = scanUsage.remainingPercent === null ? "unlimited" : `${scanUsage.remainingPercent}%`;
+  const recentReusableScans = recentScans
+    .filter((scan) => scan.status === "completed" && scan.domainHostname && isCompletedWithin24Hours(scan.completedAt))
+    .map((scan) => ({
+      domain: scan.domainHostname ?? "",
+      scanFrom: getDashboardScanFromDefault(scan.scanFromValue)
+    }));
 
   return (
     <div className="space-y-2.5">
@@ -96,6 +116,7 @@ export default async function DashboardPage() {
             allowRestrictedScanOptions={allowRestrictedScanOptions}
             defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
             planCode={organization.plan}
+            recentReusableScans={recentReusableScans}
           />
         </CardContent>
       </Card>

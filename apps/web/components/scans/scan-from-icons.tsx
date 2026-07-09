@@ -30,6 +30,18 @@ function CloudIcon({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
+function CaliforniaFlagIcon({ className = "h-4 w-5" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} viewBox="0 0 28 20">
+      <rect fill="#fff8ea" height="20" rx="2.5" width="28" />
+      <path d="M0 15h28v5H0z" fill="#c9282d" />
+      <path d="m5.8 3.1.48 1.15 1.25.1-.95.82.29 1.22-1.07-.65-1.07.65.29-1.22-.95-.82 1.25-.1.48-1.15Z" fill="#188553" />
+      <path d="M9.2 10.8h8.7c1.8 0 3.1-1.15 3.1-2.68 0-1.42-1.1-2.43-2.72-2.43h-4.5c-2.7 0-4.58 1.86-4.58 4.2v.91Z" fill="#8b5b3e" />
+      <path d="M9.1 11.1h12.2" stroke="#2f2f2f" strokeLinecap="round" strokeWidth="1" />
+    </svg>
+  );
+}
+
 export function ScanFromMarker({ flag, icon, selected }: { flag?: ScanFromFlag; icon?: ScanFromIconName; selected: boolean }) {
   if (icon === "cloud") {
     return <CloudIcon className={selected ? "h-4 w-4 text-sky-600" : "h-4 w-4 text-slate-500"} />;
@@ -37,6 +49,10 @@ export function ScanFromMarker({ flag, icon, selected }: { flag?: ScanFromFlag; 
 
   if (icon === "local") {
     return <LocalExtensionIcon className={selected ? "h-4 w-4 text-sky-600" : "h-4 w-4 text-slate-500"} />;
+  }
+
+  if (flag === "california") {
+    return <CaliforniaFlagIcon className="h-4 w-5 drop-shadow-[0_1px_1px_rgba(15,23,42,0.18)]" />;
   }
 
   if (flag) {

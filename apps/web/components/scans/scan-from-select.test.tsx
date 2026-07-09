@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ScanFromMarker } from "./scan-from-icons";
 import { SCAN_FROM_OPTIONS, ScanFromSelect } from "./scan-from-select";
 
 test("ScanFromSelect always submits core local v2 profile and Lambda option fields", () => {
@@ -20,7 +23,7 @@ test("ScanFromSelect always submits core local v2 profile and Lambda option fiel
   assert.doesNotMatch(html, />Tiny</);
 });
 
-test("ScanFromSelect defaults Lambda and fresh re-scan options on", () => {
+test("ScanFromSelect defaults Lambda on and fresh re-scan off", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       includeFreshRescanOption: true,
@@ -31,7 +34,14 @@ test("ScanFromSelect defaults Lambda and fresh re-scan options on", () => {
   );
 
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="true"/);
-  assert.match(html, /<input[^>]*name="forceNewScan"[^>]*value="true"/);
+  assert.doesNotMatch(html, /<input[^>]*name="forceNewScan"[^>]*value="true"/);
+});
+
+test("ScanFromSelect renders scan-from choices before option toggles", () => {
+  const source = readFileSync(join(process.cwd(), "apps/web/components/scans/scan-from-select.tsx"), "utf8");
+
+  assert.equal(source.indexOf(">Scan from<") < source.indexOf(">Options<"), true);
+  assert.equal(source.indexOf("menuOptions.map") < source.indexOf(">Fresh re-scan<"), true);
 });
 
 test("ScanFromSelect defaults to EU-IR and keeps Local-extension last", () => {
@@ -44,6 +54,26 @@ test("ScanFromSelect defaults to EU-IR and keeps Local-extension last", () => {
 
   assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_ie"/);
   assert.equal(SCAN_FROM_OPTIONS.map((option) => option.value).join(","), "eu_de,eu_ie,california,local_extension");
+});
+
+test("ScanFromSelect maps legacy default values to the selectable regional default", () => {
+  const html = renderToStaticMarkup(
+    createElement(ScanFromSelect, {
+      value: "default" as never,
+      variant: "field"
+    })
+  );
+
+  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_ie"/);
+  assert.match(html, /EU-IR/);
+  assert.doesNotMatch(html, /Default production scan/);
+});
+
+test("California scan marker renders as a flag graphic instead of literal sentinel text", () => {
+  const html = renderToStaticMarkup(createElement(ScanFromMarker, { flag: "california", selected: false }));
+
+  assert.match(html, /<svg/);
+  assert.doesNotMatch(html, />california</);
 });
 
 test("ScanFromSelect hides restricted scan controls from non-admin users", () => {

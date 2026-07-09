@@ -91,3 +91,8 @@ test("non-admin users cannot select restricted scan regions", () => {
   assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "eu_de" }), "eu_ie");
   assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: true, scanFrom: "eu_de" }), "eu_de");
 });
+
+test("legacy default scan selections are routed to the regional default", () => {
+  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "default" }), "eu_ie");
+  assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: true, scanFrom: "default" }), "eu_ie");
+});
