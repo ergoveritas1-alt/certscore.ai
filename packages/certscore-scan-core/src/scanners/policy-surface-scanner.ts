@@ -18,7 +18,8 @@ import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-run
 const SOURCE_SCANNER = "policy_surface";
 const SCENARIO = "policy_surface_review";
 const MAX_CANDIDATES_TO_FETCH = 8;
-const MAX_COMMON_PATH_CANDIDATES_TO_FETCH = 18;
+const MAX_COMMON_PATH_CANDIDATES_TO_FETCH = 8;
+const MAX_RENDERED_COMMON_PATH_LOW_QUALITY_FALLBACKS = 2;
 const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 3;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
@@ -758,7 +759,10 @@ async function processPolicyCandidate({
     title = titleFromHtml(fetchedHtml);
     visibleText = urlOnlyStubResolution.visibleText;
   }
-  if (shouldTryRenderedPolicyDocumentTextFallback({
+  const renderedLowQualityFallbackWithinBudget =
+    !isCommonPathFallbackCandidate(effectiveCandidate) ||
+    candidateIndex < MAX_RENDERED_COMMON_PATH_LOW_QUALITY_FALLBACKS;
+  if (renderedLowQualityFallbackWithinBudget && shouldTryRenderedPolicyDocumentTextFallback({
     candidate: effectiveCandidate,
     documentFormat: fetched.documentFormat,
     input,
