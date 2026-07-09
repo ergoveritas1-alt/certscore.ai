@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createDomainRequestSchema, normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { getCurrentUser, getDashboardContext } from "../../../../server/auth";
 import { isBetterAuthConfigurationError } from "../../../../server/better-auth/env";
+import { getPlanLimits } from "../../../../server/plans/get-plan-limits";
 import { findRecentCompletedScanForDomain } from "../../../../server/scans/recent-scan-reuse";
 import {
   canUseRestrictedScanOptions,
@@ -42,8 +43,9 @@ export async function GET(request: Request) {
       canUseRestrictedScanOptions: allowRestrictedScanOptions,
       scanFrom: normalizeScanFrom(url.searchParams.get("scanFrom"))
     });
+    const planLimits = await getPlanLimits(dashboardContext?.organization.plan ?? "free");
     const recentScan = await findRecentCompletedScanForDomain({
-      allowCrossWorkspace: Boolean(dashboardContext),
+      minPagesRequested: planLimits.maxPagesPerScan,
       normalizedDomain: parsed.data.hostname,
       normalizedUrl: parsed.data.normalizedUrl,
       organizationId: dashboardContext?.organization.id ?? null,

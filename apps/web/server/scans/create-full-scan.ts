@@ -195,6 +195,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     };
   }
 
+  const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
   const bypassRecentScanReuse = Boolean(input.bypassRecentScanReuse);
 
   const logRequest = (details: {
@@ -248,11 +249,11 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
 
   if (!bypassRecentScanReuse) {
     const recentScan = await findRecentCompletedScanForDomain({
-      allowCrossWorkspace: true,
       normalizedDomain: domainRecord.domain.hostname,
       normalizedUrl: domainRecord.domain.normalizedUrl,
       organizationId: input.organizationId,
-      scanFrom
+      scanFrom,
+      minPagesRequested: pagesRequested
     }).catch((error) => {
         console.error("[web] workspace recent scan reuse lookup failed", {
           domainId: domainRecord.domain.id,
@@ -321,7 +322,6 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     domainRecord.domain.lastScannedAt ??
     domainRecord.scans.find((scan) => scan.status === "completed" && scan.completedAt)?.completedAt ??
     null;
-  const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
 
   if (input.enforceCooldown) {
     const availability = getRescanAvailability({

@@ -27,6 +27,33 @@ test("recent scan database reuse can require a minimum requested page count", ()
   assert.match(source, /s\.pages_requested >=/);
 });
 
+test("recent scan database reuse is scoped to anonymous or the requesting organization", () => {
+  const source = readFileSync("apps/web/server/scans/recent-scan-reuse.ts", "utf8");
+
+  assert.match(source, /s\.organization_id is null and d\.organization_id is null/);
+  assert.match(source, /s\.organization_id is not distinct from \$\{organizationParameter\}::uuid/);
+  assert.match(source, /d\.organization_id is not distinct from \$\{organizationParameter\}::uuid/);
+  assert.doesNotMatch(source, /allowCrossWorkspace/);
+});
+
+test("recent scan database reuse is limited to completed full scans", () => {
+  const source = readFileSync("apps/web/server/scans/recent-scan-reuse.ts", "utf8");
+
+  assert.match(source, /s\.status = 'completed'/);
+  assert.match(source, /coalesce\(s\.scan_type, 'full'\) = 'full'/);
+});
+
+test("full scan creation and reuse availability both require sufficient reusable coverage", () => {
+  const createFullScanSource = readFileSync("apps/web/server/scans/create-full-scan.ts", "utf8");
+  const anonymousFullScanSource = readFileSync("apps/web/server/scans/create-anonymous-full-scan.ts", "utf8");
+  const availabilitySource = readFileSync("apps/web/app/api/full-scan/reuse-availability/route.ts", "utf8");
+
+  assert.match(createFullScanSource, /minPagesRequested: pagesRequested/);
+  assert.match(anonymousFullScanSource, /: pagesRequested/);
+  assert.match(availabilitySource, /getPlanLimits\(dashboardContext\?\.organization\.plan \?\? "free"\)/);
+  assert.match(availabilitySource, /minPagesRequested: planLimits\.maxPagesPerScan/);
+});
+
 test("recent scan reuse selects the newest completed scan in the 24 hour window", () => {
   const now = new Date("2026-05-19T12:00:00.000Z");
   const recent = findRecentCompletedScanInHistory(

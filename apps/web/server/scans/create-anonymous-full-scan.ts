@@ -59,9 +59,7 @@ export async function createAnonymousFullScan(input: {
   const minimumReusablePagesRequested =
     typeof input.minimumReusablePagesRequested === "number" && Number.isFinite(input.minimumReusablePagesRequested)
       ? Math.floor(input.minimumReusablePagesRequested)
-      : input.coveragePlanCode
-        ? pagesRequested
-        : undefined;
+      : pagesRequested;
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const bypassRecentScanReuse = Boolean(input.bypassRecentScanReuse);
 
