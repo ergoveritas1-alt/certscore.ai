@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
+import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
@@ -24,6 +25,51 @@ const serverOnlyPath = require.resolve("server-only");
 async function loadLocalV2DagReport() {
   return import("./local-v2-dag-report");
 }
+
+test("buildLocalV2DagTimingArtifacts retains bounded module and policy timings", async () => {
+  const { buildLocalV2DagTimingArtifacts } = await loadLocalV2DagReport();
+  const bundle = {
+    modulesRun: [
+      {
+        moduleName: "preConsentRuntimeScanner",
+        status: "completed",
+        startedAt: "2026-07-09T12:00:00.000Z",
+        completedAt: "2026-07-09T12:00:04.000Z",
+        durationMs: 4000,
+        timingBreakdown: [{ label: "page navigation", durationMs: 1200 }],
+        evidenceRefs: [],
+        errors: []
+      },
+      {
+        moduleName: "policySurfaceScanner",
+        status: "completed",
+        startedAt: "2026-07-09T12:00:00.500Z",
+        completedAt: "2026-07-09T12:00:06.500Z",
+        durationMs: 6000,
+        timingBreakdown: [
+          { label: "deterministic link ranking", durationMs: 5, detail: "Rank 18 policy candidates deterministically for planned-DAG fast mode." },
+          { label: "policy candidate group fetch", durationMs: 4100, detail: "Fetch and project up to 5 ranked policy candidates with concurrency 3." },
+          { label: "policy fetch 1", durationMs: 1000 },
+          { label: "policy fetch 2", durationMs: 900 },
+          { label: "rendered discovery skipped", durationMs: 0 }
+        ],
+        evidenceRefs: [],
+        errors: []
+      }
+    ],
+    policySurfaceObservations: [{ observationId: "privacy" }, { observationId: "terms" }]
+  } as unknown as CanonicalEvidenceBundle;
+
+  const timing = buildLocalV2DagTimingArtifacts(bundle);
+
+  assert.equal(timing.buildPhaseSummaries[1]?.phase, "policySurfaceScanner");
+  assert.equal(timing.v2DagPolicyDiscoveryDiagnostics.candidatesDiscovered, 18);
+  assert.equal(timing.v2DagPolicyDiscoveryDiagnostics.requestsStarted, 2);
+  assert.equal(timing.v2DagPolicyDiscoveryDiagnostics.successfulDocuments, 2);
+  assert.equal(timing.v2DagPolicyDiscoveryDiagnostics.phaseWallMs, 6000);
+  assert.equal(timing.v2DagPolicyDiscoveryDiagnostics.maxConcurrency, 3);
+  assert.equal(timing.v2DagPolicyDiscoveryDiagnostics.shortCircuitReason, "static_core_policy_coverage");
+});
 
 function syntheticPngHeader(width: number, height: number, byteSize = 1024) {
   const buffer = Buffer.alloc(byteSize);

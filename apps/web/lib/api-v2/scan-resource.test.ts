@@ -213,6 +213,16 @@ test("buildApiV2ScanDiagnostics projects bounded phase and policy discovery timi
       }
     ],
     runtimeArtifacts: {
+      v2DagPolicyDiscoveryDiagnostics: {
+        candidatesDiscovered: 24,
+        candidatesAfterDeduplication: 18,
+        requestsStarted: 4,
+        successfulDocuments: 3,
+        timeouts: 1,
+        phaseWallMs: 1500,
+        maxConcurrency: 4,
+        shortCircuitReason: "v2_static_short_circuit"
+      },
       buildPhaseSummaries: [
         {
           attempts: 1,
@@ -230,12 +240,14 @@ test("buildApiV2ScanDiagnostics projects bounded phase and policy discovery timi
   const diagnostics = buildApiV2ScanDiagnostics(scanRecord);
   assert.equal(diagnostics.totalWallMs, 9000);
   assert.equal(diagnostics.phases.find((phase) => phase.name === "runtime_snapshot_capture")?.lane, "browser");
-  assert.equal(diagnostics.policyDiscovery.candidatesDiscovered, 20);
-  assert.equal(diagnostics.policyDiscovery.candidatesAfterDeduplication, 2);
-  assert.equal(diagnostics.policyDiscovery.requestsStarted, 3);
-  assert.equal(diagnostics.policyDiscovery.successfulDocuments, 2);
-  assert.equal(diagnostics.policyDiscovery.phaseWallMs, 1200);
-  assert.equal(diagnostics.policyDiscovery.maxConcurrency, 3);
+  assert.equal(diagnostics.policyDiscovery.candidatesDiscovered, 24);
+  assert.equal(diagnostics.policyDiscovery.candidatesAfterDeduplication, 18);
+  assert.equal(diagnostics.policyDiscovery.requestsStarted, 4);
+  assert.equal(diagnostics.policyDiscovery.successfulDocuments, 3);
+  assert.equal(diagnostics.policyDiscovery.timeouts, 1);
+  assert.equal(diagnostics.policyDiscovery.phaseWallMs, 1500);
+  assert.equal(diagnostics.policyDiscovery.maxConcurrency, 4);
+  assert.equal(diagnostics.policyDiscovery.shortCircuitReason, "v2_static_short_circuit");
 });
 
 test("buildApiV2ScanDiagnostics normalizes database Date timestamps", () => {

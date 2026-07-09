@@ -343,6 +343,81 @@ function durationMsFromTimestamps(startedAt: string | null | undefined, complete
   return completedAtMs - startedAtMs;
 }
 
+function localV2ModuleOutcome(status: CanonicalEvidenceBundle["modulesRun"][number]["status"]) {
+  if (status === "completed") return "success";
+  if (status === "failed") return "failed";
+  if (status === "partial" || status === "not_testable" || status === "skipped_budget") return "degraded";
+  return "unknown";
+}
+
+export function buildLocalV2DagTimingArtifacts(bundle: CanonicalEvidenceBundle) {
+  const modulePhases = bundle.modulesRun.map((moduleRun) => ({
+    phase: moduleRun.moduleName.slice(0, 120),
+    startedAt: moduleRun.startedAt,
+    completedAt: moduleRun.completedAt ?? null,
+    durationMs: moduleRun.durationMs ?? durationMsFromTimestamps(moduleRun.startedAt, moduleRun.completedAt) ?? 0,
+    outcome: localV2ModuleOutcome(moduleRun.status)
+  }));
+  const childPhases = bundle.modulesRun
+    .flatMap((moduleRun) => (moduleRun.timingBreakdown ?? []).map((timing) => ({
+      phase: `${moduleRun.moduleName}:${timing.label}`.slice(0, 120),
+      startedAt: null,
+      completedAt: null,
+      durationMs: timing.durationMs,
+      outcome: localV2ModuleOutcome(moduleRun.status)
+    })))
+    .sort((left, right) => right.durationMs - left.durationMs)
+    .slice(0, Math.max(0, 20 - modulePhases.length));
+  const policyModule = bundle.modulesRun.find((moduleRun) => /policySurfaceScanner/i.test(moduleRun.moduleName));
+  const policyTimings = policyModule?.timingBreakdown ?? [];
+  const details = policyTimings.map((timing) => timing.detail ?? "");
+  const rankedCandidateCounts = details.flatMap((detail) => {
+    const match = detail.match(/Rank (\d+) (?:fallback )?policy candidates/i);
+    return match?.[1] ? [Number(match[1])] : [];
+  });
+  const fetchGroup = details.map((detail) => detail.match(/up to (\d+).*concurrency (\d+)/i)).find(Boolean);
+  const requestIndexes = new Set(policyTimings.flatMap((timing) => {
+    const match = timing.label.match(/^policy (?:rendered )?fetch(?: fallback)? (\d+)$/i);
+    return match?.[1] ? [match[1]] : [];
+  }));
+  const timeoutCount = [...(policyModule?.errors ?? []), ...details]
+    .filter((value) => /timed? out|timeout/i.test(value)).length;
+  const candidateCount = rankedCandidateCounts.length > 0 ? Math.max(...rankedCandidateCounts) : null;
+  const fetchLimit = fetchGroup?.[1] ? Number(fetchGroup[1]) : null;
+  const requestsStarted = requestIndexes.size > 0 ? requestIndexes.size : fetchLimit;
+
+  return {
+    buildPhaseSummaries: [...modulePhases, ...childPhases],
+    v2DagPolicyDiscoveryDiagnostics: {
+      candidatesDiscovered: candidateCount,
+      candidatesAfterDeduplication: candidateCount,
+      requestsStarted,
+      successfulDocuments: policyModule ? bundle.policySurfaceObservations.length : null,
+      timeouts: policyModule ? timeoutCount : null,
+      phaseWallMs: policyModule?.durationMs ?? null,
+      maxConcurrency: fetchGroup?.[2] ? Number(fetchGroup[2]) : null,
+      shortCircuitReason: policyTimings.some((timing) => timing.label === "rendered discovery skipped")
+        ? "static_core_policy_coverage"
+        : null
+    }
+  };
+}
+
+function safeLocalV2DocumentUrl(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    if (!value) continue;
+    try {
+      const url = new URL(value);
+      if (!/^https?:$/.test(url.protocol)) continue;
+      if (/\.(?:avif|bmp|css|gif|ico|jpe?g|js|mjs|map|mp3|mp4|ogg|pdf|png|svg|webm|webp|woff2?)$/i.test(url.pathname)) continue;
+      return url.toString();
+    } catch {
+      // Ignore malformed and non-document candidates.
+    }
+  }
+  return null;
+}
+
 function purposeToCategory(value: string | null | undefined) {
   switch (value) {
     case "advertising":
@@ -2255,6 +2330,11 @@ function buildMaterializedLocalV2Detail(
   } = {}
 ): ScanDetailResponse {
   const requestedHost = scanRecord.scan.domainHostname ?? hostnameFromUrl(bundle.normalizedUrl ?? bundle.url);
+  const canonicalDocumentUrl = safeLocalV2DocumentUrl(
+    bundle.normalizedUrl,
+    bundle.url,
+    requestedHost ? `https://${requestedHost}/` : null
+  );
   const rootDomain = registrableDomain(requestedHost);
   const networkEvents = bundle.networkEvents ?? [];
   const nonChallengeNetworkEvents = networkEvents.filter((event) => !isLocalV2SecurityChallengeRequest(event));
@@ -2463,6 +2543,8 @@ function buildMaterializedLocalV2Detail(
       collectionEndpointObserved: event.collectionEndpointObserved === true,
       domain: event.hostname ?? hostnameFromUrl(event.url),
       initiatorType: event.initiatorType ?? event.resourceType,
+      documentUrl: safeLocalV2DocumentUrl(event.documentUrl, event.topLevelUrl, canonicalDocumentUrl),
+      pageContextId: event.frameContext?.isMainFrame === false ? "subframe" : "primary_document",
       pageUrlSharedViaReferrer: typeof event.requestHeaders?.referer === "string" &&
         Boolean(hostnameFromUrl(event.topLevelUrl) && event.requestHeaders.referer.includes(hostnameFromUrl(event.topLevelUrl) ?? "")),
       preConsent: event.consentStateAtTime === "pre_consent",
@@ -2519,8 +2601,10 @@ function buildMaterializedLocalV2Detail(
       vendorCategoryCounts
     }
   };
+  const timingArtifacts = buildLocalV2DagTimingArtifacts(bundle);
   const runtimeArtifacts = {
     ...(scanRecord.runtimeArtifacts ?? {}),
+    ...timingArtifacts,
     local_v2_dag_scan_core_duration_ms: durationMsFromTimestamps(bundle.startedAt, bundle.completedAt),
     ...(localV2NoGo ? {
       scanNoGoAssessment: localV2NoGo.scanNoGoAssessment,
@@ -2677,12 +2761,12 @@ function buildMaterializedLocalV2Detail(
         capture_method: getString((screenshot as { captureMethod?: unknown }).captureMethod) ?? visualCapture.captureMethod ?? null,
         capture_step: "initial_load",
         consent_state: screenshot.consentStateAtTime ?? "pre_consent",
-        final_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
+        final_url: safeLocalV2DocumentUrl(screenshot.url, canonicalDocumentUrl),
         id: localV2VisualEvidenceArtifactId(screenshot),
         interaction_state: "none",
         key: capturedErrorShell ? null : storagePointer.key,
         mime_type: "image/png",
-        page_url: screenshot.url ?? bundle.normalizedUrl ?? bundle.url,
+        page_url: safeLocalV2DocumentUrl(screenshot.url, canonicalDocumentUrl),
         status: capturedErrorShell ? "capture_failed" : "available",
         status_reason: capturedErrorShell ? "pre_consent_error_shell_captured" : null
       }];
@@ -2698,8 +2782,8 @@ function buildMaterializedLocalV2Detail(
     cookies_before_consent_count: runtimeEvidenceReportable ? cookiesBeforeConsentCount : 0,
     data_collection_risk_score: runtimeEvidenceReportable ? Math.min(100, Math.max(20, thirdPartyRequestCount)) : null,
     domain: requestedHost,
-    final_effective_url: bundle.normalizedUrl ?? bundle.url,
-    final_url: bundle.normalizedUrl ?? bundle.url,
+    final_effective_url: canonicalDocumentUrl,
+    final_url: canonicalDocumentUrl,
     ...(localV2NoGo ? {
       access_posture_class: "early_loss",
       block_page_classification: localV2NoGo.pageState === "access_blocked"

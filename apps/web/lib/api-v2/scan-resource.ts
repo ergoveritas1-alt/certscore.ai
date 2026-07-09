@@ -464,6 +464,7 @@ export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2
   const discoveryMetadata = plainRecord(discoveryEvent?.metadataJson);
   const discoveryDebug = plainRecord(discoveryMetadata?.discoveryDebug);
   const subtimings = plainRecord(discoveryMetadata?.subtimings);
+  const v2PolicyDiagnostics = plainRecord(runtimeArtifacts?.v2DagPolicyDiscoveryDiagnostics);
   const prefetchTargets = Array.isArray(discoveryDebug?.prefetchTargets) ? discoveryDebug.prefetchTargets : [];
   const uniquePrefetchUrls = new Set(
     prefetchTargets.flatMap((target) => {
@@ -481,14 +482,14 @@ export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2
     totalWallMs,
     phases,
     policyDiscovery: {
-      candidatesDiscovered: finiteInt(discoveryDebug?.candidateCount),
-      candidatesAfterDeduplication: uniquePrefetchUrls.size > 0 ? uniquePrefetchUrls.size : null,
-      requestsStarted: finiteInt(discoveryDebug?.prefetchTargetCount) ?? finiteInt(discoveryMetadata?.prefetchTargetCount) ?? (uniquePrefetchUrls.size > 0 ? uniquePrefetchUrls.size : null),
-      successfulDocuments: finiteInt(subtimings?.prefetchedPageCount),
-      timeouts: finiteInt(discoveryMetadata?.timeoutCount),
-      phaseWallMs: policyPhase?.durationMs ?? null,
-      maxConcurrency: finiteInt(discoveryMetadata?.staticFetchConcurrency),
-      shortCircuitReason: boundedStringOrNull(discoveryMetadata?.skipReason, 160)
+      candidatesDiscovered: finiteInt(v2PolicyDiagnostics?.candidatesDiscovered) ?? finiteInt(discoveryDebug?.candidateCount),
+      candidatesAfterDeduplication: finiteInt(v2PolicyDiagnostics?.candidatesAfterDeduplication) ?? (uniquePrefetchUrls.size > 0 ? uniquePrefetchUrls.size : null),
+      requestsStarted: finiteInt(v2PolicyDiagnostics?.requestsStarted) ?? finiteInt(discoveryDebug?.prefetchTargetCount) ?? finiteInt(discoveryMetadata?.prefetchTargetCount) ?? (uniquePrefetchUrls.size > 0 ? uniquePrefetchUrls.size : null),
+      successfulDocuments: finiteInt(v2PolicyDiagnostics?.successfulDocuments) ?? finiteInt(subtimings?.prefetchedPageCount),
+      timeouts: finiteInt(v2PolicyDiagnostics?.timeouts) ?? finiteInt(discoveryMetadata?.timeoutCount),
+      phaseWallMs: finiteInt(v2PolicyDiagnostics?.phaseWallMs) ?? policyPhase?.durationMs ?? null,
+      maxConcurrency: finiteInt(v2PolicyDiagnostics?.maxConcurrency) ?? finiteInt(discoveryMetadata?.staticFetchConcurrency),
+      shortCircuitReason: boundedStringOrNull(v2PolicyDiagnostics?.shortCircuitReason, 160) ?? boundedStringOrNull(discoveryMetadata?.skipReason, 160)
     },
     links: {
       self: absoluteUrl(`/api/v2/scans/${scan.id}/diagnostics`),
