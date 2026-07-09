@@ -455,6 +455,38 @@ test("resolves Batch 3 through 6 endpoint hosts through the canonical vendor res
       basis: "canonical_vendor_resolver"
     }
   );
+  assert.deepEqual(
+    inferDirectEndpointVendorFromUrl("https://m.stripe.network/inner.html#url=https%3A%2F%2Fexample.com"),
+    {
+      vendorName: "Stripe.js",
+      vendorCategory: "security",
+      basis: "canonical_vendor_resolver"
+    }
+  );
+  assert.deepEqual(
+    inferDirectEndpointVendorFromUrl("https://framerusercontent.com/images/example.png"),
+    {
+      vendorName: "Framer Static Assets",
+      vendorCategory: "infrastructure",
+      basis: "canonical_vendor_resolver"
+    }
+  );
+  assert.deepEqual(
+    inferDirectEndpointVendorFromUrl("https://www.google-analytics.com/analytics.js"),
+    {
+      vendorName: "Google Analytics",
+      vendorCategory: "analytics",
+      basis: "canonical_vendor_resolver"
+    }
+  );
+  assert.deepEqual(
+    inferDirectEndpointVendorFromUrl("https://a.sfdcstatic.com/shared/fonts/SalesforceSans-Regular.woff2"),
+    {
+      vendorName: "Salesforce Static Assets",
+      vendorCategory: "infrastructure",
+      basis: "canonical_vendor_resolver"
+    }
+  );
 });
 
 test("suppresses borrowed host-bound vendor labels on unresolved endpoint hosts", () => {
@@ -592,6 +624,61 @@ test("does not promote generic or unknown static bundle rows as pre-consent trac
         firstPartyOrThirdParty: "third_party"
       },
       {
+        requestUrl: "https://transcend-cdn.com/cm/airgap.js",
+        hostname: "transcend-cdn.com",
+        vendorName: "Transcend",
+        vendorCategory: "tracking",
+        essentiality: "non_essential",
+        runtimePhase: "pre_consent",
+        confidence: 0.95,
+        firstSeenMs: 974,
+        firstPartyOrThirdParty: "third_party"
+      },
+      {
+        requestUrl: "https://privacy-center-api.transcend.io/graphql",
+        hostname: "privacy-center-api.transcend.io",
+        vendorName: "Transcend",
+        vendorCategory: "tracking",
+        essentiality: "non_essential",
+        runtimePhase: "pre_consent",
+        confidence: 0.95,
+        firstSeenMs: 974,
+        firstPartyOrThirdParty: "third_party"
+      },
+      {
+        requestUrl: "https://m.stripe.network/inner.html#url=https%3A%2F%2Fexample.com",
+        hostname: "m.stripe.network",
+        vendorName: "DoubleClick Floodlight",
+        vendorCategory: "tracking",
+        essentiality: "non_essential",
+        runtimePhase: "pre_consent",
+        confidence: 0.95,
+        firstSeenMs: 974,
+        firstPartyOrThirdParty: "third_party"
+      },
+      {
+        requestUrl: "https://framerusercontent.com/images/example.png",
+        hostname: "framerusercontent.com",
+        vendorName: "LinkedIn Ads Pixel",
+        vendorCategory: "tracking",
+        essentiality: "non_essential",
+        runtimePhase: "pre_consent",
+        confidence: 0.95,
+        firstSeenMs: 974,
+        firstPartyOrThirdParty: "third_party"
+      },
+      {
+        requestUrl: "https://a.sfdcstatic.com/shared/fonts/SalesforceSans-Regular.woff2",
+        hostname: "a.sfdcstatic.com",
+        vendorName: "Akamai mPulse",
+        vendorCategory: "tracking",
+        essentiality: "non_essential",
+        runtimePhase: "pre_consent",
+        confidence: 0.95,
+        firstSeenMs: 974,
+        firstPartyOrThirdParty: "third_party"
+      },
+      {
         requestUrl: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
         hostname: "securepubads.g.doubleclick.net",
         vendorName: "tracking",
@@ -610,6 +697,28 @@ test("does not promote generic or unknown static bundle rows as pre-consent trac
   assert.equal(requests[0]?.hostname, "securepubads.g.doubleclick.net");
   assert.equal(requests[0]?.vendorName, "Google Publisher Tag");
   assert.equal(requests[0]?.resolvedEndpointVendor, "Google Publisher Tag");
+});
+
+test("canonical endpoint vendors replace leaked request-event labels", () => {
+  const requests = buildPromotionGradePreconsentRequests({
+    rows: [
+      row({
+        hostname: "www.google-analytics.com",
+        url: "https://www.google-analytics.com/analytics.js",
+        vendorName: "DoubleClick Floodlight",
+        vendorCategory: "analytics",
+        firstSeenMs: 1
+      })
+    ],
+    maxItems: 1
+  });
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0]?.vendorName, "Google Analytics");
+  assert.equal(requests[0]?.vendorCategory, "analytics");
+  assert.equal(requests[0]?.rawObservedVendor, "DoubleClick Floodlight");
+  assert.equal(requests[0]?.resolvedEndpointVendor, "Google Analytics");
+  assert.deepEqual(requests[0]?.projectionWarnings, ["canonical_endpoint_vendor_replaced_raw_vendor"]);
 });
 
 test("executive evidence projection does not borrow request vendors by list position", () => {

@@ -525,6 +525,10 @@ const SESSION_REPLAY_CHILD_ROW_LABELS = new Map([
   ["session_replay_after_refusal", "Post-choice persistence"]
 ]);
 const SESSION_REPLAY_CHILD_ROW_IDS = new Set(SESSION_REPLAY_CHILD_ROW_LABELS.keys());
+const VISUAL_NO_GO_UI_DEPENDENT_ROW_IDS = new Set([
+  "accept_consent_control",
+  "options_settings_preferences_control"
+]);
 
 function getChecklistTone(status: GdprEprivacyCoverageChecklistStatus): GdprEprivacyCoverageChecklistTone {
   switch (status) {
@@ -2959,6 +2963,32 @@ function addDeducibilityDemotion(
   return evidenceState ? { ...guarded, evidenceState } : guarded;
 }
 
+function scanQualityVisualNoGoObserved(input: GdprEprivacyCoverageChecklistInput) {
+  return input.unifiedFindings.some((finding) => finding.unifiedFindingId === "scan_quality_visual_no_go") ||
+    (input.projectedFindings ?? []).some((finding) => finding.id === "scan_quality_visual_no_go");
+}
+
+function applyVisualNoGoUiControlGuard(
+  item: GdprEprivacyCoverageChecklistItem,
+  visualNoGoObserved: boolean
+) {
+  if (!visualNoGoObserved || !VISUAL_NO_GO_UI_DEPENDENT_ROW_IDS.has(item.id)) {
+    return item;
+  }
+  if (item.status === "Not testable" && item.evidenceState === "not_testable") {
+    return item;
+  }
+  return addDeducibilityDemotion(
+    item,
+    "Not testable",
+    item.id === "accept_consent_control"
+      ? "Accept consent control availability could not be evaluated because the retained scan context indicates the normal public site was not reached. Treat this as a scan-quality coverage limitation rather than an ordinary missing accept-control finding."
+      : "Options/settings/preferences control availability could not be evaluated because the retained scan context indicates the normal public site was not reached. Treat this as a scan-quality coverage limitation rather than an ordinary missing options-control finding.",
+    "scan_quality_visual_no_go_normal_public_site_not_reached",
+    "not_testable"
+  );
+}
+
 function applyChecklistEvidenceDeducibilityGuard(item: GdprEprivacyCoverageChecklistItem) {
   const retained = getRetainedEvidenceRecord(item);
   const firstLayerGdprBannerConfirmed = hasConfirmedFirstLayerGdprBanner(retained);
@@ -3201,6 +3231,7 @@ export function deriveGdprEprivacyCoverageChecklist(
   const findingsById = new Map(input.unifiedFindings.map((finding) => [finding.unifiedFindingId, finding]));
   const projectedFindingsById = new Map((input.projectedFindings ?? []).map((finding) => [finding.id, finding]));
   const publicCoverageIsTestable = input.scanCompleted && !input.coverageLimited;
+  const visualNoGoObserved = scanQualityVisualNoGoObserved(input);
 
   const rows = CHECKLIST_ROWS
     .filter((definition) => shouldIncludeChecklistRowDefinition(definition, input.coverageOutcomes?.[definition.id]))
@@ -3399,5 +3430,7 @@ export function deriveGdprEprivacyCoverageChecklist(
     });
   });
 
-  return collapseSessionReplayDiagnosticRows(rows.map(applyChecklistEvidenceDeducibilityGuard));
+  return collapseSessionReplayDiagnosticRows(rows
+    .map((item) => applyVisualNoGoUiControlGuard(item, visualNoGoObserved))
+    .map(applyChecklistEvidenceDeducibilityGuard));
 }

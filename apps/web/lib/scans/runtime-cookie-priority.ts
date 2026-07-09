@@ -1,4 +1,7 @@
-import type { RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
+import {
+  getRuntimeCookiePrimaryProvider,
+  type RuntimeCookieEvidenceRow
+} from "./runtime-cookie-evidence";
 
 export type RuntimeCookieReviewPriority = "high" | "medium" | "review_needed" | "contextual";
 export type RuntimeCookieInventoryConfidence = "high" | "medium" | "low";
@@ -66,7 +69,7 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
   if (/(stripe|__stripe)/i.test(haystack)) {
     return "Stripe";
   }
-  return row.initiatorVendor ?? row.initiatorDomain ?? row.domain ?? row.cookieName;
+  return getRuntimeCookiePrimaryProvider(row);
 }
 
 export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {

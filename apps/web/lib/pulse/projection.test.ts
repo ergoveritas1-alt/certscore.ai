@@ -134,6 +134,13 @@ test("Pulse evidence JSON includes diagnostic metadata and projection warnings",
   assert.match(source, /CANONICAL_VENDOR_RESOLVER_VERSION/);
   assert.match(source, /canonicalResolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION/);
   assert.match(source, /projectionWarnings/);
+  assert.match(source, /regulatory_gap_runtime_anchor_from_retained_checklist_evidence/);
+  assert.match(source, /third_party_service_connection_pre_consent/);
+  assert.match(source, /social_media_embed_pre_consent/);
+  assert.match(source, /session_replay_fingerprinting_review/);
+  assert.match(source, /retainedEvidencePointer/);
+  assert.match(source, /sourceEvidencePath/);
+  assert.match(source, /sourceFindingId/);
   assert.match(source, /canonical_endpoint_vendor_replaced_raw_vendor/);
   assert.match(source, /request_event_missing_url/);
   assert.match(source, /projectionDiagnostics/);
@@ -214,6 +221,9 @@ test("Pulse no-go scans add coverage-limited framing to projected finding eviden
 test("Pulse evidence JSON exposes bounded cookie setter context", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 
+  assert.match(source, /getRuntimeCookiePrimaryProvider/);
+  assert.match(source, /primaryProvider/);
+  assert.match(source, /relatedOrInitiatingVendor/);
   assert.match(source, /initiatorDomain: row\.initiatorDomain/);
   assert.match(source, /initiatorUrl: safeUrl\(row\.initiatorUrl\)/);
   assert.match(source, /initiatorVendor: row\.initiatorVendor/);

@@ -94,6 +94,33 @@ test("deriveConcernPolicy keeps GDPR Transparency Article 13 concerns internal w
   assert.equal(ambiguous.regulatoryChecklistEligibility, "none");
 });
 
+test("deriveConcernPolicy blocks high-risk product projection for retail and bookstore context without explicit financial offer evidence", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "section_review.high_risk_product_without_local_loss_risk_disclosure",
+      originType: "section_review",
+      suggestedUnifiedFindingId: "high_risk_product_risk_disclosure_missing",
+      title: "High-risk product disclosure review"
+    }),
+    evidenceStrengthFlags: ["fallback_only", "page_attributed", "policy_text"],
+    rawEvidence: {
+      domainIndustryPrimary: "bookstore",
+      familyPacketFindingId: "high_risk_product_risk_disclosure_missing",
+      matchedSnippet: "AbeBooks is an online marketplace for used books, rare books, paperbacks, hardcovers, and textbooks.",
+      pageClassification: "financial_offer",
+      pageType: "financial_offer",
+      pageUrl: "https://www.abebooks.com/",
+      primaryOfferSnippet: "Shop used books, rare books, paperbacks, hardcovers, and textbooks.",
+      sectionReviewIssue: true,
+      supportingSignals: ["financial.high_risk_product_promotion"]
+    }
+  });
+
+  assert.equal(policy.allowedNarrativeTier, "weak");
+  assert.equal(policy.promotionEligibility, "blocked");
+  assert.equal(policy.externalSurfacingEligibility, "suppress");
+});
+
 test("deriveConcernPolicy handles the main concern families consistently", () => {
   const cases = [
     {
@@ -3513,6 +3540,50 @@ test("deriveConcernPolicy keeps RTB cookie sync audit-only for vendor names or g
     assert.equal(policy.externalSurfacingEligibility, "audit_only");
     assert.ok(policy.negativeEvidenceFlags.includes("missing_specific_runtime_anchor"));
   }
+});
+
+test("deriveConcernPolicy keeps contextual service-only pre-consent request evidence audit-only", () => {
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.preconsent_tracking_detected",
+      originType: "runtime_artifact",
+      suggestedUnifiedFindingId: "pre_consent_tracking_detected",
+      title: "Pre-consent tracking detected"
+    }),
+    evidenceStrengthFlags: ["structured_validation"],
+    rawEvidence: {
+      consentTimeline: {
+        firstCmpVisibleMs: 900,
+        firstConsentActionMs: null,
+        firstNonEssentialRequestMs: 120
+      },
+      preconsent_tracking_detected: true,
+      requestPurposeClassificationConfidence: [
+        {
+          category: "infrastructure",
+          classification: "non_essential",
+          confidence: 0.97,
+          essentiality: "non_essential",
+          requestUrl: "https://use.typekit.net/waw8itp.css",
+          runtimePhase: "pre_consent",
+          vendor: "Adobe Fonts / Typekit"
+        },
+        {
+          category: "security",
+          classification: "non_essential",
+          confidence: 0.94,
+          essentiality: "non_essential",
+          requestUrl: "https://www.google.com/recaptcha/api.js",
+          runtimePhase: "pre_consent",
+          vendor: "Google reCAPTCHA"
+        }
+      ]
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.equal(policy.allowedNarrativeTier, "weak");
 });
 
 test("deriveConcernPolicy keeps single sync-path-only RTB evidence audit-only", () => {

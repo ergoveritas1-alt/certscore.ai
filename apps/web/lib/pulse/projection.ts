@@ -17,7 +17,10 @@ import {
   inferDirectEndpointVendorFromUrl
 } from "../scans/preconsent-public-evidence";
 import { CANONICAL_VENDOR_RESOLVER_VERSION } from "@certscore/vendor-resolver";
-import { buildRuntimeCookieInventory } from "../scans/runtime-cookie-evidence";
+import {
+  buildRuntimeCookieInventory,
+  getRuntimeCookiePrimaryProvider
+} from "../scans/runtime-cookie-evidence";
 import {
   buildTrackerInventoryGroupRows,
   buildTrackerInventoryRows,
@@ -579,6 +582,110 @@ function eventEvidencePhase(event: Record<string, unknown>) {
   return null;
 }
 
+const REGULATORY_RUNTIME_WRAPPER_ROW_IDS = new Set([
+  "pre_consent_third_party_tracking",
+  "pre_consent_cookies_storage",
+  "third_party_service_connection_pre_consent",
+  "social_media_embed_pre_consent",
+  "embedded_content_pre_consent",
+  "session_replay_fingerprinting_review",
+  "device_identification_fingerprinting_signal_observed"
+]);
+
+function policyRuntimeRetainedEvidence(details: Record<string, unknown>) {
+  const policyEvidenceDetails = asRecord(details.policyEvidenceDetails);
+  return {
+    rowId: stringValue(policyEvidenceDetails?.rowId),
+    projectedFindings: Array.isArray(policyEvidenceDetails?.projectedFindings)
+      ? policyEvidenceDetails.projectedFindings
+      : [],
+    retainedEvidence: asRecord(policyEvidenceDetails?.retainedEvidence)
+  };
+}
+
+function sourceRuntimeFindingFromWrapper(details: Record<string, unknown>, retainedEvidence: Record<string, unknown>) {
+  const { projectedFindings } = policyRuntimeRetainedEvidence(details);
+  const retainedProjectedFindings = Array.isArray(retainedEvidence.projectedFindings)
+    ? retainedEvidence.projectedFindings
+    : [];
+  const retainedPreview = Array.isArray(retainedEvidence.projectedFindingPreview)
+    ? retainedEvidence.projectedFindingPreview
+    : [];
+  return [...projectedFindings, ...retainedProjectedFindings, ...retainedPreview]
+    .map(asRecord)
+    .find((finding) => {
+      const id = stringValue(finding?.id) ?? stringValue(finding?.findingId) ?? stringValue(finding?.unifiedFindingId);
+      return Boolean(id && /pre_consent|tracking|cookie|storage|fingerprint|embedded/i.test(id));
+    }) ?? null;
+}
+
+function regulatoryRuntimeWrapperEvidence(findingId: string, details: Record<string, unknown>) {
+  if (!findingId.startsWith("regulatory_gap__gdpr_eprivacy__")) {
+    return null;
+  }
+  const { rowId, retainedEvidence } = policyRuntimeRetainedEvidence(details);
+  const effectiveRowId = rowId ?? findingId.replace(/^regulatory_gap__gdpr_eprivacy__/, "");
+  if (!REGULATORY_RUNTIME_WRAPPER_ROW_IDS.has(effectiveRowId) || !retainedEvidence) {
+    return null;
+  }
+
+  const firstRuntimeMs = [
+    retainedEvidence.firstPreconsentThirdPartyTrackingObservedMs,
+    retainedEvidence.firstPreconsentRequestObservedMs,
+    retainedEvidence.firstPreconsentCookieOrStorageObservedMs,
+    retainedEvidence.firstEmbeddedContentObservedMs,
+    retainedEvidence.firstFingerprintingSignalObservedMs
+  ].map(finiteNumber).find((value): value is number => value !== null);
+  const timingRows = Array.isArray(retainedEvidence.preconsentTimingEvidence)
+    ? retainedEvidence.preconsentTimingEvidence
+    : [];
+  const hasTimingAnchor = firstRuntimeMs !== undefined || timingRows.length > 0;
+  const vendorAnchors = [
+    stringValue(retainedEvidence.trackerPriorityLabel),
+    stringValue(retainedEvidence.cookieStoragePriorityLabel),
+    ...asStringArray(retainedEvidence.relatedVendors),
+    ...asStringArray(retainedEvidence.runtimeVendors)
+  ];
+  const findingEntities = asRecord(retainedEvidence.findingEntities);
+  const sourceFinding = sourceRuntimeFindingFromWrapper(details, retainedEvidence);
+  const sourceFindingId =
+    stringValue(sourceFinding?.id) ??
+    stringValue(sourceFinding?.findingId) ??
+    stringValue(sourceFinding?.unifiedFindingId);
+  const sourceFindingEvidence = asRecord(sourceFinding?.evidence);
+  const sourceExampleEvents = Array.isArray(sourceFindingEvidence?.exampleEvents)
+    ? sourceFindingEvidence.exampleEvents
+    : [];
+  const sourceHasTimingAnchor = sourceExampleEvents.map(asRecord).some((event) => event && evidenceTimestampMs(event) !== null);
+  const sourceHasVendorAnchor = sourceExampleEvents.map(asRecord).some((event) => event && evidenceVendorName(event) !== null);
+  const hasVendorAnchor =
+    uniqueStrings(vendorAnchors).length > 0 ||
+    (Array.isArray(findingEntities?.vendors) && findingEntities.vendors.length > 0) ||
+    sourceHasVendorAnchor;
+  const effectiveHasTimingAnchor = hasTimingAnchor || sourceHasTimingAnchor;
+
+  if (!effectiveHasTimingAnchor && !hasVendorAnchor) {
+    return null;
+  }
+
+  return {
+    phase: effectiveRowId.startsWith("pre_consent") || effectiveRowId === "embedded_content_pre_consent"
+      ? "pre_consent"
+      : null,
+    hasTimingAnchor: effectiveHasTimingAnchor,
+    hasVendorAnchor,
+    pointer: {
+      retainedEvidencePath: "policyEvidenceDetails.retainedEvidence",
+      rowId: effectiveRowId,
+      sourceEvidencePath: sourceFindingId ? "policyEvidenceDetails.projectedFindings" : null,
+      sourceFindingId: sourceFindingId ?? null,
+      firstObservedMs: firstRuntimeMs ?? null,
+      retainedTimingEvidenceCount: timingRows.length
+    },
+    projectionWarnings: ["regulatory_gap_runtime_anchor_from_retained_checklist_evidence"]
+  };
+}
+
 const POLICY_ANCHOR_KEYS = [
   "policyUrl",
   "policy_url",
@@ -624,6 +731,7 @@ export function hasMeaningfulPolicyAnchor(details: Record<string, unknown>) {
 
 function buildEvidence(finding: CertScoreFinding, scanId: string, options: { coverageLimitedByNoGo?: boolean } = {}) {
   const details = finding.evidenceDetails ?? {};
+  const regulatoryRuntimeEvidence = regulatoryRuntimeWrapperEvidence(finding.id, details);
   const representativeRequests = Array.isArray(details.representativeRequests) ? details.representativeRequests : [];
   const promotionGradePreconsentRequests = finding.id === "pre_consent_tracking_detected"
     ? buildPromotionGradePreconsentRequests({
@@ -763,23 +871,27 @@ function buildEvidence(finding: CertScoreFinding, scanId: string, options: { cov
       ? "promotion_grade_preconsent_request_not_available"
       : null,
     ...exampleEvents.flatMap((event) => asStringArray(event.projectionWarnings)),
-    ...exampleEvents.map((event) => event.type === "request" && !stringValue(event.requestUrl) ? "request_event_missing_url" : null)
+    ...exampleEvents.map((event) => event.type === "request" && !stringValue(event.requestUrl) ? "request_event_missing_url" : null),
+    ...(regulatoryRuntimeEvidence?.projectionWarnings ?? [])
   ], 12);
   const canonicalPhase =
     canonicalEvidencePhase(runtimePhase) ??
     exampleEvents.map(eventEvidencePhase).find((phase): phase is string => phase !== null) ??
+    regulatoryRuntimeEvidence?.phase ??
     null;
   const observedPhase = canonicalPhase === "pre_consent" ? "before_consent" : canonicalPhase;
   const hasTimingAnchor =
     exampleEvents.some((event) => evidenceTimestampMs(event) !== null) ||
     finiteNumber(firstRequest?.firstSeenMs) !== null ||
     Boolean(finiteNumber(recordValue(details.timing, "firstRequestMs"))) ||
-    Boolean(finiteNumber(recordValue(details.timing, "firstThirdPartyTrackingRequestMs")));
+    Boolean(finiteNumber(recordValue(details.timing, "firstThirdPartyTrackingRequestMs"))) ||
+    Boolean(regulatoryRuntimeEvidence?.hasTimingAnchor);
   const hasVendorAnchor =
     exampleEvents.some((event) => evidenceVendorName(event) !== null) ||
     vendors.length > 0 ||
     asStringArray(details.runtimeVendors).length > 0 ||
-    Boolean(firstRequest?.vendor);
+    Boolean(firstRequest?.vendor) ||
+    Boolean(regulatoryRuntimeEvidence?.hasVendorAnchor);
   const hasConsentContext = Boolean(details.consentState || details.consentInteraction || /consent|reject|pre_consent/i.test(finding.id));
   const hasPolicyAnchor = hasMeaningfulPolicyAnchor(details);
   const basis = finding.section === "Accessibility"
@@ -791,7 +903,11 @@ function buildEvidence(finding: CertScoreFinding, scanId: string, options: { cov
         : "runtime_observation";
   const summary = finding.evidencePreview[0] ?? finding.shortSummary;
   const anchorUrl = absoluteUrl(`/scan/${scanId}#finding-${finding.id}`);
-  const exampleCount = Math.max(finding.evidencePreview.length, examples.length);
+  const exampleCount = Math.max(
+    finding.evidencePreview.length,
+    examples.length,
+    regulatoryRuntimeEvidence ? 1 : 0
+  );
 
   return {
     summary,
@@ -805,6 +921,7 @@ function buildEvidence(finding: CertScoreFinding, scanId: string, options: { cov
           choiceRecorded: (details.consentState as { userConsentActionObserved?: boolean }).userConsentActionObserved ?? null
         }
       : null,
+    retainedEvidencePointer: regulatoryRuntimeEvidence?.pointer ?? null,
     fullEvidenceUrl: anchorUrl,
     evidenceDigest: {
       basis,
@@ -1247,24 +1364,29 @@ function buildEvidenceArtifact(input: {
     ),
     trackerRows: capArray(input.reportSurface.trackerInventoryRows, 150),
     cookieStorageInventory: capArray(
-      input.reportSurface.runtimeCookieRows.map((row) => ({
-        cookieName: row.cookieName,
-        domain: row.domain,
-        party: row.party,
-        category: row.category,
-        nonEssential: row.nonEssential,
-        firstObservedAtMs: row.firstObservedAtMs,
-        setAtMs: row.setAtMs,
-        initiatorDomain: row.initiatorDomain,
-        initiatorUrl: safeUrl(row.initiatorUrl),
-        initiatorVendor: row.initiatorVendor,
-        responseUrl: safeUrl(row.responseUrl),
-        sourceRequestUrl: safeUrl(row.sourceRequestUrl),
-        setMethod: row.setMethod,
-        timingBasis: row.timingBasis,
-        evidenceGrade: row.evidenceGrade,
-        timingEvidence: row.timingEvidence
-      })),
+      input.reportSurface.runtimeCookieRows.map((row) => {
+        const primaryProvider = getRuntimeCookiePrimaryProvider(row);
+        return {
+          cookieName: row.cookieName,
+          domain: row.domain,
+          party: row.party,
+          category: row.category,
+          nonEssential: row.nonEssential,
+          firstObservedAtMs: row.firstObservedAtMs,
+          setAtMs: row.setAtMs,
+          primaryProvider,
+          relatedOrInitiatingVendor: row.initiatorVendor && row.initiatorVendor !== primaryProvider ? row.initiatorVendor : null,
+          initiatorDomain: row.initiatorDomain,
+          initiatorUrl: safeUrl(row.initiatorUrl),
+          initiatorVendor: row.initiatorVendor,
+          responseUrl: safeUrl(row.responseUrl),
+          sourceRequestUrl: safeUrl(row.sourceRequestUrl),
+          setMethod: row.setMethod,
+          timingBasis: row.timingBasis,
+          evidenceGrade: row.evidenceGrade,
+          timingEvidence: row.timingEvidence
+        };
+      }),
       150
     ),
     requestTimingSummary: {

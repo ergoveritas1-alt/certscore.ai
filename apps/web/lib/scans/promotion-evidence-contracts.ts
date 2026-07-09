@@ -1252,6 +1252,36 @@ function normalizeEvidenceToken(value: string | null | undefined) {
   return value?.trim().toLowerCase().replace(/[\s-]+/g, "_") ?? null;
 }
 
+const PROMOTION_GRADE_PRECONSENT_REQUEST_CATEGORIES = new Set([
+  "advertising",
+  "advertising_measurement",
+  "analytics",
+  "dmp",
+  "identity",
+  "marketing_automation",
+  "retargeting",
+  "sale_share",
+  "session_replay",
+  "tag_management",
+  "tag_manager",
+  "tracking"
+]);
+
+const CONTEXTUAL_PRECONSENT_REQUEST_CATEGORIES = new Set([
+  "cdn",
+  "cmp",
+  "consent",
+  "functional",
+  "infrastructure",
+  "library",
+  "necessary",
+  "security",
+  "service",
+  "service_classified",
+  "static_asset",
+  "unknown"
+]);
+
 function isClassifiedNonEssentialPreconsentRequestRow(row: Record<string, unknown>) {
   if (isPromotionGradePreconsentRequestRow(row)) {
     return true;
@@ -1262,6 +1292,13 @@ function isClassifiedNonEssentialPreconsentRequestRow(row: Record<string, unknow
   const classification = normalizeEvidenceToken(getStringValue(row, ["classification", "purpose"]));
   const runtimePhase = normalizeEvidenceToken(getStringValue(row, ["runtimePhase", "runtime_phase", "phase", "timingStatus", "timing_status", "timingEvidence", "timing_evidence"]));
   const serviceClass = normalizeEvidenceToken(getStringValue(row, ["serviceClass", "service_class", "requestClass", "request_class"]));
+  const category = normalizeEvidenceToken(getStringValue(row, [
+    "vendorCategory",
+    "vendor_category",
+    "category",
+    "purposeCategory",
+    "purpose_category"
+  ]));
 
   return Boolean(
     requestUrl &&
@@ -1272,7 +1309,14 @@ function isClassifiedNonEssentialPreconsentRequestRow(row: Record<string, unknow
       serviceClass !== "necessary" &&
       serviceClass !== "functional" &&
       serviceClass !== "infrastructure" &&
-      serviceClass !== "static_asset"
+      serviceClass !== "static_asset" &&
+      (
+        !category ||
+        (
+          PROMOTION_GRADE_PRECONSENT_REQUEST_CATEGORIES.has(category) &&
+          !CONTEXTUAL_PRECONSENT_REQUEST_CATEGORIES.has(category)
+        )
+      )
   );
 }
 

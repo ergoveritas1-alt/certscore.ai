@@ -145,6 +145,15 @@ test("does not classify Google Analytics collect endpoints as Clarity", () => {
   assert.equal(observations.some((item) => item.product === "Microsoft Clarity"), false);
 });
 
+test("classifies Google Analytics library endpoints as Google Analytics", () => {
+  const observations = resolveVendorObservations([
+    request("https://www.google-analytics.com/analytics.js", "www.google-analytics.com"),
+  ]);
+
+  assertResolved(observations, "Google", "Google Analytics", "analytics");
+  assert.equal(observations.some((item) => /doubleclick/i.test(item.product)), false);
+});
+
 test("does not classify generic www.google.com collect endpoint as GA or Ads", () => {
   const observations = resolveVendorObservations([
     {
@@ -443,6 +452,8 @@ test("classifies Framer, YouTube image CDN, Statuspage, Intercom, and common CDN
     request("https://static.tildacdn.com/css/tilda-grid-3.0.min.css", "static.tildacdn.com"),
     request("https://use.typekit.net/abcd123.css", "use.typekit.net"),
     request("https://d2pu3v2r6r77j3.cloudfront.net/app.js", "d2pu3v2r6r77j3.cloudfront.net"),
+    request("https://framerusercontent.com/images/example.png", "framerusercontent.com"),
+    request("https://a.sfdcstatic.com/shared/fonts/SalesforceSans-Regular.woff2", "a.sfdcstatic.com"),
   ]);
 
   assertResolved(observations, "Framer", "Framer Analytics", "analytics");
@@ -455,6 +466,8 @@ test("classifies Framer, YouTube image CDN, Statuspage, Intercom, and common CDN
   assertResolved(observations, "Tilda", "Tilda CDN", "infrastructure");
   assertResolved(observations, "Adobe", "Adobe Fonts / Typekit", "infrastructure");
   assertResolved(observations, "Amazon CloudFront", "CloudFront Distribution", "infrastructure");
+  assertResolved(observations, "Framer", "Framer Static Assets", "infrastructure");
+  assertResolved(observations, "Salesforce", "Salesforce Static Assets", "infrastructure");
 
   const framer = observations.find((item) => item.product === "Framer Analytics");
   assert.ok(framer);
@@ -850,6 +863,7 @@ test("resolves CNN-style detected technologies from canonical registry sources",
   const observations = resolveVendorObservations([
     request("https://accounts.google.com/gsi/client", "accounts.google.com"),
     request("https://js.stripe.com/v3", "js.stripe.com"),
+    request("https://m.stripe.network/inner.html#url=https%3A%2F%2Fexample.com", "m.stripe.network"),
     request("https://cdn.jsdelivr.net/npm/example/package.js", "cdn.jsdelivr.net"),
     request("https://cdn.optimizely.com/js/123456789.js", "cdn.optimizely.com"),
     request("https://experience.piano.io/xbuilder/experience/load", "experience.piano.io"),

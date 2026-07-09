@@ -458,6 +458,118 @@ test("summarizePolicySurfaces limits Article 13 aggregation to target-relevant p
   assert.doesNotMatch(summary.retainedPrivacyPolicyTextExcerpt, /Google Privacy Policy|Cookie Policy|TrustArc/i);
 });
 
+test("summarizePolicySurfaces does not credit external vendor policies as first-party privacy notices", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "google-privacy",
+      surfaceType: "privacy_policy",
+      url: "https://policies.google.com/privacy",
+      confidence: 0.95,
+      status: "fetched",
+      textExcerpt: "Google Privacy Policy. We explain how Google collects and uses data.",
+      observedTopics: ["controller_contact", "processing_purposes"],
+      article13DisclosureSignals: [
+        {
+          disclosureType: "controller_contact",
+          status: "observed",
+          evidenceText: "Google LLC is the controller for this Google service.",
+          confidence: 0.9,
+          source: "deterministic"
+        }
+      ]
+    },
+    {
+      observationId: "google-terms",
+      surfaceType: "terms",
+      url: "https://policies.google.com/terms",
+      confidence: 0.9,
+      status: "fetched",
+      textExcerpt: "Google Terms of Service."
+    }
+  ] as never, "https://playsport.cc/");
+
+  const summary = summarizePolicySurfaces(surfaces, "playsport.cc");
+
+  assert.equal(summary.policySurfaceCount, 2);
+  assert.equal(summary.privacyPolicyPresent, false);
+  assert.deepEqual(summary.privacyPolicyUrls, []);
+  assert.deepEqual(summary.observedTopics, []);
+  assert.deepEqual(summary.article13DisclosureTypesObserved, []);
+  assert.equal(summary.policyTextExtractionHealth.policySurfaceObserved, false);
+  assert.equal(summary.policyTextExtractionHealth.policyUrlRetained, false);
+});
+
+test("summarizePolicySurfaces prefers general privacy notices over cookie-specific surfaces for Article 13", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "cookie-policy-misclassified",
+      surfaceType: "privacy_policy",
+      url: "https://www.verkada.com/privacy/cookie-policy/",
+      normalizedUrl: "https://www.verkada.com/privacy/cookie-policy/",
+      discoveryMethod: "footer_link",
+      status: "fetched",
+      fetchable: true,
+      confidence: 0.95,
+      textExcerpt: "Cookie Policy. This page explains cookies, analytics, advertising tags, and similar technologies.",
+      observedTopics: ["analytics", "advertising"],
+      article13DisclosureSignals: [
+        {
+          disclosureType: "legal_basis",
+          status: "partial",
+          evidenceText: "Cookie consent may be used for analytics.",
+          confidence: 0.66,
+          source: "deterministic"
+        }
+      ]
+    },
+    {
+      observationId: "general-privacy-policy",
+      surfaceType: "privacy_policy",
+      url: "https://www.verkada.com/privacy/privacy-policy/",
+      normalizedUrl: "https://www.verkada.com/privacy/privacy-policy/",
+      discoveryMethod: "footer_link",
+      status: "fetched",
+      fetchable: true,
+      confidence: 0.9,
+      textExcerpt: "Privacy Policy. The data controller can be contacted through our privacy contact. We describe why we process personal data and the legal basis for processing personal data. We disclose service providers that process personal data, rights, and international transfers of personal data.",
+      observedTopics: [
+        "controller_contact",
+        "processing_purposes",
+        "legal_basis",
+        "recipients_or_vendor_categories",
+        "data_subject_rights",
+        "international_transfers"
+      ],
+      article13DisclosureSignals: [
+        {
+          disclosureType: "controller_contact",
+          status: "observed",
+          evidenceText: "The data controller can be contacted through our privacy contact.",
+          confidence: 0.88,
+          source: "deterministic"
+        },
+        {
+          disclosureType: "legal_basis",
+          status: "observed",
+          evidenceText: "We describe the legal basis for processing personal data.",
+          confidence: 0.88,
+          source: "deterministic"
+        }
+      ]
+    }
+  ] as never, "https://www.verkada.com/");
+
+  const summary = summarizePolicySurfaces(surfaces, "verkada.com");
+
+  assert.deepEqual(summary.privacyPolicyUrls, ["https://verkada.com/privacy/privacy-policy"]);
+  assert.equal(summary.article13DisclosureTypesObserved.includes("controller_contact"), true);
+  assert.equal(summary.article13DisclosureTypesObserved.includes("legal_basis"), true);
+  assert.doesNotMatch(summary.retainedPrivacyPolicyTextExcerpt, /Cookie Policy/i);
+  assert.match(summary.retainedPrivacyPolicyTextExcerpt, /Privacy Policy/i);
+});
+
 test("summarizePolicySurfaces retains substantive policy text beyond navigation chrome", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const navigationChrome = "Privacy Policy Privacy & Terms Overview Technologies FAQ Terms of Service Introduction ".repeat(18);

@@ -1926,7 +1926,7 @@ const EXPLICIT_FINANCIAL_OFFER_PATTERN =
   /(?:\binvest(?:ment|ing|or)?\b|trading\s+(?:signals?|system|platform|strategy|bot)|(?:subscribe|join|sign\s*up|open)\s+(?:an?\s+)?(?:account|plan|membership)|pricing|checkout|margin|leverage|leveraged|derivative|perpetual|options?\s+trading|trade\s+options?|trading\s+options?|futures?\s+trading|trade\s+futures?|copy\s+trading|staking\s+(?:apy|yield)|\bapy\b|forex|cfd|crypto\s+(?:trading|yield|staking)|brokerage\s+account|sportsbook|sports\s+betting|bonus\s+bets?|wager(?:ing)?|casino|gambl(?:e|ing))/i;
 
 const NON_FINANCIAL_EDITORIAL_OR_RETAIL_PATTERN =
-  /(?:\b(?:lineup|festival|concert|album|movie|sports|election|celebrity|weather|recipe|travel)\b|(?:\b\d{1,2}%\s+off\b)|(?:\bselling\b.{0,80}\b(?:serum|makeup|shoes|clothing|furniture|kitchen|mattress|headphones|deals?)\b)|(?:\bamazon\b.{0,80}\b(?:selling|deal|deals?|off)\b))/i;
+  /(?:\b(?:lineup|festival|concert|album|movie|sports|election|celebrity|weather|recipe|travel|retail|ecommerce|e-commerce|bookstore|bookseller|bookshop|used\s+books?|rare\s+books?|textbooks?|paperbacks?|hardcovers?)\b|(?:\b\d{1,2}%\s+off\b)|(?:\bselling\b.{0,80}\b(?:books?|textbooks?|serum|makeup|shoes|clothing|furniture|kitchen|mattress|headphones|deals?)\b)|(?:\bamazon\b.{0,80}\b(?:selling|deal|deals?|off)\b))/i;
 
 function hasNonFinancialEditorialOrRetailContext(rawEvidence: Record<string, unknown> | null | undefined) {
   const reviewerVisibleText = [
@@ -1977,10 +1977,18 @@ function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | 
     "domainIndustryPrimary",
     "domain_industry_primary"
   ]);
+  const normalizedDomainIndustryPrimary = domainIndustryPrimary?.toLowerCase().replace(/[\s_-]+/g, "_") ?? null;
 
   // Explicit finance/crypto domain → always treat as financial context
-  if (domainIndustryPrimary === "finance" || domainIndustryPrimary === "crypto") {
+  if (normalizedDomainIndustryPrimary === "finance" || normalizedDomainIndustryPrimary === "crypto") {
     return true;
+  }
+
+  if (
+    normalizedDomainIndustryPrimary &&
+    /^(?:retail|ecommerce|e_commerce|books?|bookstore|bookseller|bookshop)$/.test(normalizedDomainIndustryPrimary)
+  ) {
+    return hasExplicitFinancialOfferInEvidence(rawEvidence);
   }
 
   // Explicit investor/securities promotion flag → always treat as financial context
@@ -2007,7 +2015,7 @@ function hasFinancialOfferContext(rawEvidence: Record<string, unknown> | null | 
   // When the domain is explicitly classified as non-finance, do not trust
   // page-level heuristics (classification / type) alone. Require explicit
   // financial offer language in the evidence text.
-  if (domainIndustryPrimary !== null && domainIndustryPrimary !== "") {
+  if (normalizedDomainIndustryPrimary !== null && normalizedDomainIndustryPrimary !== "") {
     return hasExplicitFinancialOffer;
   }
 

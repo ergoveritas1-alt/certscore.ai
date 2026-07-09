@@ -48,6 +48,54 @@ test("classifies canonical GDPR Transparency topics with bounded provenance", ()
   }
 });
 
+test("classifies Article 13 wording from controller/operator and processor-focused privacy notices", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Controller (operator) of data is ISPsystem LTD, and questions related to data processing can be sent to privacy@example.test.",
+      "ISPsystem uses personal data for the following goals: provide service, support users, and improve products.",
+      "The company proceeds from presence of the relevant legitimate interest for some processing.",
+      "Data transfer. ISPsystem can transfer data to processors located outside ISPsystem location.",
+      "Processors receive only the data needed to perform services.",
+      "Subcontractors and service providers may assist with hosting and support.",
+      "RIGHTS OF DATA SUBJECT include access, correction, deletion, objection, and restriction."
+    ].join(" "),
+  });
+  const topics = new Set(classification.matches.map((match) => match.topic));
+
+  for (const topic of [
+    "controller_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_subject_rights",
+    "international_transfers",
+  ] satisfies GdprTransparencyTopic[]) {
+    const match = classification.matches.find((candidate) => candidate.topic === topic);
+    assert.ok(match, `ISPsystem-style retained text should classify ${topic}`);
+    assert.equal(match.matchedLocale, "en");
+    assert.equal(match.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+    assert.ok(match.evidenceExcerpt.length <= 360);
+  }
+  assert.equal(topics.has("dpo_contact"), false);
+});
+
+test("classifies retained recipients headings with concrete affiliate and provider categories", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Recipients.",
+      "Our affiliates, service providers, and third parties may receive personal data where needed to provide and support services."
+    ].join(" "),
+  });
+  const match = classification.matches.find((candidate) => candidate.topic === "recipients_or_vendor_categories");
+
+  assert.ok(match);
+  assert.equal(match.matchedLocale, "en");
+  assert.equal(match.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+  assert.match(match.evidenceExcerpt, /affiliates, service providers, and third parties/i);
+});
+
 test("classifies representative GDPR Transparency snippets across supported locales", () => {
   const examples = [
     {

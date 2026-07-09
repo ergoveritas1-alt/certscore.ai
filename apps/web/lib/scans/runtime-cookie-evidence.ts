@@ -233,6 +233,84 @@ function inferCookieProvider(name: string, domain: string | null = null) {
   return null;
 }
 
+function hostnameFromUrl(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeAttributionHost(value: string | null | undefined) {
+  return value?.trim().replace(/^\.+/, "").replace(/^www\./, "").toLowerCase() ?? null;
+}
+
+function hostFamilyMatches(left: string | null | undefined, right: string | null | undefined) {
+  const normalizedLeft = normalizeAttributionHost(left);
+  const normalizedRight = normalizeAttributionHost(right);
+  if (!normalizedLeft || !normalizedRight) {
+    return false;
+  }
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.endsWith(`.${normalizedRight}`) ||
+    normalizedRight.endsWith(`.${normalizedLeft}`) ||
+    roughEtldPlusOne(normalizedLeft) === roughEtldPlusOne(normalizedRight)
+  );
+}
+
+function inferCookieSourceProviderFromHost(host: string | null | undefined) {
+  const normalized = normalizeAttributionHost(host);
+  if (!normalized) {
+    return null;
+  }
+  if (/(^|\.)github\.com$/.test(normalized)) {
+    return "GitHub";
+  }
+  if (/(^|\.)ctfassets\.net$/.test(normalized)) {
+    return "Contentful Assets";
+  }
+  if (/(^|\.)hotjar\.com$/.test(normalized)) {
+    return "Hotjar";
+  }
+  if (/(^|\.)clarity\.ms$/.test(normalized)) {
+    return "Microsoft Clarity";
+  }
+  if (/(^|\.)trustarc\.com$/.test(normalized)) {
+    return "TrustArc CMP";
+  }
+  if (/(^|\.)privacy-mgmt\.com$/.test(normalized)) {
+    return "Sourcepoint CMP";
+  }
+  return null;
+}
+
+export function getRuntimeCookiePrimaryProvider(row: RuntimeCookieEvidenceRow) {
+  const inferredCookieProvider = inferCookieProvider(row.cookieName, row.domain);
+  if (inferredCookieProvider) {
+    return inferredCookieProvider;
+  }
+
+  const sourceHost =
+    hostnameFromUrl(row.sourceRequestUrl) ??
+    hostnameFromUrl(row.responseUrl) ??
+    normalizeAttributionHost(row.initiatorDomain);
+  const sourceProvider = inferCookieSourceProviderFromHost(sourceHost);
+  if (sourceProvider) {
+    return sourceProvider;
+  }
+
+  const cookieDomain = normalizeAttributionHost(row.domain);
+  if (cookieDomain && sourceHost && hostFamilyMatches(cookieDomain, sourceHost)) {
+    return cookieDomain;
+  }
+
+  return row.initiatorVendor ?? row.initiatorDomain ?? row.domain ?? row.cookieName;
+}
+
 function getHybridPageHostname(hybrid: Record<string, unknown> | null) {
   const navigationSummary = getRecord(hybrid?.navigationSummary ?? hybrid?.navigation_summary);
   const url = getString(
@@ -496,7 +574,7 @@ function disclosureMatchesRuntimeCookie(row: RuntimeCookieEvidenceRow, disclosur
     return "domain";
   }
 
-  const runtimeProvider = normalizeCookieToken(row.initiatorVendor ?? inferCookieProvider(row.cookieName, row.domain));
+  const runtimeProvider = normalizeCookieToken(getRuntimeCookiePrimaryProvider(row));
   const disclosedProvider = normalizeCookieToken(disclosure.provider);
   if (runtimeProvider && disclosedProvider && (runtimeProvider.includes(disclosedProvider) || disclosedProvider.includes(runtimeProvider))) {
     return "provider";
@@ -538,9 +616,7 @@ export function buildCookieDisclosureGapEvidence(input: {
     unmatched_cookie_categories: uniqueStrings(unmatchedRuntimeCookies.map((row) => row.category)),
     unmatched_cookie_count: unmatchedRuntimeCookies.length,
     unmatched_cookie_names: uniqueStrings(unmatchedRuntimeCookies.map((row) => row.cookieName)),
-    unmatched_cookie_vendors: uniqueStrings(
-      unmatchedRuntimeCookies.map((row) => row.initiatorVendor ?? inferCookieProvider(row.cookieName, row.domain))
-    ),
+    unmatched_cookie_vendors: uniqueStrings(unmatchedRuntimeCookies.map(getRuntimeCookiePrimaryProvider)),
     unmatched_runtime_cookies: unmatchedRuntimeCookies,
     unmatched_third_party_cookie_count: unmatchedRuntimeCookies.filter((row) => row.party === "third_party").length
   };

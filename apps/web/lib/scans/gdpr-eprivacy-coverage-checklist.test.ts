@@ -153,6 +153,79 @@ function makeCoverageOutcome(
   };
 }
 
+test("visual no-go makes UI-dependent consent controls not testable without suppressing network rows", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      accept_consent_control: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: no same-surface accept control retained"],
+        limitation: "No accept control was retained.",
+        retainedEvidence: {
+          acceptControlObserved: false,
+          preconsentCookieOrTrackingActivityObserved: true
+        },
+        rowId: "accept_consent_control",
+        status: "Gap observed"
+      }),
+      options_settings_preferences_control: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: no same-surface options control retained"],
+        limitation: "No options control was retained.",
+        retainedEvidence: {
+          optionsControlObserved: false,
+          preconsentCookieOrTrackingActivityObserved: true
+        },
+        rowId: "options_settings_preferences_control",
+        status: "Gap observed"
+      }),
+      pre_consent_third_party_tracking: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: retained pre-consent request timing"],
+        limitation: "Pre-consent third-party tracking was retained.",
+        retainedEvidence: {
+          firstPreconsentThirdPartyTrackingObservedMs: 712,
+          preconsentThirdPartyTrackingObserved: true
+        },
+        rowId: "pre_consent_third_party_tracking",
+        status: "Gap observed"
+      })
+    },
+    projectedFindings: [{ id: "scan_quality_visual_no_go", label: "Normal public site was not reached" }],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const accept = byId(items, "accept_consent_control");
+  const options = byId(items, "options_settings_preferences_control");
+  const tracking = byId(items, "pre_consent_third_party_tracking");
+  assert.equal(accept.status, "Not testable");
+  assert.equal(accept.assessmentStatus, "coverage_limitation");
+  assert.equal(accept.evidenceState, "not_testable");
+  assert.equal(options.status, "Not testable");
+  assert.equal(options.assessmentStatus, "coverage_limitation");
+  assert.equal(options.evidenceState, "not_testable");
+  assert.equal(tracking.status, "Gap observed");
+  assert.equal(tracking.assessmentStatus, "gap_observed");
+
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: getReportableGdprEprivacyCoverageItems(items)
+    }
+  });
+  assert.equal(
+    findings.some((finding) => finding.id === "regulatory_gap__gdpr_eprivacy__accept_consent_control"),
+    false
+  );
+  assert.equal(
+    findings.some((finding) => finding.id === "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control"),
+    false
+  );
+  assert.equal(
+    findings.some((finding) => finding.id === "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking"),
+    true
+  );
+});
+
 function makeRuntimeCookieRow(overrides: Partial<RuntimeCookieEvidenceRow>): RuntimeCookieEvidenceRow {
   return {
     category: "unknown",

@@ -784,6 +784,24 @@ test("policySurfaceScanner treats external localized policy hash links as fetcha
   );
 });
 
+test("policySurfaceScanner treats encoded same-origin .htm privacy links as fetchable", () => {
+  const baseUrl = "https://www.wordreference.com/";
+  const href = "/english/Privacy%20Policy.htm";
+  const normalizedUrl = "https://www.wordreference.com/english/Privacy%20Policy.htm";
+
+  assert.equal(
+    isFetchablePolicyCandidateForPolicySurface({
+      baseUrl,
+      href,
+      normalizedUrl,
+      surfaceType: "privacy_policy",
+      matchStrength: "direct",
+      linkText: "Privacy Policy",
+    }),
+    true,
+  );
+});
+
 test("policySurfaceScanner treats direct localized policy labels as fetchable for opaque external URLs", () => {
   const baseUrl = "https://www.gazeta.pl/";
   const href = "https://pomoc.gazeta.pl/pomoc/7,192131,30837106,zgody-2.html#e=AFootLink#s=StLinks";

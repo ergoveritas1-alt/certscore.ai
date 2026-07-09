@@ -193,3 +193,78 @@ test("Article 13 rejection contract rejects DPO nouns without a contact anchor",
     "insufficient_row_specific_terms",
   );
 });
+
+test("Article 13 rejection contract rejects generic contact and GDPR page chrome for row-specific disclosures", () => {
+  const footerChrome =
+    "Parents Teachers Privacy Policy Cookie Policy Terms Contact us Content Removal Upload Home New videos Search Menu";
+  const federalRegisterFooter =
+    "Home Executive Orders Contact Us Privacy Policy Accessibility FOIA No Fear Act Office of the Federal Register National Archives";
+
+  for (const mode of ["scan_core", "retained_report"] satisfies Article13DisclosureRejectionMode[]) {
+    assert.notEqual(
+      article13DisclosureRejectReason(footerChrome, "controller_contact", { mode }),
+      null,
+      `${mode} should reject generic Contact us page chrome`,
+    );
+    assert.equal(
+      article13DisclosureRejectReason(federalRegisterFooter, "controller_contact", { mode }),
+      "page_chrome_or_navigation",
+      `${mode} should reject Federal Register footer chrome as controller contact evidence`,
+    );
+    assert.equal(
+      article13DisclosureRejectReason(
+        "Privacy Policy for Example.com. Introduction. We value privacy and mention GDPR, cookies, terms, and policy updates for visitors.",
+        "supervisory_authority",
+        { mode },
+      ),
+      "insufficient_row_specific_terms",
+      `${mode} should reject generic GDPR/privacy-policy text as supervisory authority evidence`,
+    );
+  }
+});
+
+test("Article 13 rejection contract accepts complaint-to-authority language", () => {
+  for (const mode of ["scan_core", "retained_report"] satisfies Article13DisclosureRejectionMode[]) {
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(
+        "You have the right to lodge a complaint with your local data protection authority about how we process your personal data.",
+        "supervisory_authority",
+        { mode },
+      ),
+      true,
+      `${mode} should accept row-specific complaint authority wording`,
+    );
+  }
+});
+
+test("Article 13 rejection contract rejects footer language, generic disclaimers, and cookie definitions", () => {
+  for (const mode of ["scan_core", "retained_report"] satisfies Article13DisclosureRejectionMode[]) {
+    assert.equal(
+      article13DisclosureRejectReason(
+        "Donate All languages Language Čeština Deutsch English Español Français Italiano Nederlands Polski Português Русский Privacy Policy Terms Contact",
+        "supervisory_authority",
+        { mode },
+      ),
+      "insufficient_row_specific_terms",
+      `${mode} should reject footer/language switcher text as supervisory authority evidence`,
+    );
+    assert.equal(
+      article13DisclosureRejectReason(
+        "Though all efforts have been made to ensure the accuracy and currency of the content on this website, the same should not be construed as a statement of law or used for any legal purposes.",
+        "data_retention",
+        { mode },
+      ),
+      "insufficient_row_specific_terms",
+      `${mode} should reject generic site disclaimers as retention evidence`,
+    );
+    assert.equal(
+      article13DisclosureRejectReason(
+        "Cookies. A cookie is a piece of software code that an internet web site sends to your browser when you access information at that site.",
+        "data_subject_rights",
+        { mode },
+      ),
+      "insufficient_row_specific_terms",
+      `${mode} should reject cookie definitions as data-subject-rights evidence`,
+    );
+  }
+});

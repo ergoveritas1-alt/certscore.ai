@@ -175,7 +175,13 @@ function isPotentialConcernCoverageRow(row: RegulatoryGapTopFindingRow) {
 }
 
 function getRegulatoryTopFindingConcernKind(row: RegulatoryGapTopFindingRow): RegulatoryTopFindingConcernKind | null {
+  if (isArticle13ExtractionLimitedRow(row)) {
+    return null;
+  }
   if (row.assessmentStatus === "gap_observed") {
+    if (isRiskSignalRow(row.id) && !isObservedPotentialConcernRow(row)) {
+      return null;
+    }
     return "potential_gap";
   }
   if (row.assessmentDirection === "potential_concern") {
@@ -275,6 +281,33 @@ function isRiskSignalRow(rowId: string) {
     rowId === "session_replay_fingerprinting_review" ||
     rowId === "device_identification_fingerprinting_signal_observed" ||
     rowId === "embedded_content_pre_consent";
+}
+
+const ARTICLE13_DISCLOSURE_ROW_IDS = new Set([
+  "controller_contact_disclosure",
+  "processing_purposes_disclosure",
+  "legal_basis_disclosure_observed",
+  "recipients_vendor_categories_disclosure",
+  "retention_disclosure_observed",
+  "data_subject_rights_disclosure",
+  "international_transfers_disclosure",
+  "dpo_contact_point_disclosure",
+  "supervisory_authority_complaint_disclosure",
+  "automated_decision_making_profiling_disclosure"
+]);
+
+function isArticle13ExtractionLimitedRow(row: RegulatoryGapTopFindingRow) {
+  if (!ARTICLE13_DISCLOSURE_ROW_IDS.has(row.id)) {
+    return false;
+  }
+  const evidenceLabel = getEvidenceLabel(row);
+  if (evidenceLabel !== "Partial" && evidenceLabel !== "Not testable") {
+    return false;
+  }
+  return evidenceMentions(
+    row,
+    /low_quality_extracted_code_or_config|policy text extraction (?:was )?not usable|not usable for article 13|not_confirmed_extraction_limited|not_confirmed_row_specific_extraction|characters retained|usable retained privacy policy text characters/i
+  );
 }
 
 function isObservedRow(row: RegulatoryGapTopFindingRow) {

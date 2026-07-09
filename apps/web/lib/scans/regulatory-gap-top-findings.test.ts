@@ -292,6 +292,104 @@ test("buildRegulatoryGapTopFindings keeps consent-control review rows when CMP e
   ), ["potential_gap", "potential_gap", "potential_gap"]);
 });
 
+test("buildRegulatoryGapTopFindings keeps Article 13 extraction limitations out of high regulatory findings", () => {
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [
+        {
+          assessmentStatus: "checked",
+          evidenceLabel: "Partial",
+          evidenceState: "not_observed",
+          id: "legal_basis_disclosure_observed",
+          label: "Legal basis disclosure",
+          note: "Policy text extraction low_quality_extracted_code_or_config; 1326 characters retained; 2500 required.",
+          status: "Not confirmed",
+          criticalEvidence: {
+            retainedEvidence: {
+              policyTextExtractionHealth: {
+                policyTextExtractionStatus: "low_quality_extracted_code_or_config"
+              },
+              signalObserved: "not_confirmed_extraction_limited"
+            },
+            statusBasis: "Limitation: policy text extraction was not usable for Article 13 disclosure review"
+          }
+        },
+        {
+          assessmentStatus: "checked",
+          evidenceLabel: "Partial",
+          evidenceState: "not_observed",
+          id: "retention_disclosure",
+          label: "Legacy retention review row",
+          note: "Partial support from retained policy evidence.",
+          status: "Not confirmed"
+        }
+      ]
+    }
+  });
+
+  assert.equal(
+    findings.some((finding) => finding.id === "regulatory_gap__gdpr_eprivacy__legal_basis_disclosure_observed"),
+    false
+  );
+  assert.equal(
+    findings.some((finding) => finding.id === "regulatory_gap__gdpr_eprivacy__retention_disclosure"),
+    true
+  );
+});
+
+test("buildRegulatoryGapTopFindings does not promote gap-observed unknown-only no-go runtime rows", () => {
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [
+        {
+          assessmentStatus: "gap_observed",
+          evidenceState: "observed",
+          id: "pre_consent_third_party_tracking",
+          label: "Pre-consent third-party tracking",
+          note: "Coverage-limited scan quality no-go; unknown request rows only.",
+          status: "Gap observed",
+          criticalEvidence: {
+            retainedEvidence: {
+              preconsentPurposeRiskMix: {},
+              requestRows: [
+                { hostname: "res.cloudinary.com", vendorCategory: "unknown" },
+                { hostname: "dev.visualwebsiteoptimizer.com", vendorCategory: "unknown" }
+              ],
+              scanQualityVisualNoGoObserved: true,
+              trackerPriority: "review_needed"
+            }
+          }
+        },
+        {
+          assessmentStatus: "gap_observed",
+          evidenceState: "observed",
+          id: "pre_consent_third_party_tracking",
+          label: "Pre-consent third-party tracking with ad evidence",
+          note: "Advertising endpoint fired before consent.",
+          status: "Gap observed",
+          criticalEvidence: {
+            retainedEvidence: {
+              preconsentPurposeRiskMix: {
+                advertising: ["Google Ads"]
+              },
+              scanQualityVisualNoGoObserved: true,
+              trackerPriority: "high"
+            }
+          }
+        }
+      ]
+    }
+  });
+
+  assert.deepEqual(findings.map((finding) => finding.label), [
+    "Pre-consent third-party tracking with ad evidence"
+  ]);
+});
+
 test("buildRegulatoryGapTopFindings does not promote contextual-only pre-consent tracking", () => {
   const findings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {

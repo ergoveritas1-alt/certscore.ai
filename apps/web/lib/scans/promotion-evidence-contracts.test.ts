@@ -267,6 +267,61 @@ test("structured before-consent cookie timing satisfies sequence without numeric
   assert.equal(hasStrongPreconsentRuntimeEvidence(evidence), true);
 });
 
+test("contextual infrastructure and security request rows do not become strong pre-consent tracking evidence", () => {
+  const contextualOnlyEvidence = {
+    consentTimeline: {
+      firstCmpVisibleMs: 900,
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: 120
+    },
+    requestPurposeClassificationConfidence: [
+      {
+        category: "infrastructure",
+        classification: "non_essential",
+        confidence: 0.97,
+        essentiality: "non_essential",
+        requestUrl: "https://use.typekit.net/waw8itp.css",
+        runtimePhase: "pre_consent",
+        vendor: "Adobe Fonts / Typekit"
+      },
+      {
+        category: "security",
+        classification: "non_essential",
+        confidence: 0.94,
+        essentiality: "non_essential",
+        requestUrl: "https://www.google.com/recaptcha/api.js",
+        runtimePhase: "pre_consent",
+        vendor: "Google reCAPTCHA"
+      }
+    ],
+    preconsent_tracking_detected: true
+  };
+
+  assert.equal(hasStrongPreconsentRuntimeEvidence(contextualOnlyEvidence), false);
+
+  const advertisingEvidence = {
+    consentTimeline: {
+      firstCmpVisibleMs: 900,
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: 120
+    },
+    requestPurposeClassificationConfidence: [
+      {
+        category: "advertising",
+        classification: "non_essential",
+        confidence: 0.97,
+        essentiality: "non_essential",
+        requestUrl: "https://ads.example.test/pixel.js",
+        runtimePhase: "pre_consent",
+        vendor: "Example Ads"
+      }
+    ],
+    preconsent_tracking_detected: true
+  };
+
+  assert.equal(hasStrongPreconsentRuntimeEvidence(advertisingEvidence), true);
+});
+
 test("sensitive third-party tracking contract accepts legacy tracking-host payloads without promoting generic first-party runtime calls", () => {
   assert.equal(
     hasConcreteSensitiveThirdPartyTrackingArtifact({

@@ -71,7 +71,7 @@ const SERVICE_CLASSIFICATIONS = new Set([
 ]);
 
 const SERVICE_HOST_PATTERN =
-  /(?:^|\.)cdn\.cookielaw\.org$|(?:^|\.)geolocation\.onetrust\.com$|(?:^|\.)ajax\.googleapis\.com$|(?:^|\.)cdn\.jwplayer\.com$|(?:^|\.)assets\.adobedtm\.com$/i;
+  /(?:^|\.)cdn\.cookielaw\.org$|(?:^|\.)geolocation\.onetrust\.com$|(?:^|\.)transcend-cdn\.com$|(?:^|\.)privacy-center-api\.transcend\.io$|(?:^|\.)ajax\.googleapis\.com$|(?:^|\.)cdn\.jwplayer\.com$|(?:^|\.)assets\.adobedtm\.com$|(?:^|\.)m\.stripe\.network$|(?:^|\.)framerusercontent\.com$|(?:^|\.)sfdcstatic\.com$/i;
 
 const GENERIC_VENDOR_LABELS = new Set([
   "advertising",

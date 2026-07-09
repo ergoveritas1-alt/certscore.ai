@@ -4,6 +4,7 @@ import {
   buildCookieDisclosureGapEvidence,
   buildRuntimeCookieInventory,
   classifyRuntimeCookieCategory,
+  getRuntimeCookiePrimaryProvider,
   isFunctionalCookieExcludedFromTrackingEvidence
 } from "./runtime-cookie-evidence";
 import {
@@ -198,6 +199,41 @@ test("builds cookie inventory with initiator provenance and before-consent timin
   assert.equal(inventory.rows.find((row) => row.cookieName === "_fbp")?.responseUrl, "https://connect.facebook.net/fbevents.js");
 });
 
+test("cookie provider attribution prefers cookie source host over unrelated initiator vendor", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: [
+        {
+          beforeConsent: true,
+          category: "unknown",
+          cookieName: "_gh_sess",
+          domain: "github.com",
+          initiatorVendor: "Contentful Assets",
+          sourceRequestUrl: "https://github.com/features/packages",
+          thirdParty: false
+        },
+        {
+          beforeConsent: true,
+          category: "unknown",
+          cookieName: "ctf_cookie",
+          domain: "images.ctfassets.net",
+          initiatorVendor: "Contentful Assets",
+          sourceRequestUrl: "https://images.ctfassets.net/example/asset.js",
+          thirdParty: true
+        }
+      ]
+    }
+  });
+  const githubCookie = inventory.rows.find((row) => row.cookieName === "_gh_sess");
+  const contentfulCookie = inventory.rows.find((row) => row.cookieName === "ctf_cookie");
+
+  assert.ok(githubCookie);
+  assert.ok(contentfulCookie);
+  assert.equal(getRuntimeCookiePrimaryProvider(githubCookie), "GitHub");
+  assert.equal(getRuntimeCookiePrimaryProvider(contentfulCookie), "Contentful Assets");
+  assert.equal(buildRuntimeCookiePriorityGroups([githubCookie])[0]?.vendor, "GitHub");
+});
+
 test("normalizes initial-cookie sentinel timestamps as unknown timing values", () => {
   const inventory = buildRuntimeCookieInventory({
     hybridRuntimeEvidence: {
@@ -284,7 +320,7 @@ test("builds cookie disclosure gap evidence from runtime and policy inventory", 
   assert.deepEqual(evidence.runtime_cookie_names, ["_ga", "_fbp", "__cf_bm"]);
   assert.deepEqual(evidence.disclosed_cookie_names, ["_ga"]);
   assert.deepEqual(evidence.unmatched_cookie_names, ["_fbp"]);
-  assert.deepEqual(evidence.unmatched_cookie_vendors, ["Meta Pixel"]);
+  assert.deepEqual(evidence.unmatched_cookie_vendors, ["Meta"]);
   assert.equal(evidence.unmatched_cookie_count, 1);
   assert.equal(evidence.unmatched_third_party_cookie_count, 1);
 });

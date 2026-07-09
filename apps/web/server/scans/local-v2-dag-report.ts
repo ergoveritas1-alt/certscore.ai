@@ -1361,7 +1361,9 @@ export function summarizePolicySurfaces(
   const gdprTransparencyProductionEvidenceEnabled =
     gdprTransparencyProductionEvidenceProfileEnabled(gdprTransparencyEvidenceProfile);
   const privacySurfaces = policySurfaces.filter((row) => row.surface.surfaceType === "privacy_policy");
-  const article13Surfaces = privacySurfaces.filter((row) => !isGenericThirdPartyPrivacySurface(row, rootDomain));
+  const article13Surfaces = selectArticle13PrivacySurfaces(
+    privacySurfaces.filter((row) => !isGenericThirdPartyPrivacySurface(row, rootDomain))
+  );
   const text = article13Surfaces.map((row) => firstString(row.surface.textExcerpt)).filter(Boolean).join("\n");
   const policyTextQuality = assessRetainedPolicyTextQuality(text);
   const gdprTransparencyPolicyTextQuality = gdprTransparencyProductionEvidenceEnabled
@@ -1719,6 +1721,25 @@ function isGenericThirdPartyPrivacySurface(
     "privacy.trustarc.com",
     "www.trustarc.com"
   ].includes(hostname);
+}
+
+function selectArticle13PrivacySurfaces(
+  privacySurfaces: ReturnType<typeof dedupePolicySurfaces>
+) {
+  const generalPrivacySurfaces = privacySurfaces.filter((row) => !isCookieSpecificPrivacySurface(row));
+  return generalPrivacySurfaces.length > 0 ? generalPrivacySurfaces : privacySurfaces;
+}
+
+function isCookieSpecificPrivacySurface(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
+  const url = [
+    row.pageUrl,
+    row.surface.normalizedUrl,
+    row.surface.url
+  ].filter(Boolean).join(" ");
+  const title = firstString(row.surface.title);
+  const linkText = firstString(row.surface.linkText);
+  const combined = `${url} ${title} ${linkText}`.toLowerCase();
+  return /(?:^|[/?#&._-])cookies?(?:$|[/?#&._-])|cookie[-_\s]*(?:policy|notice|statement|declaration)|(?:privacy|legal)[/?#&._-]+cookies?/i.test(combined);
 }
 
 function summarizeCollectionSurfaces(bundle: CanonicalEvidenceBundle) {

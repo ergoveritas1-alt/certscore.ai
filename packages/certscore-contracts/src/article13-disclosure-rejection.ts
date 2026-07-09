@@ -83,7 +83,7 @@ export function looksLikeArticle13PageChrome(
   const mode = options.mode ?? "scan_core";
   const navTokens = mode === "multilingual_classifier"
     ? (text.match(/\b(?:overview|privacy policy|terms of service|technologies|faq|introduction|privacy|terms|skip to main content|navigation|menu|search)\b/gi) ?? []).length
-    : (text.match(/\b(?:overview|privacy policy|terms of service|technologies|faq|introduction|privacy|terms|skip to main content)\b/gi) ?? []).length;
+    : (text.match(/\b(?:home|overview|privacy policy|terms of service|technologies|faq|introduction|privacy|terms|contact us|accessibility|foia|no fear act|skip to main content)\b/gi) ?? []).length;
   const sentenceCount = (text.match(/[.!?]/g) ?? []).length;
   if (mode !== "multilingual_classifier") {
     return navTokens >= 5 && sentenceCount < 2;
@@ -292,7 +292,7 @@ function hasScanCoreRowSpecificArticle13Terms(
   const text = normalizeArticle13Whitespace(value);
   switch (disclosureType) {
     case "controller_contact":
-      return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:us|our privacy team|google)|questions about (?:this )?(?:policy|privacy)|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
+      return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:policy|privacy)|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
         !looksLikeArticle13PageChrome(text, { mode: "scan_core" });
     case "processing_purposes":
       return /\b(?:purpose(?:s)?|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|provide (?:our )?services|personalize)\b/i.test(text);
@@ -301,7 +301,7 @@ function hasScanCoreRowSpecificArticle13Terms(
     case "recipients_or_vendor_categories":
       return /\b(?:recipients|service providers|processors|vendors?|partners|affiliates|third parties|third-party|advertising partners?|analytics providers?)\b/i.test(text);
     case "data_retention":
-      return /\b(?:retaining your information|retention period|retention criteria|storage period|retain|retention|kept for|stored for|as long as necessary|deleted or anonymi[sz]ed|expires?|no longer needed|required by law|legal purposes|fraud|abuse)\b/i.test(text) &&
+      return /\b(?:retaining your information|retention period|retention criteria|storage period|retain|retention|kept for|stored for|as long as necessary|deleted or anonymi[sz]ed|expires?|no longer needed|required by law|retain.{0,120}(?:legal purposes|fraud|abuse)|keep.{0,120}(?:legal purposes|fraud|abuse))\b/i.test(text) &&
         !isGenericArticle13StorageNotRetentionEvidence(text);
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);
@@ -310,7 +310,7 @@ function hasScanCoreRowSpecificArticle13Terms(
     case "dpo_contact":
       return /\b(?:data protection officer|\bdpo\b|data protection contact)\b/i.test(text);
     case "supervisory_authority":
-      return /\b(?:supervisory authority|data protection authority|local data protection authorit(?:y|ies)|lodge a complaint|complain to (?:a )?(?:regulator|authority)|compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)|formal written complaints?|regulatory authorities|unresolved complaints?|regulators?.{0,120}(?:complaints?|authorities|resolve)|\bico\b|\bcnil\b|\bdpc\b)\b/i.test(text);
+      return /\b(?:(?:lodge|file|submit|make)\s+a\s+complaint.{0,160}(?:supervisory|data protection|regulator|authority)|complaints?.{0,200}(?:data protection authorit(?:y|ies)|supervisory authorit(?:y|ies)|regulator)|complain to (?:a )?(?:regulator|authority)|(?:supervisory authority|data protection authority|local data protection authorit(?:y|ies)).{0,160}complaint|compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)|formal written complaints?.{0,180}(?:regulatory authorities|local data protection authorities|regulators?)|unresolved complaints?.{0,180}(?:regulatory authorities|local data protection authorities|regulators?)|regulators?.{0,120}(?:complaints?|authorities|resolve))\b/i.test(text);
     case "automated_decision_making_or_profiling":
       return /\b(?:automated decision|solely automated|profiling|meaningful information about the logic|automated systems?|algorithms?|recognize patterns|personalized ads|personalized advertising|customi[sz]ed search results|tailored search results|tailored|personalization)\b/i.test(text);
     default:
@@ -325,7 +325,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
   const text = normalizeArticle13Whitespace(value);
   switch (disclosureType) {
     case "controller_contact":
-      return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:us|our privacy team|google)|questions about (?:this )?(?:policy|privacy)|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
+      return /\b(?:data controller|controller|google llc|google ireland limited|contact (?:our privacy team|google)|questions about (?:this )?(?:policy|privacy)|privacy office|privacy questions?|privacy@|data protection office|data protection officer|\bdpo\b)\b/i.test(text) &&
         !looksLikeArticle13PageChrome(text, { mode: "retained_report" });
     case "processing_purposes":
       return /\b(?:purpose(?:s)?|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for)|provide (?:our )?services|personalize)\b/i.test(text);
@@ -334,7 +334,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
     case "recipients_or_vendor_categories":
       return /\b(?:recipients|service providers|processors|vendors?|partners|affiliates|third parties|third-party|advertising partners?|analytics providers?)\b/i.test(text);
     case "data_retention":
-      return /\b(?:retaining your information|retention period|retention criteria|storage period|retain|retention|kept for|stored for|as long as necessary|deleted or anonymi[sz]ed|expires?|no longer needed|required by law|legal purposes|fraud|abuse)\b/i.test(text) &&
+      return /\b(?:retaining your information|retention period|retention criteria|storage period|retain|retention|kept for|stored for|as long as necessary|deleted or anonymi[sz]ed|expires?|no longer needed|required by law|retain.{0,120}(?:legal purposes|fraud|abuse)|keep.{0,120}(?:legal purposes|fraud|abuse))\b/i.test(text) &&
         !isGenericArticle13StorageNotRetentionEvidence(text);
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);
@@ -343,7 +343,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
     case "dpo_contact":
       return /\b(?:data protection officer|\bdpo\b|data protection contact)\b/i.test(text);
     case "supervisory_authority":
-      return /\b(?:supervisory authority|data protection authority|local data protection authorit(?:y|ies)|lodge a complaint|complain to (?:a )?(?:regulator|authority)|compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)|formal written complaints?|regulatory authorities|unresolved complaints?|regulators?.{0,120}(?:complaints?|authorities|resolve)|\bico\b|\bcnil\b|\bdpc\b)\b/i.test(text);
+      return /\b(?:(?:lodge|file|submit|make)\s+a\s+complaint.{0,160}(?:supervisory|data protection|regulator|authority)|complaints?.{0,200}(?:data protection authorit(?:y|ies)|supervisory authorit(?:y|ies)|regulator)|complain to (?:a )?(?:regulator|authority)|(?:supervisory authority|data protection authority|local data protection authorit(?:y|ies)).{0,160}complaint|compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)|formal written complaints?.{0,180}(?:regulatory authorities|local data protection authorities|regulators?)|unresolved complaints?.{0,180}(?:regulatory authorities|local data protection authorities|regulators?)|regulators?.{0,120}(?:complaints?|authorities|resolve))\b/i.test(text);
     case "automated_decision_making_or_profiling":
       return /\b(?:automated decision|solely automated|profiling|meaningful information about the logic|automated systems?|algorithms?|recognize patterns|personalized ads|personalized advertising|customi[sz]ed search results|tailored search results|tailored|personalization)\b/i.test(text);
     default:
