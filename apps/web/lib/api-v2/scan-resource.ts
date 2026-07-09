@@ -22,7 +22,12 @@ import {
 import type { PulseResponse } from "@certscore/api-contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { derivePulseReportScore } from "../pulse/projection";
-import { buildRuntimeInventoryProjectionFromScan, inventoryRegistrableDomain, type InventoryGroupRow } from "../scans/runtime-inventory-projection";
+import {
+  buildRuntimeInventoryProjectionFromScan,
+  inventoryRegistrableDomain,
+  isInventoryDisplayHostname,
+  type InventoryGroupRow
+} from "../scans/runtime-inventory-projection";
 import { absoluteUrl } from "../seo";
 
 export const API_V2_SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
@@ -638,8 +643,16 @@ function stableInventoryRowId(row: InventoryGroupRow, host: string | null) {
     .slice(0, 220);
 }
 
+function isTokenOnlyPreConsentLabel(value: string) {
+  const trimmed = value.trim();
+  return trimmed.startsWith(".") || trimmed.startsWith("_") || trimmed.startsWith("#");
+}
+
 function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | null) {
-  const host = sanitizeHost(row.domains[0]);
+  const host = row.domains.map((domain) => sanitizeHost(domain)).find(isInventoryDisplayHostname) ?? null;
+  if (!host && isTokenOnlyPreConsentLabel(row.vendor)) {
+    return null;
+  }
   const registrableDomain = host ? inventoryRegistrableDomain(host) : null;
   const requestCount = row.type === "tracker" && typeof row.requestCount === "number" && Number.isFinite(row.requestCount)
     ? Math.max(0, Math.round(row.requestCount))
@@ -671,11 +684,13 @@ export function buildApiV2PreConsentCookiesTrackers(scanRecord: ScanDetailRespon
   const domain = scan.domainHostname ?? "unknown";
   const pageUrlHost = sanitizeHost(domain);
   const projection = buildRuntimeInventoryProjectionFromScan(scanRecord);
-  const rowsById = new Map<string, ReturnType<typeof buildApiV2PreConsentRow>>();
+  const rowsById = new Map<string, NonNullable<ReturnType<typeof buildApiV2PreConsentRow>>>();
 
   for (const row of projection.groupedRows) {
     const safeRow = buildApiV2PreConsentRow(row, pageUrlHost);
-    rowsById.set(safeRow.id, safeRow);
+    if (safeRow) {
+      rowsById.set(safeRow.id, safeRow);
+    }
   }
 
   const rows = [...rowsById.values()];

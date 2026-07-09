@@ -506,10 +506,9 @@ test("buildApiV2PreConsentCookiesTrackers matches the shared public report table
     resource.rows.map((row) => row.id),
     secondResource.rows.map((row) => row.id)
   );
-  assert.deepEqual(
-    resource.rows.map((row) => `${row.kind}:${row.vendor}:${row.purpose}:${row.host ?? "none"}`),
-    projection.groupedRows.map((row) => `${row.type}:${row.vendor}:${row.purpose}:${row.domains[0]?.split(/[/?#]/, 1)[0]?.replace(/^www\./, "").toLowerCase() ?? "none"}`)
-  );
+  assert.ok(resource.rows.every((row) => !row.host || (!row.host.startsWith(".") && !row.host.startsWith("_") && row.host.includes("."))));
+  assert.ok(resource.rows.some((row) => row.kind === "cookie" && row.vendor === "Meta Pixel" && row.host === null));
+  assert.ok(resource.rows.some((row) => row.kind === "tracker" && row.vendor === "Meta Pixel" && row.host === "connect.facebook.net"));
   assert.ok(resource.rows.every((row) => row.evidenceBasis === "public_report_projection"));
   assert.ok(resource.rows.every((row) => row.observedBeforeConsent === true));
   assert.ok(resource.rows.every((row) => !row.host?.includes("?")));
@@ -574,6 +573,7 @@ test("buildApiV2PreConsentCookiesTrackers maps report table rows without raw val
   assert.ok(resource.rows.every((row) => row.evidenceBasis === "public_report_projection"));
   assert.ok(resource.rows.every((row) => row.phase === "pre_consent"));
   assert.ok(resource.rows.every((row) => !row.host?.includes("?")));
+  assert.ok(resource.rows.every((row) => !row.host || (!row.host.startsWith(".") && !row.host.startsWith("_") && row.host.includes("."))));
   assert.ok(resource.rows.some((row) => row.kind === "tracker" && row.host === "tracker.example.test"));
   assert.equal(serialized.includes("secret-cookie-value"), false);
   assert.equal(serialized.includes("person@example.com"), false);
