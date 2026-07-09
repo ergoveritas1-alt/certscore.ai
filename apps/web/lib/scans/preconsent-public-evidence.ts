@@ -185,6 +185,7 @@ function safeEvidenceUrl(value: string) {
 const HOST_BOUND_VENDOR_DOMAINS: Array<{ pattern: RegExp; domains: string[] }> = [
   { pattern: /^(?:google\s+fonts)$/i, domains: ["fonts.googleapis.com", "fonts.gstatic.com"] },
   { pattern: /^(?:google\s+tag\s+manager|gtm)$/i, domains: ["googletagmanager.com"] },
+  { pattern: /^google\s+analytics$/i, domains: ["google-analytics.com", "analytics.google.com", "googletagmanager.com"] },
   { pattern: /^google\s+static\s+assets$/i, domains: ["gstatic.com"] },
   { pattern: /^microsoft\s+clarity$/i, domains: ["clarity.ms"] },
   { pattern: /^hotjar$/i, domains: ["hotjar.com", "hotjar.io"] },

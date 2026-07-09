@@ -503,14 +503,21 @@ test("suppresses borrowed host-bound vendor labels on unresolved endpoint hosts"
         firstSeenMs: 6
       }),
       row({
+        hostname: "kbdlabimages.s3.us-east-2.amazonaws.com",
+        url: "https://kbdlabimages.s3.us-east-2.amazonaws.com/jan-loyde-cabrera-6e9b45NTrI4-unsplash.webp",
+        vendorName: "Google Analytics",
+        vendorCategory: "analytics",
+        firstSeenMs: 7
+      }),
+      row({
         hostname: "securepubads.g.doubleclick.net",
         url: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
         vendorName: "Google Publisher Tag",
         vendorCategory: "advertising",
-        firstSeenMs: 7
+        firstSeenMs: 8
       })
     ],
-    maxItems: 7
+    maxItems: 8
   });
 
   assert.equal(requests[0]?.vendorName, "newcreatework.monster");
@@ -547,9 +554,15 @@ test("suppresses borrowed host-bound vendor labels on unresolved endpoint hosts"
   assert.equal(requests[5]?.relatedOrInitiatingVendor, "unpkg CDN");
   assert.match(requests[5]?.vendorAttributionBasis ?? "", /borrowed_host_bound_vendor_suppressed/);
 
-  assert.equal(requests[6]?.vendorName, "Google Publisher Tag");
-  assert.equal(requests[6]?.vendorCategory, "advertising");
-  assert.equal(requests[6]?.relatedOrInitiatingVendor, null);
+  assert.equal(requests[6]?.vendorName, "kbdlabimages.s3.us-east-2.amazonaws.com");
+  assert.equal(requests[6]?.vendorCategory, "unknown");
+  assert.equal(requests[6]?.rawObservedVendor, "Google Analytics");
+  assert.equal(requests[6]?.relatedOrInitiatingVendor, "Google Analytics");
+  assert.match(requests[6]?.vendorAttributionBasis ?? "", /borrowed_host_bound_vendor_suppressed/);
+
+  assert.equal(requests[7]?.vendorName, "Google Publisher Tag");
+  assert.equal(requests[7]?.vendorCategory, "advertising");
+  assert.equal(requests[7]?.relatedOrInitiatingVendor, null);
 });
 
 test("executive evidence projection does not borrow request vendors by list position", () => {
