@@ -123,10 +123,11 @@ function diagnosticLane(name: string): "scanner" | "browser" | "policy" | "persi
 }
 
 function diagnosticOffset(value: unknown, startedAtMs: number | null) {
-  if (typeof value !== "string" || startedAtMs === null) {
+  const timestampValue = dateStringOrNull(value);
+  if (!timestampValue || startedAtMs === null) {
     return null;
   }
-  const timestamp = Date.parse(value);
+  const timestamp = Date.parse(timestampValue);
   return Number.isFinite(timestamp) ? Math.max(0, Math.round(timestamp - startedAtMs)) : null;
 }
 
@@ -420,10 +421,12 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
 
 export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2ScanDiagnostics {
   const scan = scanRecord.scan;
-  const startedAtMs = scan.startedAt ? Date.parse(scan.startedAt) : Number.NaN;
+  const startedAt = dateStringOrNull(scan.startedAt);
+  const completedAt = dateStringOrNull(scan.completedAt);
+  const startedAtMs = startedAt ? Date.parse(startedAt) : Number.NaN;
   const scanStart = Number.isFinite(startedAtMs) ? startedAtMs : null;
-  const totalWallMs = scanStart !== null && scan.completedAt && Number.isFinite(Date.parse(scan.completedAt))
-    ? Math.max(0, Math.round(Date.parse(scan.completedAt) - scanStart))
+  const totalWallMs = scanStart !== null && completedAt && Number.isFinite(Date.parse(completedAt))
+    ? Math.max(0, Math.round(Date.parse(completedAt) - scanStart))
     : null;
   const executionStages = scan.executionSummary?.stages ?? [];
   const runtimeArtifacts = plainRecord(scanRecord.runtimeArtifacts);
@@ -474,7 +477,7 @@ export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2
     type: "certscore_scan_diagnostics",
     schemaVersion: "scan-diagnostics.v1",
     scanId: scan.id,
-    generatedAt: scan.completedAt ?? null,
+    generatedAt: completedAt,
     totalWallMs,
     phases,
     policyDiscovery: {

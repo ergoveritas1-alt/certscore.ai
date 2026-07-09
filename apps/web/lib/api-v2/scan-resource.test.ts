@@ -238,6 +238,18 @@ test("buildApiV2ScanDiagnostics projects bounded phase and policy discovery timi
   assert.equal(diagnostics.policyDiscovery.maxConcurrency, 3);
 });
 
+test("buildApiV2ScanDiagnostics normalizes database Date timestamps", () => {
+  const scanRecord = fixture({
+    startedAt: new Date("2026-06-30T12:00:01.000Z") as unknown as string,
+    completedAt: new Date("2026-06-30T12:00:10.000Z") as unknown as string
+  });
+
+  const diagnostics = buildApiV2ScanDiagnostics(scanRecord);
+
+  assert.equal(diagnostics.generatedAt, "2026-06-30T12:00:10.000Z");
+  assert.equal(diagnostics.totalWallMs, 9000);
+});
+
 test("buildApiV2Error returns the shared error envelope", () => {
   const error = buildApiV2Error({ code: "not_found", message: "Scan not found." });
 
