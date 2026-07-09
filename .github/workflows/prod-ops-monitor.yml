@@ -22,8 +22,6 @@ jobs:
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-      AWS_SCANNER_ECS_CLUSTER: ${{ vars.AWS_SCANNER_ECS_CLUSTER }}
-      AWS_SCANNER_ECS_SERVICE: ${{ vars.AWS_SCANNER_ECS_SERVICE }}
       AWS_VALIDATION_ECS_CLUSTER: ${{ vars.AWS_VALIDATION_ECS_CLUSTER }}
       AWS_VALIDATION_ECS_WORKER_SERVICE: ${{ vars.AWS_VALIDATION_ECS_WORKER_SERVICE }}
       AWS_WEB_CERTSCORE_SERVICE: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
@@ -48,7 +46,6 @@ jobs:
       OPS_SYNTHETIC_SCAN_DOMAIN: ${{ vars.OPS_SYNTHETIC_SCAN_DOMAIN || 'example.com' }}
       OPS_SYNTHETIC_SCAN_ENABLED: ${{ inputs.synthetic_scan || vars.OPS_SYNTHETIC_SCAN_ENABLED || 'false' }}
       OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES: ${{ vars.OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES || '15' }}
-      OPS_WAKE_SCANNER_ON_QUEUE: ${{ vars.OPS_WAKE_SCANNER_ON_QUEUE || 'false' }}
 
     steps:
       - name: Checkout
@@ -62,11 +59,6 @@ jobs:
           fi
           if [ "${OPS_SCHEDULED_MONITORING_SWEEP_ENABLED}" = "true" ]; then
             test -n "${DATABASE_URL}" || (echo "Missing secret PROD_DATABASE_URL or DATABASE_URL for scheduled monitoring sweep" && exit 1)
-          fi
-          if [ "${OPS_REQUIRE_DIRECT_DATABASE}" = "true" ] && [ "${OPS_WAKE_SCANNER_ON_QUEUE}" = "true" ]; then
-            test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
-            test -n "${AWS_SCANNER_ECS_CLUSTER}" || (echo "Missing var AWS_SCANNER_ECS_CLUSTER" && exit 1)
-            test -n "${AWS_SCANNER_ECS_SERVICE}" || (echo "Missing var AWS_SCANNER_ECS_SERVICE" && exit 1)
           fi
           if [ "${OPS_AWS_DB_PROBE_ENABLED}" = "true" ]; then
             test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing secret AWS_ROLE_TO_ASSUME" && exit 1)
@@ -83,7 +75,7 @@ jobs:
           fi
 
       - name: Configure AWS credentials
-        if: ${{ env.OPS_AWS_DB_PROBE_ENABLED == 'true' || env.AWS_WEB_ECS_CLUSTER != '' || env.AWS_VALIDATION_ECS_WORKER_SERVICE != '' || (env.OPS_REQUIRE_DIRECT_DATABASE == 'true' && env.OPS_WAKE_SCANNER_ON_QUEUE == 'true') }}
+        if: ${{ env.OPS_AWS_DB_PROBE_ENABLED == 'true' || env.AWS_WEB_ECS_CLUSTER != '' || env.AWS_VALIDATION_ECS_WORKER_SERVICE != '' }}
         uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ${{ env.AWS_REGION }}

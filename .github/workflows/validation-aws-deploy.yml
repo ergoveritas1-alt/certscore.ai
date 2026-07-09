@@ -320,16 +320,16 @@ jobs:
       - name: Check validation worker ECS boot
         if: ${{ env.ECS_WORKER_LOG_GROUP != '' }}
         env:
-          AWS_SCANNER_ECS_CLUSTER: ${{ env.ECS_CLUSTER_NAME }}
-          AWS_SCANNER_ECS_SERVICE: ${{ env.ECS_WORKER_SERVICE_NAME }}
-          AWS_SCANNER_CONTAINER_NAME: ${{ env.ECS_WORKER_CONTAINER_NAME }}
-          AWS_SCANNER_ECR_REPOSITORY: ${{ env.ECR_WORKER_REPOSITORY }}
-          AWS_SCANNER_LOG_GROUP: ${{ env.ECS_WORKER_LOG_GROUP }}
+          ECS_CLUSTER_NAME: ${{ env.ECS_CLUSTER_NAME }}
+          ECS_SERVICE_NAME: ${{ env.ECS_WORKER_SERVICE_NAME }}
+          ECS_CONTAINER_NAME: ${{ env.ECS_WORKER_CONTAINER_NAME }}
+          ECR_REPOSITORY: ${{ env.ECR_WORKER_REPOSITORY }}
+          ECS_LOG_GROUP: ${{ env.ECS_WORKER_LOG_GROUP }}
           CHECK_NAME: validation-worker
           EXPECTED_GIT_SHA: ${{ github.sha }}
-          SCANNER_HEALTH_REQUIRE_LOG_HEARTBEAT: "0"
-          SCANNER_HEALTH_LOG_PATTERN: validation-worker.*started|validation-worker.*heartbeat|heartbeat
-        run: pnpm ops:check:scanner-deploy
+          ECS_HEALTH_REQUIRE_LOG_HEARTBEAT: "0"
+          ECS_HEALTH_LOG_PATTERN: validation-worker.*started|validation-worker.*heartbeat|heartbeat
+        run: pnpm ops:check:ecs-service-deploy
 
       - name: Skip validation worker ECS boot check
         if: ${{ env.ECS_WORKER_LOG_GROUP == '' }}

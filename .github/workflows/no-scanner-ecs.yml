@@ -1,0 +1,17 @@
+name: Prohibit Scanner ECS
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prohibit-scanner-ecs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Confirm v2 DAG Lambda-only scanner topology
+        run: bash ./scripts/assert-no-scanner-ecs.sh

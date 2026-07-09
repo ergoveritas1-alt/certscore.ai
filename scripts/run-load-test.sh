@@ -23,8 +23,8 @@ mkdir -p "$OUTPUT_DIR"
 touch "$OUTPUT_DIR/operator-events.jsonl"
 
 # Pre-flight checks
-pnpm ops:check:scanner-autoscaling || {
-  echo "ERROR: Autoscaling check failed"
+pnpm ops:check:no-scanner-ecs || {
+  echo "ERROR: Lambda-only scanner topology check failed"
   exit 1
 }
 

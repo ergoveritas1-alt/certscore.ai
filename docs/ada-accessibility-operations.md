@@ -2,8 +2,8 @@
 
 `WC01` surfaces DOJ / ADA accessibility findings only after scanner evidence has produced representative axe examples. The expected flow is:
 
-1. `WS01` runs axe-core during scanner evidence collection.
-2. `WS01` persists representative axe examples into `scan_accessibility_rule_examples`.
+1. The WC01 v2 DAG Lambda scanner runs axe-core during evidence collection.
+2. The v2 DAG pipeline persists representative axe examples into `scan_accessibility_rule_examples`.
 3. `WC01` loads those rows as `accessibilityRuleExamples`.
 4. `WC01` normalizes the examples into accessibility concerns.
 5. Concern policy promotes only representative, example-backed concerns into unified findings.
@@ -20,7 +20,7 @@ Use this order:
    ADA_SCAN_ID=<scan-id> pnpm ops:smoke:ada-financial
    ```
 
-2. If `scan_accessibility_rule_examples` is empty, inspect `WS01` scanner worker logs for:
+2. If `scan_accessibility_rule_examples` is empty, inspect the v2 DAG Lambda phase and artifact manifests for:
 
    - axe-core startup/execution
    - page-level accessibility audit completion
@@ -52,21 +52,10 @@ Do not add raw count/score-only report exceptions for ADA findings.
 The preferred one-shot production check is the manual `ADA Live Verification`
 GitHub Actions workflow. It implements the operator sequence:
 
-1. validate the WS01 scanner ECS target inputs
-2. optionally run scanner ECS health
-3. queue a fresh ADA-sensitive scan, unless `ada_scan_id` and `ada_scan_url` are provided
-4. confirm `scan_accessibility_rule_examples` has representative axe examples
-5. confirm the WC01 report renders DOJ / ADA from those examples
-6. optionally confirm Financial & commercial claims remains `Audit-only`
-
-Required repository configuration for the scanner health portion:
-
-- secret `AWS_ROLE_TO_ASSUME`
-- variable `AWS_SCANNER_ECS_CLUSTER`
-- variable `AWS_SCANNER_ECS_SERVICE`
-- variable `AWS_SCANNER_CONTAINER_NAME`
-- variable `AWS_SCANNER_ECR_REPOSITORY`
-- variable `AWS_SCANNER_LOG_GROUP`
+1. queue a fresh ADA-sensitive scan through the v2 DAG Lambda path, unless `ada_scan_id` and `ada_scan_url` are provided
+2. confirm `scan_accessibility_rule_examples` has representative axe examples
+3. confirm the WC01 report renders DOJ / ADA from those examples
+4. optionally confirm Financial & commercial claims remains `Audit-only`
 
 Required repository configuration for live ADA verification:
 

@@ -77,8 +77,6 @@ function getContainerCommand() {
 function getProbeEnvironment() {
   return [
     "AWS_REGION",
-    "AWS_SCANNER_ECS_CLUSTER",
-    "AWS_SCANNER_ECS_SERVICE",
     "OPS_BASE_URL",
     "OPS_HEARTBEAT_STALE_MINUTES",
     "OPS_REQUIRE_SCANNER_HEARTBEAT",
@@ -87,7 +85,6 @@ function getProbeEnvironment() {
     "OPS_SYNTHETIC_SCAN_DOMAIN",
     "OPS_SYNTHETIC_SCAN_ENABLED",
     "OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES",
-    "OPS_WAKE_SCANNER_ON_QUEUE"
   ]
     .map((name) => {
       const value = process.env[name];
@@ -100,7 +97,7 @@ async function main() {
   const region = getEnv("AWS_REGION", "us-west-1");
   const cluster = getRequiredEnv(
     "OPS_AWS_MONITOR_ECS_CLUSTER",
-    getEnv("OPS_RUNNER_ECS_CLUSTER", getEnv("AWS_VALIDATION_ECS_CLUSTER", getEnv("AWS_SCANNER_ECS_CLUSTER")))
+    getEnv("OPS_RUNNER_ECS_CLUSTER", getEnv("AWS_VALIDATION_ECS_CLUSTER"))
   );
   const service = getRequiredEnv(
     "OPS_AWS_MONITOR_ECS_SERVICE",

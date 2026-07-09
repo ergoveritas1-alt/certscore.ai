@@ -526,6 +526,10 @@ Do not use local production DB tunnels, ECS Exec, or copied secrets for routine 
 
 ## Runtime and deployment topology
 
+Production scanning is Lambda-only and uses the CertScore v2 DAG scanner code in this repository. The approved production scanner targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-2`.
+
+Never create, restore, update, scale, inspect as a deployment target, or push images to a WS01 scanner ECS/Fargate service. In particular, `ws01-scanner-worker` is prohibited and must not be recreated. WS01 is not a production scanner deployment path. Production scanner changes must be made in the WC01 v2 DAG packages and deployed through the three-region Lambda helpers.
+
 Do not assume Docker Compose or local container orchestration is the development or deployment path.
 
 Production deploys run on AWS ECS/Fargate through the repo's deployment scripts and GitHub Actions workflows. Dockerfiles may be used to build ECS images, but do not deploy ad hoc local containers or alternate hosts unless the user explicitly requests it.

@@ -13,7 +13,6 @@ This runbook describes the lower-cost AWS shape for CertScore while preserving t
 ## Cold or on-demand services
 
 - `certscore-validation-worker`
-- `ws01-scanner-worker`
 
 These services can be scaled down only when a wake-up path exists. Full scans may be accepted while scanner capacity is cold only when:
 
@@ -49,10 +48,7 @@ OPS_REQUIRE_SCANNER_HEARTBEAT=false
 OPS_REQUIRE_VALIDATION_HEARTBEAT=false
 OPS_REQUIRE_DIRECT_DATABASE=false
 OPS_SCAN_QUEUE_STALE_MINUTES=10
-OPS_WAKE_SCANNER_ON_QUEUE=true
 AWS_REGION=us-west-1
-AWS_SCANNER_ECS_CLUSTER=certscore-validation-cluster
-AWS_SCANNER_ECS_SERVICE=ws01-scanner-worker
 OPS_AWS_DB_PROBE_ENABLED=true
 OPS_AWS_MONITOR_ECS_CLUSTER=certscore-validation-cluster
 OPS_AWS_MONITOR_ECS_SERVICE=certscore-validation-worker
@@ -78,7 +74,7 @@ The monitor checks:
 - validation worker heartbeat when direct database checks are enabled and validation heartbeat checks are not disabled
 - scanner heartbeat when direct database checks are enabled and scanner heartbeat checks are not disabled
 - queued full scans older than `OPS_SCAN_QUEUE_STALE_MINUTES` when direct database checks are enabled
-- wakes the scanner ECS service to desired count `1` when direct database checks are enabled, queued scans exist, and `OPS_WAKE_SCANNER_ON_QUEUE=true`
+- relies on the production v2 DAG Lambda scanner for queued scans; no scanner ECS wake path exists
 
 The JSON output is intentionally sectioned so the first screen answers the operational questions directly:
 
@@ -120,7 +116,7 @@ Set `alarm_actions` to SNS topic ARNs to receive notifications.
 3. Add worker wake-up automation.
 4. Set `FULL_SCAN_QUEUE_ALLOW_DEGRADED_HEARTBEAT=true`.
 5. Set `OPS_REQUIRE_SCANNER_HEARTBEAT=false` and `OPS_REQUIRE_VALIDATION_HEARTBEAT=false`.
-6. Set `OPS_WAKE_SCANNER_ON_QUEUE=true` with scanner ECS cluster/service variables.
+6. Confirm the three approved v2 DAG Lambda scanner regions are healthy.
 7. Scale workers/scheduler/ops web down one service at a time.
 8. Enable the synthetic scan canary.
 

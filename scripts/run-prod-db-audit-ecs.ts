@@ -146,7 +146,7 @@ async function main() {
   const region = getEnv("AWS_REGION", "us-west-1");
   const cluster = getRequiredEnv(
     "OPS_PROD_DB_AUDIT_ECS_CLUSTER",
-    getEnv("OPS_RUNNER_ECS_CLUSTER", getEnv("AWS_VALIDATION_ECS_CLUSTER", getEnv("AWS_SCANNER_ECS_CLUSTER")))
+    getEnv("OPS_RUNNER_ECS_CLUSTER", getEnv("AWS_VALIDATION_ECS_CLUSTER"))
   );
   const service = getRequiredEnv(
     "OPS_PROD_DB_AUDIT_ECS_SERVICE",

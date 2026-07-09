@@ -326,9 +326,6 @@ function getEcsServiceTargets() {
       : null,
     process.env.AWS_VALIDATION_ECS_CLUSTER && process.env.AWS_VALIDATION_ECS_WORKER_SERVICE
       ? `${process.env.AWS_VALIDATION_ECS_CLUSTER}/${process.env.AWS_VALIDATION_ECS_WORKER_SERVICE}`
-      : null,
-    process.env.AWS_SCANNER_ECS_CLUSTER && process.env.AWS_SCANNER_ECS_SERVICE
-      ? `${process.env.AWS_SCANNER_ECS_CLUSTER}/${process.env.AWS_SCANNER_ECS_SERVICE}`
       : null
   ].filter((target): target is string => Boolean(target));
 }
@@ -613,38 +610,6 @@ async function repairStaleRunningScans(input: {
   return { repairedCount, staleRunningCount: scans.length };
 }
 
-async function wakeScannerCapacity(input: { findings: string[]; queuedCount: number }) {
-  if (input.queuedCount <= 0 || !getBooleanEnv("OPS_WAKE_SCANNER_ON_QUEUE", false)) {
-    return;
-  }
-
-  const cluster = process.env.AWS_SCANNER_ECS_CLUSTER?.trim();
-  const service = process.env.AWS_SCANNER_ECS_SERVICE?.trim();
-  const region = process.env.AWS_REGION?.trim() || "us-west-1";
-
-  if (!cluster || !service) {
-    input.findings.push("Full scans are queued, but OPS_WAKE_SCANNER_ON_QUEUE is enabled without AWS_SCANNER_ECS_CLUSTER/AWS_SCANNER_ECS_SERVICE.");
-    return;
-  }
-
-  try {
-    await execFileAsync("aws", [
-      "ecs",
-      "update-service",
-      "--region",
-      region,
-      "--cluster",
-      cluster,
-      "--service",
-      service,
-      "--desired-count",
-      "1"
-    ]);
-  } catch (error) {
-    input.findings.push(`Failed to wake scanner ECS service ${cluster}/${service}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
 async function queueSyntheticScan(input: { baseUrl: string; domain: string }) {
   const response = await fetch(new URL("/api/full-scan", input.baseUrl), {
     body: JSON.stringify({ domain: input.domain }),
@@ -697,10 +662,6 @@ async function waitForSyntheticScan(input: { scanId: string; timeoutMinutes: num
 async function runSyntheticScanCheck(input: { baseUrl: string; domain: string; findings: string[]; section: MonitorSection; timeoutMinutes: number }) {
   try {
     const scanId = await queueSyntheticScan({ baseUrl: input.baseUrl, domain: input.domain });
-    await wakeScannerCapacity({
-      findings: input.findings,
-      queuedCount: 1
-    });
     await waitForSyntheticScan({ scanId, timeoutMinutes: input.timeoutMinutes });
   } catch (error) {
     addFinding({
@@ -941,13 +902,6 @@ async function main() {
     markSection(sections.databaseAndBacklog, "skipped", "Direct database checks are disabled.");
     markSection(sections.workerHeartbeats, "skipped", "Direct database checks are disabled.");
     markSection(sections.scannerQueueCanary, "skipped", "Direct database checks are disabled.");
-  }
-
-  if (scanBacklog) {
-    await wakeScannerCapacity({
-      findings,
-      queuedCount: scanBacklog.queued_count
-    });
   }
 
   if (syntheticScanEnabled && requireDirectDatabase) {

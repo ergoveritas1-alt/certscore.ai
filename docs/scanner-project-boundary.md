@@ -1,13 +1,12 @@
 # Scanner Project Boundary
 
-`WS01` is now the standalone scanner project and runtime home. `WC01` should be treated as the product control plane that creates scans, reads scan state, and renders product-facing results.
+Production scanning runs only through the CertScore v2 DAG Lambda runtime in `WC01`. `WS01` is retained for local comparison and historical fixtures; it is not a production deployment target.
 
-## Scanner project responsibilities
-- scanner runtime entrypoints
-- scanner crawler identity and public scanner domain
-- scheduled scan creation and scan claiming
-- scanner runtime health and heartbeat behavior
-- future cloud/runtime migration to AWS
+## Production scanner responsibilities
+- `WC01/packages/certscore-scan-core` and the v2 DAG orchestration own production evidence capture
+- the approved production targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-2`
+- production scanner changes and deployments originate in `WC01`
+- scanner ECS/Fargate services are prohibited
 
 ## Product repo responsibilities
 - user-facing product web apps
@@ -18,17 +17,14 @@
 
 ## Current contract
 - product apps persist scan requests as `scans.status = queued`
-- scanner service claims queued work from the database
-- scanner service owns execution pickup and heartbeat availability
-- `WC01` should not be treated as the source of truth for scanner runtime behavior
-- `WC01` provides `pnpm ops:check:scanner-deploy` as an operator check for the
-  deployed scanner/worker ECS target. Operators must provide the WS01-owned ECS
-  cluster, service, ECR repository, and log group through environment variables.
+- the WC01 v2 DAG Lambda path executes production scans and returns retained artifacts
+- Lambda phase, result handoff, and artifact manifests are the production runtime source of truth
+- no WS01 ECS service should exist or be used as a fallback
 
 ## Current repo boundary
-- `WC01` no longer carries `packages/scan-core`; that package now lives in the sibling `WS01` workspace
-- scanner-side extraction, enrichment, and runtime changes should originate in `WS01`
-- `WC01` should limit scan-specific logic to normalization, concern policy, unified-finding assembly, and product-facing presentation
+- production scanner observation and v2 DAG orchestration live in WC01's CertScore v2 packages
+- WS01 may be consulted for retained fixtures and historical comparisons only
+- normalized concern, concern policy, unified-finding assembly, and product-facing presentation remain WC01 responsibilities
 
 ## Follow-up tickets
 
@@ -60,32 +56,5 @@ Acceptance notes:
 - should preserve reviewer value for genuine discovery failures
 - should avoid surfacing or prioritizing this concern when retained evidence already shows the expected legal pages are reachable
 
-This document records the boundary now that the standalone scanner repo exists.
-
-## Scanner deploy health check
-
-Run this after a WS01 scanner deploy, or wire it into the WS01 scanner deploy
-workflow:
-
-```bash
-AWS_SCANNER_ECS_CLUSTER=<cluster> \
-AWS_SCANNER_ECS_SERVICE=<service> \
-AWS_SCANNER_CONTAINER_NAME=<container> \
-AWS_SCANNER_ECR_REPOSITORY=<ecr-repository> \
-AWS_SCANNER_LOG_GROUP=<cloudwatch-log-group> \
-EXPECTED_GIT_SHA=<main-sha> \
-pnpm ops:check:scanner-deploy
-```
-
-The check fails unless:
-
-- the ECS service has a running task
-- the running task image digest matches the ECR image tagged with `EXPECTED_GIT_SHA`
-- recent CloudWatch logs include startup or heartbeat evidence
-
-This does not make `WC01` the scanner deploy owner; it gives operators a shared
-contract for detecting scanner deploy drift.
-
-The manual `ADA Live Verification` workflow can run this same health check
-before queueing the ADA scan. Keep `run_scanner_health` enabled for production
+This document records the Lambda-only production scanner boundary.
 verification unless the WS01 scanner target variables are still being gathered.
