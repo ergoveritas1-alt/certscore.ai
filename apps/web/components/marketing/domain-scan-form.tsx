@@ -103,6 +103,7 @@ const GENERIC_SCAN_ERROR_MESSAGES: Record<ScanMode, string> = {
   full: "The full scan could not be started. Please try again.",
   preview: "The preview scan could not be started. Please try again."
 };
+const RECENT_SCAN_REUSED_MESSAGE = "Showing last scan for this site. Choose scan option to re-fresh with new scan.";
 
 const FULL_SCAN_ERROR_MESSAGES: Record<string, string> = {
   active_scan_exists: "A scan is already queued or running for this site. Open scan history or try again shortly.",
@@ -323,6 +324,7 @@ export function DomainScanForm({
   const router = useRouter();
   const [domain, setDomain] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"error" | "info">("error");
   const [localExtensionStatus, setLocalExtensionStatus] = useState<Bx01Status | null>(null);
   const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -402,6 +404,7 @@ export function DomainScanForm({
 
   function resetValidationState() {
     setErrorMessage(null);
+    setMessageTone("error");
     if (!isSubmittingRef.current) {
       setLocalExtensionStatus(null);
     }
@@ -493,6 +496,7 @@ export function DomainScanForm({
 
     isSubmittingRef.current = true;
     setErrorMessage(null);
+    setMessageTone("error");
 
     const submittedDomain = rawDomain.trim();
 
@@ -590,7 +594,8 @@ export function DomainScanForm({
         router.refresh();
         isSubmittingRef.current = false;
         setIsSubmitting(false);
-        setErrorMessage(payload.reusedExistingScan ? "Showing the latest completed scan for this site." : null);
+        setMessageTone(payload.reusedExistingScan ? "info" : "error");
+        setErrorMessage(payload.reusedExistingScan ? RECENT_SCAN_REUSED_MESSAGE : null);
         return;
       }
 
@@ -776,7 +781,7 @@ export function DomainScanForm({
           </div>
         </div>
       ) : null}
-      {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
+      {errorMessage ? <p className={messageTone === "info" ? "text-sm text-slate-500" : "text-sm text-red-600"}>{errorMessage}</p> : null}
       {mode === "full" && scanFrom === "local_extension" && localExtensionStatus ? (
         <div className="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-slate-700">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">

@@ -33,7 +33,7 @@ type ScanDetailPageProps = {
 };
 
 const RECENT_SCAN_REUSED_MESSAGE =
-  "CertScore found a completed scan for this website from the past 24 hours, so this request opened the existing report instead of starting a duplicate scan.";
+  "Showing last scan for this site. Choose scan option to re-fresh with new scan.";
 
 function canViewCapturedImage(input: { isPlatformAdmin: boolean; role: string | null | undefined }) {
   return input.isPlatformAdmin || input.role === "admin" || input.role === "advanced";
