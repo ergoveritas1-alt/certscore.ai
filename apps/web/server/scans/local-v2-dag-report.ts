@@ -2189,12 +2189,6 @@ function summarizeFirstLayerConsentChoices(
     null;
   const defaultToggleEvidence = summarizeConsentDefaultToggleEvidence(observation);
   const geometryChoices = summarizeGeometryFirstLayerConsentChoices(geometryEvidence);
-  if (geometryChoices?.actionableControlInventoryRetained === true) {
-    return {
-      ...geometryChoices,
-      ...defaultToggleEvidence
-    };
-  }
   const controls = (observation?.controls ?? []).filter((control) => control.visible !== false);
   const visibleChoiceLabels = uniqueStrings([
     ...(observation?.visibleChoiceLabels ?? []),
@@ -2211,10 +2205,15 @@ function summarizeFirstLayerConsentChoices(
     .map((control) => control.label));
 
   if (!observation) {
-    return null;
+    return geometryChoices
+      ? {
+          ...geometryChoices,
+          ...defaultToggleEvidence
+        }
+      : null;
   }
 
-  return {
+  const canonicalChoices = {
     acceptControlObserved: observation.acceptControlObserved === true || acceptLabels.length > 0,
     acceptLabels,
     actionableControlInventoryRetained: controls.length > 0 || visibleChoiceLabels.length > 0,
@@ -2239,6 +2238,38 @@ function summarizeFirstLayerConsentChoices(
     rejectLabels,
     textSnippet: boundedTextExcerpt(observation.textExcerpt),
     visibleChoiceLabels
+  };
+  if (geometryChoices?.actionableControlInventoryRetained !== true) {
+    return canonicalChoices;
+  }
+
+  const mergedControls = [...canonicalChoices.controls, ...geometryChoices.controls]
+    .filter((control, index, rows) => rows.findIndex((candidate) =>
+      candidate.actionType === control.actionType &&
+      candidate.label.trim().toLowerCase() === control.label.trim().toLowerCase()
+    ) === index)
+    .slice(0, 12);
+  return {
+    ...geometryChoices,
+    ...canonicalChoices,
+    acceptControlObserved: canonicalChoices.acceptControlObserved || geometryChoices.acceptControlObserved,
+    acceptLabels: uniqueStrings([...canonicalChoices.acceptLabels, ...geometryChoices.acceptLabels]),
+    actionableControlInventoryRetained:
+      canonicalChoices.actionableControlInventoryRetained || geometryChoices.actionableControlInventoryRetained,
+    controls: mergedControls,
+    layerInspected:
+      canonicalChoices.layerInspected === "first_layer" || geometryChoices.layerInspected === "first_layer"
+        ? "first_layer"
+        : canonicalChoices.layerInspected,
+    managePreferencesControlObserved:
+      canonicalChoices.managePreferencesControlObserved || geometryChoices.managePreferencesControlObserved,
+    preferenceLabels: uniqueStrings([...canonicalChoices.preferenceLabels, ...geometryChoices.preferenceLabels]),
+    rejectControlObserved: canonicalChoices.rejectControlObserved || geometryChoices.rejectControlObserved,
+    rejectLabels: uniqueStrings([...canonicalChoices.rejectLabels, ...geometryChoices.rejectLabels]),
+    visibleChoiceLabels: uniqueStrings([
+      ...canonicalChoices.visibleChoiceLabels,
+      ...geometryChoices.visibleChoiceLabels
+    ]).slice(0, 12)
   };
 }
 

@@ -2220,7 +2220,11 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
     current,
     gate15,
     "15s",
-    partialAt15 || progressAt15 ? "partial_or_progressing_continue_20s" : "strong_cmp_no_progress_continue_18s",
+    progressAt15
+      ? "progress_since_10s_continue_18s"
+      : partialAt15
+        ? "stagnant_partial_continue_18s_safety_floor"
+        : "strong_cmp_no_progress_continue_18s",
     progressAt15,
   );
   previous = gate15;
@@ -2234,8 +2238,19 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
     return recordConsentGateDecision(input.timingBreakdown, current, gate18, "18s", "hard_cap_exit", progressAt18);
   }
   const partialAt18 = hasPartialConsentGateEvidence(current);
-  if (!partialAt18 && !progressAt18) {
+  const progressSinceTenSecondSnapshot = Boolean(progressAt15 || progressAt18);
+  if (!partialAt18 && !progressSinceTenSecondSnapshot) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate18, "18s", "no_progress_exit", progressAt18);
+  }
+  if (!progressSinceTenSecondSnapshot) {
+    return recordConsentGateDecision(
+      input.timingBreakdown,
+      current,
+      gate18,
+      "18s",
+      "stagnant_partial_exit",
+      progressAt18,
+    );
   }
   current = recordConsentGateDecision(
     input.timingBreakdown,

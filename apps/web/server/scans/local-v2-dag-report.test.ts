@@ -2268,10 +2268,29 @@ test("materializeLocalV2DagScanDetail prefers pre-consent geometry proof screens
       consentUiObservations: [
         {
           observationId: "consent_ui_pre_consent",
-          likelyPresent: false,
-          basis: ["bounded_capture_timeout_or_failure"],
+          likelyPresent: true,
+          layerInspected: "first_layer",
+          acceptControlObserved: true,
+          rejectControlObserved: false,
+          managePreferencesControlObserved: false,
+          visibleChoiceLabels: ["Accept All"],
+          controls: [
+            {
+              actionType: "accept_all",
+              classifierReasonCodes: ["matched_accept", "match_strength_direct", "context_satisfied"],
+              label: "Accept All",
+              matchedLocale: "en",
+              matchedTerm: "accept all",
+              matchStrength: "direct",
+              role: "button",
+              selectorHint: "#onetrust-accept-btn-handler",
+              tagName: "button",
+              visible: true
+            }
+          ],
+          basis: ["control:accept_all:Accept All"],
           inventoryDiagnostics: {
-            rejectionReasons: ["timing_expired_before_controls_surfaced"]
+            retainedControlCount: 1
           }
         }
       ],
@@ -2334,7 +2353,7 @@ test("materializeLocalV2DagScanDetail prefers pre-consent geometry proof screens
         {
           actionType: "accept_all",
           boundingBox: { x: 691, y: 631, width: 256, height: 44, top: 631, right: 947, bottom: 675, left: 691 },
-          decisionStatus: "confirmed_visible",
+          decisionStatus: "clipped",
           enabled: true,
           intersectsViewport: true,
           label: "Accept all the collection of your data",
@@ -2426,6 +2445,13 @@ test("materializeLocalV2DagScanDetail prefers pre-consent geometry proof screens
     assert.equal(firstLayerChoices?.rejectControlObserved, true);
     assert.equal(firstLayerChoices?.managePreferencesControlObserved, true);
     assert.deepEqual(firstLayerChoices?.preferenceLabels, ["Set up the collection of your data"]);
+    assert.equal(
+      (firstLayerChoices?.controls as Array<Record<string, unknown>> | undefined)?.some((control) =>
+        control.actionType === "accept_all" && control.label === "Accept All"
+      ),
+      true,
+      "canonical structured accept evidence must survive a clipped geometry diagnostic",
+    );
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

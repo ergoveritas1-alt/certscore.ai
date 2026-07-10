@@ -150,6 +150,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "use necessary cookies only", "necessary_only"),
     equivalent("reject", "necessary cookies only", "necessary_only"),
     equivalent("reject", "essential cookies only", "necessary_only"),
+    contextual("reject", "required only", { requiresConsentContext: true, variant: "necessary_only" }),
     equivalent("reject", "only necessary", "necessary_only"),
     equivalent("reject", "only essential", "necessary_only"),
     equivalent("reject", "only technically required", "necessary_only"),

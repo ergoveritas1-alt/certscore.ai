@@ -51,6 +51,7 @@ export type StaticFixturePage =
   | "consent-preference-center-reject-success"
   | "consent-preference-center-toggle-save"
   | "consent-reject-subscribe"
+  | "consent-required-only"
   | "consent-simple-accept-reject"
   | "consent-tracking-persists-after-reject"
   | "ga-collection"
@@ -198,6 +199,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-preference-center-reject-success": "consent-preference-center-reject-success",
   "consent-preference-center-toggle-save": "consent-preference-center-toggle-save",
   "consent-reject-subscribe": "consent-reject-subscribe",
+  "consent-required-only": "consent-required-only",
   "consent-simple-accept-reject": "consent-simple",
   "consent-tracking-persists-after-reject": "consent-persists",
   "ga-collection": "ga-page",
@@ -1015,6 +1017,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     preferenceSuccess: caseName === "consent-preference-center-reject-success",
     preferenceToggleSave: caseName === "consent-preference-center-toggle-save",
     rejectSubscribe: caseName === "consent-reject-subscribe",
+    requiredOnly: caseName === "consent-required-only",
     cmpCookie: caseName === "consent-cmp-cookie-persists",
     denyNonEssential: caseName === "consent-deny-non-essential",
     analyticsCategoryControls: caseName === "consent-analytics-category-controls",
@@ -1365,7 +1368,9 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
   const preferenceOnly = options.preferenceAmbiguous || options.preferenceConfirmSave || options.preferenceSuccess || options.preferenceToggleSave;
   const rejectLabel = options.rejectSubscribe
     ? "Reject all and subscribe"
-    : options.denyNonEssential ? "Deny Non-Essential" : "Reject All";
+    : options.requiredOnly
+      ? "Required Only"
+      : options.denyNonEssential ? "Deny Non-Essential" : "Reject All";
   const rejectButton = options.noReject || options.ambiguous || options.privacyChoiceOnly || options.acceptEssential || preferenceOnly
     ? ""
     : `<button id="reject-all" type="button">${rejectLabel}</button>`;

@@ -523,6 +523,31 @@ test("pre-consent runtime scanner retains first-layer accept and reject controls
   }
 });
 
+test("pre-consent runtime scanner treats contextual Required Only as necessary-only reject evidence", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-required-only-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-required-only"),
+      path.join(tempRoot, "consent-required-only"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+    const requiredOnlyControl = observation?.controls.find((control) => control.label === "Required Only");
+
+    assert.equal(observation?.likelyPresent, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(requiredOnlyControl?.actionType, "reject_all");
+    assert.equal(requiredOnlyControl?.classifierVariant, "necessary_only");
+    assert.equal(requiredOnlyControl?.matchedTerm, "required only");
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner does not count subscription-only reject labels as first-layer reject proof", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-reject-subscribe-"));
@@ -1202,9 +1227,9 @@ test("pre-consent runtime scanner recaptures late settings controls from high-co
       "high-confidence CMP recapture should use the navigation-relative adaptive gate path",
     );
     assert.equal(
-      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_20s:no_recent_progress_exit"),
+      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_18s:stagnant_partial_exit"),
       true,
-      "accept/settings-only evidence should stabilize through the 20-second gate without spending the 25-second hard cap",
+      "accept/settings-only evidence with no progress after 10 seconds should exit at the 18-second safety floor",
     );
     assert.equal(
       typeof cmpRecaptureTiming?.durationMs === "number" && cmpRecaptureTiming.durationMs < 20_000,

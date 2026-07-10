@@ -96,6 +96,18 @@ test("classifies observed English options labels", () => {
     contextText: "We use cookies and partners for advertising purposes.",
   }).intent, "options");
   assert.equal(classifyConsentControlLabel({ label: "Manage cookies" }).intent, "options");
+  const requiredOnly = classifyConsentControlLabel({
+    label: "Required Only",
+    contextText: "We use cookies and similar technologies. Choose your cookie consent preferences.",
+  });
+  assert.equal(requiredOnly.intent, "reject");
+  assert.equal(requiredOnly.variant, "necessary_only");
+  assert.equal(requiredOnly.matchedTerm, "required only");
+  assert.equal(
+    classifyConsentControlLabel({ label: "Required Only" }).intent,
+    "unknown",
+    "the compact label must retain consent context before receiving necessary-only credit",
+  );
   assert.equal(classifyConsentControlLabel({
     label: "Personalise",
     contextText: "Data privacy at Dailymotion. We use cookies and partners for advertising measurement.",
