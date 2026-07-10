@@ -53,7 +53,9 @@ const DB_WORKFLOW = "prod-db-migrate.yml";
 async function main() {
   const startedAt = Date.now();
   const args = parseArgs(process.argv.slice(2));
-  const sha = args.ref ? await git(["rev-parse", args.ref]) : await git(["rev-parse", "HEAD"]);
+  const sourceRef = args.ref ?? await git(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const sha = await git(["rev-parse", sourceRef]);
+  const workflowRef = await resolveWorkflowDispatchRef(sourceRef, sha);
   const shortSha = sha.slice(0, 8);
   const changed = await classifyChanges(args.baseRef);
 
@@ -93,27 +95,30 @@ async function main() {
 
   const lanes: Array<Promise<LaneResult>> = [];
   if (args.mode === "all") {
-    lanes.push(deployWeb({ ref: sha, force: true }));
+    lanes.push(deployWeb({ ref: sha, workflowRef, force: true }));
     lanes.push(deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase }));
     lanes.push(deployValidation({
       ref: sha,
+      workflowRef,
       skip: !args.forceValidation && !changed.validation,
       pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase
     }));
     lanes.push(deployDb({
       ref: sha,
+      workflowRef,
       skip: !args.forceDb && !changed.db
     }));
   } else if (args.mode === "web") {
-    lanes.push(deployWeb({ ref: sha, force: args.forceWeb || true }));
+    lanes.push(deployWeb({ ref: sha, workflowRef, force: args.forceWeb || true }));
   } else if (args.mode === "validation") {
     lanes.push(deployValidation({
       ref: sha,
+      workflowRef,
       skip: false,
       pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase
     }));
   } else if (args.mode === "db") {
-    lanes.push(deployDb({ ref: sha, skip: false }));
+    lanes.push(deployDb({ ref: sha, workflowRef, skip: false }));
   } else {
     lanes.push(deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase }));
   }
@@ -345,25 +350,25 @@ function isValidationRuntimeBaseInput(file: string) {
     file === "pnpm-workspace.yaml";
 }
 
-async function deployWeb(input: { force: boolean; ref: string }): Promise<LaneResult> {
+async function deployWeb(input: { force: boolean; ref: string; workflowRef: string }): Promise<LaneResult> {
   return timedLane("web ECS deploy", async () => {
     await run([
       "node", "--import", "tsx",
       "scripts/assert-forward-web-deploy.ts",
       "--target", input.ref
     ]);
-    const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.ref);
+    const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.workflowRef, input.ref);
     const workflowRun = await waitForRun(runId);
     return { workflow: WEB_WORKFLOW, url: workflowRun.url };
   });
 }
 
-async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean }): Promise<LaneResult> {
+async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string }): Promise<LaneResult> {
   if (input.skip) {
     return skippedLane("validation deploy", "no validation deploy inputs changed");
   }
   return timedLane("validation AWS deploy", async () => {
-    const runId = await ensureWorkflowRun(VALIDATION_WORKFLOW, input.ref, [
+    const runId = await ensureWorkflowRun(VALIDATION_WORKFLOW, input.workflowRef, input.ref, [
       "-f", "use_runtime_base=true",
       "-f", `push_runtime_base=${input.pushRuntimeBase ? "true" : "false"}`,
       "-f", "runtime_base_tag=validation-worker-runtime-base"
@@ -377,12 +382,12 @@ async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; 
   });
 }
 
-async function deployDb(input: { ref: string; skip: boolean }): Promise<LaneResult> {
+async function deployDb(input: { ref: string; skip: boolean; workflowRef: string }): Promise<LaneResult> {
   if (input.skip) {
     return skippedLane("production DB migrations", "no migration inputs changed");
   }
   return timedLane("production DB migrations", async () => {
-    const runId = await ensureWorkflowRun(DB_WORKFLOW, input.ref, [], true);
+    const runId = await ensureWorkflowRun(DB_WORKFLOW, input.workflowRef, input.ref, [], true);
     const workflowRun = await waitForRun(runId);
     return { workflow: DB_WORKFLOW, url: workflowRun.url };
   });
@@ -459,26 +464,32 @@ async function verifyScanners(expectedSha: string) {
   }
 }
 
-async function ensureWorkflowRun(workflow: string, ref: string, extraArgs: string[] = [], forceDispatch = false) {
+async function ensureWorkflowRun(
+  workflow: string,
+  workflowRef: string,
+  targetSha: string,
+  extraArgs: string[] = [],
+  forceDispatch = false
+) {
   if (!forceDispatch) {
-    const existing = await latestWorkflowRunId(workflow, ref);
+    const existing = await latestWorkflowRunId(workflow, targetSha);
     if (existing) {
-      console.log(`Using existing ${workflow} run ${existing} for ${ref.slice(0, 8)}`);
+      console.log(`Using existing ${workflow} run ${existing} for ${targetSha.slice(0, 8)}`);
       return existing;
     }
   }
 
-  const before = await latestWorkflowRunId(workflow, ref);
-  await run(["gh", "workflow", "run", workflow, "--ref", ref, ...extraArgs]);
+  const before = await latestWorkflowRunId(workflow, targetSha);
+  await run(["gh", "workflow", "run", workflow, "--ref", workflowRef, ...extraArgs]);
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
     await sleep(3000);
-    const latest = await latestWorkflowRunId(workflow, ref);
+    const latest = await latestWorkflowRunId(workflow, targetSha);
     if (latest && latest !== before) {
       return latest;
     }
   }
-  throw new Error(`Timed out waiting for ${workflow} run to appear for ${ref}`);
+  throw new Error(`Timed out waiting for ${workflow} run to appear for ${targetSha}`);
 }
 
 async function latestWorkflowRunId(workflow: string, ref: string) {
@@ -617,6 +628,30 @@ function addLines(target: Set<string>, text: string) {
 async function git(args: string[]) {
   const result = await run(["git", ...args], { quiet: true });
   return result.stdout.trim();
+}
+
+async function resolveWorkflowDispatchRef(sourceRef: string, targetSha: string) {
+  const normalizedRef = sourceRef.replace(/^refs\/heads\//, "").replace(/^origin\//, "");
+  if (!/^[0-9a-f]{40}$/i.test(normalizedRef)) {
+    return normalizedRef;
+  }
+
+  const remoteRefs = await git([
+    "for-each-ref",
+    "--format=%(refname:short)",
+    "--points-at",
+    targetSha,
+    "refs/remotes/origin"
+  ]);
+  const remoteBranch = remoteRefs
+    .split("\n")
+    .map((ref) => ref.trim())
+    .filter((ref) => ref && ref !== "origin/HEAD")
+    .map((ref) => ref.replace(/^origin\//, ""))[0];
+  if (!remoteBranch) {
+    throw new Error(`Cannot dispatch a GitHub workflow for ${targetSha}: no pushed branch points at that commit.`);
+  }
+  return remoteBranch;
 }
 
 async function gitRefExists(ref: string) {
