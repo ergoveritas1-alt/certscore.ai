@@ -146,7 +146,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   }),
   locale("fi", {
     privacyPolicyLabels: ["tietosuojaseloste", "tietosuojakäytäntö"], privacyPolicyPathSlugs: ["tietosuojaseloste"], cookiePolicyLabels: ["evästekäytäntö"], cookiePolicyPathSlugs: ["evasteet"], cookieSettingsLabels: ["evästeasetukset"], termsLabels: ["käyttöehdot"], termsPathSlugs: ["kayttoehdot"], contextHints: ["tietosuoja", "henkilötiedot", "eväste", "suostumus"], tldHints: [".fi"],
-    consentControls: { accept: ["hyväksy kaikki", "salli kaikki"], reject: ["hylkää kaikki", "estä kaikki"], options: ["evästeasetukset", "hallitse asetuksia"], necessaryOnly: ["vain välttämättömät", "vain välttämättömät evästeet"] },
+    consentControls: { accept: ["hyväksy kaikki", "salli kaikki"], reject: ["hylkää kaikki", "estä kaikki"], options: ["evästeasetukset", "hallitse asetuksia", "muokkaa evästeasetuksia"], necessaryOnly: ["vain välttämättömät", "vain välttämättömät evästeet"] },
   }),
   locale("bg", {
     privacyPolicyLabels: ["политика за поверителност"], privacyPolicyPathSlugs: ["politika-za-poveritelnost"], cookiePolicyLabels: ["политика за бисквитки"], cookiePolicyPathSlugs: ["politika-za-biskvitki"], cookieSettingsLabels: ["настройки за бисквитки"], termsLabels: ["условия за ползване"], termsPathSlugs: ["usloviya-za-polzvane"], contextHints: ["поверителност", "лични данни", "бисквитки", "съгласие"], tldHints: [".bg"],

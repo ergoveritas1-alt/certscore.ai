@@ -30,7 +30,11 @@ async function main() {
     throw new Error("Unsupported multilingual live-calibration manifest version.");
   }
   const rows = await Promise.all(manifest.targets.map((target) => summarizeTarget(target, args.artifactRoot)));
-  const failures = rows.filter((row) => row.status === "failed" || row.checks.some((check) => check.status === "missed"));
+  const failures = rows.filter((row) =>
+    row.status === "failed" ||
+    row.status === "missing_artifact" ||
+    row.checks.some((check) => check.status === "missed")
+  );
   const report = {
     reportVersion: "certscore.multilingual_live_calibration_report.1",
     generatedAt: new Date().toISOString(),

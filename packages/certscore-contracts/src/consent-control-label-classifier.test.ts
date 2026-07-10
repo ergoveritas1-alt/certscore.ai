@@ -155,6 +155,23 @@ test("classifies observed German DHL consent settings control", () => {
   assert.equal(classification.matchedLocale, "de");
 });
 
+test("classifies observed Finnish YLE consent controls", () => {
+  const necessaryOnly = classifyConsentControlLabel({
+    label: "Vain välttämättömät",
+    localeHints: ["fi"],
+  });
+  assert.equal(necessaryOnly.intent, "reject");
+  assert.equal(necessaryOnly.variant, "necessary_only");
+  assert.equal(necessaryOnly.matchedLocale, "fi");
+
+  const options = classifyConsentControlLabel({
+    label: "Muokkaa evästeasetuksia",
+    localeHints: ["fi"],
+  });
+  assert.equal(options.intent, "options");
+  assert.equal(options.matchedLocale, "fi");
+});
+
 test("classifies canonical accept, reject, options, and necessary-only controls across all 40 locales", () => {
   assert.equal(SUPPORTED_PRIVACY_EVIDENCE_LOCALES.length, 40);
   assert.deepEqual(

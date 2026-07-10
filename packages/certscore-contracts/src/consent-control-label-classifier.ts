@@ -633,6 +633,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
         requiresConsentContext: true,
       })),
     ]),
+  { locale: "fi", phrase: "vain välttämättömät", intent: "reject", strength: "equivalent", variant: "necessary_only" },
+  { locale: "fi", phrase: "muokkaa evästeasetuksia", intent: "options", strength: "direct" },
 ];
 
 export const consentControlTerms = CONSENT_CONTROL_PHRASE_REGISTRY;
