@@ -97,6 +97,7 @@ test("classifies observed English options labels", () => {
     contextText: "We use cookies and partners for advertising purposes.",
   }).intent, "options");
   assert.equal(classifyConsentControlLabel({ label: "Manage cookies" }).intent, "options");
+  assert.equal(classifyConsentControlLabel({ label: "Allow Selection" }).intent, "options");
   const requiredOnly = classifyConsentControlLabel({
     label: "Required Only",
     contextText: "We use cookies and similar technologies. Choose your cookie consent preferences.",

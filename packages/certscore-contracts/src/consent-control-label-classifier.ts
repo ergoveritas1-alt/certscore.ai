@@ -185,6 +185,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "manage cookies"),
     ...direct("options", "manage options"),
     ...direct("options", "manage choices"),
+    ...direct("options", "allow selection"),
     ...direct("options", "set preferences"),
     contextual("options", "set up the collection", { requiresConsentContext: true }),
     ...direct("options", "cookie settings"),

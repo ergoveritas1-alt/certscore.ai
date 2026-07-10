@@ -37,7 +37,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
     cookiePolicyLabels: ["cookie policy", "cookie notice"], cookiePolicyPathSlugs: ["cookie-policy", "cookie-notice"],
     cookieSettingsLabels: ["cookie settings", "cookie preferences"], termsLabels: ["terms of service", "terms and conditions"], termsPathSlugs: ["terms", "terms-of-service"],
     contextHints: ["privacy", "personal data", "cookies", "consent"], tldHints: [],
-    consentControls: { accept: ["accept all", "allow all"], reject: ["reject all", "decline all"], options: ["cookie settings", "manage preferences"], necessaryOnly: ["necessary only", "required only"] },
+    consentControls: { accept: ["accept all", "allow all"], reject: ["reject all", "decline all"], options: ["cookie settings", "manage preferences", "allow selection"], necessaryOnly: ["necessary only", "required only"] },
   }),
   locale("es", {
     privacyPolicyLabels: ["política de privacidad", "aviso de privacidad"], privacyPolicyPathSlugs: ["politica-de-privacidad", "privacidad"],
