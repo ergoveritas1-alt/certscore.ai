@@ -15,6 +15,8 @@ type Target = {
     accept: Expectation;
     reject: Expectation;
     options: Expectation;
+    privacyChoices?: Expectation;
+    privacyOptOut?: Expectation;
   };
 };
 type Manifest = { version: "certscore.multilingual_live_calibration.1"; targets: Target[] };
@@ -63,6 +65,8 @@ async function summarizeTarget(target: Target, artifactRoot: string) {
       accept: controls.some((control) => control.actionType === "accept_all" && control.matchedLocale === expectedControlLocale),
       reject: controls.some((control) => control.actionType === "reject_all" && control.matchedLocale === expectedControlLocale),
       options: controls.some((control) => control.actionType === "manage_preferences" && control.matchedLocale === expectedControlLocale),
+      privacyChoices: bundle.policySurfaceObservations.some((surface) => surface.surfaceType === "your_privacy_choices" && surface.status === "fetched"),
+      privacyOptOut: controls.some((control) => control.actionType === "do_not_sell_share" && control.matchedLocale === expectedControlLocale),
     };
     return {
       key: target.key, locale: target.locale, url: target.url, artifactDir, status: "evaluated" as const,
