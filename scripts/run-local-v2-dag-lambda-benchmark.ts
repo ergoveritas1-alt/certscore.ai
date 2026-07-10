@@ -258,7 +258,12 @@ async function waitForArtifact(input: { mode: Mode; scanId: string }) {
       if (row.status === "failed") {
         throw new Error(`Scan ${input.scanId} failed: ${row.error_message ?? "unknown error"}`);
       }
-      if (outDir && await exists(path.join(outDir, "CanonicalEvidenceBundle.json"))) {
+      const requiredArtifacts = input.mode === "lambda"
+        ? ["CanonicalEvidenceBundle.json", "LocalV2DagLambdaManifest.json", "V2RuntimeResourceTelemetry.json"]
+        : ["CanonicalEvidenceBundle.json"];
+      if (outDir && (await Promise.all(
+        requiredArtifacts.map((fileName) => exists(path.join(outDir, fileName))),
+      )).every(Boolean)) {
         return { outDir, row };
       }
     }
