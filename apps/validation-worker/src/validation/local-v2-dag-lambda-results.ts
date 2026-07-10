@@ -21,6 +21,8 @@ const PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 const RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
+const RESULT_BATCH_CONCURRENCY = 3;
+const RESULT_VISIBILITY_TIMEOUT_SECONDS = 60;
 
 type LambdaResultStatus = "completed" | "failed";
 type LambdaTargetEnvironment = "local" | "production";
@@ -745,15 +747,11 @@ async function pollOnce(input: {
     ] satisfies MessageSystemAttributeName[],
     MaxNumberOfMessages: 10,
     QueueUrl: input.queueUrl,
-    VisibilityTimeout: 5,
+    VisibilityTimeout: RESULT_VISIBILITY_TIMEOUT_SECONDS,
     WaitTimeSeconds: 10
   }));
   const messages = response.Messages ?? [];
-  let deleted = 0;
-  let handled = 0;
-  let failed = 0;
-
-  for (const message of messages) {
+  const outcomes = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
     const rawMessage = messageBody(message);
     const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
     if (manualSmokeScanId) {
@@ -761,13 +759,12 @@ async function pollOnce(input: {
         QueueUrl: input.queueUrl,
         ReceiptHandle: receiptHandle(message)
       }));
-      deleted += 1;
       console.warn("[validation-worker] ignored manual v2 DAG Lambda smoke result", {
         messageId: message.MessageId ?? null,
         queueRegion: input.queueRegion,
         scanId: manualSmokeScanId
       });
-      continue;
+      return { deleted: 1, failed: 0, handled: 0 };
     }
     try {
       const parsed = parseLambdaResultMessage(rawMessage, input.targetEnvironment);
@@ -784,8 +781,7 @@ async function pollOnce(input: {
         QueueUrl: input.queueUrl,
         ReceiptHandle: receiptHandle(message)
       }));
-      deleted += 1;
-      handled += 1;
+      return { deleted: 1, failed: 0, handled: 1 };
     } catch (error) {
       const resultTargetEnvironment = getLambdaResultTargetEnvironment(rawMessage);
       if (resultTargetEnvironment && resultTargetEnvironment !== input.targetEnvironment) {
@@ -800,15 +796,23 @@ async function pollOnce(input: {
           queueRegion: input.queueRegion,
           resultTargetEnvironment
         });
-        continue;
+        return { deleted: 0, failed: 0, handled: 0 };
       }
-      failed += 1;
       console.error("[validation-worker] v2 DAG Lambda result message rejected", {
         error: error instanceof Error ? error.message : String(error),
         messageId: message.MessageId ?? null
       });
+      return { deleted: 0, failed: 1, handled: 0 };
     }
-  }
+  });
+  const { deleted, failed, handled } = outcomes.reduce(
+    (total, outcome) => ({
+      deleted: total.deleted + outcome.deleted,
+      failed: total.failed + outcome.failed,
+      handled: total.handled + outcome.handled
+    }),
+    { deleted: 0, failed: 0, handled: 0 }
+  );
 
   if (messages.length > 0) {
     console.info("[validation-worker] v2 DAG Lambda result poll complete", {
@@ -820,6 +824,27 @@ async function pollOnce(input: {
   }
 
   return { deleted, failed, handled, received: messages.length };
+}
+
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  run: (value: T) => Promise<R>
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const value = values[index];
+      if (value !== undefined) {
+        results[index] = await run(value);
+      }
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResultPollerOptions) {

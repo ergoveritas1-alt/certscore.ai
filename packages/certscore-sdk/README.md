@@ -117,7 +117,7 @@ try {
   const pulse = await client.scan("https://example.com", {
     detail: "standard",
     maxWaitMs: 300_000,
-    pollIntervalMs: 5_000,
+    // Omit for adaptive 1s → 2s → 5s polling; set explicitly for a fixed interval.
     onStatusUpdate(status) {
       console.log("Pulse status:", status.status, status.phase);
     }

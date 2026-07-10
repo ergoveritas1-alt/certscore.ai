@@ -100,6 +100,24 @@ Run a scan:
 pnpm v2:scan --url https://example.com --profile tiny --out ./artifacts/example
 ```
 
+### Lambda memory canary
+
+Lambda scan artifacts retain bounded container/RSS samples in `V2RuntimeResourceTelemetry.json`; the Lambda manifest also identifies the critical module and observed memory peak. Keep production memory unchanged until paired 3008 MB and 4096 MB cohorts retain evidence parity.
+
+Run the same Lambda cohort after configuring each dev/canary memory variant, using distinct output files and variant labels:
+
+```bash
+pnpm v2:local-dag-lambda-benchmark -- --mode lambda-only --profile full --lambda-concurrency 10 --submit-concurrency 5 --scan-from eu_de --expected-memory-mb 3008 --variant memory-3008 --out artifacts/memory-3008.json
+pnpm v2:local-dag-lambda-benchmark -- --mode lambda-only --profile full --lambda-concurrency 10 --submit-concurrency 5 --scan-from eu_de --expected-memory-mb 4096 --variant memory-4096 --out artifacts/memory-4096.json
+pnpm v2:lambda-memory-canary-compare -- --baseline artifacts/memory-3008.json --candidate artifacts/memory-4096.json --out artifacts/memory-comparison.json
+```
+
+The variant name is only a cohort label. Change and verify the selected Lambda function's real memory configuration between cohorts; `--expected-memory-mb` fails rows whose retained runtime diagnostics do not match. Use one region for the paired canary, restore its prior memory after capture unless the evidence review approves promotion, and do not change all production regions from a label alone.
+
+The benchmark runner keeps at most ten Lambda scans active, limits concurrent web submissions to five, and uses one result-queue pump with three-message receives and a 60-second visibility lease. This prevents 50-site cohorts from creating one competing queue poller per scan.
+
+The comparison is only a screening gate. Review screenshot readability, consent-control identity, policy URLs/topics, and retained evidence before promoting a memory change.
+
 ### Regulatory gold corpus
 
 The regulatory gold corpus refresh is documented in `docs/certscore-v2/regulatory-gold-corpus.md`. It is an internal v2 diagnostic workflow for bounded live-scan indexing, promoted examples, deterministic fixtures, and regression gates. It remains artifact-only and does not change production report behavior.

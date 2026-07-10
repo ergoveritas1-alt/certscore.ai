@@ -1,5 +1,5 @@
 import { CertScoreApiError, InvalidUrlError, CertScoreScanFailedError, ThrottledError } from "./errors.js";
-import { parseRetryAfter, retryDelayMs, sleep, SUCCESS_STATUSES, throwForTerminalStatus, throwTimeout } from "./poll.js";
+import { adaptivePollIntervalMs, parseRetryAfter, retryDelayMs, sleep, SUCCESS_STATUSES, throwForTerminalStatus, throwTimeout } from "./poll.js";
 import type {
   CertScoreClientOptions,
   CreateScanResourceOptions,
@@ -30,7 +30,7 @@ import type {
 const DEFAULT_BASE_URL = "https://certscore.ai";
 const DEFAULT_TIMEOUT_MS = 300_000;
 const DEFAULT_MAX_WAIT_MS = 300_000;
-const DEFAULT_POLL_INTERVAL_MS = 5_000;
+const DEFAULT_POLL_INTERVAL_MS = 1_000;
 
 type JsonFormatOption = { format?: "json" };
 type MarkdownFormatOption = { format: "markdown" };
@@ -184,6 +184,7 @@ export class CertScoreClient {
     return this.pollUntilComplete(pending, {
       detail,
       format,
+      adaptivePolling: options.pollIntervalMs === undefined,
       pollIntervalMs,
       maxWaitMs,
       startedAt,
@@ -314,6 +315,7 @@ export class CertScoreClient {
       });
     }
     return this.pollScanResourceUntilComplete(scan as ScanJob | JobStatus, {
+      adaptivePolling: options.pollIntervalMs === undefined,
       pollIntervalMs: options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
       maxWaitMs: options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS,
       startedAt: Date.now(),
@@ -368,6 +370,7 @@ export class CertScoreClient {
   private async pollUntilComplete(
     initial: JobStatus,
     options: {
+      adaptivePolling: boolean;
       detail: PulseDetail;
       format: PulseFormat;
       pollIntervalMs: number;
@@ -395,7 +398,9 @@ export class CertScoreClient {
         throwTimeout(jobId, scanId);
       }
 
-      const delay = Math.min(retryDelayMs(status, retryAfterSeconds, options.pollIntervalMs), Math.max(0, options.maxWaitMs - (Date.now() - options.startedAt)));
+      const elapsedMs = Date.now() - options.startedAt;
+      const fallbackMs = options.adaptivePolling ? adaptivePollIntervalMs(elapsedMs) : options.pollIntervalMs;
+      const delay = Math.min(retryDelayMs(status, retryAfterSeconds, fallbackMs), Math.max(0, options.maxWaitMs - elapsedMs));
       await sleep(delay, options.signal);
 
       const pollUrl = this.statusUrlFor(status);
@@ -414,6 +419,7 @@ export class CertScoreClient {
   private async pollScanResourceUntilComplete(
     initial: ScanJob | JobStatus,
     options: {
+      adaptivePolling: boolean;
       pollIntervalMs: number;
       maxWaitMs: number;
       startedAt: number;
@@ -444,7 +450,9 @@ export class CertScoreClient {
         throwTimeout(jobId, scanId);
       }
 
-      const delay = Math.min(retryDelayMs(status, undefined, options.pollIntervalMs), Math.max(0, options.maxWaitMs - (Date.now() - options.startedAt)));
+      const elapsedMs = Date.now() - options.startedAt;
+      const fallbackMs = options.adaptivePolling ? adaptivePollIntervalMs(elapsedMs) : options.pollIntervalMs;
+      const delay = Math.min(retryDelayMs(status, undefined, fallbackMs), Math.max(0, options.maxWaitMs - elapsedMs));
       await sleep(delay, options.signal);
 
       const response = await this.fetch(this.scanResourceStatusUrlFor(status), { signal: options.signal });

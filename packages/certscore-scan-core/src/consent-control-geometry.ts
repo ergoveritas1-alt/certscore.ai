@@ -271,6 +271,9 @@ export async function captureConsentControlGeometry(
   const frameTimeoutMs = options.timeoutMs
     ? Math.max(250, Math.floor(options.timeoutMs / Math.max(frames.length, 1)))
     : undefined;
+  const cookieNamesPromise = page.context().cookies(page.url())
+    .then((cookies) => cookies.map((cookie) => cookie.name))
+    .catch(() => undefined);
   const captures = (await Promise.all(frames.map(async (frame) => {
     try {
       const capture = frame.evaluate<RawGeometryCapture, typeof frameInput>(collectConsentGeometryInPage, frameInput);
@@ -282,9 +285,7 @@ export async function captureConsentControlGeometry(
     }
   }))).filter((capture): capture is RawGeometryCapture => Boolean(capture));
   const raw = mergeRawGeometryCaptures(captures, page.url(), frameInput);
-  const cookieNames = await page.context().cookies(page.url())
-    .then((cookies) => cookies.map((cookie) => cookie.name))
-    .catch(() => raw.cookieNames);
+  const cookieNames = await cookieNamesPromise ?? raw.cookieNames;
   const cmp = buildCmpEvidence({ ...raw, cookieNames });
   const containers = raw.containers.map((container, index): ConsentControlContainerEvidence => ({
     containerId: `container_${index}`,
@@ -690,6 +691,7 @@ function collectConsentGeometryInPage(input: {
   };
   const maxText = 1_200;
   const maxHtml = 2_000;
+  const deepRootCache = new WeakMap<ParentNode, ParentNode[]>();
   const viewport = {
     width: window.innerWidth,
     height: window.innerHeight,
@@ -1229,16 +1231,33 @@ function collectConsentGeometryInPage(input: {
   function deepQuerySelectorAll(selector: string, root: ParentNode = document): Element[] {
     const results: Element[] = [];
     const seen = new Set<Element>();
-    function visit(node: ParentNode, depth: number) {
-      if (depth > 4) {
-        return;
-      }
+    for (const node of deepRootsFor(root)) {
       for (const element of Array.from(node.querySelectorAll(selector))) {
         if (!seen.has(element)) {
           seen.add(element);
           results.push(element);
         }
       }
+    }
+    return results;
+  }
+
+  function deepRootsFor(root: ParentNode): ParentNode[] {
+    const cached = deepRootCache.get(root);
+    if (cached) {
+      return cached;
+    }
+    const roots: ParentNode[] = [];
+    const seenRoots = new Set<ParentNode>();
+    function visit(node: ParentNode, depth: number) {
+      if (depth > 4) {
+        return;
+      }
+      if (seenRoots.has(node)) {
+        return;
+      }
+      seenRoots.add(node);
+      roots.push(node);
       for (const element of Array.from(node.querySelectorAll("*"))) {
         if (element.shadowRoot) {
           visit(element.shadowRoot, depth + 1);
@@ -1246,27 +1265,15 @@ function collectConsentGeometryInPage(input: {
       }
     }
     visit(root, 0);
-    return results;
+    deepRootCache.set(root, roots);
+    return roots;
   }
 
   function deepText(element: Element): string {
     const textParts: string[] = [element.textContent || ""];
-    function visit(node: ParentNode, depth: number) {
-      if (depth > 4) {
-        return;
-      }
-      for (const child of Array.from(node.querySelectorAll("*"))) {
-        if (child.shadowRoot) {
-          textParts.push(child.shadowRoot.textContent || "");
-          visit(child.shadowRoot, depth + 1);
-        }
-      }
+    for (const root of deepRootsFor(element).slice(1)) {
+      textParts.push(root.textContent || "");
     }
-    if (element.shadowRoot) {
-      textParts.push(element.shadowRoot.textContent || "");
-      visit(element.shadowRoot, 1);
-    }
-    visit(element, 0);
     return compactText(textParts.join(" "));
   }
 

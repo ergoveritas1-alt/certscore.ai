@@ -103,6 +103,7 @@
     "v2:consent-geometry-aro-nogo-adversarial": "pnpm v2:consent-geometry-aro-nogo-gate --cohort adversarial --min-loaded-exact-agreement 0 --min-field-agreement 0 --require-no-go-sites 0 --max-uncertain-fields 200 --allow-missing-proof",
     "v2:local-dag-lambda-smoke": "node --env-file=apps/web/.env.local --import tsx ./scripts/smoke-local-v2-dag-lambda.ts",
     "v2:local-dag-lambda-benchmark": "node --env-file=apps/web/.env.local --import tsx ./scripts/run-local-v2-dag-lambda-benchmark.ts",
+    "v2:lambda-memory-canary-compare": "node --import tsx ./scripts/compare-v2-lambda-memory-canary.ts",
     "v2:local-dag-lambda-parity-cohort": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=apps/web/.env.local --import tsx ./scripts/run-local-v2-dag-lambda-parity-cohort.ts",
     "v2:local-dag-lambda-parity": "PLAYWRIGHT_BROWSERS_PATH= TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=apps/web/.env.local --import tsx ./scripts/run-local-v2-dag-lambda-parity.ts",
     "v2:local-dag-lambda-quality": "node --import tsx ./scripts/compare-local-v2-dag-lambda-quality.ts",

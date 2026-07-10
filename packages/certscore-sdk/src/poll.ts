@@ -51,6 +51,16 @@ export function retryDelayMs(status: JobStatus, retryAfterSeconds: number | unde
   return fallbackMs;
 }
 
+export function adaptivePollIntervalMs(elapsedMs: number): number {
+  if (elapsedMs < 15_000) {
+    return 1_000;
+  }
+  if (elapsedMs < 45_000) {
+    return 2_000;
+  }
+  return 5_000;
+}
+
 export function throwForTerminalStatus(status: JobStatus): never {
   if (status.status === "rate_limited") {
     throw new ThrottledError(status.message ?? "Pulse scan is rate limited.", {

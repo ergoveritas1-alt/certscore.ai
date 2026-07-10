@@ -141,6 +141,7 @@ export function createOpenAiNanoPolicyAssistProvider(
           },
         },
         maxCompletionTokens: 900,
+        signal: input.signal,
       });
       return normalizeLinkClassification(input, parsed);
     },
@@ -189,6 +190,7 @@ async function callNanoJson(
     system: string;
     user: unknown;
     maxCompletionTokens: number;
+    signal?: AbortSignal;
   },
 ): Promise<Record<string, unknown>> {
   const response = await fetchImpl(OPENAI_API_URL, {
@@ -207,6 +209,7 @@ async function callNanoJson(
       ],
       max_completion_tokens: input.maxCompletionTokens,
     }),
+    signal: input.signal,
   });
 
   if (!response.ok) {

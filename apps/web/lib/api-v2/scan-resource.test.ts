@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  apiV2ActiveScanRetryAfterSeconds,
   buildApiV2Error,
   buildApiV2ErrorFromPulse,
   buildApiV2DomainLatestScan,
@@ -289,8 +290,15 @@ test("buildApiV2ScanStatus degrades unknown scan states to running", () => {
 
   assert.equal(status.status, "running");
   assert.equal(status.phase, "runtime_observation");
-  assert.equal(status.retryAfterSeconds, 30);
+  assert.equal(status.retryAfterSeconds, 5);
   assert.equal(status.links?.findings, undefined);
+});
+
+test("active scan retry timing is fast initially and backs off for long scans", () => {
+  const startedAt = "2026-06-30T12:00:00.000Z";
+  assert.equal(apiV2ActiveScanRetryAfterSeconds({ startedAt, nowMs: Date.parse("2026-06-30T12:00:10.000Z") }), 1);
+  assert.equal(apiV2ActiveScanRetryAfterSeconds({ startedAt, nowMs: Date.parse("2026-06-30T12:00:20.000Z") }), 2);
+  assert.equal(apiV2ActiveScanRetryAfterSeconds({ startedAt, nowMs: Date.parse("2026-06-30T12:01:00.000Z") }), 5);
 });
 
 test("buildApiV2ScanStatus leaves runtime duration unknown instead of zero when timestamps are incomplete", () => {
@@ -317,7 +325,7 @@ test("buildApiV2ScanJobFromPulseStatus maps pending Pulse jobs to v2 status", ()
   assert.equal(status.jobId, "pulse_job_123");
   assert.equal(status.scanId, "00000000-0000-4000-8000-000000000123");
   assert.equal(status.status, "queued");
-  assert.equal(status.retryAfterSeconds, 45);
+  assert.equal(status.retryAfterSeconds, 5);
   assert.equal(status.links?.status, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status");
 });
 

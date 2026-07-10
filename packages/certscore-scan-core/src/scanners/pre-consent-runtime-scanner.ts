@@ -46,7 +46,11 @@ import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 
 const SOURCE_SCANNER = "pre_consent_runtime";
 const SCENARIO = "fresh_pre_consent";
-const HIGH_CONFIDENCE_CMP_RECAPTURE_WAIT_MS = 15_000;
+const CONSENT_GATE_INITIAL_MS = 10_000;
+const CONSENT_GATE_PROGRESS_REVIEW_MS = 15_000;
+const CONSENT_GATE_STRONG_CMP_FLOOR_MS = 18_000;
+const CONSENT_GATE_PARTIAL_EVIDENCE_MS = 20_000;
+const CONSENT_GATE_HARD_CAP_MS = 25_000;
 const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
@@ -124,6 +128,7 @@ export async function preConsentRuntimeScanner(
     artifactRefs: [],
     notes: input.screenshotMode === "never" ? ["Pre-consent screenshot capture disabled by scan mode."] : [],
   };
+  const transportNetworkProbesPromise = startTransportNetworkProbes(input.normalizedUrl);
 
   const browserMode = input.browserMode ?? "headless";
   const ownsBrowser = !input.browser;
@@ -312,12 +317,14 @@ export async function preConsentRuntimeScanner(
   const screenshots: ScreenshotArtifact[] = [];
   const screenshotErrors: string[] = [];
   let earlyScreenshotCaptured = false;
+  let supplementalScreenshotAttempted = false;
   let consentGeometryDiagnosticWritten = false;
   let initialNavigationHttpStatus: number | undefined;
   const fallbackConsentUiObservations: ConsentUiObservation[] = [];
   const fallbackDomSnapshots: DomSnapshotArtifact[] = [];
 
   try {
+    const navigationStartedAtMs = Date.now();
     const navigationResponse = await recordTiming(timingBreakdown, "page navigation", "Initial navigation until DOMContentLoaded.", () =>
       page.goto(input.normalizedUrl, {
         waitUntil: "domcontentloaded",
@@ -325,6 +332,30 @@ export async function preConsentRuntimeScanner(
       })
     );
     initialNavigationHttpStatus = navigationResponse?.status();
+    const fastWait = input.waitMode === "fast";
+    const networkIdleTimeoutMs = fastWait ? 1_500 : 5_000;
+    const settleWaitMs = fastWait ? 350 : 1_000;
+    const consentUiWaitTimeoutMs = fastWait ? 1_800 : 3_500;
+    const consentUiCaptureTimeoutMs = fastWait ? 3_500 : 5_500;
+    const consentUiBudget = createConsentUiCaptureBudget(fastWait ? 4_500 : 7_000);
+    const consentUiObservationPromise = recordBoundedTiming(
+      timingBreakdown,
+      "page evidence: consent UI",
+      "First-layer consent surface/control text and affordance inventory, started immediately after DOMContentLoaded.",
+      consentUiBudget.timeoutFor(consentUiCaptureTimeoutMs),
+      () => detectConsentUi(page, input.scanStartedAtMs, Math.min(consentUiWaitTimeoutMs, consentUiBudget.remainingMs())),
+      () => emptyConsentUiObservation(input.scanStartedAtMs),
+    );
+    const networkIdlePromise = recordTiming(
+      timingBreakdown,
+      "network idle wait",
+      fastWait
+        ? "Fast planned-DAG post-navigation network quiet wait overlapped with early visual capture; timeout is non-fatal."
+        : "Post-navigation network-idle wait overlapped with early visual capture; timeout is non-fatal.",
+      () => page.waitForLoadState("networkidle", {
+        timeout: Math.min(networkIdleTimeoutMs, input.internalBudgetMs),
+      }).catch(() => undefined),
+    );
     if ((input.screenshotMode ?? "always") === "always") {
       const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
       const screenshotCapture = await recordTiming(
@@ -349,31 +380,7 @@ export async function preConsentRuntimeScanner(
       earlyScreenshotCaptured = true;
       visualCapture = visualCaptureFromScreenshotSummary(screenshotCapture, screenshotPath);
     }
-    const fastWait = input.waitMode === "fast";
-    const networkIdleTimeoutMs = fastWait ? 1_500 : 5_000;
-    const settleWaitMs = fastWait ? 350 : 1_000;
-    const consentUiWaitTimeoutMs = fastWait ? 1_800 : 3_500;
-    const consentUiCaptureTimeoutMs = fastWait ? 3_500 : 5_500;
-    const consentUiBudget = createConsentUiCaptureBudget(fastWait ? 4_500 : 7_000);
-    const consentUiObservationPromise = recordBoundedTiming(
-      timingBreakdown,
-      "page evidence: consent UI",
-      "First-layer consent surface/control text and affordance inventory, started before network-idle/settle waits.",
-      consentUiBudget.timeoutFor(consentUiCaptureTimeoutMs),
-      () => detectConsentUi(page, input.scanStartedAtMs, Math.min(consentUiWaitTimeoutMs, consentUiBudget.remainingMs())),
-      () => emptyConsentUiObservation(input.scanStartedAtMs),
-    );
-    await recordTiming(
-      timingBreakdown,
-      "network idle wait",
-      fastWait
-        ? "Fast planned-DAG post-navigation network quiet wait, timeout is non-fatal."
-        : "Post-navigation network-idle wait, timeout is non-fatal.",
-      () =>
-      page.waitForLoadState("networkidle", {
-        timeout: Math.min(networkIdleTimeoutMs, input.internalBudgetMs),
-      }).catch(() => undefined)
-    );
+    await networkIdlePromise;
     await recordTiming(
       timingBreakdown,
       "observation settle wait",
@@ -394,58 +401,29 @@ export async function preConsentRuntimeScanner(
       `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation, network-idle, and settle windows.`,
     );
 
-    const [storageSnapshot, scripts, frames, apiAccesses, initialConsentObservation, collectionSurfaceObservations, initialDomText] =
-      await recordTiming(timingBreakdown, "page evidence capture", "Storage, scripts, iframes, browser API access, collection surfaces, consent UI, and DOM text capture.", () => Promise.all([
-        recordBoundedTiming(
+    const [pageEvidence, initialConsentObservation] = await recordTiming(
+      timingBreakdown,
+      "page evidence capture",
+      "Atomic read-only storage, scripts, iframes, browser API, collection surface, DOM text snapshot plus consent UI capture.",
+      () => Promise.all([
+        capturePostSettlePageEvidence({
+          firstPartyHostname,
+          normalizedUrl: input.normalizedUrl,
+          page,
+          scanStartedAtMs: input.scanStartedAtMs,
           timingBreakdown,
-          "page evidence: storage snapshot",
-          "Local/session storage key inventory before consent.",
-          1_500,
-          () => captureStorageSnapshot(page, input.scanStartedAtMs, input.normalizedUrl),
-          () => emptyStorageSnapshot(input.scanStartedAtMs, input.normalizedUrl),
-        ),
-        recordBoundedTiming(
-          timingBreakdown,
-          "page evidence: script inventory",
-          "DOM script element inventory before consent.",
-          1_500,
-          () => captureScriptEvents(page, input.scanStartedAtMs, firstPartyHostname),
-          () => [],
-        ),
-        recordBoundedTiming(
-          timingBreakdown,
-          "page evidence: iframe inventory",
-          "DOM iframe inventory before consent.",
-          1_500,
-          () => captureIframeEvents(page, input.scanStartedAtMs, firstPartyHostname),
-          () => [],
-        ),
-        recordBoundedTiming(
-          timingBreakdown,
-          "page evidence: browser API access",
-          "Captured browser API access probes for entropy/fingerprinting review.",
-          1_500,
-          () => captureBrowserApiAccessEvents(page, input.scanStartedAtMs, input.normalizedUrl),
-          () => [],
-        ),
+        }),
         consentUiObservationPromise,
-        recordBoundedTiming(
-          timingBreakdown,
-          "page evidence: collection surfaces",
-          "Bounded public form/input collection surface inventory.",
-          1_500,
-          () => captureCollectionSurfaceObservations(page, input.scanStartedAtMs, input.normalizedUrl),
-          () => [],
-        ),
-        recordBoundedTiming(
-          timingBreakdown,
-          "page evidence: body text",
-          "Bounded visible body text capture for first-layer consent and policy hints.",
-          2_500,
-          () => page.locator("body").innerText({ timeout: 2_000 }).catch(() => ""),
-          () => "",
-        ),
-      ]));
+      ]),
+    );
+    const {
+      apiAccesses,
+      collectionSurfaceObservations,
+      domText: initialDomText,
+      frames,
+      scripts,
+      storageSnapshot,
+    } = pageEvidence;
     let consentObservation = initialConsentObservation;
     let domText = initialDomText;
     if (
@@ -643,48 +621,101 @@ export async function preConsentRuntimeScanner(
     if (shouldRecaptureConsentUiAfterCmpRuntime(consentObservation, domText, cmpRuntimeObservations)) {
       const highConfidenceCmpRuntimeEvidence =
         hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations);
-      const cmpRecaptureWaitMs = highConfidenceCmpRuntimeEvidence
-        ? HIGH_CONFIDENCE_CMP_RECAPTURE_WAIT_MS
-        : fastWait ? 2_250 : 2_750;
+      const weakCmpRecaptureWaitMs = fastWait ? 2_250 : 2_750;
       const requestedRecaptureTimeoutMs = Math.max(
-        highConfidenceCmpRuntimeEvidence
-          ? cmpRecaptureWaitMs
-          : consentUiBudget.timeoutFor(fastWait ? 1_750 : 2_250),
-        highConfidenceCmpRuntimeEvidence
-          ? cmpRecaptureWaitMs
-          : fastWait ? 2_500 : 3_000,
+        consentUiBudget.timeoutFor(fastWait ? 1_750 : 2_250),
+        fastWait ? 2_500 : 3_000,
       );
-      const recaptureTimeoutMs = highConfidenceCmpRuntimeEvidence
-        ? requestedRecaptureTimeoutMs
-        : Math.min(requestedRecaptureTimeoutMs, remainingModuleBudgetMs());
-      const recapturedConsentObservation = recaptureTimeoutMs >= 1_000
-        ? await recordBoundedTiming(
+      const recaptureTimeoutMs = Math.min(requestedRecaptureTimeoutMs, remainingModuleBudgetMs());
+      const runHighConfidenceAdaptiveRecapture = () => detectConsentUiWithAdaptiveCmpGates({
+        cmpRuntimeObservations,
+        initialObservation: consentObservation,
+        navigationStartedAtMs,
+        onTenSecondGate: earlyScreenshotCaptured &&
+          (input.screenshotCaptureMode ?? "full_page_first") === "viewport_first"
+          ? async () => {
+            supplementalScreenshotAttempted = true;
+            const supplementalCapture = await recordTiming(
+              timingBreakdown,
+              "supplemental full-page screenshot",
+              "Bounded same-page full-page capture moved to the 10-second consent gate after baseline runtime evidence capture.",
+              () => captureSupplementalFullPagePreConsentScreenshot(page, input, {
+                timeoutMs: input.waitMode === "fast" ? 750 : 2_500,
+              }),
+            );
+            if (supplementalCapture?.screenshot) {
+              screenshots.unshift(supplementalCapture.screenshot);
+              visualCapture = mergeVisualCaptureWithFullPageArtifact(
+                visualCapture,
+                supplementalCapture.visualCapture,
+              );
+            }
+            if (supplementalCapture?.errorMessage) {
+              screenshotErrors.push(supplementalCapture.errorMessage);
+            }
+            const postCaptureObservation = await recordBoundedTiming(
+              timingBreakdown,
+              "consent UI supplemental screenshot recapture",
+              "Structured consent-control read immediately after the 10-second supplemental full-page capture.",
+              1_250,
+              () => detectConsentUi(page, input.scanStartedAtMs, 750, {
+                allowFullDocumentCmpControls: true,
+                waitForControlsOnTextOnlySurface: true,
+              }),
+              () => consentObservation,
+            );
+            if (postCaptureObservation.controls.length === 0) {
+              return postCaptureObservation;
+            }
+            const postCaptureBasis = postCaptureObservation.basis.some((basis) =>
+              basis.startsWith("inventory:full_document_")
+            )
+              ? "recapture:post_supplemental_screenshot_full_document_cmp_controls"
+              : "recapture:post_supplemental_screenshot_first_layer_controls";
+            return annotateConsentUiObservation(postCaptureObservation, postCaptureBasis);
+          }
+          : undefined,
+        page,
+        scanStartedAtMs: input.scanStartedAtMs,
+        timingBreakdown,
+      });
+      const recapturedConsentObservation = highConfidenceCmpRuntimeEvidence
+        ? await recordParentTiming(
           timingBreakdown,
           "page evidence: consent UI CMP recapture",
-          highConfidenceCmpRuntimeEvidence
-            ? "Adaptive post-CMP first-layer control inventory for high-confidence CMP evidence; exits as soon as actionable controls are retained."
-            : "Short post-CMP first-layer control inventory when CMP evidence is retained but only settings/preferences controls are visible.",
-          recaptureTimeoutMs,
-          () => detectConsentUi(
-            page,
-            input.scanStartedAtMs,
-            Math.min(cmpRecaptureWaitMs, recaptureTimeoutMs),
-            {
-              waitForActionableChoiceControls: true,
-              waitForControlsOnTextOnlySurface: true,
-            },
-          ),
-          () => consentObservation,
+          "Navigation-relative adaptive CMP inventory with 10s, 15s, 18s, 20s, and 25s evidence gates.",
+          () => runHighConfidenceAdaptiveRecapture().catch(() => consentObservation),
         )
-        : (() => {
-          recordInstantTiming(
+        : recaptureTimeoutMs >= 1_000
+          ? await recordBoundedTiming(
             timingBreakdown,
-            "page evidence: consent UI CMP recapture skipped",
-            "Skipped post-CMP first-layer control recapture because the pre-consent module budget was exhausted.",
-          );
-          return consentObservation;
-        })();
-      if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
+            "page evidence: consent UI CMP recapture",
+            "Short post-CMP first-layer control inventory when CMP evidence is retained but only settings/preferences controls are visible.",
+            recaptureTimeoutMs,
+            () => detectConsentUi(
+              page,
+              input.scanStartedAtMs,
+              Math.min(weakCmpRecaptureWaitMs, recaptureTimeoutMs),
+              {
+                waitForActionableChoiceControls: true,
+                waitForControlsOnTextOnlySurface: true,
+              },
+            ),
+            () => consentObservation,
+          )
+          : (() => {
+            recordInstantTiming(
+              timingBreakdown,
+              "page evidence: consent UI CMP recapture skipped",
+              "Skipped post-CMP first-layer control recapture because the pre-consent module budget was exhausted.",
+            );
+            return consentObservation;
+          })();
+      const recaptureImprovedEvidence = isStrongerConsentUiObservation(
+        recapturedConsentObservation,
+        consentObservation,
+      );
+      if (recaptureImprovedEvidence) {
         const recaptureBasis = hasActionableConsentChoiceControl(recapturedConsentObservation)
           ? "recapture:post_cmp_first_layer_choice_controls"
           : "recapture:post_cmp_first_layer_controls";
@@ -695,8 +726,9 @@ export async function preConsentRuntimeScanner(
         );
         domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
       } else {
-        consentObservation = annotateConsentUiObservation(
+        consentObservation = mergeConsentUiObservations(
           consentObservation,
+          recapturedConsentObservation,
           "recapture:post_cmp_no_first_layer_choice_controls",
         );
       }
@@ -771,9 +803,17 @@ export async function preConsentRuntimeScanner(
 
     if (
       earlyScreenshotCaptured &&
+      !supplementalScreenshotAttempted &&
       (input.screenshotCaptureMode ?? "full_page_first") === "viewport_first" &&
-      screenshots.some((screenshot) => screenshot.captureMethod === "primary_viewport_fallback")
+      screenshots.some((screenshot) => screenshot.captureMethod === "primary_viewport_fallback") &&
+      shouldCaptureSupplementalFullPageScreenshot({
+        cmpRuntimeObservations,
+        consentObservation,
+        screenshotErrors,
+        visualCapture,
+      })
     ) {
+      supplementalScreenshotAttempted = true;
       const supplementalCapture = await recordTiming(
         timingBreakdown,
         "supplemental full-page screenshot",
@@ -844,6 +884,31 @@ export async function preConsentRuntimeScanner(
           screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
           timeoutMs: input.waitMode === "fast" ? 3_000 : 5_000,
         });
+        if (
+          !supplementalScreenshotAttempted &&
+          (input.screenshotCaptureMode ?? "full_page_first") === "viewport_first" &&
+          hasBelowFoldFirstLayerGeometryControls(geometry)
+        ) {
+          supplementalScreenshotAttempted = true;
+          const belowFoldCapture = await recordTiming(
+            timingBreakdown,
+            "supplemental full-page screenshot below-fold geometry",
+            "Bounded full-page capture retained because geometry found a below-fold first-layer consent candidate.",
+            () => captureSupplementalFullPagePreConsentScreenshot(page, input, {
+              timeoutMs: input.waitMode === "fast" ? 750 : 2_500,
+            }),
+          );
+          if (belowFoldCapture?.screenshot) {
+            screenshots.unshift(belowFoldCapture.screenshot);
+            visualCapture = mergeVisualCaptureWithFullPageArtifact(
+              visualCapture,
+              belowFoldCapture.visualCapture,
+            );
+          }
+          if (belowFoldCapture?.errorMessage) {
+            screenshotErrors.push(belowFoldCapture.errorMessage);
+          }
+        }
         if (
           !hasConfirmedFirstLayerGeometryControls(geometry) &&
           hasBelowFoldFirstLayerGeometryControls(geometry)
@@ -933,6 +998,12 @@ export async function preConsentRuntimeScanner(
       }),
       artifactRef: undefined,
     });
+    const transportNetworkProbes = await transportNetworkProbesPromise;
+    timingBreakdown.push({
+      label: "transport security network probes",
+      detail: "HTTP redirect and strict TLS probes overlapped browser launch, navigation, consent observation, and evidence capture.",
+      durationMs: transportNetworkProbes.durationMs,
+    });
     const transportSecurityRemainingMs = remainingModuleBudgetMs();
     const { observation: transportSecurityObservation, artifactRef: transportSecurityArtifactRef } =
       transportSecurityRemainingMs >= 1_000
@@ -947,6 +1018,7 @@ export async function preConsentRuntimeScanner(
             mixedContentConsoleMessages,
             networkEvents,
             normalizedUrl: input.normalizedUrl,
+            networkProbes: transportNetworkProbes,
             page,
             requestedUrl: input.url,
             scanStartedAtMs: input.scanStartedAtMs,
@@ -1210,6 +1282,26 @@ async function recordTiming<T>(
       detail,
       durationMs: Date.now() - startedAtMs,
     });
+  }
+}
+
+async function recordParentTiming<T>(
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
+  label: string,
+  detail: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  const startedAtMs = Date.now();
+  const timingIndex = timingBreakdown.length;
+  timingBreakdown.push({ label, detail, durationMs: 0 });
+  try {
+    return await run();
+  } finally {
+    timingBreakdown[timingIndex] = {
+      label,
+      detail,
+      durationMs: Date.now() - startedAtMs,
+    };
   }
 }
 
@@ -1540,6 +1632,219 @@ function signalTypeForMatchSource(
   return undefined;
 }
 
+type ConsolidatedPageEvidenceSnapshot = {
+  apiAccesses: Array<{ apiName: string; category: string; timestampMs: number }>;
+  collectionRows: Array<{ fieldType: string; labels: string[] }>;
+  domText: string;
+  frames: Array<{ name?: string; src?: string }>;
+  localStorageEntries: Record<string, string>;
+  scripts: Array<{ async: boolean; defer: boolean; src?: string }>;
+  sessionStorageEntries: Record<string, string>;
+};
+
+async function capturePostSettlePageEvidence(input: {
+  firstPartyHostname: string | undefined;
+  normalizedUrl: string;
+  page: Page;
+  scanStartedAtMs: number;
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
+}): Promise<{
+  apiAccesses: RuntimeEvidenceEvent[];
+  collectionSurfaceObservations: CollectionSurfaceObservation[];
+  domText: string;
+  frames: IframeEvent[];
+  scripts: ScriptEvent[];
+  storageSnapshot: StorageSnapshot;
+}> {
+  const snapshot = await recordBoundedTiming(
+    input.timingBreakdown,
+    "page evidence: consolidated snapshot",
+    "One read-only main-document snapshot for storage keys, scripts, iframes, API probes, public collection surfaces, and bounded visible text.",
+    2_500,
+    () => captureConsolidatedPageEvidenceSnapshot(input.page),
+    () => undefined,
+  );
+  if (snapshot) {
+    for (const [label, detail] of [
+      ["page evidence: storage snapshot", "Local/session storage keys retained by the consolidated snapshot."],
+      ["page evidence: script inventory", "DOM script inventory retained by the consolidated snapshot."],
+      ["page evidence: iframe inventory", "DOM iframe inventory retained by the consolidated snapshot."],
+      ["page evidence: browser API access", "Browser API probe rows retained by the consolidated snapshot."],
+      ["page evidence: collection surfaces", "Public form/input rows retained by the consolidated snapshot."],
+      ["page evidence: body text", "Bounded visible DOM text retained by the consolidated snapshot."],
+    ] as const) {
+      recordInstantTiming(input.timingBreakdown, label, detail);
+    }
+    return consolidatedPageEvidenceFromSnapshot(snapshot, input);
+  }
+
+  const [storageSnapshot, scripts, frames, apiAccesses, collectionSurfaceObservations, domText] = await Promise.all([
+    recordBoundedTiming(
+      input.timingBreakdown,
+      "page evidence: storage snapshot",
+      "Legacy bounded storage-key capture retained after the consolidated snapshot was unavailable.",
+      1_500,
+      () => captureStorageSnapshot(input.page, input.scanStartedAtMs, input.normalizedUrl),
+      () => emptyStorageSnapshot(input.scanStartedAtMs, input.normalizedUrl),
+    ),
+    recordBoundedTiming(
+      input.timingBreakdown,
+      "page evidence: script inventory",
+      "Legacy bounded script inventory retained after the consolidated snapshot was unavailable.",
+      1_500,
+      () => captureScriptEvents(input.page, input.scanStartedAtMs, input.firstPartyHostname),
+      () => [],
+    ),
+    recordBoundedTiming(
+      input.timingBreakdown,
+      "page evidence: iframe inventory",
+      "Legacy bounded iframe inventory retained after the consolidated snapshot was unavailable.",
+      1_500,
+      () => captureIframeEvents(input.page, input.scanStartedAtMs, input.firstPartyHostname),
+      () => [],
+    ),
+    recordBoundedTiming(
+      input.timingBreakdown,
+      "page evidence: browser API access",
+      "Legacy bounded browser API probe capture retained after the consolidated snapshot was unavailable.",
+      1_500,
+      () => captureBrowserApiAccessEvents(input.page, input.scanStartedAtMs, input.normalizedUrl),
+      () => [],
+    ),
+    recordBoundedTiming(
+      input.timingBreakdown,
+      "page evidence: collection surfaces",
+      "Legacy bounded public collection-surface capture retained after the consolidated snapshot was unavailable.",
+      1_500,
+      () => captureCollectionSurfaceObservations(input.page, input.scanStartedAtMs, input.normalizedUrl),
+      () => [],
+    ),
+    recordBoundedTiming(
+      input.timingBreakdown,
+      "page evidence: body text",
+      "Legacy bounded visible-text capture retained after the consolidated snapshot was unavailable.",
+      2_500,
+      () => input.page.locator("body").innerText({ timeout: 2_000 }),
+      () => "",
+    ),
+  ]);
+  recordInstantTiming(
+    input.timingBreakdown,
+    "page evidence: consolidated fallback",
+    "The atomic snapshot was unavailable; legacy read-only evidence collectors retained coverage.",
+  );
+  return { apiAccesses, collectionSurfaceObservations, domText, frames, scripts, storageSnapshot };
+}
+
+async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<ConsolidatedPageEvidenceSnapshot> {
+  return page.evaluate(() => {
+    const localStorageEntries: Record<string, string> = {};
+    const sessionStorageEntries: Record<string, string> = {};
+    try {
+      for (let index = 0; index < window.localStorage.length; index += 1) {
+        const key = window.localStorage.key(index);
+        if (key) localStorageEntries[key] = "[redacted]";
+      }
+    } catch {}
+    try {
+      for (let index = 0; index < window.sessionStorage.length; index += 1) {
+        const key = window.sessionStorage.key(index);
+        if (key) sessionStorageEntries[key] = "[redacted]";
+      }
+    } catch {}
+    const textFor = (element: Element) => {
+      const labels = new Set<string>();
+      for (const value of [
+        element.getAttribute("aria-label"),
+        element.getAttribute("placeholder"),
+        element.getAttribute("name"),
+        element.getAttribute("type"),
+        element.getAttribute("role"),
+      ]) {
+        if (value) labels.add(value);
+      }
+      const id = element.getAttribute("id");
+      if (id) {
+        try {
+          document.querySelectorAll(`label[for="${CSS.escape(id)}"]`).forEach((label) => {
+            const text = label.textContent?.trim();
+            if (text) labels.add(text);
+          });
+        } catch {}
+      }
+      const closestLabel = element.closest("label")?.textContent?.trim();
+      if (closestLabel) labels.add(closestLabel);
+      return [...labels].map((label) => label.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 6);
+    };
+    const collectionRows = [...document.querySelectorAll("input, textarea, select")]
+      .filter((element) => {
+        const type = (element.getAttribute("type") || "").toLowerCase();
+        return !["hidden", "submit", "button", "reset", "image"].includes(type);
+      })
+      .slice(0, 40)
+      .map((element) => {
+        const formText = element.closest("form")?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160);
+        return {
+          fieldType: (element.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase(),
+          labels: [...new Set([...textFor(element), ...(formText ? [formText] : [])])].slice(0, 8),
+        };
+      });
+    const apiScope = window as typeof window & {
+      __certscoreBrowserApiAccesses?: Array<{ apiName: string; category: string; timestampMs: number }>;
+    };
+    return {
+      apiAccesses: (apiScope.__certscoreBrowserApiAccesses ?? []).slice(0, 60),
+      collectionRows,
+      domText: document.body?.innerText ?? "",
+      frames: [...document.querySelectorAll("iframe")].map((frame) => ({
+        src: frame.src || undefined,
+        name: frame.name || undefined,
+      })),
+      localStorageEntries,
+      scripts: [...document.scripts].map((script) => ({
+        src: script.src || undefined,
+        async: script.async,
+        defer: script.defer,
+      })),
+      sessionStorageEntries,
+    };
+  });
+}
+
+function consolidatedPageEvidenceFromSnapshot(
+  snapshot: ConsolidatedPageEvidenceSnapshot,
+  input: {
+    firstPartyHostname: string | undefined;
+    normalizedUrl: string;
+    scanStartedAtMs: number;
+  },
+) {
+  const storageSnapshot: StorageSnapshot = {
+    artifactId: "storage_snapshot_pre_consent",
+    capturedAtMs: elapsed(input.scanStartedAtMs),
+    consentStateAtTime: "pre_consent",
+    url: input.normalizedUrl,
+    localStorage: snapshot.localStorageEntries,
+    sessionStorage: snapshot.sessionStorageEntries,
+    localStorageKeys: Object.keys(snapshot.localStorageEntries),
+    sessionStorageKeys: Object.keys(snapshot.sessionStorageEntries),
+    valuesRedacted: true,
+    evidenceRefs: [],
+  };
+  return {
+    storageSnapshot,
+    scripts: scriptEventsFromRows(snapshot.scripts, input.scanStartedAtMs, input.firstPartyHostname),
+    frames: iframeEventsFromRows(snapshot.frames, input.scanStartedAtMs, input.firstPartyHostname),
+    apiAccesses: browserApiAccessEventsFromRows(snapshot.apiAccesses, input.scanStartedAtMs, input.normalizedUrl),
+    collectionSurfaceObservations: collectionSurfaceObservationsFromRows(
+      snapshot.collectionRows,
+      input.scanStartedAtMs,
+      input.normalizedUrl,
+    ),
+    domText: snapshot.domText,
+  };
+}
+
 async function captureStorageSnapshot(
   page: Page,
   scanStartedAtMs: number,
@@ -1590,6 +1895,14 @@ async function captureScriptEvents(
     })),
   ).catch(() => []);
 
+  return scriptEventsFromRows(scripts, scanStartedAtMs, firstPartyHostname);
+}
+
+function scriptEventsFromRows(
+  scripts: Array<{ async: boolean; defer: boolean; src?: string }>,
+  scanStartedAtMs: number,
+  firstPartyHostname: string | undefined,
+): ScriptEvent[] {
   return scripts.map((script) => {
     const hostname = getHostname(script.src) ?? undefined;
     const registrableDomain = getRegistrableDomain(hostname) ?? undefined;
@@ -1630,6 +1943,14 @@ async function captureIframeEvents(
     })),
   ).catch(() => []);
 
+  return iframeEventsFromRows(frames, scanStartedAtMs, firstPartyHostname);
+}
+
+function iframeEventsFromRows(
+  frames: Array<{ name?: string; src?: string }>,
+  scanStartedAtMs: number,
+  firstPartyHostname: string | undefined,
+): IframeEvent[] {
   return frames.map((frame) => {
     const hostname = getHostname(frame.src) ?? undefined;
     const registrableDomain = getRegistrableDomain(hostname) ?? undefined;
@@ -1755,6 +2076,15 @@ async function captureBrowserApiAccessEvents(
     };
     return globalTarget.__certscoreBrowserApiAccesses ?? [];
   }).catch(() => []);
+
+  return browserApiAccessEventsFromRows(rows, scanStartedAtMs, normalizedUrl);
+}
+
+function browserApiAccessEventsFromRows(
+  rows: Array<{ apiName: string; category: string; timestampMs: number }>,
+  scanStartedAtMs: number,
+  normalizedUrl: string,
+): RuntimeEvidenceEvent[] {
   const hostname = getHostname(normalizedUrl) ?? undefined;
   const registrableDomain = getRegistrableDomain(hostname) ?? undefined;
 
@@ -1783,6 +2113,303 @@ async function captureBrowserApiAccessEvents(
   }));
 }
 
+type ConsentGateSnapshot = {
+  cmpFrameKeys: string[];
+  cmpScriptKeys: string[];
+  mutationCount: number;
+  observation: ConsentUiObservation;
+  pageAgeMs: number;
+};
+
+async function detectConsentUiWithAdaptiveCmpGates(input: {
+  cmpRuntimeObservations: CmpRuntimeObservation[];
+  initialObservation: ConsentUiObservation;
+  navigationStartedAtMs: number;
+  onTenSecondGate?: () => Promise<ConsentUiObservation>;
+  page: Page;
+  scanStartedAtMs: number;
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
+}): Promise<ConsentUiObservation> {
+  await installConsentGateMutationProbe(input.page);
+  let current = input.initialObservation;
+  let previous = await captureConsentGateSnapshot(input, current);
+
+  if (previous.pageAgeMs >= CONSENT_GATE_HARD_CAP_MS) {
+    const finalObservation = await detectConsentUi(input.page, input.scanStartedAtMs, 0, {
+      waitForCompleteChoiceControls: true,
+      waitForControlsOnTextOnlySurface: true,
+    });
+    current = mergeConsentUiObservations(
+      current,
+      finalObservation,
+      "adaptive_gate_inventory:25s_late_entry",
+    );
+    const finalSnapshot = await captureConsentGateSnapshot(input, current);
+    return recordConsentGateDecision(
+      input.timingBreakdown,
+      current,
+      finalSnapshot,
+      "25s",
+      hasSufficientFirstLayerConsentControls(current) ? "complete_exit" : "hard_cap_exit",
+      meaningfulConsentGateProgress(previous, finalSnapshot),
+    );
+  }
+
+  const waitToGate = async (gateMs: number) => {
+    const remainingMs = Math.max(0, gateMs - (Date.now() - input.navigationStartedAtMs));
+    const candidate = await detectConsentUi(
+      input.page,
+      input.scanStartedAtMs,
+      remainingMs,
+      {
+        waitForCompleteChoiceControls: true,
+        waitForControlsOnTextOnlySurface: true,
+      },
+    );
+    current = mergeConsentUiObservations(
+      current,
+      candidate,
+      `adaptive_gate_inventory:${Math.round(gateMs / 1_000)}s`,
+    );
+    return captureConsentGateSnapshot(input, current);
+  };
+
+  let gate10 = await waitToGate(CONSENT_GATE_INITIAL_MS);
+  if (!hasSufficientFirstLayerConsentControls(current) && input.onTenSecondGate) {
+    const postCaptureObservation = await input.onTenSecondGate();
+    current = mergeConsentUiObservations(
+      current,
+      postCaptureObservation,
+      "adaptive_gate_inventory:10s_supplemental_capture",
+    );
+    gate10 = await captureConsentGateSnapshot(input, current);
+  }
+  const progressAt10 = meaningfulConsentGateProgress(previous, gate10);
+  if (hasSufficientFirstLayerConsentControls(current)) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "complete_exit", progressAt10);
+  }
+  const partialAt10 = hasPartialConsentGateEvidence(current);
+  current = recordConsentGateDecision(
+    input.timingBreakdown,
+    current,
+    gate10,
+    "10s",
+    partialAt10 || progressAt10 ? "partial_or_progressing_arm_20s" : "strong_cmp_no_progress_continue_18s",
+    progressAt10,
+  );
+  previous = gate10;
+
+  const gate15 = await waitToGate(CONSENT_GATE_PROGRESS_REVIEW_MS);
+  const progressAt15 = meaningfulConsentGateProgress(previous, gate15);
+  if (hasSufficientFirstLayerConsentControls(current)) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate15, "15s", "complete_exit", progressAt15);
+  }
+  const partialAt15 = hasPartialConsentGateEvidence(current);
+  current = recordConsentGateDecision(
+    input.timingBreakdown,
+    current,
+    gate15,
+    "15s",
+    partialAt15 || progressAt15 ? "partial_or_progressing_continue_20s" : "strong_cmp_no_progress_continue_18s",
+    progressAt15,
+  );
+  previous = gate15;
+
+  const gate18 = await waitToGate(CONSENT_GATE_STRONG_CMP_FLOOR_MS);
+  const progressAt18 = meaningfulConsentGateProgress(previous, gate18);
+  if (hasSufficientFirstLayerConsentControls(current)) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate18, "18s", "complete_exit", progressAt18);
+  }
+  const partialAt18 = hasPartialConsentGateEvidence(current);
+  if (!partialAt18 && !progressAt18) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate18, "18s", "no_progress_exit", progressAt18);
+  }
+  current = recordConsentGateDecision(
+    input.timingBreakdown,
+    current,
+    gate18,
+    "18s",
+    "partial_or_progressing_continue_20s",
+    progressAt18,
+  );
+  previous = gate18;
+
+  const gate20 = await waitToGate(CONSENT_GATE_PARTIAL_EVIDENCE_MS);
+  const progressAt20 = meaningfulConsentGateProgress(previous, gate20);
+  if (hasSufficientFirstLayerConsentControls(current)) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate20, "20s", "complete_exit", progressAt20);
+  }
+  if (!progressAt20) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate20, "20s", "no_recent_progress_exit", progressAt20);
+  }
+  current = recordConsentGateDecision(
+    input.timingBreakdown,
+    current,
+    gate20,
+    "20s",
+    "recent_stronger_transition_continue_25s",
+    progressAt20,
+  );
+
+  const gate25 = await waitToGate(CONSENT_GATE_HARD_CAP_MS);
+  const progressAt25 = meaningfulConsentGateProgress(gate20, gate25);
+  return recordConsentGateDecision(
+    input.timingBreakdown,
+    current,
+    gate25,
+    "25s",
+    hasSufficientFirstLayerConsentControls(current) ? "complete_exit" : "hard_cap_exit",
+    progressAt25,
+  );
+}
+
+async function installConsentGateMutationProbe(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const scope = window as typeof window & {
+      __certscoreConsentGateMutations?: { count: number; lastMutationAtMs: number };
+    };
+    if (scope.__certscoreConsentGateMutations) {
+      return;
+    }
+    scope.__certscoreConsentGateMutations = { count: 0, lastMutationAtMs: Date.now() };
+    const observer = new MutationObserver((mutations) => {
+      const state = scope.__certscoreConsentGateMutations;
+      if (!state) {
+        return;
+      }
+      state.count += mutations.length;
+      state.lastMutationAtMs = Date.now();
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+  }).catch(() => undefined);
+}
+
+async function captureConsentGateSnapshot(
+  input: {
+    cmpRuntimeObservations: CmpRuntimeObservation[];
+    navigationStartedAtMs: number;
+    page: Page;
+  },
+  observation: ConsentUiObservation,
+): Promise<ConsentGateSnapshot> {
+  const cmpHostnames = cmpSignalHostnames(input.cmpRuntimeObservations);
+  const frameKeys = input.page.frames()
+    .map((frame) => frame.url())
+    .filter((url) => matchesConsentGateCmpHostname(url, cmpHostnames))
+    .sort();
+  const scriptUrls = await input.page.locator("script[src]").evaluateAll((elements) =>
+    elements.slice(0, 200).map((element) => (element as HTMLScriptElement).src).filter(Boolean)
+  ).catch(() => [] as string[]);
+  const mutationCount = await input.page.evaluate(() => {
+    const scope = window as typeof window & {
+      __certscoreConsentGateMutations?: { count: number };
+    };
+    return scope.__certscoreConsentGateMutations?.count ?? 0;
+  }).catch(() => 0);
+  return {
+    cmpFrameKeys: unique(frameKeys),
+    cmpScriptKeys: unique(
+      scriptUrls.filter((url) => matchesConsentGateCmpHostname(url, cmpHostnames)),
+    ),
+    mutationCount,
+    observation,
+    pageAgeMs: Math.max(0, Date.now() - input.navigationStartedAtMs),
+  };
+}
+
+function cmpSignalHostnames(observations: CmpRuntimeObservation[]): Set<string> {
+  const hostnames = new Set<string>();
+  for (const observation of observations) {
+    for (const signal of observation.signals) {
+      const hostname = getHostname(signal.url ?? signal.matchedValueRedacted);
+      if (hostname) {
+        hostnames.add(hostname);
+      }
+    }
+  }
+  return hostnames;
+}
+
+function matchesConsentGateCmpHostname(value: string, cmpHostnames: Set<string>): boolean {
+  const hostname = getHostname(value);
+  if (!hostname) {
+    return false;
+  }
+  return [...cmpHostnames].some((cmpHostname) =>
+    hostname === cmpHostname || hostname.endsWith(`.${cmpHostname}`) || cmpHostname.endsWith(`.${hostname}`)
+  );
+}
+
+function meaningfulConsentGateProgress(
+  previous: ConsentGateSnapshot,
+  current: ConsentGateSnapshot,
+): string | undefined {
+  if (!previous.observation.rejectControlObserved && current.observation.rejectControlObserved) {
+    return "reject_control_retained";
+  }
+  if (!previous.observation.acceptControlObserved && current.observation.acceptControlObserved) {
+    return "accept_control_retained";
+  }
+  if (!previous.observation.managePreferencesControlObserved && current.observation.managePreferencesControlObserved) {
+    return "preferences_control_retained";
+  }
+  if (current.observation.controls.length > previous.observation.controls.length) {
+    return "classified_control_inventory_increased";
+  }
+  if (!previous.observation.likelyPresent && current.observation.likelyPresent) {
+    return "consent_surface_became_likely";
+  }
+  if (!hasTextBackedConsentSurface(previous.observation) && hasTextBackedConsentSurface(current.observation)) {
+    return "text_backed_consent_surface_retained";
+  }
+  if (current.cmpFrameKeys.some((key) => !previous.cmpFrameKeys.includes(key))) {
+    return "canonical_cmp_frame_appeared";
+  }
+  if (current.cmpScriptKeys.some((key) => !previous.cmpScriptKeys.includes(key))) {
+    return "canonical_cmp_script_appeared";
+  }
+  return undefined;
+}
+
+function hasPartialConsentGateEvidence(observation: ConsentUiObservation): boolean {
+  return observation.likelyPresent ||
+    observation.controls.length > 0 ||
+    observation.visibleChoiceLabels.length > 0 ||
+    hasTextBackedConsentSurface(observation);
+}
+
+function recordConsentGateDecision(
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
+  observation: ConsentUiObservation,
+  snapshot: ConsentGateSnapshot,
+  gate: "10s" | "15s" | "18s" | "20s" | "25s",
+  decision: string,
+  progress: string | undefined,
+): ConsentUiObservation {
+  const marker = `gate_${gate}:${decision}`;
+  timingBreakdown.push({
+    label: `consent gate ${gate}`,
+    detail: [
+      decision,
+      progress ? `progress=${progress}` : "progress=none",
+      `pageAgeMs=${snapshot.pageAgeMs}`,
+      `controls=${snapshot.observation.controls.length}`,
+      `cmpFrames=${snapshot.cmpFrameKeys.length}`,
+      `cmpScripts=${snapshot.cmpScriptKeys.length}`,
+      `mutations=${snapshot.mutationCount}`,
+    ].join("; ").slice(0, 240),
+    durationMs: 0,
+  });
+  return annotateConsentInventoryTimingMarkers(observation, [
+    marker,
+    ...(progress ? [`gate_progress:${progress}`] : []),
+  ]);
+}
+
 export async function detectConsentUi(
   page: Page,
   scanStartedAtMs: number,
@@ -1790,6 +2417,7 @@ export async function detectConsentUi(
   options: {
     allowFullDocumentCmpControls?: boolean;
     waitForActionableChoiceControls?: boolean;
+    waitForCompleteChoiceControls?: boolean;
     waitForControlsOnTextOnlySurface?: boolean;
   } = {},
 ): Promise<ConsentUiObservation> {
@@ -1799,12 +2427,15 @@ export async function detectConsentUi(
   });
   const shouldWaitForRequestedRecapture =
     options.waitForActionableChoiceControls === true ||
+    options.waitForCompleteChoiceControls === true ||
     options.waitForControlsOnTextOnlySurface === true ||
     options.allowFullDocumentCmpControls === true;
+  const requestedControlSetRetained = options.waitForCompleteChoiceControls
+    ? hasSufficientFirstLayerConsentControls(immediateObservation)
+    : !options.waitForActionableChoiceControls || hasActionableConsentChoiceControl(immediateObservation);
   if (
     immediateObservation.controls.length > 0 && (
-      !options.waitForActionableChoiceControls ||
-      hasActionableConsentChoiceControl(immediateObservation)
+      requestedControlSetRetained
     ) ||
     (immediateObservation.likelyPresent && !options.waitForControlsOnTextOnlySurface) ||
     (!shouldWaitForRequestedRecapture && !immediateObservation.likelyPresent && page.frames().length <= 1) ||
@@ -1818,7 +2449,10 @@ export async function detectConsentUi(
     );
   }
 
-  const requireActionableChoiceControl = options.waitForActionableChoiceControls === true ? "true" : "false";
+  const requireActionableChoiceControl = options.waitForActionableChoiceControls === true ||
+    options.waitForCompleteChoiceControls === true
+    ? "true"
+    : "false";
   await page.waitForFunction(`(() => {
     const requireActionableChoiceControl = ${requireActionableChoiceControl};
     const isVisible = (element) => {
@@ -1879,7 +2513,10 @@ export async function detectConsentUi(
   const postWaitObservation = await readConsentUiObservation(page, scanStartedAtMs, {
     allowFullDocumentCmpControls: options.allowFullDocumentCmpControls,
   });
-  if (!options.waitForActionableChoiceControls || hasActionableConsentChoiceControl(postWaitObservation)) {
+  const postWaitControlSetRetained = options.waitForCompleteChoiceControls
+    ? hasSufficientFirstLayerConsentControls(postWaitObservation)
+    : !options.waitForActionableChoiceControls || hasActionableConsentChoiceControl(postWaitObservation);
+  if (postWaitControlSetRetained) {
     return annotateConsentInventoryTimingMarkers(
       postWaitObservation,
       postWaitObservation.controls.length > 0
@@ -3084,7 +3721,7 @@ function shouldRecaptureConsentUiAfterCmpRuntime(
   domText: string,
   cmpRuntimeObservations: CmpRuntimeObservation[],
 ): boolean {
-  if (cmpRuntimeObservations.length === 0 || hasActionableConsentChoiceControl(observation)) {
+  if (cmpRuntimeObservations.length === 0 || hasSufficientFirstLayerConsentControls(observation)) {
     return false;
   }
   if (isTerminalVisualErrorShellText(domText || observation.textExcerpt || "")) {
@@ -3110,7 +3747,7 @@ function shouldRecaptureConsentUiAfterSupplementalScreenshot(
   if (hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations)) {
     return true;
   }
-  if (hasActionableConsentChoiceControl(observation)) {
+  if (hasSufficientFirstLayerConsentControls(observation)) {
     return false;
   }
   return hasTextBackedConsentSurface(observation) ||
@@ -3159,6 +3796,15 @@ function hasActionableConsentChoiceControl(observation: ConsentUiObservation): b
   return observation.controls.some((control) =>
     control.actionType === "accept_all" || control.actionType === "reject_all"
   );
+}
+
+function hasSufficientFirstLayerConsentControls(observation: ConsentUiObservation): boolean {
+  const hasAccept = observation.controls.some((control) => control.actionType === "accept_all");
+  const hasReject = observation.controls.some((control) => control.actionType === "reject_all");
+  const hasManage = observation.controls.some((control) =>
+    control.actionType === "manage_preferences" || control.actionType === "save_preferences"
+  );
+  return hasReject && (hasAccept || hasManage);
 }
 
 function hasRetainedSettingsPreferencesControl(observation: ConsentUiObservation): boolean {
@@ -3268,6 +3914,11 @@ function mergeConsentUiObservations(
       ...current.evidenceRefs,
       ...candidate.evidenceRefs,
     ]),
+    inventoryDiagnostics: mergeConsentInventoryDiagnostics(
+      current.inventoryDiagnostics,
+      candidate.inventoryDiagnostics,
+      controls.length,
+    ),
     nonEssentialDefaultsOff: candidate.nonEssentialDefaultsOff ?? current.nonEssentialDefaultsOff ?? null,
     managePreferencesControlObserved: current.managePreferencesControlObserved || candidate.managePreferencesControlObserved ||
       controls.some((control) => control.actionType === "manage_preferences" || control.actionType === "save_preferences"),
@@ -3282,6 +3933,40 @@ function mergeConsentUiObservations(
     rejectControlObserved: current.rejectControlObserved || candidate.rejectControlObserved ||
       controls.some((control) => control.actionType === "reject_all"),
     visibleChoiceLabels,
+  };
+}
+
+function mergeConsentInventoryDiagnostics(
+  current: ConsentUiObservation["inventoryDiagnostics"],
+  candidate: ConsentUiObservation["inventoryDiagnostics"],
+  retainedControlCount: number,
+): NonNullable<ConsentUiObservation["inventoryDiagnostics"]> {
+  return {
+    candidateContainerCount: Math.max(
+      current?.candidateContainerCount ?? 0,
+      candidate?.candidateContainerCount ?? 0,
+    ),
+    candidateControlCount: Math.max(
+      current?.candidateControlCount ?? 0,
+      candidate?.candidateControlCount ?? 0,
+    ),
+    retainedControlCount,
+    inventorySources: unique([
+      ...(current?.inventorySources ?? []),
+      ...(candidate?.inventorySources ?? []),
+    ]) as NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["inventorySources"],
+    candidateLabels: unique([
+      ...(current?.candidateLabels ?? []),
+      ...(candidate?.candidateLabels ?? []),
+    ]).slice(0, 24),
+    rejectionReasons: unique([
+      ...(current?.rejectionReasons ?? []),
+      ...(candidate?.rejectionReasons ?? []),
+    ]) as NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["rejectionReasons"],
+    timingMarkers: unique([
+      ...(current?.timingMarkers ?? []),
+      ...(candidate?.timingMarkers ?? []),
+    ]),
   };
 }
 
@@ -3416,6 +4101,14 @@ async function captureCollectionSurfaceObservations(
       });
   }).catch(() => []);
 
+  return collectionSurfaceObservationsFromRows(rows, scanStartedAtMs, pageUrl);
+}
+
+function collectionSurfaceObservationsFromRows(
+  rows: Array<{ fieldType: string; labels: string[] }>,
+  scanStartedAtMs: number,
+  pageUrl: string,
+): CollectionSurfaceObservation[] {
   return rows.slice(0, 25).map((row, index) => {
     const labels = row.labels.map((label) => label.slice(0, 120)).filter(Boolean);
     const fieldTypes = [...new Set([row.fieldType].filter(Boolean))];
@@ -3447,6 +4140,7 @@ async function captureTransportSecurityObservation(input: {
   failedHttpRequests: Array<{ url: string; resourceType?: string; failureText?: string; pageUrl?: string }>;
   mixedContentConsoleMessages: string[];
   networkEvents: NetworkEvent[];
+  networkProbes: TransportNetworkProbes;
   normalizedUrl: string;
   page: Page;
   requestedUrl: string;
@@ -3498,10 +4192,7 @@ async function captureTransportSecurityObservation(input: {
         : [];
     }),
   ].slice(0, 25);
-  const [httpProbe, tlsProbe] = await Promise.all([
-    probeHttpRedirect(input.normalizedUrl),
-    probeStrictTls(input.normalizedUrl),
-  ]);
+  const { httpProbe, tlsProbe } = input.networkProbes;
   const observation: TransportSecurityObservation = {
     observationId: "transport_security_pre_consent",
     observedAtMs: elapsed(input.scanStartedAtMs),
@@ -3549,6 +4240,25 @@ async function captureTransportSecurityObservation(input: {
       redactionStatus: "redacted",
       label: "Transport security observation",
     },
+  };
+}
+
+type TransportNetworkProbes = {
+  durationMs: number;
+  httpProbe: TransportSecurityObservation["httpProbe"];
+  tlsProbe: TransportSecurityObservation["tlsProbe"];
+};
+
+async function startTransportNetworkProbes(normalizedUrl: string): Promise<TransportNetworkProbes> {
+  const startedAtMs = Date.now();
+  const [httpProbe, tlsProbe] = await Promise.all([
+    probeHttpRedirect(normalizedUrl),
+    probeStrictTls(normalizedUrl),
+  ]);
+  return {
+    durationMs: Date.now() - startedAtMs,
+    httpProbe,
+    tlsProbe,
   };
 }
 
@@ -4545,6 +5255,20 @@ function shouldCapturePreConsentScreenshot(input: {
   return input.consentObservation.likelyPresent || input.cmpRuntimeObservations.length > 0;
 }
 
+function shouldCaptureSupplementalFullPageScreenshot(input: {
+  cmpRuntimeObservations: CmpRuntimeObservation[];
+  consentObservation: ConsentUiObservation;
+  screenshotErrors: string[];
+  visualCapture: VisualCaptureSummary;
+}): boolean {
+  return input.visualCapture.status !== "available" ||
+    input.screenshotErrors.length > 0 ||
+    input.cmpRuntimeObservations.length > 0 ||
+    input.consentObservation.likelyPresent ||
+    input.consentObservation.controls.length > 0 ||
+    hasTextBackedConsentSurface(input.consentObservation);
+}
+
 type SupplementalFullPageScreenshotResult = {
   errorMessage?: string;
   screenshot?: ScreenshotArtifact;
@@ -4558,13 +5282,7 @@ async function captureSupplementalFullPagePreConsentScreenshot(
 ): Promise<SupplementalFullPageScreenshotResult | null> {
   const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-full-page.jpg");
   try {
-    await page.screenshot({
-      fullPage: true,
-      path: screenshotPath,
-      quality: 70,
-      type: "jpeg",
-      timeout: options.timeoutMs,
-    });
+    await captureScaledFullPageScreenshotWithCdp(page, screenshotPath, options.timeoutMs);
     const screenshot: ScreenshotArtifact = {
       artifactId: "screenshot_pre_consent_full_page",
       capturedAtMs: elapsed(input.scanStartedAtMs),
@@ -4595,6 +5313,47 @@ async function captureSupplementalFullPagePreConsentScreenshot(
     return {
       errorMessage: `Supplemental full-page screenshot failed: ${message}`,
     };
+  }
+}
+
+async function captureScaledFullPageScreenshotWithCdp(
+  page: Page,
+  screenshotPath: string,
+  timeoutMs: number,
+): Promise<void> {
+  const client = await page.context().newCDPSession(page);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const metrics = await client.send("Page.getLayoutMetrics");
+    const contentSize = metrics.cssContentSize ?? metrics.contentSize;
+    const outputScale = Math.max(
+      0.5,
+      Math.min(0.75, 16_000 / Math.max(1, contentSize.height), 2_000 / Math.max(1, contentSize.width)),
+    );
+    const screenshot = await Promise.race([
+      client.send("Page.captureScreenshot", {
+        captureBeyondViewport: true,
+        clip: {
+          height: Math.max(1, contentSize.height),
+          scale: outputScale,
+          width: Math.max(1, contentSize.width),
+          x: 0,
+          y: 0,
+        },
+        format: "jpeg",
+        fromSurface: true,
+        quality: 72,
+      }),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("Supplemental full-page screenshot timed out")), timeoutMs);
+      }),
+    ]);
+    await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    await client.detach().catch(() => undefined);
   }
 }
 
@@ -4642,6 +5401,17 @@ async function capturePreConsentScreenshot(
   const viewportTimeoutMs = Math.max(1_500, Math.min(options.timeoutMs, 4_000));
   if (options.captureMode === "viewport_first") {
     try {
+      await captureViewportScreenshotWithCdp(page, screenshotPath, viewportTimeoutMs);
+      return {
+        status: "available",
+        captureMethod: captureMethods.viewportPrimary,
+        artifactRefs: [],
+        notes: ["Viewport pre-consent screenshot retained through the low-latency browser capture path."],
+      };
+    } catch {
+      // Playwright's bounded viewport capture remains the compatibility fallback.
+    }
+    try {
       await page.screenshot({ path: screenshotPath, fullPage: false, timeout: viewportTimeoutMs });
       return {
         status: "available",
@@ -4688,6 +5458,33 @@ async function capturePreConsentScreenshot(
     artifactRefs: [],
     notes: ["A 1x1 screenshot placeholder was retained after full-page and viewport screenshot capture failed."],
   };
+}
+
+async function captureViewportScreenshotWithCdp(
+  page: Page,
+  screenshotPath: string,
+  timeoutMs: number,
+): Promise<void> {
+  const client = await page.context().newCDPSession(page);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const screenshot = await Promise.race([
+      client.send("Page.captureScreenshot", {
+        captureBeyondViewport: false,
+        format: "png",
+        fromSurface: true,
+      }),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("Viewport screenshot timed out")), timeoutMs);
+      }),
+    ]);
+    await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    await client.detach().catch(() => undefined);
+  }
 }
 
 function visualCaptureFromScreenshotSummary(
@@ -4923,27 +5720,21 @@ async function captureConsentGeometryProofScreenshot(
 ): Promise<ScreenshotArtifact | null> {
   const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-geometry-proof.png");
   try {
+    await captureViewportScreenshotWithCdp(page, screenshotPath, options.timeoutMs);
+    return consentGeometryProofScreenshotArtifact(input, page, screenshotPath, "primary_viewport_fallback");
+  } catch (error) {
+    options.screenshotErrors.push(`Consent geometry proof fast screenshot failed: ${errorMessageFromUnknown(error)}`);
+  }
+  try {
     await page.screenshot({
       animations: "disabled",
       fullPage: false,
       path: screenshotPath,
       timeout: options.timeoutMs,
     });
-    return consentGeometryProofScreenshotArtifact(input, page, screenshotPath, "primary_viewport_fallback");
-  } catch (error) {
-    options.screenshotErrors.push(`Consent geometry proof screenshot failed: ${errorMessageFromUnknown(error)}`);
-  }
-  try {
-    const client = await page.context().newCDPSession(page);
-    const screenshot = await client.send("Page.captureScreenshot", {
-      captureBeyondViewport: false,
-      format: "png",
-      fromSurface: true,
-    });
-    await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
     return consentGeometryProofScreenshotArtifact(input, page, screenshotPath, "independent_visual_fallback_viewport");
   } catch (error) {
-    options.screenshotErrors.push(`Consent geometry proof CDP screenshot failed: ${errorMessageFromUnknown(error)}`);
+    options.screenshotErrors.push(`Consent geometry proof Playwright screenshot failed: ${errorMessageFromUnknown(error)}`);
     return null;
   }
 }

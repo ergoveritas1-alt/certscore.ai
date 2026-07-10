@@ -21,7 +21,8 @@ const MAX_CANDIDATES_TO_FETCH = 8;
 const MAX_COMMON_PATH_CANDIDATES_TO_FETCH = 8;
 const MAX_RENDERED_COMMON_PATH_LOW_QUALITY_FALLBACKS = 2;
 const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
-const POLICY_FETCH_CONCURRENCY = 3;
+const POLICY_FETCH_CONCURRENCY = 4;
+const POLICY_RENDERED_FETCH_CONCURRENCY = 1;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
 const MAX_EXCERPT_CHARS = 6_000;
 const MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS = 40_000;
@@ -79,6 +80,7 @@ export interface NanoLinkClassificationInput {
   assistId: string;
   pageUrl: string;
   candidates: PolicySurfaceCandidate[];
+  signal?: AbortSignal;
 }
 
 export interface NanoLinkClassificationResult {
@@ -164,6 +166,18 @@ interface PolicySurfaceTextArtifactBudget {
   remainingChars: number;
 }
 
+interface PolicyDocumentFetchCaches {
+  browserRuntime: PolicyBrowserRuntime;
+  direct: Map<string, Promise<FetchTextResult>>;
+  rendered: Map<string, Promise<FetchTextResult>>;
+  runRenderedFetch: <T>(run: () => Promise<T>) => Promise<T>;
+}
+
+interface PolicyBrowserRuntime {
+  close(): Promise<void>;
+  getBrowser(): Promise<Browser>;
+}
+
 export async function policySurfaceScanner(
   input: PolicySurfaceScannerInput,
 ): Promise<PolicySurfaceScannerResult> {
@@ -179,6 +193,13 @@ export async function policySurfaceScanner(
   const policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget = {
     remainingChars: MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS,
   };
+  const policyBrowserRuntime = createPolicyBrowserRuntime(input.browser);
+  const policyDocumentFetchCaches: PolicyDocumentFetchCaches = {
+    browserRuntime: policyBrowserRuntime,
+    direct: new Map(),
+    rendered: new Map(),
+    runRenderedFetch: createConcurrencyLimiter(POLICY_RENDERED_FETCH_CONCURRENCY),
+  };
 
   try {
     const homepage = await recordPolicyTiming(
@@ -192,13 +213,14 @@ export async function policySurfaceScanner(
         timingBreakdown,
         "homepage-failed rendered discovery",
         "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
-        () => extractRenderedCandidates(input, moduleStartedAtMs),
+        () => extractRenderedCandidates(input, moduleStartedAtMs, policyBrowserRuntime),
       );
       renderedCandidateCount = renderedCandidates.length;
       if (renderedCandidates.length > 0) {
         observedCandidateCount = renderedCandidates.length;
         const renderedResults = await fetchRankedPolicyCandidates({
           input,
+          fetchCaches: policyDocumentFetchCaches,
           timingBreakdown,
           moduleStartedAtMs,
           candidates: renderedCandidates,
@@ -229,6 +251,7 @@ export async function policySurfaceScanner(
       commonPathFallbackUsed = true;
       const fallbackResults = await fetchRankedPolicyCandidates({
         input,
+        fetchCaches: policyDocumentFetchCaches,
         timingBreakdown,
         moduleStartedAtMs,
         candidates: fallbackCandidates,
@@ -287,19 +310,79 @@ export async function policySurfaceScanner(
     const fastStaticCoverage =
       input.discoveryMode === "fast" &&
       hasCompleteFetchableStaticCoreCoverage(staticCandidates);
-    const renderedCandidates = fastStaticCoverage
-      ? await recordPolicyTiming(
+    const commonPathCandidates = commonPathCandidatesFor(
+      input.normalizedUrl,
+      staticCandidates.length,
+      commonPathLocaleHints(input.normalizedUrl, homepage.text, homepageText),
+    );
+    const shouldStartSpeculativeCommonPathRanking =
+      input.discoveryMode === "fast" &&
+      !fastStaticCoverage &&
+      commonPathCandidates.length > 0 &&
+      deterministicFetchFallback(staticCandidates).length === 0;
+    const speculativeStaticFetchCandidates = input.discoveryMode === "fast" && !fastStaticCoverage
+      ? deterministicFetchFallback(staticCandidates)
+        .filter((candidate) => candidate.fetchable && !candidate.observationOnly)
+        .slice(0, POLICY_FETCH_CONCURRENCY)
+      : [];
+    const speculativeStaticFetchPromise = speculativeStaticFetchCandidates.length > 0
+      ? recordPolicyTiming(
         timingBreakdown,
-        "rendered discovery skipped",
-        "Skipped rendered policy discovery because static planned-DAG candidates covered required surfaces.",
-        async () => [] as PolicySurfaceCandidate[],
+        "static policy fetch warmup",
+        `Warm ${speculativeStaticFetchCandidates.length} deterministic policy fetches in parallel with rendered discovery; final ranking and projection remain authoritative.`,
+        () => warmPolicyDocumentFetchCache({
+          cache: policyDocumentFetchCaches.direct,
+          candidates: speculativeStaticFetchCandidates,
+          input,
+          moduleStartedAtMs,
+        }),
       )
-      : await recordPolicyTiming(
+      : undefined;
+    void speculativeStaticFetchPromise?.catch(() => undefined);
+    const speculativeCommonPathNanoAbortController = shouldStartSpeculativeCommonPathRanking
+      ? new AbortController()
+      : undefined;
+    const speculativeCommonPathCandidates = shouldStartSpeculativeCommonPathRanking
+      ? commonPathCandidates.map((candidate) => ({ ...candidate }))
+      : [];
+    const speculativeCommonPathNanoRankingPromise = speculativeCommonPathNanoAbortController
+      ? recordPolicyTiming(
         timingBreakdown,
-        "rendered discovery",
-        "Optional browser-rendered footer/header policy link discovery.",
-        () => extractRenderedCandidates(input, moduleStartedAtMs),
-      );
+        "Nano common-path ranking",
+        `Rank ${commonPathCandidates.length} common policy paths in parallel with rendered discovery.`,
+        () => rankCandidatesWithRequiredNano(
+          input,
+          speculativeCommonPathCandidates,
+          speculativeCommonPathNanoAbortController.signal,
+        ),
+      )
+      : undefined;
+    // The speculative call is consumed only if rendered discovery still leaves no
+    // deterministic fetch candidates. Observe rejection immediately so a slow or
+    // failed Nano call cannot become an unhandled rejection while Chromium runs.
+    void speculativeCommonPathNanoRankingPromise?.catch(() => undefined);
+    let renderedCandidates: PolicySurfaceCandidate[];
+    try {
+      renderedCandidates = fastStaticCoverage
+        ? await recordPolicyTiming(
+          timingBreakdown,
+          "rendered discovery skipped",
+          "Skipped rendered policy discovery because static planned-DAG candidates covered required surfaces.",
+          async () => [] as PolicySurfaceCandidate[],
+        )
+        : await recordPolicyTiming(
+          timingBreakdown,
+          "rendered discovery",
+          "Optional browser-rendered footer/header policy link discovery.",
+          () => extractRenderedCandidates(input, moduleStartedAtMs, policyBrowserRuntime),
+        );
+    } catch (error) {
+      speculativeCommonPathNanoAbortController?.abort();
+      await speculativeCommonPathNanoRankingPromise?.catch(() => undefined);
+      await speculativeStaticFetchPromise?.catch(() => undefined);
+      throw error;
+    }
+    await speculativeStaticFetchPromise?.catch(() => undefined);
     renderedCandidateCount = renderedCandidates.length;
     const linkCandidates = fastStaticCoverage
       ? staticCandidates
@@ -313,11 +396,6 @@ export async function policySurfaceScanner(
         ]),
       );
     observedCandidateCount = linkCandidates.length;
-    const commonPathCandidates = commonPathCandidatesFor(
-      input.normalizedUrl,
-      linkCandidates.length,
-      commonPathLocaleHints(input.normalizedUrl, homepage.text, homepageText),
-    );
     const initialCandidates = linkCandidates.length > 0
       ? linkCandidates
       : commonPathCandidates;
@@ -336,6 +414,14 @@ export async function policySurfaceScanner(
         `Rank ${initialCandidates.length} policy candidates for supported surfaces.`,
         () => rankCandidatesWithRequiredNano(input, initialCandidates),
       );
+    const shouldConsumeSpeculativeCommonPathRanking =
+      rankedCandidates.length === 0 &&
+      input.discoveryMode === "fast" &&
+      shouldSpeculateCommonPathNanoRanking(linkCandidates, commonPathCandidates);
+    if (speculativeCommonPathNanoRankingPromise && !shouldConsumeSpeculativeCommonPathRanking) {
+      speculativeCommonPathNanoAbortController?.abort();
+      await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
+    }
     if (input.discoveryMode !== "fast" && linkCandidates.length === 0 && rankedCandidates.length > 0) {
       rankedCandidates = mergeCommonPathFallbackCandidates(
         deterministicCommonPathFetchFallback(commonPathCandidates),
@@ -351,7 +437,7 @@ export async function policySurfaceScanner(
             `Rank ${initialCandidates.length} policy candidates for supported surfaces after deterministic fast-path found no fetchable candidates.`,
             () => rankCandidatesWithRequiredNano(input, initialCandidates),
           ),
-          recordPolicyTiming(
+          speculativeCommonPathNanoRankingPromise ?? recordPolicyTiming(
             timingBreakdown,
             "Nano common-path ranking",
             `Rank ${commonPathCandidates.length} common policy paths in parallel with fallback link ranking.`,
@@ -418,6 +504,7 @@ export async function policySurfaceScanner(
     );
     const policyResults = await fetchPolicyCandidateGroup({
       input,
+      fetchCaches: policyDocumentFetchCaches,
       timingBreakdown,
       moduleStartedAtMs,
       rankedCandidates,
@@ -438,6 +525,7 @@ export async function policySurfaceScanner(
         deterministicCommonPathFetchFallback(commonPathCandidates);
       const commonPathResults = await fetchPolicyCandidateGroup({
         input,
+        fetchCaches: policyDocumentFetchCaches,
         timingBreakdown,
         moduleStartedAtMs,
         rankedCandidates: commonPathRankedCandidates,
@@ -457,6 +545,7 @@ export async function policySurfaceScanner(
     if (secondaryCandidates.length > 0) {
       const secondaryResults = await fetchPolicyCandidateGroup({
         input,
+        fetchCaches: policyDocumentFetchCaches,
         timingBreakdown,
         moduleStartedAtMs,
         rankedCandidates: secondaryCandidates,
@@ -491,6 +580,8 @@ export async function policySurfaceScanner(
       policySurfaceObservations: observations,
       artifactRefs,
     };
+  } finally {
+    await policyBrowserRuntime.close();
   }
 }
 
@@ -587,6 +678,7 @@ interface ProcessPolicyCandidateInput {
   candidate: PolicySurfaceCandidate;
   candidateIndex: number;
   policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
+  fetchCaches: PolicyDocumentFetchCaches;
 }
 
 interface ProcessPolicyCandidateResult {
@@ -597,6 +689,7 @@ interface ProcessPolicyCandidateResult {
 
 async function fetchRankedPolicyCandidates(input: {
   input: PolicySurfaceScannerInput;
+  fetchCaches: PolicyDocumentFetchCaches;
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
   moduleStartedAtMs: number;
   candidates: PolicySurfaceCandidate[];
@@ -622,6 +715,7 @@ async function fetchRankedPolicyCandidates(input: {
   }
   return fetchPolicyCandidateGroup({
     input: input.input,
+    fetchCaches: input.fetchCaches,
     timingBreakdown: input.timingBreakdown,
     moduleStartedAtMs: input.moduleStartedAtMs,
     rankedCandidates,
@@ -632,6 +726,7 @@ async function fetchRankedPolicyCandidates(input: {
 
 async function fetchPolicyCandidateGroup(input: {
   input: PolicySurfaceScannerInput;
+  fetchCaches: PolicyDocumentFetchCaches;
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
   moduleStartedAtMs: number;
   rankedCandidates: PolicySurfaceCandidate[];
@@ -648,6 +743,7 @@ async function fetchPolicyCandidateGroup(input: {
       POLICY_FETCH_CONCURRENCY,
       ({ candidate, candidateIndex }) => processPolicyCandidate({
         input: input.input,
+        fetchCaches: input.fetchCaches,
         timingBreakdown: input.timingBreakdown,
         moduleStartedAtMs: input.moduleStartedAtMs,
         candidate,
@@ -670,6 +766,7 @@ async function processPolicyCandidate({
   candidate,
   candidateIndex,
   policySurfaceTextArtifactBudget,
+  fetchCaches,
 }: ProcessPolicyCandidateInput): Promise<ProcessPolicyCandidateResult> {
   if (candidate.observationOnly) {
     return {
@@ -696,14 +793,18 @@ async function processPolicyCandidate({
     timingBreakdown,
     `policy fetch ${candidateIndex + 1}`,
     `Fetch ${candidate.deterministicSurfaceType} candidate document.`,
-    () => fetchText(candidate.normalizedUrl, remainingPolicyFetchMs(input, moduleStartedAtMs)),
+    () => fetchPolicyDocumentSingleFlight(
+      fetchCaches.direct,
+      candidate.normalizedUrl,
+      remainingPolicyFetchMs(input, moduleStartedAtMs),
+    ),
   );
   if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch(fetched.status, input, moduleStartedAtMs)) {
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
       `policy rendered fetch fallback ${candidateIndex + 1}`,
       `Fetch ${candidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch failed.`,
-      () => fetchRenderedPolicyDocumentText({
+      () => fetchRenderedPolicyDocumentSingleFlight(fetchCaches, {
         input,
         url: candidate.normalizedUrl,
         timeoutMs: Math.min(4_000, remainingMs(input, moduleStartedAtMs)),
@@ -729,12 +830,17 @@ async function processPolicyCandidate({
   let fetchedHtml = fetched.text;
   const secondaryCandidateHtmlInputs = [fetchedHtml];
   let title = titleFromHtml(fetchedHtml);
-  let visibleText = await resolvePolicyVisibleText({
-    html: fetched.text,
-    baseUrl: candidate.normalizedUrl,
-    surfaceType: candidate.deterministicSurfaceType,
-    timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
-  });
+  let visibleText = await recordPolicyTiming(
+    timingBreakdown,
+    `policy text resolution ${candidateIndex + 1}`,
+    `Resolve bounded direct, OneTrust, and canonical document text for ${candidate.deterministicSurfaceType}.`,
+    () => resolvePolicyVisibleText({
+      html: fetched.text,
+      baseUrl: candidate.normalizedUrl,
+      surfaceType: candidate.deterministicSurfaceType,
+      timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
+    }),
+  );
   const urlOnlyStubResolution = await recordPolicyTiming(
     timingBreakdown,
     `policy url-stub follow ${candidateIndex + 1}`,
@@ -773,19 +879,24 @@ async function processPolicyCandidate({
       timingBreakdown,
       `policy rendered low-quality text fallback ${candidateIndex + 1}`,
       `Fetch ${effectiveCandidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch retained only low-quality text.`,
-      () => fetchRenderedPolicyDocumentText({
+      () => fetchRenderedPolicyDocumentSingleFlight(fetchCaches, {
         input,
         url: effectiveCandidate.normalizedUrl,
         timeoutMs: Math.max(5_000, Math.min(6_000, remainingMs(input, moduleStartedAtMs))),
       }),
     );
     if (renderedFetched.ok) {
-      const renderedVisibleText = await resolvePolicyVisibleText({
-        html: renderedFetched.text,
-        baseUrl: effectiveCandidate.normalizedUrl,
-        surfaceType: effectiveCandidate.deterministicSurfaceType,
-        timeoutMs: Math.max(1_000, Math.min(3_000, remainingPolicyFetchMs(input, moduleStartedAtMs))),
-      });
+      const renderedVisibleText = await recordPolicyTiming(
+        timingBreakdown,
+        `policy rendered text resolution ${candidateIndex + 1}`,
+        `Resolve bounded rendered document text for ${effectiveCandidate.deterministicSurfaceType}.`,
+        () => resolvePolicyVisibleText({
+          html: renderedFetched.text,
+          baseUrl: effectiveCandidate.normalizedUrl,
+          surfaceType: effectiveCandidate.deterministicSurfaceType,
+          timeoutMs: Math.max(1_000, Math.min(3_000, remainingPolicyFetchMs(input, moduleStartedAtMs))),
+        }),
+      );
       if (shouldAdoptPolicyDocumentText(renderedVisibleText, visibleText, { allowTopicDominant: true })) {
         fetchedHtml = renderedFetched.text;
         secondaryCandidateHtmlInputs.push(fetchedHtml);
@@ -971,15 +1082,15 @@ function shouldTryRenderedPolicyDocumentTextFallback(input: {
 }
 
 async function fetchRenderedPolicyDocumentText(input: {
+  browserRuntime: PolicyBrowserRuntime;
   input: PolicySurfaceScannerInput;
   url: string;
   timeoutMs: number;
 }): Promise<FetchTextResult> {
-  let browser: Browser | undefined;
-  const ownsBrowser = !input.input.browser;
+  let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
   try {
-    browser = input.input.browser ?? await chromium.launch(chromiumLaunchOptions({ headless: true }));
-    const context = await browser.newContext(chromiumContextOptions());
+    const browser = await input.browserRuntime.getBrowser();
+    context = await browser.newContext(chromiumContextOptions());
     const page = await context.newPage();
     const response = await page.goto(input.url, {
       waitUntil: "domcontentloaded",
@@ -1012,9 +1123,7 @@ async function fetchRenderedPolicyDocumentText(input: {
   } catch {
     return { ok: false, text: "" };
   } finally {
-    if (ownsBrowser) {
-      await browser?.close().catch(() => undefined);
-    }
+    await context?.close().catch(() => undefined);
   }
 }
 
@@ -1026,13 +1135,25 @@ async function resolvePolicyVisibleText(input: {
 }): Promise<string> {
   const visibleText = htmlToVisibleText(input.html);
   let bestText = bestPolicyDocumentText(input.html, visibleText);
-
-  const oneTrustText = await extractOneTrustNoticeText({
-    html: input.html,
-    baseUrl: input.baseUrl,
-    timeoutMs: input.timeoutMs,
-    depth: 0,
-  });
+  const shouldSpeculateCanonicalPolicyLink =
+    input.surfaceType === "privacy_policy" &&
+    shouldFollowCanonicalPolicyDocumentLink(input.html, input.baseUrl, bestText);
+  const [oneTrustText, speculativeCanonicalPolicyText] = await Promise.all([
+    extractOneTrustNoticeText({
+      html: input.html,
+      baseUrl: input.baseUrl,
+      timeoutMs: input.timeoutMs,
+      depth: 0,
+    }),
+    shouldSpeculateCanonicalPolicyLink
+      ? fetchBestCanonicalPolicyDocumentText({
+        html: input.html,
+        baseUrl: input.baseUrl,
+        currentText: bestText,
+        timeoutMs: input.timeoutMs,
+      })
+      : Promise.resolve(undefined),
+  ]);
   if (oneTrustText && policyTextQualityScore(oneTrustText) > policyTextQualityScore(bestText)) {
     bestText = oneTrustText;
   }
@@ -1041,12 +1162,14 @@ async function resolvePolicyVisibleText(input: {
     input.surfaceType === "privacy_policy" &&
     shouldFollowCanonicalPolicyDocumentLink(input.html, input.baseUrl, bestText);
   if (shouldTryCanonicalPolicyLink) {
-    const linkedPolicyText = await fetchBestCanonicalPolicyDocumentText({
-      html: input.html,
-      baseUrl: input.baseUrl,
-      currentText: bestText,
-      timeoutMs: input.timeoutMs,
-    });
+    const linkedPolicyText = shouldSpeculateCanonicalPolicyLink
+      ? speculativeCanonicalPolicyText
+      : await fetchBestCanonicalPolicyDocumentText({
+        html: input.html,
+        baseUrl: input.baseUrl,
+        currentText: bestText,
+        timeoutMs: input.timeoutMs,
+      });
     if (linkedPolicyText && policyTextQualityScore(linkedPolicyText) > policyTextQualityScore(bestText)) {
       bestText = linkedPolicyText;
     }
@@ -1250,6 +1373,66 @@ async function mapWithConcurrency<TInput, TOutput>(
   return results;
 }
 
+function createConcurrencyLimiter(concurrency: number) {
+  const pending: Array<() => void> = [];
+  let active = 0;
+
+  const release = () => {
+    active = Math.max(0, active - 1);
+    pending.shift()?.();
+  };
+
+  return async function runLimited<T>(run: () => Promise<T>): Promise<T> {
+    if (active >= concurrency) {
+      await new Promise<void>((resolve) => pending.push(resolve));
+    }
+    active += 1;
+    try {
+      return await run();
+    } finally {
+      release();
+    }
+  };
+}
+
+function createPolicyBrowserRuntime(existingBrowser: Browser | undefined): PolicyBrowserRuntime {
+  let ownedBrowserPromise: Promise<Browser> | undefined;
+  return {
+    getBrowser() {
+      if (existingBrowser) {
+        return Promise.resolve(existingBrowser);
+      }
+      ownedBrowserPromise ??= chromium.launch(chromiumLaunchOptions({ headless: true }));
+      return ownedBrowserPromise;
+    },
+    async close() {
+      if (!existingBrowser && ownedBrowserPromise) {
+        const browser = await ownedBrowserPromise.catch(() => undefined);
+        await browser?.close().catch(() => undefined);
+      }
+    },
+  };
+}
+
+async function warmPolicyDocumentFetchCache(input: {
+  cache: Map<string, Promise<FetchTextResult>>;
+  candidates: PolicySurfaceCandidate[];
+  input: PolicySurfaceScannerInput;
+  moduleStartedAtMs: number;
+}): Promise<void> {
+  await mapWithConcurrency(
+    input.candidates,
+    POLICY_FETCH_CONCURRENCY,
+    async (candidate) => {
+      await fetchPolicyDocumentSingleFlight(
+        input.cache,
+        candidate.normalizedUrl,
+        remainingPolicyFetchMs(input.input, input.moduleStartedAtMs),
+      );
+    },
+  );
+}
+
 function extractCandidates(baseUrl: string, html: string, visibleText: string): PolicySurfaceCandidate[] {
   const candidates: PolicySurfaceCandidate[] = [];
   const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
@@ -1431,15 +1614,15 @@ function extractEmbeddedConsentConfigCandidates(baseUrl: string, html: string, v
 async function extractRenderedCandidates(
   input: PolicySurfaceScannerInput,
   moduleStartedAtMs: number,
+  browserRuntime: PolicyBrowserRuntime,
 ): Promise<PolicySurfaceCandidate[]> {
   if (remainingMs(input, moduleStartedAtMs) < 1_500) {
     return [];
   }
-  let browser: Browser | undefined;
-  const ownsBrowser = !input.browser;
+  let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
   try {
-    browser = input.browser ?? await chromium.launch(chromiumLaunchOptions({ headless: true }));
-    const context = await browser.newContext(chromiumContextOptions());
+    const browser = await browserRuntime.getBrowser();
+    context = await browser.newContext(chromiumContextOptions());
     const page = await context.newPage();
     const navigationTimeoutMs = input.discoveryMode === "fast" ? 4_000 : 8_000;
     await page.goto(input.normalizedUrl, {
@@ -1632,9 +1815,7 @@ async function extractRenderedCandidates(
   } catch {
     return [];
   } finally {
-    if (ownsBrowser) {
-      await browser?.close().catch(() => undefined);
-    }
+    await context?.close().catch(() => undefined);
   }
 }
 
@@ -2268,6 +2449,7 @@ function surfacePriority(surfaceType: PolicySurfaceObservation["surfaceType"]): 
 async function rankCandidatesWithRequiredNano(
   input: PolicySurfaceScannerInput,
   candidates: PolicySurfaceCandidate[],
+  signal?: AbortSignal,
 ): Promise<PolicySurfaceCandidate[]> {
   if (input.enableNanoPolicyAssist === false) {
     throw new Error("Nano policy assist cannot be disabled for policy-surface link discovery.");
@@ -2282,6 +2464,7 @@ async function rankCandidatesWithRequiredNano(
     assistId,
     pageUrl: input.normalizedUrl,
     candidates,
+    signal,
   });
   const rankedIds = new Set<string>();
   for (const ranked of result.rankedCandidates) {
@@ -3041,80 +3224,91 @@ async function extractOneTrustNoticeText(input: {
   }
 
   const noticeUrls = extractOneTrustNoticeUrls(input.html, input.baseUrl).slice(0, 4);
-  for (const noticeUrl of noticeUrls) {
-    const fetched = await fetchText(noticeUrl, input.timeoutMs);
-    if (!fetched.ok || !fetched.text.trim()) {
+  for (let index = 0; index < noticeUrls.length; index += 2) {
+    const batch = noticeUrls.slice(index, index + 2);
+    const results = await Promise.all(batch.map((noticeUrl) =>
+      extractOneTrustNoticeTextFromUrl(input, noticeUrl)
+    ));
+    const retained = results.find((text): text is string => Boolean(text && text.length > 500));
+    if (retained) {
+      return retained;
+    }
+  }
+  return null;
+}
+
+async function extractOneTrustNoticeTextFromUrl(
+  input: { html: string; baseUrl: string; timeoutMs: number; depth: number },
+  noticeUrl: string,
+): Promise<string | null> {
+  const fetched = await fetchText(noticeUrl, input.timeoutMs);
+  if (!fetched.ok || !fetched.text.trim()) {
+    return null;
+  }
+  const payload = parseJsonObject(fetched.text);
+  if (!payload) {
+    return null;
+  }
+
+  const policyUrls = extractOneTrustPolicyUrls(payload, noticeUrl).slice(0, 2);
+  for (const policyUrl of policyUrls) {
+    const policy = await fetchText(policyUrl, input.timeoutMs);
+    if (!policy.ok || !policy.text.trim()) {
       continue;
     }
-    const payload = parseJsonObject(fetched.text);
-    if (!payload) {
-      continue;
-    }
-
-    const policyUrls = extractOneTrustPolicyUrls(payload, noticeUrl).slice(0, 2);
-    for (const policyUrl of policyUrls) {
-      const policy = await fetchText(policyUrl, input.timeoutMs);
-      if (!policy.ok || !policy.text.trim()) {
-        continue;
-      }
-      const policyPayload = parseJsonObject(policy.text);
-      if (policyPayload) {
-        const nestedPolicyUrls = extractOneTrustPolicyUrls(policyPayload, policyUrl)
-          .filter((nestedUrl) => nestedUrl !== policyUrl)
-          .slice(0, 2);
-        for (const nestedPolicyUrl of nestedPolicyUrls) {
-          const nestedPolicy = await fetchText(nestedPolicyUrl, input.timeoutMs);
-          if (!nestedPolicy.ok || !nestedPolicy.text.trim()) {
-            continue;
-          }
-          const nestedPayload = parseJsonObject(nestedPolicy.text);
-          if (nestedPayload) {
-            const nestedUrls = extractOneTrustPolicyUrls(nestedPayload, nestedPolicyUrl);
-            const nestedText = extractOneTrustNoticePayloadText(nestedPayload);
-            if (nestedText && nestedText.length > 500 && nestedUrls.length === 0) {
-              return nestedText;
-            }
-          }
-          const nestedNoticeText = await extractOneTrustNoticeText({
-            html: nestedPolicy.text,
-            baseUrl: nestedPolicyUrl,
-            timeoutMs: input.timeoutMs,
-            depth: input.depth + 1,
-          });
-          if (nestedNoticeText && nestedNoticeText.length > 500) {
-            return nestedNoticeText;
+    const policyPayload = parseJsonObject(policy.text);
+    if (policyPayload) {
+      const nestedPolicyUrls = extractOneTrustPolicyUrls(policyPayload, policyUrl)
+        .filter((nestedUrl) => nestedUrl !== policyUrl)
+        .slice(0, 2);
+      for (const nestedPolicyUrl of nestedPolicyUrls) {
+        const nestedPolicy = await fetchText(nestedPolicyUrl, input.timeoutMs);
+        if (!nestedPolicy.ok || !nestedPolicy.text.trim()) {
+          continue;
+        }
+        const nestedPayload = parseJsonObject(nestedPolicy.text);
+        if (nestedPayload) {
+          const nestedUrls = extractOneTrustPolicyUrls(nestedPayload, nestedPolicyUrl);
+          const nestedText = extractOneTrustNoticePayloadText(nestedPayload);
+          if (nestedText && nestedText.length > 500 && nestedUrls.length === 0) {
+            return nestedText;
           }
         }
-
-        const policyText = extractOneTrustNoticePayloadText(policyPayload);
-        if (policyText && policyText.length > 500) {
-          return policyText;
+        const nestedNoticeText = await extractOneTrustNoticeText({
+          html: nestedPolicy.text,
+          baseUrl: nestedPolicyUrl,
+          timeoutMs: input.timeoutMs,
+          depth: input.depth + 1,
+        });
+        if (nestedNoticeText && nestedNoticeText.length > 500) {
+          return nestedNoticeText;
         }
       }
 
-      const nestedText = await extractOneTrustNoticeText({
-        html: policy.text,
-        baseUrl: policyUrl,
-        timeoutMs: input.timeoutMs,
-        depth: input.depth + 1,
-      });
-      if (nestedText && nestedText.length > 500) {
-        return nestedText;
-      }
-
-      const visibleText = htmlToVisibleText(policy.text);
-      if (visibleText.length > 500 && !/processing error|privacy center.*error/i.test(visibleText)) {
-        return visibleText;
+      const policyText = extractOneTrustNoticePayloadText(policyPayload);
+      if (policyText && policyText.length > 500) {
+        return policyText;
       }
     }
 
-    const directText = extractOneTrustNoticePayloadText(payload);
-    if (directText && directText.length > 500) {
-      return directText;
+    const nestedText = await extractOneTrustNoticeText({
+      html: policy.text,
+      baseUrl: policyUrl,
+      timeoutMs: input.timeoutMs,
+      depth: input.depth + 1,
+    });
+    if (nestedText && nestedText.length > 500) {
+      return nestedText;
+    }
+
+    const visibleText = htmlToVisibleText(policy.text);
+    if (visibleText.length > 500 && !/processing error|privacy center.*error/i.test(visibleText)) {
+      return visibleText;
     }
   }
 
-  return null;
+  const directText = extractOneTrustNoticePayloadText(payload);
+  return directText && directText.length > 500 ? directText : null;
 }
 
 function extractOneTrustNoticeUrls(html: string, baseUrl: string): string[] {
@@ -3263,6 +3457,56 @@ type PdfParseConstructor = new (input: { data: Uint8Array }) => {
     pageJoiner: string;
   }): Promise<{ text: string }>;
 };
+
+function fetchPolicyDocumentSingleFlight(
+  cache: Map<string, Promise<FetchTextResult>>,
+  url: string,
+  timeoutMs: number,
+): Promise<FetchTextResult> {
+  const key = policyDocumentFetchCacheKey(url);
+  const existing = cache.get(key);
+  if (existing) {
+    return existing;
+  }
+  const pending = fetchText(url, timeoutMs);
+  cache.set(key, pending);
+  return pending;
+}
+
+function fetchRenderedPolicyDocumentSingleFlight(
+  fetchCaches: PolicyDocumentFetchCaches,
+  input: {
+    input: PolicySurfaceScannerInput;
+    url: string;
+    timeoutMs: number;
+  },
+): Promise<FetchTextResult> {
+  // Keep failure-recovery and low-quality-text rendering in separate buckets:
+  // the latter intentionally has a longer evidence wait and must never inherit
+  // a shorter earlier attempt.
+  const renderClass = input.timeoutMs >= 5_000 ? "quality" : "failure";
+  const key = `${policyDocumentFetchCacheKey(input.url)}|${renderClass}`;
+  const existing = fetchCaches.rendered.get(key);
+  if (existing) {
+    return existing;
+  }
+  const pending = fetchCaches.runRenderedFetch(() => fetchRenderedPolicyDocumentText({
+    ...input,
+    browserRuntime: fetchCaches.browserRuntime,
+  }));
+  fetchCaches.rendered.set(key, pending);
+  return pending;
+}
+
+function policyDocumentFetchCacheKey(value: string): string {
+  try {
+    const parsed = new URL(value);
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return value.replace(/#.*$/, "");
+  }
+}
 
 async function fetchText(url: string, timeoutMs: number): Promise<FetchTextResult> {
   const startedAtMs = Date.now();
@@ -4153,9 +4397,13 @@ async function fetchBestCanonicalPolicyDocumentText(input: {
   const urls = canonicalPolicyDocumentUrlsFromHtml(input.html, input.baseUrl);
   let bestText: string | undefined;
   let bestScore = policyTextQualityScore(input.currentText);
+  const fetchedCandidates = await Promise.all(
+    urls.slice(0, MAX_CANONICAL_POLICY_LINK_FETCHES).map((url) =>
+      fetchText(url, Math.max(800, Math.min(2_000, input.timeoutMs)))
+    ),
+  );
 
-  for (const url of urls.slice(0, MAX_CANONICAL_POLICY_LINK_FETCHES)) {
-    const fetched = await fetchText(url, Math.max(800, Math.min(2_000, input.timeoutMs)));
+  for (const fetched of fetchedCandidates) {
     if (!fetched.ok) {
       continue;
     }

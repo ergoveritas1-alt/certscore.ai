@@ -56,6 +56,11 @@ const ROOT_FULL_CHECKS: Check[] = [
     command: ["pnpm", "--filter", "@certscore/scan-core", "test:integration-fixtures:consent"]
   },
   {
+    key: "scan-core-policy-timing-quality",
+    label: "v2 policy timing quality fixtures",
+    command: ["pnpm", "--filter", "@certscore/scan-core", "test:policy-timing-quality"]
+  },
+  {
     key: "lambda-tests",
     label: "v2 DAG Lambda tests",
     command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "test"]
@@ -135,6 +140,11 @@ const TARGETS: Target[] = [
         key: "scan-core-consent-quality",
         label: "v2 late-consent quality fixtures",
         command: ["pnpm", "--filter", "@certscore/scan-core", "test:integration-fixtures:consent"]
+      },
+      {
+        key: "scan-core-policy-timing-quality",
+        label: "v2 policy timing quality fixtures",
+        command: ["pnpm", "--filter", "@certscore/scan-core", "test:policy-timing-quality"]
       },
       {
         key: "lambda-typecheck",

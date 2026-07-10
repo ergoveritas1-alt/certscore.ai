@@ -4,11 +4,13 @@ import { createOpenAiNanoPolicyAssistProvider } from "./nano-policy-assist-provi
 
 test("OpenAI Nano policy provider ranks only observed candidate IDs", async () => {
   let requestBody: Record<string, unknown> | undefined;
+  let requestSignal: AbortSignal | null | undefined;
   const provider = createOpenAiNanoPolicyAssistProvider({
     apiKey: "test-key",
     model: "test-nano",
     fetchImpl: async (_url, init) => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requestSignal = init?.signal;
       return jsonResponse({
         choices: [{
           message: {
@@ -55,9 +57,11 @@ test("OpenAI Nano policy provider ranks only observed candidate IDs", async () =
     },
   });
 
+  const controller = new AbortController();
   const result = await provider.classifyLinks?.({
     assistId: "assist_links",
     pageUrl: "https://example.com/",
+    signal: controller.signal,
     candidates: [
       {
         candidateId: "policy_candidate_1",
@@ -127,6 +131,7 @@ test("OpenAI Nano policy provider ranks only observed candidate IDs", async () =
   };
   assert.equal(userPayload.candidates.some((candidate) => candidate.discoveryMethod === "guessed_common_path"), true);
   assert.equal(userPayload.candidates.some((candidate) => "observationOnly" in candidate), true);
+  assert.equal(requestSignal, controller.signal);
   assert.deepEqual(result?.rankedCandidates.map((candidate) => candidate.candidateId), ["policy_candidate_2", "policy_candidate_3"]);
   assert.equal(result?.rankedCandidates[0]?.likelySurfaceType, "your_privacy_choices");
 });

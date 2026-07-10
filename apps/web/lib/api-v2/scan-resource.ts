@@ -33,6 +33,7 @@ import {
 import { absoluteUrl } from "../seo";
 
 export const API_V2_SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
+const API_V2_MAX_ACTIVE_SCAN_RETRY_AFTER_SECONDS = 5;
 
 type PulseFindingLike = {
   id: string;
@@ -503,7 +504,12 @@ export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2
 export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJob {
   const scan = scanRecord.scan;
   const status = normalizeScanStatus(scan.status);
-  const retryAfterSeconds = status === "completed" || status === "completed_limited" || status === "failed" || status === "expired" ? null : 30;
+  const retryAfterSeconds = status === "completed" || status === "completed_limited" || status === "failed" || status === "expired"
+    ? null
+    : apiV2ActiveScanRetryAfterSeconds({
+      createdAt: scan.createdAt,
+      startedAt: scan.startedAt,
+    });
   const scanTimeSeconds = scanTimeSecondsFromTimestamps(scan.startedAt, scan.completedAt);
   const resource = {
     type: "certscore_scan_job",
@@ -534,6 +540,11 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJ
 export function buildApiV2ScanJobFromPulseStatus(status: PulseStatusLike): ApiV2ScanJob {
   const scanId = status.scanId ?? status.scan_id ?? null;
   const normalizedStatus = normalizeScanStatus(status.status);
+  const terminal = normalizedStatus === "completed" || normalizedStatus === "completed_limited" || normalizedStatus === "failed" || normalizedStatus === "expired";
+  const activeRetryAfterSeconds = apiV2ActiveScanRetryAfterSeconds({
+    createdAt: status.createdAt,
+    startedAt: status.startedAt,
+  });
   const scanTimeSeconds = finiteNumber(status.scanTimeSeconds) ?? scanTimeSecondsFromTimestamps(status.startedAt, status.completedAt);
   const resource = {
     type: "certscore_scan_job",
@@ -547,7 +558,9 @@ export function buildApiV2ScanJobFromPulseStatus(status: PulseStatusLike): ApiV2
     completedAt: dateStringOrNull(status.completedAt),
     scanTimeSeconds,
     lastUpdatedAt: dateStringOrNull(status.lastUpdatedAt ?? status.completedAt ?? status.createdAt) ?? undefined,
-    retryAfterSeconds: status.retryAfterSeconds ?? (normalizedStatus === "completed" || normalizedStatus === "completed_limited" ? null : 30),
+    retryAfterSeconds: terminal
+      ? null
+      : Math.min(status.retryAfterSeconds ?? activeRetryAfterSeconds, activeRetryAfterSeconds),
     links: {
       self: scanId ? absoluteUrl(`/api/v2/scans/${scanId}/status`) : status.statusUrl ?? undefined,
       status: scanId ? absoluteUrl(`/api/v2/scans/${scanId}/status`) : status.statusUrl ?? undefined,
@@ -560,6 +573,25 @@ export function buildApiV2ScanJobFromPulseStatus(status: PulseStatusLike): ApiV2
   } satisfies ApiV2ScanJob;
 
   return apiV2ScanJobSchema.parse(resource);
+}
+
+export function apiV2ActiveScanRetryAfterSeconds(input: {
+  createdAt?: string | null;
+  nowMs?: number;
+  startedAt?: string | null;
+}): number {
+  const referenceMs = Date.parse(input.startedAt ?? input.createdAt ?? "");
+  if (!Number.isFinite(referenceMs)) {
+    return API_V2_MAX_ACTIVE_SCAN_RETRY_AFTER_SECONDS;
+  }
+  const elapsedMs = Math.max(0, (input.nowMs ?? Date.now()) - referenceMs);
+  if (elapsedMs < 15_000) {
+    return 1;
+  }
+  if (elapsedMs < 45_000) {
+    return 2;
+  }
+  return API_V2_MAX_ACTIVE_SCAN_RETRY_AFTER_SECONDS;
 }
 
 function apiV2ErrorCodeFromPulse(code: string | undefined, status: number) {

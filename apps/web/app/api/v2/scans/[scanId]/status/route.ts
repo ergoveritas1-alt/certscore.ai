@@ -38,8 +38,13 @@ export async function GET(request: Request, context: RouteContext) {
       });
     }
 
+    const scanStatus = buildApiV2ScanStatus(scanRecord);
+    const retryAfter = scanStatus.retryAfterSeconds === null || scanStatus.retryAfterSeconds === undefined
+      ? undefined
+      : String(scanStatus.retryAfterSeconds);
     return apiV2JsonResponse({
-      body: buildApiV2ScanStatus(scanRecord),
+      body: scanStatus,
+      headers: retryAfter ? { "Retry-After": retryAfter } : undefined,
       requestId: id,
       route: "api-v2-scan-status",
       status: 200

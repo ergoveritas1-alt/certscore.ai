@@ -111,13 +111,14 @@ test("validation worker identifies wrong-target Lambda results for immediate rel
   assert.equal(getLambdaResultTargetEnvironment(JSON.stringify({ targetEnvironment: "staging" })), null);
 });
 
-test("validation worker Lambda result poller uses a short SQS visibility timeout", async () => {
+test("validation worker Lambda result poller retains leases and bounds result concurrency", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
   assert.match(source, /ChangeMessageVisibilityCommand/);
   assert.match(source, /VisibilityTimeout:\s*0/);
-  assert.match(source, /VisibilityTimeout:\s*5/);
-  assert.doesNotMatch(source, /VisibilityTimeout:\s*30/);
+  assert.match(source, /RESULT_VISIBILITY_TIMEOUT_SECONDS\s*=\s*60/);
+  assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
+  assert.match(source, /mapWithConcurrency\(messages, RESULT_BATCH_CONCURRENCY/);
 });
 
 test("validation worker records Lambda result event before marking scan completed", async () => {

@@ -1103,6 +1103,11 @@ test("pre-consent runtime scanner waits briefly for late choice controls when CM
       "scanner should use the bounded post-CMP recapture path",
     );
     assert.equal(
+      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_10s:complete_exit"),
+      true,
+      "complete accept/reject evidence should exit through the first adaptive gate without spending the later tail",
+    );
+    assert.equal(
       bundle.cmpRuntimeObservations.some((cmp) => cmp.vendor === "OneTrust"),
       true,
       "fixture should retain CMP runtime evidence before the post-CMP recapture is eligible",
@@ -1133,6 +1138,11 @@ test("pre-consent runtime scanner recaptures late CMP choice controls when no in
       observation?.basis.includes("recapture:post_cmp_first_layer_choice_controls"),
       true,
       "scanner should retain late CMP choice controls even when no initial controls were visible",
+    );
+    assert.equal(
+      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_10s:complete_exit"),
+      true,
+      "complete late CMP controls should exit before the 10-second checkpoint when they become available",
     );
   } finally {
     await server.close();
@@ -1188,13 +1198,18 @@ test("pre-consent runtime scanner recaptures late settings controls from high-co
     );
     assert.match(
       cmpRecaptureTiming?.detail ?? "",
-      /Adaptive post-CMP first-layer control inventory/,
-      "high-confidence CMP recapture should use the adaptive late-modal path",
+      /Navigation-relative adaptive CMP inventory/,
+      "high-confidence CMP recapture should use the navigation-relative adaptive gate path",
     );
     assert.equal(
-      typeof cmpRecaptureTiming?.durationMs === "number" && cmpRecaptureTiming.durationMs < 10_000,
+      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_20s:no_recent_progress_exit"),
       true,
-      "adaptive CMP recapture should exit after the delayed controls are retained instead of waiting the full cap",
+      "accept/settings-only evidence should stabilize through the 20-second gate without spending the 25-second hard cap",
+    );
+    assert.equal(
+      typeof cmpRecaptureTiming?.durationMs === "number" && cmpRecaptureTiming.durationMs < 20_000,
+      true,
+      "adaptive CMP recapture should stop before the hard cap when partial controls stop improving",
     );
   } finally {
     await server.close();
@@ -1234,11 +1249,14 @@ test("pre-consent runtime scanner keeps high-confidence CMP recapture open long 
       true,
       "scanner should mark the very late controls as retained by the adaptive CMP recapture",
     );
+    assert.equal(
+      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_18s:partial_or_progressing_continue_20s"),
+      true,
+      "very late partial controls should be retained at the 18-second safety floor and continue to the 20-second review gate",
+    );
     assert.ok(
-      typeof cmpRecaptureTiming?.durationMs === "number" &&
-        cmpRecaptureTiming.durationMs >= 12_000 &&
-        cmpRecaptureTiming.durationMs < 15_000,
-      `adaptive CMP recapture should cover controls appearing after the old 12s cap without spending the full 15s; durationMs=${cmpRecaptureTiming?.durationMs ?? "missing"}`,
+      typeof cmpRecaptureTiming?.durationMs === "number" && cmpRecaptureTiming.durationMs < 20_000,
+      `adaptive CMP recapture should retain the very late controls without spending the 25s hard cap; durationMs=${cmpRecaptureTiming?.durationMs ?? "missing"}`,
     );
   } finally {
     await server.close();
@@ -1295,9 +1313,9 @@ test("pre-consent runtime scanner performs a structured read after supplemental 
       "final structured read should retain Settings without inferring from the screenshot",
     );
     assert.equal(
-      observation?.basis.includes("recapture:post_supplemental_screenshot_first_layer_controls"),
+      observation?.basis.includes("recapture:post_cmp_first_layer_choice_controls"),
       true,
-      "scanner should identify the final structured read as the source of the retained controls",
+      "scanner should retain controls through the structured adaptive gate read after the earlier supplemental capture",
     );
   } finally {
     await server.close();
@@ -1694,7 +1712,7 @@ test("planned pre-consent baseline skips screenshots when no consent surface is 
   }
 });
 
-test("planned pre-consent baseline can retain viewport-first and same-page full-page screenshots", async () => {
+test("planned pre-consent baseline skips supplemental full-page capture without consent evidence", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-viewport-screenshot-"));
   try {
@@ -1715,14 +1733,11 @@ test("planned pre-consent baseline can retain viewport-first and same-page full-
     const viewportScreenshot = result.screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent");
     const fullPageScreenshot = result.screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page");
     assert.equal(viewportScreenshot?.captureMethod, "primary_viewport_fallback");
-    assert.equal(fullPageScreenshot?.captureMethod, "primary_full_page");
-    assert.match(fullPageScreenshot?.path ?? "", /screenshot-pre-consent-full-page\.jpg$/);
-    assert.equal(result.screenshots[0]?.artifactId, "screenshot_pre_consent_full_page");
-    assert.equal(result.visualCapture.captureMethod, "primary_full_page");
-    assert.equal(
-      result.visualCapture.notes.some((note) => note.includes("Viewport pre-consent screenshot retained")),
-      true,
-    );
+    assert.equal(fullPageScreenshot, undefined);
+    assert.equal(result.screenshots[0]?.artifactId, "screenshot_pre_consent");
+    assert.equal(result.visualCapture.captureMethod, "primary_viewport_fallback");
+    assert.equal(result.moduleRun.timingBreakdown?.some((entry) => entry.label === "supplemental full-page screenshot"), false);
+    assert.equal(result.moduleRun.timingBreakdown?.some((entry) => entry.label === "page evidence: consolidated snapshot"), true);
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -1751,6 +1766,10 @@ test("planned pre-consent baseline avoids duplicate recaptures for retained ambi
     assert.equal(result.consentUiObservations[0]?.likelyPresent, true);
     assert.equal(result.consentUiObservations[0]?.acceptControlObserved, false);
     assert.equal(result.consentUiObservations[0]?.rejectControlObserved, false);
+    assert.equal(
+      result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_full_page"),
+      true,
+    );
     assert.equal(timingLabels.includes("page evidence: consent UI timeout recapture"), false);
     assert.equal(timingLabels.includes("consent UI control recapture"), false);
   } finally {

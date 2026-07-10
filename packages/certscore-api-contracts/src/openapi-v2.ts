@@ -37,7 +37,7 @@ const scanJobExample = {
   startedAt: "2026-06-30T12:00:01.000Z",
   completedAt: null,
   scanTimeSeconds: null,
-  retryAfterSeconds: 10,
+  retryAfterSeconds: 2,
   links: {
     self: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status",
     status: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status"

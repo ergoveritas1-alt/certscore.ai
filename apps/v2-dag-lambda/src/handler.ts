@@ -2,8 +2,11 @@ import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/
 import { GetObjectCommand, PutObjectCommand, S3Client, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@aws-sdk/client-sqs";
 import { createHash } from "node:crypto";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import path from "node:path";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { connect as tlsConnect } from "node:tls";
 import { chromium } from "playwright";
 import { canonicalEvidenceBundleSchema, type CanonicalEvidenceBundle, type ConsentFlowScenario, type ScreenshotArtifact } from "@certscore/contracts";
 import {
@@ -107,6 +110,11 @@ type LocalV2DagLambdaPhaseTiming = {
   completedAt?: string;
   durationMs: number;
   label: string;
+  memoryAfterMb?: number;
+  memoryBeforeMb?: number;
+  memoryLimitMb?: number;
+  processRssAfterMb?: number;
+  processRssBeforeMb?: number;
   startedAt?: string;
   status: "completed" | "failed" | "skipped";
 };
@@ -519,15 +527,26 @@ export async function runLocalV2DagLambdaArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
-  await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot));
-
-  const bundle = await runLocalV2DagLambdaScanBundle(payload, {
+  const egressPreflightPromise = timeLambdaPhase(
+    phaseTimings,
+    "egress_preflight",
+    () => writeEgressPreflightArtifact(artifactRoot, { allowBrowserFallback: false }),
+  );
+  const scanBundlePromise = runLocalV2DagLambdaScanBundle(payload, {
     artifactRoot,
     phaseLabelPrefix: options.phaseLabelPrefix,
     phaseTimings,
     preConsentScreenshotMode: options.preConsentScreenshotMode ?? scanTuning.preConsentScreenshotMode,
     scanTuning
   });
+  const [egressAvailable, bundle] = await Promise.all([egressPreflightPromise, scanBundlePromise]);
+  if (!egressAvailable) {
+    await timeLambdaPhase(
+      phaseTimings,
+      "egress_preflight_browser_fallback",
+      () => writeEgressPreflightArtifact(artifactRoot, { allowBrowserFallback: true, skipLightweightProbe: true }),
+    );
+  }
 
   return writeAndUploadLocalV2DagLambdaArtifacts({
     artifactRoot,
@@ -549,20 +568,37 @@ async function runLocalV2DagLambdaScanBundle(
     scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
   }
 ) {
-  return timeLambdaPhase(options.phaseTimings, phaseLabel(options.phaseLabelPrefix, "scan"), () => runScan({
-    browserReuseMode: "per_module",
-    outDir: options.artifactRoot,
-    policyOutputGraceMs: 1_000,
-    policyPlanningDeadlineMs: 1_500,
-    postConsentFlowsEnabled: false,
-    preConsentScreenshotMode: options.preConsentScreenshotMode,
-    preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
-    preConsentVisualFallbackDeadlineMs: options.scanTuning.preConsentVisualFallbackDeadlineMs,
-    profile: payload.profile,
-    scenarioPlanningMode: "planned_parallel",
-    scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
-    url: payload.targetUrl
-  }));
+  return timeLambdaPhase(options.phaseTimings, phaseLabel(options.phaseLabelPrefix, "scan"), async () => {
+    const resourceSampler = startRuntimeResourceSampler();
+    try {
+      return await runScan({
+        browserReuseMode: "per_module",
+        outDir: options.artifactRoot,
+        policyOutputGraceMs: 1_000,
+        policyPlanningDeadlineMs: 1_500,
+        postConsentFlowsEnabled: false,
+        preConsentScreenshotMode: options.preConsentScreenshotMode,
+        preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
+        preConsentVisualFallbackDeadlineMs: options.scanTuning.preConsentVisualFallbackDeadlineMs,
+        profile: payload.profile,
+        scenarioPlanningMode: "planned_parallel",
+        scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
+        url: payload.targetUrl
+      });
+    } finally {
+      const telemetry = await resourceSampler.stop();
+      await writeJson(path.join(options.artifactRoot, "V2RuntimeResourceTelemetry.json"), {
+        artifactVersion: "certscore.v2_runtime_resource_telemetry.1",
+        artifactOnly: true,
+        browserIsolation: "per_module_context_isolation",
+        generatedAt: new Date().toISOString(),
+        maxConcurrentBrowserProcesses: 2,
+        policyRenderedFallbackConcurrency: 1,
+        productionFindingIntegration: false,
+        ...telemetry,
+      });
+    }
+  });
 }
 
 async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
@@ -588,11 +624,21 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     manifestFileName: "LocalV2DagLambdaManifest.json",
     scanArtifactFileName: "CanonicalEvidenceBundle.json"
   });
-  const auxiliaryArtifacts = await timeLambdaPhase(phaseTimings, "auxiliary_upload", () => uploadAuxiliaryArtifactFiles({
-    artifactRoot,
-    payload,
-    s3Client: input.s3Client
-  }));
+  const [auxiliaryArtifacts, scanArtifactMetadata] = await Promise.all([
+    timeLambdaPhase(phaseTimings, "auxiliary_upload", () => uploadAuxiliaryArtifactFiles({
+      artifactRoot,
+      payload,
+      s3Client: input.s3Client
+    })),
+    timeLambdaPhase(phaseTimings, "scan_artifact_upload", () => uploadArtifactFiles({
+      fields: ["scanArtifactUri"],
+      manifestPath,
+      payload,
+      pointers,
+      scanArtifactPath,
+      s3Client: input.s3Client
+    }))
+  ]);
   await timeLambdaPhase(phaseTimings, "manifest_write", () => writeManifest({
     artifactRoot,
     auxiliaryArtifacts,
@@ -602,7 +648,8 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     pointers,
     scanTuning
   }));
-  const artifactMetadata = await timeLambdaPhase(phaseTimings, "core_artifact_upload", () => uploadArtifactFiles({
+  const manifestArtifactMetadata = await timeLambdaPhase(phaseTimings, "core_artifact_upload", () => uploadArtifactFiles({
+    fields: ["manifestUri"],
     manifestPath,
     payload,
     pointers,
@@ -610,7 +657,10 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     s3Client: input.s3Client
   }));
   return {
-    artifactMetadata,
+    artifactMetadata: {
+      ...scanArtifactMetadata,
+      ...manifestArtifactMetadata
+    },
     artifactPointers: pointers,
     phaseTimings
   };
@@ -624,7 +674,10 @@ function writeJson(filePath: string, value: unknown) {
   return writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-async function writeEgressPreflightArtifact(artifactRoot: string) {
+async function writeEgressPreflightArtifact(
+  artifactRoot: string,
+  options: { allowBrowserFallback: boolean; skipLightweightProbe?: boolean },
+): Promise<boolean> {
   const startedAt = Date.now();
   const startedAtIso = new Date(startedAt).toISOString();
   const egressLabel = firstTrimmedRuntimeEnv(process.env, [
@@ -663,7 +716,35 @@ async function writeEgressPreflightArtifact(artifactRoot: string) {
     artifact.completedAt = new Date(completedAt).toISOString();
     artifact.durationMs = completedAt - startedAt;
     await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
-    return;
+    return true;
+  }
+
+  if (!options.skipLightweightProbe && proxyServer) {
+    try {
+      const response = await fetchEgressProbeThroughProxy(proxyServer);
+      const parsed = parseEgressProbeResponse(response.text);
+      artifact.provider = "ipinfo.io";
+      artifact.probeStatus = response.status >= 200 && response.status < 300 && parsed ? "available" : "failed";
+      artifact.observed = parsed;
+      if (artifact.probeStatus === "available") {
+        const completedAt = Date.now();
+        artifact.completedAt = new Date(completedAt).toISOString();
+        artifact.durationMs = completedAt - startedAt;
+        await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
+        return true;
+      }
+      artifact.error = `Unexpected lightweight egress preflight response: HTTP ${response.status}`;
+    } catch (error) {
+      artifact.error = error instanceof Error ? error.message.slice(0, 240) : "unknown_lightweight_egress_preflight_error";
+    }
+  }
+
+  if (!options.allowBrowserFallback) {
+    const completedAt = Date.now();
+    artifact.completedAt = new Date(completedAt).toISOString();
+    artifact.durationMs = completedAt - startedAt;
+    await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
+    return false;
   }
 
   let browser;
@@ -680,6 +761,9 @@ async function writeEgressPreflightArtifact(artifactRoot: string) {
     artifact.provider = "ipinfo.io";
     artifact.probeStatus = response && response.ok() && parsed ? "available" : "failed";
     artifact.observed = parsed;
+    if (artifact.probeStatus === "available") {
+      artifact.error = null;
+    }
     if (!parsed) {
       artifact.error = `Unexpected egress preflight response: HTTP ${response?.status() ?? 0}`;
     }
@@ -694,6 +778,7 @@ async function writeEgressPreflightArtifact(artifactRoot: string) {
     artifact.durationMs = completedAt - startedAt;
     await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
   }
+  return artifact.probeStatus === "available";
 }
 
 function parseEgressProbeResponse(text: string) {
@@ -719,6 +804,94 @@ function parseEgressProbeResponse(text: string) {
   }
 }
 
+async function fetchEgressProbeThroughProxy(
+  proxyServer: string,
+): Promise<{ status: number; text: string }> {
+  const proxyUrl = new URL(proxyServer.includes("://") ? proxyServer : `http://${proxyServer}`);
+  if (proxyUrl.protocol !== "http:" && proxyUrl.protocol !== "https:") {
+    throw new Error(`Unsupported lightweight egress proxy protocol: ${proxyUrl.protocol}`);
+  }
+  const proxyUsername = firstTrimmedRuntimeEnv(process.env, [
+    "CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME",
+    "CERTSCORE_CHROMIUM_PROXY_USERNAME",
+  ]) ?? decodeURIComponent(proxyUrl.username);
+  const proxyPassword = firstTrimmedRuntimeEnv(process.env, [
+    "CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD",
+    "CERTSCORE_CHROMIUM_PROXY_PASSWORD",
+  ]) ?? decodeURIComponent(proxyUrl.password);
+  const proxyAuthorization = proxyUsername
+    ? `Basic ${Buffer.from(`${proxyUsername}:${proxyPassword}`).toString("base64")}`
+    : undefined;
+  const connectRequest = proxyUrl.protocol === "https:" ? httpsRequest : httpRequest;
+
+  return new Promise((resolve, reject) => {
+    const request = connectRequest({
+      hostname: proxyUrl.hostname,
+      method: "CONNECT",
+      path: "ipinfo.io:443",
+      port: proxyUrl.port ? Number(proxyUrl.port) : proxyUrl.protocol === "https:" ? 443 : 80,
+      headers: {
+        Host: "ipinfo.io:443",
+        ...(proxyAuthorization ? { "Proxy-Authorization": proxyAuthorization } : {}),
+      },
+    });
+    const fail = (error: unknown) => {
+      request.destroy();
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
+    request.setTimeout(5_000, () => fail(new Error("Lightweight egress proxy CONNECT timed out")));
+    request.once("error", fail);
+    request.once("connect", (response, socket, head) => {
+      request.removeListener("error", fail);
+      if (response.statusCode !== 200) {
+        socket.destroy();
+        reject(new Error(`Lightweight egress proxy CONNECT failed: HTTP ${response.statusCode ?? 0}`));
+        return;
+      }
+      if (head.length > 0) {
+        socket.unshift(head);
+      }
+      const secureSocket = tlsConnect({
+        rejectUnauthorized: true,
+        servername: "ipinfo.io",
+        socket,
+      });
+      const probeRequest = httpsRequest({
+        agent: false,
+        createConnection: () => secureSocket,
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "CertScore-Egress-Preflight/1.0",
+        },
+        hostname: "ipinfo.io",
+        method: "GET",
+        path: "/json",
+        port: 443,
+      }, (probeResponse) => {
+        const chunks: Buffer[] = [];
+        let sizeBytes = 0;
+        probeResponse.on("data", (chunk: Buffer | string) => {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          sizeBytes += buffer.length;
+          if (sizeBytes <= 64 * 1024) {
+            chunks.push(buffer);
+          } else {
+            probeRequest.destroy(new Error("Lightweight egress response exceeded 64 KiB"));
+          }
+        });
+        probeResponse.once("end", () => resolve({
+          status: probeResponse.statusCode ?? 0,
+          text: Buffer.concat(chunks).toString("utf8"),
+        }));
+      });
+      probeRequest.setTimeout(5_000, () => probeRequest.destroy(new Error("Lightweight egress HTTPS probe timed out")));
+      probeRequest.once("error", reject);
+      probeRequest.end();
+    });
+    request.end();
+  });
+}
+
 export async function runLocalV2DagLambdaShardedArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
@@ -738,16 +911,30 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
-  await timeLambdaPhase(phaseTimings, "egress_preflight", () => writeEgressPreflightArtifact(artifactRoot));
-
+  const egressPreflightPromise = timeLambdaPhase(
+    phaseTimings,
+    "egress_preflight",
+    () => writeEgressPreflightArtifact(artifactRoot, { allowBrowserFallback: false }),
+  );
   const strongWebMdMode = isStrongWebMdEvidenceMode(payload, scanTuning);
-  const coordinatorBundle = await runLocalV2DagLambdaScanBundle(payload, {
+  const coordinatorBundlePromise = runLocalV2DagLambdaScanBundle(payload, {
     artifactRoot,
     phaseLabelPrefix: "coordinator",
     phaseTimings,
     preConsentScreenshotMode: scanTuning.preConsentScreenshotMode,
     scanTuning
   });
+  const [egressAvailable, coordinatorBundle] = await Promise.all([
+    egressPreflightPromise,
+    coordinatorBundlePromise,
+  ]);
+  if (!egressAvailable) {
+    await timeLambdaPhase(
+      phaseTimings,
+      "egress_preflight_browser_fallback",
+      () => writeEgressPreflightArtifact(artifactRoot, { allowBrowserFallback: true, skipLightweightProbe: true }),
+    );
+  }
   if (!POST_CONSENT_FLOW_SCANNING_ENABLED) {
     phaseTimings.push(skippedLambdaPhaseTiming("worker_invocations"));
     await writeJson(path.join(artifactRoot, "LocalV2DagLambdaShardSummary.json"), {
@@ -834,30 +1021,146 @@ async function timeLambdaPhase<T>(
   label: string,
   fn: () => Promise<T>
 ) {
+  const memoryBefore = await runtimeMemorySnapshot();
   const startedAt = Date.now();
   const startedAtIso = new Date(startedAt).toISOString();
   try {
     const value = await fn();
     const completedAt = Date.now();
+    const memoryAfter = await runtimeMemorySnapshot();
     phaseTimings.push({
       completedAt: new Date(completedAt).toISOString(),
       durationMs: completedAt - startedAt,
       label,
+      ...phaseMemoryTimingFields(memoryBefore, memoryAfter),
       startedAt: startedAtIso,
       status: "completed"
     });
     return value;
   } catch (error) {
     const completedAt = Date.now();
+    const memoryAfter = await runtimeMemorySnapshot();
     phaseTimings.push({
       completedAt: new Date(completedAt).toISOString(),
       durationMs: completedAt - startedAt,
       label,
+      ...phaseMemoryTimingFields(memoryBefore, memoryAfter),
       startedAt: startedAtIso,
       status: "failed"
     });
     throw error;
   }
+}
+
+type RuntimeMemorySnapshot = {
+  containerMb?: number;
+  limitMb?: number;
+  processRssMb: number;
+};
+
+async function runtimeMemorySnapshot(): Promise<RuntimeMemorySnapshot> {
+  const [containerBytes, limitBytes] = await Promise.all([
+    readFirstNumericFile([
+      "/sys/fs/cgroup/memory.current",
+      "/sys/fs/cgroup/memory/memory.usage_in_bytes",
+    ]),
+    readFirstNumericFile([
+      "/sys/fs/cgroup/memory.max",
+      "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+    ]),
+  ]);
+  return {
+    ...(containerBytes !== undefined ? { containerMb: bytesToMegabytes(containerBytes) } : {}),
+    ...(limitBytes !== undefined ? { limitMb: bytesToMegabytes(limitBytes) } : {}),
+    processRssMb: bytesToMegabytes(process.memoryUsage.rss()),
+  };
+}
+
+async function readFirstNumericFile(paths: string[]): Promise<number | undefined> {
+  for (const filePath of paths) {
+    const value = await readFile(filePath, "utf8").catch(() => "");
+    const parsed = Number.parseInt(value.trim(), 10);
+    if (Number.isFinite(parsed) && parsed > 0 && parsed < Number.MAX_SAFE_INTEGER) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
+function bytesToMegabytes(value: number): number {
+  return Math.round((value / 1024 / 1024) * 10) / 10;
+}
+
+function phaseMemoryTimingFields(
+  before: RuntimeMemorySnapshot,
+  after: RuntimeMemorySnapshot,
+): Pick<
+  LocalV2DagLambdaPhaseTiming,
+  "memoryAfterMb" | "memoryBeforeMb" | "memoryLimitMb" | "processRssAfterMb" | "processRssBeforeMb"
+> {
+  return {
+    ...(after.containerMb !== undefined ? { memoryAfterMb: after.containerMb } : {}),
+    ...(before.containerMb !== undefined ? { memoryBeforeMb: before.containerMb } : {}),
+    ...((after.limitMb ?? before.limitMb) !== undefined
+      ? { memoryLimitMb: after.limitMb ?? before.limitMb }
+      : {}),
+    processRssAfterMb: after.processRssMb,
+    processRssBeforeMb: before.processRssMb,
+  };
+}
+
+function startRuntimeResourceSampler() {
+  const startedAtMs = Date.now();
+  const samples: Array<{
+    containerMb?: number;
+    elapsedMs: number;
+    processRssMb: number;
+  }> = [];
+  let inFlight: Promise<void> | undefined;
+  const sample = () => {
+    if (inFlight) {
+      return inFlight;
+    }
+    inFlight = runtimeMemorySnapshot()
+      .then((memory) => {
+        samples.push({
+          ...(memory.containerMb !== undefined ? { containerMb: memory.containerMb } : {}),
+          elapsedMs: Date.now() - startedAtMs,
+          processRssMb: memory.processRssMb,
+        });
+        if (samples.length > 180) {
+          samples.splice(1, 1);
+        }
+      })
+      .finally(() => {
+        inFlight = undefined;
+      });
+    return inFlight;
+  };
+  void sample();
+  const timer = setInterval(() => void sample(), 500);
+  timer.unref?.();
+
+  return {
+    async stop() {
+      clearInterval(timer);
+      await sample();
+      await inFlight;
+      const containerReadings = samples.flatMap((entry) =>
+        entry.containerMb === undefined ? [] : [entry.containerMb]
+      );
+      const processReadings = samples.map((entry) => entry.processRssMb);
+      const finalMemory = await runtimeMemorySnapshot();
+      return {
+        durationMs: Date.now() - startedAtMs,
+        memoryLimitMb: finalMemory.limitMb ?? null,
+        peakContainerMemoryMb: containerReadings.length > 0 ? Math.max(...containerReadings) : null,
+        peakProcessRssMb: processReadings.length > 0 ? Math.max(...processReadings) : finalMemory.processRssMb,
+        sampleCount: samples.length,
+        samples,
+      };
+    },
+  };
 }
 
 function skippedLambdaPhaseTiming(label: string): LocalV2DagLambdaPhaseTiming {
@@ -967,6 +1270,11 @@ function parsePhaseTimings(value: unknown): LocalV2DagLambdaPhaseTiming[] {
       const durationMs = typeof record.durationMs === "number" ? record.durationMs : null;
       const completedAt = compactString(record.completedAt);
       const startedAt = compactString(record.startedAt);
+      const memoryAfterMb = finiteNonNegativeNumber(record.memoryAfterMb);
+      const memoryBeforeMb = finiteNonNegativeNumber(record.memoryBeforeMb);
+      const memoryLimitMb = finiteNonNegativeNumber(record.memoryLimitMb);
+      const processRssAfterMb = finiteNonNegativeNumber(record.processRssAfterMb);
+      const processRssBeforeMb = finiteNonNegativeNumber(record.processRssBeforeMb);
       const status =
         record.status === "failed" || record.status === "completed" || record.status === "skipped"
           ? record.status
@@ -976,12 +1284,21 @@ function parsePhaseTimings(value: unknown): LocalV2DagLambdaPhaseTiming[] {
             ...(completedAt ? { completedAt } : {}),
             durationMs,
             label,
+            ...(memoryAfterMb !== undefined ? { memoryAfterMb } : {}),
+            ...(memoryBeforeMb !== undefined ? { memoryBeforeMb } : {}),
+            ...(memoryLimitMb !== undefined ? { memoryLimitMb } : {}),
+            ...(processRssAfterMb !== undefined ? { processRssAfterMb } : {}),
+            ...(processRssBeforeMb !== undefined ? { processRssBeforeMb } : {}),
             ...(startedAt ? { startedAt } : {}),
             status
           }]
         : [];
     })
     : [];
+}
+
+function finiteNonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 async function readWorkerBundleFromArtifactResult(
@@ -1563,6 +1880,7 @@ function auxiliaryContentType(fileName: string) {
 }
 
 export async function uploadArtifactFiles(input: {
+  fields?: Array<"manifestUri" | "scanArtifactUri">;
   manifestPath: string;
   payload: LocalV2DagLambdaDispatchPayload;
   pointers: LocalV2DagLambdaArtifactPointers;
@@ -1573,7 +1891,7 @@ export async function uploadArtifactFiles(input: {
   const artifacts = [
     { field: "manifestUri" as const, path: input.manifestPath },
     { field: "scanArtifactUri" as const, path: input.scanArtifactPath }
-  ];
+  ].filter((artifact) => !input.fields || input.fields.includes(artifact.field));
   const uploaded = await Promise.all(artifacts.map(async (artifact) => {
     const uri = input.pointers[artifact.field];
     if (!uri) {
@@ -1635,6 +1953,7 @@ async function writeManifest(input: {
       status: moduleRun.status
     })),
     phaseTimings: input.phaseTimings,
+    performanceDiagnostics: buildLambdaPerformanceDiagnostics(input.bundle, input.phaseTimings),
     pointers: input.pointers,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
@@ -1647,6 +1966,39 @@ async function writeManifest(input: {
     targetEnvironment: input.payload.targetEnvironment,
     targetUrl: input.payload.targetUrl
   }, null, 2)}\n`, "utf8");
+}
+
+function buildLambdaPerformanceDiagnostics(
+  bundle: CanonicalEvidenceBundle,
+  phaseTimings: LocalV2DagLambdaPhaseTiming[],
+) {
+  const preConsent = bundle.modulesRun.find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
+  const policy = bundle.modulesRun.find((moduleRun) => moduleRun.moduleName === "policySurfaceScanner");
+  const criticalModule = [preConsent, policy]
+    .filter((moduleRun): moduleRun is NonNullable<typeof moduleRun> => Boolean(moduleRun))
+    .sort((left, right) => (right.durationMs ?? 0) - (left.durationMs ?? 0))[0];
+  const memoryReadings = phaseTimings.flatMap((phase) => [
+    phase.memoryBeforeMb,
+    phase.memoryAfterMb,
+  ]).filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+  const memoryLimitMb = phaseTimings.find((phase) => phase.memoryLimitMb !== undefined)?.memoryLimitMb;
+  const peakObservedMemoryMb = memoryReadings.length > 0 ? Math.max(...memoryReadings) : undefined;
+  return {
+    browserIsolation: "per_module_context_isolation",
+    maxConcurrentBrowserProcesses: 2,
+    policyRenderedFallbackConcurrency: 1,
+    criticalModuleName: criticalModule?.moduleName ?? null,
+    criticalModuleDurationMs: criticalModule?.durationMs ?? null,
+    preConsentDurationMs: preConsent?.durationMs ?? null,
+    policyDurationMs: policy?.durationMs ?? null,
+    ...(memoryLimitMb !== undefined ? { memoryLimitMb } : {}),
+    ...(peakObservedMemoryMb !== undefined ? {
+      peakObservedMemoryMb,
+      ...(memoryLimitMb && memoryLimitMb > 0
+        ? { peakObservedMemoryRatio: Math.round((peakObservedMemoryMb / memoryLimitMb) * 1_000) / 1_000 }
+        : {}),
+    } : {}),
+  };
 }
 
 function fileUri(filePath: string, workspaceRoot: string) {

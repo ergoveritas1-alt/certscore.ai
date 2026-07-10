@@ -71,7 +71,7 @@ export default function DeveloperReferencePage() {
   "scanId": "00000000-0000-4000-8000-000000000123",
   "domain": "example.com",
   "status": "queued",
-  "retryAfterSeconds": 30
+  "retryAfterSeconds": 1
 }`}</CodeBlock>
             </div>
             <div className="space-y-3">
@@ -82,7 +82,7 @@ export default function DeveloperReferencePage() {
   "scanId": "00000000-0000-4000-8000-000000000123",
   "status": "running",
   "phase": "runtime_observation",
-  "retryAfterSeconds": 30
+  "retryAfterSeconds": 2
 }`}</CodeBlock>
             </div>
             <div className="space-y-3">

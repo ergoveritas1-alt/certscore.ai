@@ -471,6 +471,52 @@ test("artifact uploader returns durable metadata for all v2 JSON artifacts", asy
   assert.equal(metadata.reportAdapterArtifactUri, undefined);
 });
 
+test("artifact uploader can upload scan and manifest JSON independently for overlapped handoff", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "certscore-v2-lambda-split-upload-test-"));
+  const files = {
+    manifestPath: path.join(tmp, "LocalV2DagLambdaManifest.json"),
+    scanArtifactPath: path.join(tmp, "CanonicalEvidenceBundle.json")
+  };
+  await Promise.all(Object.entries(files).map(([name, filePath]) => writeFile(filePath, JSON.stringify({ name }), "utf8")));
+  const pointers = artifactPointersFromS3Keys({
+    bucket: "certscore-v2-local-artifacts",
+    keyPrefix: "v2-dag-lambda/local/scan-local-split",
+    manifestFileName: "LocalV2DagLambdaManifest.json",
+    scanArtifactFileName: "CanonicalEvidenceBundle.json"
+  });
+  const puts: string[] = [];
+  const s3Client = {
+    async send(command: PutObjectCommand) {
+      puts.push(command.input.Key ?? "");
+      return { $metadata: {} };
+    }
+  };
+
+  const scanMetadata = await uploadArtifactFiles({
+    ...files,
+    fields: ["scanArtifactUri"],
+    payload: validPayload(),
+    pointers,
+    s3Client
+  });
+  const manifestMetadata = await uploadArtifactFiles({
+    ...files,
+    fields: ["manifestUri"],
+    payload: validPayload(),
+    pointers,
+    s3Client
+  });
+
+  assert.deepEqual(puts.map((key) => path.basename(key)), [
+    "CanonicalEvidenceBundle.json",
+    "LocalV2DagLambdaManifest.json"
+  ]);
+  assert.ok(scanMetadata.scanArtifactUri);
+  assert.equal(scanMetadata.manifestUri, undefined);
+  assert.ok(manifestMetadata.manifestUri);
+  assert.equal(manifestMetadata.scanArtifactUri, undefined);
+});
+
 test("auxiliary uploader returns durable metadata for bounded internal JSON artifacts", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "certscore-v2-lambda-aux-test-"));
   await writeFile(path.join(tmp, "CanonicalEvidenceBundle.json"), JSON.stringify({ core: true }), "utf8");

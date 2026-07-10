@@ -83,9 +83,13 @@ export async function POST(request: Request) {
     }
 
     if (pulseResponse.status === 202) {
+      const scanJob = buildApiV2ScanJobFromPulseStatus(pulseStatusSchema.parse(pulseBody));
+      const scanRetryAfter = scanJob.retryAfterSeconds === null || scanJob.retryAfterSeconds === undefined
+        ? undefined
+        : String(scanJob.retryAfterSeconds);
       return apiV2JsonResponse({
-        body: buildApiV2ScanJobFromPulseStatus(pulseStatusSchema.parse(pulseBody)),
-        headers: retryAfter ? { "Retry-After": retryAfter } : undefined,
+        body: scanJob,
+        headers: scanRetryAfter ? { "Retry-After": scanRetryAfter } : undefined,
         requestId: id,
         route: "api-v2-create-scan",
         status: 202
