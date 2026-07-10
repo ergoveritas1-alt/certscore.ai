@@ -20,6 +20,7 @@ const SCENARIO = "policy_surface_review";
 const MAX_CANDIDATES_TO_FETCH = 8;
 const MAX_COMMON_PATH_CANDIDATES_TO_FETCH = 8;
 const MAX_RENDERED_COMMON_PATH_LOW_QUALITY_FALLBACKS = 2;
+const MAX_RENDERED_COMMON_PATH_FAILED_FETCH_FALLBACKS = 4;
 const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 4;
 const POLICY_RENDERED_FETCH_CONCURRENCY = 1;
@@ -799,7 +800,13 @@ async function processPolicyCandidate({
       remainingPolicyFetchMs(input, moduleStartedAtMs),
     ),
   );
-  if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch(fetched.status, input, moduleStartedAtMs)) {
+  if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch({
+    candidate,
+    candidateIndex,
+    input,
+    moduleStartedAtMs,
+    status: fetched.status,
+  })) {
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
       `policy rendered fetch fallback ${candidateIndex + 1}`,
@@ -1041,13 +1048,21 @@ async function processPolicyCandidate({
   };
 }
 
-function shouldTryRenderedPolicyDocumentFetch(
-  status: number | undefined,
-  input: PolicySurfaceScannerInput,
-  moduleStartedAtMs: number,
-): boolean {
-  return (status === undefined || [401, 403, 429].includes(status)) &&
-    remainingMs(input, moduleStartedAtMs) >= 2_500;
+function shouldTryRenderedPolicyDocumentFetch(input: {
+  candidate: PolicySurfaceCandidate;
+  candidateIndex: number;
+  input: PolicySurfaceScannerInput;
+  moduleStartedAtMs: number;
+  status: number | undefined;
+}): boolean {
+  if (
+    isCommonPathFallbackCandidate(input.candidate) &&
+    input.candidateIndex >= MAX_RENDERED_COMMON_PATH_FAILED_FETCH_FALLBACKS
+  ) {
+    return false;
+  }
+  return (input.status === undefined || [401, 403, 429].includes(input.status)) &&
+    remainingMs(input.input, input.moduleStartedAtMs) >= 2_500;
 }
 
 function shouldTryRenderedPolicyDocumentTextFallback(input: {

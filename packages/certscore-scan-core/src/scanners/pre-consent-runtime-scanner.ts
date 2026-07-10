@@ -51,6 +51,7 @@ const CONSENT_GATE_PROGRESS_REVIEW_MS = 15_000;
 const CONSENT_GATE_STRONG_CMP_FLOOR_MS = 18_000;
 const CONSENT_GATE_PARTIAL_EVIDENCE_MS = 20_000;
 const CONSENT_GATE_HARD_CAP_MS = 25_000;
+const CONSENT_GATE_INVENTORY_GRACE_MS = 1_250;
 const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
@@ -2132,57 +2133,68 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
 }): Promise<ConsentUiObservation> {
   await installConsentGateMutationProbe(input.page);
   let current = input.initialObservation;
-  let previous = await captureConsentGateSnapshot(input, current);
+  const initialSnapshot = await captureConsentGateSnapshotBounded(input, current);
+  let previous = initialSnapshot.snapshot;
 
   if (previous.pageAgeMs >= CONSENT_GATE_HARD_CAP_MS) {
-    const finalObservation = await detectConsentUi(input.page, input.scanStartedAtMs, 0, {
-      waitForCompleteChoiceControls: true,
-      waitForControlsOnTextOnlySurface: true,
-    });
-    current = mergeConsentUiObservations(
-      current,
-      finalObservation,
-      "adaptive_gate_inventory:25s_late_entry",
-    );
-    const finalSnapshot = await captureConsentGateSnapshot(input, current);
     return recordConsentGateDecision(
       input.timingBreakdown,
       current,
-      finalSnapshot,
+      previous,
       "25s",
       hasSufficientFirstLayerConsentControls(current) ? "complete_exit" : "hard_cap_exit",
-      meaningfulConsentGateProgress(previous, finalSnapshot),
+      undefined,
     );
   }
 
   const waitToGate = async (gateMs: number) => {
     const remainingMs = Math.max(0, gateMs - (Date.now() - input.navigationStartedAtMs));
-    const candidate = await detectConsentUi(
-      input.page,
-      input.scanStartedAtMs,
-      remainingMs,
-      {
-        waitForCompleteChoiceControls: true,
-        waitForControlsOnTextOnlySurface: true,
-      },
+    const hardCapRemainingMs = Math.max(0, CONSENT_GATE_HARD_CAP_MS - (Date.now() - input.navigationStartedAtMs));
+    const candidateResult = await runConsentGateOperationBounded(
+      Math.min(remainingMs + CONSENT_GATE_INVENTORY_GRACE_MS, hardCapRemainingMs),
+      () => detectConsentUi(
+        input.page,
+        input.scanStartedAtMs,
+        remainingMs,
+        {
+          waitForCompleteChoiceControls: true,
+          waitForControlsOnTextOnlySurface: true,
+        },
+      ),
+      () => current,
     );
+    if (candidateResult.timedOut) {
+      return {
+        snapshot: consentGateFallbackSnapshot(input, current, previous),
+        timedOut: true,
+      };
+    }
+    const candidate = candidateResult.value;
     current = mergeConsentUiObservations(
       current,
       candidate,
       `adaptive_gate_inventory:${Math.round(gateMs / 1_000)}s`,
     );
-    return captureConsentGateSnapshot(input, current);
+    return captureConsentGateSnapshotBounded(input, current, previous);
   };
 
-  let gate10 = await waitToGate(CONSENT_GATE_INITIAL_MS);
-  if (!hasSufficientFirstLayerConsentControls(current) && input.onTenSecondGate) {
+  let gate10Result = await waitToGate(CONSENT_GATE_INITIAL_MS);
+  let gate10 = gate10Result.snapshot;
+  if ((!hasSufficientFirstLayerConsentControls(current) || gate10Result.timedOut) && input.onTenSecondGate) {
     const postCaptureObservation = await input.onTenSecondGate();
     current = mergeConsentUiObservations(
       current,
       postCaptureObservation,
       "adaptive_gate_inventory:10s_supplemental_capture",
     );
-    gate10 = await captureConsentGateSnapshot(input, current);
+    gate10Result = await captureConsentGateSnapshotBounded(input, current, gate10);
+    gate10 = gate10Result.snapshot;
+    if (gate10Result.timedOut) {
+      return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "inventory_timeout_exit", undefined);
+    }
+  }
+  if (gate10Result.timedOut) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "inventory_timeout_exit", undefined);
   }
   const progressAt10 = meaningfulConsentGateProgress(previous, gate10);
   if (hasSufficientFirstLayerConsentControls(current)) {
@@ -2199,7 +2211,11 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   );
   previous = gate10;
 
-  const gate15 = await waitToGate(CONSENT_GATE_PROGRESS_REVIEW_MS);
+  const gate15Result = await waitToGate(CONSENT_GATE_PROGRESS_REVIEW_MS);
+  if (gate15Result.timedOut) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate15Result.snapshot, "15s", "inventory_timeout_exit", undefined);
+  }
+  const gate15 = gate15Result.snapshot;
   const progressAt15 = meaningfulConsentGateProgress(previous, gate15);
   if (hasSufficientFirstLayerConsentControls(current)) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate15, "15s", "complete_exit", progressAt15);
@@ -2215,7 +2231,11 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   );
   previous = gate15;
 
-  const gate18 = await waitToGate(CONSENT_GATE_STRONG_CMP_FLOOR_MS);
+  const gate18Result = await waitToGate(CONSENT_GATE_STRONG_CMP_FLOOR_MS);
+  if (gate18Result.timedOut) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate18Result.snapshot, "18s", "inventory_timeout_exit", undefined);
+  }
+  const gate18 = gate18Result.snapshot;
   const progressAt18 = meaningfulConsentGateProgress(previous, gate18);
   if (hasSufficientFirstLayerConsentControls(current)) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate18, "18s", "complete_exit", progressAt18);
@@ -2234,7 +2254,11 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   );
   previous = gate18;
 
-  const gate20 = await waitToGate(CONSENT_GATE_PARTIAL_EVIDENCE_MS);
+  const gate20Result = await waitToGate(CONSENT_GATE_PARTIAL_EVIDENCE_MS);
+  if (gate20Result.timedOut) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate20Result.snapshot, "20s", "inventory_timeout_exit", undefined);
+  }
+  const gate20 = gate20Result.snapshot;
   const progressAt20 = meaningfulConsentGateProgress(previous, gate20);
   if (hasSufficientFirstLayerConsentControls(current)) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate20, "20s", "complete_exit", progressAt20);
@@ -2251,7 +2275,8 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
     progressAt20,
   );
 
-  const gate25 = await waitToGate(CONSENT_GATE_HARD_CAP_MS);
+  const gate25Result = await waitToGate(CONSENT_GATE_HARD_CAP_MS);
+  const gate25 = gate25Result.snapshot;
   const progressAt25 = meaningfulConsentGateProgress(gate20, gate25);
   return recordConsentGateDecision(
     input.timingBreakdown,
@@ -2261,6 +2286,57 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
     hasSufficientFirstLayerConsentControls(current) ? "complete_exit" : "hard_cap_exit",
     progressAt25,
   );
+}
+
+async function captureConsentGateSnapshotBounded(
+  input: Parameters<typeof captureConsentGateSnapshot>[0],
+  observation: ConsentUiObservation,
+  fallback?: ConsentGateSnapshot,
+) {
+  const hardCapRemainingMs = Math.max(0, CONSENT_GATE_HARD_CAP_MS - (Date.now() - input.navigationStartedAtMs));
+  return runConsentGateOperationBounded(
+    Math.min(CONSENT_GATE_INVENTORY_GRACE_MS, hardCapRemainingMs),
+    () => captureConsentGateSnapshot(input, observation),
+    () => consentGateFallbackSnapshot(input, observation, fallback),
+  ).then(({ value: snapshot, timedOut }) => ({ snapshot, timedOut }));
+}
+
+function consentGateFallbackSnapshot(
+  input: Parameters<typeof captureConsentGateSnapshot>[0],
+  observation: ConsentUiObservation,
+  fallback?: ConsentGateSnapshot,
+): ConsentGateSnapshot {
+  const cmpHostnames = cmpSignalHostnames(input.cmpRuntimeObservations);
+  return {
+    cmpFrameKeys: unique(input.page.frames()
+      .map((frame) => frame.url())
+      .filter((url) => matchesConsentGateCmpHostname(url, cmpHostnames))),
+    cmpScriptKeys: fallback?.cmpScriptKeys ?? [],
+    mutationCount: fallback?.mutationCount ?? 0,
+    observation,
+    pageAgeMs: Math.max(0, Date.now() - input.navigationStartedAtMs),
+  };
+}
+
+async function runConsentGateOperationBounded<T>(
+  timeoutMs: number,
+  run: () => Promise<T>,
+  fallback: () => T,
+): Promise<{ timedOut: boolean; value: T }> {
+  if (timeoutMs <= 0) {
+    return { timedOut: true, value: fallback() };
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([
+    run().then((value) => ({ timedOut: false, value })).catch(() => ({ timedOut: false, value: fallback() })),
+    new Promise<{ timedOut: boolean; value: T }>((resolve) => {
+      timer = setTimeout(() => resolve({ timedOut: true, value: fallback() }), timeoutMs);
+    }),
+  ]);
+  if (timer) {
+    clearTimeout(timer);
+  }
+  return result;
 }
 
 async function installConsentGateMutationProbe(page: Page): Promise<void> {
