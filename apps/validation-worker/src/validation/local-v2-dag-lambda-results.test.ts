@@ -150,6 +150,9 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
   assert.match(source, /MaxNumberOfMessages:\s*RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /mapWithConcurrency\(messages, RESULT_BATCH_CONCURRENCY/);
+  assert.match(source, /async function loopQueue\(queueUrl: string\)/);
+  assert.match(source, /for \(const queueUrl of queueUrls\)/);
+  assert.doesNotMatch(source, /Promise\.all\(queueUrls\.map/);
 });
 
 test("validation worker records Lambda result event before marking scan completed", async () => {

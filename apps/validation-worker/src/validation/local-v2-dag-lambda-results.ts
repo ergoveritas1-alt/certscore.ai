@@ -900,35 +900,25 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
   const clients = new Map<string, SQSClient>();
   let stopped = false;
 
-  async function loop() {
+  async function loopQueue(queueUrl: string) {
+    const queueRegion = parseQueueRegion(queueUrl);
+    let client = clients.get(queueRegion);
+    if (!client) {
+      client = new SQSClient({ region: queueRegion });
+      clients.set(queueRegion, client);
+    }
     while (!stopped) {
       try {
-        const results = await Promise.all(queueUrls.map((queueUrl) => {
-          const queueRegion = parseQueueRegion(queueUrl);
-          let client = clients.get(queueRegion);
-          if (!client) {
-            client = new SQSClient({ region: queueRegion });
-            clients.set(queueRegion, client);
-          }
-          return pollOnce({
-            client,
-            queueRegion,
-            queueUrl,
-            targetEnvironment: options.targetEnvironment
-          });
-        }));
-        const result = results.reduce(
-          (total, item) => ({
-            failed: total.failed + item.failed,
-            handled: total.handled + item.handled,
-            received: total.received + item.received
-          }),
-          { failed: 0, handled: 0, received: 0 }
-        );
-        void result;
+        await pollOnce({
+          client,
+          queueRegion,
+          queueUrl,
+          targetEnvironment: options.targetEnvironment
+        });
       } catch (error) {
         console.error("[validation-worker] v2 DAG Lambda result poll failed", {
-          error: error instanceof Error ? error.message : String(error)
+          error: error instanceof Error ? error.message : String(error),
+          queueRegion
         });
       }
       await sleep(options.pollMs);
@@ -941,7 +931,9 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
     queueCount: queueUrls.length,
     targetEnvironment: options.targetEnvironment
   });
-  void loop();
+  for (const queueUrl of queueUrls) {
+    void loopQueue(queueUrl);
+  }
 
   return {
     stop() {
