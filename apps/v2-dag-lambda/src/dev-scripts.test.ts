@@ -24,6 +24,9 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(buildScript, /use_runtime_base="\$\{CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE:-true\}"/);
   assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_BUILD_CACHE_TAG/);
   assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_CACHE_TAG/);
+  assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_ECR_AUTH_ONLY/);
+  assert.match(buildScript, /CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN/);
+  assert.match(buildScript, /Authenticated Docker to/);
   assert.match(buildScript, /--target lambda-runtime-base/);
   assert.match(buildScript, /CERTSCORE_LAMBDA_RUNTIME_BASE=\$\{runtime_base_image_uri\}/);
   assert.match(buildScript, /--build-arg "BUILD_GIT_SHA=\$\{build_git_sha\}"/);

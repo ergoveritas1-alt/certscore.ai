@@ -395,6 +395,21 @@ async function deployDb(input: { ref: string; skip: boolean; workflowRef: string
 
 async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }): Promise<LaneResult> {
   return timedLane("Lambda scanner deploys", async () => {
+    // Docker's credential helper serializes writes to one local credential
+    // store. Authenticate each registry first, then keep the expensive image
+    // builds and Lambda updates parallel across regions.
+    for (const region of SCANNER_REGIONS) {
+      await run([
+        "bash",
+        "scripts/local-v2-dag-lambda/build-push-dev-image.sh"
+      ], {
+        env: {
+          AWS_REGION: region,
+          CERTSCORE_V2_DAG_LAMBDA_ECR_AUTH_ONLY: "true"
+        }
+      });
+    }
+
     const results = await Promise.all(SCANNER_REGIONS.map(async (region) => {
       const regionStart = Date.now();
       const imageUri = `199536052647.dkr.ecr.${region}.amazonaws.com/certscore-v2-dag-local-lambda:${input.ref}`;
@@ -408,6 +423,7 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
           BUILD_IMAGE_TAG: input.ref,
           CERTSCORE_V2_DAG_LAMBDA_IMAGE_TAG: input.ref,
           CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE: input.pushRuntimeBase ? "true" : "false",
+          CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN: "true",
           CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE: "true"
         }
       });

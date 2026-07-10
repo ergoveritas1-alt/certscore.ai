@@ -15,6 +15,8 @@ push_runtime_base="${CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE:-false}"
 use_runtime_base="${CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE:-true}"
 build_cache_tag="${CERTSCORE_V2_DAG_LAMBDA_BUILD_CACHE_TAG:-buildcache}"
 runtime_base_cache_tag="${CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_CACHE_TAG:-runtime-base-cache}"
+auth_only="${CERTSCORE_V2_DAG_LAMBDA_ECR_AUTH_ONLY:-false}"
+skip_ecr_login="${CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN:-false}"
 
 case "$region" in
   eu-central-1|eu-west-1|us-west-2) ;;
@@ -39,8 +41,20 @@ aws ecr describe-repositories \
     --repository-name "$repository_name" \
     --image-scanning-configuration scanOnPush=true >/dev/null
 
-aws ecr get-login-password --region "$region" | \
-  docker login --username AWS --password-stdin "${account_id}.dkr.ecr.${region}.amazonaws.com" >/dev/null
+case "${skip_ecr_login}" in
+  1|true|TRUE|yes|YES) ;;
+  *)
+    aws ecr get-login-password --region "$region" | \
+      docker login --username AWS --password-stdin "${account_id}.dkr.ecr.${region}.amazonaws.com" >/dev/null
+    ;;
+esac
+
+case "${auth_only}" in
+  1|true|TRUE|yes|YES)
+    echo "Authenticated Docker to ${account_id}.dkr.ecr.${region}.amazonaws.com"
+    exit 0
+    ;;
+esac
 
 runtime_base_action="not-used"
 case "${push_runtime_base}" in
