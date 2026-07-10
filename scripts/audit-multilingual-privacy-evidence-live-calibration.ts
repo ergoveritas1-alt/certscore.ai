@@ -6,6 +6,7 @@ type Expectation = "required" | "not_expected" | "unknown";
 type Target = {
   key: string;
   locale: SupportedPrivacyEvidenceLocale;
+  controlLocale?: SupportedPrivacyEvidenceLocale;
   url: string;
   artifactDir?: string;
   expectations: {
@@ -55,12 +56,13 @@ async function summarizeTarget(target: Target, artifactRoot: string) {
   try {
     const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(await readFile(bundlePath, "utf8")));
     const controls = bundle.consentUiObservations.flatMap((observation) => observation.controls);
+    const expectedControlLocale = target.controlLocale ?? target.locale;
     const observed = {
       privacyPolicy: bundle.policySurfaceObservations.some((surface) => surface.surfaceType === "privacy_policy" && surface.status === "fetched"),
       cookiePolicy: bundle.policySurfaceObservations.some((surface) => surface.surfaceType === "cookie_policy" && surface.status === "fetched"),
-      accept: controls.some((control) => control.actionType === "accept_all" && control.matchedLocale === target.locale),
-      reject: controls.some((control) => control.actionType === "reject_all" && control.matchedLocale === target.locale),
-      options: controls.some((control) => control.actionType === "manage_preferences" && control.matchedLocale === target.locale),
+      accept: controls.some((control) => control.actionType === "accept_all" && control.matchedLocale === expectedControlLocale),
+      reject: controls.some((control) => control.actionType === "reject_all" && control.matchedLocale === expectedControlLocale),
+      options: controls.some((control) => control.actionType === "manage_preferences" && control.matchedLocale === expectedControlLocale),
     };
     return {
       key: target.key, locale: target.locale, url: target.url, artifactDir, status: "evaluated" as const,
