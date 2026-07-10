@@ -46,6 +46,16 @@ const ROOT_FULL_CHECKS: Check[] = [
     command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "typecheck"]
   },
   {
+    key: "scan-core-typecheck",
+    label: "v2 scan-core typecheck",
+    command: ["pnpm", "--filter", "@certscore/scan-core", "typecheck"]
+  },
+  {
+    key: "scan-core-consent-quality",
+    label: "v2 late-consent quality fixtures",
+    command: ["pnpm", "--filter", "@certscore/scan-core", "test:integration-fixtures:consent"]
+  },
+  {
     key: "lambda-tests",
     label: "v2 DAG Lambda tests",
     command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "test"]
@@ -109,9 +119,23 @@ const TARGETS: Target[] = [
     matches: (file) =>
       isGlobalBuildInput(file) ||
       file.startsWith("apps/v2-dag-lambda/") ||
+      file.startsWith("packages/certscore-contracts/") ||
+      file.startsWith("packages/certscore-scan-core/") ||
+      file.startsWith("packages/certscore-vendor-resolver/") ||
+      file.startsWith("packages/shared/") ||
       file.startsWith("scripts/local-v2-dag-lambda/") ||
       file === ".github/workflows/v2-regulatory-gold-corpus.yml",
     checks: [
+      {
+        key: "scan-core-typecheck",
+        label: "v2 scan-core typecheck",
+        command: ["pnpm", "--filter", "@certscore/scan-core", "typecheck"]
+      },
+      {
+        key: "scan-core-consent-quality",
+        label: "v2 late-consent quality fixtures",
+        command: ["pnpm", "--filter", "@certscore/scan-core", "test:integration-fixtures:consent"]
+      },
       {
         key: "lambda-typecheck",
         label: "v2 DAG Lambda typecheck",
@@ -148,6 +172,7 @@ function isGlobalBuildInput(file: string) {
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
+    "scripts/predeploy.ts",
     "tsconfig.base.json",
     "turbo.json"
   ].includes(file);
