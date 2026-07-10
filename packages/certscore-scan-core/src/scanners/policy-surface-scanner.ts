@@ -35,6 +35,7 @@ const MAX_FETCHED_TEXT_CHARS = 500_000;
 const MAX_POLICY_PDF_BYTES = 2_500_000;
 const MAX_POLICY_PDF_PAGES = 12;
 const MAX_POLICY_PDF_TEXT_CHARS = 500_000;
+const MAX_POLICY_FETCH_DIAGNOSTICS = 32;
 const DEFAULT_POLICY_EXCERPT_KEYWORDS = [
   "personal data",
   "personal information",
@@ -169,9 +170,46 @@ interface PolicySurfaceTextArtifactBudget {
 
 interface PolicyDocumentFetchCaches {
   browserRuntime: PolicyBrowserRuntime;
+  diagnostics: PolicyFetchDiagnosticsCollector;
   direct: Map<string, Promise<FetchTextResult>>;
   rendered: Map<string, Promise<FetchTextResult>>;
   runRenderedFetch: <T>(run: () => Promise<T>) => Promise<T>;
+}
+
+type PolicyFetchAttemptOutcome =
+  | "fetched"
+  | "http_error"
+  | "network_error"
+  | "timeout"
+  | "unsupported_content_type"
+  | "oversized_pdf"
+  | "empty_rendered_body"
+  | "navigation_no_response";
+
+interface PolicyFetchAttemptDiagnostic {
+  mode: "direct" | "rendered";
+  requestedUrl: string;
+  finalUrl?: string;
+  outcome: PolicyFetchAttemptOutcome;
+  httpStatus?: number;
+  contentType?: string;
+}
+
+interface PolicyFetchDiagnostic {
+  stage: "homepage" | "candidate_direct" | "candidate_rendered";
+  candidateUrl?: string;
+  discoveryMethod?: PolicySurfaceObservation["discoveryMethod"];
+  surfaceType?: PolicySurfaceObservation["surfaceType"];
+  ok: boolean;
+  httpStatus?: number;
+  failureReason?: Exclude<PolicyFetchAttemptOutcome, "fetched">;
+  attempts: PolicyFetchAttemptDiagnostic[];
+}
+
+interface PolicyFetchDiagnosticsCollector {
+  homepageFetch?: PolicyFetchDiagnostic;
+  failedFetches: PolicyFetchDiagnostic[];
+  seenFailureKeys: Set<string>;
 }
 
 interface PolicyBrowserRuntime {
@@ -194,9 +232,14 @@ export async function policySurfaceScanner(
   const policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget = {
     remainingChars: MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS,
   };
+  const policyFetchDiagnostics: PolicyFetchDiagnosticsCollector = {
+    failedFetches: [],
+    seenFailureKeys: new Set(),
+  };
   const policyBrowserRuntime = createPolicyBrowserRuntime(input.browser);
   const policyDocumentFetchCaches: PolicyDocumentFetchCaches = {
     browserRuntime: policyBrowserRuntime,
+    diagnostics: policyFetchDiagnostics,
     direct: new Map(),
     rendered: new Map(),
     runRenderedFetch: createConcurrencyLimiter(POLICY_RENDERED_FETCH_CONCURRENCY),
@@ -209,28 +252,64 @@ export async function policySurfaceScanner(
       "Fetch homepage HTML for static policy link discovery.",
       () => fetchText(input.normalizedUrl, remainingMs(input, moduleStartedAtMs)),
     );
+    recordPolicyFetchDiagnostic(policyFetchDiagnostics, {
+      stage: "homepage",
+      result: homepage,
+    });
     if (!homepage.ok) {
-      const renderedCandidates = await recordPolicyTiming(
+      const fallbackCandidates = commonPathCandidatesFor(input.normalizedUrl, 0);
+      const speculativeCommonPathNanoAbortController = new AbortController();
+      const speculativeCommonPathNanoRankingPromise = recordPolicyTiming(
         timingBreakdown,
-        "homepage-failed rendered discovery",
-        "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
-        () => extractRenderedCandidates(input, moduleStartedAtMs, policyBrowserRuntime),
+        "homepage-failed common-path Nano ranking",
+        `Rank ${fallbackCandidates.length} common policy paths in parallel with rendered discovery and rendered candidate recovery.`,
+        () => rankCandidatesWithRequiredNano(
+          input,
+          fallbackCandidates,
+          speculativeCommonPathNanoAbortController.signal,
+        ),
       );
+      // The speculative ranking is authoritative only if rendered recovery does
+      // not retain a core surface. Observe rejection immediately while Chromium
+      // continues so it cannot become an unhandled rejection.
+      void speculativeCommonPathNanoRankingPromise.catch(() => undefined);
+      let renderedCandidates: PolicySurfaceCandidate[];
+      try {
+        renderedCandidates = await recordPolicyTiming(
+          timingBreakdown,
+          "homepage-failed rendered discovery",
+          "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
+          () => extractRenderedCandidates(input, moduleStartedAtMs, policyBrowserRuntime),
+        );
+      } catch (error) {
+        speculativeCommonPathNanoAbortController.abort();
+        await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
+        throw error;
+      }
       renderedCandidateCount = renderedCandidates.length;
       if (renderedCandidates.length > 0) {
         observedCandidateCount = renderedCandidates.length;
-        const renderedResults = await fetchRankedPolicyCandidates({
-          input,
-          fetchCaches: policyDocumentFetchCaches,
-          timingBreakdown,
-          moduleStartedAtMs,
-          candidates: renderedCandidates,
-          labelPrefix: "homepage-failed rendered",
-          policySurfaceTextArtifactBudget,
-        });
+        let renderedResults: Awaited<ReturnType<typeof fetchRankedPolicyCandidates>>;
+        try {
+          renderedResults = await fetchRankedPolicyCandidates({
+            input,
+            fetchCaches: policyDocumentFetchCaches,
+            timingBreakdown,
+            moduleStartedAtMs,
+            candidates: renderedCandidates,
+            labelPrefix: "homepage-failed rendered",
+            policySurfaceTextArtifactBudget,
+          });
+        } catch (error) {
+          speculativeCommonPathNanoAbortController.abort();
+          await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
+          throw error;
+        }
         observations.push(...renderedResults.observations);
         artifactRefs.push(...renderedResults.artifactRefs);
         if (hasRetainedCorePolicyOrControlSurface(observations)) {
+          speculativeCommonPathNanoAbortController.abort();
+          await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
           artifactRefs.push(await writePolicyCaptureDiagnostics({
             input,
             moduleStartedAtMs,
@@ -240,6 +319,7 @@ export async function policySurfaceScanner(
             commonPathFallbackUsed,
             observations,
             candidates: renderedCandidates,
+            policyFetchDiagnostics,
           }));
           return {
             moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
@@ -248,14 +328,17 @@ export async function policySurfaceScanner(
           };
         }
       }
-      const fallbackCandidates = commonPathCandidatesFor(input.normalizedUrl, 0);
       commonPathFallbackUsed = true;
-      const fallbackResults = await fetchRankedPolicyCandidates({
+      const nanoRankedFallbackCandidates = await speculativeCommonPathNanoRankingPromise;
+      const fallbackResults = await fetchPolicyCandidateGroup({
         input,
         fetchCaches: policyDocumentFetchCaches,
         timingBreakdown,
         moduleStartedAtMs,
-        candidates: fallbackCandidates,
+        rankedCandidates: mergeCommonPathFallbackCandidates(
+          deterministicCommonPathFetchFallback(fallbackCandidates),
+          nanoRankedFallbackCandidates,
+        ),
         labelPrefix: "homepage-failed common-path",
         policySurfaceTextArtifactBudget,
       });
@@ -274,6 +357,7 @@ export async function policySurfaceScanner(
             ...renderedCandidates,
             ...fallbackCandidates,
           ]),
+          policyFetchDiagnostics,
         }));
         return {
           moduleRun: moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown),
@@ -281,6 +365,20 @@ export async function policySurfaceScanner(
           artifactRefs,
         };
       }
+      artifactRefs.push(await writePolicyCaptureDiagnostics({
+        input,
+        moduleStartedAtMs,
+        staticCandidateCount,
+        renderedCandidateCount,
+        observedCandidateCount,
+        commonPathFallbackUsed,
+        observations,
+        candidates: dedupeCandidates([
+          ...renderedCandidates,
+          ...fallbackCandidates,
+        ]),
+        policyFetchDiagnostics,
+      }));
       return {
         moduleRun: moduleRun("failed", moduleStartedAt, moduleStartedAtMs, [`Homepage fetch failed with status ${homepage.status ?? "unknown"} and common-path fallback retained no policy surfaces.`], timingBreakdown),
         policySurfaceObservations: [],
@@ -568,6 +666,7 @@ export async function policySurfaceScanner(
       commonPathFallbackUsed,
       observations,
       candidates: linkCandidates,
+      policyFetchDiagnostics,
     }));
 
     return {
@@ -632,6 +731,7 @@ async function writePolicyCaptureDiagnostics(input: {
   commonPathFallbackUsed: boolean;
   observations: PolicySurfaceObservation[];
   candidates?: PolicySurfaceCandidate[];
+  policyFetchDiagnostics: PolicyFetchDiagnosticsCollector;
 }): Promise<ArtifactRef> {
   const fetchedObservations = input.observations.filter((observation) => observation.status === "fetched");
   const coreSurfaces = fetchedObservations.filter((observation) =>
@@ -639,7 +739,7 @@ async function writePolicyCaptureDiagnostics(input: {
     !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
   );
   const path = await input.input.artifactWriter.writeJsonArtifact("PolicySurfaceCaptureDiagnostics.json", {
-    artifactVersion: "policy_surface_capture_diagnostics.v1",
+    artifactVersion: "policy_surface_capture_diagnostics.v2",
     sourceScanner: SOURCE_SCANNER,
     generatedAt: new Date().toISOString(),
     normalizedUrl: input.input.normalizedUrl,
@@ -651,6 +751,8 @@ async function writePolicyCaptureDiagnostics(input: {
     commonPathFallbackUsed: input.commonPathFallbackUsed,
     fetchedCount: fetchedObservations.length,
     failedCandidateCount: input.observations.filter((observation) => observation.status === "failed").length,
+    homepageFetch: input.policyFetchDiagnostics.homepageFetch,
+    failedFetches: input.policyFetchDiagnostics.failedFetches,
     candidateSummary: summarizePolicyCandidates(input.candidates ?? []),
     winningSurfaceUrls: coreSurfaces
       .map((observation) => observation.normalizedUrl ?? observation.url)
@@ -670,6 +772,69 @@ async function writePolicyCaptureDiagnostics(input: {
     relatedEventIds: [],
     label: "Policy surface capture diagnostics",
   };
+}
+
+function recordPolicyFetchDiagnostic(
+  collector: PolicyFetchDiagnosticsCollector,
+  input: {
+    stage: PolicyFetchDiagnostic["stage"];
+    result: FetchTextResult;
+    candidate?: PolicySurfaceCandidate;
+  },
+): void {
+  const attempts = (input.result.attempts ?? []).map((attempt) => ({
+    ...attempt,
+    requestedUrl: boundedDiagnosticUrl(attempt.requestedUrl),
+    ...(attempt.finalUrl ? { finalUrl: boundedDiagnosticUrl(attempt.finalUrl) } : {}),
+    ...(attempt.contentType ? { contentType: attempt.contentType.slice(0, 120) } : {}),
+  }));
+  const failedAttempt = [...attempts].reverse().find((attempt) => attempt.outcome !== "fetched");
+  const diagnostic: PolicyFetchDiagnostic = {
+    stage: input.stage,
+    ...(input.candidate
+      ? {
+          candidateUrl: boundedDiagnosticUrl(input.candidate.normalizedUrl),
+          discoveryMethod: input.candidate.discoveryMethod,
+          surfaceType: input.candidate.deterministicSurfaceType,
+        }
+      : {}),
+    ok: input.result.ok,
+    ...(input.result.status !== undefined ? { httpStatus: input.result.status } : {}),
+    ...(!input.result.ok && failedAttempt
+      ? { failureReason: failedAttempt.outcome as Exclude<PolicyFetchAttemptOutcome, "fetched"> }
+      : {}),
+    attempts,
+  };
+  if (input.stage === "homepage") {
+    collector.homepageFetch = diagnostic;
+  }
+  if (input.result.ok || collector.failedFetches.length >= MAX_POLICY_FETCH_DIAGNOSTICS) {
+    return;
+  }
+  const failureKey = JSON.stringify([
+    diagnostic.stage,
+    diagnostic.candidateUrl,
+    diagnostic.httpStatus,
+    diagnostic.failureReason,
+  ]);
+  if (collector.seenFailureKeys.has(failureKey)) {
+    return;
+  }
+  collector.seenFailureKeys.add(failureKey);
+  collector.failedFetches.push(diagnostic);
+}
+
+function boundedDiagnosticUrl(value: string): string {
+  try {
+    const parsed = new URL(value);
+    parsed.username = "";
+    parsed.password = "";
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().slice(0, 500);
+  } catch {
+    return value.replace(/[?#].*$/, "").slice(0, 500);
+  }
 }
 
 interface ProcessPolicyCandidateInput {
@@ -800,6 +965,11 @@ async function processPolicyCandidate({
       remainingPolicyFetchMs(input, moduleStartedAtMs),
     ),
   );
+  recordPolicyFetchDiagnostic(fetchCaches.diagnostics, {
+    stage: "candidate_direct",
+    result: fetched,
+    candidate,
+  });
   if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch({
     candidate,
     candidateIndex,
@@ -817,6 +987,11 @@ async function processPolicyCandidate({
         timeoutMs: Math.min(4_000, remainingMs(input, moduleStartedAtMs)),
       }),
     );
+    recordPolicyFetchDiagnostic(fetchCaches.diagnostics, {
+      stage: "candidate_rendered",
+      result: renderedFetched,
+      candidate,
+    });
     if (renderedFetched.ok) {
       fetched = renderedFetched;
     }
@@ -892,6 +1067,11 @@ async function processPolicyCandidate({
         timeoutMs: Math.max(5_000, Math.min(6_000, remainingMs(input, moduleStartedAtMs))),
       }),
     );
+    recordPolicyFetchDiagnostic(fetchCaches.diagnostics, {
+      stage: "candidate_rendered",
+      result: renderedFetched,
+      candidate: effectiveCandidate,
+    });
     if (renderedFetched.ok) {
       const renderedVisibleText = await recordPolicyTiming(
         timingBreakdown,
@@ -1127,16 +1307,50 @@ async function fetchRenderedPolicyDocumentText(input: {
       bodyText,
       ...semanticTextCandidates,
     ]);
+    const status = response?.status();
+    const attemptBase = {
+      mode: "rendered" as const,
+      requestedUrl: input.url,
+      finalUrl: page.url() || input.url,
+      ...(status !== undefined ? { httpStatus: status } : {}),
+    };
     if (!text) {
-      return { ok: false, status: response?.status(), text: "" };
+      return {
+        attempts: [{
+          ...attemptBase,
+          outcome: response ? "empty_rendered_body" : "navigation_no_response",
+        }],
+        ok: false,
+        status,
+        text: "",
+      };
     }
+    const ok = Boolean(response?.ok());
     return {
-      ok: Boolean(response?.ok()),
-      status: response?.status(),
+      attempts: [{
+        ...attemptBase,
+        outcome: ok
+          ? "fetched"
+          : response
+            ? "http_error"
+            : "navigation_no_response",
+      }],
+      ok,
+      status,
       text: text.slice(0, 500_000),
     };
-  } catch {
-    return { ok: false, text: "" };
+  } catch (error) {
+    return {
+      attempts: [{
+        mode: "rendered",
+        requestedUrl: input.url,
+        outcome: error instanceof Error && /timeout/i.test(`${error.name} ${error.message}`)
+          ? "timeout"
+          : "network_error",
+      }],
+      ok: false,
+      text: "",
+    };
   } finally {
     await context?.close().catch(() => undefined);
   }
@@ -3462,7 +3676,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-type FetchTextResult = { documentFormat?: "pdf" | "text"; ok: boolean; status?: number; text: string };
+type FetchTextResult = {
+  attempts?: PolicyFetchAttemptDiagnostic[];
+  documentFormat?: "pdf" | "text";
+  ok: boolean;
+  status?: number;
+  text: string;
+};
 type PdfParseConstructor = new (input: { data: Uint8Array }) => {
   destroy(): Promise<void>;
   getText(input: {
@@ -3536,7 +3756,14 @@ async function fetchText(url: string, timeoutMs: number): Promise<FetchTextResul
   }
 
   const remainingTimeoutMs = Math.max(500, timeoutMs - (Date.now() - startedAtMs));
-  return fetchTextOnce(fallbackUrl, remainingTimeoutMs);
+  const fallback = await fetchTextOnce(fallbackUrl, remainingTimeoutMs);
+  return {
+    ...fallback,
+    attempts: [
+      ...(primary.attempts ?? []),
+      ...(fallback.attempts ?? []),
+    ],
+  };
 }
 
 async function fetchTextOnce(url: string, timeoutMs: number): Promise<FetchTextResult> {
@@ -3553,18 +3780,44 @@ async function fetchTextOnce(url: string, timeoutMs: number): Promise<FetchTextR
       redirect: "follow",
     });
     const contentType = response.headers.get("content-type") ?? "";
+    const attemptBase = {
+      mode: "direct" as const,
+      requestedUrl: url,
+      finalUrl: response.url || url,
+      httpStatus: response.status,
+      ...(contentType ? { contentType } : {}),
+    };
     const isTextResponse = /text|html|json/i.test(contentType);
     const isPdfResponse = isPdfPolicyResponse(url, contentType) && !isTextResponse;
-    if (!response.ok || (!isTextResponse && !isPdfResponse)) {
-      return { ok: response.ok, status: response.status, text: "" };
+    if (!response.ok) {
+      return {
+        attempts: [{ ...attemptBase, outcome: "http_error" }],
+        ok: false,
+        status: response.status,
+        text: "",
+      };
+    }
+    if (!isTextResponse && !isPdfResponse) {
+      return {
+        attempts: [{ ...attemptBase, outcome: "unsupported_content_type" }],
+        ok: false,
+        status: response.status,
+        text: "",
+      };
     }
     const contentLength = contentLengthFromHeader(response.headers.get("content-length"));
     if (isPdfResponse && contentLength !== undefined && contentLength > MAX_POLICY_PDF_BYTES) {
-      return { ok: true, status: response.status, text: "" };
+      return {
+        attempts: [{ ...attemptBase, outcome: "oversized_pdf" }],
+        ok: false,
+        status: response.status,
+        text: "",
+      };
     }
     const body = new Uint8Array(await response.arrayBuffer());
     if (isPdfResponse) {
       return {
+        attempts: [{ ...attemptBase, outcome: "fetched" }],
         documentFormat: "pdf",
         ok: true,
         status: response.status,
@@ -3572,13 +3825,26 @@ async function fetchTextOnce(url: string, timeoutMs: number): Promise<FetchTextR
       };
     }
     return {
+      attempts: [{ ...attemptBase, outcome: "fetched" }],
       documentFormat: "text",
       ok: true,
       status: response.status,
       text: boundedFetchedText(decodeFetchedPolicyText(body, contentType), MAX_FETCHED_TEXT_CHARS),
     };
-  } catch {
-    return { ok: false, text: "" };
+  } catch (error) {
+    const outcome: PolicyFetchAttemptOutcome =
+      error instanceof Error && error.name === "AbortError"
+        ? "timeout"
+        : "network_error";
+    return {
+      attempts: [{
+        mode: "direct",
+        requestedUrl: url,
+        outcome,
+      }],
+      ok: false,
+      text: "",
+    };
   } finally {
     clearTimeout(timeout);
   }

@@ -1177,9 +1177,10 @@ test("policySurfaceScanner uses common-path fallback when homepage fetch fails",
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
   try {
     const artifactWriter = await createArtifactWriter(tempRoot);
+    const targetUrl = `${server.baseUrl}/blocked-homepage?secret-token=must-not-be-retained`;
     const result = await policySurfaceScanner({
-      url: `${server.baseUrl}/blocked-homepage`,
-      normalizedUrl: `${server.baseUrl}/blocked-homepage`,
+      url: targetUrl,
+      normalizedUrl: targetUrl,
       scanStartedAtMs: Date.now(),
       internalBudgetMs: 5_000,
       artifactWriter,
@@ -1194,6 +1195,20 @@ test("policySurfaceScanner uses common-path fallback when homepage fetch fails",
     assert.ok(fallback);
     assert.equal(fallback.surfaceType, "privacy_policy");
     assert.equal(result.moduleRun.errors.length, 0);
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    assert.equal(diagnostics.artifactVersion, "policy_surface_capture_diagnostics.v2");
+    assert.equal(diagnostics.homepageFetch?.ok, false);
+    assert.equal(diagnostics.homepageFetch?.httpStatus, 404);
+    assert.equal(diagnostics.homepageFetch?.failureReason, "http_error");
+    assert.doesNotMatch(JSON.stringify(diagnostics.homepageFetch), /secret-token|must-not-be-retained/);
+    assert.equal(
+      diagnostics.failedFetches.some((failure) =>
+        failure.stage === "homepage" &&
+        failure.httpStatus === 404 &&
+        failure.failureReason === "http_error"
+      ),
+      true,
+    );
     assert.equal(
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed common-path")),
       true,
@@ -1270,13 +1285,23 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
   try {
     const artifactWriter = await createArtifactWriter(tempRoot);
+    const defaultNanoProvider = createDefaultMockNanoPolicyAssistProvider();
+    const classificationOrder: string[] = [];
+    const nanoAssistProvider: PolicyNanoAssistProvider = {
+      async classifyLinks(input) {
+        classificationOrder.push(input.candidates.every((candidate) => candidate.discoveryMethod === "guessed_common_path")
+          ? "common_path"
+          : "rendered");
+        return defaultNanoProvider.classifyLinks!(input);
+      },
+    };
     const result = await policySurfaceScanner({
       url: `${server.baseUrl}/browser-visible-policy-homepage`,
       normalizedUrl: `${server.baseUrl}/browser-visible-policy-homepage`,
       scanStartedAtMs: Date.now(),
       internalBudgetMs: 7_000,
       artifactWriter,
-      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      nanoAssistProvider,
     });
     const privacy = result.policySurfaceObservations.find((observation) =>
       observation.status === "fetched" &&
@@ -1289,6 +1314,8 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
     assert.equal(privacy.surfaceType, "privacy_policy");
     assert.equal(diagnostics.renderedCandidateCount > 0, true);
     assert.equal(diagnostics.commonPathFallbackUsed, false);
+    assert.equal(classificationOrder[0], "common_path");
+    assert.equal(classificationOrder.includes("rendered"), true);
     assert.equal(
       diagnostics.candidateSummary.some((candidate) =>
         candidate.normalizedUrl === `${server.baseUrl}/browser-visible-policy-homepage/privacy`
@@ -1297,6 +1324,14 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
     );
     assert.equal(privacy.httpStatus, 200);
     assert.equal(privacy.observedTopics.includes("data_retention"), true);
+    assert.equal(
+      diagnostics.failedFetches.some((failure) =>
+        failure.stage === "candidate_direct" &&
+        failure.httpStatus === 429 &&
+        failure.failureReason === "http_error"
+      ),
+      true,
+    );
     assert.equal(
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed rendered discovery")),
       true,
@@ -1328,11 +1363,20 @@ test("policySurfaceScanner uses rendered policy document fallback when direct po
       observation.status === "fetched" &&
       observation.normalizedUrl === `${server.baseUrl}/browser-timeout-policy-homepage/privacy`
     );
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
 
     assert.ok(privacy);
     assert.equal(privacy.surfaceType, "privacy_policy");
     assert.equal(privacy.httpStatus, 200);
     assert.match(privacy.textExcerpt ?? "", /controller for this service/i);
+    assert.equal(
+      diagnostics.failedFetches.some((failure) =>
+        failure.stage === "candidate_direct" &&
+        failure.failureReason === "timeout" &&
+        failure.candidateUrl === `${server.baseUrl}/browser-timeout-policy-homepage/privacy`
+      ),
+      true,
+    );
     assert.equal(
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy rendered fetch fallback")),
       true,
@@ -2256,12 +2300,26 @@ function observedSurface(
 async function readPolicyCaptureDiagnostics(
   result: Awaited<ReturnType<typeof policySurfaceScanner>>,
 ): Promise<{
+  artifactVersion: string;
   corePolicySurfaceRetained: boolean;
   coreSurfaceTypes: string[];
   observedCandidateCount: number;
   commonPathFallbackUsed: boolean;
   fetchedCount: number;
   failedCandidateCount: number;
+  homepageFetch?: {
+    failureReason?: string;
+    httpStatus?: number;
+    ok: boolean;
+    stage: string;
+  };
+  failedFetches: Array<{
+    candidateUrl?: string;
+    failureReason?: string;
+    httpStatus?: number;
+    ok: boolean;
+    stage: string;
+  }>;
   candidateSummary: Array<{
     classifierProvenance: string;
     classifierReasonCodes: string[];
