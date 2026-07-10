@@ -879,6 +879,16 @@ async function readLocalV2DagBundle(outDir: string): Promise<CanonicalEvidenceBu
   }
 }
 
+async function readLocalV2DagManifest(outDir: string): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await readFile(path.join(resolveLocalV2OutDir(outDir), "LocalV2DagLambdaManifest.json"), "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 async function readLocalV2ConsentControlGeometry(outDir: string): Promise<Record<string, unknown> | null> {
   try {
     const raw = await readFile(path.join(resolveLocalV2OutDir(outDir), "ConsentControlGeometryEvidence.json"), "utf8");
@@ -3055,9 +3065,10 @@ export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResp
     return scanRecord;
   }
   const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
-  const [localBundle, localGeometryEvidence] = await Promise.all([
+  const [localBundle, localGeometryEvidence, localManifest] = await Promise.all([
     shouldReadLocalOutDir && input.outDir ? readLocalV2DagBundle(input.outDir) : Promise.resolve(null),
-    shouldReadLocalOutDir && input.outDir ? readLocalV2ConsentControlGeometry(input.outDir) : Promise.resolve(null)
+    shouldReadLocalOutDir && input.outDir ? readLocalV2ConsentControlGeometry(input.outDir) : Promise.resolve(null),
+    shouldReadLocalOutDir && input.outDir ? readLocalV2DagManifest(input.outDir) : Promise.resolve(null)
   ]);
   const [bundle, manifest] = await Promise.all([
     localBundle ?? (input.scanArtifactUri
@@ -3067,13 +3078,13 @@ export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResp
           uri: input.scanArtifactUri
         })
       : Promise.resolve(null)),
-    localGeometryEvidence || !input.manifestArtifactUri
+    localManifest ?? (localGeometryEvidence || !input.manifestArtifactUri
       ? Promise.resolve(null)
       : readLocalV2DagManifestFromS3({
           expectedSha256: input.manifestArtifactSha256,
           expectedSizeBytes: input.manifestArtifactSizeBytes,
           uri: input.manifestArtifactUri
-        })
+        }))
   ]);
   const geometryArtifact = localGeometryEvidence
     ? null

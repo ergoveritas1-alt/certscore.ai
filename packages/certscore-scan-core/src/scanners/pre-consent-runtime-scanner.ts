@@ -2121,6 +2121,10 @@ type ConsentGateSnapshot = {
   pageAgeMs: number;
 };
 
+export function hasConsentGateReachedHardCap(pageAgeMs: number) {
+  return Math.max(0, pageAgeMs) >= CONSENT_GATE_HARD_CAP_MS;
+}
+
 async function detectConsentUiWithAdaptiveCmpGates(input: {
   cmpRuntimeObservations: CmpRuntimeObservation[];
   initialObservation: ConsentUiObservation;
@@ -2188,6 +2192,9 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   if (hasSufficientFirstLayerConsentControls(current)) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "complete_exit", progressAt10);
   }
+  if (hasConsentGateReachedHardCap(gate10.pageAgeMs)) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "hard_cap_exit", progressAt10);
+  }
   const partialAt10 = hasPartialConsentGateEvidence(current);
   current = recordConsentGateDecision(
     input.timingBreakdown,
@@ -2204,6 +2211,9 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   if (hasSufficientFirstLayerConsentControls(current)) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate15, "15s", "complete_exit", progressAt15);
   }
+  if (hasConsentGateReachedHardCap(gate15.pageAgeMs)) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate15, "15s", "hard_cap_exit", progressAt15);
+  }
   const partialAt15 = hasPartialConsentGateEvidence(current);
   current = recordConsentGateDecision(
     input.timingBreakdown,
@@ -2219,6 +2229,9 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   const progressAt18 = meaningfulConsentGateProgress(previous, gate18);
   if (hasSufficientFirstLayerConsentControls(current)) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate18, "18s", "complete_exit", progressAt18);
+  }
+  if (hasConsentGateReachedHardCap(gate18.pageAgeMs)) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate18, "18s", "hard_cap_exit", progressAt18);
   }
   const partialAt18 = hasPartialConsentGateEvidence(current);
   if (!partialAt18 && !progressAt18) {
@@ -2238,6 +2251,9 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   const progressAt20 = meaningfulConsentGateProgress(previous, gate20);
   if (hasSufficientFirstLayerConsentControls(current)) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate20, "20s", "complete_exit", progressAt20);
+  }
+  if (hasConsentGateReachedHardCap(gate20.pageAgeMs)) {
+    return recordConsentGateDecision(input.timingBreakdown, current, gate20, "20s", "hard_cap_exit", progressAt20);
   }
   if (!progressAt20) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate20, "20s", "no_recent_progress_exit", progressAt20);
