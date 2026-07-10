@@ -122,12 +122,14 @@ test("SQS poller handles at most three result messages concurrently", async () =
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
     },
     handleMessage: async (rawMessage, options) => {
+      assert.equal(options?.mirrorAuxiliaryArtifacts, false);
       active += 1;
       peakActive = Math.max(peakActive, active);
       await new Promise((resolve) => setTimeout(resolve, 10));
       active -= 1;
       return ingestLocalV2DagLambdaResultMessage(rawMessage, options);
     },
+    mirrorAuxiliaryArtifacts: false,
     sqsClient
   });
 

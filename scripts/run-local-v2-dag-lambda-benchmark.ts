@@ -303,6 +303,7 @@ function startLambdaResultPump(args: Args) {
         const result = await pollLocalV2DagLambdaResultQueue({
           expectedTargetEnvironment: "local",
           maxMessages: 3,
+          mirrorAuxiliaryArtifacts: false,
           queueUrl: queueUrl ?? undefined,
           visibilityTimeoutSeconds: 60,
           waitTimeSeconds: 1,

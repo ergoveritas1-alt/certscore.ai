@@ -367,6 +367,7 @@ export async function recordLocalV2DagLambdaResultEvent(
   parsedMessage: LocalV2DagLambdaResultMessage,
   options: {
     consumer?: LocalV2DagLambdaResultConsumerMetadata;
+    mirrorAuxiliaryArtifacts?: boolean;
     s3Client?: S3GetClient;
     workspaceRoot?: string;
   } = {}
@@ -543,7 +544,7 @@ export async function recordLocalV2DagLambdaResultEvent(
       parsedMessage.error?.message ?? null
     ]
   );
-  if (artifactMirror) {
+  if (artifactMirror && options.mirrorAuxiliaryArtifacts !== false) {
     await mirrorLocalV2DagLambdaAuxiliaryArtifacts({
       mirror: artifactMirror,
       parsedMessage,
@@ -580,6 +581,7 @@ export async function handleLocalV2DagLambdaResultMessage(
   options: {
     consumer?: LocalV2DagLambdaResultConsumerMetadata;
     expectedTargetEnvironment?: LocalV2DagLambdaTargetEnvironment;
+    mirrorAuxiliaryArtifacts?: boolean;
     s3Client?: S3GetClient;
     workspaceRoot?: string;
   } = {}
@@ -587,6 +589,7 @@ export async function handleLocalV2DagLambdaResultMessage(
   const ingestion = ingestLocalV2DagLambdaResultMessage(rawMessage, options);
   await recordLocalV2DagLambdaResultEvent(ingestion.parsedMessage, {
     consumer: options.consumer,
+    mirrorAuxiliaryArtifacts: options.mirrorAuxiliaryArtifacts,
     s3Client: options.s3Client,
     workspaceRoot: options.workspaceRoot
   });
@@ -635,6 +638,7 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
   expectedTargetEnvironment?: LocalV2DagLambdaTargetEnvironment;
   handleMessage?: typeof handleLocalV2DagLambdaResultMessage;
   maxMessages?: number;
+  mirrorAuxiliaryArtifacts?: boolean;
   queueUrl?: string;
   s3Client?: S3GetClient;
   sqsClient?: SqsPollClient;
@@ -707,6 +711,7 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
             sqsMessageId: message.MessageId ?? null
           },
           expectedTargetEnvironment,
+          mirrorAuxiliaryArtifacts: input.mirrorAuxiliaryArtifacts,
           s3Client
         });
         await sqsClient.send(new DeleteMessageCommand({
