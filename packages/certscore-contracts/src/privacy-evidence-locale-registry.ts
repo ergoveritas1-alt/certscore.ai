@@ -90,7 +90,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   }),
   locale("pl", {
     privacyPolicyLabels: ["polityka prywatności", "informacja o prywatności"], privacyPolicyPathSlugs: ["polityka-prywatnosci", "prywatnosc"], cookiePolicyLabels: ["polityka plików cookie", "polityka cookies"], cookiePolicyPathSlugs: ["polityka-cookie"], cookieSettingsLabels: ["ustawienia plików cookie"], termsLabels: ["regulamin", "warunki korzystania"], termsPathSlugs: ["regulamin"], contextHints: ["prywatność", "dane osobowe", "pliki cookie", "zgoda"], tldHints: [".pl"],
-    consentControls: { accept: ["akceptuj wszystko", "zaakceptuj wszystko"], reject: ["odrzuć wszystko", "odrzuć wszystkie"], options: ["ustawienia plików cookie", "zarządzaj preferencjami"], necessaryOnly: ["tylko niezbędne pliki cookie", "tylko wymagane pliki cookie"] },
+    consentControls: { accept: ["akceptuj wszystko", "zaakceptuj wszystko"], reject: ["odrzuć wszystko", "odrzuć wszystkie"], options: ["ustawienia plików cookie", "zarządzaj preferencjami"], necessaryOnly: ["akceptuj tylko niezbędne", "tylko niezbędne pliki cookie", "tylko wymagane pliki cookie"] },
   }),
   locale("vi", {
     privacyPolicyLabels: ["chính sách bảo mật", "chính sách quyền riêng tư"], privacyPolicyPathSlugs: ["chinh-sach-bao-mat"], cookiePolicyLabels: ["chính sách cookie"], cookiePolicyPathSlugs: ["chinh-sach-cookie"], cookieSettingsLabels: ["cài đặt cookie"], termsLabels: ["điều khoản sử dụng"], termsPathSlugs: ["dieu-khoan-su-dung"], contextHints: ["quyền riêng tư", "dữ liệu cá nhân", "cookie", "đồng ý"], tldHints: [".vn"],

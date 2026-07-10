@@ -137,3 +137,13 @@ test("generic page controls remain outside multilingual consent evidence", async
     await page.close();
   }
 });
+
+test("Polish accept-only-necessary wording remains reject-equivalent", () => {
+  const classification = classifyConsentControlLabel({
+    label: "Akceptuj tylko niezbędne",
+    contextText: "Używamy plików cookie i prosimy o zgodę.",
+    localeHints: ["pl"],
+  });
+  assert.equal(classification.intent, "reject");
+  assert.equal(classification.variant, "necessary_only");
+});
