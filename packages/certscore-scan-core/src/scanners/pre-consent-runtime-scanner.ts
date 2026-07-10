@@ -629,6 +629,7 @@ export async function preConsentRuntimeScanner(
       );
       const recaptureTimeoutMs = Math.min(requestedRecaptureTimeoutMs, remainingModuleBudgetMs());
       const runHighConfidenceAdaptiveRecapture = () => detectConsentUiWithAdaptiveCmpGates({
+        artifactWriter: input.artifactWriter,
         cmpRuntimeObservations,
         initialObservation: consentObservation,
         navigationStartedAtMs,
@@ -2123,6 +2124,7 @@ type ConsentGateSnapshot = {
 };
 
 async function detectConsentUiWithAdaptiveCmpGates(input: {
+  artifactWriter: ArtifactWriter;
   cmpRuntimeObservations: CmpRuntimeObservation[];
   initialObservation: ConsentUiObservation;
   navigationStartedAtMs: number;
@@ -2177,6 +2179,21 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
     );
     return captureConsentGateSnapshotBounded(input, current, previous);
   };
+  const exitAfterInventoryTimeout = async (
+    gate: "10s" | "15s" | "18s" | "20s",
+    snapshot: ConsentGateSnapshot,
+  ) => {
+    current = await recoverConsentGateTimeoutWithGeometry(input, current);
+    const recoveredSnapshot = consentGateFallbackSnapshot(input, current, snapshot);
+    return recordConsentGateDecision(
+      input.timingBreakdown,
+      current,
+      recoveredSnapshot,
+      gate,
+      "inventory_timeout_exit",
+      meaningfulConsentGateProgress(snapshot, recoveredSnapshot),
+    );
+  };
 
   let gate10Result = await waitToGate(CONSENT_GATE_INITIAL_MS);
   let gate10 = gate10Result.snapshot;
@@ -2190,11 +2207,11 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
     gate10Result = await captureConsentGateSnapshotBounded(input, current, gate10);
     gate10 = gate10Result.snapshot;
     if (gate10Result.timedOut) {
-      return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "inventory_timeout_exit", undefined);
+      return exitAfterInventoryTimeout("10s", gate10);
     }
   }
   if (gate10Result.timedOut) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "inventory_timeout_exit", undefined);
+    return exitAfterInventoryTimeout("10s", gate10);
   }
   const progressAt10 = meaningfulConsentGateProgress(previous, gate10);
   if (hasSufficientFirstLayerConsentControls(current)) {
@@ -2213,7 +2230,7 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
 
   const gate15Result = await waitToGate(CONSENT_GATE_PROGRESS_REVIEW_MS);
   if (gate15Result.timedOut) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate15Result.snapshot, "15s", "inventory_timeout_exit", undefined);
+    return exitAfterInventoryTimeout("15s", gate15Result.snapshot);
   }
   const gate15 = gate15Result.snapshot;
   const progressAt15 = meaningfulConsentGateProgress(previous, gate15);
@@ -2233,7 +2250,7 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
 
   const gate18Result = await waitToGate(CONSENT_GATE_STRONG_CMP_FLOOR_MS);
   if (gate18Result.timedOut) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate18Result.snapshot, "18s", "inventory_timeout_exit", undefined);
+    return exitAfterInventoryTimeout("18s", gate18Result.snapshot);
   }
   const gate18 = gate18Result.snapshot;
   const progressAt18 = meaningfulConsentGateProgress(previous, gate18);
@@ -2256,7 +2273,7 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
 
   const gate20Result = await waitToGate(CONSENT_GATE_PARTIAL_EVIDENCE_MS);
   if (gate20Result.timedOut) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate20Result.snapshot, "20s", "inventory_timeout_exit", undefined);
+    return exitAfterInventoryTimeout("20s", gate20Result.snapshot);
   }
   const gate20 = gate20Result.snapshot;
   const progressAt20 = meaningfulConsentGateProgress(previous, gate20);
@@ -2286,6 +2303,40 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
     hasSufficientFirstLayerConsentControls(current) ? "complete_exit" : "hard_cap_exit",
     progressAt25,
   );
+}
+
+async function recoverConsentGateTimeoutWithGeometry(
+  input: {
+    artifactWriter: ArtifactWriter;
+    navigationStartedAtMs: number;
+    page: Page;
+    scanStartedAtMs: number;
+  },
+  observation: ConsentUiObservation,
+) {
+  const geometry = await captureConsentControlGeometry(input.page, {
+    candidateLimit: 48,
+    containerLimit: 16,
+    timeoutMs: 2_000,
+  }).catch(() => null);
+  if (!geometry || !hasConfirmedFirstLayerGeometryControls(geometry)) {
+    return observation;
+  }
+  const artifactPath = await input.artifactWriter.writeJsonArtifact("ConsentGateTimeoutGeometryEvidence.json", {
+    ...geometry,
+    artifactOnly: true,
+    productionFindingIntegration: false,
+    limitation: "Bounded canonical geometry fallback after the normal consent inventory exceeded its gate deadline.",
+  }).catch(() => undefined);
+  const recovered = consentUiObservationFromConfirmedGeometryControls({
+    artifactPath,
+    geometry,
+    scanStartedAtMs: input.scanStartedAtMs,
+    text: observation.textExcerpt,
+  });
+  return recovered
+    ? mergeConsentUiObservations(observation, recovered, "geometry:gate_inventory_timeout_controls")
+    : observation;
 }
 
 async function captureConsentGateSnapshotBounded(
