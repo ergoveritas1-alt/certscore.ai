@@ -3389,11 +3389,42 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           phrase.length >= 8 && normalizedLabel.includes(phrase)
         );
       };
+      const isExactCanonicalActionLabel = (label) => {
+        const normalizedLabel = String(label || "").replace(/\s+/g, " ").trim().toLowerCase();
+        return canonicalActionLabelSet.has(normalizedLabel);
+      };
       const hasCanonicalContextHint = (text) => {
         const normalizedText = String(text || "").replace(/\s+/g, " ").trim().toLowerCase();
         return normalizedText.length > 0 && Array.from(canonicalContextHintSet).some((phrase) =>
           normalizedText.includes(phrase)
         );
+      };
+      const hasStrongCmpContainerContext = (element) => {
+        let current = parentFor(element);
+        let depth = 0;
+        while (current && depth < 5) {
+          const attrs = [
+            current.getAttribute("id"),
+            current.getAttribute("class"),
+            current.getAttribute("role"),
+            current.getAttribute("aria-label"),
+            current.getAttribute("data-testid"),
+          ].filter(Boolean).join(" ");
+          if (/(?:optanon|onetrust|cmp|cookiebot|didomi|usercentrics|trustarc|consent|cookie|privacy)/i.test(attrs)) {
+            return true;
+          }
+          current = parentFor(current);
+          depth += 1;
+        }
+        return false;
+      };
+      const isSafeCanonicalTextCandidate = (element, label) => {
+        if (isExactCanonicalActionLabel(label)) {
+          return true;
+        }
+        return String(label || "").replace(/\s+/g, " ").trim().length <= 40 &&
+          isCanonicalActionLabel(label) &&
+          hasStrongCmpContainerContext(element);
       };
       const selectorHintFor = (element) => {
         const id = element.getAttribute("id");
@@ -3659,7 +3690,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         .filter((element) => !directSet.has(element))
         .filter((element) => {
           const label = labelFor(element);
-          if (!label || label.length > 80 || !isCanonicalActionLabel(label) || !hasConsentContext(element)) {
+          if (!label || label.length > 80 || !isSafeCanonicalTextCandidate(element, label) || !hasConsentContext(element)) {
             return false;
           }
           return !Array.from(element.children || []).slice(0, 20).some((child) => {
