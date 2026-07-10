@@ -1,4 +1,4 @@
-import type { SupportedPrivacyEvidenceLocale } from "./supported-languages";
+import type { SupportedGdprTransparencyLocale } from "./supported-languages";
 
 export type GdprTransparencyTopic =
   | "controller_contact"
@@ -19,7 +19,7 @@ export type GdprTransparencyTopicMatchStrength =
   | "weak";
 
 export type GdprTransparencyTopicPhrase = {
-  locale: SupportedPrivacyEvidenceLocale;
+  locale: SupportedGdprTransparencyLocale;
   phrase: string;
   topic: GdprTransparencyTopic;
   strength: GdprTransparencyTopicMatchStrength;
@@ -28,7 +28,7 @@ export type GdprTransparencyTopicPhrase = {
 
 export type GdprTransparencyTopicClassifierInput = {
   text?: string | null;
-  localeHints?: SupportedPrivacyEvidenceLocale[];
+  localeHints?: SupportedGdprTransparencyLocale[];
   maxMatches?: number;
 };
 
@@ -36,7 +36,7 @@ export type GdprTransparencyTopicMatch = {
   classifierProvenance: "gdpr_transparency_topic_classifier.v1";
   confidence: number;
   evidenceExcerpt: string;
-  matchedLocale: SupportedPrivacyEvidenceLocale;
+  matchedLocale: SupportedGdprTransparencyLocale;
   matchedTerm: string;
   matchStrength: GdprTransparencyTopicMatchStrength;
   reasonCodes: string[];

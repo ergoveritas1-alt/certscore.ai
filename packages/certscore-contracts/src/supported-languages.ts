@@ -1,5 +1,50 @@
 export const SUPPORTED_PRIVACY_EVIDENCE_LOCALES = [
   "en",
+  "es",
+  "de",
+  "ja",
+  "fr",
+  "ru",
+  "pt",
+  "it",
+  "tr",
+  "zh",
+  "fa",
+  "nl",
+  "pl",
+  "vi",
+  "id",
+  "cs",
+  "ko",
+  "sv",
+  "uk",
+  "el",
+  "ar",
+  "hu",
+  "ro",
+  "th",
+  "da",
+  "sk",
+  "fi",
+  "bg",
+  "he",
+  "sr",
+  "hr",
+  "lt",
+  "sl",
+  "ca",
+  "hi",
+  "nb",
+  "et",
+  "lv",
+  "az",
+  "gl",
+] as const;
+
+export type SupportedPrivacyEvidenceLocale = typeof SUPPORTED_PRIVACY_EVIDENCE_LOCALES[number];
+
+export const SUPPORTED_GDPR_TRANSPARENCY_LOCALES = [
+  "en",
   "de",
   "fr",
   "es",
@@ -8,7 +53,7 @@ export const SUPPORTED_PRIVACY_EVIDENCE_LOCALES = [
   "pl",
 ] as const;
 
-export type SupportedPrivacyEvidenceLocale = typeof SUPPORTED_PRIVACY_EVIDENCE_LOCALES[number];
+export type SupportedGdprTransparencyLocale = typeof SUPPORTED_GDPR_TRANSPARENCY_LOCALES[number];
 
 export function isSupportedPrivacyEvidenceLocale(
   value: string | null | undefined,

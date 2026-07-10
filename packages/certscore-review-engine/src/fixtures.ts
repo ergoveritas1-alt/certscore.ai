@@ -57,6 +57,9 @@ export function minimalBundle(
         acceptControlObserved: false,
         rejectControlObserved: false,
         managePreferencesControlObserved: false,
+        defaultTogglePurposeLabels: [],
+        precheckedOptionalPurposeCount: 0,
+        precheckedOptionalPurposeLabels: [],
         controls: [],
         evidenceRefs: [],
         confidence: 0.55,
@@ -266,6 +269,9 @@ export function consentBannerTextBundle(): CanonicalEvidenceBundle {
         acceptControlObserved: true,
         rejectControlObserved: true,
         managePreferencesControlObserved: false,
+        defaultTogglePurposeLabels: [],
+        precheckedOptionalPurposeCount: 0,
+        precheckedOptionalPurposeLabels: [],
         controls: [
           {
             label: "Accept",

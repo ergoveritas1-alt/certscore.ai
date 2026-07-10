@@ -123,6 +123,7 @@ export type StaticFixturePage =
   | "policy-manage-cookies-footer-anchor"
   | "policy-manage-cookies-embedded-config"
   | "policy-no-links"
+  | "policy-no-links-es"
   | "policy-noisy-policy-body"
   | "policy-notice-at-collection-link"
   | "policy-privacy-choices-link"
@@ -271,6 +272,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-manage-cookies-footer-anchor": "policy-manage-cookies-footer-anchor",
   "policy-manage-cookies-embedded-config": "policy-manage-cookies-embedded-config",
   "policy-no-links": "policy-no-links",
+  "policy-no-links-es": "policy-no-links-es",
   "policy-noisy-policy-body": "policy-noisy-policy-body",
   "policy-notice-at-collection-link": "policy-notice-at-collection",
   "policy-privacy-choices-link": "policy-privacy-choices",
@@ -1610,6 +1612,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-manage-cookies-footer-anchor": `<main><p>News homepage</p></main><footer><a href="#" id="manage-cookies">Manage Cookies</a></footer>`,
     "policy-manage-cookies-embedded-config": `<main><p>News homepage</p></main><script>window.CONSENT_CONFIG={consentLinkTitle:{en:"Manage Cookies+"},privacyCenterLinkTitle:{en:"Privacy Policy"}};</script>`,
     "policy-no-links": "",
+    "policy-no-links-es": `<main lang="es"><h1>Inicio</h1><p>Información general sobre datos personales.</p></main>`,
     "policy-noisy-policy-body": `<a href="/policies/noisy-privacy">Privacy Policy</a>`,
     "policy-notice-at-collection-link": `<a href="/notice-at-collection">Notice at Collection</a>`,
     "policy-onetrust-index-json": `<a href="/policies/onetrust-index-shell">Privacy Policy</a>`,

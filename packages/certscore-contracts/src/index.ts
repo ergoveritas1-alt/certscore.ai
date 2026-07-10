@@ -1,9 +1,13 @@
 import { z } from "zod";
-import { SUPPORTED_PRIVACY_EVIDENCE_LOCALES } from "./supported-languages";
+import {
+  SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
+  SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
+} from "./supported-languages";
 export * from "./consent-control-label-classifier";
 export * from "./gdpr-transparency-topic-classifier";
 export * from "./article13-disclosure-rejection";
 export * from "./privacy-surface-classifier";
+export * from "./privacy-evidence-locale-registry";
 export * from "./supported-languages";
 
 export const directVsInferredSchema = z.enum([
@@ -15,6 +19,7 @@ export const directVsInferredSchema = z.enum([
 
 export const confidenceSchema = z.number().min(0).max(1);
 export const supportedPrivacyEvidenceLocaleSchema = z.enum(SUPPORTED_PRIVACY_EVIDENCE_LOCALES);
+export const supportedGdprTransparencyLocaleSchema = z.enum(SUPPORTED_GDPR_TRANSPARENCY_LOCALES);
 export const consentControlLocaleSchema = supportedPrivacyEvidenceLocaleSchema;
 export const consentControlMatchStrengthSchema = z.enum(["direct", "equivalent", "contextual", "weak"]);
 export const consentControlClassifierReasonCodesSchema = z.array(z.string().max(80)).max(16).optional();
@@ -1285,7 +1290,7 @@ export const policySurfaceObservationSchema = z.object({
     evidenceSource: z.enum(["deterministic", "nano", "deterministic_plus_nano"]).optional(),
     selectedEvidenceStrength: z.enum(["strong", "partial", "limited"]).optional(),
     classifierProvenance: z.literal("gdpr_transparency_topic_classifier.v1").optional(),
-    matchedLocale: supportedPrivacyEvidenceLocaleSchema.optional(),
+    matchedLocale: supportedGdprTransparencyLocaleSchema.optional(),
     matchedTerm: z.string().max(240).optional(),
     matchStrength: z.enum(["direct", "equivalent", "contextual", "weak"]).optional(),
     classifierReasonCodes: z.array(z.string().max(100)).max(16).optional(),
@@ -1307,7 +1312,7 @@ export const policySurfaceObservationSchema = z.object({
     evidenceText: z.string().max(640),
     confidence: z.number().min(0).max(1).default(0.5),
     classifierProvenance: z.literal("gdpr_transparency_topic_classifier.v1"),
-    matchedLocale: supportedPrivacyEvidenceLocaleSchema,
+    matchedLocale: supportedGdprTransparencyLocaleSchema,
     matchedTerm: z.string().max(240),
     matchStrength: z.enum(["direct", "equivalent", "contextual", "weak"]),
     classifierReasonCodes: z.array(z.string().max(100)).max(16).default([]),

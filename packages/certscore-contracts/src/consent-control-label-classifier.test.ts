@@ -5,6 +5,7 @@ import {
   consentActionCandidateSchema,
   consentUiObservationSchema,
   isProductionCreditworthySupplementalConsentControlClassification,
+  PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
@@ -141,69 +142,46 @@ test("classifies observed Spanish and Italian consent labels", () => {
   }).intent, "unknown");
 });
 
-test("classifies canonical consent controls across supported privacy evidence locales with multilingual profile", () => {
-  const examples = [
-    { label: "Accept all", locale: "en", intent: "accept" },
-    { label: "Alle akzeptieren", locale: "de", intent: "accept" },
-    { label: "Tout accepter", locale: "fr", intent: "accept" },
-    { label: "Aceptar todo", locale: "es", intent: "accept" },
-    { label: "Accetta tutto", locale: "it", intent: "accept" },
-    { label: "Alles accepteren", locale: "nl", intent: "accept" },
-    { label: "Akceptuj wszystko", locale: "pl", intent: "accept" },
-    { label: "Reject all", locale: "en", intent: "reject" },
-    { label: "Alle ablehnen", locale: "de", intent: "reject" },
-    { label: "Tout refuser", locale: "fr", intent: "reject" },
-    { label: "Rechazar todo", locale: "es", intent: "reject" },
-    { label: "Rifiuta tutto", locale: "it", intent: "reject" },
-    { label: "Alles weigeren", locale: "nl", intent: "reject" },
-    { label: "Odrzuć wszystko", locale: "pl", intent: "reject" },
-    { label: "Cookie settings", locale: "en", intent: "options" },
-    { label: "Cookie-Einstellungen", locale: "de", intent: "options" },
-    { label: "Paramètres des cookies", locale: "fr", intent: "options" },
-    { label: "Configuración de cookies", locale: "es", intent: "options" },
-    { label: "Impostazioni cookie", locale: "it", intent: "options" },
-    { label: "Cookie-instellingen", locale: "nl", intent: "options" },
-    { label: "Privacy-instellingen", locale: "nl", intent: "options" },
-    { label: "Ustawienia plików cookie", locale: "pl", intent: "options" },
-  ] as const;
+test("classifies canonical accept, reject, options, and necessary-only controls across all 40 locales", () => {
+  assert.equal(SUPPORTED_PRIVACY_EVIDENCE_LOCALES.length, 40);
+  assert.deepEqual(
+    PRIVACY_EVIDENCE_LOCALE_REGISTRY.map((entry) => entry.locale),
+    [...SUPPORTED_PRIVACY_EVIDENCE_LOCALES],
+  );
 
-  assert.deepEqual(SUPPORTED_PRIVACY_EVIDENCE_LOCALES, ["en", "de", "fr", "es", "it", "nl", "pl"]);
+  for (const entry of PRIVACY_EVIDENCE_LOCALE_REGISTRY) {
+    for (const [intent, label] of [
+      ["accept", entry.consentControls.accept[0]],
+      ["reject", entry.consentControls.reject[0]],
+      ["options", entry.consentControls.options[0]],
+    ] as const) {
+      assert.ok(label, `${entry.locale} ${intent} fixture`);
+      for (const classifierProfile of ["production_default", "multilingual_v1"] as const) {
+        const classification = classifyConsentControlLabel({
+          label,
+          classifierProfile,
+          localeHints: [entry.locale],
+        });
+        assert.equal(classification.intent, intent, `${entry.locale} ${label} ${classifierProfile}`);
+        assert.equal(classification.matchedLocale, entry.locale, `${entry.locale} ${label} ${classifierProfile}`);
+      }
+    }
 
-  for (const example of examples) {
-    const classification = classifyConsentControlLabel({
-      label: example.label,
-      classifierProfile: "multilingual_v1",
+    const necessaryOnly = entry.consentControls.necessaryOnly[0];
+    assert.ok(necessaryOnly, `${entry.locale} necessary-only fixture`);
+    const withContext = classifyConsentControlLabel({
+      label: necessaryOnly,
+      contextText: entry.contextHints.join(" "),
+      localeHints: [entry.locale],
     });
-    assert.equal(classification.intent, example.intent, example.label);
-    assert.equal(classification.matchedLocale, example.locale, example.label);
+    assert.equal(withContext.intent, "reject", `${entry.locale} ${necessaryOnly}`);
+    assert.equal(withContext.variant, "necessary_only", `${entry.locale} ${necessaryOnly}`);
   }
 });
 
-test("keeps Dutch and Polish labels outside default production classifier profile", () => {
-  for (const label of [
-    "Alles accepteren",
-    "Alles weigeren",
-    "Cookie-instellingen",
-    "Privacy-instellingen",
-    "Akceptuj wszystko",
-    "Odrzuć wszystko",
-    "Ustawienia plików cookie",
-    "Przejdź do serwisu",
-  ]) {
-    const classification = classifyConsentControlLabel({ label });
-    assert.equal(classification.intent, "unknown", label);
-    assert.equal(classification.matchedLocale, undefined, label);
-  }
-});
-
-test("keeps Dutch and Polish context hints outside default production classifier profile", () => {
-  for (const contextText of [
-    "Wij vragen toestemming voor voorkeuren en instellingen.",
-    "Prosimy o zgodę na preferencje i ustawienia.",
-  ]) {
-    assert.equal(classifyConsentControlLabel({ label: "Settings", contextText }).intent, "unknown", contextText);
-    assert.equal(classifyConsentControlLabel({ label: "Customise", contextText }).intent, "unknown", contextText);
-  }
+test("uses canonical Dutch and Polish controls in the default production classifier", () => {
+  assert.equal(classifyConsentControlLabel({ label: "Cookie-instellingen" }).intent, "options");
+  assert.equal(classifyConsentControlLabel({ label: "Ustawienia plików cookie" }).intent, "options");
 
   const multilingualDutch = classifyConsentControlLabel({
     label: "Settings",
@@ -254,14 +232,14 @@ test("does not let generic Dutch or Polish settings labels satisfy multilingual 
   assert.equal(consentPolish.contextSatisfied, true);
 });
 
-test("keeps Dutch and Polish preference context outside default production classifier profile", () => {
+test("uses Dutch and Polish preference context in the default production classifier", () => {
   for (const contextText of [
     "Cookie voorkeuren beheren",
     "Cookie preferencje ustawienia",
   ]) {
     const classification = classifyConsentControlLabel({ label: "Save choices", contextText });
-    assert.equal(classification.intent, "unknown", contextText);
-    assert.equal(classification.contextSatisfied, false, contextText);
+    assert.equal(classification.intent, "options", contextText);
+    assert.equal(classification.contextSatisfied, true, contextText);
   }
 
   const multilingualDutch = classifyConsentControlLabel({
@@ -281,18 +259,18 @@ test("keeps Dutch and Polish preference context outside default production class
   assert.equal(multilingualPolish.variant, "save_preferences");
 });
 
-test("requires multilingual profile rather than locale hints alone for Dutch and Polish terms", () => {
+test("supports Dutch and Polish terms in the default profile and honors locale hints", () => {
   const dutchWithHintOnly = classifyConsentControlLabel({
     label: "Alles weigeren",
     localeHints: ["nl"],
   });
-  assert.equal(dutchWithHintOnly.intent, "unknown");
+  assert.equal(dutchWithHintOnly.intent, "reject");
 
   const polishWithHintOnly = classifyConsentControlLabel({
     label: "Odrzuć wszystko",
     localeHints: ["pl"],
   });
-  assert.equal(polishWithHintOnly.intent, "unknown");
+  assert.equal(polishWithHintOnly.intent, "reject");
 
   const dutchWithProfile = classifyConsentControlLabel({
     label: "Alles weigeren",
@@ -303,13 +281,13 @@ test("requires multilingual profile rather than locale hints alone for Dutch and
   assert.equal(dutchWithProfile.matchedLocale, "nl");
 });
 
-test("classifies contextual Polish continue-to-service consent labels only with multilingual profile", () => {
+test("classifies contextual Polish continue-to-service consent labels in the default profile", () => {
   const contextText = "Klikając Przejdź do serwisu udzielasz zgody na przetwarzanie danych osobowych i pliki cookie.";
 
   assert.equal(classifyConsentControlLabel({
     label: "Przejdź do serwisu",
     contextText,
-  }).intent, "unknown");
+  }).intent, "accept");
 
   assert.equal(classifyConsentControlLabel({
     label: "Przejdź do serwisu",
@@ -392,12 +370,12 @@ test("classifies necessary-only labels as reject-equivalent", () => {
   }
 });
 
-test("classifies Dutch and Polish necessary-only labels only with multilingual profile", () => {
+test("classifies Dutch and Polish necessary-only labels in both profiles", () => {
   for (const label of [
     "Alleen noodzakelijke cookies",
     "Tylko niezbędne pliki cookie",
   ]) {
-    assert.equal(classifyConsentControlLabel({ label }).intent, "unknown", label);
+    assert.equal(classifyConsentControlLabel({ label }).intent, "reject", label);
     const classification = classifyConsentControlLabel({
       label,
       classifierProfile: "multilingual_v1",

@@ -1,4 +1,8 @@
-import type { SupportedPrivacyEvidenceLocale } from "./supported-languages";
+import { PRIVACY_EVIDENCE_LOCALE_REGISTRY } from "./privacy-evidence-locale-registry";
+import {
+  SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
+  type SupportedPrivacyEvidenceLocale,
+} from "./supported-languages";
 
 export type ConsentControlIntent =
   | "accept"
@@ -55,17 +59,11 @@ export type ConsentControlLabelClassification = {
 
 type TermInput = Omit<ConsentControlTerm, "locale">;
 
-const PRODUCTION_DEFAULT_CONTEXT_HINT_PATTERN =
-  /\b(cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|optional|essential|necessary|cmp|onetrust|trustarc|didomi|usercentrics|cookiebot|optanon|datenschutz|cookies?|einwilligung|zustimmung|präferenzen|einstellungen|choix|confidentialit[eé]|pr[eé]f[eé]rences?|consentement|finalit[eé]s|privacidad|preferencias?|configuraci[oó]n|opciones|consenso|privacy|preferenze|impostazioni|pubblicitarie|tracciamento)\b/i;
-
 const MULTILINGUAL_CONTEXT_HINT_PATTERN =
   /\b(cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|optional|essential|necessary|cmp|onetrust|trustarc|didomi|usercentrics|cookiebot|optanon|datenschutz|cookies?|einwilligung|zustimmung|präferenzen|einstellungen|choix|confidentialit[eé]|pr[eé]f[eé]rences?|consentement|finalit[eé]s|privacidad|preferencias?|configuraci[oó]n|opciones|consenso|privacy|preferenze|impostazioni|pubblicitarie|tracciamento|toestemming|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie)\b/i;
 
 const PRIVACY_OPT_OUT_HINT_PATTERN =
   /\b(do not sell|do not share|sale|share|targeted advertising|privacy rights?|legitimate interest|berechtigtem interesse|widerspruch|opposition|int[eé]r[eê]t l[eé]gitime|droit d['’]opposition|gerechtvaardigd belang|bezwaar|sprzeciw|uzasadnion(?:y|ego) interes)\b/i;
-
-const PRODUCTION_DEFAULT_PREFERENCE_CONTEXT_PATTERN =
-  /\b(preference|preferences|settings|choices?|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|param[eè]tres|pr[eé]f[eé]rences?|finalit[eé]s|preferencias?|configuraci[oó]n|opciones|preferenze|impostazioni|pubblicitarie)\b/i;
 
 const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN =
   /\b(preference|preferences|settings|choices?|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|param[eè]tres|pr[eé]f[eé]rences?|finalit[eé]s|preferencias?|configuraci[oó]n|opciones|preferenze|impostazioni|pubblicitarie|voorkeuren|instellingen|keuzes|doeleinden|ustawieni[ae]|preferencj[ae]|wybor(?:y|ów)|cel(?:e|ów))\b/i;
@@ -79,13 +77,9 @@ const UTIQ_SCOPED_REJECT_PATTERN =
 const CONTINUE_AS_ACCEPT_CONTEXT_PATTERN =
   /\b(?:by\s+(?:using|continuing(?:\s+to\s+use)?|accessing|remaining\s+on)\s+(?:this\s+)?(?:site|website|service|page)|(?:using|continuing(?:\s+to\s+use)?|accessing|remaining\s+on)\s+(?:this\s+)?(?:site|website|service|page)\s+(?:means|constitutes|indicates)|you\s+(?:consent|agree)\s+to\s+(?:these\s+)?cookies?)\b/i;
 
-const PRODUCTION_DEFAULT_CONSENT_CONTROL_LOCALES = new Set<ConsentControlLocale>([
-  "en",
-  "de",
-  "fr",
-  "es",
-  "it",
-]);
+const PRODUCTION_DEFAULT_CONSENT_CONTROL_LOCALES = new Set<ConsentControlLocale>(
+  SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
+);
 
 const en = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "en", ...term }));
 const de = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "de", ...term }));
@@ -604,6 +598,36 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("privacy_opt_out", "nie udostępniaj"),
     ...direct("privacy_opt_out", "wybory dotyczące prywatności"),
   ]),
+  ...PRIVACY_EVIDENCE_LOCALE_REGISTRY
+    .flatMap((entry): ConsentControlTerm[] => [
+      ...entry.consentControls.accept.map((phrase) => ({
+        locale: entry.locale,
+        phrase,
+        intent: "accept" as const,
+        strength: "direct" as const,
+      })),
+      ...entry.consentControls.reject.map((phrase) => ({
+        locale: entry.locale,
+        phrase,
+        intent: "reject" as const,
+        strength: "direct" as const,
+      })),
+      ...entry.consentControls.options.map((phrase, index) => ({
+        locale: entry.locale,
+        phrase,
+        intent: "options" as const,
+        strength: index === 0 ? "direct" as const : "contextual" as const,
+        requiresConsentContext: index === 0 ? undefined : true,
+      })),
+      ...entry.consentControls.necessaryOnly.map((phrase) => ({
+        locale: entry.locale,
+        phrase,
+        intent: "reject" as const,
+        strength: "equivalent" as const,
+        variant: "necessary_only",
+        requiresConsentContext: true,
+      })),
+    ]),
 ];
 
 export const consentControlTerms = CONSENT_CONTROL_PHRASE_REGISTRY;
@@ -627,16 +651,17 @@ export function classifyConsentControlLabel(
   const normalizedContext = normalizeConsentControlText(input.contextText ?? "");
   const reasonCodes: string[] = [];
   const classifierProfile = input.classifierProfile ?? "production_default";
-  const contextHintPattern = classifierProfile === "multilingual_v1"
-    ? MULTILINGUAL_CONTEXT_HINT_PATTERN
-    : PRODUCTION_DEFAULT_CONTEXT_HINT_PATTERN;
-  const preferenceContextPattern = classifierProfile === "multilingual_v1"
-    ? MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN
-    : PRODUCTION_DEFAULT_PREFERENCE_CONTEXT_PATTERN;
+  const contextHintPattern = MULTILINGUAL_CONTEXT_HINT_PATTERN;
+  const preferenceContextPattern = MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN;
+  const activeLocales = activeLocalesForProfile(classifierProfile);
   const hasConsentContext = input.hasConsentContext === true ||
-    contextHintPattern.test(input.contextText ?? "");
+    contextHintPattern.test(input.contextText ?? "") ||
+    hasCanonicalLocaleContext(input.contextText, activeLocales, "consent");
   const hasPreferenceContext = input.hasPreferenceContext === true ||
-    hasConsentContext && preferenceContextPattern.test(input.contextText ?? "");
+    hasConsentContext && (
+      preferenceContextPattern.test(input.contextText ?? "") ||
+      hasCanonicalLocaleContext(input.contextText, activeLocales, "preference")
+    );
   const hasContinueConsentContext = CONTINUE_AS_ACCEPT_CONTEXT_PATTERN.test(input.contextText ?? "");
 
   if (!normalizedLabel) {
@@ -670,7 +695,6 @@ export function classifyConsentControlLabel(
   }
 
   const localeHints = new Set(input.localeHints ?? []);
-  const activeLocales = activeLocalesForProfile(classifierProfile);
   const terms = CONSENT_CONTROL_PHRASE_REGISTRY.filter((term) =>
     activeLocales.has(term.locale) &&
     (localeHints.size === 0 || localeHints.has(term.locale))
@@ -731,6 +755,17 @@ export function isProductionCreditworthySupplementalConsentControlClassification
   if (classification.intent === "unknown") return false;
   const normalizedLabel = normalizeConsentControlText(labelValue);
   const strongMatch = classification.matchStrength === "direct" || classification.matchStrength === "equivalent";
+
+  if (
+    classification.matchedLocale &&
+    classification.matchedLocale !== "nl" &&
+    classification.matchedLocale !== "pl" &&
+    !new Set<ConsentControlLocale>(["en", "de", "fr", "es", "it"]).has(classification.matchedLocale)
+  ) {
+    return strongMatch && (
+      classification.variant !== "necessary_only" || classification.contextSatisfied
+    );
+  }
 
   if (classification.matchedLocale === "nl") {
     if (classification.intent === "accept") return strongMatch && /\b(?:alles accepteren|alle cookies accepteren|accepteren|akkoord|ik ga akkoord|toestaan|alles toestaan)\b/i.test(normalizedLabel);
@@ -796,7 +831,15 @@ function termScore(
     return 0;
   }
   const contextSatisfied = contextRequirementSatisfied(term, hasConsentContext, hasPreferenceContext, hasContinueConsentContext);
-  if (!contextSatisfied && (term.intent === "options" || term.strength === "contextual")) {
+  if (!contextSatisfied && (
+    term.intent === "options" ||
+    term.strength === "contextual" ||
+    term.strength !== "weak" && (
+      term.requiresConsentContext === true ||
+      term.requiresPreferenceContext === true ||
+      term.requiresContinueConsentContext === true
+    )
+  )) {
     return 0;
   }
   return (exact ? 1000 : 500) +
@@ -849,9 +892,28 @@ function uniqueStrings(values: Array<string | null | undefined>) {
 
 function activeLocalesForProfile(profile: ConsentControlClassifierProfile) {
   if (profile === "multilingual_v1") {
-    return new Set<ConsentControlLocale>(["en", "de", "fr", "es", "it", "nl", "pl"]);
+    return new Set<ConsentControlLocale>(SUPPORTED_PRIVACY_EVIDENCE_LOCALES);
   }
   return PRODUCTION_DEFAULT_CONSENT_CONTROL_LOCALES;
+}
+
+function hasCanonicalLocaleContext(
+  contextText: string | null | undefined,
+  activeLocales: Set<ConsentControlLocale>,
+  kind: "consent" | "preference",
+): boolean {
+  const normalizedContext = normalizeConsentControlText(contextText);
+  if (!normalizedContext) return false;
+  return PRIVACY_EVIDENCE_LOCALE_REGISTRY.some((entry) => {
+    if (!activeLocales.has(entry.locale)) return false;
+    const hints = kind === "preference"
+      ? entry.cookieSettingsLabels
+      : entry.contextHints;
+    return hints.some((hint) => {
+      const normalizedHint = normalizeConsentControlText(hint);
+      return normalizedHint.length >= 3 && normalizedContext.includes(normalizedHint);
+    });
+  });
 }
 
 function unknown(reasonCodes: string[]): ConsentControlLabelClassification {

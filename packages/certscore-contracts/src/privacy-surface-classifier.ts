@@ -1,4 +1,5 @@
 import type { SupportedPrivacyEvidenceLocale } from "./supported-languages";
+import { PRIVACY_EVIDENCE_LOCALE_REGISTRY } from "./privacy-evidence-locale-registry";
 
 export type PrivacySurfaceType =
   | "privacy_policy"
@@ -195,6 +196,14 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
     direct("terms", "regulamin"),
     direct("terms", "warunki korzystania"),
   ]),
+  ...PRIVACY_EVIDENCE_LOCALE_REGISTRY
+    .filter((entry) => !new Set<SupportedPrivacyEvidenceLocale>(["en", "de", "fr", "es", "it", "nl", "pl"]).has(entry.locale))
+    .flatMap((entry): PrivacySurfacePhrase[] => [
+      ...entry.privacyPolicyLabels.map((phrase) => ({ locale: entry.locale, phrase, strength: "direct" as const, surfaceType: "privacy_policy" as const })),
+      ...entry.cookiePolicyLabels.map((phrase) => ({ locale: entry.locale, phrase, strength: "direct" as const, surfaceType: "cookie_policy" as const })),
+      ...entry.cookieSettingsLabels.map((phrase) => ({ locale: entry.locale, phrase, strength: "direct" as const, surfaceType: "cookie_settings" as const })),
+      ...entry.termsLabels.map((phrase) => ({ locale: entry.locale, phrase, strength: "direct" as const, surfaceType: "terms" as const })),
+    ]),
 ];
 
 const URL_SURFACE_PATTERNS: Array<{
@@ -260,12 +269,16 @@ export function classifyPrivacySurface(
       right.term.phrase.length - left.term.phrase.length
     )[0];
 
-  const urlMatch = URL_SURFACE_PATTERNS
+  const staticUrlMatch = URL_SURFACE_PATTERNS
     .map((entry) => ({
       ...entry,
       score: entry.pattern.test(normalizedUrl) ? 540 : 0,
     }))
     .filter((entry) => entry.score > 0)[0];
+  const localeUrlMatch = canonicalLocaleUrlMatch(normalizedUrl, localeHints);
+  const urlMatch = localeUrlMatch && (!staticUrlMatch || localeUrlMatch.score >= staticUrlMatch.score)
+    ? localeUrlMatch
+    : staticUrlMatch;
 
   if (!phraseMatch && !urlMatch) {
     return unknown(["no_surface_match"]);
@@ -297,6 +310,7 @@ export function classifyPrivacySurface(
   return {
     confidence: 0.74,
     contextSatisfied,
+    matchedLocale: "matchedLocale" in urlMatch ? urlMatch.matchedLocale : undefined,
     matchStrength: "contextual",
     reasonCodes: uniqueStrings([
       `matched_${urlMatch.surfaceType}`,
@@ -307,6 +321,40 @@ export function classifyPrivacySurface(
     surfaceType: urlMatch.surfaceType,
     variant: urlMatch.variant,
   };
+}
+
+function canonicalLocaleUrlMatch(
+  normalizedUrl: string,
+  localeHints: Set<SupportedPrivacyEvidenceLocale>,
+): {
+  surfaceType: Exclude<PrivacySurfaceType, "unknown">;
+  score: number;
+  matchedLocale: SupportedPrivacyEvidenceLocale;
+  variant: string;
+} | undefined {
+  const entries = localeHints.size > 0
+    ? PRIVACY_EVIDENCE_LOCALE_REGISTRY.filter((entry) => localeHints.has(entry.locale))
+    : PRIVACY_EVIDENCE_LOCALE_REGISTRY;
+  return entries
+    .flatMap((entry) => [
+      ...entry.cookiePolicyPathSlugs.map((slug) => ({ entry, slug, surfaceType: "cookie_policy" as const })),
+      ...entry.privacyPolicyPathSlugs.map((slug) => ({ entry, slug, surfaceType: "privacy_policy" as const })),
+      ...entry.termsPathSlugs.map((slug) => ({ entry, slug, surfaceType: "terms" as const })),
+    ])
+    .filter(({ slug }) => canonicalSlugMatchesUrl(normalizedUrl, slug))
+    .sort((left, right) => right.slug.length - left.slug.length)
+    .map(({ entry, surfaceType }) => ({
+      surfaceType,
+      score: 539,
+      matchedLocale: entry.locale,
+      variant: "canonical_locale_path",
+    }))[0];
+}
+
+function canonicalSlugMatchesUrl(normalizedUrl: string, slug: string): boolean {
+  const normalizedSlug = normalizePrivacySurfaceText(slug.replace(/[-_/]+/g, " "));
+  if (!normalizedSlug || normalizedSlug.length < 4) return false;
+  return ` ${normalizePrivacySurfaceText(normalizedUrl)} `.includes(` ${normalizedSlug} `);
 }
 
 export function normalizePrivacySurfaceText(value: string | null | undefined): string {

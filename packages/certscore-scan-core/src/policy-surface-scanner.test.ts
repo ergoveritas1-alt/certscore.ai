@@ -1735,7 +1735,7 @@ test("policySurfaceScanner does not let secondary-only surfaces satisfy core GDP
   });
 });
 
-test("policySurfaceScanner common-path fallback includes localized privacy policy paths", async () => {
+test("policySurfaceScanner keeps no-locale common-path fallback bounded to core plus datenschutz", async () => {
   await withPolicyScan("policy-no-links", async ({ result, baseUrl }) => {
     const fetchedPrivacyPaths = new Set(result.policySurfaceObservations
       .filter((observation) =>
@@ -1745,18 +1745,21 @@ test("policySurfaceScanner common-path fallback includes localized privacy polic
       )
       .map((observation) => observation.normalizedUrl));
 
-    for (const expectedPath of [
-      "/datenschutz",
-      "/politica-de-privacidad",
-      "/informativa-privacy",
-      "/privacybeleid",
-    ]) {
-      assert.equal(
-        fetchedPrivacyPaths.has(`${baseUrl}${expectedPath}`),
-        true,
-        `expected localized fallback ${expectedPath}; retained=${JSON.stringify([...fetchedPrivacyPaths])}`,
-      );
+    assert.equal(fetchedPrivacyPaths.has(`${baseUrl}/datenschutz`), true);
+    for (const excludedPath of ["/politica-de-privacidad", "/informativa-privacy", "/privacybeleid"]) {
+      assert.equal(fetchedPrivacyPaths.has(`${baseUrl}${excludedPath}`), false, excludedPath);
     }
+  });
+});
+
+test("policySurfaceScanner adds localized common paths only for the detected locale", async () => {
+  await withPolicyScan("policy-no-links-es", async ({ result, baseUrl }) => {
+    const fetchedUrls = new Set(result.policySurfaceObservations
+      .filter((observation) => observation.discoveryMethod === "guessed_common_path")
+      .map((observation) => observation.normalizedUrl));
+    assert.equal(fetchedUrls.has(`${baseUrl}/politica-de-privacidad`), true);
+    assert.equal(fetchedUrls.has(`${baseUrl}/informativa-privacy`), false);
+    assert.equal(fetchedUrls.has(`${baseUrl}/privacybeleid`), false);
   });
 });
 

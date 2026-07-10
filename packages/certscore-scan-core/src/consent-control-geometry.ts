@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 import {
   classifyConsentControlLabel,
+  PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   type ConsentControlClassifierProfile,
   type ConsentControlLabelClassification,
 } from "@certscore/contracts";
@@ -239,20 +240,41 @@ const DEFAULT_CANDIDATE_LIMIT = 48;
 const DEFAULT_CONTAINER_LIMIT = 12;
 // Browser-side patterns only broaden candidate/context capture; canonical intent
 // classification and production credit still flow through the contracts classifier.
-const CONSENT_CONTEXT_PATTERN =
-  /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie/i;
-const MULTILINGUAL_CONSENT_CONTEXT_PATTERN =
-  /cookie|cookies|consent|privacy|preference|preferences|settings|choices|tracking|advertising|marketing|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot|consentmanager|datenschutz|einwilligung|zustimmung|préférences|confidentialité|consentement|privacidad|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|toestemming|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie/i;
-const MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN =
-  /consent|tracking|advertising|marketing|optional|essential|necessary|cmp|optanon|onetrust|trustarc|didomi|usercentrics|cookiebot|consentmanager|einwilligung|zustimmung|consentement|finalit[eé]s|consenso|tracciamento|toestemming|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|zgod[ayęą]|niezb[eę]dne|danych osobowych|(?:use|uses|using|gebruiken|gebruikt|używamy|uzywamy|używa|uzywa)[^.]{0,80}cookies?|cookies?[^.]{0,80}(?:tracking|advertising|marketing|consent|preferences|analytics)/i;
+const CONSENT_CONTEXT_PATTERN = canonicalPhrasePattern([
+  "cookie", "cookies", "consent", "privacy", "tracking", "advertising", "marketing",
+  "optanon", "onetrust", "cmp", "trustarc", "didomi", "usercentrics", "cookiebot", "consentmanager",
+  ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => entry.contextHints),
+]);
+const MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN = CONSENT_CONTEXT_PATTERN;
 const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN =
   /preference|preferences|settings|choices|options|purpose|purposes|präferenzen|einstellungen|auswahl|optionen|choix|paramètres|préférences|finalités|preferencias|configuración|opciones|preferenze|impostazioni|pubblicitarie|voorkeuren|instellingen|keuzes|doeleinden|ustawieni[ae]|preferencj[ae]|wybor(?:y|ów)|cel(?:e|ów)/i;
-const POLICY_LINK_PATTERN = /\b(?:privacy policy|cookie policy|privacy statement|cookie statement|privacy notice|cookie notice|privacy and cookie policy|politique de confidentialit[eé]|politique de confidentialit[eé] et de gestion des cookies|politique|datenschutzerklärung)\b/i;
-const CANDIDATE_ACTION_PRIORITY_PATTERN =
-  /accept|agree|allow|continue|reject|decline|deny|settings|preferences|options|choices|purposes|manage|personalise|personalize|customise|customize|necessary|essential|required|technical|akzeptieren|ablehnen|einstellungen|accepter|refuser|paramètres|aceptar|rechazar|configurar|preferencias|accetta|rifiuta|impostazioni|preferenze|personalizza|accepteren|weigeren|instellingen|voorkeuren|akceptuj|akceptuję|odrzuć|ustawienia|preferencje|przejdź/i;
+const POLICY_LINK_PATTERN = canonicalPhrasePattern(
+  PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => [
+    ...entry.privacyPolicyLabels,
+    ...entry.cookiePolicyLabels,
+  ]),
+);
+const CANDIDATE_ACTION_PRIORITY_PATTERN = canonicalPhrasePattern([
+  "accept", "agree", "allow", "continue", "reject", "decline", "deny", "settings", "preferences", "options", "choices", "manage", "necessary", "essential", "required",
+  ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => [
+    ...entry.consentControls.accept,
+    ...entry.consentControls.reject,
+    ...entry.consentControls.options,
+    ...entry.consentControls.necessaryOnly,
+  ]),
+]);
 const STATIC_TEXT_TAG_NAMES = new Set(["p", "span", "strong", "em", "small", "li", "h1", "h2", "h3", "h4", "h5", "h6"]);
 const INTERACTIVE_TAG_NAMES = new Set(["a", "button", "input", "select", "textarea"]);
 const INTERACTIVE_ROLE_PATTERN = /^(button|link|checkbox|radio|switch|tab|menuitem)$/i;
+
+function canonicalPhrasePattern(phrases: readonly string[]): RegExp {
+  const source = [...new Set(phrases)]
+    .filter((phrase) => phrase.length >= 2)
+    .sort((left, right) => right.length - left.length)
+    .map((phrase) => phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+  return new RegExp(source || "$a", "iu");
+}
 
 export async function captureConsentControlGeometry(
   page: Page,

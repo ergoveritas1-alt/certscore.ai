@@ -125,7 +125,7 @@ test("captures OneTrust optional-cookie noun-phrase controls as first-layer acce
   assert.equal(accept?.decisionStatus, "confirmed_visible");
 });
 
-test("retains multilingual consent classifications as diagnostic-only geometry evidence", async () => {
+test("retains Polish consent controls as production geometry evidence", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
     <div id="cmpbox" class="cmpbox cmpboxWelcomeGDPR" role="dialog" aria-modal="true" style="position: fixed; left: 100px; top: 100px; width: 560px; padding: 24px; background: white;">
@@ -138,46 +138,23 @@ test("retains multilingual consent classifications as diagnostic-only geometry e
   `);
 
   assert.equal(artifact.summary.cmpDetected, true);
-  assert.equal(artifact.summary.firstLayerAccept, false);
+  assert.equal(artifact.summary.firstLayerAccept, true);
   assert.equal(artifact.summary.firstLayerReject, false);
-  assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.equal(artifact.summary.firstLayerOptions, true);
 
   const accept = findCandidate(artifact, "AKCEPTUJĘ");
-  assert.equal(accept?.actionType, "other");
-  assert.equal(
-    accept?.diagnosticClassifications?.some((classification) =>
-      classification.classifierProfile === "multilingual_v1" &&
-      classification.productionCredit === false &&
-      classification.actionType === "accept_all" &&
-      classification.matchedLocale === "pl"
-    ),
-    true,
-  );
+  assert.equal(accept?.actionType, "accept_all");
+  assert.equal(accept?.matchedLocale, "pl");
+  assert.equal(accept?.decisionStatus, "confirmed_visible");
 
   const options = findCandidate(artifact, "USTAWIENIA ZAAWANSOWANE");
-  assert.equal(options?.actionType, "other");
-  assert.equal(
-    options?.diagnosticClassifications?.some((classification) =>
-      classification.classifierProfile === "multilingual_v1" &&
-      classification.productionCredit === false &&
-      classification.actionType === "manage_preferences" &&
-      classification.matchedLocale === "pl"
-    ),
-    true,
-  );
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.matchedLocale, "pl");
 
   const continueToService = findCandidate(artifact, "Przejdź do serwisu");
-  assert.equal(continueToService?.actionType, "other");
-  assert.equal(
-    continueToService?.diagnosticClassifications?.some((classification) =>
-      classification.classifierProfile === "multilingual_v1" &&
-      classification.productionCredit === false &&
-      classification.actionType === "accept_all" &&
-      classification.matchedLocale === "pl" &&
-      classification.matchStrength === "contextual"
-    ),
-    true,
-  );
+  assert.equal(continueToService?.actionType, "accept_all");
+  assert.equal(continueToService?.matchedLocale, "pl");
+  assert.equal(continueToService?.matchStrength, "contextual");
 });
 
 test("does not treat generic Dutch settings page chrome as diagnostic consent evidence", async () => {
@@ -202,7 +179,7 @@ test("does not treat generic Dutch settings page chrome as diagnostic consent ev
   assert.equal(settingsCandidates.some((candidate) => (candidate.diagnosticClassifications?.length ?? 0) > 0), false);
 });
 
-test("retains Polish long-form consent buttons as diagnostic-only geometry evidence", async () => {
+test("retains Polish long-form consent buttons as production geometry evidence", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
     <div id="rasp_cmp" role="dialog" aria-label="Plansza RODO" style="position: fixed; left: 208px; top: 175px; width: 950px; height: 550px; display: flex; flex-direction: column; padding: 24px; background: white;">
@@ -220,33 +197,17 @@ test("retains Polish long-form consent buttons as diagnostic-only geometry evide
   `);
 
   assert.equal(artifact.summary.cmpDetected, true);
-  assert.equal(artifact.summary.firstLayerAccept, false);
+  assert.equal(artifact.summary.firstLayerAccept, true);
   assert.equal(artifact.summary.firstLayerReject, false);
-  assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.equal(artifact.summary.firstLayerOptions, true);
 
   const options = findCandidate(artifact, "Ustawienia zaawansowane");
-  assert.equal(options?.actionType, "other");
-  assert.equal(
-    options?.diagnosticClassifications?.some((classification) =>
-      classification.classifierProfile === "multilingual_v1" &&
-      classification.productionCredit === false &&
-      classification.actionType === "manage_preferences" &&
-      classification.matchedLocale === "pl"
-    ),
-    true,
-  );
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.matchedLocale, "pl");
 
   const continueToService = findCandidate(artifact, "Przejdź do serwisu");
-  assert.equal(continueToService?.actionType, "other");
-  assert.equal(
-    continueToService?.diagnosticClassifications?.some((classification) =>
-      classification.classifierProfile === "multilingual_v1" &&
-      classification.productionCredit === false &&
-      classification.actionType === "accept_all" &&
-      classification.matchedLocale === "pl"
-    ),
-    true,
-  );
+  assert.equal(continueToService?.actionType, "accept_all");
+  assert.equal(continueToService?.matchedLocale, "pl");
 });
 
 test("keeps NBC-style hidden OneTrust preference center from counting as first-layer controls", async () => {
@@ -434,6 +395,33 @@ test("captures Spanish Didomi pay-or-consent controls rendered as styled element
   assert.equal(findCandidate(artifact, "Aceptar y continuar")?.decisionStatus, "confirmed_visible");
   assert.equal(findCandidate(artifact, "Rechazar y pagar")?.actionType, "reject_all");
   assert.equal(findCandidate(artifact, "Configurar cookies")?.actionType, "manage_preferences");
+});
+
+test("captures production consent controls across CJK, RTL, Nordic, Cyrillic, and Indic scripts", async () => {
+  const fixtures = [
+    { locale: "ja", context: "クッキーと個人情報の利用について同意を選択してください。", accept: "すべて同意する", reject: "すべて拒否する", options: "クッキー設定" },
+    { locale: "ar", context: "نستخدم ملفات تعريف الارتباط ونطلب الموافقة لحماية الخصوصية.", accept: "قبول الكل", reject: "رفض الكل", options: "إعدادات ملفات تعريف الارتباط" },
+    { locale: "fi", context: "Käytämme evästeitä ja pyydämme suostumusta tietosuojaa varten.", accept: "Hyväksy kaikki", reject: "Hylkää kaikki", options: "Evästeasetukset" },
+    { locale: "ru", context: "Мы используем файлы cookie и запрашиваем согласие на обработку персональных данных.", accept: "Принять все", reject: "Отклонить все", options: "Настройки файлов cookie" },
+    { locale: "hi", context: "हम गोपनीयता और सहमति के लिए कुकी का उपयोग करते हैं।", accept: "सभी स्वीकार करें", reject: "सभी अस्वीकार करें", options: "कुकी सेटिंग्स" },
+  ] as const;
+
+  for (const fixture of fixtures) {
+    const artifact = await captureFixture(`
+      <div role="dialog" aria-label="cookie consent" style="position: fixed; left: 100px; top: 100px; width: 620px; padding: 24px; background: white;">
+        <p>${fixture.context}</p>
+        <button type="button">${fixture.options}</button>
+        <button type="button">${fixture.reject}</button>
+        <button type="button">${fixture.accept}</button>
+      </div>
+    `);
+    assert.equal(artifact.summary.firstLayerAccept, true, `${fixture.locale} accept`);
+    assert.equal(artifact.summary.firstLayerReject, true, `${fixture.locale} reject`);
+    assert.equal(artifact.summary.firstLayerOptions, true, `${fixture.locale} options`);
+    assert.equal(findCandidate(artifact, fixture.accept)?.matchedLocale, fixture.locale);
+    assert.equal(findCandidate(artifact, fixture.reject)?.matchedLocale, fixture.locale);
+    assert.equal(findCandidate(artifact, fixture.options)?.matchedLocale, fixture.locale);
+  }
 });
 
 test("does not count Utiq-scoped refusal as first-layer cookie reject", async () => {

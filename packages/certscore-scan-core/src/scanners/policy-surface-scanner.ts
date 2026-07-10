@@ -8,6 +8,8 @@ import {
   type PolicySurfaceObservation,
   type PrivacySurfaceClassification,
   type PrivacySurfaceMatchStrength,
+  PRIVACY_EVIDENCE_LOCALE_REGISTRY,
+  privacySurfacePathsForLocale,
   type ScanModuleRun,
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
@@ -2127,6 +2129,7 @@ function commonPolicyPathsFor(baseUrl: string, localeHints: SupportedPrivacyEvid
     "/privacy-policy",
     "/privacy-policy/",
     "/privacy-notice",
+    "/datenschutz",
   ];
   const genericSecondaryPaths = [
     "/help/privacy",
@@ -2155,27 +2158,10 @@ function commonPolicyPathsFor(baseUrl: string, localeHints: SupportedPrivacyEvid
     "/terms",
     "/accessibility",
   ];
-  const localizedByLocale: Record<SupportedPrivacyEvidenceLocale, string[]> = {
-    en: [],
-    de: ["/datenschutz", "/datenschutzerklaerung", "/datenschutzerklärung"],
-    fr: ["/confidentialite", "/confidentialité", "/politique-de-confidentialite", "/politique-de-confidentialité"],
-    es: ["/privacidad", "/politica-de-privacidad", "/política-de-privacidad"],
-    it: ["/informativa-privacy", "/informativa-sulla-privacy"],
-    nl: ["/privacybeleid", "/privacyverklaring"],
-    pl: ["/prywatnosc", "/prywatność", "/polityka-prywatnosci", "/polityka-prywatności"],
-  };
-  const hintedLocalePaths = uniqueStrings(localeHints.flatMap((locale) => localizedByLocale[locale] ?? []));
-  const fallbackLocalePaths = [
-    "/datenschutz",
-    "/politique-de-confidentialite",
-    "/politica-de-privacidad",
-    "/informativa-privacy",
-    "/privacybeleid",
-    "/polityka-prywatnosci",
-  ];
+  const hintedLocalePaths = uniqueStrings(localeHints.flatMap(privacySurfacePathsForLocale));
   return uniqueStrings([
     ...genericCorePaths,
-    ...(hintedLocalePaths.length > 0 ? hintedLocalePaths : fallbackLocalePaths),
+    ...hintedLocalePaths,
     ...knownPublisherPrivacyCenterUrls(baseUrl),
     ...genericSecondaryPaths,
   ]);
@@ -2217,31 +2203,28 @@ function commonPathLocaleHints(
       hints.push(locale);
     }
   };
+  let hostname = "";
   try {
-    const hostname = new URL(baseUrl).hostname.toLowerCase();
-    if (hostname.endsWith(".de")) add("de");
-    if (hostname.endsWith(".fr")) add("fr");
-    if (hostname.endsWith(".es")) add("es");
-    if (hostname.endsWith(".it")) add("it");
-    if (hostname.endsWith(".nl")) add("nl");
-    if (hostname.endsWith(".pl")) add("pl");
+    hostname = new URL(baseUrl).hostname.toLowerCase();
   } catch {
     // Ignore malformed fixture URLs.
   }
-  const htmlLang = /\blang=["']?([a-z]{2})(?:[-_][a-z]{2})?/i.exec(html)?.[1]?.toLowerCase();
-  if (htmlLang === "de") add("de");
-  if (htmlLang === "fr") add("fr");
-  if (htmlLang === "es") add("es");
-  if (htmlLang === "it") add("it");
-  if (htmlLang === "nl") add("nl");
-  if (htmlLang === "pl") add("pl");
-  const haystack = `${html.slice(0, 20_000)} ${visibleText.slice(0, 20_000)}`.toLowerCase();
-  if (/\b(?:datenschutz|personenbezogene daten)\b/.test(haystack)) add("de");
-  if (/\b(?:confidentialit[eé]|donn[eé]es personnelles)\b/.test(haystack)) add("fr");
-  if (/\b(?:privacidad|datos personales)\b/.test(haystack)) add("es");
-  if (/\b(?:informativa sulla privacy|dati personali)\b/.test(haystack)) add("it");
-  if (/\b(?:privacybeleid|persoonsgegevens)\b/.test(haystack)) add("nl");
-  if (/\b(?:polityka prywatno[śs]ci|dane osobowe|rodo)\b/.test(haystack)) add("pl");
+  const declaredLocales = new Set(
+    [...html.matchAll(/(?:\blang|hreflang|http-equiv=["']content-language["'][^>]*content)=["']?([a-z]{2})(?:[-_][a-z]{2})?/gi)]
+      .map((match) => match[1]?.toLowerCase())
+      .filter((value): value is string => Boolean(value)),
+  );
+  const haystack = `${html.slice(0, 20_000)} ${visibleText.slice(0, 20_000)}`.normalize("NFKC").toLowerCase();
+  for (const entry of PRIVACY_EVIDENCE_LOCALE_REGISTRY) {
+    if (declaredLocales.has(entry.locale)) add(entry.locale);
+    if (entry.tldHints.some((tld) => hostname.endsWith(tld))) add(entry.locale);
+    const directLocaleSignal = [
+      ...entry.privacyPolicyLabels,
+      ...entry.cookiePolicyLabels,
+      ...entry.cookieSettingsLabels,
+    ].some((hint) => haystack.includes(hint.normalize("NFKC").toLowerCase()));
+    if (directLocaleSignal) add(entry.locale);
+  }
   return hints;
 }
 

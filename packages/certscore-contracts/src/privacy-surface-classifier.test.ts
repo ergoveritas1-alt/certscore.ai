@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   classifyPrivacySurface,
+  PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   PRIVACY_SURFACE_PHRASE_REGISTRY,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
@@ -23,6 +24,37 @@ test("classifies canonical privacy-policy surfaces across supported locales", ()
     assert.equal(classification.surfaceType, "privacy_policy", linkText);
     assert.equal(classification.matchedLocale, locale, linkText);
     assert.equal(classification.reasonCodes.includes("matched_privacy_policy"), true, linkText);
+  }
+});
+
+test("classifies canonical policy labels and localized paths across all 40 locales", () => {
+  assert.equal(PRIVACY_EVIDENCE_LOCALE_REGISTRY.length, 40);
+  for (const entry of PRIVACY_EVIDENCE_LOCALE_REGISTRY) {
+    const privacyLabel = entry.privacyPolicyLabels[0];
+    const cookieLabel = entry.cookiePolicyLabels[0];
+    const settingsLabel = entry.cookieSettingsLabels[0];
+    const privacySlug = entry.privacyPolicyPathSlugs[0];
+    assert.ok(privacyLabel && cookieLabel && settingsLabel && privacySlug, entry.locale);
+
+    for (const [linkText, surfaceType] of [
+      [privacyLabel, "privacy_policy"],
+      [cookieLabel, "cookie_policy"],
+      [settingsLabel, "cookie_settings"],
+    ] as const) {
+      const classification = classifyPrivacySurface({
+        linkText,
+        localeHints: [entry.locale],
+      });
+      assert.equal(classification.surfaceType, surfaceType, `${entry.locale} ${linkText}`);
+      assert.equal(classification.matchedLocale, entry.locale, `${entry.locale} ${linkText}`);
+    }
+
+    const pathClassification = classifyPrivacySurface({
+      linkText: "Legal",
+      url: `https://example.test/${privacySlug}`,
+      localeHints: [entry.locale],
+    });
+    assert.equal(pathClassification.surfaceType, "privacy_policy", `${entry.locale} ${privacySlug}`);
   }
 });
 

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   classifyGdprTransparencyTopics,
   GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY,
-  SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
+  SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type GdprTransparencyTopic,
 } from "./index.js";
 
@@ -962,7 +962,7 @@ test("classifies every GDPR Transparency topic with privacy-specific evidence ac
 test("registry covers every supported locale", () => {
   const registryLocales = new Set(GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY.map((term) => term.locale));
 
-  for (const locale of SUPPORTED_PRIVACY_EVIDENCE_LOCALES) {
+  for (const locale of SUPPORTED_GDPR_TRANSPARENCY_LOCALES) {
     assert.equal(registryLocales.has(locale), true, locale);
   }
 });
