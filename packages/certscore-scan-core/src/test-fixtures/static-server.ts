@@ -1207,7 +1207,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
   if (options.cmpScriptLateSettings || options.cmpScriptVeryLateSettings || options.cmpScriptSupplementalSettings) {
     const modalDelayMs = options.cmpScriptSupplementalSettings
       ? 14_250
-      : options.cmpScriptVeryLateSettings ? 13_200 : 6_500;
+      : options.cmpScriptVeryLateSettings ? 15_200 : 6_500;
     return `
       <section>
         <h1>Numa-style landing page</h1>

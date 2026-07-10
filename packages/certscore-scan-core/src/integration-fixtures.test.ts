@@ -1236,9 +1236,9 @@ test("pre-consent runtime scanner keeps high-confidence CMP recapture open long 
     );
     assert.ok(
       typeof cmpRecaptureTiming?.durationMs === "number" &&
-        cmpRecaptureTiming.durationMs >= 10_000 &&
-        cmpRecaptureTiming.durationMs < 12_000,
-      `adaptive CMP recapture should cover controls appearing after the old 10s fast cap without spending the full 12s; durationMs=${cmpRecaptureTiming?.durationMs ?? "missing"}`,
+        cmpRecaptureTiming.durationMs >= 12_000 &&
+        cmpRecaptureTiming.durationMs < 15_000,
+      `adaptive CMP recapture should cover controls appearing after the old 12s cap without spending the full 15s; durationMs=${cmpRecaptureTiming?.durationMs ?? "missing"}`,
     );
   } finally {
     await server.close();

@@ -46,6 +46,7 @@ import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 
 const SOURCE_SCANNER = "pre_consent_runtime";
 const SCENARIO = "fresh_pre_consent";
+const HIGH_CONFIDENCE_CMP_RECAPTURE_WAIT_MS = 15_000;
 const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
@@ -643,7 +644,7 @@ export async function preConsentRuntimeScanner(
       const highConfidenceCmpRuntimeEvidence =
         hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations);
       const cmpRecaptureWaitMs = highConfidenceCmpRuntimeEvidence
-        ? 12_000
+        ? HIGH_CONFIDENCE_CMP_RECAPTURE_WAIT_MS
         : fastWait ? 2_250 : 2_750;
       const requestedRecaptureTimeoutMs = Math.max(
         highConfidenceCmpRuntimeEvidence
