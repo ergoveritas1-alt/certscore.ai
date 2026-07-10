@@ -38,7 +38,16 @@ type ScanSubmitPayload = {
   scanUrl?: string | null;
 };
 
-function parseScanSubmitPayload(raw: string): ScanSubmitPayload {
+type RecentScanAvailabilityPayload = {
+  hasRecentReusableScan?: boolean | null;
+};
+
+function looksLikeHtmlDocument(raw: string) {
+  const prefix = raw.trimStart().slice(0, 120).toLowerCase();
+  return prefix.startsWith("<!doctype html") || prefix.startsWith("<html") || prefix.includes("<html");
+}
+
+export function parseScanSubmitPayload(raw: string): ScanSubmitPayload {
   if (!raw.trim()) {
     return {};
   }
@@ -47,8 +56,37 @@ function parseScanSubmitPayload(raw: string): ScanSubmitPayload {
     const parsed: unknown = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? parsed as ScanSubmitPayload : {};
   } catch {
+    if (looksLikeHtmlDocument(raw)) {
+      return {
+        code: "non_json_response",
+        error: "The scan service returned an unexpected response. Please try again."
+      };
+    }
+
     return { error: raw.slice(0, 240) };
   }
+}
+
+function parseRecentScanAvailabilityPayload(raw: string): RecentScanAvailabilityPayload {
+  if (!raw.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed as RecentScanAvailabilityPayload : {};
+  } catch {
+    return {};
+  }
+}
+
+export function buildRecentScanAvailabilityUrl(input: { domain: string; scanFrom: ServerScanFrom }) {
+  const params = new URLSearchParams({
+    domain: input.domain,
+    scanFrom: input.scanFrom
+  });
+
+  return `/api/full-scan/reuse-availability?${params.toString()}`;
 }
 
 type ScanSubmitFailure = {
@@ -65,6 +103,7 @@ const GENERIC_SCAN_ERROR_MESSAGES: Record<ScanMode, string> = {
   full: "The full scan could not be started. Please try again.",
   preview: "The preview scan could not be started. Please try again."
 };
+const RECENT_SCAN_REUSED_MESSAGE = "Recently scanned. Select Fresh re-scan to run a new scan.";
 
 const FULL_SCAN_ERROR_MESSAGES: Record<string, string> = {
   active_scan_exists: "A scan is already queued or running for this site. Open scan history or try again shortly.",
@@ -89,6 +128,7 @@ const FULL_SCAN_ERROR_GUIDANCE: Record<string, string> = {
 
 const BX01_SCAN_WINDOW_MS = 15000;
 const BX01_EXTENSION_TIMEOUT_MS = 1200;
+const RECENT_SCAN_AVAILABILITY_CHECK_DELAY_MS = 350;
 
 const SAMPLE_SCAN_ACCENTS: Record<string, { accent: string; label: string; tone: string }> = {
   "caltech.edu": { accent: "bg-sky-400", label: "Higher ed", tone: "from-sky-500/20 to-cyan-400/5" },
@@ -284,15 +324,19 @@ export function DomainScanForm({
   const router = useRouter();
   const [domain, setDomain] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"error" | "info">("error");
   const [localExtensionStatus, setLocalExtensionStatus] = useState<Bx01Status | null>(null);
   const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [freshRescan, setFreshRescan] = useState(true);
+  const [freshRescan, setFreshRescan] = useState(false);
+  const [hasRecentReusableScan, setHasRecentReusableScan] = useState(false);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
   const [scanFrom, setScanFrom] = useState<ScanFrom>(defaultScanFrom);
   const isSubmittingRef = useRef(false);
   const scanProgress = useScanProgressClock(isSubmitting);
+  const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
+  const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
 
   useEffect(() => {
     if (!allowLocalExtensionScan && scanFrom === "local_extension") {
@@ -311,8 +355,56 @@ export function DomainScanForm({
     }
   }, [allowRestrictedScanOptions]);
 
+  useEffect(() => {
+    if (mode !== "full" || scanFrom === "local_extension" || !effectiveSubmitDomain) {
+      setHasRecentReusableScan(false);
+      setFreshRescan(false);
+      return;
+    }
+
+    setHasRecentReusableScan(false);
+    setFreshRescan(false);
+
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      fetch(buildRecentScanAvailabilityUrl({ domain: effectiveSubmitDomain, scanFrom: scanFrom as ServerScanFrom }), {
+        headers: {
+          Accept: "application/json"
+        },
+        signal: controller.signal
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            return false;
+          }
+
+          const payload = parseRecentScanAvailabilityPayload(await response.text());
+          return Boolean(payload.hasRecentReusableScan);
+        })
+        .then((nextHasRecentReusableScan) => {
+          setHasRecentReusableScan(nextHasRecentReusableScan);
+          if (!nextHasRecentReusableScan) {
+            setFreshRescan(false);
+          }
+        })
+        .catch((error) => {
+          if (error instanceof Error && error.name === "AbortError") {
+            return;
+          }
+          setHasRecentReusableScan(false);
+          setFreshRescan(false);
+        });
+    }, RECENT_SCAN_AVAILABILITY_CHECK_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [effectiveSubmitDomain, mode, scanFrom]);
+
   function resetValidationState() {
     setErrorMessage(null);
+    setMessageTone("error");
     if (!isSubmittingRef.current) {
       setLocalExtensionStatus(null);
     }
@@ -404,6 +496,7 @@ export function DomainScanForm({
 
     isSubmittingRef.current = true;
     setErrorMessage(null);
+    setMessageTone("error");
 
     const submittedDomain = rawDomain.trim();
 
@@ -442,7 +535,7 @@ export function DomainScanForm({
       const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
         body: JSON.stringify({
           domain: submittedDomain,
-          forceNewScan: mode === "full" ? freshRescan : false,
+          forceNewScan: showFreshRescanOption ? freshRescan : false,
           localV2ScanProfile,
           localV2RunViaLambda:
             allowRestrictedScanOptions || LOCALHOST_FULL_SCAN_QUEUE_ENABLED
@@ -501,7 +594,8 @@ export function DomainScanForm({
         router.refresh();
         isSubmittingRef.current = false;
         setIsSubmitting(false);
-        setErrorMessage(payload.reusedExistingScan ? "Showing the latest completed scan for this site." : null);
+        setMessageTone(payload.reusedExistingScan ? "info" : "error");
+        setErrorMessage(payload.reusedExistingScan ? RECENT_SCAN_REUSED_MESSAGE : null);
         return;
       }
 
@@ -558,7 +652,7 @@ export function DomainScanForm({
                 compact={compact}
                 freshRescanValue={freshRescan}
                 includeLocalV2ScanProfileOption
-                includeFreshRescanOption
+                includeFreshRescanOption={showFreshRescanOption}
                 includeLocalExtension={allowLocalExtensionScan}
                 localV2ScanProfileValue={localV2ScanProfile}
                 localV2RunViaLambdaValue={localV2RunViaLambda}
@@ -687,7 +781,7 @@ export function DomainScanForm({
           </div>
         </div>
       ) : null}
-      {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
+      {errorMessage ? <p className={messageTone === "info" ? "text-sm text-slate-500" : "text-sm text-red-600"}>{errorMessage}</p> : null}
       {mode === "full" && scanFrom === "local_extension" && localExtensionStatus ? (
         <div className="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-slate-700">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">

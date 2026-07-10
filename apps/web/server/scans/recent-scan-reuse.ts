@@ -45,7 +45,6 @@ export function findRecentCompletedScanInHistory(scans: ScanHistoryCandidate[], 
 }
 
 export async function findRecentCompletedScanForDomain(input: {
-  allowCrossWorkspace?: boolean;
   minPagesRequested?: number;
   normalizedDomain: string;
   normalizedUrl: string;
@@ -54,17 +53,18 @@ export async function findRecentCompletedScanForDomain(input: {
   windowHours?: number;
 }) {
   const scanFrom = normalizeScanFrom(input.scanFrom);
-  const parameters: Array<string | number | null> = input.allowCrossWorkspace
-    ? [input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl, scanFrom]
-    : [input.organizationId, input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS, input.normalizedDomain, input.normalizedUrl, scanFrom];
-  const organizationFilter = input.allowCrossWorkspace
-    ? ""
-    : `and s.organization_id is not distinct from $1
-        and d.organization_id is not distinct from $1`;
-  const windowParameter = input.allowCrossWorkspace ? "$1" : "$2";
-  const domainParameter = input.allowCrossWorkspace ? "$2" : "$3";
-  const urlParameter = input.allowCrossWorkspace ? "$3" : "$4";
-  const scanFromParameter = input.allowCrossWorkspace ? "$4" : "$5";
+  const parameters: Array<string | number | null> = [
+    input.organizationId,
+    input.windowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS,
+    input.normalizedDomain,
+    input.normalizedUrl,
+    scanFrom
+  ];
+  const organizationParameter = "$1";
+  const windowParameter = "$2";
+  const domainParameter = "$3";
+  const urlParameter = "$4";
+  const scanFromParameter = "$5";
   const minPagesClause =
     typeof input.minPagesRequested === "number" && Number.isFinite(input.minPagesRequested)
       ? (() => {
@@ -75,11 +75,19 @@ export async function findRecentCompletedScanForDomain(input: {
 
   return queryOne<CompletedScanCandidate>(
     `select s.id, s.organization_id as "organizationId", s.completed_at as "completedAt"
-       from scans s
+      from scans s
        join domains d on d.id = s.domain_id
       where 1 = 1
-        ${organizationFilter}
+        and (
+          (s.organization_id is null and d.organization_id is null)
+          or (
+            ${organizationParameter}::uuid is not null
+            and s.organization_id is not distinct from ${organizationParameter}::uuid
+            and d.organization_id is not distinct from ${organizationParameter}::uuid
+          )
+        )
         and s.status = 'completed'
+        and coalesce(s.scan_type, 'full') = 'full'
         and s.completed_at is not null
         and s.completed_at >= timezone('utc', now()) - (${windowParameter}::int * interval '1 hour')
         and coalesce(s.scan_config_json->>'scanFrom', '${DEFAULT_SCAN_FROM}') = ${scanFromParameter}

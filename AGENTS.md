@@ -522,6 +522,7 @@ Do not use local production DB tunnels, ECS Exec, or copied secrets for routine 
 - Create a commit with a clear message.
 - Push the branch to GitHub instead of deploying an uncommitted working tree directly to any production host.
 - Prefer Git-based deploy promotion through the connected AWS ECS deployment workflows, but verify which runtime is actually serving `certscore.ai` before claiming production is updated.
+- Web deploys are forward-only: the target revision must contain the Git SHA currently reported by the production `/api/version` endpoint. Merge the live revision into the target branch before deploying; use the explicit non-descendant override only for an intentional emergency rollback.
 - For a user request phrased as "deploy all", run `pnpm preflight:all` first, then deploy through the canonical paths: GitHub/AWS ECS for web and validation worker, `.github/workflows/prod-db-migrate.yml` for production DB migrations when migration files changed, and the local v2 DAG Lambda image deploy helpers for each approved scanner region (`eu-central-1`, `eu-west-1`, `us-west-2`). Preview deploy orchestration first with `pnpm deploy:all -- --plan` or `pnpm deploy:all -- --dry-run` when checking scope. Scanner deploys reuse prebuilt Lambda runtime-base images by default; rebuild and push the scanner runtime base only when explicitly requested with `--push-runtime-base`.
 
 ## Runtime and deployment topology

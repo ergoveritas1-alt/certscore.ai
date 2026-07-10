@@ -282,6 +282,7 @@ function isGlobalBuildInput(file: string) {
 function isWebDeployInput(file: string) {
   return isGlobalBuildInput(file) ||
     file === ".github/workflows/web-aws-ecs-deploy.yml" ||
+    file === "scripts/assert-forward-web-deploy.ts" ||
     file.startsWith("apps/web/") ||
     file.startsWith("packages/certscore-contracts/") ||
     file.startsWith("packages/certscore-vendor-resolver/") ||
@@ -346,6 +347,11 @@ function isValidationRuntimeBaseInput(file: string) {
 
 async function deployWeb(input: { force: boolean; ref: string }): Promise<LaneResult> {
   return timedLane("web ECS deploy", async () => {
+    await run([
+      "node", "--import", "tsx",
+      "scripts/assert-forward-web-deploy.ts",
+      "--target", input.ref
+    ]);
     const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.ref);
     const run = await waitForRun(runId);
     return { workflow: WEB_WORKFLOW, url: run.url };

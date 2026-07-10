@@ -1,4 +1,4 @@
-import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import { DEFAULT_SCAN_FROM, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { parsePlatformAdminEmails } from "../admin/platform-admin-core";
 import { shouldUseLocalhostFullScanQueue, type LocalV2DagScanEnv } from "./local-v2-dag-scan-config";
 
@@ -18,6 +18,9 @@ export function restrictScanFromForUser(input: {
   scanFrom: unknown;
 }): ScanFrom {
   const scanFrom = normalizeScanFrom(input.scanFrom);
+  if (scanFrom === "default") {
+    return DEFAULT_SCAN_FROM;
+  }
   return !input.canUseRestrictedScanOptions && scanFrom === "eu_de" ? "eu_ie" : scanFrom;
 }
 

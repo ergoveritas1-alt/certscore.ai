@@ -86,7 +86,7 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
 }
 
 const RECENT_SCAN_REUSED_MESSAGE =
-  "CertScore.ai found a completed scan for this website from the past 24 hours, so this request opened the existing report instead of starting a duplicate scan.";
+  "Recently scanned. Select Fresh re-scan to run a new scan.";
 
 export default async function PublicScanDetailPage({ params, searchParams }: PublicScanDetailPageProps) {
   const { scanId } = await params;

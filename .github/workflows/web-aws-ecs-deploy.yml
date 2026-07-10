@@ -15,6 +15,7 @@ on:
       - "packages/ui/**"
       - "packages/validation-shared/**"
       - "scripts/apply-db-migrations.mjs"
+      - "scripts/assert-forward-web-deploy.ts"
       - "scripts/insert-integration-api-key.mjs"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -27,6 +28,12 @@ on:
       - "!apps/web/**/*.spec.tsx"
       - "!apps/web/scripts/**"
   workflow_dispatch:
+    inputs:
+      allow_non_descendant_deploy:
+        description: "Emergency only: permit a web revision that does not contain the currently live revision"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: public-web-aws-production
@@ -125,6 +132,21 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Prevent non-descendant production rollback
+        env:
+          ALLOW_NON_DESCENDANT_WEB_DEPLOY: ${{ github.event.inputs.allow_non_descendant_deploy || 'false' }}
+          LIVE_WEB_BASE_URL: ${{ env.CERTSCORE_BASE_URL }}
+        run: pnpm exec tsx ./scripts/assert-forward-web-deploy.ts --target "${GITHUB_SHA}"
+
+      - name: Test scan-source contracts
+        run: |
+          node --import tsx --test \
+            apps/web/components/marketing/domain-scan-form.test.ts \
+            apps/web/components/scans/scan-from-select.test.tsx \
+            apps/web/server/scans/recent-scan-reuse.test.ts \
+            apps/web/server/scans/restricted-scan-options.test.ts \
+            scripts/assert-forward-web-deploy.test.ts
 
       - name: Typecheck web
         run: pnpm --filter @website-signal-risk-scanner/web typecheck

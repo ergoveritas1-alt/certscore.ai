@@ -75,6 +75,7 @@ const TARGETS: Target[] = [
       isGlobalBuildInput(file) ||
       file === ".dockerignore" ||
       file === ".github/workflows/web-aws-ecs-deploy.yml" ||
+      file === "scripts/assert-forward-web-deploy.ts" ||
       file.startsWith("apps/web/") ||
       file.startsWith("packages/certscore-contracts/") ||
       file.startsWith("packages/certscore-vendor-resolver/") ||
@@ -87,6 +88,18 @@ const TARGETS: Target[] = [
         key: "web-typecheck",
         label: "public web typecheck",
         command: ["pnpm", "--filter", "@website-signal-risk-scanner/web", "typecheck"]
+      },
+      {
+        key: "web-scan-source-contracts",
+        label: "scan-source and forward-deploy contracts",
+        command: [
+          "node", "--import", "tsx", "--test",
+          "apps/web/components/marketing/domain-scan-form.test.ts",
+          "apps/web/components/scans/scan-from-select.test.tsx",
+          "apps/web/server/scans/recent-scan-reuse.test.ts",
+          "apps/web/server/scans/restricted-scan-options.test.ts",
+          "scripts/assert-forward-web-deploy.test.ts"
+        ]
       }
     ]
   },
