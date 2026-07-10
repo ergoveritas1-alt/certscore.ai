@@ -147,3 +147,17 @@ test("Polish accept-only-necessary wording remains reject-equivalent", () => {
   assert.equal(classification.intent, "reject");
   assert.equal(classification.variant, "necessary_only");
 });
+
+test("observed Central and Eastern European consent variants retain their canonical intent", () => {
+  for (const [locale, label, intent, variant] of [
+    ["cs", "Odmítnout volitelné cookies", "reject", undefined],
+    ["hu", "Nem kötelező sütik elutasítása", "reject", undefined],
+    ["hr", "Prihvati samo obavezne kolačiće", "reject", "necessary_only"],
+    ["sl", "Sprejmi samo obvezne piškotke", "reject", "necessary_only"],
+    ["lt", "Atsisakyti visų", "reject", undefined],
+  ] as const) {
+    const classification = classifyConsentControlLabel({ label, localeHints: [locale], hasConsentContext: true });
+    assert.equal(classification.intent, intent, `${locale} ${label}`);
+    assert.equal(classification.variant, variant, `${locale} ${label} variant`);
+  }
+});
