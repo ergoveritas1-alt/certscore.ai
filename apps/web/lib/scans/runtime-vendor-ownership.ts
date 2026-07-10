@@ -1,9 +1,9 @@
-import { resolveVendorObservations } from "@certscore/vendor-resolver";
+import { resolveCanonicalVendorLabel, resolveVendorDisplayCategory, resolveVendorObservations } from "@certscore/vendor-resolver";
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 
 export type RuntimeVendorAttributionEvidence = {
   signatureId: string;
-  matchedOn: "cookie_name" | "domain" | "request_pattern" | "id_sync";
+  matchedOn: "cookie_name" | "domain" | "request_pattern" | "id_sync" | "vendor_label";
   matchedValue: string;
 };
 
@@ -36,12 +36,35 @@ export function findRuntimeEntityOwner(value: string | null | undefined) {
   if (!observation) return null;
   return {
     category: observation.purpose,
+    confidence: observation.confidence,
     entity: observation.entity,
+    product: observation.product ?? observation.vendor,
+    regulatoryRelevance: observation.regulatoryRelevance,
     vendor: observation.vendor,
+    vendorDisplayCategory: resolveVendorDisplayCategory(observation),
     attributionEvidence: {
       signatureId: observation.basis[0] ?? "canonical_vendor_resolver",
       matchedOn: "domain" as const,
       matchedValue: hostname
+    }
+  };
+}
+
+export function findRuntimeVendorLabelOwner(value: string | null | undefined) {
+  const resolution = resolveCanonicalVendorLabel(value);
+  if (!resolution) return null;
+  return {
+    category: resolution.purpose,
+    confidence: resolution.confidence,
+    entity: resolution.entity,
+    product: resolution.product,
+    regulatoryRelevance: resolution.regulatoryRelevance,
+    vendor: resolution.vendor,
+    vendorDisplayCategory: resolution.displayCategory,
+    attributionEvidence: {
+      signatureId: resolution.basis,
+      matchedOn: "vendor_label" as const,
+      matchedValue: value?.trim() ?? resolution.product
     }
   };
 }

@@ -15,6 +15,7 @@ import {
 } from "./runtime-cookie-priority";
 import {
   findRuntimeEntityOwner,
+  findRuntimeVendorLabelOwner,
   hostsShareRuntimeEntity,
   isLikelyCookieName,
   type RuntimeVendorAttributionEvidence
@@ -245,16 +246,28 @@ function isSyncedVendorInference(vendorName: string, ownerVendor: string) {
 
 function resolveTrackerIdentity(input: { category: string | null | undefined; domains: string[]; source: string | null | undefined; vendorName: string }) {
   const owner = input.domains.map(findRuntimeEntityOwner).find((candidate) => candidate !== null);
-  if (!owner) {
-    return { attributionEvidence: null, category: input.category || "tracker", confidence: null, label: input.vendorName, syncedIdentifiers: [] };
+  const labelOwner = owner ? null : findRuntimeVendorLabelOwner(input.vendorName);
+  const resolvedOwner = owner ?? labelOwner;
+  if (!resolvedOwner) {
+    return {
+      attributionEvidence: null,
+      category: input.category || "tracker",
+      confidence: null,
+      label: input.vendorName,
+      regulatoryRelevance: [] as string[],
+      syncedIdentifiers: [] as string[],
+      vendorDisplayCategory: null
+    };
   }
-  const shouldUseDomainOwner = isSyncedVendorInference(input.vendorName, owner.vendor) || input.vendorName === input.domains[0] || input.source === "id_sync";
+  const shouldUseDomainOwner = owner && (isSyncedVendorInference(input.vendorName, owner.vendor) || input.vendorName === input.domains[0] || input.source === "id_sync");
   return {
-    attributionEvidence: owner.attributionEvidence,
-    category: owner.category ?? input.category ?? "tracker",
-    confidence: 0.95,
-    label: shouldUseDomainOwner ? owner.vendor : input.vendorName,
-    syncedIdentifiers: shouldUseDomainOwner && isSyncedVendorInference(input.vendorName, owner.vendor) ? [input.vendorName] : []
+    attributionEvidence: resolvedOwner.attributionEvidence,
+    category: resolvedOwner.category ?? input.category ?? "tracker",
+    confidence: resolvedOwner.confidence,
+    label: labelOwner ? labelOwner.product : shouldUseDomainOwner ? resolvedOwner.vendor : input.vendorName,
+    regulatoryRelevance: resolvedOwner.regulatoryRelevance,
+    syncedIdentifiers: shouldUseDomainOwner && isSyncedVendorInference(input.vendorName, resolvedOwner.vendor) ? [input.vendorName] : [],
+    vendorDisplayCategory: labelOwner ? labelOwner.vendorDisplayCategory : null
   };
 }
 
@@ -339,8 +352,10 @@ export function buildTrackerInventoryRows(input: {
       party: getTrackerParty(domains),
       preConsent: input.preConsentVendors.includes(entity.label),
       requestCount: entity.requestCount,
+      regulatoryRelevance: identity.regulatoryRelevance,
       source: "runtime requests",
-      syncedIdentifiers: identity.syncedIdentifiers
+      syncedIdentifiers: identity.syncedIdentifiers,
+      vendorDisplayCategory: identity.vendorDisplayCategory
     });
   }
   for (const tracker of input.trackerVendors) {
@@ -361,16 +376,25 @@ export function buildTrackerInventoryRows(input: {
       observedVia: observedVia.length > 0 ? observedVia : ["request"],
       party: getTrackerParty(matchedDomains),
       preConsent: tracker.beforeConsent === true || input.preConsentVendors.includes(tracker.vendorName) || input.preConsentVendors.includes(identity.label),
-      regulatoryRelevance: tracker.regulatoryRelevance ?? getStringArrayFromRecord(record, ["regulatoryRelevance", "regulatory_relevance"]),
+      regulatoryRelevance: uniqueStrings([
+        ...(tracker.regulatoryRelevance ?? getStringArrayFromRecord(record, ["regulatoryRelevance", "regulatory_relevance"])),
+        ...identity.regulatoryRelevance
+      ]),
       requestCount: null,
       source: tracker.detectionSource || "tracker inventory",
       syncedIdentifiers: identity.syncedIdentifiers,
-      vendorDisplayCategory: tracker.vendorDisplayCategory ?? (typeof record.vendorDisplayCategory === "string" ? record.vendorDisplayCategory : null)
+      vendorDisplayCategory: tracker.vendorDisplayCategory ?? (typeof record.vendorDisplayCategory === "string" ? record.vendorDisplayCategory : identity.vendorDisplayCategory)
     });
   }
   for (const vendor of input.resolvedVendors) {
+    const identity = resolveTrackerIdentity({
+      category: input.sessionReplayVendors.includes(vendor) ? "session_replay" : "unknown",
+      domains: [],
+      source: "vendor resolver",
+      vendorName: vendor
+    });
     const hasConcreteObservedRow = [...rows.values()].some((row) =>
-      row.label.toLowerCase() === vendor.toLowerCase() &&
+      (row.label.toLowerCase() === vendor.toLowerCase() || row.label.toLowerCase() === identity.label.toLowerCase()) &&
       (
         row.domains.length > 0 ||
         row.observedVia.some((value) => !/^(resolver|vendor resolver)$/i.test(value))
@@ -380,17 +404,21 @@ export function buildTrackerInventoryRows(input: {
       continue;
     }
     addRow({
-      category: input.sessionReplayVendors.includes(vendor) ? "session_replay" : "unknown",
-      confidence: null,
+      attributionEvidence: identity.attributionEvidence,
+      category: identity.category,
+      confidence: identity.confidence,
       cookieNames: [],
       domains: [],
       firstSeenMs: null,
-      label: vendor,
+      label: identity.label,
       observedVia: ["resolver"],
       party: "unknown",
       preConsent: input.preConsentVendors.includes(vendor),
       requestCount: null,
-      source: "vendor resolver"
+      regulatoryRelevance: identity.regulatoryRelevance,
+      source: "vendor resolver",
+      syncedIdentifiers: identity.syncedIdentifiers,
+      vendorDisplayCategory: identity.vendorDisplayCategory
     });
   }
   for (const host of input.unresolvedHosts) {
@@ -412,8 +440,10 @@ export function buildTrackerInventoryRows(input: {
       party: getTrackerParty(domains),
       preConsent: false,
       requestCount: null,
+      regulatoryRelevance: identity.regulatoryRelevance,
       source: "host inventory",
-      syncedIdentifiers: identity.syncedIdentifiers
+      syncedIdentifiers: identity.syncedIdentifiers,
+      vendorDisplayCategory: identity.vendorDisplayCategory
     });
   }
 
@@ -544,7 +574,7 @@ export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): Conse
   if (isLinkedInAdsPixel) {
     return row.preConsent ? "high" : "review_needed";
   }
-  if (/^(advertising|retargeting|audience_measurement|session_replay|fingerprinting)$/.test(purpose)) {
+  if (/^(advertising|advertising_measurement|retargeting|audience_measurement|session_replay|fingerprinting)$/.test(purpose)) {
     return row.preConsent ? "high" : "medium";
   }
   if (/^(personalization|personalisation)$/.test(purpose) && confidence === "low") {

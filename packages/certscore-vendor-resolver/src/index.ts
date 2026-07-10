@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-08";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-10";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -71,6 +71,17 @@ export type VendorDisplayCategoryInput = {
   purpose?: NormalizedVendorObservation["purpose"] | string | null;
   regulatoryRelevance?: readonly string[] | null;
   vendor?: string | null;
+};
+
+export type CanonicalVendorLabelResolution = {
+  basis: string;
+  confidence: number;
+  displayCategory: VendorDisplayCategory;
+  entity: string;
+  product: string;
+  purpose: NormalizedVendorObservation["purpose"];
+  regulatoryRelevance: string[];
+  vendor: string;
 };
 
 interface VendorRule {
@@ -471,7 +482,7 @@ const rules: VendorRule[] = [
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "content_recommendation"],
     confidence: 0.93,
-    hostPatterns: [/\.taboola\.com$/i],
+    hostPatterns: [/(?:^|\.)taboola\.com$/i],
     urlPatterns: [/\/trc\//i, /\/libtrc\/[^/]+\/loader\.js\b/i, /\/pixel/i, /\/sync/i, /^https:\/\/beacon\.taboola\.com\//i],
     cookiePatterns: [/^t_gid$/i],
     storageKeyPatterns: [/^tbl[_-]/i, /^taboola\b/i],
@@ -1591,6 +1602,9 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   if (/klaviyo|izooto|hubspot|marketing_automation|marketing automation|push_notifications|push notifications|email_personalization|email personalization|lead_capture|lead capture|crm/.test(haystack)) {
     return "Marketing automation";
   }
+  if (purpose === "advertising") {
+    return "Advertising";
+  }
   if (/piano|tinypass|cxense|personalization|personalisation|paywall|subscription|audience_management/.test(haystack)) {
     return "Personalisation";
   }
@@ -1623,6 +1637,71 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   }
 
   return "Unknown";
+}
+
+export function resolveCanonicalVendorLabel(value: string | null | undefined): CanonicalVendorLabelResolution | null {
+  const normalizedValue = value?.trim().replace(/\s+/g, " ").toLowerCase();
+  if (!normalizedValue) {
+    return null;
+  }
+
+  if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(normalizedValue)) {
+    const hostnameObservation = resolveVendorObservations([{
+      type: "request",
+      hostname: normalizedValue,
+      matchSource: "network_request",
+    }])[0];
+    if (hostnameObservation) {
+      return canonicalVendorLabelResolution(hostnameObservation, "canonical_hostname_label");
+    }
+  }
+
+  const productRules = rules.filter((rule) => rule.product.trim().replace(/\s+/g, " ").toLowerCase() === normalizedValue);
+  const candidateRules = productRules.length > 0
+    ? productRules
+    : rules.filter((rule) => rule.vendor.trim().replace(/\s+/g, " ").toLowerCase() === normalizedValue);
+  if (candidateRules.length === 0) {
+    return null;
+  }
+
+  const identities = new Set(candidateRules.map((rule) => `${rule.entity}\u0000${rule.vendor}\u0000${rule.product}\u0000${rule.purpose}`));
+  if (identities.size !== 1) {
+    return null;
+  }
+
+  const primaryRule = candidateRules.reduce((best, rule) => rule.confidence > best.confidence ? rule : best);
+  const regulatoryRelevance = unique(candidateRules.flatMap((rule) => rule.regulatoryRelevance));
+  return {
+    basis: `canonical_${productRules.length > 0 ? "product" : "vendor"}_label`,
+    confidence: primaryRule.confidence,
+    displayCategory: resolveVendorDisplayCategory({
+      product: primaryRule.product,
+      purpose: primaryRule.purpose,
+      regulatoryRelevance,
+      vendor: primaryRule.vendor,
+    }),
+    entity: primaryRule.entity,
+    product: primaryRule.product,
+    purpose: primaryRule.purpose,
+    regulatoryRelevance,
+    vendor: primaryRule.vendor,
+  };
+}
+
+function canonicalVendorLabelResolution(
+  observation: NormalizedVendorObservation,
+  basis: string,
+): CanonicalVendorLabelResolution {
+  return {
+    basis,
+    confidence: observation.confidence,
+    displayCategory: resolveVendorDisplayCategory(observation),
+    entity: observation.entity,
+    product: observation.product ?? observation.vendor,
+    purpose: observation.purpose,
+    regulatoryRelevance: observation.regulatoryRelevance,
+    vendor: observation.vendor,
+  };
 }
 
 const explicitInfrastructureRegionPatterns = [

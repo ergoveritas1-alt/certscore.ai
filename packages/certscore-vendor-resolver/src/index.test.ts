@@ -1,6 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resolveEndpointGeography, resolveVendorDisplayCategory, resolveVendorObservations } from "./index.js";
+import {
+  resolveCanonicalVendorLabel,
+  resolveEndpointGeography,
+  resolveVendorDisplayCategory,
+  resolveVendorObservations,
+} from "./index.js";
+
+test("resolves canonical product labels and apex vendor host labels conservatively", () => {
+  assert.deepEqual(
+    [
+      resolveCanonicalVendorLabel("Adobe Audience Manager / Experience Cloud"),
+      resolveCanonicalVendorLabel("Akamai mPulse"),
+      resolveCanonicalVendorLabel("Amazon Ads"),
+      resolveCanonicalVendorLabel("taboola.com"),
+    ].map((resolution) => [resolution?.product, resolution?.purpose, resolution?.displayCategory]),
+    [
+      ["Adobe Audience Manager / Experience Cloud", "advertising", "Advertising"],
+      ["Akamai mPulse", "performance_monitoring", "Performance monitoring"],
+      ["Amazon Ads", "advertising", "Advertising"],
+      ["Taboola", "advertising", "Advertising"],
+    ],
+  );
+  assert.equal(resolveCanonicalVendorLabel("Adobe"), null);
+
+  const apexObservation = resolveVendorObservations([{ type: "request", hostname: "taboola.com" }]);
+  assertResolved(apexObservation, "Taboola", "Taboola", "advertising");
+});
 
 test("resolves endpoint geography only from explicit host region tokens", () => {
   assert.deepEqual(

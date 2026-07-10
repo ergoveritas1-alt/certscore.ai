@@ -44,6 +44,65 @@ test("projects Adobe Launch host as tag management instead of unknown tracker", 
   assert.equal(adobeRow?.party, "3rd");
 });
 
+test("projects canonical hostless vendor labels with known purposes and categories", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: [],
+    firstPartyDomain: "example.com",
+    preConsentVendors: ["Adobe Audience Manager / Experience Cloud", "Amazon Ads"],
+    resolvedVendors: ["Adobe Audience Manager / Experience Cloud", "Akamai mPulse", "Amazon Ads"],
+    sessionReplayVendors: [],
+    trackerVendors: [],
+    topObservedEntities: [],
+    unresolvedHosts: [],
+  });
+
+  const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
+  const adobe = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Adobe Audience Manager / Experience Cloud");
+  const akamai = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Akamai mPulse");
+  const amazon = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Amazon Ads");
+
+  assert.deepEqual(
+    [adobe, akamai, amazon].map((row) => [row?.purpose, row?.macroCategory, row?.priority, row?.confidence]),
+    [
+      ["Advertising", "Advertising", "high", "high"],
+      ["Performance monitoring", "Analytics", "contextual", "high"],
+      ["Advertising measurement", "Advertising", "high", "high"],
+    ],
+  );
+  assert.equal(adobe?.attributionEvidence?.matchedOn, "vendor_label");
+  assert.equal(akamai?.attributionEvidence?.matchedOn, "vendor_label");
+  assert.equal(amazon?.attributionEvidence?.matchedOn, "vendor_label");
+});
+
+test("projects a Taboola apex-domain cookie as advertising instead of unknown", () => {
+  const groupedRows = buildRuntimeInventoryGroupRows({
+    cookieRows: [{
+      category: "unknown",
+      cookieName: "sp",
+      domain: "taboola.com",
+      evidenceGrade: "medium",
+      firstObservedAtMs: null,
+      initiatorDomain: null,
+      initiatorUrl: null,
+      initiatorVendor: null,
+      nonEssential: true,
+      party: "third_party",
+      setAtMs: null,
+      setMethod: "cookie_snapshot",
+      timingEvidence: "initial_cookie_snapshot",
+    }] as never,
+    firstPartyDomain: "example.com",
+    trackerRows: [],
+  });
+  const taboola = groupedRows.find((row) => row.type === "cookie" && row.vendor === "Taboola");
+
+  assert.equal(taboola?.purpose, "Advertising");
+  assert.equal(taboola?.macroCategory, "Advertising");
+  assert.equal(taboola?.priority, "high");
+  assert.equal(taboola?.confidence, "high");
+  assert.equal(taboola?.attributionEvidence?.matchedOn, "domain");
+});
+
 test("keeps first-party Akamai security tracker inventory contextual", () => {
   const rows = buildTrackerInventoryRows({
     domains: [],
