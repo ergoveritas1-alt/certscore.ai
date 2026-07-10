@@ -138,7 +138,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   }),
   locale("da", {
     privacyPolicyLabels: ["privatlivspolitik", "databeskyttelsespolitik"], privacyPolicyPathSlugs: ["privatlivspolitik"], cookiePolicyLabels: ["cookiepolitik"], cookiePolicyPathSlugs: ["cookiepolitik"], cookieSettingsLabels: ["cookieindstillinger"], termsLabels: ["brugsvilkår"], termsPathSlugs: ["brugsvilkar"], contextHints: ["privatliv", "personoplysninger", "cookies", "samtykke"], tldHints: [".dk"],
-    consentControls: { accept: ["accepter alle", "tillad alle"], reject: ["afvis alle", "nægt alle"], options: ["cookieindstillinger", "administrer præferencer"], necessaryOnly: ["kun nødvendige", "kun nødvendige cookies"] },
+    consentControls: { accept: ["accepter alle", "acceptér alle", "tillad alle"], reject: ["afvis alle", "nægt alle"], options: ["cookieindstillinger", "indstillinger", "administrer præferencer"], necessaryOnly: ["kun nødvendige", "kun nødvendige cookies"] },
   }),
   locale("sk", {
     privacyPolicyLabels: ["zásady ochrany osobných údajov"], privacyPolicyPathSlugs: ["zasady-ochrany-osobnych-udajov"], cookiePolicyLabels: ["pravidlá používania cookies"], cookiePolicyPathSlugs: ["pravidla-pouzivania-cookies"], cookieSettingsLabels: ["nastavenia cookies"], termsLabels: ["podmienky používania"], termsPathSlugs: ["podmienky-pouzivania"], contextHints: ["osobné údaje", "súkromie", "cookies", "súhlas"], tldHints: [".sk"],
@@ -166,7 +166,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   }),
   locale("lt", {
     privacyPolicyLabels: ["privatumo politika"], privacyPolicyPathSlugs: ["privatumo-politika"], cookiePolicyLabels: ["slapukų politika"], cookiePolicyPathSlugs: ["slapuku-politika"], cookieSettingsLabels: ["slapukų nustatymai"], termsLabels: ["naudojimo sąlygos"], termsPathSlugs: ["naudojimo-salygos"], contextHints: ["privatumas", "asmens duomenys", "slapukai", "sutikimas"], tldHints: [".lt"],
-    consentControls: { accept: ["priimti visus", "leisti visus"], reject: ["atmesti visus", "neleisti visų", "atsisakyti visų"], options: ["slapukų nustatymai", "tvarkyti nuostatas"], necessaryOnly: ["tik būtinieji", "tik būtinieji slapukai"] },
+    consentControls: { accept: ["priimti visus", "leisti visus"], reject: ["atmesti visus", "neleisti visų", "atsisakyti visų"], options: ["slapukų nustatymai", "rinktis", "tvarkyti nuostatas"], necessaryOnly: ["tik būtinieji", "tik būtinieji slapukai"] },
   }),
   locale("sl", {
     privacyPolicyLabels: ["politika zasebnosti"], privacyPolicyPathSlugs: ["politika-zasebnosti"], cookiePolicyLabels: ["politika piškotkov"], cookiePolicyPathSlugs: ["politika-piskotkov"], cookieSettingsLabels: ["nastavitve piškotkov"], termsLabels: ["pogoji uporabe"], termsPathSlugs: ["pogoji-uporabe"], contextHints: ["zasebnost", "osebni podatki", "piškotki", "soglasje"], tldHints: [".si"],

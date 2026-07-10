@@ -228,6 +228,31 @@ test("uses canonical Dutch and Polish controls in the default production classif
   assert.equal(multilingualPolish.intent, "options");
 });
 
+test("classifies observed Danish and Lithuanian consent labels", () => {
+  const danishAccept = classifyConsentControlLabel({
+    label: "Acceptér alle",
+    localeHints: ["da"],
+  });
+  assert.equal(danishAccept.intent, "accept");
+  assert.equal(danishAccept.matchedLocale, "da");
+
+  const danishOptions = classifyConsentControlLabel({
+    label: "Indstillinger",
+    contextText: "Dine data og cookies samtykke",
+    localeHints: ["da"],
+  });
+  assert.equal(danishOptions.intent, "options");
+  assert.equal(danishOptions.matchedLocale, "da");
+
+  const lithuanianOptions = classifyConsentControlLabel({
+    label: "Rinktis",
+    contextText: "Asmens duomenų naudojimas slapukai sutikimas",
+    localeHints: ["lt"],
+  });
+  assert.equal(lithuanianOptions.intent, "options");
+  assert.equal(lithuanianOptions.matchedLocale, "lt");
+});
+
 test("does not let generic Dutch or Polish settings labels satisfy multilingual consent context", () => {
   const genericDutch = classifyConsentControlLabel({
     label: "Instellingen",
