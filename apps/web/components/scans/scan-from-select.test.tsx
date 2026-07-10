@@ -77,7 +77,7 @@ test("California scan marker renders as a flag graphic instead of literal sentin
   assert.doesNotMatch(html, />california</);
 });
 
-test("ScanFromSelect hides restricted scan controls from non-admin users", () => {
+test("ScanFromSelect exposes every public region while hiding internal controls from non-admin users", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       includeLocalV2ScanProfileOption: true,
@@ -87,9 +87,9 @@ test("ScanFromSelect hides restricted scan controls from non-admin users", () =>
     })
   );
 
-  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_ie"/);
+  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_de"/);
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="true"/);
-  assert.doesNotMatch(html, /EU-DE/);
+  assert.match(html, /EU-DE/);
   assert.doesNotMatch(html, /Run via Lambda/);
 });
 

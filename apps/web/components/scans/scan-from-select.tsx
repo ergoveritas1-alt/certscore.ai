@@ -108,9 +108,6 @@ export function ScanFromSelect({
     if (!includeLocalExtension && option.value === "local_extension") {
       return false;
     }
-    if (!allowRestrictedScanOptions && option.value === "eu_de") {
-      return false;
-    }
     return true;
   });
   const selectedOption =

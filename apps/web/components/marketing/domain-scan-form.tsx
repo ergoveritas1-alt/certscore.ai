@@ -344,10 +344,7 @@ export function DomainScanForm({
       setLocalExtensionStatus(null);
       setShowExtensionInstructions(false);
     }
-    if (!allowRestrictedScanOptions && scanFrom === "eu_de") {
-      setScanFrom("eu_ie");
-    }
-  }, [allowLocalExtensionScan, allowRestrictedScanOptions, defaultScanFrom, scanFrom]);
+  }, [allowLocalExtensionScan, defaultScanFrom, scanFrom]);
 
   useEffect(() => {
     if (LOCALHOST_FULL_SCAN_QUEUE_ENABLED && !allowRestrictedScanOptions) {
@@ -541,7 +538,7 @@ export function DomainScanForm({
             allowRestrictedScanOptions || LOCALHOST_FULL_SCAN_QUEUE_ENABLED
               ? localV2RunViaLambda
               : true,
-          scanFrom: (allowRestrictedScanOptions || scanFrom !== "eu_de" ? scanFrom : "eu_ie") as ServerScanFrom
+          scanFrom: scanFrom as ServerScanFrom
         }),
         headers: {
           "Content-Type": "application/json"
