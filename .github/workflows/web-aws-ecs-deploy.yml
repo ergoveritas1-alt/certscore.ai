@@ -139,6 +139,12 @@ jobs:
           LIVE_WEB_BASE_URL: ${{ env.CERTSCORE_BASE_URL }}
         run: pnpm exec tsx ./scripts/assert-forward-web-deploy.ts --target "${GITHUB_SHA}"
 
+      - name: Build scan-source test dependencies
+        run: |
+          pnpm --filter @website-signal-risk-scanner/shared build
+          pnpm --filter @website-signal-risk-scanner/ui build
+          pnpm --filter @website-signal-risk-scanner/db build
+
       - name: Test scan-source contracts
         run: |
           node --import tsx --test \
