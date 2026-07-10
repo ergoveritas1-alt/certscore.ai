@@ -823,7 +823,7 @@ function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | n
     vendor: compactApiText(row.vendor),
     host,
     registrableDomain,
-    category: compactApiText(row.purpose),
+    category: compactApiText(row.macroCategory),
     purpose: compactApiText(row.purpose),
     priority: normalizePreConsentPriority(row.priority),
     confidence: normalizePreConsentConfidence(row.confidence),

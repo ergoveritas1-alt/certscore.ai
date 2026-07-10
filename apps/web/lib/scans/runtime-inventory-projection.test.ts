@@ -3,8 +3,19 @@ import test from "node:test";
 import {
   buildRuntimeInventoryGroupRows,
   buildTrackerInventoryRows,
+  deriveInventoryMacroCategory,
   isInventoryDisplayHostname,
 } from "./runtime-inventory-projection";
+
+test("derives Fable macro categories without replacing detailed purposes", () => {
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Advertising", priority: "high", vendor: "Meta Pixel" }), "Advertising");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Session replay", priority: "medium", vendor: "Microsoft Clarity" }), "Analytics");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Security", priority: "contextual", vendor: "Cloudflare" }), "Essential");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Tag management", priority: "medium", vendor: "Google Tag Manager" }), "Functional");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "jQuery CDN" }), "Essential");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "CDN", priority: "contextual", vendor: "Instagram CDN" }), "Functional");
+  assert.equal(deriveInventoryMacroCategory({ purpose: "Unknown", priority: "review_needed", vendor: "unresolved.example" }), "Unknown");
+});
 
 test("projects Adobe Launch host as tag management instead of unknown tracker", () => {
   const rows = buildTrackerInventoryRows({
@@ -28,6 +39,7 @@ test("projects Adobe Launch host as tag management instead of unknown tracker", 
   const adobeRow = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Adobe");
 
   assert.equal(adobeRow?.purpose, "Tag Management");
+  assert.equal(adobeRow?.macroCategory, "Functional");
   assert.equal(adobeRow?.priority, "medium");
   assert.equal(adobeRow?.party, "3rd");
 });
@@ -58,6 +70,7 @@ test("keeps first-party Akamai security tracker inventory contextual", () => {
   const akamaiRow = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Akamai Bot Manager / Edge");
 
   assert.equal(akamaiRow?.purpose, "Security");
+  assert.equal(akamaiRow?.macroCategory, "Essential");
   assert.equal(akamaiRow?.priority, "contextual");
   assert.equal(akamaiRow?.party, "—");
 });
@@ -191,6 +204,8 @@ test("deduplicates tracker inventory rows by vendor host and purpose", () => {
 
   assert.equal(groupedRows.length, 1);
   assert.deepEqual(groupedRows[0]?.domains, ["snap.licdn.com"]);
+  assert.equal(groupedRows[0]?.purpose, "Advertising");
+  assert.equal(groupedRows[0]?.macroCategory, "Advertising");
 });
 
 test("separates cookie names from domains and preserves canonical ownership", () => {
@@ -215,9 +230,11 @@ test("separates cookie names from domains and preserves canonical ownership", ()
   const oneTrustRow = groupedRows.find((row) => row.type === "cookie" && row.vendor === "OneTrust");
   assert.deepEqual(sourcepointRow?.cookieNames, ["_sp_su"]);
   assert.deepEqual(sourcepointRow?.domains, ["bild.de"]);
+  assert.equal(sourcepointRow?.macroCategory, "Essential");
   assert.deepEqual(sourcepointRow?.syncedIdentifiers, ["Google"]);
   assert.deepEqual(oneTrustRow?.cookieNames, ["optanonconsent"]);
   assert.deepEqual(oneTrustRow?.domains, ["bild.de"]);
+  assert.equal(oneTrustRow?.macroCategory, "Essential");
   assert.ok(groupedRows.every((row) => row.domains.every((domain) => !row.cookieNames.includes(domain))));
 });
 

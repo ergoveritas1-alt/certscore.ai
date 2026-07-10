@@ -624,8 +624,12 @@ test("buildApiV2PreConsentCookiesTrackers matches the shared public report table
     secondResource.rows.map((row) => row.id)
   );
   assert.ok(resource.rows.every((row) => !row.host || (!row.host.startsWith(".") && !row.host.startsWith("_") && row.host.includes("."))));
-  assert.ok(resource.rows.some((row) => row.kind === "cookie" && row.vendor === "Meta Pixel" && row.host === null));
-  assert.ok(resource.rows.some((row) => row.kind === "tracker" && row.vendor === "Meta Pixel" && row.host === "connect.facebook.net"));
+  assert.ok(resource.rows.some((row) => row.kind === "cookie" && row.vendor === "Meta" && row.host === "example.com"));
+  assert.ok(resource.rows.some((row) => row.kind === "tracker" && row.vendor === "Meta" && row.host === "connect.facebook.net"));
+  const klaviyoRow = resource.rows.find((row) => row.kind === "tracker" && row.vendor === "Klaviyo");
+  assert.equal(klaviyoRow?.purpose, "Marketing automation");
+  assert.equal(klaviyoRow?.category, "Advertising");
+  assert.notEqual(klaviyoRow?.category, klaviyoRow?.purpose);
   assert.ok(resource.rows.every((row) => row.evidenceBasis === "public_report_projection"));
   assert.ok(resource.rows.every((row) => row.observedBeforeConsent === true));
   assert.ok(resource.rows.every((row) => !row.host?.includes("?")));

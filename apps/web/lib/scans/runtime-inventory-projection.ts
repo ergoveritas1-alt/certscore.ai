@@ -23,6 +23,7 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 
 export type ConsentReviewPriority = RuntimeCookieReviewPriority;
 export type InventoryConfidence = RuntimeCookieInventoryConfidence;
+export type InventoryMacroCategory = "Advertising" | "Analytics" | "Essential" | "Functional" | "Unknown";
 
 export type TrackerInventoryRow = {
   attributionEvidence?: RuntimeVendorAttributionEvidence | null;
@@ -48,6 +49,7 @@ export type CookieInventoryGroupRow = {
   cookieNames: string[];
   domains: string[];
   firstSeenMs: number | null;
+  macroCategory: InventoryMacroCategory;
   party: "first_party" | "third_party" | "unknown" | "mixed";
   priority: ConsentReviewPriority;
   purpose: string;
@@ -61,6 +63,7 @@ export type TrackerInventoryGroupRow = {
   cookieNames: string[];
   domains: string[];
   firstSeenMs: number | null;
+  macroCategory: InventoryMacroCategory;
   party: "3rd" | "—" | "mixed";
   priority: ConsentReviewPriority;
   purpose: string;
@@ -493,6 +496,43 @@ function normalizeInventoryPurpose(value: string | null | undefined) {
   return (value ?? "unknown").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
 }
 
+export function deriveInventoryMacroCategory(input: {
+  priority?: ConsentReviewPriority | null;
+  purpose?: string | null;
+  vendor?: string | null;
+}): InventoryMacroCategory {
+  const purpose = normalizeInventoryPurpose(input.purpose);
+  const vendor = (input.vendor ?? "").toLowerCase();
+
+  if (/^(advertising|advertising_measurement|audience_measurement|retargeting|fingerprinting|marketing_automation)$/.test(purpose)) {
+    return "Advertising";
+  }
+  if (/^(analytics|session_replay|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics|a_b_testing|experimentation)$/.test(purpose)) {
+    return "Analytics";
+  }
+  if (/^(security|necessary|payment|payment_processors|authentication|cookie_compliance|consent|consent_management)$/.test(purpose)) {
+    return "Essential";
+  }
+  if (/^(tag_management|tag_manager|functional|customer_support|personalization|personalisation|embedded_content)$/.test(purpose)) {
+    return "Functional";
+  }
+  if (/^(cdn|cdn_static)$/.test(purpose)) {
+    return /instagram|vimeo|maps|font|sportradar|trustmary|iterate|medallia|piano|usable|jw player/.test(vendor)
+      ? "Functional"
+      : "Essential";
+  }
+  if (input.priority === "contextual") {
+    return "Essential";
+  }
+  if (input.priority === "high") {
+    return "Advertising";
+  }
+  if (input.priority === "medium") {
+    return "Analytics";
+  }
+  return "Unknown";
+}
+
 export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {
   const purpose = normalizeInventoryPurpose(getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance));
   const confidence = getTrackerInventoryConfidence(row);
@@ -612,13 +652,21 @@ export function formatGroupedParty(value: CookieInventoryGroupRow["party"] | Tra
 }
 
 export function buildCookieInventoryGroupRows(rows: RuntimeCookieEvidenceRow[], options: { firstPartyDomain?: string | null } = {}) {
-  return buildRuntimeCookiePriorityGroups(rows, options);
+  return buildRuntimeCookiePriorityGroups(rows, options).map((row) => ({
+    ...row,
+    macroCategory: deriveInventoryMacroCategory({
+      priority: row.priority,
+      purpose: row.purpose,
+      vendor: row.vendor
+    })
+  }));
 }
 
 export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
   const grouped = new Map<string, TrackerInventoryGroupRow>();
   for (const row of rows) {
     const purpose = getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance);
+    const priority = getTrackerConsentReviewPriority(row);
     const key = `${row.label.toLowerCase()}\u0000${purpose.toLowerCase()}`;
     const candidate: TrackerInventoryGroupRow = {
       attributionEvidence: row.attributionEvidence ?? null,
@@ -626,8 +674,13 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
       cookieNames: row.cookieNames ?? [],
       domains: row.domains,
       firstSeenMs: row.firstSeenMs,
+      macroCategory: deriveInventoryMacroCategory({
+        priority,
+        purpose,
+        vendor: row.label
+      }),
       party: formatTrackerParty(row),
-      priority: getTrackerConsentReviewPriority(row),
+      priority,
       purpose,
       requestCount: row.requestCount,
       syncedIdentifiers: row.syncedIdentifiers,
