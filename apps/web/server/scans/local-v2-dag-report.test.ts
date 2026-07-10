@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
@@ -26,6 +27,28 @@ const serverOnlyPath = require.resolve("server-only");
 async function loadLocalV2DagReport() {
   return import("./local-v2-dag-report");
 }
+
+test("buildLocalV2NoGoSnapshotFields preserves every canonical no-go reason classification", async () => {
+  const { buildLocalV2NoGoSnapshotFields } = await loadLocalV2DagReport();
+  for (const reasonCode of SCAN_NO_GO_REASON_CODES) {
+    const presentation = SCAN_NO_GO_REASON_PRESENTATIONS[reasonCode];
+    const snapshot = buildLocalV2NoGoSnapshotFields(reasonCode, presentation.pageState);
+    assert.equal(snapshot.stop_reason_code, presentation.snapshotStopReasonCode, reasonCode);
+    assert.equal(snapshot.stop_reason_label, presentation.snapshotStopReasonLabel, reasonCode);
+    assert.equal(snapshot.stop_reason_detail, presentation.snapshotStopReasonDetail, reasonCode);
+    assert.equal(snapshot.block_page_classification, presentation.snapshotBlockPageClassification, reasonCode);
+    assert.notEqual(snapshot.stop_reason_label, "Homepage capture failed", reasonCode);
+  }
+});
+
+test("buildLocalV2NoGoSnapshotFields gives Cerebras site-not-ready snapshot copy", async () => {
+  const { buildLocalV2NoGoSnapshotFields } = await loadLocalV2DagReport();
+  const snapshot = buildLocalV2NoGoSnapshotFields("site_not_ready", "parked_or_placeholder");
+  assert.equal(snapshot.stop_reason_code, "homepage_site_not_ready");
+  assert.equal(snapshot.stop_reason_label, "Site not ready for scanning");
+  assert.match(snapshot.stop_reason_detail, /prelaunch/i);
+  assert.doesNotMatch(snapshot.stop_reason_detail, /capture failed/i);
+});
 
 test("buildLocalV2DagTimingArtifacts retains bounded module and policy timings", async () => {
   const { buildLocalV2DagTimingArtifacts } = await loadLocalV2DagReport();
@@ -3547,10 +3570,10 @@ test("materializeLocalV2DagScanDetail promotes 1x1 screenshot placeholders to sc
     assert.deepEqual(scanNoGoAssessment?.reasonCodes, ["visual_capture_failed_or_placeholder", "scan_no_go_corroborated"]);
     assert.equal(visualAccessReview?.go_no_go, "NO_GO");
     assert.equal(visualAccessReview?.page_state, "capture_failed");
-    assert.equal(detail.snapshot?.homepage_fetch_status, "blocked");
+    assert.equal(detail.snapshot?.homepage_fetch_status, "capture_failed");
     assert.equal(detail.snapshot?.block_page_classification, "capture_failed");
     assert.equal(detail.snapshot?.stop_reason_code, "homepage_visual_capture_failed");
-    assert.equal(detail.snapshot?.stop_reason_label, "Homepage capture failed");
+    assert.equal(detail.snapshot?.stop_reason_label, "Homepage visual capture failed");
     assert.equal(detail.snapshot?.coverage_level, "limited_none");
     assert.equal(detail.snapshot?.pages_scanned, 0);
     assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_none");
@@ -3696,7 +3719,7 @@ test("materializeLocalV2DagScanDetail promotes retained full-viewport visual err
     assert.deepEqual(scanNoGoAssessment?.reasonCodes, ["retained_visual_error_shell", "scan_no_go_corroborated"]);
     assert.equal(visualAccessReview?.go_no_go, "NO_GO");
     assert.equal(visualAccessReview?.page_state, "visual_error_shell");
-    assert.equal(detail.snapshot?.homepage_fetch_status, "blocked");
+    assert.equal(detail.snapshot?.homepage_fetch_status, "visual_error");
     assert.equal(detail.snapshot?.coverage_level, "limited_none");
     assert.equal(detail.snapshot?.pages_scanned, 0);
     assert.equal(detail.runtimeArtifacts?.runtime_coverage_status, "limited_none");
@@ -3832,7 +3855,7 @@ test("materializeLocalV2DagScanDetail resolves mirrored Lambda screenshot paths 
     assert.deepEqual(scanNoGoAssessment?.reasonCodes, ["retained_visual_error_shell", "scan_no_go_corroborated"]);
     assert.equal(visualArtifacts?.[0]?.status, "capture_failed");
     assert.equal(visualArtifacts?.[0]?.status_reason, "pre_consent_error_shell_captured");
-    assert.equal(detail.snapshot?.homepage_fetch_status, "blocked");
+    assert.equal(detail.snapshot?.homepage_fetch_status, "visual_error");
     assert.equal(detail.snapshot?.coverage_level, "limited_none");
     assert.equal(detail.scan.pagesScanned, 0);
     assert.equal(detail.signals.length, 0);

@@ -13,6 +13,7 @@ type PublicReportFindingDisplayInput = {
   confidence?: CertScoreFindingConfidence | "high" | "moderate" | "low" | null;
   findingId: string;
   label?: string | null;
+  observedSummary?: string | null;
   remediation?: string | null;
   section?: string | null;
   severity?: string | null;
@@ -110,7 +111,13 @@ export function getPublicReportFindingDisplay(input: PublicReportFindingDisplayI
   const referenceId = getPublicReportFindingReferenceId(input.findingId);
   const reference = referenceId ? FINDING_REFERENCE_BY_ID.get(referenceId) : null;
   const canonicalFindingId = referenceId ?? input.findingId;
+  const reasonSpecificNoGoTitle = canonicalFindingId === "scan_quality_visual_no_go"
+    && input.title
+    && input.title !== SCAN_QUALITY_TITLE_COPY.scan_quality_visual_no_go
+      ? input.title
+      : null;
   const title =
+    reasonSpecificNoGoTitle ??
     SCAN_QUALITY_TITLE_COPY[canonicalFindingId] ??
     reference?.title ??
     getFindingReferenceTitle(canonicalFindingId) ??
@@ -118,8 +125,12 @@ export function getPublicReportFindingDisplay(input: PublicReportFindingDisplayI
     input.label ??
     input.findingId.replaceAll("_", " ");
   const criticality = reference?.criticality ?? getFindingReferenceCriticality(canonicalFindingId) ?? normalizeCriticality(input.severity);
-  const observedSummary = SCAN_QUALITY_OBSERVED_COPY[canonicalFindingId] ?? reference?.observed ?? getFindingReferenceObservedCopy(canonicalFindingId);
-  const remediation = REPORT_REMEDIATION_COPY[referenceId ?? input.findingId] ?? softenReportRemediation(input.remediation ?? "");
+  const observedSummary = canonicalFindingId === "scan_quality_visual_no_go" && input.observedSummary
+    ? input.observedSummary
+    : SCAN_QUALITY_OBSERVED_COPY[canonicalFindingId] ?? reference?.observed ?? getFindingReferenceObservedCopy(canonicalFindingId);
+  const remediation = reasonSpecificNoGoTitle && input.remediation
+    ? softenReportRemediation(input.remediation)
+    : REPORT_REMEDIATION_COPY[referenceId ?? input.findingId] ?? softenReportRemediation(input.remediation ?? "");
 
   return {
     criticality,

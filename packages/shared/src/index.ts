@@ -7,6 +7,7 @@ export * from "./access-limitations";
 export * from "./access-limitations.fixtures";
 export * from "./scan-config";
 export * from "./scan-location";
+export * from "./scan-no-go-reasons";
 export * from "./types/entities";
 export * from "./types/signals";
 export * from "./types/merged-signals";

@@ -4,6 +4,8 @@ import {
   getReportUnifiedFindingForSignal,
   getReportUnifiedFindingForValidationRule,
   getKnownCmpVendorName,
+  getScanNoGoLimitationKindLabel,
+  resolveScanNoGoPresentation,
   type ReportSignalSource
 } from "@website-signal-risk-scanner/shared";
 import {
@@ -2568,16 +2570,23 @@ function buildScanNoGoAssessmentConcerns(
   }
 
   const supportingSignals = getRuntimeRecord(assessment, ["supportingSignals", "supporting_signals"]);
+  const visualAccessReview = getRuntimeRecord(runtimeArtifacts, ["visualAccessReview", "visual_access_review"]);
   const visualPageState =
     getRuntimeString(supportingSignals, ["visualPageState", "visual_page_state"]) ??
-    getRuntimeString(assessment, ["visualPageState", "visual_page_state"]);
+    getRuntimeString(assessment, ["visualPageState", "visual_page_state"]) ??
+    getRuntimeString(visualAccessReview, ["pageState", "page_state"]);
   const signalKey = getScanNoGoSignalKey(visualPageState);
   const evidenceRefs = getRuntimeStringArray(assessment, ["evidenceRefs", "evidence_refs"]);
   const reasonCodes = getRuntimeStringArray(assessment, ["reasonCodes", "reason_codes"]);
   const corroboratorCodes = getRuntimeStringArray(assessment, ["corroboratorCodes", "corroborator_codes"]);
   const contradictorCodes = getRuntimeStringArray(assessment, ["contradictorCodes", "contradictor_codes"]);
+  const primaryReasonCode =
+    reasonCodes.find((code) => code !== "scan_no_go_corroborated") ??
+    getRuntimeString(visualAccessReview, ["reasonCode", "reason_code"]);
+  const presentation = resolveScanNoGoPresentation(primaryReasonCode, visualPageState);
   const description = [
-    "WS01 retained a scan-level no-go assessment from observed runtime evidence.",
+    presentation.reportSummary,
+    `Classification: ${getScanNoGoLimitationKindLabel(presentation.limitationKind)}.`,
     corroboratorCodes.length > 0 ? `Corroborators: ${corroboratorCodes.join(", ")}.` : null
   ].filter((part): part is string => Boolean(part)).join(" ");
 
@@ -2598,17 +2607,24 @@ function buildScanNoGoAssessmentConcerns(
         scanNoGoConfidence,
         scanNoGoDecision: decision,
         scanNoGoReasonCodes: reasonCodes,
+        scanNoGoPrimaryReasonCode: primaryReasonCode,
         scanNoGoCorroboratorCodes: corroboratorCodes,
         scanNoGoContradictorCodes: contradictorCodes,
+        scanNoGoCustomerTitle: presentation.customerTitle,
+        scanNoGoCustomerExplanation: presentation.explanation,
+        scanNoGoReportSummary: presentation.reportSummary,
+        scanNoGoRecommendedNextAction: presentation.recommendedNextAction,
+        scanNoGoLimitationKind: presentation.limitationKind,
+        scanNoGoRetryLikelyToHelp: presentation.retryLikelyToHelp,
         signalKey,
         unifiedFindingId: "scan_quality_visual_no_go"
       },
       severity: "high",
       signalKey,
-      signalLabel: "Scan-level no-go assessment",
+      signalLabel: presentation.customerTitle,
       signalSource: "runtime_artifact_signal",
       sourceType: "signal",
-      title: "Scan-level no-go assessment"
+      title: presentation.customerTitle
     })
   ];
 }

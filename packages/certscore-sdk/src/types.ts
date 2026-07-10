@@ -3,6 +3,23 @@ export type NormalizedPulseDetail = "tiny" | "standard" | "full" | "summary" | "
 export type PulseFormat = "json" | "markdown";
 export type FreshnessMode = "latest" | "refresh";
 export type ScanFrom = "eu_ie" | "california";
+export type ScanResultDisposition = "no_go";
+export type ScanNoGoReasonCode =
+  | "blank_or_unusable_page" | "loading_or_stalled" | "not_found_404" | "parked_or_placeholder"
+  | "site_not_ready" | "captcha_or_challenge" | "access_denied_or_forbidden_page" | "rate_limited_429"
+  | "server_error_5xx" | "configuration_error" | "maintenance_or_unavailable" | "tls_or_certificate_error"
+  | "unsupported_region" | "navigation_transport_failure" | "visual_capture_failed_or_placeholder"
+  | "retained_visual_error_shell" | "unknown";
+export type ScanNoGoLimitationKind = "target_site_state" | "scanner_access_limitation" | "scanner_capture_limitation";
+export interface ScanNoGoResult {
+  reasonCode: ScanNoGoReasonCode;
+  title: string;
+  explanation: string;
+  summary: string;
+  limitationKind: ScanNoGoLimitationKind;
+  recommendedNextAction: string;
+  retryLikelyToHelp: boolean;
+}
 
 export type PulseJobStatus =
   | "queued"
@@ -78,6 +95,8 @@ export interface ScanResource {
   domain: string;
   url?: string | null;
   status: PulseJobStatus;
+  resultDisposition?: ScanResultDisposition;
+  noGo?: ScanNoGoResult;
   scanFrom?: ScanFrom;
   createdAt?: string | null;
   startedAt?: string | null;
@@ -103,6 +122,8 @@ export interface ScanJob {
   scan_id?: string | null;
   domain?: string | null;
   status: PulseJobStatus;
+  resultDisposition?: ScanResultDisposition;
+  noGo?: ScanNoGoResult;
   phase?: string;
   createdAt?: string;
   startedAt?: string | null;
@@ -200,6 +221,8 @@ export interface FindingSummary {
   criticality?: "critical" | "high" | "medium" | "low" | "info" | "unknown";
   confidence?: "strong" | "good" | "moderate" | "weak" | "unknown";
   plainEnglish?: string;
+  resultDisposition?: ScanResultDisposition;
+  noGo?: ScanNoGoResult;
   evidence?: EvidenceSummary;
   reviewLenses?: string[];
   disclaimer?: string;
@@ -232,6 +255,8 @@ export interface ScanPulse {
   type: "certscore_scan_pulse";
   scanId: string;
   pulse: PulseResult;
+  resultDisposition?: ScanResultDisposition;
+  noGo?: ScanNoGoResult;
   links?: ApiV2Links;
   disclaimer?: string;
   [key: string]: unknown;
@@ -472,6 +497,8 @@ export interface PulseResultBase {
   scanId?: string;
   scan_id?: string;
   scanStatus?: string;
+  resultDisposition?: ScanResultDisposition;
+  noGo?: ScanNoGoResult;
   summary?: PulseSummary;
   topFindings?: TopFinding[];
   coverage?: CoverageInfo;
@@ -519,6 +546,8 @@ export interface JobStatus {
   scan_id?: string | null;
   domain?: string | null;
   status: PulseJobStatus;
+  resultDisposition?: ScanResultDisposition;
+  noGo?: ScanNoGoResult;
   phase?: string;
   message?: string;
   createdAt?: string;
@@ -542,6 +571,8 @@ export interface JobStatus {
 export interface PendingJob {
   type: "certscore_pulse_status" | "certscore_pulse_pending" | "certscore_pulse_completed";
   status: PulseJobStatus;
+  resultDisposition?: ScanResultDisposition;
+  noGo?: ScanNoGoResult;
   jobId?: string;
   scanId?: string | null;
   scan_id?: string | null;

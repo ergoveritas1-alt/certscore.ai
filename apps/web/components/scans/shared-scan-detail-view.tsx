@@ -7,6 +7,8 @@ import {
   getReportSignalsForEvidenceCategory,
   getReportUnifiedFindingByAlias,
   getReportUnifiedFindingForValidationRule,
+  getScanNoGoLimitationKindLabel,
+  resolveScanNoGoPresentation,
   type PreviewScanPayload,
   type PreviewSampleFinding,
   type ReportSignalDefinition,
@@ -2339,6 +2341,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
     confidence: input.finding.confidenceBand,
     findingId: input.finding.unifiedFindingId,
     label: input.finding.presentation.findingName,
+    observedSummary: input.finding.summary,
     remediation: input.finding.presentation.suggestedFix,
     severity: input.finding.severity,
     title: input.finding.title
@@ -3764,61 +3767,70 @@ export function deriveVisualAccessLimitationNotice(
     return null;
   }
   const evidenceRefs = ["scan_runtime_artifacts.scan_no_go_assessment", "scan_runtime_artifacts.visual_access_review"];
-
-  const shortExplanation =
+  const scanNoGoReasonCodes = [
+    ...getRecordStringArray(scanNoGoAssessment, "reasonCodes"),
+    ...getRecordStringArray(scanNoGoAssessment, "reason_codes")
+  ];
+  const primaryReasonCode = scanNoGoReasonCodes.find((code) => code !== "scan_no_go_corroborated") ?? reasonCode;
+  const presentation = resolveScanNoGoPresentation(primaryReasonCode, pageState);
+  const retainedExplanation =
     getRecordString(visualAccessReview, "shortExplanation") ??
     getRecordString(visualAccessReview, "short_explanation") ??
     (status === "missing_visual_artifact"
       ? "Initial-load visual evidence was not retained as an available screenshot artifact."
       : "Retained visual review did not verify a normal public page for this scan.");
-  const reason =
-    reasonCode === "visual_evidence_upload_failed"
-      ? "Reason: the initial-load screenshot was captured but the retained artifact upload failed."
-      : reasonCode
-        ? `Reason: retained visual access review reported ${reasonCode}.`
-        : `Reason: ${shortExplanation}`;
+  const keyVisualEvidence = [
+    ...getRecordStringArray(visualAccessReview, "key_visual_evidence"),
+    ...getRecordStringArray(visualAccessReview, "keyVisualEvidence")
+  ];
+  const boundedEvidenceExcerpt = sanitizePublicReportEvidenceText(keyVisualEvidence[0] ?? retainedExplanation)
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 360);
+  const limitationKindLabel = getScanNoGoLimitationKindLabel(presentation.limitationKind);
+  const limitationMeaning = presentation.limitationKind === "scanner_access_limitation"
+    ? "This result reflects an access limitation encountered by the scanner, not a conclusion about the site's underlying privacy or consent behavior."
+    : presentation.limitationKind === "scanner_capture_limitation"
+      ? "This result reflects a scanner capture limitation, so the normal public page could not be verified."
+      : "This result reflects the page state displayed by the target URL during the scan.";
+  const evidenceMessage = boundedEvidenceExcerpt
+    ? `Observed evidence: “${boundedEvidenceExcerpt}”`
+    : presentation.explanation;
 
   return {
-    summary:
-      "No reliable privacy or consent findings should be treated as conclusive because retained visual review did not verify a normal public page.",
+    summary: presentation.reportSummary,
     review: {
-      coverageLabel: "Visual verification unavailable",
-      guidance: [
-        "Retry the scan after screenshot retention is healthy, then rely on the projected privacy and consent findings.",
-        "Treat substantive checklist conclusions as coverage-limited until a normal public page is visually retained."
-      ],
-      message: shortExplanation,
-      outcomeTitle: "Normal public site was not visually verified",
+      coverageLabel: limitationKindLabel,
+      guidance: [presentation.recommendedNextAction],
+      message: evidenceMessage,
+      outcomeTitle: presentation.customerTitle,
       verifiedPolicyInsights: [],
       verifiedSurfaces: [],
-      recommendationTitle: "Retry With Retained Visual Evidence",
-      reason,
-      title: "Normal public site was not reached",
+      recommendationTitle: presentation.retryLikelyToHelp ? "Recommended retry path" : "Recommended next action",
+      reason: presentation.explanation,
+      title: presentation.customerTitle,
       whatThisMeans: [
-        "The scanner retained a visual no-go state, so runtime privacy signals may not represent the normal public website.",
-        "This is a scan quality limitation, not evidence that Grammarly did or did not perform the underlying behaviors."
+        limitationMeaning,
+        "CertScore withheld scores and substantive privacy or consent conclusions because the retained page was not representative."
       ]
     },
     finding: {
       id: "scan_quality_visual_no_go",
-      label: "Normal public site was not reached",
+      label: presentation.customerTitle,
       section: "Runtime & Diagnostics",
       defaultSurfacePriority: 120,
-      whyItMatters:
-        "When the retained visual review cannot verify a normal public page, raw runtime signals can reflect a blocked, wrong, or unverifiable page state.",
-      remediation:
-        "Retry the scan after visual evidence retention is available and confirm the captured page represents the normal public website.",
+      whyItMatters: presentation.explanation,
+      remediation: presentation.recommendedNextAction,
       confidence: "strong",
       directVsInferred: "direct",
       evidencePreview: [
-        shortExplanation,
-        reason,
+        evidenceMessage,
+        limitationKindLabel,
         scanNoGoConfidence !== null ? `Scan no-go confidence: ${scanNoGoConfidence.toFixed(2)}.` : null
       ].filter((value): value is string => Boolean(value)),
       evidenceRefs,
       severity: "medium",
-      shortSummary:
-        "Retained visual review did not verify a normal public page, so substantive privacy and consent conclusions are coverage-limited."
+      shortSummary: presentation.reportSummary
     }
   };
 }

@@ -17,6 +17,7 @@ import {
 } from "./scan-resource";
 import { buildRuntimeInventoryProjectionFromScan } from "../scans/runtime-inventory-projection";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
 
 function fixture(overrides: Partial<ScanDetailResponse["scan"]> = {}) {
   return {
@@ -164,6 +165,37 @@ test("buildApiV2ScanResource marks partial coverage without exposing raw evidenc
   assert.equal(resource.coverage?.status, "partial");
   assert.deepEqual(resource.coverage?.limitations, ["Automated public-web scan only."]);
   assert.equal("rawEvidence" in resource, false);
+});
+
+test("API v2 scan resource and status preserve every canonical no-go reason", () => {
+  for (const reasonCode of SCAN_NO_GO_REASON_CODES) {
+    const presentation = SCAN_NO_GO_REASON_PRESENTATIONS[reasonCode];
+    const scanRecord = {
+      ...fixture({ pagesScanned: 0 }),
+      runtimeArtifacts: {
+        scan_no_go_assessment: {
+          decision: "no_go",
+          reasonCodes: [reasonCode, "scan_no_go_corroborated"]
+        },
+        visual_access_review: {
+          page_state: presentation.pageState,
+          reason_code: reasonCode
+        }
+      }
+    } as ScanDetailResponse;
+    const resource = buildApiV2ScanResource(scanRecord);
+    const status = buildApiV2ScanStatus(scanRecord);
+
+    assert.equal(resource.status, "completed_limited", reasonCode);
+    assert.equal(status.status, "completed_limited", reasonCode);
+    assert.equal(resource.resultDisposition, "no_go", reasonCode);
+    assert.equal(resource.noGo?.reasonCode, reasonCode, reasonCode);
+    assert.equal(resource.noGo?.title, presentation.customerTitle, reasonCode);
+    assert.equal(resource.noGo?.recommendedNextAction, presentation.recommendedNextAction, reasonCode);
+    assert.equal(resource.score, null, reasonCode);
+    assert.equal(resource.riskLevel, null, reasonCode);
+    assert.equal(status.retryAfterSeconds, null, reasonCode);
+  }
 });
 
 test("buildApiV2ScanDiagnostics projects bounded phase and policy discovery timings", () => {

@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   assessPulseScanRecordQuality,
+  buildPulseNoGoState,
   hasMeaningfulPolicyAnchor,
   isPublicPulseApiFinding
 } from "./projection";
+import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
 
 function pulseScanRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -89,6 +91,22 @@ test("Pulse quality gate keeps explicit access-limited scans usable as limitatio
   assert.equal(quality.usable, true);
   assert.equal(quality.level, "usable_with_limitations");
   assert.equal(quality.reason, "retained_access_limitation");
+});
+
+test("Pulse no-go state preserves every canonical reason", () => {
+  for (const reasonCode of SCAN_NO_GO_REASON_CODES) {
+    const presentation = SCAN_NO_GO_REASON_PRESENTATIONS[reasonCode];
+    const state = buildPulseNoGoState({
+      scan_no_go_assessment: { decision: "no_go", reasonCodes: [reasonCode, "scan_no_go_corroborated"] },
+      visual_access_review: { page_state: presentation.pageState, reason_code: reasonCode }
+    });
+    assert.equal(state?.scanStatus, "completed_limited", reasonCode);
+    assert.equal(state?.resultDisposition, "no_go", reasonCode);
+    assert.equal(state?.noGo.reasonCode, reasonCode, reasonCode);
+    assert.equal(state?.noGo.title, presentation.customerTitle, reasonCode);
+    assert.equal(state?.noGo.recommendedNextAction, presentation.recommendedNextAction, reasonCode);
+    assert.equal(state?.resultQuality.reason, "scan_no_go", reasonCode);
+  }
 });
 
 test("Pulse route rejects unusable completed scan records before projection", () => {

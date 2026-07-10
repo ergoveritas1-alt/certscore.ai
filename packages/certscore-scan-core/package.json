@@ -16,6 +16,7 @@
     "consent-geometry-final-summary": "node --import tsx ./src/cli/consent-geometry-final-summary.ts",
     "replay": "node --import tsx ./src/cli/replay.ts",
     "calibrate": "node --import tsx ./src/cli/calibrate.ts",
+    "calibrate:no-go-corpus": "node --import tsx ./src/cli/calibrate-no-go-corpus.ts",
     "test": "tsx --tsconfig ../../tsconfig.base.json --test --test-concurrency=1 'src/*.test.ts'",
     "test:integration-fixtures": "tsx --tsconfig ../../tsconfig.base.json --test src/integration-fixtures.test.ts",
     "test:integration-fixtures:corpus": "tsx --tsconfig ../../tsconfig.base.json --test --test-name-pattern='^fixture corpus:' src/integration-fixtures.test.ts",

@@ -349,10 +349,13 @@ export class CertScoreClient {
       }
       const pulse = (await response.json()) as PulseResult;
       const nestedScanId = asRecord(pulse.scan).scanId;
+      const completedStatus = pulse.resultDisposition === "no_go" ? "completed_limited" : "completed";
       return {
         type: "certscore_pulse_completed",
-        status: "completed",
+        status: completedStatus,
         completed: true,
+        resultDisposition: pulse.resultDisposition,
+        noGo: pulse.noGo,
         scanId: pulse.scanId ?? pulse.scan_id ?? (typeof nestedScanId === "string" ? nestedScanId : null),
         resultUrl:
           typeof pulse.links?.scanJsonUrl === "string"

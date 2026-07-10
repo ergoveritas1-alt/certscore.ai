@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
 export const PULSE_API_VERSION = "v1";
 export const PULSE_SCHEMA_VERSION = "0.5.3";
@@ -163,6 +164,8 @@ export const pulseResponseSchema = z
     scanId: z.string().optional(),
     scan_id: z.string().optional(),
     scanStatus: z.string().optional(),
+    resultDisposition: scanResultDispositionSchema.optional(),
+    noGo: scanNoGoResultSchema.optional(),
     summary: pulseSummarySchema.optional(),
     topFindings: z.array(pulseFindingSchema).optional(),
     coverage: pulseCoverageSchema.optional(),
@@ -183,6 +186,8 @@ export const pulseStatusSchema = z
     scan_id: z.string().nullable().optional(),
     domain: z.string().nullable().optional(),
     status: pulseJobStatusSchema,
+    resultDisposition: scanResultDispositionSchema.optional(),
+    noGo: scanNoGoResultSchema.optional(),
     phase: z.string().optional(),
     message: z.string().optional(),
     resultUrl: z.string().nullable().optional(),

@@ -10,6 +10,7 @@ import {
   PULSE_VERSION
 } from "./constants";
 import { buildPulseAgentInterpretation } from "./agent-interpretation";
+import type { ExternalScanNoGoProjection } from "@website-signal-risk-scanner/shared";
 
 type PulseStatusInput = {
   jobId: string;
@@ -25,6 +26,7 @@ type PulseStatusInput = {
   reportUrl?: string | null;
   message?: string | null;
   retryAfterSeconds?: number | null;
+  noGoProjection?: ExternalScanNoGoProjection | null;
 };
 
 function elapsedSeconds(createdAt: string, completedAt?: string | null) {
@@ -82,7 +84,8 @@ function responseClassForStatus(status: string) {
 }
 
 export function buildPulseStatus(input: PulseStatusInput) {
-  const phase = publicPhase(input.status, input.phase);
+  const effectiveStatus = input.noGoProjection && input.status === "completed" ? "completed_limited" : input.status;
+  const phase = publicPhase(effectiveStatus, input.phase);
   const phaseIndex = Math.max(0, PULSE_STATUS_STEPS.indexOf(phase as (typeof PULSE_STATUS_STEPS)[number]));
   const completedSteps = PULSE_STATUS_STEPS.slice(0, phaseIndex).filter((step) => step !== "completed");
   const remainingSteps = PULSE_STATUS_STEPS.slice(phaseIndex + 1);
@@ -105,9 +108,12 @@ export function buildPulseStatus(input: PulseStatusInput) {
     scanId: input.scanId ?? null,
     scan_id: input.scanId ?? null,
     domain: input.domain,
-    status: input.status,
+    status: effectiveStatus,
+    ...(input.noGoProjection ?? {}),
     phase,
-    message: input.message ?? defaultMessage(input.status, phase),
+    message: input.noGoProjection
+      ? `The scan completed with limited coverage. ${input.noGoProjection.noGo.summary}`
+      : input.message ?? defaultMessage(effectiveStatus, phase),
     createdAt: input.createdAt,
     startedAt: input.startedAt ?? null,
     lastUpdatedAt: input.lastUpdatedAt ?? input.completedAt ?? input.startedAt ?? input.createdAt,
@@ -121,11 +127,11 @@ export function buildPulseStatus(input: PulseStatusInput) {
     },
     resultUrl,
     reportUrl,
-    retryAfterSeconds: input.status === "rate_limited" ? input.retryAfterSeconds ?? null : null,
+    retryAfterSeconds: effectiveStatus === "rate_limited" ? input.retryAfterSeconds ?? null : null,
     capabilities: PULSE_CAPABILITIES,
     agentInterpretation: buildPulseAgentInterpretation({
-      responseClass: responseClassForStatus(input.status),
-      safeSummaryUse: input.status === "completed" || input.status === "completed_limited"
+      responseClass: responseClassForStatus(effectiveStatus),
+      safeSummaryUse: effectiveStatus === "completed" || effectiveStatus === "completed_limited"
     }),
     disclaimer: PULSE_STANDARD_DISCLAIMER
   };

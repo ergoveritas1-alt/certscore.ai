@@ -617,6 +617,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scanId: { type: ["string", "null"] },
             domain: { type: ["string", "null"] },
             status: { type: "string", enum: ["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited"] },
+            resultDisposition: { type: "string", enum: ["no_go"] },
+            noGo: { type: "object", additionalProperties: true, description: "Reason-specific public no-go presentation; includes reasonCode, title, explanation, summary, limitationKind, recommendedNextAction, and retryLikelyToHelp." },
             phase: { type: "string" },
             createdAt: { type: "string" },
             startedAt: { type: ["string", "null"] },
@@ -638,6 +640,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             domain: { type: "string" },
             url: { type: ["string", "null"] },
             status: { type: "string" },
+            resultDisposition: { type: "string", enum: ["no_go"] },
+            noGo: { type: "object", additionalProperties: true, description: "Reason-specific public no-go presentation; includes reasonCode, title, explanation, summary, limitationKind, recommendedNextAction, and retryLikelyToHelp." },
             scanFrom: { type: "string" },
             createdAt: { type: ["string", "null"] },
             startedAt: { type: ["string", "null"] },
@@ -831,6 +835,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
           properties: {
             type: { type: "string", const: "certscore_scan_pulse" },
             scanId: { type: "string" },
+            resultDisposition: { type: "string", enum: ["no_go"] },
+            noGo: { type: "object", additionalProperties: true, description: "Reason-specific public no-go presentation; includes reasonCode, title, explanation, summary, limitationKind, recommendedNextAction, and retryLikelyToHelp." },
             pulse: { type: "object", additionalProperties: true },
             links: { $ref: "#/components/schemas/Links" },
             disclaimer: { type: "string" }

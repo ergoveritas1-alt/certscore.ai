@@ -10,6 +10,7 @@ import {
   apiV2ScanStatusSchema
 } from "./api-v2.js";
 import { pulseResponseSchema, pulseStatusSchema } from "./pulse-v1.js";
+import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
 export const mcpPulseDetailSchema = z.enum(["tiny", "quick", "standard", "full", "summary", "evidence"]);
 export const mcpGptSafePulseDetailSchema = z.enum(["tiny", "standard", "summary"]);
@@ -112,7 +113,9 @@ export const mcpCreateScanOutputSchema = z
     statusUrl: z.string().nullable(),
     resultUrl: z.string().nullable(),
     reportUrl: z.string().nullable(),
-    pulse: pulseResponseSchema.nullable()
+    pulse: pulseResponseSchema.nullable(),
+    resultDisposition: scanResultDispositionSchema.nullable().optional(),
+    noGo: scanNoGoResultSchema.nullable().optional()
   })
   .passthrough();
 
@@ -123,6 +126,8 @@ export const mcpScanSiteOutputSchema = z
     jobId: z.string().optional(),
     domain: z.string().nullable().optional(),
     status: apiV2ScanStatusSchema,
+    resultDisposition: scanResultDispositionSchema.optional(),
+    noGo: scanNoGoResultSchema.optional(),
     scanFrom: apiV2ScanFromSchema.optional(),
     startedAt: z.string().nullable().optional(),
     completedAt: z.string().nullable().optional(),
@@ -138,6 +143,8 @@ export const mcpScanStatusOutputSchema = z
     scan_id: z.string().nullable().optional(),
     domain: z.string().nullable().optional(),
     status: z.union([apiV2ScanStatusSchema, pulseStatusSchema.shape.status]).optional(),
+    resultDisposition: scanResultDispositionSchema.optional(),
+    noGo: scanNoGoResultSchema.optional(),
     startedAt: z.string().nullable().optional(),
     completedAt: z.string().nullable().optional(),
     scanTimeSeconds: z.number().nullable().optional(),
@@ -150,6 +157,8 @@ export const mcpReportOutputSchema = z
     type: z.enum(["certscore_pulse", "certscore_pulse_summary", "certscore_pulse_evidence"]).optional(),
     scanId: z.string().optional(),
     scan_id: z.string().optional(),
+    resultDisposition: scanResultDispositionSchema.optional(),
+    noGo: scanNoGoResultSchema.optional(),
     value: z.string().optional()
   })
   .passthrough();
@@ -160,6 +169,8 @@ export const mcpFindingsExportOutputSchema = z
     scanId: z.string().nullable(),
     domain: z.string().nullable(),
     summary: z.unknown().nullable(),
+    resultDisposition: scanResultDispositionSchema.nullable(),
+    noGo: scanNoGoResultSchema.nullable(),
     findings: z.array(
       z
         .object({

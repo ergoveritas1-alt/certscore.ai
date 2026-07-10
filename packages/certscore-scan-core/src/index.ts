@@ -24,6 +24,7 @@ import {
   canonicalEvidenceBundleSchema,
 } from "@certscore/contracts";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
+import type { ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
 import { chromium, type Browser } from "playwright";
 import { createArtifactWriter, type ArtifactWriter } from "./artifact-writer.js";
 import {
@@ -355,6 +356,22 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       reason: preConsentEnabled ? "not_needed" : "pre_consent_runtime_disabled",
     });
   }
+  const earlyScanNoGoEvidence = input.captureReplay === true
+    ? null
+    : buildScanNoGoAssessment({
+      consentUiObservations: preConsentResult.consentUiObservations,
+      domSnapshots: preConsentResult.domSnapshots,
+      modulesRun: [preConsentResult.moduleRun],
+      networkEvents: preConsentResult.networkEvents,
+      networkResponseEvents: preConsentResult.networkResponseEvents,
+      policySurfaceObservations: [],
+      screenshots: preConsentResult.screenshots,
+    });
+  const earlyConfirmedNoGo = earlyScanNoGoEvidence?.scanNoGoAssessment.decision === "no_go";
+  await phaseRecorder.record("scan_no_go_fast_gate", earlyConfirmedNoGo ? "completed" : "skipped", {
+    decision: earlyScanNoGoEvidence?.scanNoGoAssessment.decision ?? "go",
+    reasonCode: earlyScanNoGoEvidence?.primaryReasonCode,
+  });
   await phaseRecorder.record("policy_surface_for_replay", input.captureReplay && policySurfaceEnabled && !plannedParallel ? "started" : "skipped");
   let policySurfaceSettled = input.captureReplay && policySurfaceEnabled && !plannedParallel
     ? await policySurfaceResultPromise
@@ -372,7 +389,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     });
   }
   const seededPrivacyControlUrls = normalizeSeedUrls(input.privacyControlUrls ?? []);
-  if (!policySurfaceSettled && plannedParallel && policySurfaceEnabled) {
+  if (!policySurfaceSettled && plannedParallel && policySurfaceEnabled && !earlyConfirmedNoGo) {
     await phaseRecorder.record("policy_surface_planning_deadline", "started", {
       deadlineMs: input.policyPlanningDeadlineMs ?? 1_500,
     });
@@ -430,11 +447,11 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       status: consentFlowResult.moduleRun.status,
     });
   }
-  const policyRequiredForOutput = policySurfaceEnabled && (!plannedParallel || !consentFlowEnabled || input.captureReplay);
+  const policyRequiredForOutput = policySurfaceEnabled && !earlyConfirmedNoGo && (!plannedParallel || !consentFlowEnabled || input.captureReplay);
   await phaseRecorder.record("policy_surface_for_output", policyRequiredForOutput ? "started" : "skipped");
   if (policyRequiredForOutput) {
     policySurfaceSettled ??= await policySurfaceResultPromise;
-  } else if (policySurfaceEnabled) {
+  } else if (policySurfaceEnabled && !earlyConfirmedNoGo) {
     const policyOutputGraceMs = input.policyOutputGraceMs ?? 0;
     await phaseRecorder.record("policy_surface_output_grace", policyOutputGraceMs > 0 ? "started" : "skipped", {
       deadlineMs: policyOutputGraceMs,
@@ -460,24 +477,28 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
 
   const vendorResolverStartedAtMs = Date.now();
   const vendorResolverStartedAt = new Date(vendorResolverStartedAtMs).toISOString();
-  await phaseRecorder.record("vendor_resolver", "started");
-  const normalizedVendorObservations = resolveVendorObservations(
-    [
-      ...preConsentResult.vendorResolverInputs,
-      ...(consentFlowResult?.vendorResolverInputs ?? []),
-    ],
-  );
+  await phaseRecorder.record("vendor_resolver", earlyConfirmedNoGo ? "skipped" : "started", {
+    reason: earlyConfirmedNoGo ? "confirmed_scan_no_go" : undefined,
+  });
+  const normalizedVendorObservations = earlyConfirmedNoGo
+    ? []
+    : resolveVendorObservations(
+      [
+        ...preConsentResult.vendorResolverInputs,
+        ...(consentFlowResult?.vendorResolverInputs ?? []),
+      ],
+    );
   const vendorResolverCompletedAtMs = Date.now();
   const vendorResolverModuleRun: CanonicalEvidenceBundle["modulesRun"][number] = {
     moduleName: "vendorResolver",
-    status: "completed",
+    status: earlyConfirmedNoGo ? "not_testable" : "completed",
     startedAt: vendorResolverStartedAt,
     completedAt: new Date(vendorResolverCompletedAtMs).toISOString(),
     durationMs: vendorResolverCompletedAtMs - vendorResolverStartedAtMs,
     evidenceRefs: [],
-    errors: [],
+    errors: earlyConfirmedNoGo ? ["Skipped because the fast gate confirmed that the normal public site was not reached."] : [],
   };
-  await phaseRecorder.record("vendor_resolver", "completed", {
+  await phaseRecorder.record("vendor_resolver", earlyConfirmedNoGo ? "skipped" : "completed", {
     durationMs: vendorResolverModuleRun.durationMs,
     vendorObservations: normalizedVendorObservations.length,
   });
@@ -577,7 +598,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   ],
   cmpRuntimeObservations: preConsentResult.cmpRuntimeObservations,
   });
-  const scanNoGoEvidence = buildScanNoGoAssessment({
+  const scanNoGoEvidence = earlyScanNoGoEvidence ?? buildScanNoGoAssessment({
     consentUiObservations: [
       ...preConsentResult.consentUiObservations,
       ...(consentFlowResult?.consentUiObservations ?? []),
@@ -595,7 +616,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     ],
     modulesRun,
   });
-  const runtimeCoverage = scanNoGoEvidence
+  const runtimeCoverage = scanNoGoEvidence?.scanNoGoAssessment.decision === "no_go"
     ? {
       ...baseRuntimeCoverage,
       coverageStatus: "limited_none" as const,
@@ -611,7 +632,19 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
           : "Initial-load evidence shows a bot/security challenge or access-block page, so runtime evidence should be treated as not reportable.",
       ]),
     }
-    : baseRuntimeCoverage;
+    : scanNoGoEvidence
+      ? {
+        ...baseRuntimeCoverage,
+        limitationKeys: uniqueStrings([
+          ...baseRuntimeCoverage.limitationKeys,
+          "scan_no_go_diagnostics",
+        ]),
+        notes: uniqueStrings([
+          ...baseRuntimeCoverage.notes,
+          "Potential no-go evidence was observed but contradicted by retained normal-site evidence, so the scan continued.",
+        ]),
+      }
+      : baseRuntimeCoverage;
 
   const boundedModulesRun = modulesRun.map(boundModuleRunTimingBreakdown);
   const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
@@ -1188,7 +1221,26 @@ function postConsentFlowRuntimeDisabled(input: {
 }
 
 const SCAN_NO_GO_TEXT_PATTERN =
-  /access to this site has been denied|access denied|access is temporarily restricted|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|protected by kasada|x-kpsdk|detected unusual (?:behaviour|activity)[^.]{0,180}(?:bot|browser|network)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot|\bzaraz wracamy\b/i;
+  /access to this site has been denied|access denied|access is temporarily restricted|forbidden|http\s*403|403(?:\s*-\s*|\s+)forbidden|403\s+error|the request could not be satisfied|block access from your country|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|dein browser wird geprüft|performing security verification|security check|protected by kasada|x-kpsdk|detected unusual (?:behaviour|activity)[^.]{0,180}(?:bot|browser|network)|resembles that of a bot|real (?:shopper|person|user)s?[^.]{0,80}not robots?|(?:please )?verif(?:y|ies|ying)[^.]{0,80}(?:you are|that you(?:'|’)re) human|are you (?:a )?(?:person|human) or (?:a )?robot|press and hold[^.]{0,100}verif|\bzaraz wracamy\b/i;
+
+const SCAN_NO_GO_NOT_FOUND_PATTERN =
+  /^(?:not found(?:\s+not found)?|404(?: not found)?)[.!\s]*$|\b404\b[^\n]{0,80}(?:not found|file not found)|(?:requested (?:page|file|url)|the (?:page|file))[^\n]{0,80}not found|the page you (?:requested|are looking for) (?:could not be found|does not exist)/i;
+const SCAN_NO_GO_RATE_LIMIT_PATTERN = /\b429\b[^\n]{0,80}(?:too many requests|rate limit)|too many requests|rate limit exceeded/i;
+const SCAN_NO_GO_SERVER_ERROR_PATTERN =
+  /\b(?:500|502|503|504)\b[^\n]{0,100}(?:error|unavailable|gateway|timeout)|internal server error|service unavailable|bad gateway|gateway timeout/i;
+const SCAN_NO_GO_MAINTENANCE_PATTERN =
+  /(?:site|service|page) (?:is )?(?:temporarily )?(?:unavailable|under maintenance)|scheduled maintenance|we(?:'|’)ll be back soon|temporarily offline|page unavailable/i;
+const SCAN_NO_GO_PLACEHOLDER_PATTERN =
+  /\bexample domain\b|apache is functioning normally|website coming soon|site under construction|domain (?:is )?parked|domain (?:is )?for sale|welcome to nginx|default web site page|^[a-z0-9.-]+ is live!?$|this domain is an active and legitimate web address[^.]{0,160}(?:technical purposes|traffic routing|ad-tracking)/i;
+const SCAN_NO_GO_LOADING_PATTERN =
+  /^[^\p{L}\p{N}]{0,4}(?:loading|please wait|establishing (?:a )?secure connection|initializing)\b[\s\S]{0,120}$/iu;
+const SCAN_NO_GO_TLS_PATTERN = /invalid ssl certificate|certificate (?:is )?(?:invalid|expired)|privacy error|your connection is not private/i;
+const SCAN_NO_GO_CONFIGURATION_ERROR_PATTERN =
+  /\{\s*"(?:detail|error)"\s*:\s*"(?:wrong domain parts[^\"]*|invalid (?:domain|host)[^\"]*|domain (?:is )?not configured[^\"]*)"|"error_code"\s*:\s*"[^"]+"[^}]{0,160}"error_msg"\s*:\s*"[^"]*(?:unavailable|configuration|invalid domain)/i;
+const SCAN_NO_GO_UNSUPPORTED_REGION_PATTERN =
+  /visiting from the(?:\s|\|)+(?:eu|european union)[\s\S]{0,280}(?:ignore|block|deny)[^.]{0,100}(?:traffic|users?|access)|(?:site|service|content) (?:is )?not available in your (?:country|region)/i;
+const SCAN_NO_GO_SITE_NOT_READY_PATTERN =
+  /\bprelaunch\b[\s\S]{0,300}check back at launch|your browser can(?:'|’|‘)?t render[^.]{0,120}check back at launch/i;
 
 const SCAN_NO_GO_SECURITY_CHALLENGE_REQUEST_PATTERN =
   /(?:^|\/)\.well-known\/vercel\/security\/|\/request-challenge(?:$|[?#])|challenge\.v2\.(?:min\.js|wasm)(?:$|[?#])|\/cdn-cgi\/challenge-platform\/|\/cdn-cgi\/challenge|challenges\.cloudflare\.com|captcha-delivery\.com|x-kpsdk|kasada/i;
@@ -1265,41 +1317,95 @@ function buildScanNoGoAssessment(input: {
   const textCandidates = uniqueStrings([
     ...input.domSnapshots.map((snapshot) => boundedScanNoGoText(snapshot.textExcerpt)),
     ...input.consentUiObservations.map((observation) => boundedScanNoGoText(observation.textExcerpt)),
-    ...input.policySurfaceObservations.map((observation) => boundedScanNoGoText(observation.textExcerpt)),
   ].filter((text): text is string => Boolean(text)));
-  const matchedText = textCandidates.find((text) => SCAN_NO_GO_TEXT_PATTERN.test(text));
+  const longestText = [...textCandidates].sort((left, right) => right.length - left.length)[0] ?? "";
+  const mainDocumentStatus = getMainDocumentStatus(input.networkEvents, input.networkResponseEvents);
+  const successfulFirstPartyResponses = input.networkResponseEvents.filter((event) =>
+    event.firstParty === true && (event.status ?? 0) >= 200 && (event.status ?? 0) < 400
+  ).length;
+  const substantiveWordCount = longestText.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
+  const textPageState = classifyScanNoGoText(longestText);
+  const positiveSiteSignals = uniqueStrings([
+    mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400
+      ? "main_document_success"
+      : null,
+    !textPageState && longestText.length >= 180 && substantiveWordCount >= 24
+      ? "substantive_dom_text_observed"
+      : null,
+    input.policySurfaceObservations.length > 0 ? "policy_surface_observed" : null,
+    successfulFirstPartyResponses >= 4 ? "multiple_first_party_resources_loaded" : null,
+  ].filter((value): value is string => Boolean(value)));
+  const strongPositiveSiteEvidence = positiveSiteSignals.some((signal) =>
+    signal !== "main_document_success"
+  );
   const networkChallengeEvidence = detectScanNoGoNetworkChallengeEvidence({
     networkEvents: input.networkEvents,
     networkResponseEvents: input.networkResponseEvents,
   });
-  if (!matchedText && !networkChallengeEvidence) {
+  const httpPageState = classifyMainDocumentStatus(mainDocumentStatus);
+  const challengePageState: ClassifiedNoGoPageState | null =
+    networkChallengeEvidence &&
+    (textPageState?.reasonCode === "captcha_or_challenge" ||
+      (httpPageState?.reasonCode === "access_denied_or_forbidden_page" &&
+        ["network_datadome_challenge", "network_kasada_challenge"].includes(
+          networkChallengeEvidence.corroboratorCode,
+        )))
+      ? {
+          confidence: 0.95,
+          evidenceText: textPageState?.evidenceText ?? networkChallengeEvidence.evidenceText,
+          hardTerminal: Boolean(textPageState) || mainDocumentStatus !== null,
+          reasonCode: "captcha_or_challenge",
+          visualPageState: "captcha_or_challenge",
+        }
+      : null;
+  const pageState = challengePageState ?? httpPageState ?? textPageState;
+  const nearlyEmptyPage = longestText.length <= 40 && substantiveWordCount <= 6;
+  const sparseSuccessfulPage =
+    mainDocumentStatus !== null &&
+    mainDocumentStatus >= 200 &&
+    mainDocumentStatus < 400 &&
+    nearlyEmptyPage &&
+    input.networkEvents.length <= 4 &&
+    successfulFirstPartyResponses <= 2 &&
+    input.policySurfaceObservations.length === 0;
+  if (!pageState && !networkChallengeEvidence && !sparseSuccessfulPage) {
     return null;
   }
 
-  const retainedEvidenceText = matchedText ?? networkChallengeEvidence?.evidenceText ?? "Security challenge evidence observed.";
+  const retainedEvidenceText = pageState?.evidenceText ??
+    (sparseSuccessfulPage ? "The settled page retained almost no visible text or supporting first-party content." : null) ??
+    networkChallengeEvidence?.evidenceText ??
+    "Potential security challenge evidence observed.";
   const securityChallengeRequestObserved = Boolean(networkChallengeEvidence);
   const screenshot = input.screenshots
     .filter((artifact) => artifact.consentStateAtTime === "pre_consent")
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs)[0] ?? null;
-  const primaryReasonCode = securityChallengeRequestObserved
-    ? "captcha_or_challenge"
-    : "access_denied_or_forbidden_page";
-  const visualPageState: VisualAccessReview["page_state"] = securityChallengeRequestObserved
-    ? "captcha_or_challenge"
-    : "access_blocked";
-  const confidence = securityChallengeRequestObserved ? 0.95 : 0.93;
+  const primaryReasonCode = pageState?.reasonCode ??
+    (sparseSuccessfulPage ? "blank_or_unusable_page" : "potential_security_challenge");
+  const visualPageState: VisualAccessReview["page_state"] = pageState?.visualPageState ??
+    (sparseSuccessfulPage ? "blank_or_unusable" : "degraded_but_useful");
+  const blockedMainDocument = mainDocumentStatus !== null && [401, 403, 407, 429, 451, 500, 502, 503, 504].includes(mainDocumentStatus);
+  const explicitTerminalPage = Boolean(pageState) || sparseSuccessfulPage;
+  const contradictedByNormalSite = strongPositiveSiteEvidence && !blockedMainDocument && !pageState?.hardTerminal;
+  const decision: ScanNoGoAssessment["decision"] =
+    explicitTerminalPage && !contradictedByNormalSite
+      ? "no_go"
+      : "continue_with_diagnostics";
+  const confidence = decision === "no_go"
+    ? pageState?.confidence ?? (sparseSuccessfulPage ? 0.91 : 0.9)
+    : 0.72;
   const evidenceRefs = [
     "scan_runtime_artifacts.scan_no_go_assessment",
     "scan_runtime_artifacts.visual_access_review",
     screenshot ? "scan_runtime_artifacts.visual_evidence_artifacts" : null,
   ].filter((value): value is string => Boolean(value));
-  const shortExplanation = securityChallengeRequestObserved
-    ? `The retained initial-load evidence showed a bot/security challenge instead of the normal public site: "${retainedEvidenceText}"`
-    : `The retained initial-load evidence showed an access-block page instead of the normal public site: "${retainedEvidenceText}"`;
+  const shortExplanation = decision === "no_go"
+    ? `Corroborated initial-load evidence showed a terminal no-go page instead of the normal public site: "${retainedEvidenceText}"`
+    : `Potential no-go evidence was observed, but normal-site evidence required the scan to continue: "${retainedEvidenceText}"`;
   const visualAccessReview: VisualAccessReview = {
     artifact_ref: screenshot ? "scan_core:screenshot_pre_consent" : null,
     confidence,
-    go_no_go: "NO_GO",
+    go_no_go: decision === "no_go" ? "NO_GO" : "GO",
     key_visual_evidence: [retainedEvidenceText],
     page_state: visualPageState,
     reason_code: primaryReasonCode,
@@ -1310,25 +1416,30 @@ function buildScanNoGoAssessment(input: {
   const scanNoGoAssessment: ScanNoGoAssessment = {
     status: "available",
     version: "scan-no-go-assessment-v1",
-    decision: "no_go",
+    decision,
     scanNoGoConfidence: confidence,
     visualScreenshotNoGoConfidence: screenshot ? confidence : undefined,
     reasonCodes: [primaryReasonCode, "scan_no_go_corroborated"],
     corroboratorCodes: [
       securityChallengeRequestObserved ? "network_security_challenge_request_observed" : null,
       networkChallengeEvidence?.corroboratorCode ?? null,
-      matchedText ? "access_block_text_observed" : null,
+      pageState ? "terminal_page_text_or_status_observed" : null,
+      sparseSuccessfulPage ? "settled_page_nearly_empty" : null,
       screenshot ? "retained_visual_artifact_available" : null,
     ].filter((value): value is string => Boolean(value)),
-    contradictorCodes: [],
+    contradictorCodes: decision === "continue_with_diagnostics" ? positiveSiteSignals : [],
     supportingSignals: {
-      challengeSignalsDetected: true,
-      documentStatusBlocked: true,
-      expectedOriginReached: false,
+      challengeSignalsDetected: securityChallengeRequestObserved,
+      documentStatusBlocked: blockedMainDocument,
+      expectedOriginReached: mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400,
+      mainDocumentStatus,
+      substantiveDomTextObserved: longestText.length >= 180 && substantiveWordCount >= 24,
+      substantiveWordCount,
+      successfulFirstPartyResponses,
       retainedVisualArtifactAvailable: Boolean(screenshot),
       securityChallengeRequestObserved,
-      visualHardNoGoPageState: true,
-      visualNoGo: true,
+      visualHardNoGoPageState: decision === "no_go",
+      visualNoGo: decision === "no_go",
       visualPageState,
     },
     evidenceRefs,
@@ -1339,6 +1450,105 @@ function buildScanNoGoAssessment(input: {
     scanNoGoAssessment,
     visualAccessReview,
   };
+}
+
+type ClassifiedNoGoPageState = {
+  confidence: number;
+  evidenceText: string;
+  hardTerminal: boolean;
+  reasonCode: ScanNoGoReasonCode;
+  visualPageState: VisualAccessReview["page_state"];
+};
+
+function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return null;
+  }
+  const evidenceText = boundedScanNoGoText(normalized) ?? normalized;
+  if (SCAN_NO_GO_TLS_PATTERN.test(normalized)) {
+    return { confidence: 0.97, evidenceText, hardTerminal: true, reasonCode: "tls_or_certificate_error", visualPageState: "visual_error_shell" };
+  }
+  if (SCAN_NO_GO_CONFIGURATION_ERROR_PATTERN.test(normalized)) {
+    return { confidence: 0.96, evidenceText, hardTerminal: true, reasonCode: "configuration_error", visualPageState: "visual_error_shell" };
+  }
+  if (SCAN_NO_GO_UNSUPPORTED_REGION_PATTERN.test(normalized)) {
+    return { confidence: 0.97, evidenceText, hardTerminal: true, reasonCode: "unsupported_region", visualPageState: "access_blocked" };
+  }
+  if (SCAN_NO_GO_SITE_NOT_READY_PATTERN.test(normalized)) {
+    return { confidence: 0.97, evidenceText, hardTerminal: true, reasonCode: "site_not_ready", visualPageState: "parked_or_placeholder" };
+  }
+  if (SCAN_NO_GO_RATE_LIMIT_PATTERN.test(normalized)) {
+    return { confidence: 0.98, evidenceText, hardTerminal: true, reasonCode: "rate_limited_429", visualPageState: "access_blocked" };
+  }
+  if (SCAN_NO_GO_NOT_FOUND_PATTERN.test(normalized)) {
+    return { confidence: 0.97, evidenceText, hardTerminal: true, reasonCode: "not_found_404", visualPageState: "wrong_site_or_soft_404" };
+  }
+  if (SCAN_NO_GO_SERVER_ERROR_PATTERN.test(normalized)) {
+    return { confidence: 0.97, evidenceText, hardTerminal: true, reasonCode: "server_error_5xx", visualPageState: "maintenance_or_unavailable" };
+  }
+  if (SCAN_NO_GO_PLACEHOLDER_PATTERN.test(normalized)) {
+    return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "parked_or_placeholder", visualPageState: "parked_or_placeholder" };
+  }
+  if (SCAN_NO_GO_MAINTENANCE_PATTERN.test(normalized)) {
+    return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "maintenance_or_unavailable", visualPageState: "maintenance_or_unavailable" };
+  }
+  if (SCAN_NO_GO_TEXT_PATTERN.test(normalized)) {
+    const challenge = /not a bot|not robots?|person or (?:a )?robot|verif(?:y|ies|ying)[^.]{0,80}(?:you are|that you(?:'|’)re) human|press and hold[^.]{0,100}verif|security (?:check|verification)|checking your browser|dein browser wird geprüft|performing security verification|protected by kasada|x-kpsdk|resembles that of a bot/i.test(normalized);
+    return {
+      confidence: challenge ? 0.95 : 0.93,
+      evidenceText,
+      hardTerminal: true,
+      reasonCode: challenge ? "captcha_or_challenge" : "access_denied_or_forbidden_page",
+      visualPageState: challenge ? "captcha_or_challenge" : "access_blocked",
+    };
+  }
+  if (SCAN_NO_GO_LOADING_PATTERN.test(normalized)) {
+    return { confidence: 0.92, evidenceText, hardTerminal: false, reasonCode: "loading_or_stalled", visualPageState: "blank_or_unusable" };
+  }
+  return null;
+}
+
+export function classifyScanNoGoTextForCalibration(text: string) {
+  const classified = classifyScanNoGoText(boundedScanNoGoText(text) ?? "");
+  return classified
+    ? {
+        confidence: classified.confidence,
+        reasonCode: classified.reasonCode,
+        visualPageState: classified.visualPageState,
+      }
+    : null;
+}
+
+function classifyMainDocumentStatus(status: number | null): ClassifiedNoGoPageState | null {
+  if (status === null) return null;
+  if (status === 404 || status === 410) {
+    return { confidence: 0.99, evidenceText: `The main document returned HTTP ${status}.`, hardTerminal: true, reasonCode: "not_found_404", visualPageState: "wrong_site_or_soft_404" };
+  }
+  if (status === 429) {
+    return { confidence: 0.99, evidenceText: "The main document returned HTTP 429.", hardTerminal: true, reasonCode: "rate_limited_429", visualPageState: "access_blocked" };
+  }
+  if ([401, 403, 407, 451].includes(status)) {
+    return { confidence: 0.99, evidenceText: `The main document returned HTTP ${status}.`, hardTerminal: true, reasonCode: "access_denied_or_forbidden_page", visualPageState: "access_blocked" };
+  }
+  if ([500, 502, 503, 504].includes(status)) {
+    return { confidence: 0.99, evidenceText: `The main document returned HTTP ${status}.`, hardTerminal: true, reasonCode: "server_error_5xx", visualPageState: "maintenance_or_unavailable" };
+  }
+  return null;
+}
+
+function getMainDocumentStatus(
+  networkEvents: NetworkEvent[],
+  networkResponseEvents: NetworkResponseEvent[],
+): number | null {
+  const mainDocumentRequestIds = new Set(networkEvents
+    .filter((event) => event.resourceType === "document" && event.isMainFrame === true)
+    .map((event) => event.requestId));
+  const statuses = networkResponseEvents
+    .filter((event) => event.requestId && mainDocumentRequestIds.has(event.requestId))
+    .map((event) => event.status)
+    .filter((status): status is number => typeof status === "number");
+  return statuses.at(-1) ?? null;
 }
 
 function detectScanNoGoNetworkChallengeEvidence(input: {

@@ -254,6 +254,19 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
     "## Summary",
     "",
     completionSummary === "Not available" ? safeSummary(pulse.summary?.humanSummary ?? pulse.summary?.headline) : completionSummary,
+    ...(pulse.resultDisposition === "no_go" && pulse.noGo
+      ? [
+          "",
+          "## Scan limitation",
+          "",
+          `**${line(pulse.noGo.title)}**`,
+          "",
+          line(pulse.noGo.explanation),
+          "",
+          `Recommended next action: ${line(pulse.noGo.recommendedNextAction)}`,
+          `Retry likely to help: ${pulse.noGo.retryLikelyToHelp === true ? "Yes" : "No"}`
+        ]
+      : []),
     "",
     `Executive report: ${metricValue(executive.score ?? pulse.summary?.score)}/100; ${executiveIssueCount} issue${executiveIssueCount === 1 ? "" : "s"} to review; ${metricValue(executive.thirdPartyRequests)} third-party requests; ${metricValue(executive.cookiesPreConsent)} cookies pre-consent.`,
     `Signal snapshot: consent platform ${line(executive.consentPlatform)}; tracker footprint ${metricValue(executive.trackerFootprint?.vendors)} vendor${executive.trackerFootprint?.vendors === 1 ? "" : "s"}, ${metricValue(executive.trackerFootprint?.domains)} domain${executive.trackerFootprint?.domains === 1 ? "" : "s"}.`,

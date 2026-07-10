@@ -74,7 +74,9 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
       statusUrl: result.statusUrl ?? result.nextCheckUrl ?? null,
       resultUrl: result.resultUrl ?? null,
       reportUrl: result.reportUrl ?? null,
-      pulse: result.pulse ?? null
+      pulse: result.pulse ?? null,
+      resultDisposition: result.resultDisposition ?? result.pulse?.resultDisposition ?? null,
+      noGo: result.noGo ?? result.pulse?.noGo ?? null
     };
   }
 

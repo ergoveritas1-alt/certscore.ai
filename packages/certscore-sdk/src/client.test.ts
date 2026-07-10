@@ -123,6 +123,35 @@ test("pulse.evidence retrieves the bounded Evidence JSON artifact", async () => 
   }
 });
 
+test("SDK preserves typed completed-limited no-go scan resources", async () => {
+  const mock = installFetch([{ status: 200, body: {
+    type: "certscore_scan",
+    scanId: "scan_no_go",
+    domain: "cerebras.com",
+    status: "completed_limited",
+    resultDisposition: "no_go",
+    noGo: {
+      reasonCode: "site_not_ready",
+      title: "The site is not ready for scanning",
+      explanation: "The retained page was a prelaunch experience.",
+      summary: "A prelaunch page was observed.",
+      limitationKind: "target_site_state",
+      recommendedNextAction: "Retry after launch.",
+      retryLikelyToHelp: false
+    }
+  }}]);
+  try {
+    const client = new CertScoreClient({ baseUrl: "https://certscore.test" });
+    const result = await client.scans.get("scan_no_go");
+    assert.equal(result.status, "completed_limited");
+    assert.equal(result.resultDisposition, "no_go");
+    assert.equal(result.noGo?.reasonCode, "site_not_ready");
+    assert.equal(result.noGo?.recommendedNextAction, "Retry after launch.");
+  } finally {
+    mock.restore();
+  }
+});
+
 test("scan returns immediate 200 markdown", async () => {
   const mock = installFetch([{ status: 200, text: "# CertScore Pulse" }]);
   try {

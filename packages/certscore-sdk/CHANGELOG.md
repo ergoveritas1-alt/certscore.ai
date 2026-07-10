@@ -1,5 +1,9 @@
 # @certscore/sdk
 
+## Unreleased
+
+- Expose typed `resultDisposition` and `noGo` details for completed-limited no-go scans across scan, job, and Pulse resources.
+
 ## 0.2.3
 
 - Expose API v2 scan timing fields in packaged SDK declarations: `startedAt`, `completedAt`, and `scanTimeSeconds`.

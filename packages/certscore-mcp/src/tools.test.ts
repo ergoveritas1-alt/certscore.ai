@@ -46,6 +46,35 @@ test("exportFindings returns structured finding payloads", () => {
   assert.equal(exported.findings[0]?.evidenceSummary, "A third-party tracking request was observed before consent.");
 });
 
+test("MCP export and explanation preserve structured no-go messaging", () => {
+  const noGoReport = {
+    ...report,
+    scanStatus: "completed_limited",
+    resultDisposition: "no_go",
+    noGo: {
+      reasonCode: "site_not_ready",
+      title: "The site is not ready for scanning",
+      explanation: "The retained page was a prelaunch experience.",
+      summary: "A prelaunch page was observed.",
+      limitationKind: "target_site_state",
+      recommendedNextAction: "Retry after launch.",
+      retryLikelyToHelp: false
+    },
+    topFindings: [{
+      id: "scan_quality_visual_no_go",
+      label: "The site is not ready for scanning",
+      plainEnglish: "The retained page was a prelaunch experience.",
+      nextStep: "Retry after launch."
+    }]
+  } satisfies PulseResult;
+  const exported = exportFindings(noGoReport);
+  const explained = explainFinding(noGoReport, "scan_quality_visual_no_go");
+  assert.equal(exported.resultDisposition, "no_go");
+  assert.equal(exported.noGo?.reasonCode, "site_not_ready");
+  assert.equal(exported.noGo?.recommendedNextAction, "Retry after launch.");
+  assert.equal(explained.noGo?.title, "The site is not ready for scanning");
+});
+
 test("explainFinding includes evidence and caveats", () => {
   const explanation = explainFinding(report, "pre_consent_tracking_detected");
   assert.equal(explanation.found, true);

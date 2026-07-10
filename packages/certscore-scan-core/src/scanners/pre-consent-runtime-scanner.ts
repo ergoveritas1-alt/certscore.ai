@@ -993,6 +993,50 @@ export async function preConsentRuntimeScanner(
       );
     }
 
+    const initialNoGoCandidateText = domText.replace(/\s+/g, " ").trim();
+    if (
+      initialNoGoCandidateText.length <= 60 ||
+      /^(?:loading(?:\.{0,3})?|please wait|establishing (?:a )?secure connection(?:\.{0,3})?|initializing(?:\.{0,3})?)$/i.test(initialNoGoCandidateText)
+    ) {
+      const confirmationWaitMs = fastWait ? 750 : 1_250;
+      await recordTiming(
+        timingBreakdown,
+        "no-go candidate confirmation wait",
+        "Short, read-only second-look window for initially blank or loading pages.",
+        () => page.waitForTimeout(confirmationWaitMs).catch(() => undefined),
+      );
+      const confirmedDomText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
+      if (confirmedDomText.trim().length > domText.trim().length) {
+        domText = confirmedDomText;
+      }
+      const confirmedNoGoCandidateText = domText.replace(/\s+/g, " ").trim();
+      if (
+        (input.screenshotMode ?? "always") !== "never" &&
+        (confirmedNoGoCandidateText.length <= 60 || /^(?:loading|please wait|establishing|initializing)/i.test(confirmedNoGoCandidateText))
+      ) {
+        const confirmationPath = input.artifactWriter.artifactPath("screenshot-pre-consent-no-go-confirmation.png");
+        const confirmationCapture = await recordTiming(
+          timingBreakdown,
+          "no-go candidate confirmation screenshot",
+          "Confirmation screenshot retained after the bounded second-look window.",
+          () => capturePreConsentScreenshot(page, confirmationPath, {
+            captureMode: "viewport_first",
+            screenshotErrors,
+            timeoutMs: Math.min(input.screenshotTimeoutMs ?? 5_000, 3_000),
+          }),
+        );
+        screenshots.push({
+          artifactId: "screenshot_pre_consent_no_go_confirmation",
+          capturedAtMs: elapsed(input.scanStartedAtMs),
+          captureMethod: confirmationCapture.captureMethod,
+          path: confirmationPath,
+          url: page.url(),
+          pagePhase: "network_idle",
+          consentStateAtTime: "pre_consent",
+        });
+      }
+    }
+
     const domPath = await recordTiming(
       timingBreakdown,
       "DOM artifact write",

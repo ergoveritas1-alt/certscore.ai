@@ -1907,6 +1907,90 @@ test("scan-core emits scan no-go assessment for Cloudflare-style security challe
   }
 });
 
+test("scan-core does not stop a substantive site for background security challenge traffic", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-background-security-challenge-"));
+  try {
+    const bundle = await runScan({
+      url: server.urlFor("security-background-challenge-normal-site"),
+      profile: "tiny",
+      outDir: path.join(tempRoot, "out"),
+      preConsentScreenshotMode: "always",
+    });
+
+    assert.equal(bundle.scan_no_go_assessment?.decision, "continue_with_diagnostics");
+    assert.equal(bundle.visual_access_review?.go_no_go, "GO");
+    assert.equal(bundle.visual_access_review?.page_state, "degraded_but_useful");
+    assert.ok(bundle.scan_no_go_assessment?.corroboratorCodes.includes("network_cloudflare_challenge"));
+    assert.ok(bundle.scan_no_go_assessment?.contradictorCodes.includes("substantive_dom_text_observed"));
+    assert.notEqual(bundle.runtimeCoverage?.coverageStatus, "limited_none");
+    assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("scan_no_go_diagnostics"));
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("scan-core classifies deterministic non-security no-go pages", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-deterministic-no-go-"));
+  const cases = [
+    ["no-go-not-found", "not_found_404", "wrong_site_or_soft_404"],
+    ["no-go-minimal-not-found", "not_found_404", "wrong_site_or_soft_404"],
+    ["no-go-placeholder", "parked_or_placeholder", "parked_or_placeholder"],
+    ["no-go-technical-placeholder", "parked_or_placeholder", "parked_or_placeholder"],
+    ["no-go-configuration-error", "configuration_error", "visual_error_shell"],
+    ["no-go-unsupported-region", "unsupported_region", "access_blocked"],
+    ["no-go-real-world-access-shells", "captcha_or_challenge", "captcha_or_challenge"],
+    ["no-go-site-not-ready", "site_not_ready", "parked_or_placeholder"],
+    ["no-go-loading-stalled", "loading_or_stalled", "blank_or_unusable"],
+    ["no-go-blank-page", "blank_or_unusable_page", "blank_or_unusable"],
+  ] as const;
+  try {
+    for (const [page, reasonCode, pageState] of cases) {
+      const bundle = await runScan({
+        url: server.urlFor(page),
+        profile: "tiny",
+        outDir: path.join(tempRoot, page),
+        preConsentScreenshotMode: "always",
+      });
+      assert.equal(bundle.scan_no_go_assessment?.decision, "no_go", page);
+      assert.ok(bundle.scan_no_go_assessment?.reasonCodes.includes(reasonCode), page);
+      assert.equal(bundle.visual_access_review?.page_state, pageState, page);
+      assert.equal(bundle.runtimeCoverage?.coverageStatus, "limited_none", page);
+      if (page === "no-go-loading-stalled" || page === "no-go-blank-page") {
+        assert.ok(
+          bundle.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_no_go_confirmation"),
+          page,
+        );
+      }
+    }
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("scan-core treats a substantive branded login page as scannable", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-branded-login-"));
+  try {
+    const bundle = await runScan({
+      url: server.urlFor("branded-login-page"),
+      profile: "tiny",
+      outDir: path.join(tempRoot, "out"),
+      preConsentScreenshotMode: "always",
+    });
+
+    assert.equal(bundle.scan_no_go_assessment, undefined);
+    assert.equal(bundle.visual_access_review, undefined);
+    assert.notEqual(bundle.runtimeCoverage?.coverageStatus, "limited_none");
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("scan-core emits scan no-go assessment for DataDome response challenges", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-datadome-challenge-"));

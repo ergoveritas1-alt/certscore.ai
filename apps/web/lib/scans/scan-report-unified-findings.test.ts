@@ -11,6 +11,7 @@ import { buildReviewFindings, buildSectionReviewIssues } from "./scan-report-rev
 import { buildSupplementalRuntimeUnifiedFindingPackets } from "./supplemental-runtime-unified-findings";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import { deriveConcernPolicy } from "./concern-policy";
+import { buildNormalizedConcerns } from "./normalized-concerns";
 import {
   dedupeHeadlineFindings,
   deriveConsentAuditFindings
@@ -1380,6 +1381,41 @@ test("WS01 scan-level no-go assessment enters canonical concern pipeline", () =>
   assert.equal(packet?.sourceRefs.some((source) => source.kind === "signal" && source.key === "scan_quality.visual_maintenance_or_unavailable"), true);
   assert.equal(packet?.concernContext?.originTypes.includes("runtime_artifact"), true);
   assert.equal(packet?.concernContext?.evidenceStrengthFlags.includes("direct_runtime"), true);
+  assert.match(packet?.title ?? "", /maintenance/i);
+  assert.match(packet?.summary ?? "", /maintenance or unavailable page/i);
+  assert.doesNotMatch(`${packet?.title ?? ""} ${packet?.summary ?? ""}`, /maintenance_recharging_page/);
+});
+
+test("normalized no-go concern retains the exact site-not-ready reason and customer presentation", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      scan_no_go_assessment: {
+        decision: "no_go",
+        scanNoGoConfidence: 0.98,
+        reasonCodes: ["site_not_ready", "scan_no_go_corroborated"],
+        corroboratorCodes: ["origin_not_reached"],
+        contradictorCodes: [],
+        status: "available",
+        supportingSignals: { visualPageState: "site_not_ready" }
+      },
+      visual_access_review: {
+        go_no_go: "NO_GO",
+        page_state: "site_not_ready",
+        reason_code: "site_not_ready",
+        short_explanation: "Your browser can’t render the visitor. Check back at launch.",
+        status: "available"
+      }
+    },
+    validationFindings: []
+  });
+  const concern = concerns.find((item) => item.suggestedUnifiedFindingId === "scan_quality_visual_no_go");
+
+  assert.equal(concern?.title, "The site is not ready for scanning");
+  assert.match(concern?.description ?? "", /prelaunch/i);
+  assert.equal(concern?.evidenceBundle.rawEvidence?.scanNoGoPrimaryReasonCode, "site_not_ready");
+  assert.equal(concern?.evidenceBundle.rawEvidence?.scanNoGoCustomerTitle, "The site is not ready for scanning");
+  assert.match(String(concern?.evidenceBundle.rawEvidence?.scanNoGoRecommendedNextAction ?? ""), /public website launches/i);
 });
 
 test("scan-level diagnostic assessment remains non-projected despite visual no-go", () => {

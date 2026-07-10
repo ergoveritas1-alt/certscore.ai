@@ -136,10 +136,22 @@ export type StaticFixturePage =
   | "policy-webmd-like-secondary-surfaces"
   | "region-coded-collection-endpoint"
   | "security-access-temporarily-restricted"
+  | "security-background-challenge-normal-site"
   | "security-cloudflare-challenge"
   | "security-datadome-challenge"
   | "security-kasada-challenge"
   | "security-polish-temporary-interstitial"
+  | "no-go-blank-page"
+  | "no-go-configuration-error"
+  | "no-go-loading-stalled"
+  | "no-go-minimal-not-found"
+  | "no-go-not-found"
+  | "no-go-placeholder"
+  | "no-go-real-world-access-shells"
+  | "no-go-site-not-ready"
+  | "no-go-technical-placeholder"
+  | "no-go-unsupported-region"
+  | "branded-login-page"
   | "site-owned-infrastructure"
   | "third-party-cookie-positive"
   | "unresolved-collection-endpoint";
@@ -286,10 +298,22 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-webmd-like-secondary-surfaces": "policy-webmd-like-secondary",
   "region-coded-collection-endpoint": "region-coded-collection",
   "security-access-temporarily-restricted": "security-access-temporarily-restricted",
+  "security-background-challenge-normal-site": "security-background-challenge-normal-site",
   "security-cloudflare-challenge": "security-cloudflare-challenge",
   "security-datadome-challenge": "security-datadome-challenge",
   "security-kasada-challenge": "security-kasada-challenge",
   "security-polish-temporary-interstitial": "security-polish-temporary-interstitial",
+  "no-go-blank-page": "no-go-blank-page",
+  "no-go-configuration-error": "no-go-configuration-error",
+  "no-go-loading-stalled": "no-go-loading-stalled",
+  "no-go-minimal-not-found": "no-go-minimal-not-found",
+  "no-go-not-found": "no-go-not-found",
+  "no-go-placeholder": "no-go-placeholder",
+  "no-go-real-world-access-shells": "no-go-real-world-access-shells",
+  "no-go-site-not-ready": "no-go-site-not-ready",
+  "no-go-technical-placeholder": "no-go-technical-placeholder",
+  "no-go-unsupported-region": "no-go-unsupported-region",
+  "branded-login-page": "branded-login-page",
   "site-owned-infrastructure": "site-infra",
   "third-party-cookie-positive": "third-party-cookie",
   "unresolved-collection-endpoint": "unresolved-page",
@@ -773,6 +797,11 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
 }
 
 function serveCase(caseName: StaticFixturePage, response: ServerResponse): void {
+  if (caseName === "no-go-not-found") {
+    response.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(pageHtml(caseName));
+    return;
+  }
   if (caseName === "security-datadome-challenge") {
     response.setHeader("Set-Cookie", "datadome=fixture-redacted; Path=/; Max-Age=31536000; SameSite=Lax");
     response.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
@@ -824,6 +853,15 @@ function cookieForCase(caseName: StaticFixturePage): string | undefined {
 }
 
 function pageHtml(caseName: StaticFixturePage): string {
+  if (caseName === "no-go-blank-page") {
+    return "<!doctype html><html><head><title></title></head><body></body></html>";
+  }
+  if (caseName === "no-go-loading-stalled") {
+    return "<!doctype html><html><head><title>Loading</title></head><body>Loading...</body></html>";
+  }
+  if (caseName === "no-go-minimal-not-found") {
+    return "<!doctype html><html><head><title>Not Found</title></head><body>Not Found</body></html>";
+  }
   return `<!doctype html>
 <html>
   <head>
@@ -943,6 +981,74 @@ function bodyMarkup(caseName: StaticFixturePage): string {
         <p>Lufthansa thanks you for your understanding.</p>
       </section>
       <script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>
+    `;
+  }
+  if (caseName === "security-background-challenge-normal-site") {
+    return `
+      <nav><a href="/products">Products</a><a href="/pricing">Pricing</a><a href="/privacy">Privacy</a></nav>
+      <section>
+        <h1>Acme analytics for modern teams</h1>
+        <p>Measure product adoption, understand customer journeys, and improve your application with reliable reporting.</p>
+        <p>Trusted by thousands of product, engineering, and marketing teams around the world.</p>
+        <a href="/signup">Start free trial</a>
+      </section>
+      <script src="/cdn-cgi/challenge-platform/scripts/jsd/background.js"></script>
+    `;
+  }
+  if (caseName === "no-go-not-found") {
+    return `<section><h1>404 Not Found</h1><p>The requested page could not be found.</p></section>`;
+  }
+  if (caseName === "no-go-placeholder") {
+    return `<section><h1>Example Domain</h1><p>This domain is for use in illustrative examples.</p></section>`;
+  }
+  if (caseName === "no-go-minimal-not-found") {
+    return `<main>Not Found</main>`;
+  }
+  if (caseName === "no-go-configuration-error") {
+    return `<pre>{"detail":"Wrong domain parts: fixture.example"}</pre>`;
+  }
+  if (caseName === "no-go-unsupported-region") {
+    return `
+      <main>
+        <h1>Regional access notice</h1>
+        <p>Our systems have determined that you are visiting from the EU.</p>
+        <p>We have configured our systems to automatically ignore traffic from EU-based internet users.</p>
+      </main>
+    `;
+  }
+  if (caseName === "no-go-technical-placeholder") {
+    return `
+      <main>
+        <h1>Technical endpoint</h1>
+        <p>This domain is an active and legitimate web address operated for technical purposes, including traffic routing and ad-tracking operations.</p>
+      </main>
+    `;
+  }
+  if (caseName === "no-go-real-world-access-shells") {
+    return `
+      <section>
+        <h1>Please verify you are human.</h1>
+        <p>Are you a person or a robot? Press and hold below to verify yourself.</p>
+      </section>
+    `;
+  }
+  if (caseName === "no-go-site-not-ready") {
+    return `
+      <main>
+        <p>PRELAUNCH · LATTICE ONLINE · V0.0.3</p>
+        <p>Your browser can’t render the visitor. It’s probably for the best. Check back at launch.</p>
+      </main>
+    `;
+  }
+  if (caseName === "branded-login-page") {
+    return `
+      <nav><strong>Acme Cloud</strong><a href="/support">Support</a><a href="/status">System status</a></nav>
+      <main>
+        <h1>Welcome to Acme Cloud</h1>
+        <p>Sign in to manage your projects, deployments, team members, and account settings.</p>
+        <form><label>Email <input type="email"></label><label>Password <input type="password"></label><button>Sign in</button></form>
+        <a href="/signup">Create an account</a><a href="/forgot">Forgot password?</a>
+      </main>
     `;
   }
   if (caseName === "security-datadome-challenge") {

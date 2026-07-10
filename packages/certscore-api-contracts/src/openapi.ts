@@ -236,6 +236,8 @@ export function buildPulseV1OpenApiDocument() {
             scanId: { type: "string" },
             scan_id: { type: "string" },
             scanStatus: { type: "string" },
+            resultDisposition: { type: "string", enum: ["no_go"] },
+            noGo: { type: "object", additionalProperties: true, description: "Reason-specific public no-go presentation; includes reasonCode, title, explanation, summary, limitationKind, recommendedNextAction, and retryLikelyToHelp." },
             summary: {
               type: "object",
               additionalProperties: true,
@@ -287,6 +289,8 @@ export function buildPulseV1OpenApiDocument() {
             scan_id: { type: ["string", "null"] },
             domain: { type: ["string", "null"] },
             status: { type: "string" },
+            resultDisposition: { type: "string", enum: ["no_go"] },
+            noGo: { type: "object", additionalProperties: true, description: "Reason-specific public no-go presentation; includes reasonCode, title, explanation, summary, limitationKind, recommendedNextAction, and retryLikelyToHelp." },
             phase: { type: "string" },
             message: { type: "string" },
             resultUrl: { type: ["string", "null"] },

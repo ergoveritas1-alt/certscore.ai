@@ -12,6 +12,7 @@ import {
   type CanonicalEvidenceBundle
 } from "@certscore/contracts";
 import { resolveVendorDisplayCategory, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
+import { resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
 import {
   adaptGdprTransparencyTopicCandidatesForProduction,
   type GdprTransparencyTopicEvidenceAdapterResult
@@ -2550,6 +2551,22 @@ function buildLocalV2ScanNoGoAssessment(input: {
   };
 }
 
+export function buildLocalV2NoGoSnapshotFields(reasonCode: string, pageState: string) {
+  const presentation = resolveScanNoGoPresentation(reasonCode, pageState);
+  return {
+    access_posture_class: "early_loss",
+    block_page_classification: presentation.snapshotBlockPageClassification,
+    blocked_flag: true,
+    challenge_suspected: presentation.limitationKind === "scanner_access_limitation",
+    coverage_level: "limited_none",
+    homepage_fetch_status: presentation.snapshotHomepageFetchStatus,
+    scan_outcome: presentation.snapshotScanOutcome,
+    stop_reason_code: presentation.snapshotStopReasonCode,
+    stop_reason_detail: presentation.snapshotStopReasonDetail,
+    stop_reason_label: presentation.snapshotStopReasonLabel,
+  } as const;
+}
+
 function buildMaterializedLocalV2Detail(
   scanRecord: ScanDetailResponse,
   bundle: CanonicalEvidenceBundle,
@@ -3015,48 +3032,7 @@ function buildMaterializedLocalV2Detail(
     domain: requestedHost,
     final_effective_url: canonicalDocumentUrl,
     final_url: canonicalDocumentUrl,
-    ...(localV2NoGo ? {
-      access_posture_class: "early_loss",
-      block_page_classification: localV2NoGo.pageState === "access_blocked"
-        ? "access_denied"
-        : localV2NoGo.pageState === "captcha_or_challenge" || localV2NoGo.pageState === "challenge_or_robot_page"
-          ? "security_challenge"
-        : localV2NoGo.pageState === "visual_error_shell"
-          ? "visual_error_shell"
-          : "capture_failed",
-      blocked_flag: true,
-      challenge_suspected: true,
-      coverage_level: "limited_none",
-      homepage_fetch_status: "blocked",
-      scan_outcome: localV2NoGo.pageState === "access_blocked"
-        ? "reachability_blocked_homepage_403"
-        : localV2NoGo.pageState === "captcha_or_challenge" || localV2NoGo.pageState === "challenge_or_robot_page"
-          ? "homepage_security_challenge"
-        : localV2NoGo.pageState === "visual_error_shell"
-          ? "homepage_visual_error_shell"
-          : "homepage_visual_capture_failed",
-      stop_reason_code: localV2NoGo.pageState === "access_blocked"
-        ? "reachability_blocked_homepage_403"
-        : localV2NoGo.pageState === "captcha_or_challenge" || localV2NoGo.pageState === "challenge_or_robot_page"
-          ? "homepage_security_challenge"
-        : localV2NoGo.pageState === "visual_error_shell"
-          ? "homepage_visual_error_shell"
-          : "homepage_visual_capture_failed",
-      stop_reason_detail: localV2NoGo.pageState === "access_blocked"
-        ? "The retained initial-load evidence showed an access-denied or forbidden page instead of the normal public site."
-        : localV2NoGo.pageState === "captcha_or_challenge" || localV2NoGo.pageState === "challenge_or_robot_page"
-          ? "The retained initial-load evidence showed a bot/security challenge instead of the normal public site."
-        : localV2NoGo.pageState === "visual_error_shell"
-          ? "The retained initial-load screenshot appeared to be a visual error shell instead of the normal public site."
-          : "The scanner could not retain a usable homepage visual/runtime capture.",
-      stop_reason_label: localV2NoGo.pageState === "access_blocked"
-        ? "Homepage access blocked"
-        : localV2NoGo.pageState === "captcha_or_challenge" || localV2NoGo.pageState === "challenge_or_robot_page"
-          ? "Homepage security challenge"
-        : localV2NoGo.pageState === "visual_error_shell"
-          ? "Homepage visual error shell"
-          : "Homepage capture failed"
-    } : {
+    ...(localV2NoGo ? buildLocalV2NoGoSnapshotFields(localV2NoGo.primaryReasonCode, localV2NoGo.pageState) : {
       homepage_fetch_status: "success"
     }),
     legal_coverage_score: localV2NoGo ? null : score,

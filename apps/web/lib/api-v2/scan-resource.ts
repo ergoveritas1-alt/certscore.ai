@@ -19,10 +19,12 @@ import {
   type ApiV2ScanJob,
   type ApiV2ScanDiagnostics,
   type ApiV2ScanPulse,
-  type ApiV2ScanResource
+  type ApiV2ScanResource,
+  type ScanNoGoResult
 } from "@certscore/api-contracts";
 import type { PulseResponse } from "@certscore/api-contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { derivePulseReportScore } from "../pulse/projection";
 import {
   buildRuntimeInventoryProjectionFromScan,
@@ -82,6 +84,8 @@ type PulseStatusLike = {
   retryAfterSeconds?: number | null;
   resultUrl?: string | null;
   reportUrl?: string | null;
+  resultDisposition?: "no_go";
+  noGo?: ScanNoGoResult;
   statusUrl?: string | null;
 };
 type PulseErrorLike = {
@@ -362,6 +366,14 @@ export function projectedFindingsFromPulse(pulse: PulseResponse): PulseFindingLi
 }
 
 function deriveCoverage(scanRecord: ScanDetailResponse) {
+  const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
+  if (noGoProjection) {
+    return {
+      status: noGoProjection.noGo.limitationKind,
+      summary: noGoProjection.noGo.summary,
+      limitations: [noGoProjection.noGo.explanation]
+    };
+  }
   const posture = scanRecord.accessPostureSummary;
   const homepageObserved = scanRecord.scan.pagesScanned > 0 || posture.homepageFetchStatus === "ok";
   const limited =
@@ -389,19 +401,21 @@ export function buildApiV2ScanResource(scanRecord: ScanDetailResponse): ApiV2Sca
   const domain = scan.domainHostname ?? "unknown";
   const score = derivePulseReportScore({ scanRecord });
   const scanTimeSeconds = scanTimeSecondsFromTimestamps(scan.startedAt, scan.completedAt);
+  const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
   const resource = {
     type: "certscore_scan",
     scanId: scan.id,
     domain,
     url: domain === "unknown" ? null : `https://${domain}`,
-    status: "completed",
+    status: noGoProjection ? "completed_limited" : "completed",
+    ...(noGoProjection ?? {}),
     scanFrom: publicScanFrom(scan.scanFromValue),
     createdAt: dateStringOrNull(scan.createdAt),
     startedAt: dateStringOrNull(scan.startedAt),
     completedAt: dateStringOrNull(scan.completedAt),
     scanTimeSeconds,
-    score,
-    riskLevel: riskLevelFromScore(score),
+    score: noGoProjection ? null : score,
+    riskLevel: noGoProjection ? null : riskLevelFromScore(score),
     coverage: deriveCoverage(scanRecord),
     links: {
       self: absoluteUrl(`/api/v2/scans/${scan.id}`),
@@ -503,7 +517,8 @@ export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2
 
 export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJob {
   const scan = scanRecord.scan;
-  const status = normalizeScanStatus(scan.status);
+  const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
+  const status = noGoProjection && scan.status === "completed" ? "completed_limited" : normalizeScanStatus(scan.status);
   const retryAfterSeconds = status === "completed" || status === "completed_limited" || status === "failed" || status === "expired"
     ? null
     : apiV2ActiveScanRetryAfterSeconds({
@@ -517,6 +532,7 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse): ApiV2ScanJ
     scanId: scan.id,
     domain: scan.domainHostname ?? null,
     status,
+    ...(noGoProjection ?? {}),
     phase: status === "completed" || status === "completed_limited" ? "completed" : status === "failed" ? "failed" : "runtime_observation",
     createdAt: dateStringOrNull(scan.createdAt) ?? undefined,
     startedAt: dateStringOrNull(scan.startedAt),
@@ -552,6 +568,8 @@ export function buildApiV2ScanJobFromPulseStatus(status: PulseStatusLike): ApiV2
     scanId,
     domain: status.domain ?? null,
     status: normalizedStatus,
+    ...(status.resultDisposition ? { resultDisposition: status.resultDisposition } : {}),
+    ...(status.noGo ? { noGo: status.noGo } : {}),
     phase: status.phase ?? (normalizedStatus === "completed" || normalizedStatus === "completed_limited" ? "completed" : "queued"),
     createdAt: dateStringOrNull(status.createdAt) ?? undefined,
     startedAt: dateStringOrNull(status.startedAt),
@@ -673,6 +691,8 @@ export function buildApiV2Error(input: {
 export function buildApiV2FindingSummary(input: {
   finding: PulseFindingLike;
   scanId: string;
+  resultDisposition?: "no_go";
+  noGo?: ScanNoGoResult;
 }): ApiV2FindingSummary {
   const finding = input.finding;
   const resource = {
@@ -683,6 +703,8 @@ export function buildApiV2FindingSummary(input: {
     criticality: normalizeCriticality(finding.criticality),
     confidence: normalizeConfidence(finding.confidence),
     plainEnglish: finding.plainEnglish ?? finding.evidence?.summary ?? finding.label ?? finding.id,
+    ...(input.resultDisposition ? { resultDisposition: input.resultDisposition } : {}),
+    ...(input.noGo ? { noGo: input.noGo } : {}),
     reviewLenses: Array.isArray(finding.reviewLenses) ? finding.reviewLenses.filter((lens) => typeof lens === "string" && lens.trim().length > 0) : [],
     evidence: buildApiV2EvidenceSummary(finding),
     nextStep: finding.nextStep ?? null,
@@ -701,11 +723,18 @@ export function buildApiV2FindingSummary(input: {
 export function buildApiV2FindingList(input: {
   findings: PulseFindingLike[];
   scanId: string;
+  resultDisposition?: "no_go";
+  noGo?: ScanNoGoResult;
 }): ApiV2FindingList {
   const resource = {
     type: "certscore_finding_list",
     scanId: input.scanId,
-    findings: input.findings.map((finding) => buildApiV2FindingSummary({ finding, scanId: input.scanId })),
+    findings: input.findings.map((finding) => buildApiV2FindingSummary({
+      finding,
+      scanId: input.scanId,
+      resultDisposition: input.resultDisposition,
+      noGo: input.noGo
+    })),
     links: {
       self: absoluteUrl(`/api/v2/scans/${input.scanId}/findings`),
       pulse: absoluteUrl(`/api/v2/scans/${input.scanId}/pulse`),
@@ -722,6 +751,8 @@ export function buildApiV2FindingDetail(input: {
   finding: PulseFindingLike;
   scanId: string;
   caveats?: string[];
+  resultDisposition?: "no_go";
+  noGo?: ScanNoGoResult;
 }): ApiV2FindingDetail {
   const detail = {
     ...buildApiV2FindingSummary(input),
@@ -740,6 +771,8 @@ export function buildApiV2ScanPulse(input: {
   const resource = {
     type: "certscore_scan_pulse",
     scanId: input.scanId,
+    ...(input.pulse.resultDisposition ? { resultDisposition: input.pulse.resultDisposition } : {}),
+    ...(input.pulse.noGo ? { noGo: input.pulse.noGo } : {}),
     pulse: input.pulse,
     links: {
       self: absoluteUrl(`/api/v2/scans/${input.scanId}/pulse`),

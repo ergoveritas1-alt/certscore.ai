@@ -63,7 +63,9 @@ export async function GET(request: Request, context: RouteContext) {
     return apiV2JsonResponse({
       body: buildApiV2FindingList({
         findings: projectedFindingsFromPulse(pulse),
-        scanId: scanRecord.scan.id
+        scanId: scanRecord.scan.id,
+        resultDisposition: pulse.resultDisposition,
+        noGo: pulse.noGo
       }),
       requestId: id,
       route: "api-v2-scan-findings",

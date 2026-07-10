@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { pulseResponseSchema } from "./pulse-v1.js";
+import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
 export const CERTSCORE_API_V2_VERSION = "v2";
 export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.3";
@@ -62,6 +63,8 @@ export const apiV2ScanJobSchema = z
     scanId: z.string().nullable().optional(),
     domain: z.string().nullable().optional(),
     status: apiV2ScanStatusSchema,
+    resultDisposition: scanResultDispositionSchema.optional(),
+    noGo: scanNoGoResultSchema.optional(),
     phase: z.string().optional(),
     createdAt: z.string().optional(),
     startedAt: z.string().nullable().optional(),
@@ -81,6 +84,8 @@ export const apiV2ScanResourceSchema = z
     domain: z.string(),
     url: z.string().nullable().optional(),
     status: apiV2ScanStatusSchema,
+    resultDisposition: scanResultDispositionSchema.optional(),
+    noGo: scanNoGoResultSchema.optional(),
     scanFrom: apiV2ScanFromSchema.optional(),
     createdAt: z.string().nullable().optional(),
     startedAt: z.string().nullable().optional(),
@@ -157,6 +162,8 @@ export const apiV2FindingSummarySchema = z
     criticality: apiV2FindingCriticalitySchema,
     confidence: apiV2FindingConfidenceSchema,
     plainEnglish: z.string(),
+    resultDisposition: scanResultDispositionSchema.optional(),
+    noGo: scanNoGoResultSchema.optional(),
     reviewLenses: z.array(z.string()).default([]),
     evidence: apiV2EvidenceSummarySchema,
     nextStep: z.string().nullable().optional(),
@@ -199,6 +206,8 @@ export const apiV2ScanPulseSchema = z
   .object({
     type: z.literal("certscore_scan_pulse"),
     scanId: z.string(),
+    resultDisposition: scanResultDispositionSchema.optional(),
+    noGo: scanNoGoResultSchema.optional(),
     pulse: pulseResponseSchema,
     links: apiV2LinksSchema.optional(),
     disclaimer: z.string().optional()

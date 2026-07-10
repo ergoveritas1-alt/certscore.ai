@@ -1,5 +1,9 @@
 # certscore-mcp
 
+## Unreleased
+
+- Preserve structured no-go disposition, reason-specific messaging, and retry guidance in scan, status, report, export, and explanation tools.
+
 ## 0.2.5
 
 - Rebuilt the MCP server against `@certscore/sdk@0.2.3`.

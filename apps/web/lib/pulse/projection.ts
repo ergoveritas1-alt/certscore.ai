@@ -28,7 +28,7 @@ import {
 } from "../scans/runtime-inventory-projection";
 import { deriveRegulatoryCoverageScore } from "../scans/regulatory-coverage-score";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
-import { getKnownCmpVendorName } from "@website-signal-risk-scanner/shared";
+import { getKnownCmpVendorName, projectExternalScanNoGo, type ExternalScanNoGoResult } from "@website-signal-risk-scanner/shared";
 import {
   buildScanReportUnifiedFindings,
   deriveExecutiveDisplayedScore
@@ -61,6 +61,20 @@ type PulseProjectionInput = {
   scanRecord: ScanDetailResponse;
   waitSeconds: number;
 };
+
+export function buildPulseNoGoState(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const projection = projectExternalScanNoGo(runtimeArtifacts);
+  return projection ? {
+    ...projection,
+    scanStatus: "completed_limited" as const,
+    coverageStatus: projection.noGo.limitationKind,
+    resultQuality: {
+      level: "usable_with_limitations" as const,
+      reason: "scan_no_go" as const,
+      summary: projection.noGo.summary
+    }
+  } : null;
+}
 
 function generatedAt() {
   return new Date().toISOString();
@@ -392,6 +406,17 @@ function deriveFreshness(completedAt: string | null, generated: string) {
 }
 
 function deriveCoverage(scanRecord: ScanDetailResponse) {
+  const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
+  if (noGoProjection) {
+    return {
+      status: noGoProjection.noGo.limitationKind,
+      homepageObserved: false,
+      interruptionCount: 1,
+      summary: noGoProjection.noGo.summary,
+      limitations: [noGoProjection.noGo.explanation],
+      interruptions: [{ label: noGoProjection.noGo.title, reason: noGoProjection.noGo.explanation }]
+    };
+  }
   const posture = scanRecord.accessPostureSummary;
   const interruptions =
     posture.interruptionLabel || posture.interruptionReason || posture.stopOutcomeTitle || posture.stopReviewTitle || posture.stopReason
@@ -951,7 +976,7 @@ function safeHostname(value: string | null | undefined) {
   }
 }
 
-function toPulseFinding(finding: CertScoreFinding, scanId: string, options: { coverageLimitedByNoGo?: boolean } = {}) {
+function toPulseFinding(finding: CertScoreFinding, scanId: string, options: { coverageLimitedByNoGo?: boolean; noGo?: ExternalScanNoGoResult | null } = {}) {
   const display = getPublicReportFindingDisplay({
     confidence: finding.confidence,
     findingId: finding.id,
@@ -968,21 +993,26 @@ function toPulseFinding(finding: CertScoreFinding, scanId: string, options: { co
   const evidence = buildEvidence(finding, scanId, {
     coverageLimitedByNoGo: applyNoGoCoverageFraming
   });
-  const plainEnglish = applyNoGoCoverageFraming
+  const isNoGoFinding = finding.id === "scan_quality_visual_no_go" && Boolean(options.noGo);
+  const plainEnglish = isNoGoFinding
+    ? options.noGo!.explanation
+    : applyNoGoCoverageFraming
     ? `Coverage-limited: ${finding.shortSummary}`
     : finding.shortSummary;
-  const nextStep = applyNoGoCoverageFraming
+  const nextStep = isNoGoFinding
+    ? options.noGo!.recommendedNextAction
+    : applyNoGoCoverageFraming
     ? `Treat this as coverage-limited until a representative scan reaches the normal public site. ${display.remediation || "Review the retained evidence and confirm expected site behavior."}`
     : display.remediation || "Review the retained evidence and confirm expected site behavior.";
 
   return {
     id: finding.id,
-    label: display.title,
+    label: isNoGoFinding ? options.noGo!.title : display.title,
     criticality: display.criticality,
     confidence: applyNoGoCoverageFraming ? "moderate" : finding.confidence,
     plainEnglish,
     evidence: {
-      summary: evidence.summary,
+      summary: isNoGoFinding ? options.noGo!.summary : evidence.summary,
       observedPhase: evidence.observedPhase,
       exampleEvents: evidence.exampleEvents,
       projectionWarnings: evidence.projectionWarnings,
@@ -1215,6 +1245,8 @@ function buildSummaryArtifact(input: {
     scanId: input.base.scanId,
     scan_id: input.base.scan_id,
     scanStatus: input.base.scanStatus,
+    resultDisposition: input.base.resultDisposition,
+    noGo: input.base.noGo,
     timestamps: input.timestamps,
     summary: input.base.summary,
     executiveSummary: input.base.executiveSummary,
@@ -1295,7 +1327,10 @@ function buildEvidenceArtifact(input: {
       : null
   }));
   const coverageLimitedByNoGo = input.allFindings.some((finding) => finding.id === "scan_quality_visual_no_go");
-  const findings = input.allFindings.map((finding) => toPulseFinding(finding, scanRecord.scan.id, { coverageLimitedByNoGo }));
+  const findings = input.allFindings.map((finding) => toPulseFinding(finding, scanRecord.scan.id, {
+    coverageLimitedByNoGo,
+    noGo: projectExternalScanNoGo(scanRecord.runtimeArtifacts)?.noGo
+  }));
   const rejectedTrackerHostRows = rejectedDisplayHostnameRows(scanRecord.trackerVendors.map((vendor) => vendor.scriptHost));
   const rejectedTrackerDomainRows = rejectedDisplayHostnameRows(input.reportSurface.trackerInventoryRows.flatMap((row) => row.domains));
 
@@ -1312,6 +1347,8 @@ function buildEvidenceArtifact(input: {
     scanId: input.base.scanId,
     scan_id: input.base.scan_id,
     scanStatus: input.base.scanStatus,
+    resultDisposition: input.base.resultDisposition,
+    noGo: input.base.noGo,
     timestamps: input.timestamps,
     summary: input.base.summary,
     executiveSummary: input.base.executiveSummary,
@@ -1520,6 +1557,11 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const generated = generatedAt();
   const scan = input.scanRecord.scan;
   const domain = scan.domainHostname ?? safeHostname(input.requestedUrl) ?? "unknown";
+  const pulseNoGoState = buildPulseNoGoState(input.scanRecord.runtimeArtifacts);
+  const noGoProjection = pulseNoGoState
+    ? { resultDisposition: pulseNoGoState.resultDisposition, noGo: pulseNoGoState.noGo }
+    : null;
+  const effectiveScanStatus = pulseNoGoState?.scanStatus ?? scan.status;
   const coverage = deriveCoverage(input.scanRecord);
   const quality = assessPulseScanRecordQuality(input.scanRecord);
   const packets = buildScanReportUnifiedFindings(input.scanRecord);
@@ -1530,9 +1572,9 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   });
   const executive = reportSurface.executive;
   const allFindings = reportSurface.allFindings;
-  const score = reportSurface.score;
+  const score = noGoProjection ? null : reportSurface.score;
   const coverageLimitedByNoGo = allFindings.some((finding) => finding.id === "scan_quality_visual_no_go");
-  const topFindings = reportSurface.topFindings.map((finding) => toPulseFinding(finding, scan.id, { coverageLimitedByNoGo }));
+  const topFindings = reportSurface.topFindings.map((finding) => toPulseFinding(finding, scan.id, { coverageLimitedByNoGo, noGo: noGoProjection?.noGo }));
   const benchmark = input.scanRecord.domainBenchmark
     ? `${input.scanRecord.domainBenchmark.industry} / ${input.scanRecord.domainBenchmark.estimatedRankLabel}`
     : null;
@@ -1543,6 +1585,13 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     findings: allFindings,
     score
   });
+  if (noGoProjection) {
+    summary.headline = noGoProjection.noGo.title;
+    summary.completionSummary = noGoProjection.noGo.summary;
+    summary.humanSummary = noGoProjection.noGo.explanation;
+    summary.score = null;
+    summary.riskLevel = "unknown";
+  }
   const topFindingCount = topFindings.length;
   const evidenceHighlights = buildEvidenceHighlights(input.scanRecord);
   const counts = buildPulseCounts({
@@ -1656,7 +1705,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     domain,
     scanId: scan.id,
     scan_id: scan.id,
-    scanStatus: scan.status,
+    scanStatus: effectiveScanStatus,
+    ...(noGoProjection ?? {}),
     summary,
     executiveSummary,
     surfacedResults,
@@ -1683,6 +1733,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       domain: base.domain,
       scanId: base.scanId,
       scanStatus: base.scanStatus,
+      resultDisposition: base.resultDisposition,
+      noGo: base.noGo,
       summary: tinySummary,
       counts: base.counts,
       topFindings: topFindings.map((finding) => ({
@@ -1731,7 +1783,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     },
     scan: {
       scanId: scan.id,
-      scanStatus: scan.status,
+      scanStatus: effectiveScanStatus,
       createdAt: scan.createdAt,
       startedAt: scan.startedAt,
       completedAt: scan.completedAt,
@@ -1750,7 +1802,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     resultQuality: {
       level: quality.usable ? (coverage.status === "complete" ? "usable" : "usable_with_limitations") : "unavailable",
       summary: quality.usable ? coverage.summary : quality.message,
-      reason: quality.reason
+      reason: pulseNoGoState?.resultQuality.reason ?? quality.reason
     },
     usageGuidance: PULSE_USAGE_GUIDANCE
   };
@@ -1778,7 +1830,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
 
   return {
     ...standard,
-    findings: allFindings.map((finding) => toPulseFinding(finding, scan.id, { coverageLimitedByNoGo })),
+    findings: allFindings.map((finding) => toPulseFinding(finding, scan.id, { coverageLimitedByNoGo, noGo: noGoProjection?.noGo })),
     reviewContext: {
       ...standard.reviewContext,
       lenses: standard.reviewContext.lenses.map((lens) => ({

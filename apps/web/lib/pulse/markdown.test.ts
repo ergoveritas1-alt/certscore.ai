@@ -78,6 +78,33 @@ test("Pulse markdown includes cautious no-finding copy, feedback, links, and dis
   assert.doesNotMatch(markdown, /\bclean\b/i);
 });
 
+test("Pulse markdown explains Cerebras-style site-not-ready no-go without raw codes", () => {
+  const markdown = renderPulseMarkdown({
+    domain: "cerebras.com",
+    scanId: "scan_cerebras",
+    scanStatus: "completed_limited",
+    resultDisposition: "no_go",
+    noGo: {
+      reasonCode: "site_not_ready",
+      title: "The site is not ready for scanning",
+      explanation: "The retained page identified itself as a prelaunch experience rather than the normal public website.",
+      summary: "CertScore observed a prelaunch page, so substantive findings were withheld.",
+      limitationKind: "target_site_state",
+      recommendedNextAction: "Retry after the public website launches.",
+      retryLikelyToHelp: false
+    },
+    summary: { completionSummary: "CertScore observed a prelaunch page, so substantive findings were withheld.", score: null },
+    coverage: { status: "target_site_state", summary: "CertScore observed a prelaunch page." },
+    topFindings: [],
+    links: {},
+    feedback: {}
+  });
+  assert.match(markdown, /The site is not ready for scanning/);
+  assert.match(markdown, /prelaunch experience/);
+  assert.match(markdown, /Retry after the public website launches/);
+  assert.doesNotMatch(markdown, /site_not_ready|Homepage capture failed|eligible public scan results/);
+});
+
 test("Pulse markdown renders full findings when full detail payload includes them", () => {
   const markdown = renderPulseMarkdown({
     meta: { detail: "full", generatedAt: "2026-05-18T23:15:32Z" },

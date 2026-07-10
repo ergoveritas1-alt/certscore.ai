@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import {
+  SCAN_NO_GO_REASON_CODES,
+  SCAN_NO_GO_REASON_PRESENTATIONS
+} from "@website-signal-risk-scanner/shared";
 
 test("pre-consent inventory keeps purpose separate, removes requests, and places category last", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
@@ -571,8 +575,22 @@ async function loadVisualAccessLimitationNotice() {
     ) =>
       | {
           summary: string;
-          finding: { id: string; label: string; shortSummary: string };
-          review: { coverageLabel: string; outcomeTitle: string; reason: string; title: string };
+          finding: {
+            evidencePreview?: string[];
+            evidenceRefs?: string[];
+            id: string;
+            label: string;
+            remediation: string;
+            shortSummary: string;
+          };
+          review: {
+            coverageLabel: string;
+            guidance: string[];
+            message: string;
+            outcomeTitle: string;
+            reason: string;
+            title: string;
+          };
         }
       | null;
   }).deriveVisualAccessLimitationNotice;
@@ -1861,6 +1879,91 @@ test("deriveVisualAccessLimitationNotice uses scan-level no-go assessment when p
   const finding = notice?.finding as { evidencePreview?: string[]; evidenceRefs?: string[] } | undefined;
   assert.ok(finding?.evidenceRefs?.includes("scan_runtime_artifacts.scan_no_go_assessment"));
   assert.ok(finding?.evidencePreview?.some((line) => /Scan no-go confidence: 0\.93/.test(line)));
+});
+
+test("deriveVisualAccessLimitationNotice presents every canonical no-go reason without exposing raw codes", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+
+  for (const reasonCode of SCAN_NO_GO_REASON_CODES) {
+    const presentation = SCAN_NO_GO_REASON_PRESENTATIONS[reasonCode];
+    const runtimeArtifacts = {
+      scan_no_go_assessment: {
+        decision: "no_go",
+        scanNoGoConfidence: 0.95,
+        reasonCodes: [reasonCode, "scan_no_go_corroborated"],
+        status: "available"
+      },
+      visual_access_review: {
+        goNoGo: "NO_GO",
+        keyVisualEvidence: ["The retained screenshot showed the classified page state."],
+        pageState: presentation.pageState,
+        reasonCode,
+        shortExplanation: presentation.explanation,
+        status: "available"
+      }
+    };
+
+    const notice = deriveVisualAccessLimitationNotice(runtimeArtifacts);
+    assert.equal(notice?.review.title, presentation.customerTitle, reasonCode);
+    assert.equal(notice?.review.reason, presentation.explanation, reasonCode);
+    assert.deepEqual(notice?.review.guidance, [presentation.recommendedNextAction], reasonCode);
+    assert.equal(notice?.finding.label, presentation.customerTitle, reasonCode);
+    assert.equal(notice?.finding.remediation, presentation.recommendedNextAction, reasonCode);
+    assert.doesNotMatch(JSON.stringify(notice), new RegExp(reasonCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), reasonCode);
+    assert.equal(runtimeArtifacts.scan_no_go_assessment.reasonCodes[0], reasonCode, reasonCode);
+  }
+});
+
+test("deriveVisualAccessLimitationNotice uses a safe fallback for unknown reasons while diagnostics retain the code", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+  const runtimeArtifacts = {
+    scan_no_go_assessment: {
+      decision: "no_go",
+      scanNoGoConfidence: 0.95,
+      reasonCodes: ["legacy_internal_reason_xyz", "scan_no_go_corroborated"],
+      status: "available"
+    },
+    visual_access_review: {
+      goNoGo: "NO_GO",
+      pageState: "legacy_unknown_state",
+      reasonCode: "legacy_internal_reason_xyz",
+      shortExplanation: "A legacy diagnostic reason was retained.",
+      status: "available"
+    }
+  };
+
+  const notice = deriveVisualAccessLimitationNotice(runtimeArtifacts);
+  assert.equal(notice?.review.title, "The public site could not be verified");
+  assert.doesNotMatch(JSON.stringify(notice), /legacy_internal_reason_xyz/);
+  assert.equal(runtimeArtifacts.scan_no_go_assessment.reasonCodes[0], "legacy_internal_reason_xyz");
+});
+
+test("deriveVisualAccessLimitationNotice identifies the Cerebras prelaunch page without capture-failure copy", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+  const observedText = "Your browser can’t render the visitor. It’s probably for the best. Check back at launch.";
+
+  const notice = deriveVisualAccessLimitationNotice({
+    scan_no_go_assessment: {
+      decision: "no_go",
+      scanNoGoConfidence: 0.98,
+      reasonCodes: ["site_not_ready", "scan_no_go_corroborated"],
+      status: "available"
+    },
+    visual_access_review: {
+      goNoGo: "NO_GO",
+      key_visual_evidence: [observedText],
+      page_state: "site_not_ready",
+      reason_code: "site_not_ready",
+      short_explanation: "The target displayed a prelaunch page.",
+      status: "available"
+    }
+  });
+
+  assert.equal(notice?.review.title, "The site is not ready for scanning");
+  assert.match(notice?.review.reason ?? "", /prelaunch/i);
+  assert.match(notice?.review.message ?? "", /Check back at launch/i);
+  assert.match(notice?.review.guidance[0] ?? "", /public website launches/i);
+  assert.doesNotMatch(JSON.stringify(notice), /Homepage capture failed/i);
 });
 
 test("deriveVisualAccessLimitationNotice does not suppress review for diagnostic scan-level no-go assessment", async () => {

@@ -75,7 +75,9 @@ export async function GET(request: Request, context: RouteContext) {
       body: buildApiV2FindingDetail({
         caveats: pulse.coverage?.limitations,
         finding,
-        scanId: scanRecord.scan.id
+        scanId: scanRecord.scan.id,
+        resultDisposition: pulse.resultDisposition,
+        noGo: pulse.noGo
       }),
       requestId: id,
       route: "api-v2-scan-finding",

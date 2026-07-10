@@ -265,6 +265,8 @@ export function exportFindings(report: PulseResult) {
     scanId: scanIdFromPulse(report),
     domain: report.domain ?? report.request?.domain ?? null,
     summary: report.summary ?? null,
+    resultDisposition: report.resultDisposition ?? null,
+    noGo: report.noGo ?? null,
     findings: findingsFromReport(report).map((finding) => ({
       id: finding.id,
       label: finding.label ?? null,
@@ -356,6 +358,8 @@ export function explainFinding(report: PulseResult, findingId: string) {
     reviewLenses: finding.reviewLenses ?? [],
     anchorUrl: finding.anchorUrl ?? finding.evidence?.fullEvidenceUrl ?? null,
     nextStep: finding.nextStep ?? null,
+    resultDisposition: report.resultDisposition ?? null,
+    noGo: report.noGo ?? null,
     caveats: report.coverage?.limitations ?? [],
     disclaimer: report.disclaimer ?? null
   };

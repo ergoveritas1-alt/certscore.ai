@@ -5,6 +5,7 @@ import { logPulseGptActionEvent } from "../../../../../../lib/pulse/gpt-action-a
 import { buildPulseStatus } from "../../../../../../lib/pulse/status";
 import { getAnonymousScanById } from "../../../../../../server/scans/get-scan-by-id";
 import { getPulseRequestByJobId } from "../../../../../../server/pulse/repository";
+import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -71,9 +72,11 @@ export async function GET(request: Request, context: RouteContext) {
 
     let status = pulseRequest.status;
     let completedAt = pulseRequest.completed_at;
+    let noGoProjection: ReturnType<typeof projectExternalScanNoGo> = null;
     if (pulseRequest.scan_id) {
       const scanRecord = await getAnonymousScanById(pulseRequest.scan_id).catch(() => null);
       if (scanRecord?.scan.status === "completed") {
+        noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
         status = scanRecord.accessPostureSummary.interruptionReason || scanRecord.scan.pagesScanned < scanRecord.scan.pagesRequested
           ? "completed_limited"
           : "completed";
@@ -96,7 +99,8 @@ export async function GET(request: Request, context: RouteContext) {
       scanId: pulseRequest.scan_id,
       resultUrl: pulseRequest.result_pulse_url,
       reportUrl: pulseRequest.result_report_url,
-      retryAfterSeconds: pulseRequest.retry_after_seconds
+      retryAfterSeconds: pulseRequest.retry_after_seconds,
+      noGoProjection
     });
 
     const headers: Record<string, string> = {

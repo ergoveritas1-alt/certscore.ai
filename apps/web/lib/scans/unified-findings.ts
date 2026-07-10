@@ -7219,6 +7219,12 @@ export function buildUnifiedFindingPackets(input: {
     const existing = packets.get(findingId);
     const fallbackEvidence = extractEvidenceFromFallback(candidate.fallbackEvidence ?? null);
     const nextPacket: UnifiedFindingPacket = existing ?? createInitialUnifiedFindingPacket(definition, candidate);
+    const noGoCustomerTitle = typeof candidate.fallbackEvidence?.scanNoGoCustomerTitle === "string"
+      ? candidate.fallbackEvidence.scanNoGoCustomerTitle.trim()
+      : "";
+    if (findingId === "scan_quality_visual_no_go" && noGoCustomerTitle.length > 0) {
+      nextPacket.title = noGoCustomerTitle;
+    }
 
     nextPacket.severity = maxSeverity(nextPacket.severity, candidate.severity);
     if (!existing || nextPacket.summary.trim().length === 0) {
