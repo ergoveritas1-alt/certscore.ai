@@ -1,7 +1,10 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { query } from "../packages/db/src/postgres";
-import { pollLocalV2DagLambdaResultQueue } from "../apps/web/server/scans/local-v2-dag-lambda-result-poller";
+import {
+  pollLocalV2DagLambdaResultQueue,
+  readLocalV2DagLambdaArtifactJson,
+} from "../apps/web/server/scans/local-v2-dag-lambda-result-poller";
 
 type Mode = "lambda" | "localhost";
 
@@ -115,7 +118,13 @@ async function runOne(input: {
   });
   const elapsedMs = Date.now() - wallStartedAt;
   const events = await loadScanEvents(submitted.scanId);
-  const performance = await loadArtifactPerformanceSummary(completed.outDir);
+  const performance = await loadArtifactPerformanceSummary({
+    completedAt: completed.row.completed_at,
+    lambdaRegion: input.args.scanFrom === "eu_ie" ? "eu-west-1" : "eu-central-1",
+    mode: input.mode,
+    outDir: completed.outDir,
+    scanId: submitted.scanId,
+  });
   if (input.mode === "lambda" && input.args.expectedMemorySizeMb !== null) {
     const observedMemorySizeMb = numberOrNull(asRecord(performance.runtimeDiagnostics).memorySizeMb);
     if (observedMemorySizeMb !== input.args.expectedMemorySizeMb) {
@@ -149,12 +158,23 @@ async function runOne(input: {
   return result;
 }
 
-async function loadArtifactPerformanceSummary(outDir: string): Promise<Record<string, unknown>> {
-  const [manifest, bundle, resourceTelemetry] = await Promise.all([
-    readJson(path.join(outDir, "LocalV2DagLambdaManifest.json")).catch(() => ({})),
-    readJson(path.join(outDir, "CanonicalEvidenceBundle.json")),
-    readJson(path.join(outDir, "V2RuntimeResourceTelemetry.json")).catch(() => ({})),
+async function loadArtifactPerformanceSummary(input: {
+  completedAt: string | null;
+  lambdaRegion: string;
+  mode: Mode;
+  outDir: string;
+  scanId: string;
+}): Promise<Record<string, unknown>> {
+  const [manifest, bundle, handoffTimings] = await Promise.all([
+    readJson(path.join(input.outDir, "LocalV2DagLambdaManifest.json")).catch(() => ({})),
+    readJson(path.join(input.outDir, "CanonicalEvidenceBundle.json")),
+    input.mode === "lambda" ? loadScanHandoffTimings(input.scanId) : Promise.resolve(null),
   ]);
+  const resourceTelemetry = await loadResourceTelemetry({
+    lambdaRegion: input.lambdaRegion,
+    manifest,
+    outDir: input.outDir,
+  });
   const consentObservations = Array.isArray(bundle.consentUiObservations) ? bundle.consentUiObservations : [];
   const policyObservations = Array.isArray(bundle.policySurfaceObservations) ? bundle.policySurfaceObservations : [];
   const cmpObservations = Array.isArray(bundle.cmpRuntimeObservations) ? bundle.cmpRuntimeObservations : [];
@@ -169,10 +189,105 @@ async function loadArtifactPerformanceSummary(outDir: string): Promise<Record<st
       screenshots: screenshots.length,
     },
     performanceDiagnostics: asRecord(manifest.performanceDiagnostics),
+    handoffTimings: handoffTimings
+      ? {
+          ...handoffTimings,
+          wc01ResultRecordedToBenchmarkObservedMs: elapsedBetween(
+            handoffTimings.wc01ResultRecordedAt,
+            new Date().toISOString(),
+          ),
+          lambdaCompletedToBenchmarkObservedMs: elapsedBetween(
+            input.completedAt,
+            new Date().toISOString(),
+          ),
+        }
+      : null,
     phaseTimings: Array.isArray(manifest.phaseTimings) ? manifest.phaseTimings : [],
     resourceTelemetry,
     runtimeDiagnostics: asRecord(manifest.runtimeDiagnostics),
   };
+}
+
+async function loadResourceTelemetry(input: {
+  lambdaRegion: string;
+  manifest: Record<string, unknown>;
+  outDir: string;
+}) {
+  const localPath = path.join(input.outDir, "V2RuntimeResourceTelemetry.json");
+  const local = await readJson(localPath).catch(() => null);
+  if (local) {
+    return local;
+  }
+
+  const telemetryArtifact = (Array.isArray(input.manifest.auxiliaryArtifacts)
+    ? input.manifest.auxiliaryArtifacts
+    : [])
+    .map(asRecord)
+    .find((artifact) => artifact.fileName === "V2RuntimeResourceTelemetry.json");
+  const uri = typeof telemetryArtifact?.uri === "string" ? telemetryArtifact.uri : null;
+  if (!uri) {
+    return {};
+  }
+
+  try {
+    const expectedSha256 = typeof telemetryArtifact.sha256 === "string" ? telemetryArtifact.sha256 : null;
+    return await readLocalV2DagLambdaArtifactJson({
+      expectedSha256,
+      region: input.lambdaRegion,
+      uri,
+    });
+  } catch (error) {
+    console.error(JSON.stringify({
+      error: error instanceof Error ? error.message : String(error),
+      event: "resource_telemetry_fetch_failed",
+      uri,
+    }));
+    return {};
+  }
+}
+
+async function loadScanHandoffTimings(scanId: string) {
+  const result = await query(
+    `select created_at, metadata_json
+       from scan_events
+      where scan_id = $1
+        and event_type = 'v2_lambda_result.received'
+      order by created_at desc
+      limit 1`,
+    [scanId],
+    { readOnly: true },
+  );
+  const row = result.rows[0] as { created_at?: string; metadata_json?: unknown } | undefined;
+  if (!row) {
+    return null;
+  }
+  const metadata = asRecord(row.metadata_json);
+  const handoff = asRecord(metadata.handoffTiming);
+  const consumer = asRecord(metadata.sqsConsumer);
+  const lambdaCompletedAt = stringOrNull(handoff.lambdaCompletedAt);
+  const sentAt = stringOrNull(consumer.sentAt);
+  const consumerReceivedAt = stringOrNull(consumer.consumerReceivedAt);
+  const wc01ResultRecordedAt = stringOrNull(handoff.wc01ResultRecordedAt) ?? stringOrNull(row.created_at);
+  return {
+    artifactMirrorDurationMs: numberOrNull(handoff.artifactMirrorDurationMs),
+    consumerReceivedAt,
+    consumerToWc01ResultRecordedMs: elapsedBetween(consumerReceivedAt, wc01ResultRecordedAt),
+    lambdaCompletedAt,
+    lambdaCompletedToSqsSentMs: elapsedBetween(lambdaCompletedAt, sentAt),
+    lambdaToWc01ResultRecordedMs: numberOrNull(handoff.lambdaToWc01ResultRecordedMs),
+    sentAt,
+    sqsSentToConsumerMs: elapsedBetween(sentAt, consumerReceivedAt),
+    wc01ResultRecordedAt,
+  };
+}
+
+function elapsedBetween(start: string | null, end: string | null) {
+  if (!start || !end) {
+    return null;
+  }
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  return Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.max(0, endMs - startMs) : null;
 }
 
 async function readJson(filePath: string): Promise<Record<string, unknown>> {
@@ -259,7 +374,7 @@ async function waitForArtifact(input: { mode: Mode; scanId: string }) {
         throw new Error(`Scan ${input.scanId} failed: ${row.error_message ?? "unknown error"}`);
       }
       const requiredArtifacts = input.mode === "lambda"
-        ? ["CanonicalEvidenceBundle.json", "LocalV2DagLambdaManifest.json", "V2RuntimeResourceTelemetry.json"]
+        ? ["CanonicalEvidenceBundle.json", "LocalV2DagLambdaManifest.json"]
         : ["CanonicalEvidenceBundle.json"];
       if (outDir && (await Promise.all(
         requiredArtifacts.map((fileName) => exists(path.join(outDir, fileName))),
@@ -493,6 +608,10 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 async function exists(filePath: string) {

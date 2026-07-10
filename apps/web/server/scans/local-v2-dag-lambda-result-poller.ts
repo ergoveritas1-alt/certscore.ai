@@ -66,6 +66,9 @@ type LocalV2DagLambdaResultConsumerMetadata = {
   sqsMessageId: string | null;
 };
 
+const RESULT_BATCH_CONCURRENCY = 3;
+const RESULT_VISIBILITY_TIMEOUT_SECONDS = 60;
+
 function compactEnvValue(value: string | undefined) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -162,6 +165,23 @@ async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {
     return Buffer.from(await body.transformToByteArray());
   }
   throw new Error("Unsupported local v2 DAG Lambda artifact response body.");
+}
+
+export async function readLocalV2DagLambdaArtifactJson(input: {
+  expectedSha256?: string | null;
+  region: string;
+  uri: string;
+}) {
+  const { bucket, key } = parseS3Uri(input.uri);
+  const response = await new S3Client({ region: input.region }).send(new GetObjectCommand({
+    Bucket: bucket,
+    Key: key
+  }));
+  const body = await streamToBuffer(response.Body);
+  if (input.expectedSha256 && createHash("sha256").update(body).digest("hex") !== input.expectedSha256) {
+    throw new Error("Local v2 DAG Lambda JSON artifact checksum mismatch.");
+  }
+  return asRecord(JSON.parse(body.toString("utf8")));
 }
 
 export async function mirrorLocalV2DagLambdaArtifacts(input: {
@@ -589,6 +609,27 @@ function parseSqsInteger(value: string | undefined) {
   return Number.isInteger(parsed) ? parsed : null;
 }
 
+async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  concurrency: number,
+  run: (value: T) => Promise<R>
+) {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      const value = values[index];
+      if (value !== undefined) {
+        results[index] = await run(value);
+      }
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 export async function pollLocalV2DagLambdaResultQueue(input: {
   env?: LocalV2DagLambdaResultPollerEnv;
   expectedTargetEnvironment?: LocalV2DagLambdaTargetEnvironment;
@@ -635,13 +676,13 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
         "SentTimestamp"
       ] satisfies MessageSystemAttributeName[],
       QueueUrl: queueUrl,
-      VisibilityTimeout: input.visibilityTimeoutSeconds ?? 30,
+      VisibilityTimeout: input.visibilityTimeoutSeconds ?? RESULT_VISIBILITY_TIMEOUT_SECONDS,
       WaitTimeSeconds: Math.min(Math.max(input.waitTimeSeconds ?? 10, 0), 20)
     })) as ReceiveMessageCommandOutput;
     const messages = response.Messages ?? [];
     queueResult.received += messages.length;
 
-    for (const message of messages) {
+    const messageResults = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
       const rawMessage = messageBody(message);
       const manualSmokeScanId = getManualSmokeResultScanId(rawMessage);
       if (manualSmokeScanId) {
@@ -649,13 +690,12 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
           QueueUrl: queueUrl,
           ReceiptHandle: getReceiptHandle(message)
         }));
-        queueResult.deleted += 1;
         console.warn("[web] ignored manual local v2 DAG Lambda smoke result", {
           messageId: message.MessageId ?? null,
           queueRegion: getSqsQueueRegion(queueUrl),
           scanId: manualSmokeScanId
         });
-        continue;
+        return { deleted: 1, failed: 0, handled: 0 };
       }
       try {
         await handleMessage(rawMessage, {
@@ -673,16 +713,20 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
           QueueUrl: queueUrl,
           ReceiptHandle: getReceiptHandle(message)
         }));
-        queueResult.deleted += 1;
-        queueResult.handled += 1;
+        return { deleted: 1, failed: 0, handled: 1 };
       } catch (error) {
-        queueResult.failed += 1;
         console.error("[web] local v2 DAG Lambda result message rejected", {
           error: error instanceof Error ? error.message : String(error),
           messageId: message.MessageId ?? null,
           queueRegion: getSqsQueueRegion(queueUrl)
         });
+        return { deleted: 0, failed: 1, handled: 0 };
       }
+    });
+    for (const messageResult of messageResults) {
+      queueResult.deleted += messageResult.deleted;
+      queueResult.failed += messageResult.failed;
+      queueResult.handled += messageResult.handled;
     }
     return queueResult;
   };

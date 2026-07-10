@@ -40,6 +40,7 @@ test("SQS poller validates and deletes completed and failed local v2 DAG message
       if (command instanceof ReceiveMessageCommand) {
         assert.equal(command.input.QueueUrl, "https://sqs.eu-central-1.amazonaws.com/123/local-results");
         assert.equal(command.input.MaxNumberOfMessages, 10);
+        assert.equal(command.input.VisibilityTimeout, 60);
         assert.deepEqual(command.input.MessageSystemAttributeNames, [
           "ApproximateReceiveCount",
           "SentTimestamp"
@@ -91,6 +92,60 @@ test("SQS poller validates and deletes completed and failed local v2 DAG message
   });
   assert.deepEqual(handled, ["scan-local-1", "scan-local-2"]);
   assert.deepEqual(deleted, ["receipt-1", "receipt-2"]);
+});
+
+test("SQS poller handles at most three result messages concurrently", async () => {
+  let active = 0;
+  let peakActive = 0;
+  const deleted: string[] = [];
+  const sqsClient = {
+    async send(command: ReceiveMessageCommand | DeleteMessageCommand) {
+      if (command instanceof ReceiveMessageCommand) {
+        return {
+          $metadata: {},
+          Messages: Array.from({ length: 6 }, (_, index) => ({
+            Body: buildResultMessage({ scanId: `scan-local-${index + 1}` }),
+            MessageId: `message-${index + 1}`,
+            ReceiptHandle: `receipt-${index + 1}`
+          }))
+        };
+      }
+
+      deleted.push(String(command.input.ReceiptHandle));
+      return { $metadata: {} };
+    }
+  };
+
+  const result = await pollLocalV2DagLambdaResultQueue({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/local-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
+    },
+    handleMessage: async (rawMessage, options) => {
+      active += 1;
+      peakActive = Math.max(peakActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active -= 1;
+      return ingestLocalV2DagLambdaResultMessage(rawMessage, options);
+    },
+    sqsClient
+  });
+
+  assert.equal(peakActive, 3);
+  assert.deepEqual(result, {
+    deleted: 6,
+    failed: 0,
+    handled: 6,
+    received: 6
+  });
+  assert.deepEqual(deleted.sort(), [
+    "receipt-1",
+    "receipt-2",
+    "receipt-3",
+    "receipt-4",
+    "receipt-5",
+    "receipt-6"
+  ]);
 });
 
 test("SQS poller deletes manual smoke results that do not belong to a local scan", async () => {
