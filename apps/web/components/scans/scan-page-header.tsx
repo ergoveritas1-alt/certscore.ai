@@ -33,7 +33,7 @@ function getScanFromMarkerInput(value: string | undefined) {
     case "uk":
       return { flag: "🇮🇪" };
     case "california":
-      return { flag: "california" };
+      return { icon: "california" as const };
     case "local_extension":
       return { icon: "local" as const };
     case "default":

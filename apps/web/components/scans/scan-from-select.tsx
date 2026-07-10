@@ -20,7 +20,7 @@ export const SCAN_FROM_OPTIONS = [
   },
   {
     description: "Run from CertScore's US-West Lambda scanner.",
-    flag: "california",
+    icon: "california",
     label: "California",
     value: "california"
   },

@@ -1,7 +1,22 @@
 import React from "react";
 
-export type ScanFromIconName = "cloud" | "local";
+export type ScanFromIconName = "california" | "cloud" | "local";
 export type ScanFromFlag = string;
+
+function CaliforniaIcon({ selected }: { selected: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={
+        selected
+          ? "inline-flex h-4 min-w-5 items-center justify-center rounded border border-sky-300 bg-sky-50 px-0.5 text-[0.55rem] font-bold leading-none tracking-[-0.03em] text-sky-700"
+          : "inline-flex h-4 min-w-5 items-center justify-center rounded border border-slate-300 bg-slate-50 px-0.5 text-[0.55rem] font-bold leading-none tracking-[-0.03em] text-slate-600"
+      }
+    >
+      CA
+    </span>
+  );
+}
 
 function GlobeIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -31,6 +46,10 @@ function CloudIcon({ className = "h-4 w-4" }: { className?: string }) {
 }
 
 export function ScanFromMarker({ flag, icon, selected }: { flag?: ScanFromFlag; icon?: ScanFromIconName; selected: boolean }) {
+  if (icon === "california") {
+    return <CaliforniaIcon selected={selected} />;
+  }
+
   if (icon === "cloud") {
     return <CloudIcon className={selected ? "h-4 w-4 text-sky-600" : "h-4 w-4 text-slate-500"} />;
   }

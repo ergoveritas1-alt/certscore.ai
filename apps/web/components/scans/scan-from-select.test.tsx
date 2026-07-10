@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ScanFromMarker } from "./scan-from-icons";
 import { SCAN_FROM_OPTIONS, ScanFromSelect } from "./scan-from-select";
 
 test("ScanFromSelect always submits core local v2 profile and Lambda option fields", () => {
@@ -44,6 +45,22 @@ test("ScanFromSelect defaults to EU-IR and keeps Local-extension last", () => {
 
   assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_ie"/);
   assert.equal(SCAN_FROM_OPTIONS.map((option) => option.value).join(","), "eu_de,eu_ie,california,local_extension");
+  const california = SCAN_FROM_OPTIONS.find((option) => option.value === "california");
+  assert.equal(california && "icon" in california ? california.icon : null, "california");
+});
+
+test("ScanFromMarker renders California as a bounded icon instead of overflowing text", () => {
+  const html = renderToStaticMarkup(
+    createElement(ScanFromMarker, {
+      icon: "california",
+      selected: false
+    })
+  );
+
+  assert.match(html, /aria-hidden="true"/);
+  assert.match(html, /min-w-5/);
+  assert.match(html, />CA<\/span>/);
+  assert.doesNotMatch(html, />california<\/span>/i);
 });
 
 test("ScanFromSelect hides restricted scan controls from non-admin users", () => {
