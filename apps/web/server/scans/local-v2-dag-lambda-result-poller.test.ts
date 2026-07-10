@@ -39,7 +39,7 @@ test("SQS poller validates and deletes completed and failed local v2 DAG message
     async send(command: ReceiveMessageCommand | DeleteMessageCommand) {
       if (command instanceof ReceiveMessageCommand) {
         assert.equal(command.input.QueueUrl, "https://sqs.eu-central-1.amazonaws.com/123/local-results");
-        assert.equal(command.input.MaxNumberOfMessages, 10);
+        assert.equal(command.input.MaxNumberOfMessages, 3);
         assert.equal(command.input.VisibilityTimeout, 60);
         assert.deepEqual(command.input.MessageSystemAttributeNames, [
           "ApproximateReceiveCount",

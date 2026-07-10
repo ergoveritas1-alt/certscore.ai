@@ -118,6 +118,7 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /VisibilityTimeout:\s*0/);
   assert.match(source, /RESULT_VISIBILITY_TIMEOUT_SECONDS\s*=\s*60/);
   assert.match(source, /RESULT_BATCH_CONCURRENCY\s*=\s*3/);
+  assert.match(source, /MaxNumberOfMessages:\s*RESULT_BATCH_CONCURRENCY/);
   assert.match(source, /mapWithConcurrency\(messages, RESULT_BATCH_CONCURRENCY/);
 });
 

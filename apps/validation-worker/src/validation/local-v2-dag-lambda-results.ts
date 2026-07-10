@@ -745,7 +745,7 @@ async function pollOnce(input: {
       "ApproximateReceiveCount",
       "SentTimestamp"
     ] satisfies MessageSystemAttributeName[],
-    MaxNumberOfMessages: 10,
+    MaxNumberOfMessages: RESULT_BATCH_CONCURRENCY,
     QueueUrl: input.queueUrl,
     VisibilityTimeout: RESULT_VISIBILITY_TIMEOUT_SECONDS,
     WaitTimeSeconds: 10

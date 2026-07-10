@@ -43,9 +43,9 @@ export async function nudgeLocalV2DagLambdaHandoffForScan(input: {
   try {
     const result = await pollLocalV2DagLambdaResultQueue({
       expectedTargetEnvironment: getLocalV2DagLambdaTargetEnvironment(scan.scanConfigJson),
-      maxMessages: 10,
+      maxMessages: 3,
       queueUrl,
-      visibilityTimeoutSeconds: 5,
+      visibilityTimeoutSeconds: 60,
       waitTimeSeconds: 0
     });
     return {

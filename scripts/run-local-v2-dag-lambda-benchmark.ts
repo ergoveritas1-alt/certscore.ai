@@ -377,7 +377,7 @@ async function waitForArtifact(input: { mode: Mode; scanId: string }) {
       const requiredArtifacts = input.mode === "lambda"
         ? ["CanonicalEvidenceBundle.json", "LocalV2DagLambdaManifest.json"]
         : ["CanonicalEvidenceBundle.json"];
-      if (outDir && (await Promise.all(
+      if (row.status === "completed" && outDir && (await Promise.all(
         requiredArtifacts.map((fileName) => exists(path.join(outDir, fileName))),
       )).every(Boolean)) {
         return { outDir, row };

@@ -674,7 +674,7 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
     const sqsClient = input.sqsClient ?? new SQSClient({ region: queueRegion });
     const s3Client = input.s3Client ?? new S3Client({ region: queueRegion });
     const response = await sqsClient.send(new ReceiveMessageCommand({
-      MaxNumberOfMessages: Math.min(Math.max(input.maxMessages ?? 10, 1), 10),
+      MaxNumberOfMessages: Math.min(Math.max(input.maxMessages ?? RESULT_BATCH_CONCURRENCY, 1), 10),
       MessageSystemAttributeNames: [
         "ApproximateReceiveCount",
         "SentTimestamp"
