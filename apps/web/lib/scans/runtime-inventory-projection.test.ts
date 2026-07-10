@@ -187,7 +187,7 @@ test("deduplicates tracker inventory rows by vendor host and purpose", () => {
   });
 
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows })
-    .filter((row) => row.type === "tracker" && row.vendor === "LinkedIn Insight Tag");
+    .filter((row) => row.type === "tracker" && row.vendor === "LinkedIn");
 
   assert.equal(groupedRows.length, 1);
   assert.deepEqual(groupedRows[0]?.domains, ["snap.licdn.com"]);

@@ -60,6 +60,22 @@ test("resolves Google Analytics from collection endpoint and cookie", () => {
   );
 });
 
+test("resolves publisher infrastructure and supported ownership domains canonically", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", hostname: "a.bildstatic.de" },
+    { type: "request", hostname: "squid.gazeta.pl" },
+    { type: "request", hostname: "rp.pl" },
+    { type: "request", hostname: "hit.gemius.pl" },
+    { type: "cookie", cookieName: "smuuid" },
+  ]);
+
+  assertResolved(observations, "Axel Springer", "Axel Springer publisher infrastructure", "infrastructure");
+  assertResolved(observations, "Agora", "Agora publisher infrastructure", "infrastructure");
+  assertResolved(observations, "Gremi Media", "Gremi Media publisher infrastructure", "infrastructure");
+  assertResolved(observations, "Gemius", "Gemius audience measurement", "analytics");
+  assertResolved(observations, "Salesmanago", "Salesmanago marketing automation", "analytics");
+});
+
 test("resolves non-essential vendors from bounded storage keys", () => {
   const observations = resolveVendorObservations([
     {
