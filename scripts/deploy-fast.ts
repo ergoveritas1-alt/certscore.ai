@@ -353,8 +353,8 @@ async function deployWeb(input: { force: boolean; ref: string }): Promise<LaneRe
       "--target", input.ref
     ]);
     const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.ref);
-    const run = await waitForRun(runId);
-    return { workflow: WEB_WORKFLOW, url: run.url };
+    const workflowRun = await waitForRun(runId);
+    return { workflow: WEB_WORKFLOW, url: workflowRun.url };
   });
 }
 
@@ -368,11 +368,11 @@ async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; 
       "-f", `push_runtime_base=${input.pushRuntimeBase ? "true" : "false"}`,
       "-f", "runtime_base_tag=validation-worker-runtime-base"
     ], input.pushRuntimeBase);
-    const run = await waitForRun(runId);
+    const workflowRun = await waitForRun(runId);
     return {
       runtimeBase: input.pushRuntimeBase ? "rebuilt" : "reused",
       workflow: VALIDATION_WORKFLOW,
-      url: run.url
+      url: workflowRun.url
     };
   });
 }
@@ -383,8 +383,8 @@ async function deployDb(input: { ref: string; skip: boolean }): Promise<LaneResu
   }
   return timedLane("production DB migrations", async () => {
     const runId = await ensureWorkflowRun(DB_WORKFLOW, input.ref, [], true);
-    const run = await waitForRun(runId);
-    return { workflow: DB_WORKFLOW, url: run.url };
+    const workflowRun = await waitForRun(runId);
+    return { workflow: DB_WORKFLOW, url: workflowRun.url };
   });
 }
 
