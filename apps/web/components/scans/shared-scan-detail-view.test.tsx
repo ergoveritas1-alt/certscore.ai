@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-test("pre-consent inventory keeps separate purpose and category columns", () => {
+test("pre-consent inventory keeps purpose separate, removes requests, and places category last", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
 
-  assert.match(source, /\["Type", "Vendor", "Purpose", "Category", "Priority"/);
-  assert.match(source, />Purpose<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>[\s\S]*>Priority<\/[a-z]+>/);
-  assert.match(source, /\{row\.purpose\}[\s\S]*\{getRuntimeInventoryMacroCategory\(row\)\}/);
+  assert.match(source, /\["Type", "Vendor", "Purpose", "Priority", "First seen", "Cookie name\(s\)", "Domain", "Confidence", "Party", "Category"\]/);
+  assert.match(source, />Purpose<\/[a-z]+>[\s\S]*>Party<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
+  assert.doesNotMatch(source, />Req\.<\/[a-z]+>/);
+  assert.doesNotMatch(source, /"Requests"/);
 });
 
 async function loadBuildScanReportUnifiedFindings() {
