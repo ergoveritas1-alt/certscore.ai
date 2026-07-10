@@ -1,9 +1,11 @@
 import type { Page } from "playwright";
 import {
   classifyConsentControlLabel,
+  isSupportedPrivacyEvidenceLocale,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   type ConsentControlClassifierProfile,
   type ConsentControlLabelClassification,
+  type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
 import {
   KNOWN_CMP_REGISTRY,
@@ -194,6 +196,7 @@ interface RawGeometryContainer {
 
 interface RawGeometryCandidate {
   frameUrl: string;
+  localeHint?: string;
   label: string;
   tagName: string;
   role?: string;
@@ -522,6 +525,7 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
     contextText: candidate.contextText,
     hasConsentContext: CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
     hasPreferenceContext: candidate.layer === "preference_center" || /preference|settings|privacy choices/i.test(candidate.contextText),
+    localeHints: localeHintsForCandidate(candidate),
   });
 }
 
@@ -539,6 +543,7 @@ function diagnosticClassificationsForCandidate(candidate: RawGeometryCandidate):
     classifierProfile: "multilingual_v1",
     hasConsentContext,
     hasPreferenceContext,
+    localeHints: localeHintsForCandidate(candidate),
   });
   if (classification.intent === "unknown") {
     return undefined;
@@ -558,6 +563,13 @@ function diagnosticClassificationsForCandidate(candidate: RawGeometryCandidate):
     classifierVariant: classification.variant,
     productionCredit: false,
   }];
+}
+
+function localeHintsForCandidate(candidate: RawGeometryCandidate): SupportedPrivacyEvidenceLocale[] | undefined {
+  const normalized = candidate.localeHint?.trim().toLowerCase().replace(/_/g, "-");
+  if (!normalized) return undefined;
+  const baseLocale = normalized.split("-", 1)[0];
+  return baseLocale && isSupportedPrivacyEvidenceLocale(baseLocale) ? [baseLocale] : undefined;
 }
 
 function isLoosePageChromeDiagnostic(
@@ -913,6 +925,7 @@ function collectConsentGeometryInPage(input: {
     const container = typeof containerIndex === "number" ? containerItems[containerIndex] : undefined;
     return {
       frameUrl: window.location.href,
+      localeHint: document.documentElement.lang || undefined,
       label: label.slice(0, 160),
       tagName: element.tagName.toLowerCase(),
       role: attr(element, "role"),

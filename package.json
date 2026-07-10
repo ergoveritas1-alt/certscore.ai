@@ -110,6 +110,8 @@
     "v2:multilingual-local-checklist-compare": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=apps/web/.env.local --import tsx ./scripts/compare-multilingual-privacy-evidence-checklist-local.ts",
     "v2:multilingual-local-evidence-quality": "TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx ./scripts/audit-multilingual-gdpr-evidence-quality-local.ts",
     "v2:multilingual-local-cohort": "PLAYWRIGHT_BROWSERS_PATH= TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=apps/web/.env.local --import tsx ./scripts/run-multilingual-privacy-evidence-local-cohort.ts",
+    "v2:multilingual-gold": "pnpm --filter @certscore/scan-core exec tsx --tsconfig ../../tsconfig.base.json --test src/multilingual-privacy-evidence-gold.test.ts",
+    "v2:multilingual-live-calibration": "node --import tsx ./scripts/audit-multilingual-privacy-evidence-live-calibration.ts",
     "v2:replay-gold-coverage": "node --import tsx ./scripts/verify-v2-replay-gold-corpus.ts",
     "v2:replay-gold-quality": "node --import tsx ./scripts/verify-v2-replay-gold-corpus.ts",
     "v2:regulatory-gold-corpus-fixtures": "node --import tsx ./scripts/build-v2-regulatory-gold-corpus-stage3-fixtures.ts --fail-on-missing",

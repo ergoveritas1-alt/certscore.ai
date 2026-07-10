@@ -60,7 +60,7 @@ export type ConsentControlLabelClassification = {
 type TermInput = Omit<ConsentControlTerm, "locale">;
 
 const MULTILINGUAL_CONTEXT_HINT_PATTERN =
-  /\b(cookie|cookies|consent|privacy|preferences?|settings|choices?|tracking|advertising|marketing|optional|essential|necessary|cmp|onetrust|trustarc|didomi|usercentrics|cookiebot|optanon|datenschutz|cookies?|einwilligung|zustimmung|präferenzen|einstellungen|choix|confidentialit[eé]|pr[eé]f[eé]rences?|consentement|finalit[eé]s|privacidad|preferencias?|configuraci[oó]n|opciones|consenso|privacy|preferenze|impostazioni|pubblicitarie|tracciamento|toestemming|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie)\b/i;
+  /\b(cookie|cookies|consent|privacy|tracking|advertising|marketing|optional|essential|necessary|cmp|onetrust|trustarc|didomi|usercentrics|cookiebot|optanon|datenschutz|einwilligung|zustimmung|confidentialit[eé]|consentement|finalit[eé]s|privacidad|consenso|pubblicitarie|tracciamento|toestemming|noodzakelijk|adverteren|śledzenie|sledzenie|reklam|prywatno[śs][ćc]|zgod[ayęą]|niezb[eę]dne|danych osobowych|plik(?:i|ów) cookie)\b/i;
 
 const PRIVACY_OPT_OUT_HINT_PATTERN =
   /\b(do not sell|do not share|sale|share|targeted advertising|privacy rights?|legitimate interest|berechtigtem interesse|widerspruch|opposition|int[eé]r[eê]t l[eé]gitime|droit d['’]opposition|gerechtvaardigd belang|bezwaar|sprzeciw|uzasadnion(?:y|ego) interes)\b/i;
