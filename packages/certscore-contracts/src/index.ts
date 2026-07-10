@@ -37,6 +37,7 @@ export const consentControlInventoryRejectionReasonSchema = z.enum([
   "no_consent_context",
   "footer_nav_page_chrome",
   "classifier_other_unknown",
+  "composite_control_container",
   "generic_container_fewer_than_two_classified_controls",
   "frame_inaccessible",
   "timing_expired_before_controls_surfaced",

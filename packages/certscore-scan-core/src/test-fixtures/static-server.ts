@@ -21,6 +21,7 @@ export type StaticFixturePage =
   | "consent-cmp-script-offscreen-onetrust-controls"
   | "consent-cmp-script-shadow-context-controls"
   | "consent-cmp-script-supplemental-settings"
+  | "consent-cmp-static-canonical-controls"
   | "consent-cmp-script-very-late-settings"
   | "consent-compact-analytics-controls"
   | "consent-compact-cookie-controls"
@@ -170,6 +171,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-cmp-script-offscreen-onetrust-controls": "consent-cmp-script-offscreen-onetrust-controls",
   "consent-cmp-script-shadow-context-controls": "consent-cmp-script-shadow-context-controls",
   "consent-cmp-script-supplemental-settings": "consent-cmp-script-supplemental-settings",
+  "consent-cmp-static-canonical-controls": "consent-cmp-static-canonical-controls",
   "consent-cmp-script-very-late-settings": "consent-cmp-script-very-late-settings",
   "consent-compact-analytics-controls": "consent-compact-analytics-controls",
   "consent-compact-cookie-controls": "consent-compact-cookie-controls",
@@ -1005,6 +1007,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     cmpScriptOffscreenOneTrustControls: caseName === "consent-cmp-script-offscreen-onetrust-controls",
     cmpScriptShadowContextControls: caseName === "consent-cmp-script-shadow-context-controls",
     cmpScriptSupplementalSettings: caseName === "consent-cmp-script-supplemental-settings",
+    cmpStaticCanonicalControls: caseName === "consent-cmp-static-canonical-controls",
     cmpScriptVeryLateSettings: caseName === "consent-cmp-script-very-late-settings",
     contextualContinueAccept: caseName === "consent-contextual-continue-accept",
     compactAnalyticsControls: caseName === "consent-compact-analytics-controls",
@@ -1061,6 +1064,18 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
         <button id="accept-all" type="button">Alle akzeptieren</button>
         <button id="reject-all" type="button">Tout refuser</button>
         <button id="settings" type="button">Paramètres des cookies</button>
+      </div>
+    `;
+  }
+  if (options.cmpStaticCanonicalControls) {
+    return `
+      <section>
+        <p>Fixture page with CMP-rendered text-ish canonical consent controls.</p>
+      </section>
+      <div id="cookiebot-banner" role="dialog" aria-label="Sutikimas" style="position: fixed; left: 24px; right: 24px; bottom: 24px; padding: 20px; border: 1px solid #111; background: #fff;">
+        <p>Atsakingas jūsų duomenų naudojimas. Naudojame slapukus, kad galėtume suasmeninti turinį ir analizuoti srautą. Galite pasirinkti, kas ir kokiais tikslais naudoja jūsų duomenis.</p>
+        <span id="accept-static" style="display: inline-block; padding: 10px; border: 1px solid #111;">Leisti visus slapukus</span>
+        <span id="options-static" style="display: inline-block; padding: 10px; border: 1px solid #111;">Rinktis</span>
       </div>
     `;
   }

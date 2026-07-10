@@ -779,6 +779,44 @@ test("pre-consent runtime scanner inventories German and French first-layer cont
   }
 });
 
+test("pre-consent runtime scanner retains text-ish canonical controls inside CMP surfaces", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-static-canonical-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-cmp-static-canonical-controls"),
+      path.join(tempRoot, "consent-cmp-static-canonical-controls"),
+      "fast",
+      "selective",
+    );
+    const observation = bundle.consentUiObservations[0];
+
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "accept_all" &&
+        control.label === "Leisti visus slapukus" &&
+        control.matchedLocale === "lt"
+      ),
+      true,
+      "scanner should retain Lithuanian accept text rendered as a CMP control",
+    );
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "manage_preferences" &&
+        control.label === "Rinktis" &&
+        control.matchedLocale === "lt"
+      ),
+      true,
+      "scanner should retain Lithuanian options text rendered as a CMP control",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner treats first-layer contextual Continue as accept-equivalent only with retained consent-by-using text", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-contextual-continue-"));

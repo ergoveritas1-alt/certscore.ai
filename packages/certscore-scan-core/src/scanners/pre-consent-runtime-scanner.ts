@@ -18,6 +18,8 @@ import {
   type ConsentUiObservation,
   type VisualCaptureSummary,
   classifyConsentControlLabel,
+  consentControlTerms,
+  PRIVACY_EVIDENCE_LOCALE_REGISTRY,
 } from "@certscore/contracts";
 import { resolveEndpointGeography, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 import { writeFile } from "node:fs/promises";
@@ -51,6 +53,30 @@ const CONSENT_GATE_PROGRESS_REVIEW_MS = 15_000;
 const CONSENT_GATE_STRONG_CMP_FLOOR_MS = 18_000;
 const CONSENT_GATE_PARTIAL_EVIDENCE_MS = 20_000;
 const CONSENT_GATE_HARD_CAP_MS = 25_000;
+const CANONICAL_CONSENT_INVENTORY_LABELS = unique(
+  consentControlTerms
+    .filter((term) => term.strength !== "weak")
+    .map((term) => term.phrase.replace(/\s+/g, " ").trim().toLowerCase())
+    .filter((phrase) => phrase.length >= 4 && phrase.length <= 80),
+).slice(0, 1_000);
+const CANONICAL_CONSENT_INVENTORY_TERMS = consentControlTerms
+  .filter((term) => term.strength !== "weak")
+  .map((term) => ({
+    intent: term.intent,
+    phrase: term.phrase.replace(/\s+/g, " ").trim().toLowerCase(),
+  }))
+  .filter((term) => term.phrase.length >= 4 && term.phrase.length <= 80)
+  .slice(0, 1_000);
+const CANONICAL_CONSENT_CONTEXT_HINTS = unique(
+  PRIVACY_EVIDENCE_LOCALE_REGISTRY
+    .flatMap((entry) => [
+      ...entry.contextHints,
+      ...entry.cookiePolicyLabels,
+      ...entry.cookieSettingsLabels,
+    ])
+    .map((phrase) => phrase.replace(/\s+/g, " ").trim().toLowerCase())
+    .filter((phrase) => phrase.length >= 4 && phrase.length <= 80),
+).slice(0, 1_000);
 const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
@@ -2586,13 +2612,34 @@ async function readConsentUiObservation(
     controls: ConsentUiInventoryControl[];
     diagnostics?: ConsentInventoryProbeDiagnostics;
     frameInaccessibleCount: number;
-  }>(String.raw`(() => {
-    const allowFullDocumentCmpControls = ${allowFullDocumentCmpControls ? "true" : "false"};
+  }, {
+    allowFullDocumentCmpControls: boolean;
+    canonicalConsentInventoryLabels: string[];
+    canonicalConsentContextHints: string[];
+  }>((input) => {
+    const certscoreWindow = window as typeof window & {
+      __certscoreConsentInventory: (
+        allowFullDocumentCmpControls: boolean,
+        canonicalConsentInventoryLabels?: string[],
+        canonicalConsentContextHints?: string[],
+      ) => {
+        controls: ConsentUiInventoryControl[];
+        diagnostics?: ConsentInventoryProbeDiagnostics;
+      };
+    };
     return {
-      ...window.__certscoreConsentInventory(allowFullDocumentCmpControls),
+      ...certscoreWindow.__certscoreConsentInventory(
+        input.allowFullDocumentCmpControls,
+        input.canonicalConsentInventoryLabels,
+        input.canonicalConsentContextHints,
+      ),
       frameInaccessibleCount: 0,
     };
-  })()`).catch((): {
+  }, {
+    allowFullDocumentCmpControls,
+    canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
+    canonicalConsentContextHints: CANONICAL_CONSENT_CONTEXT_HINTS,
+  }).catch((): {
     controls: ConsentUiInventoryControl[];
     diagnostics?: ConsentInventoryProbeDiagnostics;
     frameInaccessibleCount: number;
@@ -2661,6 +2708,10 @@ async function readConsentUiObservation(
     }
     if (isStaticTextConsentInventoryControl(control)) {
       rejectedReasons.add("outside_eligible_surface");
+      return false;
+    }
+    if (isCompositeConsentInventoryControl(control)) {
+      rejectedReasons.add("composite_control_container");
       return false;
     }
     if (
@@ -2779,7 +2830,28 @@ function isStaticTextConsentInventoryControl(control: ConsentUiInventoryControl)
   if (role === "button" || role === "link") {
     return false;
   }
+  const matchedTerm = control.matchedTerm?.replace(/\s+/g, " ").trim().toLowerCase();
+  if (matchedTerm && CANONICAL_CONSENT_INVENTORY_LABELS.includes(matchedTerm)) {
+    return false;
+  }
   return !/(?:button|btn|choice|option|preference|purpose)/i.test(control.selectorHint ?? "");
+}
+
+function isCompositeConsentInventoryControl(control: ConsentUiInventoryControl): boolean {
+  const normalizedLabel = control.label.replace(/\s+/g, " ").trim().toLowerCase();
+  if (!normalizedLabel || normalizedLabel.length > 160) {
+    return false;
+  }
+  const matchedIntents = new Set<string>();
+  for (const term of CANONICAL_CONSENT_INVENTORY_TERMS) {
+    if (term.phrase.length < 6) {
+      continue;
+    }
+    if (normalizedLabel === term.phrase || normalizedLabel.includes(term.phrase)) {
+      matchedIntents.add(term.intent);
+    }
+  }
+  return matchedIntents.size >= 2;
 }
 
 const CONSENT_DEFAULT_TOGGLE_PROBE_SCRIPT = String.raw`(() => {
@@ -3263,7 +3335,7 @@ function axStringValue(value: AccessibilityNodeValue | undefined) {
 }
 
 const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
-    window.__certscoreConsentInventory = (allowFullDocumentCmpControls) => {
+    window.__certscoreConsentInventory = (allowFullDocumentCmpControls, canonicalConsentInventoryLabels = [], canonicalConsentContextHints = []) => {
       const controlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
       const customControlSelectors = [
         "[role='link']",
@@ -3287,12 +3359,41 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
       const consentContextPattern = /cookie|cookies|privacy|consent|analytics|tracking|marketing|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i;
       const consentSurfaceTextPattern = /cookie|cookies|privacy settings|privacy preferences|analytics preferences|consent preferences|tracking preferences/i;
       const consentSurfaceActionPattern = /consent|privacy|preference|preferences|setting|settings|choice|choices|accept|reject|decline|allow|manage|ablehnen|akzeptieren|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer/i;
+      const canonicalActionLabelSet = new Set(
+        Array.isArray(canonicalConsentInventoryLabels)
+          ? canonicalConsentInventoryLabels
+            .map((value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase())
+            .filter((value) => value.length >= 4 && value.length <= 80)
+          : []
+      );
+      const canonicalContextHintSet = new Set(
+        Array.isArray(canonicalConsentContextHints)
+          ? canonicalConsentContextHints
+            .map((value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase())
+            .filter((value) => value.length >= 4 && value.length <= 80)
+          : []
+      );
       const labelFor = (element) => {
         const aria = element.getAttribute("aria-label");
         const title = element.getAttribute("title");
         const value = element instanceof HTMLInputElement ? element.value : null;
         const textContent = element.textContent;
         return (aria || title || value || textContent || "").replace(/\s+/g, " ").trim();
+      };
+      const isCanonicalActionLabel = (label) => {
+        const normalizedLabel = String(label || "").replace(/\s+/g, " ").trim().toLowerCase();
+        if (canonicalActionLabelSet.has(normalizedLabel)) {
+          return true;
+        }
+        return normalizedLabel.length <= 80 && Array.from(canonicalActionLabelSet).some((phrase) =>
+          phrase.length >= 8 && normalizedLabel.includes(phrase)
+        );
+      };
+      const hasCanonicalContextHint = (text) => {
+        const normalizedText = String(text || "").replace(/\s+/g, " ").trim().toLowerCase();
+        return normalizedText.length > 0 && Array.from(canonicalContextHintSet).some((phrase) =>
+          normalizedText.includes(phrase)
+        );
       };
       const selectorHintFor = (element) => {
         const id = element.getAttribute("id");
@@ -3468,7 +3569,10 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
             current.getAttribute("id"),
             current.getAttribute("class"),
           ].filter(Boolean).join(" ");
-          if (consentContextPattern.test(contextText + " " + contextAttrs)) {
+          if (
+            consentContextPattern.test(contextText + " " + contextAttrs) ||
+            hasCanonicalContextHint(contextText + " " + contextAttrs)
+          ) {
             return true;
           }
           current = parentFor(current);
@@ -3486,6 +3590,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           role === "button" ||
           role === "link" ||
           element.hasAttribute("onclick") ||
+          isCanonicalActionLabel(labelFor(element)) ||
           /\b(?:btn|button|choice|option|preference|purpose)\b/i.test(className) ||
           /(?:btn|button|choice|option|preference|purpose)/i.test(id)
         );
@@ -3508,6 +3613,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           (isVisible(element) ? 100 : 0) +
           (hasConsentContext(element) ? 80 : 0) +
           (isFirstLayerPosition(element) ? 40 : 0) +
+          (isCanonicalActionLabel(label) ? 110 : 0) +
           (/\b(?:accept|reject|decline|allow|agree|settings|preferences|options|choices|cookie|cookies|consent|ablehnen|akzeptieren|accepter|refuser)\b/i.test(label) ? 70 : 0) -
           (pageChrome ? 30 : 0)
         );
@@ -3549,7 +3655,20 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
             return childLabel && childLabel !== label && childLabel.length <= 140;
           });
         });
-      const candidates = [...directCandidates, ...textCandidates]
+      const canonicalTextCandidates = queryAllRoots(roots, "*", 3_500)
+        .filter((element) => !directSet.has(element))
+        .filter((element) => {
+          const label = labelFor(element);
+          if (!label || label.length > 80 || !isCanonicalActionLabel(label) || !hasConsentContext(element)) {
+            return false;
+          }
+          return !Array.from(element.children || []).slice(0, 20).some((child) => {
+            const childLabel = labelFor(child);
+            return childLabel && childLabel !== label && childLabel.length <= 80;
+          });
+        })
+        .slice(0, 80);
+      const candidates = [...directCandidates, ...textCandidates, ...canonicalTextCandidates]
         .sort((left, right) => candidatePriority(right) - candidatePriority(left))
         .slice(0, 1_200);
       const seen = new Set();
@@ -3819,8 +3938,13 @@ function likelyLateFirstLayerConsentSurfaceText(text: string): boolean {
   if (!normalized || normalized.length > 12_000) {
     return false;
   }
-  return /\b(?:cookie|cookies|cookie-einstellungen|consent|analytics preferences|privacy settings|privacy preferences|privacy choices)\b/i.test(normalized) &&
-    /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|options|necessary|essential|akzeptieren|ablehnen|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer)\b/i.test(normalized);
+  const hasConsentSubject =
+    /\b(?:cookie|cookies|cookie-einstellungen|consent|analytics preferences|privacy settings|privacy preferences|privacy choices)\b/i.test(normalized) ||
+    containsCanonicalPhrase(normalized, CANONICAL_CONSENT_CONTEXT_HINTS);
+  const hasChoiceLanguage =
+    /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|options|necessary|essential|akzeptieren|ablehnen|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer)\b/i.test(normalized) ||
+    containsCanonicalPhrase(normalized, CANONICAL_CONSENT_INVENTORY_LABELS);
+  return hasConsentSubject && hasChoiceLanguage;
 }
 
 function hasActionableConsentChoiceControl(observation: ConsentUiObservation): boolean {
@@ -3860,8 +3984,12 @@ function likelyFirstLayerConsentBannerHintText(text: string): boolean {
   if (!normalized || normalized.length > 12_000) {
     return false;
   }
-  const hasConsentSubject = /\b(?:cookie|cookies|cookie-einstellungen|consent|analytics preferences|privacy settings|privacy preferences|privacy choices)\b/i.test(normalized);
-  const hasChoiceLanguage = /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|manage|options|necessary|essential|akzeptieren|ablehnen|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer)\b/i.test(normalized);
+  const hasConsentSubject =
+    /\b(?:cookie|cookies|cookie-einstellungen|consent|analytics preferences|privacy settings|privacy preferences|privacy choices)\b/i.test(normalized) ||
+    containsCanonicalPhrase(normalized, CANONICAL_CONSENT_CONTEXT_HINTS);
+  const hasChoiceLanguage =
+    /\b(?:accept|agree|allow|reject|decline|deny|refuse|setting|settings|preferences|choices|choose|manage|options|necessary|essential|akzeptieren|ablehnen|zustimmen|einstellungen|accepter|refuser|param[eè]tres|g[eé]rer)\b/i.test(normalized) ||
+    containsCanonicalPhrase(normalized, CANONICAL_CONSENT_INVENTORY_LABELS);
   const hasBannerUseLanguage =
     /\bwe use (?:cookies|similar technologies)\b/i.test(normalized) ||
     /\buse cookies\b/i.test(normalized) ||
@@ -3872,6 +4000,10 @@ function likelyFirstLayerConsentBannerHintText(text: string): boolean {
     /\bprivacy settings\b/i.test(normalized) ||
     /\bprivacy preferences\b/i.test(normalized);
   return hasConsentSubject && (hasChoiceLanguage || hasBannerUseLanguage);
+}
+
+function containsCanonicalPhrase(normalizedText: string, phrases: readonly string[]): boolean {
+  return phrases.some((phrase) => normalizedText.includes(phrase));
 }
 
 function isTerminalVisualErrorShellText(text: string): boolean {
