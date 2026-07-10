@@ -48,7 +48,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   locale("de", {
     privacyPolicyLabels: ["datenschutzerklärung", "datenschutzinformation"], privacyPolicyPathSlugs: ["datenschutz", "datenschutzerklaerung"], cookiePolicyLabels: ["cookie-richtlinie", "cookie-hinweis"], cookiePolicyPathSlugs: ["cookie-richtlinie"],
     cookieSettingsLabels: ["cookie-einstellungen", "datenschutzeinstellungen"], termsLabels: ["nutzungsbedingungen", "allgemeine geschäftsbedingungen"], termsPathSlugs: ["nutzungsbedingungen", "agb"], contextHints: ["datenschutz", "personenbezogene daten", "cookies", "einwilligung"], tldHints: [".de", ".at"],
-    consentControls: { accept: ["alle akzeptieren", "alles akzeptieren"], reject: ["alle ablehnen", "alles ablehnen"], options: ["cookie-einstellungen", "einstellungen verwalten"], necessaryOnly: ["nur notwendige cookies", "nur erforderliche cookies"] },
+    consentControls: { accept: ["alle akzeptieren", "alles akzeptieren"], reject: ["alle ablehnen", "alles ablehnen"], options: ["cookie-einstellungen", "einstellungen verwalten", "einwilligungs-einstellungen"], necessaryOnly: ["nur notwendige cookies", "nur erforderliche cookies"] },
   }),
   locale("ja", {
     privacyPolicyLabels: ["プライバシーポリシー", "個人情報保護方針"], privacyPolicyPathSlugs: ["privacy-policy", "kojin-joho"], cookiePolicyLabels: ["クッキーポリシー"], cookiePolicyPathSlugs: ["cookie-policy", "ja/cookies"], cookieSettingsLabels: ["Cookie設定"],
@@ -70,7 +70,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
   }),
   locale("it", {
     privacyPolicyLabels: ["informativa sulla privacy", "politica sulla privacy"], privacyPolicyPathSlugs: ["informativa-privacy", "privacy"], cookiePolicyLabels: ["informativa sui cookie", "cookie policy"], cookiePolicyPathSlugs: ["cookie-policy"], cookieSettingsLabels: ["impostazioni cookie", "preferenze cookie"], termsLabels: ["termini e condizioni", "condizioni d'uso"], termsPathSlugs: ["termini-e-condizioni"], contextHints: ["privacy", "dati personali", "cookie", "consenso"], tldHints: [".it"],
-    consentControls: { accept: ["accetta tutto", "accetta tutti"], reject: ["rifiuta tutto", "rifiuta tutti"], options: ["impostazioni cookie", "gestisci preferenze"], necessaryOnly: ["solo cookie necessari", "solo i cookie necessari"] },
+    consentControls: { accept: ["accetta tutto", "accetta tutti"], reject: ["rifiuta tutto", "rifiuta tutti"], options: ["impostazioni cookie", "gestisci preferenze", "personalizza le mie scelte"], necessaryOnly: ["solo cookie necessari", "solo i cookie necessari"] },
   }),
   locale("tr", {
     privacyPolicyLabels: ["gizlilik politikası", "kişisel verilerin korunması"], privacyPolicyPathSlugs: ["gizlilik-politikasi", "kvkk"], cookiePolicyLabels: ["çerez politikası"], cookiePolicyPathSlugs: ["cerez-politikasi"], cookieSettingsLabels: ["çerez ayarları"], termsLabels: ["kullanım koşulları"], termsPathSlugs: ["kullanim-kosullari"], contextHints: ["gizlilik", "kişisel veri", "çerez", "rıza"], tldHints: [".tr"],

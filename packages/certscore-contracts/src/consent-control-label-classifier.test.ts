@@ -130,7 +130,9 @@ test("classifies observed Spanish and Italian consent labels", () => {
 
   assert.equal(classifyConsentControlLabel({ label: "Accetta" }).matchedLocale, "it");
   assert.equal(classifyConsentControlLabel({ label: "Accetto" }).intent, "accept");
+  assert.equal(classifyConsentControlLabel({ label: "Accetta tutte le condizioni e le impostazioni sulla privacy" }).intent, "accept");
   assert.equal(classifyConsentControlLabel({ label: "Rifiuta" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Rifiuta tutte le condizioni e le impostazioni sulla privacy" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({ label: "Rifiuta e abbonati" }).variant, "reject_with_subscription");
   assert.equal(classifyConsentControlLabel({ label: "Continua senza accettare" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({
@@ -141,6 +143,16 @@ test("classifies observed Spanish and Italian consent labels", () => {
     label: "pannello delle preferenze pubblicitarie",
     contextText: "Usiamo cookie e tecnologie simili per finalita pubblicitarie.",
   }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: "Personalizza le mie scelte" }).intent, "options");
+});
+
+test("classifies observed German DHL consent settings control", () => {
+  const classification = classifyConsentControlLabel({
+    label: "Einwilligungs-Einstellungen",
+    localeHints: ["de"],
+  });
+  assert.equal(classification.intent, "options");
+  assert.equal(classification.matchedLocale, "de");
 });
 
 test("classifies canonical accept, reject, options, and necessary-only controls across all 40 locales", () => {
