@@ -18,6 +18,10 @@ runtime_base_cache_tag="${CERTSCORE_V2_DAG_LAMBDA_RUNTIME_BASE_CACHE_TAG:-runtim
 auth_only="${CERTSCORE_V2_DAG_LAMBDA_ECR_AUTH_ONLY:-false}"
 skip_ecr_login="${CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN:-false}"
 
+if [[ -n "${DOCKER_CONFIG:-}" ]]; then
+  mkdir -p "$DOCKER_CONFIG"
+fi
+
 case "$region" in
   eu-central-1|eu-west-1|us-west-2) ;;
   *)

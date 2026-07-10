@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { mkdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 type DeployMode = "all" | "db" | "scanners" | "validation" | "web";
 type LaneStatus = "failed" | "skipped" | "succeeded";
@@ -395,60 +398,70 @@ async function deployDb(input: { ref: string; skip: boolean; workflowRef: string
 
 async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }): Promise<LaneResult> {
   return timedLane("Lambda scanner deploys", async () => {
-    // Docker's credential helper serializes writes to one local credential
-    // store. Authenticate each registry first, then keep the expensive image
-    // builds and Lambda updates parallel across regions.
-    for (const region of SCANNER_REGIONS) {
-      await run([
-        "bash",
-        "scripts/local-v2-dag-lambda/build-push-dev-image.sh"
-      ], {
-        env: {
-          AWS_REGION: region,
-          CERTSCORE_V2_DAG_LAMBDA_ECR_AUTH_ONLY: "true"
-        }
-      });
-    }
+    const dockerConfigRoot = path.join(tmpdir(), `certscore-lambda-deploy-${process.pid}-${input.ref.slice(0, 8)}`);
+    const dockerConfigByRegion = Object.fromEntries(SCANNER_REGIONS.map((region) => [
+      region,
+      path.join(dockerConfigRoot, region)
+    ])) as Record<(typeof SCANNER_REGIONS)[number], string>;
+    await Promise.all(Object.values(dockerConfigByRegion).map((directory) => mkdir(directory, { recursive: true })));
 
-    const results = await Promise.all(SCANNER_REGIONS.map(async (region) => {
-      const regionStart = Date.now();
-      const imageUri = `199536052647.dkr.ecr.${region}.amazonaws.com/certscore-v2-dag-local-lambda:${input.ref}`;
-      await run([
+    try {
+      // Each region gets an isolated temporary Docker credential store. This
+      // avoids macOS Keychain/helper contention without sharing auth state.
+      await Promise.all(SCANNER_REGIONS.map((region) => run([
         "bash",
         "scripts/local-v2-dag-lambda/build-push-dev-image.sh"
       ], {
         env: {
           AWS_REGION: region,
-          BUILD_GIT_SHA: input.ref,
-          BUILD_IMAGE_TAG: input.ref,
-          CERTSCORE_V2_DAG_LAMBDA_IMAGE_TAG: input.ref,
-          CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE: input.pushRuntimeBase ? "true" : "false",
-          CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN: "true",
-          CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE: "true"
+          CERTSCORE_V2_DAG_LAMBDA_ECR_AUTH_ONLY: "true",
+          DOCKER_CONFIG: dockerConfigByRegion[region]
         }
-      });
-      await run([
-        "bash",
-        "scripts/local-v2-dag-lambda/setup-dev-aws-image.sh",
-        imageUri
-      ], {
-        env: { AWS_REGION: region }
-      });
-      return {
-        durationMs: Date.now() - regionStart,
-        imageUri,
-        region,
+      })));
+
+      const results = await Promise.all(SCANNER_REGIONS.map(async (region) => {
+        const regionStart = Date.now();
+        const imageUri = `199536052647.dkr.ecr.${region}.amazonaws.com/certscore-v2-dag-local-lambda:${input.ref}`;
+        await run([
+          "bash",
+          "scripts/local-v2-dag-lambda/build-push-dev-image.sh"
+        ], {
+          env: {
+            AWS_REGION: region,
+            BUILD_GIT_SHA: input.ref,
+            BUILD_IMAGE_TAG: input.ref,
+            CERTSCORE_V2_DAG_LAMBDA_IMAGE_TAG: input.ref,
+            CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE: input.pushRuntimeBase ? "true" : "false",
+            CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN: "true",
+            CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE: "true",
+            DOCKER_CONFIG: dockerConfigByRegion[region]
+          }
+        });
+        await run([
+          "bash",
+          "scripts/local-v2-dag-lambda/setup-dev-aws-image.sh",
+          imageUri
+        ], {
+          env: { AWS_REGION: region }
+        });
+        return {
+          durationMs: Date.now() - regionStart,
+          imageUri,
+          region,
+          runtimeBase: input.pushRuntimeBase ? "rebuilt" : "reused"
+        };
+      }));
+
+      const details: Record<string, string> = {
         runtimeBase: input.pushRuntimeBase ? "rebuilt" : "reused"
       };
-    }));
-
-    const details: Record<string, string> = {
-      runtimeBase: input.pushRuntimeBase ? "rebuilt" : "reused"
-    };
-    for (const result of results) {
-      details[result.region] = `${formatDuration(result.durationMs)} ${result.imageUri}`;
+      for (const result of results) {
+        details[result.region] = `${formatDuration(result.durationMs)} ${result.imageUri}`;
+      }
+      return details;
+    } finally {
+      await rm(dockerConfigRoot, { force: true, recursive: true });
     }
-    return details;
   });
 }
 
