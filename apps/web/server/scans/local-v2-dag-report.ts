@@ -1075,6 +1075,82 @@ function getLocalV2DagAuxiliaryArtifact(
   return null;
 }
 
+const LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES = {
+  "local_v2:screenshot_pre_consent": "screenshot-pre-consent.png",
+  "local_v2:screenshot_pre_consent_full_page": "screenshot-pre-consent-full-page.png",
+  "local_v2:screenshot_pre_consent_geometry_proof": "screenshot-pre-consent-geometry-proof.png"
+} as const;
+
+export type LocalV2DagVisualEvidencePointer = {
+  bucket: string | null;
+  id: keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES;
+  key: string;
+  mimeType: "image/png";
+  status: "available";
+};
+
+export async function resolveLocalV2DagVisualEvidencePointer(
+  scanRecord: ScanDetailResponse,
+  artifactId: string
+): Promise<LocalV2DagVisualEvidencePointer | null> {
+  const input = getLocalV2DagReportInput(scanRecord);
+  if (
+    !input ||
+    scanRecord.scan.status !== "completed" ||
+    !Object.prototype.hasOwnProperty.call(LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES, artifactId)
+  ) {
+    return null;
+  }
+
+  const id = artifactId as keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES;
+  const fileName = LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES[id];
+  const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
+  if (shouldReadLocalOutDir && input.outDir) {
+    try {
+      const localPath = path.join(resolveLocalV2OutDir(input.outDir), fileName);
+      if (statSync(localPath).isFile()) {
+        return {
+          bucket: null,
+          id,
+          key: `local-v2-dag-scans/${scanRecord.scan.id}/${fileName}`,
+          mimeType: "image/png",
+          status: "available"
+        };
+      }
+    } catch {
+      // Fall through to the verified manifest pointer when the local mirror is unavailable.
+    }
+  }
+
+  const localManifest = shouldReadLocalOutDir && input.outDir
+    ? await readLocalV2DagManifest(input.outDir)
+    : null;
+  const manifest = localManifest ?? (input.manifestArtifactUri
+    ? await readLocalV2DagManifestFromS3({
+        expectedSha256: input.manifestArtifactSha256,
+        expectedSizeBytes: input.manifestArtifactSizeBytes,
+        uri: input.manifestArtifactUri
+      })
+    : null);
+  const screenshotArtifact = getLocalV2DagAuxiliaryArtifact(manifest, fileName);
+  if (!screenshotArtifact) {
+    return null;
+  }
+
+  try {
+    const { bucket, key } = parseS3Uri(screenshotArtifact.uri);
+    return {
+      bucket,
+      id,
+      key,
+      mimeType: "image/png",
+      status: "available"
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function readLocalV2ConsentControlGeometryFromS3(
   artifact: LocalV2DagLambdaArtifactPointer
 ): Promise<Record<string, unknown> | null> {

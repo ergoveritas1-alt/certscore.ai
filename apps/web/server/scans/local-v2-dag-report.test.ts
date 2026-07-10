@@ -230,6 +230,72 @@ test("getLocalV2DagReportInput rejects new verified-S3 pointers without checksum
   assert.equal(input?.scanArtifactUri, null);
 });
 
+test("resolveLocalV2DagVisualEvidencePointer resolves a mirrored screenshot without reading the canonical bundle", async () => {
+  const { resolveLocalV2DagVisualEvidencePointer } = await loadLocalV2DagReport();
+  const scanId = "94d8855d-0347-4d5d-9bb1-b60f1cccc8fd";
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/direct-visual-evidence-"));
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await writeFile(path.join(outDir, "screenshot-pre-consent.png"), syntheticPngHeader(1366, 900));
+    await writeFile(path.join(outDir, "LocalV2DagLambdaManifest.json"), JSON.stringify({
+      auxiliaryArtifacts: [{
+        fileName: "screenshot-pre-consent.png",
+        sha256: "a".repeat(64),
+        sizeBytes: 1024,
+        uri: `s3://certscore-v2-dag-local-artifacts-eu-west-1-199536052647/v2-dag-lambda/local/${scanId}/auxiliary/screenshot-pre-consent.png`
+      }]
+    }));
+
+    const scanRecord = makeScanRecord({
+      scan: {
+        ...makeScanRecord().scan,
+        id: scanId,
+        scanConfigJson: {
+          ...makeScanRecord().scan.scanConfigJson,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    });
+
+    assert.deepEqual(
+      await resolveLocalV2DagVisualEvidencePointer(scanRecord, "local_v2:screenshot_pre_consent"),
+      {
+        bucket: null,
+        id: "local_v2:screenshot_pre_consent",
+        key: `local-v2-dag-scans/${scanId}/screenshot-pre-consent.png`,
+        mimeType: "image/png",
+        status: "available"
+      }
+    );
+    assert.equal(
+      await resolveLocalV2DagVisualEvidencePointer(scanRecord, "local_v2:unknown_screenshot"),
+      null,
+      "unrecognized artifact IDs must not be converted into storage paths"
+    );
+    assert.equal(
+      await resolveLocalV2DagVisualEvidencePointer(scanRecord, "toString"),
+      null,
+      "inherited object properties must not be accepted as artifact IDs"
+    );
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("verified S3 fallback enforces Lambda artifact checksum and size", async () => {
   const { verifyLocalV2DagLambdaArtifactBody } = await loadLocalV2DagReport();
   const body = Buffer.from('{"schemaVersion":"certscore.v2.canonical-evidence-bundle.v1"}');

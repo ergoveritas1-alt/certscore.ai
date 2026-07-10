@@ -10,7 +10,7 @@ import { bootstrapAppUserSession } from "../../../../../../server/bootstrap-user
 import { getAnonymousScanById, getScanById } from "../../../../../../server/scans/get-scan-by-id";
 import {
   getLocalV2DagReportInput,
-  materializeLocalV2DagScanDetail
+  resolveLocalV2DagVisualEvidencePointer
 } from "../../../../../../server/scans/local-v2-dag-report";
 import { createSignedStorageUrl, getStorageBucketName } from "../../../../../../server/storage/s3";
 
@@ -217,12 +217,12 @@ export async function GET(_request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Scan not found." }, { status: 404 });
   }
 
-  const displayScanRecord =
-    getLocalV2DagReportInput(scanRecord) && scanRecord.scan.status === "completed"
-      ? await materializeLocalV2DagScanDetail(scanRecord)
-      : scanRecord;
-
-  const artifact = getVisualEvidenceArtifacts(displayScanRecord.runtimeArtifacts).find((candidate) => candidate.id === decodeURIComponent(artifactId));
+  const decodedArtifactId = decodeURIComponent(artifactId);
+  const storedArtifact = getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)
+    .find((candidate) => candidate.id === decodedArtifactId) ?? null;
+  const artifact = storedArtifact ?? (getLocalV2DagReportInput(scanRecord)
+    ? await resolveLocalV2DagVisualEvidencePointer(scanRecord, decodedArtifactId)
+    : null);
   if (!artifact || artifact.status !== "available" || !artifact.key) {
     return NextResponse.json({ error: "Visual evidence is unavailable." }, { status: 404 });
   }
