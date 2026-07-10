@@ -2311,6 +2311,7 @@ async function recoverConsentGateTimeoutWithGeometry(
     navigationStartedAtMs: number;
     page: Page;
     scanStartedAtMs: number;
+    timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
   },
   observation: ConsentUiObservation,
 ) {
@@ -2319,23 +2320,38 @@ async function recoverConsentGateTimeoutWithGeometry(
     containerLimit: 16,
     timeoutMs: 2_000,
   }).catch(() => null);
-  if (!geometry || !hasConfirmedFirstLayerGeometryControls(geometry)) {
-    return observation;
+  if (geometry && hasConfirmedFirstLayerGeometryControls(geometry)) {
+    const artifactPath = await input.artifactWriter.writeJsonArtifact("ConsentGateTimeoutGeometryEvidence.json", {
+      ...geometry,
+      artifactOnly: true,
+      productionFindingIntegration: false,
+      limitation: "Bounded canonical geometry fallback after the normal consent inventory exceeded its gate deadline.",
+    }).catch(() => undefined);
+    const recovered = consentUiObservationFromConfirmedGeometryControls({
+      artifactPath,
+      geometry,
+      scanStartedAtMs: input.scanStartedAtMs,
+      text: observation.textExcerpt,
+    });
+    if (recovered) {
+      return mergeConsentUiObservations(observation, recovered, "geometry:gate_inventory_timeout_controls");
+    }
   }
-  const artifactPath = await input.artifactWriter.writeJsonArtifact("ConsentGateTimeoutGeometryEvidence.json", {
-    ...geometry,
-    artifactOnly: true,
-    productionFindingIntegration: false,
-    limitation: "Bounded canonical geometry fallback after the normal consent inventory exceeded its gate deadline.",
-  }).catch(() => undefined);
-  const recovered = consentUiObservationFromConfirmedGeometryControls({
-    artifactPath,
-    geometry,
-    scanStartedAtMs: input.scanStartedAtMs,
-    text: observation.textExcerpt,
-  });
-  return recovered
-    ? mergeConsentUiObservations(observation, recovered, "geometry:gate_inventory_timeout_controls")
+
+  const rescue = await recordBoundedTiming(
+    input.timingBreakdown,
+    "consent UI stalled-inventory quality rescue",
+    "One final bounded structured inventory after canonical CMP geometry could not recover controls from a stalled page.",
+    12_000,
+    () => detectConsentUi(input.page, input.scanStartedAtMs, 0, {
+      allowFullDocumentCmpControls: true,
+      waitForCompleteChoiceControls: true,
+      waitForControlsOnTextOnlySurface: true,
+    }),
+    () => observation,
+  );
+  return isStrongerConsentUiObservation(rescue, observation)
+    ? mergeConsentUiObservations(observation, rescue, "recapture:stalled_inventory_quality_rescue")
     : observation;
 }
 
