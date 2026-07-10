@@ -20,6 +20,10 @@ skip_ecr_login="${CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN:-false}"
 
 if [[ -n "${DOCKER_CONFIG:-}" ]]; then
   mkdir -p "$DOCKER_CONFIG"
+  if [[ -x "/Applications/Docker.app/Contents/Resources/cli-plugins/docker-buildx" ]]; then
+    mkdir -p "$DOCKER_CONFIG/cli-plugins"
+    ln -sf "/Applications/Docker.app/Contents/Resources/cli-plugins/docker-buildx" "$DOCKER_CONFIG/cli-plugins/docker-buildx"
+  fi
 fi
 
 case "$region" in
