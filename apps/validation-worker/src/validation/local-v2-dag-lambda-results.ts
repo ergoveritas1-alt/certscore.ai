@@ -160,6 +160,29 @@ function parseLambdaHandlerTiming(value: unknown): LambdaHandlerTiming | undefin
   };
 }
 
+export function productionArtifactChainRejectReason(input: {
+  artifactMetadata?: Record<string, unknown>;
+  artifactPointers?: Record<string, unknown>;
+}) {
+  const artifactMetadata = input.artifactMetadata ?? {};
+  const artifactPointers = input.artifactPointers ?? {};
+  for (const field of ["manifestUri", "scanArtifactUri"] as const) {
+    const uri = stringValue(artifactPointers[field]);
+    if (!uri?.startsWith("s3://")) {
+      return `${field} must be a durable s3:// pointer`;
+    }
+    const metadata = asRecord(artifactMetadata[field]);
+    const sha256 = stringValue(metadata.sha256);
+    if (!sha256 || !/^[a-f0-9]{64}$/i.test(sha256)) {
+      return `${field} must include a SHA-256 checksum`;
+    }
+    if (typeof metadata.sizeBytes !== "number" || !Number.isSafeInteger(metadata.sizeBytes) || metadata.sizeBytes <= 0) {
+      return `${field} must include a positive byte size`;
+    }
+  }
+  return null;
+}
+
 function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: LambdaTargetEnvironment): LambdaResultMessage {
   const record = asRecord(JSON.parse(raw));
   if (record.artifactOnly !== true || record.productionFindingIntegration !== false) {
@@ -187,10 +210,18 @@ function parseLambdaResultMessage(raw: string, expectedTargetEnvironment: Lambda
   const errorRecord = asRecord(record.error);
   const errorMessage = stringValue(errorRecord.message);
   const handlerTiming = parseLambdaHandlerTiming(record.handlerTiming);
+  const artifactMetadata = asRecord(record.artifactMetadata);
+  const artifactPointers = asRecord(record.artifactPointers);
+  if (targetEnvironment === "production" && status === "completed") {
+    const artifactChainRejectReason = productionArtifactChainRejectReason({ artifactMetadata, artifactPointers });
+    if (artifactChainRejectReason) {
+      throw new Error(`Production Lambda result artifact chain is not verifiable: ${artifactChainRejectReason}.`);
+    }
+  }
 
   return {
-    artifactMetadata: asRecord(record.artifactMetadata),
-    artifactPointers: asRecord(record.artifactPointers),
+    artifactMetadata,
+    artifactPointers,
     completedAt,
     ...(errorMessage
       ? { error: { ...(stringValue(errorRecord.code) ? { code: stringValue(errorRecord.code) as string } : {}), message: errorMessage } }
@@ -531,12 +562,15 @@ export async function recordLocalV2DagLambdaResult(
     throw new Error(`Cannot record Lambda result for unknown scan ${parsedMessage.scanId}.`);
   }
 
-  const artifactMirror = await mirrorLocalV2DagLambdaArtifacts({
-    mirrorAuxiliaryArtifacts: false,
-    parsedMessage,
-    s3Client: options.s3Client,
-    workspaceRoot: options.workspaceRoot
-  });
+  const shouldMirrorArtifacts = parsedMessage.targetEnvironment === "local";
+  const artifactMirror = shouldMirrorArtifacts
+    ? await mirrorLocalV2DagLambdaArtifacts({
+        mirrorAuxiliaryArtifacts: false,
+        parsedMessage,
+        s3Client: options.s3Client,
+        workspaceRoot: options.workspaceRoot
+      })
+    : null;
   const wc01ResultRecordedAt = new Date();
   const lambdaCompletedAtMs = Date.parse(parsedMessage.completedAt);
   const lambdaToWc01ResultRecordedMs = Number.isFinite(lambdaCompletedAtMs)
@@ -616,6 +650,11 @@ export async function recordLocalV2DagLambdaResult(
           ? "Local v2 DAG Lambda returned a failed artifact-only result."
           : "Local v2 DAG Lambda returned a completed artifact-only result.",
         {
+          artifactAccess: {
+            checksumSource: "lambda_result_artifact_metadata",
+            localMirrorRequired: shouldMirrorArtifacts,
+            productionReadMode: "verified_s3"
+          },
           artifactOnly: true,
           artifactMetadata: parsedMessage.artifactMetadata ?? {},
           artifactMirror: artifactMirror
@@ -638,6 +677,7 @@ export async function recordLocalV2DagLambdaResult(
           handoffTiming: {
             artifactMirrorDurationMs: artifactMirror?.durationMs ?? null,
             artifactMirroredAt: artifactMirror ? wc01ResultRecordedAt.toISOString() : null,
+            artifactMirrorSkippedReason: shouldMirrorArtifacts ? null : "production_uses_verified_s3",
             lambdaCompletedAt: parsedMessage.completedAt,
             lambdaToWc01ResultRecordedMs,
             wc01ResultRecordedAt: wc01ResultRecordedAt.toISOString()

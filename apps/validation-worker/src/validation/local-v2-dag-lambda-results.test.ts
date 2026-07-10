@@ -9,7 +9,8 @@ import test from "node:test";
 import {
   getLambdaResultTargetEnvironment,
   getManualSmokeResultScanId,
-  mirrorLocalV2DagLambdaArtifacts
+  mirrorLocalV2DagLambdaArtifacts,
+  productionArtifactChainRejectReason
 } from "./local-v2-dag-lambda-results";
 
 test("validation worker mirrors completed local Lambda artifacts and auxiliary screenshots", async () => {
@@ -111,6 +112,35 @@ test("validation worker identifies wrong-target Lambda results for immediate rel
   assert.equal(getLambdaResultTargetEnvironment(JSON.stringify({ targetEnvironment: "staging" })), null);
 });
 
+test("production result handoff requires verifiable canonical artifact pointers", () => {
+  const valid = {
+    artifactMetadata: {
+      manifestUri: { sha256: "a".repeat(64), sizeBytes: 100 },
+      scanArtifactUri: { sha256: "b".repeat(64), sizeBytes: 200 }
+    },
+    artifactPointers: {
+      manifestUri: "s3://certscore-artifacts/scan/LocalV2DagLambdaManifest.json",
+      scanArtifactUri: "s3://certscore-artifacts/scan/CanonicalEvidenceBundle.json"
+    }
+  };
+
+  assert.equal(productionArtifactChainRejectReason(valid), null);
+  assert.match(productionArtifactChainRejectReason({
+    ...valid,
+    artifactMetadata: {
+      ...valid.artifactMetadata,
+      scanArtifactUri: { sha256: "bad", sizeBytes: 200 }
+    }
+  }) ?? "", /SHA-256/);
+  assert.match(productionArtifactChainRejectReason({
+    ...valid,
+    artifactPointers: {
+      ...valid.artifactPointers,
+      manifestUri: "https://example.test/manifest.json"
+    }
+  }) ?? "", /s3:\/\//);
+});
+
 test("validation worker Lambda result poller retains leases and bounds result concurrency", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
@@ -135,9 +165,11 @@ test("validation worker records Lambda result event before marking scan complete
   );
 });
 
-test("validation worker mirrors completed Lambda artifacts for production-target results", async () => {
+test("validation worker uses verified S3 for production results and retains local diagnostic mirrors", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
 
-  assert.doesNotMatch(source, /targetEnvironment\s*!==\s*"local"/);
+  assert.match(source, /shouldMirrorArtifacts\s*=\s*parsedMessage\.targetEnvironment\s*===\s*"local"/);
+  assert.match(source, /productionReadMode:\s*"verified_s3"/);
+  assert.match(source, /production_uses_verified_s3/);
   assert.match(source, /input\.parsedMessage\.status\s*!==\s*"completed"/);
 });

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -71,6 +72,16 @@ test("buildLocalV2DagTimingArtifacts retains bounded module and policy timings",
   assert.equal(timing.v2DagPolicyDiscoveryDiagnostics.shortCircuitReason, "static_core_policy_coverage");
 });
 
+test("buildLocalV2DagTimingArtifacts tolerates retained legacy bundles without module timings", async () => {
+  const { buildLocalV2DagTimingArtifacts } = await loadLocalV2DagReport();
+  const timing = buildLocalV2DagTimingArtifacts({
+    policySurfaceObservations: []
+  } as unknown as CanonicalEvidenceBundle);
+
+  assert.deepEqual(timing.buildPhaseSummaries, []);
+  assert.equal(timing.v2DagPolicyDiscoveryDiagnostics.phaseWallMs, null);
+});
+
 function syntheticPngHeader(width: number, height: number, byteSize = 1024) {
   const buffer = Buffer.alloc(byteSize);
   Buffer.from("89504e470d0a1a0a", "hex").copy(buffer, 0);
@@ -139,8 +150,22 @@ test("getLocalV2DagReportInput reads Lambda scan artifact URI from retained resu
         id: "event-1",
         message: "Local v2 DAG Lambda returned a completed artifact-only result.",
         metadataJson: {
+          artifactAccess: {
+            productionReadMode: "verified_s3"
+          },
           artifactOnly: true,
+          artifactMetadata: {
+            manifestUri: {
+              sha256: "manifest-sha256",
+              sizeBytes: 456
+            },
+            scanArtifactUri: {
+              sha256: "scan-sha256",
+              sizeBytes: 123
+            }
+          },
           artifactPointers: {
+            manifestUri: "s3://certscore-v2-dag-local-artifacts-199536052647-eu-central-1/v2-dag-lambda/local/manifest.json",
             scanArtifactUri: "s3://certscore-v2-dag-local-artifacts-199536052647-eu-central-1/v2-dag-lambda/local/scan.json"
           },
           processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
@@ -176,6 +201,55 @@ test("getLocalV2DagReportInput reads Lambda scan artifact URI from retained resu
   assert.equal(input?.outDir, null);
   assert.equal(input?.profile, "standard");
   assert.equal(input?.lambdaResultQueueUrl, "https://sqs.eu-west-1.amazonaws.com/123/ie-results");
+  assert.equal(input?.scanArtifactSha256, "scan-sha256");
+  assert.equal(input?.scanArtifactSizeBytes, 123);
+  assert.equal(input?.manifestArtifactSha256, "manifest-sha256");
+  assert.equal(input?.manifestArtifactSizeBytes, 456);
+});
+
+test("getLocalV2DagReportInput rejects new verified-S3 pointers without checksums", async () => {
+  const { getLocalV2DagReportInput } = await loadLocalV2DagReport();
+  const input = getLocalV2DagReportInput(makeScanRecord({
+    events: [
+      {
+        createdAt: "2026-07-10T13:14:02.000Z",
+        eventType: "v2_lambda_result.received",
+        id: "event-unverified",
+        message: "Unverifiable result.",
+        metadataJson: {
+          artifactAccess: { productionReadMode: "verified_s3" },
+          artifactOnly: true,
+          artifactPointers: { scanArtifactUri: "s3://certscore-artifacts/scan/bundle.json" },
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          productionFindingIntegration: false
+        }
+      }
+    ]
+  }));
+
+  assert.equal(input?.scanArtifactUri, null);
+});
+
+test("verified S3 fallback enforces Lambda artifact checksum and size", async () => {
+  const { verifyLocalV2DagLambdaArtifactBody } = await loadLocalV2DagReport();
+  const body = Buffer.from('{"schemaVersion":"certscore.v2.canonical-evidence-bundle.v1"}');
+  const sha256 = createHash("sha256").update(body).digest("hex");
+
+  assert.equal(verifyLocalV2DagLambdaArtifactBody({
+    body,
+    expectedSha256: sha256,
+    expectedSizeBytes: body.byteLength
+  }), body);
+  assert.throws(() => verifyLocalV2DagLambdaArtifactBody({
+    body,
+    expectedSha256: "0".repeat(64),
+    expectedSizeBytes: body.byteLength
+  }), /checksum mismatch/);
+  assert.throws(() => verifyLocalV2DagLambdaArtifactBody({
+    body,
+    expectedSha256: sha256,
+    expectedSizeBytes: body.byteLength + 1
+  }), /size mismatch/);
 });
 
 test("getLocalV2DagReportInput ignores Lambda events that would enable production finding integration", async () => {
@@ -3108,7 +3182,7 @@ test("materializeLocalV2DagScanDetail treats retained bot verification DOM as sc
   }
 });
 
-test("materializeLocalV2DagScanDetail keeps missing reject actionable when runtime activity was retained", async () => {
+test("materializeLocalV2DagScanDetail keeps missing reject unconfirmed when runtime activity was retained", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/missing-reject-"));
@@ -3181,6 +3255,7 @@ test("materializeLocalV2DagScanDetail keeps missing reject actionable when runti
           url: "https://tags.example.test/pixel.js"
         }
       ],
+      modulesRun: [],
       normalizedUrl: "https://www.nbcnews.com/",
       runtimeCoverage: {
         coverageStatus: "limited_partial",
@@ -3258,10 +3333,10 @@ test("materializeLocalV2DagScanDetail keeps missing reject actionable when runti
 
     assert.equal(rejectPathArtifact?.firstLayerCookieConsentBannerObserved, false);
     assert.equal(rejectPathArtifact?.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
-    assert.equal(rejectPath?.status, "Review signal");
+    assert.equal(rejectPath?.status, "Not confirmed");
     assert.equal(rejectPath?.assessmentStatus, "review_signal");
     assert.notEqual(rejectPath?.evidenceState, "not_testable");
-    assert.match(rejectPath?.limitation ?? "", /partial concern/i);
+    assert.match(rejectPath?.limitation ?? "", /not confirmed|tracking activity alone|cookie consent banner/i);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
+import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -54,7 +55,17 @@ type GdprTransparencyProductionEvidenceDiagnostics = {
   sourceCandidateCount: number;
 };
 
-function getLocalV2DagLambdaScanArtifactUri(scanRecord: ScanDetailResponse) {
+type LocalV2DagLambdaArtifactPointer = {
+  sha256: string | null;
+  sizeBytes: number | null;
+  uri: string;
+  verificationRequired: boolean;
+};
+
+function getLocalV2DagLambdaArtifactPointer(
+  scanRecord: ScanDetailResponse,
+  field: "manifestUri" | "scanArtifactUri"
+): LocalV2DagLambdaArtifactPointer | null {
   return scanRecord.events
     .filter((event) => event.eventType === "v2_lambda_result.received")
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
@@ -67,9 +78,28 @@ function getLocalV2DagLambdaScanArtifactUri(scanRecord: ScanDetailResponse) {
       ) {
         return null;
       }
-      return getString(getRecord(metadata, "artifactPointers")?.scanArtifactUri);
+      const uri = getString(getRecord(metadata, "artifactPointers")?.[field]);
+      if (!uri) {
+        return null;
+      }
+      const artifactMetadata = getRecord(getRecord(metadata, "artifactMetadata"), field);
+      const sizeBytes = artifactMetadata?.sizeBytes;
+      const sha256 = getString(artifactMetadata?.sha256);
+      const normalizedSizeBytes = typeof sizeBytes === "number" && Number.isSafeInteger(sizeBytes) && sizeBytes >= 0
+        ? sizeBytes
+        : null;
+      const verificationRequired = getRecord(metadata, "artifactAccess")?.productionReadMode === "verified_s3";
+      if (verificationRequired && (!sha256 || normalizedSizeBytes === null)) {
+        return null;
+      }
+      return {
+        sha256,
+        sizeBytes: normalizedSizeBytes,
+        uri,
+        verificationRequired
+      };
     })
-    .find((uri): uri is string => Boolean(uri)) ?? null;
+    .find((pointer): pointer is LocalV2DagLambdaArtifactPointer => Boolean(pointer)) ?? null;
 }
 
 export function getLocalV2DagReportInput(scanRecord: ScanDetailResponse) {
@@ -87,7 +117,8 @@ export function getLocalV2DagReportInput(scanRecord: ScanDetailResponse) {
   const localV2Dag = getRecord(execution, "localV2Dag");
   const v2DagLambda = getRecord(execution, "v2DagLambda");
   const outDir = getString(localV2Dag?.outDir);
-  const scanArtifactUri = getLocalV2DagLambdaScanArtifactUri(scanRecord);
+  const manifestArtifact = getLocalV2DagLambdaArtifactPointer(scanRecord, "manifestUri");
+  const scanArtifact = getLocalV2DagLambdaArtifactPointer(scanRecord, "scanArtifactUri");
   const lambdaResultQueueUrl = getString(v2DagLambda?.resultQueueUrl);
   const normalizedUrl = getString(config.normalizedUrl);
   const hostname = getString(config.hostname) ?? scanRecord.scan.domainHostname;
@@ -101,9 +132,14 @@ export function getLocalV2DagReportInput(scanRecord: ScanDetailResponse) {
   return {
     gdprTransparencyEvidenceProfile,
     lambdaResultQueueUrl,
+    manifestArtifactSha256: manifestArtifact?.sha256 ?? null,
+    manifestArtifactSizeBytes: manifestArtifact?.sizeBytes ?? null,
+    manifestArtifactUri: manifestArtifact?.uri ?? null,
     outDir,
     profile: profile === "tiny" ? "tiny" as LocalV2DagScanProfile : "standard" as LocalV2DagScanProfile,
-    scanArtifactUri,
+    scanArtifactSha256: scanArtifact?.sha256 ?? null,
+    scanArtifactSizeBytes: scanArtifact?.sizeBytes ?? null,
+    scanArtifactUri: scanArtifact?.uri ?? null,
     url: normalizedUrl ?? hostname ?? null
   };
 }
@@ -351,14 +387,15 @@ function localV2ModuleOutcome(status: CanonicalEvidenceBundle["modulesRun"][numb
 }
 
 export function buildLocalV2DagTimingArtifacts(bundle: CanonicalEvidenceBundle) {
-  const modulePhases = bundle.modulesRun.map((moduleRun) => ({
+  const modulesRun = Array.isArray(bundle.modulesRun) ? bundle.modulesRun : [];
+  const modulePhases = modulesRun.map((moduleRun) => ({
     phase: moduleRun.moduleName.slice(0, 120),
     startedAt: moduleRun.startedAt,
     completedAt: moduleRun.completedAt ?? null,
     durationMs: moduleRun.durationMs ?? durationMsFromTimestamps(moduleRun.startedAt, moduleRun.completedAt) ?? 0,
     outcome: localV2ModuleOutcome(moduleRun.status)
   }));
-  const childPhases = bundle.modulesRun
+  const childPhases = modulesRun
     .flatMap((moduleRun) => (moduleRun.timingBreakdown ?? []).map((timing) => ({
       phase: `${moduleRun.moduleName}:${timing.label}`.slice(0, 120),
       startedAt: null,
@@ -368,7 +405,7 @@ export function buildLocalV2DagTimingArtifacts(bundle: CanonicalEvidenceBundle) 
     })))
     .sort((left, right) => right.durationMs - left.durationMs)
     .slice(0, Math.max(0, 20 - modulePhases.length));
-  const policyModule = bundle.modulesRun.find((moduleRun) => /policySurfaceScanner/i.test(moduleRun.moduleName));
+  const policyModule = modulesRun.find((moduleRun) => /policySurfaceScanner/i.test(moduleRun.moduleName));
   const policyTimings = policyModule?.timingBreakdown ?? [];
   const details = policyTimings.map((timing) => timing.detail ?? "");
   const rankedCandidateCounts = details.flatMap((detail) => {
@@ -932,13 +969,47 @@ async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {
   throw new Error("Unsupported local v2 DAG Lambda scan artifact response body.");
 }
 
-async function readLocalV2DagBundleFromS3(scanArtifactUri: string): Promise<CanonicalEvidenceBundle | null> {
+export function verifyLocalV2DagLambdaArtifactBody(input: {
+  body: Buffer;
+  expectedSha256?: string | null;
+  expectedSizeBytes?: number | null;
+}) {
+  if (input.expectedSizeBytes !== null && input.expectedSizeBytes !== undefined && input.body.byteLength !== input.expectedSizeBytes) {
+    throw new Error("Local v2 DAG Lambda S3 artifact size mismatch.");
+  }
+  if (
+    input.expectedSha256 &&
+    createHash("sha256").update(input.body).digest("hex") !== input.expectedSha256
+  ) {
+    throw new Error("Local v2 DAG Lambda S3 artifact checksum mismatch.");
+  }
+  return input.body;
+}
+
+async function readLocalV2DagJsonArtifactFromS3(input: {
+  expectedSha256?: string | null;
+  expectedSizeBytes?: number | null;
+  uri: string;
+}) {
+  const { bucket, key } = parseS3Uri(input.uri);
+  const response = await new S3Client({ region: inferS3ArtifactRegion(bucket) }).send(
+    new GetObjectCommand({ Bucket: bucket, Key: key })
+  );
+  const body = verifyLocalV2DagLambdaArtifactBody({
+    body: await streamToBuffer(response.Body),
+    expectedSha256: input.expectedSha256,
+    expectedSizeBytes: input.expectedSizeBytes
+  });
+  return JSON.parse(body.toString("utf8")) as unknown;
+}
+
+async function readLocalV2DagBundleFromS3(input: {
+  expectedSha256?: string | null;
+  expectedSizeBytes?: number | null;
+  uri: string;
+}): Promise<CanonicalEvidenceBundle | null> {
   try {
-    const { bucket, key } = parseS3Uri(scanArtifactUri);
-    const response = await new S3Client({ region: inferS3ArtifactRegion(bucket) }).send(
-      new GetObjectCommand({ Bucket: bucket, Key: key })
-    );
-    const parsed: unknown = JSON.parse((await streamToBuffer(response.Body)).toString("utf8"));
+    const parsed = await readLocalV2DagJsonArtifactFromS3(input);
     if (
       !isRecord(parsed) ||
       (parsed.schemaVersion !== "certscore.v2.canonical-evidence-bundle.v1" &&
@@ -952,14 +1023,57 @@ async function readLocalV2DagBundleFromS3(scanArtifactUri: string): Promise<Cano
   }
 }
 
-async function readLocalV2ConsentControlGeometryFromS3(scanArtifactUri: string): Promise<Record<string, unknown> | null> {
+async function readLocalV2DagManifestFromS3(input: {
+  expectedSha256?: string | null;
+  expectedSizeBytes?: number | null;
+  uri: string;
+}): Promise<Record<string, unknown> | null> {
   try {
-    const { bucket, key } = parseS3Uri(scanArtifactUri);
-    const geometryKey = `${path.posix.dirname(key)}/auxiliary/ConsentControlGeometryEvidence.json`;
-    const response = await new S3Client({ region: inferS3ArtifactRegion(bucket) }).send(
-      new GetObjectCommand({ Bucket: bucket, Key: geometryKey })
-    );
-    const parsed: unknown = JSON.parse((await streamToBuffer(response.Body)).toString("utf8"));
+    const parsed = await readLocalV2DagJsonArtifactFromS3(input);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function getLocalV2DagAuxiliaryArtifact(
+  manifest: Record<string, unknown> | null,
+  fileName: string
+): LocalV2DagLambdaArtifactPointer | null {
+  const artifacts = Array.isArray(manifest?.auxiliaryArtifacts) ? manifest.auxiliaryArtifacts : [];
+  for (const value of artifacts) {
+    const artifact = isRecord(value) ? value : null;
+    const uri = getString(artifact?.uri);
+    if (artifact?.fileName !== fileName || !uri) {
+      continue;
+    }
+    const sizeBytes = artifact.sizeBytes;
+    const sha256 = getString(artifact.sha256);
+    const normalizedSizeBytes = typeof sizeBytes === "number" && Number.isSafeInteger(sizeBytes) && sizeBytes >= 0
+      ? sizeBytes
+      : null;
+    if (!sha256 || normalizedSizeBytes === null) {
+      return null;
+    }
+    return {
+      sha256,
+      sizeBytes: normalizedSizeBytes,
+      uri,
+      verificationRequired: true
+    };
+  }
+  return null;
+}
+
+async function readLocalV2ConsentControlGeometryFromS3(
+  artifact: LocalV2DagLambdaArtifactPointer
+): Promise<Record<string, unknown> | null> {
+  try {
+    const parsed = await readLocalV2DagJsonArtifactFromS3({
+      expectedSha256: artifact.sha256,
+      expectedSizeBytes: artifact.sizeBytes,
+      uri: artifact.uri
+    });
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
@@ -2941,17 +3055,31 @@ export async function materializeLocalV2DagScanDetail(scanRecord: ScanDetailResp
     return scanRecord;
   }
   const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
-  const localBundle = shouldReadLocalOutDir && input.outDir
-    ? await readLocalV2DagBundle(input.outDir)
-    : null;
-  const bundle = localBundle ?? (input.scanArtifactUri
-    ? await readLocalV2DagBundleFromS3(input.scanArtifactUri)
-    : null);
-  const localGeometryEvidence = shouldReadLocalOutDir && input.outDir
-    ? await readLocalV2ConsentControlGeometry(input.outDir)
-    : null;
-  const consentControlGeometryEvidence = localGeometryEvidence ?? (input.scanArtifactUri
-    ? await readLocalV2ConsentControlGeometryFromS3(input.scanArtifactUri)
+  const [localBundle, localGeometryEvidence] = await Promise.all([
+    shouldReadLocalOutDir && input.outDir ? readLocalV2DagBundle(input.outDir) : Promise.resolve(null),
+    shouldReadLocalOutDir && input.outDir ? readLocalV2ConsentControlGeometry(input.outDir) : Promise.resolve(null)
+  ]);
+  const [bundle, manifest] = await Promise.all([
+    localBundle ?? (input.scanArtifactUri
+      ? readLocalV2DagBundleFromS3({
+          expectedSha256: input.scanArtifactSha256,
+          expectedSizeBytes: input.scanArtifactSizeBytes,
+          uri: input.scanArtifactUri
+        })
+      : Promise.resolve(null)),
+    localGeometryEvidence || !input.manifestArtifactUri
+      ? Promise.resolve(null)
+      : readLocalV2DagManifestFromS3({
+          expectedSha256: input.manifestArtifactSha256,
+          expectedSizeBytes: input.manifestArtifactSizeBytes,
+          uri: input.manifestArtifactUri
+        })
+  ]);
+  const geometryArtifact = localGeometryEvidence
+    ? null
+    : getLocalV2DagAuxiliaryArtifact(manifest, "ConsentControlGeometryEvidence.json");
+  const consentControlGeometryEvidence = localGeometryEvidence ?? (geometryArtifact
+    ? await readLocalV2ConsentControlGeometryFromS3(geometryArtifact)
     : null);
   return bundle ? buildMaterializedLocalV2Detail(scanRecord, bundle, {
     consentControlGeometryEvidence,
