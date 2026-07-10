@@ -13,14 +13,22 @@ import {
   type RuntimeCookieInventoryConfidence,
   type RuntimeCookieReviewPriority
 } from "./runtime-cookie-priority";
+import {
+  findRuntimeEntityOwner,
+  hostsShareRuntimeEntity,
+  isLikelyCookieName,
+  type RuntimeVendorAttributionEvidence
+} from "./runtime-vendor-ownership";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 
 export type ConsentReviewPriority = RuntimeCookieReviewPriority;
 export type InventoryConfidence = RuntimeCookieInventoryConfidence;
 
 export type TrackerInventoryRow = {
+  attributionEvidence?: RuntimeVendorAttributionEvidence | null;
   category: string;
   confidence: number | null;
+  cookieNames?: string[];
   domains: string[];
   firstSeenMs: number | null;
   label: string;
@@ -30,27 +38,34 @@ export type TrackerInventoryRow = {
   requestCount: number | null;
   regulatoryRelevance?: string[] | null;
   source: string;
+  syncedIdentifiers?: string[];
   vendorDisplayCategory?: string | null;
 };
 
 export type CookieInventoryGroupRow = {
+  attributionEvidence?: RuntimeVendorAttributionEvidence | null;
   confidence: InventoryConfidence;
+  cookieNames: string[];
   domains: string[];
   firstSeenMs: number | null;
   party: "first_party" | "third_party" | "unknown" | "mixed";
   priority: ConsentReviewPriority;
   purpose: string;
+  syncedIdentifiers?: string[];
   vendor: string;
 };
 
 export type TrackerInventoryGroupRow = {
+  attributionEvidence?: RuntimeVendorAttributionEvidence | null;
   confidence: InventoryConfidence;
+  cookieNames: string[];
   domains: string[];
   firstSeenMs: number | null;
   party: "3rd" | "—" | "mixed";
   priority: ConsentReviewPriority;
   purpose: string;
   requestCount: number | null;
+  syncedIdentifiers?: string[];
   vendor: string;
 };
 
@@ -211,6 +226,35 @@ function trackerMatchedHosts(tracker: ScanDetailResponse["trackerVendors"][numbe
   ].map(normalizeInventoryHostname));
 }
 
+function sanitizeInventoryDomains(values: Array<string | null | undefined>) {
+  return uniqueStrings(values.map((value) => {
+    const host = normalizeInventoryHostname(value);
+    return host && !isLikelyCookieName(host) ? host : null;
+  }));
+}
+
+function isSyncedVendorInference(vendorName: string, ownerVendor: string) {
+  const normalizedVendorName = vendorName.trim().toLowerCase();
+  const normalizedOwnerVendor = ownerVendor.trim().toLowerCase();
+  return Boolean(normalizedVendorName && normalizedVendorName !== normalizedOwnerVendor &&
+    !(normalizedOwnerVendor === "google" && /^google\b/.test(normalizedVendorName)));
+}
+
+function resolveTrackerIdentity(input: { category: string | null | undefined; domains: string[]; source: string | null | undefined; vendorName: string }) {
+  const owner = input.domains.map(findRuntimeEntityOwner).find((candidate) => candidate !== null);
+  if (!owner) {
+    return { attributionEvidence: null, category: input.category || "tracker", confidence: null, label: input.vendorName, syncedIdentifiers: [] };
+  }
+  const shouldUseDomainOwner = isSyncedVendorInference(input.vendorName, owner.vendor) || input.vendorName === input.domains[0] || input.source === "id_sync";
+  return {
+    attributionEvidence: owner.attributionEvidence,
+    category: owner.category ?? input.category ?? "tracker",
+    confidence: 0.95,
+    label: shouldUseDomainOwner ? owner.vendor : input.vendorName,
+    syncedIdentifiers: shouldUseDomainOwner && isSyncedVendorInference(input.vendorName, owner.vendor) ? [input.vendorName] : []
+  };
+}
+
 export function buildTrackerInventoryRows(input: {
   domains: string[];
   firstPartyDomain?: string | null;
@@ -228,7 +272,7 @@ export function buildTrackerInventoryRows(input: {
   );
   const isFirstPartyHost = (value: string) => {
     const hostDomain = inventoryRegistrableDomain(value);
-    return Boolean(firstPartyRegistrableDomain && hostDomain === firstPartyRegistrableDomain);
+    return Boolean((firstPartyRegistrableDomain && hostDomain === firstPartyRegistrableDomain) || hostsShareRuntimeEntity(value, input.firstPartyDomain));
   };
   const isCoveredByResolvedVendorHost = (value: string) => {
     const host = normalizeInventoryHostname(value);
@@ -248,7 +292,7 @@ export function buildTrackerInventoryRows(input: {
     return "third_party";
   };
   const addRow = (row: TrackerInventoryRow) => {
-    const key = `${row.label.toLowerCase()}\u0000${row.category.toLowerCase()}`;
+    const key = `${row.label.toLowerCase()}\u0000${row.category.toLowerCase()}\u0000${row.domains.join("|") || "no-domain"}`;
     const existing = rows.get(key);
     if (!existing) {
       rows.set(key, row);
@@ -257,6 +301,7 @@ export function buildTrackerInventoryRows(input: {
     rows.set(key, {
       ...existing,
       confidence: Math.max(existing.confidence ?? 0, row.confidence ?? 0) || existing.confidence || row.confidence,
+      cookieNames: uniqueStrings([...(existing.cookieNames ?? []), ...(row.cookieNames ?? [])]),
       domains: uniqueStrings([...existing.domains, ...row.domains]),
       firstSeenMs:
         existing.firstSeenMs !== null && row.firstSeenMs !== null
@@ -267,7 +312,8 @@ export function buildTrackerInventoryRows(input: {
       preConsent: existing.preConsent || row.preConsent,
       regulatoryRelevance: uniqueStrings([...(existing.regulatoryRelevance ?? []), ...(row.regulatoryRelevance ?? [])]),
       requestCount: Math.max(existing.requestCount ?? 0, row.requestCount ?? 0) || existing.requestCount || row.requestCount,
-      source: existing.source === row.source ? existing.source : "multiple"
+      source: existing.source === row.source ? existing.source : "multiple",
+      syncedIdentifiers: uniqueStrings([...(existing.syncedIdentifiers ?? []), ...(row.syncedIdentifiers ?? [])])
     });
   };
 
@@ -276,17 +322,22 @@ export function buildTrackerInventoryRows(input: {
     if (!entityHost || isFirstPartyHost(entityHost) || isCoveredByResolvedVendorHost(entityHost)) {
       continue;
     }
+    const domains = sanitizeInventoryDomains(input.domains.includes(entityHost) ? [entityHost] : []);
+    const identity = resolveTrackerIdentity({ category: entity.category || "tracker", domains, source: "runtime requests", vendorName: entity.label });
     addRow({
-      category: entity.category || "tracker",
-      confidence: null,
-      domains: input.domains.includes(entityHost) ? [entityHost] : [],
+      attributionEvidence: identity.attributionEvidence,
+      category: identity.category,
+      confidence: identity.confidence,
+      cookieNames: [],
+      domains,
       firstSeenMs: null,
-      label: entity.label,
+      label: identity.label,
       observedVia: ["request"],
-      party: getTrackerParty(input.domains.includes(entityHost) ? [entityHost] : []),
+      party: getTrackerParty(domains),
       preConsent: input.preConsentVendors.includes(entity.label),
       requestCount: entity.requestCount,
-      source: "runtime requests"
+      source: "runtime requests",
+      syncedIdentifiers: identity.syncedIdentifiers
     });
   }
   for (const tracker of input.trackerVendors) {
@@ -294,19 +345,23 @@ export function buildTrackerInventoryRows(input: {
     const observedVia = tracker.observedVia && tracker.observedVia.length > 0
       ? uniqueStrings(tracker.observedVia)
       : getStringArrayFromRecord(record, ["observedVia", "observed_via"]);
-    const matchedDomains = trackerMatchedHosts(tracker);
+    const matchedDomains = sanitizeInventoryDomains(trackerMatchedHosts(tracker));
+    const identity = resolveTrackerIdentity({ category: tracker.vendorCategory || "tracker", domains: matchedDomains, source: tracker.detectionSource, vendorName: tracker.vendorName });
     addRow({
-      category: tracker.vendorCategory || "tracker",
-      confidence: typeof tracker.confidence === "number" && Number.isFinite(tracker.confidence) ? tracker.confidence : null,
+      attributionEvidence: identity.attributionEvidence,
+      category: identity.category,
+      confidence: identity.confidence ?? (typeof tracker.confidence === "number" && Number.isFinite(tracker.confidence) ? tracker.confidence : null),
+      cookieNames: [],
       domains: matchedDomains,
       firstSeenMs: getNumberFromRecord(record, ["firstSeenMs", "first_seen_ms", "firstObservedMs", "first_observed_ms"]),
-      label: tracker.vendorName,
+      label: identity.label,
       observedVia: observedVia.length > 0 ? observedVia : ["request"],
       party: getTrackerParty(matchedDomains),
-      preConsent: tracker.beforeConsent === true || input.preConsentVendors.includes(tracker.vendorName),
+      preConsent: tracker.beforeConsent === true || input.preConsentVendors.includes(tracker.vendorName) || input.preConsentVendors.includes(identity.label),
       regulatoryRelevance: tracker.regulatoryRelevance ?? getStringArrayFromRecord(record, ["regulatoryRelevance", "regulatory_relevance"]),
       requestCount: null,
       source: tracker.detectionSource || "tracker inventory",
+      syncedIdentifiers: identity.syncedIdentifiers,
       vendorDisplayCategory: tracker.vendorDisplayCategory ?? (typeof record.vendorDisplayCategory === "string" ? record.vendorDisplayCategory : null)
     });
   }
@@ -324,6 +379,7 @@ export function buildTrackerInventoryRows(input: {
     addRow({
       category: input.sessionReplayVendors.includes(vendor) ? "session_replay" : "unknown",
       confidence: null,
+      cookieNames: [],
       domains: [],
       firstSeenMs: null,
       label: vendor,
@@ -339,17 +395,22 @@ export function buildTrackerInventoryRows(input: {
     if (!unresolvedHost || isFirstPartyHost(unresolvedHost) || isCoveredByResolvedVendorHost(unresolvedHost)) {
       continue;
     }
+    const domains = sanitizeInventoryDomains([unresolvedHost]);
+    const identity = resolveTrackerIdentity({ category: "unresolved_host", domains, source: "host inventory", vendorName: unresolvedHost });
     addRow({
-      category: "unresolved_host",
-      confidence: null,
-      domains: [unresolvedHost],
+      attributionEvidence: identity.attributionEvidence,
+      category: identity.category,
+      confidence: identity.confidence,
+      cookieNames: [],
+      domains,
       firstSeenMs: null,
-      label: unresolvedHost,
+      label: identity.label,
       observedVia: ["host"],
-      party: getTrackerParty([unresolvedHost]),
+      party: getTrackerParty(domains),
       preConsent: false,
       requestCount: null,
-      source: "host inventory"
+      source: "host inventory",
+      syncedIdentifiers: identity.syncedIdentifiers
     });
   }
 
@@ -421,6 +482,10 @@ export function getInventoryCategoryLabel(
   if (/quantcast/.test(label)) {
     return "Analytics";
   }
+  if (/gemius/.test(label)) return "Audience measurement";
+  if (/ad alliance/.test(label)) return "Advertising";
+  if (/green.?video/.test(label)) return "Embedded content";
+  if (/sourcepoint|privacy-mgmt/.test(label)) return "Cookie compliance";
   return normalizeInventoryLabel(fallbackCategory || "unknown");
 }
 
@@ -451,7 +516,7 @@ export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): Conse
   if (/^(security|payment|payment_processors|authentication|cookie_compliance|consent|consent_management|performance_monitoring|telemetry|diagnostics|telemetry_diagnostics)$/.test(purpose)) {
     return "contextual";
   }
-  if (/^(cdn_static|cdn|functional)$/.test(purpose)) {
+  if (/^(cdn_static|cdn|functional|publisher_infrastructure)$/.test(purpose)) {
     return "contextual";
   }
   if (row.category === "unknown" || row.category === "unresolved_host" || row.domains.length === 0) {
@@ -546,8 +611,8 @@ export function formatGroupedParty(value: CookieInventoryGroupRow["party"] | Tra
   return value;
 }
 
-export function buildCookieInventoryGroupRows(rows: RuntimeCookieEvidenceRow[]) {
-  return buildRuntimeCookiePriorityGroups(rows);
+export function buildCookieInventoryGroupRows(rows: RuntimeCookieEvidenceRow[], options: { firstPartyDomain?: string | null } = {}) {
+  return buildRuntimeCookiePriorityGroups(rows, options);
 }
 
 export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
@@ -556,13 +621,16 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
     const purpose = getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance);
     const key = `${row.label.toLowerCase()}\u0000${purpose.toLowerCase()}`;
     const candidate: TrackerInventoryGroupRow = {
+      attributionEvidence: row.attributionEvidence ?? null,
       confidence: getTrackerInventoryConfidence(row),
+      cookieNames: row.cookieNames ?? [],
       domains: row.domains,
       firstSeenMs: row.firstSeenMs,
       party: formatTrackerParty(row),
       priority: getTrackerConsentReviewPriority(row),
       purpose,
       requestCount: row.requestCount,
+      syncedIdentifiers: row.syncedIdentifiers,
       vendor: row.label
     };
     const existing = grouped.get(key);
@@ -573,6 +641,7 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
     grouped.set(key, {
       ...existing,
       confidence: confidenceWeight(candidate.confidence) > confidenceWeight(existing.confidence) ? candidate.confidence : existing.confidence,
+      cookieNames: uniqueStrings([...existing.cookieNames, ...candidate.cookieNames]),
       domains: uniqueStrings([...existing.domains, ...candidate.domains]),
       firstSeenMs:
         existing.firstSeenMs !== null && candidate.firstSeenMs !== null
@@ -580,7 +649,8 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
           : existing.firstSeenMs ?? candidate.firstSeenMs,
       party: mergePartyValues(existing.party, candidate.party),
       priority: priorityWeight(candidate.priority) > priorityWeight(existing.priority) ? candidate.priority : existing.priority,
-      requestCount: Math.max(existing.requestCount ?? 0, candidate.requestCount ?? 0) || existing.requestCount || candidate.requestCount
+      requestCount: Math.max(existing.requestCount ?? 0, candidate.requestCount ?? 0) || existing.requestCount || candidate.requestCount,
+      syncedIdentifiers: uniqueStrings([...(existing.syncedIdentifiers ?? []), ...(candidate.syncedIdentifiers ?? [])])
     });
   }
   return [...grouped.values()].sort(compareInventoryPriorityRows);
@@ -588,9 +658,10 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
 
 export function buildRuntimeInventoryGroupRows(input: {
   cookieRows: RuntimeCookieEvidenceRow[];
+  firstPartyDomain?: string | null;
   trackerRows: TrackerInventoryRow[];
 }) {
-  const groupedCookieRows = buildCookieInventoryGroupRows(input.cookieRows);
+  const groupedCookieRows = buildCookieInventoryGroupRows(input.cookieRows, { firstPartyDomain: input.firstPartyDomain });
   const groupedTrackerRows = buildTrackerInventoryGroupRows(input.trackerRows);
   return [
     ...groupedCookieRows.map((row) => ({ ...row, type: "cookie" as const })),
@@ -628,6 +699,6 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
   return {
     cookieRows,
     trackerRows,
-    groupedRows: buildRuntimeInventoryGroupRows({ cookieRows, trackerRows })
+    groupedRows: buildRuntimeInventoryGroupRows({ cookieRows, firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost, trackerRows })
   };
 }

@@ -25,9 +25,9 @@ test("projects Adobe Launch host as tag management instead of unknown tracker", 
   });
 
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
-  const adobeRow = groupedRows.find((row) => row.type === "tracker" && row.vendor === "assets.adobedtm.com");
+  const adobeRow = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Adobe");
 
-  assert.equal(adobeRow?.purpose, "Tag management");
+  assert.equal(adobeRow?.purpose, "Tag Management");
   assert.equal(adobeRow?.priority, "medium");
   assert.equal(adobeRow?.party, "3rd");
 });
@@ -191,4 +191,40 @@ test("deduplicates tracker inventory rows by vendor host and purpose", () => {
 
   assert.equal(groupedRows.length, 1);
   assert.deepEqual(groupedRows[0]?.domains, ["snap.licdn.com"]);
+});
+
+test("separates cookie names from domains and preserves canonical ownership", () => {
+  const groupedRows = buildRuntimeInventoryGroupRows({
+    cookieRows: [
+      {
+        category: "unknown", cookieName: "_sp_su", domain: ".bild.de", evidenceGrade: "medium",
+        firstObservedAtMs: 80, initiatorDomain: "cdn.privacy-mgmt.com", initiatorUrl: "https://cdn.privacy-mgmt.com/wrapper.js?google_gid=123",
+        initiatorVendor: "Google", nonEssential: false, party: "first_party", setAtMs: 80, setMethod: "document_cookie", timingEvidence: "initial_cookie_snapshot"
+      },
+      {
+        category: "unknown", cookieName: "optanonconsent", domain: ".bild.de", evidenceGrade: "medium",
+        firstObservedAtMs: 90, initiatorDomain: "cdn.cookielaw.org", initiatorVendor: "OneTrust",
+        nonEssential: false, party: "first_party", setAtMs: 90, setMethod: "document_cookie", timingEvidence: "initial_cookie_snapshot"
+      }
+    ] as never,
+    firstPartyDomain: "bild.de",
+    trackerRows: []
+  });
+
+  const sourcepointRow = groupedRows.find((row) => row.type === "cookie" && row.vendor === "Sourcepoint");
+  const oneTrustRow = groupedRows.find((row) => row.type === "cookie" && row.vendor === "OneTrust");
+  assert.deepEqual(sourcepointRow?.cookieNames, ["_sp_su"]);
+  assert.deepEqual(sourcepointRow?.domains, ["bild.de"]);
+  assert.deepEqual(sourcepointRow?.syncedIdentifiers, ["Google"]);
+  assert.deepEqual(oneTrustRow?.cookieNames, ["optanonconsent"]);
+  assert.deepEqual(oneTrustRow?.domains, ["bild.de"]);
+  assert.ok(groupedRows.every((row) => row.domains.every((domain) => !row.cookieNames.includes(domain))));
+});
+
+test("treats publisher-owned related domains as first-party infrastructure", () => {
+  const rows = buildTrackerInventoryRows({
+    domains: ["a.bildstatic.de"], firstPartyDomain: "bild.de", preConsentVendors: [], resolvedVendors: [], sessionReplayVendors: [],
+    trackerVendors: [], topObservedEntities: [{ category: "unknown", label: "a.bildstatic.de", requestCount: 12 }], unresolvedHosts: ["a.bildstatic.de"]
+  });
+  assert.deepEqual(rows, []);
 });

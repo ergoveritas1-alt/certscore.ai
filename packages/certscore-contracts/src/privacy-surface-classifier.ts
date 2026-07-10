@@ -27,6 +27,7 @@ export type PrivacySurfacePhrase = {
   strength: PrivacySurfaceMatchStrength;
   variant?: string;
   requiresPrivacyContext?: boolean;
+  requiresPolicyContext?: boolean;
 };
 
 export type PrivacySurfaceClassifierInput = {
@@ -116,12 +117,17 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
   ...fr([
     direct("privacy_policy", "politique de confidentialité"),
     direct("privacy_policy", "avis de confidentialité"),
-    equivalent("privacy_policy", "confidentialité"),
+    direct("privacy_policy", "données personnelles"),
+    direct("privacy_policy", "protection des données personnelles"),
+    direct("privacy_policy", "protection des données"),
+    policyContextualEquivalent("privacy_policy", "confidentialité"),
     direct("cookie_policy", "politique relative aux cookies"),
     direct("cookie_policy", "politique cookies"),
+    direct("cookie_policy", "politique cookie"),
     direct("cookie_policy", "avis relatif aux cookies"),
     equivalent("cookie_policy", "cookies"),
     direct("cookie_settings", "paramètres des cookies"),
+    direct("cookie_settings", "paramétrage des cookies"),
     direct("cookie_settings", "préférences cookies"),
     direct("consent_preferences", "préférences de consentement"),
     direct("consent_preferences", "centre de préférences"),
@@ -198,10 +204,11 @@ const URL_SURFACE_PATTERNS: Array<{
 }> = [
   { surfaceType: "cookie_policy", pattern: /privacy[-_/]cookie[-_/]statement|privacy[-_/]and[-_/]cookies?|privacy[-_/]cookies?/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_-])privacy(?:[-_/]policy|[-_/]notice|[-_/]statement)?(?:$|[/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_-])privacy[-_/]statement(?:$|[/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])datenschutz(?:erkl[aä]rung|information)?(?:$|[\s/?#._-])/i },
-  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:politique[-_\s/](?:de[-_\s/])?confidentialit[eé]|confidentialit[eé])(?:$|[\s/?#._-])/i },
-  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:pol[ií]tica[-_\s/](?:de[-_\s/])?privacidad|privacidad)(?:$|[\s/?#._-])/i },
-  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:informativa[-_\s/](?:sulla[-_\s/])?privacy|privacy)(?:$|[\s/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:politique[-_\s/](?:de[-_\s/])?confidentialit[eé]|protection[-_\s/](?:des[-_\s/])?donn[eé]es(?:[-_\s/]personnelles)?)(?:$|[\s/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:pol[ií]tica[-_\s/](?:de[-_\s/])?privacidad|protecci[oó]n[-_\s/](?:de[-_\s/])?datos|privacidad)(?:$|[\s/?#._-])/i },
+  { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:informativa[-_\s/](?:sulla[-_\s/])?privacy|trattamento[-_\s/](?:dei[-_\s/])?dati|privacy)(?:$|[\s/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:privacybeleid|privacyverklaring|privacy[-_\s/]reglement)(?:$|[\s/?#._-])/i },
   { surfaceType: "privacy_policy", pattern: /(?:^|[/_\s-])(?:polityka[-_\s/]prywatno(?:sci|ści)|prywatno(?:sc|ść))(?:$|[\s/?#._-])/i },
   { surfaceType: "cookie_policy", pattern: /(?:^|[/_-])cookies?(?:[-_/]policy|[-_/]notice|[-_/]statement)?(?:$|[/?#._-])/i },
@@ -218,6 +225,8 @@ const URL_SURFACE_PATTERNS: Array<{
 
 const PRIVACY_CONTEXT_PATTERN =
   /\b(privacy|cookie|cookies|consent|preferences?|settings|choices?|datenschutz|cookie|cookies|einwilligung|confidentialit[eé]|cookies?|consentement|privacidad|cookies?|consenso|privacy|cookie|cookies|toestemming|privacybeleid|cookiebeleid|prywatno[śs][ćc]|zgod[ay]|plik[oó]w cookie)\b/i;
+const POLICY_CONTEXT_PATTERN =
+  /\b(policy|notice|statement|legal|privacy|cookies?|data protection|personal data|datenschutz|datenschutzerkl[aä]rung|politique|mentions l[eé]gales|donn[eé]es personnelles|protection des donn[eé]es|vie priv[eé]e|pol[ií]tica|aviso legal|protecci[oó]n de datos|informativa|termini|privacybeleid|privacyverklaring|avg|polityka|regulamin|dane osobowe)\b/i;
 
 export function classifyPrivacySurface(
   input: PrivacySurfaceClassifierInput,
@@ -229,6 +238,7 @@ export function classifyPrivacySurface(
   const labelText = uniqueStrings([normalizedLinkText, normalizedTitle].filter(Boolean)).join(" ");
   const haystack = uniqueStrings([labelText, normalizedSurrounding, normalizedUrl].filter(Boolean)).join(" ");
   const contextSatisfied = PRIVACY_CONTEXT_PATTERN.test(haystack);
+  const policyContextSatisfied = POLICY_CONTEXT_PATTERN.test(uniqueStrings([normalizedSurrounding, normalizedUrl]).join(" "));
 
   if (!haystack) {
     return unknown(["empty_surface_evidence"]);
@@ -241,7 +251,7 @@ export function classifyPrivacySurface(
   const phraseMatch = phrases
     .map((term) => ({
       term,
-      score: phraseScore(term, labelText, contextSatisfied),
+      score: phraseScore(term, labelText, contextSatisfied, policyContextSatisfied),
     }))
     .filter((entry) => entry.score > 0)
     .sort((left, right) =>
@@ -273,6 +283,7 @@ export function classifyPrivacySurface(
         `match_strength_${phraseMatch.term.strength}`,
         phraseMatch.term.variant ? `variant_${phraseMatch.term.variant}` : null,
         contextSatisfied ? "context_satisfied" : "context_not_satisfied",
+        phraseMatch.term.requiresPolicyContext ? policyContextSatisfied ? "policy_context_satisfied" : "policy_context_not_satisfied" : null,
       ]),
       surfaceType: phraseMatch.term.surfaceType,
       variant: phraseMatch.term.variant,
@@ -332,10 +343,15 @@ function equivalent(surfaceType: Exclude<PrivacySurfaceType, "unknown">, phrase:
   return { phrase, strength: "equivalent", surfaceType, variant };
 }
 
+function policyContextualEquivalent(surfaceType: Exclude<PrivacySurfaceType, "unknown">, phrase: string, variant?: string): PhraseInput {
+  return { phrase, requiresPolicyContext: true, strength: "equivalent", surfaceType, variant };
+}
+
 function phraseScore(
   term: PrivacySurfacePhrase,
   normalizedLabel: string,
   contextSatisfied: boolean,
+  policyContextSatisfied: boolean,
 ) {
   const phrase = normalizePrivacySurfaceText(term.phrase);
   if (!phrase) {
@@ -347,6 +363,9 @@ function phraseScore(
     return 0;
   }
   if (term.requiresPrivacyContext && !contextSatisfied) {
+    return 0;
+  }
+  if (term.requiresPolicyContext && !policyContextSatisfied) {
     return 0;
   }
   return (exact ? 1000 : 650) +

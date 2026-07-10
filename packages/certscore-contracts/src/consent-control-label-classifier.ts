@@ -273,6 +273,10 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "nur erforderliche cookies", "necessary_only"),
     equivalent("reject", "nur essenzielle cookies", "necessary_only"),
     equivalent("reject", "nur essentielle cookies", "necessary_only"),
+    contextual("reject", "nur notwendige", { requiresConsentContext: true, variant: "necessary_only" }),
+    contextual("reject", "nur erforderliche", { requiresConsentContext: true, variant: "necessary_only" }),
+    contextual("reject", "nur essenzielle", { requiresConsentContext: true, variant: "necessary_only" }),
+    contextual("reject", "nur essentielle", { requiresConsentContext: true, variant: "necessary_only" }),
     equivalent("reject", "nur technisch notwendige cookies", "necessary_only"),
     equivalent("reject", "technisch notwendige cookies", "necessary_only"),
     equivalent("reject", "notwendige cookies verwenden", "necessary_only"),
@@ -305,6 +309,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     contextual("options", "konfigurieren", { requiresConsentContext: true }),
     ...direct("options", "präferenzcenter"),
     ...direct("options", "datenschutzcenter"),
+    ...direct("options", "mehr informationen öffnet das einstellungscenter-dialogfeld"),
     contextual("options", "auswahl speichern", { requiresPreferenceContext: true, variant: "save_preferences" }),
     contextual("options", "meine auswahl speichern", { requiresPreferenceContext: true, variant: "save_preferences" }),
     contextual("options", "einstellungen speichern", { requiresPreferenceContext: true, variant: "save_preferences" }),
@@ -358,6 +363,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("reject", "ne pas consentir"),
     ...direct("reject", "je ne consens pas"),
     ...direct("reject", "sans consentement"),
+    contextual("reject", "non merci", { requiresConsentContext: true }),
     equivalent("reject", "continuer sans accepter"),
     equivalent("reject", "continuer sans consentir"),
     equivalent("reject", "continuer sans cookies"),
@@ -368,6 +374,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "cookies nécessaires uniquement", "necessary_only"),
     equivalent("reject", "cookies essentiels uniquement", "necessary_only"),
     equivalent("reject", "cookies strictement nécessaires", "necessary_only"),
+    equivalent("reject", "essentiel uniquement", "necessary_only"),
     equivalent("reject", "seulement les cookies nécessaires", "necessary_only"),
     equivalent("reject", "seulement les cookies essentiels", "necessary_only"),
     equivalent("reject", "accepter uniquement les nécessaires", "necessary_only"),
@@ -484,6 +491,11 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "continua senza cookie"),
     equivalent("reject", "solo cookie necessari", "necessary_only"),
     equivalent("reject", "solo i cookie necessari", "necessary_only"),
+    contextual("reject", "accetta solo necessari", { requiresConsentContext: true, variant: "necessary_only" }),
+    contextual("reject", "accetta solo i necessari", { requiresConsentContext: true, variant: "necessary_only" }),
+    equivalent("reject", "consenti solo i cookie tecnici", "necessary_only"),
+    equivalent("reject", "solo cookie tecnici", "necessary_only"),
+    equivalent("reject", "solo i cookie tecnici", "necessary_only"),
 
     contextual("options", "preferenze", { requiresConsentContext: true }),
     contextual("options", "impostazioni", { requiresConsentContext: true }),
@@ -547,6 +559,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "zgadzam się"),
     ...direct("accept", "zezwól"),
     ...direct("accept", "zezwól na wszystkie"),
+    ...direct("accept", "zezwalam"),
+    ...direct("accept", "zezwalam na wszystkie"),
     contextual("accept", "przejdź do serwisu", { requiresConsentContext: true }),
     weak("accept", "ok", { requiresConsentContext: true }),
 
@@ -568,10 +582,15 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("reject", "wyłącz wszystkie"),
 
     contextual("options", "ustawienia", { requiresConsentContext: true }),
+    contextual("options", "ustawienia zaawansowane", { requiresConsentContext: true }),
     contextual("options", "preferencje", { requiresConsentContext: true }),
     contextual("options", "opcje", { requiresConsentContext: true }),
+    ...direct("options", "ustawienia cookies"),
     ...direct("options", "ustawienia plików cookie"),
     ...direct("options", "preferencje plików cookie"),
+    ...direct("options", "dostosuj zgody"),
+    ...direct("options", "dostosuj ustawienia"),
+    ...direct("options", "dostosuj preferencje"),
     ...direct("options", "zarządzaj zgodami"),
     ...direct("options", "zarządzaj preferencjami"),
     ...direct("options", "centrum preferencji"),
@@ -702,6 +721,27 @@ export function normalizeConsentControlText(value: string | null | undefined): s
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+export function isProductionCreditworthySupplementalConsentControlClassification(
+  labelValue: string | null | undefined,
+  classification: ConsentControlLabelClassification,
+): boolean {
+  if (classification.intent === "unknown") return false;
+  const normalizedLabel = normalizeConsentControlText(labelValue);
+  const strongMatch = classification.matchStrength === "direct" || classification.matchStrength === "equivalent";
+
+  if (classification.matchedLocale === "nl") {
+    if (classification.intent === "accept") return strongMatch && /\b(?:alles accepteren|alle cookies accepteren|accepteren|akkoord|ik ga akkoord|toestaan|alles toestaan)\b/i.test(normalizedLabel);
+    if (classification.intent === "options") return /(?:cookie-instellingen|cookie instellingen|privacy-instellingen|cookies beheren|voorkeuren beheren)/i.test(normalizedLabel) || (strongMatch && /(?:voorkeuren|instellingen|keuzes)/i.test(normalizedLabel));
+    if (classification.intent === "reject") return strongMatch && /(?:weigeren|niet accepteren|niet toestaan|zonder (?:accepteren|toestemming|cookies)|alleen (?:noodzakelijke|essenti[eë]le))/i.test(normalizedLabel);
+    return false;
+  }
+  if (classification.matchedLocale !== "pl") return false;
+  if (classification.intent === "accept") return strongMatch && /\b(?:akceptuj(?:e|ę)?|zaakceptuj|zgadzam się|zezw[oó]l|zezwalam)\b/i.test(normalizedLabel) && !/\bprzejd[zź]\b/i.test(normalizedLabel);
+  if (classification.intent === "options") return /(?:centrum preferencji|ustawienia zaawansowane|preferencje plik|ustawienia (?:plik|cookies)|zarządzaj (?:zgodami|preferencjami)|dostosuj (?:zgody|ustawienia|preferencje))/i.test(normalizedLabel) || (classification.matchStrength === "contextual" && classification.contextSatisfied && classification.matchedTerm === "ustawienia" && normalizedLabel === "ustawienia") || (strongMatch && /(?:preferenc|ustawieni|wybor|zgod)/i.test(normalizedLabel));
+  if (classification.intent === "reject") return strongMatch && /(?:odrzu|nie akceptuj|nie zgadzam|tylko (?:niezb[eę]dne|wymagane|konieczne))/i.test(normalizedLabel);
+  return false;
 }
 
 function direct(intent: Exclude<ConsentControlIntent, "unknown">, phrase: string): TermInput[] {

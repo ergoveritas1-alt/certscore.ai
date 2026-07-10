@@ -97,6 +97,27 @@ test("classifies CMP infrastructure while preserving attribution signals", () =>
   assert.equal(isKnownCmpInfrastructureUrl("https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"), true);
 });
 
+test("does not treat generic TCF protocol globals as vendor identity", () => {
+  assert.equal(getKnownCmpVendorName({ jsGlobals: ["__tcfapi"] }), null);
+
+  const didomi = detectKnownCmps({
+    cookieNames: ["didomi_token"],
+    domSelectors: ["#didomi-host"],
+    jsGlobals: ["__tcfapi", "Didomi"],
+    urls: ["https://sdk.privacy-center.org/sdk/example.js"]
+  });
+  assert.equal(didomi[0]?.canonicalName, "Didomi");
+  assert.equal(didomi.some((detection) => detection.canonicalName === "Consentmanager"), false);
+
+  const oneTrust = detectKnownCmps({
+    cookieNames: ["OptanonConsent"],
+    domSelectors: ["#onetrust-banner-sdk"],
+    jsGlobals: ["__tcfapi", "OneTrust"],
+    urls: ["https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"]
+  });
+  assert.equal(oneTrust[0]?.canonicalName, "OneTrust");
+});
+
 test("recognizes canonical and alias CMP labels", () => {
   assert.equal(isKnownCmpVendorLabel("CookiePro"), true);
   assert.equal(isKnownCmpVendorLabel("Transcend Consent Management"), true);

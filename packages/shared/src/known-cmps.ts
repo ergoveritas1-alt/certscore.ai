@@ -304,6 +304,7 @@ function textMatches(value: string, pattern: RegExp) {
 }
 
 const GENERIC_SELECTOR_TOKENS = new Set(["aria", "class", "data", "dialog", "iframe", "role", "testid"]);
+const GENERIC_CMP_PROTOCOL_GLOBALS = new Set(["__tcfapi", "__gpp", "__uspapi", "__cmp"]);
 
 function selectorTokens(value: string) {
   return (value.toLowerCase().match(/[a-z0-9_-]{3,}/g) ?? []).filter((token) => !GENERIC_SELECTOR_TOKENS.has(token));
@@ -370,7 +371,14 @@ function collectSignalsForDefinition(definition: KnownCmpDefinition, input: Know
   }
 
   for (const globalName of uniqueStrings(input.jsGlobals ?? [])) {
-    if ((definition.globalNames ?? []).some((knownName) => globalName.toLowerCase() === knownName.toLowerCase() || globalName.toLowerCase().includes(knownName.toLowerCase()))) {
+    if ((definition.globalNames ?? []).some((knownName) => {
+      const normalizedGlobalName = globalName.toLowerCase();
+      const normalizedKnownName = knownName.toLowerCase();
+      if (GENERIC_CMP_PROTOCOL_GLOBALS.has(normalizedGlobalName) && GENERIC_CMP_PROTOCOL_GLOBALS.has(normalizedKnownName)) {
+        return false;
+      }
+      return normalizedGlobalName === normalizedKnownName || normalizedGlobalName.includes(normalizedKnownName);
+    })) {
       push("global", globalName);
     }
   }
@@ -410,6 +418,13 @@ function confidenceForSignals(signals: KnownCmpSignal[]) {
   return 0.7;
 }
 
+function detectionSpecificityScore(detection: KnownCmpDetection) {
+  const sourceWeight: Record<KnownCmpSignalSource, number> = {
+    alias: 4, cookie: 9, dom: 6, global: 5, host: 10, iframe: 7, script: 8, storage: 6, text: 3, url: 10
+  };
+  return detection.matchedSignals.reduce((score, signal) => score + (sourceWeight[signal.source] ?? 1), 0);
+}
+
 export function detectKnownCmps(input: KnownCmpDetectionInput) {
   return KNOWN_CMP_REGISTRY.flatMap((definition): KnownCmpDetection[] => {
     const matchedSignals = collectSignalsForDefinition(definition, input);
@@ -424,7 +439,12 @@ export function detectKnownCmps(input: KnownCmpDetectionInput) {
       matchedSignals,
       standards: definition.standards ?? []
     }];
-  }).sort((left, right) => right.confidence - left.confidence || left.canonicalName.localeCompare(right.canonicalName));
+  }).sort((left, right) =>
+    right.confidence - left.confidence ||
+    detectionSpecificityScore(right) - detectionSpecificityScore(left) ||
+    right.matchedSignals.length - left.matchedSignals.length ||
+    left.canonicalName.localeCompare(right.canonicalName)
+  );
 }
 
 export function getKnownCmpVendorName(input: KnownCmpDetectionInput) {

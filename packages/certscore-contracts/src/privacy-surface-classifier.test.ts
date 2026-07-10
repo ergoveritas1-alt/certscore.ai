@@ -73,6 +73,17 @@ test("does not classify generic single-word cookie notification labels as policy
   assert.equal(classification.matchedLocale, undefined);
 });
 
+test("requires policy context for an ambiguous French privacy label", () => {
+  assert.equal(classifyPrivacySurface({ linkText: "Confidentialité", url: "https://example.test/news" }).surfaceType, "unknown");
+  const classification = classifyPrivacySurface({
+    linkText: "Confidentialité",
+    url: "https://example.test/politique-de-confidentialite",
+    surroundingText: "Politique de protection des données personnelles"
+  });
+  assert.equal(classification.surfaceType, "privacy_policy");
+  assert.equal(classification.reasonCodes.includes("policy_context_satisfied"), true);
+});
+
 test("classifies canonical terms surfaces across supported locales", () => {
   const examples = [
     ["Terms", "en"],

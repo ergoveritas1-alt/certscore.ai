@@ -4,6 +4,7 @@ import {
   classifyConsentControlLabel,
   consentActionCandidateSchema,
   consentUiObservationSchema,
+  isProductionCreditworthySupplementalConsentControlClassification,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
 
@@ -543,4 +544,14 @@ test("schemas accept bounded classifier metadata", () => {
     confidence: 0.9,
   });
   assert.equal(observation.controls[0]?.matchedLocale, "de");
+});
+
+test("recognizes restored German, French, Italian, and Polish consent labels", () => {
+  const german = classifyConsentControlLabel({ label: "Nur notwendige", contextText: "Wir verwenden Cookies" });
+  assert.equal(german.intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Non merci", contextText: "Nous utilisons des cookies" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Solo cookie tecnici" }).intent, "reject");
+  const polish = classifyConsentControlLabel({ label: "Dostosuj zgody", classifierProfile: "multilingual_v1" });
+  assert.equal(polish.intent, "options");
+  assert.equal(isProductionCreditworthySupplementalConsentControlClassification("Dostosuj zgody", polish), true);
 });
