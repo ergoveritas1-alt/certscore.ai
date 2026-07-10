@@ -102,14 +102,14 @@ pnpm v2:scan --url https://example.com --profile tiny --out ./artifacts/example
 
 ### Lambda memory canary
 
-Lambda scan artifacts retain bounded container/RSS samples in `V2RuntimeResourceTelemetry.json`; the Lambda manifest also identifies the critical module and observed memory peak. Keep production memory unchanged until paired 3008 MB and 4096 MB cohorts retain evidence parity.
+Lambda scan artifacts retain bounded container/RSS samples in `V2RuntimeResourceTelemetry.json`; the Lambda manifest also identifies the critical module and observed memory peak. The current production function API caps memory at 3008 MB, so use a paired 3008 MB versus 2048 MB cohort to test whether reducing memory preserves evidence and timing. Keep production at 3008 MB unless the lower-memory cohort retains evidence parity without a material latency regression.
 
 Run the same Lambda cohort after configuring each dev/canary memory variant, using distinct output files and variant labels:
 
 ```bash
-pnpm v2:local-dag-lambda-benchmark -- --mode lambda-only --profile full --lambda-concurrency 10 --submit-concurrency 5 --scan-from eu_de --expected-memory-mb 3008 --variant memory-3008 --out artifacts/memory-3008.json
-pnpm v2:local-dag-lambda-benchmark -- --mode lambda-only --profile full --lambda-concurrency 10 --submit-concurrency 5 --scan-from eu_de --expected-memory-mb 4096 --variant memory-4096 --out artifacts/memory-4096.json
-pnpm v2:lambda-memory-canary-compare -- --baseline artifacts/memory-3008.json --candidate artifacts/memory-4096.json --out artifacts/memory-comparison.json
+pnpm v2:local-dag-lambda-benchmark -- --mode lambda-only --profile full --lambda-concurrency 10 --submit-concurrency 5 --scan-from eu_ie --expected-memory-mb 3008 --variant memory-3008 --out artifacts/memory-3008.json
+pnpm v2:local-dag-lambda-benchmark -- --mode lambda-only --profile full --lambda-concurrency 10 --submit-concurrency 5 --scan-from eu_ie --expected-memory-mb 2048 --variant memory-2048 --out artifacts/memory-2048.json
+pnpm v2:lambda-memory-canary-compare -- --baseline artifacts/memory-3008.json --candidate artifacts/memory-2048.json --out artifacts/memory-comparison.json
 ```
 
 The variant name is only a cohort label. Change and verify the selected Lambda function's real memory configuration between cohorts; `--expected-memory-mb` fails rows whose retained runtime diagnostics do not match. Use one region for the paired canary, restore its prior memory after capture unless the evidence review approves promotion, and do not change all production regions from a label alone.
