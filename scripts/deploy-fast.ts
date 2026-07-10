@@ -129,7 +129,7 @@ async function main() {
   const results = await Promise.all(lanes);
 
   if (args.mode === "all" || args.mode === "web") {
-    await timedLane("verify live web", async () => {
+    results.push(await timedLane("verify live web", async () => {
       await run(["pnpm", "ops:check:live"], {
         env: { EXPECTED_LIVE_GIT_SHA: sha }
       });
@@ -139,13 +139,13 @@ async function main() {
           SKIP_LIVE_DEPLOY_CHECK: "0"
         }
       });
-    });
+    }));
   }
 
   if (args.mode === "all" || args.mode === "scanners") {
-    await timedLane("verify Lambda scanners", async () => {
+    results.push(await timedLane("verify Lambda scanners", async () => {
       await verifyScanners(sha);
-    });
+    }));
   }
 
   printSummary(results, Date.now() - startedAt, shortSha);
@@ -485,6 +485,11 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
 
 async function verifyScanners(expectedSha: string) {
   const reports = await Promise.all(SCANNER_REGIONS.map(async (region) => {
+    await run([
+      "aws", "lambda", "wait", "function-updated-v2",
+      "--region", region,
+      "--function-name", "certscore-v2-dag-local-lambda"
+    ], { quiet: true });
     const result = await run([
       "aws", "lambda", "get-function",
       "--region", region,
@@ -620,7 +625,7 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
     lanes.push("web ECS deploy");
   }
   if (args.mode === "all" || args.mode === "scanners") {
-    lanes.push(`Lambda scanner deploys (${SCANNER_REGIONS.join(", ")}; runtime base ${args.pushScannerRuntimeBase ? "rebuild/push" : "reuse"})`);
+    lanes.push(`Lambda scanner deploys (${SCANNER_REGIONS.join(", ")}; runtime base ${args.pushScannerRuntimeBase ? "rebuild/push" : "reuse when available, cached full-image fallback otherwise"})`);
   }
   if (args.mode === "all" || args.mode === "validation") {
     const skip = args.mode === "all" && !args.forceValidation && !changed.validation;
@@ -644,7 +649,7 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
     console.log(`  - ${lane}`);
   }
   if (changed.lambdaRuntimeBase && !args.pushScannerRuntimeBase && (args.mode === "all" || args.mode === "scanners")) {
-    console.log("  note: Lambda runtime-base inputs changed, but scanner deploys will still reuse the existing runtime base.");
+    console.log("  note: Lambda runtime-base inputs changed, but scanner deploys will reuse an existing base when available or use the cached full-image path.");
     console.log("        Pass --push-runtime-base to rebuild and push the scanner runtime base explicitly.");
   }
 }
