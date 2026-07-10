@@ -258,7 +258,7 @@ variable "worker_cpu" {
 variable "worker_memory" {
   description = "Memory for the validation worker task."
   type        = number
-  default     = 2048
+  default     = 1024
 }
 
 variable "web_desired_count" {

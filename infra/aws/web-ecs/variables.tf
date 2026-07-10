@@ -82,6 +82,18 @@ variable "image_tag" {
   default     = "latest"
 }
 
+variable "mcp_image_tag" {
+  description = "Immutable image tag for the MCP HTTP sidecar deployed with the CertScore web task."
+  type        = string
+  default     = "3ec31789770d0bdcfd334aa0a5d2f183f50a5348"
+}
+
+variable "mcp_ecr_repository_name" {
+  description = "ECR repository containing the MCP HTTP sidecar image."
+  type        = string
+  default     = "certscore-web-mcp"
+}
+
 variable "app_flavor" {
   description = "APP_FLAVOR value for the CertScore public web service."
   type        = string

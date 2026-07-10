@@ -1,5 +1,13 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_secretsmanager_secret" "oauth_jwt" {
+  name = "certscore/oauth-jwt-secret"
+}
+
+data "aws_lb_target_group" "mcp" {
+  name = "certscore-web-mcp"
+}
+
 data "tls_certificate" "github_actions_oidc" {
   url = "https://token.actions.githubusercontent.com"
 }
@@ -40,7 +48,8 @@ locals {
     var.feedback_to_email_secret_arn,
     var.privacy_request_to_email_secret_arn,
     var.stripe_secret_key_secret_arn,
-    var.stripe_webhook_secret_secret_arn
+    var.stripe_webhook_secret_secret_arn,
+    data.aws_secretsmanager_secret.oauth_jwt.arn
   ])
   base_environment = concat(
     [
@@ -133,6 +142,13 @@ resource "aws_security_group" "ecs_tasks" {
   ingress {
     from_port       = 3000
     to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  ingress {
+    from_port       = 3004
+    to_port         = 3004
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
   }
@@ -540,6 +556,48 @@ resource "aws_ecs_task_definition" "certscore" {
           awslogs-stream-prefix = "ecs"
         }
       }
+    },
+    {
+      name      = "mcp-http"
+      image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.mcp_ecr_repository_name}:${var.mcp_image_tag}"
+      essential = true
+      portMappings = [
+        {
+          containerPort = 3004
+          hostPort      = 3004
+          protocol      = "tcp"
+        }
+      ]
+      environment = [
+        { name = "CORS_ALLOWED_ORIGINS", value = "https://certscore.ai,https://www.certscore.ai,https://claude.ai,https://api.anthropic.com" },
+        { name = "CERTSCORE_BASE_URL", value = "https://certscore.ai" },
+        { name = "CERTSCORE_REQUEST_TIMEOUT_MS", value = "30000" },
+        { name = "PORT", value = "3004" },
+        { name = "SESSION_TTL_SECONDS", value = "1800" },
+        { name = "BUILD_RUNTIME_TARGET", value = var.build_runtime_target },
+        { name = "OAUTH_ISSUER", value = "https://certscore.ai" },
+        { name = "MCP_PUBLIC_URL", value = "https://mcp.certscore.ai" },
+        { name = "NODE_ENV", value = "production" },
+        { name = "SESSION_MAX_COUNT", value = "500" }
+      ]
+      secrets = [
+        { name = "CERTSCORE_OAUTH_JWT_SECRET", valueFrom = data.aws_secretsmanager_secret.oauth_jwt.arn }
+      ]
+      healthCheck = {
+        command     = ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3004/healthz').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))\""]
+        interval    = 30
+        timeout     = 5
+        retries     = 3
+        startPeriod = 20
+      }
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = "/ecs/certscore-web/mcp"
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
     }
   ])
 
@@ -569,6 +627,12 @@ resource "aws_ecs_service" "certscore" {
     target_group_arn = aws_lb_target_group.certscore.arn
     container_name   = "certscore-web"
     container_port   = 3000
+  }
+
+  load_balancer {
+    target_group_arn = data.aws_lb_target_group.mcp.arn
+    container_name   = "mcp-http"
+    container_port   = 3004
   }
 
   deployment_circuit_breaker {

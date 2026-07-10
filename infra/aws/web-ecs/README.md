@@ -26,8 +26,8 @@ The baseline stack provisions:
 - one ALB for the public web surface
 - one ECS security group for web tasks
 - one ECR repository for the shared `apps/web` image
-- one ECS service for `certscore.ai`
-- one task definition for `certscore.ai`
+- one ECS service for `certscore.ai` and `mcp.certscore.ai`
+- one task definition containing the web container and lightweight MCP HTTP sidecar
 - IAM roles for ECS runtime and GitHub Actions deploys
 
 The stack expects you to supply an existing VPC and existing public and private subnets. The current fastest practical path is to place the public web stack in the same VPC as RDS so database access can be granted by security group instead of public IP allowlists.
@@ -84,6 +84,9 @@ The default example now targets the RDS/default VPC because that is the fastest 
 - service name for `certscore.ai`
 - custom domain name
 - existing ACM certificate ARN for the public host
+- immutable MCP sidecar image tag from the `certscore-web-mcp` ECR repository
+
+The MCP HTTP runtime shares the CertScore web task ENI and Fargate allocation. The ALB keeps separate target groups for ports 3000 and 3004, so the web and MCP health checks and host routing remain independent without a second ECS task or public IPv4 address.
 
 ### Runtime config inputs
 

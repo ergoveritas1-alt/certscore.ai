@@ -20,6 +20,8 @@ existing_certificate_arn = "arn:aws:acm:us-west-1:199536052647:certificate/73baf
 
 build_runtime_target              = "ecs-fargate"
 app_flavor                        = "certscore"
+mcp_ecr_repository_name           = "certscore-web-mcp"
+mcp_image_tag                     = "3ec31789770d0bdcfd334aa0a5d2f183f50a5348"
 database_ssl_mode                 = "require"
 next_public_auth_google_enabled   = "true"
 certscore_admin_emails            = "ops@example.com"

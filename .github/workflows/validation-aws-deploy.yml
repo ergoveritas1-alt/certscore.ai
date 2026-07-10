@@ -70,6 +70,8 @@ jobs:
       ECS_WORKER_SERVICE_NAME: ${{ vars.AWS_VALIDATION_ECS_WORKER_SERVICE }}
       ECS_WORKER_CONTAINER_NAME: ${{ vars.AWS_VALIDATION_ECS_WORKER_CONTAINER || 'validation-worker' }}
       ECS_WORKER_LOG_GROUP: ${{ vars.AWS_VALIDATION_ECS_WORKER_LOG_GROUP }}
+      ECS_WORKER_CPU: "512"
+      ECS_WORKER_MEMORY: "1024"
       VALIDATION_WORKER_USE_RUNTIME_BASE: ${{ github.event.inputs.use_runtime_base || vars.VALIDATION_WORKER_USE_RUNTIME_BASE || 'true' }}
       VALIDATION_WORKER_PUSH_RUNTIME_BASE: ${{ github.event.inputs.push_runtime_base || vars.VALIDATION_WORKER_PUSH_RUNTIME_BASE || 'false' }}
       VALIDATION_WORKER_RUNTIME_BASE_TAG: ${{ github.event.inputs.runtime_base_tag || vars.VALIDATION_WORKER_RUNTIME_BASE_TAG || 'validation-worker-runtime-base' }}
@@ -270,6 +272,8 @@ jobs:
           aws ecs describe-task-definition --task-definition "${current_task_definition}" \
             | jq '.taskDefinition
               | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
+              | .cpu = env.ECS_WORKER_CPU
+              | .memory = env.ECS_WORKER_MEMORY
               | .containerDefinitions = (.containerDefinitions | map(
                   if .name == env.ECS_WORKER_CONTAINER_NAME
                   then .image = "\(env.VALIDATION_WORKER_IMAGE):\(env.GITHUB_SHA)"
