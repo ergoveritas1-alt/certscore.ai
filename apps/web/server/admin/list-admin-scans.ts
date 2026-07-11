@@ -8,6 +8,7 @@ import { deriveDisplayCreatedAt } from "../scans/display-state";
 import {
   loadAdminScanOverviewCounts,
   loadAdminScanListPageData,
+  loadAdminPulseScanAttributionRows,
   loadAdminScanRequestRows,
   loadBlockedRunTelemetryRows,
   type AdminBlockedRunTelemetryRow,
@@ -104,6 +105,8 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     resolvedSnapshots,
     scanRows
   } = scanPageData;
+  const pulseAttributionRows = await loadAdminPulseScanAttributionRows(scanRows.map((scan) => scan.id));
+  const pulseAttributionMap = new Map(pulseAttributionRows.map((row) => [row.scan_id, row] as const));
 
   const domainMap = new Map(domains.flatMap((domain) => (domain.id ? [[domain.id, domain] as const] : [])));
   const organizationMap = new Map(organizations.flatMap((organization) => (organization.id ? [[organization.id, organization] as const] : [])));
@@ -128,6 +131,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
   const scanItems: AdminScanListItem[] = scanRows.map((scan) => {
     const snapshot = snapshotMap.get(scan.id) ?? null;
     const linkedRequest = requestByLinkedScanId.get(scan.id) ?? null;
+    const pulseAttribution = pulseAttributionMap.get(scan.id) ?? null;
     const normalizedAccessPosture = normalizeAccessPostureSummary({
       accessPostureClass: snapshot?.access_posture_class ?? null,
       highestSuccessfulTier: snapshot?.highest_successful_tier ?? null,
@@ -160,19 +164,22 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       scanId: scan.id,
       rowKind: "scan",
       linkedScanId: scan.id,
-      requestPublicId: linkedRequest?.public_id ?? null,
-      requestedAt: linkedRequest?.requested_at ?? scan.created_at,
-      requestChannel: linkedRequest?.request_channel ?? null,
-      requestResolutionMode: linkedRequest?.resolution_mode ?? null,
-      requestedUrl: linkedRequest?.requested_url ?? null,
+      requestPublicId: linkedRequest?.public_id ?? pulseAttribution?.public_id ?? null,
+      requestedAt: linkedRequest?.requested_at ?? pulseAttribution?.requested_at ?? scan.created_at,
+      requestChannel: linkedRequest?.request_channel ?? pulseAttribution?.request_channel ?? null,
+      requestResolutionMode: linkedRequest?.resolution_mode ?? pulseAttribution?.resolution_mode ?? null,
+      requestedUrl: linkedRequest?.requested_url ?? pulseAttribution?.normalized_url ?? null,
       reusedCompletedAt: linkedRequest?.reused_completed_at ?? null,
       reuseWindowHours: linkedRequest?.reuse_window_hours ?? null,
       domainId: scan.domain_id,
       domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
       organizationId: scan.organization_id,
-      requesterIp: getRequesterIpFromRequest(linkedRequest) ?? selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
-      requesterName: linkedRequest?.requester_name ?? null,
+      requesterIp:
+        getRequesterIpFromRequest(linkedRequest) ??
+        getRequesterIpFromContext(pulseAttribution?.request_context ?? null) ??
+        selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
+      requesterName: linkedRequest?.requester_name ?? pulseAttribution?.requester_name ?? null,
       scanViewHref: getAdminAuthenticatedScanHref(scan.id),
       scanType: scan.scan_type,
       scanFromLabel: getScanFromDisplay(scan.scan_config_json).label,
@@ -187,7 +194,7 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       totalSignals: snapshot?.total_signals ?? null,
       topFindingCount: snapshot?.top_finding_count ?? null,
       findingCount: snapshot?.report_finding_count ?? null,
-      freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? null),
+      freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? pulseAttribution?.request_context ?? null),
       certscoreOverall: snapshot?.certscore_overall ?? null,
       cmpVendorName: snapshot?.cmp_vendor_name ?? null,
       privacyPolicyPresent: snapshot?.privacy_policy_present ?? null,
@@ -319,6 +326,11 @@ function getRequesterIpFromRequest(request: ScanRequestRow | null) {
     (requestContext ? getStringMetadataValue(requestContext.originIp) : null) ??
     (requestedBy ? getStringMetadataValue(requestedBy.ipHash) : null)
   );
+}
+
+function getRequesterIpFromContext(value: unknown) {
+  const context = getNestedMetadataObject(value);
+  return context ? getStringMetadataValue(context.ipHash) ?? getStringMetadataValue(context.sourceIp) : null;
 }
 
 function getStringMetadataValue(value: unknown) {

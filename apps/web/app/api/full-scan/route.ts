@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import {
   createDomainRequestSchema,
   normalizeScanFrom,
@@ -52,7 +53,7 @@ function getScanRequestProvenance(request: Request) {
     githubSha,
     githubWorkflow,
     host: headers.get("host")?.trim() || null,
-    originIp,
+    originIp: originIp ? createHash("sha256").update(originIp).digest("hex") : null,
     source,
     userAgent: headers.get("user-agent")?.slice(0, 240) || null
   };

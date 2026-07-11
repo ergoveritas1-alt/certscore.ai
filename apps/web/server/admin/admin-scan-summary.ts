@@ -1,7 +1,6 @@
 import "server-only";
 
-import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
-import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
+import { buildPulseProjection } from "../../lib/pulse/projection";
 import { getScanById } from "../scans/get-scan-by-id";
 import { getPublicScanRecord } from "../scans/get-public-scan-record";
 import { materializeLocalV2DagScanDetail } from "../scans/local-v2-dag-report";
@@ -41,16 +40,29 @@ async function buildAndPersistAdminScanSummary(scanId: string, organizationId: s
     return null;
   }
 
-  const packets = buildScanReportUnifiedFindingsForScan(scanRecord);
-  const executiveProjection = projectExecutiveFindingsFromUnifiedPackets(packets);
+  const reportProjection = buildPulseProjection({
+    detail: "summary",
+    format: "json",
+    freshnessMode: "latest",
+    pulseRequestId: `admin:${scanId}`,
+    requestedUrl: scanRecord.scan.domainHostname ? `https://${scanRecord.scan.domainHostname}` : null,
+    resolutionMode: "admin_projection",
+    scanRecord,
+    waitSeconds: 0
+  });
+  const reportProjectionRecord = reportProjection as unknown as Record<string, unknown>;
+  const reportSummary = reportProjectionRecord.summary && typeof reportProjectionRecord.summary === "object"
+    ? reportProjectionRecord.summary as Record<string, unknown>
+    : null;
+  const reportTopFindings = Array.isArray(reportProjectionRecord.topFindings) ? reportProjectionRecord.topFindings : [];
   const snapshot = scanRecord.snapshot;
   const summary: AdminScanSummary = {
     cmpVendorName: recordString(snapshot, "cmp_vendor_name"),
     industry: scanRecord.domainBenchmark?.industry ?? null,
     primaryLanguage: recordString(snapshot, "site_language_primary"),
     privacyPolicyPresent: recordBoolean(snapshot, "privacy_policy_present"),
-    score: recordNumber(snapshot, "certscore_overall"),
-    topFindingCount: executiveProjection.topFindings.length
+    score: recordNumber(reportSummary, "score") ?? recordNumber(snapshot, "certscore_overall"),
+    topFindingCount: reportTopFindings.length
   };
 
   await persistAdminScanSummary({ scanId, ...summary });

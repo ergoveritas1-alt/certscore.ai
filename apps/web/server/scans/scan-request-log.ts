@@ -45,9 +45,9 @@ async function createScanRequestLogTable() {
       reused_completed_at timestamptz,
       error_code text,
       error_message text,
-      requested_at timestamptz not null default timezone('utc', now()),
-      created_at timestamptz not null default timezone('utc', now()),
-      updated_at timestamptz not null default timezone('utc', now())
+      requested_at timestamptz not null default now(),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
     );
 
     create index if not exists scan_requests_requested_at_idx

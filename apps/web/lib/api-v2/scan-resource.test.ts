@@ -159,6 +159,23 @@ test("buildApiV2ScanResource projects a completed scan into public-safe v2 shape
   assert.equal(resource.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });
 
+test("API v2 resource links honor the configured app origin", () => {
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+
+  try {
+    const resource = buildApiV2ScanResource(fixture());
+    assert.equal(resource.links?.self, "http://localhost:3000/api/v2/scans/00000000-0000-4000-8000-000000000123");
+    assert.equal(resource.links?.status, "http://localhost:3000/api/v2/scans/00000000-0000-4000-8000-000000000123/status");
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+  }
+});
+
 test("buildApiV2ScanResource marks partial coverage without exposing raw evidence", () => {
   const resource = buildApiV2ScanResource(fixture({ pagesRequested: 4, pagesScanned: 1 }));
 

@@ -123,7 +123,15 @@ async function main() {
 
     const applied = await getAppliedMigrations(client);
     const files = await getMigrationFiles();
+    const latestMigration = files.at(-1) ?? null;
+    const expectedLatestMigration = process.env.EXPECTED_LATEST_MIGRATION?.trim() || null;
+    if (expectedLatestMigration && latestMigration !== expectedLatestMigration) {
+      throw new Error(
+        `Target image migration mismatch: expected newest migration ${expectedLatestMigration}, found ${latestMigration ?? "none"}.`
+      );
+    }
     let appliedCount = 0;
+    const appliedMigrations = [];
 
     for (const migrationName of files) {
       const fullPath = path.join(MIGRATIONS_DIR, migrationName);
@@ -145,14 +153,19 @@ async function main() {
       await applyMigration(client, migrationName, sql, checksum);
       console.info(`APPLY ${migrationName} ${checksum}`);
       appliedCount += 1;
+      appliedMigrations.push(migrationName);
     }
 
     console.info(
       JSON.stringify(
         {
           appliedCount,
+          appliedMigrations,
+          imageTag: process.env.BUILD_IMAGE_TAG?.trim() || process.env.DEPLOY_TARGET_GIT_SHA?.trim() || null,
+          latestMigration,
           migrationsDir: MIGRATIONS_DIR,
           status: "ok",
+          targetGitSha: process.env.DEPLOY_TARGET_GIT_SHA?.trim() || null,
           totalMigrations: files.length
         },
         null,

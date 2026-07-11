@@ -133,11 +133,25 @@ export default async function AdminOverviewPage() {
                   {scan.organizationName ?? "Unknown workspace"} · {scan.scanType} · {scan.status} · Scan from {scan.scanFromLabel}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">
-                  Signals {scan.totalSignals ?? 0} · CertScore.ai {scan.certscoreOverall ?? "n/a"} · Completed {formatAdminDateTime(scan.completedAt)}
+                  Score {scan.certscoreOverall !== null ? `${scan.certscoreOverall}/100` : "—"} · Top {scan.topFindingCount ?? "—"} ·{" "}
+                  Privacy {scan.privacyPolicyPresent === true ? "✓" : scan.privacyPolicyPresent === false ? "—" : "?"} · CMP {scan.cmpVendorName ?? "—"}
                 </p>
-                <div className="mt-3">
-                  <PendingButtonLink href={scan.scanViewHref} idleContent="Inspect snapshot" pendingContent="Opening..." size="sm" variant="secondary" />
-                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {scan.completedAt && scan.startedAt
+                    ? `${Math.max(0, (new Date(scan.completedAt).getTime() - new Date(scan.startedAt).getTime()) / 1000).toFixed(1)}s`
+                    : scan.status} · {formatAdminDateTime(scan.completedAt ?? scan.activityAt)}
+                </p>
+                {scan.linkedScanId ? (
+                  <div className="mt-3">
+                    <PendingButtonLink
+                      href={`/app/admin/scans/${scan.linkedScanId}`}
+                      idleContent="Inspect snapshot"
+                      pendingContent="Opening..."
+                      size="sm"
+                      variant="secondary"
+                    />
+                  </div>
+                ) : null}
               </div>
             ))}
             <PendingButtonLink href="/app/admin/scans" idleContent="Open scan admin" pendingContent="Opening..." variant="secondary" />

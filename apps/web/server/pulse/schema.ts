@@ -12,7 +12,7 @@ async function createPulseTables() {
       requested_url text,
       normalized_url text,
       normalized_domain text,
-      requested_at timestamptz not null default timezone('utc', now()),
+      requested_at timestamptz not null default now(),
       requested_by jsonb not null default '{}'::jsonb,
       request_context jsonb not null default '{}'::jsonb,
       status text not null default 'queued',
@@ -33,8 +33,8 @@ async function createPulseTables() {
       error_message text,
       completed_at timestamptz,
       elapsed_seconds integer,
-      created_at timestamptz not null default timezone('utc', now()),
-      updated_at timestamptz not null default timezone('utc', now())
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
     );
 
     create index if not exists pulse_requests_normalized_domain_requested_at_idx
@@ -56,11 +56,11 @@ async function createPulseTables() {
 
     create table if not exists public.pulse_domain_throttles (
       normalized_domain text primary key,
-      last_scan_created_at timestamptz not null default timezone('utc', now()),
+      last_scan_created_at timestamptz not null default now(),
       expires_at timestamptz not null,
       last_pulse_request_id text,
-      created_at timestamptz not null default timezone('utc', now()),
-      updated_at timestamptz not null default timezone('utc', now())
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
     );
 
     create table if not exists public.pulse_feedback (
@@ -74,7 +74,7 @@ async function createPulseTables() {
       email text,
       ip_hash text,
       user_agent text,
-      created_at timestamptz not null default timezone('utc', now())
+      created_at timestamptz not null default now()
     );
 
     create index if not exists pulse_feedback_pulse_request_id_created_at_idx
@@ -97,7 +97,7 @@ async function createPulseTables() {
       resolution_mode text,
       cached_or_reused boolean,
       requester_context jsonb not null default '{}'::jsonb,
-      created_at timestamptz not null default timezone('utc', now())
+      created_at timestamptz not null default now()
     );
 
     create index if not exists pulse_artifact_downloads_created_at_idx

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { restrictScanFromForUser } from "../../../../server/scans/restricted-scan-options";
-import { absoluteUrl } from "../../../../lib/seo";
+import { SITE_URL } from "../../../../lib/seo";
 import { applyPulseCors, pulseOptionsResponse } from "../../../../lib/pulse/cors";
 import { buildPulseError } from "../../../../lib/pulse/error";
 import {
@@ -54,6 +54,10 @@ const SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
 const GPT_ACTION_HOURLY_LIMIT = 5;
 const GPT_ACTION_DAILY_LIMIT = 20;
 const GPT_ACTION_MAX_WAIT_SECONDS = 35;
+
+function pulseAbsoluteUrl(path: string) {
+  return new URL(path, process.env.NEXT_PUBLIC_APP_URL?.trim() || SITE_URL).toString();
+}
 
 type PulseRouteOptions = {
   gptAction?: boolean;
@@ -229,14 +233,14 @@ async function buildAndLogCompletedPulse(input: {
       detail: input.detail,
       format: input.format,
       freshness: "latest",
-      fullDetailAvailableAt: pulseRecord.links?.fullReportUrl ?? absoluteUrl(`/scan/${input.scanRecord.scan.id}`)
+      fullDetailAvailableAt: pulseRecord.links?.fullReportUrl ?? pulseAbsoluteUrl(`/scan/${input.scanRecord.scan.id}`)
     };
   }
   await updatePulseRequestCompleted({
     pulseRequestId: input.pulseRequestId,
     scanId: input.scanRecord.scan.id,
-    resultPulseUrl: absoluteUrl(`/api/v1/pulse?scanId=${input.scanRecord.scan.id}`),
-    resultReportUrl: absoluteUrl(`/scan/${input.scanRecord.scan.id}`),
+    resultPulseUrl: pulseAbsoluteUrl(`/api/v1/pulse?scanId=${input.scanRecord.scan.id}`),
+    resultReportUrl: pulseAbsoluteUrl(`/scan/${input.scanRecord.scan.id}`),
     resolutionMode: input.resolutionMode,
     responseSummary: {
       score: pulseRecord.summary?.score ?? null,
@@ -397,7 +401,14 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       );
     }
     const integrationClient = request.headers.get("x-certscore-client")?.trim().toLowerCase();
-    const integrationChannel = integrationClient === "sdk" ? "sdk" : integrationClient === "mcp" ? "mcp" : "other_api";
+    const integrationChannel =
+      integrationClient === "sdk"
+        ? "sdk"
+        : integrationClient === "mcp"
+          ? "mcp"
+          : integrationClient
+            ? "other_api"
+            : "pulse_api";
     apiKeyContext = {
       accountId: auth.key.organizationId,
       apiKeyId: auth.key.publicId,
@@ -451,7 +462,6 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       }
       const { publicId } = await createPulseRequest({
         context: { ...contextBase, mode: "scanId" },
-        requestChannel: gptAction ? "gpt_action" : "pulse_api",
         requestedUrl: null,
         resolutionMode: "reused_existing_scan",
         scanId,
@@ -593,7 +603,6 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
           context: { ...contextBase, mode: "url" },
           normalizedDomain: normalized.normalizedDomain,
           normalizedUrl: normalized.normalizedUrl,
-          requestChannel: "gpt_action",
           requestedUrl: rawUrl,
           resolutionMode: "rate_limited",
           status: "rate_limited"
@@ -630,7 +639,6 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       context: { ...contextBase, mode: "url" },
       normalizedDomain: normalized.normalizedDomain,
       normalizedUrl: normalized.normalizedUrl,
-      requestChannel: gptAction ? "gpt_action" : "pulse_api",
       requestedUrl: rawUrl,
       resolutionMode: "created_new_scan",
       status: "queued"
@@ -794,8 +802,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     await updatePulseRequestQueued({
       pulseRequestId: publicId,
       scanId: queued.scan.id,
-      resultPulseUrl: absoluteUrl(`/api/v1/pulse?scanId=${queued.scan.id}`),
-      resultReportUrl: absoluteUrl(`/scan/${queued.scan.id}`)
+      resultPulseUrl: pulseAbsoluteUrl(`/api/v1/pulse?scanId=${queued.scan.id}`),
+      resultReportUrl: pulseAbsoluteUrl(`/scan/${queued.scan.id}`)
     });
     if (gptAction) {
       logPulseGptActionEvent("pulse_gpt_action_scan_queued", {
@@ -838,15 +846,15 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       phase: "queued",
       createdAt: new Date().toISOString(),
       scanId: queued.scan.id,
-      resultUrl: absoluteUrl(`/api/v1/pulse?scanId=${queued.scan.id}`),
-      reportUrl: absoluteUrl(`/scan/${queued.scan.id}`)
+      resultUrl: pulseAbsoluteUrl(`/api/v1/pulse?scanId=${queued.scan.id}`),
+      reportUrl: pulseAbsoluteUrl(`/scan/${queued.scan.id}`)
     });
     return pulseJson(
       {
         ...status,
-        statusUrl: absoluteUrl(`/api/v1/pulse/status/${createdJobId}`),
-        nextCheckUrl: absoluteUrl(`/api/v1/pulse?jobId=${createdJobId}`),
-        lastKnownPulse: latestScanRecord && latestScanQuality?.usable ? absoluteUrl(`/api/v1/pulse?scanId=${latestScanRecord.scan.id}`) : null
+        statusUrl: pulseAbsoluteUrl(`/api/v1/pulse/status/${createdJobId}`),
+        nextCheckUrl: pulseAbsoluteUrl(`/api/v1/pulse?jobId=${createdJobId}`),
+        lastKnownPulse: latestScanRecord && latestScanQuality?.usable ? pulseAbsoluteUrl(`/api/v1/pulse?scanId=${latestScanRecord.scan.id}`) : null
       },
       { headers: { "Cache-Control": "no-store", "Retry-After": String(retryAfterForStatus(status)) }, status: 202 },
       requestId,

@@ -18,6 +18,7 @@ type ClassifyAdminRequestProvenanceInput = {
   organizationName?: string | null;
   requestChannel?: string | null;
   requestedByAnonymous?: boolean | null;
+  requesterName?: string | null;
   requesterIp?: string | null;
   source?: string | null;
 };
@@ -93,6 +94,10 @@ export function classifyAdminRequestProvenance(input: ClassifyAdminRequestProven
   }
 
   if (input.organizationName && organizationName !== "public / anonymous") {
+    return adminRequestProvenance("authenticated_user");
+  }
+
+  if (input.requesterName || input.requestedByAnonymous === false) {
     return adminRequestProvenance("authenticated_user");
   }
 

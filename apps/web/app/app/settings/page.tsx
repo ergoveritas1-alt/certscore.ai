@@ -157,7 +157,7 @@ export default async function SettingsPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent><ApiKeysCard apiKeys={apiKeys} /></CardContent>
+        <CardContent><ApiKeysCard apiKeys={apiKeys} referenceTime={new Date().toISOString()} /></CardContent>
       </Card>
 
       {isPlatformAdmin ? (
@@ -207,12 +207,20 @@ export default async function SettingsPage() {
                     </span>
                   </p>
                   <p>
-                    Background worker lane:{" "}
-                    <span className={systemHealth.queue.enabled ? "font-medium text-emerald-700" : "font-medium text-rose-700"}>
-                      {systemHealth.queue.enabled ? "configured" : "unavailable"}
+                    Lambda scanner fleet:{" "}
+                    <span className={
+                      systemHealth.scanners.status === "healthy"
+                        ? "font-medium text-emerald-700"
+                        : systemHealth.scanners.status === "degraded" || systemHealth.scanners.status === "unknown"
+                          ? "font-medium text-amber-700"
+                          : "font-medium text-rose-700"
+                    }>
+                      {systemHealth.scanners.status}
                     </span>
                   </p>
-                  {systemHealth.queue.reason ? <p>{systemHealth.queue.reason}</p> : null}
+                  <p>
+                    {systemHealth.scanners.regions.map((region) => `${region.region}: ${region.status}`).join(" · ")}
+                  </p>
                   <p>
                     Worker activity:{" "}
                     <span className={systemHealth.worker.recentActivity ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>

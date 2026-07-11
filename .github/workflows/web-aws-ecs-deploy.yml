@@ -192,10 +192,72 @@ jobs:
             -t "${WEB_IMAGE}:latest" \
             --push \
             .
+          echo "TARGET_WEB_IMAGE=${WEB_IMAGE}:${GITHUB_SHA}" >> "${GITHUB_ENV}"
+
+      - name: Apply database migrations from target web image
+        run: |
+          set -euo pipefail
+
+          aws ecs describe-services \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --services "${ECS_CERTSCORE_SERVICE_NAME}" \
+            --output json > service.json
+
+          CURRENT_TASK_DEFINITION="$(jq -r '.services[0].taskDefinition // empty' service.json)"
+          NETWORK_CONFIGURATION="$(jq -c '.services[0].networkConfiguration' service.json)"
+          test -n "${CURRENT_TASK_DEFINITION}" || (echo "Could not resolve current web task definition" && exit 1)
+
+          aws ecs describe-task-definition \
+            --task-definition "${CURRENT_TASK_DEFINITION}" \
+            --query taskDefinition \
+            --output json > current-task-definition.json
+
+          CONTAINER_NAME="$(jq -r '.containerDefinitions[0].name // empty' current-task-definition.json)"
+          test -n "${CONTAINER_NAME}" || (echo "Could not resolve web container name" && exit 1)
+
+          jq --arg image "${TARGET_WEB_IMAGE}" '
+            del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy,.deregisteredAt)
+            | .containerDefinitions[0].image = $image
+          ' current-task-definition.json > target-task-definition.json
+
+          TARGET_TASK_DEFINITION="$(aws ecs register-task-definition \
+            --cli-input-json file://target-task-definition.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)"
+          echo "TARGET_TASK_DEFINITION=${TARGET_TASK_DEFINITION}" >> "${GITHUB_ENV}"
+
+          EXPECTED_LATEST_MIGRATION="$(find packages/db/migrations -maxdepth 1 -type f -name '*.sql' -exec basename {} \; | sort | tail -1)"
+          OVERRIDES="$(jq -nc --arg name "${CONTAINER_NAME}" --arg latest "${EXPECTED_LATEST_MIGRATION}" '{containerOverrides:[{
+            name:$name,
+            command:["node","./apps/web/scripts/apply-db-migrations.mjs"],
+            environment:[
+              {name:"DEPLOY_TARGET_GIT_SHA",value:env.GITHUB_SHA},
+              {name:"EXPECTED_LATEST_MIGRATION",value:$latest},
+              {name:"PGCONNECT_TIMEOUT",value:"15"},
+              {name:"PGOPTIONS",value:"-c lock_timeout=10000 -c statement_timeout=60000"}
+            ]
+          }]}')"
+
+          TASK_ARN="$(aws ecs run-task \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --task-definition "${TARGET_TASK_DEFINITION}" \
+            --launch-type FARGATE \
+            --network-configuration "${NETWORK_CONFIGURATION}" \
+            --overrides "${OVERRIDES}" \
+            --query 'tasks[0].taskArn' \
+            --output text)"
+          test -n "${TASK_ARN}" || (echo "Migration task did not start" && exit 1)
+          aws ecs wait tasks-stopped --cluster "${ECS_CLUSTER_NAME}" --tasks "${TASK_ARN}"
+          EXIT_CODE="$(aws ecs describe-tasks --cluster "${ECS_CLUSTER_NAME}" --tasks "${TASK_ARN}" --query 'tasks[0].containers[0].exitCode' --output text)"
+          test "${EXIT_CODE}" = "0" || (echo "Migration task failed with exit code ${EXIT_CODE}" && exit 1)
 
       - name: Force ECS deployments
         run: |
-          aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_CERTSCORE_SERVICE_NAME}" --force-new-deployment >/dev/null
+          aws ecs update-service \
+            --cluster "${ECS_CLUSTER_NAME}" \
+            --service "${ECS_CERTSCORE_SERVICE_NAME}" \
+            --task-definition "${TARGET_TASK_DEFINITION}" \
+            --force-new-deployment >/dev/null
 
       - name: Wait for ECS services to stabilize
         run: |

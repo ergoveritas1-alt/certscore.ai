@@ -7,6 +7,7 @@ import { classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-r
 import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { getAnonymousScanById } from "../scans/get-scan-by-id";
 import { ensurePulseTables } from "../pulse/schema";
+import { materializeAdminScanSummaries, type AdminScanSummary } from "./admin-scan-summary";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminPulseRequestStatus =
@@ -50,6 +51,7 @@ export type AdminPulseRequestListItem = {
   scanFromValue: string;
   requestChannel: string | null;
   requestedByAnonymous: boolean | null;
+  requesterName: string | null;
   sourceIp: string | null;
   sourceIpHash: string | null;
   status: string;
@@ -124,6 +126,13 @@ function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
+function timestampString(value: unknown) {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 function getRequestContextString(value: unknown, key: string) {
   const record = asRecord(value);
   const nested = record[key];
@@ -152,11 +161,16 @@ function getFreshRescanRequested(requestContext: Record<string, unknown>) {
   return getRequestContextBoolean(requestContext, "bypassRecentScanReuse") ?? getRequestContextBoolean(requestContext, "forceNewScan");
 }
 
-function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId: Map<string, string[]> = new Map()): AdminPulseRequestListItem {
+function mapPulseRequestRow(
+  row: Record<string, unknown>,
+  topFindingIdsByScanId: Map<string, string[]> = new Map(),
+  summariesByScanId: Map<string, AdminScanSummary> = new Map()
+): AdminPulseRequestListItem {
   const requestContext = asRecord(row.request_context);
   const requestedBy = asRecord(row.requested_by);
   const responseSummary = asRecord(row.response_summary);
   const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
+  const canonicalSummary = scanId ? summariesByScanId.get(scanId) ?? null : null;
   const storedTopFindingIds = asStringArray(responseSummary.topFindingIds);
   const scanFromValue = normalizeScanFrom(requestContext.scanFrom ?? asRecord(row.scan_config_json).scanFrom);
   return {
@@ -165,43 +179,87 @@ function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId:
       requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
       requestSource: getRequestContextString(requestContext, "source") ?? getRequestContextString(requestContext, "channel")
     }),
-    completedAt: typeof row.completed_at === "string" ? row.completed_at : null,
+    completedAt: timestampString(row.completed_at) ?? timestampString(row.scan_completed_at),
     blockedFlag: typeof row.blocked_flag === "boolean" ? row.blocked_flag : null,
     captchaFlag: typeof row.captcha_flag === "boolean" ? row.captcha_flag : null,
-    cmpVendorName: typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
-    createdAt: String(row.created_at),
+    cmpVendorName: canonicalSummary?.cmpVendorName ?? (typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null),
+    createdAt: timestampString(row.created_at) ?? String(row.created_at),
     detail: getRequestContextString(requestContext, "detail"),
-    elapsedSeconds: typeof row.elapsed_seconds === "number" ? row.elapsed_seconds : null,
+    elapsedSeconds:
+      typeof row.elapsed_seconds === "number"
+        ? row.elapsed_seconds
+        : typeof row.scan_elapsed_seconds === "number"
+          ? row.scan_elapsed_seconds
+          : null,
     feedbackCount: typeof row.feedback_count === "number" ? row.feedback_count : 0,
     format: getRequestContextString(requestContext, "format"),
     freshRescanRequested: getFreshRescanRequested(requestContext),
     freshness: getRequestContextString(requestContext, "freshness"),
     jobId: String(row.job_id),
-    industry: typeof row.admin_industry_label === "string" ? row.admin_industry_label : null,
-    normalizedDomain: typeof row.normalized_domain === "string" ? row.normalized_domain : null,
+    industry: canonicalSummary?.industry ?? (typeof row.admin_industry_label === "string" ? row.admin_industry_label : null),
+    normalizedDomain:
+      typeof row.normalized_domain === "string"
+        ? row.normalized_domain
+        : typeof row.scan_domain_hostname === "string"
+          ? row.scan_domain_hostname
+          : null,
     publicId: String(row.public_id),
-    requestedAt: String(row.requested_at),
+    requestedAt: timestampString(row.requested_at) ?? String(row.requested_at),
     requestedUrl: typeof row.requested_url === "string" ? row.requested_url : null,
-    primaryLanguage: typeof row.site_language_primary === "string" ? row.site_language_primary : null,
-    privacyPolicyPresent: typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null,
+    primaryLanguage: canonicalSummary?.primaryLanguage ?? (typeof row.site_language_primary === "string" ? row.site_language_primary : null),
+    privacyPolicyPresent:
+      canonicalSummary?.privacyPolicyPresent ??
+      (typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null),
     resolutionMode: typeof row.resolution_mode === "string" ? row.resolution_mode : null,
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId,
-    score: typeof responseSummary.score === "number" ? responseSummary.score : typeof row.snapshot_score === "number" ? row.snapshot_score : null,
+    score:
+      typeof responseSummary.score === "number"
+        ? responseSummary.score
+        : canonicalSummary?.score ?? (typeof row.snapshot_score === "number" ? row.snapshot_score : null),
     scanFromLabel: formatScanFromLabel(scanFromValue),
     scanFromValue,
     requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
     requestedByAnonymous: typeof requestedBy.anonymous === "boolean" ? requestedBy.anonymous : null,
+    requesterName: typeof row.requester_name === "string" ? row.requester_name : null,
     sourceIp: getRequestContextString(requestContext, "sourceIp"),
     sourceIpHash: getRequestContextString(requestContext, "ipHash"),
-    status: String(row.status),
+    status:
+      ["completed", "completed_limited", "failed"].includes(String(row.scan_status)) &&
+      ["queued", "running", "finalizing"].includes(String(row.status))
+        ? String(row.scan_status)
+        : String(row.status),
     snapshotFindingCount: typeof row.snapshot_finding_count === "number" ? row.snapshot_finding_count : null,
     snapshotTotalSignals: typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
     summaryJsonDownloads: typeof row.summary_json_downloads === "number" ? row.summary_json_downloads : 0,
     evidenceJsonDownloads: typeof row.evidence_json_downloads === "number" ? row.evidence_json_downloads : 0,
-    topFindingIds: storedTopFindingIds.length > 0 || !scanId ? storedTopFindingIds : (topFindingIdsByScanId.get(scanId) ?? [])
+    topFindingIds:
+      storedTopFindingIds.length > 0 || !scanId
+        ? storedTopFindingIds
+        : topFindingIdsByScanId.get(scanId) ?? []
   };
+}
+
+async function materializeMissingPulseScanSummaries(rows: Record<string, unknown>[]) {
+  const scans = [
+    ...new Map(
+      rows.flatMap((row) => {
+        const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
+        const scanStatus = typeof row.scan_status === "string" ? row.scan_status : null;
+        if (!scanId || (scanStatus !== "completed" && scanStatus !== "completed_limited")) {
+          return [];
+        }
+        const hasProjection =
+          typeof row.snapshot_score === "number" &&
+          typeof row.privacy_policy_present === "boolean" &&
+          typeof row.site_language_primary === "string" &&
+          typeof row.admin_industry_label === "string";
+        return hasProjection ? [] : [[scanId, { organizationId: null, scanId }] as const];
+      })
+    ).values()
+  ];
+  return materializeAdminScanSummaries(scans, 3);
 }
 
 async function loadTopFindingIdsByScanId(rows: Record<string, unknown>[]) {
@@ -314,6 +372,15 @@ export async function listAdminPulseRequests(input: {
             pr.completed_at,
             pr.elapsed_seconds,
             pr.created_at,
+            coalesce(app_user.email, auth_user.email, api_key.created_by) as requester_name,
+            s.status as scan_status,
+            s.completed_at as scan_completed_at,
+            case
+              when s.completed_at is not null and s.started_at is not null
+              then extract(epoch from (s.completed_at - s.started_at))::float8
+              else null
+            end as scan_elapsed_seconds,
+            domain.hostname as scan_domain_hostname,
             ss.total_signals::int as snapshot_total_signals,
             ss.report_finding_count::int as snapshot_finding_count,
             ss.certscore_overall::int as snapshot_score,
@@ -331,6 +398,10 @@ export async function listAdminPulseRequests(input: {
        from pulse_requests pr
        left join scan_snapshots ss on ss.scan_id = pr.scan_id
        left join scans s on s.id = pr.scan_id
+       left join domains domain on domain.id = s.domain_id
+       left join users app_user on app_user.id::text = pr.requested_by ->> 'userId'
+       left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
+       left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
        left join lateral (
          select count(*)::int as feedback_count
            from pulse_feedback
@@ -358,7 +429,11 @@ export async function listAdminPulseRequests(input: {
     { readOnly: true }
   );
 
-  return rows.rows.map((row) => mapPulseRequestRow(row));
+  const [topFindingIdsByScanId, summariesByScanId] = await Promise.all([
+    loadTopFindingIdsByScanId(rows.rows),
+    materializeMissingPulseScanSummaries(rows.rows)
+  ]);
+  return rows.rows.map((row) => mapPulseRequestRow(row, topFindingIdsByScanId, summariesByScanId));
 }
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {
@@ -395,12 +470,36 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               pr.elapsed_seconds,
               pr.created_at,
               pr.updated_at,
+              coalesce(app_user.email, auth_user.email, api_key.created_by) as requester_name,
+              s.status as scan_status,
+              s.completed_at as scan_completed_at,
+              case
+                when s.completed_at is not null and s.started_at is not null
+                then extract(epoch from (s.completed_at - s.started_at))::float8
+                else null
+              end as scan_elapsed_seconds,
+              domain.hostname as scan_domain_hostname,
+              ss.total_signals::int as snapshot_total_signals,
+              ss.report_finding_count::int as snapshot_finding_count,
+              ss.certscore_overall::int as snapshot_score,
+              ss.privacy_policy_present,
+              ss.cmp_vendor_name,
+              ss.access_posture_class,
+              ss.blocked_flag,
+              ss.captcha_flag,
+              ss.site_language_primary,
+              ss.admin_industry_label,
               s.scan_config_json,
               coalesce(pf.feedback_count, 0)::int as feedback_count,
               coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
               coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
          from pulse_requests pr
          left join scans s on s.id = pr.scan_id
+         left join domains domain on domain.id = s.domain_id
+         left join scan_snapshots ss on ss.scan_id = pr.scan_id
+         left join users app_user on app_user.id::text = pr.requested_by ->> 'userId'
+         left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
+         left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
          left join lateral (
            select count(*)::int as feedback_count
              from pulse_feedback
@@ -458,15 +557,23 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
     return null;
   }
 
-  const topFindingIdsByScanId = await loadTopFindingIdsByScanId([request]);
-  const base = mapPulseRequestRow(request, topFindingIdsByScanId);
+  const [topFindingIdsByScanId, summariesByScanId] = await Promise.all([
+    loadTopFindingIdsByScanId([request]),
+    materializeMissingPulseScanSummaries([request])
+  ]);
+  const base = mapPulseRequestRow(request, topFindingIdsByScanId, summariesByScanId);
   return {
     ...base,
     apiVersion: String(request.api_version),
     errorCode: typeof request.error_code === "string" ? request.error_code : null,
     errorMessage: typeof request.error_message === "string" ? request.error_message : null,
     normalizedUrl: typeof request.normalized_url === "string" ? request.normalized_url : null,
-    phase: typeof request.phase === "string" ? request.phase : null,
+    phase:
+      ["completed", "completed_limited", "failed", "expired", "rate_limited"].includes(base.status)
+        ? base.status
+        : typeof request.phase === "string"
+          ? request.phase
+          : null,
     projectionVersion: String(request.projection_version),
     pulseVersion: String(request.pulse_version),
     requestChannel: String(request.request_channel),
@@ -478,10 +585,10 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
     retryAfterSeconds: typeof request.retry_after_seconds === "number" ? request.retry_after_seconds : null,
     schemaVersion: String(request.schema_version),
     throttleReason: typeof request.throttle_reason === "string" ? request.throttle_reason : null,
-    updatedAt: String(request.updated_at),
+    updatedAt: timestampString(request.updated_at) ?? String(request.updated_at),
     feedback: feedbackRows.map((row) => ({
       comment: typeof row.comment === "string" ? row.comment : null,
-      createdAt: String(row.created_at),
+      createdAt: timestampString(row.created_at) ?? String(row.created_at),
       email: typeof row.email === "string" ? row.email : null,
       id: String(row.id),
       ipHash: typeof row.ip_hash === "string" ? row.ip_hash : null,
@@ -493,7 +600,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
       artifactType: String(row.artifact_type),
       byteSize: typeof row.byte_size === "number" ? row.byte_size : null,
       cachedOrReused: typeof row.cached_or_reused === "boolean" ? row.cached_or_reused : null,
-      createdAt: String(row.created_at),
+      createdAt: timestampString(row.created_at) ?? String(row.created_at),
       id: String(row.id),
       requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
       requestSource: typeof row.request_source === "string" ? row.request_source : null,

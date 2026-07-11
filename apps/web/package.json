@@ -41,7 +41,7 @@
     "validate:tranco-review-export": "node --enable-source-maps --import tsx ./scripts/validate-tranco-review-export.ts",
     "eval:build-finding-corpus": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/eval/build-finding-corpus.ts",
     "eval:inspect-coverage-edge-corpus": "node ./scripts/eval/inspect-coverage-edge-corpus.mjs",
-    "dev": "NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048} next dev --turbo --port 3000",
+    "dev": "NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=4096} next dev --turbo --port 3000",
     "dev:validation:local": "NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048} next dev --turbo --port 3003",
     "typecheck": "pnpm --filter @certscore/mcp-auth build && next typegen . && tsc --noEmit",
     "clean": "rm -rf .next"

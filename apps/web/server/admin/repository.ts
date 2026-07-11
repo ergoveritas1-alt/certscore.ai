@@ -49,6 +49,17 @@ export type AdminScanRequestRow = {
   status: string;
 };
 
+export type AdminPulseScanAttributionRow = {
+  normalized_url: string | null;
+  public_id: string;
+  request_channel: string | null;
+  request_context: Record<string, unknown> | null;
+  requested_at: string;
+  requester_name: string | null;
+  resolution_mode: string | null;
+  scan_id: string;
+};
+
 export type AdminScanDomainRow = {
   hostname: string;
   id?: string;
@@ -67,7 +78,7 @@ export type AdminScanSnapshotRow = {
   block_vendor_guess?: string | null;
   blocked_flag: boolean | null;
   captcha_flag: boolean | null;
-  certscore_overall: number;
+  certscore_overall: number | null;
   cmp_vendor_name?: string | null;
   egress_id?: string | null;
   egress_type?: string | null;
@@ -503,6 +514,39 @@ export async function loadAdminScanRequestRows(limit: number): Promise<AdminScan
   return result.rows;
 }
 
+export async function loadAdminPulseScanAttributionRows(scanIds: string[]): Promise<AdminPulseScanAttributionRow[]> {
+  if (scanIds.length === 0) {
+    return [];
+  }
+
+  const result = await query<AdminPulseScanAttributionRow>(
+    `select distinct on (pr.scan_id)
+            pr.scan_id,
+            pr.public_id,
+            pr.request_channel,
+            pr.request_context,
+            pr.requested_at,
+            pr.normalized_url,
+            pr.resolution_mode,
+            coalesce(app_user.email, auth_user.email, api_key.created_by) as requester_name
+       from public.pulse_requests pr
+       left join public.integration_api_keys api_key
+         on api_key.public_id = pr.requested_by ->> 'apiKeyId'
+       left join public.users app_user
+         on app_user.id::text = coalesce(pr.requested_by ->> 'userId', api_key.owner_user_id::text)
+       left join public.better_auth_users auth_user
+         on auth_user.id = pr.requested_by ->> 'userId'
+      where pr.scan_id = any($1::uuid[])
+      order by pr.scan_id,
+               case when pr.resolution_mode in ('created_new_scan', 'queued_new_scan') then 0 else 1 end,
+               pr.requested_at asc`,
+    [scanIds],
+    { readOnly: true }
+  );
+
+  return result.rows;
+}
+
 export async function persistAdminScanSummary(input: {
   cmpVendorName: string | null;
   industry: string | null;
@@ -531,9 +575,8 @@ export async function persistAdminScanSummary(input: {
             $7,
             coalesce($4, false),
             $5
-       from scans
+      from scans
       where scans.id = $1
-        and scans.organization_id is not null
         and scans.domain_id is not null
      on conflict (scan_id) do update
        set admin_summary_generated_at = excluded.admin_summary_generated_at,

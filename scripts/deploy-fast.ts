@@ -106,11 +106,10 @@ async function main() {
       skip: !args.forceValidation && !changed.validation,
       pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase
     }));
-    lanes.push(deployDb({
-      ref: sha,
-      workflowRef,
-      skip: !args.forceDb && !changed.db
-    }));
+    lanes.push(Promise.resolve(skippedLane(
+      "production DB migrations",
+      "the web workflow applies migrations from the target image before ECS promotion"
+    )));
   } else if (args.mode === "web") {
     lanes.push(deployWeb({ ref: sha, workflowRef, force: args.forceWeb || true }));
   } else if (args.mode === "validation") {
@@ -634,9 +633,8 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
       : `validation AWS deploy (runtime base ${args.forceValidationRuntimeBase || changed.validationRuntimeBase ? "rebuild/push" : "reuse"})`);
   }
   if (args.mode === "all" || args.mode === "db") {
-    const skip = args.mode === "all" && !args.forceDb && !changed.db;
-    lanes.push(skip
-      ? "production DB migrations skipped (no migration inputs changed)"
+    lanes.push(args.mode === "all"
+      ? "production DB migrations run from the target web image before ECS promotion"
       : "production DB migrations");
   }
 

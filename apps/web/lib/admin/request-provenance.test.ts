@@ -44,6 +44,18 @@ describe("classifyAdminRequestProvenance", () => {
     );
   });
 
+  it("labels API-key requests with an owning email as authenticated", () => {
+    assert.equal(
+      classifyAdminRequestProvenance({
+        requestChannel: "sdk",
+        requestedByAnonymous: false,
+        requesterIp: "hash",
+        requesterName: "owner@example.com"
+      }).kind,
+      "authenticated_user"
+    );
+  });
+
   it("labels anonymous marketing scan sources as public traffic", () => {
     assert.equal(
       classifyAdminRequestProvenance({

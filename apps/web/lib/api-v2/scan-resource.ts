@@ -32,7 +32,11 @@ import {
   isInventoryDisplayHostname,
   type InventoryGroupRow
 } from "../scans/runtime-inventory-projection";
-import { absoluteUrl } from "../seo";
+import { SITE_URL } from "../seo";
+
+function absoluteUrl(path: string) {
+  return new URL(path, process.env.NEXT_PUBLIC_APP_URL?.trim() || SITE_URL).toString();
+}
 
 export const API_V2_SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
 const API_V2_MAX_ACTIVE_SCAN_RETRY_AFTER_SECONDS = 5;

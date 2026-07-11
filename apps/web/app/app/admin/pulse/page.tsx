@@ -139,6 +139,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                 const provenance = classifyAdminRequestProvenance({
                   requestChannel: request.requestChannel,
                   requestedByAnonymous: request.requestedByAnonymous,
+                  requesterName: request.requesterName,
                   requesterIp: request.sourceIp ?? request.sourceIpHash
                 });
                 const status = statusIndicator(request.status);
@@ -147,7 +148,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                   <tr className="group h-[52px] hover:bg-slate-50/70" key={request.publicId}>
                     <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 text-center group-hover:bg-slate-50" title={status.label}><span aria-label={status.label} className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /></td>
                     <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${routeClass(request.apiRoute)}`}>{request.apiRoute}</span></td>
-                    <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`}>{provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={sourceIpLabel(request)}>{sourceIpLabel(request)}</p></td>
+                    <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={request.requesterName ?? provenance.label}>{request.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={sourceIpLabel(request)}>{sourceIpLabel(request)}</p></td>
                     <td className="px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(request.requestedAt)}</td>
                     <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-900" title={request.normalizedDomain ?? undefined}>{request.normalizedDomain ?? "Unknown"}</p><p className="truncate font-mono text-[10px] text-slate-400" title={request.publicId}>{request.publicId}</p></td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.score !== null ? `${request.score}/100` : "—"}</td>

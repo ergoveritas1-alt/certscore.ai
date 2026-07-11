@@ -1,6 +1,8 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { createDomainRequestSchema, normalizeScanFrom, parseDomainBatchInput, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
 import { getDashboardContext } from "../auth";
@@ -218,6 +220,17 @@ export async function createDomainAction(
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
   const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom);
   const parsedBatch = parseDomainBatchInput(domainInput);
+  const requestHeaders = await headers();
+  const originIp =
+    requestHeaders.get("cf-connecting-ip")?.split(",").at(0)?.trim() ??
+    requestHeaders.get("x-forwarded-for")?.split(",").at(0)?.trim() ??
+    requestHeaders.get("x-real-ip")?.trim() ??
+    null;
+  const provenance = {
+    host: requestHeaders.get("host"),
+    originIp: originIp ? createHash("sha256").update(originIp).digest("hex") : null,
+    userAgent: requestHeaders.get("user-agent")
+  };
 
   if (parsedBatch.valid.length === 0) {
     return {
@@ -236,6 +249,7 @@ export async function createDomainAction(
         bypassRecentScanReuse: forceNewScan,
         localV2DagScanProfile,
         localV2DagRunViaLambda,
+        provenance,
         scanFrom
       })
     )

@@ -11,6 +11,7 @@ import type { IntegrationApiKeyRecord } from "../../server/integrations/api-keys
 
 type ApiKeysCardProps = {
   apiKeys: IntegrationApiKeyRecord[];
+  referenceTime: string;
 };
 
 const initialApiKeyActionState: ApiKeyActionState = {
@@ -31,6 +32,7 @@ function formatDateTime(value: string | null) {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
+    timeZone: "America/Los_Angeles",
     timeZoneName: "short"
   }).format(new Date(value));
 }
@@ -55,7 +57,7 @@ function scopeLabel(scope: string) {
   return scope;
 }
 
-export function ApiKeysCard({ apiKeys }: ApiKeysCardProps) {
+export function ApiKeysCard({ apiKeys, referenceTime }: ApiKeysCardProps) {
   const [createState, createAction, createPending] = useActionState(createIntegrationApiKeyAction, initialApiKeyActionState);
   const [revokeState, revokeAction, revokePending] = useActionState(revokeIntegrationApiKeyAction, initialApiKeyActionState);
 
@@ -119,7 +121,7 @@ export function ApiKeysCard({ apiKeys }: ApiKeysCardProps) {
         ) : (
           <div className="divide-y divide-slate-200">
             {apiKeys.map((apiKey) => (
-              <ApiKeyRow key={apiKey.publicId} apiKey={apiKey} revokeAction={revokeAction} revokePending={revokePending} />
+              <ApiKeyRow key={apiKey.publicId} apiKey={apiKey} referenceTime={referenceTime} revokeAction={revokeAction} revokePending={revokePending} />
             ))}
           </div>
         )}
@@ -130,14 +132,16 @@ export function ApiKeysCard({ apiKeys }: ApiKeysCardProps) {
 
 function ApiKeyRow({
   apiKey,
+  referenceTime,
   revokeAction,
   revokePending
 }: {
   apiKey: IntegrationApiKeyRecord;
+  referenceTime: string;
   revokeAction: (payload: FormData) => void;
   revokePending: boolean;
 }) {
-  const expired = apiKey.expiresAt ? new Date(apiKey.expiresAt).getTime() <= Date.now() : false;
+  const expired = apiKey.expiresAt ? new Date(apiKey.expiresAt).getTime() <= new Date(referenceTime).getTime() : false;
   const statusLabel = apiKey.status === "revoked" ? "revoked" : expired ? "expired" : "active";
   const statusClasses =
     statusLabel === "active"

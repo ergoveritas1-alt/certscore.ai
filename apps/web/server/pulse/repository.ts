@@ -47,7 +47,7 @@ export async function findLatestCompletedAnonymousScanForDomain(
     typeof input?.maxAgeHours === "number" && Number.isFinite(input.maxAgeHours)
       ? (() => {
           parameters.push(Math.floor(input.maxAgeHours));
-          return `and s.completed_at is not null and s.completed_at >= timezone('utc', now()) - ($${parameters.length}::int * interval '1 hour')`;
+          return `and s.completed_at is not null and s.completed_at >= now() - ($${parameters.length}::int * interval '1 hour')`;
         })()
       : "";
   const minPagesClause =
@@ -143,8 +143,8 @@ export async function getPulseGptActionUsage(input: { ipHash: string | null }) {
 
   const result = await queryOne<{ hourly_count: number; daily_count: number }>(
     `select
-       count(*) filter (where requested_at > timezone('utc', now()) - interval '1 hour')::int as hourly_count,
-       count(*) filter (where requested_at > timezone('utc', now()) - interval '1 day')::int as daily_count
+       count(*) filter (where requested_at > now() - interval '1 hour')::int as hourly_count,
+       count(*) filter (where requested_at > now() - interval '1 day')::int as daily_count
        from pulse_requests
       where request_channel = 'gpt_action'
         and request_context->>'mode' = 'url'
@@ -171,14 +171,19 @@ export async function updatePulseRequestCompleted(input: {
   await query(
     `update pulse_requests
         set status = 'completed',
+            phase = 'completed',
             scan_id = $2,
             result_pulse_url = $3,
             result_report_url = $4,
             response_summary = $5,
-            resolution_mode = coalesce($6, resolution_mode),
-            completed_at = timezone('utc', now()),
-            elapsed_seconds = greatest(0, extract(epoch from (timezone('utc', now()) - requested_at))::int)
-      where public_id = $1`,
+            resolution_mode = case
+              when public_id = $1 then coalesce($6, resolution_mode)
+              else resolution_mode
+            end,
+            completed_at = now(),
+            elapsed_seconds = greatest(0, extract(epoch from (now() - requested_at))::int)
+      where public_id = $1
+         or (scan_id = $2 and status in ('queued', 'running'))`,
     [input.pulseRequestId, input.scanId, input.resultPulseUrl, input.resultReportUrl, input.responseSummary, input.resolutionMode ?? null]
   );
 }
@@ -241,6 +246,31 @@ export async function updatePulseRequestQueued(input: {
   );
 }
 
+export async function updatePulseRequestLifecycle(input: {
+  completedAt?: string | null;
+  phase: string;
+  pulseRequestId: string;
+  status: string;
+}) {
+  await ensurePulseTables();
+  const terminal = ["completed", "completed_limited", "failed", "expired", "rate_limited"].includes(input.status);
+  await query(
+    `update pulse_requests
+        set status = $2,
+            phase = $3,
+            completed_at = case
+              when $4::boolean then coalesce($5::timestamptz, completed_at, now())
+              else completed_at
+            end,
+            elapsed_seconds = case
+              when $4::boolean then greatest(0, extract(epoch from (coalesce($5::timestamptz, now()) - requested_at))::int)
+              else elapsed_seconds
+            end
+      where public_id = $1`,
+    [input.pulseRequestId, input.status, input.phase, terminal, input.completedAt ?? null]
+  );
+}
+
 export async function updatePulseRequestRateLimited(input: {
   pulseRequestId: string;
   retryAfterSeconds: number;
@@ -250,10 +280,13 @@ export async function updatePulseRequestRateLimited(input: {
   await query(
     `update pulse_requests
         set status = 'rate_limited',
+            phase = 'rate_limited',
             resolution_mode = 'rate_limited',
             throttle_reason = 'domain_1_minute_scan_limit',
             retry_after_seconds = $2,
-            scan_id = coalesce($3, scan_id)
+            scan_id = coalesce($3, scan_id),
+            completed_at = coalesce(completed_at, now()),
+            elapsed_seconds = greatest(0, extract(epoch from (now() - requested_at))::int)
       where public_id = $1`,
     [input.pulseRequestId, input.retryAfterSeconds, input.scanId ?? null]
   );
@@ -279,7 +312,7 @@ export async function claimPulseDomainScanCreation(input: { normalizedDomain: st
     `select expires_at
        from pulse_domain_throttles
       where normalized_domain = $1
-        and expires_at > timezone('utc', now())`,
+        and expires_at > now()`,
     [input.normalizedDomain],
     { readOnly: true }
   );
@@ -291,11 +324,11 @@ export async function claimPulseDomainScanCreation(input: { normalizedDomain: st
 
   await query(
     `insert into pulse_domain_throttles (normalized_domain, expires_at, last_pulse_request_id)
-     values ($1, timezone('utc', now()) + interval '1 minute', $2)
+     values ($1, now() + interval '1 minute', $2)
      on conflict (normalized_domain)
      do update set
-       last_scan_created_at = timezone('utc', now()),
-       expires_at = timezone('utc', now()) + interval '1 minute',
+       last_scan_created_at = now(),
+       expires_at = now() + interval '1 minute',
        last_pulse_request_id = excluded.last_pulse_request_id`,
     [input.normalizedDomain, input.pulseRequestId]
   );
@@ -310,7 +343,7 @@ export async function getPulseFeedbackCount(input: { pulseRequestId: string; ipH
        from pulse_feedback
       where pulse_request_id = $1
         and ($2::text is null or ip_hash = $2)
-        and created_at > timezone('utc', now()) - interval '1 hour'`,
+        and created_at > now() - interval '1 hour'`,
     [input.pulseRequestId, input.ipHash],
     { readOnly: true }
   );

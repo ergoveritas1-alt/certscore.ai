@@ -52,11 +52,16 @@ export function AddDomainForm({
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
   const [domain, setDomain] = useState("");
   const [freshRescan, setFreshRescan] = useState(false);
-  const [hasRecentReusableScan, setHasRecentReusableScan] = useState(false);
+  const [apiHasRecentReusableScan, setApiHasRecentReusableScan] = useState(false);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [scanFrom, setScanFrom] = useState<ScanFrom>(defaultScanFrom);
   const scanProgress = useScanProgressClock(isPending);
   const effectiveSubmitDomain = domain.trim();
+  const normalizedDomain = normalizeDomainHint(effectiveSubmitDomain);
+  const hasRecentReusableScanHint = recentReusableScans.some(
+    (scan) => normalizeDomainHint(scan.domain) === normalizedDomain && scan.scanFrom === scanFrom
+  );
+  const hasRecentReusableScan = hasRecentReusableScanHint || apiHasRecentReusableScan;
 
   useEffect(() => {
     if (state.error) {
@@ -66,17 +71,15 @@ export function AddDomainForm({
 
   useEffect(() => {
     if (!effectiveSubmitDomain || scanFrom === "local_extension") {
-      setHasRecentReusableScan(false);
+      setApiHasRecentReusableScan(false);
       setFreshRescan(false);
       return;
     }
 
-    setHasRecentReusableScan(false);
+    setApiHasRecentReusableScan(false);
     setFreshRescan(false);
 
-    const normalizedDomain = normalizeDomainHint(effectiveSubmitDomain);
-    if (recentReusableScans.some((scan) => normalizeDomainHint(scan.domain) === normalizedDomain && scan.scanFrom === scanFrom)) {
-      setHasRecentReusableScan(true);
+    if (hasRecentReusableScanHint) {
       return;
     }
 
@@ -98,7 +101,7 @@ export function AddDomainForm({
           return Boolean(payload?.hasRecentReusableScan);
         })
         .then((nextHasRecentReusableScan) => {
-          setHasRecentReusableScan(nextHasRecentReusableScan);
+          setApiHasRecentReusableScan(nextHasRecentReusableScan);
           if (!nextHasRecentReusableScan) {
             setFreshRescan(false);
           }
@@ -107,7 +110,7 @@ export function AddDomainForm({
           if (error instanceof Error && error.name === "AbortError") {
             return;
           }
-          setHasRecentReusableScan(false);
+          setApiHasRecentReusableScan(false);
           setFreshRescan(false);
         });
     }, RECENT_SCAN_AVAILABILITY_CHECK_DELAY_MS);
@@ -116,7 +119,7 @@ export function AddDomainForm({
       window.clearTimeout(timeoutId);
       controller.abort();
     };
-  }, [effectiveSubmitDomain, recentReusableScans, scanFrom]);
+  }, [effectiveSubmitDomain, hasRecentReusableScanHint, scanFrom]);
 
   return (
     <form action={action} className="space-y-4" onSubmit={() => markPendingScanStarted("dashboard")}>

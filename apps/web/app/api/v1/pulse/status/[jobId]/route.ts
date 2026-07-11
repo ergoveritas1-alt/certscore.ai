@@ -4,7 +4,7 @@ import { buildPulseError } from "../../../../../../lib/pulse/error";
 import { logPulseGptActionEvent } from "../../../../../../lib/pulse/gpt-action-analytics";
 import { buildPulseStatus } from "../../../../../../lib/pulse/status";
 import { getAnonymousScanById } from "../../../../../../server/scans/get-scan-by-id";
-import { getPulseRequestByJobId } from "../../../../../../server/pulse/repository";
+import { getPulseRequestByJobId, updatePulseRequestLifecycle } from "../../../../../../server/pulse/repository";
 import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 
 export const dynamic = "force-dynamic";
@@ -88,11 +88,25 @@ export async function GET(request: Request, context: RouteContext) {
       }
     }
 
+    const phase = ["completed", "completed_limited", "failed", "expired", "rate_limited"].includes(status)
+      ? status
+      : status === "running"
+        ? "running"
+        : pulseRequest.phase ?? status;
+    if (status !== pulseRequest.status || phase !== pulseRequest.phase || (completedAt && !pulseRequest.completed_at)) {
+      await updatePulseRequestLifecycle({
+        completedAt,
+        phase,
+        pulseRequestId: pulseRequest.public_id,
+        status
+      });
+    }
+
     const body = buildPulseStatus({
       jobId: pulseRequest.job_id,
       domain: pulseRequest.normalized_domain,
       status,
-      phase: pulseRequest.phase,
+      phase,
       createdAt: pulseRequest.created_at,
       completedAt,
       lastUpdatedAt: pulseRequest.updated_at,
