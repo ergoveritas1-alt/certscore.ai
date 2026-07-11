@@ -406,6 +406,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         ? "sdk"
         : integrationClient === "mcp"
           ? "mcp"
+          : integrationClient === "pulse"
+            ? "pulse_api"
           : integrationClient
             ? "other_api"
             : "pulse_api";

@@ -16,7 +16,6 @@ import {
   type AdminScanRequestRow as ScanRequestRow
 } from "./repository";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
-import { materializeAdminScanSummaries } from "./admin-scan-summary";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanListItem = {
@@ -213,34 +212,15 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     };
   });
 
-  const missingSummaryScans = scanItems
-    .filter((scan) => scan.status === "completed" && !scan.adminSummaryGeneratedAt)
-    .map((scan) => ({ organizationId: scan.organizationId, scanId: scan.scanId }));
-  const materializedSummaries = await materializeAdminScanSummaries(missingSummaryScans);
-  const hydratedScanItems = scanItems.map((scan) => {
-    const summary = materializedSummaries.get(scan.scanId);
-    return summary
-      ? {
-          ...scan,
-          adminSummaryGeneratedAt: new Date().toISOString(),
-          certscoreOverall: summary.score,
-          cmpVendorName: summary.cmpVendorName,
-          industry: summary.industry,
-          primaryLanguage: summary.primaryLanguage,
-          privacyPolicyPresent: summary.privacyPolicyPresent,
-          topFindingCount: summary.topFindingCount
-        }
-      : scan;
-  });
-  const hydratedScansById = new Map(hydratedScanItems.map((scan) => [scan.scanId, scan] as const));
+  const scansById = new Map(scanItems.map((scan) => [scan.scanId, scan] as const));
   const requestItems: AdminScanListItem[] = scanRequestRows
     .filter((request) => !getLinkedScanIdForRequest(request) || request.resolution_mode === "reused_existing_scan")
     .map((request) => {
       const linkedScanId = getLinkedScanIdForRequest(request);
-      return mapScanRequestRow(request, linkedScanId ? hydratedScansById.get(linkedScanId) ?? null : null);
+      return mapScanRequestRow(request, linkedScanId ? scansById.get(linkedScanId) ?? null : null);
     });
 
-  return [...hydratedScanItems, ...requestItems]
+  return [...scanItems, ...requestItems]
     .sort((left, right) => new Date(right.activityAt).getTime() - new Date(left.activityAt).getTime())
     .slice(offset, offset + limit);
 }

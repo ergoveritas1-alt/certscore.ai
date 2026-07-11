@@ -14,18 +14,35 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   const source = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
   assert.match(source, /coalesce\(app_user\.email, auth_user\.email, api_key\.created_by\) as requester_name/);
   assert.match(source, /domain\.hostname as scan_domain_hostname/);
-  assert.match(source, /materializeMissingPulseScanSummaries/);
   assert.match(source, /scan_completed_at/);
-  assert.match(source, /canonicalSummary\.topFindingIds/);
+  assert.match(source, /ss\.top_finding_count::int as top_finding_count/);
+  assert.match(source, /topFindingCount:/);
+  assert.doesNotMatch(source, /materializeAdminScanSummar/);
+  assert.doesNotMatch(source, /materializeLocalV2DagScanDetail/);
   assert.doesNotMatch(source, /getAnonymousScanById/);
-  assert.doesNotMatch(source, /\.slice\(0, 1\)/);
 });
 
-test("Admin Scans enriches every missing completed row in the current page", async () => {
+test("Admin Scans reads persisted summaries without report materialization in the list request", async () => {
   const source = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
-  assert.match(source, /materializeAdminScanSummaries\(missingSummaryScans\)/);
-  assert.doesNotMatch(source, /missingSummaryScans[\s\S]{0,180}\.slice\(0, 1\)/);
-  assert.match(source, /mapScanRequestRow\(request, linkedScanId \? hydratedScansById\.get\(linkedScanId\)/);
+  assert.doesNotMatch(source, /materializeAdminScanSummar/);
+  assert.doesNotMatch(source, /materializeLocalV2DagScanDetail/);
+  assert.match(source, /mapScanRequestRow\(request, linkedScanId \? scansById\.get\(linkedScanId\)/);
+});
+
+test("public report materialization persists the canonical summary before returning", async () => {
+  const source = await readFile("apps/web/server/scans/get-public-scan-record.ts", "utf8");
+  assert.match(source, /persistAdminScanSummaryForRecord\(materialized\)/);
+  assert.match(source, /await persistAdminScanSummaryForRecord/);
+});
+
+test("authenticated and marketing report pages persist canonical summaries", async () => {
+  for (const file of [
+    "apps/web/app/app/scans/[scanId]/page.tsx",
+    "apps/web/app/(marketing)/scan/[scanId]/page.tsx"
+  ]) {
+    const source = await readFile(file, "utf8");
+    assert.match(source, /persistAdminScanSummaryForRecord\(displayScanRecord\)/);
+  }
 });
 
 test("admin summary persistence accepts completed scans without a canonical score", async () => {

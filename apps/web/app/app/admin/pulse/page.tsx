@@ -152,7 +152,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                     <td className="px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(request.requestedAt)}</td>
                     <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-900" title={request.normalizedDomain ?? undefined}>{request.normalizedDomain ?? "Unknown"}</p><p className="truncate font-mono text-[10px] text-slate-400" title={request.publicId}>{request.publicId}</p></td>
                     <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.score !== null ? `${request.score}/100` : "—"}</td>
-                    <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.topFindingIds.length}</td>
+                    <td className="px-2.5 py-1.5 font-semibold text-slate-900">{request.topFindingCount ?? "—"}</td>
                     <td className="px-2.5 py-1.5"><p className="whitespace-nowrap">Privacy {request.privacyPolicyPresent === true ? "✓" : request.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={request.cmpVendorName ?? undefined}>CMP {request.cmpVendorName ?? "—"}</p></td>
                     <td className="px-2.5 py-1.5 font-medium text-slate-700">{accessLabel(request)}</td>
                     <td className="px-2.5 py-1.5 font-medium text-slate-800">{request.elapsedSeconds !== null ? `${request.elapsedSeconds.toFixed(1)}s` : "—"}</td>

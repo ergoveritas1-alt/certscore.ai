@@ -1,8 +1,8 @@
 import "server-only";
 
 import { buildPulseProjection } from "../../lib/pulse/projection";
-import { getScanById } from "../scans/get-scan-by-id";
-import { getPublicScanRecord } from "../scans/get-public-scan-record";
+import { getAnonymousScanById, getScanById } from "../scans/get-scan-by-id";
+import type { PublicScanRecord } from "../scans/get-public-scan-record";
 import { materializeLocalV2DagScanDetail } from "../scans/local-v2-dag-report";
 import { persistAdminScanSummary } from "./repository";
 
@@ -33,13 +33,11 @@ function recordNumber(record: Record<string, unknown> | null, key: string) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-async function buildAndPersistAdminScanSummary(scanId: string, organizationId: string | null): Promise<AdminScanSummary | null> {
-  const scanRecord = organizationId
-    ? await getScanById({ organizationId, scanId }).then((record) => record ? materializeLocalV2DagScanDetail(record) : null)
-    : await getPublicScanRecord(scanId, { logPrefix: "[admin-scan-summary]" });
+export async function persistAdminScanSummaryForRecord(scanRecord: PublicScanRecord): Promise<AdminScanSummary | null> {
   if (!scanRecord || scanRecord.scan.status !== "completed") {
     return null;
   }
+  const scanId = scanRecord.scan.id;
 
   const reportProjection = buildPulseProjection({
     detail: "summary",
@@ -74,6 +72,14 @@ async function buildAndPersistAdminScanSummary(scanId: string, organizationId: s
 
   await persistAdminScanSummary({ scanId, ...summary });
   return summary;
+}
+
+async function buildAndPersistAdminScanSummary(scanId: string, organizationId: string | null): Promise<AdminScanSummary | null> {
+  const rawRecord = organizationId
+    ? await getScanById({ organizationId, scanId })
+    : await getAnonymousScanById(scanId);
+  const scanRecord = rawRecord ? await materializeLocalV2DagScanDetail(rawRecord) : null;
+  return scanRecord ? persistAdminScanSummaryForRecord(scanRecord) : null;
 }
 
 export function materializeAdminScanSummary(scanId: string, organizationId: string | null) {

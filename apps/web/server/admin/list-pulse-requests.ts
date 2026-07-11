@@ -4,7 +4,6 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { formatScanFromLabel, normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-route";
 import { ensurePulseTables } from "../pulse/schema";
-import { materializeAdminScanSummaries, type AdminScanSummary } from "./admin-scan-summary";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminPulseRequestStatus =
@@ -57,6 +56,7 @@ export type AdminPulseRequestListItem = {
   summaryJsonDownloads: number;
   evidenceJsonDownloads: number;
   topFindingIds: string[];
+  topFindingCount: number | null;
 };
 
 export type AdminPulseRequestDetail = AdminPulseRequestListItem & {
@@ -158,15 +158,11 @@ function getFreshRescanRequested(requestContext: Record<string, unknown>) {
   return getRequestContextBoolean(requestContext, "bypassRecentScanReuse") ?? getRequestContextBoolean(requestContext, "forceNewScan");
 }
 
-function mapPulseRequestRow(
-  row: Record<string, unknown>,
-  summariesByScanId: Map<string, AdminScanSummary> = new Map()
-): AdminPulseRequestListItem {
+function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestListItem {
   const requestContext = asRecord(row.request_context);
   const requestedBy = asRecord(row.requested_by);
   const responseSummary = asRecord(row.response_summary);
   const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
-  const canonicalSummary = scanId ? summariesByScanId.get(scanId) ?? null : null;
   const storedTopFindingIds = asStringArray(responseSummary.topFindingIds);
   const scanFromValue = normalizeScanFrom(requestContext.scanFrom ?? asRecord(row.scan_config_json).scanFrom);
   return {
@@ -178,7 +174,7 @@ function mapPulseRequestRow(
     completedAt: timestampString(row.completed_at) ?? timestampString(row.scan_completed_at),
     blockedFlag: typeof row.blocked_flag === "boolean" ? row.blocked_flag : null,
     captchaFlag: typeof row.captcha_flag === "boolean" ? row.captcha_flag : null,
-    cmpVendorName: canonicalSummary?.cmpVendorName ?? (typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null),
+    cmpVendorName: typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
     createdAt: timestampString(row.created_at) ?? String(row.created_at),
     detail: getRequestContextString(requestContext, "detail"),
     elapsedSeconds:
@@ -192,7 +188,7 @@ function mapPulseRequestRow(
     freshRescanRequested: getFreshRescanRequested(requestContext),
     freshness: getRequestContextString(requestContext, "freshness"),
     jobId: String(row.job_id),
-    industry: canonicalSummary?.industry ?? (typeof row.admin_industry_label === "string" ? row.admin_industry_label : null),
+    industry: typeof row.admin_industry_label === "string" ? row.admin_industry_label : null,
     normalizedDomain:
       typeof row.normalized_domain === "string"
         ? row.normalized_domain
@@ -202,10 +198,9 @@ function mapPulseRequestRow(
     publicId: String(row.public_id),
     requestedAt: timestampString(row.requested_at) ?? String(row.requested_at),
     requestedUrl: typeof row.requested_url === "string" ? row.requested_url : null,
-    primaryLanguage: canonicalSummary?.primaryLanguage ?? (typeof row.site_language_primary === "string" ? row.site_language_primary : null),
+    primaryLanguage: typeof row.site_language_primary === "string" ? row.site_language_primary : null,
     privacyPolicyPresent:
-      canonicalSummary?.privacyPolicyPresent ??
-      (typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null),
+      typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null,
     resolutionMode: typeof row.resolution_mode === "string" ? row.resolution_mode : null,
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
@@ -213,7 +208,7 @@ function mapPulseRequestRow(
     score:
       typeof responseSummary.score === "number"
         ? responseSummary.score
-        : canonicalSummary?.score ?? (typeof row.snapshot_score === "number" ? row.snapshot_score : null),
+        : typeof row.snapshot_score === "number" ? row.snapshot_score : null,
     scanFromLabel: formatScanFromLabel(scanFromValue),
     scanFromValue,
     requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
@@ -230,27 +225,14 @@ function mapPulseRequestRow(
     snapshotTotalSignals: typeof row.snapshot_total_signals === "number" ? row.snapshot_total_signals : null,
     summaryJsonDownloads: typeof row.summary_json_downloads === "number" ? row.summary_json_downloads : 0,
     evidenceJsonDownloads: typeof row.evidence_json_downloads === "number" ? row.evidence_json_downloads : 0,
-    topFindingIds:
-      canonicalSummary
-        ? canonicalSummary.topFindingIds
-        : storedTopFindingIds
+    topFindingIds: storedTopFindingIds,
+    topFindingCount:
+      typeof row.top_finding_count === "number"
+        ? row.top_finding_count
+        : storedTopFindingIds.length > 0
+          ? storedTopFindingIds.length
+          : null
   };
-}
-
-async function materializeMissingPulseScanSummaries(rows: Record<string, unknown>[]) {
-  const scans = [
-    ...new Map(
-      rows.flatMap((row) => {
-        const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
-        const scanStatus = typeof row.scan_status === "string" ? row.scan_status : null;
-        if (!scanId || (scanStatus !== "completed" && scanStatus !== "completed_limited")) {
-          return [];
-        }
-        return [[scanId, { organizationId: null, scanId }] as const];
-      })
-    ).values()
-  ];
-  return materializeAdminScanSummaries(scans, 3);
 }
 
 function buildDisplayResponseSummary(input: {
@@ -265,7 +247,7 @@ function buildDisplayResponseSummary(input: {
   return {
     ...responseSummary,
     topFindingIds: input.base.topFindingIds,
-    topFindingCount: input.base.topFindingIds.length,
+    topFindingCount: input.base.topFindingCount,
     findingCount: input.base.snapshotFindingCount,
     scanId: input.base.scanId,
     totalSignals: input.base.snapshotTotalSignals
@@ -349,6 +331,7 @@ export async function listAdminPulseRequests(input: {
             ss.total_signals::int as snapshot_total_signals,
             ss.report_finding_count::int as snapshot_finding_count,
             ss.certscore_overall::int as snapshot_score,
+            ss.top_finding_count::int as top_finding_count,
             ss.privacy_policy_present,
             ss.cmp_vendor_name,
             ss.access_posture_class,
@@ -394,8 +377,7 @@ export async function listAdminPulseRequests(input: {
     { readOnly: true }
   );
 
-  const summariesByScanId = await materializeMissingPulseScanSummaries(rows.rows);
-  return rows.rows.map((row) => mapPulseRequestRow(row, summariesByScanId));
+  return rows.rows.map((row) => mapPulseRequestRow(row));
 }
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {
@@ -444,6 +426,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
               ss.total_signals::int as snapshot_total_signals,
               ss.report_finding_count::int as snapshot_finding_count,
               ss.certscore_overall::int as snapshot_score,
+              ss.top_finding_count::int as top_finding_count,
               ss.privacy_policy_present,
               ss.cmp_vendor_name,
               ss.access_posture_class,
@@ -519,8 +502,7 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
     return null;
   }
 
-  const summariesByScanId = await materializeMissingPulseScanSummaries([request]);
-  const base = mapPulseRequestRow(request, summariesByScanId);
+  const base = mapPulseRequestRow(request);
   return {
     ...base,
     apiVersion: String(request.api_version),
@@ -590,11 +572,18 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
             pr.elapsed_seconds,
             pr.created_at,
             s.scan_config_json,
+            ss.certscore_overall::int as snapshot_score,
+            ss.top_finding_count::int as top_finding_count,
+            ss.privacy_policy_present,
+            ss.cmp_vendor_name,
+            ss.site_language_primary,
+            ss.admin_industry_label,
             coalesce(pf.feedback_count, 0)::int as feedback_count,
             coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,
             coalesce(pad.evidence_json_downloads, 0)::int as evidence_json_downloads
        from pulse_requests pr
        left join scans s on s.id = pr.scan_id
+       left join scan_snapshots ss on ss.scan_id = pr.scan_id
        left join lateral (
          select count(*)::int as feedback_count
            from pulse_feedback
@@ -614,6 +603,5 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
     { readOnly: true }
   );
 
-  const summariesByScanId = await materializeMissingPulseScanSummaries(rows.rows);
-  return rows.rows.map((row) => mapPulseRequestRow(row, summariesByScanId));
+  return rows.rows.map((row) => mapPulseRequestRow(row));
 }

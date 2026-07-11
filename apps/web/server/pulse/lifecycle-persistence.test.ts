@@ -39,6 +39,8 @@ test("Pulse request persistence preserves direct API, SDK, and MCP channels", as
 
   assert.match(routeSource, /integrationClient === "sdk"/);
   assert.match(routeSource, /integrationClient === "mcp"/);
+  assert.match(routeSource, /integrationClient === "pulse"/);
+  assert.match(routeSource, /\? "pulse_api"/);
   assert.match(routeSource, /integrationClient\s+\? "other_api"\s+: "pulse_api"/);
   assert.doesNotMatch(routeSource, /requestChannel: gptAction \? "gpt_action" : "pulse_api"/);
   assert.match(repositorySource, /input\.requestChannel \?\? input\.context\.channel \?\? input\.context\.source/);
