@@ -273,7 +273,16 @@ function summarize(label: string, payload: ToolPayload) {
 }
 
 async function callTool(client: Client, name: string, args: Record<string, unknown>) {
-  return parseToolJson(await client.callTool({ name, arguments: args }));
+  const result = await client.callTool({ name, arguments: args });
+  const payload = parseToolJson(result);
+  if (result.isError) {
+    throw new Error(`MCP tool ${name} failed: ${JSON.stringify(payload).slice(0, 2_000)}`);
+  }
+  return payload;
+}
+
+function sleep(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function runInstalledMcpSmoke(token: string) {
@@ -314,7 +323,25 @@ async function runInstalledMcpSmoke(token: string) {
       throw new Error("scan_site did not return a usable scanId.");
     }
 
-    summarize("get_scan_status", await callTool(client, "get_scan_status", { scanId }));
+    let terminalStatus: ToolPayload | null = null;
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      const status = await callTool(client, "get_scan_status", { scanId });
+      const statusValue = status.status ?? status.scan?.status ?? null;
+      if (attempt === 0 || statusValue === "completed" || statusValue === "completed_limited") {
+        summarize("get_scan_status", status);
+      }
+      if (statusValue === "completed" || statusValue === "completed_limited") {
+        terminalStatus = status;
+        break;
+      }
+      if (statusValue === "failed" || statusValue === "expired") {
+        throw new Error(`Production scan reached ${statusValue}: ${JSON.stringify(status).slice(0, 2_000)}`);
+      }
+      await sleep(5_000);
+    }
+    if (!terminalStatus) {
+      throw new Error(`Production scan ${scanId} did not complete within 10 minutes.`);
+    }
     summarize("get_scan", await callTool(client, "get_scan", { scanId }));
     const findings = await callTool(client, "list_findings", { scanId });
     summarize("list_findings", findings);

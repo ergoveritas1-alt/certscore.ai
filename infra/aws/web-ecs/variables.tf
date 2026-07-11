@@ -85,7 +85,7 @@ variable "image_tag" {
 variable "mcp_image_tag" {
   description = "Immutable image tag for the MCP HTTP sidecar deployed with the CertScore web task."
   type        = string
-  default     = "mcp-v0.2.6"
+  default     = "mcp-v0.2.7"
 }
 
 variable "mcp_ecr_repository_name" {

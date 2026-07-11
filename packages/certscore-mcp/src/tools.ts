@@ -23,9 +23,8 @@ export function toToolResult(payload: unknown): CallToolResult {
 }
 
 export function toToolError(error: unknown): CallToolResult {
-  if (error instanceof CertScoreError) {
-    return {
-      ...toToolResult({
+  const payload = error instanceof CertScoreError
+    ? {
         error: {
           name: error.name,
           message: error.message,
@@ -34,17 +33,19 @@ export function toToolError(error: unknown): CallToolResult {
           retryAfterSeconds: "retryAfterSeconds" in error ? error.retryAfterSeconds : undefined,
           responseBody: truncateErrorResponseBody(error.responseBody)
         }
-      }),
-      isError: true
-    };
-  }
-  return {
-    ...toToolResult({
-      error: {
-        name: error instanceof Error ? error.name : "Error",
-        message: error instanceof Error ? error.message : "Unknown CertScore MCP error."
       }
-    }),
+    : {
+        error: {
+          name: error instanceof Error ? error.name : "Error",
+          message: error instanceof Error ? error.message : "Unknown CertScore MCP error."
+        }
+      };
+
+  // MCP validates structuredContent against the tool's success output schema,
+  // including for isError results. Keep errors in text content so a bounded
+  // error envelope cannot be rejected as an invalid success resource.
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload) }],
     isError: true
   };
 }

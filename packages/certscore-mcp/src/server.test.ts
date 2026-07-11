@@ -682,6 +682,27 @@ test("tool errors are returned as structured JSON", async () => {
       assert.equal(error.name, "InvalidUrlError");
       assert.equal(error.code, "invalid_url");
       assert.equal(raw.isError, true);
+      assert.equal(raw.structuredContent, undefined);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("get_scan returns an MCP error while a scan resource is not ready", async () => {
+  const mock = installFetch([
+    {
+      status: 409,
+      body: { type: "certscore_api_error", error: { code: "scan_not_ready", message: "The scan is still running." } }
+    }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const raw = await client.callTool({ name: "get_scan", arguments: { scanId: "scan_running" } });
+      const result = parseToolJson(raw);
+      assert.equal(raw.isError, true);
+      assert.equal(raw.structuredContent, undefined);
+      assert.equal((result.error as Record<string, unknown>).code, "scan_not_ready");
     });
   } finally {
     mock.restore();

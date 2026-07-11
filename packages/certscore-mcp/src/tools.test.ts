@@ -129,22 +129,24 @@ test("toToolError marks CertScoreError results as MCP errors and truncates respo
     responseBody,
     status: 401
   }));
-  const payload = result.structuredContent as {
+  const payload = JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "{}") as {
     error?: { responseBody?: string };
   };
 
   assert.equal(result.isError, true);
+  assert.equal(result.structuredContent, undefined);
   assert.equal(payload.error?.responseBody?.length, 2_012);
   assert.match(payload.error?.responseBody ?? "", /…\[truncated\]$/);
 });
 
 test("toToolError marks generic errors as MCP errors", () => {
   const result = toToolError(new Error("Boom"));
-  const payload = result.structuredContent as {
+  const payload = JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "{}") as {
     error?: { message?: string; name?: string };
   };
 
   assert.equal(result.isError, true);
+  assert.equal(result.structuredContent, undefined);
   assert.equal(payload.error?.name, "Error");
   assert.equal(payload.error?.message, "Boom");
 });

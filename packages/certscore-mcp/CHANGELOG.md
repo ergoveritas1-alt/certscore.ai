@@ -1,5 +1,10 @@
 # certscore-mcp
 
+## 0.2.7
+
+- Return bounded MCP errors as text-only `isError` results so success output schemas cannot reject valid in-progress or API error responses.
+- Make the production smoke wait for a terminal scan resource before exercising report tools.
+
 ## 0.2.6
 
 - Preserve structured no-go disposition, reason-specific messaging, and retry guidance in scan, status, report, export, and explanation tools.
