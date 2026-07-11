@@ -300,6 +300,7 @@ function sleep(milliseconds: number) {
 
 async function runInstalledMcpSmoke(token: string) {
   const smokeUrl = process.env.CERTSCORE_MCP_PROD_SMOKE_URL?.trim() || DEFAULT_SMOKE_URL;
+  const smokeFreshness = process.env.CERTSCORE_MCP_PROD_SMOKE_FRESHNESS?.trim() === "refresh" ? "refresh" : "latest";
   const fallbackDomain = process.env.CERTSCORE_MCP_PROD_SMOKE_FALLBACK_DOMAIN?.trim() || DEFAULT_FALLBACK_DOMAIN;
   const smokeDomain = new URL(smokeUrl).hostname.replace(/^www\./, "");
   const transport = new StdioClientTransport({
@@ -340,7 +341,7 @@ async function runInstalledMcpSmoke(token: string) {
     const created = await callTool(client, "scan_site", {
       url: smokeUrl,
       detail: "standard",
-      freshness: "refresh",
+      freshness: smokeFreshness,
       scanFrom: "eu_ie"
     });
     summarize("scan_site", created);
