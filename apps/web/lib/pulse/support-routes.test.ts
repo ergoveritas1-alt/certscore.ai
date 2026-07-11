@@ -554,7 +554,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.distribution, "homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.5");
+  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.6");
   assert.equal(aiDiscovery.mcp.hosted.endpoint, "https://mcp.certscore.ai/mcp");
   assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.6");
   assert.match(aiDiscovery.mcp.hosted.authentication, /PKCE/);
