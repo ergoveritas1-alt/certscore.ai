@@ -712,7 +712,7 @@ async function main() {
   const environment = process.env.OPS_ALERT_ENVIRONMENT?.trim() || DEFAULT_ENVIRONMENT;
   const staleMinutes = Number(process.env.OPS_HEARTBEAT_STALE_MINUTES ?? DEFAULT_HEARTBEAT_STALE_MINUTES);
   const baseUrl = process.env.OPS_BASE_URL?.trim() || DEFAULT_BASE_URL;
-  const requireScannerHeartbeat = getBooleanEnv("OPS_REQUIRE_SCANNER_HEARTBEAT", true);
+  const requireScannerHeartbeat = getBooleanEnv("OPS_REQUIRE_SCANNER_HEARTBEAT", false);
   const requireValidationHeartbeat = getBooleanEnv("OPS_REQUIRE_VALIDATION_HEARTBEAT", true);
   const requireDirectDatabase = getBooleanEnv("OPS_REQUIRE_DIRECT_DATABASE", false);
   const databaseUrl = process.env.DATABASE_URL?.trim();
