@@ -35,6 +35,7 @@ export type PulseJobStatus =
 export interface CertScoreClientOptions {
   apiKey?: string;
   baseUrl?: string;
+  clientName?: "mcp" | "sdk";
   timeout?: number;
 }
 

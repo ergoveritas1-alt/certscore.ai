@@ -56,7 +56,7 @@ import {
   summarizeLocalV2DagLambdaDispatchForEvent
 } from "./local-v2-dag-lambda-dispatch";
 import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-simulated-dispatch";
-import { findRecentCompletedScanForDomain, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
+import { resolveRecentScanReuseDecision, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
 import { lookupTrancoRankMetadata } from "./tranco-rank-metadata";
 import { upsertOrganizationSettings } from "../settings/repository";
@@ -249,13 +249,13 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     return request.catch((error) => logScanRequestFailure("workspace_full_scan_request", error));
   };
 
-  if (!bypassRecentScanReuse) {
-    const recentScan = await findRecentCompletedScanForDomain({
+  const reuseDecision = await resolveRecentScanReuseDecision({
+      forceNewScan: bypassRecentScanReuse,
+      minPagesRequested: pagesRequested,
       normalizedDomain: domainRecord.domain.hostname,
       normalizedUrl: domainRecord.domain.normalizedUrl,
       organizationId: input.organizationId,
-      scanFrom,
-      minPagesRequested: pagesRequested
+      scanFrom
     }).catch((error) => {
         console.error("[web] workspace recent scan reuse lookup failed", {
           domainId: domainRecord.domain.id,
@@ -264,6 +264,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         return null;
       });
 
+  if (reuseDecision?.action === "reuse") {
+    const recentScan = reuseDecision.eligibility.candidate;
     if (recentScan) {
       try {
         await logRequest({

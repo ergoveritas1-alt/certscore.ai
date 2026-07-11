@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import React, { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { sendReportEmailAction, type SendReportEmailActionState } from "../../server/scans/email-report";
 
 type ShareReportActionsProps = {
   domainLabel: string;
   scanId: string;
+  showMonitorSite?: boolean;
   visualEvidenceHref?: string | null;
 };
 
@@ -168,6 +169,7 @@ function ImageLoadingGlyph() {
 export function ShareReportActions({
   domainLabel,
   scanId,
+  showMonitorSite = false,
   visualEvidenceHref = null
 }: ShareReportActionsProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
@@ -291,17 +293,19 @@ export function ShareReportActions({
           <EmailIcon />
           <IconTooltip label={emailState.success ? "Sent" : "Email report"} />
         </button>
-        <Link
-          aria-label="Monitor this site"
-          className={iconActionClassName()}
-          data-analytics-cta-type="monitor"
-          data-analytics-event="report_cta_clicked"
-          href={monitorHref}
-          title="Monitor this site"
-        >
-          <MonitorIcon />
-          <IconTooltip label="Monitor this site" />
-        </Link>
+        {showMonitorSite ? (
+          <Link
+            aria-label="Monitor this site"
+            className={iconActionClassName()}
+            data-analytics-cta-type="monitor"
+            data-analytics-event="report_cta_clicked"
+            href={monitorHref}
+            title="Monitor this site"
+          >
+            <MonitorIcon />
+            <IconTooltip label="Monitor this site" />
+          </Link>
+        ) : null}
         {visualEvidenceHref ? (
           <button
             type="button"

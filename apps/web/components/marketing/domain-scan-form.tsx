@@ -89,6 +89,14 @@ export function buildRecentScanAvailabilityUrl(input: { domain: string; scanFrom
   return `/api/full-scan/reuse-availability?${params.toString()}`;
 }
 
+export function shouldExpectRecentScanReuse(input: {
+  freshRescan: boolean;
+  hasRecentReusableScan: boolean;
+  mode: ScanMode;
+}) {
+  return input.mode === "full" && input.hasRecentReusableScan && !input.freshRescan;
+}
+
 type ScanSubmitFailure = {
   code?: string | null;
   destination?: string | null;
@@ -337,6 +345,7 @@ export function DomainScanForm({
   const scanProgress = useScanProgressClock(isSubmitting);
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
+  const expectsRecentScanReuse = shouldExpectRecentScanReuse({ freshRescan, hasRecentReusableScan, mode });
 
   useEffect(() => {
     if (!allowLocalExtensionScan && scanFrom === "local_extension") {
@@ -483,7 +492,7 @@ export function DomainScanForm({
       scan_status: "queued"
     });
 
-    router.push(response.reportUrl ?? `/app/browser-scans/${response.browserScanId}`);
+    router.push(response.reportUrl ?? `/browser-scans/${response.browserScanId}`);
   }
 
   async function submitDomain(rawDomain: string) {
@@ -712,7 +721,10 @@ export function DomainScanForm({
           <p className="max-w-sm text-xs text-slate-500 sm:text-right">{helperText}</p>
         </div>
       ) : null}
-      {isSubmitting && scanFrom !== "local_extension" ? (
+      {isSubmitting && expectsRecentScanReuse ? (
+        <p className="text-sm font-medium text-slate-600" role="status">Opening the recent completed report…</p>
+      ) : null}
+      {isSubmitting && scanFrom !== "local_extension" && !expectsRecentScanReuse ? (
         <ScanSubmitProgressBar
           active
           compact={compact}
@@ -824,12 +836,6 @@ export function DomainScanForm({
                 <li>Reload this CertScore.ai tab after loading or reloading the extension.</li>
                 <li>Run the scan again with Local-extension selected.</li>
               </ol>
-              <a
-                className="inline-flex font-semibold text-sky-700 underline decoration-sky-200 underline-offset-4 hover:text-sky-800"
-                href="/app/browser-scans/setup"
-              >
-                Open extension setup page
-              </a>
             </div>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button

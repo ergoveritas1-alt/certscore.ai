@@ -6,8 +6,8 @@ import { browserScanStartSchema } from "../../../../server/browser-scans/schema"
 
 export const dynamic = "force-dynamic";
 
-function getBrowserScanReportUrl(browserScanId: string, anonymous: boolean) {
-  return anonymous ? `/browser-scans/${browserScanId}` : `/app/browser-scans/${browserScanId}`;
+function getBrowserScanReportUrl(browserScanId: string, _anonymous: boolean) {
+  return `/browser-scans/${browserScanId}`;
 }
 
 export async function POST(request: Request) {

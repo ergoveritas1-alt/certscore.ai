@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildRecentScanAvailabilityUrl, getScanSubmitDestination, parseScanSubmitPayload } from "./domain-scan-form";
+import {
+  buildRecentScanAvailabilityUrl,
+  getScanSubmitDestination,
+  parseScanSubmitPayload,
+  shouldExpectRecentScanReuse
+} from "./domain-scan-form";
 
 test("getScanSubmitDestination prefers public scanUrl for anonymous full scans", () => {
   assert.equal(
@@ -37,6 +42,13 @@ test("buildRecentScanAvailabilityUrl targets the full scan reuse availability ch
     buildRecentScanAvailabilityUrl({ domain: "https://example.com/path?a=1", scanFrom: "eu_ie" }),
     "/api/full-scan/reuse-availability?domain=https%3A%2F%2Fexample.com%2Fpath%3Fa%3D1&scanFrom=eu_ie"
   );
+});
+
+test("known recent reuse opens the report without showing fresh-scan progress", () => {
+  assert.equal(shouldExpectRecentScanReuse({ freshRescan: false, hasRecentReusableScan: true, mode: "full" }), true);
+  assert.equal(shouldExpectRecentScanReuse({ freshRescan: true, hasRecentReusableScan: true, mode: "full" }), false);
+  assert.equal(shouldExpectRecentScanReuse({ freshRescan: false, hasRecentReusableScan: false, mode: "full" }), false);
+  assert.equal(shouldExpectRecentScanReuse({ freshRescan: false, hasRecentReusableScan: true, mode: "preview" }), false);
 });
 
 test("parseScanSubmitPayload does not surface raw HTML error documents", () => {

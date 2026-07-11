@@ -1,9 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { FreshRescanBadge } from "../../../../components/scans/fresh-rescan-badge";
+import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/scans/scan-from-icons";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
-import { getAdminScanOverviewMetrics, listAdminScans } from "../../../../server/admin/list-admin-scans";
+import { getAdminScanOverviewMetrics, listAdminScans, type AdminScanListItem } from "../../../../server/admin/list-admin-scans";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
@@ -12,43 +12,57 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type AdminScansPageProps = {
-  searchParams?: Promise<{
-    page?: string;
-    perPage?: string;
-  }>;
+  searchParams?: Promise<{ page?: string; perPage?: string }>;
 };
 
-function formatResolutionMode(value: string | null) {
-  if (!value) {
-    return "Request recorded";
-  }
-
-  return value
-    .split("_")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function getScanFreshnessBadge(scan: { requestResolutionMode: string | null; rowKind: "scan" | "request" }) {
+function getScanFreshnessBadge(scan: Pick<AdminScanListItem, "freshRescanRequested" | "requestResolutionMode" | "rowKind">) {
   if (scan.requestResolutionMode === "reused_existing_scan") {
-    return {
-      className: "bg-sky-50 text-sky-700 ring-1 ring-sky-100",
-      label: "Reused <24h"
-    };
+    return { className: "bg-sky-50 text-sky-700 ring-1 ring-sky-100", label: "Reused <24h" };
   }
-
-  if (scan.rowKind === "request") {
-    return {
-      className: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
-      label: "Fresh request"
-    };
+  if (scan.freshRescanRequested === true) {
+    return { className: "bg-violet-50 text-violet-700 ring-1 ring-violet-100", label: "Forced fresh" };
   }
-
   return {
     className: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
-    label: "Fresh scan"
+    label: scan.rowKind === "request" ? "Fresh request" : "Fresh"
   };
+}
+
+function getOperationalStatus(scan: AdminScanListItem) {
+  if (scan.accessPostureClass === "early_loss" || scan.blockedFlag || scan.captchaFlag) {
+    return { className: "bg-rose-500", label: "No-go" };
+  }
+  if (scan.status === "failed") {
+    return { className: "bg-rose-500", label: "Failed" };
+  }
+  if (scan.status === "running" || scan.status === "queued") {
+    return { className: "bg-amber-400", label: scan.status === "running" ? "Running" : "Queued" };
+  }
+  if (scan.accessPostureClass === "degraded_but_useful" || scan.accessPostureClass === "robots_limited") {
+    return { className: "bg-amber-400", label: "Limited" };
+  }
+  if (scan.rowKind === "request") {
+    return { className: "bg-sky-400", label: "Request" };
+  }
+  return { className: "bg-emerald-500", label: "Completed" };
+}
+
+function formatAdminScanDuration(scan: Pick<AdminScanListItem, "completedAt" | "createdAt" | "startedAt">) {
+  const start = new Date(scan.startedAt ?? scan.createdAt).getTime();
+  const end = scan.completedAt ? new Date(scan.completedAt).getTime() : null;
+  if (!Number.isFinite(start) || end === null || !Number.isFinite(end) || end < start) {
+    return null;
+  }
+  const seconds = (end - start) / 1000;
+  return seconds >= 60 ? `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s` : `${seconds.toFixed(1)}s`;
+}
+
+function getAccessLabel(scan: AdminScanListItem) {
+  if (scan.captchaFlag) return "CAPTCHA";
+  if (scan.blockedFlag || scan.accessPostureClass === "early_loss") return scan.homepageFetchHttpStatus ? `Blocked · ${scan.homepageFetchHttpStatus}` : "Blocked";
+  if (scan.accessPostureClass === "robots_limited") return "Robots-limited";
+  if (scan.accessPostureClass === "degraded_but_useful") return "Limited";
+  return scan.rowKind === "scan" ? "Clear" : "—";
 }
 
 export default async function AdminScansPage({ searchParams }: AdminScansPageProps) {
@@ -62,20 +76,19 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
   const hasActiveScans = scans.some((scan) => scan.status === "queued" || scan.status === "running");
 
   return (
-    <Card className="border-slate-200 bg-white">
+    <Card className="min-w-0 overflow-hidden border-slate-200 bg-white">
       <CardHeader className="pb-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-1">
             <CardTitle>Scan Admin</CardTitle>
-            <p className="text-sm text-slate-500">Newest scan activity first.</p>
+            <p className="text-sm text-slate-500">Compact operational view of newest scan activity.</p>
           </div>
           <p className="text-sm text-slate-500">
-            {scanMetrics.totalScans} activity rows · {scanMetrics.totalPhysicalScans} scanner runs ·{" "}
-            {scanMetrics.totalScanRequests} submitted requests
+            {scanMetrics.totalPhysicalScans} runs · {scanMetrics.totalScanRequests} requests
           </p>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 pt-0">
+      <CardContent className="min-w-0 space-y-3 pt-0">
         <AdminScansAutoRefresh hasActiveScans={hasActiveScans} />
         <PaginationControls
           basePath="/app/admin/scans"
@@ -86,25 +99,27 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
           totalCount={scanMetrics.totalScans}
           visibleCount={scans.length}
         />
-        <div className="overflow-x-auto">
-          <table className="min-w-[1180px] table-fixed divide-y divide-slate-200 text-sm">
+        <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
+          <table className="min-w-[1535px] table-fixed text-left text-xs">
             <colgroup>
-              <col style={{ width: "190px" }} />
-              <col style={{ width: "170px" }} />
-              <col style={{ width: "360px" }} />
-              <col style={{ width: "300px" }} />
-              <col style={{ width: "60px" }} />
+              <col style={{ width: "40px" }} /><col style={{ width: "165px" }} /><col style={{ width: "140px" }} />
+              <col style={{ width: "150px" }} /><col style={{ width: "70px" }} /><col style={{ width: "60px" }} />
+              <col style={{ width: "210px" }} /><col style={{ width: "110px" }} /><col style={{ width: "80px" }} />
+              <col style={{ width: "65px" }} /><col style={{ width: "100px" }} /><col style={{ width: "65px" }} />
+              <col style={{ width: "160px" }} /><col style={{ width: "78px" }} />
             </colgroup>
-            <thead>
-              <tr className="text-left text-slate-500">
-                <th className="pb-3 pr-4 font-medium">Request</th>
-                <th className="pb-3 pr-4 font-medium">Target</th>
-                <th className="pb-3 pr-4 font-medium">Scan</th>
-                <th className="pb-3 pr-4 font-medium">Result</th>
-                <th className="pb-3 font-medium">Open</th>
+            <thead className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
+              <tr>
+                {[
+                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
+                  { label: "Requester / IP" }, { label: "Requested" }, { label: "Site" },
+                  { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" }, { label: "Access" },
+                  { label: "Time" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
+                  { label: "Open", className: "sticky right-0 z-30 bg-slate-50" }
+                ].map(({ label, className }) => <th key={label} className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`}>{label}</th>)}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
               {scans.map((scan) => {
                 const provenance = classifyAdminRequestProvenance({
                   organizationName: scan.organizationName,
@@ -112,92 +127,32 @@ export default async function AdminScansPage({ searchParams }: AdminScansPagePro
                   requesterIp: scan.requesterIp,
                   source: scan.source
                 });
+                const status = getOperationalStatus(scan);
+                const freshness = getScanFreshnessBadge(scan);
+                const duration = scan.rowKind === "scan" ? formatAdminScanDuration(scan) : null;
+                const scanFromMarker = getScanFromMarkerInput(scan.scanFromValue);
                 return (
-                  <tr key={scan.activityId}>
-                    <td className="py-3 pr-4 align-top text-slate-700">
-                      <p className="truncate font-medium text-slate-900" title={scan.organizationName ?? "Unknown workspace"}>
-                        {scan.organizationName ?? "Unknown workspace"}
-                      </p>
-                      <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${provenance.className}`}>
-                        {provenance.label}
-                      </span>
-                      <p className="mt-1 text-xs leading-snug text-slate-500">
-                        <span>IP </span>
-                        <span className="break-all">{scan.requesterIp ?? "Not recorded"}</span>
-                      </p>
-                    </td>
-                    <td className="py-3 pr-4 align-top text-slate-700">
-                      <p className="truncate" title={scan.domainHostname ?? "Unknown domain"}>{scan.domainHostname ?? "Unknown domain"}</p>
-                    </td>
-                    <td className="py-3 pr-4 align-top text-slate-700">
-                      <p className="truncate font-mono text-xs text-slate-500" title={scan.linkedScanId ?? scan.scanId}>
-                        scan_id {scan.linkedScanId ?? scan.scanId}
-                      </p>
-                      <p className="text-xs text-slate-500">First generated {formatAdminDateTime(scan.firstGeneratedAt)}</p>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <span className="font-medium text-slate-900">{scan.status}</span>
-                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
-                          Scan from: {scan.scanFromLabel}
-                        </span>
-                        {(() => {
-                          const badge = getScanFreshnessBadge(scan);
-                          return (
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge.className}`}>
-                              {badge.label}
-                            </span>
-                          );
-                        })()}
-                        <FreshRescanBadge value={scan.freshRescanRequested} />
-                        {scan.rowKind === "request" ? (
-                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Request</span>
-                        ) : (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">Run</span>
-                        )}
-                        {scan.rowKind === "scan" ? <span className="text-xs text-slate-500">{scan.pagesScanned} pages</span> : null}
+                  <tr key={scan.activityId} className="group h-[52px] hover:bg-slate-50/70">
+                    <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 text-center group-hover:bg-slate-50" title={status.label}><span aria-label={status.label} className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /></td>
+                    <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={scan.requesterName ?? provenance.label}>{scan.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={scan.requesterIp ?? "Not recorded"}>{scan.requesterIp ?? "IP not recorded"}</p></td>
+                    <td className="px-2.5 py-1.5 text-[11px] leading-4 text-slate-600">{formatAdminDateTime(scan.requestedAt ?? scan.createdAt)}</td>
+                    <td className="px-2.5 py-1.5">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <p className="min-w-0 flex-1 truncate font-semibold text-slate-900" title={scan.domainHostname ?? scan.requestedUrl ?? "Unknown target"}>{scan.domainHostname ?? scan.requestedUrl ?? "Unknown target"}</p>
+                        <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">{scan.scanType}</span>
                       </div>
-                      {scan.rowKind === "request" ? (
-                        <p className="mt-1 truncate text-xs text-slate-500">
-                          {formatResolutionMode(scan.requestResolutionMode)}
-                          {scan.requestPublicId ? ` · ${scan.requestPublicId}` : ""}
-                        </p>
-                      ) : (
-                        scan.requestPublicId ? <p className="mt-1 truncate text-xs text-slate-400">Request {scan.requestPublicId}</p> : null
-                      )}
+                      <p className="truncate font-mono text-[10px] text-slate-400" title={scan.linkedScanId ?? scan.scanId}>scan_id {scan.linkedScanId ?? scan.scanId}</p>
                     </td>
-                    <td className="py-3 pr-4 align-top text-slate-700">
-                      {scan.rowKind === "request" ? (
-                        <>
-                          <p className="font-medium text-slate-900">
-                            {scan.linkedScanId
-                              ? scan.requestResolutionMode === "reused_existing_scan"
-                                ? "Fulfilled by recent scan"
-                                : "Fulfilled by scan"
-                              : "No scan linked"}
-                          </p>
-                          {scan.linkedScanId ? <p className="truncate font-mono text-xs text-slate-500">{scan.linkedScanId}</p> : null}
-                          {scan.reuseWindowHours ? (
-                            <p className="text-xs text-slate-500">Reuse window {scan.reuseWindowHours}h</p>
-                          ) : null}
-                        </>
-                      ) : (
-                        <>
-                          <p className="font-medium text-slate-900">
-                            Signals {scan.totalSignals ?? 0} · Findings {scan.findingCount ?? 0}
-                          </p>
-                          {scan.topFindingCount !== null ? (
-                            <p className="text-xs text-slate-500">Top findings {scan.topFindingCount}</p>
-                          ) : null}
-                        </>
-                      )}
-                      <p className="mt-1 text-xs text-slate-500">{formatAdminDateTime(scan.activityAt)}</p>
-                    </td>
-                    <td className="py-3 align-top">
-                      {scan.linkedScanId && scan.scanViewHref ? (
-                        <AdminScanActions scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} />
-                      ) : (
-                        <span className="text-xs text-slate-400">No report</span>
-                      )}
-                    </td>
+                    <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.certscoreOverall ?? "—"}</span>{scan.certscoreOverall !== null ? <span className="text-slate-400">/100</span> : null}</td>
+                    <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.topFindingCount ?? "—"}</span></td>
+                    <td className="px-2.5 py-1.5"><p className="whitespace-nowrap">Privacy {scan.privacyPolicyPresent === true ? "✓" : scan.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={scan.cmpVendorName ?? undefined}>CMP {scan.cmpVendorName ?? "—"}</p></td>
+                    <td className="px-2.5 py-1.5"><span className={status.label === "No-go" || status.label === "Failed" ? "font-semibold text-rose-700" : "text-slate-700"}>{getAccessLabel(scan)}</span>{scan.interruptionLabel ? <p className="truncate text-[10px] text-slate-400" title={scan.interruptionReason ?? undefined}>{scan.interruptionLabel}</p> : null}</td>
+                    <td className={`px-2.5 py-1.5 font-medium ${duration && (duration.includes("m") || Number.parseFloat(duration) > 60) ? "text-amber-700" : "text-slate-800"}`}>{duration ?? (scan.status === "running" ? "Running" : "—")}</td>
+                    <td className="px-2.5 py-1.5" title={scan.scanFromLabel}><span aria-label={scan.scanFromLabel} className="inline-flex"><ScanFromMarker flag={"flag" in scanFromMarker ? scanFromMarker.flag : undefined} icon={"icon" in scanFromMarker ? scanFromMarker.icon : undefined} selected /></span></td>
+                    <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${freshness.className}`}>{freshness.label}</span></td>
+                    <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700">{scan.primaryLanguage ?? "—"}</td>
+                    <td className="truncate px-2.5 py-1.5 text-slate-700" title={scan.industry ?? undefined}>{scan.industry ?? "—"}</td>
+                    <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 group-hover:bg-slate-50">{scan.linkedScanId && scan.scanViewHref ? <AdminScanActions compact scanId={scan.linkedScanId} scanViewHref={scan.scanViewHref} /> : <span className="text-slate-400">—</span>}</td>
                   </tr>
                 );
               })}

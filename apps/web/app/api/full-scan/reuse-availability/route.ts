@@ -3,7 +3,7 @@ import { createDomainRequestSchema, normalizeScanFrom } from "@website-signal-ri
 import { getCurrentUser, getDashboardContext } from "../../../../server/auth";
 import { isBetterAuthConfigurationError } from "../../../../server/better-auth/env";
 import { getPlanLimits } from "../../../../server/plans/get-plan-limits";
-import { findRecentCompletedScanForDomain } from "../../../../server/scans/recent-scan-reuse";
+import { getRecentScanReuseEligibility } from "../../../../server/scans/recent-scan-reuse";
 import {
   canUseRestrictedScanOptions,
   restrictScanFromForUser
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
       scanFrom: normalizeScanFrom(url.searchParams.get("scanFrom"))
     });
     const planLimits = await getPlanLimits(dashboardContext?.organization.plan ?? "free");
-    const recentScan = await findRecentCompletedScanForDomain({
+    const eligibility = await getRecentScanReuseEligibility({
       minPagesRequested: planLimits.maxPagesPerScan,
       normalizedDomain: parsed.data.hostname,
       normalizedUrl: parsed.data.normalizedUrl,
@@ -53,7 +53,13 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(
-      { hasRecentReusableScan: Boolean(recentScan) },
+      {
+        effectiveScanFrom: eligibility.effectiveScanFrom,
+        hasRecentReusableScan: eligibility.eligible,
+        minPagesRequested: eligibility.minPagesRequested,
+        reason: eligibility.eligible ? null : eligibility.reason,
+        reuseWindowHours: eligibility.reuseWindowHours
+      },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {

@@ -23,6 +23,8 @@ export type AdminUserListItem = {
   fullName: string | null;
   id: string;
   lastCompletedScanAt: string | null;
+  lastLoginAt: string | null;
+  lastScanAt: string | null;
   membershipRole: string | null;
   organizationId: string | null;
   organizationName: string | null;
@@ -61,6 +63,7 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
   const totalScans = new Map<string, number>();
   const completedScans = new Map<string, number>();
   const latestCompletedScan = new Map<string, string>();
+  const latestScan = new Map<string, string>();
 
   for (const domain of domains as DomainRow[]) {
     if (!domain.organization_id) {
@@ -76,6 +79,10 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
     }
 
     totalScans.set(scan.organization_id, (totalScans.get(scan.organization_id) ?? 0) + 1);
+    const currentLatestScan = latestScan.get(scan.organization_id);
+    if (!currentLatestScan || scan.created_at > currentLatestScan) {
+      latestScan.set(scan.organization_id, scan.created_at);
+    }
 
     if (scan.completed_at) {
       completedScans.set(scan.organization_id, (completedScans.get(scan.organization_id) ?? 0) + 1);
@@ -98,6 +105,7 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
       authProvider: user.auth_provider,
       createdAt: user.created_at,
       updatedAt: user.updated_at,
+      lastLoginAt: user.last_login_at,
       organizationId: organization?.id ?? null,
       organizationName: organization?.name ?? null,
       organizationSlug: organization?.slug ?? null,
@@ -107,6 +115,7 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
       domainCount: organization ? domainCounts.get(organization.id) ?? 0 : 0,
       totalScans: organization ? totalScans.get(organization.id) ?? 0 : 0,
       completedScans: organization ? completedScans.get(organization.id) ?? 0 : 0,
+      lastScanAt: organization ? latestScan.get(organization.id) ?? null : null,
       lastCompletedScanAt: organization ? latestCompletedScan.get(organization.id) ?? null : null
     } satisfies AdminUserListItem;
   });
@@ -120,6 +129,7 @@ function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
     authProvider: row.auth_provider,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    lastLoginAt: row.last_login_at,
     organizationId: row.organization_id,
     organizationName: row.organization_name,
     organizationSlug: row.organization_slug,
@@ -129,6 +139,7 @@ function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
     domainCount: Number(row.domain_count ?? 0),
     totalScans: Number(row.total_scans ?? 0),
     completedScans: Number(row.completed_scans ?? 0),
+    lastScanAt: row.last_scan_at,
     lastCompletedScanAt: row.last_completed_scan_at
   };
 }

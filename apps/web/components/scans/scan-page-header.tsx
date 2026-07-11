@@ -1,6 +1,6 @@
 import { Badge } from "@website-signal-risk-scanner/ui";
 import React, { type ReactNode } from "react";
-import { ScanFromMarker } from "./scan-from-icons";
+import { getScanFromMarkerInput, ScanFromMarker } from "./scan-from-icons";
 
 type ScanPageHeaderProps = {
   actions?: ReactNode;
@@ -24,23 +24,6 @@ function getStatusTone(status: string): "success" | "warning" {
   return status === "completed" ? "success" : "warning";
 }
 
-function getScanFromMarkerInput(value: string | undefined) {
-  switch (value) {
-    case "eu_de":
-    case "eu":
-      return { flag: "🇩🇪" };
-    case "eu_ie":
-    case "uk":
-      return { flag: "🇮🇪" };
-    case "california":
-      return { flag: "california" };
-    case "local_extension":
-      return { icon: "local" as const };
-    case "default":
-    default:
-      return { icon: "cloud" as const };
-  }
-}
 
 function getScanSourceContext(value: string | undefined) {
   switch (value) {
@@ -81,6 +64,7 @@ export function ScanPageHeader({
 }: ScanPageHeaderProps) {
   const scanFromMarker = getScanFromMarkerInput(scanFromValue);
   const scanSourceContext = getScanSourceContext(scanFromValue);
+  const scanSourceContextId = scanSourceContext ? `scan-source-context-${scanFromValue ?? "default"}` : undefined;
 
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -90,18 +74,32 @@ export function ScanPageHeader({
           {leadingBadges}
           <Badge tone={statusTone ?? getStatusTone(status)}>{statusLabel ?? formatStatus(status)}</Badge>
           {scanFromLabel ? (
-            <span aria-label={`Scan source: ${scanFromLabel}`} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-sm shadow-slate-200/50" title={`Scan source: ${scanFromLabel}`}>
+            <span
+              aria-describedby={scanSourceContextId}
+              aria-label={`Scan source: ${scanFromLabel}`}
+              className="group relative inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 shadow-sm shadow-slate-200/50 focus:outline-none focus:ring-2 focus:ring-sky-200 focus:ring-offset-2"
+              tabIndex={scanSourceContext ? 0 : undefined}
+              title={scanSourceContext ?? `Scan source: ${scanFromLabel}`}
+            >
               <ScanOriginIcon />
               <ScanFromMarker
                 flag={"flag" in scanFromMarker ? scanFromMarker.flag : undefined}
                 icon={"icon" in scanFromMarker ? scanFromMarker.icon : undefined}
                 selected
               />
+              {scanSourceContext ? (
+                <span
+                  className="pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-max max-w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium leading-5 text-slate-600 opacity-0 shadow-xl transition-opacity group-hover:opacity-100 group-focus:opacity-100"
+                  id={scanSourceContextId}
+                  role="tooltip"
+                >
+                  {scanSourceContext}
+                </span>
+              ) : null}
             </span>
           ) : null}
         </div>
         {createdAtLabel ? <div className="flex flex-wrap items-center gap-1.5 text-sm font-normal text-slate-400">{createdAtLabel}</div> : null}
-        {scanSourceContext ? <p className="max-w-3xl text-xs leading-5 text-slate-500">{scanSourceContext}</p> : null}
         {actionsPlacement === "belowTitle" ? actions : null}
         {autoRefresh}
       </div>

@@ -49,6 +49,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   const client = new CertScoreClient({
     apiKey: options.apiKey,
     baseUrl: options.baseUrl,
+    clientName: "mcp",
     timeout: options.timeout
   });
 

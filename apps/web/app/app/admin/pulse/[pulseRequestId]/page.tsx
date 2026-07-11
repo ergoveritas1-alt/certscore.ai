@@ -45,7 +45,7 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
   return (
     <div className="space-y-6">
       <Link className="text-sm font-semibold text-sky-700" href="/app/admin/pulse">
-        Back to Pulse requests
+        Back to API activity
       </Link>
 
       <div className="grid gap-6 lg:grid-cols-3">

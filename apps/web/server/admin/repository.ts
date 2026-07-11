@@ -16,6 +16,7 @@ export type AdminScanQueryRow = {
   pages_scanned: number;
   scan_config_json?: Record<string, unknown> | null;
   scan_type: string;
+  started_at: string | null;
   status: string;
 };
 
@@ -30,6 +31,7 @@ export type AdminScanRequestRow = {
   normalized_url: string | null;
   public_id: string;
   request_channel: string | null;
+  requester_name: string | null;
   request_context: Record<string, unknown> | null;
   requested_at: string;
   requested_by: Record<string, unknown> | null;
@@ -58,12 +60,15 @@ export type AdminScanOrganizationRow = {
 };
 
 export type AdminScanSnapshotRow = {
+  admin_industry_label?: string | null;
+  admin_summary_generated_at?: string | null;
   access_posture_class?: AccessPostureClass | null;
   asn?: number | null;
   block_vendor_guess?: string | null;
   blocked_flag: boolean | null;
   captcha_flag: boolean | null;
   certscore_overall: number;
+  cmp_vendor_name?: string | null;
   egress_id?: string | null;
   egress_type?: string | null;
   highest_successful_tier?: ScanExecutionTier | null;
@@ -72,13 +77,16 @@ export type AdminScanSnapshotRow = {
   legal_coverage_score?: number | null;
   normalized_body_hash?: string | null;
   report_finding_count?: number | null;
+  privacy_policy_present?: boolean | null;
   recoverable_finding_classes?: RecoverableFindingClass[] | null;
   robots_fetch_http_status: number | null;
   scan_id?: string;
   scan_outcome?: string | null;
   scan_timestamp?: string | null;
+  site_language_primary?: string | null;
   stop_tier?: ScanExecutionTier | null;
   total_signals?: number;
+  top_finding_count?: number | null;
   verified_public_surfaces_count?: number | null;
 };
 
@@ -172,6 +180,7 @@ export type AdminUserRow = {
   email: string;
   full_name: string | null;
   id: string;
+  last_login_at: string | null;
   updated_at: string;
 };
 
@@ -197,6 +206,7 @@ export type AdminDomainSummaryRow = {
 
 export type AdminOrganizationScanSummaryRow = {
   completed_at: string | null;
+  created_at: string;
   id: string;
   organization_id: string | null;
 };
@@ -205,6 +215,7 @@ export type AdminUserOverviewRow = AdminUserRow & {
   completed_scans: number;
   domain_count: number;
   last_completed_scan_at: string | null;
+  last_scan_at: string | null;
   membership_role: string | null;
   organization_id: string | null;
   organization_name: string | null;
@@ -319,7 +330,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
   verdictByFindingId: Map<string, AdminValidationVerdictRow>;
 }> {
   const scansResult = await query<AdminScanQueryRow>(
-    `select id, organization_id, domain_id, scan_type, status, created_at, completed_at, pages_scanned, scan_config_json
+    `select id, organization_id, domain_id, scan_type, status, created_at, started_at, completed_at, pages_scanned, scan_config_json
        from scans
       order by coalesce(completed_at, started_at, created_at) desc, created_at desc
       limit $1 offset $2`,
@@ -332,7 +343,44 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
   const organizationIds = [...new Set(scanRows.flatMap((scan) => (scan.organization_id ? [scan.organization_id] : [])))];
   const scanIds = scanRows.map((scan) => scan.id);
 
-  const [domainsResult, organizationsResult, snapshotsResult, diagnosticEventsResult] = await Promise.all([
+  const loadTopFindingCounts = async () => {
+    if (scanIds.length === 0) {
+      return new Map<string, number>();
+    }
+    const reportsTable = await queryOne<{ table_name: string | null }>(
+      `select to_regclass('public.reports')::text as table_name`,
+      [],
+      { readOnly: true }
+    );
+    if (!reportsTable?.table_name) {
+      return new Map<string, number>();
+    }
+    const result = await query<{ scan_id: string; top_finding_count: number | null }>(
+      `select scan_id,
+              case
+                when jsonb_typeof(coalesce(
+                  summary_json -> 'topFindings',
+                  summary_json -> 'top_findings',
+                  report_payload_json -> 'topFindings',
+                  report_payload_json -> 'top_findings'
+                )) = 'array'
+                then jsonb_array_length(coalesce(
+                  summary_json -> 'topFindings',
+                  summary_json -> 'top_findings',
+                  report_payload_json -> 'topFindings',
+                  report_payload_json -> 'top_findings'
+                ))
+                else null
+              end as top_finding_count
+         from reports
+        where scan_id = any($1::uuid[])`,
+      [scanIds],
+      { readOnly: true }
+    );
+    return new Map(result.rows.flatMap((row) => row.top_finding_count === null ? [] : [[row.scan_id, row.top_finding_count] as const]));
+  };
+
+  const [domainsResult, organizationsResult, snapshotsResult, diagnosticEventsResult, topFindingCounts] = await Promise.all([
     domainIds.length
       ? query<AdminScanDomainRow>(
           `select id, hostname
@@ -355,8 +403,13 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
       ? query<AdminScanSnapshotRow>(
           `select scan_id,
                   certscore_overall,
+                  admin_industry_label,
+                  admin_summary_generated_at,
                   total_signals,
+                  top_finding_count,
                   report_finding_count,
+                  privacy_policy_present,
+                  cmp_vendor_name,
                   homepage_fetch_http_status,
                   robots_fetch_http_status,
                   blocked_flag,
@@ -367,6 +420,7 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
                   recoverable_finding_classes,
                   legal_coverage_score,
                   verified_public_surfaces_count,
+                  site_language_primary,
                   scan_outcome
              from scan_snapshots
             where scan_id = any($1::uuid[])`,
@@ -384,7 +438,8 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
           [scanIds],
           { readOnly: true }
         )
-      : Promise.resolve({ rows: [] as AdminScanDiagnosticEventRow[] })
+      : Promise.resolve({ rows: [] as AdminScanDiagnosticEventRow[] }),
+    loadTopFindingCounts()
   ]);
 
   return {
@@ -392,7 +447,10 @@ export async function loadAdminScanListPageData(limit: number, offset = 0): Prom
     domains: domainsResult.rows,
     organizations: organizationsResult.rows,
     policyEnrichmentRows: [],
-    resolvedSnapshots: snapshotsResult.rows,
+    resolvedSnapshots: snapshotsResult.rows.map((snapshot) => ({
+      ...snapshot,
+      top_finding_count: snapshot.top_finding_count ?? (snapshot.scan_id ? topFindingCounts.get(snapshot.scan_id) ?? null : null)
+    })),
     runtimeArtifacts: [],
     scanRows,
     validationFindingRows: [],
@@ -407,6 +465,7 @@ export async function loadAdminScanRequestRows(limit: number): Promise<AdminScan
     `select sr.public_id,
             sr.request_type,
             sr.request_channel,
+            coalesce(app_user.email, auth_user.email) as requester_name,
             sr.requested_url,
             sr.normalized_url,
             sr.normalized_domain,
@@ -433,6 +492,8 @@ export async function loadAdminScanRequestRows(limit: number): Promise<AdminScan
        left join public.scans scan on scan.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
        left join public.domains domain on domain.id = scan.domain_id
        left join public.organizations org on org.id = sr.organization_id
+       left join public.users app_user on app_user.id::text = sr.requested_by ->> 'userId'
+       left join public.better_auth_users auth_user on auth_user.id = sr.requested_by ->> 'userId'
       order by sr.requested_at desc
       limit $1`,
     [limit],
@@ -440,6 +501,50 @@ export async function loadAdminScanRequestRows(limit: number): Promise<AdminScan
   );
 
   return result.rows;
+}
+
+export async function persistAdminScanSummary(input: {
+  cmpVendorName: string | null;
+  industry: string | null;
+  primaryLanguage: string | null;
+  privacyPolicyPresent: boolean | null;
+  scanId: string;
+  score: number | null;
+  topFindingCount: number;
+}) {
+  await query(
+    `insert into scan_snapshots (
+       scan_id, organization_id, domain_id, pages_requested, pages_scanned,
+       admin_summary_generated_at, admin_industry_label, certscore_overall, top_finding_count,
+       site_language_primary,
+       privacy_policy_present, cmp_vendor_name
+     )
+     select scans.id,
+            scans.organization_id,
+            scans.domain_id,
+            greatest(coalesce(scans.pages_requested, scans.pages_scanned, 1), 1),
+            coalesce(scans.pages_scanned, 0),
+            timezone('utc', now()),
+            $6,
+            $2,
+            $3,
+            $7,
+            coalesce($4, false),
+            $5
+       from scans
+      where scans.id = $1
+        and scans.organization_id is not null
+        and scans.domain_id is not null
+     on conflict (scan_id) do update
+       set admin_summary_generated_at = excluded.admin_summary_generated_at,
+           admin_industry_label = excluded.admin_industry_label,
+           certscore_overall = excluded.certscore_overall,
+           top_finding_count = excluded.top_finding_count,
+           site_language_primary = excluded.site_language_primary,
+           privacy_policy_present = excluded.privacy_policy_present,
+           cmp_vendor_name = excluded.cmp_vendor_name`,
+    [input.scanId, input.score, input.topFindingCount, input.privacyPolicyPresent, input.cmpVendorName, input.industry, input.primaryLanguage]
+  );
 }
 
 export async function loadAdminScanDetailData(scanId: string): Promise<{
@@ -606,9 +711,21 @@ export async function loadAdminUsersData(): Promise<{
 }> {
   const [users, memberships, organizations, domains, scans] = await Promise.all([
     query<AdminUserRow>(
-      `select id, email, full_name, auth_provider, created_at, updated_at
+      `select users.id,
+              users.email,
+              users.full_name,
+              users.auth_provider,
+              users.created_at,
+              users.updated_at,
+              login_activity.last_login_at
          from users
-        order by created_at desc`,
+         left join lateral (
+           select max(better_auth_sessions.created_at) as last_login_at
+             from better_auth_users
+             join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
+            where better_auth_users.email = users.email
+         ) login_activity on true
+        order by users.created_at desc`,
       [],
       { readOnly: true }
     ).then((result) => result.rows),
@@ -619,7 +736,7 @@ export async function loadAdminUsersData(): Promise<{
       (result) => result.rows
     ),
     query<AdminDomainSummaryRow>(`select id, organization_id from domains`, [], { readOnly: true }).then((result) => result.rows),
-    query<AdminOrganizationScanSummaryRow>(`select id, organization_id, completed_at from scans`, [], { readOnly: true }).then(
+    query<AdminOrganizationScanSummaryRow>(`select id, organization_id, created_at, completed_at from scans`, [], { readOnly: true }).then(
       (result) => result.rows
     )
   ]);
@@ -665,6 +782,7 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
               users.auth_provider,
               users.created_at,
               users.updated_at,
+              login_activity.last_login_at,
               membership.organization_id,
               membership.role as membership_role,
               organizations.name as organization_name,
@@ -674,8 +792,15 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
               coalesce(domain_counts.domain_count, 0)::int as domain_count,
               coalesce(scan_counts.total_scans, 0)::int as total_scans,
               coalesce(scan_counts.completed_scans, 0)::int as completed_scans,
+              scan_counts.last_scan_at,
               scan_counts.last_completed_scan_at
          from users
+         left join lateral (
+           select max(better_auth_sessions.created_at) as last_login_at
+             from better_auth_users
+             join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
+            where better_auth_users.email = users.email
+         ) login_activity on true
          left join lateral (
            select organization_id, role
              from organization_members
@@ -692,6 +817,7 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
          left join lateral (
            select count(*)::int as total_scans,
                   count(*) filter (where completed_at is not null)::int as completed_scans,
+                  max(created_at) as last_scan_at,
                   max(completed_at) as last_completed_scan_at
              from scans
             where scans.organization_id = membership.organization_id

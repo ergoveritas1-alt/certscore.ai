@@ -41,15 +41,15 @@ export function normalizeAccessEmail(email: string | null | undefined) {
 }
 
 export function isPublicAccountCreationEnabled(env: AccessControlEnv = process.env) {
-  return envBoolean(env.CERTSCORE_PUBLIC_ACCOUNT_CREATION_ENABLED, false);
+  return envBoolean(env.CERTSCORE_PUBLIC_ACCOUNT_CREATION_ENABLED, true);
 }
 
 export function isSelfServePurchasingEnabled(env: AccessControlEnv = process.env) {
-  return envBoolean(env.CERTSCORE_SELF_SERVE_PURCHASING_ENABLED, false);
+  return envBoolean(env.CERTSCORE_SELF_SERVE_PURCHASING_ENABLED, true);
 }
 
 export function isAuthAccessRestricted(env: AccessControlEnv = process.env) {
-  return envBoolean(env.CERTSCORE_AUTH_ACCESS_RESTRICTED, true);
+  return envBoolean(env.CERTSCORE_AUTH_ACCESS_RESTRICTED, false);
 }
 
 export function getAllowedAuthEmails(env: AccessControlEnv = process.env) {

@@ -15,15 +15,18 @@ import {
   type AdminScanRequestRow as ScanRequestRow
 } from "./repository";
 import { getAdminAuthenticatedScanHref } from "./admin-scan-links";
+import { materializeAdminScanSummaries } from "./admin-scan-summary";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type AdminScanListItem = {
   accessPostureClass: AccessPostureClass | null;
+  adminSummaryGeneratedAt: string | null;
   activityAt: string;
   activityId: string;
   blockedFlag: boolean | null;
   captchaFlag: boolean | null;
   certscoreOverall: number | null;
+  cmpVendorName: string | null;
   completedAt: string | null;
   createdAt: string;
   domainHostname: string | null;
@@ -35,14 +38,20 @@ export type AdminScanListItem = {
   homepageFetchHttpStatus: number | null;
   interruptionLabel: string | null;
   interruptionReason: string | null;
+  industry: string | null;
   linkedScanId: string | null;
+  organizationId: string | null;
   organizationName: string | null;
   pagesScanned: number;
+  privacyPolicyPresent: boolean | null;
+  primaryLanguage: string | null;
   recoverableFindingClasses: RecoverableFindingClass[];
   robotsFetchHttpStatus: number | null;
   scanId: string;
   requesterIp: string | null;
+  requesterName: string | null;
   requestPublicId: string | null;
+  requestedAt: string | null;
   requestChannel: string | null;
   requestResolutionMode: string | null;
   requestedUrl: string | null;
@@ -55,6 +64,7 @@ export type AdminScanListItem = {
   scanFromValue: string;
   source: string | null;
   status: string;
+  startedAt: string | null;
   stopTier: ScanExecutionTier | null;
   totalSignals: number | null;
   topFindingCount: number | null;
@@ -146,10 +156,12 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     return {
       activityAt: displayCreatedAt,
       activityId: `scan:${scan.id}`,
+      adminSummaryGeneratedAt: snapshot?.admin_summary_generated_at ?? null,
       scanId: scan.id,
       rowKind: "scan",
       linkedScanId: scan.id,
       requestPublicId: linkedRequest?.public_id ?? null,
+      requestedAt: linkedRequest?.requested_at ?? scan.created_at,
       requestChannel: linkedRequest?.request_channel ?? null,
       requestResolutionMode: linkedRequest?.resolution_mode ?? null,
       requestedUrl: linkedRequest?.requested_url ?? null,
@@ -158,7 +170,9 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       domainId: scan.domain_id,
       domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
-      requesterIp: selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
+      organizationId: scan.organization_id,
+      requesterIp: getRequesterIpFromRequest(linkedRequest) ?? selectRequesterIp(diagnosticEventMap.get(scan.id) ?? []),
+      requesterName: linkedRequest?.requester_name ?? null,
       scanViewHref: getAdminAuthenticatedScanHref(scan.id),
       scanType: scan.scan_type,
       scanFromLabel: getScanFromDisplay(scan.scan_config_json).label,
@@ -168,12 +182,17 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       createdAt: displayCreatedAt,
       firstGeneratedAt: scan.created_at,
       completedAt: scan.completed_at,
+      startedAt: scan.started_at,
       pagesScanned: scan.pages_scanned,
       totalSignals: snapshot?.total_signals ?? null,
-      topFindingCount: null,
+      topFindingCount: snapshot?.top_finding_count ?? null,
       findingCount: snapshot?.report_finding_count ?? null,
       freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? null),
       certscoreOverall: snapshot?.certscore_overall ?? null,
+      cmpVendorName: snapshot?.cmp_vendor_name ?? null,
+      privacyPolicyPresent: snapshot?.privacy_policy_present ?? null,
+      primaryLanguage: snapshot?.site_language_primary ?? null,
+      industry: snapshot?.admin_industry_label ?? null,
       homepageFetchHttpStatus: snapshot?.homepage_fetch_http_status ?? null,
       robotsFetchHttpStatus: snapshot?.robots_fetch_http_status ?? null,
       blockedFlag: snapshot?.blocked_flag ?? null,
@@ -191,7 +210,28 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     .filter((request) => !getLinkedScanIdForRequest(request) || request.resolution_mode === "reused_existing_scan")
     .map((request) => mapScanRequestRow(request));
 
-  return [...scanItems, ...requestItems]
+  const missingSummaryScans = scanItems
+    .filter((scan) => scan.status === "completed" && !scan.adminSummaryGeneratedAt)
+    .map((scan) => ({ organizationId: scan.organizationId, scanId: scan.scanId }))
+    .slice(0, 1);
+  const materializedSummaries = await materializeAdminScanSummaries(missingSummaryScans);
+  const hydratedScanItems = scanItems.map((scan) => {
+    const summary = materializedSummaries.get(scan.scanId);
+    return summary
+      ? {
+          ...scan,
+          adminSummaryGeneratedAt: new Date().toISOString(),
+          certscoreOverall: summary.score,
+          cmpVendorName: summary.cmpVendorName,
+          industry: summary.industry,
+          primaryLanguage: summary.primaryLanguage,
+          privacyPolicyPresent: summary.privacyPolicyPresent,
+          topFindingCount: summary.topFindingCount
+        }
+      : scan;
+  });
+
+  return [...hydratedScanItems, ...requestItems]
     .sort((left, right) => new Date(right.activityAt).getTime() - new Date(left.activityAt).getTime())
     .slice(offset, offset + limit);
 }
@@ -208,20 +248,17 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
   const requestContext = getNestedMetadataObject(request.request_context);
   const scanConfig = getNestedMetadataObject(request.scan_config_json);
   const scanFromDisplay = getScanFromDisplay(requestContext ?? scanConfig);
-  const requestedBy = getNestedMetadataObject(request.requested_by);
-  const provenance = requestContext ? getNestedMetadataObject(requestContext.provenance) : null;
-  const requesterIp =
-    (provenance ? getStringMetadataValue(provenance.originIp) : null) ??
-    (requestContext ? getStringMetadataValue(requestContext.originIp) : null) ??
-    (requestedBy ? getStringMetadataValue(requestedBy.ipHash) : null);
+  const requesterIp = getRequesterIpFromRequest(request);
 
   return {
     accessPostureClass: null,
+    adminSummaryGeneratedAt: null,
     activityAt: request.requested_at,
     activityId: `request:${request.public_id}`,
     blockedFlag: null,
     captchaFlag: null,
     certscoreOverall: null,
+    cmpVendorName: null,
     completedAt: request.reused_completed_at,
     createdAt: request.requested_at,
     domainHostname: request.scan_domain_hostname ?? request.normalized_domain,
@@ -233,15 +270,21 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     homepageFetchHttpStatus: null,
     interruptionLabel: null,
     interruptionReason: request.error_message,
+    industry: null,
     linkedScanId,
     organizationName,
+    organizationId: request.organization_id ?? request.scan_organization_id,
     pagesScanned: 0,
+    privacyPolicyPresent: null,
+    primaryLanguage: null,
     recoverableFindingClasses: [],
     requestChannel: request.request_channel,
     requestPublicId: request.public_id,
+    requestedAt: request.requested_at,
     requestResolutionMode: request.resolution_mode,
     requestedUrl: request.requested_url,
     requesterIp,
+    requesterName: request.requester_name,
     reusedCompletedAt: request.reused_completed_at,
     reuseWindowHours: request.reuse_window_hours,
     robotsFetchHttpStatus: null,
@@ -253,6 +296,7 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     scanViewHref: getAdminAuthenticatedScanHref(linkedScanId),
     source: request.request_channel,
     status: request.status,
+    startedAt: request.scan_created_at,
     stopTier: null,
     totalSignals: null,
     topFindingCount: null
@@ -261,6 +305,20 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
 
 function getLinkedScanIdForRequest(request: ScanRequestRow) {
   return request.fulfilled_by_scan_id ?? request.scan_id ?? null;
+}
+
+function getRequesterIpFromRequest(request: ScanRequestRow | null) {
+  if (!request) {
+    return null;
+  }
+  const requestContext = getNestedMetadataObject(request.request_context);
+  const requestedBy = getNestedMetadataObject(request.requested_by);
+  const provenance = requestContext ? getNestedMetadataObject(requestContext.provenance) : null;
+  return (
+    (provenance ? getStringMetadataValue(provenance.originIp) : null) ??
+    (requestContext ? getStringMetadataValue(requestContext.originIp) : null) ??
+    (requestedBy ? getStringMetadataValue(requestedBy.ipHash) : null)
+  );
 }
 
 function getStringMetadataValue(value: unknown) {

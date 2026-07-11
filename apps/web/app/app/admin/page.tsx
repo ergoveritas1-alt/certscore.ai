@@ -90,7 +90,7 @@ export default async function AdminOverviewPage() {
         </Card>
         <Card className="border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle>Pulse API</CardTitle>
+          <CardTitle>API Activity</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1 text-sm text-slate-600">
             <p>Total: {pulseCounts.total}</p>
@@ -189,7 +189,7 @@ export default async function AdminOverviewPage() {
                 </div>
               </div>
             ))}
-            <PendingButtonLink href="/app/admin/pulse" idleContent="Open Pulse admin" pendingContent="Opening..." variant="secondary" />
+            <PendingButtonLink href="/app/admin/pulse" idleContent="Open API activity" pendingContent="Opening..." variant="secondary" />
           </CardContent>
         </Card>
       </div>

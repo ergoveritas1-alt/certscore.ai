@@ -133,6 +133,7 @@ import {
   buildTrackerInventoryRows,
   deriveInventoryMacroCategory,
   formatGroupedParty,
+  getInventoryGroupRowRenderKey,
   getTrackerConsentReviewPriority,
   isCmpOrFunctionalVendorDomain,
   type ConsentReviewPriority,
@@ -724,8 +725,8 @@ function RuntimeInventoryTable({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
-                {groupedInventoryRows.map((row) => (
-                  <tr key={`${row.type}-${row.vendor}-${row.purpose}`} className="h-10">
+                {groupedInventoryRows.map((row, index) => (
+                  <tr key={getInventoryGroupRowRenderKey(row, index)} className="h-10">
                     <td className="truncate whitespace-nowrap px-2.5 py-1.5">
                       <InventoryTypeIcon type={row.type} />
                     </td>
@@ -1040,6 +1041,23 @@ function firstTimelineMsFromRows(
   );
 }
 
+function getTimelineVendorLabel(row: Record<string, unknown> | null | undefined) {
+  if (!row) return null;
+  for (const key of ["vendorName", "vendor_name", "vendor", "productName", "product_name", "ownerName", "owner_name", "host", "domain"]) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function firstTimelineRow(rows: Record<string, unknown>[], predicate: (row: Record<string, unknown>) => boolean) {
+  return rows
+    .filter(predicate)
+    .map((row) => ({ row, atMs: firstTimelineMsFromRows([row], () => true) }))
+    .filter((item): item is { row: Record<string, unknown>; atMs: number } => item.atMs !== null)
+    .sort((left, right) => left.atMs - right.atMs)[0]?.row ?? null;
+}
+
 function buildExecutiveTimelineEvents(
   runtimeArtifacts: Record<string, unknown> | null | undefined
 ): ExecutiveTimelineEvent[] {
@@ -1062,6 +1080,18 @@ function buildExecutiveTimelineEvents(
     ...getRecordObjectArray(iframeSummary, "iframeEvents"),
     ...getRecordObjectArray(iframeSummary, "iframe_events")
   ];
+  const cookieRows = [
+    ...getRecordObjectArray(hybrid, "cookieObservations"),
+    ...getRecordObjectArray(hybrid, "cookie_observations"),
+    ...getRecordObjectArray(hybrid, "storageObservations"),
+    ...getRecordObjectArray(hybrid, "storage_observations")
+  ];
+  const consentSummary = getRecord(hybrid.consentSummary) ?? getRecord(hybrid.consent_summary);
+  const firstRequestRow = firstTimelineRow(requestRows, () => true);
+  const firstCookieRow = firstTimelineRow(cookieRows, () => true);
+  const firstAdRow = firstTimelineRow(requestRows, (row) => /advertising|adtech|retargeting|marketing/i.test(String(row.category ?? row.vendorCategory ?? row.vendor_category ?? row.classification ?? "")));
+  const firstAnalyticsRow = firstTimelineRow(requestRows, (row) => /analytics|measurement/i.test(String(row.category ?? row.vendorCategory ?? row.vendor_category ?? "")));
+  const firstEmbeddedRow = firstTimelineRow(embeddedRows, (row) => row.preConsent !== false && row.pre_consent !== false);
   const sessionReplaySummary =
     getRecord(hybrid.sessionReplayEvidenceSummary) ?? getRecord(hybrid.session_replay_evidence_summary);
   const fingerprintRows = [
@@ -1082,7 +1112,8 @@ function buildExecutiveTimelineEvents(
   pushEvent({
     atMs: firstTimelineMs(timelineMarkers?.firstCmpVisibleMs, timelineMarkers?.first_cmp_visible_ms) ?? -1,
     label: "Consent banner",
-    tone: "emerald"
+    tone: "emerald",
+    vendorLabel: getTimelineVendorLabel(consentSummary)
   });
   pushEvent({
     atMs:
@@ -1095,7 +1126,8 @@ function buildExecutiveTimelineEvents(
         timelineMarkers?.first_request_ms
       ) ?? -1,
     label: "3P request",
-    tone: "amber"
+    tone: "amber",
+    vendorLabel: getTimelineVendorLabel(firstRequestRow)
   });
   pushEvent({
     atMs:
@@ -1106,7 +1138,8 @@ function buildExecutiveTimelineEvents(
         timelineMarkers?.first_cookie_write_ms
       ) ?? -1,
     label: "Cookie/storage",
-    tone: "amber"
+    tone: "amber",
+    vendorLabel: getTimelineVendorLabel(firstCookieRow)
   });
   pushEvent({
     atMs:
@@ -1116,7 +1149,8 @@ function buildExecutiveTimelineEvents(
         )
       ) ?? -1,
     label: "Ad vendor",
-    tone: "rose"
+    tone: "rose",
+    vendorLabel: getTimelineVendorLabel(firstAdRow)
   });
   pushEvent({
     atMs:
@@ -1124,7 +1158,8 @@ function buildExecutiveTimelineEvents(
         /analytics|measurement/i.test(String(row.category ?? row.vendorCategory ?? row.vendor_category ?? ""))
       ) ?? -1,
     label: "Analytics",
-    tone: "sky"
+    tone: "sky",
+    vendorLabel: getTimelineVendorLabel(firstAnalyticsRow)
   });
   pushEvent({
     atMs:
@@ -1145,7 +1180,8 @@ function buildExecutiveTimelineEvents(
   pushEvent({
     atMs: firstTimelineMsFromRows(embeddedRows, (row) => row.preConsent !== false && row.pre_consent !== false) ?? -1,
     label: "Embedded content",
-    tone: "amber"
+    tone: "amber",
+    vendorLabel: getTimelineVendorLabel(firstEmbeddedRow)
   });
 
   return events.sort((left, right) => left.atMs - right.atMs).slice(0, 8);

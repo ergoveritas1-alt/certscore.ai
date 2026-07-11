@@ -11,20 +11,26 @@ import { ScanFromMarker } from "../scans/scan-from-icons";
 
 const SCAN_LOCATION_OPTIONS = [
   {
-    description: "Dublin Lambda scanner",
+    city: "Dublin",
     flag: "🇮🇪",
     label: "EU-IR",
     value: "eu_ie"
   },
   {
-    description: "Frankfurt Lambda scanner",
+    city: "Frankfurt",
     flag: "🇩🇪",
     label: "EU-DE",
     value: "eu_de"
+  },
+  {
+    city: "US West",
+    flag: "california",
+    label: "California",
+    value: "california"
   }
 ] as const satisfies Array<{
-  description: string;
-  flag: "🇮🇪" | "🇩🇪";
+  city: string;
+  flag: "🇮🇪" | "🇩🇪" | "california";
   label: string;
   value: ScanFrom;
 }>;
@@ -35,53 +41,36 @@ const initialState: UpsertOrganizationSettingsActionState = {
 };
 
 export function ScanLocationSettingsCard({
-  allowRestrictedScanOptions = false,
   lastScanFrom
 }: {
-  allowRestrictedScanOptions?: boolean;
   lastScanFrom: ScanFrom;
 }) {
   const [state, action, isPending] = useActionState(upsertOrganizationSettingsAction, initialState);
-  const options = allowRestrictedScanOptions
-    ? SCAN_LOCATION_OPTIONS
-    : SCAN_LOCATION_OPTIONS.filter((option) => option.value !== "eu_de");
-  const selectedScanFrom = allowRestrictedScanOptions || lastScanFrom !== "eu_de" ? lastScanFrom : "eu_ie";
+  const selectedScanFrom = lastScanFrom === "default" ? "eu_ie" : lastScanFrom;
 
   return (
-    <form action={action} className="space-y-5">
-      <div className="grid gap-3 md:grid-cols-3">
-        {options.map((option) => (
-          <label
-            className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-4 transition has-[:checked]:border-sky-300 has-[:checked]:bg-sky-50/70 hover:border-slate-300"
-            key={option.value}
-          >
-            <input
-              className="peer sr-only"
-              defaultChecked={selectedScanFrom === option.value}
-              name="defaultScanFrom"
-              type="radio"
-              value={option.value}
-            />
-            <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-lg shadow-sm">
-              <ScanFromMarker flag={option.flag} selected />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-slate-950">{option.label}</span>
-              <span className="mt-1 block text-sm leading-6 text-slate-600">{option.description}</span>
-            </span>
-          </label>
-        ))}
+    <form action={action} className="space-y-3">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="grid min-w-0 flex-1 grid-cols-3 gap-1 rounded-2xl border border-slate-200 bg-slate-100/80 p-1.5">
+          {SCAN_LOCATION_OPTIONS.map((option) => (
+            <label className="group flex min-w-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-transparent px-2 py-2.5 text-slate-600 transition has-[:checked]:border-sky-200 has-[:checked]:bg-white has-[:checked]:text-slate-950 has-[:checked]:shadow-sm hover:bg-white/70" key={option.value} title={`${option.city} Lambda scanner`}>
+              <input className="peer sr-only" defaultChecked={selectedScanFrom === option.value} name="defaultScanFrom" type="radio" value={option.value} />
+              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-sm"><ScanFromMarker flag={option.flag} selected /></span>
+              <span className="min-w-0 text-left leading-tight"><span className="block truncate text-xs font-semibold">{option.label}</span><span className="block truncate text-[10px] text-slate-400">{option.city}</span></span>
+            </label>
+          ))}
+        </div>
+        <Button className="shrink-0 lg:self-stretch" type="submit" disabled={isPending}>
+          {isPending ? "Saving..." : "Save location"}
+        </Button>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      {(state.error || state.success) ? (
+        <div aria-live="polite">
           {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
           {state.success ? <p className="text-sm text-emerald-700">{state.success}</p> : null}
         </div>
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Saving..." : "Save last scan location"}
-        </Button>
-      </div>
+      ) : null}
     </form>
   );
 }

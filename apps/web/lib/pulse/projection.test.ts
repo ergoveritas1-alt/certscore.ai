@@ -115,8 +115,9 @@ test("Pulse route rejects unusable completed scan records before projection", ()
   assert.match(source, /loadPulseScanRecord/);
   assert.match(source, /assessPulseScanRecordQuality\(scanRecord\)/);
   assert.match(source, /pulseUnavailableResponse/);
-  assert.match(source, /recentScanWasUnusable/);
-  assert.match(source, /bypassRecentScanReuse: forceNewScan \|\| recentScanWasUnusable/);
+  assert.match(source, /getRecentScanReuseEligibility/);
+  assert.match(source, /bypassRecentScanReuse: forceNewScan/);
+  assert.doesNotMatch(source, /recentScanWasUnusable/);
 });
 
 test("Pulse projection exposes explicit counts for agent summaries", () => {

@@ -34,6 +34,7 @@ export type OrganizationScanListItem = {
   certscoreOverall: number | null;
   regulatoryScore: number | null;
   privacyScore: number | null;
+  privacyPolicyPresent: boolean | null;
   consentScore: number | null;
   accessibilityScore: number | null;
   totalSignals: number | null;
@@ -505,7 +506,8 @@ async function loadOrganizationScans(
         accessibilityScore: snapshot?.accessibility_score ?? null,
         totalSignals,
         findingCount: snapshot?.report_finding_count ?? 0,
-        topFindingCount: null,
+        topFindingCount: snapshot?.top_finding_count ?? null,
+        privacyPolicyPresent: snapshot?.privacy_policy_present ?? null,
         cookieBannerPresent: snapshot?.cookie_banner_present ?? null,
         cmpVendorName: snapshot?.cmp_vendor_name ?? null,
         consentAuditCompleted:

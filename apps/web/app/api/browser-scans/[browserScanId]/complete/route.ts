@@ -22,7 +22,7 @@ function getBrowserScanReportUrl(input: {
     return input.anonymous ? `/scan/${input.canonicalScanId}` : `/app/scans/${input.canonicalScanId}`;
   }
 
-  return input.anonymous ? `/browser-scans/${input.browserScanId}` : `/app/browser-scans/${input.browserScanId}`;
+  return `/browser-scans/${input.browserScanId}`;
 }
 
 export async function POST(request: Request, context: RouteContext) {

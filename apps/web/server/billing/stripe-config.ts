@@ -65,7 +65,9 @@ export function getStripeBillingMode(env: NodeJS.ProcessEnv = process.env) {
   const values = getStripeBillingEnv(env);
   const missing = [
     values.STRIPE_SECRET_KEY ? null : "STRIPE_SECRET_KEY",
-    values.STRIPE_PRICE_INDIVIDUAL_MONTHLY ? null : "STRIPE_PRICE_INDIVIDUAL_MONTHLY",
+    values.STRIPE_PRICE_STARTER_MONTHLY || values.STRIPE_PRICE_INDIVIDUAL_MONTHLY
+      ? null
+      : "STRIPE_PRICE_STARTER_MONTHLY or STRIPE_PRICE_INDIVIDUAL_MONTHLY",
     values.STRIPE_PRICE_PRO_MONTHLY ? null : "STRIPE_PRICE_PRO_MONTHLY"
   ].filter((value): value is string => Boolean(value));
 

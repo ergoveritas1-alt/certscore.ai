@@ -198,6 +198,7 @@ export type OrganizationScanSnapshotRow = {
   legal_coverage_score?: number | null;
   normalized_body_hash: string | null;
   privacy_score: number | null;
+  privacy_policy_present: boolean | null;
   recoverable_finding_classes: RecoverableFindingClass[] | null;
   regulatory_exposure_score: number | null;
   report_finding_count: number | null;
@@ -212,6 +213,7 @@ export type OrganizationScanSnapshotRow = {
   stop_reason_label: string | null;
   stop_tier: ScanExecutionTier | null;
   total_signals: number;
+  top_finding_count?: number | null;
   verified_public_surfaces_count?: number | null;
 };
 

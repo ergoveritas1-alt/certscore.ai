@@ -77,6 +77,19 @@ export type InventoryGroupRow =
   | (CookieInventoryGroupRow & { type: "cookie" })
   | (TrackerInventoryGroupRow & { type: "tracker" });
 
+export function getInventoryGroupRowRenderKey(row: InventoryGroupRow, index: number) {
+  return JSON.stringify([
+    row.type,
+    row.vendor,
+    row.purpose,
+    [...row.cookieNames].sort(),
+    [...row.domains].sort(),
+    row.priority,
+    row.party,
+    index
+  ]);
+}
+
 type ReportVendorSurfaceProjectionInput = {
   rawThirdPartyDomains: string[];
   resolvedVendorNames: string[];

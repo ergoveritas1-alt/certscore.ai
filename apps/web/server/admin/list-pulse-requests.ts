@@ -3,6 +3,7 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { formatScanFromLabel, normalizeScanFrom } from "@website-signal-risk-scanner/shared";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
+import { classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-route";
 import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
 import { getAnonymousScanById } from "../scans/get-scan-by-id";
 import { ensurePulseTables } from "../pulse/schema";
@@ -19,6 +20,11 @@ export type AdminPulseRequestStatus =
   | "rate_limited";
 
 export type AdminPulseRequestListItem = {
+  accessPostureClass: string | null;
+  apiRoute: AdminApiRoute;
+  blockedFlag: boolean | null;
+  captchaFlag: boolean | null;
+  cmpVendorName: string | null;
   completedAt: string | null;
   createdAt: string;
   detail: string | null;
@@ -29,13 +35,17 @@ export type AdminPulseRequestListItem = {
   freshness: string | null;
   jobId: string;
   normalizedDomain: string | null;
+  industry: string | null;
   publicId: string;
   requestedAt: string;
   requestedUrl: string | null;
+  primaryLanguage: string | null;
+  privacyPolicyPresent: boolean | null;
   resolutionMode: string | null;
   resultPulseUrl: string | null;
   resultReportUrl: string | null;
   scanId: string | null;
+  score: number | null;
   scanFromLabel: string;
   scanFromValue: string;
   requestChannel: string | null;
@@ -150,7 +160,15 @@ function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId:
   const storedTopFindingIds = asStringArray(responseSummary.topFindingIds);
   const scanFromValue = normalizeScanFrom(requestContext.scanFrom ?? asRecord(row.scan_config_json).scanFrom);
   return {
+    accessPostureClass: typeof row.access_posture_class === "string" ? row.access_posture_class : null,
+    apiRoute: classifyAdminApiRoute({
+      requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
+      requestSource: getRequestContextString(requestContext, "source") ?? getRequestContextString(requestContext, "channel")
+    }),
     completedAt: typeof row.completed_at === "string" ? row.completed_at : null,
+    blockedFlag: typeof row.blocked_flag === "boolean" ? row.blocked_flag : null,
+    captchaFlag: typeof row.captcha_flag === "boolean" ? row.captcha_flag : null,
+    cmpVendorName: typeof row.cmp_vendor_name === "string" ? row.cmp_vendor_name : null,
     createdAt: String(row.created_at),
     detail: getRequestContextString(requestContext, "detail"),
     elapsedSeconds: typeof row.elapsed_seconds === "number" ? row.elapsed_seconds : null,
@@ -159,14 +177,18 @@ function mapPulseRequestRow(row: Record<string, unknown>, topFindingIdsByScanId:
     freshRescanRequested: getFreshRescanRequested(requestContext),
     freshness: getRequestContextString(requestContext, "freshness"),
     jobId: String(row.job_id),
+    industry: typeof row.admin_industry_label === "string" ? row.admin_industry_label : null,
     normalizedDomain: typeof row.normalized_domain === "string" ? row.normalized_domain : null,
     publicId: String(row.public_id),
     requestedAt: String(row.requested_at),
     requestedUrl: typeof row.requested_url === "string" ? row.requested_url : null,
+    primaryLanguage: typeof row.site_language_primary === "string" ? row.site_language_primary : null,
+    privacyPolicyPresent: typeof row.privacy_policy_present === "boolean" ? row.privacy_policy_present : null,
     resolutionMode: typeof row.resolution_mode === "string" ? row.resolution_mode : null,
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId,
+    score: typeof responseSummary.score === "number" ? responseSummary.score : typeof row.snapshot_score === "number" ? row.snapshot_score : null,
     scanFromLabel: formatScanFromLabel(scanFromValue),
     scanFromValue,
     requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
@@ -294,6 +316,14 @@ export async function listAdminPulseRequests(input: {
             pr.created_at,
             ss.total_signals::int as snapshot_total_signals,
             ss.report_finding_count::int as snapshot_finding_count,
+            ss.certscore_overall::int as snapshot_score,
+            ss.privacy_policy_present,
+            ss.cmp_vendor_name,
+            ss.access_posture_class,
+            ss.blocked_flag,
+            ss.captcha_flag,
+            ss.site_language_primary,
+            ss.admin_industry_label,
             s.scan_config_json,
             coalesce(pf.feedback_count, 0)::int as feedback_count,
             coalesce(pad.summary_json_downloads, 0)::int as summary_json_downloads,

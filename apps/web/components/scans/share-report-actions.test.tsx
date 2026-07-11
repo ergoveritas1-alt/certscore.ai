@@ -1,9 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   buildVisualEvidenceRetryHref,
+  ShareReportActions,
   VISUAL_EVIDENCE_RETRY_DELAYS_MS
 } from "./share-report-actions";
+
+test("monitor action is hidden by default and shown only when access is granted", () => {
+  const hidden = renderToStaticMarkup(createElement(ShareReportActions, {
+    domainLabel: "example.com",
+    scanId: "scan-1"
+  }));
+  const visible = renderToStaticMarkup(createElement(ShareReportActions, {
+    domainLabel: "example.com",
+    scanId: "scan-1",
+    showMonitorSite: true
+  }));
+
+  assert.doesNotMatch(hidden, /Monitor this site/);
+  assert.match(visible, /Monitor this site/);
+});
 
 test("visual evidence retries use bounded backoff for transient artifact-read races", () => {
   assert.deepEqual(VISUAL_EVIDENCE_RETRY_DELAYS_MS, [1_000, 2_000, 4_000, 8_000, 15_000]);

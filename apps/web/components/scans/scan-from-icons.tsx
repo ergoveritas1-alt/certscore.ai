@@ -3,6 +3,24 @@ import React from "react";
 export type ScanFromIconName = "cloud" | "local";
 export type ScanFromFlag = string;
 
+export function getScanFromMarkerInput(value: string | undefined) {
+  switch (value) {
+    case "eu_de":
+    case "eu":
+      return { flag: "🇩🇪" } as const;
+    case "eu_ie":
+    case "uk":
+      return { flag: "🇮🇪" } as const;
+    case "california":
+      return { flag: "california" } as const;
+    case "local_extension":
+      return { icon: "local" } as const;
+    case "default":
+    default:
+      return { icon: "cloud" } as const;
+  }
+}
+
 function GlobeIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
     <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 24 24">

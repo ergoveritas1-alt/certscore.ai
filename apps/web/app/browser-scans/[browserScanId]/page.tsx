@@ -47,12 +47,8 @@ export default async function BrowserScanPublicPage({ params }: BrowserScanPubli
     notFound();
   }
 
-  if (scan.user_id !== null) {
-    redirect(scan.canonical_scan_id ? `/app/scans/${scan.canonical_scan_id}` : `/app/browser-scans/${scan.id}`);
-  }
-
   if (scan.canonical_scan_id) {
-    redirect(`/scan/${scan.canonical_scan_id}`);
+    redirect(scan.user_id !== null ? `/app/scans/${scan.canonical_scan_id}` : `/scan/${scan.canonical_scan_id}`);
   }
 
   const summary = scan.summary_json ?? {};

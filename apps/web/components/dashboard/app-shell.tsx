@@ -35,16 +35,6 @@ function ScansIcon(props: NavIconProps) {
   );
 }
 
-function BrowserEvidenceIcon(props: NavIconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
-      <rect x="4" y="5" width="16" height="13.5" rx="2.5" />
-      <path d="M4 9h16" />
-      <path d="M8 14h3.5M14 14h2" />
-    </svg>
-  );
-}
-
 function ChangesIcon(props: NavIconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
@@ -120,9 +110,8 @@ const navItems = [
   { href: "/app", label: "Overview", icon: OverviewIcon },
   { href: "/app/signals", label: "Scan view", icon: SignalsIcon },
   { href: "/app/scans", label: "Scan History", icon: ScansIcon },
-  { href: "/app/browser-scans", label: "Browser Evidence", icon: BrowserEvidenceIcon },
-  { href: "/app/modify-plan", label: "Modify plan", icon: PlanIcon },
-  { href: "/app/settings", label: "Settings", icon: SettingsIcon }
+  { href: "/app/settings", label: "Settings", icon: SettingsIcon },
+  { href: "/app/modify-plan", label: "Modify plan", icon: PlanIcon }
 ] as const;
 
 type AppShellProps = {
@@ -140,10 +129,6 @@ function isItemActive(pathname: string, href: string) {
 
   if (href === "/app/scans") {
     return pathname === href;
-  }
-
-  if (href === "/app/browser-scans") {
-    return pathname === href || pathname.startsWith("/app/browser-scans/");
   }
 
   if (href === "/app") {
@@ -177,8 +162,9 @@ export function AppShell({
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [navExpanded, setNavExpanded] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const isAdminPath = pathname === "/app/admin" || pathname.startsWith("/app/admin/");
   const scopedNavItems = [
-    ...navItems,
+    ...navItems.filter((item) => !(isAdminPath && item.href === "/app/scans")),
     ...(isPlatformAdmin ? [{ href: "/app/admin", label: "Admin", icon: ShieldIcon }] : [])
   ];
 
@@ -348,7 +334,10 @@ export function AppShell({
           </div>
 
           <aside
-            className={["border-b border-slate-800 bg-slate-900 lg:relative lg:-mr-px lg:overflow-visible lg:border-b-0 lg:border-r", COLLAPSED_NAV_WIDTH].join(" ")}
+            className={[
+              "border-b border-slate-800 bg-slate-900 lg:relative lg:-mr-px lg:shrink-0 lg:overflow-visible lg:border-b-0 lg:border-r lg:transition-[width] lg:duration-200",
+              navExpanded ? "lg:w-[248px]" : COLLAPSED_NAV_WIDTH
+            ].join(" ")}
             onMouseEnter={() => setNavExpanded(true)}
             onMouseLeave={closeNav}
           >

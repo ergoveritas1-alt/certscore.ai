@@ -110,6 +110,7 @@ function isStatus(body: unknown): body is JobStatus {
 export class CertScoreClient {
   private readonly apiKey?: string;
   private readonly baseUrl: string;
+  private readonly clientName: "mcp" | "sdk";
   private readonly timeout: number;
   public readonly scans: ScanResourceClient;
   public readonly findings: FindingResourceClient;
@@ -120,6 +121,7 @@ export class CertScoreClient {
   constructor(options: CertScoreClientOptions = {}) {
     this.apiKey = options.apiKey;
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
+    this.clientName = options.clientName ?? "sdk";
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
     this.scans = {
       create: (url, scanOptions) => this.createScanResource(url, scanOptions),
@@ -608,7 +610,8 @@ export class CertScoreClient {
 
   private headers(jsonBody = false): HeadersInit {
     const headers: Record<string, string> = {
-      Accept: "application/json, text/markdown;q=0.9"
+      Accept: "application/json, text/markdown;q=0.9",
+      "X-CertScore-Client": this.clientName
     };
     if (jsonBody) {
       headers["Content-Type"] = "application/json; charset=utf-8";

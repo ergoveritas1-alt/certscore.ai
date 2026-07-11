@@ -6,6 +6,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 type AdminScanActionsProps = {
+  compact?: boolean;
   scanId: string;
   scanViewHref: string;
 };
@@ -35,12 +36,14 @@ function ActionButton({
   children,
   href,
   label,
-  onNavigate
+  onNavigate,
+  compact = false
 }: {
   children: ReactNode;
   href: string;
   label: string;
   onNavigate: () => void;
+  compact?: boolean;
 }) {
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     if (
@@ -61,7 +64,7 @@ function ActionButton({
     <div className="group relative inline-flex">
       <Link
         aria-label={label}
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400 hover:text-slate-950"
+        className={`inline-flex items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400 hover:text-slate-950 ${compact ? "h-8 w-8 [&_svg]:h-4 [&_svg]:w-4" : "h-10 w-10"}`}
         href={href}
         onClick={handleClick}
         title={label}
@@ -75,7 +78,7 @@ function ActionButton({
   );
 }
 
-export function AdminScanActions({ scanId, scanViewHref }: AdminScanActionsProps) {
+export function AdminScanActions({ compact = false, scanId, scanViewHref }: AdminScanActionsProps) {
   const pathname = usePathname();
   const [openingLabel, setOpeningLabel] = useState<string | null>(null);
 
@@ -99,11 +102,11 @@ export function AdminScanActions({ scanId, scanViewHref }: AdminScanActionsProps
 
   return (
     <>
-      <div className="flex items-center gap-2">
-        <ActionButton href={scanViewHref} label="Open simple scan view" onNavigate={() => setOpeningLabel("Opening scan view...")}>
+      <div className={`flex items-center ${compact ? "gap-1" : "gap-2"}`}>
+        <ActionButton compact={compact} href={scanViewHref} label="Open simple scan view" onNavigate={() => setOpeningLabel("Opening scan view...")}>
           <SimpleScanIcon />
         </ActionButton>
-        <ActionButton href={`/app/admin/scans/${scanId}`} label="Inspect snapshot" onNavigate={() => setOpeningLabel("Opening snapshot...")}>
+        <ActionButton compact={compact} href={`/app/admin/scans/${scanId}`} label="Inspect snapshot" onNavigate={() => setOpeningLabel("Opening snapshot...")}>
           <SnapshotInspectIcon />
         </ActionButton>
       </div>

@@ -4,8 +4,28 @@ import {
   buildRuntimeInventoryGroupRows,
   buildTrackerInventoryRows,
   deriveInventoryMacroCategory,
+  getInventoryGroupRowRenderKey,
   isInventoryDisplayHostname,
 } from "./runtime-inventory-projection";
+
+test("creates unique render keys for repeated vendor-purpose inventory rows", () => {
+  const baseRow = {
+    confidence: "high" as const,
+    cookieNames: ["uid"],
+    domains: ["criteo.com"],
+    firstSeenMs: 120,
+    macroCategory: "Advertising" as const,
+    party: "third_party" as const,
+    priority: "high" as const,
+    purpose: "Advertising",
+    type: "cookie" as const,
+    vendor: "Criteo"
+  };
+  const rows = [baseRow, { ...baseRow, cookieNames: ["cto_bundle"] }, { ...baseRow }];
+  const keys = rows.map(getInventoryGroupRowRenderKey);
+
+  assert.equal(new Set(keys).size, rows.length);
+});
 
 test("derives Fable macro categories without replacing detailed purposes", () => {
   assert.equal(deriveInventoryMacroCategory({ purpose: "Advertising", priority: "high", vendor: "Meta Pixel" }), "Advertising");

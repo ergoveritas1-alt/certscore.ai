@@ -103,6 +103,7 @@ export type ExecutiveTimelineEvent = {
   atMs: number;
   label: string;
   tone?: "amber" | "emerald" | "rose" | "sky" | "slate";
+  vendorLabel?: string | null;
 };
 
 function isProtectedRouteInterruption(interruption: ExecutiveScanInterruption) {
@@ -2437,19 +2438,24 @@ function getTimelineToneClasses(tone: ExecutiveTimelineEvent["tone"] = "slate") 
   }
 }
 
-function getTimelineDotClasses(tone: ExecutiveTimelineEvent["tone"] = "slate") {
+function getTimelineTimeBadgeClasses(tone: ExecutiveTimelineEvent["tone"] = "slate") {
   switch (tone) {
     case "amber":
-      return "border-amber-200 bg-amber-400 shadow-[0_0_0_3px_rgba(254,243,199,0.9)]";
+      return "border-amber-200 bg-amber-100 text-amber-800";
     case "emerald":
-      return "border-emerald-200 bg-emerald-400 shadow-[0_0_0_3px_rgba(209,250,229,0.9)]";
+      return "border-emerald-200 bg-emerald-100 text-emerald-800";
     case "rose":
-      return "border-rose-200 bg-rose-400 shadow-[0_0_0_3px_rgba(255,228,230,0.9)]";
+      return "border-rose-200 bg-rose-100 text-rose-800";
     case "sky":
-      return "border-sky-200 bg-sky-400 shadow-[0_0_0_3px_rgba(224,242,254,0.9)]";
+      return "border-sky-200 bg-sky-100 text-sky-800";
     default:
-      return "border-slate-200 bg-slate-400 shadow-[0_0_0_3px_rgba(226,232,240,0.9)]";
+      return "border-slate-200 bg-slate-100 text-slate-700";
   }
+}
+
+function formatTimelineSecondBadge(ms: number) {
+  const seconds = Math.max(0, ms) / 1000;
+  return `${seconds < 1 ? seconds.toFixed(2) : seconds.toFixed(1)}s`;
 }
 
 function buildPositionedTimelineEvents(input: { durationMs: number; events: ExecutiveTimelineEvent[] }) {
@@ -2503,9 +2509,16 @@ function ExecutiveTimelinePane(input: {
             title={`${event.label} first observed at ${formatTimelineOffset(event.atMs)}`}
             style={{ top: `${event.top}%` }}
           >
-            <span className={`h-2.5 w-2.5 shrink-0 rounded-full border ${getTimelineDotClasses(event.tone)}`} aria-hidden="true" />
-            <span className={`min-w-0 flex-1 truncate rounded-lg border px-2.5 py-1 text-[10px] font-semibold uppercase leading-4 tracking-[0.08em] shadow-sm ${getTimelineToneClasses(event.tone)}`}>
-              {event.label}
+            <span className={`inline-flex h-5 min-w-9 shrink-0 items-center justify-center rounded-full border px-1 font-mono text-[9px] font-bold tracking-[-0.04em] ${getTimelineTimeBadgeClasses(event.tone)}`} aria-label={`First observed at ${formatTimelineOffset(event.atMs)}`}>
+              {formatTimelineSecondBadge(event.atMs)}
+            </span>
+            <span className={`flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border px-2 py-1 text-[10px] font-semibold uppercase leading-4 tracking-[0.08em] shadow-sm ${getTimelineToneClasses(event.tone)}`}>
+              {event.vendorLabel ? (
+                <VendorBrandChip className="h-5 w-5 rounded-full p-0" hideLabel label={event.vendorLabel} showMeta={false} />
+              ) : (
+                <TimelineCategoryIcon label={event.label} />
+              )}
+              <span className="min-w-0 truncate">{event.label}</span>
             </span>
           </div>
         ))}
@@ -2518,6 +2531,23 @@ function ExecutiveTimelinePane(input: {
       </div>
     </div>
   );
+}
+
+function TimelineCategoryIcon({ label }: { label: string }) {
+  const normalized = label.toLowerCase();
+  const path = normalized.includes("cookie")
+    ? <><circle cx="12" cy="12" r="7" /><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none" /><circle cx="14" cy="14" r="1" fill="currentColor" stroke="none" /></>
+    : normalized.includes("analytics")
+      ? <><path d="M5 17V11M10 17V7M15 17V4M19 17H4" /></>
+      : normalized.includes("ad vendor")
+        ? <><path d="M5 10h3l7-4v12l-7-4H5z" /><path d="M8 14l1 4" /></>
+        : normalized.includes("embedded")
+          ? <><rect x="4" y="5" width="16" height="14" rx="2" /><path d="m10 9 5 3-5 3z" /></>
+          : normalized.includes("consent")
+            ? <><path d="M12 3.5 18 6v5c0 4-2.2 7-6 8.5C8.2 18 6 15 6 11V6z" /><path d="m9.5 11.5 1.6 1.6 3.5-3.5" /></>
+            : <><circle cx="7" cy="12" r="2.5" /><circle cx="17" cy="7" r="2.5" /><circle cx="17" cy="17" r="2.5" /><path d="m9.2 10.8 5.5-2.7M9.2 13.2l5.5 2.7" /></>;
+
+  return <span aria-hidden="true" className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-current/15 bg-white/80"><svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" viewBox="0 0 24 24">{path}</svg></span>;
 }
 
 function getFindingReferenceLink(finding: CertScoreFinding) {

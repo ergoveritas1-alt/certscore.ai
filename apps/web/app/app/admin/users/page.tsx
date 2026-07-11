@@ -55,7 +55,7 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                 <th className="pb-3 pr-4 font-medium">User</th>
                 <th className="pb-3 pr-4 font-medium">Domains</th>
                 <th className="pb-3 pr-4 font-medium">Scans</th>
-                <th className="pb-3 pr-4 font-medium">Last</th>
+                <th className="pb-3 pr-4 font-medium">Last login/scan</th>
                 <th className="pb-3 pr-4 font-medium">Access</th>
                 <th className="pb-3 font-medium">Plan Controls</th>
               </tr>
@@ -84,7 +84,10 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                   </td>
                   <td className="py-4 pr-4 align-top text-slate-600">{user.domainCount}</td>
                   <td className="py-4 pr-4 align-top text-slate-600">{user.totalScans}</td>
-                  <td className="whitespace-nowrap py-4 pr-4 align-top text-slate-600">{formatAdminDateTime(user.updatedAt)}</td>
+                  <td className="whitespace-nowrap py-4 pr-4 align-top text-slate-600">
+                    <div>Login: {formatAdminDateTime(user.lastLoginAt, { fallback: "Never" })}</div>
+                    <div>Scan: {formatAdminDateTime(user.lastScanAt, { fallback: "Never" })}</div>
+                  </td>
                   <td className="py-4 pr-4 align-top text-slate-600">
                     {user.organizationId ? (
                       <MembershipRoleForm

@@ -158,7 +158,7 @@ test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass"
   assert.match(reuseSource, /s\.pages_requested >=/);
   assert.match(pulseRoute, /requestedFreshness === "refresh"/);
   assert.match(pulseRoute, /parseForceNewScan\(url\.searchParams\.get\("forceNewScan"\)\) \|\| requestedFreshness === "refresh"/);
-  assert.match(pulseRoute, /maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS/);
+  assert.match(pulseRoute, /getRecentScanReuseEligibility/);
   assert.match(pulseRoute, /minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED/);
   assert.match(apiV2CreateScanRoute, /GET as pulseGET/);
   assert.match(apiV2CreateScanRoute, /new URL\("\/api\/v1\/pulse"/);
@@ -181,8 +181,8 @@ test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass"
   assert.match(pulseRoute, /url\.searchParams\.get\("scanFrom"\) \?\? url\.searchParams\.get\("geo"\)/);
   assert.match(fullScanRoute, /payload\?\.scanFrom \?\? payload\?\.geo/);
   assert.match(fullScanRoute, /bypassRecentScanReuse: forceNewScan/);
-  assert.match(anonymousScanSource, /findRecentCompletedScanForDomain/);
-  assert.match(authenticatedScanSource, /findRecentCompletedScanForDomain/);
+  assert.match(anonymousScanSource, /resolveRecentScanReuseDecision/);
+  assert.match(authenticatedScanSource, /resolveRecentScanReuseDecision/);
   assert.match(domainSource, /reusedExistingScan: queueResult\.reusedExistingScan/);
 });
 

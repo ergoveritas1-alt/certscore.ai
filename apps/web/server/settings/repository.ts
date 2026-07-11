@@ -13,6 +13,28 @@ export type OrganizationSettingsRow = {
   show_signal_snapshot_scan_interruption: boolean;
 };
 
+export type SettingsActivityRow = {
+  last_login_at: string | null;
+  last_scan_at: string | null;
+};
+
+export async function loadSettingsActivity(input: { organizationId: string; userEmail: string }): Promise<SettingsActivityRow> {
+  const row = await queryOne<SettingsActivityRow>(
+    `select
+       (select max(better_auth_sessions.created_at)
+          from better_auth_users
+          join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
+         where lower(better_auth_users.email) = lower($1)) as last_login_at,
+       (select max(coalesce(scans.completed_at, scans.created_at))
+          from scans
+         where scans.organization_id = $2) as last_scan_at`,
+    [input.userEmail, input.organizationId],
+    { readOnly: true }
+  );
+
+  return row ?? { last_login_at: null, last_scan_at: null };
+}
+
 const ORGANIZATION_SETTINGS_COLUMNS = [
   "default_scan_from",
   "default_scan_frequency",

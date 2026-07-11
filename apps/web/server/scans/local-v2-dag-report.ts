@@ -43,6 +43,22 @@ function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function getLocalV2PrimaryLanguage(bundle: CanonicalEvidenceBundle) {
+  for (const observation of bundle.consentUiObservations ?? []) {
+    for (const control of observation.controls ?? []) {
+      const locale = getString((control as { matchedLocale?: unknown }).matchedLocale);
+      if (locale) return locale;
+    }
+  }
+  for (const surface of bundle.policySurfaceObservations ?? []) {
+    for (const candidate of surface.gdprTransparencyTopicCandidates ?? []) {
+      const locale = getString((candidate as { matchedLocale?: unknown }).matchedLocale);
+      if (locale) return locale;
+    }
+  }
+  return null;
+}
+
 type LocalV2DagLambdaPollResult = {
   handled: number;
 };
@@ -3041,6 +3057,7 @@ function buildMaterializedLocalV2Detail(
     preconsent_tracking_detected: runtimeEvidenceReportable ? bundle.derivedRuntimeSignals?.preConsentTrackingObserved === true || preconsentRequests.length > 0 : false,
     privacy_policy_present: Boolean(privacySurface),
     privacy_score: localV2NoGo ? null : score,
+    site_language_primary: getLocalV2PrimaryLanguage(bundle),
     registered_domain: rootDomain,
     runtime_counts_retained: effectiveRuntimeCountsRetained,
     runtime_coverage_status: effectiveRuntimeCoverageStatus,

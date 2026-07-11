@@ -117,6 +117,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
 
   const scanDomainLabel = displayScanRecord.scan.domainHostname?.trim() || "Scanned website";
   const isPlatformAdmin = isPlatformAdminEmail(user.email);
+  const canUseAdvancedReportActions = isPlatformAdmin || membership.role === "admin" || membership.role === "advanced";
   const canUseLocalExtensionScan = isPlatformAdmin;
   const allowRestrictedScanOptions = canUseRestrictedScanOptions({
     membershipRole: membership.role,
@@ -157,6 +158,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
               <ShareReportActions
                 domainLabel={scanDomainLabel}
                 scanId={displayScanRecord.scan.id}
+                showMonitorSite={canUseAdvancedReportActions}
                 visualEvidenceHref={visualEvidenceHref}
               />
               <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">

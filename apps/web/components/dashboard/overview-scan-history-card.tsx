@@ -6,97 +6,52 @@ import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-s
 import { getScanThrottleCopy } from "../../lib/scan-access";
 import { getRescanAvailability } from "../../lib/scans/rescan-policy";
 import type { OrganizationScanListItem } from "../../server/scans/get-organization-scans";
-import { FreshRescanBadge } from "../scans/fresh-rescan-badge";
+import { getScanFromMarkerInput, ScanFromMarker } from "../scans/scan-from-icons";
 import { RescanDomainForm } from "../scans/rescan-domain-form";
 import type { ServerScanFrom } from "../scans/scan-from-select";
 import { PendingButtonLink } from "../ui/pending-link";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
-const DEFAULT_SCAN_HISTORY_PAGE_SIZE = 20;
 
 function formatDateTime(value: string | null) {
-  if (!value) {
-    return "No activity yet";
-  }
-
+  if (!value) return "—";
   return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZoneName: "short"
+    month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+    hour12: true, timeZone: "America/Los_Angeles", timeZoneName: "short"
   }).format(new Date(value));
 }
 
-function formatRescanCooldownMessage(nextAllowedAt: string | null, planCode: PlanCode) {
-  void planCode;
-
-  if (!nextAllowedAt) {
-    return getScanThrottleCopy();
-  }
-
-  return getScanThrottleCopy(formatDateTime(nextAllowedAt));
+function formatDuration(scan: Pick<OrganizationScanListItem, "completedAt" | "createdAt" | "startedAt">) {
+  const start = Date.parse(scan.startedAt ?? scan.createdAt);
+  const end = scan.completedAt ? Date.parse(scan.completedAt) : Number.NaN;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return "—";
+  const seconds = (end - start) / 1000;
+  return seconds >= 60 ? `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s` : `${seconds.toFixed(1)}s`;
 }
 
-function ViewScanIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
+function freshnessLabel(value: boolean | null) {
+  if (value === true) return "Forced fresh";
+  if (value === false) return "Standard";
+  return "—";
 }
 
-function ScanHistoryIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M8 6h13" />
-      <path d="M8 12h13" />
-      <path d="M8 18h13" />
-      <circle cx="4" cy="6" r="1" fill="currentColor" stroke="none" />
-      <circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="4" cy="18" r="1" fill="currentColor" stroke="none" />
-    </svg>
-  );
+function statusIndicator(scan: OrganizationScanListItem) {
+  if (scan.status === "failed" || scan.accessPostureClass === "early_loss") return { className: "bg-rose-500", label: scan.interruptionLabel ?? "Failed" };
+  if (scan.status === "queued" || scan.status === "running") return { className: "bg-sky-400", label: scan.status === "queued" ? "Queued" : "Running" };
+  if (scan.interruptionLabel || scan.accessPostureClass === "degraded_but_useful" || scan.accessPostureClass === "robots_limited") return { className: "bg-amber-400", label: scan.interruptionLabel ?? "Limited" };
+  return { className: "bg-emerald-500", label: "Completed" };
 }
 
-function DomainRowActionButton({
-  children,
-  tooltip
-}: {
-  children: React.ReactNode;
-  tooltip: string;
-}) {
-  return (
-    <div className="group relative inline-flex">
-      {children}
-      <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-lg group-hover:block">
-        {tooltip}
-      </div>
-    </div>
-  );
+function formatCooldown(nextAllowedAt: string | null) {
+  return nextAllowedAt ? getScanThrottleCopy(formatDateTime(nextAllowedAt)) : getScanThrottleCopy();
 }
 
-function getPrimaryBadgeClassName(scan: OrganizationScanListItem) {
-  if (scan.interruptionLabel) {
-    return "border-amber-200 bg-amber-50 text-amber-800";
-  }
-
-  if (scan.scanQualityLevel === "high") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  }
-
-  if (scan.scanQualityLevel === "moderate") {
-    return "border-sky-200 bg-sky-50 text-sky-800";
-  }
-
-  return "border-amber-200 bg-amber-50 text-amber-800";
+function ViewIcon() {
+  return <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" /><circle cx="12" cy="12" r="3" /></svg>;
 }
 
-function getPrimaryBadgeLabel(scan: OrganizationScanListItem) {
-  return scan.interruptionLabel ?? scan.scanQualityLabel;
+function HistoryIcon() {
+  return <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="4" cy="6" fill="currentColor" r="1" /><circle cx="4" cy="12" fill="currentColor" r="1" /><circle cx="4" cy="18" fill="currentColor" r="1" /></svg>;
 }
 
 type OverviewScanHistoryCardProps = {
@@ -107,249 +62,72 @@ type OverviewScanHistoryCardProps = {
   scans: OrganizationScanListItem[];
 };
 
-export function OverviewScanHistoryCard({
-  allowRestrictedScanOptions = false,
-  defaultScanFrom = "eu_ie",
-  planCode,
-  rescanCooldownMs,
-  scans
-}: OverviewScanHistoryCardProps) {
+export function OverviewScanHistoryCard({ allowRestrictedScanOptions = false, defaultScanFrom = "eu_ie", planCode, rescanCooldownMs, scans }: OverviewScanHistoryCardProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_SCAN_HISTORY_PAGE_SIZE);
-  const scanGroups = useMemo(
-    () =>
-      scans.reduce<
-        Array<{
-          key: string;
-          domainId: string | null;
-          hostname: string | null;
-          scans: OrganizationScanListItem[];
-        }>
-      >((groups, scan) => {
-        const key = scan.domainId ?? scan.domainHostname ?? scan.id;
-        const existingGroup = groups.find((group) => group.key === key);
-
-        if (existingGroup) {
-          existingGroup.scans.push(scan);
-          return groups;
-        }
-
-        groups.push({
-          key,
-          domainId: scan.domainId,
-          hostname: scan.domainHostname,
-          scans: [scan]
-        });
-
-        return groups;
-      }, []),
-    [scans]
-  );
-
-  const totalPages = Math.max(1, Math.ceil(scanGroups.length / pageSize));
-  const normalizedPage = Math.min(currentPage, totalPages);
-  const pageStart = (normalizedPage - 1) * pageSize;
-  const visibleGroups = scanGroups.slice(pageStart, pageStart + pageSize);
+  const [pageSize, setPageSize] = useState(20);
+  const groups = useMemo(() => scans.reduce<Array<{ domainId: string | null; hostname: string | null; key: string; scans: OrganizationScanListItem[] }>>((result, scan) => {
+    const key = scan.domainId ?? scan.domainHostname ?? scan.id;
+    const existing = result.find((group) => group.key === key);
+    if (existing) existing.scans.push(scan);
+    else result.push({ domainId: scan.domainId, hostname: scan.domainHostname, key, scans: [scan] });
+    return result;
+  }, []), [scans]);
+  const totalPages = Math.max(1, Math.ceil(groups.length / pageSize));
+  const page = Math.min(currentPage, totalPages);
+  const start = (page - 1) * pageSize;
+  const visibleGroups = groups.slice(start, start + pageSize);
 
   return (
     <Card className="border-slate-200 bg-white">
       <CardHeader className="pb-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div className="space-y-1">
-            <CardTitle>Scan history</CardTitle>
-            <p className="text-sm text-slate-500">Newest domain activity first.</p>
-          </div>
-          <p className="text-sm text-slate-500">{scanGroups.length} domains with recent scans</p>
+          <div className="space-y-1"><CardTitle>Recent website health</CardTitle><p className="text-sm text-slate-500">Latest result for each website, with earlier scans one click away.</p></div>
+          <p className="text-sm text-slate-500">{groups.length} website{groups.length === 1 ? "" : "s"}</p>
         </div>
       </CardHeader>
-      <CardContent className="pt-0">
-        {scans.length === 0 ? (
-          <p className="text-sm text-slate-600">No scans yet. Add a website to start building scan history.</p>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-slate-600">
-                Showing {scanGroups.length === 0 ? 0 : pageStart + 1}-{Math.min(pageStart + visibleGroups.length, scanGroups.length)} of{" "}
-                {scanGroups.length} scan history items · Page {normalizedPage} of {totalPages}
-              </p>
-              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-                <select
-                  className="h-9 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700"
-                  value={pageSize}
-                  onChange={(event) => {
-                    setPageSize(Number(event.target.value));
-                    setCurrentPage(1);
-                  }}
-                >
-                  {PAGE_SIZE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option} per page
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                  disabled={normalizedPage <= 1}
-                  className={[
-                    "inline-flex h-9 items-center rounded-full border px-4 text-sm font-medium transition",
-                    normalizedPage <= 1
-                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950"
-                  ].join(" ")}
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                  disabled={normalizedPage >= totalPages}
-                  className={[
-                    "inline-flex h-9 items-center rounded-full border px-4 text-sm font-medium transition",
-                    normalizedPage >= totalPages
-                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:text-slate-950"
-                  ].join(" ")}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-            <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-slate-50/40">
-              {visibleGroups.map((group) => {
-                const latestScan = group.scans[0];
-                if (!latestScan) {
-                  return null;
-                }
-
-                const rescanAvailability =
-                  group.domainId
-                    ? getRescanAvailability({
-                        activeScanExists: latestScan.domainActiveScanExists,
-                        lastScannedAt: latestScan.domainLastScannedAt,
-                        planCode,
-                        rescanCooldownMs
-                      })
-                    : null;
-
-                const cooldownMessage = rescanAvailability
-                  ? rescanAvailability.reason ??
-                    (!rescanAvailability.allowed
-                      ? formatRescanCooldownMessage(rescanAvailability.nextAllowedAt, planCode)
-                      : null)
-                  : null;
-                const earlierScans = group.scans.slice(1, 11);
-                return (
-                  <div key={group.key} className="px-4 py-3 first:rounded-t-2xl last:rounded-b-2xl">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 space-y-2">
-                        <div>
-                          <p className="truncate font-medium text-slate-900">{group.hostname ?? "Unknown website"}</p>
-                          <p className="text-xs text-slate-500">
-                            {group.scans.length} scan{group.scans.length === 1 ? "" : "s"} · newest {formatDateTime(latestScan.createdAt)}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
-                          <span className="font-medium text-slate-900">{latestScan.status}</span>
-                          <span
-                            className={[
-                              "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
-                              getPrimaryBadgeClassName(latestScan)
-                            ].join(" ")}
-                            title={latestScan.interruptionReason ?? getPrimaryBadgeLabel(latestScan)}
-                          >
-                            {getPrimaryBadgeLabel(latestScan)}
-                          </span>
-                          <span>Signals {latestScan.totalSignals ?? 0}</span>
-                          <span>Findings {latestScan.findingCount}</span>
-                          {latestScan.topFindingCount !== null ? <span>Top findings {latestScan.topFindingCount}</span> : null}
-                          {latestScan.certscoreOverall !== null ? <span>Overall {latestScan.certscoreOverall}</span> : null}
-                          {latestScan.cmpVendorName ? <span>CMP {latestScan.cmpVendorName}</span> : null}
-                          {latestScan.cookieBannerPresent === false ? <span>Banner not visible</span> : null}
-                          <FreshRescanBadge value={latestScan.freshRescanRequested} />
-                        </div>
-                        {latestScan.scanQualityWarning && latestScan.scanQualityWarning !== latestScan.interruptionReason ? (
-                          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                            {latestScan.scanQualityWarning}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap items-start gap-2 self-start sm:pt-0.5">
-                        <DomainRowActionButton tooltip="View latest scan">
-                          <PendingButtonLink
-                            href={`/app/scans/${latestScan.id}`}
-                            ariaLabel="View latest scan"
-                            idleContent={<ViewScanIcon />}
-                            pendingContent="Opening..."
-                            size="sm"
-                            variant="secondary"
-                            className="h-8 w-8 rounded-full border border-slate-300 bg-white p-0 text-slate-700 shadow-sm hover:border-slate-400 hover:text-slate-950"
-                            title="View latest scan"
-                          />
-                        </DomainRowActionButton>
-                        <DomainRowActionButton tooltip="List earlier scans">
-                          <details className="relative">
-                            <summary
-                              className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm transition hover:border-slate-400 hover:text-slate-950 [&::-webkit-details-marker]:hidden"
-                              aria-label="List earlier scans"
-                              title="List earlier scans"
-                            >
-                              <ScanHistoryIcon />
-                            </summary>
-                            <div className="absolute right-0 top-full z-20 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-                              <div className="border-b border-slate-100 px-3 py-2">
-                                <p className="text-sm font-medium text-slate-900">Earlier scans</p>
-                                <p className="text-xs text-slate-500">
-                                  {earlierScans.length > 0
-                                    ? `Showing up to ${earlierScans.length} earlier scans for ${group.hostname ?? "this domain"}.`
-                                    : `No earlier scans available for ${group.hostname ?? "this domain"}.`}
-                                </p>
-                              </div>
-                              {earlierScans.length > 0 ? (
-                                <div className="max-h-80 overflow-y-auto py-1">
-                                  {earlierScans.map((scan) => (
-                                    <a
-                                      key={scan.id}
-                                      href={`/app/scans/${scan.id}`}
-                                      className="block rounded-xl px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50 hover:text-slate-950"
-                                    >
-                                      <span className="block font-medium text-slate-900">
-                                        {scan.scanType} · {scan.status}
-                                      </span>
-                                      <span className="block text-xs text-slate-500">{formatDateTime(scan.createdAt)}</span>
-                                      <span className="mt-1 block">
-                                        <FreshRescanBadge value={scan.freshRescanRequested} />
-                                      </span>
-                                    </a>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="px-3 py-3 text-sm text-slate-500">No earlier scans yet.</p>
-                              )}
-                            </div>
-                          </details>
-                        </DomainRowActionButton>
-                        {group.domainId && rescanAvailability ? (
-                          <DomainRowActionButton tooltip={rescanAvailability.allowed ? "Re-scan domain" : cooldownMessage ?? "Re-scan unavailable"}>
-                            <RescanDomainForm
-                              allowRestrictedScanOptions={allowRestrictedScanOptions}
-                              compact
-                              cooldownMessage={cooldownMessage}
-                              defaultScanFrom={defaultScanFrom}
-                              disabled={!rescanAvailability.allowed}
-                              domainId={group.domainId}
-                              showLabel
-                            />
-                          </DomainRowActionButton>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+      <CardContent className="space-y-3 pt-0">
+        {groups.length === 0 ? <div className="rounded-xl border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500">Scan your first website to start tracking risk signals and changes.</div> : <>
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2">
+            <p className="text-xs text-slate-500">Showing {start + 1}–{Math.min(start + visibleGroups.length, groups.length)} of {groups.length}</p>
+            <div className="flex items-center gap-2">
+              <select aria-label="Rows per page" className="h-8 rounded-full border border-slate-300 bg-white px-3 text-xs" onChange={(event) => { setPageSize(Number(event.target.value)); setCurrentPage(1); }} value={pageSize}>{PAGE_SIZE_OPTIONS.map((option) => <option key={option} value={option}>{option} per page</option>)}</select>
+              <button className="h-8 rounded-full border border-slate-300 bg-white px-3 text-xs disabled:opacity-40" disabled={page <= 1} onClick={() => setCurrentPage((value) => Math.max(1, value - 1))} type="button">Previous</button>
+              <button className="h-8 rounded-full border border-slate-300 bg-white px-3 text-xs disabled:opacity-40" disabled={page >= totalPages} onClick={() => setCurrentPage((value) => Math.min(totalPages, value + 1))} type="button">Next</button>
             </div>
           </div>
-        )}
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="table-fixed text-left text-xs" style={{ minWidth: "1125px" }}>
+              <colgroup><col style={{ width: "40px" }} /><col style={{ width: "180px" }} /><col style={{ width: "75px" }} /><col style={{ width: "60px" }} /><col style={{ width: "205px" }} /><col style={{ width: "80px" }} /><col style={{ width: "60px" }} /><col style={{ width: "95px" }} /><col style={{ width: "155px" }} /><col style={{ width: "175px" }} /></colgroup>
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr>{["Status", "Website", "Score", "Top", "Privacy / CMP", "Time", "From", "Freshness", "Scanned", "Actions"].map((label) => <th className="border-b border-slate-200 px-2.5 py-1.5 font-semibold" key={label}>{label}</th>)}</tr></thead>
+              <tbody className="divide-y divide-slate-100 bg-white">
+                {visibleGroups.map((group) => {
+                  const latest = group.scans[0];
+                  if (!latest) return null;
+                  const status = statusIndicator(latest);
+                  const marker = getScanFromMarkerInput(latest.scanFromValue);
+                  const availability = group.domainId ? getRescanAvailability({ activeScanExists: latest.domainActiveScanExists, lastScannedAt: latest.domainLastScannedAt, planCode, rescanCooldownMs }) : null;
+                  const earlier = group.scans.slice(1, 11);
+                  return <tr className="h-[56px] hover:bg-slate-50/70" key={group.key}>
+                    <td className="px-2.5 py-1.5 text-center" title={status.label}><span aria-label={status.label} className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /></td>
+                    <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-900">{group.hostname ?? "Unknown website"}</p><p className="text-[10px] text-slate-400">{group.scans.length} scan{group.scans.length === 1 ? "" : "s"}</p></td>
+                    <td className="px-2.5 py-1.5 font-semibold text-slate-900">{latest.certscoreOverall !== null ? `${latest.certscoreOverall}/100` : "—"}</td>
+                    <td className="px-2.5 py-1.5 font-semibold text-slate-900">{latest.topFindingCount ?? "—"}</td>
+                    <td className="px-2.5 py-1.5"><p>Privacy {latest.privacyPolicyPresent === true ? "✓" : latest.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={latest.cmpVendorName ?? undefined}>CMP {latest.cmpVendorName ?? "—"}</p></td>
+                    <td className="px-2.5 py-1.5 font-medium">{formatDuration(latest)}</td>
+                    <td className="px-2.5 py-1.5" title={latest.scanFromLabel}><ScanFromMarker flag={"flag" in marker ? marker.flag : undefined} icon={"icon" in marker ? marker.icon : undefined} selected /></td>
+                    <td className="px-2.5 py-1.5"><span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{freshnessLabel(latest.freshRescanRequested)}</span></td>
+                    <td className="px-2.5 py-1.5 text-[11px] text-slate-600">{formatDateTime(latest.completedAt ?? latest.createdAt)}</td>
+                    <td className="px-2.5 py-1.5"><div className="flex items-center gap-1">
+                      <PendingButtonLink ariaLabel="View latest scan" className="h-8 w-8 rounded-full border border-slate-300 bg-white p-0" href={`/app/scans/${latest.id}`} idleContent={<ViewIcon />} pendingContent="…" size="sm" title="View latest scan" variant="secondary" />
+                      <details className="relative"><summary aria-label="Earlier scans" className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full border border-slate-300 bg-white [&::-webkit-details-marker]:hidden"><HistoryIcon /></summary><div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"><p className="px-2 py-1 text-xs font-semibold text-slate-900">Earlier scans</p>{earlier.length ? earlier.map((scan) => <a className="block rounded-lg px-2 py-1.5 text-xs hover:bg-slate-50" href={`/app/scans/${scan.id}`} key={scan.id}>{formatDateTime(scan.completedAt ?? scan.createdAt)} · {scan.certscoreOverall ?? "—"}/100</a>) : <p className="px-2 py-2 text-xs text-slate-500">No earlier scans.</p>}</div></details>
+                      {group.domainId && availability ? <RescanDomainForm allowRestrictedScanOptions={allowRestrictedScanOptions} compact cooldownMessage={availability.allowed ? null : availability.reason ?? formatCooldown(availability.nextAllowedAt)} defaultScanFrom={defaultScanFrom} disabled={!availability.allowed} domainId={group.domainId} showLabel /> : null}
+                    </div></td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>}
       </CardContent>
     </Card>
   );

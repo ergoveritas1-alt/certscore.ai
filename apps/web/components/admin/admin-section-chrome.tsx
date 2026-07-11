@@ -12,7 +12,6 @@ const navItems = [
   { href: "/app/admin", label: "Overview" },
   { href: "/app/admin/users", label: "Users" },
   { href: "/app/admin/scans", label: "Scans" },
-  { href: "/app/admin/scanner-quality", label: "Scanner Quality" },
   { href: "/app/admin/fintech", label: "Fintech" }
 ] as const;
 

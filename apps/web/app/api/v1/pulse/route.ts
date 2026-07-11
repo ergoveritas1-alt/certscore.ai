@@ -32,7 +32,9 @@ import {
 import { checkDomainDns } from "../../../../server/domains/domain-dns";
 import { createAnonymousFullScan } from "../../../../server/scans/create-anonymous-full-scan";
 import { getPublicScanRecord, type PublicScanRecord } from "../../../../server/scans/get-public-scan-record";
-import { RECENT_SCAN_REUSE_WINDOW_HOURS } from "../../../../server/scans/recent-scan-reuse";
+import {
+  getRecentScanReuseEligibility
+} from "../../../../server/scans/recent-scan-reuse";
 import {
   claimPulseDomainScanCreation,
   createPulseRequest,
@@ -394,11 +396,13 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         routeName
       );
     }
+    const integrationClient = request.headers.get("x-certscore-client")?.trim().toLowerCase();
+    const integrationChannel = integrationClient === "sdk" ? "sdk" : integrationClient === "mcp" ? "mcp" : "other_api";
     apiKeyContext = {
       accountId: auth.key.organizationId,
       apiKeyId: auth.key.publicId,
-      channel: "mcp",
-      source: "mcp",
+      channel: integrationChannel,
+      source: integrationChannel,
       userId: auth.key.ownerUserId
     };
   }
@@ -631,13 +635,16 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       resolutionMode: "created_new_scan",
       status: "queued"
     });
-    const recentScan = forceNewScan
+    const recentEligibility = forceNewScan
       ? null
-      : await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, {
-          maxAgeHours: RECENT_SCAN_REUSE_WINDOW_HOURS,
+      : await getRecentScanReuseEligibility({
           minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
+          normalizedDomain: normalized.normalizedDomain,
+          normalizedUrl: normalized.normalizedUrl,
+          organizationId: null,
           scanFrom
         });
+    const recentScan = recentEligibility?.eligible ? recentEligibility.candidate : null;
     const latestScan =
       recentScan ??
       (await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, {
@@ -646,7 +653,6 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       }));
     const latestScanRecord = latestScan ? await loadPulseScanRecord(latestScan.id) : null;
     const latestScanQuality = latestScanRecord ? assessPulseScanRecordQuality(latestScanRecord) : null;
-    const recentScanWasUnusable = Boolean(recentScan && latestScanRecord && latestScanQuality && !latestScanQuality.usable);
     const recentScanRecord =
       recentScan && latestScanRecord && latestScanQuality?.usable
         ? latestScanRecord
@@ -746,7 +752,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     }
 
     const queued = await createAnonymousFullScan({
-      bypassRecentScanReuse: forceNewScan || recentScanWasUnusable,
+      bypassRecentScanReuse: forceNewScan,
       coveragePlanCode: PULSE_SCAN_COVERAGE_PLAN_CODE,
       hostname: normalized.normalizedDomain,
       minimumReusablePagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
