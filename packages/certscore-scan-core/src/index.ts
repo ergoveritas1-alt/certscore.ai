@@ -77,6 +77,7 @@ export {
 } from "./consent-geometry-visual-review.js";
 
 export interface RunScanInput {
+  signal?: AbortSignal;
   url: string;
   profile?: ScanProfile["profileId"];
   outDir?: string;
@@ -205,6 +206,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       screenshotMode: input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always"),
       screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
       waitMode: leanPreConsent ? "fast" : "full",
+      signal: input.signal,
     })
     : Promise.resolve(emptyPreConsentResult(nowIso(startedAtMs)));
   const policySurfaceResultPromise = policySurfaceEnabled
@@ -217,6 +219,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       browser: sharedBrowser,
       nanoAssistProvider: nanoPolicyAssistProvider,
       discoveryMode: input.scenarioPlanningMode === "planned_parallel" ? "fast" : "full",
+      signal: input.signal,
     }).then(
       (value) => ({ status: "fulfilled" as const, value }),
       (reason: unknown) => ({ status: "rejected" as const, reason }),

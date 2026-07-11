@@ -67,6 +67,7 @@ export interface PolicySurfaceScannerInput {
   enableNanoPolicyAssist?: boolean;
   nanoAssistProvider?: PolicyNanoAssistProvider;
   discoveryMode?: "full" | "fast";
+  signal?: AbortSignal;
 }
 
 export interface PolicySurfaceScannerResult {
@@ -239,6 +240,17 @@ export async function policySurfaceScanner(
     seenFailureKeys: new Set(),
   };
   const policyBrowserRuntime = createPolicyBrowserRuntime(input.browser);
+  let policyModuleDeadlineReached = false;
+  const policyModuleDeadlineMs = Math.max(1_000, input.internalBudgetMs + 5_000);
+  const policyModuleDeadlineTimer = setTimeout(() => {
+    policyModuleDeadlineReached = true;
+    void policyBrowserRuntime.close();
+  }, policyModuleDeadlineMs);
+  const abortPolicyRuntime = () => {
+    policyModuleDeadlineReached = true;
+    void policyBrowserRuntime.close();
+  };
+  input.signal?.addEventListener("abort", abortPolicyRuntime, { once: true });
   const policyDocumentFetchCaches: PolicyDocumentFetchCaches = {
     browserRuntime: policyBrowserRuntime,
     diagnostics: policyFetchDiagnostics,
@@ -678,11 +690,17 @@ export async function policySurfaceScanner(
     };
   } catch (error) {
     return {
-      moduleRun: moduleRun("failed", moduleStartedAt, moduleStartedAtMs, [error instanceof Error ? error.message : String(error)], timingBreakdown),
+      moduleRun: moduleRun("failed", moduleStartedAt, moduleStartedAtMs, [
+        policyModuleDeadlineReached
+          ? `Policy-surface module exceeded its ${policyModuleDeadlineMs}ms hard deadline; retained evidence may be incomplete.`
+          : error instanceof Error ? error.message : String(error)
+      ], timingBreakdown),
       policySurfaceObservations: observations,
       artifactRefs,
     };
   } finally {
+    clearTimeout(policyModuleDeadlineTimer);
+    input.signal?.removeEventListener("abort", abortPolicyRuntime);
     await policyBrowserRuntime.close();
   }
 }
@@ -2661,7 +2679,7 @@ function surfacePriority(surfaceType: PolicySurfaceObservation["surfaceType"]): 
 async function rankCandidatesWithRequiredNano(
   input: PolicySurfaceScannerInput,
   candidates: PolicySurfaceCandidate[],
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined = input.signal,
 ): Promise<PolicySurfaceCandidate[]> {
   if (input.enableNanoPolicyAssist === false) {
     throw new Error("Nano policy assist cannot be disabled for policy-surface link discovery.");

@@ -31,7 +31,8 @@ import {
   loadPriorScanAccelerationCandidate,
   loadUsageCounter,
   upsertUsageCounter,
-  updateDomainLatestScan
+  updateDomainLatestScan,
+  updateLocalV2DagLambdaDispatchState
 } from "./repository";
 import { buildQueuedFullScanConfig } from "./full-scan-config";
 import {
@@ -604,6 +605,12 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         scanConfig,
         scanId: scan.id
       });
+      await updateLocalV2DagLambdaDispatchState({
+        acceptedAt: new Date().toISOString(),
+        dispatchState: "accepted",
+        invocationRequestId: dispatchResult.invocationRequestId,
+        scanId: scan.id
+      });
       await insertQueuedFullScanEvent({
         domainId: domainRecord.domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
@@ -623,6 +630,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Local v2 DAG Lambda dispatch failed.";
+      await updateLocalV2DagLambdaDispatchState({ dispatchState: "failed", errorMessage: message, scanId: scan.id });
       await insertQueuedFullScanEvent({
         domainId: domainRecord.domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,

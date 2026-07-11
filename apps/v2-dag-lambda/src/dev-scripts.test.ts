@@ -91,6 +91,18 @@ test("dev image setup uses local names and refuses non-dev resource names", asyn
   assert.doesNotMatch(setupScript, /certscore-prod|certscore-v2-dag-production/);
 });
 
+test("Lambda setup disables default async retries and bounds event age", async () => {
+  const imageSetup = await readRepoFile("scripts/local-v2-dag-lambda/setup-dev-aws-image.sh");
+  const zipSetup = await readRepoFile("scripts/local-v2-dag-lambda/setup-dev-aws.sh");
+
+  for (const source of [imageSetup, zipSetup]) {
+    assert.match(source, /put-function-event-invoke-config/);
+    assert.match(source, /--maximum-event-age-in-seconds 60/);
+    assert.match(source, /--maximum-retry-attempts 0/);
+    assert.match(source, /--destination-config "OnFailure=\{Destination=\$\{failure_queue_arn\}\}"/);
+  }
+});
+
 test("local Lambda parity harness uses the Lambda pre-consent visual budget", async () => {
   const parityScript = await readRepoFile("scripts/run-local-v2-dag-lambda-parity.ts");
 

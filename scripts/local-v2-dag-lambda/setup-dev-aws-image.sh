@@ -5,6 +5,7 @@ region="${AWS_REGION:-eu-central-1}"
 prefix="${CERTSCORE_V2_DAG_LAMBDA_DEV_PREFIX:-certscore-v2-dag-local}"
 function_name="${CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME:-${prefix}-lambda}"
 queue_name="${CERTSCORE_V2_DAG_LAMBDA_QUEUE_NAME:-${prefix}-results}"
+failure_queue_name="${CERTSCORE_V2_DAG_LAMBDA_FAILURE_QUEUE_NAME:-${prefix}-async-failures}"
 role_name="${CERTSCORE_V2_DAG_LAMBDA_ROLE_NAME:-${prefix}-role}"
 image_uri="${CERTSCORE_V2_DAG_LAMBDA_IMAGE_URI:-${1:-}}"
 artifact_bucket="${CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET:-}"
@@ -82,6 +83,18 @@ queue_arn="$(aws sqs get-queue-attributes \
   --attribute-names QueueArn \
   --query 'Attributes.QueueArn' \
   --output text)"
+failure_queue_url="$(aws sqs create-queue \
+  --region "$region" \
+  --queue-name "$failure_queue_name" \
+  --attributes VisibilityTimeout=60,MessageRetentionPeriod=1209600 \
+  --query QueueUrl \
+  --output text)"
+failure_queue_arn="$(aws sqs get-queue-attributes \
+  --region "$region" \
+  --queue-url "$failure_queue_url" \
+  --attribute-names QueueArn \
+  --query 'Attributes.QueueArn' \
+  --output text)"
 supported_regions=("eu-central-1" "eu-west-1" "us-west-2")
 
 json_array() {
@@ -96,6 +109,7 @@ for supported_region in "${supported_regions[@]}"; do
   log_resources+=("arn:aws:logs:${supported_region}:${account_id}:*")
   sqs_resources+=("arn:aws:sqs:${supported_region}:${account_id}:${queue_name}")
   sqs_resources+=("arn:aws:sqs:${supported_region}:${account_id}:${prefix}-production-results")
+  sqs_resources+=("arn:aws:sqs:${supported_region}:${account_id}:${failure_queue_name}")
   s3_resources+=("arn:aws:s3:::${prefix}-artifacts-${supported_region}-${account_id}/${artifact_prefix%/}/*")
   lambda_resources+=("arn:aws:lambda:${supported_region}:${account_id}:function:${prefix}-*")
 done
@@ -336,6 +350,13 @@ else
     --environment "file://${environment_json}" >/dev/null
 fi
 
+aws lambda put-function-event-invoke-config \
+  --region "$region" \
+  --function-name "$function_name" \
+  --maximum-event-age-in-seconds 60 \
+  --maximum-retry-attempts 0 \
+  --destination-config "OnFailure={Destination=${failure_queue_arn}}" >/dev/null
+
 cat <<EOF
 Created/updated local v2 DAG Lambda image resources:
   AWS_REGION=${region}
@@ -345,6 +366,7 @@ Created/updated local v2 DAG Lambda image resources:
   CERTSCORE_V2_DAG_LAMBDA_${location_env_prefix}_ENABLED=true
   CERTSCORE_V2_DAG_LAMBDA_${location_env_prefix}_FUNCTION_NAME=${function_name}
   CERTSCORE_V2_DAG_LAMBDA_${location_env_prefix}_RESULT_QUEUE_URL=${queue_url}
+  CERTSCORE_V2_DAG_LAMBDA_ASYNC_FAILURE_QUEUE_URL=${failure_queue_url}
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV=local
   CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET=${artifact_bucket}
   CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX=${artifact_prefix}

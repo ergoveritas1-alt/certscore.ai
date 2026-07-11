@@ -96,6 +96,7 @@ export interface PreConsentRuntimeScannerInput {
   screenshotMode?: "always" | "selective" | "never";
   screenshotTimeoutMs?: number;
   waitMode?: "full" | "fast";
+  signal?: AbortSignal;
 }
 
 export interface FixtureRouteFulfiller {
@@ -168,6 +169,13 @@ export async function preConsentRuntimeScanner(
   });
   const page = context.newPage;
   const browserContext = context.newContext;
+  const abortRuntime = () => {
+    void browserContext.close().catch(() => undefined);
+    if (ownsBrowser) {
+      void browser.close().catch(() => undefined);
+    }
+  };
+  input.signal?.addEventListener("abort", abortRuntime, { once: true });
   await recordTiming(
     timingBreakdown,
     "browser api probe install",
@@ -1211,8 +1219,12 @@ export async function preConsentRuntimeScanner(
       vendorResolverInputs,
     };
   } finally {
+    input.signal?.removeEventListener("abort", abortRuntime);
     if (ownsBrowser) {
-      await browser.close();
+      await Promise.race([
+        browser.close().catch(() => undefined),
+        new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+      ]);
     }
   }
 

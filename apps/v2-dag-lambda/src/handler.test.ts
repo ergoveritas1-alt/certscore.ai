@@ -21,6 +21,7 @@ import {
   mergeLocalV2DagLambdaShardBundles,
   mirrorWorkerArtifactsIntoFinalArtifactRoot,
   parseLocalV2DagLambdaDispatchPayload,
+  sendLocalV2DagLambdaResultMessage,
   uploadAuxiliaryArtifactFiles,
   uploadArtifactFiles
 } from "./handler";
@@ -332,6 +333,67 @@ test("handler emits a validated completed SQS result without production findings
     scanPhaseDurationMs: 123,
     scanPhaseLabel: "scan"
   });
+});
+
+test("handler publishes a terminal failure before the Lambda hard timeout", async () => {
+  const sentBodies: string[] = [];
+  let scannerSignal: AbortSignal | undefined;
+  const result = await handler(validPayload(), {
+    artifactChainTimeoutMs: 20,
+    handlerSafetyTimeoutMs: 30,
+    scannerWorkTimeoutMs: 10,
+    runArtifactChain: async (_payload, options) => {
+      scannerSignal = options.signal;
+      return await new Promise(() => undefined);
+    },
+    sqsClient: {
+      async send(command: SendMessageCommand) {
+        sentBodies.push(String(command.input.MessageBody));
+        return { $metadata: {} };
+      }
+    }
+  });
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.error?.code, "v2_dag_lambda_safety_timeout");
+  assert.match(result.error?.message ?? "", /internal safety deadline/);
+  assert.equal(sentBodies.length, 1);
+  const parsed = parseLocalV2DagLambdaResultMessage(sentBodies[0], { expectedTargetEnvironment: "local" });
+  assert.equal(parsed.status, "failed");
+  assert.equal(parsed.error?.code, "v2_dag_lambda_safety_timeout");
+  assert.equal(scannerSignal?.aborted, true);
+});
+
+test("terminal SQS publication is bounded and aborts the SDK call", async () => {
+  let observedSignal: AbortSignal | undefined;
+  const startedAt = Date.now();
+
+  await assert.rejects(
+    sendLocalV2DagLambdaResultMessage({
+      message: {
+        artifactOnly: true,
+        completedAt: "2026-06-15T18:00:00.000Z",
+        contractVersion: "certscore.v2.lambda-dag-result.v1",
+        processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+        productionFindingIntegration: false,
+        scanId: "scan-local-1",
+        status: "failed",
+        targetEnvironment: "local"
+      },
+      queueUrl: "https://sqs.eu-central-1.amazonaws.com/123/certscore-v2-dag-local-results",
+      sqsClient: {
+        async send(_command, options) {
+          observedSignal = options?.abortSignal;
+          return await new Promise(() => undefined);
+        }
+      },
+      timeoutMs: 10
+    }),
+    /internal safety deadline/
+  );
+
+  assert.equal(observedSignal?.aborted, true);
+  assert.ok(Date.now() - startedAt < 500);
 });
 
 test("handler worker mode fails closed while post-consent flow scanning is disabled", async () => {

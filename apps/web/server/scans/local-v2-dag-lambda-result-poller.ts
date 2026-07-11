@@ -534,6 +534,15 @@ export async function recordLocalV2DagLambdaResultEvent(
     `update scans
         set completed_at = coalesce(completed_at, $2::timestamptz),
             error_message = case when $3 = 'failed' then $4 else error_message end,
+            scan_config_json = jsonb_set(
+              scan_config_json,
+              '{execution,v2DagLambda}',
+              coalesce(scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || jsonb_build_object(
+                'completedAt', $2::timestamptz,
+                'dispatchState', case when $3 = 'failed' then 'failed' else 'completed' end
+              ),
+              true
+            ),
             status = case when $3 = 'failed' then 'failed' else 'completed' end
       where id = $1
         and status in ('queued', 'running')`,

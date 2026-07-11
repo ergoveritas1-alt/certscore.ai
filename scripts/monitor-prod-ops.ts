@@ -7,8 +7,8 @@ const DEFAULT_ENVIRONMENT = "production";
 const DEFAULT_HEARTBEAT_STALE_MINUTES = 10;
 const DEFAULT_BASE_URL = "https://certscore.ai";
 const DEFAULT_SCAN_QUEUE_STALE_MINUTES = 10;
-const DEFAULT_STALE_RUNNING_SCAN_MINUTES = 12;
-const DEFAULT_STALE_RUNNING_SCAN_EVENT_MINUTES = 8;
+const DEFAULT_STALE_RUNNING_SCAN_MINUTES = 6;
+const DEFAULT_STALE_RUNNING_SCAN_EVENT_MINUTES = 5;
 const DEFAULT_STALE_RUNNING_SCAN_REPAIR_LIMIT = 25;
 const DEFAULT_SYNTHETIC_SCAN_DOMAIN = "example.com";
 const DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES = 15;
@@ -504,7 +504,7 @@ async function markStaleRunningScanFailed(input: {
   scan: StaleRunningScanRow;
 }) {
   const failedAt = new Date().toISOString();
-  const errorMessage = `Ops monitor marked scan failed after stale running state: run age ${input.scan.run_age_minutes ?? "unknown"}m, latest event stale threshold ${input.eventStaleMinutes}m.`;
+  const errorMessage = "The scanner did not return a terminal result within the expected time. No result was inferred; start a new scan.";
   const result = await query<{ id: string }>(
     `
       update scans
@@ -539,14 +539,14 @@ async function markStaleRunningScanFailed(input: {
       input.scan.id,
       input.scan.domain_id,
       input.scan.organization_id,
-      "Ops monitor marked stale running scan as failed.",
+      "Ops reconciler marked an orphaned running scan as failed after no terminal Lambda result arrived.",
       {
         failedAt,
         latestEventAt: input.scan.latest_event_at,
         latestEventMessage: input.scan.latest_event_message,
         minEventStaleMinutes: input.eventStaleMinutes,
         minRunAgeMinutes: input.runAgeMinutes,
-        reason: "stale_running_scan",
+        reason: "lambda_terminal_result_absent",
         runAgeMinutes: input.scan.run_age_minutes,
         source: "monitor-prod-ops"
       }

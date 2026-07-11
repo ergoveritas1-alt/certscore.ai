@@ -12,7 +12,12 @@ import { enqueueNanoSignalEnrichmentJob } from "../queue/validation-queue";
 import { ensureValidationRunForManualScan } from "../validation/manual-scan-handoff";
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
 import { setPreviewDomainLatestScan } from "../preview-scan/db";
-import { createQueuedFullScan, insertQueuedFullScanEvent, loadPriorScanAccelerationCandidate } from "./repository";
+import {
+  createQueuedFullScan,
+  insertQueuedFullScanEvent,
+  loadPriorScanAccelerationCandidate,
+  updateLocalV2DagLambdaDispatchState
+} from "./repository";
 import { buildQueuedFullScanConfig } from "./full-scan-config";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
@@ -291,6 +296,12 @@ export async function createAnonymousFullScan(input: {
         scanConfig,
         scanId: scan.id
       });
+      await updateLocalV2DagLambdaDispatchState({
+        acceptedAt: new Date().toISOString(),
+        dispatchState: "accepted",
+        invocationRequestId: dispatchResult.invocationRequestId,
+        scanId: scan.id
+      });
       await insertQueuedFullScanEvent({
         domainId: domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
@@ -310,6 +321,7 @@ export async function createAnonymousFullScan(input: {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Local v2 DAG Lambda dispatch failed.";
+      await updateLocalV2DagLambdaDispatchState({ dispatchState: "failed", errorMessage: message, scanId: scan.id });
       await insertQueuedFullScanEvent({
         domainId: domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,

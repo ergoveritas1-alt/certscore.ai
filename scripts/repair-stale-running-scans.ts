@@ -21,8 +21,8 @@ type EventRow = {
   metadata_json: unknown;
 };
 
-const DEFAULT_MIN_RUN_AGE_MINUTES = 12;
-const DEFAULT_MIN_EVENT_STALE_MINUTES = 8;
+const DEFAULT_MIN_RUN_AGE_MINUTES = 6;
+const DEFAULT_MIN_EVENT_STALE_MINUTES = 5;
 
 function parseArgs(argv: string[]) {
   const scanRefs: string[] = [];
@@ -132,7 +132,7 @@ async function markScanFailed(input: {
   scan: ScanRow;
 }) {
   const failedAt = new Date().toISOString();
-  const errorMessage = `Ops marked scan failed after stale running state: run age ${input.runAgeMinutes ?? "unknown"}m, last event age ${input.eventStaleMinutes ?? "unknown"}m.`;
+  const errorMessage = "The scanner did not return a terminal result within the expected time. No result was inferred; start a new scan.";
 
   await query(
     `
@@ -156,14 +156,14 @@ async function markScanFailed(input: {
       input.scan.id,
       input.scan.domain_id,
       input.scan.organization_id,
-      "Ops marked stale running scan as failed.",
+      "Ops reconciler marked an orphaned running scan as failed after no terminal Lambda result arrived.",
       {
         failedAt,
         lastEventAt: input.latestEvent?.created_at ?? null,
         lastEventMessage: input.latestEvent?.message ?? null,
         minEventStaleMinutes: input.minEventStaleMinutes,
         minRunAgeMinutes: input.minRunAgeMinutes,
-        reason: "stale_running_scan",
+        reason: "lambda_terminal_result_absent",
         runAgeMinutes: input.runAgeMinutes
       }
     ]

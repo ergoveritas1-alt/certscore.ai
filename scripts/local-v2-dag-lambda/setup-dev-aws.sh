@@ -5,6 +5,7 @@ region="${AWS_REGION:-eu-central-1}"
 prefix="${CERTSCORE_V2_DAG_LAMBDA_DEV_PREFIX:-certscore-v2-dag-local}"
 function_name="${CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME:-${prefix}-lambda}"
 queue_name="${CERTSCORE_V2_DAG_LAMBDA_QUEUE_NAME:-${prefix}-results}"
+failure_queue_name="${CERTSCORE_V2_DAG_LAMBDA_FAILURE_QUEUE_NAME:-${prefix}-async-failures}"
 role_name="${CERTSCORE_V2_DAG_LAMBDA_ROLE_NAME:-${prefix}-role}"
 zip_path="${CERTSCORE_V2_DAG_LAMBDA_ZIP:-${1:-}}"
 
@@ -47,6 +48,18 @@ queue_arn="$(aws sqs get-queue-attributes \
   --attribute-names QueueArn \
   --query 'Attributes.QueueArn' \
   --output text)"
+failure_queue_url="$(aws sqs create-queue \
+  --region "$region" \
+  --queue-name "$failure_queue_name" \
+  --attributes VisibilityTimeout=60,MessageRetentionPeriod=1209600 \
+  --query QueueUrl \
+  --output text)"
+failure_queue_arn="$(aws sqs get-queue-attributes \
+  --region "$region" \
+  --queue-url "$failure_queue_url" \
+  --attribute-names QueueArn \
+  --query 'Attributes.QueueArn' \
+  --output text)"
 
 trust_policy="$(mktemp)"
 permission_policy="$(mktemp)"
@@ -81,7 +94,7 @@ cat >"$permission_policy" <<JSON
     {
       "Effect": "Allow",
       "Action": "sqs:SendMessage",
-      "Resource": "${queue_arn}"
+      "Resource": ["${queue_arn}", "${failure_queue_arn}"]
     }
   ]
 }
@@ -132,6 +145,13 @@ else
     --environment "Variables={CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV=local}" >/dev/null
 fi
 
+aws lambda put-function-event-invoke-config \
+  --region "$region" \
+  --function-name "$function_name" \
+  --maximum-event-age-in-seconds 60 \
+  --maximum-retry-attempts 0 \
+  --destination-config "OnFailure={Destination=${failure_queue_arn}}" >/dev/null
+
 cat <<EOF
 Created/updated local v2 DAG Lambda resources:
   AWS_REGION=${region}
@@ -140,5 +160,6 @@ Created/updated local v2 DAG Lambda resources:
   CERTSCORE_V2_DAG_LAMBDA_${location_env_prefix}_ENABLED=true
   CERTSCORE_V2_DAG_LAMBDA_${location_env_prefix}_FUNCTION_NAME=${function_name}
   CERTSCORE_V2_DAG_LAMBDA_${location_env_prefix}_RESULT_QUEUE_URL=${queue_url}
+  CERTSCORE_V2_DAG_LAMBDA_ASYNC_FAILURE_QUEUE_URL=${failure_queue_url}
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV=local
 EOF

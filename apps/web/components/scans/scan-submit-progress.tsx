@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 export type LocalV2ScanProfile = "standard" | "tiny";
 
@@ -48,17 +48,11 @@ export function ScanSubmitProgressBar({
   ), [profileValue]);
   const estimate = progressEstimate ?? derivedEstimate;
   const elapsedSeconds = startedAtMs ? Math.max(0, Math.floor((nowMs - startedAtMs) / 1_000)) : 0;
-  const progressValue = calculateDisplayedScanProgress({
-    active,
+  const progressPhase = describeScanProgressPhase({
     elapsedMs: elapsedSeconds * 1_000,
     estimatedDurationMs: estimate.estimatedDurationMs
   });
-  const progressPhase = active
-    ? describeScanProgressPhase({
-        elapsedMs: elapsedSeconds * 1_000,
-        estimatedDurationMs: estimate.estimatedDurationMs
-      })
-    : "";
+  const delayed = elapsedSeconds * 1_000 > estimate.estimatedDurationMs * 2;
 
   if (!active) {
     return null;
@@ -67,13 +61,16 @@ export function ScanSubmitProgressBar({
   return (
     <div className={compact ? "rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm" : "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"}>
       <div className={compact ? "flex items-center justify-between gap-3 text-xs font-medium text-slate-600" : "flex items-center justify-between gap-3 text-sm font-medium text-slate-700"}>
-        <span className="min-w-0 truncate">{progressPhase}</span>
-        <span className="shrink-0">{progressValue}% ready | {elapsedSeconds}s elapsed</span>
+        <span className="min-w-0 truncate">{delayed ? "taking longer than usual" : progressPhase}</span>
+        <span className="shrink-0">{elapsedSeconds}s elapsed</span>
       </div>
-      <div className={compact ? "mt-2 h-2 overflow-hidden rounded-full bg-slate-200" : "mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200"}>
+      <div
+        aria-label={delayed ? "Scan is taking longer than usual" : "Scan is in progress"}
+        className={compact ? "mt-2 h-2 overflow-hidden rounded-full bg-slate-200" : "mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200"}
+        role="progressbar"
+      >
         <div
-          className="h-full rounded-full bg-sky-500 transition-[width] duration-700"
-          style={{ width: `${progressValue}%` }}
+          className="h-full w-1/3 animate-pulse rounded-full bg-sky-500"
         />
       </div>
     </div>
@@ -171,30 +168,6 @@ export function normalizeLocalV2ScanProfile(value: unknown): LocalV2ScanProfile 
   return value === "tiny" ? "tiny" : "standard";
 }
 
-export function calculateDisplayedScanProgress(input: {
-  active: boolean;
-  elapsedMs: number;
-  estimatedDurationMs: number;
-}) {
-  if (!input.active) {
-    return 0;
-  }
-
-  const estimatedDurationMs = Math.max(6_000, input.estimatedDurationMs);
-  const ratio = Math.max(0, input.elapsedMs) / estimatedDurationMs;
-  const progress = ratio <= 0.18
-    ? interpolate(ratio, 0, 0.18, 4, 22)
-    : ratio <= 0.55
-      ? interpolate(ratio, 0.18, 0.55, 22, 63)
-      : ratio <= 0.88
-        ? interpolate(ratio, 0.55, 0.88, 63, 84)
-        : ratio <= 1.35
-          ? interpolate(ratio, 0.88, 1.35, 84, 93)
-          : 93 + (1 - Math.exp(-(ratio - 1.35) / 1.6)) * 3;
-
-  return Math.max(4, Math.min(96, Math.round(progress)));
-}
-
 export function describeScanProgressPhase(input: {
   elapsedMs: number;
   estimatedDurationMs: number;
@@ -209,10 +182,7 @@ export function describeScanProgressPhase(input: {
   if (ratio < 0.76) {
     return "checking policies";
   }
-  if (ratio < 1.05) {
-    return "mirroring evidence";
-  }
-  return "opening report";
+  return "processing retained evidence";
 }
 
 export function estimateScanProgressForOptions(input: {
@@ -232,18 +202,4 @@ export function estimateScanProgressForOptions(input: {
   const estimatedDurationMs = profileEstimateMs;
   const modeLabel = `${profileValue} scan`;
   return { estimatedDurationMs, modeLabel };
-}
-
-function interpolate(
-  value: number,
-  inputMin: number,
-  inputMax: number,
-  outputMin: number,
-  outputMax: number,
-) {
-  if (inputMax <= inputMin) {
-    return outputMax;
-  }
-  const clampedRatio = Math.max(0, Math.min(1, (value - inputMin) / (inputMax - inputMin)));
-  return outputMin + (outputMax - outputMin) * clampedRatio;
 }

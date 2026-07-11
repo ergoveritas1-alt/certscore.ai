@@ -1122,6 +1122,40 @@ export async function insertQueuedFullScanEvent(input: {
   );
 }
 
+export async function updateLocalV2DagLambdaDispatchState(input: {
+  acceptedAt?: string;
+  dispatchState: "accepted" | "failed";
+  errorMessage?: string;
+  invocationRequestId?: string | null;
+  scanId: string;
+}) {
+  await query(
+    `update scans
+        set scan_config_json = jsonb_set(
+          scan_config_json,
+          '{execution,v2DagLambda}',
+          coalesce(scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || $2::jsonb,
+          true
+        ),
+        status = case when $3 = 'failed' then 'failed' else status end,
+        completed_at = case when $3 = 'failed' then coalesce(completed_at, now()) else completed_at end,
+        error_message = case when $3 = 'failed' then coalesce($4, error_message) else error_message end,
+        updated_at = now()
+      where id = $1
+        and status in ('queued', 'running')`,
+    [
+      input.scanId,
+      {
+        ...(input.acceptedAt ? { acceptedAt: input.acceptedAt } : {}),
+        dispatchState: input.dispatchState,
+        ...(input.invocationRequestId ? { invocationRequestId: input.invocationRequestId } : {})
+      },
+      input.dispatchState,
+      input.errorMessage ?? null
+    ]
+  );
+}
+
 export async function updateDomainLatestScan(input: {
   completedAt?: string | null;
   domainId: string;

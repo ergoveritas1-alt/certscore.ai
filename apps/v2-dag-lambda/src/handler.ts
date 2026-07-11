@@ -28,6 +28,10 @@ export const LOCAL_V2_DAG_SCANNER_RUNTIME = "certscore-v2-dag-parallel-path";
 export const POST_CONSENT_FLOW_SCANNING_ENABLED = false;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_SCREENSHOT_TIMEOUT_MS = 15_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS = 15_000;
+export const LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS = 60_000;
+export const LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS = 45_000;
+export const LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS = 52_000;
+export const LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS = 7_000;
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
@@ -185,11 +189,11 @@ type LocalV2DagLambdaShardResult = {
 };
 
 type SqsSendClient = {
-  send(command: SendMessageCommand): Promise<SendMessageCommandOutput>;
+  send(command: SendMessageCommand, options?: { abortSignal?: AbortSignal }): Promise<SendMessageCommandOutput>;
 };
 
 type S3PutClient = {
-  send(command: PutObjectCommand): Promise<PutObjectCommandOutput>;
+  send(command: PutObjectCommand, options?: { abortSignal?: AbortSignal }): Promise<PutObjectCommandOutput>;
 };
 
 type S3GetClient = {
@@ -209,14 +213,48 @@ type ArtifactChainResult = {
 export type LocalV2DagLambdaRuntimeDiagnostics = ReturnType<typeof buildLocalV2DagLambdaRuntimeDiagnostics>;
 
 type HandlerOptions = {
+  artifactChainTimeoutMs?: number;
+  handlerSafetyTimeoutMs?: number;
   lambdaClient?: LambdaInvokeClient;
   now?: () => Date;
-  runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: { artifactRoot: string }) => Promise<ArtifactChainResult>;
+  resultPublishTimeoutMs?: number;
+  runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: { artifactRoot: string; signal?: AbortSignal }) => Promise<ArtifactChainResult>;
+  scannerWorkTimeoutMs?: number;
   s3GetClient?: S3GetClient;
   s3Client?: S3PutClient;
   sqsClient?: SqsSendClient;
   workspaceRoot?: string;
 };
+
+class LocalV2DagLambdaSafetyTimeoutError extends Error {
+  readonly code = "v2_dag_lambda_safety_timeout";
+
+  constructor(readonly timeoutMs: number) {
+    super(`Scanner exceeded its ${timeoutMs}ms internal safety deadline before the Lambda hard timeout.`);
+    this.name = "LocalV2DagLambdaSafetyTimeoutError";
+  }
+}
+
+async function withHandlerSafetyTimeout<T>(
+  work: Promise<T>,
+  timeoutMs: number,
+  onTimeout?: () => void
+): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          onTimeout?.();
+          reject(new LocalV2DagLambdaSafetyTimeoutError(timeoutMs));
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -514,6 +552,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     phaseLabelPrefix?: string;
     preConsentScreenshotMode?: "always" | "selective" | "never";
     s3Client?: S3PutClient;
+    signal?: AbortSignal;
     workspaceRoot?: string;
   }
 ): Promise<{
@@ -537,7 +576,8 @@ export async function runLocalV2DagLambdaArtifactChain(
     phaseLabelPrefix: options.phaseLabelPrefix,
     phaseTimings,
     preConsentScreenshotMode: options.preConsentScreenshotMode ?? scanTuning.preConsentScreenshotMode,
-    scanTuning
+    scanTuning,
+    signal: options.signal
   });
   const [egressAvailable, bundle] = await Promise.all([egressPreflightPromise, scanBundlePromise]);
   if (!egressAvailable) {
@@ -554,7 +594,8 @@ export async function runLocalV2DagLambdaArtifactChain(
     payload,
     phaseTimings,
     s3Client: options.s3Client,
-    scanTuning
+    scanTuning,
+    signal: options.signal
   });
 }
 
@@ -566,6 +607,7 @@ async function runLocalV2DagLambdaScanBundle(
     phaseTimings: LocalV2DagLambdaPhaseTiming[];
     preConsentScreenshotMode?: "always" | "selective" | "never";
     scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
+    signal?: AbortSignal;
   }
 ) {
   return timeLambdaPhase(options.phaseTimings, phaseLabel(options.phaseLabelPrefix, "scan"), async () => {
@@ -583,6 +625,7 @@ async function runLocalV2DagLambdaScanBundle(
         profile: payload.profile,
         scenarioPlanningMode: "planned_parallel",
         scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
+        signal: options.signal,
         url: payload.targetUrl
       });
     } finally {
@@ -608,6 +651,7 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
   s3Client?: S3PutClient;
   scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
+  signal?: AbortSignal;
 }): Promise<{
   artifactMetadata: LocalV2DagLambdaArtifactMetadata;
   artifactPointers: LocalV2DagLambdaArtifactPointers;
@@ -628,7 +672,8 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     timeLambdaPhase(phaseTimings, "auxiliary_upload", () => uploadAuxiliaryArtifactFiles({
       artifactRoot,
       payload,
-      s3Client: input.s3Client
+      s3Client: input.s3Client,
+      signal: input.signal
     })),
     timeLambdaPhase(phaseTimings, "scan_artifact_upload", () => uploadArtifactFiles({
       fields: ["scanArtifactUri"],
@@ -636,7 +681,8 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
       payload,
       pointers,
       scanArtifactPath,
-      s3Client: input.s3Client
+      s3Client: input.s3Client,
+      signal: input.signal
     }))
   ]);
   await timeLambdaPhase(phaseTimings, "manifest_write", () => writeManifest({
@@ -654,7 +700,8 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     payload,
     pointers,
     scanArtifactPath,
-    s3Client: input.s3Client
+    s3Client: input.s3Client,
+    signal: input.signal
   }));
   return {
     artifactMetadata: {
@@ -1830,6 +1877,7 @@ export async function uploadAuxiliaryArtifactFiles(input: {
   artifactRoot: string;
   payload: LocalV2DagLambdaDispatchPayload;
   s3Client?: S3PutClient;
+  signal?: AbortSignal;
 }): Promise<LocalV2DagLambdaAuxiliaryArtifact[]> {
   const entries = await readdir(input.artifactRoot, { withFileTypes: true });
   const fileNames = entries
@@ -1859,7 +1907,7 @@ export async function uploadAuxiliaryArtifactFiles(input: {
         "certscore-production-finding-integration": "false",
         "certscore-v2-artifact-only": "true"
       }
-    }));
+    }), { abortSignal: input.signal });
     return {
       fileName,
       sha256: object.sha256,
@@ -1886,6 +1934,7 @@ export async function uploadArtifactFiles(input: {
   pointers: LocalV2DagLambdaArtifactPointers;
   s3Client?: S3PutClient;
   scanArtifactPath: string;
+  signal?: AbortSignal;
 }): Promise<LocalV2DagLambdaArtifactMetadata> {
   const s3Client = input.s3Client ?? new S3Client({ region: input.payload.awsRegion });
   const artifacts = [
@@ -1911,7 +1960,7 @@ export async function uploadArtifactFiles(input: {
         "certscore-production-finding-integration": "false",
         "certscore-v2-artifact-only": "true"
       }
-    }));
+    }), { abortSignal: input.signal });
     return {
       field: artifact.field,
       metadata: {
@@ -2091,21 +2140,38 @@ export async function sendLocalV2DagLambdaResultMessage(input: {
   message: LocalV2DagLambdaResultMessage;
   queueUrl: string;
   sqsClient?: SqsSendClient;
+  timeoutMs?: number;
 }) {
   const sqsClient = input.sqsClient ?? new SQSClient({ region: parseQueueRegion(input.queueUrl) });
-  await sqsClient.send(new SendMessageCommand({
-    MessageBody: JSON.stringify(input.message),
-    QueueUrl: input.queueUrl
-  }));
+  const controller = new AbortController();
+  const timeoutMs = Math.max(10, input.timeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS);
+  await withHandlerSafetyTimeout(
+    sqsClient.send(new SendMessageCommand({
+      MessageBody: JSON.stringify(input.message),
+      QueueUrl: input.queueUrl
+    }), { abortSignal: controller.signal }),
+    timeoutMs,
+    () => controller.abort(new Error("Terminal SQS publication deadline reached."))
+  );
 }
 
 export async function handler(event: unknown, options: HandlerOptions = {}) {
   let payload: LocalV2DagLambdaDispatchPayload | null = null;
   const now = options.now ?? (() => new Date());
   const handlerStartedAt = now();
+  const handlerStartedAtMs = Date.now();
   let artifactChainStartedAt: Date | undefined;
   let artifactChainCompletedAt: Date | undefined;
   let phaseTimings: LocalV2DagLambdaPhaseTiming[] | undefined;
+  let scannerAbortController: AbortController | undefined;
+  let scannerDeadlineTimer: NodeJS.Timeout | undefined;
+  let handlerSafetyTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS;
+  let resultPublishTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS;
+
+  const remainingResultPublishMs = () => Math.max(
+    10,
+    Math.min(resultPublishTimeoutMs, handlerStartedAtMs + handlerSafetyTimeoutMs - Date.now())
+  );
 
   try {
     payload = parseLocalV2DagLambdaDispatchPayload(event);
@@ -2120,7 +2186,37 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     const runArtifactChain = options.runArtifactChain ?? ((dispatchPayload, runOptions) =>
       runLocalV2DagLambdaArtifactChain(dispatchPayload, { ...runOptions, s3Client: options.s3Client, workspaceRoot }));
     artifactChainStartedAt = now();
-    const artifactResult = await runArtifactChain(payload, { artifactRoot });
+    const configuredHandlerSafetyTimeoutMs = options.handlerSafetyTimeoutMs ?? (
+      Number(process.env.CERTSCORE_V2_DAG_LAMBDA_HANDLER_SAFETY_TIMEOUT_MS) ||
+      LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS
+    );
+    handlerSafetyTimeoutMs = Math.max(
+      options.handlerSafetyTimeoutMs === undefined ? 5_000 : 10,
+      Math.min(configuredHandlerSafetyTimeoutMs, 60_000)
+    );
+    const scannerWorkTimeoutMs = Math.max(10, Math.min(
+      options.scannerWorkTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS,
+      Math.max(10, handlerSafetyTimeoutMs - 15_000)
+    ));
+    const artifactChainTimeoutMs = Math.max(scannerWorkTimeoutMs, Math.min(
+      options.artifactChainTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
+      Math.max(scannerWorkTimeoutMs, handlerSafetyTimeoutMs - 8_000)
+    ));
+    resultPublishTimeoutMs = Math.max(10, Math.min(
+      options.resultPublishTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,
+      Math.max(10, handlerSafetyTimeoutMs - artifactChainTimeoutMs)
+    ));
+    scannerAbortController = new AbortController();
+    scannerDeadlineTimer = setTimeout(() => {
+      scannerAbortController?.abort(new Error(`Scanner work exceeded its ${scannerWorkTimeoutMs}ms deadline.`));
+    }, scannerWorkTimeoutMs);
+    const artifactResult = await withHandlerSafetyTimeout(
+      runArtifactChain(payload, { artifactRoot, signal: scannerAbortController.signal }),
+      artifactChainTimeoutMs,
+      () => scannerAbortController?.abort(new Error(`Artifact chain exceeded its ${artifactChainTimeoutMs}ms deadline.`))
+    );
+    clearTimeout(scannerDeadlineTimer);
+    scannerDeadlineTimer = undefined;
     artifactChainCompletedAt = now();
     phaseTimings = artifactResult.phaseTimings;
     const completedAt = now();
@@ -2142,10 +2238,14 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     await sendLocalV2DagLambdaResultMessage({
       message: result,
       queueUrl: payload.resultQueueUrl,
-      sqsClient: options.sqsClient
+      sqsClient: options.sqsClient,
+      timeoutMs: remainingResultPublishMs()
     });
     return result;
   } catch (error) {
+    const scannerDeadlineAborted = scannerAbortController?.signal.aborted === true;
+    if (scannerDeadlineTimer) clearTimeout(scannerDeadlineTimer);
+    scannerAbortController?.abort(error);
     if (!payload) {
       throw error;
     }
@@ -2164,7 +2264,11 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     const result = buildLocalV2DagLambdaResultMessage({
       completedAt,
       error: {
-        code: "v2_dag_lambda_failed",
+        code: error instanceof LocalV2DagLambdaSafetyTimeoutError
+          ? error.code
+          : scannerDeadlineAborted
+            ? "v2_dag_lambda_safety_timeout"
+          : "v2_dag_lambda_failed",
         message: error instanceof Error ? error.message : String(error)
       },
       handlerTiming: buildLocalV2DagLambdaHandlerTiming({
@@ -2180,7 +2284,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     await sendLocalV2DagLambdaResultMessage({
       message: result,
       queueUrl: payload.resultQueueUrl,
-      sqsClient: options.sqsClient
+      sqsClient: options.sqsClient,
+      timeoutMs: remainingResultPublishMs()
     });
     return result;
   }
