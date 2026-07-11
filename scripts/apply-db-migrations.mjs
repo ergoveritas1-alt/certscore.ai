@@ -177,7 +177,10 @@ async function main() {
   }
 }
 
-void main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+void main().then(
+  () => process.exit(0),
+  (error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+);

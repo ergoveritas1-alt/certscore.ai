@@ -20,3 +20,8 @@ test("deploy-all does not race the standalone DB workflow against the target web
   const deploySource = await readFile("scripts/deploy-fast.ts", "utf8");
   assert.match(deploySource, /the web workflow applies migrations from the target image before ECS promotion/);
 });
+
+test("the one-off migration process exits after a successful run", async () => {
+  const migrationSource = await readFile("scripts/apply-db-migrations.mjs", "utf8");
+  assert.match(migrationSource, /\(\) => process\.exit\(0\)/);
+});
