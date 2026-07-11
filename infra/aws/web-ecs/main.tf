@@ -46,6 +46,7 @@ locals {
     var.privacy_request_to_email_secret_arn,
     var.stripe_secret_key_secret_arn,
     var.stripe_webhook_secret_secret_arn,
+    var.bx01_observed_signal_ingest_token_secret_arn,
     data.aws_secretsmanager_secret.oauth_jwt.arn
   ])
   base_environment = concat(
@@ -58,6 +59,7 @@ locals {
       { name = "HOSTNAME", value = "0.0.0.0" },
       { name = "NEXT_PUBLIC_AUTH_GOOGLE_ENABLED", value = var.next_public_auth_google_enabled },
       { name = "CERTSCORE_ADMIN_EMAILS", value = var.certscore_admin_emails },
+      { name = "CERTSCORE_AUTH_ALLOWED_EMAILS", value = var.certscore_admin_emails },
       { name = "CERTSCORE_V2_DAG_LAMBDA_ENABLED", value = "true" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE", value = "sharded" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV", value = "production" },
@@ -97,7 +99,9 @@ locals {
     var.privacy_request_to_email_secret_arn != "" ? [{ name = "PRIVACY_REQUEST_TO_EMAIL", valueFrom = var.privacy_request_to_email_secret_arn }] : []
     ,
     var.stripe_secret_key_secret_arn != "" ? [{ name = "STRIPE_SECRET_KEY", valueFrom = var.stripe_secret_key_secret_arn }] : [],
-    var.stripe_webhook_secret_secret_arn != "" ? [{ name = "STRIPE_WEBHOOK_SECRET", valueFrom = var.stripe_webhook_secret_secret_arn }] : []
+    var.stripe_webhook_secret_secret_arn != "" ? [{ name = "STRIPE_WEBHOOK_SECRET", valueFrom = var.stripe_webhook_secret_secret_arn }] : [],
+    var.bx01_observed_signal_ingest_token_secret_arn != "" ? [{ name = "BX01_OBSERVED_SIGNAL_INGEST_TOKEN", valueFrom = var.bx01_observed_signal_ingest_token_secret_arn }] : [],
+    [{ name = "CERTSCORE_OAUTH_JWT_SECRET", valueFrom = data.aws_secretsmanager_secret.oauth_jwt.arn }]
   )
   certscore_base_url = local.certificate_arn != null ? "https://${var.certscore_domain_name}" : "http://${aws_lb.web.dns_name}"
 }

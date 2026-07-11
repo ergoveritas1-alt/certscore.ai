@@ -250,6 +250,12 @@ variable "stripe_webhook_secret_secret_arn" {
   default     = ""
 }
 
+variable "bx01_observed_signal_ingest_token_secret_arn" {
+  description = "Optional Secrets Manager ARN for the bounded BX01 observed-signal ingest token."
+  type        = string
+  default     = ""
+}
+
 variable "stripe_price_individual_monthly" {
   description = "Stripe monthly price id for the CertScore Starter plan."
   type        = string
