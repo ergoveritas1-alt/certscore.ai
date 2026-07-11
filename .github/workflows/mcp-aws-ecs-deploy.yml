@@ -75,6 +75,7 @@ jobs:
       - name: Verify and test MCP source
         run: |
           pnpm ops:check:mcp-source
+          pnpm --filter @certscore/mcp-http build:deps
           pnpm --filter @certscore/api-contracts test
           pnpm --filter @certscore/sdk test
           pnpm --filter @certscore/mcp-auth test
