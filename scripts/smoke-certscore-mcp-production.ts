@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -31,6 +32,18 @@ type ToolPayload = Record<string, unknown> & {
     scanId?: string;
     status?: string;
     domain?: string;
+    noGo?: {
+      reason?: string;
+      title?: string;
+      explanation?: string;
+      recommendation?: string;
+    };
+  };
+  noGo?: {
+    reason?: string;
+    title?: string;
+    explanation?: string;
+    recommendation?: string;
   };
   findings?: Array<{ id?: string }>;
   rows?: unknown[];
@@ -309,6 +322,19 @@ async function runInstalledMcpSmoke(token: string) {
       if (!toolNames.includes(toolName)) {
         throw new Error(`Missing required MCP tool: ${toolName}`);
       }
+    }
+
+    const noGoScanId = process.env.CERTSCORE_MCP_PROD_NO_GO_SCAN_ID?.trim();
+    if (noGoScanId) {
+      const noGoScan = await callTool(client, "get_scan", { scanId: noGoScanId });
+      const noGo = noGoScan.noGo ?? noGoScan.scan?.noGo;
+      assert.equal(noGoScan.status ?? noGoScan.scan?.status, "completed_limited");
+      assert.ok(noGo?.reason, "Production no-go scan should retain a stable reason.");
+      assert.ok(noGo?.title && noGo.title.length > 5, "Production no-go scan should include a customer-facing title.");
+      assert.ok(noGo?.explanation && noGo.explanation.length > 10, "Production no-go scan should include an explanation.");
+      assert.ok(noGo?.recommendation && noGo.recommendation.length > 10, "Production no-go scan should include a recommendation.");
+      summarize("no_go_get_scan", noGoScan);
+      console.log(`no_go_contract=passed reason=${noGo.reason} title=${JSON.stringify(noGo.title)}`);
     }
 
     const created = await callTool(client, "scan_site", {
