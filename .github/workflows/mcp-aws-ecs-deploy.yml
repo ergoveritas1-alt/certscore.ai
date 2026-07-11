@@ -134,7 +134,10 @@ jobs:
       - name: Inspect ECR image scan
         run: |
           aws ecr wait image-scan-complete --repository-name "${ECR_MCP_REPOSITORY}" --image-id "imageTag=${GITHUB_SHA}" || true
-          findings="$(aws ecr describe-image-scan-findings --repository-name "${ECR_MCP_REPOSITORY}" --image-id "imageTag=${GITHUB_SHA}" --query 'imageScanFindings.findingSeverityCounts' --output json 2>/dev/null || echo '{}')"
+          scan="$(aws ecr describe-image-scan-findings --repository-name "${ECR_MCP_REPOSITORY}" --image-id "imageTag=${GITHUB_SHA}" --output json)"
+          scan_status="$(jq -r '.imageScanStatus.status // "UNKNOWN"' <<<"${scan}")"
+          test "${scan_status}" = "COMPLETE" || (echo "MCP image scan did not complete: ${scan_status}" && exit 1)
+          findings="$(jq -c '.imageScanFindings.findingSeverityCounts // {}' <<<"${scan}")"
           echo "ECR image scan findings: ${findings}"
           critical="$(jq -r '.CRITICAL // 0' <<<"${findings}")"
           test "${critical}" = "0" || (echo "MCP image has CRITICAL ECR findings" && exit 1)
