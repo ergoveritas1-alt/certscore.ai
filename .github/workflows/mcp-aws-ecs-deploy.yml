@@ -1,0 +1,197 @@
+name: MCP AWS ECS Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".dockerignore"
+      - ".github/workflows/mcp-aws-ecs-deploy.yml"
+      - "apps/mcp/**"
+      - "packages/certscore-api-contracts/**"
+      - "packages/certscore-mcp-auth/**"
+      - "packages/certscore-mcp/**"
+      - "packages/certscore-sdk/**"
+      - "scripts/check-mcp-http-deploy-readiness.ts"
+      - "scripts/smoke-certscore-mcp-http-tools-diff.ts"
+      - "scripts/verify-mcp-source-tracked.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig.base.json"
+      - "turbo.json"
+  workflow_dispatch:
+
+# MCP and web containers share one ECS task definition.
+concurrency:
+  group: public-web-aws-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-mcp-aws:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      ECR_MCP_REPOSITORY: certscore-web-mcp
+      ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER || 'certscore-web-cluster' }}
+      ECS_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE || 'certscore-web-certscore' }}
+      ECS_CONTAINER_NAME: mcp-http
+      ECS_LOG_GROUP: /ecs/certscore-web/mcp
+      MCP_TARGET_GROUP_NAME: certscore-web-mcp
+      MCP_PUBLIC_URL: https://mcp.certscore.ai
+      OAUTH_ISSUER: https://certscore.ai
+      OAUTH_SECRET_ID: certscore/oauth-jwt-secret
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate consolidated deploy configuration
+        run: |
+          test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing AWS_ROLE_TO_ASSUME" && exit 1)
+          test "${AWS_REGION}" = "us-west-1" || (echo "Hosted MCP must deploy in us-west-1" && exit 1)
+          test "${ECS_CLUSTER_NAME}" = "certscore-web-cluster" || (echo "Unexpected ECS cluster: ${ECS_CLUSTER_NAME}" && exit 1)
+          test "${ECS_SERVICE_NAME}" = "certscore-web-certscore" || (echo "Unexpected ECS service: ${ECS_SERVICE_NAME}" && exit 1)
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify and test MCP source
+        run: |
+          pnpm ops:check:mcp-source
+          pnpm --filter @certscore/api-contracts test
+          pnpm --filter @certscore/sdk test
+          pnpm --filter @certscore/mcp-auth test
+          pnpm --filter @certscore/mcp test
+          pnpm --filter @certscore/mcp-http test
+          pnpm --filter @certscore/mcp-http typecheck
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+
+      - name: Validate live consolidated service
+        run: |
+          current_task_definition="$(aws ecs describe-services --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}" --query 'services[0].taskDefinition' --output text)"
+          test -n "${current_task_definition}" && test "${current_task_definition}" != "None"
+          containers="$(aws ecs describe-task-definition --task-definition "${current_task_definition}" --query 'taskDefinition.containerDefinitions[].name' --output text)"
+          grep -qw certscore-web <<<"${containers}"
+          grep -qw mcp-http <<<"${containers}"
+          echo "PREVIOUS_TASK_DEFINITION_ARN=${current_task_definition}" >> "${GITHUB_ENV}"
+          target_group_arn="$(aws elbv2 describe-target-groups --names "${MCP_TARGET_GROUP_NAME}" --query 'TargetGroups[0].TargetGroupArn' --output text)"
+          test -n "${target_group_arn}" && test "${target_group_arn}" != "None"
+          echo "MCP_TARGET_GROUP_ARN=${target_group_arn}" >> "${GITHUB_ENV}"
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push immutable MCP image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          MCP_VERSION="$(node -p "require('./packages/certscore-mcp/package.json').version")"
+          MCP_IMAGE="${REGISTRY}/${ECR_MCP_REPOSITORY}"
+          MCP_CACHE="${MCP_IMAGE}:buildcache"
+          RELEASE_TAG="mcp-v${MCP_VERSION}"
+          if aws ecr describe-images --repository-name "${ECR_MCP_REPOSITORY}" --image-ids "imageTag=${GITHUB_SHA}" >/dev/null 2>&1; then
+            echo "Reusing immutable SHA image ${MCP_IMAGE}:${GITHUB_SHA}."
+          else
+            build_args=(--provenance=false --sbom=false --cache-from "type=registry,ref=${MCP_CACHE}" --cache-to "type=registry,ref=${MCP_CACHE},mode=max" -f apps/mcp/Dockerfile --build-arg "BUILD_GIT_REF=${GITHUB_REF_NAME}" --build-arg "BUILD_GIT_SHA=${GITHUB_SHA}" --build-arg "BUILD_IMAGE_TAG=${GITHUB_SHA}" --build-arg "BUILD_RUNTIME_TARGET=ecs-fargate" -t "${MCP_IMAGE}:${GITHUB_SHA}" -t "${MCP_IMAGE}:latest")
+            if ! aws ecr describe-images --repository-name "${ECR_MCP_REPOSITORY}" --image-ids "imageTag=${RELEASE_TAG}" >/dev/null 2>&1; then
+              build_args+=(-t "${MCP_IMAGE}:${RELEASE_TAG}")
+            fi
+            docker buildx build "${build_args[@]}" --push .
+          fi
+          image_digest="$(aws ecr describe-images --repository-name "${ECR_MCP_REPOSITORY}" --image-ids "imageTag=${GITHUB_SHA}" --query 'imageDetails[0].imageDigest' --output text)"
+          test -n "${image_digest}" && test "${image_digest}" != "None"
+          echo "MCP_VERSION=${MCP_VERSION}" >> "${GITHUB_ENV}"
+          echo "MCP_IMAGE=${MCP_IMAGE}" >> "${GITHUB_ENV}"
+          echo "MCP_IMAGE_DIGEST=${image_digest}" >> "${GITHUB_ENV}"
+
+      - name: Inspect ECR image scan
+        run: |
+          aws ecr wait image-scan-complete --repository-name "${ECR_MCP_REPOSITORY}" --image-id "imageTag=${GITHUB_SHA}" || true
+          findings="$(aws ecr describe-image-scan-findings --repository-name "${ECR_MCP_REPOSITORY}" --image-id "imageTag=${GITHUB_SHA}" --query 'imageScanFindings.findingSeverityCounts' --output json 2>/dev/null || echo '{}')"
+          echo "ECR image scan findings: ${findings}"
+          critical="$(jq -r '.CRITICAL // 0' <<<"${findings}")"
+          test "${critical}" = "0" || (echo "MCP image has CRITICAL ECR findings" && exit 1)
+
+      - name: Register combined task definition
+        run: |
+          aws ecs describe-task-definition --task-definition "${PREVIOUS_TASK_DEFINITION_ARN}" | jq '.taskDefinition | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) | .containerDefinitions = (.containerDefinitions | map(if .name == env.ECS_CONTAINER_NAME then .image = "\(env.MCP_IMAGE):\(env.GITHUB_SHA)" else . end))' > /tmp/mcp-task-definition.json
+          task_definition_arn="$(aws ecs register-task-definition --cli-input-json file:///tmp/mcp-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)"
+          echo "MCP_TASK_DEFINITION_ARN=${task_definition_arn}" >> "${GITHUB_ENV}"
+
+      - name: Deploy combined task definition
+        run: |
+          aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_SERVICE_NAME}" --task-definition "${MCP_TASK_DEFINITION_ARN}" --force-new-deployment >/dev/null
+          aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}"
+
+      - name: Verify target and deployed image
+        run: |
+          unhealthy_count="$(aws elbv2 describe-target-health --target-group-arn "${MCP_TARGET_GROUP_ARN}" --query 'length(TargetHealthDescriptions[?TargetHealth.State!=`healthy`])' --output text)"
+          test "${unhealthy_count}" = "0"
+          active_task="$(aws ecs list-tasks --cluster "${ECS_CLUSTER_NAME}" --service-name "${ECS_SERVICE_NAME}" --desired-status RUNNING --query 'taskArns[0]' --output text)"
+          deployed_image="$(aws ecs describe-tasks --cluster "${ECS_CLUSTER_NAME}" --tasks "${active_task}" --query 'tasks[0].containers[?name==`mcp-http`].image' --output text)"
+          test "${deployed_image}" = "${MCP_IMAGE}:${GITHUB_SHA}"
+
+      - name: Verify public metadata and authenticated tools
+        run: |
+          live_version=""
+          for attempt in {1..30}; do
+            live_version="$(curl -fsS "${MCP_PUBLIC_URL}/healthz" | jq -r '.version // empty')" || true
+            if [[ "${live_version}" = "${MCP_VERSION}" ]]; then break; fi
+            sleep 5
+          done
+          test "${live_version}" = "${MCP_VERSION}"
+          oauth_secret="$(aws secretsmanager get-secret-value --secret-id "${OAUTH_SECRET_ID}" --query SecretString --output text)"
+          test -n "${oauth_secret}"
+          echo "::add-mask::${oauth_secret}"
+          CERTSCORE_OAUTH_JWT_SECRET="${oauth_secret}" pnpm ops:check:mcp-http-deploy -- --live
+          CERTSCORE_OAUTH_JWT_SECRET="${oauth_secret}" pnpm mcp:certscore:http:tools-diff
+          unset oauth_secret
+
+      - name: Deployment summary
+        run: |
+          echo "### CertScore MCP HTTP" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Version: ${MCP_VERSION}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Image: ${MCP_IMAGE}:${GITHUB_SHA}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Digest: ${MCP_IMAGE_DIGEST}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Previous task definition: ${PREVIOUS_TASK_DEFINITION_ARN}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Active task definition: ${MCP_TASK_DEFINITION_ARN}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Rollback: update ${ECS_SERVICE_NAME} to ${PREVIOUS_TASK_DEFINITION_ARN}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Roll back on failed verification
+        if: ${{ failure() && env.MCP_TASK_DEFINITION_ARN != '' && env.PREVIOUS_TASK_DEFINITION_ARN != '' }}
+        run: |
+          aws ecs update-service --cluster "${ECS_CLUSTER_NAME}" --service "${ECS_SERVICE_NAME}" --task-definition "${PREVIOUS_TASK_DEFINITION_ARN}" --force-new-deployment >/dev/null
+          aws ecs wait services-stable --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}"
+
+      - name: Print diagnostics on failure
+        if: ${{ failure() }}
+        run: |
+          aws ecs describe-services --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}" || true
+          if [[ -n "${MCP_TARGET_GROUP_ARN:-}" ]]; then aws elbv2 describe-target-health --target-group-arn "${MCP_TARGET_GROUP_ARN}" || true; fi
+          aws logs filter-log-events --log-group-name "${ECS_LOG_GROUP}" --start-time "$(( ($(date +%s) - 900) * 1000 ))" --max-items 50 || true

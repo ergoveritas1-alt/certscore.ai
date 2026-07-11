@@ -6,11 +6,13 @@ CertScore outputs are automated public-web observations for review. They are not
 
 ## Status
 
-The SDK is published as `@certscore/sdk` on npm. Use version `0.2.3` or newer when you need API v2 scan timing fields.
+The SDK is published as `@certscore/sdk` on npm. Use version `0.2.4` or newer for typed completed-limited no-go results and API v2 scan timing fields.
 
 ```bash
 npm install @certscore/sdk
 ```
+
+Completed no-go scans resolve normally with `status: "completed_limited"`, `resultDisposition: "no_go"`, and a typed `noGo` object. The object carries a stable reason, customer-safe explanation, target-site or scanner-limitation attribution through `limitationKind`, retry guidance, and a bounded `evidenceExcerpt` when available.
 
 ## Quick Start
 

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { CertScoreClient } from "./client.js";
 import { CertScoreScanFailedError, CertScoreTimeoutError, InvalidUrlError, ThrottledError } from "./errors.js";
+import type { ScanNoGoReasonCode } from "./types.js";
 
 type MockResponse = {
   status: number;
@@ -60,6 +61,14 @@ const pulse = {
   disclaimer: "CertScore provides automated public-web observations for review."
 } as const;
 
+const supportedNoGoReasons: ScanNoGoReasonCode[] = [
+  "blank_or_unusable_page", "loading_or_stalled", "not_found_404", "parked_or_placeholder",
+  "site_not_ready", "captcha_or_challenge", "access_denied_or_forbidden_page", "rate_limited_429",
+  "server_error_5xx", "configuration_error", "maintenance_or_unavailable", "tls_or_certificate_error",
+  "unsupported_region", "navigation_transport_failure", "visual_capture_failed_or_placeholder",
+  "retained_visual_error_shell", "unknown"
+];
+
 test("scan returns immediate 200 JSON", async () => {
   const mock = installFetch([{ status: 200, body: pulse }]);
   try {
@@ -108,6 +117,7 @@ test("packaged declarations expose API v2 scan timing fields", () => {
   assert.match(declarations, /startedAt\?: string \| null;/);
   assert.match(declarations, /completedAt\?: string \| null;/);
   assert.match(declarations, /scanTimeSeconds\?: number \| null;/);
+  assert.match(declarations, /evidenceExcerpt\?: string;/);
 });
 
 test("pulse.evidence retrieves the bounded Evidence JSON artifact", async () => {
@@ -137,7 +147,8 @@ test("SDK preserves typed completed-limited no-go scan resources", async () => {
       summary: "A prelaunch page was observed.",
       limitationKind: "target_site_state",
       recommendedNextAction: "Retry after launch.",
-      retryLikelyToHelp: false
+      retryLikelyToHelp: false,
+      evidenceExcerpt: "Your browser cannot render the visitor. Check back at launch."
     }
   }}]);
   try {
@@ -147,6 +158,37 @@ test("SDK preserves typed completed-limited no-go scan resources", async () => {
     assert.equal(result.resultDisposition, "no_go");
     assert.equal(result.noGo?.reasonCode, "site_not_ready");
     assert.equal(result.noGo?.recommendedNextAction, "Retry after launch.");
+    assert.match(result.noGo?.evidenceExcerpt ?? "", /Check back at launch/);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("SDK preserves every supported no-go reason without changing terminal status", async () => {
+  const mock = installFetch(supportedNoGoReasons.map((reasonCode) => ({ status: 200, body: {
+    type: "certscore_scan",
+    scanId: `scan_${reasonCode}`,
+    domain: "example.com",
+    status: "completed_limited",
+    resultDisposition: "no_go",
+    noGo: {
+      reasonCode,
+      title: "Customer-safe title",
+      explanation: "Customer-safe explanation of the observed page state.",
+      summary: "The scan completed with limited coverage.",
+      limitationKind: "target_site_state",
+      recommendedNextAction: "Review the retained evidence and retry when appropriate.",
+      retryLikelyToHelp: true
+    }
+  }})));
+  try {
+    const client = new CertScoreClient({ baseUrl: "https://certscore.test" });
+    for (const reasonCode of supportedNoGoReasons) {
+      const result = await client.scans.get(`scan_${reasonCode}`);
+      assert.equal(result.status, "completed_limited", reasonCode);
+      assert.equal(result.resultDisposition, "no_go", reasonCode);
+      assert.equal(result.noGo?.reasonCode, reasonCode, reasonCode);
+    }
   } finally {
     mock.restore();
   }

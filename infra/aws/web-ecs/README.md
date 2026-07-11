@@ -88,6 +88,19 @@ The default example now targets the RDS/default VPC because that is the fastest 
 
 The MCP HTTP runtime shares the CertScore web task ENI and Fargate allocation. The ALB keeps separate target groups for ports 3000 and 3004, so the web and MCP health checks and host routing remain independent without a second ECS task or public IPv4 address.
 
+The hosted sidecar is built from tracked `apps/mcp` and `packages/certscore-mcp-auth` source by `.github/workflows/mcp-aws-ecs-deploy.yml`. That workflow serializes with the web deploy, pushes a Git-SHA image to `certscore-web-mcp`, registers a new combined task-definition revision, verifies OAuth metadata and authenticated `tools/list`, and automatically rolls back to the previous task definition if production verification fails. Do not deploy to the retired standalone MCP service.
+
+Manual rollback keeps the prior task definition and immutable image available:
+
+```bash
+aws ecs update-service \
+  --region us-west-1 \
+  --cluster certscore-web-cluster \
+  --service certscore-web-certscore \
+  --task-definition <previous-certscore-web-certscore-revision> \
+  --force-new-deployment
+```
+
 ### Runtime config inputs
 
 - `BUILD_RUNTIME_TARGET=ecs-fargate`

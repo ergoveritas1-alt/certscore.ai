@@ -415,7 +415,7 @@ test("Pulse route validates supplied integration bearer tokens outside the findi
   const source = readFileSync("apps/web/app/api/v1/pulse/route.ts", "utf8");
 
   assert.match(source, /parseBearerToken/);
-  assert.match(source, /validateIntegrationApiKey/);
+  assert.match(source, /validateCertScoreBearerToken/);
   assert.match(source, /requiredScopesForPulseRequest/);
   assert.match(source, /channel: "mcp"/);
   assert.match(source, /source: "mcp"/);
@@ -547,11 +547,17 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.developerDocs.evidenceBoundaries, "https://certscore.ai/developers/examples#evidence-boundaries");
   assert.equal(aiDiscovery.api.docs, "https://certscore.ai/developers/reference");
   assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
+  assert.equal(aiDiscovery.sdk.distribution, "npm");
+  assert.equal(aiDiscovery.sdk.status, "published");
+  assert.equal(aiDiscovery.sdk.currentVersion, "0.2.4");
   assert.equal(aiDiscovery.mcp.docs, "https://certscore.ai/developers/mcp");
   assert.equal(aiDiscovery.mcp.distribution, "homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
   assert.equal(aiDiscovery.mcp.currentVersion, "0.2.5");
+  assert.equal(aiDiscovery.mcp.hosted.endpoint, "https://mcp.certscore.ai/mcp");
+  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.6");
+  assert.match(aiDiscovery.mcp.hosted.authentication, /PKCE/);
   assert.equal(
     aiDiscovery.mcp.install,
     "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp"

@@ -1,0 +1,125 @@
+import assert from "node:assert/strict";
+import { spawn, type ChildProcess } from "node:child_process";
+import { createServer } from "node:net";
+import test from "node:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { signCertScoreAccessToken } from "@certscore/mcp-auth";
+
+async function unusedPort() {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const port = address.port;
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  return port;
+}
+
+async function waitForHealth(url: string, child: ChildProcess) {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error(`MCP HTTP test server exited with ${child.exitCode}.`);
+    }
+    try {
+      const response = await fetch(`${url}/healthz`);
+      if (response.ok) return;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("Timed out waiting for MCP HTTP test server.");
+}
+
+test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and sessions", async () => {
+  const port = await unusedPort();
+  const origin = `http://127.0.0.1:${port}`;
+  const secret = "mcp-http-integration-secret-long-enough";
+  const child = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
+    cwd: new URL("..", import.meta.url),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CERTSCORE_BASE_URL: "https://certscore.ai",
+      CERTSCORE_OAUTH_JWT_SECRET: secret,
+      MCP_PUBLIC_URL: origin,
+      OAUTH_ISSUER: "https://certscore.ai",
+      CORS_ALLOWED_ORIGINS: "https://allowed.example"
+    },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  let diagnostics = "";
+  child.stdout?.on("data", (chunk) => { diagnostics += String(chunk); });
+  child.stderr?.on("data", (chunk) => { diagnostics += String(chunk); });
+
+  try {
+    await waitForHealth(origin, child);
+    const metadata = await fetch(`${origin}/.well-known/oauth-protected-resource`).then((response) => response.json());
+    assert.deepEqual(metadata.authorization_servers, ["https://certscore.ai"]);
+
+    const unauthenticated = await fetch(`${origin}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })
+    });
+    assert.equal(unauthenticated.status, 401);
+    assert.match(unauthenticated.headers.get("www-authenticate") ?? "", /oauth-protected-resource/);
+
+    const token = signCertScoreAccessToken({
+      audience: origin,
+      clientId: "integration_client",
+      issuer: "https://certscore.ai",
+      jwtSecret: secret,
+      organizationId: null,
+      scopes: ["scan:read", "mcp"],
+      subject: "integration_user",
+      userId: "integration_user"
+    });
+    const forbiddenOrigin = await fetch(`${origin}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        origin: "https://forbidden.example"
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })
+    });
+    assert.equal(forbiddenOrigin.status, 403);
+
+    const transport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
+      requestInit: { headers: { authorization: `Bearer ${token}` } }
+    });
+    const client = new Client({ name: "certscore-http-integration", version: "0.1.0" });
+    await client.connect(transport);
+    const tools = await client.listTools();
+    assert.ok(tools.tools.some((tool) => tool.name === "get_scan"));
+    assert.ok(tools.tools.some((tool) => tool.name === "scan_site"));
+    await client.close();
+
+    const invalidSession = await fetch(`${origin}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "mcp-session-id": "missing-session"
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} })
+    });
+    assert.equal(invalidSession.status, 404);
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${diagnostics}`);
+  } finally {
+    child.kill("SIGTERM");
+    await new Promise<void>((resolve) => {
+      if (child.exitCode !== null) return resolve();
+      child.once("exit", () => resolve());
+      setTimeout(() => {
+        child.kill("SIGKILL");
+        resolve();
+      }, 3_000).unref();
+    });
+  }
+});

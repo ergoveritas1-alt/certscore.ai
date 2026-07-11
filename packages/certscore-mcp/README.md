@@ -2,7 +2,7 @@
 
 CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
 
-Status: public developer preview. The server is distributed for external macOS MCP clients through Homebrew. Local WC01 development uses `pnpm mcp:certscore`.
+Status: public developer preview. Version 0.2.6 is available as a Homebrew/npm stdio server and as a hosted OAuth-protected Streamable HTTP service. Local WC01 development uses `pnpm mcp:certscore`.
 
 Public docs:
 
@@ -13,16 +13,16 @@ Public docs:
 
 ## Tools
 
-- `create_scan` - Deprecated compatibility alias of scan_site. Removed in 0.2.0. Use scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links.
-- `scan_site` - Start or reuse a CertScore public-web scan for a public URL. API v2 responses may include startedAt, completedAt, and scanTimeSeconds.
-- `get_scan` - Retrieve the API v2 public-safe scan resource for a stable scan ID, including startedAt, completedAt, and scanTimeSeconds when available.
-- `get_scan_status` - Pass scanId (preferred, API v2) to retrieve status and scan timing fields. Pass jobId only for a just-created scan that has not yet returned a scanId.
-- `get_report` - Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet.
+- `create_scan` - Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable.
+- `scan_site` - Start or reuse a CertScore public-web scan. Completed no-go scans return completed_limited status, structured reason-specific guidance, and timing when available.
+- `get_scan` - Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.
+- `get_scan_status` - Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available.
+- `get_report` - Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet.
 - `get_evidence` - Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.
-- `export_findings` - Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows.
+- `export_findings` - Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows.
 - `list_findings` - List API v2 public-safe findings already projected for a scan.
 - `get_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.
-- `explain_finding` - Explain a single CertScore finding with public evidence, caveats, and reviewer next steps.
+- `explain_finding` - Explain one projected finding with public evidence, caveats, reviewer next steps, and reason-specific no-go context when applicable.
 - `get_latest_domain_scan` - Retrieve the latest eligible API v2 public-safe scan for a domain.
 - `get_latest_domain_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.
 
@@ -37,6 +37,27 @@ MCP tools backed by API v2 scan resources return scan timing when CertScore has 
 - `scanTimeSeconds`
 
 This applies to `scan_site` when it returns an API v2 scan resource or job, `get_scan`, and `get_scan_status` when called with a `scanId`. `scanTimeSeconds: null` means timing is unavailable or incomplete and should not be displayed as `0`.
+
+## Completed-Limited No-Go Results
+
+No-go scans are usable terminal results, not transport failures. Relevant tools retain `status: "completed_limited"`, `resultDisposition: "no_go"`, the stable reason code, customer-safe title and explanation, `limitationKind` attribution, retry guidance, and a bounded `evidenceExcerpt` when retained. Unknown future reasons use generic customer copy while remaining structured as `reasonCode: "unknown"`.
+
+## Hosted Streamable HTTP
+
+OAuth-capable MCP clients can connect to:
+
+```text
+https://mcp.certscore.ai/mcp
+```
+
+Discovery endpoints:
+
+```text
+https://mcp.certscore.ai/.well-known/oauth-protected-resource
+https://certscore.ai/.well-known/oauth-authorization-server
+```
+
+The hosted service uses OAuth authorization code with PKCE. Default read access requests `scan:read mcp`; support-gated scan creation additionally requests `scan:create`. The same tool implementation and output contracts power stdio and hosted transports.
 
 ## Configuration
 
@@ -95,7 +116,7 @@ CERTSCORE_REQUEST_TIMEOUT_MS=300000
 
 ## API Key Access
 
-MCP clients usually need `scan:read`, `scan:create`, and `mcp` scopes. Request developer-preview access by emailing `support@certscore.ai` with your organization, MCP client, expected workflow, expected request volume, contact email, and requested scopes.
+Stdio API keys use `pulse:read` and `mcp`; creating scans additionally requires `pulse:scan`. Hosted OAuth uses `scan:read` and `mcp`, with support-gated `scan:create`. Request scan-creation access by emailing `support@certscore.ai` with your organization, MCP client, expected workflow, expected request volume, and contact email.
 
 ## Verify Install
 

@@ -2,6 +2,8 @@
 
 CertScore MCP is distributed to external macOS MCP clients through Homebrew. The release artifact installs a persistent `certscore-mcp` command without requiring an npm account or npm package ownership.
 
+The hosted Streamable HTTP runtime is a separate deployment of the same tool contracts at `https://mcp.certscore.ai/mcp`. Releasing Homebrew does not update that sidecar; the consolidated MCP ECS workflow must also deploy and verify the matching version.
+
 CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.
 
 ## Build
@@ -41,6 +43,7 @@ The tarball contains:
 3. Let `.github/workflows/certscore-mcp-linux-release.yml` create the release tarball and `SHA256SUMS` on Ubuntu.
 4. Review and merge the cask/formula bump PR opened by the workflow.
 5. Bump the well-known manifest only after the release asset and cask/formula bump exist.
+6. Confirm the hosted MCP health endpoint reports the same version and run the authenticated stdio-versus-HTTP tool parity smoke.
 
 Expected user install:
 

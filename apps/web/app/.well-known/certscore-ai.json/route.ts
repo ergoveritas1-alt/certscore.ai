@@ -1,6 +1,6 @@
 const discoveryDocument = {
   name: "CertScore AI and API discovery",
-  version: "2026-06-30",
+  version: "2026-07-10",
   type: "certscore_ai_discovery",
   description:
     "Vendor-neutral discovery document for CertScore public API, SDK, MCP, OpenAPI, and agent-readable documentation.",
@@ -68,8 +68,11 @@ const discoveryDocument = {
   sdk: {
     docs: "https://certscore.ai/developers/sdk",
     repositoryPath: "packages/certscore-sdk",
-    distribution: "source_preview",
-    status: "public_package_not_published"
+    distribution: "npm",
+    status: "published",
+    package: "@certscore/sdk",
+    currentVersion: "0.2.4",
+    install: "npm install @certscore/sdk@0.2.4"
   },
   mcp: {
     distribution: "homebrew",
@@ -81,6 +84,14 @@ const discoveryDocument = {
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
     verify: ["certscore-mcp --version", "certscore-mcp --help", "CERTSCORE_API_KEY=<token> certscore-mcp doctor"],
     transport: "stdio",
+    hosted: {
+      transport: "streamable_http",
+      endpoint: "https://mcp.certscore.ai/mcp",
+      protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
+      authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
+      authentication: "OAuth 2.0 authorization code with PKCE",
+      currentVersion: "0.2.6"
+    },
     currentTools: [
       "scan_site",
       "create_scan",

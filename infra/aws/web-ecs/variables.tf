@@ -85,13 +85,25 @@ variable "image_tag" {
 variable "mcp_image_tag" {
   description = "Immutable image tag for the MCP HTTP sidecar deployed with the CertScore web task."
   type        = string
-  default     = "3ec31789770d0bdcfd334aa0a5d2f183f50a5348"
+  default     = "mcp-v0.2.6"
 }
 
 variable "mcp_ecr_repository_name" {
   description = "ECR repository containing the MCP HTTP sidecar image."
   type        = string
   default     = "certscore-web-mcp"
+}
+
+variable "mcp_domain_name" {
+  description = "Public hostname for the consolidated MCP service routed through the shared web ALB."
+  type        = string
+  default     = "mcp.certscore.ai"
+}
+
+variable "mcp_certificate_arn" {
+  description = "ACM certificate ARN in aws_region covering mcp_domain_name."
+  type        = string
+  default     = ""
 }
 
 variable "app_flavor" {

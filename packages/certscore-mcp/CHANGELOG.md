@@ -1,8 +1,10 @@
 # certscore-mcp
 
-## Unreleased
+## 0.2.6
 
 - Preserve structured no-go disposition, reason-specific messaging, and retry guidance in scan, status, report, export, and explanation tools.
+- Add the reproducible Streamable HTTP runtime, OAuth PKCE authorization flow, consolidated ECS deployment path, and authenticated transport parity smoke coverage.
+- Preserve completed-limited status, result attribution, and bounded no-go evidence excerpts across stdio and hosted transports.
 
 ## 0.2.5
 

@@ -27,3 +27,13 @@ output "web_ecr_repository_url" {
   description = "ECR repository URL for the public web image."
   value       = aws_ecr_repository.web.repository_url
 }
+
+output "mcp_ecr_repository_url" {
+  description = "ECR repository URL for the consolidated MCP sidecar image."
+  value       = aws_ecr_repository.mcp.repository_url
+}
+
+output "mcp_target_group_arn" {
+  description = "Target group ARN for consolidated MCP health checks and deployment verification."
+  value       = aws_lb_target_group.mcp.arn
+}

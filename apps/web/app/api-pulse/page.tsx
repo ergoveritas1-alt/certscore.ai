@@ -110,16 +110,16 @@ const detailLevels = [
 ] as const;
 
 const mcpTools = [
-  ["create_scan", "Deprecated compatibility alias of scan_site. Removed in 0.2.0. Use scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links."],
-  ["scan_site", "Start or reuse a CertScore public-web scan for a public URL. API v2 responses may include startedAt, completedAt, and scanTimeSeconds."],
-  ["get_scan", "Retrieve the API v2 public-safe scan resource for a stable scan ID, including startedAt, completedAt, and scanTimeSeconds when available."],
-  ["get_scan_status", "Pass scanId (preferred, API v2) to retrieve status and scan timing fields. Pass jobId only for a just-created scan that has not yet returned a scanId."],
-  ["get_report", "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet."],
+  ["create_scan", "Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable."],
+  ["scan_site", "Start or reuse a CertScore public-web scan. Completed no-go scans return completed_limited status, structured reason-specific guidance, and timing when available."],
+  ["get_scan", "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available."],
+  ["get_scan_status", "Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available."],
+  ["get_report", "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet."],
   ["get_evidence", "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."],
-  ["export_findings", "Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows."],
+  ["export_findings", "Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows."],
   ["list_findings", "List API v2 public-safe findings already projected for a scan."],
   ["get_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan."],
-  ["explain_finding", "Explain a single CertScore finding with public evidence, caveats, and reviewer next steps."],
+  ["explain_finding", "Explain one projected finding with public evidence, caveats, reviewer next steps, and reason-specific no-go context when applicable."],
   ["get_latest_domain_scan", "Retrieve the latest eligible API v2 public-safe scan for a domain."],
   ["get_latest_domain_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain."]
 ] as const;

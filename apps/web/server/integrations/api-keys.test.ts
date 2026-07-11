@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { signCertScoreAccessToken } from "@certscore/mcp-auth";
 import {
   INTEGRATION_API_KEY_DAILY_LIMIT,
   INTEGRATION_API_KEY_HOURLY_LIMIT,
@@ -18,7 +19,8 @@ import {
   hashSelfServeApiKeyRequester,
   isDisposableEmailDomain,
   isIntegrationApiKeyScope,
-  parseBearerToken
+  parseBearerToken,
+  validateCertScoreBearerToken
 } from "./api-keys";
 
 test("generateIntegrationApiKey creates preview keys with stable prefixes", () => {
@@ -64,6 +66,32 @@ test("isIntegrationApiKeyScope only accepts known scoped actions", () => {
   assert.equal(isIntegrationApiKeyScope("pulse:scan"), true);
   assert.equal(isIntegrationApiKeyScope("mcp"), true);
   assert.equal(isIntegrationApiKeyScope("admin"), false);
+});
+
+test("OAuth access tokens map onto existing API/MCP bearer scopes", async () => {
+  const previousSecret = process.env.CERTSCORE_OAUTH_JWT_SECRET;
+  process.env.CERTSCORE_OAUTH_JWT_SECRET = "integration-api-oauth-secret-long-enough";
+  const token = signCertScoreAccessToken({
+    audience: "https://mcp.certscore.ai",
+    clientId: "client_test",
+    issuer: "https://certscore.ai",
+    jwtSecret: process.env.CERTSCORE_OAUTH_JWT_SECRET,
+    organizationId: "org_test",
+    scopes: ["scan:read", "mcp"],
+    subject: "user_test",
+    userId: "user_test"
+  });
+  try {
+    const read = await validateCertScoreBearerToken(token, ["pulse:read", "mcp"]);
+    assert.equal(read.ok, true);
+    assert.deepEqual(read.ok && read.key.scopes, ["mcp", "pulse:read"]);
+    const create = await validateCertScoreBearerToken(token, ["pulse:scan"]);
+    assert.equal(create.ok, false);
+    assert.equal(!create.ok && create.reason, "missing_scope");
+  } finally {
+    if (previousSecret === undefined) delete process.env.CERTSCORE_OAUTH_JWT_SECRET;
+    else process.env.CERTSCORE_OAUTH_JWT_SECRET = previousSecret;
+  }
 });
 
 test("self-serve requester hashing and disposable-domain checks are normalized", () => {

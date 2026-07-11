@@ -25,6 +25,27 @@ export default function DeveloperMcpPage() {
             <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">certscore-mcp</code> command before connecting Claude Desktop,
             Cursor, Windsurf, or another stdio-compatible MCP client.
           </p>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+            OAuth-capable clients can connect directly to the hosted Streamable HTTP endpoint at
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">https://mcp.certscore.ai/mcp</code>. The hosted endpoint uses
+            OAuth authorization code flow with PKCE and does not require placing a long-lived API key in client configuration.
+          </p>
+        </Section>
+
+        <Section eyebrow="Hosted MCP" title="Connect with OAuth and Streamable HTTP">
+          <CodeBlock>{`MCP endpoint:
+https://mcp.certscore.ai/mcp
+
+Protected-resource metadata:
+https://mcp.certscore.ai/.well-known/oauth-protected-resource
+
+Authorization-server metadata:
+https://certscore.ai/.well-known/oauth-authorization-server`}</CodeBlock>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Read access requests the OAuth scopes <code className="rounded bg-white px-1">scan:read</code> and
+            <code className="ml-1 rounded bg-white px-1">mcp</code>. Scan creation additionally requires the support-gated
+            <code className="ml-1 rounded bg-white px-1">scan:create</code> scope.
+          </p>
         </Section>
 
         <Section eyebrow="Install" title="Homebrew setup">
@@ -37,10 +58,11 @@ brew install --cask certscore-mcp`}</CodeBlock>
 
         <Section eyebrow="Access" title="Use a scoped MCP key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            MCP read tools work with a self-serve <code className="rounded bg-white px-1">cs_ro_</code> key carrying{" "}
-            <code className="rounded bg-white px-1">scan:read</code> and <code className="rounded bg-white px-1">mcp</code>. Sign in,
+            The local stdio MCP server works with a self-serve <code className="rounded bg-white px-1">cs_ro_</code> key carrying{" "}
+            <code className="rounded bg-white px-1">pulse:read</code> and <code className="rounded bg-white px-1">mcp</code>. Sign in,
             verify your email, then request the key from <code className="rounded bg-white px-1">/api/v2/keys/request</code>.
-            Tools that create scans require <code className="rounded bg-white px-1">scan:create</code> and remain support-gated at{" "}
+            Stdio tools that create scans require <code className="rounded bg-white px-1">pulse:scan</code>; hosted OAuth uses
+            <code className="ml-1 rounded bg-white px-1">scan:create</code>. Both remain support-gated at{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>
@@ -177,6 +199,15 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
 const status = await get_scan_status({ scanId });
 
 // scan.scanTimeSeconds and status.scanTimeSeconds are numbers or null.`}</CodeBlock>
+        </Section>
+
+        <Section eyebrow="Completed with limited coverage" title="No-go results remain structured">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Scan, status, report, export, and explanation tools preserve
+            <code className="mx-1 rounded bg-white px-1">completed_limited</code>,
+            <code className="rounded bg-white px-1">resultDisposition: no_go</code>, the stable reason code, customer-safe copy,
+            target-site versus scanner-limitation attribution, retry guidance, and a bounded evidence excerpt when retained.
+          </p>
         </Section>
 
         <Section eyebrow="Choosing an integration" title="MCP vs REST API vs SDK">

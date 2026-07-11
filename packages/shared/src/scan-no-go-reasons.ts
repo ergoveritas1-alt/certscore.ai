@@ -347,6 +347,7 @@ export type ExternalScanNoGoResult = {
   limitationKind: ScanNoGoLimitationKind;
   recommendedNextAction: string;
   retryLikelyToHelp: boolean;
+  evidenceExcerpt?: string;
 };
 
 export type ExternalScanNoGoProjection = {
@@ -398,6 +399,16 @@ function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 }
 
+function boundedPublicEvidenceExcerpt(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized || /^[a-z0-9_:-]+$/i.test(normalized)) return null;
+  return normalized.slice(0, 360);
+}
+
 /** Public-safe projection of a retained, structured scan no-go assessment. */
 export function projectExternalScanNoGo(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
@@ -422,6 +433,12 @@ export function projectExternalScanNoGo(
         ? String(plainRecord(assessment.supportingSignals)?.visualPageState)
         : null;
   const presentation = resolveScanNoGoPresentation(internalReasonCode, pageState);
+  const visualEvidence = [
+    ...stringArray(visualReview?.keyVisualEvidence),
+    ...stringArray(visualReview?.key_visual_evidence),
+    typeof visualReview?.shortExplanation === "string" ? visualReview.shortExplanation : null,
+    typeof visualReview?.short_explanation === "string" ? visualReview.short_explanation : null,
+  ].map(boundedPublicEvidenceExcerpt).find((value): value is string => Boolean(value));
   return {
     resultDisposition: "no_go",
     noGo: {
@@ -432,6 +449,7 @@ export function projectExternalScanNoGo(
       limitationKind: presentation.limitationKind,
       recommendedNextAction: presentation.recommendedNextAction,
       retryLikelyToHelp: presentation.retryLikelyToHelp,
+      ...(visualEvidence ? { evidenceExcerpt: visualEvidence } : {}),
     },
   };
 }

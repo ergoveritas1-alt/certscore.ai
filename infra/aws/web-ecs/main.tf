@@ -4,10 +4,6 @@ data "aws_secretsmanager_secret" "oauth_jwt" {
   name = "certscore/oauth-jwt-secret"
 }
 
-data "aws_lb_target_group" "mcp" {
-  name = "certscore-web-mcp"
-}
-
 data "tls_certificate" "github_actions_oidc" {
   url = "https://token.actions.githubusercontent.com"
 }
@@ -18,6 +14,7 @@ locals {
   public_subnets              = var.public_subnet_ids
   private_subnets             = var.private_subnet_ids
   certificate_arn             = trimspace(var.existing_certificate_arn) != "" ? var.existing_certificate_arn : null
+  mcp_certificate_arn         = trimspace(var.mcp_certificate_arn) != "" ? var.mcp_certificate_arn : null
   create_cluster              = trimspace(var.existing_ecs_cluster_name) == ""
   ecs_cluster_name            = local.create_cluster ? aws_ecs_cluster.web[0].name : var.existing_ecs_cluster_name
   common_tags                 = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "web-ecs" })
@@ -107,7 +104,7 @@ locals {
 
 resource "aws_security_group" "alb" {
   name        = "${local.prefix}-alb"
-  description = "Public ingress for CertScore web"
+  description = "Public ingress for CertScore and ConsentCheck web"
   vpc_id      = local.vpc_id
 
   ingress {
@@ -180,6 +177,7 @@ resource "aws_lb" "web" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
   subnets            = local.public_subnets
+  idle_timeout       = 600
 
   tags = merge(local.common_tags, { Name = "${local.prefix}-alb" })
 }
@@ -204,6 +202,32 @@ resource "aws_lb_target_group" "certscore" {
   }
 
   tags = merge(local.common_tags, { Name = "${local.prefix}-certscore-tg" })
+}
+
+resource "aws_lb_target_group" "mcp" {
+  name        = substr(replace("${local.prefix}-mcp", "/[^a-zA-Z0-9-]/", "-"), 0, 32)
+  port        = 3004
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = local.vpc_id
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200-399"
+    path                = "/healthz"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 3
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = merge(local.common_tags, { Name = "${local.prefix}-mcp-tg" })
 }
 
 resource "aws_lb_listener" "http" {
@@ -249,10 +273,46 @@ resource "aws_lb_listener" "https" {
   }
 }
 
+resource "aws_lb_listener_certificate" "mcp" {
+  count = local.certificate_arn != null && local.mcp_certificate_arn != null ? 1 : 0
+
+  listener_arn    = aws_lb_listener.https[0].arn
+  certificate_arn = local.mcp_certificate_arn
+}
+
+resource "aws_lb_listener_rule" "mcp_host" {
+  count = local.certificate_arn != null && local.mcp_certificate_arn != null ? 1 : 0
+
+  listener_arn = aws_lb_listener.https[0].arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.mcp.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.mcp_domain_name]
+    }
+  }
+}
+
 resource "aws_cloudwatch_log_group" "certscore" {
   name              = "/ecs/${local.prefix}/certscore"
   retention_in_days = 30
   tags              = local.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "mcp" {
+  name              = "/ecs/${local.prefix}/mcp"
+  retention_in_days = 30
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = local.common_tags
 }
 
 resource "aws_ecr_repository" "web" {
@@ -261,6 +321,21 @@ resource "aws_ecr_repository" "web" {
 
   image_scanning_configuration {
     scan_on_push = true
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_ecr_repository" "mcp" {
+  name                 = var.mcp_ecr_repository_name
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 
   tags = local.common_tags
@@ -295,6 +370,36 @@ resource "aws_ecr_lifecycle_policy" "web" {
         action = {
           type = "expire"
         }
+      }
+    ]
+  })
+}
+
+resource "aws_ecr_lifecycle_policy" "mcp" {
+  repository = aws_ecr_repository.mcp.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Expire untagged images after 14 days"
+        selection = {
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
+          countNumber = 14
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 10
+        description  = "Keep only the newest 20 images"
+        selection = {
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
+          countNumber = 20
+        }
+        action = { type = "expire" }
       }
     ]
   })
@@ -478,12 +583,13 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "ecr:CompleteLayerUpload",
           "ecr:DescribeImages",
           "ecr:DescribeRepositories",
+          "ecr:DescribeImageScanFindings",
           "ecr:GetDownloadUrlForLayer",
           "ecr:InitiateLayerUpload",
           "ecr:PutImage",
           "ecr:UploadLayerPart"
         ]
-        Resource = concat([aws_ecr_repository.web.arn], var.github_actions_extra_ecr_repository_arns)
+        Resource = concat([aws_ecr_repository.web.arn, aws_ecr_repository.mcp.arn], var.github_actions_extra_ecr_repository_arns)
       },
       {
         Effect = "Allow"
@@ -498,6 +604,19 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "ecs:UpdateService"
         ]
         Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeTargetHealth"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = data.aws_secretsmanager_secret.oauth_jwt.arn
       },
       {
         Effect   = "Allow"
@@ -559,7 +678,7 @@ resource "aws_ecs_task_definition" "certscore" {
     },
     {
       name      = "mcp-http"
-      image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${var.mcp_ecr_repository_name}:${var.mcp_image_tag}"
+      image     = "${aws_ecr_repository.mcp.repository_url}:${var.mcp_image_tag}"
       essential = true
       portMappings = [
         {
@@ -593,7 +712,7 @@ resource "aws_ecs_task_definition" "certscore" {
       logConfiguration = {
         logDriver = "awslogs"
         options = {
-          awslogs-group         = "/ecs/certscore-web/mcp"
+          awslogs-group         = aws_cloudwatch_log_group.mcp.name
           awslogs-region        = var.aws_region
           awslogs-stream-prefix = "ecs"
         }
@@ -630,7 +749,7 @@ resource "aws_ecs_service" "certscore" {
   }
 
   load_balancer {
-    target_group_arn = data.aws_lb_target_group.mcp.arn
+    target_group_arn = aws_lb_target_group.mcp.arn
     container_name   = "mcp-http"
     container_port   = 3004
   }
@@ -687,6 +806,152 @@ resource "aws_cloudwatch_metric_alarm" "certscore_unhealthy_targets" {
     LoadBalancer = aws_lb.web.arn_suffix
     TargetGroup  = aws_lb_target_group.certscore.arn_suffix
   }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "mcp_no_healthy_targets" {
+  alarm_name          = "${local.prefix}-mcp-no-healthy-targets"
+  alarm_description   = "CertScore MCP target group has no healthy ALB targets."
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "HealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Minimum"
+  threshold           = 1
+  treat_missing_data  = "breaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+
+  dimensions = {
+    LoadBalancer = aws_lb.web.arn_suffix
+    TargetGroup  = aws_lb_target_group.mcp.arn_suffix
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "mcp_unhealthy_targets" {
+  alarm_name          = "${local.prefix}-mcp-unhealthy-targets"
+  alarm_description   = "CertScore MCP target group has unhealthy ALB targets."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "UnHealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+
+  dimensions = {
+    LoadBalancer = aws_lb.web.arn_suffix
+    TargetGroup  = aws_lb_target_group.mcp.arn_suffix
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "mcp_target_5xx" {
+  alarm_name          = "${local.prefix}-mcp-target-5xx"
+  alarm_description   = "CertScore MCP returned an elevated number of target 5xx responses."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "HTTPCode_Target_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 5
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+
+  dimensions = {
+    LoadBalancer = aws_lb.web.arn_suffix
+    TargetGroup  = aws_lb_target_group.mcp.arn_suffix
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "mcp_target_latency" {
+  alarm_name          = "${local.prefix}-mcp-target-latency"
+  alarm_description   = "CertScore MCP target response latency exceeded five seconds at p95."
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "TargetResponseTime"
+  namespace           = "AWS/ApplicationELB"
+  period              = 300
+  extended_statistic  = "p95"
+  threshold           = 5
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+
+  dimensions = {
+    LoadBalancer = aws_lb.web.arn_suffix
+    TargetGroup  = aws_lb_target_group.mcp.arn_suffix
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_log_metric_filter" "mcp_auth_failures" {
+  name           = "${local.prefix}-mcp-auth-failures"
+  pattern        = "{ $.event = \"mcp_http.auth_failed\" }"
+  log_group_name = "/ecs/certscore-web/mcp"
+
+  metric_transformation {
+    name      = "AuthenticationFailures"
+    namespace = "CertScore/MCP"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "mcp_auth_failures" {
+  alarm_name          = "${local.prefix}-mcp-auth-failures"
+  alarm_description   = "CertScore MCP observed an elevated number of bearer-token authentication failures."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "AuthenticationFailures"
+  namespace           = "CertScore/MCP"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 20
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_log_metric_filter" "mcp_session_capacity_evictions" {
+  name           = "${local.prefix}-mcp-session-capacity-evictions"
+  pattern        = "{ $.event = \"mcp_http.session_capacity_eviction\" }"
+  log_group_name = "/ecs/certscore-web/mcp"
+
+  metric_transformation {
+    name      = "SessionCapacityEvictions"
+    namespace = "CertScore/MCP"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "mcp_session_capacity_evictions" {
+  alarm_name          = "${local.prefix}-mcp-session-capacity-evictions"
+  alarm_description   = "CertScore MCP reached its bounded session capacity and evicted an existing session."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "SessionCapacityEvictions"
+  namespace           = "CertScore/MCP"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
 
   tags = local.common_tags
 }

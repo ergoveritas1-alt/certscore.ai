@@ -26,12 +26,29 @@ test("every canonical scan no-go reason has complete customer and snapshot prese
 test("projects a public-safe structured no-go result without diagnostic codes", () => {
   const projection = projectExternalScanNoGo({
     scan_no_go_assessment: { decision: "no_go", reasonCodes: ["site_not_ready", "scan_no_go_corroborated"] },
-    visual_access_review: { page_state: "parked_or_placeholder", reason_code: "site_not_ready" }
+    visual_access_review: {
+      page_state: "parked_or_placeholder",
+      reason_code: "site_not_ready",
+      key_visual_evidence: ["Your browser cannot render the visitor. Check back at launch."]
+    }
   });
   assert.equal(projection?.resultDisposition, "no_go");
   assert.equal(projection?.noGo.reasonCode, "site_not_ready");
   assert.equal(projection?.noGo.title, "The site is not ready for scanning");
+  assert.equal(projection?.noGo.evidenceExcerpt, "Your browser cannot render the visitor. Check back at launch.");
   assert.doesNotMatch(JSON.stringify(projection), /scan_no_go_corroborated/);
+});
+
+test("public no-go evidence excerpts are bounded and do not surface code-only diagnostics", () => {
+  const projection = projectExternalScanNoGo({
+    scan_no_go_assessment: { decision: "no_go", reasonCodes: ["not_found_404"] },
+    visual_access_review: {
+      reason_code: "not_found_404",
+      key_visual_evidence: ["not_found_404", `Page not found ${"x".repeat(500)}`]
+    }
+  });
+  assert.match(projection?.noGo.evidenceExcerpt ?? "", /^Page not found/);
+  assert.ok((projection?.noGo.evidenceExcerpt?.length ?? 0) <= 360);
 });
 
 test("external no-go projection uses unknown fallback without exposing the internal reason", () => {

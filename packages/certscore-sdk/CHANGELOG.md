@@ -1,8 +1,10 @@
 # @certscore/sdk
 
-## Unreleased
+## 0.2.4
 
 - Expose typed `resultDisposition` and `noGo` details for completed-limited no-go scans across scan, job, and Pulse resources.
+- Preserve all supported reason codes, customer-safe presentation, retry guidance, attribution, and bounded evidence excerpts.
+- Treat `completed_limited` as a usable terminal result in polling and wait workflows.
 
 ## 0.2.3
 

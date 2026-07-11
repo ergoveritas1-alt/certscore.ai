@@ -75,6 +75,33 @@ test("MCP export and explanation preserve structured no-go messaging", () => {
   assert.equal(explained.noGo?.title, "The site is not ready for scanning");
 });
 
+test("MCP export preserves every supported no-go reason", () => {
+  const reasons = [
+    "blank_or_unusable_page", "loading_or_stalled", "not_found_404", "parked_or_placeholder",
+    "site_not_ready", "captcha_or_challenge", "access_denied_or_forbidden_page", "rate_limited_429",
+    "server_error_5xx", "configuration_error", "maintenance_or_unavailable", "tls_or_certificate_error",
+    "unsupported_region", "navigation_transport_failure", "visual_capture_failed_or_placeholder",
+    "retained_visual_error_shell", "unknown"
+  ] as const;
+  for (const reasonCode of reasons) {
+    const exported = exportFindings({
+      ...report,
+      scanStatus: "completed_limited",
+      resultDisposition: "no_go",
+      noGo: {
+        reasonCode,
+        title: "Customer-safe title",
+        explanation: "Customer-safe explanation of the observed page state.",
+        summary: "The scan completed with limited coverage.",
+        limitationKind: "target_site_state",
+        recommendedNextAction: "Review the retained evidence and retry when appropriate.",
+        retryLikelyToHelp: true
+      }
+    });
+    assert.equal(exported.noGo?.reasonCode, reasonCode, reasonCode);
+  }
+});
+
 test("explainFinding includes evidence and caveats", () => {
   const explanation = explainFinding(report, "pre_consent_tracking_detected");
   assert.equal(explanation.found, true);

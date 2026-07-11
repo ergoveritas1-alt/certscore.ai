@@ -24,6 +24,7 @@ export const scanNoGoResultSchema = z.object({
   limitationKind: scanNoGoLimitationKindSchema,
   recommendedNextAction: z.string(),
   retryLikelyToHelp: z.boolean(),
+  evidenceExcerpt: z.string().max(360).optional(),
 }).strict();
 
 export type ScanResultDisposition = z.infer<typeof scanResultDispositionSchema>;

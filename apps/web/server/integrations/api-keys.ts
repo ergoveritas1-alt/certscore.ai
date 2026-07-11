@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { verifyCertScoreAccessToken } from "@certscore/mcp-auth";
 
 export type IntegrationApiKeyScope = "pulse:read" | "pulse:scan" | "mcp";
 
@@ -74,8 +75,8 @@ export function hashIntegrationApiKey(token: string) {
 }
 
 export function getIntegrationApiKeyPrefix(token: string) {
-  const parts = token.split("_");
-  return parts.length >= 3 ? `${parts[0]}_${parts[1]}_${parts[2]?.slice(0, 8)}` : token.slice(0, 20);
+  const match = token.match(/^(cs_(?:preview|live|ro))_(.{0,8})/);
+  return match?.[1] && match[2] ? `${match[1]}_${match[2]}` : token.slice(0, 20);
 }
 
 export function hashSelfServeApiKeyRequester(value: string) {
@@ -424,4 +425,61 @@ export async function validateIntegrationApiKey(token: string, requiredScopes: I
     (error) => console.error("[integration-api-key] last_used update failed", error)
   );
   return { ok: true as const, key: record };
+}
+
+function oauthKeyRecord(claims: {
+  client_id: string;
+  exp: number;
+  iat: number;
+  jti: string;
+  certscore: {
+    organizationId: string | null;
+    scopes: IntegrationApiKeyScope[];
+    userId: string | null;
+  };
+}): IntegrationApiKeyRecord {
+  return {
+    publicId: `oauth_${claims.client_id}_${claims.jti}`.slice(0, 96),
+    name: "MCP OAuth access token",
+    tokenPrefix: "oauth",
+    scopes: claims.certscore.scopes,
+    status: "active",
+    organizationId: claims.certscore.organizationId,
+    ownerUserId: claims.certscore.userId,
+    expiresAt: new Date(claims.exp * 1000).toISOString(),
+    lastUsedAt: null,
+    createdAt: new Date(claims.iat * 1000).toISOString(),
+    revokedAt: null,
+    usage: {
+      hourlyCount: 0,
+      hourlyLimit: INTEGRATION_API_KEY_HOURLY_LIMIT,
+      dailyCount: 0,
+      dailyLimit: INTEGRATION_API_KEY_DAILY_LIMIT
+    }
+  };
+}
+
+/** Validates the existing cs_* API-key format or a short-lived MCP OAuth access token. */
+export async function validateCertScoreBearerToken(token: string, requiredScopes: IntegrationApiKeyScope[]) {
+  if (API_KEY_PATTERN.test(token)) {
+    return validateIntegrationApiKey(token, requiredScopes);
+  }
+  const jwtSecret = process.env.CERTSCORE_OAUTH_JWT_SECRET?.trim() || process.env.JWT_SIGNING_KEY?.trim();
+  if (!jwtSecret) {
+    return { ok: false as const, reason: "not_found" as const };
+  }
+  const verified = verifyCertScoreAccessToken({
+    audience: process.env.MCP_PUBLIC_URL?.trim() || "https://mcp.certscore.ai",
+    issuer: process.env.OAUTH_ISSUER?.trim() || "https://certscore.ai",
+    jwtSecret,
+    token
+  });
+  if (!verified.ok) {
+    return { ok: false as const, reason: "not_found" as const };
+  }
+  const key = oauthKeyRecord(verified.claims);
+  if (!requiredScopes.every((scope) => key.scopes.includes(scope))) {
+    return { ok: false as const, reason: "missing_scope" as const, key };
+  }
+  return { ok: true as const, key };
 }

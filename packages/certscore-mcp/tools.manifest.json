@@ -1,23 +1,23 @@
 [
   {
     "name": "create_scan",
-    "description": "Deprecated compatibility alias of scan_site. Removed in 0.2.0. Use scan_site. Start a CertScore Pulse scan for a public URL and return immediately with status, scan, and polling links."
+    "description": "Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable."
   },
   {
     "name": "scan_site",
-    "description": "Start or reuse a CertScore public-web scan for a public URL. API v2 responses may include startedAt, completedAt, and scanTimeSeconds."
+    "description": "Start or reuse a CertScore public-web scan. Completed no-go scans return completed_limited status, structured reason-specific guidance, and timing when available."
   },
   {
     "name": "get_scan",
-    "description": "Retrieve the API v2 public-safe scan resource for a stable scan ID, including startedAt, completedAt, and scanTimeSeconds when available."
+    "description": "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available."
   },
   {
     "name": "get_scan_status",
-    "description": "Pass scanId (preferred, API v2) to retrieve status and scan timing fields. Pass jobId only for a just-created scan that has not yet returned a scanId."
+    "description": "Retrieve terminal status, including completed_limited no-go disposition and reason-specific guidance. Pass jobId only before a stable scanId is available."
   },
   {
     "name": "get_report",
-    "description": "Retrieve a summary CertScore Pulse report by stable scan ID. Use get_evidence for the larger bounded evidence packet."
+    "description": "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet."
   },
   {
     "name": "get_evidence",
@@ -25,7 +25,7 @@
   },
   {
     "name": "export_findings",
-    "description": "Return structured findings from a CertScore Pulse report for downstream review or ticketing workflows."
+    "description": "Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows."
   },
   {
     "name": "list_findings",
@@ -37,7 +37,7 @@
   },
   {
     "name": "explain_finding",
-    "description": "Explain a single CertScore finding with public evidence, caveats, and reviewer next steps."
+    "description": "Explain one projected finding with public evidence, caveats, reviewer next steps, and reason-specific no-go context when applicable."
   },
   {
     "name": "get_latest_domain_scan",

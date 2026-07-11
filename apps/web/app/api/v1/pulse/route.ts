@@ -26,7 +26,7 @@ import { PULSE_MIN_REUSABLE_PAGES_REQUESTED, PULSE_SCAN_COVERAGE_PLAN_CODE } fro
 import {
   checkIntegrationApiKeyUsageLimit,
   parseBearerToken,
-  validateIntegrationApiKey,
+  validateCertScoreBearerToken,
   type IntegrationApiKeyScope
 } from "../../../../server/integrations/api-keys";
 import { checkDomainDns } from "../../../../server/domains/domain-dns";
@@ -355,7 +355,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         routeName
       );
     }
-    const auth = await validateIntegrationApiKey(
+    const auth = await validateCertScoreBearerToken(
       bearer.token,
       requiredScopesForPulseRequest({ hasUrl: Boolean(rawUrl), hasScanId: Boolean(scanId), hasJobId: Boolean(jobId) })
     );

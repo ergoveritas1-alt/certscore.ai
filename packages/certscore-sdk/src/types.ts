@@ -19,6 +19,7 @@ export interface ScanNoGoResult {
   limitationKind: ScanNoGoLimitationKind;
   recommendedNextAction: string;
   retryLikelyToHelp: boolean;
+  evidenceExcerpt?: string;
 }
 
 export type PulseJobStatus =
