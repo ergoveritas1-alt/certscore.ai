@@ -57,7 +57,7 @@ FROM builder AS prod-deps
 RUN rm -rf /app/deploy/mcp \
   && pnpm --filter @certscore/mcp-http deploy --prod --legacy /app/deploy/mcp
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:22-alpine AS runtime
 
 ARG BUILD_GIT_REF=""
 ARG BUILD_GIT_SHA=""
