@@ -8,6 +8,8 @@ export { classifyLambdaScannerFleet } from "./lambda-scanner-health-core";
 export const PRODUCTION_SCANNER_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
 
 export type LambdaScannerRegionHealth = {
+  checkedAt: string;
+  detail: "configuration_unavailable" | "permission_denied" | null;
   functionName: string;
   lastUpdateStatus: string | null;
   region: (typeof PRODUCTION_SCANNER_REGIONS)[number];
@@ -36,20 +38,32 @@ function functionNameForRegion(region: LambdaScannerRegionHealth["region"]) {
 
 async function checkRegion(region: LambdaScannerRegionHealth["region"]): Promise<LambdaScannerRegionHealth> {
   const functionName = functionNameForRegion(region);
+  const checkedAt = new Date().toISOString();
   try {
     const client = new LambdaClient({ region });
     const result = await client.send(new GetFunctionConfigurationCommand({ FunctionName: functionName }));
     const state = result.State ?? null;
     const lastUpdateStatus = result.LastUpdateStatus ?? null;
     return {
+      checkedAt,
+      detail: null,
       functionName,
       lastUpdateStatus,
       region,
       state,
       status: state === "Active" && lastUpdateStatus === "Successful" ? "healthy" : "unavailable"
     };
-  } catch {
-    return { functionName, lastUpdateStatus: null, region, state: null, status: "unknown" };
+  } catch (error) {
+    const errorName = error && typeof error === "object" && "name" in error ? String(error.name) : "";
+    return {
+      checkedAt,
+      detail: errorName === "AccessDeniedException" ? "permission_denied" : "configuration_unavailable",
+      functionName,
+      lastUpdateStatus: null,
+      region,
+      state: null,
+      status: "unknown"
+    };
   }
 }
 

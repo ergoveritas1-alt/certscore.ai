@@ -213,14 +213,9 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
     };
   });
 
-  const requestItems: AdminScanListItem[] = scanRequestRows
-    .filter((request) => !getLinkedScanIdForRequest(request) || request.resolution_mode === "reused_existing_scan")
-    .map((request) => mapScanRequestRow(request));
-
   const missingSummaryScans = scanItems
     .filter((scan) => scan.status === "completed" && !scan.adminSummaryGeneratedAt)
-    .map((scan) => ({ organizationId: scan.organizationId, scanId: scan.scanId }))
-    .slice(0, 1);
+    .map((scan) => ({ organizationId: scan.organizationId, scanId: scan.scanId }));
   const materializedSummaries = await materializeAdminScanSummaries(missingSummaryScans);
   const hydratedScanItems = scanItems.map((scan) => {
     const summary = materializedSummaries.get(scan.scanId);
@@ -237,6 +232,13 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
         }
       : scan;
   });
+  const hydratedScansById = new Map(hydratedScanItems.map((scan) => [scan.scanId, scan] as const));
+  const requestItems: AdminScanListItem[] = scanRequestRows
+    .filter((request) => !getLinkedScanIdForRequest(request) || request.resolution_mode === "reused_existing_scan")
+    .map((request) => {
+      const linkedScanId = getLinkedScanIdForRequest(request);
+      return mapScanRequestRow(request, linkedScanId ? hydratedScansById.get(linkedScanId) ?? null : null);
+    });
 
   return [...hydratedScanItems, ...requestItems]
     .sort((left, right) => new Date(right.activityAt).getTime() - new Date(left.activityAt).getTime())
@@ -248,7 +250,7 @@ export async function getAdminScanOverviewMetrics(): Promise<AdminScanOverviewMe
   return await loadAdminScanOverviewCounts();
 }
 
-function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
+function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListItem | null = null): AdminScanListItem {
   const linkedScanId = getLinkedScanIdForRequest(request);
   const organizationName =
     request.organization_name ?? (request.organization_id || request.scan_organization_id ? "Unknown workspace" : "Public / anonymous");
@@ -264,26 +266,26 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     activityId: `request:${request.public_id}`,
     blockedFlag: null,
     captchaFlag: null,
-    certscoreOverall: null,
-    cmpVendorName: null,
+    certscoreOverall: linkedScan?.certscoreOverall ?? null,
+    cmpVendorName: linkedScan?.cmpVendorName ?? null,
     completedAt: request.reused_completed_at,
     createdAt: request.requested_at,
     domainHostname: request.scan_domain_hostname ?? request.normalized_domain,
     domainId: null,
-    findingCount: null,
+    findingCount: linkedScan?.findingCount ?? null,
     firstGeneratedAt: request.scan_created_at ?? request.reused_completed_at ?? null,
     freshRescanRequested: getFreshRescanRequested(request.request_context),
     highestSuccessfulTier: null,
     homepageFetchHttpStatus: null,
     interruptionLabel: null,
     interruptionReason: request.error_message,
-    industry: null,
+    industry: linkedScan?.industry ?? null,
     linkedScanId,
     organizationName,
     organizationId: request.organization_id ?? request.scan_organization_id,
     pagesScanned: 0,
-    privacyPolicyPresent: null,
-    primaryLanguage: null,
+    privacyPolicyPresent: linkedScan?.privacyPolicyPresent ?? null,
+    primaryLanguage: linkedScan?.primaryLanguage ?? null,
     recoverableFindingClasses: [],
     requestChannel: request.request_channel,
     requestPublicId: request.public_id,
@@ -305,8 +307,8 @@ function mapScanRequestRow(request: ScanRequestRow): AdminScanListItem {
     status: request.status,
     startedAt: request.scan_created_at,
     stopTier: null,
-    totalSignals: null,
-    topFindingCount: null
+    totalSignals: linkedScan?.totalSignals ?? null,
+    topFindingCount: linkedScan?.topFindingCount ?? null
   };
 }
 

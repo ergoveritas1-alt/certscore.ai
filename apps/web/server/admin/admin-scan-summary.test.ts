@@ -6,7 +6,7 @@ test("admin scan summaries consume the canonical report projection", async () =>
   const source = await readFile("apps/web/server/admin/admin-scan-summary.ts", "utf8");
   assert.match(source, /buildPulseProjection/);
   assert.match(source, /reportSummary/);
-  assert.match(source, /reportTopFindings\.length/);
+  assert.match(source, /topFindingIds\.length/);
   assert.doesNotMatch(source, /projectExecutiveFindingsFromUnifiedPackets/);
 });
 
@@ -16,6 +16,16 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.match(source, /domain\.hostname as scan_domain_hostname/);
   assert.match(source, /materializeMissingPulseScanSummaries/);
   assert.match(source, /scan_completed_at/);
+  assert.match(source, /canonicalSummary\.topFindingIds/);
+  assert.doesNotMatch(source, /getAnonymousScanById/);
+  assert.doesNotMatch(source, /\.slice\(0, 1\)/);
+});
+
+test("Admin Scans enriches every missing completed row in the current page", async () => {
+  const source = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
+  assert.match(source, /materializeAdminScanSummaries\(missingSummaryScans\)/);
+  assert.doesNotMatch(source, /missingSummaryScans[\s\S]{0,180}\.slice\(0, 1\)/);
+  assert.match(source, /mapScanRequestRow\(request, linkedScanId \? hydratedScansById\.get\(linkedScanId\)/);
 });
 
 test("admin summary persistence accepts completed scans without a canonical score", async () => {

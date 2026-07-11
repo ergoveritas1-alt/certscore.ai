@@ -8,3 +8,8 @@ export function classifyLambdaScannerFleet(regions: Array<{ status: LambdaScanne
   if (unknown > 0) return "unknown" as const;
   return "unavailable" as const;
 }
+
+export function isLambdaScannerHealthStale(checkedAt: string, nowMs = Date.now(), maxAgeMs = 2 * 60_000) {
+  const checkedAtMs = new Date(checkedAt).getTime();
+  return !Number.isFinite(checkedAtMs) || nowMs - checkedAtMs > maxAgeMs;
+}

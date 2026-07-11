@@ -2,10 +2,7 @@
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { formatScanFromLabel, normalizeScanFrom } from "@website-signal-risk-scanner/shared";
-import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import { classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-route";
-import { buildScanReportUnifiedFindingsForScan } from "../../lib/scans/scan-report-unified-findings";
-import { getAnonymousScanById } from "../scans/get-scan-by-id";
 import { ensurePulseTables } from "../pulse/schema";
 import { materializeAdminScanSummaries, type AdminScanSummary } from "./admin-scan-summary";
 import { requirePlatformAdminContext } from "./platform-admin";
@@ -163,7 +160,6 @@ function getFreshRescanRequested(requestContext: Record<string, unknown>) {
 
 function mapPulseRequestRow(
   row: Record<string, unknown>,
-  topFindingIdsByScanId: Map<string, string[]> = new Map(),
   summariesByScanId: Map<string, AdminScanSummary> = new Map()
 ): AdminPulseRequestListItem {
   const requestContext = asRecord(row.request_context);
@@ -235,9 +231,9 @@ function mapPulseRequestRow(
     summaryJsonDownloads: typeof row.summary_json_downloads === "number" ? row.summary_json_downloads : 0,
     evidenceJsonDownloads: typeof row.evidence_json_downloads === "number" ? row.evidence_json_downloads : 0,
     topFindingIds:
-      storedTopFindingIds.length > 0 || !scanId
-        ? storedTopFindingIds
-        : topFindingIdsByScanId.get(scanId) ?? []
+      canonicalSummary
+        ? canonicalSummary.topFindingIds
+        : storedTopFindingIds
   };
 }
 
@@ -250,42 +246,11 @@ async function materializeMissingPulseScanSummaries(rows: Record<string, unknown
         if (!scanId || (scanStatus !== "completed" && scanStatus !== "completed_limited")) {
           return [];
         }
-        const hasProjection =
-          typeof row.snapshot_score === "number" &&
-          typeof row.privacy_policy_present === "boolean" &&
-          typeof row.site_language_primary === "string" &&
-          typeof row.admin_industry_label === "string";
-        return hasProjection ? [] : [[scanId, { organizationId: null, scanId }] as const];
+        return [[scanId, { organizationId: null, scanId }] as const];
       })
     ).values()
   ];
   return materializeAdminScanSummaries(scans, 3);
-}
-
-async function loadTopFindingIdsByScanId(rows: Record<string, unknown>[]) {
-  const scanIds = [
-    ...new Set(
-      rows.flatMap((row) => {
-        const responseSummary = asRecord(row.response_summary);
-        if (asStringArray(responseSummary.topFindingIds).length > 0) {
-          return [];
-        }
-        return typeof row.scan_id === "string" && row.scan_id.trim().length > 0 ? [row.scan_id] : [];
-      })
-    )
-  ];
-  const topFindingIdsByScanId = new Map<string, string[]>();
-  await Promise.all(
-    scanIds.map(async (scanId) => {
-      const scanRecord = await getAnonymousScanById(scanId).catch(() => null);
-      if (!scanRecord) {
-        return;
-      }
-      const packets = buildScanReportUnifiedFindingsForScan(scanRecord);
-      topFindingIdsByScanId.set(scanId, projectExecutiveFindingsFromUnifiedPackets(packets).topFindings.map((finding) => finding.id));
-    })
-  );
-  return topFindingIdsByScanId;
 }
 
 function buildDisplayResponseSummary(input: {
@@ -429,11 +394,8 @@ export async function listAdminPulseRequests(input: {
     { readOnly: true }
   );
 
-  const [topFindingIdsByScanId, summariesByScanId] = await Promise.all([
-    loadTopFindingIdsByScanId(rows.rows),
-    materializeMissingPulseScanSummaries(rows.rows)
-  ]);
-  return rows.rows.map((row) => mapPulseRequestRow(row, topFindingIdsByScanId, summariesByScanId));
+  const summariesByScanId = await materializeMissingPulseScanSummaries(rows.rows);
+  return rows.rows.map((row) => mapPulseRequestRow(row, summariesByScanId));
 }
 
 export async function getAdminPulseRequestDetail(pulseRequestId: string): Promise<AdminPulseRequestDetail | null> {
@@ -557,11 +519,8 @@ export async function getAdminPulseRequestDetail(pulseRequestId: string): Promis
     return null;
   }
 
-  const [topFindingIdsByScanId, summariesByScanId] = await Promise.all([
-    loadTopFindingIdsByScanId([request]),
-    materializeMissingPulseScanSummaries([request])
-  ]);
-  const base = mapPulseRequestRow(request, topFindingIdsByScanId, summariesByScanId);
+  const summariesByScanId = await materializeMissingPulseScanSummaries([request]);
+  const base = mapPulseRequestRow(request, summariesByScanId);
   return {
     ...base,
     apiVersion: String(request.api_version),
@@ -655,5 +614,6 @@ export async function listAdminPulseRequestsForScan(scanId: string): Promise<Adm
     { readOnly: true }
   );
 
-  return rows.rows.map((row) => mapPulseRequestRow(row));
+  const summariesByScanId = await materializeMissingPulseScanSummaries(rows.rows);
+  return rows.rows.map((row) => mapPulseRequestRow(row, summariesByScanId));
 }

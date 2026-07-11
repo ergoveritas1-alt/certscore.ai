@@ -12,6 +12,7 @@ export type AdminScanSummary = {
   primaryLanguage: string | null;
   privacyPolicyPresent: boolean | null;
   score: number | null;
+  topFindingIds: string[];
   topFindingCount: number;
 };
 
@@ -55,6 +56,11 @@ async function buildAndPersistAdminScanSummary(scanId: string, organizationId: s
     ? reportProjectionRecord.summary as Record<string, unknown>
     : null;
   const reportTopFindings = Array.isArray(reportProjectionRecord.topFindings) ? reportProjectionRecord.topFindings : [];
+  const topFindingIds = reportTopFindings.flatMap((finding) => {
+    if (!finding || typeof finding !== "object" || Array.isArray(finding)) return [];
+    const id = (finding as Record<string, unknown>).id;
+    return typeof id === "string" && id.trim() ? [id.trim()] : [];
+  });
   const snapshot = scanRecord.snapshot;
   const summary: AdminScanSummary = {
     cmpVendorName: recordString(snapshot, "cmp_vendor_name"),
@@ -62,7 +68,8 @@ async function buildAndPersistAdminScanSummary(scanId: string, organizationId: s
     primaryLanguage: recordString(snapshot, "site_language_primary"),
     privacyPolicyPresent: recordBoolean(snapshot, "privacy_policy_present"),
     score: recordNumber(reportSummary, "score") ?? recordNumber(snapshot, "certscore_overall"),
-    topFindingCount: reportTopFindings.length
+    topFindingIds,
+    topFindingCount: topFindingIds.length
   };
 
   await persistAdminScanSummary({ scanId, ...summary });

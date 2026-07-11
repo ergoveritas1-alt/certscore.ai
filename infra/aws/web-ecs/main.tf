@@ -513,6 +513,17 @@ resource "aws_iam_role_policy" "task_exec" {
         ]
       },
       {
+        Sid    = "ReadRegionalV2DagLambdaHealth"
+        Effect = "Allow"
+        Action = [
+          "lambda:GetFunctionConfiguration"
+        ]
+        Resource = [
+          for region in values(local.v2_dag_lambda_regions) :
+          "arn:aws:lambda:${region}:${data.aws_caller_identity.current.account_id}:function:${local.v2_dag_lambda_function_name}"
+        ]
+      },
+      {
         Sid    = "ReadRegionalV2DagLambdaResults"
         Effect = "Allow"
         Action = [

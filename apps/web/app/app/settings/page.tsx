@@ -221,6 +221,7 @@ export default async function SettingsPage() {
                   <p>
                     {systemHealth.scanners.regions.map((region) => `${region.region}: ${region.status}`).join(" · ")}
                   </p>
+                  <p>Scanner health last checked: {formatDateTime(systemHealth.scanners.checkedAt)}</p>
                   <p>
                     Worker activity:{" "}
                     <span className={systemHealth.worker.recentActivity ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>
