@@ -59,7 +59,7 @@ locals {
       { name = "HOSTNAME", value = "0.0.0.0" },
       { name = "NEXT_PUBLIC_AUTH_GOOGLE_ENABLED", value = var.next_public_auth_google_enabled },
       { name = "CERTSCORE_ADMIN_EMAILS", value = var.certscore_admin_emails },
-      { name = "CERTSCORE_AUTH_ALLOWED_EMAILS", value = var.certscore_admin_emails },
+      { name = "CERTSCORE_AUTH_ALLOWED_EMAILS", value = var.certscore_auth_allowed_emails != "" ? var.certscore_auth_allowed_emails : var.certscore_admin_emails },
       { name = "CERTSCORE_V2_DAG_LAMBDA_ENABLED", value = "true" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE", value = "sharded" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV", value = "production" },

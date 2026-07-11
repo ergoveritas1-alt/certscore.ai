@@ -25,6 +25,7 @@ mcp_image_tag                     = "mcp-v0.2.7"
 database_ssl_mode                 = "require"
 next_public_auth_google_enabled   = "true"
 certscore_admin_emails            = "ops@example.com"
+certscore_auth_allowed_emails     = "ops@example.com"
 full_scan_allow_production_load_test_dns_bypass = false
 s3_bucket                         = "ws01-scan-artifacts-199536052647-us-west-1"
 s3_region                         = "us-west-1"

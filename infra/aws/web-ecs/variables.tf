@@ -136,6 +136,12 @@ variable "certscore_admin_emails" {
   default     = ""
 }
 
+variable "certscore_auth_allowed_emails" {
+  description = "Optional comma-separated sign-in allowlist; defaults to the admin allowlist when unset."
+  type        = string
+  default     = ""
+}
+
 variable "full_scan_allow_production_load_test_dns_bypass" {
   description = "Whether trusted production load-test full-scan requests bypass intake DNS validation so scanner/runtime records transport outcomes."
   type        = bool
