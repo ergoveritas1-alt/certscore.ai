@@ -30,9 +30,11 @@ function textResponse(status: number, body: string, headers: Record<string, stri
 
 function installFetch(responses: MockResponse[]) {
   const calls: string[] = [];
+  const requestHeaders: Headers[] = [];
   const previous = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     calls.push(String(input));
+    requestHeaders.push(new Headers(init?.headers));
     const next = responses.shift();
     if (!next) {
       throw new Error("Unexpected fetch call");
@@ -44,6 +46,7 @@ function installFetch(responses: MockResponse[]) {
   }) as typeof fetch;
   return {
     calls,
+    requestHeaders,
     restore() {
       globalThis.fetch = previous;
     }
@@ -353,6 +356,7 @@ test("create_scan returns async status and scan handles", async () => {
       });
     });
     assert.deepEqual(warnings, ["[certscore-mcp] create_scan is deprecated and will be removed in 0.2.0. Use scan_site."]);
+    assert.equal(mock.requestHeaders[0]?.get("x-certscore-client"), "mcp");
   } finally {
     console.error = previousConsoleError;
     mock.restore();

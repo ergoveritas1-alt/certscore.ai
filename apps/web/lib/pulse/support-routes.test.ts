@@ -417,8 +417,8 @@ test("Pulse route validates supplied integration bearer tokens outside the findi
   assert.match(source, /parseBearerToken/);
   assert.match(source, /validateCertScoreBearerToken/);
   assert.match(source, /requiredScopesForPulseRequest/);
-  assert.match(source, /channel: "mcp"/);
-  assert.match(source, /source: "mcp"/);
+  assert.match(source, /integrationClient === "mcp"/);
+  assert.match(source, /integrationChannel/);
   assert.doesNotMatch(source, /normalized-concerns|concern-policy|unified-findings|executive-findings-projection/);
 });
 

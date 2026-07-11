@@ -99,7 +99,7 @@ async function main() {
   assert.equal(chatGptOpenapi.response.status, 200);
   assertPulseHeaders(chatGptOpenapi, "openapi-chatgpt");
   const chatGptOpenapiBody = json(chatGptOpenapi);
-  assert.equal(chatGptOpenapiBody.openapi, "3.1.0");
+  assert.equal(chatGptOpenapiBody.openapi, "3.1.1");
   assert.equal(chatGptOpenapiBody.paths?.["/api/v1/pulse/gpt"]?.get?.operationId, "getPulseForUrl");
   assert.equal(chatGptOpenapiBody.paths?.["/api/v1/pulse-self-test"]?.get?.operationId, "checkPulseConnectivity");
   results.push(chatGptOpenapi);

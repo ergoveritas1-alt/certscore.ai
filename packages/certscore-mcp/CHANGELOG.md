@@ -1,5 +1,9 @@
 # certscore-mcp
 
+## 0.2.8
+
+- Rebuild the distributed MCP binary against the SDK client-attribution header so stdio scan requests persist as MCP activity instead of generic Pulse activity.
+
 ## 0.2.7
 
 - Return bounded MCP errors as text-only `isError` results so success output schemas cannot reject valid in-progress or API error responses.
