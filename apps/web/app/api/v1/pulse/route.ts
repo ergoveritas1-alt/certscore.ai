@@ -351,6 +351,17 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const jobId = url.searchParams.get("jobId")?.trim() || null;
   const rawUrl = url.searchParams.get("url")?.trim() || null;
   const bearer = parseBearerToken(request);
+  const integrationClient = request.headers.get("x-certscore-client")?.trim().toLowerCase();
+  const integrationChannel =
+    integrationClient === "sdk"
+      ? "sdk"
+      : integrationClient === "mcp"
+        ? "mcp"
+        : integrationClient === "pulse"
+          ? "pulse_api"
+          : integrationClient
+            ? "other_api"
+            : null;
   let apiKeyContext: { apiKeyId?: string | null; accountId?: string | null; userId?: string | null; channel?: string; source?: string } = {};
   if (bearer.provided) {
     if (!bearer.token) {
@@ -400,22 +411,11 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         routeName
       );
     }
-    const integrationClient = request.headers.get("x-certscore-client")?.trim().toLowerCase();
-    const integrationChannel =
-      integrationClient === "sdk"
-        ? "sdk"
-        : integrationClient === "mcp"
-          ? "mcp"
-          : integrationClient === "pulse"
-            ? "pulse_api"
-          : integrationClient
-            ? "other_api"
-            : "pulse_api";
     apiKeyContext = {
       accountId: auth.key.organizationId,
       apiKeyId: auth.key.publicId,
-      channel: integrationChannel,
-      source: integrationChannel,
+      channel: integrationChannel ?? "pulse_api",
+      source: integrationChannel ?? "pulse_api",
       userId: auth.key.ownerUserId
     };
   }
@@ -428,8 +428,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     forceNewScan,
     scanFrom,
     waitSeconds,
-    channel: apiKeyContext.channel ?? (gptAction ? "gpt_action" : "pulse_api"),
-    source: apiKeyContext.source ?? (gptAction ? "gpt_action" : "pulse_api")
+    channel: apiKeyContext.channel ?? (gptAction ? "gpt_action" : integrationChannel ?? "pulse_api"),
+    source: apiKeyContext.source ?? (gptAction ? "gpt_action" : integrationChannel ?? "pulse_api")
   };
   const startedAt = Date.now();
 

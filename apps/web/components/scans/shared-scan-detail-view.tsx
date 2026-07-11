@@ -64,6 +64,7 @@ import {
   deriveCertScoreFindings,
 } from "../../lib/scans/derive-findings";
 import { buildScanCalibrationSummary } from "../../lib/scans/calibration-summary";
+import { persistAdminScanSummary } from "../../server/admin/repository";
 import {
   compactEvidenceJsonForDisplay,
   sanitizePublicReportEvidenceText
@@ -6697,7 +6698,7 @@ function normalizeScanReportAccessRole(role: string | null | undefined): ScanRep
   return "user";
 }
 
-export function SharedScanDetailView({
+export async function SharedScanDetailView({
   analyticsScanSource = "unknown",
   autoRefresh = null,
   createAccountHref = null,
@@ -7049,6 +7050,18 @@ export function SharedScanDetailView({
   const topExecutiveFindings = executiveAccessLimitationNotice
     ? [executiveAccessLimitationNotice.finding]
     : regulatoryGapTopFindings;
+  if (scanRecord.scan.status === "completed") {
+    const persistedTopFindings = executiveAccessLimitationNotice ? [] : topExecutiveFindings;
+    await persistAdminScanSummary({
+      cmpVendorName: typeof scanRecord.snapshot?.cmp_vendor_name === "string" ? scanRecord.snapshot.cmp_vendor_name : null,
+      industry: scanRecord.domainBenchmark?.industry ?? null,
+      primaryLanguage: typeof scanRecord.snapshot?.site_language_primary === "string" ? scanRecord.snapshot.site_language_primary : null,
+      privacyPolicyPresent: typeof scanRecord.snapshot?.privacy_policy_present === "boolean" ? scanRecord.snapshot.privacy_policy_present : null,
+      scanId: scanRecord.scan.id,
+      score: executiveAccessLimitationNotice ? null : executiveDisplayedScore,
+      topFindingCount: persistedTopFindings.length
+    });
+  }
   const scanCalibrationSummary = buildScanCalibrationSummary({
     accessLimitationNotice: executiveAccessNoticeCardProps,
     beforeConsentCookieCount: cookiesBeforeConsentCount,

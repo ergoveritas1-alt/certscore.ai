@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { persistAdminScanSummaryForRecord } from "../../../../server/admin/admin-scan-summary";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
@@ -132,10 +131,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     localV2DagReportInput && scanRecord.scan.status === "completed"
       ? await materializeLocalV2DagScanDetail(scanRecord)
       : scanRecord;
-  if (displayScanRecord.scan.status === "completed") {
-    await persistAdminScanSummaryForRecord(displayScanRecord);
-  }
-
   const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
     events: scanRecord.events,
     scanType: scanRecord.scan.scanType,

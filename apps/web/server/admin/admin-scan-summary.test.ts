@@ -35,14 +35,11 @@ test("public report materialization persists the canonical summary before return
   assert.match(source, /await persistAdminScanSummaryForRecord/);
 });
 
-test("authenticated and marketing report pages persist canonical summaries", async () => {
-  for (const file of [
-    "apps/web/app/app/scans/[scanId]/page.tsx",
-    "apps/web/app/(marketing)/scan/[scanId]/page.tsx"
-  ]) {
-    const source = await readFile(file, "utf8");
-    assert.match(source, /persistAdminScanSummaryForRecord\(displayScanRecord\)/);
-  }
+test("the rendered report projection persists its exact score and top-finding count", async () => {
+  const source = await readFile("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
+  assert.match(source, /score: executiveAccessLimitationNotice \? null : executiveDisplayedScore/);
+  assert.match(source, /topFindingCount: persistedTopFindings\.length/);
+  assert.match(source, /const persistedTopFindings = executiveAccessLimitationNotice \? \[\] : topExecutiveFindings/);
 });
 
 test("admin summary persistence accepts completed scans without a canonical score", async () => {

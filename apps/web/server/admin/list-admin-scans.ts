@@ -191,7 +191,9 @@ export async function listAdminScans(limit = 50, offset = 0): Promise<AdminScanL
       startedAt: scan.started_at,
       pagesScanned: scan.pages_scanned,
       totalSignals: snapshot?.total_signals ?? null,
-      topFindingCount: snapshot?.top_finding_count ?? null,
+      topFindingCount: snapshot?.certscore_overall === null || snapshot?.certscore_overall === undefined
+        ? null
+        : snapshot.top_finding_count ?? null,
       findingCount: snapshot?.report_finding_count ?? null,
       freshRescanRequested: getFreshRescanRequested(linkedRequest?.request_context ?? pulseAttribution?.request_context ?? null),
       certscoreOverall: snapshot?.certscore_overall ?? null,

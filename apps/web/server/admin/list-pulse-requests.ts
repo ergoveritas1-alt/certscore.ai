@@ -165,6 +165,10 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
   const scanId = typeof row.scan_id === "string" ? row.scan_id : null;
   const storedTopFindingIds = asStringArray(responseSummary.topFindingIds);
   const scanFromValue = normalizeScanFrom(requestContext.scanFrom ?? asRecord(row.scan_config_json).scanFrom);
+  const score =
+    typeof responseSummary.score === "number"
+      ? responseSummary.score
+      : typeof row.snapshot_score === "number" ? row.snapshot_score : null;
   return {
     accessPostureClass: typeof row.access_posture_class === "string" ? row.access_posture_class : null,
     apiRoute: classifyAdminApiRoute({
@@ -205,10 +209,7 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     resultPulseUrl: typeof row.result_pulse_url === "string" ? row.result_pulse_url : null,
     resultReportUrl: typeof row.result_report_url === "string" ? row.result_report_url : null,
     scanId,
-    score:
-      typeof responseSummary.score === "number"
-        ? responseSummary.score
-        : typeof row.snapshot_score === "number" ? row.snapshot_score : null,
+    score,
     scanFromLabel: formatScanFromLabel(scanFromValue),
     scanFromValue,
     requestChannel: typeof row.request_channel === "string" ? row.request_channel : null,
@@ -227,7 +228,9 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     evidenceJsonDownloads: typeof row.evidence_json_downloads === "number" ? row.evidence_json_downloads : 0,
     topFindingIds: storedTopFindingIds,
     topFindingCount:
-      typeof row.top_finding_count === "number"
+      score === null
+        ? null
+        : typeof row.top_finding_count === "number"
         ? row.top_finding_count
         : storedTopFindingIds.length > 0
           ? storedTopFindingIds.length

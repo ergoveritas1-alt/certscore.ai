@@ -66,5 +66,5 @@ export function ViewerTimestamp({ value, fallback = "Not available" }: ViewerTim
     return <>{fallback}</>;
   }
 
-  return <span title={timeZone ?? "Viewer local time"}>{formatted}</span>;
+  return <span suppressHydrationWarning title={timeZone ?? "Viewer local time"}>{formatted}</span>;
 }

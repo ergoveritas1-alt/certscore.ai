@@ -14,7 +14,6 @@ import {
 } from "../../../../lib/scans/scan-auto-refresh";
 import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
-import { persistAdminScanSummaryForRecord } from "../../../../server/admin/admin-scan-summary";
 import { getDashboardContext } from "../../../../server/auth";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
@@ -94,12 +93,6 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     localV2DagReportInput && scanRecord.scan.status === "completed"
       ? await withServerTiming("app.scan_detail.local_v2_report", () => materializeLocalV2DagScanDetail(scanRecord))
       : scanRecord;
-  if (displayScanRecord.scan.status === "completed") {
-    await withServerTiming("app.scan_detail.persist_canonical_summary", () =>
-      persistAdminScanSummaryForRecord(displayScanRecord)
-    );
-  }
-
   const pendingBrowserExtensionNormalization = hasPendingBrowserExtensionNormalization({
     events: scanRecord.events,
     scanType: scanRecord.scan.scanType,
