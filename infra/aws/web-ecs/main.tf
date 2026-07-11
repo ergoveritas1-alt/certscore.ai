@@ -784,7 +784,7 @@ resource "aws_appautoscaling_target" "certscore_web" {
 }
 
 resource "aws_appautoscaling_policy" "certscore_web_cpu" {
-  name               = "${local.prefix}-certscore-web-cpu"
+  name               = "${local.prefix}-certscore-cpu-60"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.certscore_web.resource_id
   scalable_dimension = aws_appautoscaling_target.certscore_web.scalable_dimension
