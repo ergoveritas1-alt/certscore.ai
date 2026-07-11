@@ -148,6 +148,7 @@ resource "aws_security_group" "ecs_tasks" {
   }
 
   ingress {
+    description     = "ALB access to MCP sidecar"
     from_port       = 3004
     to_port         = 3004
     protocol        = "tcp"
