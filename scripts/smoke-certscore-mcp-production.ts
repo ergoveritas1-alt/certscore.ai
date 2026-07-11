@@ -33,17 +33,17 @@ type ToolPayload = Record<string, unknown> & {
     status?: string;
     domain?: string;
     noGo?: {
-      reason?: string;
+      reasonCode?: string;
       title?: string;
       explanation?: string;
-      recommendation?: string;
+      recommendedNextAction?: string;
     };
   };
   noGo?: {
-    reason?: string;
+    reasonCode?: string;
     title?: string;
     explanation?: string;
-    recommendation?: string;
+    recommendedNextAction?: string;
   };
   findings?: Array<{ id?: string }>;
   rows?: unknown[];
@@ -330,12 +330,12 @@ async function runInstalledMcpSmoke(token: string) {
       const noGoScan = await callTool(client, "get_scan", { scanId: noGoScanId });
       const noGo = noGoScan.noGo ?? noGoScan.scan?.noGo;
       assert.equal(noGoScan.status ?? noGoScan.scan?.status, "completed_limited");
-      assert.ok(noGo?.reason, "Production no-go scan should retain a stable reason.");
+      assert.ok(noGo?.reasonCode, "Production no-go scan should retain a stable reason.");
       assert.ok(noGo?.title && noGo.title.length > 5, "Production no-go scan should include a customer-facing title.");
       assert.ok(noGo?.explanation && noGo.explanation.length > 10, "Production no-go scan should include an explanation.");
-      assert.ok(noGo?.recommendation && noGo.recommendation.length > 10, "Production no-go scan should include a recommendation.");
+      assert.ok(noGo?.recommendedNextAction && noGo.recommendedNextAction.length > 10, "Production no-go scan should include a recommendation.");
       summarize("no_go_get_scan", noGoScan);
-      console.log(`no_go_contract=passed reason=${noGo.reason} title=${JSON.stringify(noGo.title)}`);
+      console.log(`no_go_contract=passed reason=${noGo.reasonCode} title=${JSON.stringify(noGo.title)}`);
     }
 
     const created = await callTool(client, "scan_site", {
