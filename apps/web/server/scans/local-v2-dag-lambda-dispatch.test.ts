@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { buildQueuedFullScanConfig } from "./full-scan-config";
 import {
   LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
+  LocalV2DagLambdaDispatchError,
   buildLocalV2DagLambdaDispatchPayload,
   dispatchLocalV2DagLambdaScan,
   ingestLocalV2DagLambdaResultMessage,
@@ -151,6 +153,53 @@ test("dispatch fails closed when Lambda does not accept the async invocation", a
     }),
     /not accepted/
   );
+});
+
+test("dispatch timeout is typed as uncertain and does not retry an ambiguous async invocation", async () => {
+  let sendCount = 0;
+  let caught: unknown;
+  try {
+    await dispatchLocalV2DagLambdaScan({
+      dispatchTimeoutMs: 250,
+      lambdaClient: {
+        send(_command, options) {
+          sendCount += 1;
+          return new Promise((_resolve, reject) => {
+            options?.abortSignal?.addEventListener("abort", () => {
+              const error = new Error("aborted");
+              error.name = "AbortError";
+              reject(error);
+            }, { once: true });
+          });
+        }
+      },
+      scanConfig: buildLambdaScanConfig(),
+      scanId: "scan-local-timeout"
+    });
+  } catch (error) {
+    caught = error;
+  }
+
+  assert.ok(caught instanceof LocalV2DagLambdaDispatchError);
+  assert.equal(caught.dispatchState, "uncertain");
+  assert.match(caught.message, /not confirmed within 250ms/);
+  assert.equal(sendCount, 1);
+  assert.ok(caught.timings.dispatchTotalMs >= 240);
+});
+
+test("uncertain dispatch acceptance is persisted as a terminal failed scan state", async () => {
+  const [repository, authenticatedCreate, anonymousCreate] = await Promise.all([
+    readFile("apps/web/server/scans/repository.ts", "utf8"),
+    readFile("apps/web/server/scans/create-full-scan.ts", "utf8"),
+    readFile("apps/web/server/scans/create-anonymous-full-scan.ts", "utf8"),
+  ]);
+
+  assert.match(repository, /dispatchState: "accepted" \| "failed" \| "uncertain"/);
+  assert.match(repository, /\$3 in \('failed', 'uncertain'\)/);
+  for (const source of [authenticatedCreate, anonymousCreate]) {
+    assert.match(source, /error instanceof LocalV2DagLambdaDispatchError \? error\.dispatchState : "failed"/);
+    assert.match(source, /updateLocalV2DagLambdaDispatchState\(\{ dispatchState, errorMessage/);
+  }
 });
 
 test("dispatch payload fails closed when v2 DAG Lambda intent is absent", () => {

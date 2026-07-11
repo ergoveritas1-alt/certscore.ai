@@ -304,6 +304,24 @@ variable "web_desired_count" {
   default     = 1
 }
 
+variable "web_autoscaling_min_capacity" {
+  description = "Minimum CertScore web task count when ECS service autoscaling is enabled."
+  type        = number
+  default     = 1
+}
+
+variable "web_autoscaling_max_capacity" {
+  description = "Maximum CertScore web task count for CPU target tracking."
+  type        = number
+  default     = 3
+}
+
+variable "web_autoscaling_target_cpu" {
+  description = "Average ECS CPU percentage targeted by CertScore web service autoscaling."
+  type        = number
+  default     = 60
+}
+
 variable "full_scan_queue_allow_degraded_heartbeat" {
   description = "Allow the web app to accept full-scan queue requests when scanner heartbeat is stale; requires external worker wake-up monitoring."
   type        = bool

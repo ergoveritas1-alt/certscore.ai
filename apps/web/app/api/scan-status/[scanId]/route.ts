@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
-import { bootstrapAppUserSession } from "../../../../server/bootstrap-user";
 import { getCurrentUser } from "../../../../server/auth";
 import {
   getAnonymousOpsScanStatus,
   getOrganizationOpsScanStatus
 } from "../../../../server/scans/ops-status";
+import {
+  buildLightweightScanStatusResponse,
+  getViewerAccessibleScanStatusProjection
+} from "../../../../server/scans/scan-status-projection";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -32,25 +35,38 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
     );
   }
 
-  let status = await getAnonymousOpsScanStatus({ includeFindings, scanId });
-  let organizationId: string | null = null;
-  let viewerEmail: string | null = null;
-
-  if (!status) {
-    const user = await getCurrentUser();
-
-    if (user) {
-      const { organization } = await bootstrapAppUserSession(user);
-      organizationId = organization.id;
-      viewerEmail = user.email;
-      status = await getOrganizationOpsScanStatus({
-        includeFindings,
-        organizationId: organization.id,
-        scanId,
-        viewerEmail: user.email
-      });
-    }
+  const user = await getCurrentUser();
+  const projection = await getViewerAccessibleScanStatusProjection({
+    scanId,
+    viewerEmail: user?.email ?? null,
+    viewerUserId: user?.id ?? null
+  });
+  if (!projection) {
+    return NextResponse.json(
+      { code: "scan_not_found", error: "Scan not found." },
+      { status: 404 }
+    );
   }
+
+  if (!includeFindings) {
+    console.info(JSON.stringify({
+      event: "scan.progress_status_request",
+      scanId,
+      status: projection.status
+    }));
+    return NextResponse.json(buildLightweightScanStatusResponse(projection), {
+      headers: { "Cache-Control": "no-store" }
+    });
+  }
+
+  const status = projection.organizationId === null
+    ? await getAnonymousOpsScanStatus({ includeFindings: true, scanId })
+    : await getOrganizationOpsScanStatus({
+        includeFindings: true,
+        organizationId: projection.organizationId,
+        scanId,
+        viewerEmail: user?.email ?? null
+      });
 
   if (!status) {
     return NextResponse.json(

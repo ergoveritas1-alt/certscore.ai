@@ -5,6 +5,8 @@ import { SharedScanDetailView } from "../../../../components/scans/shared-scan-d
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { LocalV2DagScanProgressCard } from "../../../../components/scans/scan-submit-progress";
+import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
+import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
 import { ShareReportActions } from "../../../../components/scans/share-report-actions";
 import {
   hasPendingBrowserExtensionNormalization,
@@ -20,6 +22,10 @@ import {
   materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
+import {
+  getOrganizationScanStatusProjection,
+  isPendingScanStatus
+} from "../../../../server/scans/scan-status-projection";
 import { canUseRestrictedScanOptions } from "../../../../server/scans/restricted-scan-options";
 import { getOrganizationSettings } from "../../../../server/settings/get-organization-settings";
 
@@ -46,6 +52,27 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   ]);
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const recentScanReused = resolvedSearchParams.recentScanReused === "1";
+  const statusProjection = await withServerTiming("app.scan_detail.status_projection", () =>
+    getOrganizationScanStatusProjection({ organizationId: organization.id, scanId })
+  );
+  if (!statusProjection) {
+    notFound();
+  }
+  if (isPendingScanStatus(statusProjection.status)) {
+    return (
+      <>
+        <PendingScanStartedEvent />
+        <PendingScanDetailView
+          createdAt={statusProjection.createdAt}
+          domainHostname={statusProjection.domainHostname}
+          profile={statusProjection.profile}
+          scanId={statusProjection.id}
+          startedAt={statusProjection.startedAt}
+          status={statusProjection.status}
+        />
+      </>
+    );
+  }
   let [scanRecord, organizationSettings] = await Promise.all([
     withServerTiming("app.scan_detail.record", () =>
       getScanById({
@@ -111,6 +138,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   return (
     <>
       <PendingScanStartedEvent />
+      <ScanProgressReportVisible scanId={displayScanRecord.scan.id} />
       <SharedScanDetailView
         analyticsScanSource="dashboard"
         autoRefresh={

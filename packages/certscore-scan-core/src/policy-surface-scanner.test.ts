@@ -9,6 +9,7 @@ import {
   isFetchablePolicyCandidateForPolicySurface,
   isFetchablePolicyHrefForPolicySurface,
   isFetchablePolicyUrlForPolicySurface,
+  POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
   type PolicyNanoAssistProvider,
   policySurfaceScanner,
   wwwFallbackUrlForPolicyFetch,
@@ -1213,6 +1214,42 @@ test("policySurfaceScanner uses common-path fallback when homepage fetch fails",
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed common-path")),
       true,
     );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("policySurfaceScanner bounds a Ford-like stalled homepage fetch and continues rendered discovery", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const startedAt = Date.now();
+    const result = await policySurfaceScanner({
+      url: `${server.baseUrl}/stalled-policy-homepage`,
+      normalizedUrl: `${server.baseUrl}/stalled-policy-homepage`,
+      scanStartedAtMs: startedAt,
+      internalBudgetMs: 10_000,
+      artifactWriter,
+      discoveryMode: "fast",
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const elapsedMs = Date.now() - startedAt;
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    const homepageTiming = result.moduleRun.timingBreakdown?.find((timing) => timing.label === "homepage fetch");
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${server.baseUrl}/stalled-policy-homepage/privacy`
+    );
+
+    assert.equal(POLICY_HOMEPAGE_FETCH_TIMEOUT_MS, 5_000);
+    assert.ok((homepageTiming?.durationMs ?? 0) >= 4_500);
+    assert.ok((homepageTiming?.durationMs ?? Infinity) < 6_500);
+    assert.ok(elapsedMs < 12_000, `expected bounded fallback completion; elapsed=${elapsedMs}`);
+    assert.equal(diagnostics.homepageFetch?.failureReason, "timeout");
+    assert.equal(diagnostics.homepageFetch?.ok, false);
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.surfaceType, "privacy_policy");
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { sendReportEmailAction, type SendReportEmailActionState } from "../../server/scans/email-report";
 
@@ -14,6 +14,13 @@ const initialSendReportEmailActionState: SendReportEmailActionState = {
   error: null,
   success: null
 };
+
+export const VISUAL_EVIDENCE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000] as const;
+
+export function buildVisualEvidenceRetryHref(href: string, attempt: number) {
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}visualEvidenceAttempt=${attempt}`;
+}
 
 function actionClassName(tone: "primary" | "secondary" = "secondary") {
   const base =
@@ -168,7 +175,10 @@ export function ShareReportActions({
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [isVisualEvidenceDialogOpen, setIsVisualEvidenceDialogOpen] = useState(false);
   const [isVisualEvidenceImageLoading, setIsVisualEvidenceImageLoading] = useState(false);
+  const [visualEvidenceImageFailed, setVisualEvidenceImageFailed] = useState(false);
+  const [visualEvidenceLoadAttempt, setVisualEvidenceLoadAttempt] = useState(0);
   const [visualEvidenceZoom, setVisualEvidenceZoom] = useState(1);
+  const visualEvidenceRetryTimerRef = useRef<number | null>(null);
   const [emailState, emailAction, isEmailPending] = useActionState(
     sendReportEmailAction,
     initialSendReportEmailActionState
@@ -190,6 +200,51 @@ export function ShareReportActions({
       setIsEmailDialogOpen(false);
     }
   }, [emailState.success]);
+
+  useEffect(() => {
+    return () => {
+      if (visualEvidenceRetryTimerRef.current !== null) {
+        window.clearTimeout(visualEvidenceRetryTimerRef.current);
+      }
+    };
+  }, []);
+
+  function beginVisualEvidenceLoad() {
+    if (visualEvidenceRetryTimerRef.current !== null) {
+      window.clearTimeout(visualEvidenceRetryTimerRef.current);
+      visualEvidenceRetryTimerRef.current = null;
+    }
+    setVisualEvidenceImageFailed(false);
+    setIsVisualEvidenceImageLoading(true);
+  }
+
+  function retryVisualEvidenceNow() {
+    beginVisualEvidenceLoad();
+    setVisualEvidenceLoadAttempt(0);
+  }
+
+  function closeVisualEvidenceDialog() {
+    if (visualEvidenceRetryTimerRef.current !== null) {
+      window.clearTimeout(visualEvidenceRetryTimerRef.current);
+      visualEvidenceRetryTimerRef.current = null;
+    }
+    setIsVisualEvidenceDialogOpen(false);
+  }
+
+  function handleVisualEvidenceLoadError() {
+    const retryDelay = VISUAL_EVIDENCE_RETRY_DELAYS_MS[visualEvidenceLoadAttempt];
+    if (retryDelay === undefined) {
+      setIsVisualEvidenceImageLoading(false);
+      setVisualEvidenceImageFailed(true);
+      return;
+    }
+
+    setIsVisualEvidenceImageLoading(true);
+    visualEvidenceRetryTimerRef.current = window.setTimeout(() => {
+      visualEvidenceRetryTimerRef.current = null;
+      setVisualEvidenceLoadAttempt((attempt) => attempt + 1);
+    }, retryDelay);
+  }
 
   async function copyValue(value: string) {
     try {
@@ -255,7 +310,8 @@ export function ShareReportActions({
             data-analytics-cta-type="visual-evidence"
             data-analytics-event="report_cta_clicked"
             onClick={() => {
-              setIsVisualEvidenceImageLoading(true);
+              setVisualEvidenceLoadAttempt(0);
+              beginVisualEvidenceLoad();
               setVisualEvidenceZoom(1);
               setIsVisualEvidenceDialogOpen(true);
             }}
@@ -371,7 +427,7 @@ export function ShareReportActions({
                   type="button"
                   aria-label="Close captured image"
                   className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-sky-200"
-                  onClick={() => setIsVisualEvidenceDialogOpen(false)}
+                  onClick={closeVisualEvidenceDialog}
                 >
                   <CloseIcon />
                 </button>
@@ -386,23 +442,40 @@ export function ShareReportActions({
                   </div>
                 </div>
               ) : null}
-              <img
-                alt={`Captured scan evidence for ${domainLabel}`}
-                className={`mx-auto block rounded-lg bg-white object-contain shadow-lg transition-opacity duration-150 ${isVisualEvidenceImageLoading ? "opacity-0" : "opacity-100"}`}
-                onError={() => setIsVisualEvidenceImageLoading(false)}
-                onLoad={() => setIsVisualEvidenceImageLoading(false)}
-                src={visualEvidenceHref}
-                style={{
-                  maxHeight: visualEvidenceZoom === 1 ? "72vh" : "none",
-                  maxWidth: visualEvidenceZoom === 1 ? "100%" : "none",
-                  width: `${visualEvidenceZoom * 100}%`
-                }}
-              />
+              {visualEvidenceImageFailed ? (
+                <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
+                  <div className="max-w-md rounded-2xl border border-slate-700 bg-slate-900/95 p-5 text-slate-100 shadow-xl">
+                    <p className="font-semibold">The captured image is temporarily unavailable.</p>
+                    <p className="mt-2 text-sm leading-6 text-slate-300">
+                      The evidence was retained, but the image service did not respond after several attempts.
+                    </p>
+                    <button className={`${actionClassName("primary")} mt-4`} onClick={retryVisualEvidenceNow} type="button">
+                      Try again
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <img
+                  alt={`Captured scan evidence for ${domainLabel}`}
+                  className={`mx-auto block rounded-lg bg-white object-contain shadow-lg transition-opacity duration-150 ${isVisualEvidenceImageLoading ? "opacity-0" : "opacity-100"}`}
+                  onError={handleVisualEvidenceLoadError}
+                  onLoad={() => {
+                    setIsVisualEvidenceImageLoading(false);
+                    setVisualEvidenceImageFailed(false);
+                  }}
+                  src={buildVisualEvidenceRetryHref(visualEvidenceHref, visualEvidenceLoadAttempt)}
+                  style={{
+                    maxHeight: visualEvidenceZoom === 1 ? "72vh" : "none",
+                    maxWidth: visualEvidenceZoom === 1 ? "100%" : "none",
+                    width: `${visualEvidenceZoom * 100}%`
+                  }}
+                />
+              )}
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-3">
               <button
                 className={actionClassName("primary")}
-                onClick={() => setIsVisualEvidenceDialogOpen(false)}
+                onClick={closeVisualEvidenceDialog}
                 type="button"
               >
                 Close

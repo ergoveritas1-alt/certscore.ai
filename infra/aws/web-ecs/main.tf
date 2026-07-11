@@ -766,7 +766,114 @@ resource "aws_ecs_service" "certscore" {
 
   health_check_grace_period_seconds = 90
 
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
+
   depends_on = [aws_lb_listener.http, aws_lb_listener.https]
+
+  tags = local.common_tags
+}
+
+resource "aws_appautoscaling_target" "certscore_web" {
+  max_capacity       = var.web_autoscaling_max_capacity
+  min_capacity       = var.web_autoscaling_min_capacity
+  resource_id        = "service/${local.ecs_cluster_name}/${aws_ecs_service.certscore.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "certscore_web_cpu" {
+  name               = "${local.prefix}-certscore-web-cpu"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.certscore_web.resource_id
+  scalable_dimension = aws_appautoscaling_target.certscore_web.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.certscore_web.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    target_value       = var.web_autoscaling_target_cpu
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 60
+
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "certscore_web_cpu_sustained" {
+  alarm_name          = "${local.prefix}-certscore-web-cpu-sustained"
+  alarm_description   = "CertScore web ECS CPU remained at or above 85% for two minutes."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ECS"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 85
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+
+  dimensions = {
+    ClusterName = local.ecs_cluster_name
+    ServiceName = aws_ecs_service.certscore.name
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_log_metric_filter" "scan_progress_status_requests" {
+  name           = "${local.prefix}-scan-progress-status-requests"
+  log_group_name = aws_cloudwatch_log_group.certscore.name
+  pattern        = "{ $.event = \"scan.progress_status_request\" }"
+
+  metric_transformation {
+    name      = "ScanProgressStatusRequests"
+    namespace = "CertScore/Web"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "scan_progress_report_visible_ms" {
+  name           = "${local.prefix}-scan-progress-report-visible-ms"
+  log_group_name = aws_cloudwatch_log_group.certscore.name
+  pattern        = "{ $.event = \"scan.progress_report_visible\" && $.durationMs = * }"
+
+  metric_transformation {
+    name      = "ScanTerminalToReportVisibleMs"
+    namespace = "CertScore/Web"
+    value     = "$.durationMs"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "lambda_dispatch_total_ms" {
+  name           = "${local.prefix}-lambda-dispatch-total-ms"
+  log_group_name = aws_cloudwatch_log_group.certscore.name
+  pattern        = "{ $.event = \"scan.lambda_dispatch_timing\" && $.dispatchTotalMs = * }"
+
+  metric_transformation {
+    name      = "ScanLambdaDispatchTotalMs"
+    namespace = "CertScore/Web"
+    value     = "$.dispatchTotalMs"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "scan_progress_request_amplification" {
+  alarm_name          = "${local.prefix}-scan-progress-request-amplification"
+  alarm_description   = "Pending scan status requests exceeded the bounded polling envelope."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "ScanProgressStatusRequests"
+  namespace           = "CertScore/Web"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 120
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+
+  depends_on = [aws_cloudwatch_log_metric_filter.scan_progress_status_requests]
 
   tags = local.common_tags
 }

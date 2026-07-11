@@ -8,6 +8,8 @@ import { buildScanReportUnifiedFindings } from "../../../../components/scans/sha
 import { AgentSummaryActions, ShareReportActions } from "../../../../components/scans/share-report-actions";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { LocalV2DagScanProgressCard } from "../../../../components/scans/scan-submit-progress";
+import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
+import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
 import {
   hasPendingBrowserExtensionNormalization,
   hasPendingPostCompletionFindingWork
@@ -20,6 +22,10 @@ import {
   materializeLocalV2DagScanDetail
 } from "../../../../server/scans/local-v2-dag-report";
 import { persistReportFindingCount } from "../../../../server/scans/persist-report-finding-count";
+import {
+  getAnonymousScanStatusProjection,
+  isPendingScanStatus
+} from "../../../../server/scans/scan-status-projection";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -39,7 +45,7 @@ function getPublicScanDomainLabel(domainHostname: string | null) {
 
 export async function generateMetadata({ params }: PublicScanDetailPageProps): Promise<Metadata> {
   const { scanId } = await params;
-  const scanRecord = await getAnonymousScanById(scanId);
+  const scanRecord = await getAnonymousScanStatusProjection(scanId);
 
   if (!scanRecord) {
     return {
@@ -51,7 +57,7 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
     };
   }
 
-  const domain = getPublicScanDomainLabel(scanRecord.scan.domainHostname);
+  const domain = getPublicScanDomainLabel(scanRecord.domainHostname);
   const title = `${domain} tracking, cookie, consent, and accessibility scan | CertScore.ai`;
   const description = `Automated CertScore.ai scan summary for ${domain}, including observed tracking, cookie, consent, and accessibility risk signals. Review the evidence; automated findings may contain errors.`;
   const reportUrl = absoluteUrl(`/scan/${scanId}`);
@@ -92,6 +98,28 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const { scanId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const recentScanReused = resolvedSearchParams.recentScanReused === "1";
+  const statusProjection = await getAnonymousScanStatusProjection(scanId);
+  if (!statusProjection) {
+    notFound();
+  }
+  if (isPendingScanStatus(statusProjection.status)) {
+    return (
+      <main className="min-h-screen bg-white">
+        <SiteHeader />
+        <section className="mx-auto max-w-6xl px-6 py-16">
+          <PendingScanDetailView
+            createdAt={statusProjection.createdAt}
+            domainHostname={statusProjection.domainHostname}
+            profile={statusProjection.profile}
+            scanId={statusProjection.id}
+            startedAt={statusProjection.startedAt}
+            status={statusProjection.status}
+          />
+        </section>
+        <SiteFooter />
+      </main>
+    );
+  }
   const scanRecord = await getAnonymousScanById(scanId);
 
   if (!scanRecord) {
@@ -133,6 +161,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
 
   return (
     <main className="min-h-screen bg-white">
+      <ScanProgressReportVisible scanId={displayScanRecord.scan.id} />
       <SiteHeader />
       <section className="mx-auto max-w-6xl px-6 py-16">
         <SharedScanDetailView

@@ -27,6 +27,7 @@ const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 4;
 const POLICY_RENDERED_FETCH_CONCURRENCY = 1;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
+export const POLICY_HOMEPAGE_FETCH_TIMEOUT_MS = 5_000;
 const MAX_EXCERPT_CHARS = 6_000;
 const MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS = 40_000;
 const MIN_SUBSTANTIVE_POLICY_TEXT_CHARS = 2_500;
@@ -264,7 +265,11 @@ export async function policySurfaceScanner(
       timingBreakdown,
       "homepage fetch",
       "Fetch homepage HTML for static policy link discovery.",
-      () => fetchText(input.normalizedUrl, remainingMs(input, moduleStartedAtMs)),
+      () => fetchText(
+        input.normalizedUrl,
+        Math.min(POLICY_HOMEPAGE_FETCH_TIMEOUT_MS, remainingMs(input, moduleStartedAtMs)),
+        input.signal,
+      ),
     );
     recordPolicyFetchDiagnostic(policyFetchDiagnostics, {
       stage: "homepage",
@@ -280,7 +285,7 @@ export async function policySurfaceScanner(
         () => rankCandidatesWithRequiredNano(
           input,
           fallbackCandidates,
-          speculativeCommonPathNanoAbortController.signal,
+          combineAbortSignals(input.signal, speculativeCommonPathNanoAbortController.signal),
         ),
       );
       // The speculative ranking is authoritative only if rendered recovery does
@@ -466,7 +471,7 @@ export async function policySurfaceScanner(
         () => rankCandidatesWithRequiredNano(
           input,
           speculativeCommonPathCandidates,
-          speculativeCommonPathNanoAbortController.signal,
+          combineAbortSignals(input.signal, speculativeCommonPathNanoAbortController.signal),
         ),
       )
       : undefined;
@@ -983,6 +988,7 @@ async function processPolicyCandidate({
       fetchCaches.direct,
       candidate.normalizedUrl,
       remainingPolicyFetchMs(input, moduleStartedAtMs),
+      input.signal,
     ),
   );
   recordPolicyFetchDiagnostic(fetchCaches.diagnostics, {
@@ -1677,6 +1683,7 @@ async function warmPolicyDocumentFetchCache(input: {
         input.cache,
         candidate.normalizedUrl,
         remainingPolicyFetchMs(input.input, input.moduleStartedAtMs),
+        input.input.signal,
       );
     },
   );
@@ -3698,13 +3705,14 @@ function fetchPolicyDocumentSingleFlight(
   cache: Map<string, Promise<FetchTextResult>>,
   url: string,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<FetchTextResult> {
   const key = policyDocumentFetchCacheKey(url);
   const existing = cache.get(key);
   if (existing) {
     return existing;
   }
-  const pending = fetchText(url, timeoutMs);
+  const pending = fetchText(url, timeoutMs, signal);
   cache.set(key, pending);
   return pending;
 }
@@ -3744,9 +3752,9 @@ function policyDocumentFetchCacheKey(value: string): string {
   }
 }
 
-async function fetchText(url: string, timeoutMs: number): Promise<FetchTextResult> {
+async function fetchText(url: string, timeoutMs: number, signal?: AbortSignal): Promise<FetchTextResult> {
   const startedAtMs = Date.now();
-  const primary = await fetchTextOnce(url, timeoutMs);
+  const primary = await fetchTextOnce(url, timeoutMs, signal);
   if (primary.ok || primary.status !== undefined) {
     return primary;
   }
@@ -3757,7 +3765,7 @@ async function fetchText(url: string, timeoutMs: number): Promise<FetchTextResul
   }
 
   const remainingTimeoutMs = Math.max(500, timeoutMs - (Date.now() - startedAtMs));
-  const fallback = await fetchTextOnce(fallbackUrl, remainingTimeoutMs);
+  const fallback = await fetchTextOnce(fallbackUrl, remainingTimeoutMs, signal);
   return {
     ...fallback,
     attempts: [
@@ -3767,8 +3775,11 @@ async function fetchText(url: string, timeoutMs: number): Promise<FetchTextResul
   };
 }
 
-async function fetchTextOnce(url: string, timeoutMs: number): Promise<FetchTextResult> {
+async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: AbortSignal): Promise<FetchTextResult> {
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort(parentSignal?.reason);
+  if (parentSignal?.aborted) abortFromParent();
+  else parentSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(), Math.max(500, timeoutMs));
   try {
     const response = await fetch(url, {
@@ -3848,7 +3859,23 @@ async function fetchTextOnce(url: string, timeoutMs: number): Promise<FetchTextR
     };
   } finally {
     clearTimeout(timeout);
+    parentSignal?.removeEventListener("abort", abortFromParent);
   }
+}
+
+function combineAbortSignals(...signals: Array<AbortSignal | undefined>): AbortSignal | undefined {
+  const active = signals.filter((signal): signal is AbortSignal => Boolean(signal));
+  if (active.length === 0) return undefined;
+  if (active.length === 1) return active[0];
+  const controller = new AbortController();
+  for (const signal of active) {
+    if (signal.aborted) {
+      controller.abort(signal.reason);
+      break;
+    }
+    signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
+  }
+  return controller.signal;
 }
 
 function isPdfPolicyResponse(url: string, contentType: string): boolean {

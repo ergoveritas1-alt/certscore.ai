@@ -1124,7 +1124,7 @@ export async function insertQueuedFullScanEvent(input: {
 
 export async function updateLocalV2DagLambdaDispatchState(input: {
   acceptedAt?: string;
-  dispatchState: "accepted" | "failed";
+  dispatchState: "accepted" | "failed" | "uncertain";
   errorMessage?: string;
   invocationRequestId?: string | null;
   scanId: string;
@@ -1137,9 +1137,9 @@ export async function updateLocalV2DagLambdaDispatchState(input: {
           coalesce(scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || $2::jsonb,
           true
         ),
-        status = case when $3 = 'failed' then 'failed' else status end,
-        completed_at = case when $3 = 'failed' then coalesce(completed_at, now()) else completed_at end,
-        error_message = case when $3 = 'failed' then coalesce($4, error_message) else error_message end,
+        status = case when $3 in ('failed', 'uncertain') then 'failed' else status end,
+        completed_at = case when $3 in ('failed', 'uncertain') then coalesce(completed_at, now()) else completed_at end,
+        error_message = case when $3 in ('failed', 'uncertain') then coalesce($4, error_message) else error_message end,
         updated_at = now()
       where id = $1
         and status in ('queued', 'running')`,

@@ -13,6 +13,9 @@ existing_ecs_cluster_name = ""
 public_subnet_ids         = ["subnet-053d0eaa45152d300", "subnet-000adac289b27c3ac"]
 private_subnet_ids        = ["subnet-053d0eaa45152d300", "subnet-000adac289b27c3ac"]
 assign_public_ip          = true
+web_autoscaling_min_capacity = 1
+web_autoscaling_max_capacity = 3
+web_autoscaling_target_cpu   = 60
 database_security_group_id = "sg-0f2219d488cc6c482"
 
 certscore_domain_name    = "certscore.ai"

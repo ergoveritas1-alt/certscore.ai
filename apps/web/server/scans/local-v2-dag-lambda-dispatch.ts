@@ -16,6 +16,7 @@ export const LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE = "v2_lambda_dispa
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE = "v2_lambda_dispatch.failed";
 export const LOCAL_V2_DAG_LAMBDA_RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 export const LOCAL_V2_DAG_LAMBDA_RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
+export const LOCAL_V2_DAG_LAMBDA_DISPATCH_TIMEOUT_MS = 5_000;
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
@@ -132,14 +133,38 @@ export type LocalV2DagLambdaDispatchResult = {
   invocationStatusCode: number;
   invocationType: "Event";
   payload: LocalV2DagLambdaDispatchPayload;
+  timings: LocalV2DagLambdaDispatchTimings;
 };
+
+export type LocalV2DagLambdaDispatchTimings = {
+  clientReadyMs: number;
+  credentialResolutionMs: number;
+  dispatchTotalMs: number;
+  requestSigningAndSendMs: number;
+  sdkImportMs: number;
+};
+
+export class LocalV2DagLambdaDispatchError extends Error {
+  constructor(
+    message: string,
+    readonly dispatchState: "failed" | "uncertain",
+    readonly timings: LocalV2DagLambdaDispatchTimings,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = "LocalV2DagLambdaDispatchError";
+  }
+}
 
 type LambdaInvokeCommand = import("@aws-sdk/client-lambda").InvokeCommand;
 type LambdaInvokeCommandOutput = import("@aws-sdk/client-lambda").InvokeCommandOutput;
 
 type LambdaInvokeClient = {
-  send(command: LambdaInvokeCommand): Promise<LambdaInvokeCommandOutput>;
+  config?: { credentials?: () => Promise<unknown> };
+  send(command: LambdaInvokeCommand, options?: { abortSignal?: AbortSignal }): Promise<LambdaInvokeCommandOutput>;
 };
+
+const lambdaClientsByRegion = new Map<LocalV2DagLambdaAwsRegion, LambdaInvokeClient>();
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -259,24 +284,97 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
 }
 
 export async function dispatchLocalV2DagLambdaScan(input: {
+  dispatchTimeoutMs?: number;
   lambdaClient?: LambdaInvokeClient;
   localCallbackUrl?: string | null;
   scanConfig: SharedScanConfig | Record<string, unknown>;
   scanId: string;
 }): Promise<LocalV2DagLambdaDispatchResult> {
+  const dispatchStartedAtMs = Date.now();
   const payload = buildLocalV2DagLambdaDispatchPayload(input);
+  const sdkImportStartedAtMs = Date.now();
   const { InvokeCommand, LambdaClient } = await import("@aws-sdk/client-lambda");
-  const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: payload.awsRegion });
+  const sdkImportMs = Date.now() - sdkImportStartedAtMs;
+  const clientReadyStartedAtMs = Date.now();
+  let lambdaClient = input.lambdaClient ?? lambdaClientsByRegion.get(payload.awsRegion);
+  if (!lambdaClient) {
+    lambdaClient = new LambdaClient({ region: payload.awsRegion });
+    lambdaClientsByRegion.set(payload.awsRegion, lambdaClient);
+  }
+  const clientReadyMs = Date.now() - clientReadyStartedAtMs;
   const command = new InvokeCommand({
     FunctionName: payload.functionName,
     InvocationType: "Event",
     Payload: Buffer.from(JSON.stringify(payload))
   });
-  const response = await lambdaClient.send(command);
+  const timeoutMs = Math.max(250, input.dispatchTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DISPATCH_TIMEOUT_MS);
+  const abortController = new AbortController();
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    abortController.abort(new Error("Lambda async invocation acceptance deadline exceeded."));
+  }, timeoutMs);
+  const aborted = new Promise<never>((_resolve, reject) => {
+    abortController.signal.addEventListener("abort", () => {
+      const error = new Error("Lambda dispatch deadline exceeded.");
+      error.name = "AbortError";
+      reject(error);
+    }, { once: true });
+  });
+  let response: LambdaInvokeCommandOutput;
+  let credentialResolutionMs = 0;
+  let requestSigningAndSendMs = 0;
+  try {
+    const credentialStartedAtMs = Date.now();
+    if (lambdaClient.config?.credentials) {
+      await Promise.race([lambdaClient.config.credentials(), aborted]);
+    }
+    credentialResolutionMs = Date.now() - credentialStartedAtMs;
+    const requestStartedAtMs = Date.now();
+    response = await Promise.race([
+      lambdaClient.send(command, { abortSignal: abortController.signal }),
+      aborted,
+    ]);
+    requestSigningAndSendMs = Date.now() - requestStartedAtMs;
+  } catch (error) {
+    const timings = {
+      clientReadyMs,
+      credentialResolutionMs,
+      dispatchTotalMs: Date.now() - dispatchStartedAtMs,
+      requestSigningAndSendMs,
+      sdkImportMs,
+    };
+    if (timedOut || (error instanceof Error && error.name === "AbortError")) {
+      throw new LocalV2DagLambdaDispatchError(
+        `AWS Lambda invocation acceptance was not confirmed within ${timeoutMs}ms; the scan was stopped without retry because acceptance is uncertain.`,
+        "uncertain",
+        timings,
+        { cause: error },
+      );
+    }
+    throw new LocalV2DagLambdaDispatchError(
+      error instanceof Error ? error.message : "AWS Lambda invocation failed before acceptance.",
+      "failed",
+      timings,
+      { cause: error },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
   const statusCode = response.StatusCode ?? 0;
 
   if (statusCode < 200 || statusCode >= 300) {
-    throw new Error(`Local v2 DAG Lambda dispatch was not accepted by AWS Lambda: status ${statusCode}.`);
+    throw new LocalV2DagLambdaDispatchError(
+      `Local v2 DAG Lambda dispatch was not accepted by AWS Lambda: status ${statusCode}.`,
+      "failed",
+      {
+        clientReadyMs,
+        credentialResolutionMs,
+        dispatchTotalMs: Date.now() - dispatchStartedAtMs,
+        requestSigningAndSendMs,
+        sdkImportMs,
+      },
+    );
   }
 
   return {
@@ -284,7 +382,14 @@ export async function dispatchLocalV2DagLambdaScan(input: {
     invocationRequestId: response.$metadata.requestId ?? null,
     invocationStatusCode: statusCode,
     invocationType: "Event",
-    payload
+    payload,
+    timings: {
+      clientReadyMs,
+      credentialResolutionMs,
+      dispatchTotalMs: Date.now() - dispatchStartedAtMs,
+      requestSigningAndSendMs,
+      sdkImportMs,
+    }
   };
 }
 

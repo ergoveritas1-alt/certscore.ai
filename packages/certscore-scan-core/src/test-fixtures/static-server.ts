@@ -416,6 +416,33 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     return;
   }
 
+  if (url.pathname === "/stalled-policy-homepage") {
+    if (request.headers["sec-fetch-mode"] !== "navigate") {
+      // Ford-like fixture: the static homepage response never becomes usable,
+      // while browser-rendered discovery remains available.
+      const delayed = setTimeout(() => {
+        if (!response.destroyed) response.destroy();
+      }, 15_000);
+      response.on("close", () => clearTimeout(delayed));
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><html><body>
+      <main>Rendered homepage</main>
+      <footer><a href="/stalled-policy-homepage/privacy">Privacy Policy</a></footer>
+    </body></html>`);
+    return;
+  }
+
+  if (url.pathname === "/stalled-policy-homepage/privacy") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><html><head><title>Ford-like Privacy Policy</title></head><body>
+      <h1>Privacy Policy</h1>
+      <p>We collect personal data for service delivery and analytics. You may exercise access, deletion, and objection rights by contacting privacy@example.test.</p>
+    </body></html>`);
+    return;
+  }
+
   if (url.pathname === "/browser-visible-policy-homepage/privacy") {
     if (request.headers["sec-fetch-mode"] !== "navigate") {
       response.writeHead(429, { "Content-Type": "text/plain; charset=utf-8" });

@@ -50,6 +50,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
+  LocalV2DagLambdaDispatchError,
   dispatchLocalV2DagLambdaScan,
   isLocalV2DagLambdaIntentSimulated,
   summarizeLocalV2DagLambdaDispatchForEvent
@@ -446,7 +447,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     }
   }
 
-  const priorScanAcceleration = await loadPriorScanAccelerationCandidate({
+  const [priorScanAcceleration, trancoRankMetadata] = await Promise.all([loadPriorScanAccelerationCandidate({
     domainId: domainRecord.domain.id,
     normalizedUrl: domainRecord.domain.normalizedUrl,
     organizationId: input.organizationId
@@ -456,8 +457,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       domainId: domainRecord.domain.id
     });
     return null;
-  });
-  const trancoRankMetadata = await lookupTrancoRankMetadata({
+  }), lookupTrancoRankMetadata({
     hostname: domainRecord.domain.hostname,
     normalizedUrl: domainRecord.domain.normalizedUrl
   }).catch((error) => {
@@ -466,7 +466,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       hostname: domainRecord.domain.hostname
     });
     return null;
-  });
+  })]);
   const scanConfig = buildQueuedFullScanConfig({
     hostname: domainRecord.domain.hostname,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
@@ -605,12 +605,15 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         scanConfig,
         scanId: scan.id
       });
+      const acceptancePersistenceStartedAtMs = Date.now();
       await updateLocalV2DagLambdaDispatchState({
         acceptedAt: new Date().toISOString(),
         dispatchState: "accepted",
         invocationRequestId: dispatchResult.invocationRequestId,
         scanId: scan.id
       });
+      const acceptancePersistenceMs = Date.now() - acceptancePersistenceStartedAtMs;
+      const eventPersistenceStartedAtMs = Date.now();
       await insertQueuedFullScanEvent({
         domainId: domainRecord.domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
@@ -622,15 +625,27 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
           invocationRequestId: dispatchResult.invocationRequestId,
           invocationStatusCode: dispatchResult.invocationStatusCode,
           invocationType: dispatchResult.invocationType,
+          dispatchTimings: {
+            ...dispatchResult.timings,
+            acceptancePersistenceMs
+          },
           simulatedLocalLambda,
           productionFindingIntegration: false
         },
         organizationId: input.organizationId,
         scanId: scan.id
       });
+      console.info(JSON.stringify({
+        ...dispatchResult.timings,
+        acceptancePersistenceMs,
+        event: "scan.lambda_dispatch_timing",
+        eventPersistenceMs: Date.now() - eventPersistenceStartedAtMs,
+        scanId: scan.id
+      }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Local v2 DAG Lambda dispatch failed.";
-      await updateLocalV2DagLambdaDispatchState({ dispatchState: "failed", errorMessage: message, scanId: scan.id });
+      const dispatchState = error instanceof LocalV2DagLambdaDispatchError ? error.dispatchState : "failed";
+      await updateLocalV2DagLambdaDispatchState({ dispatchState, errorMessage: message, scanId: scan.id });
       await insertQueuedFullScanEvent({
         domainId: domainRecord.domain.id,
         eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
@@ -638,6 +653,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         metadataJson: {
           ...localV2DagLambdaDispatch,
           errorMessage: message,
+          dispatchState,
+          dispatchTimings: error instanceof LocalV2DagLambdaDispatchError ? error.timings : null,
           productionFindingIntegration: false
         },
         organizationId: input.organizationId,

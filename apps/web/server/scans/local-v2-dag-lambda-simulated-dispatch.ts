@@ -34,6 +34,7 @@ export async function dispatchLocalV2DagSimulatedLambdaScan(input: {
   scanConfig: SharedScanConfig | Record<string, unknown>;
   scanId: string;
 }): Promise<LocalV2DagLambdaDispatchResult> {
+  const dispatchStartedAtMs = Date.now();
   const payload = buildLocalV2DagLambdaDispatchPayload(input);
   const root = workspaceRoot();
   const artifactDir = "artifacts/local-v2-dag-lambda-simulated";
@@ -98,7 +99,14 @@ export async function dispatchLocalV2DagSimulatedLambdaScan(input: {
     invocationRequestId: `local-simulated:${payload.scanId}`,
     invocationStatusCode: 200,
     invocationType: "Event",
-    payload
+    payload,
+    timings: {
+      clientReadyMs: 0,
+      credentialResolutionMs: 0,
+      dispatchTotalMs: Date.now() - dispatchStartedAtMs,
+      requestSigningAndSendMs: 0,
+      sdkImportMs: 0
+    }
   };
 }
 
