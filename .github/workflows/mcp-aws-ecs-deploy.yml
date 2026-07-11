@@ -120,9 +120,6 @@ jobs:
             echo "Reusing immutable SHA image ${MCP_IMAGE}:${GITHUB_SHA}."
           else
             build_args=(--provenance=false --sbom=false --cache-from "type=registry,ref=${MCP_CACHE}" --cache-to "type=registry,ref=${MCP_CACHE},mode=max" -f apps/mcp/Dockerfile --build-arg "BUILD_GIT_REF=${GITHUB_REF_NAME}" --build-arg "BUILD_GIT_SHA=${GITHUB_SHA}" --build-arg "BUILD_IMAGE_TAG=${GITHUB_SHA}" --build-arg "BUILD_RUNTIME_TARGET=ecs-fargate" -t "${MCP_IMAGE}:${GITHUB_SHA}" -t "${MCP_IMAGE}:latest")
-            if ! aws ecr describe-images --repository-name "${ECR_MCP_REPOSITORY}" --image-ids "imageTag=${RELEASE_TAG}" >/dev/null 2>&1; then
-              build_args+=(-t "${MCP_IMAGE}:${RELEASE_TAG}")
-            fi
             docker buildx build "${build_args[@]}" --push .
           fi
           image_digest="$(aws ecr describe-images --repository-name "${ECR_MCP_REPOSITORY}" --image-ids "imageTag=${GITHUB_SHA}" --query 'imageDetails[0].imageDigest' --output text)"
@@ -130,6 +127,7 @@ jobs:
           echo "MCP_VERSION=${MCP_VERSION}" >> "${GITHUB_ENV}"
           echo "MCP_IMAGE=${MCP_IMAGE}" >> "${GITHUB_ENV}"
           echo "MCP_IMAGE_DIGEST=${image_digest}" >> "${GITHUB_ENV}"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
 
       - name: Inspect ECR image scan
         run: |
@@ -141,6 +139,12 @@ jobs:
           echo "ECR image scan findings: ${findings}"
           critical="$(jq -r '.CRITICAL // 0' <<<"${findings}")"
           test "${critical}" = "0" || (echo "MCP image has CRITICAL ECR findings" && exit 1)
+
+      - name: Promote scanned release tag
+        run: |
+          manifest="$(aws ecr batch-get-image --repository-name "${ECR_MCP_REPOSITORY}" --image-ids "imageTag=${GITHUB_SHA}" --query 'images[0].imageManifest' --output text)"
+          test -n "${manifest}" && test "${manifest}" != "None"
+          aws ecr put-image --repository-name "${ECR_MCP_REPOSITORY}" --image-tag "${RELEASE_TAG}" --image-manifest "${manifest}" >/dev/null
 
       - name: Register combined task definition
         run: |
@@ -155,10 +159,11 @@ jobs:
 
       - name: Verify target and deployed image
         run: |
-          unhealthy_count="$(aws elbv2 describe-target-health --target-group-arn "${MCP_TARGET_GROUP_ARN}" --query 'length(TargetHealthDescriptions[?TargetHealth.State!=`healthy`])' --output text)"
-          test "${unhealthy_count}" = "0"
-          active_task="$(aws ecs list-tasks --cluster "${ECS_CLUSTER_NAME}" --service-name "${ECS_SERVICE_NAME}" --desired-status RUNNING --query 'taskArns[0]' --output text)"
-          deployed_image="$(aws ecs describe-tasks --cluster "${ECS_CLUSTER_NAME}" --tasks "${active_task}" --query 'tasks[0].containers[?name==`mcp-http`].image' --output text)"
+          healthy_count="$(aws elbv2 describe-target-health --target-group-arn "${MCP_TARGET_GROUP_ARN}" --query 'length(TargetHealthDescriptions[?TargetHealth.State==`healthy`])' --output text)"
+          test "${healthy_count}" -ge 1
+          deployed_task_definition="$(aws ecs describe-services --cluster "${ECS_CLUSTER_NAME}" --services "${ECS_SERVICE_NAME}" --query 'services[0].taskDefinition' --output text)"
+          test "${deployed_task_definition}" = "${MCP_TASK_DEFINITION_ARN}"
+          deployed_image="$(aws ecs describe-task-definition --task-definition "${deployed_task_definition}" --query 'taskDefinition.containerDefinitions[?name==`mcp-http`].image' --output text)"
           test "${deployed_image}" = "${MCP_IMAGE}:${GITHUB_SHA}"
 
       - name: Verify public metadata and authenticated tools
