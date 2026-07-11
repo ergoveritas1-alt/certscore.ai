@@ -47,9 +47,11 @@ function extractStringArrayFromSource(sourcePath: string, marker: string) {
   return [...source.slice(start, end).matchAll(/"([^"]+)"/g)].map((match) => match[1] ?? "");
 }
 
-function extractQuotedStringAfterMarker(sourcePath: string, marker: string) {
+function extractQuotedStringAfterMarker(sourcePath: string, marker: string, sectionMarker?: string) {
   const source = readFileSync(join(repoRoot, sourcePath), "utf8");
-  const markerIndex = source.indexOf(marker);
+  const sectionIndex = sectionMarker ? source.indexOf(sectionMarker) : 0;
+  assert.notEqual(sectionIndex, -1, `${sourcePath} should contain ${sectionMarker}`);
+  const markerIndex = source.indexOf(marker, sectionIndex);
   assert.notEqual(markerIndex, -1, `${sourcePath} should contain ${marker}`);
   const value = source.slice(markerIndex).match(/:\s*"([^"]+)"/)?.[1];
   assert.ok(value, `${sourcePath} should contain a quoted string for ${marker}`);
@@ -175,7 +177,7 @@ function npxPackagesFromDocs(paths: string[]) {
 async function main() {
   assert.equal(manifest.length, 12, "CertScore MCP manifest should expose exactly 12 tools");
   const cask = parseCertScoreMcpCask();
-  const discoveryVersion = extractQuotedStringAfterMarker(discoveryRoutePath, "currentVersion:");
+  const discoveryVersion = extractQuotedStringAfterMarker(discoveryRoutePath, "currentVersion:", "mcp: {");
 
   assert.deepEqual(
     sortedTools(certScoreMcpToolContracts.map((tool) => ({ name: tool.name, description: tool.description }))),

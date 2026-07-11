@@ -47,6 +47,7 @@ export const apiV2Routes = [
   ["POST", "/api/v2/keys/request", "Issue a self-serve read-only + MCP key for a signed-in verified user."],
   ["POST", "/api/v2/scans", "Create or reuse a public scan through the resource API."],
   ["GET", "/api/v2/scans/{scanId}", "Retrieve the public-safe scan resource."],
+  ["GET", "/api/v2/scans/{scanId}/diagnostics", "Retrieve bounded scan timing and collection diagnostics."],
   ["GET", "/api/v2/scans/{scanId}/status", "Check scan or job status without inferring from partial evidence."],
   ["GET", "/api/v2/scans/{scanId}/findings", "List already-projected public findings for a scan."],
   ["GET", "/api/v2/scans/{scanId}/findings/{findingId}", "Retrieve one public-safe finding and capped evidence summary."],

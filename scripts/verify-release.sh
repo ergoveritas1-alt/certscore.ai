@@ -68,8 +68,10 @@ const caskVersion = process.env.VERIFY_CASK_VERSION;
 assert.ok(binary, "VERIFY_BINARY is required");
 assert.ok(caskVersion, "VERIFY_CASK_VERSION is required");
 
-function extractDiscoveryString(source, marker) {
-  const index = source.indexOf(marker);
+function extractDiscoveryString(source, marker, sectionMarker) {
+  const sectionIndex = sectionMarker ? source.indexOf(sectionMarker) : 0;
+  assert.notEqual(sectionIndex, -1, `Local discovery manifest should contain ${sectionMarker}`);
+  const index = source.indexOf(marker, sectionIndex);
   assert.notEqual(index, -1, `Local discovery manifest should contain ${marker}`);
   const value = source.slice(index).match(/:\s*"([^"]+)"/)?.[1];
   assert.ok(value, `Local discovery manifest should contain a string for ${marker}`);
@@ -115,7 +117,7 @@ function serializedLength(value) {
 }
 
 const localDiscoverySource = readFileSync("apps/web/app/.well-known/certscore-ai.json/route.ts", "utf8");
-const localManifestVersion = extractDiscoveryString(localDiscoverySource, "currentVersion:");
+const localManifestVersion = extractDiscoveryString(localDiscoverySource, "currentVersion:", "mcp: {");
 const localManifestTools = extractDiscoveryTools(localDiscoverySource);
 assert.equal(localManifestVersion, caskVersion, "Local manifest currentVersion must match cask version");
 
