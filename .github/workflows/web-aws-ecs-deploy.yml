@@ -227,7 +227,12 @@ jobs:
           echo "TARGET_TASK_DEFINITION=${TARGET_TASK_DEFINITION}" >> "${GITHUB_ENV}"
 
           EXPECTED_LATEST_MIGRATION="$(find packages/db/migrations -maxdepth 1 -type f -name '*.sql' -exec basename {} \; | sort | tail -1)"
-          OVERRIDES="$(jq -nc --arg name "${CONTAINER_NAME}" --arg latest "${EXPECTED_LATEST_MIGRATION}" '{containerOverrides:[{
+          AUXILIARY_OVERRIDES="$(jq -c --arg primary "${CONTAINER_NAME}" '[
+            .containerDefinitions[]
+            | select(.name != $primary)
+            | {name:.name,command:["sh","-c","exit 0"]}
+          ]' current-task-definition.json)"
+          OVERRIDES="$(jq -nc --arg name "${CONTAINER_NAME}" --arg latest "${EXPECTED_LATEST_MIGRATION}" --argjson auxiliary "${AUXILIARY_OVERRIDES}" '{containerOverrides:([{
             name:$name,
             command:["node","./apps/web/scripts/apply-db-migrations.mjs"],
             environment:[
@@ -236,7 +241,7 @@ jobs:
               {name:"PGCONNECT_TIMEOUT",value:"15"},
               {name:"PGOPTIONS",value:"-c lock_timeout=10000 -c statement_timeout=60000"}
             ]
-          }]}')"
+          }] + $auxiliary)}')"
 
           TASK_ARN="$(aws ecs run-task \
             --cluster "${ECS_CLUSTER_NAME}" \

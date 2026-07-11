@@ -14,6 +14,8 @@ test("web deploy applies target-image migrations before ECS promotion", async ()
   assert.match(workflow, /\.containerDefinitions\[0\]\.image = \$image/);
   assert.match(workflow, /EXPECTED_LATEST_MIGRATION/);
   assert.match(workflow, /--task-definition "\$\{TARGET_TASK_DEFINITION\}"/);
+  assert.match(workflow, /select\(\.name != \$primary\)/);
+  assert.match(workflow, /command:\["sh","-c","exit 0"\]/);
 });
 
 test("deploy-all does not race the standalone DB workflow against the target web image", async () => {
