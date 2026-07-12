@@ -17,6 +17,7 @@ export type ScanDetailQueryRow = {
   completed_at: string | null;
   created_at: string;
   domain_id: string | null;
+  duration_ms: number | null;
   error_message: string | null;
   id: string;
   organization_id?: string | null;
@@ -541,7 +542,7 @@ export async function loadScanCoreRecord(input: {
   const loadScan = async (organizationId: string | null) => {
     return await queryOne<ScanDetailQueryRow>(
       `select id, organization_id, domain_id, scan_type, status, pages_requested, pages_scanned,
-              scan_config_json, created_at, started_at, completed_at, error_message
+              scan_config_json, created_at, started_at, completed_at, duration_ms, error_message
          from scans
         where id = $1
           and ${
@@ -554,7 +555,7 @@ export async function loadScanCoreRecord(input: {
   const loadScanWithoutOrganizationScope = async () => {
     return await queryOne<ScanDetailQueryRow>(
       `select id, organization_id, domain_id, scan_type, status, pages_requested, pages_scanned,
-              scan_config_json, created_at, started_at, completed_at, error_message
+              scan_config_json, created_at, started_at, completed_at, duration_ms, error_message
          from scans
         where id = $1`,
       [input.scanId],

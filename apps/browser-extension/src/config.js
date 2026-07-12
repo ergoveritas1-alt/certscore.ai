@@ -6,12 +6,5 @@ export const config = {
 };
 
 export async function getApiBaseUrl() {
-  if (typeof chrome === "undefined" || !chrome.storage?.sync) {
-    return config.apiBaseUrl;
-  }
-
-  const stored = await chrome.storage.sync.get("certscoreApiBaseUrl");
-  return typeof stored.certscoreApiBaseUrl === "string" && stored.certscoreApiBaseUrl.trim()
-    ? stored.certscoreApiBaseUrl.trim().replace(/\/+$/, "")
-    : config.apiBaseUrl;
+  return config.apiBaseUrl;
 }

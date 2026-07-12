@@ -109,6 +109,7 @@ export type ScanDetailRecord = {
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
+  durationMs: number | null;
   errorMessage: string | null;
   provenance: ScanExecutionProvenanceRecord;
 };
@@ -1409,6 +1410,7 @@ async function loadScanDetailRecord(input: {
       createdAt: displayCreatedAt,
       startedAt: displayState.startedAt,
       completedAt: displayState.completedAt,
+      durationMs: scanRow.duration_ms,
       errorMessage: scanRow.error_message,
       provenance: buildScanExecutionProvenance({
         events: normalizedEvents,

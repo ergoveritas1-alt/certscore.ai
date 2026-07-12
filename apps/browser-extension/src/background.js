@@ -100,6 +100,39 @@ function originFromUrl(url) {
   }
 }
 
+function permissionPatternForUrl(value) {
+  const url = new URL(value);
+  return `${url.protocol}//${url.host}/*`;
+}
+
+async function registerTargetContentScripts(targetUrl) {
+  const matches = [permissionPatternForUrl(targetUrl)];
+  const hasAccess = await chrome.permissions.contains({ origins: matches });
+  if (!hasAccess) {
+    throw new Error("Open the CertScore.ai extension and allow access to this site before starting the scan.");
+  }
+
+  const ids = ["certscore-target-observer", "certscore-target-fingerprint-probe"];
+  await chrome.scripting.unregisterContentScripts({ ids }).catch(() => {});
+  await chrome.scripting.registerContentScripts([
+    {
+      id: ids[0],
+      js: ["src/content.js"],
+      matches,
+      persistAcrossSessions: false,
+      runAt: "document_start"
+    },
+    {
+      id: ids[1],
+      js: ["src/fingerprint-probe.js"],
+      matches,
+      persistAcrossSessions: false,
+      runAt: "document_start",
+      world: "MAIN"
+    }
+  ]);
+}
+
 async function clearSiteDataForFreshVisit(targetUrl) {
   const origin = originFromUrl(targetUrl);
   if (!origin) {
@@ -316,7 +349,7 @@ async function uploadScreenshotArtifact(scan) {
   if (dataUrl.length > config.maxScreenshotDataUrlBytes) {
     scan.events.push({
       eventType: "browser_capture_note",
-      message: "Visible-tab screenshot skipped because it exceeded the BX01 MVP upload size limit.",
+      message: "Visible-tab screenshot skipped because it exceeded the browser-evidence upload size limit.",
       observedAtMs: nowMs(scan),
       sourceId: "BX01",
       sourceType: "browser_extension"
@@ -328,7 +361,7 @@ async function uploadScreenshotArtifact(scan) {
     artifactJson: {
       capturedAtMs: nowMs(scan),
       dataUrl,
-      description: "Reviewer-visible tab screenshot captured by BX01 near the end of the scan window.",
+      description: "Reviewer-visible tab screenshot captured near the end of the browser scan window.",
       sourceId: "BX01",
       sourceType: "browser_extension",
       targetUrl: scan.targetUrl
@@ -567,6 +600,7 @@ async function startScan(message) {
   setBadge("observing");
   const apiBaseUrl = await getApiBaseUrl();
   const targetUrl = message.targetUrl;
+  await registerTargetContentScripts(targetUrl);
   const startedAtEpochMs = Date.now();
   const launcherTabId = typeof message.launcherTabId === "number" ? message.launcherTabId : null;
 
@@ -574,8 +608,8 @@ async function startScan(message) {
     busy: true,
     label: "Queueing",
     message: message.freshVisit
-      ? "Scanning is in progress. BX01 is preparing a fresh visit and clearing this site's local browser state."
-      : "Scanning is in progress. BX01 is opening a browser evidence session with CertScore.ai.",
+      ? "Scanning is in progress. CertScore.ai is preparing a fresh visit and clearing this site's local browser state."
+      : "Scanning is in progress. CertScore.ai is opening a browser evidence session.",
     phase: "queueing",
     startedAt: startedAtEpochMs,
     targetUrl
@@ -604,7 +638,7 @@ async function startScan(message) {
       throw new Error("Sign in to CertScore.ai before running a browser scan.");
     }
     if (startResponse.status === 404) {
-      throw new Error(`BX01 API was not found at ${apiBaseUrl}. Point the API URL at a CertScore.ai build that includes browser scan routes.`);
+      throw new Error("The CertScore.ai browser-scan service is not available right now.");
     }
     throw new Error(`Start failed with ${startResponse.status}.`);
   }
@@ -629,7 +663,7 @@ async function startScan(message) {
   if (message.launchFromCertScore) {
     const createdTab = await chrome.tabs.create({ active: true, url: session.targetUrl || targetUrl });
     if (!createdTab.id) {
-      throw new Error("Could not open target website tab for BX01 scan.");
+      throw new Error("Could not open the target website tab for this scan.");
     }
     tabId = createdTab.id;
   }
@@ -662,7 +696,7 @@ async function startScan(message) {
 
   setScanStatus(scan, {
     label: "Scanning",
-    message: `Scanning is in progress. Keep the CertScore.ai and target-site tabs open while BX01 watches browser evidence for ${Math.round(scanWindowMs / 1000)} seconds.`,
+    message: `Scanning is in progress. Keep the CertScore.ai and target-site tabs open while browser evidence is observed for ${Math.round(scanWindowMs / 1000)} seconds.`,
     phase: "scanning"
   });
   setTimeout(() => {

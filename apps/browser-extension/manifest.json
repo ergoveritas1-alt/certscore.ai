@@ -17,18 +17,11 @@
     "service_worker": "src/background.js",
     "type": "module"
   },
-  "options_page": "src/options/options.html",
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
+      "matches": ["https://certscore.ai/*"],
       "js": ["src/content.js"],
       "run_at": "document_start"
-    },
-    {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["src/fingerprint-probe.js"],
-      "run_at": "document_start",
-      "world": "MAIN"
     }
   ],
   "icons": {
@@ -37,6 +30,7 @@
     "48": "assets/icons/icon-48.png",
     "128": "assets/icons/icon-128.png"
   },
-  "host_permissions": ["http://*/*", "https://*/*"],
-  "permissions": ["activeTab", "browsingData", "cookies", "scripting", "storage", "tabs", "webRequest", "windows"]
+  "host_permissions": ["https://certscore.ai/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "permissions": ["browsingData", "cookies", "scripting", "storage", "tabs", "webRequest", "windows"]
 }

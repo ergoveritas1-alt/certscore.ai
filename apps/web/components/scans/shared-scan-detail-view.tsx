@@ -7118,7 +7118,9 @@ export async function SharedScanDetailView({
   );
   const gdprEprivacyExecutiveLens =
     executiveRegulatoryLenses.find((lens) => lens.acronym === "GDPR / ePrivacy") ?? null;
-  const scanDurationMs = getRuntimeArtifactNumber(scanRecord.runtimeArtifacts, "local_v2_dag_scan_core_duration_ms");
+  const scanDurationMs =
+    getRuntimeArtifactNumber(scanRecord.runtimeArtifacts, "local_v2_dag_scan_core_duration_ms") ??
+    scanRecord.scan.durationMs;
   const executiveTimelineEvents = buildExecutiveTimelineEvents(scanRecord.runtimeArtifacts);
   const scanTimeLabel = formatScanTimeLabel({
     completedAt: scanRecord.scan.completedAt,

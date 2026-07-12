@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "node scripts/validate-extension.mjs",
+    "store:package": "node scripts/package-store-release.mjs",
     "typecheck": "node scripts/validate-extension.mjs",
     "clean": "rm -rf dist"
   }

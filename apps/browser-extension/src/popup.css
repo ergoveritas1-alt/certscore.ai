@@ -65,6 +65,51 @@ header p,
   font-size: 12px;
 }
 
+.data-disclosure {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 10px;
+}
+
+.data-disclosure summary {
+  color: #0b2e4f;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.data-disclosure p {
+  margin-top: 8px;
+}
+
+.data-disclosure a {
+  display: inline-block;
+  margin-top: 8px;
+}
+
+.scan-consent {
+  align-items: flex-start;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  color: #1e3a5f;
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  line-height: 1.4;
+  padding: 10px;
+}
+
+.scan-consent[hidden] {
+  display: none;
+}
+
+.scan-consent input {
+  margin-top: 2px;
+}
+
 .target,
 .status,
 .results,

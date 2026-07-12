@@ -25,6 +25,13 @@ function signalStringArray(signals: BrowserScanObservedSignalPackageInput["obser
   return Array.isArray(signal?.value) ? uniqueStrings(signal.value.filter((value): value is string => typeof value === "string")) : [];
 }
 
+function signalObservedAtMs(signals: BrowserScanObservedSignalPackageInput["observedSignals"], key: string) {
+  const signal = signals.find((candidate) => candidate.key === key);
+  return typeof signal?.observedAtMs === "number" && Number.isFinite(signal.observedAtMs)
+    ? Math.max(0, Math.round(signal.observedAtMs))
+    : null;
+}
+
 function countCategoryMatches(categories: string[], pattern: RegExp) {
   return categories.filter((category) => pattern.test(category)).length;
 }
@@ -83,6 +90,7 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
   const granularPreferencesPresent = signalBoolean(signals, "privacy.granular_preferences_present");
   const doNotSellLinkPresent = signalBoolean(signals, "privacy.do_not_sell_link_present");
   const preconsentTrackingDetected = signalBoolean(signals, "privacy.preconsent_tracking_detected");
+  const firstThirdPartyRequestMs = signalObservedAtMs(signals, "privacy.preconsent_tracking_detected");
   const score = deriveBrowserScanScore({
     acceptAllPresent,
     cookieBannerPresent,
@@ -146,6 +154,10 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
         thirdPartyCookieBeforeConsentCount: 0,
         thirdPartyCookieCount: 0,
         valueCaptured: false
+      },
+      timelineMarkers: {
+        firstNonEssentialRequestMs: firstThirdPartyRequestMs,
+        firstThirdPartyRequestMs
       },
       vendorSummary: {
         normalizedVendors: trackerVendors,

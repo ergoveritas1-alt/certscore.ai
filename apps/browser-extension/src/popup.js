@@ -7,6 +7,8 @@ const statusMetaEl = document.querySelector("#status-meta");
 const statusElapsedEl = document.querySelector("#status-elapsed");
 const statusPhaseEl = document.querySelector("#status-phase");
 const freshVisitInput = document.querySelector("#fresh-visit");
+const scanConsentEl = document.querySelector("#scan-consent");
+const acceptDataUseInput = document.querySelector("#accept-data-use");
 const runButton = document.querySelector("#run-scan");
 const errorEl = document.querySelector("#error");
 const reportLink = document.querySelector("#report-link");
@@ -18,6 +20,11 @@ const extensionApiAvailable = typeof chrome !== "undefined" && Boolean(chrome.ta
 let currentApiBaseUrl = config.apiBaseUrl;
 let currentStatus = null;
 let elapsedTimer = null;
+let dataUseAccepted = false;
+
+function updateRunButton() {
+  runButton.disabled = Boolean(currentStatus?.busy) || !dataUseAccepted;
+}
 
 async function getActiveTab() {
   if (!extensionApiAvailable) {
@@ -93,8 +100,8 @@ function renderStatus(status) {
   const label = status?.label ?? "Ready";
   statusEl.textContent = status?.busy ? "Scanning is in progress..." : label;
   statusMessageEl.textContent = status?.message ?? "Waiting for a reviewer-started browser scan.";
-  runButton.disabled = Boolean(status?.busy);
   syncElapsedTimer(status);
+  updateRunButton();
   const summary = status?.summary;
 
   if (summary) {
@@ -119,6 +126,13 @@ function renderStatus(status) {
 async function refresh() {
   const tab = await getActiveTab();
   currentApiBaseUrl = await getApiBaseUrl();
+  if (extensionApiAvailable) {
+    const stored = await chrome.storage.local.get("certscoreDataDisclosureAcceptedAt");
+    dataUseAccepted = typeof stored.certscoreDataDisclosureAcceptedAt === "string";
+    acceptDataUseInput.checked = dataUseAccepted;
+    scanConsentEl.hidden = dataUseAccepted;
+    updateRunButton();
+  }
   const launchTargetUrl = getLaunchTargetFromCertScoreUrl(tab?.url);
   urlEl.textContent = launchTargetUrl ?? tab?.url ?? "No active tab";
 
@@ -146,6 +160,28 @@ async function refresh() {
   renderStatus(certscoreBx01Status);
 }
 
+function permissionPatternForUrl(value) {
+  const url = new URL(value);
+  return `${url.protocol}//${url.host}/*`;
+}
+
+async function ensureTargetPermission(targetUrl) {
+  const origins = [permissionPatternForUrl(targetUrl)];
+  if (await chrome.permissions.contains({ origins })) {
+    return true;
+  }
+  return chrome.permissions.request({ origins });
+}
+
+acceptDataUseInput.addEventListener("change", async () => {
+  dataUseAccepted = acceptDataUseInput.checked;
+  if (dataUseAccepted) {
+    await chrome.storage.local.set({ certscoreDataDisclosureAcceptedAt: new Date().toISOString() });
+    scanConsentEl.hidden = true;
+  }
+  updateRunButton();
+});
+
 runButton.addEventListener("click", async () => {
   const tab = await getActiveTab();
   const launchTargetUrl = getLaunchTargetFromCertScoreUrl(tab?.url);
@@ -157,16 +193,27 @@ runButton.addEventListener("click", async () => {
 
   if (!extensionApiAvailable) {
     renderStatus({
-      error: "Load this folder as a Chrome extension to run a real BX01 scan.",
+      error: "Install the CertScore.ai Chrome extension to run a browser scan.",
       label: "Preview mode"
     });
+    return;
+  }
+
+  if (!dataUseAccepted) {
+    setError("Review and accept the scan data disclosure before starting.");
+    return;
+  }
+
+  const permissionGranted = await ensureTargetPermission(targetUrl).catch(() => false);
+  if (!permissionGranted) {
+    setError("Allow CertScore.ai to access this site so the reviewer-started scan can run.");
     return;
   }
 
   renderStatus({
     busy: true,
     label: "Starting...",
-    message: "Keep the CertScore.ai and target-site tabs open while BX01 captures browser evidence."
+    message: "Keep the CertScore.ai and target-site tabs open while browser evidence is captured."
   });
   const response = await chrome.runtime.sendMessage({
     type: "BX01_START_SCAN",

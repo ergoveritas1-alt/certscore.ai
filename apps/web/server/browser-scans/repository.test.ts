@@ -146,3 +146,52 @@ test("WS01-normalized BX01 signal package preserves request timing provenance", 
     preconsentSignal?.evidenceRefs.includes("bx01.network_request:25:https://www.googletagmanager.com/gtm.js?id=GTM-TEST")
   );
 });
+
+test("browser signal package uses the canonical resolver for multiple pre-consent vendors", () => {
+  const summary = summarizeBrowserEvidence({
+    artifacts: [],
+    events: [
+      {
+        event_type: "network_request",
+        observed_at_ms: 25,
+        event_json: {
+          eventType: "network_request",
+          hostname: "securepubads.g.doubleclick.net",
+          observedAtMs: 25,
+          resourceType: "script",
+          url: "https://securepubads.g.doubleclick.net/tag/js/gpt.js"
+        }
+      },
+      {
+        event_type: "network_request",
+        observed_at_ms: 40,
+        event_json: {
+          eventType: "network_request",
+          hostname: "sb.scorecardresearch.com",
+          observedAtMs: 40,
+          resourceType: "image",
+          url: "https://sb.scorecardresearch.com/p?c1=2"
+        }
+      },
+      {
+        event_type: "network_request",
+        observed_at_ms: 50,
+        event_json: {
+          eventType: "network_request",
+          hostname: "cdn.cnn.com",
+          observedAtMs: 50,
+          resourceType: "script",
+          url: "https://cdn.cnn.com/app.js"
+        }
+      }
+    ],
+    targetHostname: "www.cnn.com"
+  });
+
+  const signalPackage = buildBrowserObservedSignalPackageFromEvidence({ evidence: summary });
+  const vendors = signalPackage.observedSignals.find((signal) => signal.key === "privacy.preconsent_tracker_vendors");
+  const violationCount = signalPackage.observedSignals.find((signal) => signal.key === "privacy.preconsent_violation_count");
+
+  assert.deepEqual(vendors?.value, ["Google Publisher Tag", "Google Ads / DoubleClick", "ScorecardResearch"]);
+  assert.equal(violationCount?.value, 2);
+});

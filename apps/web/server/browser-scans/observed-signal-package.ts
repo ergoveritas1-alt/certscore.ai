@@ -1,4 +1,5 @@
 import type { summarizeBrowserEvidence } from "./evidence-summary";
+import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import {
   BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
   BROWSER_SCAN_SOURCE_ID,
@@ -11,17 +12,10 @@ function uniqueStrings(values: Array<string | null | undefined>, limit = 250) {
     .slice(0, limit);
 }
 
-function classifyBrowserVendor(hostname: string) {
-  const host = hostname.toLowerCase();
-  if (/googletagmanager\.com/.test(host)) return { category: "tag_manager", vendor: "Google Tag Manager" };
-  if (/google-analytics\.com|analytics\.google\.com/.test(host)) return { category: "analytics", vendor: "Google Analytics" };
-  if (/scorecardresearch\.com/.test(host)) return { category: "analytics", vendor: "Comscore / ScorecardResearch" };
-  if (/doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google\./.test(host)) return { category: "advertising", vendor: "Google Ads" };
-  if (/facebook\.com|facebook\.net|connect\.facebook\.net/.test(host)) return { category: "advertising", vendor: "Meta Pixel" };
-  if (/clarity\.ms|bat\.bing\.com/.test(host)) return { category: "analytics", vendor: host.includes("clarity") ? "Microsoft Clarity" : "Microsoft Advertising" };
-  if (/hotjar\.com|fullstory\.com|logrocket\.com/.test(host)) return { category: "session_replay", vendor: host.includes("hotjar") ? "Hotjar" : host.includes("fullstory") ? "FullStory" : "LogRocket" };
-  if (/segment\.com|segment\.io/.test(host)) return { category: "analytics", vendor: "Segment" };
-  return null;
+const TRACKING_PURPOSES = new Set(["advertising", "analytics", "session_replay", "tag_management"]);
+
+function vendorLabel(observation: ReturnType<typeof resolveVendorObservations>[number]) {
+  return observation.product?.trim() || observation.vendor;
 }
 
 function browserEvidenceRef(prefix: string, observedAtMs: number | null | undefined, value: string) {
@@ -38,19 +32,40 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
     input.evidence.consentSummary && typeof input.evidence.consentSummary === "object"
       ? input.evidence.consentSummary
       : null;
-  const classified = input.evidence.thirdPartyRequestDomains
-    .map((domain) => classifyBrowserVendor(domain))
-    .filter((value): value is { category: string; vendor: string } => Boolean(value));
-  const trackerVendors = uniqueStrings(classified.map((item) => item.vendor));
-  const trackerCategories = uniqueStrings(classified.map((item) => item.category));
   const preconsentNetworkEvents = input.evidence.networkEvidence.filter((event) => event.consentInteractionObserved !== true);
-  const classifiedPreconsentNetworkEvents = preconsentNetworkEvents.filter((event) => classifyBrowserVendor(event.hostname));
+  const resolvedPreconsentNetworkEvents = preconsentNetworkEvents.flatMap((event) => {
+    const observations = resolveVendorObservations([{
+      evidenceId: browserEvidenceRef("network_request", event.observedAtMs, event.hostname) ?? undefined,
+      hostname: event.hostname,
+      sourceEventType: "network_request",
+      sourceScanner: BROWSER_SCAN_SOURCE_ID,
+      type: event.resourceType === "script" ? "script" : "request",
+      url: event.url
+    }]).filter((observation) => TRACKING_PURPOSES.has(observation.purpose));
+    return observations.length > 0 ? [{ event, observations }] : [];
+  });
+  const resolvedCookieObservations = input.evidence.cookies.flatMap((event) =>
+    resolveVendorObservations([{
+      cookieName: event.cookieName,
+      evidenceId: browserEvidenceRef("cookie", event.observedAtMs, event.cookieName) ?? undefined,
+      hostname: event.domain,
+      sourceEventType: event.eventType,
+      sourceScanner: BROWSER_SCAN_SOURCE_ID,
+      type: "cookie"
+    }]).filter((observation) => TRACKING_PURPOSES.has(observation.purpose))
+  );
+  const trackerObservations = [
+    ...resolvedPreconsentNetworkEvents.flatMap(({ observations }) => observations),
+    ...resolvedCookieObservations
+  ];
+  const trackerVendors = uniqueStrings(trackerObservations.map(vendorLabel));
+  const trackerCategories = uniqueStrings(trackerObservations.map((observation) => observation.purpose));
   const preconsentTrackerEvidenceUrls = uniqueStrings(
-    classifiedPreconsentNetworkEvents.map((event) => event.url),
+    resolvedPreconsentNetworkEvents.map(({ event }) => event.url),
     50
   );
   const preconsentTrackerEvidenceRefs = uniqueStrings(
-    classifiedPreconsentNetworkEvents.flatMap((event) => [
+    resolvedPreconsentNetworkEvents.flatMap(({ event }) => [
       event.url,
       browserEvidenceRef("network_request", event.observedAtMs, event.url)
     ]),
