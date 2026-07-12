@@ -5,8 +5,7 @@
 - Publisher account: `ben@certscore.ai`
 - Public publisher name: `CertScore.ai by ErgoVeritas`
 - Support email: `support@certscore.ai`
-- Initial visibility: Private
-- Initial trusted testers: `ben@certscore.ai`, `bmasek@gmail.com`
+- Initial visibility: Public
 - Privacy policy: `https://certscore.ai/browser-extension/privacy`
 
 ## Store listing
@@ -25,17 +24,17 @@ CertScore.ai Browser Evidence lets a signed-in CertScore.ai reviewer run a brows
 
 Use it when a website behaves differently in a normal browser session or when CertScore.ai's hosted scanner cannot verify a representative public page.
 
-After you start a scan, the extension reloads the selected page for an untouched pre-consent observation, then inspects up to four linked privacy, cookie, terms, or accessibility pages in background tabs. It collects bounded request metadata, cookie names and attributes, visible consent-interface evidence, browser-observed fingerprinting signals, transport/form/embed and accessibility metadata, linked legal-surface URLs, bounded visible legal text, scan timing, and a screenshot of the visible target tab. It sends that evidence securely to CertScore.ai to create the requested scan report.
+After you start a scan, the extension clears site data for the selected origin, reloads the selected page for an untouched pre-consent observation, then inspects up to four linked privacy, cookie, terms, or accessibility pages in background tabs. It collects bounded request metadata, cookie names and attributes, visible consent-interface evidence, browser-observed fingerprinting signals, transport/form/embed and accessibility metadata, linked legal-surface URLs, bounded visible legal text, and scan timing. It sends that evidence securely to CertScore.ai to create the requested scan report.
 
 The extension does not capture cookie values, passwords, form entries, payment information, or browsing activity outside the reviewer-started scan window. Evidence is not sold or used for personalized advertising.
 
-Fresh visit is optional. When selected, it clears cookies and site storage only for the chosen website before reloading it.
+Every scan uses a fresh visit. The extension clears cookies and site storage only for the chosen website before reloading it.
 
 The extension reports observable risk signals for review. It does not provide legal certification or a compliance determination.
 
 ## Single purpose
 
-CertScore.ai lets a signed-in reviewer run a user-initiated browser-assisted website scan and upload bounded pre-consent runtime, consent-interface, privacy/legal surface, transport, embed, accessibility, timing, and visible-tab evidence to the reviewer's CertScore.ai report.
+CertScore.ai lets a signed-in reviewer run a user-initiated browser-assisted website scan and upload bounded pre-consent runtime, consent-interface, privacy/legal surface, transport, embed, accessibility, and timing evidence to the reviewer's CertScore.ai report.
 
 ## Permission justifications
 
@@ -49,7 +48,7 @@ Requested only when the reviewer starts a scan. This access allows the extension
 
 ### `browsingData`
 
-Used only when the reviewer explicitly enables Fresh visit. It clears cookies and browser storage for the selected target origin before reload so the requested scan can observe a fresh pre-consent state.
+Used for every reviewer-started scan to clear cookies and browser storage for the selected target origin before reload so the requested scan observes a fresh pre-consent state.
 
 ### `cookies`
 
@@ -59,17 +58,17 @@ Reads cookie names and non-value attributes for the selected target origin durin
 
 Stores scan progress, the first-scan data-use acknowledgment, and bounded extension state locally in Chrome.
 
+### `notifications`
+
+Shows a completion notification after the reviewer-started scan finishes so the reviewer knows the report is ready even though Chrome closes the extension popup while the scan runs.
+
 ### `tabs`
 
-Reads the selected tab URL, reloads or opens the reviewer-selected target page, opens and closes up to four discovered legal surfaces in inactive tabs, sends bounded messages to packaged content scripts, captures the visible target tab, and opens the completed CertScore.ai report.
+Reads the selected tab URL, reloads or opens the reviewer-selected target page, opens and closes up to four discovered legal surfaces in inactive tabs, sends bounded messages to packaged content scripts, and opens the completed CertScore.ai report.
 
 ### `webRequest`
 
 Observes request URL, hostname, method, resource type, timing, selected header names, and response status for the reviewer-selected tab during the bounded scan window. Request and response bodies are not captured.
-
-### `windows`
-
-Opens and focuses the small CertScore.ai progress window while a reviewer-started scan is running.
 
 ### `scripting`
 
@@ -80,7 +79,7 @@ Registers packaged observation scripts only after the reviewer grants the option
 Declare the following data categories in the Privacy practices tab:
 
 - Web history: target URL/hostname and bounded request URLs during the reviewer-started scan.
-- Website content: visible consent-interface snippets, bounded visible text from selected linked legal surfaces, structural page evidence, and the visible-target-tab screenshot.
+- Website content: visible consent-interface snippets, bounded visible text from selected linked legal surfaces, and structural page evidence. Screenshots are not captured.
 - User activity: reviewer-started scan action and scan timing.
 - Authentication information: the extension uses the signed-in CertScore.ai session to create the requested scan, but does not collect or upload passwords or authentication-cookie values.
 
@@ -100,7 +99,14 @@ Certifications:
 4. Read and accept the first-scan data disclosure.
 5. Select **Run Browser-Assisted Scan**.
 6. Approve scan-time website access when Chrome prompts.
-7. Keep the target and CertScore.ai progress windows open while the 15-second pre-consent observation and bounded legal-surface review complete.
-8. Select **View scan report on CertScore.ai** after completion.
+7. Keep the target tab open while the 15-second pre-consent observation and bounded legal-surface review complete.
+8. Reopen the extension after the icon shows **OK**, then select **Open CertScore.ai report**.
 
 No consent-banner buttons are clicked by the extension.
+
+## Submission files
+
+- Upload package: `artifacts/chrome-web-store/certscore-chrome-extension-0.2.0.zip`
+- Store icon: `apps/browser-extension/assets/icons/icon-128.png`
+- Small promotional tile: `apps/browser-extension/store-assets/small-promo-440x280.png`
+- Listing screenshot: `apps/browser-extension/store-assets/screenshot-run-scan-640x400.png`

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CertScore.ai Browser-Assisted Scan</title>
+    <link rel="stylesheet" href="../src/popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <img class="brand-mark" src="../assets/certscore-mark-cropped.png" alt="" />
+        <div class="brand-copy">
+          <h1><span>CertScore</span><span>.ai</span></h1>
+          <p>Browser-assisted site scan</p>
+        </div>
+      </header>
+
+      <section class="target">
+        <span>Current URL</span>
+        <strong>https://www.example.com/</strong>
+      </section>
+
+      <button type="button">Run Browser-Assisted Scan</button>
+      <p class="note">The page will reload for an untouched pre-consent observation, then CertScore.ai will inspect a bounded set of linked legal surfaces in background tabs.</p>
+
+      <details class="data-disclosure">
+        <summary>What this scan collects</summary>
+      </details>
+
+      <label class="scan-consent">
+        <input type="checkbox" />
+        <span>I understand what this reviewer-started scan collects and uploads.</span>
+      </label>
+
+      <section class="status">
+        <span>Status</span>
+        <strong>Ready</strong>
+        <p class="status-message">Waiting for a reviewer-started browser scan.</p>
+      </section>
+    </main>
+  </body>
+</html>
