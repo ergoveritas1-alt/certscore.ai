@@ -121,11 +121,9 @@ function renderStatus(status) {
   if (status?.reportUrl) {
     currentReportUrl = new URL(status.reportUrl, currentApiBaseUrl).toString();
     reportButton.hidden = false;
-    runButton.hidden = true;
   } else {
     currentReportUrl = null;
     reportButton.hidden = true;
-    runButton.hidden = false;
   }
 
   setError(status?.error ?? "");
