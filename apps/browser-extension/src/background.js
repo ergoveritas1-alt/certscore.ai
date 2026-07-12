@@ -165,6 +165,39 @@ function selectPolicyLinks(links) {
   return [...selected.values()];
 }
 
+async function collectPolicyPageEvidence(tabId) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const formActions = Array.from(document.querySelectorAll("form"))
+        .map((form) => form.action || window.location.href)
+        .filter(Boolean)
+        .slice(0, 50);
+      return {
+        bodyText: (document.querySelector("main")?.innerText || document.body?.innerText || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 12000),
+        finalUrl: window.location.href.slice(0, 4096),
+        formActions,
+        iframeUrls: Array.from(document.querySelectorAll("iframe[src]"))
+          .map((frame) => frame.src)
+          .filter((url) => /^https?:/i.test(url))
+          .slice(0, 50),
+        insecureFormActionCount: formActions.filter((url) => /^http:/i.test(url)).length,
+        language: (document.documentElement.lang || "").slice(0, 40),
+        mixedContentCount: window.location.protocol === "https:"
+          ? document.querySelectorAll('[src^="http:"], [href^="http:"]').length
+          : 0,
+        policyLinks: [],
+        title: document.title.slice(0, 300),
+        transportSecure: window.location.protocol === "https:"
+      };
+    }
+  }).catch(() => []);
+  return results[0]?.result ?? null;
+}
+
 async function captureBrowserPageEvidence(scan) {
   setScanStatus(scan, {
     label: "Reviewing surfaces",
@@ -191,18 +224,8 @@ async function captureBrowserPageEvidence(scan) {
     try {
       const loaded = await waitForTabComplete(tab.id);
       if (!loaded) continue;
-      let evidence = await chrome.tabs.sendMessage(tab.id, {
-        includeText: true,
-        type: "BX01_COLLECT_PAGE_EVIDENCE"
-      }).catch(() => null);
-      if (!evidence) {
-        await chrome.scripting.executeScript({ files: ["src/content.js"], target: { tabId: tab.id } }).catch(() => null);
-        await new Promise((resolve) => setTimeout(resolve, 350));
-        evidence = await chrome.tabs.sendMessage(tab.id, {
-          includeText: true,
-          type: "BX01_COLLECT_PAGE_EVIDENCE"
-        }).catch(() => null);
-      }
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const evidence = await collectPolicyPageEvidence(tab.id);
       if (!evidence?.finalUrl || !evidence.bodyText) continue;
       await uploadArtifact(scan, {
         artifactJson: {
