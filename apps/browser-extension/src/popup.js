@@ -11,7 +11,7 @@ const scanConsentEl = document.querySelector("#scan-consent");
 const acceptDataUseInput = document.querySelector("#accept-data-use");
 const runButton = document.querySelector("#run-scan");
 const errorEl = document.querySelector("#error");
-const reportLink = document.querySelector("#report-link");
+const reportButton = document.querySelector("#report-button");
 const resultsEl = document.querySelector("#results");
 const resultRequestsEl = document.querySelector("#result-requests");
 const resultCookiesEl = document.querySelector("#result-cookies");
@@ -21,6 +21,11 @@ let currentApiBaseUrl = config.apiBaseUrl;
 let currentStatus = null;
 let elapsedTimer = null;
 let dataUseAccepted = false;
+let currentReportUrl = null;
+
+reportButton.addEventListener("click", () => {
+  if (currentReportUrl) chrome.tabs.create({ active: true, url: currentReportUrl });
+});
 
 function updateRunButton() {
   runButton.disabled = Boolean(currentStatus?.busy) || !dataUseAccepted;
@@ -114,10 +119,13 @@ function renderStatus(status) {
   }
 
   if (status?.reportUrl) {
-    reportLink.href = new URL(status.reportUrl, currentApiBaseUrl).toString();
-    reportLink.hidden = false;
+    currentReportUrl = new URL(status.reportUrl, currentApiBaseUrl).toString();
+    reportButton.hidden = false;
+    runButton.hidden = true;
   } else {
-    reportLink.hidden = true;
+    currentReportUrl = null;
+    reportButton.hidden = true;
+    runButton.hidden = false;
   }
 
   setError(status?.error ?? "");
