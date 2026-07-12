@@ -87,7 +87,7 @@ export const browserScanEventsUploadSchema = z.object({
 
 export const browserScanArtifactSchema = z.object({
   artifactJson: z.record(z.unknown()).default({}),
-  artifactType: z.enum(["screenshot", "banner_dom_summary"]),
+  artifactType: z.enum(["screenshot", "banner_dom_summary", "page_evidence", "policy_surface"]),
   contentType: z.string().trim().min(1).max(120)
 });
 
@@ -98,6 +98,7 @@ export const browserScanCompleteSchema = z.object({
       bannerObserved: z.boolean().optional(),
       cookieEventCount: z.number().int().min(0).max(100000).optional(),
       networkRequestCount: z.number().int().min(0).max(100000).optional(),
+      policySurfaceCount: z.number().int().min(0).max(20).optional(),
       sourceId: z.literal(BROWSER_SCAN_SOURCE_ID).optional(),
       sourceType: z.literal(BROWSER_SCAN_SOURCE_TYPE).optional()
     })

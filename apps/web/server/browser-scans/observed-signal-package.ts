@@ -1,4 +1,5 @@
 import type { summarizeBrowserEvidence } from "./evidence-summary";
+import { classifyGdprTransparencyTopics } from "@certscore/contracts";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import {
   BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
@@ -80,6 +81,35 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
     100
   );
   const fingerprintCategories = uniqueStrings(input.evidence.fingerprintCategories, 50);
+  const policySurfaces = input.evidence.policySurfaces;
+  const policySurfaceUrls = (type: string) => uniqueStrings(
+    policySurfaces
+      .filter((surface) => surface.pageType === type && typeof surface.finalUrl === "string")
+      .map((surface) => surface.finalUrl as string),
+    10
+  );
+  const privacyPolicyUrls = policySurfaceUrls("privacy_policy");
+  const cookiePolicyUrls = policySurfaceUrls("cookie_policy");
+  const termsUrls = policySurfaceUrls("terms");
+  const accessibilityUrls = policySurfaceUrls("accessibility");
+  const homepageEvidence = input.evidence.pageEvidence[0] ?? null;
+  const iframeUrls = Array.isArray(homepageEvidence?.iframeUrls)
+    ? uniqueStrings(homepageEvidence.iframeUrls.filter((value): value is string => typeof value === "string"), 50)
+    : [];
+  const transportSecure = homepageEvidence?.transportSecure === true;
+  const mixedContentCount = typeof homepageEvidence?.mixedContentCount === "number" ? homepageEvidence.mixedContentCount : 0;
+  const insecureFormActionCount = typeof homepageEvidence?.insecureFormActionCount === "number" ? homepageEvidence.insecureFormActionCount : 0;
+  const accessibilitySummary = homepageEvidence?.accessibilitySummary && typeof homepageEvidence.accessibilitySummary === "object"
+    ? homepageEvidence.accessibilitySummary as Record<string, unknown>
+    : {};
+  const imagesMissingAltCount = typeof accessibilitySummary.imagesMissingAltCount === "number" ? accessibilitySummary.imagesMissingAltCount : 0;
+  const unlabeledFormControlCount = typeof accessibilitySummary.unlabeledFormControlCount === "number" ? accessibilitySummary.unlabeledFormControlCount : 0;
+  const gdprTransparencyTopics = uniqueStrings(
+    policySurfaces
+      .filter((surface) => surface.pageType === "privacy_policy" && typeof surface.bodyText === "string")
+      .flatMap((surface) => classifyGdprTransparencyTopics({ text: surface.bodyText as string }).matches.map((match) => match.topic)),
+    20
+  );
   const signals: BrowserScanObservedSignalPackageInput["observedSignals"] = [];
   const addSignal = (
     key: string,
@@ -91,7 +121,13 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
     observedAtMs: number | null = null
   ) => {
     signals.push({
-      category: "privacy",
+      category: key.startsWith("accessibility.")
+        ? "accessibility"
+        : key.startsWith("disclosure.")
+          ? "disclosure"
+          : key.startsWith("context.") || key.startsWith("security.")
+            ? "context"
+            : "privacy",
       confidence,
       evidenceRefs,
       key,
@@ -144,6 +180,24 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
   addSignal("privacy.session_replay_runtime_vendors", "Session replay runtime vendors", trackerCategories.includes("session_replay") ? trackerVendors : [], "string_array", 0.76);
   addSignal("privacy.fingerprinting_tier", "Fingerprinting tier", fingerprintCategories.length >= 3 ? 2 : fingerprintCategories.length > 0 ? 1 : 0, "number", 0.6);
   addSignal("privacy.fingerprinting_attribute_categories", "Fingerprinting attribute categories", fingerprintCategories, "string_array", 0.6);
+  addSignal("disclosure.privacy_policy_present", "Privacy policy fetched", privacyPolicyUrls.length > 0, "boolean", 0.9, privacyPolicyUrls);
+  addSignal("disclosure.privacy_policy_urls", "Privacy policy URLs", privacyPolicyUrls, "string_array", 0.9, privacyPolicyUrls);
+  addSignal("disclosure.cookie_policy_present", "Cookie policy fetched", cookiePolicyUrls.length > 0, "boolean", 0.9, cookiePolicyUrls);
+  addSignal("disclosure.cookie_policy_urls", "Cookie policy URLs", cookiePolicyUrls, "string_array", 0.9, cookiePolicyUrls);
+  addSignal("disclosure.terms_of_service_present", "Terms fetched", termsUrls.length > 0, "boolean", 0.9, termsUrls);
+  addSignal("disclosure.terms_urls", "Terms URLs", termsUrls, "string_array", 0.9, termsUrls);
+  addSignal("disclosure.accessibility_statement_present", "Accessibility statement fetched", accessibilityUrls.length > 0, "boolean", 0.86, accessibilityUrls);
+  addSignal("disclosure.accessibility_statement_urls", "Accessibility statement URLs", accessibilityUrls, "string_array", 0.86, accessibilityUrls);
+  addSignal("disclosure.gdpr_transparency_topics", "GDPR transparency topics observed", gdprTransparencyTopics, "string_array", 0.84, privacyPolicyUrls);
+  addSignal("security.https_enforced", "HTTPS delivery observed", transportSecure, "boolean", 0.9);
+  addSignal("security.mixed_content_detected", "Mixed content detected", mixedContentCount > 0, "boolean", 0.8);
+  addSignal("security.insecure_form_action_count", "Insecure form action count", insecureFormActionCount, "number", 0.82);
+  addSignal("privacy.preconsent_iframe_urls", "Pre-consent iframe URLs", iframeUrls, "string_array", 0.78, iframeUrls);
+  addSignal("privacy.preconsent_iframe_count", "Pre-consent iframe count", iframeUrls.length, "number", 0.78, iframeUrls);
+  addSignal("context.browser_policy_surface_count", "Browser policy surfaces fetched", policySurfaces.length, "number", 0.9);
+  addSignal("accessibility.image_alt_missing_count", "Images missing alt text", imagesMissingAltCount, "number", 0.78);
+  addSignal("accessibility.form_label_missing_count", "Form controls missing labels", unlabeledFormControlCount, "number", 0.78);
+  addSignal("accessibility.document_language_present", "Document language present", accessibilitySummary.documentLanguagePresent === true, "boolean", 0.82);
 
   return {
     observedSignals: signals,

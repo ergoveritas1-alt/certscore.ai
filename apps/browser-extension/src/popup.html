@@ -12,7 +12,7 @@
         <img class="brand-mark" src="../assets/certscore-mark-cropped.png" alt="" />
         <div class="brand-copy">
           <h1><span>CertScore</span><span>.ai</span></h1>
-          <p>Browser pre-consent evidence</p>
+          <p>Browser-assisted site scan</p>
         </div>
       </header>
 
@@ -28,16 +28,18 @@
           <small>Clear this site’s cookies and storage before reload.</small>
         </span>
       </label>
-      <button id="run-scan" type="button">Run Browser Pre-Consent Scan</button>
+      <button id="run-scan" type="button">Run Browser-Assisted Scan</button>
 
-      <p class="note">The page will reload. CertScore.ai will observe this tab for about 15 seconds.</p>
+      <p class="note">The page will reload for an untouched pre-consent observation, then CertScore.ai will inspect a bounded set of linked legal surfaces in background tabs.</p>
 
       <details class="data-disclosure">
         <summary>What this scan collects</summary>
         <p>
           After you start the scan, CertScore.ai collects the target URL, bounded request metadata, cookie names and
-          attributes, visible consent-interface evidence, and a visible-tab screenshot. Cookie values, form entries,
-          passwords, and payment information are not captured.
+          attributes, visible consent-interface evidence, linked privacy/legal surface URLs and bounded visible policy
+          text, transport/form/embed metadata, and a visible-tab screenshot. The extension requests temporary access to
+          linked sites so those surfaces can be inspected. Cookie values, form entries, passwords, and payment
+          information are not captured, and consent controls are not clicked.
         </p>
         <p>Evidence is sent securely to CertScore.ai only to create your scan report.</p>
         <a href="https://certscore.ai/browser-extension/privacy" target="_blank" rel="noreferrer">Extension privacy details</a>

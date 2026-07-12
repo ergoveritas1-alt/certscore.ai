@@ -106,7 +106,7 @@ function permissionPatternForUrl(value) {
 }
 
 async function registerTargetContentScripts(targetUrl) {
-  const matches = [permissionPatternForUrl(targetUrl)];
+  const matches = ["http://*/*", "https://*/*"];
   const hasAccess = await chrome.permissions.contains({ origins: matches });
   if (!hasAccess) {
     throw new Error("Open the CertScore.ai extension and allow access to this site before starting the scan.");
@@ -131,6 +131,90 @@ async function registerTargetContentScripts(targetUrl) {
       world: "MAIN"
     }
   ]);
+}
+
+function waitForTabComplete(tabId, timeoutMs = 15000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve(value);
+    };
+    const listener = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === "complete") finish(true);
+    };
+    const timeout = setTimeout(() => finish(false), timeoutMs);
+    chrome.tabs.onUpdated.addListener(listener);
+    chrome.tabs.get(tabId).then((tab) => {
+      if (tab.status === "complete") finish(true);
+    }).catch(() => finish(false));
+  });
+}
+
+function selectPolicyLinks(links) {
+  const selected = new Map();
+  for (const link of Array.isArray(links) ? links : []) {
+    if (!link?.type || !link?.url || selected.has(link.type)) continue;
+    selected.set(link.type, link);
+    if (selected.size >= 4) break;
+  }
+  return [...selected.values()];
+}
+
+async function captureBrowserPageEvidence(scan) {
+  setScanStatus(scan, {
+    label: "Reviewing surfaces",
+    message: "Reviewing rendered privacy, cookie, terms, accessibility, transport, form, and embedded-service surfaces without interacting with consent controls.",
+    phase: "surface_review"
+  });
+
+  const homepage = await chrome.tabs.sendMessage(scan.tabId, {
+    includeText: false,
+    type: "BX01_COLLECT_PAGE_EVIDENCE"
+  }).catch(() => null);
+  if (!homepage) return { policySurfaceCount: 0 };
+
+  await uploadArtifact(scan, {
+    artifactJson: { ...homepage, capturedAtMs: nowMs(scan), pageType: "homepage", sourceId: "BX01", sourceType: "browser_extension" },
+    artifactType: "page_evidence",
+    contentType: "application/json"
+  });
+
+  let policySurfaceCount = 0;
+  for (const link of selectPolicyLinks(homepage.policyLinks)) {
+    const tab = await chrome.tabs.create({ active: false, url: link.url }).catch(() => null);
+    if (!tab?.id) continue;
+    try {
+      const loaded = await waitForTabComplete(tab.id);
+      if (!loaded) continue;
+      const evidence = await chrome.tabs.sendMessage(tab.id, {
+        includeText: true,
+        type: "BX01_COLLECT_PAGE_EVIDENCE"
+      }).catch(() => null);
+      if (!evidence?.finalUrl || !evidence.bodyText) continue;
+      await uploadArtifact(scan, {
+        artifactJson: {
+          ...evidence,
+          capturedAtMs: nowMs(scan),
+          discoveredFromUrl: scan.targetUrl,
+          linkLabel: link.label,
+          pageType: link.type,
+          requestedUrl: link.url,
+          sourceId: "BX01",
+          sourceType: "browser_extension"
+        },
+        artifactType: "policy_surface",
+        contentType: "application/json"
+      });
+      policySurfaceCount += 1;
+    } finally {
+      await chrome.tabs.remove(tab.id).catch(() => {});
+    }
+  }
+  return { policySurfaceCount };
 }
 
 async function clearSiteDataForFreshVisit(targetUrl) {
@@ -404,6 +488,7 @@ async function completeScan(scan) {
   }
 
   await uploadScreenshotArtifact(scan);
+  const pageEvidenceSummary = await captureBrowserPageEvidence(scan);
 
   setScanStatus(scan, {
     label: "Reporting",
@@ -425,6 +510,7 @@ async function completeScan(scan) {
         bannerObserved,
         cookieEventCount,
         networkRequestCount,
+        policySurfaceCount: pageEvidenceSummary.policySurfaceCount,
         sourceId: "BX01",
         sourceType: "browser_extension"
       }
@@ -445,7 +531,8 @@ async function completeScan(scan) {
   const summary = {
     bannerObserved,
     cookieEventCount,
-    networkRequestCount
+    networkRequestCount,
+    policySurfaceCount: pageEvidenceSummary.policySurfaceCount
   };
   cleanupScan(scan.tabId);
   const completeStatus = {
@@ -453,7 +540,7 @@ async function completeScan(scan) {
     browserScanId: scan.browserScanId,
     busy: false,
     label: "Complete",
-    message: `Captured ${networkRequestCount} requests, ${cookieEventCount} cookie events, and ${bannerObserved ? "a visible consent banner" : "no visible consent banner"}.`,
+    message: `Captured ${networkRequestCount} requests, ${cookieEventCount} cookie events, ${pageEvidenceSummary.policySurfaceCount} linked legal surfaces, and ${bannerObserved ? "a visible consent banner" : "no visible consent banner"}.`,
     phase: "complete",
     reportUrl: body.reportUrl,
     summary,

@@ -12,6 +12,7 @@ const resultsEl = document.querySelector("#results");
 const resultRequestsEl = document.querySelector("#result-requests");
 const resultCookiesEl = document.querySelector("#result-cookies");
 const resultBannerEl = document.querySelector("#result-banner");
+const resultPoliciesEl = document.querySelector("#result-policies");
 
 let currentApiBaseUrl = config.apiBaseUrl;
 let currentStatus = null;
@@ -58,6 +59,7 @@ function renderStatus(status) {
     resultRequestsEl.textContent = String(summary.networkRequestCount ?? 0);
     resultCookiesEl.textContent = String(summary.cookieEventCount ?? 0);
     resultBannerEl.textContent = summary.bannerObserved === true ? "Seen" : summary.bannerObserved === false ? "Not seen" : "Unknown";
+    if (resultPoliciesEl) resultPoliciesEl.textContent = String(summary.policySurfaceCount ?? 0);
     resultsEl.hidden = false;
   } else {
     resultsEl.hidden = true;

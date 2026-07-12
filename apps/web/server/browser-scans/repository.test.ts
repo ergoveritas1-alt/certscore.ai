@@ -225,3 +225,50 @@ test("browser signal package counts unique cookies instead of repeated cookie ev
   assert.equal(cookieCount?.value, 2);
   assert.equal(cookieCount?.label, "Unique cookies observed");
 });
+
+test("browser signal package projects fetched legal surfaces and page evidence", () => {
+  const summary = summarizeBrowserEvidence({
+    artifacts: [
+      {
+        artifact_type: "page_evidence",
+        content_type: "application/json",
+        artifact_json: {
+          finalUrl: "https://example.com/",
+          iframeUrls: ["https://player.example-video.com/embed/1"],
+          insecureFormActionCount: 0,
+          mixedContentCount: 0,
+          transportSecure: true
+        }
+      },
+      {
+        artifact_type: "policy_surface",
+        content_type: "application/json",
+        artifact_json: {
+          bodyText: "Privacy notice content retained for bounded review.",
+          finalUrl: "https://example.com/privacy",
+          pageType: "privacy_policy"
+        }
+      },
+      {
+        artifact_type: "policy_surface",
+        content_type: "application/json",
+        artifact_json: {
+          bodyText: "Cookie notice content retained for bounded review.",
+          finalUrl: "https://example.com/cookies",
+          pageType: "cookie_policy"
+        }
+      }
+    ],
+    events: [],
+    targetHostname: "example.com"
+  });
+  const signalPackage = buildBrowserObservedSignalPackageFromEvidence({ evidence: summary });
+  const value = (key: string) => signalPackage.observedSignals.find((signal) => signal.key === key)?.value;
+
+  assert.equal(value("disclosure.privacy_policy_present"), true);
+  assert.equal(value("disclosure.cookie_policy_present"), true);
+  assert.equal(value("disclosure.terms_of_service_present"), false);
+  assert.equal(value("security.https_enforced"), true);
+  assert.equal(value("privacy.preconsent_iframe_count"), 1);
+  assert.deepEqual(value("disclosure.privacy_policy_urls"), ["https://example.com/privacy"]);
+});

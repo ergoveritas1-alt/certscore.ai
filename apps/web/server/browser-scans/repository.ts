@@ -504,6 +504,12 @@ export async function ingestBrowserScanObservedSignals(input: {
             consent_maturity_score = $19::int,
             privacy_score = $20::int,
             certscore_overall = $21::int
+            , privacy_policy_present = $22::boolean
+            , cookie_policy_present = $23::boolean
+            , terms_of_service_present = $24::boolean
+            , accessibility_statement_present = $25::boolean
+            , https_enforced = $26::boolean
+            , mixed_content_detected = $27::boolean
       where scan_id = $1`,
     [
       canonicalScan.id,
@@ -527,6 +533,12 @@ export async function ingestBrowserScanObservedSignals(input: {
       materialized.cookieBannerPresent ? (materialized.rejectAllPresent ? 80 : 45) : 65,
       materialized.privacyScore,
       materialized.score
+      , materialized.privacyPolicyPresent
+      , materialized.cookiePolicyPresent
+      , materialized.termsOfServicePresent
+      , materialized.accessibilityStatementPresent
+      , materialized.httpsEnforced
+      , materialized.mixedContentDetected
     ]
   );
 

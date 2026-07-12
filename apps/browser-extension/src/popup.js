@@ -127,8 +127,8 @@ async function refresh() {
   const tab = await getActiveTab();
   currentApiBaseUrl = await getApiBaseUrl();
   if (extensionApiAvailable) {
-    const stored = await chrome.storage.local.get("certscoreDataDisclosureAcceptedAt");
-    dataUseAccepted = typeof stored.certscoreDataDisclosureAcceptedAt === "string";
+    const stored = await chrome.storage.local.get("certscoreBrowserAssistedDisclosureAcceptedAt");
+    dataUseAccepted = typeof stored.certscoreBrowserAssistedDisclosureAcceptedAt === "string";
     acceptDataUseInput.checked = dataUseAccepted;
     scanConsentEl.hidden = dataUseAccepted;
     updateRunButton();
@@ -166,7 +166,7 @@ function permissionPatternForUrl(value) {
 }
 
 async function ensureTargetPermission(targetUrl) {
-  const origins = [permissionPatternForUrl(targetUrl)];
+  const origins = ["http://*/*", "https://*/*"];
   if (await chrome.permissions.contains({ origins })) {
     return true;
   }
@@ -176,7 +176,7 @@ async function ensureTargetPermission(targetUrl) {
 acceptDataUseInput.addEventListener("change", async () => {
   dataUseAccepted = acceptDataUseInput.checked;
   if (dataUseAccepted) {
-    await chrome.storage.local.set({ certscoreDataDisclosureAcceptedAt: new Date().toISOString() });
+    await chrome.storage.local.set({ certscoreBrowserAssistedDisclosureAcceptedAt: new Date().toISOString() });
     scanConsentEl.hidden = true;
   }
   updateRunButton();

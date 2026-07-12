@@ -90,6 +90,18 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
   const granularPreferencesPresent = signalBoolean(signals, "privacy.granular_preferences_present");
   const doNotSellLinkPresent = signalBoolean(signals, "privacy.do_not_sell_link_present");
   const preconsentTrackingDetected = signalBoolean(signals, "privacy.preconsent_tracking_detected");
+  const privacyPolicyPresent = signalBoolean(signals, "disclosure.privacy_policy_present");
+  const cookiePolicyPresent = signalBoolean(signals, "disclosure.cookie_policy_present");
+  const termsOfServicePresent = signalBoolean(signals, "disclosure.terms_of_service_present");
+  const accessibilityStatementPresent = signalBoolean(signals, "disclosure.accessibility_statement_present");
+  const privacyPolicyUrls = signalStringArray(signals, "disclosure.privacy_policy_urls");
+  const cookiePolicyUrls = signalStringArray(signals, "disclosure.cookie_policy_urls");
+  const termsUrls = signalStringArray(signals, "disclosure.terms_urls");
+  const accessibilityStatementUrls = signalStringArray(signals, "disclosure.accessibility_statement_urls");
+  const gdprTransparencyTopics = signalStringArray(signals, "disclosure.gdpr_transparency_topics");
+  const httpsEnforced = signalBoolean(signals, "security.https_enforced");
+  const mixedContentDetected = signalBoolean(signals, "security.mixed_content_detected");
+  const preconsentIframeUrls = signalStringArray(signals, "privacy.preconsent_iframe_urls");
   const firstThirdPartyRequestMs = signalObservedAtMs(signals, "privacy.preconsent_tracking_detected");
   const score = deriveBrowserScanScore({
     acceptAllPresent,
@@ -147,6 +159,23 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
         thirdPartyRequestCount,
         totalRequestCount: thirdPartyRequestCount
       },
+      embeddedContentSummary: {
+        observations: preconsentIframeUrls.map((url) => ({ preConsent: true, type: "iframe", url })),
+        preConsentCount: preconsentIframeUrls.length,
+        source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE
+      },
+      policySurfaceSummary: {
+        accessibilityStatementPresent,
+        accessibilityStatementUrls,
+        cookiePolicyPresent,
+        cookiePolicyUrls,
+        privacyPolicyPresent,
+        privacyPolicyUrls,
+        gdprTransparencyTopics,
+        source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
+        termsOfServicePresent,
+        termsUrls
+      },
       requestToVendorObservations,
       storageSummary: {
         cookiesBeforeConsentCount: cookieBannerPresent ? cookieCountTotal : 0,
@@ -173,6 +202,12 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
     preconsentTrackingDetected,
     preconsentViolationCount,
     privacyScore: score,
+    privacyPolicyPresent,
+    cookiePolicyPresent,
+    termsOfServicePresent,
+    accessibilityStatementPresent,
+    httpsEnforced,
+    mixedContentDetected,
     rejectAllPresent,
     score,
     sessionReplayTrackerCount: sessionReplayVendors.length,

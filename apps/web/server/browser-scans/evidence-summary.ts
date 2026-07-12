@@ -41,6 +41,14 @@ export function summarizeBrowserEvidence(input: {
   const consentSummary = consentEvents.find((event) => event.bannerObserved) ?? consentEvents[0] ?? null;
   const firstThirdPartyRequestMs = thirdPartyNetworkEvents[0]?.observedAtMs ?? null;
   const firstConsentBannerMs = consentSummary?.observedAtMs ?? null;
+  const pageEvidence = input.artifacts
+    .filter((artifact) => artifact.artifact_type === "page_evidence")
+    .map((artifact) => artifact.artifact_json)
+    .slice(0, 5);
+  const policySurfaces = input.artifacts
+    .filter((artifact) => artifact.artifact_type === "policy_surface")
+    .map((artifact) => artifact.artifact_json)
+    .slice(0, 10);
 
   return {
     bannerObserved: consentSummary?.bannerObserved === true,
@@ -65,6 +73,8 @@ export function summarizeBrowserEvidence(input: {
       resourceType: event.resourceType ?? null,
       url: event.url
     })),
+    pageEvidence,
+    policySurfaces,
     screenshotArtifactCount: input.artifacts.filter((artifact) => artifact.artifact_type === "screenshot").length,
     timelineMarkers: {
       consentBannerDetectedMs: firstConsentBannerMs,

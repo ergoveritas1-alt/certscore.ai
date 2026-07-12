@@ -87,6 +87,72 @@ function summarizeConsentUi() {
   };
 }
 
+const POLICY_LINK_PATTERNS = [
+  { type: "privacy_policy", pattern: /privacy(?:\s+policy|\s+notice|\s+statement)?|data protection/i },
+  { type: "cookie_policy", pattern: /cookie(?:\s+policy|\s+notice|\s+declaration)|tracking technologies/i },
+  { type: "terms", pattern: /terms(?:\s+of\s+(?:service|use))?|conditions of use/i },
+  { type: "accessibility", pattern: /accessibility(?:\s+statement)?/i }
+];
+
+function classifyPolicyLink(label, url) {
+  const candidate = `${label} ${url}`;
+  return POLICY_LINK_PATTERNS.find((entry) => entry.pattern.test(candidate))?.type ?? null;
+}
+
+function collectPageEvidence(includeText = false) {
+  const links = [];
+  for (const anchor of Array.from(document.querySelectorAll("a[href]")).slice(0, 500)) {
+    const href = anchor.href;
+    if (!/^https?:/i.test(href)) continue;
+    const label = (visibleText(anchor) || anchor.getAttribute("aria-label") || "").slice(0, 160);
+    const type = classifyPolicyLink(label, href);
+    if (!type) continue;
+    links.push({ label, type, url: href.slice(0, 4096) });
+  }
+
+  const uniqueLinks = Array.from(new Map(links.map((link) => [`${link.type}|${link.url}`, link])).values()).slice(0, 20);
+  const iframeUrls = Array.from(document.querySelectorAll("iframe[src]"))
+    .map((frame) => frame.src)
+    .filter((url) => /^https?:/i.test(url))
+    .slice(0, 50);
+  const formActions = Array.from(document.querySelectorAll("form"))
+    .map((form) => form.action || window.location.href)
+    .filter(Boolean)
+    .slice(0, 50);
+  const bodyText = includeText
+    ? (document.querySelector("main")?.innerText || document.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 12000)
+    : "";
+  const images = Array.from(document.images);
+  const formControls = Array.from(document.querySelectorAll("input, select, textarea"));
+  const accessibilitySummary = {
+    documentLanguagePresent: Boolean(document.documentElement.lang?.trim()),
+    formControlCount: formControls.length,
+    headingCount: document.querySelectorAll("h1, h2, h3, h4, h5, h6").length,
+    imageCount: images.length,
+    imagesMissingAltCount: images.filter((image) => !image.hasAttribute("alt")).length,
+    unlabeledFormControlCount: formControls.filter((control) => {
+      const id = control.id;
+      return !control.getAttribute("aria-label") && !control.getAttribute("aria-labelledby") && !(id && document.querySelector(`label[for="${CSS.escape(id)}"]`)) && !control.closest("label");
+    }).length
+  };
+
+  return {
+    accessibilitySummary,
+    bodyText,
+    finalUrl: window.location.href.slice(0, 4096),
+    formActions,
+    iframeUrls,
+    insecureFormActionCount: formActions.filter((url) => /^http:/i.test(url)).length,
+    language: (document.documentElement.lang || "").slice(0, 40),
+    mixedContentCount: window.location.protocol === "https:"
+      ? document.querySelectorAll('[src^="http:"], [href^="http:"]').length
+      : 0,
+    policyLinks: uniqueLinks,
+    title: document.title.slice(0, 300),
+    transportSecure: window.location.protocol === "https:"
+  };
+}
+
 let consentInteractionObserved = false;
 
 function getRuntime() {
@@ -135,6 +201,11 @@ if (runtime) {
         consentInteractionObserved,
         summary: summarizeConsentUi()
       });
+      return true;
+    }
+
+    if (message?.type === "BX01_COLLECT_PAGE_EVIDENCE") {
+      sendResponse(collectPageEvidence(message.includeText === true));
       return true;
     }
 
