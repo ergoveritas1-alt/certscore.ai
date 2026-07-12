@@ -509,45 +509,6 @@ async function uploadArtifact(scan, artifact) {
   }
 }
 
-async function uploadScreenshotArtifact(scan) {
-  if (!chrome.tabs?.get || !chrome.tabs?.captureVisibleTab) {
-    return;
-  }
-
-  const tab = await chrome.tabs.get(scan.tabId).catch(() => null);
-  if (!tab?.windowId) {
-    return;
-  }
-
-  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" }).catch(() => null);
-  if (!dataUrl) {
-    return;
-  }
-  if (dataUrl.length > config.maxScreenshotDataUrlBytes) {
-    scan.events.push({
-      eventType: "browser_capture_note",
-      message: "Visible-tab screenshot skipped because it exceeded the browser-evidence upload size limit.",
-      observedAtMs: nowMs(scan),
-      sourceId: "BX01",
-      sourceType: "browser_extension"
-    });
-    return;
-  }
-
-  await uploadArtifact(scan, {
-    artifactJson: {
-      capturedAtMs: nowMs(scan),
-      dataUrl,
-      description: "Reviewer-visible tab screenshot captured near the end of the browser scan window.",
-      sourceId: "BX01",
-      sourceType: "browser_extension",
-      targetUrl: scan.targetUrl
-    },
-    artifactType: "screenshot",
-    contentType: "image/png"
-  });
-}
-
 async function completeScan(scan) {
   setScanStatus(scan, {
     label: "Normalizing",
@@ -580,7 +541,6 @@ async function completeScan(scan) {
     });
   }
 
-  await uploadScreenshotArtifact(scan);
   const pageEvidenceSummary = await captureBrowserPageEvidence(scan);
 
   setScanStatus(scan, {

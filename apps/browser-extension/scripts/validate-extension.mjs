@@ -72,7 +72,7 @@ if (!configSource.includes('apiBaseUrl: "https://certscore.ai"') || /chrome\.sto
 }
 
 const popupSource = readFileSync(join(root, "src/popup.html"), "utf8");
-for (const disclosure of ["bounded request metadata", "Cookie values", "visible-tab screenshot", "Extension privacy details", "I understand what this reviewer-started scan collects"]) {
+for (const disclosure of ["bounded request metadata", "Cookie values", "transport/form/embed metadata", "Extension privacy details", "I understand what this reviewer-started scan collects"]) {
   if (!popupSource.includes(disclosure)) {
     throw new Error(`Popup is missing required data disclosure: ${disclosure}`);
   }
