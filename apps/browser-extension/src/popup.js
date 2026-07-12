@@ -26,9 +26,10 @@ let currentReportUrl = null;
 
 reportButton.addEventListener("click", async () => {
   if (currentReportUrl) {
+    const reportUrl = currentReportUrl;
     await chrome.storage.local.remove("certscoreBx01Status");
     renderStatus({ label: "Ready" });
-    await chrome.tabs.create({ active: true, url: currentReportUrl });
+    await chrome.tabs.create({ active: true, url: reportUrl });
   }
 });
 

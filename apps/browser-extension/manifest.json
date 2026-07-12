@@ -32,5 +32,5 @@
   },
   "host_permissions": ["https://certscore.ai/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
-  "permissions": ["browsingData", "cookies", "scripting", "storage", "tabs", "webRequest", "windows"]
+  "permissions": ["browsingData", "cookies", "scripting", "storage", "tabs", "webRequest"]
 }

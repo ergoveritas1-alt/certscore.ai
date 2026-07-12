@@ -16,9 +16,6 @@ const required = [
   "src/content.js",
   "src/fingerprint-probe.js",
   "src/config.js",
-  "src/progress/progress.css",
-  "src/progress/progress.html",
-  "src/progress/progress.js",
   "src/popup.css",
   "src/popup.html",
   "src/popup.js"
