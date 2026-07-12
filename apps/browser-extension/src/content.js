@@ -94,10 +94,10 @@ function summarizeConsentUi() {
 }
 
 const POLICY_LINK_PATTERNS = [
-  { type: "privacy_policy", pattern: /privacy(?:\s+policy|\s+notice|\s+statement)?|data protection/i },
-  { type: "cookie_policy", pattern: /cookie(?:\s+policy|\s+notice|\s+declaration)|tracking technologies/i },
-  { type: "terms", pattern: /terms(?:\s+of\s+(?:service|use))?|conditions of use/i },
-  { type: "accessibility", pattern: /accessibility(?:\s+statement)?/i }
+  { type: "privacy_policy", pattern: /\bprivacy(?:\s+policy|\s+notice|\s+statement)?\b|\bdata protection\b/i },
+  { type: "cookie_policy", pattern: /\bcookie(?:\s+policy|\s+notice|\s+declaration)\b|\btracking technologies\b/i },
+  { type: "terms", pattern: /\bterms(?:\s+of\s+(?:service|use))?\b|\bconditions of use\b/i },
+  { type: "accessibility", pattern: /\baccessibility(?:\s+statement)?\b/i }
 ];
 
 function classifyPolicyLink(label, url) {
@@ -120,7 +120,7 @@ function scorePolicyLink(type, label, url) {
 
 function collectPageEvidence(includeText = false) {
   const links = [];
-  for (const anchor of Array.from(document.querySelectorAll("a[href]")).slice(0, 500)) {
+  for (const anchor of Array.from(document.querySelectorAll("a[href]"))) {
     const href = anchor.href;
     if (!/^https?:/i.test(href)) continue;
     const label = (visibleText(anchor) || anchor.getAttribute("aria-label") || "").slice(0, 160);
