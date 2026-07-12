@@ -139,7 +139,7 @@ variable "certscore_admin_emails" {
 variable "certscore_chrome_extension_store_url" {
   description = "Chrome Web Store listing URL for the CertScore.ai browser extension."
   type        = string
-  default     = "https://chromewebstore.google.com/detail/certscore-ai/mjeaagdiegpaeokkdaghkndmkjhlbhbp"
+  default     = "https://chromewebstore.google.com/detail/certscore-ai/fopkldkmhadjkoafdgemginpkgonfmga"
 }
 
 variable "certscore_auth_allowed_emails" {
