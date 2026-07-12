@@ -1,3 +1,9 @@
+(() => {
+if (globalThis.__certscoreBrowserObserverInstalled === true) {
+  return;
+}
+globalThis.__certscoreBrowserObserverInstalled = true;
+
 const BUTTON_PATTERNS = {
   acceptObserved: /\b(accept|agree|allow all|ok)\b/i,
   closeObserved: /\b(close|dismiss|continue without accepting|maybe later|not now|×|x)\b/i,
@@ -302,3 +308,4 @@ async function handleWindowMessage(event) {
 window.addEventListener("message", (event) => {
   void handleWindowMessage(event).catch(() => {});
 });
+})();
