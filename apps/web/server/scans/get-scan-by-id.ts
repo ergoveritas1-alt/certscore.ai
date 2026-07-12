@@ -847,7 +847,10 @@ async function loadScanDetailRecord(input: {
     createdAt: scanRow.created_at,
     startedAt: displayState.startedAt
   });
-  const scanFromDisplay = getScanFromDisplay(scanRow.scan_config_json);
+  const scanFromDisplay =
+    scanRow.scan_type === "browser_extension"
+      ? { label: "Reviewer Chrome browser", value: "local_extension" }
+      : getScanFromDisplay(scanRow.scan_config_json);
   const scanObservedAt = displayState.completedAt ?? displayState.startedAt ?? scanRow.created_at;
   const supplementalCoverageSignals = deriveSupplementalCoverageSignals({
     events: normalizedEvents,

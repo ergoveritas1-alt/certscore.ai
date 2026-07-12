@@ -18,6 +18,14 @@ function vendorLabel(observation: ReturnType<typeof resolveVendorObservations>[n
   return observation.product?.trim() || observation.vendor;
 }
 
+function uniqueObservedCookieCount(cookies: ReturnType<typeof summarizeBrowserEvidence>["cookies"]) {
+  return new Set(
+    cookies.map((cookie) =>
+      [cookie.domain.toLowerCase(), cookie.path ?? "/", cookie.cookieName].join("|")
+    )
+  ).size;
+}
+
 function browserEvidenceRef(prefix: string, observedAtMs: number | null | undefined, value: string) {
   if (typeof observedAtMs === "number" && Number.isFinite(observedAtMs)) {
     return `bx01.${prefix}:${Math.max(0, Math.round(observedAtMs))}:${value}`;
@@ -110,7 +118,13 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
   addSignal("privacy.preconsent_tracker_vendors", "Pre-consent tracker vendors", trackerVendors, "string_array", trackerVendors.length > 0 ? 0.82 : 0.65);
   addSignal("privacy.preconsent_tracker_evidence_urls", "Pre-consent tracker evidence URLs", preconsentTrackerEvidenceUrls, "string_array", 0.82, preconsentTrackerEvidenceRefs);
   addSignal("privacy.preconsent_violation_count", "Pre-consent violation count", preconsentTrackerEvidenceUrls.length, "number", 0.82, preconsentTrackerEvidenceRefs, input.evidence.timelineMarkers.firstThirdPartyRequestMs);
-  addSignal("privacy.cookie_count_total", "Cookie count total", input.evidence.cookies.length, "number", 0.78);
+  addSignal(
+    "privacy.cookie_count_total",
+    "Unique cookies observed",
+    uniqueObservedCookieCount(input.evidence.cookies),
+    "number",
+    0.78
+  );
   addSignal(
     "privacy.cookie_banner_present",
     "Cookie banner present",

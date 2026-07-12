@@ -195,3 +195,33 @@ test("browser signal package uses the canonical resolver for multiple pre-consen
   assert.deepEqual(vendors?.value, ["Google Publisher Tag", "Google Ads / DoubleClick", "ScorecardResearch"]);
   assert.equal(violationCount?.value, 2);
 });
+
+test("browser signal package counts unique cookies instead of repeated cookie events", () => {
+  const cookie = {
+    cookieName: "session-id",
+    domain: ".example.com",
+    observedAtMs: 20,
+    path: "/",
+    valueCaptured: false as const
+  };
+  const summary = summarizeBrowserEvidence({
+    artifacts: [],
+    events: [
+      { event_type: "cookie_added", observed_at_ms: 20, event_json: { ...cookie, eventType: "cookie_added" } },
+      { event_type: "cookie_changed", observed_at_ms: 30, event_json: { ...cookie, eventType: "cookie_changed" } },
+      { event_type: "cookie_observed", observed_at_ms: 40, event_json: { ...cookie, eventType: "cookie_observed" } },
+      {
+        event_type: "cookie_added",
+        observed_at_ms: 50,
+        event_json: { ...cookie, cookieName: "preferences", eventType: "cookie_added", observedAtMs: 50 }
+      }
+    ],
+    targetHostname: "example.com"
+  });
+
+  const signalPackage = buildBrowserObservedSignalPackageFromEvidence({ evidence: summary });
+  const cookieCount = signalPackage.observedSignals.find((signal) => signal.key === "privacy.cookie_count_total");
+
+  assert.equal(cookieCount?.value, 2);
+  assert.equal(cookieCount?.label, "Unique cookies observed");
+});
