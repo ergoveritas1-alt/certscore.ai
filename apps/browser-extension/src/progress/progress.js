@@ -7,7 +7,7 @@ const statusElapsedEl = document.querySelector("#status-elapsed");
 const statusPhaseEl = document.querySelector("#status-phase");
 const busyCalloutEl = document.querySelector("#busy-callout");
 const errorEl = document.querySelector("#error");
-const reportLink = document.querySelector("#report-link");
+const reportButton = document.querySelector("#report-button");
 const resultsEl = document.querySelector("#results");
 const resultRequestsEl = document.querySelector("#result-requests");
 const resultCookiesEl = document.querySelector("#result-cookies");
@@ -17,6 +17,11 @@ const resultPoliciesEl = document.querySelector("#result-policies");
 let currentApiBaseUrl = config.apiBaseUrl;
 let currentStatus = null;
 let elapsedTimer = null;
+let currentReportUrl = null;
+
+reportButton?.addEventListener("click", () => {
+  if (currentReportUrl) chrome.tabs.create({ active: true, url: currentReportUrl });
+});
 
 function getElapsedSeconds(status) {
   if (!status?.startedAt) {
@@ -66,10 +71,11 @@ function renderStatus(status) {
   }
 
   if (status?.reportUrl) {
-    reportLink.href = new URL(status.reportUrl, currentApiBaseUrl).toString();
-    reportLink.hidden = false;
+    currentReportUrl = new URL(status.reportUrl, currentApiBaseUrl).toString();
+    reportButton.hidden = false;
   } else {
-    reportLink.hidden = true;
+    currentReportUrl = null;
+    reportButton.hidden = true;
   }
 
   updateElapsed();
