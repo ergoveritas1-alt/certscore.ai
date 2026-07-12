@@ -191,12 +191,18 @@ async function captureBrowserPageEvidence(scan) {
     try {
       const loaded = await waitForTabComplete(tab.id);
       if (!loaded) continue;
-      await chrome.scripting.executeScript({ files: ["src/content.js"], target: { tabId: tab.id } }).catch(() => null);
-      await new Promise((resolve) => setTimeout(resolve, 350));
-      const evidence = await chrome.tabs.sendMessage(tab.id, {
+      let evidence = await chrome.tabs.sendMessage(tab.id, {
         includeText: true,
         type: "BX01_COLLECT_PAGE_EVIDENCE"
       }).catch(() => null);
+      if (!evidence) {
+        await chrome.scripting.executeScript({ files: ["src/content.js"], target: { tabId: tab.id } }).catch(() => null);
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        evidence = await chrome.tabs.sendMessage(tab.id, {
+          includeText: true,
+          type: "BX01_COLLECT_PAGE_EVIDENCE"
+        }).catch(() => null);
+      }
       if (!evidence?.finalUrl || !evidence.bodyText) continue;
       await uploadArtifact(scan, {
         artifactJson: {
