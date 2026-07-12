@@ -189,7 +189,13 @@ async function collectPolicyPageEvidence(tabId) {
         mixedContentCount: window.location.protocol === "https:"
           ? document.querySelectorAll('[src^="http:"], [href^="http:"]').length
           : 0,
-        policyLinks: [],
+        policyLinks: Array.from(document.querySelectorAll("a[href]"))
+          .map((anchor) => ({
+            label: (anchor.innerText || anchor.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim().slice(0, 160),
+            url: anchor.href
+          }))
+          .filter((link) => /^https?:/i.test(link.url) && /privacy policy|privacy notice|cookie policy|terms of use|accessibility/i.test(`${link.label} ${link.url}`))
+          .slice(0, 20),
         title: document.title.slice(0, 300),
         transportSecure: window.location.protocol === "https:"
       };
@@ -226,10 +232,23 @@ async function captureBrowserPageEvidence(scan) {
       if (!loaded) continue;
       await new Promise((resolve) => setTimeout(resolve, 350));
       const evidence = await collectPolicyPageEvidence(tab.id);
-      if (!evidence?.finalUrl || !evidence.bodyText) continue;
+      let resolvedEvidence = evidence;
+      if (link.type === "privacy_policy" && (resolvedEvidence?.bodyText?.length ?? 0) < 2500) {
+        const nestedPrivacy = resolvedEvidence?.policyLinks?.find((candidate) =>
+          candidate.url !== resolvedEvidence.finalUrl && /privacy policy|privacy notice/i.test(`${candidate.label} ${candidate.url}`)
+        );
+        if (nestedPrivacy?.url) {
+          await chrome.tabs.update(tab.id, { url: nestedPrivacy.url });
+          if (await waitForTabComplete(tab.id)) {
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            resolvedEvidence = await collectPolicyPageEvidence(tab.id) ?? resolvedEvidence;
+          }
+        }
+      }
+      if (!resolvedEvidence?.finalUrl || !resolvedEvidence.bodyText) continue;
       await uploadArtifact(scan, {
         artifactJson: {
-          ...evidence,
+          ...resolvedEvidence,
           capturedAtMs: nowMs(scan),
           discoveredFromUrl: scan.targetUrl,
           linkLabel: link.label,

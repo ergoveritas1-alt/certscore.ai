@@ -1205,9 +1205,11 @@ async function loadScanDetailRecord(input: {
               ? (baseRuntimeArtifacts.hybrid_runtime_evidence as Record<string, unknown>)
               : {};
           const mergedHybrid = {
-            ...existingHybrid,
-            ...browserExtensionMaterialization.hybridRuntimeEvidencePatch
+            ...browserExtensionMaterialization.hybridRuntimeEvidencePatch,
+            ...existingHybrid
           };
+          const transportSecuritySummary =
+            browserExtensionMaterialization.hybridRuntimeEvidencePatch.transportSecuritySummary;
 
           return {
             ...(baseRuntimeArtifacts ?? {}),
@@ -1217,7 +1219,9 @@ async function loadScanDetailRecord(input: {
             hybrid_runtime_evidence: mergedHybrid,
             initial_cookie_count: browserExtensionMaterialization.cookieCountTotal,
             third_party_request_count: browserExtensionMaterialization.thirdPartyRequestCount,
-            third_party_request_domains: browserExtensionMaterialization.thirdPartyRequestDomains
+            third_party_request_domains: browserExtensionMaterialization.thirdPartyRequestDomains,
+            transport_security_summary: transportSecuritySummary,
+            transportSecuritySummary
           } satisfies Record<string, unknown>;
         })()
       : baseRuntimeArtifacts;

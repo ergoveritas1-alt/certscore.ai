@@ -825,6 +825,45 @@ async function materializeBrowserScanAsCanonicalScan(input: {
     throw new Error("Could not create canonical browser-extension scan.");
   }
 
+  for (const artifact of artifacts.filter((candidate) => candidate.artifact_type === "policy_surface")) {
+    const pageType = typeof artifact.artifact_json.pageType === "string" ? artifact.artifact_json.pageType : null;
+    const documentType = pageType === "privacy_policy"
+      ? "privacy_policy"
+      : pageType === "cookie_policy"
+        ? "cookie_policy"
+        : pageType === "terms"
+          ? "terms"
+          : pageType === "accessibility"
+            ? "accessibility_statement"
+            : null;
+    const documentText = typeof artifact.artifact_json.bodyText === "string"
+      ? artifact.artifact_json.bodyText.trim().slice(0, 12000)
+      : "";
+    const sourceUrl = typeof artifact.artifact_json.requestedUrl === "string" ? artifact.artifact_json.requestedUrl : null;
+    const canonicalUrl = typeof artifact.artifact_json.finalUrl === "string" ? artifact.artifact_json.finalUrl : sourceUrl;
+    const title = typeof artifact.artifact_json.title === "string" ? artifact.artifact_json.title.slice(0, 300) : null;
+    if (!documentType || !canonicalUrl || documentText.length === 0) continue;
+
+    await query(
+      `insert into scan_document_sources (
+         scan_id, source, source_status, document_type, source_url, canonical_url, title,
+         document_text, extraction_status, semantic_confidence, evidence_refs, metadata_json
+       ) values ($1, 'browser_extension', 'ready', $2, $3, $4, $5, $6, $7, $8, $9::text[], $10::jsonb)`,
+      [
+        scan.id,
+        documentType,
+        sourceUrl,
+        canonicalUrl,
+        title,
+        documentText,
+        documentText.length >= 2500 ? "ready" : "insufficient",
+        documentText.length >= 2500 ? 0.88 : 0.62,
+        [`browser_extension.policy_surface:${documentType}:${canonicalUrl}`],
+        JSON.stringify({ browserScanId: input.browserScanId, captureMode: BROWSER_SCAN_CAPTURE_MODE, pageType })
+      ]
+    );
+  }
+
   await query(
     `insert into scan_snapshots (
        scan_id, organization_id, domain_id, pages_requested, pages_scanned,

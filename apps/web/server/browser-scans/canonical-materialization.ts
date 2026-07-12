@@ -166,6 +166,28 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
         preConsentCount: preconsentIframeUrls.length,
         source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE
       },
+      iframeSummary: {
+        iframeEvents: preconsentIframeUrls.map((url) => ({ frameUrl: url, preConsent: true })),
+        preConsentIframeCount: preconsentIframeUrls.length,
+        source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE
+      },
+      consentSummary: {
+        acceptControlObserved: acceptAllPresent,
+        bannerPresent: cookieBannerPresent,
+        capturedBeforeInteraction: true,
+        cookieNoticeObserved: cookieBannerPresent,
+        manageControlObserved: granularPreferencesPresent,
+        rejectControlObserved: rejectAllPresent,
+        source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE
+      },
+      firstLayerConsentChoices: {
+        acceptControlObserved: acceptAllPresent,
+        capturedBeforeInteraction: true,
+        layerInspected: "first_layer",
+        preferenceControlObserved: granularPreferencesPresent,
+        rejectControlObserved: rejectAllPresent,
+        visibleChoiceLabels: []
+      },
       policySurfaceSummary: {
         accessibilityStatementPresent,
         accessibilityStatementUrls,
