@@ -262,6 +262,8 @@ test("WS01-normalized BX01 signals materialize canonical dashboard fields", () =
     { count: 1, firstSeenMs: null, name: "canvas_webgl" },
     { count: 1, firstSeenMs: null, name: "audio" }
   ]);
+  assert.equal(materialized.hybridRuntimeEvidencePatch.fingerprintingEvidenceSummary.coverageRetained, true);
+  assert.equal(materialized.hybridRuntimeEvidencePatch.fingerprintingEvidenceSummary.fingerprintingObserved, true);
   assert.ok(materialized.score < 100);
 });
 

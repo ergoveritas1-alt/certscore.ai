@@ -64,6 +64,7 @@ export function summarizeBrowserEvidence(input: {
       sampleCount: event.sampleCount ?? 1,
       scriptUrl: event.scriptUrl ?? null
     })),
+    transportProbeEvidence: pageEvidence[0] ?? null,
     networkEvidence: networkEvents.slice(0, 500).map((event) => ({
       consentInteractionObserved: event.consentInteractionObserved === true,
       hostname: event.hostname,

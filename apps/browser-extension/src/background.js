@@ -169,15 +169,14 @@ async function collectPolicyPageEvidence(tabId) {
   const results = await chrome.scripting.executeScript({
     target: { tabId },
     func: () => {
+      const mainText = (document.querySelector("main")?.innerText || "").replace(/\s+/g, " ").trim();
+      const bodyText = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
       const formActions = Array.from(document.querySelectorAll("form"))
         .map((form) => form.action || window.location.href)
         .filter(Boolean)
         .slice(0, 50);
       return {
-        bodyText: (document.querySelector("main")?.innerText || document.body?.innerText || "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 12000),
+        bodyText: (bodyText.length > mainText.length ? bodyText : mainText).slice(0, 12000),
         finalUrl: window.location.href.slice(0, 4096),
         formActions,
         iframeUrls: Array.from(document.querySelectorAll("iframe[src]"))
@@ -204,6 +203,55 @@ async function collectPolicyPageEvidence(tabId) {
   return results[0]?.result ?? null;
 }
 
+async function waitForPolicyPageEvidence(tabId, minimumTextLength = 2500) {
+  let evidence = null;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    evidence = await collectPolicyPageEvidence(tabId) ?? evidence;
+    if ((evidence?.bodyText?.length ?? 0) >= minimumTextLength) break;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return evidence;
+}
+
+async function collectTransportProbeEvidence(targetUrl) {
+  const target = new URL(targetUrl);
+  const httpsUrl = new URL(target.href);
+  httpsUrl.protocol = "https:";
+  const httpUrl = new URL(target.href);
+  httpUrl.protocol = "http:";
+
+  let validTlsCertificate = null;
+  try {
+    await fetch(httpsUrl.href, { cache: "no-store", credentials: "omit", method: "HEAD", redirect: "follow" });
+    validTlsCertificate = true;
+  } catch {
+    try {
+      await fetch(httpsUrl.href, { cache: "no-store", credentials: "omit", method: "GET", redirect: "follow" });
+      validTlsCertificate = true;
+    } catch {
+      validTlsCertificate = false;
+    }
+  }
+
+  let httpProbeFinalUrl = null;
+  let httpRedirectsToHttps = null;
+  try {
+    const response = await fetch(httpUrl.href, { cache: "no-store", credentials: "omit", method: "HEAD", redirect: "follow" });
+    httpProbeFinalUrl = response.url || null;
+    httpRedirectsToHttps = /^https:/i.test(response.url);
+  } catch {
+    httpRedirectsToHttps = false;
+  }
+
+  return {
+    httpProbeAttempted: true,
+    httpProbeFinalUrl,
+    httpRedirectsToHttps,
+    tlsProbeAttempted: true,
+    validTlsCertificate
+  };
+}
+
 async function captureBrowserPageEvidence(scan) {
   setScanStatus(scan, {
     label: "Reviewing surfaces",
@@ -217,8 +265,9 @@ async function captureBrowserPageEvidence(scan) {
   }).catch(() => null);
   if (!homepage) return { policySurfaceCount: 0 };
 
+  const transportProbeEvidence = await collectTransportProbeEvidence(scan.targetUrl);
   await uploadArtifact(scan, {
-    artifactJson: { ...homepage, capturedAtMs: nowMs(scan), pageType: "homepage", sourceId: "BX01", sourceType: "browser_extension" },
+    artifactJson: { ...homepage, ...transportProbeEvidence, capturedAtMs: nowMs(scan), pageType: "homepage", sourceId: "BX01", sourceType: "browser_extension" },
     artifactType: "page_evidence",
     contentType: "application/json"
   });
@@ -230,8 +279,7 @@ async function captureBrowserPageEvidence(scan) {
     try {
       const loaded = await waitForTabComplete(tab.id);
       if (!loaded) continue;
-      await new Promise((resolve) => setTimeout(resolve, 350));
-      const evidence = await collectPolicyPageEvidence(tab.id);
+      const evidence = await waitForPolicyPageEvidence(tab.id);
       let resolvedEvidence = evidence;
       if (link.type === "privacy_policy" && (resolvedEvidence?.bodyText?.length ?? 0) < 2500) {
         const nestedPrivacy = resolvedEvidence?.policyLinks?.find((candidate) =>
@@ -240,8 +288,7 @@ async function captureBrowserPageEvidence(scan) {
         if (nestedPrivacy?.url) {
           await chrome.tabs.update(tab.id, { url: nestedPrivacy.url });
           if (await waitForTabComplete(tab.id)) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            resolvedEvidence = await collectPolicyPageEvidence(tab.id) ?? resolvedEvidence;
+            resolvedEvidence = await waitForPolicyPageEvidence(tab.id) ?? resolvedEvidence;
           }
         }
       }

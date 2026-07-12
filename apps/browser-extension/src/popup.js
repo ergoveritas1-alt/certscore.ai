@@ -23,8 +23,12 @@ let elapsedTimer = null;
 let dataUseAccepted = false;
 let currentReportUrl = null;
 
-reportButton.addEventListener("click", () => {
-  if (currentReportUrl) chrome.tabs.create({ active: true, url: currentReportUrl });
+reportButton.addEventListener("click", async () => {
+  if (currentReportUrl) {
+    await chrome.tabs.create({ active: true, url: currentReportUrl });
+    await chrome.storage.local.remove("certscoreBx01Status");
+    renderStatus({ label: "Ready" });
+  }
 });
 
 function updateRunButton() {
@@ -108,6 +112,7 @@ function renderStatus(status) {
   syncElapsedTimer(status);
   updateRunButton();
   const summary = status?.summary;
+  runButton.hidden = status?.label === "Complete";
 
   if (summary) {
     resultRequestsEl.textContent = String(summary.networkRequestCount ?? 0);

@@ -20,6 +20,11 @@ function signalBoolean(signals: BrowserScanObservedSignalPackageInput["observedS
   return signal?.value === true;
 }
 
+function signalOptionalBoolean(signals: BrowserScanObservedSignalPackageInput["observedSignals"], key: string) {
+  const signal = signals.find((candidate) => candidate.key === key && candidate.valueType === "boolean");
+  return typeof signal?.value === "boolean" ? signal.value : null;
+}
+
 function signalStringArray(signals: BrowserScanObservedSignalPackageInput["observedSignals"], key: string) {
   const signal = signals.find((candidate) => candidate.key === key && candidate.valueType === "string_array");
   return Array.isArray(signal?.value) ? uniqueStrings(signal.value.filter((value): value is string => typeof value === "string")) : [];
@@ -88,6 +93,7 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
   const acceptAllPresent = signalBoolean(signals, "privacy.accept_all_present");
   const rejectAllPresent = signalBoolean(signals, "privacy.reject_all_present");
   const granularPreferencesPresent = signalBoolean(signals, "privacy.granular_preferences_present");
+  const firstLayerConsentLabels = signalStringArray(signals, "privacy.first_layer_consent_labels");
   const doNotSellLinkPresent = signalBoolean(signals, "privacy.do_not_sell_link_present");
   const preconsentTrackingDetected = signalBoolean(signals, "privacy.preconsent_tracking_detected");
   const privacyPolicyPresent = signalBoolean(signals, "disclosure.privacy_policy_present");
@@ -102,8 +108,15 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
   const httpsEnforced = signalBoolean(signals, "security.https_enforced");
   const mixedContentDetected = signalBoolean(signals, "security.mixed_content_detected");
   const insecureFormActionCount = signalNumber(signals, "security.insecure_form_action_count");
+  const tlsProbeAttempted = signalOptionalBoolean(signals, "security.tls_probe_attempted");
+  const validTlsCertificate = signalOptionalBoolean(signals, "security.valid_tls_certificate");
+  const httpProbeAttempted = signalOptionalBoolean(signals, "security.http_probe_attempted");
+  const httpRedirectsToHttps = signalOptionalBoolean(signals, "security.http_redirects_to_https");
   const preconsentIframeUrls = signalStringArray(signals, "privacy.preconsent_iframe_urls");
   const firstThirdPartyRequestMs = signalObservedAtMs(signals, "privacy.preconsent_tracking_detected");
+  const firstRequestMs = signalObservedAtMs(signals, "privacy.third_party_request_count");
+  const firstCookieSeenMs = signalObservedAtMs(signals, "privacy.cookie_count_total");
+  const consentBannerDetectedMs = signalObservedAtMs(signals, "privacy.cookie_banner_present");
   const score = deriveBrowserScanScore({
     acceptAllPresent,
     cookieBannerPresent,
@@ -151,6 +164,15 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
         source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
         tier: fingerprintTier
       },
+      fingerprintingEvidenceSummary: {
+        apiProbeRetained: true,
+        artifactCount: fingerprintCategories.length,
+        coverageRetained: true,
+        fingerprintAttributeCategories: fingerprintCategories,
+        fingerprintingObserved: fingerprintTier > 0,
+        highEntropySignals: fingerprintCategories,
+        source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE
+      },
       networkSummary: {
         preConsentRequestCount: preconsentViolationCount,
         preConsentThirdPartyRequestCount: preconsentViolationCount,
@@ -183,10 +205,13 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
       firstLayerConsentChoices: {
         acceptControlObserved: acceptAllPresent,
         capturedBeforeInteraction: true,
+        firstLayerCookieConsentBannerObserved: cookieBannerPresent,
         layerInspected: "first_layer",
+        managePreferencesObserved: granularPreferencesPresent,
         preferenceControlObserved: granularPreferencesPresent,
         rejectControlObserved: rejectAllPresent,
-        visibleChoiceLabels: []
+        sameLayerRejectObserved: rejectAllPresent,
+        visibleChoiceLabels: firstLayerConsentLabels
       },
       policySurfaceSummary: {
         accessibilityStatementPresent,
@@ -205,14 +230,15 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
         evidenceRetained: true,
         finalScheme: httpsEnforced ? "https" : "http",
         formTransportCount: insecureFormActionCount,
-        httpProbeAttempted: false,
+        httpProbeAttempted,
+        httpRedirectsToHttps,
         insecureFormTransportObserved: insecureFormActionCount > 0,
         mixedContentObserved: mixedContentDetected,
         mixedContentObservedCount: mixedContentDetected ? 1 : 0,
         pageHttpsObserved: httpsEnforced,
         sampledPageUrls: [],
-        tlsProbeAttempted: false,
-        validTlsCertificate: null
+        tlsProbeAttempted,
+        validTlsCertificate
       },
       requestToVendorObservations,
       storageSummary: {
@@ -223,7 +249,10 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
         valueCaptured: false
       },
       timelineMarkers: {
+        consentBannerDetectedMs,
+        firstCookieSeenMs,
         firstNonEssentialRequestMs: firstThirdPartyRequestMs,
+        firstRequestMs,
         firstThirdPartyRequestMs
       },
       vendorSummary: {

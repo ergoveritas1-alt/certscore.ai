@@ -234,10 +234,14 @@ test("browser signal package projects fetched legal surfaces and page evidence",
         content_type: "application/json",
         artifact_json: {
           finalUrl: "https://example.com/",
+          httpProbeAttempted: true,
+          httpRedirectsToHttps: true,
           iframeUrls: ["https://player.example-video.com/embed/1"],
           insecureFormActionCount: 0,
           mixedContentCount: 0,
-          transportSecure: true
+          tlsProbeAttempted: true,
+          transportSecure: true,
+          validTlsCertificate: true
         }
       },
       {
@@ -269,6 +273,10 @@ test("browser signal package projects fetched legal surfaces and page evidence",
   assert.equal(value("disclosure.cookie_policy_present"), true);
   assert.equal(value("disclosure.terms_of_service_present"), false);
   assert.equal(value("security.https_enforced"), true);
+  assert.equal(value("security.tls_probe_attempted"), true);
+  assert.equal(value("security.valid_tls_certificate"), true);
+  assert.equal(value("security.http_probe_attempted"), true);
+  assert.equal(value("security.http_redirects_to_https"), true);
   assert.equal(value("privacy.preconsent_iframe_count"), 1);
   assert.deepEqual(value("disclosure.privacy_policy_urls"), ["https://example.com/privacy"]);
 });

@@ -97,6 +97,10 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
     ? uniqueStrings(homepageEvidence.iframeUrls.filter((value): value is string => typeof value === "string"), 50)
     : [];
   const transportSecure = homepageEvidence?.transportSecure === true;
+  const httpProbeAttempted = homepageEvidence?.httpProbeAttempted === true;
+  const httpRedirectsToHttps = homepageEvidence?.httpRedirectsToHttps === true;
+  const tlsProbeAttempted = homepageEvidence?.tlsProbeAttempted === true;
+  const validTlsCertificate = homepageEvidence?.validTlsCertificate === true;
   const mixedContentCount = typeof homepageEvidence?.mixedContentCount === "number" ? homepageEvidence.mixedContentCount : 0;
   const insecureFormActionCount = typeof homepageEvidence?.insecureFormActionCount === "number" ? homepageEvidence.insecureFormActionCount : 0;
   const accessibilitySummary = homepageEvidence?.accessibilitySummary && typeof homepageEvidence.accessibilitySummary === "object"
@@ -144,7 +148,7 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
     });
   };
 
-  addSignal("privacy.third_party_request_count", "Third-party request count", input.evidence.thirdPartyRequestCount, "number", 0.8);
+  addSignal("privacy.third_party_request_count", "Third-party request count", input.evidence.thirdPartyRequestCount, "number", 0.8, [], input.evidence.timelineMarkers.firstRequestMs);
   addSignal("privacy.third_party_request_domains", "Third-party request domains", input.evidence.thirdPartyRequestDomains, "string_array", 0.8);
   addSignal("privacy.third_party_script_domain_count", "Third-party script domain count", input.evidence.thirdPartyRequestDomains.length, "number", 0.68);
   addSignal("privacy.third_party_script_domains", "Third-party script domains", input.evidence.thirdPartyRequestDomains, "string_array", 0.68);
@@ -159,7 +163,9 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
     "Unique cookies observed",
     uniqueObservedCookieCount(input.evidence.cookies),
     "number",
-    0.78
+    0.78,
+    [],
+    input.evidence.cookies.map((cookie) => cookie.observedAtMs).filter((value): value is number => typeof value === "number").sort((left, right) => left - right)[0] ?? null
   );
   addSignal(
     "privacy.cookie_banner_present",
@@ -175,6 +181,7 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
   addSignal("privacy.accept_all_present", "Accept-all control present", consentSummary?.acceptObserved === true, "boolean", 0.78);
   addSignal("privacy.reject_all_present", "Reject-all control present", consentSummary?.rejectObserved === true, "boolean", 0.78);
   addSignal("privacy.granular_preferences_present", "Granular preferences present", consentSummary?.manageObserved === true, "boolean", 0.78);
+  addSignal("privacy.first_layer_consent_labels", "First-layer consent control labels", Array.isArray(consentSummary?.buttonsObserved) ? consentSummary.buttonsObserved : [], "string_array", 0.78);
   addSignal("privacy.do_not_sell_link_present", "Do-not-sell/share control present", consentSummary?.doNotSellShareObserved === true, "boolean", 0.72);
   addSignal("privacy.preconsent_tracking_detected", "Pre-consent tracking detected", preconsentTrackerEvidenceUrls.length > 0, "boolean", 0.82, preconsentTrackerEvidenceRefs, input.evidence.timelineMarkers.firstThirdPartyRequestMs);
   addSignal("privacy.session_replay_runtime_vendors", "Session replay runtime vendors", trackerCategories.includes("session_replay") ? trackerVendors : [], "string_array", 0.76);
@@ -190,6 +197,10 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
   addSignal("disclosure.accessibility_statement_urls", "Accessibility statement URLs", accessibilityUrls, "string_array", 0.86, accessibilityUrls);
   addSignal("disclosure.gdpr_transparency_topics", "GDPR transparency topics observed", gdprTransparencyTopics, "string_array", 0.84, privacyPolicyUrls);
   addSignal("security.https_enforced", "HTTPS delivery observed", transportSecure, "boolean", 0.9);
+  addSignal("security.tls_probe_attempted", "TLS certificate probe attempted", tlsProbeAttempted, "boolean", 0.9);
+  addSignal("security.valid_tls_certificate", "Valid TLS certificate observed", validTlsCertificate, "boolean", 0.9);
+  addSignal("security.http_probe_attempted", "HTTP redirect probe attempted", httpProbeAttempted, "boolean", 0.9);
+  addSignal("security.http_redirects_to_https", "HTTP redirects to HTTPS", httpRedirectsToHttps, "boolean", 0.9);
   addSignal("security.mixed_content_detected", "Mixed content detected", mixedContentCount > 0, "boolean", 0.8);
   addSignal("security.insecure_form_action_count", "Insecure form action count", insecureFormActionCount, "number", 0.82);
   addSignal("privacy.preconsent_iframe_urls", "Pre-consent iframe URLs", iframeUrls, "string_array", 0.78, iframeUrls);

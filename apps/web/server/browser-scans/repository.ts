@@ -423,6 +423,33 @@ export async function ingestBrowserScanObservedSignals(input: {
 
   const signals = input.signalPackage.observedSignals;
   const materialized = deriveBrowserScanCanonicalMaterializationFromObservedSignals(signals);
+  const retainedPrivacyDocument = await queryOne<{ document_text: string | null }>(
+    `select document_text
+       from scan_document_sources
+      where scan_id = $1
+        and document_type = 'privacy_policy'
+        and source_status = 'ready'
+      order by length(coalesce(document_text, '')) desc, created_at asc
+      limit 1`,
+    [canonicalScan.id],
+    { readOnly: true }
+  );
+  const retainedPrivacyText = retainedPrivacyDocument?.document_text?.trim().slice(0, 12000) ?? "";
+  if (retainedPrivacyText.length > 0) {
+    const policySurfaceSummary = materialized.hybridRuntimeEvidencePatch.policySurfaceSummary as Record<string, unknown>;
+    Object.assign(policySurfaceSummary, {
+      policyTextExtractionHealth: {
+        extractedTextLength: retainedPrivacyText.length,
+        minimumTextLengthRequired: 2500,
+        nanoInvoked: false,
+        policySurfaceObserved: true,
+        policyTextExtractionStatus: retainedPrivacyText.length >= 2500 ? "ok" : "thin",
+        policyUrlRetained: materialized.privacyPolicyPresent
+      },
+      privacyPolicyTextCharacterCount: retainedPrivacyText.length,
+      retainedPrivacyPolicyTextExcerpt: retainedPrivacyText
+    });
+  }
   if (signals.length > 0) {
     const values: unknown[] = [];
     const rows = signals.map((signal, index) => {
