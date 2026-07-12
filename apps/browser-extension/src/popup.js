@@ -12,6 +12,7 @@ const acceptDataUseInput = document.querySelector("#accept-data-use");
 const runButton = document.querySelector("#run-scan");
 const errorEl = document.querySelector("#error");
 const reportButton = document.querySelector("#report-button");
+const newScanButton = document.querySelector("#new-scan-button");
 const resultsEl = document.querySelector("#results");
 const resultRequestsEl = document.querySelector("#result-requests");
 const resultCookiesEl = document.querySelector("#result-cookies");
@@ -29,6 +30,11 @@ reportButton.addEventListener("click", async () => {
     renderStatus({ label: "Ready" });
     await chrome.tabs.create({ active: true, url: currentReportUrl });
   }
+});
+
+newScanButton.addEventListener("click", async () => {
+  await chrome.storage.local.remove("certscoreBx01Status");
+  renderStatus({ label: "Ready" });
 });
 
 function updateRunButton() {
@@ -113,6 +119,7 @@ function renderStatus(status) {
   updateRunButton();
   const summary = status?.summary;
   runButton.hidden = status?.label === "Complete";
+  newScanButton.hidden = status?.label !== "Complete";
 
   if (summary) {
     resultRequestsEl.textContent = String(summary.networkRequestCount ?? 0);
