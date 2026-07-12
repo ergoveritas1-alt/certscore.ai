@@ -755,9 +755,7 @@ async function startScan(message) {
   const queueingStatus = {
     busy: true,
     label: "Queueing",
-    message: message.freshVisit
-      ? "Scanning is in progress. CertScore.ai is preparing a fresh visit and clearing this site's local browser state."
-      : "Scanning is in progress. CertScore.ai is opening a browser evidence session.",
+    message: "Scanning is in progress. CertScore.ai is preparing a fresh visit and clearing this site's local browser state.",
     phase: "queueing",
     startedAt: startedAtEpochMs,
     targetUrl
@@ -792,20 +790,18 @@ async function startScan(message) {
   }
 
   const session = await startResponse.json();
-  if (message.freshVisit) {
-    const fresheningStatus = {
-      browserScanId: session.browserScanId,
-      busy: true,
-      label: "Freshening",
-      message: "Scanning is in progress. Clearing cookies, cache storage, local storage, IndexedDB, and service workers for this origin only.",
-      phase: "freshening",
-      startedAt: startedAtEpochMs,
-      targetUrl
-    };
-    setStatus(fresheningStatus);
-    sendStatusToLauncher(launcherTabId, fresheningStatus);
-    await clearSiteDataForFreshVisit(targetUrl);
-  }
+  const fresheningStatus = {
+    browserScanId: session.browserScanId,
+    busy: true,
+    label: "Freshening",
+    message: "Scanning is in progress. Clearing cookies, cache storage, local storage, IndexedDB, and service workers for this origin only.",
+    phase: "freshening",
+    startedAt: startedAtEpochMs,
+    targetUrl
+  };
+  setStatus(fresheningStatus);
+  sendStatusToLauncher(launcherTabId, fresheningStatus);
+  await clearSiteDataForFreshVisit(targetUrl);
 
   let tabId = message.tabId;
   if (message.launchFromCertScore) {

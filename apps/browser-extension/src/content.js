@@ -282,7 +282,7 @@ async function handleWindowMessage(event) {
   }
 
   const response = await sendRuntimeMessage({
-    freshVisit: event.data.freshVisit !== false,
+    freshVisit: true,
     launchFromCertScore: true,
     returnToLauncherOnComplete: event.data.returnToLauncherOnComplete === true,
     scanWindowMs: event.data.scanWindowMs,

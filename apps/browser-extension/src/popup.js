@@ -6,7 +6,6 @@ const statusMessageEl = document.querySelector("#status-message");
 const statusMetaEl = document.querySelector("#status-meta");
 const statusElapsedEl = document.querySelector("#status-elapsed");
 const statusPhaseEl = document.querySelector("#status-phase");
-const freshVisitInput = document.querySelector("#fresh-visit");
 const scanConsentEl = document.querySelector("#scan-consent");
 const acceptDataUseInput = document.querySelector("#accept-data-use");
 const runButton = document.querySelector("#run-scan");
@@ -242,7 +241,7 @@ runButton.addEventListener("click", async () => {
   });
   const response = await chrome.runtime.sendMessage({
     type: "BX01_START_SCAN",
-    freshVisit: Boolean(freshVisitInput.checked),
+    freshVisit: true,
     launchFromCertScore: Boolean(launchTargetUrl),
     scanWindowMs: config.defaultScanWindowMs,
     tabId: tab.id,

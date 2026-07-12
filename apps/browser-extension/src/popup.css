@@ -248,37 +248,6 @@ button {
   background: #f1f5f9;
 }
 
-.fresh-toggle {
-  align-items: flex-start;
-  background: #ffffff;
-  border: 1px solid #d9e2ea;
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-}
-
-.fresh-toggle input {
-  margin-top: 3px;
-}
-
-.fresh-toggle span {
-  display: grid;
-  gap: 2px;
-}
-
-.fresh-toggle strong {
-  color: #0b2e4f;
-  font-size: 13px;
-}
-
-.fresh-toggle small {
-  color: #5f6f7e;
-  font-size: 12px;
-  line-height: 1.3;
-}
-
 button:disabled {
   background: #8ba39e;
   cursor: not-allowed;
