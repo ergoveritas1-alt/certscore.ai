@@ -8,7 +8,6 @@ const statusPhaseEl = document.querySelector("#status-phase");
 const busyCalloutEl = document.querySelector("#busy-callout");
 const errorEl = document.querySelector("#error");
 const reportLink = document.querySelector("#report-link");
-const signupLink = document.querySelector("#signup-link");
 const resultsEl = document.querySelector("#results");
 const resultRequestsEl = document.querySelector("#result-requests");
 const resultCookiesEl = document.querySelector("#result-cookies");
@@ -17,7 +16,6 @@ const resultBannerEl = document.querySelector("#result-banner");
 let currentApiBaseUrl = config.apiBaseUrl;
 let currentStatus = null;
 let elapsedTimer = null;
-let autoCloseTimer = null;
 
 function getElapsedSeconds(status) {
   if (!status?.startedAt) {
@@ -72,22 +70,9 @@ function renderStatus(status) {
     reportLink.hidden = true;
   }
 
-  signupLink.href = new URL("/login?mode=create_account", currentApiBaseUrl).toString();
-  signupLink.hidden = !(status?.summary && status?.anonymous);
-
   updateElapsed();
   if (status?.busy && status?.startedAt) {
     elapsedTimer = setInterval(updateElapsed, 1000);
-  }
-
-  if (autoCloseTimer) {
-    clearTimeout(autoCloseTimer);
-    autoCloseTimer = null;
-  }
-  if (status?.phase === "complete" && status?.reportUrl) {
-    autoCloseTimer = setTimeout(() => {
-      window.close();
-    }, 2200);
   }
 }
 

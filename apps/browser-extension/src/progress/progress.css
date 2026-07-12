@@ -69,6 +69,7 @@ header p,
 }
 
 .busy-hourglass {
+  animation: turn-hourglass 1.4s ease-in-out infinite;
   background: #ffffff;
   border: 1px solid #9ee6c5;
   border-radius: 999px;
@@ -78,6 +79,24 @@ header p,
   height: 32px;
   place-items: center;
   width: 32px;
+}
+
+@keyframes turn-hourglass {
+  0%,
+  35% {
+    transform: rotate(0deg);
+  }
+
+  65%,
+  100% {
+    transform: rotate(180deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy-hourglass {
+    animation: none;
+  }
 }
 
 .busy-callout strong {
@@ -95,7 +114,8 @@ header p,
 
 .status,
 .results,
-.checklist {
+.checklist,
+.report-actions {
   background: #ffffff;
   border: 1px solid #d9e2ea;
   border-radius: 8px;
@@ -194,14 +214,32 @@ a {
   text-decoration: none;
 }
 
-.cta-link {
-  align-items: center;
+.report-actions {
+  display: none;
+}
+
+.report-actions:has(#report-link:not([hidden])) {
+  display: grid;
+}
+
+.report-actions strong {
+  color: #0b2e4f;
+  font-size: 16px;
+}
+
+.report-actions p {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.report-actions a {
   background: #0b2e4f;
   border-radius: 8px;
   color: #ffffff;
-  display: inline-flex;
-  justify-content: center;
-  min-height: 38px;
+  display: block;
+  padding: 12px 14px;
+  text-align: center;
 }
 
 .error {

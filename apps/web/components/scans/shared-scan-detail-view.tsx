@@ -50,6 +50,7 @@ import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { ScanPageHeader } from "./scan-page-header";
 import { VendorBrandChip } from "./vendor-brand-chip";
+import { NoGoBrowserExtensionRecovery } from "./no-go-browser-extension-recovery";
 import {
   EMPHASIS_METRIC_CARD_CLASS,
   EMPHASIS_METRIC_CARD_VALUE_CLASS,
@@ -6508,6 +6509,7 @@ type SharedScanDetailViewProps = {
     showReviewLenses: boolean;
     showScanInterruption: boolean;
   };
+  showBrowserExtensionRecovery?: boolean;
   viewerAccessRole?: string | null;
 };
 
@@ -6713,6 +6715,7 @@ export async function SharedScanDetailView({
   scanRecord,
   canViewReviewLenses,
   signalSnapshotVisibility,
+  showBrowserExtensionRecovery = false,
   viewerAccessRole = "user"
 }: SharedScanDetailViewProps) {
   const scanReportAccessRole = normalizeScanReportAccessRole(viewerAccessRole);
@@ -7278,6 +7281,12 @@ export async function SharedScanDetailView({
             showProtectedRouteInterruptions={showAdvancedDiagnostics}
             verifiedPublicSurfacesCount={getFiniteNumber(scanRecord.snapshot?.verified_public_surfaces_count)}
           />
+          {showBrowserExtensionRecovery && executiveAccessLimitationNotice?.finding.id === "scan_quality_visual_no_go" ? (
+            <NoGoBrowserExtensionRecovery
+              isTargetSiteState={executiveAccessLimitationNotice.review.coverageLabel === "Observed target-site state"}
+              scanId={scanRecord.scan.id}
+            />
+          ) : null}
           <RuntimeInventoryTable
             cookieRows={cookieInventoryRows}
             firstPartyDomain={scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost}

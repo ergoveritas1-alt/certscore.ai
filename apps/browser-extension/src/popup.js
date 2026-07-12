@@ -10,7 +10,6 @@ const freshVisitInput = document.querySelector("#fresh-visit");
 const runButton = document.querySelector("#run-scan");
 const errorEl = document.querySelector("#error");
 const reportLink = document.querySelector("#report-link");
-const signupLink = document.querySelector("#signup-link");
 const resultsEl = document.querySelector("#results");
 const resultRequestsEl = document.querySelector("#result-requests");
 const resultCookiesEl = document.querySelector("#result-cookies");
@@ -113,9 +112,6 @@ function renderStatus(status) {
   } else {
     reportLink.hidden = true;
   }
-
-  signupLink.href = new URL("/login?mode=create_account", currentApiBaseUrl).toString();
-  signupLink.hidden = !(status?.summary && status?.anonymous);
 
   setError(status?.error ?? "");
 }

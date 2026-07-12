@@ -246,16 +246,6 @@ a {
   text-decoration: none;
 }
 
-.cta-link {
-  align-items: center;
-  background: #0b2e4f;
-  border-radius: 8px;
-  color: #ffffff;
-  display: inline-flex;
-  justify-content: center;
-  min-height: 38px;
-}
-
 .error {
   background: #fff1f2;
   border: 1px solid #fecdd3;

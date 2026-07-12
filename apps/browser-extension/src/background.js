@@ -428,10 +428,6 @@ async function completeScan(scan) {
   };
   setStatus(completeStatus);
   sendStatusToLauncher(scan, completeStatus);
-  if (typeof scan.launcherTabId === "number" && body.reportUrl) {
-    const reportUrl = new URL(body.reportUrl, scan.apiBaseUrl).toString();
-    chrome.tabs.update(scan.launcherTabId, { active: true, url: reportUrl }).catch(() => {});
-  }
   setBadge("complete");
 }
 

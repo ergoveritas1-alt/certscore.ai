@@ -193,6 +193,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
           showReviewLenses: organizationSettings?.showSignalSnapshotReviewLenses ?? true,
           showScanInterruption: organizationSettings?.showSignalSnapshotScanInterruption ?? true
         }}
+        showBrowserExtensionRecovery={isPlatformAdmin}
         viewerAccessRole={membership.role}
       />
     </>

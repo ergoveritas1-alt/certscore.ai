@@ -53,6 +53,7 @@ jobs:
       ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER }}
       ECS_CERTSCORE_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
       CERTSCORE_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL }}
+      CERTSCORE_CHROME_EXTENSION_STORE_URL: ${{ vars.CERTSCORE_CHROME_EXTENSION_STORE_URL || 'https://chromewebstore.google.com/detail/certscore-ai/mjeaagdiegpaeokkdaghkndmkjhlbhbp' }}
 
     steps:
       - name: Checkout
@@ -215,9 +216,13 @@ jobs:
           CONTAINER_NAME="$(jq -r '.containerDefinitions[0].name // empty' current-task-definition.json)"
           test -n "${CONTAINER_NAME}" || (echo "Could not resolve web container name" && exit 1)
 
-          jq --arg image "${TARGET_WEB_IMAGE}" '
+          jq --arg image "${TARGET_WEB_IMAGE}" --arg extension_url "${CERTSCORE_CHROME_EXTENSION_STORE_URL}" '
             del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy,.deregisteredAt)
             | .containerDefinitions[0].image = $image
+            | .containerDefinitions[0].environment = (
+                [(.containerDefinitions[0].environment // [])[] | select(.name != "CERTSCORE_CHROME_EXTENSION_STORE_URL")]
+                + [{name:"CERTSCORE_CHROME_EXTENSION_STORE_URL",value:$extension_url}]
+              )
           ' current-task-definition.json > target-task-definition.json
 
           TARGET_TASK_DEFINITION="$(aws ecs register-task-definition \
