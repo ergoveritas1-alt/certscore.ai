@@ -156,7 +156,8 @@ function waitForTabComplete(tabId, timeoutMs = 15000) {
 
 function selectPolicyLinks(links) {
   const selected = new Map();
-  for (const link of Array.isArray(links) ? links : []) {
+  const ranked = [...(Array.isArray(links) ? links : [])].sort((left, right) => (right.score ?? 0) - (left.score ?? 0));
+  for (const link of ranked) {
     if (!link?.type || !link?.url || selected.has(link.type)) continue;
     selected.set(link.type, link);
     if (selected.size >= 4) break;
@@ -190,6 +191,8 @@ async function captureBrowserPageEvidence(scan) {
     try {
       const loaded = await waitForTabComplete(tab.id);
       if (!loaded) continue;
+      await chrome.scripting.executeScript({ files: ["src/content.js"], target: { tabId: tab.id } }).catch(() => null);
+      await new Promise((resolve) => setTimeout(resolve, 350));
       const evidence = await chrome.tabs.sendMessage(tab.id, {
         includeText: true,
         type: "BX01_COLLECT_PAGE_EVIDENCE"

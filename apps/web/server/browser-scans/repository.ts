@@ -510,6 +510,8 @@ export async function ingestBrowserScanObservedSignals(input: {
             , accessibility_statement_present = $25::boolean
             , https_enforced = $26::boolean
             , mixed_content_detected = $27::boolean
+            , partial_scan = $28::boolean
+            , scan_confidence = $29::text
       where scan_id = $1`,
     [
       canonicalScan.id,
@@ -539,6 +541,8 @@ export async function ingestBrowserScanObservedSignals(input: {
       , materialized.accessibilityStatementPresent
       , materialized.httpsEnforced
       , materialized.mixedContentDetected
+      , !materialized.browserCoverageSufficient
+      , materialized.browserCoverageSufficient ? "high" : "low"
     ]
   );
 

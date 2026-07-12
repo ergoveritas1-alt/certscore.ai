@@ -101,6 +101,7 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
   const gdprTransparencyTopics = signalStringArray(signals, "disclosure.gdpr_transparency_topics");
   const httpsEnforced = signalBoolean(signals, "security.https_enforced");
   const mixedContentDetected = signalBoolean(signals, "security.mixed_content_detected");
+  const insecureFormActionCount = signalNumber(signals, "security.insecure_form_action_count");
   const preconsentIframeUrls = signalStringArray(signals, "privacy.preconsent_iframe_urls");
   const firstThirdPartyRequestMs = signalObservedAtMs(signals, "privacy.preconsent_tracking_detected");
   const score = deriveBrowserScanScore({
@@ -113,6 +114,7 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
     thirdPartyRequestCount,
     trackerVendorCount
   });
+  const browserCoverageSufficient = privacyPolicyPresent && httpsEnforced;
   const vendorCategoryCounts = {
     advertising: countCategoryMatches(trackerCategories, /advertising|ads/i),
     analytics: countCategoryMatches(trackerCategories, /analytics|measurement/i),
@@ -176,6 +178,20 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
         termsOfServicePresent,
         termsUrls
       },
+      transportSecuritySummary: {
+        evidenceRefs: ["browser_extension.page_evidence"],
+        evidenceRetained: true,
+        finalScheme: httpsEnforced ? "https" : "http",
+        formTransportCount: insecureFormActionCount,
+        httpProbeAttempted: false,
+        insecureFormTransportObserved: insecureFormActionCount > 0,
+        mixedContentObserved: mixedContentDetected,
+        mixedContentObservedCount: mixedContentDetected ? 1 : 0,
+        pageHttpsObserved: httpsEnforced,
+        sampledPageUrls: [],
+        tlsProbeAttempted: false,
+        validTlsCertificate: null
+      },
       requestToVendorObservations,
       storageSummary: {
         cookiesBeforeConsentCount: cookieBannerPresent ? cookieCountTotal : 0,
@@ -206,6 +222,7 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
     cookiePolicyPresent,
     termsOfServicePresent,
     accessibilityStatementPresent,
+    browserCoverageSufficient,
     httpsEnforced,
     mixedContentDetected,
     rejectAllPresent,

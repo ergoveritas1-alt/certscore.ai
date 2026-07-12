@@ -99,6 +99,19 @@ function classifyPolicyLink(label, url) {
   return POLICY_LINK_PATTERNS.find((entry) => entry.pattern.test(candidate))?.type ?? null;
 }
 
+function scorePolicyLink(type, label, url) {
+  let score = 0;
+  const normalizedLabel = label.toLowerCase();
+  const pathname = new URL(url).pathname.toLowerCase();
+  if (type === "privacy_policy" && /privacy policy|privacy notice/.test(normalizedLabel)) score += 100;
+  if (type === "cookie_policy" && /cookie policy|cookie notice/.test(normalizedLabel)) score += 100;
+  if (type === "terms" && /terms of use|terms and conditions/.test(normalizedLabel)) score += 100;
+  if (type === "accessibility" && /accessibility/.test(normalizedLabel)) score += 100;
+  if (/\/(privacy|privacy-policy|cookies?|terms|terms-of-use|accessibility)\/?$/.test(pathname)) score += 80;
+  if (/podcast|audio|article|video|story/.test(pathname)) score -= 120;
+  return score;
+}
+
 function collectPageEvidence(includeText = false) {
   const links = [];
   for (const anchor of Array.from(document.querySelectorAll("a[href]")).slice(0, 500)) {
@@ -107,7 +120,7 @@ function collectPageEvidence(includeText = false) {
     const label = (visibleText(anchor) || anchor.getAttribute("aria-label") || "").slice(0, 160);
     const type = classifyPolicyLink(label, href);
     if (!type) continue;
-    links.push({ label, type, url: href.slice(0, 4096) });
+    links.push({ label, score: scorePolicyLink(type, label, href), type, url: href.slice(0, 4096) });
   }
 
   const uniqueLinks = Array.from(new Map(links.map((link) => [`${link.type}|${link.url}`, link])).values()).slice(0, 20);

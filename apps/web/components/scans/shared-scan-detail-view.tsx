@@ -7023,7 +7023,12 @@ export async function SharedScanDetailView({
       : typeof scanRecord.snapshot?.cookie_banner_present === "boolean"
         ? scanRecord.snapshot.cookie_banner_present
         : null;
-  const executiveDisplayedScore = gdprEprivacyCoverageScore.score ?? legacyExecutiveDisplayedScore;
+  const browserCoverageSufficient =
+    scanRecord.scan.scanType !== "browser_extension" ||
+    (scanRecord.snapshot?.privacy_policy_present === true && scanRecord.snapshot?.https_enforced === true);
+  const executiveDisplayedScore = browserCoverageSufficient
+    ? gdprEprivacyCoverageScore.score ?? legacyExecutiveDisplayedScore
+    : null;
   const regulatoryGapTopFindings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {
       id: "gdpr_eprivacy",
