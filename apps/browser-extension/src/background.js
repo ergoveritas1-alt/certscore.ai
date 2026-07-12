@@ -51,6 +51,29 @@ function setBadge(status) {
   chrome.action.setBadgeBackgroundColor({ color });
 }
 
+async function openCompletedReport() {
+  const { certscoreBx01Status } = await chrome.storage.local.get("certscoreBx01Status");
+  if (typeof certscoreBx01Status?.reportUrl === "string" && certscoreBx01Status.reportUrl) {
+    await chrome.tabs.create({ active: true, url: certscoreBx01Status.reportUrl });
+  }
+}
+
+if (chrome.notifications?.onButtonClicked) {
+  chrome.notifications.onButtonClicked.addListener((notificationId) => {
+    if (notificationId.startsWith("certscore-scan-complete:")) {
+      openCompletedReport().catch(() => {});
+    }
+  });
+}
+
+if (chrome.notifications?.onClicked) {
+  chrome.notifications.onClicked.addListener((notificationId) => {
+    if (notificationId.startsWith("certscore-scan-complete:")) {
+      openCompletedReport().catch(() => {});
+    }
+  });
+}
+
 function hostnameFromUrl(url) {
   try {
     return new URL(url).hostname.toLowerCase();
@@ -248,10 +271,15 @@ async function captureBrowserPageEvidence(scan) {
       if (!loaded) continue;
       const evidence = await waitForPolicyPageEvidence(tab.id);
       let resolvedEvidence = evidence;
-      if (link.type === "privacy_policy" && (resolvedEvidence?.bodyText?.length ?? 0) < 2500) {
-        const nestedPrivacy = resolvedEvidence?.policyLinks?.find((candidate) =>
-          candidate.url !== resolvedEvidence.finalUrl && /privacy policy|privacy notice/i.test(`${candidate.label} ${candidate.url}`)
-        );
+      const nestedPrivacyCandidates = resolvedEvidence?.policyLinks?.filter((candidate) =>
+        candidate.url !== resolvedEvidence.finalUrl && /privacy policy|privacy notice/i.test(`${candidate.label} ${candidate.url}`)
+      ) ?? [];
+      const privacyHubLikely = nestedPrivacyCandidates.length >= 2;
+      if (link.type === "privacy_policy" && ((resolvedEvidence?.bodyText?.length ?? 0) < 2500 || privacyHubLikely)) {
+        const nestedPrivacy = [...nestedPrivacyCandidates].sort((left, right) => {
+          const preferred = (candidate) => /(?:en-emea|europe|\beu\b)/i.test(candidate.url) ? 1 : 0;
+          return preferred(right) - preferred(left);
+        })[0];
         if (nestedPrivacy?.url) {
           await chrome.tabs.update(tab.id, { url: nestedPrivacy.url });
           if (await waitForTabComplete(tab.id)) {
@@ -593,6 +621,7 @@ async function completeScan(scan) {
   }
 
   const body = await response.json();
+  const reportUrl = new URL(body.reportUrl, scan.apiBaseUrl).toString();
   const summary = {
     bannerObserved,
     cookieEventCount,
@@ -607,13 +636,21 @@ async function completeScan(scan) {
     label: "Complete",
     message: `Captured ${networkRequestCount} requests, ${cookieEventCount} cookie events, ${pageEvidenceSummary.policySurfaceCount} linked legal surfaces, and ${bannerObserved ? "a visible consent banner" : "no visible consent banner"}.`,
     phase: "complete",
-    reportUrl: body.reportUrl,
+    reportUrl,
     summary,
     targetUrl: scan.targetUrl
   };
   setStatus(completeStatus);
   sendStatusToLauncher(scan, completeStatus);
   setBadge("complete");
+  await chrome.notifications.create(`certscore-scan-complete:${scan.browserScanId}`, {
+    buttons: [{ title: "Open report" }],
+    iconUrl: chrome.runtime.getURL("assets/certscore-mark-cropped.png"),
+    message: "Your browser-assisted scan is complete. Open the CertScore.ai report to review the retained evidence.",
+    priority: 2,
+    title: "CertScore.ai scan complete",
+    type: "basic"
+  }).catch(() => {});
 }
 
 function cleanupScan(tabId) {
