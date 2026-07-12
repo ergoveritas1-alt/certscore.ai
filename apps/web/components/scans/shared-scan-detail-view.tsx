@@ -7133,11 +7133,14 @@ export async function SharedScanDetailView({
     createdAt: scanRecord.scan.createdAt,
     startedAt: scanRecord.scan.startedAt
   });
-  const scanTimeDetailLabel = scanReadyTimeLabel
-    ? `scan time: ${scanReadyTimeLabel}`
-    : scanTimeLabel
+  const scanTimeDetailLabel =
+    scanRecord.scan.scanType === "browser_extension" && scanTimeLabel
       ? `scan time: ${scanTimeLabel}`
-      : null;
+      : scanReadyTimeLabel
+        ? `scan time: ${scanReadyTimeLabel}`
+        : scanTimeLabel
+          ? `scan time: ${scanTimeLabel}`
+          : null;
 
   return (
     <div className="min-w-0 overflow-x-hidden space-y-8">
