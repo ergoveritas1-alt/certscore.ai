@@ -170,7 +170,13 @@ async function refresh() {
     return;
   }
 
-  if (certscoreBx01Status?.targetUrl && tab?.url && certscoreBx01Status.targetUrl !== tab.url) {
+  if (
+    certscoreBx01Status?.targetUrl &&
+    tab?.url &&
+    certscoreBx01Status.targetUrl !== tab.url &&
+    !certscoreBx01Status.reportUrl &&
+    certscoreBx01Status.busy !== true
+  ) {
     await chrome.storage.local.remove("certscoreBx01Status");
     renderStatus({ label: "Ready" });
     return;
