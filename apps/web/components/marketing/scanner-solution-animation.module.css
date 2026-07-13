@@ -1,0 +1,211 @@
+.visual {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: #0b2340;
+}
+
+@keyframes growWaterfallBar {
+  0% {
+    transform: scaleX(0);
+  }
+  20%,
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes revealWaterfallBadge {
+  0% {
+    opacity: 0;
+  }
+  3%,
+  100% {
+    opacity: 1;
+  }
+}
+
+.waterfallBar {
+  animation: growWaterfallBar 20s ease-out infinite;
+  transform: scaleX(0);
+  transform-box: fill-box;
+  transform-origin: left center;
+}
+
+.waterfallBadge {
+  animation: revealWaterfallBadge 20s linear infinite;
+  opacity: 0;
+}
+
+.delay1 {
+  animation-delay: 0.48s;
+}
+
+.delay2 {
+  animation-delay: 0.714s;
+}
+
+.delay3 {
+  animation-delay: 2.02s;
+}
+
+.delay4 {
+  animation-delay: 2.39s;
+}
+
+.delay5 {
+  animation-delay: 4.87s;
+}
+
+.delay6 {
+  animation-delay: 5.24s;
+}
+
+.delay7 {
+  animation-delay: 8.31s;
+}
+
+@keyframes rotateRadarSweep {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes glowPrivacySurface {
+  0%,
+  10% {
+    opacity: 0.4;
+  }
+  14% {
+    opacity: 1;
+  }
+  64% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes glowCookieSurface {
+  0% {
+    opacity: 0.5;
+  }
+  20% {
+    opacity: 0.42;
+  }
+  59% {
+    opacity: 0.4;
+  }
+  63% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes glowTermsSurface {
+  0%,
+  30% {
+    opacity: 0.4;
+  }
+  36% {
+    opacity: 1;
+  }
+  86% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 0.4;
+  }
+}
+
+.radarSweep {
+  animation: rotateRadarSweep 5s linear infinite;
+  transform-box: view-box;
+  transform-origin: 170px 172px;
+}
+
+.privacySurface {
+  animation: glowPrivacySurface 5s linear infinite;
+}
+
+.cookieSurface {
+  animation: glowCookieSurface 5s linear infinite;
+}
+
+.termsSurface {
+  animation: glowTermsSurface 5s linear infinite;
+}
+
+@keyframes sonarPing {
+  0% {
+    opacity: 0.9;
+    r: 6px;
+  }
+  100% {
+    opacity: 0;
+    r: 170px;
+  }
+}
+
+.sonarPing {
+  animation: sonarPing 6.8s ease-out infinite;
+  opacity: 0;
+}
+
+.ping1 {
+  animation-delay: 0.6s;
+}
+
+.ping1b {
+  animation-delay: 4s;
+}
+
+.ping2 {
+  animation-delay: 1.8s;
+}
+
+.ping2b {
+  animation-delay: 5.2s;
+}
+
+.ping3 {
+  animation-delay: 3s;
+}
+
+.ping3b {
+  animation-delay: 6.4s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waterfallBar,
+  .waterfallBadge,
+  .radarSweep,
+  .privacySurface,
+  .cookieSurface,
+  .termsSurface,
+  .sonarPing {
+    animation: none;
+  }
+
+  .waterfallBar {
+    transform: scaleX(1);
+  }
+
+  .waterfallBadge,
+  .privacySurface,
+  .cookieSurface,
+  .termsSurface {
+    opacity: 1;
+  }
+
+  .sonarPing {
+    opacity: 0.45;
+    r: 26px;
+  }
+}

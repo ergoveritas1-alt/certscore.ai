@@ -73,8 +73,11 @@ function deriveBrowserScanScore(input: {
 }
 
 export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
-  signals: BrowserScanObservedSignalPackageInput["observedSignals"]
+  signals: BrowserScanObservedSignalPackageInput["observedSignals"],
+  evidenceInventory?: BrowserScanObservedSignalPackageInput["evidenceInventory"]
 ) {
+  const cookieInventory = evidenceInventory?.cookies ?? [];
+  const thirdPartyRequestInventory = evidenceInventory?.thirdPartyRequests ?? [];
   const thirdPartyRequestCount = signalNumber(signals, "privacy.third_party_request_count");
   const thirdPartyRequestDomains = signalStringArray(signals, "privacy.third_party_request_domains");
   const thirdPartyScriptDomainCount = signalNumber(signals, "privacy.third_party_script_domain_count");
@@ -134,12 +137,32 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
     session_replay: Math.max(sessionReplayVendors.length, countCategoryMatches(trackerCategories, /session_replay|behavioral/i)),
     tag_manager: countCategoryMatches(trackerCategories, /tag_manager/i)
   };
-  const requestToVendorObservations = uniqueStrings([...trackerVendors, ...preconsentTrackerVendors], 50).map((vendor) => ({
-    category: trackerCategories[0] ?? "tracker",
-    preConsent: preconsentTrackerVendors.includes(vendor) || preconsentTrackingDetected,
-    source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
-    vendor
-  }));
+  const requestToVendorObservations = thirdPartyRequestInventory.length > 0
+    ? thirdPartyRequestInventory.map((row) => ({
+        category: row.purpose ?? "unresolved_host",
+        confidence: row.confidence,
+        firstSeenMs: row.firstObservedAtMs,
+        hostname: row.hostname,
+        preConsent: row.preConsent,
+        product: row.product,
+        regulatoryRelevance: row.regulatoryRelevance,
+        requestCount: row.requestCount,
+        source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
+        vendor: row.vendor ?? "unresolved"
+      }))
+    : uniqueStrings([...trackerVendors, ...preconsentTrackerVendors], 50).map((vendor) => ({
+        category: trackerCategories[0] ?? "tracker",
+        preConsent: preconsentTrackerVendors.includes(vendor) || preconsentTrackingDetected,
+        source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
+        vendor
+      }));
+  const cookieNames = uniqueStrings(cookieInventory.map((row) => row.cookieName), 250);
+  const cookieDomains = cookieNames.map((cookieName) =>
+    cookieInventory.find((row) => row.cookieName === cookieName)?.domain ?? ""
+  );
+  const thirdPartyCookieRows = cookieInventory.filter((row) => row.party === "third_party");
+  const beforeConsentCookieRows = cookieInventory.filter((row) => row.beforeConsent);
+  const beforeConsentThirdPartyCookieRows = thirdPartyCookieRows.filter((row) => row.beforeConsent);
 
   return {
     acceptAllPresent,
@@ -156,6 +179,21 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
         sourceId: BROWSER_SCAN_SOURCE_ID,
         sourceType: BROWSER_SCAN_SOURCE_TYPE
       },
+      browserExtensionRequestInventory: thirdPartyRequestInventory.map((row) => ({
+        attributionStatus: row.attributionStatus,
+        category: row.purpose ?? "unresolved_host",
+        confidence: row.confidence,
+        firstSeenMs: row.firstObservedAtMs,
+        hostname: row.hostname,
+        lastSeenMs: row.lastObservedAtMs,
+        preConsent: row.preConsent,
+        product: row.product,
+        regulatoryRelevance: row.regulatoryRelevance,
+        requestCount: row.requestCount,
+        resourceTypes: row.resourceTypes,
+        source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
+        vendor: row.vendor
+      })),
       fingerprintSummary: {
         attributeCategories: fingerprintCategories.map((name) => ({ count: 1, firstSeenMs: null, name })),
         attributeCategoryCount: fingerprintCategories.length,
@@ -241,11 +279,46 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
         validTlsCertificate
       },
       requestToVendorObservations,
+      requestObservations: thirdPartyRequestInventory.map((row) => ({
+        category: row.purpose ?? "unresolved_host",
+        confidence: row.confidence,
+        domain: row.hostname,
+        firstSeenMs: row.firstObservedAtMs,
+        lastSeenMs: row.lastObservedAtMs,
+        preConsent: row.preConsent,
+        product: row.product,
+        regulatoryRelevance: row.regulatoryRelevance,
+        requestCount: row.requestCount,
+        resourceTypes: row.resourceTypes,
+        source: BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
+        thirdParty: true,
+        vendor: row.vendor ?? "unresolved"
+      })),
+      cookieWriteObservations: cookieInventory.map((row) => ({
+        beforeConsent: row.beforeConsent,
+        category: row.purpose ?? "unknown",
+        cookieName: row.cookieName,
+        cookiePartyType: row.party,
+        cookieSetMethod: row.sources.join(","),
+        domain: row.domain,
+        evidenceGrade: row.confidence !== null && row.confidence >= 0.9 ? "high" : row.confidence !== null && row.confidence >= 0.7 ? "medium" : "low",
+        firstObservedAtMs: row.firstObservedAtMs,
+        httpOnly: row.httpOnly,
+        initiatorVendor: row.product ?? row.vendor,
+        lastObservedAtMs: row.lastObservedAtMs,
+        path: row.path,
+        sameSite: row.sameSite,
+        secure: row.secure,
+        setAtMs: row.firstObservedAtMs,
+        timingBasis: row.timingBasis,
+        timingEvidence: row.beforeConsent ? "before_consent_cookie_write" : "unknown",
+        valueCaptured: false
+      })),
       storageSummary: {
-        cookiesBeforeConsentCount: cookieBannerPresent ? cookieCountTotal : 0,
-        cookiesSeenCount: cookieCountTotal,
-        thirdPartyCookieBeforeConsentCount: 0,
-        thirdPartyCookieCount: 0,
+        cookiesBeforeConsentCount: beforeConsentCookieRows.length,
+        cookiesSeenCount: cookieInventory.length > 0 ? cookieInventory.length : cookieCountTotal,
+        thirdPartyCookieBeforeConsentCount: beforeConsentThirdPartyCookieRows.length,
+        thirdPartyCookieCount: thirdPartyCookieRows.length,
         valueCaptured: false
       },
       timelineMarkers: {
@@ -268,6 +341,8 @@ export function deriveBrowserScanCanonicalMaterializationFromObservedSignals(
     preconsentTrackerVendors,
     preconsentTrackingDetected,
     preconsentViolationCount,
+    cookieDomains,
+    cookieNames,
     privacyScore: score,
     privacyPolicyPresent,
     cookiePolicyPresent,

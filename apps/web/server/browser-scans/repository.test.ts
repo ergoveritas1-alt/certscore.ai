@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { summarizeBrowserEvidence, type BrowserScanArtifactRow, type BrowserScanEventRow } from "./evidence-summary";
 import { buildBrowserObservedSignalPackageFromEvidence } from "./observed-signal-package";
+import { browserScanObservedSignalPackageSchema } from "./schema";
 
 test("summarizeBrowserEvidence preserves browser-extension provenance shape without cookie values", () => {
   const events: BrowserScanEventRow[] = [
@@ -137,6 +138,7 @@ test("WS01-normalized BX01 signal package preserves request timing provenance", 
   });
 
   const signalPackage = buildBrowserObservedSignalPackageFromEvidence({ evidence: summary });
+  assert.equal(browserScanObservedSignalPackageSchema.safeParse(signalPackage).success, true);
   const preconsentSignal = signalPackage.observedSignals.find(
     (signal) => signal.key === "privacy.preconsent_tracking_detected"
   );
@@ -194,6 +196,12 @@ test("browser signal package uses the canonical resolver for multiple pre-consen
 
   assert.deepEqual(vendors?.value, ["Google Publisher Tag", "Google Ads / DoubleClick", "ScorecardResearch"]);
   assert.equal(violationCount?.value, 2);
+  assert.ok(signalPackage.evidenceInventory?.thirdPartyRequests.some((row) =>
+    row.hostname === "securepubads.g.doubleclick.net" && row.attributionStatus === "resolved" && row.purpose === "advertising"
+  ));
+  assert.ok(signalPackage.evidenceInventory?.thirdPartyRequests.some((row) =>
+    row.hostname === "cdn.cnn.com" && row.attributionStatus === "unresolved"
+  ));
 });
 
 test("browser signal package counts unique cookies instead of repeated cookie events", () => {
@@ -208,8 +216,8 @@ test("browser signal package counts unique cookies instead of repeated cookie ev
     artifacts: [],
     events: [
       { event_type: "cookie_added", observed_at_ms: 20, event_json: { ...cookie, eventType: "cookie_added" } },
-      { event_type: "cookie_changed", observed_at_ms: 30, event_json: { ...cookie, eventType: "cookie_changed" } },
-      { event_type: "cookie_observed", observed_at_ms: 40, event_json: { ...cookie, eventType: "cookie_observed" } },
+      { event_type: "cookie_changed", observed_at_ms: 30, event_json: { ...cookie, eventType: "cookie_changed", observedAtMs: 30 } },
+      { event_type: "cookie_observed", observed_at_ms: 40, event_json: { ...cookie, eventType: "cookie_observed", observedAtMs: 40 } },
       {
         event_type: "cookie_added",
         observed_at_ms: 50,
@@ -224,6 +232,13 @@ test("browser signal package counts unique cookies instead of repeated cookie ev
 
   assert.equal(cookieCount?.value, 2);
   assert.equal(cookieCount?.label, "Unique cookies observed");
+  assert.deepEqual(
+    signalPackage.evidenceInventory?.cookies.map((row) => [row.cookieName, row.domain, row.firstObservedAtMs, row.lastObservedAtMs]),
+    [
+      ["session-id", ".example.com", 20, 40],
+      ["preferences", ".example.com", 50, 50]
+    ]
+  );
 });
 
 test("browser signal package projects fetched legal surfaces and page evidence", () => {

@@ -11,6 +11,7 @@ const navLinks = [
 ];
 
 const resourceLinks = [
+  { href: "/browser-extension", label: "Chrome browser extension" },
   { href: "/solutions", label: "Scanner solutions" },
   { href: "/solutions/gdpr-website-compliance-scanner", label: "GDPR website scanner" },
   { href: "/solutions/cookie-consent-scanner", label: "Cookie consent scanner" },

@@ -1223,7 +1223,7 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
     .slice(0, 4)
     .map((row) => `${row.vendor} - ${row.purpose} (${formatCookiePriorityFirstSeen(row.firstSeenMs)})`)
     .join(", ");
-  const status = getCookiePriorityChecklistStatus(selectedPriority);
+  const status = "Review signal" as const;
   const priorityLabel = formatCookiePriorityLabel(selectedPriority);
   const firstSeenMs = selectedRows
     .map((row) => row.firstSeenMs)
@@ -1233,7 +1233,14 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
 
   return {
     criticalEvidence: {
-      missingOrIncompleteSourceSignals: [],
+      missingOrIncompleteSourceSignals: [
+        makeSourceSignalGap(
+          "CertScore.unifiedFinding.preconsent_tracking",
+          "promotion-eligible normalized concern and unified finding",
+          "tracker inventory only",
+          "Grouped tracker inventory remains review evidence unless the canonical promotion-grade sequence contract passes."
+        )
+      ],
       pipeline: {
         concernPolicyKey: `gdpr_eprivacy.pre_consent_third_party_tracking.tracker_inventory.${selectedPriority}`,
         projectionStage: "coverage_fallback",
@@ -1257,8 +1264,8 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
       },
       statusBasis:
         selectedEvidence.length > 0
-          ? `${priorityLabel} priority pre-consent 3rd party tracking evidence: ${selectedEvidence}.`
-          : `${priorityLabel} priority pre-consent 3rd party tracking evidence was retained.`
+          ? `${priorityLabel} priority pre-consent 3rd party tracking inventory was retained for review: ${selectedEvidence}.`
+          : `${priorityLabel} priority pre-consent 3rd party tracking inventory was retained for review.`,
     } satisfies GdprEprivacyCoverageCriticalEvidence,
     evidenceRefs: selectedRows
       .map((row) => `${row.vendor} ${row.purpose} tracker first seen ${formatCookiePriorityFirstSeen(row.firstSeenMs)}`)

@@ -25,9 +25,9 @@ export const SCAN_FROM_OPTIONS = [
     value: "california"
   },
   {
-    description: "Run from this browser using the CertScore Chrome extension.",
+    description: "Run from this browser using CertScore.ai Browser Evidence.",
     icon: "local",
-    label: "Local-extension",
+    label: "Chrome browser",
     value: "local_extension"
   }
 ] as const;

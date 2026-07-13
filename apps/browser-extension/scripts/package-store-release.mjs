@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -20,7 +20,10 @@ if (validated.status !== 0) {
 }
 mkdirSync(packageRoot, { recursive: true });
 for (const entry of ["manifest.json", "assets", "src"]) {
-  cpSync(join(root, entry), join(packageRoot, entry), { recursive: true });
+  cpSync(join(root, entry), join(packageRoot, entry), {
+    filter: (source) => basename(source) !== ".DS_Store",
+    recursive: true
+  });
 }
 rmSync(join(packageRoot, "src/options"), { force: true, recursive: true });
 
@@ -29,6 +32,17 @@ rmSync(zipPath, { force: true });
 const zipped = spawnSync("zip", ["-qr", zipPath, "."], { cwd: packageRoot, encoding: "utf8" });
 if (zipped.status !== 0) {
   throw new Error(zipped.stderr || "Unable to create Chrome Web Store ZIP.");
+}
+
+const listed = spawnSync("unzip", ["-Z1", zipPath], { encoding: "utf8" });
+if (listed.status !== 0) {
+  throw new Error(listed.stderr || "Unable to inspect Chrome Web Store ZIP.");
+}
+const forbiddenEntries = listed.stdout
+  .split("\n")
+  .filter((entry) => entry.split("/").some((part) => part === ".DS_Store" || part === "__MACOSX"));
+if (forbiddenEntries.length > 0) {
+  throw new Error(`Chrome Web Store ZIP contains forbidden metadata: ${forbiddenEntries.join(", ")}`);
 }
 
 const checksum = createHash("sha256").update(readFileSync(zipPath)).digest("hex");

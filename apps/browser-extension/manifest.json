@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "CertScore.ai Browser Evidence",
   "description": "Run browser-assisted CertScore.ai scans with pre-consent, privacy-surface, transport, embed, and accessibility evidence.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "action": {
     "default_icon": {
       "16": "assets/icons/icon-16.png",

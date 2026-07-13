@@ -3,8 +3,11 @@ import { notFound } from "next/navigation";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
-import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
-import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
+import {
+  SharedScanDetailView,
+  buildScanReportUnifiedFindings,
+  deriveVisualAccessLimitationNotice
+} from "../../../../components/scans/shared-scan-detail-view";
 import { AgentSummaryActions, ShareReportActions } from "../../../../components/scans/share-report-actions";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { LocalV2DagScanProgressCard } from "../../../../components/scans/scan-submit-progress";
@@ -157,6 +160,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const visualEvidenceHref = visualEvidenceArtifact
     ? `/api/scans/${displayScanRecord.scan.id}/visual-evidence/${encodeURIComponent(visualEvidenceArtifact.id)}`
     : null;
+  const isNoGoReport = Boolean(deriveVisualAccessLimitationNotice(displayScanRecord.runtimeArtifacts));
 
   return (
     <main className="min-h-screen bg-white">
@@ -207,9 +211,10 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
             ) : null
           }
           scanRecord={displayScanRecord}
+          showBrowserExtensionRecovery
           viewerAccessRole="user"
         />
-        {displayScanRecord.scan.status === "completed" ? (
+        {displayScanRecord.scan.status === "completed" && !isNoGoReport ? (
           <div className="mt-8 space-y-4">
             <AgentSummaryActions domainLabel={publicScanDomainLabel} scanId={displayScanRecord.scan.id} />
           </div>

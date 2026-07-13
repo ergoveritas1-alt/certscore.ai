@@ -1688,6 +1688,72 @@ test("promotion-grade preconsent timing and vendor anchors surface as executive 
   assert.equal(projection.posture, "Action Needed");
 });
 
+test("generic consent-surface timing projects preconsent tracking without CMP identity", () => {
+  const state = buildPreconsentRuntimeState({
+    consent_surface_observed: true,
+    consent_timeline: {
+      firstCmpVisibleMs: null,
+      firstConsentSurfaceVisibleMs: 1000,
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: 250,
+      timelineConfidence: "high"
+    },
+    hybrid_runtime_evidence: {
+      requestPurposeClassificationConfidence: [
+        {
+          category: "analytics",
+          confidence: 0.95,
+          essentiality: "non_essential",
+          hostname: "analytics.example.test",
+          requestUrl: "https://analytics.example.test/collect",
+          runtimePhase: "pre_consent",
+          tsMs: 250,
+          vendor: "Example Analytics"
+        }
+      ]
+    }
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+});
+
+test("complete no-surface inspection projects initial-load tracking without CMP identity", () => {
+  const state = buildPreconsentRuntimeState({
+    consent_surface_inspection: {
+      outcome: "no_surface_observed_complete_coverage",
+      coverageStatus: "complete",
+      inspectionCompleted: true,
+      inspectedPreInteraction: true,
+      observedAtMs: 250
+    },
+    consent_timeline: {
+      firstCmpVisibleMs: null,
+      firstConsentSurfaceVisibleMs: null,
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: 250,
+      timelineConfidence: "high"
+    },
+    hybrid_runtime_evidence: {
+      requestPurposeClassificationConfidence: [{
+        category: "analytics",
+        confidence: 0.95,
+        essentiality: "non_essential",
+        hostname: "analytics.example.test",
+        requestUrl: "https://analytics.example.test/collect",
+        runtimePhase: "pre_consent",
+        tsMs: 250,
+        vendor: "Example Analytics"
+      }]
+    }
+  });
+  const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+
+  assert.equal(packet?.presentationDecision.status, "surface");
+  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+});
+
 test("request-only preconsent violation rows do not synthesize analytics cookie findings", () => {
   const state = debugBuildScanReportUnifiedFindingStateForScan({
     accessibilityRuleCounts: [],

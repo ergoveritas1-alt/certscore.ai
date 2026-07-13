@@ -401,8 +401,9 @@ async function baselineCookies(targetUrl) {
   );
 }
 
-function serializeCookie(cookie, observedAtMs, eventType, source, timingPrecision) {
+function serializeCookie(cookie, observedAtMs, eventType, source, timingPrecision, consentInteractionObserved = false) {
   return {
+    consentInteractionObserved,
     cookieName: cookie.name,
     domain: cookie.domain,
     eventType,
@@ -519,7 +520,14 @@ async function completeScan(scan) {
   const endingCookies = await baselineCookies(scan.targetUrl);
   for (const [key, cookie] of endingCookies.entries()) {
     if (!scan.baselineCookies.has(key)) {
-      scan.events.push(serializeCookie(cookie, nowMs(scan), "cookie_observed", "baseline_diff", "scan_window_diff"));
+      scan.events.push(serializeCookie(
+        cookie,
+        nowMs(scan),
+        "cookie_observed",
+        "baseline_diff",
+        "scan_window_diff",
+        scan.consentInteractionObserved
+      ));
     }
   }
 
@@ -674,12 +682,15 @@ chrome.webRequest.onHeadersReceived.addListener(
     for (const header of setCookieHeaders) {
       const cookie = parseSetCookieHeader(header, details.url, nowMs(scan));
       if (cookie) {
-        scan.events.push(cookie);
+        scan.events.push({
+          ...cookie,
+          consentInteractionObserved: scan.consentInteractionObserved
+        });
       }
     }
   },
   { urls: ["http://*/*", "https://*/*"] },
-  ["responseHeaders"]
+  ["responseHeaders", "extraHeaders"]
 );
 
 chrome.cookies.onChanged.addListener((changeInfo) => {
@@ -694,7 +705,8 @@ chrome.cookies.onChanged.addListener((changeInfo) => {
         nowMs(scan),
         changeInfo.cause === "overwrite" ? "cookie_changed" : "cookie_added",
         "chrome.cookies.onChanged",
-        "exact_event"
+        "exact_event",
+        scan.consentInteractionObserved
       )
     );
   }

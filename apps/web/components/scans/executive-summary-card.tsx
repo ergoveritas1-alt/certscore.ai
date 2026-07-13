@@ -1297,6 +1297,7 @@ function shouldMapConsentDarkPatternsToGdpr(input: {
 }
 
 export type ExecutiveAccessLimitationNotice = {
+  blockerLabel?: string | null;
   coverageLabel: string;
   headline: string;
   message: string;
@@ -2212,12 +2213,6 @@ function NotScoredSnapshotPane() {
         <p className="mt-2 text-sm font-semibold text-slate-950">Not scored</p>
         <p className="mt-1 text-sm leading-6 text-slate-600">
           CertScore did not issue privacy, consent, accessibility, or regulatory scores from this run.
-        </p>
-      </div>
-      <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Recommended next step</p>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          Re-run the scan when the site is available, or try a different scan context if the retained screenshot still does not show the normal public site.
         </p>
       </div>
     </div>
@@ -4517,6 +4512,14 @@ export function ExecutiveSummaryCard(input: {
           >
             {getExecutiveBadgeLabel(effectiveDisplayState)}
           </span>
+          {isScanNotRepresentative && input.accessLimitationNotice?.blockerLabel ? (
+            <span
+              className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-800"
+              data-testid="scan-blocker-type-badge"
+            >
+              Blocker: {input.accessLimitationNotice.blockerLabel}
+            </span>
+          ) : null}
           {input.domainBenchmark ? (
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600">
               Benchmark: {formatBenchmarkHeaderIndustry(input.domainBenchmark.industry)}

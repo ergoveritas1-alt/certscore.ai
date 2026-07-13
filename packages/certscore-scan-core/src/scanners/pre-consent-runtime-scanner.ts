@@ -455,13 +455,12 @@ export async function preConsentRuntimeScanner(
     const settleWaitMs = fastWait ? 350 : 1_000;
     const consentUiWaitTimeoutMs = fastWait ? 1_800 : 3_500;
     const consentUiCaptureTimeoutMs = fastWait ? 3_500 : 5_500;
-    const consentUiBudget = createConsentUiCaptureBudget(fastWait ? 4_500 : 7_000);
     const consentUiObservationPromise = recordBoundedTiming(
       timingBreakdown,
       "page evidence: consent UI",
       "First-layer consent surface/control text and affordance inventory, started immediately after DOMContentLoaded.",
-      consentUiBudget.timeoutFor(consentUiCaptureTimeoutMs),
-      () => detectConsentUi(page, input.scanStartedAtMs, Math.min(consentUiWaitTimeoutMs, consentUiBudget.remainingMs())),
+      consentUiCaptureTimeoutMs,
+      () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs),
       () => emptyConsentUiObservation(input.scanStartedAtMs),
     );
     const networkIdlePromise = recordTiming(
@@ -559,7 +558,7 @@ export async function preConsentRuntimeScanner(
       });
     }
     if (shouldRecaptureTextBackedConsentUiAfterSettle(consentObservation, domText)) {
-      const recaptureTimeoutMs = consentUiBudget.timeoutFor(fastWait ? 1_000 : 1_500);
+      const recaptureTimeoutMs = Math.min(fastWait ? 1_000 : 1_500, remainingModuleBudgetMs());
       const recapturedConsentObservation = await recordBoundedTiming(
         timingBreakdown,
         "page evidence: consent UI post-settle recapture",
@@ -589,7 +588,7 @@ export async function preConsentRuntimeScanner(
       retainedConsentUiObservation = consentObservation;
     }
     if (shouldRecaptureConsentUiAfterTimeout(consentObservation, { fastWait })) {
-      const recaptureTimeoutMs = consentUiBudget.timeoutFor(fastWait ? 3_000 : 4_000);
+      const recaptureTimeoutMs = Math.min(fastWait ? 1_500 : 2_500, remainingModuleBudgetMs());
       const recapturedConsentObservation = await recordBoundedTiming(
         timingBreakdown,
         "page evidence: consent UI timeout recapture",
@@ -603,12 +602,14 @@ export async function preConsentRuntimeScanner(
         ),
         () => consentObservation,
       );
-      if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
-        consentObservation = mergeConsentUiObservations(
-          consentObservation,
-          recapturedConsentObservation,
-          "recapture:post_timeout_first_layer_controls",
-        );
+      const recaptureResolution = reconcileConsentUiRecapture({
+        current: consentObservation,
+        candidate: recapturedConsentObservation,
+        strongerBasis: "recapture:post_timeout_first_layer_controls",
+        completedWithoutControlsBasis: "recapture:post_timeout_completed_without_first_layer_controls",
+      });
+      consentObservation = recaptureResolution.observation;
+      if (recaptureResolution.strongerEvidenceRetained) {
         domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
       }
       retainedConsentUiObservation = consentObservation;
@@ -748,10 +749,7 @@ export async function preConsentRuntimeScanner(
       const highConfidenceCmpRuntimeEvidence =
         hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations);
       const weakCmpRecaptureWaitMs = fastWait ? 2_250 : 2_750;
-      const requestedRecaptureTimeoutMs = Math.max(
-        consentUiBudget.timeoutFor(fastWait ? 1_750 : 2_250),
-        fastWait ? 2_500 : 3_000,
-      );
+      const requestedRecaptureTimeoutMs = fastWait ? 2_500 : 3_000;
       const recaptureTimeoutMs = Math.min(requestedRecaptureTimeoutMs, remainingModuleBudgetMs());
       const runHighConfidenceAdaptiveRecapture = () => detectConsentUiWithAdaptiveCmpGates({
         cmpRuntimeObservations,
@@ -891,7 +889,7 @@ export async function preConsentRuntimeScanner(
         fastWait,
         visualCaptureAvailable: visualCapture.status === "available" || screenshots.length > 0,
       })) {
-        const recaptureTimeoutMs = consentUiBudget.timeoutFor(fastWait ? 3_000 : 4_000);
+        const recaptureTimeoutMs = Math.min(fastWait ? 1_500 : 2_500, remainingModuleBudgetMs());
         const recapturedConsentObservation = await recordBoundedTiming(
           timingBreakdown,
           "consent UI control recapture",
@@ -905,12 +903,14 @@ export async function preConsentRuntimeScanner(
           ),
           () => consentObservation,
         );
-        if (isStrongerConsentUiObservation(recapturedConsentObservation, consentObservation)) {
-          consentObservation = mergeConsentUiObservations(
-            consentObservation,
-            recapturedConsentObservation,
-            "recapture:post_screenshot_first_layer_controls",
-          );
+        const recaptureResolution = reconcileConsentUiRecapture({
+          current: consentObservation,
+          candidate: recapturedConsentObservation,
+          strongerBasis: "recapture:post_screenshot_first_layer_controls",
+          completedWithoutControlsBasis: "recapture:post_screenshot_completed_without_first_layer_controls",
+        });
+        consentObservation = recaptureResolution.observation;
+        if (recaptureResolution.strongerEvidenceRetained) {
           domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
         }
       }
@@ -1549,18 +1549,6 @@ async function recordBoundedTiming<T>(
   }
 }
 
-function createConsentUiCaptureBudget(totalMs: number) {
-  const startedAtMs = Date.now();
-  return {
-    remainingMs() {
-      return Math.max(0, totalMs - (Date.now() - startedAtMs));
-    },
-    timeoutFor(requestedMs: number) {
-      return Math.max(0, Math.min(requestedMs, totalMs - (Date.now() - startedAtMs)));
-    },
-  };
-}
-
 function recordInstantTiming(
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
   label: string,
@@ -1625,6 +1613,41 @@ function emptyConsentUiObservation(scanStartedAtMs: number): ConsentUiObservatio
     },
     evidenceRefs: [],
     confidence: 0.4,
+  };
+}
+
+function isIncompleteConsentUiCapture(observation: ConsentUiObservation): boolean {
+  return observation.basis.includes("bounded_capture_timeout_or_failure");
+}
+
+export function reconcileConsentUiRecapture(input: {
+  current: ConsentUiObservation;
+  candidate: ConsentUiObservation;
+  strongerBasis: string;
+  completedWithoutControlsBasis: string;
+}): {
+  observation: ConsentUiObservation;
+  strongerEvidenceRetained: boolean;
+  completedNegativeRetained: boolean;
+} {
+  if (isStrongerConsentUiObservation(input.candidate, input.current)) {
+    return {
+      observation: mergeConsentUiObservations(input.current, input.candidate, input.strongerBasis),
+      strongerEvidenceRetained: true,
+      completedNegativeRetained: false,
+    };
+  }
+  if (isIncompleteConsentUiCapture(input.current) && !isIncompleteConsentUiCapture(input.candidate)) {
+    return {
+      observation: annotateConsentUiObservation(input.candidate, input.completedWithoutControlsBasis),
+      strongerEvidenceRetained: false,
+      completedNegativeRetained: true,
+    };
+  }
+  return {
+    observation: input.current,
+    strongerEvidenceRetained: false,
+    completedNegativeRetained: false,
   };
 }
 

@@ -1,12 +1,54 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildBrowserExtensionRequestInventoryRows,
   buildRuntimeInventoryGroupRows,
   buildTrackerInventoryRows,
   deriveInventoryMacroCategory,
   getInventoryGroupRowRenderKey,
   isInventoryDisplayHostname,
 } from "./runtime-inventory-projection";
+
+test("projects bounded BX01 request inventory without treating unresolved hosts as violations", () => {
+  const rows = buildBrowserExtensionRequestInventoryRows({
+    browserExtensionRequestInventory: [
+      {
+        attributionStatus: "resolved",
+        category: "consent_management",
+        confidence: 0.96,
+        firstSeenMs: 7,
+        hostname: "cdn.cookielaw.org",
+        preConsent: true,
+        product: "OneTrust CMP",
+        regulatoryRelevance: ["consent"],
+        requestCount: 6,
+        vendor: "OneTrust"
+      },
+      {
+        attributionStatus: "unresolved",
+        category: "unresolved_host",
+        confidence: null,
+        firstSeenMs: 18,
+        hostname: "cdn.pricespider.com",
+        preConsent: true,
+        product: null,
+        regulatoryRelevance: [],
+        requestCount: 4,
+        vendor: null
+      }
+    ]
+  });
+  const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
+  const oneTrust = groupedRows.find((row) => row.type === "tracker" && row.vendor === "OneTrust CMP");
+  const priceSpider = groupedRows.find((row) => row.type === "tracker" && row.vendor === "cdn.pricespider.com");
+
+  assert.equal(oneTrust?.purpose, "Cookie compliance");
+  assert.equal(oneTrust?.priority, "contextual");
+  assert.equal(oneTrust?.type === "tracker" ? oneTrust.requestCount : null, 6);
+  assert.equal(priceSpider?.purpose, "Unresolved Host");
+  assert.equal(priceSpider?.priority, "review_needed");
+  assert.equal(priceSpider?.type === "tracker" ? priceSpider.requestCount : null, 4);
+});
 
 test("creates unique render keys for repeated vendor-purpose inventory rows", () => {
   const baseRow = {

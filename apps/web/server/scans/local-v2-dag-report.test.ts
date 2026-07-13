@@ -105,6 +105,45 @@ test("buildLocalV2DagTimingArtifacts tolerates retained legacy bundles without m
   assert.equal(timing.v2DagPolicyDiscoveryDiagnostics.phaseWallMs, null);
 });
 
+test("selectBoundedPreconsentRequestPurposeRows retains later promotion-grade evidence", async () => {
+  const {
+    firstPromotionGradePreconsentRequestMs,
+    selectBoundedPreconsentRequestPurposeRows
+  } = await loadLocalV2DagReport();
+  const contextualRows = Array.from({ length: 30 }, (_, index) => ({
+    category: "infrastructure",
+    classification: "tracking",
+    confidence: 0.95,
+    essentiality: "non_essential",
+    hostname: `static-${index}.example.test`,
+    requestUrl: `https://static-${index}.example.test/asset.js`,
+    runtimePhase: "pre_consent",
+    tsMs: index,
+    vendor: "Example CDN"
+  }));
+  const eligibleRow = {
+    category: "advertising",
+    classification: "tracking",
+    confidence: 0.95,
+    essentiality: "non_essential",
+    hostname: "ads.example.test",
+    requestUrl: "https://ads.example.test/pixel.js",
+    runtimePhase: "pre_consent",
+    tsMs: 31,
+    vendor: "Example Ads"
+  };
+
+  const selected = selectBoundedPreconsentRequestPurposeRows([...contextualRows, eligibleRow]);
+
+  assert.equal(selected.length, 25);
+  assert.equal(selected.some((row) => row.requestUrl === eligibleRow.requestUrl), true);
+  assert.equal(
+    firstPromotionGradePreconsentRequestMs([{ ...contextualRows[0], tsMs: 1 }, eligibleRow]),
+    31,
+    "contextual requests must not provide the promotion sequence timestamp"
+  );
+});
+
 function syntheticPngHeader(width: number, height: number, byteSize = 1024) {
   const buffer = Buffer.alloc(byteSize);
   Buffer.from("89504e470d0a1a0a", "hex").copy(buffer, 0);
@@ -1959,6 +1998,14 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.equal(fingerprintingSummary.fingerprintingObserved, true);
     assert.deepEqual(fingerprintingSummary.highEntropySignals, ["HTMLCanvasElement.toDataURL"]);
     assert.equal(firstLayerConsentChoices.rejectControlObserved, false);
+    const requestPurposeRows = hybrid.requestPurposeClassificationConfidence as unknown as Array<Record<string, unknown>>;
+    assert.equal(
+      requestPurposeRows.some((row) =>
+        row.requestUrl === "https://connect.facebook.net/en_US/fbevents.js" && row.vendor === "Microsoft Clarity"
+      ),
+      false,
+      "an unmatched request must not borrow the first retained vendor"
+    );
     assert.equal(rejectPath.rejectControlObserved, false);
     assert.equal(rejectPath.rejectAvailableOnFirstLayer, false);
     assert.equal(rejectPath.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
@@ -2070,6 +2117,12 @@ test("materializeLocalV2DagScanDetail projects retained first-layer optional tog
     assert.equal(firstLayerChoices?.defaultToggleStatesObserved, true);
     assert.equal(firstLayerChoices?.nonEssentialDefaultsOff, false);
     assert.deepEqual(firstLayerChoices?.precheckedOptionalPurposeLabels, ["Analytics cookies"]);
+    assert.equal(detail.runtimeArtifacts?.consentActionableChoiceObserved, true);
+    assert.equal(detail.runtimeArtifacts?.cmpFrameworkSignalObserved, undefined);
+    assert.equal(
+      (detail.runtimeArtifacts?.consentTimeline as Record<string, unknown> | undefined)?.firstConsentSurfaceVisibleMs,
+      900
+    );
 
     const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
       coverageLimited: false,

@@ -44,7 +44,7 @@ test("ScanFromSelect renders scan-from choices before option toggles", () => {
   assert.equal(source.indexOf("menuOptions.map") < source.indexOf(">Fresh re-scan<"), true);
 });
 
-test("ScanFromSelect defaults to EU-IR and keeps Local-extension last", () => {
+test("ScanFromSelect defaults to EU-IR and keeps the Chrome browser option last", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       includeLocalExtension: true,

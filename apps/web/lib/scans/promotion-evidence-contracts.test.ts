@@ -322,6 +322,89 @@ test("contextual infrastructure and security request rows do not become strong p
   assert.equal(hasStrongPreconsentRuntimeEvidence(advertisingEvidence), true);
 });
 
+test("generic consent-surface timing satisfies sequence without requiring CMP identity", () => {
+  const evidence = {
+    consentActionableChoiceObserved: true,
+    consentSurfaceObserved: true,
+    consentTimeline: {
+      firstCmpVisibleMs: null,
+      firstConsentSurfaceVisibleMs: 900,
+      firstNonEssentialRequestMs: 120
+    },
+    requestPurposeClassificationConfidence: [
+      {
+        category: "analytics",
+        classification: "tracking",
+        confidence: 0.92,
+        essentiality: "non_essential",
+        requestUrl: "https://analytics.example.test/collect",
+        runtimePhase: "pre_consent",
+        vendor: "Example Analytics"
+      }
+    ]
+  };
+
+  assert.equal(hasPreconsentSequenceEvidence(evidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(evidence), true);
+});
+
+test("complete no-surface inspection satisfies sequence without CMP or consent controls", () => {
+  const evidence = {
+    consentSurfaceInspection: {
+      outcome: "no_surface_observed_complete_coverage",
+      coverageStatus: "complete",
+      inspectionCompleted: true,
+      inspectedPreInteraction: true,
+      observedAtMs: 240
+    },
+    consentTimeline: {
+      firstCmpVisibleMs: null,
+      firstConsentSurfaceVisibleMs: null,
+      firstNonEssentialRequestMs: 120
+    },
+    requestPurposeClassificationConfidence: [{
+      category: "analytics",
+      classification: "tracking",
+      confidence: 0.92,
+      essentiality: "non_essential",
+      requestUrl: "https://analytics.example.test/collect",
+      runtimePhase: "pre_consent",
+      vendor: "Example Analytics"
+    }]
+  };
+
+  assert.equal(hasPreconsentSequenceEvidence(evidence), true);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(evidence), true);
+});
+
+test("no-surface inspection before the qualifying request does not satisfy sequence", () => {
+  const evidence = {
+    consentSurfaceInspection: {
+      outcome: "no_surface_observed_complete_coverage",
+      coverageStatus: "complete",
+      inspectionCompleted: true,
+      inspectedPreInteraction: true,
+      observedAtMs: 100
+    },
+    consentTimeline: {
+      firstConsentSurfaceVisibleMs: null,
+      firstNonEssentialRequestMs: 120
+    },
+    requestPurposeClassificationConfidence: [{
+      category: "advertising",
+      confidence: 0.95,
+      essentiality: "non_essential",
+      requestUrl: "https://ads.example/pixel",
+      runtimePhase: "pre_consent",
+      tsMs: 120,
+      vendor: "Example Ads"
+    }]
+  };
+
+  assert.equal(hasPreconsentSequenceEvidence(evidence), false);
+  assert.equal(hasStrongPreconsentRuntimeEvidence(evidence), false);
+});
+
 test("sensitive third-party tracking contract accepts legacy tracking-host payloads without promoting generic first-party runtime calls", () => {
   assert.equal(
     hasConcreteSensitiveThirdPartyTrackingArtifact({

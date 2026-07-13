@@ -117,7 +117,6 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   const scanDomainLabel = displayScanRecord.scan.domainHostname?.trim() || "Scanned website";
   const isPlatformAdmin = isPlatformAdminEmail(user.email);
   const canUseAdvancedReportActions = isPlatformAdmin || membership.role === "admin" || membership.role === "advanced";
-  const canUseLocalExtensionScan = isPlatformAdmin;
   const allowRestrictedScanOptions = canUseRestrictedScanOptions({
     membershipRole: membership.role,
     userEmail: user.email
@@ -162,7 +161,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
               />
               <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                 <DomainScanForm
-                  allowLocalExtensionScan={canUseLocalExtensionScan}
+                  allowLocalExtensionScan
                   allowRestrictedScanOptions={allowRestrictedScanOptions}
                   buttonLabel="Scan"
                   compact
@@ -193,7 +192,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
           showReviewLenses: organizationSettings?.showSignalSnapshotReviewLenses ?? true,
           showScanInterruption: organizationSettings?.showSignalSnapshotScanInterruption ?? true
         }}
-        showBrowserExtensionRecovery={isPlatformAdmin}
+        showBrowserExtensionRecovery
         viewerAccessRole={membership.role}
       />
     </>

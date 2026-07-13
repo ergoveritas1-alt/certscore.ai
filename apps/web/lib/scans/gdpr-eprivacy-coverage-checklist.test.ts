@@ -660,7 +660,7 @@ test("deriveGdprEprivacyCoverageChecklist lets medium cookie inventory override 
   assert.match(row.explanation, /Quantcast - Analytics \(1.19s\)/);
 });
 
-test("deriveGdprEprivacyCoverageChecklist rates pre-consent 3rd party tracking from high-priority tracker inventory", () => {
+test("deriveGdprEprivacyCoverageChecklist keeps high-priority tracker inventory review-grade without unified eligibility", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     runtimeTrackerPriorityRows: [
@@ -684,8 +684,10 @@ test("deriveGdprEprivacyCoverageChecklist rates pre-consent 3rd party tracking f
   });
 
   const row = byId(items, "pre_consent_third_party_tracking");
-  assert.equal(row.status, "Gap observed");
+  assert.equal(row.status, "Review signal");
+  assert.equal(row.assessmentStatus, "review_signal");
   assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "high");
+  assert.equal(row.criticalEvidence.missingOrIncompleteSourceSignals.length, 1);
   assert.match(row.explanation, /Google Ads \/ DoubleClick - Advertising \(0.386s\)/);
   assert.match(row.criticalEvidence.statusBasis, /High priority.*Advertising/);
 });

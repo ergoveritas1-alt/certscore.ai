@@ -41,6 +41,8 @@ const staticPaths = [
   "/contact-sales",
   "/book-demo",
   "/sample-report",
+  "/browser-extension",
+  "/browser-extension/privacy",
   "/solutions",
   "/solutions/gdpr-website-compliance-scanner",
   "/solutions/cookie-consent-scanner",

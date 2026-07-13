@@ -1,4 +1,7 @@
-import type { RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
+import {
+  getRuntimeCookiePrimaryProvider,
+  type RuntimeCookieEvidenceRow
+} from "./runtime-cookie-evidence";
 import {
   findRuntimeCookieNameVendor,
   findRuntimeEntityOwner,
@@ -56,9 +59,11 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
   }
 
   const cookieNameVendor = findRuntimeCookieNameVendor(row.cookieName);
-  if (cookieNameVendor) return cookieNameVendor.vendor;
-  const domainOwner = findRuntimeEntityOwner(row.domain);
-  if (domainOwner) return domainOwner.vendor;
+  if (cookieNameVendor) {
+    return cookieNameVendor.category === "security"
+      ? cookieNameVendor.product
+      : cookieNameVendor.vendor;
+  }
 
   const haystack = [
     row.cookieName,
@@ -93,6 +98,14 @@ export function getRuntimeCookieBrandLabel(row: RuntimeCookieEvidenceRow) {
   if (/(stripe|__stripe)/i.test(haystack)) {
     return "Stripe";
   }
+
+  const sourceProvider = getRuntimeCookiePrimaryProvider(row);
+  if ((row.sourceRequestUrl || row.responseUrl || row.initiatorDomain) && sourceProvider) {
+    return sourceProvider;
+  }
+
+  const domainOwner = findRuntimeEntityOwner(row.domain);
+  if (domainOwner) return domainOwner.vendor;
   return sanitizeCookieDomain(row.domain) ?? row.initiatorVendor ?? row.initiatorDomain ?? row.cookieName;
 }
 
@@ -164,10 +177,16 @@ export function getRuntimeCookiePurposeLabel(row: RuntimeCookieEvidenceRow) {
 
 function getRuntimeCookieAttribution(row: RuntimeCookieEvidenceRow) {
   const cookieNameVendor = findRuntimeCookieNameVendor(row.cookieName);
-  if (cookieNameVendor) return { attributionEvidence: cookieNameVendor.attributionEvidence, vendor: cookieNameVendor.vendor };
+  if (cookieNameVendor) {
+    return {
+      attributionEvidence: cookieNameVendor.attributionEvidence,
+      vendor: getRuntimeCookieBrandLabel(row)
+    };
+  }
+  const vendor = getRuntimeCookieBrandLabel(row);
   const domainOwner = findRuntimeEntityOwner(row.domain);
-  if (domainOwner) return { attributionEvidence: domainOwner.attributionEvidence, vendor: domainOwner.vendor };
-  return { attributionEvidence: null, vendor: getRuntimeCookieBrandLabel(row) };
+  if (domainOwner?.vendor === vendor) return { attributionEvidence: domainOwner.attributionEvidence, vendor };
+  return { attributionEvidence: null, vendor };
 }
 
 function getRuntimeCookieSyncedIdentifiers(row: RuntimeCookieEvidenceRow, vendor: string) {

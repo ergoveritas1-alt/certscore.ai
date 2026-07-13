@@ -2747,6 +2747,7 @@ function formatSectionScore(value: number) {
 }
 
 type UnverifiedHomepageReview = {
+  blockerLabel?: string | null;
   coverageLabel: string;
   guidance: string[];
   message: string;
@@ -3838,6 +3839,7 @@ export function deriveVisualAccessLimitationNotice(
   return {
     summary: presentation.reportSummary,
     review: {
+      blockerLabel: presentation.snapshotStopReasonLabel.replace(/^Homepage\s+/i, ""),
       coverageLabel: limitationKindLabel,
       guidance: [presentation.recommendedNextAction],
       message: evidenceMessage,
@@ -6953,6 +6955,7 @@ export async function SharedScanDetailView({
   const isIncompleteScanCoverage = hasIncompleteScanCoverage(scanRecord);
   const executiveAccessNoticeCardProps = executiveAccessLimitationNotice
     ? {
+        blockerLabel: executiveAccessLimitationNotice.review.blockerLabel,
         coverageLabel: executiveAccessLimitationNotice.review.coverageLabel,
         guidance: executiveAccessLimitationNotice.review.guidance,
         headline: "Public site access was limited during this scan",
@@ -6966,6 +6969,7 @@ export async function SharedScanDetailView({
   const showRegulatoryChecklistSection = shouldShowRegulatoryChecklistSection({
     executiveAccessLimitationNotice
   });
+  const isNoGoReport = executiveAccessLimitationNotice?.finding.id === "scan_quality_visual_no_go";
   const executivePolicySurfaces = deriveExecutivePolicySurfaces(scanRecord.policyEnrichment, scanRecord.snapshot, runtimeArtifacts);
   const executiveScanInterruptions = deriveExecutiveScanInterruptions(scanRecord.snapshot, scanRecord.events);
   const executiveRuntimeMetricsReliable = scanRecord.snapshot?.runtime_counts_retained !== false;
@@ -7294,14 +7298,15 @@ export async function SharedScanDetailView({
           {showBrowserExtensionRecovery && executiveAccessLimitationNotice?.finding.id === "scan_quality_visual_no_go" ? (
             <NoGoBrowserExtensionRecovery
               isTargetSiteState={executiveAccessLimitationNotice.review.coverageLabel === "Observed target-site state"}
-              scanId={scanRecord.scan.id}
             />
           ) : null}
-          <RuntimeInventoryTable
-            cookieRows={cookieInventoryRows}
-            firstPartyDomain={scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost}
-            trackerRows={trackerInventoryRows}
-          />
+          {isNoGoReport ? null : (
+            <RuntimeInventoryTable
+              cookieRows={cookieInventoryRows}
+              firstPartyDomain={scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost}
+              trackerRows={trackerInventoryRows}
+            />
+          )}
           {showRegulatoryChecklistSection ? (
             <RegulatoryChecklistSection
               headingLabel="GDPR / ePrivacy Evidence Checklist"

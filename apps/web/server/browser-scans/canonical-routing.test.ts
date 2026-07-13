@@ -5,11 +5,17 @@ import {
   buildNormalizedConcerns,
   buildUnifiedFindingCandidatesFromConcerns
 } from "../../lib/scans/normalized-concerns";
+import { buildRuntimeCookieInventory } from "../../lib/scans/runtime-cookie-evidence";
+import {
+  buildBrowserExtensionRequestInventoryRows,
+  buildRuntimeInventoryGroupRows
+} from "../../lib/scans/runtime-inventory-projection";
 import {
   deriveBrowserScanCanonicalMaterializationFromObservedSignals,
   deriveBrowserScanCanonicalMaterializationFromStoredSignalRows
 } from "./canonical-materialization";
 import { summarizeBrowserEvidence, type BrowserScanEventRow } from "./evidence-summary";
+import { buildBrowserObservedSignalPackageFromEvidence } from "./observed-signal-package";
 
 test("raw BX01 browser evidence alone does not create concern-backed finding candidates", () => {
   const events: BrowserScanEventRow[] = [
@@ -44,6 +50,92 @@ test("raw BX01 browser evidence alone does not create concern-backed finding can
   assert.equal(reviewCandidates.length, 0);
   assert.equal(concerns.length, 0);
   assert.equal(buildUnifiedFindingCandidatesFromConcerns(concerns).length, 0);
+});
+
+test("BX01 Neosporin-style capture projects contextual cookies and request inventory end to end", () => {
+  const event = (event_json: BrowserScanEventRow["event_json"]): BrowserScanEventRow => ({
+    event_json,
+    event_type: event_json.eventType,
+    observed_at_ms: event_json.observedAtMs
+  });
+  const evidence = summarizeBrowserEvidence({
+    artifacts: [],
+    events: [
+      event({
+        bannerObserved: true,
+        eventType: "consent_ui_observed",
+        observedAtMs: 5
+      }),
+      event({
+        consentInteractionObserved: false,
+        cookieName: "OptanonConsent",
+        domain: ".neosporin.com",
+        eventType: "cookie_added",
+        observedAtMs: 7,
+        path: "/",
+        source: "chrome.cookies.onChanged",
+        timingPrecision: "exact_event",
+        valueCaptured: false
+      }),
+      event({
+        consentInteractionObserved: false,
+        eventType: "network_request",
+        hostname: "cdn.cookielaw.org",
+        observedAtMs: 15,
+        resourceType: "script",
+        url: "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"
+      }),
+      event({
+        consentInteractionObserved: false,
+        eventType: "network_request",
+        hostname: "images.ctfassets.net",
+        observedAtMs: 20,
+        resourceType: "image",
+        url: "https://images.ctfassets.net/example/hero.webp"
+      }),
+      event({
+        consentInteractionObserved: false,
+        eventType: "network_request",
+        hostname: "cdn.pricespider.com",
+        observedAtMs: 30,
+        resourceType: "script",
+        url: "https://cdn.pricespider.com/1/lib.js"
+      })
+    ],
+    targetHostname: "www.neosporin.com"
+  });
+  const observedPackage = buildBrowserObservedSignalPackageFromEvidence({ evidence });
+  const preconsentTrackingSignal = observedPackage.observedSignals.find(
+    (signal) => signal.key === "privacy.preconsent_tracking_detected"
+  );
+
+  assert.equal(preconsentTrackingSignal?.value, false);
+  assert.equal(observedPackage.evidenceInventory?.cookies.length, 1);
+  assert.equal(observedPackage.evidenceInventory?.thirdPartyRequests.length, 3);
+
+  const materialized = deriveBrowserScanCanonicalMaterializationFromObservedSignals(
+    observedPackage.observedSignals,
+    observedPackage.evidenceInventory
+  );
+  const cookieRows = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: materialized.hybridRuntimeEvidencePatch
+  }).rows;
+  const trackerRows = buildBrowserExtensionRequestInventoryRows(materialized.hybridRuntimeEvidencePatch);
+  const groupedRows = buildRuntimeInventoryGroupRows({
+    cookieRows,
+    firstPartyDomain: "www.neosporin.com",
+    trackerRows
+  });
+
+  assert.equal(cookieRows[0]?.cookieName, "OptanonConsent");
+  assert.equal(cookieRows[0]?.timingEvidence, "before_consent_cookie_write");
+  assert.equal(trackerRows.length, 3);
+  assert.equal(groupedRows.length, 4);
+  assert.ok(groupedRows.some((row) => row.vendor === "OneTrust" || row.vendor === "OneTrust CMP"));
+  assert.ok(groupedRows.some((row) => row.domains.includes("cdn.pricespider.com")));
+  assert.equal(materialized.preconsentTrackingDetected, false);
+  assert.equal(materialized.preconsentViolationCount, 0);
+  assert.equal(JSON.stringify(materialized).includes("cookieValue"), false);
 });
 
 test("WS01-normalized BX01 signals enter the canonical concern pipeline", () => {
@@ -309,4 +401,112 @@ test("stored WS01-normalized BX01 signal rows can repair browser-extension dashb
   assert.equal(materialized.hybridRuntimeEvidencePatch.networkSummary.thirdPartyRequestCount, 233);
   assert.equal(materialized.hybridRuntimeEvidencePatch.storageSummary.cookiesSeenCount, 147);
   assert.ok(materialized.score < 100);
+});
+
+test("BX01 structured inventory remains contextual while materializing cookie and request rows", () => {
+  const materialized = deriveBrowserScanCanonicalMaterializationFromObservedSignals(
+    [
+      {
+        category: "privacy",
+        confidence: 0.78,
+        evidenceRefs: [],
+        key: "privacy.cookie_count_total",
+        label: "Unique cookies observed",
+        observedAtMs: 7,
+        populationSource: "browser_extension_bx01",
+        provenance: { sourceId: "BX01", sourceType: "browser_extension" },
+        value: 1,
+        valueType: "number"
+      },
+      {
+        category: "privacy",
+        confidence: 0.8,
+        evidenceRefs: [],
+        key: "privacy.third_party_request_count",
+        label: "Third-party request count",
+        observedAtMs: 20,
+        populationSource: "browser_extension_bx01",
+        provenance: { sourceId: "BX01", sourceType: "browser_extension" },
+        value: 4,
+        valueType: "number"
+      }
+    ],
+    {
+      targetHostname: "www.neosporin.com",
+      cookies: [{
+        attributionStatus: "resolved",
+        beforeConsent: true,
+        confidence: 0.95,
+        cookieName: "OptanonConsent",
+        domain: ".neosporin.com",
+        firstObservedAtMs: 7,
+        httpOnly: false,
+        lastObservedAtMs: 15007,
+        party: "first_party",
+        path: "/",
+        product: "OneTrust CMP",
+        purpose: "consent_management",
+        regulatoryRelevance: ["consent"],
+        sameSite: "lax",
+        secure: true,
+        sources: ["chrome.cookies.onChanged"],
+        timingBasis: "exact_event",
+        vendor: "OneTrust"
+      }],
+      thirdPartyRequests: [{
+        attributionStatus: "unresolved",
+        confidence: null,
+        firstObservedAtMs: 20,
+        hostname: "cdn.pricespider.com",
+        lastObservedAtMs: 120,
+        preConsent: true,
+        product: null,
+        purpose: null,
+        regulatoryRelevance: [],
+        requestCount: 4,
+        resourceTypes: ["script", "xmlhttprequest"],
+        vendor: null
+      }]
+    }
+  );
+
+  assert.deepEqual(materialized.cookieNames, ["OptanonConsent"]);
+  assert.deepEqual(materialized.cookieDomains, [".neosporin.com"]);
+  assert.deepEqual(materialized.hybridRuntimeEvidencePatch.cookieWriteObservations, [{
+    beforeConsent: true,
+    category: "consent_management",
+    cookieName: "OptanonConsent",
+    cookiePartyType: "first_party",
+    cookieSetMethod: "chrome.cookies.onChanged",
+    domain: ".neosporin.com",
+    evidenceGrade: "high",
+    firstObservedAtMs: 7,
+    httpOnly: false,
+    initiatorVendor: "OneTrust CMP",
+    lastObservedAtMs: 15007,
+    path: "/",
+    sameSite: "lax",
+    secure: true,
+    setAtMs: 7,
+    timingBasis: "exact_event",
+    timingEvidence: "before_consent_cookie_write",
+    valueCaptured: false
+  }]);
+  assert.equal(materialized.preconsentTrackingDetected, false);
+  assert.equal(materialized.preconsentViolationCount, 0);
+  assert.deepEqual(materialized.hybridRuntimeEvidencePatch.browserExtensionRequestInventory, [{
+    attributionStatus: "unresolved",
+    category: "unresolved_host",
+    confidence: null,
+    firstSeenMs: 20,
+    hostname: "cdn.pricespider.com",
+    lastSeenMs: 120,
+    preConsent: true,
+    product: null,
+    regulatoryRelevance: [],
+    requestCount: 4,
+    resourceTypes: ["script", "xmlhttprequest"],
+    source: "browser_extension_bx01",
+    vendor: null
+  }]);
 });

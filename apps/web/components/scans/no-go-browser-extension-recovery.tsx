@@ -2,11 +2,9 @@ import React from "react";
 import Link from "next/link";
 
 export function NoGoBrowserExtensionRecovery({
-  isTargetSiteState,
-  scanId
+  isTargetSiteState
 }: {
   isTargetSiteState: boolean;
-  scanId: string;
 }) {
   return (
     <section className="overflow-hidden rounded-[1.4rem] border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-emerald-50 px-6 py-6 shadow-sm">
@@ -26,7 +24,7 @@ export function NoGoBrowserExtensionRecovery({
         </div>
         <Link
           className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2"
-          href={`/app/browser-scans/setup?scanId=${encodeURIComponent(scanId)}`}
+          href="/browser-extension"
         >
           Show instructions
         </Link>

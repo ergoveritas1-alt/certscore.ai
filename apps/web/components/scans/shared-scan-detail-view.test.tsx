@@ -584,6 +584,7 @@ async function loadVisualAccessLimitationNotice() {
             shortSummary: string;
           };
           review: {
+            blockerLabel?: string | null;
             coverageLabel: string;
             guidance: string[];
             message: string;
@@ -1905,6 +1906,11 @@ test("deriveVisualAccessLimitationNotice presents every canonical no-go reason w
 
     const notice = deriveVisualAccessLimitationNotice(runtimeArtifacts);
     assert.equal(notice?.review.title, presentation.customerTitle, reasonCode);
+    assert.equal(
+      notice?.review.blockerLabel,
+      presentation.snapshotStopReasonLabel.replace(/^Homepage\s+/i, ""),
+      reasonCode
+    );
     assert.equal(notice?.review.reason, presentation.explanation, reasonCode);
     assert.deepEqual(notice?.review.guidance, [presentation.recommendedNextAction], reasonCode);
     assert.equal(notice?.finding.label, presentation.customerTitle, reasonCode);

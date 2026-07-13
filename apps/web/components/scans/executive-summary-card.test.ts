@@ -1903,7 +1903,17 @@ test("ExecutiveSummaryCard shows benchmark beside clear posture without scanned 
 test("ExecutiveSummaryCard withholds scores when the captured page is not representative", () => {
   const html = renderToStaticMarkup(
     createElement(ExecutiveSummaryCard, {
-      accessLimitationNotice: null,
+      accessLimitationNotice: {
+        blockerLabel: "Access blocked",
+        coverageLabel: "Scanner access limitation",
+        guidance: [],
+        headline: "Public site access was limited during this scan",
+        message: "Access controls prevented CertScore from verifying the public site.",
+        recommendationTitle: "Recommended retry path",
+        reason: "The homepage displayed an access-denied response.",
+        title: "The site denied access to the scanner",
+        whatThisMeans: []
+      },
       beforeConsentCookieCount: 46,
       domainBenchmark: {
         confidence: "medium",
@@ -1945,11 +1955,13 @@ test("ExecutiveSummaryCard withholds scores when the captured page is not repres
   );
 
   assert.match(html, /Scan not representative/);
-  assert.match(html, /Automated scan could not evaluate this site/);
+  assert.match(html, /Blocker: Access blocked/);
+  assert.match(html, /Public site access was limited during this scan/);
   assert.match(html, /Scores, regulatory projections, and substantive findings are withheld for this scan/);
   assert.match(html, /Not scored/);
   assert.match(html, /Scores and regulatory projections were withheld for this scan/);
   assert.match(html, /Scan quality snapshot/);
+  assert.doesNotMatch(html, /Recommended next step/);
   assert.doesNotMatch(html, /Top findings/);
   assert.doesNotMatch(html, /Why this scan was not scored/);
   assert.doesNotMatch(html, /Public page access/);

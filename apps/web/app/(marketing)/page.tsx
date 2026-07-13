@@ -6,6 +6,7 @@ import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { HomepageFindingsOverview } from "../../components/marketing/homepage-findings-overview";
+import { ScannerSolutionAnimation } from "../../components/marketing/scanner-solution-animation";
 import { PendingButtonLink } from "../../components/ui/pending-link";
 import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
@@ -52,19 +53,25 @@ const scannerSolutions = [
     href: "/solutions/gdpr-website-compliance-scanner",
     title: "GDPR website scanner",
     description:
-      "Review consent, cookie, tracking, policy, and disclosure signals for GDPR/ePrivacy workflows."
+      "Review consent, cookie, tracking, policy, and disclosure signals for GDPR/ePrivacy workflows.",
+    animation: "trace" as const,
+    meta: "GDPR / ePrivacy"
   },
   {
     href: "/solutions/cookie-consent-scanner",
     title: "Cookie consent scanner",
     description:
-      "Check cookie timing, CMP behavior, third-party cookies before consent, and reject-path review signals."
+      "Check cookie timing, CMP behavior, third-party cookies before consent, and reject-path review signals.",
+    animation: "waterfall" as const,
+    meta: "Consent controls"
   },
   {
     href: "/solutions/privacy-policy-risk-scanner",
     title: "Privacy policy risk scanner",
     description:
-      "Compare observable website behavior with privacy, cookie, vendor, and disclosure surfaces."
+      "Compare observable website behavior with privacy, cookie, vendor, and disclosure surfaces.",
+    animation: "policy" as const,
+    meta: "Policy surfaces"
   }
 ];
 
@@ -225,26 +232,35 @@ export default async function MarketingHomePage() {
 
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-14">
-          <div className="max-w-3xl space-y-3">
-            <Badge tone="neutral">Scanner solutions</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
-              Focused pages for the review workflow you need.
-            </h2>
-            <p className="text-sm leading-6 text-slate-600">
-              Start with the scanner category closest to the question: GDPR, cookie consent, or privacy policy risk. Each page explains observable public-web signals for review, not legal conclusions.
-            </p>
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div className="max-w-3xl space-y-3">
+              <Badge tone="neutral">Scanner solutions</Badge>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">
+                Focused pages for the review workflow you need.
+              </h2>
+              <p className="text-sm leading-6 text-slate-600">
+                Start with the scanner category closest to the question: GDPR, cookie consent, or privacy policy risk. Each page explains observable public-web signals for review, not legal conclusions.
+              </p>
+            </div>
+            <Link href="/solutions" className="text-sm font-semibold text-slate-900 transition hover:text-sky-700">
+              View all
+            </Link>
           </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <div className="mt-8 grid gap-6 lg:grid-cols-3">
             {scannerSolutions.map((solution) => (
               <Link key={solution.href} href={solution.href} className="group block">
-                <Card className="h-full border-slate-200 bg-slate-50 shadow-none transition group-hover:border-sky-200 group-hover:bg-white group-hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
-                  <CardHeader>
-                    <CardTitle className="text-xl text-slate-950">{solution.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm leading-7 text-slate-600">{solution.description}</p>
-                  </CardContent>
-                </Card>
+                <article className="h-full">
+                  <div className="relative aspect-[340/300] overflow-hidden rounded-lg border border-slate-200 bg-[#0b2340] shadow-[0_18px_40px_rgba(15,23,42,0.12)] transition group-hover:-translate-y-0.5 group-hover:shadow-[0_22px_48px_rgba(15,23,42,0.16)]">
+                    <ScannerSolutionAnimation type={solution.animation} />
+                  </div>
+                  <div className="pt-4">
+                    <p className="text-xs font-semibold text-slate-500">{solution.meta}</p>
+                    <h3 className="mt-2 text-xl font-semibold leading-tight tracking-tight text-slate-950 group-hover:text-sky-700">
+                      {solution.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{solution.description}</p>
+                  </div>
+                </article>
               </Link>
             ))}
           </div>

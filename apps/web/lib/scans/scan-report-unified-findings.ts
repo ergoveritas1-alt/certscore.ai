@@ -1457,6 +1457,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
   const preconsentEvidenceQuality = buildPreconsentEvidenceQualityFallback(input.runtimeArtifacts);
   const preconsentEvidenceRecord = preconsentEvidenceQuality as Record<string, unknown> | null;
   const hybridRuntimeEvidenceRecord = getRuntimeObject(input.runtimeArtifacts, ["hybridRuntimeEvidence", "hybrid_runtime_evidence"]);
+  const consentSurfaceInspection =
+    getRuntimeObject(input.runtimeArtifacts, ["consentSurfaceInspection", "consent_surface_inspection"]) ??
+    getRuntimeObject(hybridRuntimeEvidenceRecord, ["consentSurfaceInspection", "consent_surface_inspection"]);
   const runtimeCookieInventory = buildRuntimeCookieInventory({
     hybridRuntimeEvidence: hybridRuntimeEvidenceRecord,
     runtimeArtifacts: input.runtimeArtifacts
@@ -1480,6 +1483,12 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
           directConsentTimeline?.first_cmp_visible_ms,
           derivedConsentTimeline?.firstCmpVisibleMs,
           derivedConsentTimeline?.first_cmp_visible_ms
+        ),
+        firstConsentSurfaceVisibleMs: firstPresent(
+          directConsentTimeline?.firstConsentSurfaceVisibleMs,
+          directConsentTimeline?.first_consent_surface_visible_ms,
+          derivedConsentTimeline?.firstConsentSurfaceVisibleMs,
+          derivedConsentTimeline?.first_consent_surface_visible_ms
         ),
         firstConsentActionMs: firstPresent(
           directConsentTimeline?.firstConsentActionMs,
@@ -1557,6 +1566,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     consentTimeline?.firstNonEssentialRequestMs ?? consentTimeline?.first_non_essential_request_ms
   );
   const firstCmpVisibleMs = getFiniteNumber(consentTimeline?.firstCmpVisibleMs ?? consentTimeline?.first_cmp_visible_ms);
+  const firstConsentSurfaceVisibleMs = getFiniteNumber(
+    consentTimeline?.firstConsentSurfaceVisibleMs ?? consentTimeline?.first_consent_surface_visible_ms
+  );
   const firstConsentActionMs = getFiniteNumber(consentTimeline?.firstConsentActionMs ?? consentTimeline?.first_consent_action_ms);
   const firstRejectActionMs = getFiniteNumber(consentTimeline?.firstRejectActionMs ?? consentTimeline?.first_reject_action_ms);
   const firstAcceptActionMs = getFiniteNumber(consentTimeline?.firstAcceptActionMs ?? consentTimeline?.first_accept_action_ms);
@@ -1633,7 +1645,8 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     .filter((value): value is string => Boolean(value && /^https?:\/\//i.test(value)));
   const hasPreconsentSequence =
     firstNonEssentialRequestMs !== null &&
-    ((firstCmpVisibleMs !== null && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
+    ((firstConsentSurfaceVisibleMs !== null && firstNonEssentialRequestMs < firstConsentSurfaceVisibleMs) ||
+      (firstCmpVisibleMs !== null && firstNonEssentialRequestMs < firstCmpVisibleMs) ||
       (firstConsentActionMs !== null && firstNonEssentialRequestMs < firstConsentActionMs) ||
       (
         consentSurfaceObserved === true &&
@@ -1642,7 +1655,23 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
         firstRejectActionMs === null &&
         firstAcceptActionMs === null &&
         firstUserActionMs === null
+      ) ||
+      (
+        consentSurfaceInspection?.outcome === "no_surface_observed_complete_coverage" &&
+        consentSurfaceInspection?.coverageStatus === "complete" &&
+        consentSurfaceInspection?.inspectionCompleted === true &&
+        consentSurfaceInspection?.inspectedPreInteraction === true &&
+        typeof consentSurfaceInspection?.observedAtMs === "number" &&
+        firstNonEssentialRequestMs <= consentSurfaceInspection.observedAtMs &&
+        firstConsentActionMs === null &&
+        firstRejectActionMs === null &&
+        firstAcceptActionMs === null &&
+        firstUserActionMs === null
       ));
+  const hasCompleteNoSurfaceObservation =
+    consentSurfaceInspection?.outcome === "no_surface_observed_complete_coverage" &&
+    consentSurfaceInspection?.coverageStatus === "complete" &&
+    consentSurfaceInspection?.inspectionCompleted === true;
 
   if (
     (nonEssentialRequestRows.length > 0 && firstNonEssentialRequestMs !== null) ||
@@ -1654,7 +1683,9 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
     candidates.push({
       categoryId: "preconsent_tracking_incidents",
       description: hasPromotionReadyRequestEvidence && hasPreconsentSequence
-        ? "A retained consent timeline places a non-essential request before the CMP was visible or before a consent action."
+        ? hasCompleteNoSurfaceObservation
+          ? "A retained non-essential request occurred during initial load, and the completed pre-interaction inspection observed no consent surface."
+          : "A retained consent timeline places a non-essential request before the consent surface was visible or before a consent action."
         : hasPromotionReadyRequestEvidence
           ? "A retained non-essential request classification exists, but the timing sequence is incomplete or ambiguous."
           : preconsentCookieEvidenceRows.length > 0 || preconsentViolationEvidenceRows.length > 0
@@ -1663,6 +1694,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       fallbackEvidence: {
         ...(preconsentEvidenceQuality ?? {}),
         consentTimeline,
+        consentSurfaceInspection,
         consentActionableChoiceObserved,
         consentSurfaceObserved,
         requestPurposeClassificationConfidence: requestClassifications,

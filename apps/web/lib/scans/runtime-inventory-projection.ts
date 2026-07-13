@@ -111,6 +111,22 @@ function getRecordStringArray(record: Record<string, unknown> | null | undefined
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
 }
 
+function getObjectArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
+    : [];
+}
+
+function getOptionalString(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function getOptionalNumber(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 function isCmpVendorDomain(value: string | null | undefined) {
   return isKnownCmpInfrastructureHost(value);
 }
@@ -248,6 +264,43 @@ function sanitizeInventoryDomains(values: Array<string | null | undefined>) {
     const host = normalizeInventoryHostname(value);
     return host && !isLikelyCookieName(host) ? host : null;
   }));
+}
+
+export function buildBrowserExtensionRequestInventoryRows(
+  hybridRuntimeEvidence: Record<string, unknown> | null | undefined
+): TrackerInventoryRow[] {
+  return getObjectArray(
+    hybridRuntimeEvidence?.browserExtensionRequestInventory ?? hybridRuntimeEvidence?.browser_extension_request_inventory
+  ).flatMap((row) => {
+    const hostname = normalizeInventoryHostname(getOptionalString(row, "hostname"));
+    if (!hostname) {
+      return [];
+    }
+    const vendor = getOptionalString(row, "product") ?? getOptionalString(row, "vendor") ?? hostname;
+    const category = getOptionalString(row, "category") ?? "unresolved_host";
+    const confidence = getOptionalNumber(row, "confidence");
+    const firstSeenMs = getOptionalNumber(row, "firstSeenMs");
+    const requestCount = getOptionalNumber(row, "requestCount");
+    const regulatoryRelevance = getStringArrayFromRecord(row, ["regulatoryRelevance", "regulatory_relevance"]);
+
+    return [{
+      attributionEvidence: null,
+      category,
+      confidence,
+      cookieNames: [],
+      domains: [hostname],
+      firstSeenMs,
+      label: vendor,
+      observedVia: ["request"],
+      party: "third_party" as const,
+      preConsent: row.preConsent === true,
+      requestCount,
+      regulatoryRelevance,
+      source: "browser_extension_bx01",
+      syncedIdentifiers: [],
+      vendorDisplayCategory: null
+    }];
+  });
 }
 
 function isSyncedVendorInference(vendorName: string, ownerVendor: string) {
@@ -781,7 +834,7 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
     hybridRuntimeEvidence,
     runtimeArtifacts
   }).rows;
-  const trackerRows = buildTrackerInventoryRows({
+  const canonicalTrackerRows = buildTrackerInventoryRows({
     domains: vendorSurfaceProjection.evidenceInventory.thirdPartyDomains,
     firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
     preConsentVendors: certScoreSummary.preConsentVendorNames,
@@ -791,6 +844,8 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
     topObservedEntities: vendorSurfaceProjection.evidenceInventory.topObservedEntities,
     unresolvedHosts: vendorSurfaceProjection.evidenceInventory.unresolvedVendorHosts
   });
+  const browserExtensionRequestRows = buildBrowserExtensionRequestInventoryRows(hybridRuntimeEvidence);
+  const trackerRows = browserExtensionRequestRows.length > 0 ? browserExtensionRequestRows : canonicalTrackerRows;
 
   return {
     cookieRows,

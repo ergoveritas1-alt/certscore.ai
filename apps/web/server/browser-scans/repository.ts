@@ -422,7 +422,10 @@ export async function ingestBrowserScanObservedSignals(input: {
   }
 
   const signals = input.signalPackage.observedSignals;
-  const materialized = deriveBrowserScanCanonicalMaterializationFromObservedSignals(signals);
+  const materialized = deriveBrowserScanCanonicalMaterializationFromObservedSignals(
+    signals,
+    input.signalPackage.evidenceInventory
+  );
   const retainedPrivacyDocument = await queryOne<{ document_text: string | null }>(
     `select document_text
        from scan_document_sources
@@ -580,10 +583,12 @@ export async function ingestBrowserScanObservedSignals(input: {
        consent_preconsent_violation_count, consent_baseline_tracker_evidence_urls,
        consent_baseline_tracker_vendor_names, hybrid_runtime_evidence
      )
-     values ($1, $9, $10, $2::text[], $3::int, '{}'::text[], '{}'::text[], $4::int, $5::int, $6::text[], $7::text[], $8::jsonb)
+     values ($1, $9, $10, $2::text[], $3::int, $11::text[], $12::text[], $4::int, $5::int, $6::text[], $7::text[], $8::jsonb)
      on conflict (scan_id) do update
        set third_party_request_domains = excluded.third_party_request_domains,
            third_party_request_count = excluded.third_party_request_count,
+           initial_cookie_names = excluded.initial_cookie_names,
+           initial_cookie_domains = excluded.initial_cookie_domains,
            initial_cookie_count = excluded.initial_cookie_count,
            consent_preconsent_violation_count = excluded.consent_preconsent_violation_count,
            consent_baseline_tracker_evidence_urls = excluded.consent_baseline_tracker_evidence_urls,
@@ -600,7 +605,9 @@ export async function ingestBrowserScanObservedSignals(input: {
       materialized.preconsentTrackerVendors,
       JSON.stringify(materialized.hybridRuntimeEvidencePatch),
       canonicalScan.organization_id,
-      canonicalScan.domain_id
+      canonicalScan.domain_id,
+      materialized.cookieNames,
+      materialized.cookieDomains
     ]
   );
 

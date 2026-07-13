@@ -9,6 +9,7 @@ import { Readable } from "node:stream";
 import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   classifyConsentControlLabel,
+  deriveConsentSurfaceInspectionOutcome,
   type CanonicalEvidenceBundle
 } from "@certscore/contracts";
 import { resolveVendorDisplayCategory, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
@@ -22,6 +23,7 @@ import {
   normalizeGdprTransparencyProductionEvidenceProfile,
   type GdprTransparencyProductionEvidenceProfile
 } from "../../lib/scans/gdpr-transparency-production-profile";
+import { isPromotionGradePreconsentRequestRow } from "../../lib/scans/preconsent-public-evidence";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import {
   LOCAL_V2_DAG_LAMBDA_AWS_REGION,
@@ -1338,6 +1340,7 @@ function buildVendorEvidence(bundle: CanonicalEvidenceBundle) {
       firstSeenMs: firstNumber(relatedJourneyFirstSeenMs, relatedEventFirstSeenMs),
       firstPartyOrThirdParty: "third_party",
       matchedSignatureId: vendor.observationId ?? null,
+      matchedEventIds,
       matchedHostnames,
       observedVia,
       regulatoryRelevance: vendor.regulatoryRelevance ?? [],
@@ -2382,6 +2385,46 @@ function hasRetainedFirstLayerConsentControlInventory(choices: ReturnType<typeof
   );
 }
 
+function hasCanonicalActionableConsentChoice(choices: ReturnType<typeof summarizeFirstLayerConsentChoices>) {
+  return Boolean(
+    choices &&
+    choices.layerInspected === "first_layer" &&
+    (
+      choices.acceptControlObserved === true ||
+      choices.rejectControlObserved === true ||
+      choices.managePreferencesControlObserved === true
+    )
+  );
+}
+
+export function selectBoundedPreconsentRequestPurposeRows(
+  rows: Array<Record<string, unknown>>,
+  limit = 25
+) {
+  if (rows.length <= limit) {
+    return rows;
+  }
+  const promotionGradeRows = rows.filter(isPromotionGradePreconsentRequestRow);
+  const otherRows = rows.filter((row) => !isPromotionGradePreconsentRequestRow(row));
+  return [...promotionGradeRows, ...otherRows]
+    .slice(0, limit)
+    .sort((left, right) => {
+      const leftTs = typeof left.tsMs === "number" ? left.tsMs : Number.POSITIVE_INFINITY;
+      const rightTs = typeof right.tsMs === "number" ? right.tsMs : Number.POSITIVE_INFINITY;
+      return leftTs - rightTs;
+    });
+}
+
+export function firstPromotionGradePreconsentRequestMs(rows: Array<Record<string, unknown>>) {
+  return firstNumber(
+    ...rows
+      .filter(isPromotionGradePreconsentRequestRow)
+      .map((row) => row.tsMs)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+      .sort((left, right) => left - right)
+  );
+}
+
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
   /access to this site has been denied|access denied|forbidden|http\s*403|403\s*-\s*forbidden|unable to give you access to (?:our|this) site|unable to access (?:www\.)?[a-z0-9.-]+|security issue was automatically identified|security service to protect itself from online attacks|request blocked|bot protection|you(?:'|’)?ve been blocked|you have been blocked|cloudflare ray id|vercel security checkpoint|vercel sicherheitskontrollpunkt|checking your browser|wir überprüfen ihren browser|performing security verification|security check|protected by kasada|x-kpsdk|detected unusual behaviour[^.]{0,180}(?:bot|browser)|resembles that of a bot|verif(?:y|ies|ying)[^.]{0,120}not a bot/i;
 const LOCAL_V2_VERCEL_SECURITY_CHALLENGE_PATTERN =
@@ -2620,8 +2663,24 @@ function buildMaterializedLocalV2Detail(
   const cmpSignalLabels = uniqueStrings((cmp?.signals ?? []).map((signal) =>
     firstString(signal.matchedValueRedacted, signal.matchedField, signal.signalType)
   ).concat(geometryCmpName));
-  const consentSurfaceLikelyPresent = Boolean(cmpVendorName ?? bundle.derivedRuntimeSignals?.consentBannerLikelyPresent);
   const firstLayerConsentChoices = summarizeFirstLayerConsentChoices(bundle, options.consentControlGeometryEvidence);
+  const firstLayerConsentControlInventoryRetained = hasRetainedFirstLayerConsentControlInventory(firstLayerConsentChoices);
+  const consentActionableChoiceObserved = hasCanonicalActionableConsentChoice(firstLayerConsentChoices);
+  const retainedConsentSurfaceObservations = (bundle.consentUiObservations ?? []).filter(
+    (observation) => observation.likelyPresent
+  );
+  const firstConsentSurfaceVisibleMs = firstNumber(
+    ...retainedConsentSurfaceObservations
+      .map((observation) => observation.observedAtMs)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+      .sort((left, right) => left - right)
+  );
+  const consentSurfaceLikelyPresent = Boolean(
+    cmpVendorName ||
+    bundle.derivedRuntimeSignals?.consentBannerLikelyPresent === true ||
+    firstLayerConsentControlInventoryRetained ||
+    retainedConsentSurfaceObservations.length > 0
+  );
   const runtimeCoverageStatus = bundle.runtimeCoverage?.coverageStatus ?? null;
   const runtimeLimitationKeys = bundle.runtimeCoverage?.limitationKeys ?? [];
   const runtimeObservationCounts = bundle.runtimeCoverage?.observationCounts;
@@ -2658,6 +2717,21 @@ function buildMaterializedLocalV2Detail(
       : runtimeLimitationKeys;
   const consentRuntimeEvidenceReportable = !localV2NoGo && preConsentRuntimeReliable;
   const runtimeEvidenceReportable = !localV2NoGo && effectiveRuntimeCountsRetained;
+  const consentSurfaceInspection = deriveConsentSurfaceInspectionOutcome({
+    cmpRuntimeObservations: bundle.cmpRuntimeObservations,
+    consentUiObservations: bundle.consentUiObservations,
+    domSnapshots: bundle.domSnapshots,
+    modulesRun: bundle.modulesRun,
+    runtimeCoverage: bundle.runtimeCoverage
+      ? {
+          ...bundle.runtimeCoverage,
+          coverageStatus: effectiveRuntimeCoverageStatus ?? bundle.runtimeCoverage.coverageStatus,
+          limitationKeys: effectiveRuntimeLimitationKeys,
+        }
+      : undefined,
+    screenshots: bundle.screenshots,
+    visualCapture: bundle.visualCapture,
+  });
   const vendorEvidenceReportable = runtimeEvidenceReportable ||
     (!localV2NoGo && preConsentRuntimeReliable && runtimeCoverageStatus === null && meaningfulRuntimeSignalsRetained);
   const reportableVendorRows = vendorEvidenceReportable ? vendorRows : [];
@@ -2687,7 +2761,6 @@ function buildMaterializedLocalV2Detail(
     rejectLabels: [],
     visibleChoiceLabels: []
   };
-  const firstLayerConsentControlInventoryRetained = hasRetainedFirstLayerConsentControlInventory(firstLayerConsentChoices);
   const policySurfaces = dedupePolicySurfaces(
     bundle.policySurfaceObservations ?? [],
     bundle.normalizedUrl ?? bundle.url ?? (requestedHost ? `https://${requestedHost}/` : null)
@@ -2727,10 +2800,13 @@ function buildMaterializedLocalV2Detail(
       : 88;
   const requestPurposeRows = (preconsentRequests
     .map((event) => {
-      const matchedVendor = reportableVendorRows.find((vendor) => {
-        const host = hostnameFromUrl(event.hostname ?? event.url);
-        return Boolean(host && vendor.scriptHost && (host === vendor.scriptHost || host.endsWith(`.${vendor.scriptHost}`)));
-      }) ?? reportableVendorRows[0] ?? null;
+      const matchedVendor = reportableVendorRows.find((vendor) => vendor.matchedEventIds.has(event.eventId)) ??
+        reportableVendorRows.find((vendor) => {
+          const host = hostnameFromUrl(event.hostname ?? event.url);
+          return Boolean(host && vendor.matchedHostnames.some((matchedHost) =>
+            host === matchedHost || host.endsWith(`.${matchedHost}`)
+          ));
+        }) ?? null;
       const url = requestUrl(event);
       const hostname = event.hostname ?? hostnameFromUrl(url);
       return matchedVendor && url && hostname
@@ -2756,12 +2832,12 @@ function buildMaterializedLocalV2Detail(
           }
         : null;
     })
-    .filter((row) => row !== null) as Array<Record<string, unknown>>)
-    .slice(0, 25);
+    .filter((row) => row !== null) as Array<Record<string, unknown>>);
+  const boundedRequestPurposeRows = selectBoundedPreconsentRequestPurposeRows(requestPurposeRows, 25);
   const embeddedContentSummary = summarizeEmbeddedContentEvidence(preconsentIframeEvents, preconsentRequests);
   const fingerprintingRuntimeEvidence = browserApiAccessRows(bundle);
   const fingerprintingEvidenceSummary = summarizeFingerprintingEvidence(bundle);
-  const sessionReplayEvidenceSummary = summarizeSessionReplayEvidence(reportableVendorRows, preconsentRequests, requestPurposeRows);
+  const sessionReplayEvidenceSummary = summarizeSessionReplayEvidence(reportableVendorRows, preconsentRequests, boundedRequestPurposeRows);
   const cookieWriteObservations = cookieEvents.map((event) => ({
     beforeConsent: event.consentStateAtTime === "pre_consent",
     category: event.cookiePurpose ?? "unknown",
@@ -2782,12 +2858,13 @@ function buildMaterializedLocalV2Detail(
   const hybridRuntimeEvidence = {
     consentSummary: {
       bannerPresent: consentSurfaceLikelyPresent,
-      firstVisibleMs: cmp?.observedAtMs ?? null,
+      firstVisibleMs: firstNumber(cmp?.observedAtMs, firstConsentSurfaceVisibleMs),
       cmpFrameworkSignalObserved: Boolean(cmpVendorName),
       cmpRuntimeSignalLabels: cmpSignalLabels,
       cookieNoticeObserved: consentSurfaceLikelyPresent,
       requestsBeforeAnyConsentAction: preconsentRequests.length > 0
     },
+    consentSurfaceInspection,
     cookieNoticeObserved: consentSurfaceLikelyPresent,
     cmpFrameworkSignalObserved: Boolean(cmpVendorName),
     cmpRuntimeSignalLabels: cmpSignalLabels,
@@ -2819,7 +2896,7 @@ function buildMaterializedLocalV2Detail(
       timestampMs: event.timestampMs,
       url: requestUrl(event)
     })),
-    requestPurposeClassificationConfidence: requestPurposeRows,
+    requestPurposeClassificationConfidence: boundedRequestPurposeRows,
     requestToVendorObservations: reportableVendorRows.map((vendor) => ({
       category: vendor.vendorCategory,
       hostname: vendor.scriptHost,
@@ -2849,7 +2926,8 @@ function buildMaterializedLocalV2Detail(
     },
     timelineMarkers: {
       firstCmpVisibleMs: cmp?.observedAtMs ?? null,
-      firstNonEssentialRequestMs: firstNumber(...preconsentRequests.map((event) => event.timestampMs)),
+      firstConsentSurfaceVisibleMs,
+      firstNonEssentialRequestMs: firstPromotionGradePreconsentRequestMs(requestPurposeRows),
       firstRequestMs: firstNumber(...networkEvents.map((event) => event.timestampMs)),
       firstTrackingCookieSetMs: firstNumber(...preconsentCookies.map((event) => event.timestampMs)),
       timelineConfidence: "direct_v2_runtime"
@@ -2886,10 +2964,12 @@ function buildMaterializedLocalV2Detail(
     collection_surface_summary: collectionSurfaceSummary,
     transportSecuritySummary,
     transport_security_summary: transportSecuritySummary,
-    consentActionableChoiceObserved: consentRuntimeEvidenceReportable ? Boolean(cmpVendorName) : null,
+    consentActionableChoiceObserved: consentRuntimeEvidenceReportable ? consentActionableChoiceObserved : null,
     consentSurfaceObserved: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
-    consent_actionable_choice_observed: consentRuntimeEvidenceReportable ? Boolean(cmpVendorName) : null,
+    consentSurfaceInspection,
+    consent_actionable_choice_observed: consentRuntimeEvidenceReportable ? consentActionableChoiceObserved : null,
     consent_surface_observed: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
+    consent_surface_inspection: consentSurfaceInspection,
     cookieNoticeObserved: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
     cookie_notice_observed: consentRuntimeEvidenceReportable ? consentSurfaceLikelyPresent : null,
     ...(cookieSurface ? { cookiePolicyPresent: true, cookie_policy_present: true } : {}),

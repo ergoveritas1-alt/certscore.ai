@@ -35,6 +35,16 @@ function ScansIcon(props: NavIconProps) {
   );
 }
 
+function BrowserExtensionIcon(props: NavIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
+      <rect x="3.5" y="5" width="17" height="14" rx="3" />
+      <path d="M3.5 9.5h17" />
+      <path d="M8 14h3.5M15.5 12.5v3M14 14h3" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function ChangesIcon(props: NavIconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true" width="20" height="20" {...props}>
@@ -110,6 +120,7 @@ const navItems = [
   { href: "/app", label: "Overview", icon: OverviewIcon },
   { href: "/app/signals", label: "Scan view", icon: SignalsIcon },
   { href: "/app/scans", label: "Scan History", icon: ScansIcon },
+  { href: "/app/browser-scans/setup", label: "Chrome extension", icon: BrowserExtensionIcon },
   { href: "/app/settings", label: "Settings", icon: SettingsIcon },
   { href: "/app/modify-plan", label: "Modify plan", icon: PlanIcon }
 ] as const;

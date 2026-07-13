@@ -4,6 +4,7 @@ import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
+import { CERTSCORE_CHROME_EXTENSION_STORE_URL } from "../../lib/browser-extension";
 import { ScanFromSelect, type ScanFrom, type ServerScanFrom } from "../scans/scan-from-select";
 import {
   ScanSubmitProgressBar,
@@ -319,7 +320,7 @@ export function getScanSubmitDestination(mode: ScanMode, payload: ScanSubmitPayl
 }
 
 export function DomainScanForm({
-  allowLocalExtensionScan = false,
+  allowLocalExtensionScan = true,
   allowRestrictedScanOptions = false,
   buttonLabel = "Start full scan",
   compact = false,
@@ -876,7 +877,7 @@ export function DomainScanForm({
         <div className="rounded-2xl border border-sky-100 bg-sky-50/80 px-4 py-3 text-sm text-slate-700">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="font-semibold text-slate-950">{localExtensionStatus.label ?? "Local-extension scan"}</p>
+              <p className="font-semibold text-slate-950">{localExtensionStatus.label ?? "Chrome browser scan"}</p>
               <p className="mt-1 leading-6">{localExtensionStatus.message ?? "BX01 is preparing the browser scan."}</p>
             </div>
             {localExtensionStatus.phase ? (
@@ -892,7 +893,7 @@ export function DomainScanForm({
           <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.24)]">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Local-extension scan</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Chrome browser scan</p>
                 <h2 id="bx01-install-title" className="text-xl font-semibold tracking-tight text-slate-950">Install the CertScore.ai Chrome extension</h2>
               </div>
               <button
@@ -908,14 +909,12 @@ export function DomainScanForm({
             </div>
             <div className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
               <p>
-                Local-extension scans run from your own Chrome browser. CertScore.ai did not detect the BX01 extension on this page.
+                Browser scans run from your own Chrome session. CertScore.ai Browser Evidence was not detected on this page.
               </p>
               <ol className="list-decimal space-y-2 pl-5">
-                <li>Open Chrome Extensions and enable Developer mode.</li>
-                <li>Choose Load unpacked.</li>
-                <li>Select the CertScore.ai extension folder: <span className="font-mono text-xs">apps/browser-extension</span>.</li>
-                <li>Reload this CertScore.ai tab after loading or reloading the extension.</li>
-                <li>Run the scan again with Local-extension selected.</li>
+                <li>Add CertScore.ai Browser Evidence from its official Chrome Web Store listing.</li>
+                <li>Reload this CertScore.ai tab after Chrome finishes installing the extension.</li>
+                <li>Run the scan again with Chrome browser selected.</li>
               </ol>
             </div>
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -926,6 +925,14 @@ export function DomainScanForm({
               >
                 Close
               </button>
+              <a
+                className="inline-flex items-center justify-center rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-800 transition hover:border-sky-300 hover:bg-sky-100"
+                href={CERTSCORE_CHROME_EXTENSION_STORE_URL}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                Open Chrome Web Store
+              </a>
               <button
                 className="inline-flex items-center justify-center rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-wait disabled:opacity-60"
                 disabled={isSubmitting}

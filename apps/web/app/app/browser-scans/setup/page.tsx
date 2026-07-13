@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { getCertScoreChromeExtensionStoreUrl } from "../../../../lib/browser-extension-store";
-import { requirePlatformAdminContext } from "../../../../server/admin/platform-admin";
+import { getDashboardContext } from "../../../../server/auth";
 import { getScanById } from "../../../../server/scans/get-scan-by-id";
 
 export const metadata: Metadata = {
@@ -26,7 +27,7 @@ function StepVisual({ kind }: { kind: (typeof steps)[number][2] }) {
   const content = {
     store: (
       <div className="space-y-3">
-        <div className="flex items-center gap-3"><img alt="" className="h-9 w-9 rounded-lg" src="/certscore-mark-dark.png" /><div className="min-w-0"><p className="truncate font-semibold text-slate-900">CertScore.ai</p><p className="text-[11px] text-slate-500">Chrome Web Store</p></div></div>
+        <div className="flex items-center gap-3"><Image alt="" className="h-9 w-9 rounded-lg" height={36} src="/certscore-mark-dark.png" width={36} /><div className="min-w-0"><p className="truncate font-semibold text-slate-900">CertScore.ai</p><p className="text-[11px] text-slate-500">Chrome Web Store</p></div></div>
         <div className="rounded-lg bg-blue-600 px-3 py-2 text-center text-xs font-semibold text-white">Add to Chrome</div>
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-xs font-semibold text-slate-800">Add “CertScore.ai”?</p><div className="mt-2 flex justify-end gap-2"><span className="rounded-md border border-slate-300 px-2 py-1 text-[10px]">Cancel</span><span className="rounded-md bg-blue-600 px-2 py-1 text-[10px] font-semibold text-white">Add extension</span></div></div>
       </div>
@@ -34,14 +35,14 @@ function StepVisual({ kind }: { kind: (typeof steps)[number][2] }) {
     pin: (
       <div className="space-y-3">
         <div className="flex justify-end gap-2 text-lg"><span className="rounded-md bg-slate-100 px-2">🧩</span><span className="rounded-md bg-emerald-100 px-2">🛡️</span></div>
-        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-md"><p className="text-xs font-semibold text-slate-900">Extensions</p><div className="mt-3 flex items-center gap-2 rounded-md bg-sky-50 p-2"><img alt="" className="h-7 w-7 rounded-md" src="/certscore-mark-dark.png" /><span className="flex-1 text-xs font-medium text-slate-800">CertScore.ai</span><span className="rounded bg-blue-100 px-1.5 py-1 text-blue-700">📌</span></div></div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-md"><p className="text-xs font-semibold text-slate-900">Extensions</p><div className="mt-3 flex items-center gap-2 rounded-md bg-sky-50 p-2"><Image alt="" className="h-7 w-7 rounded-md" height={28} src="/certscore-mark-dark.png" width={28} /><span className="flex-1 text-xs font-medium text-slate-800">CertScore.ai</span><span className="rounded bg-blue-100 px-1.5 py-1 text-blue-700">📌</span></div></div>
       </div>
     ),
     site: (
       <div className="space-y-3"><div className="flex items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-2 text-xs text-slate-600"><span>ⓘ</span><span className="font-medium text-slate-800">cerebras.com</span></div><div className="rounded-lg bg-slate-900 p-4 text-white"><p className="text-lg font-semibold">Target website</p><p className="mt-1 text-xs text-slate-300">Wait until the normal public page is visible.</p></div></div>
     ),
     scan: (
-      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-md"><div className="flex items-center gap-2"><img alt="" className="h-8 w-8 rounded-md" src="/certscore-mark-dark.png" /><div><p className="text-xs font-bold text-slate-900">CertScore<span className="text-lime-600">.ai</span></p><p className="text-[10px] text-slate-500">Browser pre-consent evidence</p></div></div><div className="mt-3 rounded-md bg-slate-50 p-2 text-[10px] text-slate-600"><span className="block uppercase tracking-wide">Current URL</span><strong className="block truncate text-slate-800">https://cerebras.com/</strong></div><div className="mt-2 flex items-center gap-2 text-[10px] text-slate-700"><span className="h-3 w-3 rounded border border-slate-400" /> Fresh visit</div><div className="mt-3 rounded-md bg-slate-900 px-3 py-2 text-center text-[11px] font-semibold text-white">Run Browser Pre-Consent Scan</div></div>
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-md"><div className="flex items-center gap-2"><Image alt="" className="h-8 w-8 rounded-md" height={32} src="/certscore-mark-dark.png" width={32} /><div><p className="text-xs font-bold text-slate-900">CertScore<span className="text-lime-600">.ai</span></p><p className="text-[10px] text-slate-500">Browser pre-consent evidence</p></div></div><div className="mt-3 rounded-md bg-slate-50 p-2 text-[10px] text-slate-600"><span className="block uppercase tracking-wide">Current URL</span><strong className="block truncate text-slate-800">https://cerebras.com/</strong></div><div className="mt-2 flex items-center gap-2 text-[10px] text-slate-700"><span className="h-3 w-3 rounded border border-slate-400" /> Fresh visit</div><div className="mt-3 rounded-md bg-slate-900 px-3 py-2 text-center text-[11px] font-semibold text-white">Run Browser Pre-Consent Scan</div></div>
     ),
     progress: (
       <div className="space-y-3"><div className="flex gap-2"><div className="flex-1 rounded-t-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-700">CertScore.ai</div><div className="flex-1 rounded-t-lg border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium text-slate-700">cerebras.com</div></div><div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3"><div className="flex items-center gap-3"><span className="grid h-8 w-8 place-items-center rounded-full bg-white text-lg motion-safe:animate-pulse">⌛</span><div><p className="text-xs font-semibold text-slate-900">Scanning is in progress…</p><p className="mt-0.5 text-[10px] text-slate-600">Keep both tabs open.</p></div></div></div></div>
@@ -60,7 +61,7 @@ function StepVisual({ kind }: { kind: (typeof steps)[number][2] }) {
 
 export default async function BrowserScanSetupPage({ searchParams }: SetupPageProps) {
   const [{ organization, user }, resolvedSearchParams] = await Promise.all([
-    requirePlatformAdminContext(),
+    getDashboardContext(),
     searchParams ?? Promise.resolve({} as { scanId?: string })
   ]);
   const scanId = resolvedSearchParams.scanId?.trim() || null;
@@ -80,11 +81,7 @@ export default async function BrowserScanSetupPage({ searchParams }: SetupPagePr
         </p>
         {scan ? <p className="mt-4 text-sm text-slate-300">Preparing to rescan <strong className="text-white">{scan.scan.domainHostname ?? "this site"}</strong>.</p> : null}
         <div className="mt-7 flex flex-wrap gap-3">
-          {storeUrl ? (
-            <a className="inline-flex min-h-12 items-center rounded-xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" href={storeUrl} rel="noreferrer" target="_blank">Add the CertScore.ai extension to Chrome</a>
-          ) : (
-            <span className="inline-flex min-h-12 items-center rounded-xl border border-amber-300/50 bg-amber-300/10 px-6 py-3 text-sm font-semibold text-amber-100">Chrome Web Store link is not configured</span>
-          )}
+          <a className="inline-flex min-h-12 items-center rounded-xl bg-emerald-400 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" href={storeUrl} rel="noreferrer" target="_blank">Add the CertScore.ai extension to Chrome</a>
           {scan ? <Link className="inline-flex min-h-12 items-center rounded-xl border border-slate-600 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800" href={`/app/scans/${encodeURIComponent(scan.scan.id)}`}>Back to scan report</Link> : null}
         </div>
       </header>

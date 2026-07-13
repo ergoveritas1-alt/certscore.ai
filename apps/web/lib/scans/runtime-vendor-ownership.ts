@@ -76,6 +76,7 @@ export function findRuntimeCookieNameVendor(cookieName: string | null | undefine
   if (!observation) return null;
   return {
     category: observation.purpose,
+    product: observation.product ?? observation.vendor,
     vendor: observation.vendor,
     attributionEvidence: {
       signatureId: observation.basis[0] ?? "canonical_vendor_resolver",

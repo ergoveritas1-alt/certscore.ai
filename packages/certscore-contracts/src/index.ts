@@ -1595,6 +1595,118 @@ export const runtimeCoverageSummarySchema = z.object({
   notes: z.array(z.string()).default([]),
 });
 
+export const consentSurfaceInspectionOutcomeSchema = z.object({
+  outcome: z.enum([
+    "actionable_surface_observed",
+    "non_actionable_surface_observed",
+    "no_surface_observed_complete_coverage",
+    "indeterminate_limited_coverage",
+  ]),
+  coverageStatus: z.enum(["complete", "limited"]),
+  inspectionCompleted: z.boolean(),
+  inspectedPreInteraction: z.literal(true),
+  consentSurfaceObserved: z.boolean(),
+  actionableControlObserved: z.boolean(),
+  observedAtMs: z.number().int().nonnegative().nullable(),
+  evidenceSources: z.array(z.enum([
+    "consent_ui_observation",
+    "control_inventory",
+    "cmp_runtime",
+    "dom_snapshot",
+    "visual_capture",
+  ])).max(5),
+  limitationKeys: z.array(z.string().max(120)).max(16).default([]),
+});
+
+export function deriveConsentSurfaceInspectionOutcome(input: {
+  cmpRuntimeObservations?: z.infer<typeof cmpRuntimeObservationSchema>[];
+  consentUiObservations?: z.infer<typeof consentUiObservationSchema>[];
+  domSnapshots?: z.infer<typeof domSnapshotArtifactSchema>[];
+  modulesRun?: z.infer<typeof scanModuleRunSchema>[];
+  runtimeCoverage?: z.infer<typeof runtimeCoverageSummarySchema>;
+  screenshots?: z.infer<typeof screenshotArtifactSchema>[];
+  visualCapture?: z.infer<typeof visualCaptureSummarySchema>;
+}) {
+  const observations = input.consentUiObservations ?? [];
+  const visibleObservation = observations
+    .filter((observation) => observation.likelyPresent)
+    .sort((left, right) => left.observedAtMs - right.observedAtMs)[0] ?? null;
+  const latestObservation = observations
+    .slice()
+    .sort((left, right) => right.observedAtMs - left.observedAtMs)[0] ?? null;
+  const actionableControlObserved = observations.some((observation) =>
+    observation.layerInspected === "first_layer" &&
+    (
+      observation.acceptControlObserved ||
+      observation.rejectControlObserved ||
+      observation.managePreferencesControlObserved ||
+      observation.controls.some((control) =>
+        control.visible !== false &&
+        ["accept_all", "reject_all", "manage_preferences", "save_preferences"].includes(control.actionType)
+      )
+    )
+  );
+  const consentSurfaceObserved = Boolean(visibleObservation || (input.cmpRuntimeObservations ?? []).length > 0);
+  const preConsentRun = (input.modulesRun ?? []).find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
+  const observationFailed = observations.length === 0 || observations.some((observation) =>
+    observation.basis.includes("bounded_capture_timeout_or_failure")
+  );
+  const materialLimitationKeys = (input.runtimeCoverage?.limitationKeys ?? []).filter(
+    (key) => key !== "post_consent_flow_runtime_disabled"
+  );
+  const retainedVisualOrDomEvidence =
+    input.visualCapture?.status === "available" ||
+    (input.screenshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent") ||
+    (input.domSnapshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent");
+  const inspectionLimitationKeys = [
+    ...materialLimitationKeys,
+    !preConsentRun ? "consent_surface_inspection_runtime_not_run" : null,
+    preConsentRun && preConsentRun.status !== "completed"
+      ? `consent_surface_inspection_runtime_${preConsentRun.status}`
+      : null,
+    observations.length === 0 ? "consent_surface_inspection_observation_missing" : null,
+    observationFailed ? "consent_surface_inspection_observation_incomplete" : null,
+    !retainedVisualOrDomEvidence ? "consent_surface_inspection_visual_or_dom_missing" : null,
+  ].filter((value): value is string => value !== null)
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .slice(0, 16);
+  const inspectionCompleted =
+    preConsentRun?.status === "completed" &&
+    input.runtimeCoverage?.coverageStatus !== "limited_none" &&
+    input.runtimeCoverage?.coverageStatus !== "not_applicable" &&
+    inspectionLimitationKeys.length === 0;
+  const coverageStatus = inspectionCompleted ? "complete" as const : "limited" as const;
+  const evidenceSources = [
+    observations.length > 0 ? "consent_ui_observation" as const : null,
+    actionableControlObserved ? "control_inventory" as const : null,
+    (input.cmpRuntimeObservations ?? []).length > 0 ? "cmp_runtime" as const : null,
+    (input.domSnapshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent") ? "dom_snapshot" as const : null,
+    retainedVisualOrDomEvidence && (
+      input.visualCapture?.status === "available" ||
+      (input.screenshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent")
+    ) ? "visual_capture" as const : null,
+  ].filter((value): value is NonNullable<typeof value> => value !== null);
+  const outcome = consentSurfaceObserved
+    ? actionableControlObserved
+      ? "actionable_surface_observed" as const
+      : "non_actionable_surface_observed" as const
+    : inspectionCompleted
+      ? "no_surface_observed_complete_coverage" as const
+      : "indeterminate_limited_coverage" as const;
+
+  return consentSurfaceInspectionOutcomeSchema.parse({
+    outcome,
+    coverageStatus,
+    inspectionCompleted,
+    inspectedPreInteraction: true,
+    consentSurfaceObserved,
+    actionableControlObserved,
+    observedAtMs: visibleObservation?.observedAtMs ?? latestObservation?.observedAtMs ?? null,
+    evidenceSources,
+    limitationKeys: inspectionLimitationKeys,
+  });
+}
+
 export const visualAccessReviewSchema = z.object({
   artifact_ref: z.string().max(160).nullable().optional(),
   artifactRef: z.string().max(160).nullable().optional(),
@@ -1717,6 +1829,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   observedJourneys: z.array(observedJourneySchema).default([]),
   derivedRuntimeSignals: derivedRuntimeSignalsSchema,
   runtimeCoverage: runtimeCoverageSummarySchema.optional(),
+  consentSurfaceInspection: consentSurfaceInspectionOutcomeSchema.optional(),
   visualCapture: visualCaptureSummarySchema.optional(),
   scanNoGoAssessment: scanNoGoAssessmentSchema.optional(),
   scan_no_go_assessment: scanNoGoAssessmentSchema.optional(),
@@ -1903,6 +2016,7 @@ export type CmpRuntimeObservation = z.infer<typeof cmpRuntimeObservationSchema>;
 export type TransportSecurityObservation = z.infer<typeof transportSecurityObservationSchema>;
 export type DerivedRuntimeSignals = z.infer<typeof derivedRuntimeSignalsSchema>;
 export type RuntimeCoverageSummary = z.infer<typeof runtimeCoverageSummarySchema>;
+export type ConsentSurfaceInspectionOutcome = z.infer<typeof consentSurfaceInspectionOutcomeSchema>;
 export type ScanNoGoAssessment = z.infer<typeof scanNoGoAssessmentSchema>;
 export type VisualAccessReview = z.infer<typeof visualAccessReviewSchema>;
 export type ObservedBehavior = z.infer<typeof observedBehaviorSchema>;

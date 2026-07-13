@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { Badge } from "@website-signal-risk-scanner/ui";
+import { ScannerSolutionAnimation } from "../../components/marketing/scanner-solution-animation";
 import {
   createBreadcrumbSchema,
   createItemListSchema,
@@ -10,19 +11,28 @@ import {
 
 const solutions = [
   {
-    title: "GDPR website compliance scanner",
-    description: "Review public website consent, cookie, tracking, policy, and disclosure signals.",
-    href: "/solutions/gdpr-website-compliance-scanner"
+    title: "GDPR website scanner",
+    description:
+      "Review consent, cookie, tracking, policy, and disclosure signals for GDPR/ePrivacy workflows.",
+    href: "/solutions/gdpr-website-compliance-scanner",
+    animation: "trace" as const,
+    meta: "GDPR / ePrivacy"
   },
   {
     title: "Cookie consent scanner",
-    description: "Check cookie timing, CMP behavior, third-party cookies before consent, and reject-path signals.",
-    href: "/solutions/cookie-consent-scanner"
+    description:
+      "Check cookie timing, CMP behavior, third-party cookies before consent, and reject-path review signals.",
+    href: "/solutions/cookie-consent-scanner",
+    animation: "waterfall" as const,
+    meta: "Consent controls"
   },
   {
     title: "Privacy policy risk scanner",
-    description: "Compare public privacy disclosures with observable website behavior and vendor signals.",
-    href: "/solutions/privacy-policy-risk-scanner"
+    description:
+      "Compare observable website behavior with privacy, cookie, vendor, and disclosure surfaces.",
+    href: "/solutions/privacy-policy-risk-scanner",
+    animation: "policy" as const,
+    meta: "Policy surfaces"
   }
 ] as const;
 
@@ -75,17 +85,21 @@ export default function SolutionsPage() {
         </p>
       </div>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
+      <div className="mt-8 grid gap-6 lg:grid-cols-3">
         {solutions.map((solution) => (
           <Link key={solution.href} href={solution.href} className="group block">
-            <Card className="h-full border-slate-200 bg-white shadow-none transition group-hover:border-sky-200 group-hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
-              <CardHeader>
-                <CardTitle className="text-xl text-slate-950">{solution.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-7 text-slate-600">{solution.description}</p>
-              </CardContent>
-            </Card>
+            <article className="h-full">
+              <div className="relative aspect-[340/300] overflow-hidden rounded-lg border border-slate-200 bg-[#0b2340] shadow-[0_18px_40px_rgba(15,23,42,0.12)] transition group-hover:-translate-y-0.5 group-hover:shadow-[0_22px_48px_rgba(15,23,42,0.16)]">
+                <ScannerSolutionAnimation type={solution.animation} />
+              </div>
+              <div className="pt-4">
+                <p className="text-xs font-semibold text-slate-500">{solution.meta}</p>
+                <h2 className="mt-2 text-xl font-semibold leading-tight tracking-tight text-slate-950 group-hover:text-sky-700">
+                  {solution.title}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{solution.description}</p>
+              </div>
+            </article>
           </Link>
         ))}
       </div>

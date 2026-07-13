@@ -105,6 +105,59 @@ test("runtime coverage remains usable when only screenshot fallback failed", () 
   assert.equal(summary.observationCounts.networkEvents, 1);
 });
 
+test("runtime coverage records incomplete consent UI capture even when other runtime evidence is usable", () => {
+  const summary = deriveRuntimeCoverageSummary({
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 1300,
+      likelyPresent: false,
+      basis: ["bounded_capture_timeout_or_failure"],
+      textExcerpt: "",
+      layerInspected: "unknown",
+      visibleChoiceLabels: [],
+      acceptControlObserved: false,
+      rejectControlObserved: false,
+      managePreferencesControlObserved: false,
+      controls: [],
+      evidenceRefs: [],
+      confidence: 0.4,
+    }],
+    cookieEvents: [],
+    cookieSnapshots: [],
+    enabledModules: ["preConsentRuntimeScanner"],
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "completed",
+      startedAt,
+      completedAt: "2026-01-01T00:00:01.000Z",
+      durationMs: 1000,
+      evidenceRefs: [],
+      errors: [],
+    }],
+    networkEvents: [{
+      eventId: "net_1",
+      eventType: "network_request",
+      timestampMs: 100,
+      sourceScanner: "pre_consent_runtime",
+      consentStateAtTime: "pre_consent",
+      pagePhase: "initial_navigation",
+      url: "https://analytics.example/collect",
+      hostname: "analytics.example",
+      firstParty: false,
+      thirdParty: true,
+      evidenceRefs: [],
+      confidence: 0.9,
+      directVsInferred: "direct",
+    }],
+    normalizedVendorObservations: [],
+    observedJourneys: [],
+  });
+
+  assert.equal(summary.coverageStatus, "limited_partial");
+  assert.deepEqual(summary.limitationKeys, ["consent_ui_capture_timed_out"]);
+  assert.match(summary.notes.join("\n"), /did not complete/);
+});
+
 test("runtime coverage records CMP limitation when no actionable consent controls are retained", () => {
   const summary = deriveRuntimeCoverageSummary({
     cmpRuntimeObservations: [{
@@ -169,7 +222,10 @@ test("runtime coverage records CMP limitation when no actionable consent control
   });
 
   assert.equal(summary.coverageStatus, "limited_partial");
-  assert.deepEqual(summary.limitationKeys, ["cmp_runtime_without_actionable_surface"]);
+  assert.deepEqual(summary.limitationKeys, [
+    "consent_ui_capture_timed_out",
+    "cmp_runtime_without_actionable_surface",
+  ]);
   assert.match(summary.notes.join("\n"), /CMP runtime evidence was observed/);
 });
 

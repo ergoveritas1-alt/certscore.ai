@@ -22,6 +22,7 @@ import {
   type VisualCaptureSummary,
   SCHEMA_VERSION,
   canonicalEvidenceBundleSchema,
+  deriveConsentSurfaceInspectionOutcome,
 } from "@certscore/contracts";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import type { ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
@@ -677,6 +678,15 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       : baseRuntimeCoverage;
 
   const boundedModulesRun = modulesRun.map(boundModuleRunTimingBreakdown);
+  const consentSurfaceInspection = deriveConsentSurfaceInspectionOutcome({
+    cmpRuntimeObservations: preConsentResult.cmpRuntimeObservations,
+    consentUiObservations: preConsentResult.consentUiObservations,
+    domSnapshots: preConsentResult.domSnapshots,
+    modulesRun: boundedModulesRun,
+    runtimeCoverage,
+    screenshots: preConsentResult.screenshots,
+    visualCapture: preConsentResult.visualCapture,
+  });
   const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
     scanId,
     url: input.url,
@@ -722,6 +732,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     observedJourneys,
     derivedRuntimeSignals,
     runtimeCoverage,
+    consentSurfaceInspection,
     visualCapture: preConsentResult.visualCapture,
     ...(scanNoGoEvidence
       ? {
@@ -1194,6 +1205,10 @@ export function deriveRuntimeCoverageSummary(input: {
   if (silentEmpty) {
     limitationKeys.push("silent_empty_runtime_completed");
   }
+  if (consentUiCaptureIncomplete(input)) {
+    limitationKeys.push("consent_ui_capture_timed_out");
+    notes.push("The bounded pre-interaction consent-surface inventory did not complete, so absence of a consent surface is not established for this run.");
+  }
   if (cmpRuntimeObservedWithoutActionableConsentSurface(input)) {
     limitationKeys.push("cmp_runtime_without_actionable_surface");
     notes.push("CMP runtime evidence was observed, but no actionable consent surface or first-layer controls were retained in bounded capture.");
@@ -1218,6 +1233,14 @@ export function deriveRuntimeCoverageSummary(input: {
     silentEmpty,
     notes,
   };
+}
+
+function consentUiCaptureIncomplete(input: {
+  consentUiObservations?: ConsentUiObservation[];
+}) {
+  return (input.consentUiObservations ?? []).some((observation) =>
+    observation.basis.includes("bounded_capture_timeout_or_failure")
+  );
 }
 
 function cmpRuntimeObservedWithoutActionableConsentSurface(input: {

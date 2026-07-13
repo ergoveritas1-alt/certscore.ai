@@ -77,6 +77,7 @@ export function summarizeBrowserEvidence(input: {
     pageEvidence,
     policySurfaces,
     screenshotArtifactCount: input.artifacts.filter((artifact) => artifact.artifact_type === "screenshot").length,
+    targetHostname: input.targetHostname,
     timelineMarkers: {
       consentBannerDetectedMs: firstConsentBannerMs,
       firstRequestMs: networkEvents[0]?.observedAtMs ?? null,

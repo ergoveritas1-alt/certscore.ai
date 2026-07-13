@@ -27,6 +27,153 @@ function uniqueObservedCookieCount(cookies: ReturnType<typeof summarizeBrowserEv
   ).size;
 }
 
+function normalizeHostname(value: string) {
+  return value.trim().replace(/^\.+/, "").replace(/^www\./i, "").toLowerCase();
+}
+
+function roughRegistrableDomain(value: string) {
+  const parts = normalizeHostname(value).split(".").filter(Boolean);
+  if (parts.length <= 2) {
+    return parts.join(".");
+  }
+  const lastTwo = parts.slice(-2).join(".");
+  return new Set(["co.uk", "com.au", "com.br", "co.jp", "co.nz", "com.mx"]).has(lastTwo)
+    ? parts.slice(-3).join(".")
+    : lastTwo;
+}
+
+function isFirstPartyCookieDomain(cookieDomain: string, targetHostname: string) {
+  return roughRegistrableDomain(cookieDomain) === roughRegistrableDomain(targetHostname);
+}
+
+function canonicalAttribution(
+  observation: ReturnType<typeof resolveVendorObservations>[number] | null
+) {
+  return observation
+    ? {
+        attributionStatus: "resolved" as const,
+        confidence: observation.confidence,
+        product: observation.product ?? null,
+        purpose: observation.purpose,
+        regulatoryRelevance: uniqueStrings(observation.regulatoryRelevance, 20),
+        vendor: observation.vendor
+      }
+    : {
+        attributionStatus: "unresolved" as const,
+        confidence: null,
+        product: null,
+        purpose: null,
+        regulatoryRelevance: [],
+        vendor: null
+      };
+}
+
+function buildCookieInventory(evidence: ReturnType<typeof summarizeBrowserEvidence>) {
+  type CookieRow = NonNullable<BrowserScanObservedSignalPackageInput["evidenceInventory"]>["cookies"][number];
+  const grouped = new Map<string, CookieRow>();
+
+  for (const event of evidence.cookies) {
+    const key = [event.domain.toLowerCase(), event.path ?? "/", event.cookieName].join("|");
+    const observation = resolveVendorObservations([{
+      cookieName: event.cookieName,
+      evidenceId: browserEvidenceRef("cookie", event.observedAtMs, event.cookieName) ?? undefined,
+      hostname: event.domain,
+      sourceEventType: event.eventType,
+      sourceScanner: BROWSER_SCAN_SOURCE_ID,
+      type: "cookie"
+    }])[0] ?? null;
+    const candidate: CookieRow = {
+      ...canonicalAttribution(observation),
+      beforeConsent: event.consentInteractionObserved !== true,
+      cookieName: event.cookieName,
+      domain: event.domain,
+      firstObservedAtMs: event.observedAtMs,
+      httpOnly: event.httpOnly === true,
+      lastObservedAtMs: event.observedAtMs,
+      party: isFirstPartyCookieDomain(event.domain, evidence.targetHostname) ? "first_party" : "third_party",
+      path: event.path ?? "/",
+      sameSite: event.sameSite ?? null,
+      secure: event.secure === true,
+      sources: [event.source ?? event.eventType],
+      timingBasis: event.timingPrecision ?? "browser_observed"
+    };
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, candidate);
+      continue;
+    }
+    grouped.set(key, {
+      ...existing,
+      attributionStatus: existing.attributionStatus === "resolved" ? "resolved" : candidate.attributionStatus,
+      beforeConsent: existing.beforeConsent || candidate.beforeConsent,
+      confidence: existing.confidence ?? candidate.confidence,
+      firstObservedAtMs: Math.min(existing.firstObservedAtMs, candidate.firstObservedAtMs),
+      httpOnly: existing.httpOnly || candidate.httpOnly,
+      lastObservedAtMs: Math.max(existing.lastObservedAtMs, candidate.lastObservedAtMs),
+      product: existing.product ?? candidate.product,
+      purpose: existing.purpose ?? candidate.purpose,
+      regulatoryRelevance: uniqueStrings([...existing.regulatoryRelevance, ...candidate.regulatoryRelevance], 20),
+      secure: existing.secure || candidate.secure,
+      sources: uniqueStrings([...existing.sources, ...candidate.sources], 8),
+      vendor: existing.vendor ?? candidate.vendor
+    });
+  }
+
+  return [...grouped.values()]
+    .sort((left, right) => left.firstObservedAtMs - right.firstObservedAtMs || left.cookieName.localeCompare(right.cookieName))
+    .slice(0, 250);
+}
+
+function buildThirdPartyRequestInventory(evidence: ReturnType<typeof summarizeBrowserEvidence>) {
+  type RequestRow = NonNullable<BrowserScanObservedSignalPackageInput["evidenceInventory"]>["thirdPartyRequests"][number];
+  const thirdPartyHosts = new Set(evidence.thirdPartyRequestDomains.map((hostname) => hostname.toLowerCase()));
+  const grouped = new Map<string, RequestRow>();
+
+  for (const event of evidence.networkEvidence) {
+    if (event.consentInteractionObserved === true || !thirdPartyHosts.has(event.hostname.toLowerCase())) {
+      continue;
+    }
+    const observations = resolveVendorObservations([{
+      evidenceId: browserEvidenceRef("network_request", event.observedAtMs, event.hostname) ?? undefined,
+      hostname: event.hostname,
+      sourceEventType: "network_request",
+      sourceScanner: BROWSER_SCAN_SOURCE_ID,
+      type: event.resourceType === "script" ? "script" : "request",
+      url: event.url
+    }]);
+    const attributed = observations.length > 0 ? observations : [null];
+    for (const observation of attributed) {
+      const attribution = canonicalAttribution(observation);
+      const key = [event.hostname.toLowerCase(), attribution.vendor ?? "unresolved", attribution.product ?? "", attribution.purpose ?? ""].join("|");
+      const candidate: RequestRow = {
+        ...attribution,
+        firstObservedAtMs: event.observedAtMs,
+        hostname: event.hostname,
+        lastObservedAtMs: event.observedAtMs,
+        preConsent: true,
+        requestCount: 1,
+        resourceTypes: event.resourceType ? [event.resourceType] : []
+      };
+      const existing = grouped.get(key);
+      if (!existing) {
+        grouped.set(key, candidate);
+        continue;
+      }
+      grouped.set(key, {
+        ...existing,
+        firstObservedAtMs: Math.min(existing.firstObservedAtMs, candidate.firstObservedAtMs),
+        lastObservedAtMs: Math.max(existing.lastObservedAtMs, candidate.lastObservedAtMs),
+        requestCount: existing.requestCount + 1,
+        resourceTypes: uniqueStrings([...existing.resourceTypes, ...candidate.resourceTypes], 20)
+      });
+    }
+  }
+
+  return [...grouped.values()]
+    .sort((left, right) => left.firstObservedAtMs - right.firstObservedAtMs || left.hostname.localeCompare(right.hostname))
+    .slice(0, 250);
+}
+
 function browserEvidenceRef(prefix: string, observedAtMs: number | null | undefined, value: string) {
   if (typeof observedAtMs === "number" && Number.isFinite(observedAtMs)) {
     return `bx01.${prefix}:${Math.max(0, Math.round(observedAtMs))}:${value}`;
@@ -211,6 +358,11 @@ export function buildBrowserObservedSignalPackageFromEvidence(input: {
   addSignal("accessibility.document_language_present", "Document language present", accessibilitySummary.documentLanguagePresent === true, "boolean", 0.82);
 
   return {
+    evidenceInventory: {
+      cookies: buildCookieInventory(input.evidence),
+      targetHostname: input.evidence.targetHostname,
+      thirdPartyRequests: buildThirdPartyRequestInventory(input.evidence)
+    },
     observedSignals: signals,
     provenance: {
       sourceId: BROWSER_SCAN_SOURCE_ID,

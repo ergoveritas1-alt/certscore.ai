@@ -1424,6 +1424,11 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
     : typeof timeline?.first_cmp_visible_ms === "number"
       ? timeline.first_cmp_visible_ms
       : null;
+  const firstConsentSurfaceVisibleMs = typeof timeline?.firstConsentSurfaceVisibleMs === "number"
+    ? timeline.firstConsentSurfaceVisibleMs
+    : typeof timeline?.first_consent_surface_visible_ms === "number"
+      ? timeline.first_consent_surface_visible_ms
+      : null;
   const firstConsentActionMs = typeof timeline?.firstConsentActionMs === "number"
     ? timeline.firstConsentActionMs
     : typeof timeline?.first_consent_action_ms === "number"
@@ -1444,6 +1449,13 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
     : typeof timeline?.first_user_action_ms === "number"
       ? timeline.first_user_action_ms
       : null;
+  const consentSurfaceInspection = getObjectValue(rawEvidence, [
+    "consentSurfaceInspection",
+    "consent_surface_inspection"
+  ]) ?? getObjectValue(getObjectValue(rawEvidence, ["entities"]), [
+    "consentSurfaceInspection",
+    "consent_surface_inspection"
+  ]);
   const consentSurfaceObserved =
     getBooleanValue(rawEvidence, ["consentSurfaceObserved", "consent_surface_observed", "cookieBannerPresent", "consentBannerPresent"]) ??
     getBooleanValue(getObjectValue(rawEvidence, ["entities"]), ["consentSurfaceObserved", "consent_surface_observed"]);
@@ -1465,7 +1477,8 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
       : null;
   const hasTimelineSequence =
     typeof firstPreconsentRuntimeMs === "number" &&
-    ((typeof firstCmpVisibleMs === "number" && firstPreconsentRuntimeMs < firstCmpVisibleMs) ||
+    ((typeof firstConsentSurfaceVisibleMs === "number" && firstPreconsentRuntimeMs < firstConsentSurfaceVisibleMs) ||
+      (typeof firstCmpVisibleMs === "number" && firstPreconsentRuntimeMs < firstCmpVisibleMs) ||
       (typeof firstConsentActionMs === "number" && firstPreconsentRuntimeMs < firstConsentActionMs));
   const hasNoRecordedChoiceSequence =
     typeof firstPreconsentRuntimeMs === "number" &&
@@ -1475,7 +1488,19 @@ export function hasPreconsentSequenceEvidence(rawEvidence: Record<string, unknow
     firstRejectActionMs === null &&
     firstAcceptActionMs === null &&
     firstUserActionMs === null;
-  return hasTimelineSequence || hasNoRecordedChoiceSequence;
+  const hasNoConsentOpportunitySequence =
+    typeof firstPreconsentRuntimeMs === "number" &&
+    consentSurfaceInspection?.outcome === "no_surface_observed_complete_coverage" &&
+    consentSurfaceInspection?.coverageStatus === "complete" &&
+    consentSurfaceInspection?.inspectionCompleted === true &&
+    consentSurfaceInspection?.inspectedPreInteraction === true &&
+    typeof consentSurfaceInspection?.observedAtMs === "number" &&
+    firstPreconsentRuntimeMs <= consentSurfaceInspection.observedAtMs &&
+    firstConsentActionMs === null &&
+    firstRejectActionMs === null &&
+    firstAcceptActionMs === null &&
+    firstUserActionMs === null;
+  return hasTimelineSequence || hasNoRecordedChoiceSequence || hasNoConsentOpportunitySequence;
 }
 
 function getNumberValue(record: Record<string, unknown> | null | undefined, keys: string[]) {

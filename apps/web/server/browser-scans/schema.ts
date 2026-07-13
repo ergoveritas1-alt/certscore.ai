@@ -113,6 +113,39 @@ const observedSignalValueSchema = z.union([
   z.array(z.string().trim().min(1).max(2000)).max(250)
 ]);
 
+const browserScanInventoryAttributionSchema = z.object({
+  attributionStatus: z.enum(["resolved", "unresolved"]),
+  confidence: z.number().min(0).max(1).nullable(),
+  product: boundedString(255).nullable(),
+  purpose: boundedString(80).nullable(),
+  regulatoryRelevance: z.array(boundedString(120)).max(20),
+  vendor: boundedString(255).nullable()
+});
+
+const browserScanCookieInventoryRowSchema = browserScanInventoryAttributionSchema.extend({
+  beforeConsent: z.boolean(),
+  cookieName: boundedString(255),
+  domain: boundedString(255),
+  firstObservedAtMs: observedAtMsSchema,
+  httpOnly: z.boolean(),
+  lastObservedAtMs: observedAtMsSchema,
+  party: z.enum(["first_party", "third_party"]),
+  path: z.string().max(1024),
+  sameSite: z.string().trim().max(32).nullable(),
+  secure: z.boolean(),
+  sources: z.array(boundedString(80)).min(1).max(8),
+  timingBasis: boundedString(80)
+});
+
+const browserScanThirdPartyRequestInventoryRowSchema = browserScanInventoryAttributionSchema.extend({
+  firstObservedAtMs: observedAtMsSchema,
+  hostname: boundedString(255),
+  lastObservedAtMs: observedAtMsSchema,
+  preConsent: z.boolean(),
+  requestCount: z.number().int().min(1).max(100000),
+  resourceTypes: z.array(boundedString(80)).max(20)
+});
+
 export const browserScanObservedSignalSchema = z
   .object({
     category: z.enum(["accessibility", "privacy", "disclosure", "commerce", "financial", "entity", "context"]).default("privacy"),
@@ -147,6 +180,11 @@ export const browserScanObservedSignalSchema = z
   });
 
 export const browserScanObservedSignalPackageSchema = z.object({
+  evidenceInventory: z.object({
+    cookies: z.array(browserScanCookieInventoryRowSchema).max(250),
+    targetHostname: boundedString(255),
+    thirdPartyRequests: z.array(browserScanThirdPartyRequestInventoryRowSchema).max(250)
+  }).optional(),
   observedSignals: z.array(browserScanObservedSignalSchema).max(250),
   provenance: z.object({
     sourceId: z.literal(BROWSER_SCAN_SOURCE_ID),
