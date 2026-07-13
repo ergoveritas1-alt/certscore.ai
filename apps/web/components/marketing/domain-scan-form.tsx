@@ -25,6 +25,7 @@ type DomainScanFormProps = {
   mode?: "full" | "preview";
   sampleDomains?: string[];
   scanSource?: ScanSource;
+  variant?: "default" | "homepage-hero";
 };
 
 type ScanMode = NonNullable<DomainScanFormProps["mode"]>;
@@ -137,6 +138,8 @@ const FULL_SCAN_ERROR_GUIDANCE: Record<string, string> = {
 const BX01_SCAN_WINDOW_MS = 15000;
 const BX01_EXTENSION_TIMEOUT_MS = 1200;
 const RECENT_SCAN_AVAILABILITY_CHECK_DELAY_MS = 350;
+const HERO_IDLE_PLACEHOLDER = "Enter website here:";
+const HERO_EXAMPLE_PLACEHOLDER = "yoursite.com";
 
 const SAMPLE_SCAN_ACCENTS: Record<string, { accent: string; label: string; tone: string }> = {
   "caltech.edu": { accent: "bg-sky-400", label: "Higher ed", tone: "from-sky-500/20 to-cyan-400/5" },
@@ -327,7 +330,8 @@ export function DomainScanForm({
   inputPlaceholder = "Enter yoursite.com",
   mode = "preview",
   sampleDomains = [],
-  scanSource = "unknown"
+  scanSource = "unknown",
+  variant = "default"
 }: DomainScanFormProps) {
   const router = useRouter();
   const [domain, setDomain] = useState("");
@@ -341,11 +345,68 @@ export function DomainScanForm({
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
   const [scanFrom, setScanFrom] = useState<ScanFrom>(defaultScanFrom);
+  const [heroPlaceholder, setHeroPlaceholder] = useState(HERO_IDLE_PLACEHOLDER);
   const isSubmittingRef = useRef(false);
   const scanProgress = useScanProgressClock(isSubmitting);
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
   const expectsRecentScanReuse = shouldExpectRecentScanReuse({ freshRescan, hasRecentReusableScan, mode });
+
+  useEffect(() => {
+    if (variant !== "homepage-hero") {
+      return;
+    }
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setHeroPlaceholder(HERO_IDLE_PLACEHOLDER);
+      return;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    function wait(durationMs: number) {
+      return new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, durationMs);
+      });
+    }
+
+    async function erase(value: string) {
+      for (let length = value.length - 1; length >= 0 && !cancelled; length -= 1) {
+        setHeroPlaceholder(value.slice(0, length));
+        await wait(40);
+      }
+    }
+
+    async function type(value: string) {
+      for (let length = 1; length <= value.length && !cancelled; length += 1) {
+        setHeroPlaceholder(value.slice(0, length));
+        await wait(90);
+      }
+    }
+
+    async function animatePlaceholder() {
+      await wait(3500);
+
+      while (!cancelled) {
+        await erase(HERO_IDLE_PLACEHOLDER);
+        await type(HERO_EXAMPLE_PLACEHOLDER);
+        await wait(3800);
+        await erase(HERO_EXAMPLE_PLACEHOLDER);
+        await type(HERO_IDLE_PLACEHOLDER);
+        await wait(6000);
+      }
+    }
+
+    void animatePlaceholder();
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [variant]);
 
   useEffect(() => {
     if (!allowLocalExtensionScan && scanFrom === "local_extension") {
@@ -636,7 +697,9 @@ export function DomainScanForm({
           <Input
             autoComplete="url"
             className={
-              compact
+              variant === "homepage-hero"
+                ? "h-14 rounded-full border-[3px] border-sky-400 bg-white pl-6 pr-44 text-base font-semibold text-slate-950 shadow-[0_0_0_1px_rgba(255,255,255,0.9),0_16px_42px_rgba(14,165,233,0.3)] placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-400/30 sm:h-16 sm:pr-48 sm:text-lg"
+                : compact
                 ? "h-12 rounded-[1.2rem] border-2 border-sky-500 pr-40 text-left text-sm font-semibold shadow-[0_12px_30px_rgba(14,165,233,0.12)] placeholder:text-left focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
                 : "h-14 rounded-[1.6rem] border-2 border-sky-500 pr-32 text-base font-semibold shadow-[0_14px_34px_rgba(14,165,233,0.12)] focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
             }
@@ -646,13 +709,13 @@ export function DomainScanForm({
               setDomain(event.target.value);
               resetValidationState();
             }}
-            placeholder={inputPlaceholder}
+            placeholder={variant === "homepage-hero" ? heroPlaceholder : inputPlaceholder}
             type="text"
             value={domain}
             aria-label={inputLabel}
           />
           {mode === "full" ? (
-            <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
+            <div className={variant === "homepage-hero" ? "absolute right-[8.25rem] top-1/2 -translate-y-1/2 scale-150 sm:right-[8.75rem]" : compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
               <ScanFromSelect
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
@@ -669,6 +732,20 @@ export function DomainScanForm({
                 value={scanFrom}
                 variant="icon"
               />
+              {variant === "homepage-hero" ? (
+                <svg
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -bottom-0.5 left-1/2 h-2 w-2 -translate-x-1/2 text-slate-500"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  viewBox="0 0 12 8"
+                >
+                  <path d="m2 2 4 4 4-4" />
+                </svg>
+              ) : null}
             </div>
           ) : (
             <div className={compact ? "absolute right-[5.9rem] top-1/2 -translate-y-1/2" : "absolute right-[4.25rem] top-1/2 -translate-y-1/2"}>
@@ -688,7 +765,9 @@ export function DomainScanForm({
           <Button
             aria-label={buttonLabel}
             className={
-              compact
+              variant === "homepage-hero"
+                ? "absolute right-1.5 top-1/2 h-11 w-[118px] -translate-y-1/2 rounded-full border border-emerald-300/70 bg-[linear-gradient(135deg,#45c957_0%,#56bd58_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(34,197,94,0.28)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-emerald-300/40 sm:h-[52px] sm:w-[126px] sm:text-base"
+                : compact
                 ? "absolute right-2 top-1/2 h-8 -translate-y-1/2 rounded-full border-0 bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
                 : "absolute right-3 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-0 text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]"
             }
@@ -698,7 +777,9 @@ export function DomainScanForm({
             {isSubmitting ? (
               <span className="text-xs">...</span>
             ) : (
-              compact ? (
+              variant === "homepage-hero" ? (
+                <span>Free scan</span>
+              ) : compact ? (
                 <span>Scan</span>
               ) : (
                 <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">

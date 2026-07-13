@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../components/layout/site-footer";
@@ -9,7 +10,7 @@ import { PendingButtonLink } from "../../components/ui/pending-link";
 import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
-const SAMPLE_REPORT_URL = "https://certscore.ai/scan/bc6e4dfa-8a25-43f8-822d-a10e89950799";
+const SAMPLE_REPORT_URL = "https://certscore.ai/scan/f20f885d-10d4-4a07-899f-f7ea5a1825d8";
 const BOOK_DEMO_URL = "https://calendly.com/bmasek-w7ou/30min";
 export const metadata: Metadata = {
   ...createPageMetadata({
@@ -152,30 +153,53 @@ export default async function MarketingHomePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(scannerSolutionsSchema) }} />
       <SiteHeader />
 
-      <section className="border-b border-slate-200 bg-[radial-gradient(circle_at_50%_-12%,rgba(255,255,255,0.95)_0%,rgba(255,255,255,0.72)_24%,rgba(238,242,255,0.88)_58%,rgba(244,246,255,0.98)_100%)]">
-        <div className="mx-auto grid max-w-6xl gap-10 px-6 py-12 sm:py-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
-          <div className="space-y-5">
-            <h1
-              className="max-w-3xl pb-2 bg-clip-text text-4xl font-semibold leading-[1.08] tracking-normal text-transparent sm:text-5xl sm:leading-[1.04] lg:text-6xl"
-              style={{
-                backgroundImage: "linear-gradient(180deg, #020617 0%, #0f172a 24%, #334155 62%, #94a3b8 100%)"
-              }}
-            >
-              See how websites handle privacy, consent, tracking, and disclosure.
+      <section className="relative isolate overflow-hidden border-b border-sky-500/20 bg-[#020d20] text-white">
+        <div className="absolute inset-x-0 -top-10 bottom-0 -z-20" aria-hidden="true">
+          <Image alt="" className="object-cover object-[62%_center]" fill priority sizes="100vw" src="/marketing/hero/futuristic-tech-shield-and-network.png" />
+        </div>
+        <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(1,10,27,0.06)_0%,rgba(1,10,27,0.02)_48%,rgba(1,10,27,0.12)_100%)]" aria-hidden="true" />
+        <div className="relative -top-5 mx-auto grid min-h-[595px] max-w-[1360px] gap-12 px-6 py-14 sm:py-20 lg:grid-cols-[0.98fr_1.02fr] lg:items-center lg:px-12 lg:py-16">
+          <div className="relative z-20 max-w-[680px] space-y-8 lg:-translate-y-1">
+            <h1 className="text-[2rem] font-bold leading-[1.08] tracking-[-0.035em] text-white sm:text-5xl lg:text-[3.5rem]">
+              <span className="block whitespace-nowrap">See what websites</span>
+              <span className="block whitespace-nowrap"><span className="text-[#178cff]">reveal</span> before consent.</span>
             </h1>
-            <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
-              Evidence based analysis of pre-consent tracking, consent surfaces, cookie activity, transport security, and disclosure inconsistencies. Mapped to GDPR/ePrivacy.
+            <p className="max-w-[650px] text-base leading-8 text-slate-300 sm:text-xl">
+              Scan any website for pre-consent cookies, trackers,<br className="hidden xl:block" /> consent controls, and <span className="font-semibold text-[#1594ff]">GDPR</span>/ePrivacy disclosure signals.
             </p>
-            <div className="flex flex-col gap-3 pt-1 sm:flex-row">
+            <div id="homepage-scan" className="max-w-[650px] scroll-mt-24 pt-2">
+              <DomainScanForm buttonLabel="Scan a website" inputLabel="Website URL to scan" inputPlaceholder="Enter website here:" mode="full" scanSource="homepage" variant="homepage-hero" />
+            </div>
+            <div className="flex flex-wrap gap-x-9 gap-y-4 text-sm font-medium text-slate-100">
+              <span className="flex items-center gap-2.5">
+                <svg viewBox="0 0 24 24" className="h-6 w-6 shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9.25" /><path d="m8 12.2 2.5 2.5 5.5-6" />
+                </svg>
+                Free scan
+              </span>
+              <span className="flex items-center gap-2.5">
+                <svg viewBox="0 0 24 24" className="h-6 w-6 shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2.75" y="5.25" width="18.5" height="13.5" rx="1.25" /><path d="M3 9h18M7 14h3M3.5 3.5l17 17" />
+                </svg>
+                No credit card
+              </span>
+              <span className="flex items-center gap-2.5">
+                <svg viewBox="0 0 24 24" className="h-6 w-6 shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9.25" /><path d="M12 6.8V12l3.4 2.1" />
+                </svg>
+                Results in about 30 seconds
+              </span>
+            </div>
+            <div className="relative top-3 flex flex-col gap-3 sm:flex-row">
               <PendingButtonLink
-                className="w-full border-0 bg-[linear-gradient(135deg,#2563eb_0%,#0f8bd7_100%)] text-white shadow-[0_16px_32px_rgba(37,99,235,0.24)] hover:brightness-[1.05] focus-visible:ring-sky-500 sm:w-auto"
+                className="w-full border border-sky-400/50 bg-sky-500 text-white shadow-[0_12px_30px_rgba(14,165,233,0.22)] hover:bg-sky-400 focus-visible:ring-sky-300 sm:w-auto"
                 data-analytics-event="hero_book_demo_clicked"
                 href={BOOK_DEMO_URL}
                 idleContent="Schedule demo"
                 pendingContent="Opening..."
               />
               <PendingButtonLink
-                className="w-full border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 sm:w-auto"
+                className="w-full border border-slate-500/70 bg-slate-900/45 text-white backdrop-blur-sm hover:border-sky-400/70 hover:bg-slate-800/70 focus-visible:ring-sky-300 sm:w-auto"
                 data-analytics-cta-type="sample_report"
                 data-analytics-event="hero_sample_report_clicked"
                 href={SAMPLE_REPORT_URL}
@@ -184,27 +208,10 @@ export default async function MarketingHomePage() {
                 variant="secondary"
               />
             </div>
-            <p className="max-w-2xl text-xs leading-5 text-slate-500">
-              Built for policy analysts, developers, AI agents and agency/enterprise teams managing regulatory compliance workflows, API integrations, and structured privacy-risk signals.
-            </p>
           </div>
 
-          <div className="space-y-4">
-            <Card id="homepage-scan" className="border-slate-200 bg-slate-50 shadow-none">
-              <CardHeader>
-                <CardTitle className="text-[1.625rem] leading-tight">Scan any website.</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <DomainScanForm
-                  buttonLabel="Scan a website"
-                  inputLabel="Website to analyze"
-                  inputPlaceholder="Enter website here"
-                  mode="full"
-                  sampleDomains={["caltech.edu", "nbcnews.com", "latimes.com", "nvidia.com"]}
-                  scanSource="homepage"
-                />
-              </CardContent>
-            </Card>
+          <div className="relative z-10 flex items-center justify-center lg:-mr-8 lg:-translate-y-3 lg:justify-end" aria-hidden="true">
+            <Image alt="" className="h-auto w-full max-w-[476px] -translate-x-[15px] blur-[0.85px] opacity-[0.51] mix-blend-screen drop-shadow-[0_32px_45px_rgba(0,0,0,0.35)]" height={1190} priority sizes="(min-width: 1024px) 36vw, 92vw" src="/marketing/hero/scan-report-dashboard-with-privacy-details.jpg" width={1438} />
           </div>
         </div>
       </section>
