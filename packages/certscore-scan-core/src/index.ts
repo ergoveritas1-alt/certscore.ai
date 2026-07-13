@@ -471,7 +471,12 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       status: consentFlowResult.moduleRun.status,
     });
   }
-  const policyRequiredForOutput = policySurfaceEnabled && !earlyConfirmedNoGo && (!plannedParallel || !consentFlowEnabled || input.captureReplay);
+  const policyRequiredForOutput = policySurfaceRequiredForUnboundedOutput({
+    captureReplay: input.captureReplay === true,
+    earlyConfirmedNoGo,
+    plannedParallel,
+    policySurfaceEnabled,
+  });
   throwIfAborted(input.signal);
   await phaseRecorder.record("policy_surface_for_output", policyRequiredForOutput ? "started" : "skipped");
   if (policyRequiredForOutput) {
@@ -540,7 +545,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     ...(policySurfaceResult
       ? [policySurfaceResult.moduleRun]
       : policySurfaceEnabled
-        ? [policySurfaceScannerPlaceholder(now, plannedParallel && consentFlowEnabled
+        ? [policySurfaceScannerPlaceholder(now, plannedParallel
           ? "Policy-surface scanner was not ready before the planned consent DAG deadline or bounded output grace window."
           : undefined)]
         : []),
@@ -1872,6 +1877,17 @@ async function settlePolicySurfaceBeforeDeadline<T>(
     promise,
     new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), Math.max(0, deadlineMs))),
   ]);
+}
+
+export function policySurfaceRequiredForUnboundedOutput(input: {
+  captureReplay: boolean;
+  earlyConfirmedNoGo: boolean;
+  plannedParallel: boolean;
+  policySurfaceEnabled: boolean;
+}): boolean {
+  return input.policySurfaceEnabled &&
+    !input.earlyConfirmedNoGo &&
+    (!input.plannedParallel || input.captureReplay);
 }
 
 function policyPlanningStatus(
