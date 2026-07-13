@@ -229,7 +229,14 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
   const parsed = parseLocalV2DagLambdaResultMessage({
     Body: JSON.stringify({
       artifactOnly: true,
+      artifactMetadata: {
+        failureDiagnosticUri: {
+          sha256: "a".repeat(64),
+          sizeBytes: 512
+        }
+      },
       artifactPointers: {
+        failureDiagnosticUri: "s3://certscore-dev-artifacts/v2/scan-local-1/failure/FailureDiagnostic.json",
         manifestUri: "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json",
         reviewArtifactUri: "s3://certscore-dev-artifacts/v2/scan-local-1/review.json"
       },
@@ -274,6 +281,8 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
   assert.equal(parsed.productionFindingIntegration, false);
   assert.equal(parsed.artifactOnly, true);
   assert.equal(parsed.artifactPointers?.manifestUri, "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json");
+  assert.equal(parsed.artifactPointers?.failureDiagnosticUri, "s3://certscore-dev-artifacts/v2/scan-local-1/failure/FailureDiagnostic.json");
+  assert.deepEqual(parsed.artifactMetadata?.failureDiagnosticUri, { sha256: "a".repeat(64), sizeBytes: 512 });
   assert.equal(parsed.scannerGitSha, "abc123scanner");
   assert.equal(parsed.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(parsed.scannerRuntimeVersion, "v2-dag-runtime.1");

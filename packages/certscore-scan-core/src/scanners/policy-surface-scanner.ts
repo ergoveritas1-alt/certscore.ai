@@ -16,6 +16,7 @@ import {
 import { chromium, type Browser, type Page } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
+import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
 
 const SOURCE_SCANNER = "policy_surface";
 const SCENARIO = "policy_surface_review";
@@ -224,6 +225,7 @@ interface PolicyBrowserRuntime {
 export async function policySurfaceScanner(
   input: PolicySurfaceScannerInput,
 ): Promise<PolicySurfaceScannerResult> {
+  throwIfAborted(input.signal);
   const moduleStartedAtMs = Date.now();
   const moduleStartedAt = new Date(moduleStartedAtMs).toISOString();
   const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
@@ -694,6 +696,8 @@ export async function policySurfaceScanner(
       artifactRefs,
     };
   } catch (error) {
+    const cancellation = abortReason(input.signal);
+    if (cancellation) throw cancellation;
     return {
       moduleRun: moduleRun("failed", moduleStartedAt, moduleStartedAtMs, [
         policyModuleDeadlineReached
@@ -706,7 +710,7 @@ export async function policySurfaceScanner(
   } finally {
     clearTimeout(policyModuleDeadlineTimer);
     input.signal?.removeEventListener("abort", abortPolicyRuntime);
-    await policyBrowserRuntime.close();
+    await boundedCleanup(policyBrowserRuntime.close());
   }
 }
 

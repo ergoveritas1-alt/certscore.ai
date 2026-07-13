@@ -61,6 +61,10 @@ export type LocalV2DagLambdaDispatchPayload = {
 export type LocalV2DagLambdaResultMessage = {
   artifactOnly: true;
   artifactMetadata?: {
+    failureDiagnosticUri?: {
+      sha256: string;
+      sizeBytes: number;
+    };
     manifestUri?: {
       sha256: string;
       sizeBytes: number;
@@ -79,6 +83,7 @@ export type LocalV2DagLambdaResultMessage = {
     };
   };
   artifactPointers?: {
+    failureDiagnosticUri?: string;
     manifestUri?: string;
     reportAdapterArtifactUri?: string;
     reviewArtifactUri?: string;
@@ -1285,6 +1290,7 @@ function parseLocalV2DagLambdaShardResult(
 function parseArtifactPointersRecord(value: unknown): LocalV2DagLambdaArtifactPointers {
   const record = asRecord(value);
   return {
+    failureDiagnosticUri: compactString(record.failureDiagnosticUri) ?? undefined,
     manifestUri: compactString(record.manifestUri) ?? undefined,
     reportAdapterArtifactUri: compactString(record.reportAdapterArtifactUri) ?? undefined,
     reviewArtifactUri: compactString(record.reviewArtifactUri) ?? undefined,
@@ -1295,6 +1301,7 @@ function parseArtifactPointersRecord(value: unknown): LocalV2DagLambdaArtifactPo
 function parseArtifactMetadataRecord(value: unknown): LocalV2DagLambdaArtifactMetadata {
   const record = asRecord(value);
   return {
+    failureDiagnosticUri: parseArtifactMetadataEntry(record.failureDiagnosticUri),
     manifestUri: parseArtifactMetadataEntry(record.manifestUri),
     reportAdapterArtifactUri: parseArtifactMetadataEntry(record.reportAdapterArtifactUri),
     reviewArtifactUri: parseArtifactMetadataEntry(record.reviewArtifactUri),
@@ -1843,6 +1850,80 @@ function s3Uri(bucket: string, key: string) {
   return `s3://${bucket}/${key.replace(/^\/+/g, "")}`;
 }
 
+async function writeAndUploadFailureDiagnostic(input: {
+  artifactChainTimeoutMs: number;
+  artifactRoot: string;
+  cancellationReason: string;
+  handlerStartedAt: Date;
+  payload: LocalV2DagLambdaDispatchPayload;
+  s3Client?: S3PutClient;
+  scannerWorkTimeoutMs: number;
+}): Promise<{ artifactMetadata: LocalV2DagLambdaArtifactMetadata; artifactPointers: LocalV2DagLambdaArtifactPointers }> {
+  const phaseRecord: Record<string, unknown> = await readFile(path.join(input.artifactRoot, "V2ScanCorePhases.json"), "utf8")
+    .then((value) => asRecord(JSON.parse(value)))
+    .catch((): Record<string, unknown> => ({}));
+  const checkpoints = Array.isArray(phaseRecord.checkpoints)
+    ? phaseRecord.checkpoints.slice(0, 100).map((value) => {
+      const row = asRecord(value);
+      const detail = asRecord(row.detail);
+      return {
+        at: compactString(row.at) ?? undefined,
+        elapsedMs: typeof row.elapsedMs === "number" ? row.elapsedMs : undefined,
+        name: compactString(row.name) ?? "unknown",
+        status: compactString(row.status) ?? "unknown",
+        detail: {
+          deadlineMs: typeof detail.deadlineMs === "number" ? detail.deadlineMs : undefined,
+          durationMs: typeof detail.durationMs === "number" ? detail.durationMs : undefined,
+          reason: compactString(detail.reason) ?? undefined,
+          status: compactString(detail.status) ?? undefined,
+        },
+      };
+    })
+    : [];
+  const body = Buffer.from(`${JSON.stringify({
+    artifactOnly: true,
+    artifactVersion: "certscore.v2_lambda_failure_diagnostic.1",
+    cancellationReason: input.cancellationReason.slice(0, 240),
+    configuredBudgets: {
+      artifactChainTimeoutMs: input.artifactChainTimeoutMs,
+      scannerWorkTimeoutMs: input.scannerWorkTimeoutMs,
+    },
+    generatedAt: new Date().toISOString(),
+    handlerElapsedMs: Date.now() - input.handlerStartedAt.getTime(),
+    lastCheckpoint: checkpoints.at(-1) ?? null,
+    phaseCheckpoints: checkpoints,
+    productionFindingIntegration: false,
+    scanId: input.payload.scanId,
+  })}\n`, "utf8");
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  const bucket = requireArtifactBucket();
+  const key = `${artifactKeyPrefix(input.payload)}/failure/FailureDiagnostic.json`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error("Failure diagnostic upload deadline reached.")), 1_500);
+  try {
+    const s3Client = input.s3Client ?? new S3Client({ region: input.payload.awsRegion });
+    await s3Client.send(new PutObjectCommand({
+      Body: body,
+      Bucket: bucket,
+      ContentType: "application/json",
+      Key: key,
+      Metadata: {
+        "certscore-artifact-field": "failureDiagnosticUri",
+        "certscore-artifact-sha256": sha256,
+        "certscore-artifact-size-bytes": String(body.byteLength),
+        "certscore-production-finding-integration": "false",
+        "certscore-v2-artifact-only": "true",
+      },
+    }), { abortSignal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+  return {
+    artifactMetadata: { failureDiagnosticUri: { sha256, sizeBytes: body.byteLength } },
+    artifactPointers: { failureDiagnosticUri: s3Uri(bucket, key) },
+  };
+}
+
 function parseS3Uri(uri: string) {
   if (!uri.startsWith("s3://")) {
     throw new Error(`Local v2 DAG Lambda artifact URI must be s3://, got ${uri.slice(0, 24)}.`);
@@ -2163,9 +2244,12 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let artifactChainStartedAt: Date | undefined;
   let artifactChainCompletedAt: Date | undefined;
   let phaseTimings: LocalV2DagLambdaPhaseTiming[] | undefined;
+  let artifactRoot: string | undefined;
   let scannerAbortController: AbortController | undefined;
   let scannerDeadlineTimer: NodeJS.Timeout | undefined;
   let handlerSafetyTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS;
+  let scannerWorkTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS;
+  let artifactChainTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS;
   let resultPublishTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS;
 
   const remainingResultPublishMs = () => Math.max(
@@ -2176,7 +2260,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   try {
     payload = parseLocalV2DagLambdaDispatchPayload(event);
     const workspaceRoot = options.workspaceRoot ?? process.cwd();
-    const artifactRoot = buildLocalV2DagLambdaArtifactRoot({
+    artifactRoot = buildLocalV2DagLambdaArtifactRoot({
       scanId: payload.scanId,
       workspaceRoot
     });
@@ -2194,11 +2278,11 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       options.handlerSafetyTimeoutMs === undefined ? 5_000 : 10,
       Math.min(configuredHandlerSafetyTimeoutMs, 60_000)
     );
-    const scannerWorkTimeoutMs = Math.max(10, Math.min(
+    scannerWorkTimeoutMs = Math.max(10, Math.min(
       options.scannerWorkTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS,
       Math.max(10, handlerSafetyTimeoutMs - 15_000)
     ));
-    const artifactChainTimeoutMs = Math.max(scannerWorkTimeoutMs, Math.min(
+    artifactChainTimeoutMs = Math.max(scannerWorkTimeoutMs, Math.min(
       options.artifactChainTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
       Math.max(scannerWorkTimeoutMs, handlerSafetyTimeoutMs - 8_000)
     ));
@@ -2260,8 +2344,21 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         workerLane: payload.workerLane ?? "coordinator"
       };
     }
+    const failureDiagnostic = artifactRoot && (scannerDeadlineAborted || error instanceof LocalV2DagLambdaSafetyTimeoutError)
+      ? await writeAndUploadFailureDiagnostic({
+        artifactRoot,
+        artifactChainTimeoutMs,
+        cancellationReason: error instanceof Error ? error.message : String(error),
+        handlerStartedAt,
+        payload,
+        scannerWorkTimeoutMs,
+        s3Client: options.s3Client,
+      }).catch(() => undefined)
+      : undefined;
     const completedAt = now();
     const result = buildLocalV2DagLambdaResultMessage({
+      artifactMetadata: failureDiagnostic?.artifactMetadata,
+      artifactPointers: failureDiagnostic?.artifactPointers,
       completedAt,
       error: {
         code: error instanceof LocalV2DagLambdaSafetyTimeoutError

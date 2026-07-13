@@ -38,6 +38,7 @@ import { consentFlowRuntimeScannerPlaceholder, policySurfaceScannerPlaceholder }
 import { detectConsentUi, preConsentRuntimeScanner, type PreConsentRuntimeScannerResult } from "./scanners/pre-consent-runtime-scanner.js";
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runtime.js";
+import { throwIfAborted } from "./abort.js";
 
 type ConsentFlowRuntimeScanner = typeof import("./scanners/consent-flow-runtime-scanner.js").consentFlowRuntimeScanner;
 type ConsentFlowRuntimeInput = Parameters<ConsentFlowRuntimeScanner>[0];
@@ -129,6 +130,7 @@ export interface ConsentActionRecipeInput {
 }
 
 export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBundle> {
+  throwIfAborted(input.signal);
   const startedAtMs = Date.now();
   const startedAt = new Date(startedAtMs).toISOString();
   const scanProfile = getScanProfile(input.profile ?? "tiny");
@@ -230,6 +232,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   try {
     await phaseRecorder.record("pre_consent_runtime", preConsentEnabled ? "started" : "skipped");
     preConsentResult = await preConsentResultPromise;
+    throwIfAborted(input.signal);
     await phaseRecorder.record("pre_consent_runtime", "completed", {
       durationMs: preConsentResult.moduleRun.durationMs,
       status: preConsentResult.moduleRun.status,
@@ -393,6 +396,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   }
   const seededPrivacyControlUrls = normalizeSeedUrls(input.privacyControlUrls ?? []);
   if (!policySurfaceSettled && plannedParallel && policySurfaceEnabled && !earlyConfirmedNoGo) {
+    throwIfAborted(input.signal);
     await phaseRecorder.record("policy_surface_planning_deadline", "started", {
       deadlineMs: input.policyPlanningDeadlineMs ?? 1_500,
     });
@@ -451,6 +455,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     });
   }
   const policyRequiredForOutput = policySurfaceEnabled && !earlyConfirmedNoGo && (!plannedParallel || !consentFlowEnabled || input.captureReplay);
+  throwIfAborted(input.signal);
   await phaseRecorder.record("policy_surface_for_output", policyRequiredForOutput ? "started" : "skipped");
   if (policyRequiredForOutput) {
     policySurfaceSettled ??= await policySurfaceResultPromise;

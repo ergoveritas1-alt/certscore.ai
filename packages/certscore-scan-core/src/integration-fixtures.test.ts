@@ -1222,6 +1222,8 @@ test("pre-consent runtime scanner recaptures late settings controls from high-co
       path.join(tempRoot, "consent-cmp-script-late-settings"),
       "fast",
       "selective",
+      undefined,
+      25_000,
     );
     const observation = bundle.consentUiObservations[0];
     const cmpRecaptureTiming = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
@@ -1289,6 +1291,8 @@ test("pre-consent runtime scanner keeps high-confidence CMP recapture open long 
       path.join(tempRoot, "consent-cmp-script-very-late-settings"),
       "fast",
       "selective",
+      undefined,
+      25_000,
     );
     const observation = bundle.consentUiObservations[0];
     const cmpRecaptureTiming = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
@@ -2103,6 +2107,7 @@ async function scanFixturePage(
   waitMode: "full" | "fast" = "full",
   screenshotMode: "always" | "selective" | "never" = "always",
   screenshotCaptureMode?: "full_page_first" | "viewport_first",
+  internalBudgetMs?: number,
 ): Promise<CanonicalEvidenceBundle> {
   const startedAtMs = Date.now();
   const scanProfile = getScanProfile("quick");
@@ -2111,7 +2116,7 @@ async function scanFixturePage(
     url,
     normalizedUrl: url,
     scanStartedAtMs: startedAtMs,
-    internalBudgetMs: waitMode === "fast" ? 6_000 : scanProfile.internalBudgetMs,
+    internalBudgetMs: internalBudgetMs ?? (waitMode === "fast" ? 6_000 : scanProfile.internalBudgetMs),
     artifactWriter,
     routeFulfillers,
     screenshotCaptureMode,

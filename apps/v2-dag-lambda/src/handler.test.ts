@@ -364,6 +364,43 @@ test("handler publishes a terminal failure before the Lambda hard timeout", asyn
   assert.equal(scannerSignal?.aborted, true);
 });
 
+test("handler uploads a bounded artifact-only failure diagnostic on scanner timeout", async () => {
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "failure-diagnostic-test";
+  const uploads: Array<{ body: string; key: string }> = [];
+  try {
+    const result = await handler(validPayload(), {
+      artifactChainTimeoutMs: 30,
+      handlerSafetyTimeoutMs: 50,
+      scannerWorkTimeoutMs: 10,
+      runArtifactChain: async () => await new Promise(() => undefined),
+      s3Client: {
+        async send(command: PutObjectCommand) {
+          uploads.push({
+            body: Buffer.from(command.input.Body as Uint8Array).toString("utf8"),
+            key: String(command.input.Key),
+          });
+          return { $metadata: {} };
+        },
+      },
+      sqsClient: {
+        async send() {
+          return { $metadata: {} };
+        },
+      },
+    });
+    assert.equal(result.status, "failed");
+    assert.match(result.artifactPointers?.failureDiagnosticUri ?? "", /FailureDiagnostic\.json$/);
+    assert.equal(uploads.length, 1);
+    assert.ok(uploads[0]?.body.length && uploads[0].body.length < 20_000);
+    assert.match(uploads[0]?.body ?? "", /certscore\.v2_lambda_failure_diagnostic\.1/);
+    assert.doesNotMatch(uploads[0]?.body ?? "", /cookieValue|documentText|requestBody|nanoReasoning/i);
+  } finally {
+    if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+  }
+});
+
 test("terminal SQS publication is bounded and aborts the SDK call", async () => {
   let observedSignal: AbortSignal | undefined;
   const startedAt = Date.now();

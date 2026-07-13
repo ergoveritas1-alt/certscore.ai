@@ -66,7 +66,13 @@ export function SiteHeader() {
             </div>
           </details>
           {navLinks.slice(3).map((link) => (
-            <Link key={link.href} href={link.href} className="text-sm text-slate-600 hover:text-ink">
+            <Link
+              key={link.href}
+              href={link.href}
+              className={link.label === "Contact"
+                ? "rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100 hover:text-sky-800"
+                : "text-sm text-slate-600 hover:text-ink"}
+            >
               {link.label}
             </Link>
           ))}

@@ -79,6 +79,10 @@ export type LocalV2DagLambdaHandlerTiming = {
 export type LocalV2DagLambdaResultMessage = {
   artifactOnly: true;
   artifactMetadata?: {
+    failureDiagnosticUri?: {
+      sha256: string;
+      sizeBytes: number;
+    };
     manifestUri?: {
       sha256: string;
       sizeBytes: number;
@@ -97,6 +101,7 @@ export type LocalV2DagLambdaResultMessage = {
     };
   };
   artifactPointers?: {
+    failureDiagnosticUri?: string;
     manifestUri?: string;
     reportAdapterArtifactUri?: string;
     reviewArtifactUri?: string;
@@ -409,11 +414,15 @@ function parseJson(value: unknown): unknown {
 function parseArtifactPointers(value: unknown): LocalV2DagLambdaResultMessage["artifactPointers"] {
   const record = asRecord(value);
   const artifactPointers: NonNullable<LocalV2DagLambdaResultMessage["artifactPointers"]> = {};
+  const failureDiagnosticUri = stringValue(record.failureDiagnosticUri);
   const manifestUri = stringValue(record.manifestUri);
   const reportAdapterArtifactUri = stringValue(record.reportAdapterArtifactUri);
   const reviewArtifactUri = stringValue(record.reviewArtifactUri);
   const scanArtifactUri = stringValue(record.scanArtifactUri);
 
+  if (failureDiagnosticUri) {
+    artifactPointers.failureDiagnosticUri = requireDurableArtifactUri(failureDiagnosticUri);
+  }
   if (manifestUri) {
     artifactPointers.manifestUri = requireDurableArtifactUri(manifestUri);
   }
@@ -439,7 +448,7 @@ function requireDurableArtifactUri(value: string) {
 
 function parseArtifactMetadata(value: unknown): LocalV2DagLambdaResultMessage["artifactMetadata"] {
   const record = asRecord(value);
-  const fields = ["manifestUri", "reportAdapterArtifactUri", "reviewArtifactUri", "scanArtifactUri"] as const;
+  const fields = ["failureDiagnosticUri", "manifestUri", "reportAdapterArtifactUri", "reviewArtifactUri", "scanArtifactUri"] as const;
   const artifactMetadata: NonNullable<LocalV2DagLambdaResultMessage["artifactMetadata"]> = {};
 
   for (const field of fields) {

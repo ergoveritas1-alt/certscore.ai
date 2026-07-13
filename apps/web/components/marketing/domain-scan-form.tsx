@@ -698,7 +698,7 @@ export function DomainScanForm({
             autoComplete="url"
             className={
               variant === "homepage-hero"
-                ? "h-14 rounded-full border-[3px] border-sky-400 bg-white pl-6 pr-44 text-base font-semibold text-slate-950 shadow-[0_0_0_1px_rgba(255,255,255,0.9),0_16px_42px_rgba(14,165,233,0.3)] placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-400/30 sm:h-16 sm:pr-48 sm:text-lg"
+                ? "h-14 rounded-[16px] border-[3px] border-sky-400 bg-white pl-6 pr-44 text-base font-semibold text-slate-950 shadow-[0_0_0_1px_rgba(255,255,255,0.9),0_16px_42px_rgba(14,165,233,0.3)] placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-400/30 sm:h-16 sm:pr-48 sm:text-lg"
                 : compact
                 ? "h-12 rounded-[1.2rem] border-2 border-sky-500 pr-40 text-left text-sm font-semibold shadow-[0_12px_30px_rgba(14,165,233,0.12)] placeholder:text-left focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
                 : "h-14 rounded-[1.6rem] border-2 border-sky-500 pr-32 text-base font-semibold shadow-[0_14px_34px_rgba(14,165,233,0.12)] focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
@@ -766,7 +766,7 @@ export function DomainScanForm({
             aria-label={buttonLabel}
             className={
               variant === "homepage-hero"
-                ? "absolute right-1.5 top-1/2 h-11 w-[118px] -translate-y-1/2 rounded-full border border-emerald-300/70 bg-[linear-gradient(135deg,#45c957_0%,#56bd58_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(34,197,94,0.28)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-emerald-300/40 sm:h-[52px] sm:w-[126px] sm:text-base"
+                ? "absolute right-1.5 top-1/2 h-11 w-[118px] -translate-y-1/2 rounded-[13px] border border-emerald-300/70 bg-[linear-gradient(135deg,#45c957_0%,#56bd58_100%)] px-4 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_7px_18px_rgba(34,197,94,0.28)] hover:brightness-110 focus-visible:ring-4 focus-visible:ring-emerald-300/40 sm:h-[52px] sm:w-[126px] sm:text-base"
                 : compact
                 ? "absolute right-2 top-1/2 h-8 -translate-y-1/2 rounded-full border-0 bg-slate-950 px-4 text-xs font-semibold text-white shadow-none hover:bg-slate-800"
                 : "absolute right-3 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border-0 bg-[linear-gradient(135deg,#47b54a_0%,#5ec158_58%,#7ccf79_100%)] px-0 text-white shadow-[0_10px_24px_rgba(71,181,74,0.16)] hover:brightness-[1.04]"
@@ -778,7 +778,7 @@ export function DomainScanForm({
               <span className="text-xs">...</span>
             ) : (
               variant === "homepage-hero" ? (
-                <span>Free scan</span>
+                <span className="whitespace-nowrap">Run free scan</span>
               ) : compact ? (
                 <span>Scan</span>
               ) : (

@@ -45,6 +45,7 @@ import {
 } from "../domain-utils.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
+import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
 
 const SOURCE_SCANNER = "pre_consent_runtime";
 const SCENARIO = "fresh_pre_consent";
@@ -132,7 +133,9 @@ export interface PreConsentRuntimeScannerResult {
 export async function preConsentRuntimeScanner(
   input: PreConsentRuntimeScannerInput,
 ): Promise<PreConsentRuntimeScannerResult> {
+  throwIfAborted(input.signal);
   const moduleStartedAtMs = Date.now();
+  const moduleDeadlineAtMs = moduleStartedAtMs + input.internalBudgetMs;
   const moduleStartedAt = new Date(moduleStartedAtMs).toISOString();
   const remainingModuleBudgetMs = () => Math.max(0, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
   const timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
@@ -155,7 +158,11 @@ export async function preConsentRuntimeScanner(
     artifactRefs: [],
     notes: input.screenshotMode === "never" ? ["Pre-consent screenshot capture disabled by scan mode."] : [],
   };
-  const transportNetworkProbesPromise = startTransportNetworkProbes(input.normalizedUrl);
+  const transportNetworkProbesPromise = startTransportNetworkProbes(
+    input.normalizedUrl,
+    input.signal,
+    moduleDeadlineAtMs,
+  );
 
   const browserMode = input.browserMode ?? "headless";
   const ownsBrowser = !input.browser;
@@ -712,6 +719,7 @@ export async function preConsentRuntimeScanner(
         page,
         scanStartedAtMs: input.scanStartedAtMs,
         timingBreakdown,
+        deadlineAtMs: moduleDeadlineAtMs,
       });
       const recapturedConsentObservation = highConfidenceCmpRuntimeEvidence
         ? await recordParentTiming(
@@ -1077,6 +1085,7 @@ export async function preConsentRuntimeScanner(
       artifactRef: undefined,
     });
     const transportNetworkProbes = await transportNetworkProbesPromise;
+    throwIfAborted(input.signal);
     timingBreakdown.push({
       label: "transport security network probes",
       detail: "HTTP redirect and strict TLS probes overlapped browser launch, navigation, consent observation, and evidence capture.",
@@ -1143,6 +1152,8 @@ export async function preConsentRuntimeScanner(
       vendorResolverInputs,
     };
   } catch (error) {
+    const cancellation = abortReason(input.signal);
+    if (cancellation) throw cancellation;
     const errorMessage = error instanceof Error ? error.message : String(error);
     if (!consentGeometryDiagnosticWritten) {
       await writeConsentGeometryNoGoArtifact(input.artifactWriter, input.normalizedUrl, errorMessage, initialNavigationHttpStatus)
@@ -1221,10 +1232,7 @@ export async function preConsentRuntimeScanner(
   } finally {
     input.signal?.removeEventListener("abort", abortRuntime);
     if (ownsBrowser) {
-      await Promise.race([
-        browser.close().catch(() => undefined),
-        new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
-      ]);
+      await boundedCleanup(browser.close(), 1_000);
     }
   }
 
@@ -2215,6 +2223,7 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   page: Page;
   scanStartedAtMs: number;
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
+  deadlineAtMs: number;
 }): Promise<ConsentUiObservation> {
   await installConsentGateMutationProbe(input.page);
   let current = input.initialObservation;
@@ -2242,7 +2251,11 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   }
 
   const waitToGate = async (gateMs: number) => {
-    const remainingMs = Math.max(0, gateMs - (Date.now() - input.navigationStartedAtMs));
+    const remainingBudgetMs = Math.max(0, input.deadlineAtMs - Date.now());
+    const remainingMs = Math.min(
+      remainingBudgetMs,
+      Math.max(0, gateMs - (Date.now() - input.navigationStartedAtMs)),
+    );
     const candidate = await detectConsentUi(
       input.page,
       input.scanStartedAtMs,
@@ -4499,11 +4512,16 @@ type TransportNetworkProbes = {
   tlsProbe: TransportSecurityObservation["tlsProbe"];
 };
 
-async function startTransportNetworkProbes(normalizedUrl: string): Promise<TransportNetworkProbes> {
+async function startTransportNetworkProbes(
+  normalizedUrl: string,
+  signal?: AbortSignal,
+  deadlineAtMs = Date.now() + 10_000,
+): Promise<TransportNetworkProbes> {
   const startedAtMs = Date.now();
+  throwIfAborted(signal);
   const [httpProbe, tlsProbe] = await Promise.all([
-    probeHttpRedirect(normalizedUrl),
-    probeStrictTls(normalizedUrl),
+    probeHttpRedirect(normalizedUrl, signal, deadlineAtMs),
+    probeStrictTls(normalizedUrl, signal, deadlineAtMs),
   ]);
   return {
     durationMs: Date.now() - startedAtMs,
@@ -4556,7 +4574,11 @@ function emptyTransportSecurityObservation(input: {
   };
 }
 
-async function probeHttpRedirect(normalizedUrl: string): Promise<TransportSecurityObservation["httpProbe"]> {
+async function probeHttpRedirect(
+  normalizedUrl: string,
+  signal?: AbortSignal,
+  deadlineAtMs = Date.now() + 10_000,
+): Promise<TransportSecurityObservation["httpProbe"]> {
   const inputUrl = originProbeUrl(normalizedUrl, "http");
   if (!inputUrl) {
     return { attempted: false, errorCategory: "unsupported_url", redirectChain: [] };
@@ -4566,7 +4588,10 @@ async function probeHttpRedirect(normalizedUrl: string): Promise<TransportSecuri
   let currentUrl = inputUrl;
   try {
     for (let index = 0; index < 8; index += 1) {
-      const response = await fetchWithTimeout(currentUrl, 8_000);
+      throwIfAborted(signal);
+      const remainingMs = deadlineAtMs - Date.now();
+      if (remainingMs <= 0) throw new Error("HTTP redirect probe module deadline reached");
+      const response = await fetchWithTimeout(currentUrl, Math.min(8_000, remainingMs), signal);
       const location = response.headers.get("location");
       const isRedirect = response.status >= 300 && response.status < 400 && Boolean(location);
       if (!isRedirect || !location) {
@@ -4620,7 +4645,11 @@ async function probeHttpRedirect(normalizedUrl: string): Promise<TransportSecuri
   }
 }
 
-async function probeStrictTls(normalizedUrl: string): Promise<TransportSecurityObservation["tlsProbe"]> {
+async function probeStrictTls(
+  normalizedUrl: string,
+  signal?: AbortSignal,
+  deadlineAtMs = Date.now() + 5_000,
+): Promise<TransportSecurityObservation["tlsProbe"]> {
   const inputUrl = originProbeUrl(normalizedUrl, "https");
   if (!inputUrl) {
     return { attempted: false, errorCategory: "unsupported_url" };
@@ -4629,12 +4658,14 @@ async function probeStrictTls(normalizedUrl: string): Promise<TransportSecurityO
 
   return new Promise((resolve) => {
     let settled = false;
+    let abortListener: (() => void) | undefined;
     const settle = (result: TransportSecurityObservation["tlsProbe"]) => {
       if (settled) {
         return;
       }
       settled = true;
       clearTimeout(timeout);
+      if (abortListener) signal?.removeEventListener("abort", abortListener);
       resolve(result);
     };
     const socket = tlsConnect({
@@ -4657,6 +4688,11 @@ async function probeStrictTls(normalizedUrl: string): Promise<TransportSecurityO
       });
       socket.end();
     });
+    abortListener = () => {
+      socket.destroy(abortReason(signal) ?? new Error("strict TLS probe aborted"));
+      settle({ attempted: true, inputUrl: sanitizeTransportUrl(inputUrl), validCertificate: false, errorCategory: "timeout", errorMessage: "strict TLS probe aborted" });
+    };
+    signal?.addEventListener("abort", abortListener, { once: true });
     const timeout = setTimeout(() => {
       socket.destroy(new Error("strict TLS probe timed out"));
       settle({
@@ -4666,7 +4702,7 @@ async function probeStrictTls(normalizedUrl: string): Promise<TransportSecurityO
         errorCategory: "timeout",
         errorMessage: "strict TLS probe timed out",
       });
-    }, 5_000);
+    }, Math.max(1, Math.min(5_000, deadlineAtMs - Date.now())));
     socket.on("error", (error) => {
       settle({
         attempted: true,
@@ -4679,16 +4715,19 @@ async function probeStrictTls(normalizedUrl: string): Promise<TransportSecurityO
   });
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number) {
-  const headResponse = await fetchOnceWithTimeout(url, Math.min(2_000, timeoutMs), "HEAD").catch(() => null);
+async function fetchWithTimeout(url: string, timeoutMs: number, signal?: AbortSignal) {
+  const headResponse = await fetchOnceWithTimeout(url, Math.min(2_000, timeoutMs), "HEAD", signal).catch(() => null);
   if (headResponse) {
     return headResponse;
   }
-  return fetchOnceWithTimeout(url, timeoutMs, "GET");
+  throwIfAborted(signal);
+  return fetchOnceWithTimeout(url, timeoutMs, "GET", signal);
 }
 
-async function fetchOnceWithTimeout(url: string, timeoutMs: number, method: "GET" | "HEAD") {
+async function fetchOnceWithTimeout(url: string, timeoutMs: number, method: "GET" | "HEAD", parentSignal?: AbortSignal) {
   const controller = new AbortController();
+  const abortFromParent = () => controller.abort(abortReason(parentSignal) ?? undefined);
+  parentSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(new Error("HTTP redirect probe timed out")), timeoutMs);
   try {
     return await fetch(url, {
@@ -4698,6 +4737,7 @@ async function fetchOnceWithTimeout(url: string, timeoutMs: number, method: "GET
     });
   } finally {
     clearTimeout(timeout);
+    parentSignal?.removeEventListener("abort", abortFromParent);
   }
 }
 
