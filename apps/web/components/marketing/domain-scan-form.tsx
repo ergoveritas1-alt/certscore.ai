@@ -319,6 +319,18 @@ export function getScanSubmitDestination(mode: ScanMode, payload: ScanSubmitPayl
   return payload.scanUrl ?? (payload.scanId ? `/app/scans/${payload.scanId}` : null);
 }
 
+export function restrictLocalExtensionScanFrom(input: {
+  allowLocalExtensionScan: boolean;
+  allowRestrictedScanOptions: boolean;
+  scanFrom: ScanFrom;
+}): ScanFrom {
+  if (input.scanFrom === "local_extension" && (!input.allowLocalExtensionScan || !input.allowRestrictedScanOptions)) {
+    return "eu_ie";
+  }
+
+  return input.scanFrom;
+}
+
 export function DomainScanForm({
   allowLocalExtensionScan = true,
   allowRestrictedScanOptions = false,
@@ -335,6 +347,12 @@ export function DomainScanForm({
   variant = "default"
 }: DomainScanFormProps) {
   const router = useRouter();
+  const canUseLocalExtensionScan = allowLocalExtensionScan && allowRestrictedScanOptions;
+  const allowedDefaultScanFrom = restrictLocalExtensionScanFrom({
+    allowLocalExtensionScan,
+    allowRestrictedScanOptions,
+    scanFrom: defaultScanFrom
+  });
   const [domain, setDomain] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<"error" | "info">("error");
@@ -345,7 +363,7 @@ export function DomainScanForm({
   const [hasRecentReusableScan, setHasRecentReusableScan] = useState(false);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
-  const [scanFrom, setScanFrom] = useState<ScanFrom>(defaultScanFrom);
+  const [scanFrom, setScanFrom] = useState<ScanFrom>(allowedDefaultScanFrom);
   const [heroPlaceholder, setHeroPlaceholder] = useState(HERO_IDLE_PLACEHOLDER);
   const isSubmittingRef = useRef(false);
   const scanProgress = useScanProgressClock(isSubmitting);
@@ -410,12 +428,12 @@ export function DomainScanForm({
   }, [variant]);
 
   useEffect(() => {
-    if (!allowLocalExtensionScan && scanFrom === "local_extension") {
-      setScanFrom(defaultScanFrom);
+    if (!canUseLocalExtensionScan && scanFrom === "local_extension") {
+      setScanFrom(allowedDefaultScanFrom);
       setLocalExtensionStatus(null);
       setShowExtensionInstructions(false);
     }
-  }, [allowLocalExtensionScan, defaultScanFrom, scanFrom]);
+  }, [allowedDefaultScanFrom, canUseLocalExtensionScan, scanFrom]);
 
   useEffect(() => {
     if (LOCALHOST_FULL_SCAN_QUEUE_ENABLED && !allowRestrictedScanOptions) {
@@ -577,7 +595,7 @@ export function DomainScanForm({
     setIsSubmitting(true);
 
     try {
-      if (mode === "full" && scanFrom === "local_extension") {
+      if (mode === "full" && canUseLocalExtensionScan && scanFrom === "local_extension") {
         try {
           await startLocalExtensionScan(submittedDomain);
         } catch (error) {
@@ -723,7 +741,7 @@ export function DomainScanForm({
                 freshRescanValue={freshRescan}
                 includeLocalV2ScanProfileOption
                 includeFreshRescanOption={showFreshRescanOption}
-                includeLocalExtension={allowLocalExtensionScan}
+                includeLocalExtension={canUseLocalExtensionScan}
                 localV2ScanProfileValue={localV2ScanProfile}
                 localV2RunViaLambdaValue={localV2RunViaLambda}
                 onChange={setScanFrom}

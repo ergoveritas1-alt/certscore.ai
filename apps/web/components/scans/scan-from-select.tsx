@@ -105,7 +105,7 @@ export function ScanFromSelect({
   const menuRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const options = SCAN_FROM_OPTIONS.filter((option) => {
-    if (!includeLocalExtension && option.value === "local_extension") {
+    if ((!includeLocalExtension || !allowRestrictedScanOptions) && option.value === "local_extension") {
       return false;
     }
     return true;

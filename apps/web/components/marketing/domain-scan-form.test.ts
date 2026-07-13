@@ -5,6 +5,7 @@ import {
   buildRecentScanAvailabilityUrl,
   getScanSubmitDestination,
   parseScanSubmitPayload,
+  restrictLocalExtensionScanFrom,
   shouldExpectRecentScanReuse
 } from "./domain-scan-form";
 
@@ -58,5 +59,24 @@ test("parseScanSubmitPayload does not surface raw HTML error documents", () => {
       code: "non_json_response",
       error: "The scan service returned an unexpected response. Please try again."
     }
+  );
+});
+
+test("Chrome browser scan source is restricted to admins", () => {
+  assert.equal(
+    restrictLocalExtensionScanFrom({
+      allowLocalExtensionScan: true,
+      allowRestrictedScanOptions: false,
+      scanFrom: "local_extension"
+    }),
+    "eu_ie"
+  );
+  assert.equal(
+    restrictLocalExtensionScanFrom({
+      allowLocalExtensionScan: true,
+      allowRestrictedScanOptions: true,
+      scanFrom: "local_extension"
+    }),
+    "local_extension"
   );
 });

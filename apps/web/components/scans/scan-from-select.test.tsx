@@ -47,6 +47,7 @@ test("ScanFromSelect renders scan-from choices before option toggles", () => {
 test("ScanFromSelect defaults to EU-IR and keeps the Chrome browser option last", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
+      allowRestrictedScanOptions: true,
       includeLocalExtension: true,
       variant: "field"
     })
@@ -81,15 +82,17 @@ test("ScanFromSelect exposes every public region while hiding internal controls 
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       includeLocalV2ScanProfileOption: true,
+      includeLocalExtension: true,
       localV2RunViaLambdaValue: false,
-      value: "eu_de",
+      value: "local_extension",
       variant: "field"
     })
   );
 
-  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_de"/);
+  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_ie"/);
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="true"/);
-  assert.match(html, /EU-DE/);
+  assert.match(html, /EU-IR/);
+  assert.doesNotMatch(html, /Chrome browser/);
   assert.doesNotMatch(html, /Run via Lambda/);
 });
 
@@ -97,14 +100,15 @@ test("ScanFromSelect exposes restricted scan controls to admin users", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       allowRestrictedScanOptions: true,
+      includeLocalExtension: true,
       includeLocalV2ScanProfileOption: true,
       localV2RunViaLambdaValue: false,
-      value: "eu_de",
+      value: "local_extension",
       variant: "field"
     })
   );
 
-  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="eu_de"/);
+  assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="local_extension"/);
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="false"/);
-  assert.match(html, /EU-DE/);
+  assert.match(html, /Chrome browser/);
 });
