@@ -92,7 +92,7 @@ test("resolves the second production-discovered vendor wave", () => {
     { type: "request", url: "https://eb2.3lift.com/sync" },
     { type: "request", url: "https://user-sync.fwmrm.net/sync" },
     { type: "request", url: "https://sync.teads.tv/sync" },
-    { type: "request", hostname: "mc.yandex.com" },
+    { type: "request", url: "https://mc.yandex.com/metrika" },
   ]);
 
   for (const [vendor, product, purpose] of [
@@ -106,6 +106,23 @@ test("resolves the second production-discovered vendor wave", () => {
   ] as const) {
     assertResolved(observations, vendor, product, purpose);
   }
+});
+
+test("keeps Amazon Publisher Services separate from generic Amazon Ads", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://c.aps.amazon-adsystem.com/aps/prebid" },
+  ]);
+
+  assertResolved(observations, "Amazon", "Amazon Publisher Services", "advertising");
+  assert.equal(observations.some((item) => item.product === "Amazon Ads"), false);
+});
+
+test("does not classify unrelated Yandex hosts as advertising", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://www.yandex.com/unrelated" },
+  ]);
+
+  assert.equal(observations.some((item) => item.vendor === "Yandex"), false);
 });
 
 test("does not classify unrelated lookalike hosts as second-wave vendors", () => {

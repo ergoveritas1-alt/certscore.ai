@@ -194,6 +194,7 @@ type VendorDomainPatternAuditRow = {
 
 type ObservedVendorAuditRow = {
   category_count: number;
+  categories: string[];
   detection_sources: string[];
   first_seen: string | null;
   last_seen: string | null;
@@ -2293,7 +2294,8 @@ async function runVendorRegistryReconciliationAudit(input: AuditInput) {
       observedCount: row.observed_count,
       scanCount: row.scan_count,
       scriptHosts: row.script_hosts,
-      vendorName: row.vendor_name
+      vendorName: row.vendor_name,
+      categories: row.categories
     }))
   };
 }

@@ -98,6 +98,7 @@ interface VendorRule {
   globalPatterns?: RegExp[];
   storageKeyPatterns?: RegExp[];
   domSelectorPatterns?: RegExp[];
+  excludeHostPatterns?: RegExp[];
   requireUrlPatternMatch?: boolean;
   suppressCookieMatchedHostname?: boolean;
   basisLabel: string;
@@ -300,6 +301,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.94,
     hostPatterns: [/\.amazon-adsystem\.com$/i, /^aax\.amazon-adsystem\.com$/i],
+    excludeHostPatterns: [/^c\.amazon-adsystem\.com$/i, /\.aps\.amazon-adsystem\.com$/i],
     urlPatterns: [/\/e\/dt\b/i, /\/x\/px\//i],
     cookiePatterns: [/^ad-id$/i, /^ad-privacy$/i],
     basisLabel: "amazon_ads_endpoint_or_cookie",
@@ -377,6 +379,7 @@ const rules: VendorRule[] = [
     hostPatterns: [/\.yandex\.(?:ru|com|net)$/i, /^yandex\.(?:ru|com|net)$/i],
     urlPatterns: [/\/(?:watch|metrika|metrika_match|ads|yabs|sync|setuid)\b/i],
     cookiePatterns: [/^yabs-sid$/i, /^sync_cookie_csrf$/i, /^yandexuid$/i, /^yuid/i],
+    requireUrlPatternMatch: true,
     basisLabel: "yandex_ads_metrica_endpoint_or_cookie",
   },
   {
@@ -1991,7 +1994,7 @@ export function resolveVendorObservations(
 
     for (const rule of rules) {
       const matchedHost = hostname
-        ? matchesAny(hostname, rule.hostPatterns)
+        ? matchesAny(hostname, rule.hostPatterns) && !matchesAny(hostname, rule.excludeHostPatterns)
         : false;
       const matchedUrlPattern = url ? matchesAny(url, rule.urlPatterns) : false;
       const matchedUrl = matchedUrlPattern && (!rule.hostPatterns || matchedHost);
