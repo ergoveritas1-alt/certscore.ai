@@ -20,7 +20,7 @@
     "test": "tsx --tsconfig ../../tsconfig.base.json --test --test-concurrency=1 'src/*.test.ts'",
     "test:integration-fixtures": "tsx --tsconfig ../../tsconfig.base.json --test src/integration-fixtures.test.ts",
     "test:integration-fixtures:corpus": "tsx --tsconfig ../../tsconfig.base.json --test --test-name-pattern='^fixture corpus:' src/integration-fixtures.test.ts",
-    "test:integration-fixtures:consent": "node --import tsx --test --test-name-pattern='first-layer|choice controls|CMP recapture|CMP script|supplemental full-page|off-viewport|bare generic|post-screenshot consent|ambiguous consent' src/integration-fixtures.test.ts",
+    "test:integration-fixtures:consent": "node --import tsx --test --test-name-pattern='first-layer|choice controls|CMP recapture|CMP script|supplemental full-page|off-viewport|bare generic|post-screenshot consent|ambiguous consent|soft module deadline|parent scan is cancelled' src/integration-fixtures.test.ts",
     "test:policy-timing-quality": "node --import tsx --test --test-name-pattern='fast mode|thin shell|canonical GDPR Transparency|late-rendered localized|common-path fallback|speculative Nano|observed links are declined|rendered policy document fallback|rendered footer links' src/policy-surface-scanner.test.ts",
     "test:inspect-snapshots": "tsx --tsconfig ../../tsconfig.base.json --test src/inspect-snapshots.test.ts",
     "clean": "rm -rf dist"

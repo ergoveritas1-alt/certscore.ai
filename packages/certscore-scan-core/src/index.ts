@@ -95,6 +95,8 @@ export interface RunScanInput {
   preConsentScreenshotMode?: "always" | "selective" | "never";
   preConsentScreenshotTimeoutMs?: number;
   preConsentVisualFallbackDeadlineMs?: number;
+  /** Internal/test override that may shorten, but never extend, the profile module budget. */
+  preConsentModuleDeadlineMs?: number;
   consentFlowScreenshotMode?: "auto" | "none";
   consentFlowDeadlineMs?: number;
   consentFlowActionFinalSettleMs?: number;
@@ -195,6 +197,18 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     policySurfaceEnabled,
     preConsentEnabled,
   });
+  const preConsentModuleDeadlineMs = Math.max(
+    1_000,
+    Math.min(input.preConsentModuleDeadlineMs ?? scanProfile.internalBudgetMs, scanProfile.internalBudgetMs),
+  );
+  const preConsentDeadlineController = preConsentEnabled ? new AbortController() : undefined;
+  const preConsentDeadlineTimer = preConsentDeadlineController
+    ? setTimeout(() => {
+        preConsentDeadlineController.abort(new Error(
+          `Pre-consent runtime reached its ${preConsentModuleDeadlineMs}ms module budget; retained bounded partial evidence.`,
+        ));
+      }, preConsentModuleDeadlineMs)
+    : undefined;
   const preConsentResultPromise = preConsentEnabled
     ? preConsentRuntimeScanner({
       url: input.url,
@@ -207,8 +221,11 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       screenshotCaptureMode: leanPreConsent ? "viewport_first" : "full_page_first",
       screenshotMode: input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always"),
       screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
+      softDeadlineSignal: preConsentDeadlineController?.signal,
       waitMode: leanPreConsent ? "fast" : "full",
       signal: input.signal,
+    }).finally(() => {
+      if (preConsentDeadlineTimer) clearTimeout(preConsentDeadlineTimer);
     })
     : Promise.resolve(emptyPreConsentResult(nowIso(startedAtMs)));
   const policySurfaceResultPromise = policySurfaceEnabled

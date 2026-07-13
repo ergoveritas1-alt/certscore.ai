@@ -98,6 +98,12 @@ export interface PreConsentRuntimeScannerInput {
   screenshotTimeoutMs?: number;
   waitMode?: "full" | "fast";
   signal?: AbortSignal;
+  /**
+   * A module-local deadline may stop pre-consent collection without cancelling
+   * sibling scan modules. Evidence retained before this signal aborts is
+   * returned as an explicitly partial result.
+   */
+  softDeadlineSignal?: AbortSignal;
 }
 
 export interface FixtureRouteFulfiller {
@@ -133,6 +139,14 @@ export interface PreConsentRuntimeScannerResult {
 export async function preConsentRuntimeScanner(
   input: PreConsentRuntimeScannerInput,
 ): Promise<PreConsentRuntimeScannerResult> {
+  const parentSignal = input.signal;
+  const softDeadlineSignal = input.softDeadlineSignal;
+  const effectiveSignal = parentSignal && softDeadlineSignal
+    ? AbortSignal.any([parentSignal, softDeadlineSignal])
+    : parentSignal ?? softDeadlineSignal;
+  if (effectiveSignal !== input.signal) {
+    input = { ...input, signal: effectiveSignal };
+  }
   throwIfAborted(input.signal);
   const moduleStartedAtMs = Date.now();
   const moduleDeadlineAtMs = moduleStartedAtMs + input.internalBudgetMs;
@@ -183,6 +197,7 @@ export async function preConsentRuntimeScanner(
     }
   };
   input.signal?.addEventListener("abort", abortRuntime, { once: true });
+  if (input.signal?.aborted) abortRuntime();
   await recordTiming(
     timingBreakdown,
     "browser api probe install",
@@ -363,7 +378,69 @@ export async function preConsentRuntimeScanner(
   let initialNavigationHttpStatus: number | undefined;
   const fallbackConsentUiObservations: ConsentUiObservation[] = [];
   const fallbackDomSnapshots: DomSnapshotArtifact[] = [];
+  let retainedCookieSnapshot: CookieSnapshot | undefined;
+  let retainedStorageSnapshot: StorageSnapshot | undefined;
+  let retainedConsentUiObservation: ConsentUiObservation | undefined;
+  let retainedCollectionSurfaceObservations: CollectionSurfaceObservation[] = [];
+  let retainedCmpRuntimeObservations: CmpRuntimeObservation[] = [];
 
+  const buildSoftDeadlineResult = (): PreConsentRuntimeScannerResult => {
+    const deadlineReason = abortReason(softDeadlineSignal);
+    const errorMessage = deadlineReason instanceof Error
+      ? deadlineReason.message
+      : "Pre-consent runtime reached its module deadline.";
+    const retainedConsentUiObservations = retainedConsentUiObservation
+      ? [retainedConsentUiObservation, ...fallbackConsentUiObservations]
+      : [...fallbackConsentUiObservations];
+    const retainedEvidence =
+      networkEvents.length > 0 ||
+      networkResponseEvents.length > 0 ||
+      cookieEvents.length > 0 ||
+      scriptEvents.length > 0 ||
+      iframeEvents.length > 0 ||
+      screenshots.length > 0 ||
+      retainedConsentUiObservations.length > 0 ||
+      retainedCollectionSurfaceObservations.length > 0 ||
+      retainedCmpRuntimeObservations.length > 0;
+    return {
+      moduleRun: {
+        moduleName: "preConsentRuntimeScanner",
+        status: retainedEvidence ? "partial" : "skipped_budget",
+        startedAt: moduleStartedAt,
+        completedAt: new Date().toISOString(),
+        durationMs: Date.now() - moduleStartedAtMs,
+        timingBreakdown: [...timingBreakdown],
+        evidenceRefs: [],
+        errors: [...runtimeErrors, errorMessage, ...screenshotErrors],
+      },
+      runtimeTimeline: [...networkEvents, ...networkResponseEvents, ...cookieEvents, ...scriptEvents, ...iframeEvents, ...browserApiAccessEvents],
+      networkEvents: [...networkEvents],
+      networkResponseEvents: [...networkResponseEvents],
+      cookieEvents: [...cookieEvents],
+      cookieSnapshots: retainedCookieSnapshot ? [retainedCookieSnapshot] : [],
+      storageSnapshots: retainedStorageSnapshot ? [retainedStorageSnapshot] : [],
+      scriptEvents: [...scriptEvents],
+      iframeEvents: [...iframeEvents],
+      consentUiObservations: retainedConsentUiObservations,
+      collectionSurfaceObservations: [...retainedCollectionSurfaceObservations],
+      cmpRuntimeObservations: [...retainedCmpRuntimeObservations],
+      transportSecurityObservations: [],
+      screenshots: [...screenshots],
+      visualCapture: { ...visualCapture },
+      domSnapshots: [...fallbackDomSnapshots],
+      artifactRefs: [],
+      vendorResolverInputs: [...vendorResolverInputs],
+    };
+  };
+  const softDeadlineResultPromise = softDeadlineSignal
+    ? new Promise<PreConsentRuntimeScannerResult>((resolve) => {
+        const resolveDeadline = () => resolve(buildSoftDeadlineResult());
+        if (softDeadlineSignal.aborted) resolveDeadline();
+        else softDeadlineSignal.addEventListener("abort", resolveDeadline, { once: true });
+      })
+    : undefined;
+
+  const scanPromise = (async (): Promise<PreConsentRuntimeScannerResult> => {
   try {
     const navigationStartedAtMs = Date.now();
     const navigationResponse = await recordTiming(timingBreakdown, "page navigation", "Initial navigation until DOMContentLoaded.", () =>
@@ -465,7 +542,10 @@ export async function preConsentRuntimeScanner(
       scripts,
       storageSnapshot,
     } = pageEvidence;
+    retainedStorageSnapshot = storageSnapshot;
+    retainedCollectionSurfaceObservations = collectionSurfaceObservations;
     let consentObservation = initialConsentObservation;
+    retainedConsentUiObservation = consentObservation;
     let domText = initialDomText;
     if (
       consentObservation.basis.includes("bounded_capture_timeout_or_failure") &&
@@ -506,6 +586,7 @@ export async function preConsentRuntimeScanner(
           "recapture:post_settle_no_first_layer_controls",
         );
       }
+      retainedConsentUiObservation = consentObservation;
     }
     if (shouldRecaptureConsentUiAfterTimeout(consentObservation, { fastWait })) {
       const recaptureTimeoutMs = consentUiBudget.timeoutFor(fastWait ? 3_000 : 4_000);
@@ -530,6 +611,7 @@ export async function preConsentRuntimeScanner(
         );
         domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);
       }
+      retainedConsentUiObservation = consentObservation;
     }
 
     for (const script of scripts) {
@@ -582,6 +664,7 @@ export async function preConsentRuntimeScanner(
       cookieNames: cookies.map((cookie) => cookie.name),
       evidenceRefs: [],
     };
+    retainedCookieSnapshot = cookieSnapshot;
     for (const cookie of cookies) {
       const cookieHostname = getHostname(cookie.domain) ?? undefined;
       const cookieRegistrableDomain = getRegistrableDomain(cookieHostname) ?? undefined;
@@ -659,6 +742,8 @@ export async function preConsentRuntimeScanner(
         input.scanStartedAtMs,
       ),
     );
+    retainedCmpRuntimeObservations = cmpRuntimeObservations;
+    retainedConsentUiObservation = consentObservation;
     if (shouldRecaptureConsentUiAfterCmpRuntime(consentObservation, domText, cmpRuntimeObservations)) {
       const highConfidenceCmpRuntimeEvidence =
         hasHighConfidenceInteractiveCmpRuntimeEvidence(cmpRuntimeObservations);
@@ -1152,9 +1237,15 @@ export async function preConsentRuntimeScanner(
       vendorResolverInputs,
     };
   } catch (error) {
-    const cancellation = abortReason(input.signal);
-    if (cancellation) throw cancellation;
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const parentCancellation = abortReason(parentSignal);
+    if (parentCancellation) throw parentCancellation;
+    const softDeadlineCancellation = abortReason(softDeadlineSignal);
+    const moduleBudgetEnded = softDeadlineCancellation !== undefined;
+    const errorMessage = moduleBudgetEnded
+      ? (softDeadlineCancellation instanceof Error
+          ? softDeadlineCancellation.message
+          : "Pre-consent runtime reached its module deadline.")
+      : error instanceof Error ? error.message : String(error);
     if (!consentGeometryDiagnosticWritten) {
       await writeConsentGeometryNoGoArtifact(input.artifactWriter, input.normalizedUrl, errorMessage, initialNavigationHttpStatus)
         .catch((artifactError: unknown) => {
@@ -1178,7 +1269,7 @@ export async function preConsentRuntimeScanner(
         ]),
       };
     }
-    if ((input.screenshotMode ?? "always") !== "never" && screenshots.length === 0 && failureReason === "page_closed") {
+    if (!moduleBudgetEnded && (input.screenshotMode ?? "always") !== "never" && screenshots.length === 0 && failureReason === "page_closed") {
       const retryCapture = await retryPreConsentScreenshotInFreshContext({
         browser,
         input,
@@ -1200,10 +1291,25 @@ export async function preConsentRuntimeScanner(
         }
       }
     }
+    const retainedConsentUiObservations = retainedConsentUiObservation
+      ? [retainedConsentUiObservation, ...fallbackConsentUiObservations]
+      : fallbackConsentUiObservations;
+    const retainedEvidence =
+      networkEvents.length > 0 ||
+      networkResponseEvents.length > 0 ||
+      cookieEvents.length > 0 ||
+      scriptEvents.length > 0 ||
+      iframeEvents.length > 0 ||
+      screenshots.length > 0 ||
+      retainedConsentUiObservations.length > 0 ||
+      retainedCollectionSurfaceObservations.length > 0 ||
+      retainedCmpRuntimeObservations.length > 0;
     return {
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
-        status: "failed",
+        status: moduleBudgetEnded
+          ? retainedEvidence ? "partial" : "skipped_budget"
+          : "failed",
         startedAt: moduleStartedAt,
         completedAt: new Date().toISOString(),
         durationMs: Date.now() - moduleStartedAtMs,
@@ -1215,13 +1321,13 @@ export async function preConsentRuntimeScanner(
       networkEvents,
       networkResponseEvents,
       cookieEvents,
-      cookieSnapshots: [],
-      storageSnapshots: [],
+      cookieSnapshots: retainedCookieSnapshot ? [retainedCookieSnapshot] : [],
+      storageSnapshots: retainedStorageSnapshot ? [retainedStorageSnapshot] : [],
       scriptEvents,
       iframeEvents,
-      consentUiObservations: fallbackConsentUiObservations,
-      collectionSurfaceObservations: [],
-      cmpRuntimeObservations: [],
+      consentUiObservations: retainedConsentUiObservations,
+      collectionSurfaceObservations: retainedCollectionSurfaceObservations,
+      cmpRuntimeObservations: retainedCmpRuntimeObservations,
       transportSecurityObservations: [],
       screenshots,
       visualCapture,
@@ -1235,6 +1341,10 @@ export async function preConsentRuntimeScanner(
       await boundedCleanup(browser.close(), 1_000);
     }
   }
+  })();
+
+  if (!softDeadlineResultPromise) return scanPromise;
+  return Promise.race([scanPromise, softDeadlineResultPromise]);
 
   async function captureResponse(response: Response): Promise<void> {
     const responseUrl = response.url();

@@ -1390,6 +1390,103 @@ test("pre-consent runtime scanner performs a structured read after supplemental 
   }
 });
 
+test("pre-consent runtime scanner returns retained partial evidence at its soft module deadline", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-soft-deadline-"));
+  const softDeadlineController = new AbortController();
+  const deadlineTimer = setTimeout(() => {
+    softDeadlineController.abort(new Error(
+      "Pre-consent runtime reached its fixture module budget; retained bounded partial evidence.",
+    ));
+  }, 1_500);
+  try {
+    const url = server.urlFor("consent-cmp-script-very-late-settings");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 25_000,
+      artifactWriter,
+      routeFulfillers,
+      screenshotCaptureMode: "viewport_first",
+      screenshotMode: "selective",
+      softDeadlineSignal: softDeadlineController.signal,
+      waitMode: "fast",
+    });
+
+    assert.equal(result.moduleRun.status, "partial");
+    assert.match(result.moduleRun.errors.join("; "), /retained bounded partial evidence/i);
+    assert.ok(result.moduleRun.durationMs < 5_000, `soft deadline should stop the module promptly; durationMs=${result.moduleRun.durationMs}`);
+    assert.ok(
+      result.networkEvents.length > 0 || result.networkResponseEvents.length > 0 || result.screenshots.length > 0,
+      "soft deadline should retain evidence observed before cancellation",
+    );
+  } finally {
+    clearTimeout(deadlineTimer);
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("scan pipeline completes with explicit limited coverage after the pre-consent soft module deadline", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-scan-soft-deadline-"));
+  try {
+    const bundle = await runScan({
+      url: server.urlFor("consent-cmp-script-very-late-settings"),
+      profile: "quick",
+      outDir: path.join(tempRoot, "out"),
+      preConsentModuleDeadlineMs: 1_500,
+      preConsentScreenshotMode: "selective",
+      scenarioPlanningMode: "planned_parallel",
+      scenarioResourceMode: "lean",
+    });
+    const preConsentRun = bundle.modulesRun.find((run) => run.moduleName === "preConsentRuntimeScanner");
+
+    assert.equal(preConsentRun?.status, "partial");
+    assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("pre_consent_runtime_partial"));
+    assert.ok(
+      bundle.networkEvents.length > 0 || bundle.networkResponseEvents.length > 0 || bundle.screenshots.length > 0,
+      "completed bundle should carry evidence retained before the module deadline",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner still fails closed when the parent scan is cancelled", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-parent-cancel-"));
+  const parentController = new AbortController();
+  const cancellation = new Error("Parent Lambda scanner deadline reached.");
+  const deadlineTimer = setTimeout(() => parentController.abort(cancellation), 1_500);
+  try {
+    const url = server.urlFor("consent-cmp-script-very-late-settings");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    await assert.rejects(
+      preConsentRuntimeScanner({
+        url,
+        normalizedUrl: url,
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 25_000,
+        artifactWriter,
+        routeFulfillers,
+        screenshotCaptureMode: "viewport_first",
+        screenshotMode: "selective",
+        signal: parentController.signal,
+        waitMode: "fast",
+      }),
+      (error: unknown) => error === cancellation,
+    );
+  } finally {
+    clearTimeout(deadlineTimer);
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("pre-consent runtime scanner inventories off-viewport controls inside strong CMP containers after supplemental full-page capture", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-offscreen-onetrust-controls-"));
