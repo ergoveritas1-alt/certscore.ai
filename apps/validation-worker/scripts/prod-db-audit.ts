@@ -175,6 +175,34 @@ type ValidationVerdictRow = {
   verdict: "supported" | "inconclusive" | "not_supported" | null;
 };
 
+type VendorRegistryAuditRow = {
+  aliases: string[];
+  canonical_name: string;
+  confidence: number;
+  cookie_names: string[];
+  source: string;
+  vendor_category: string;
+};
+
+type VendorDomainPatternAuditRow = {
+  confidence: number;
+  domain: string;
+  match_type: string;
+  source: string;
+  vendor_registry_id: string;
+};
+
+type ObservedVendorAuditRow = {
+  category_count: number;
+  detection_sources: string[];
+  first_seen: string | null;
+  last_seen: string | null;
+  observed_count: number;
+  scan_count: number;
+  script_hosts: string[];
+  vendor_name: string;
+};
+
 function decodeInput(): AuditInput {
   const encoded = process.env.OPS_PROD_DB_AUDIT_INPUT_BASE64?.trim();
   const inline = process.env.OPS_PROD_DB_AUDIT_INPUT_JSON?.trim();
@@ -2211,6 +2239,65 @@ async function runRtbCookieSyncAudit(input: AuditInput) {
   };
 }
 
+async function runVendorRegistryReconciliationAudit(input: AuditInput) {
+  const [registryResult, patternResult, observedResult] = await Promise.all([
+    query<VendorRegistryAuditRow>(
+      `select canonical_name, vendor_category, aliases, cookie_names, confidence, source
+         from vendor_registry
+        order by canonical_name`,
+      [],
+      { readOnly: true }
+    ),
+    query<VendorDomainPatternAuditRow>(
+      `select vendor_registry_id, domain, match_type, confidence, source
+         from vendor_domain_patterns
+        order by domain`,
+      [],
+      { readOnly: true }
+    ),
+    query<ObservedVendorAuditRow>(
+      `select vendor_name,
+              count(*)::int as observed_count,
+              count(distinct scan_id)::int as scan_count,
+              count(distinct vendor_category)::int as category_count,
+              array_agg(distinct vendor_category order by vendor_category) as categories,
+              array_agg(distinct detection_source order by detection_source) as detection_sources,
+              array_agg(distinct script_host order by script_host) filter (where script_host is not null) as script_hosts,
+              min(created_at) as first_seen,
+              max(created_at) as last_seen
+         from scan_tracker_vendors
+        where vendor_name is not null
+        group by vendor_name
+        order by scan_count desc, observed_count desc, vendor_name`,
+      [],
+      { readOnly: true }
+    )
+  ]);
+  await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
+
+  return {
+    audit: "vendor-registry-reconciliation",
+    generatedAt: new Date().toISOString(),
+    notes: input.notes ?? null,
+    readScope: {
+      tables: ["vendor_registry", "vendor_domain_patterns", "scan_tracker_vendors"],
+      mutations: false
+    },
+    registry: registryResult.rows,
+    domainPatterns: patternResult.rows,
+    observedVendors: observedResult.rows.map((row) => ({
+      categoryCount: row.category_count,
+      detectionSources: row.detection_sources,
+      firstSeen: row.first_seen,
+      lastSeen: row.last_seen,
+      observedCount: row.observed_count,
+      scanCount: row.scan_count,
+      scriptHosts: row.script_hosts,
+      vendorName: row.vendor_name
+    }))
+  };
+}
+
 async function main() {
   const auditName = process.env.OPS_PROD_DB_AUDIT_NAME?.trim();
   if (!auditName) {
@@ -2239,6 +2326,8 @@ async function main() {
         ? await runScanTimingAudit(input)
       : auditName === "scanner-phase-timing"
         ? await runScannerPhaseTimingAudit(input)
+      : auditName === "vendor-registry-reconciliation"
+        ? await runVendorRegistryReconciliationAudit(input)
         : null;
   if (!result) {
     throw new Error(`Unsupported prod DB audit: ${auditName}`);

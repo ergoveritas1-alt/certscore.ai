@@ -28,6 +28,102 @@ test("resolves canonical product labels and apex vendor host labels conservative
   assertResolved(apexObservation, "Taboola", "Taboola", "advertising");
 });
 
+test("reconciles production product aliases to existing canonical identities", () => {
+  assert.deepEqual(
+    [
+      resolveCanonicalVendorLabel("Google Ads"),
+      resolveCanonicalVendorLabel("Adobe Analytics"),
+      resolveCanonicalVendorLabel("DoubleClick / Floodlight"),
+      resolveCanonicalVendorLabel("Scorecard Research"),
+      resolveCanonicalVendorLabel("Snapchat Pixel"),
+    ].map((resolution) => [resolution?.vendor, resolution?.product]),
+    [
+      ["Google", "Google Ads / DoubleClick"],
+      ["Adobe", "Adobe Analytics / Experience Cloud"],
+      ["Google", "DoubleClick Floodlight"],
+      ["ScorecardResearch / Comscore", "ScorecardResearch"],
+      ["Snap", "Snap Pixel"],
+    ],
+  );
+});
+
+test("resolves deterministic production-discovered vendor endpoints", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", hostname: "tags.tiqcdn.com" },
+    { type: "request", hostname: "api.id5-sync.com" },
+    { type: "request", hostname: "b-code.liadm.com" },
+    { type: "request", hostname: "sync.srv.stackadapt.com" },
+    { type: "request", hostname: "contextual.media.net" },
+    { type: "request", hostname: "js.appboycdn.com" },
+    { type: "request", hostname: "t.contentsquare.net" },
+    { type: "request", hostname: "cdn.quantummetric.com" },
+  ]);
+
+  for (const [vendor, product, purpose] of [
+    ["Tealium", "Tealium iQ Tag Management", "tag_management"],
+    ["ID5", "ID5 Identity", "advertising"],
+    ["LiveIntent", "LiveIntent", "advertising"],
+    ["StackAdapt", "StackAdapt", "advertising"],
+    ["Media.net", "Media.net", "advertising"],
+    ["Braze", "Braze", "analytics"],
+    ["Contentsquare", "Contentsquare", "session_replay"],
+    ["Quantum Metric", "Quantum Metric", "session_replay"],
+  ] as const) {
+    assertResolved(observations, vendor, product, purpose);
+  }
+});
+
+test("does not promote lookalike hosts for newly added vendor rules", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", hostname: "tiqcdn.com.example.test" },
+    { type: "request", hostname: "not-id5-sync.com" },
+    { type: "request", hostname: "media.net.example.test" },
+    { type: "request", hostname: "not-quantummetric.com" },
+  ]);
+
+  assert.equal(observations.some((item) => ["Tealium", "ID5", "Media.net", "Quantum Metric"].includes(item.vendor)), false);
+});
+
+test("resolves the second production-discovered vendor wave", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://bat.bing.com/action/0" },
+    { type: "request", url: "https://c.aps.amazon-adsystem.com/aps/prebid" },
+    { type: "request", url: "https://ib.adnxs.com/getuid" },
+    { type: "request", url: "https://eb2.3lift.com/sync" },
+    { type: "request", url: "https://user-sync.fwmrm.net/sync" },
+    { type: "request", url: "https://sync.teads.tv/sync" },
+    { type: "request", hostname: "mc.yandex.com" },
+  ]);
+
+  for (const [vendor, product, purpose] of [
+    ["Microsoft", "Microsoft Advertising / Bing UET", "advertising"],
+    ["Amazon", "Amazon Publisher Services", "advertising"],
+    ["Xandr", "Xandr / AppNexus", "advertising"],
+    ["TripleLift", "TripleLift", "advertising"],
+    ["FreeWheel", "FreeWheel", "advertising"],
+    ["Teads", "Teads Video Advertising", "advertising"],
+    ["Yandex", "Yandex Ads / Metrica", "advertising"],
+  ] as const) {
+    assertResolved(observations, vendor, product, purpose);
+  }
+});
+
+test("does not classify unrelated lookalike hosts as second-wave vendors", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://bat.bing.com.example.test/action/0" },
+    { type: "request", url: "https://c.aps.amazon-adsystem.com.example.test/aps/prebid" },
+    { type: "request", url: "https://ib.adnxs.com.example.test/getuid" },
+    { type: "request", url: "https://eb2.3lift.com.example.test/sync" },
+    { type: "request", url: "https://user-sync.fwmrm.net.example.test/sync" },
+    { type: "request", url: "https://sync.teads.tv.example.test/sync" },
+  ]);
+
+  assert.equal(
+    observations.some((item) => ["Microsoft", "Amazon", "Xandr", "TripleLift", "FreeWheel", "Teads"].includes(item.vendor)),
+    false,
+  );
+});
+
 test("resolves endpoint geography only from explicit host region tokens", () => {
   assert.deepEqual(
     resolveEndpointGeography({

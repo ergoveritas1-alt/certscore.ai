@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-10";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-13-wave2-teads";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -91,6 +91,7 @@ interface VendorRule {
   purpose: NormalizedVendorObservation["purpose"];
   regulatoryRelevance: string[];
   confidence: number;
+  aliases?: string[];
   hostPatterns?: RegExp[];
   urlPatterns?: RegExp[];
   cookiePatterns?: RegExp[];
@@ -282,6 +283,7 @@ const rules: VendorRule[] = [
     entity: "Adobe Inc.",
     vendor: "Adobe",
     product: "Adobe Analytics / Experience Cloud",
+    aliases: ["Adobe Analytics"],
     purpose: "analytics",
     regulatoryRelevance: ["consent", "analytics", "cross_site_tracking"],
     confidence: 0.94,
@@ -368,6 +370,7 @@ const rules: VendorRule[] = [
     entity: "Yandex LLC",
     vendor: "Yandex",
     product: "Yandex Ads / Metrica",
+    aliases: ["Yandex Ads"],
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "analytics", "ad_measurement", "cross_site_tracking"],
     confidence: 0.93,
@@ -697,6 +700,7 @@ const rules: VendorRule[] = [
     entity: "X Corp.",
     vendor: "X/Twitter",
     product: "X/Twitter Social Widgets",
+    aliases: ["X Corp."],
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "social_embed", "cross_site_tracking"],
     confidence: 0.93,
@@ -708,6 +712,7 @@ const rules: VendorRule[] = [
     entity: "X Corp.",
     vendor: "X/Twitter",
     product: "Twitter Pixel",
+    aliases: ["X Corp."],
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "ad_measurement", "cross_site_tracking"],
     confidence: 0.94,
@@ -742,6 +747,7 @@ const rules: VendorRule[] = [
     entity: "Snap Inc.",
     vendor: "Snap",
     product: "Snap Pixel",
+    aliases: ["Snapchat Pixel"],
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.94,
@@ -983,6 +989,7 @@ const rules: VendorRule[] = [
     entity: "Google LLC",
     vendor: "Google",
     product: "DoubleClick Floodlight",
+    aliases: ["DoubleClick / Floodlight"],
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "ad_measurement", "conversion_tracking"],
     confidence: 0.94,
@@ -994,6 +1001,7 @@ const rules: VendorRule[] = [
     entity: "Google LLC",
     vendor: "Google",
     product: "Google Ads / DoubleClick",
+    aliases: ["Google Ads", "DoubleClick"],
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.96,
@@ -1012,6 +1020,7 @@ const rules: VendorRule[] = [
     entity: "Google LLC",
     vendor: "Google",
     product: "Google Ads / DoubleClick",
+    aliases: ["Google Ads", "DoubleClick"],
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.94,
@@ -1320,6 +1329,7 @@ const rules: VendorRule[] = [
     entity: "Comscore, Inc.",
     vendor: "ScorecardResearch / Comscore",
     product: "ScorecardResearch",
+    aliases: ["Scorecard Research"],
     purpose: "analytics",
     regulatoryRelevance: ["consent", "analytics", "audience_measurement", "advertising_measurement", "market_research"],
     confidence: 0.92,
@@ -1573,6 +1583,163 @@ const rules: VendorRule[] = [
     domSelectorPatterns: [/^#coiOverlay$/i, /^\.coi-/i],
     basisLabel: "cookie_information_cmp_runtime_or_endpoint",
   },
+  {
+    entity: "Tealium, Inc.",
+    vendor: "Tealium",
+    product: "Tealium iQ Tag Management",
+    purpose: "tag_management",
+    regulatoryRelevance: ["tag_management", "third_party_runtime"],
+    confidence: 0.92,
+    hostPatterns: [/\.tiqcdn\.com$/i, /\.tealiumiq\.com$/i],
+    urlPatterns: [/\/utag(?:\.|\/)/i],
+    basisLabel: "tealium_iq_tag_management_endpoint",
+  },
+  {
+    entity: "ID5 Technology, Inc.",
+    vendor: "ID5",
+    product: "ID5 Identity",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "identity_resolution", "cross_site_tracking"],
+    confidence: 0.91,
+    hostPatterns: [/\.id5-sync\.com$/i],
+    urlPatterns: [/\/(?:sync|eids|gdpr|api)\b/i],
+    basisLabel: "id5_identity_sync_endpoint",
+  },
+  {
+    entity: "LiveIntent, Inc.",
+    vendor: "LiveIntent",
+    product: "LiveIntent",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "identity_resolution", "cross_site_tracking"],
+    confidence: 0.91,
+    hostPatterns: [/\.liadm\.com$/i],
+    urlPatterns: [/\/(?:sync|pixel|collect|match)\b/i],
+    basisLabel: "liveintent_liadm_endpoint",
+  },
+  {
+    entity: "StackAdapt, Inc.",
+    vendor: "StackAdapt",
+    product: "StackAdapt",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "programmatic_ads"],
+    confidence: 0.91,
+    hostPatterns: [/\.stackadapt\.com$/i],
+    urlPatterns: [/\/(?:sync|pixel|track|event)\b/i],
+    basisLabel: "stackadapt_advertising_endpoint",
+  },
+  {
+    entity: "Media.net Advertising FZ-LLC",
+    vendor: "Media.net",
+    product: "Media.net",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "contextual_advertising"],
+    confidence: 0.91,
+    hostPatterns: [/\.media\.net$/i],
+    urlPatterns: [/\/(?:pixel|sync|prebid|event)\b/i],
+    basisLabel: "media_net_advertising_endpoint",
+  },
+  {
+    entity: "Braze, Inc.",
+    vendor: "Braze",
+    product: "Braze",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "marketing_automation", "personalization"],
+    confidence: 0.91,
+    hostPatterns: [/\.appboycdn\.com$/i, /\.braze\.com$/i],
+    urlPatterns: [/\/(?:api|sdk|track|events)\b/i],
+    basisLabel: "braze_marketing_automation_endpoint",
+  },
+  {
+    entity: "Contentsquare SA",
+    vendor: "Contentsquare",
+    product: "Contentsquare",
+    purpose: "session_replay",
+    regulatoryRelevance: ["consent", "behavioral_analytics", "session_replay"],
+    confidence: 0.91,
+    hostPatterns: [/\.contentsquare\.net$/i, /\.contentsquare\.com$/i],
+    urlPatterns: [/\/(?:collect|track|events|pixel)\b/i],
+    basisLabel: "contentsquare_behavioral_analytics_endpoint",
+  },
+  {
+    entity: "Quantum Metric, Inc.",
+    vendor: "Quantum Metric",
+    product: "Quantum Metric",
+    purpose: "session_replay",
+    regulatoryRelevance: ["consent", "behavioral_analytics", "session_replay"],
+    confidence: 0.91,
+    hostPatterns: [/\.quantummetric\.com$/i],
+    urlPatterns: [/\/(?:collect|track|events|pixel)\b/i],
+    basisLabel: "quantum_metric_behavioral_analytics_endpoint",
+  },
+  {
+    entity: "Microsoft Corporation",
+    vendor: "Microsoft",
+    product: "Microsoft Advertising / Bing UET",
+    aliases: ["Microsoft Bing Ads", "Bing UET", "Microsoft Advertising"],
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "conversion_tracking"],
+    confidence: 0.91,
+    hostPatterns: [/^bat\.bing\.com$/i],
+    urlPatterns: [/\/(?:action|p|bat)\b/i],
+    basisLabel: "microsoft_bing_uet_endpoint",
+  },
+  {
+    entity: "Amazon.com, Inc.",
+    vendor: "Amazon",
+    product: "Amazon Publisher Services",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "publisher_ad_server", "programmatic_ads"],
+    confidence: 0.91,
+    hostPatterns: [/\.aps\.amazon-adsystem\.com$/i, /^c\.amazon-adsystem\.com$/i],
+    urlPatterns: [/\/(?:aps|prebid|config|sync)\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "amazon_publisher_services_endpoint",
+  },
+  {
+    entity: "Microsoft Corporation",
+    vendor: "Xandr",
+    product: "Xandr / AppNexus",
+    aliases: ["AppNexus / Xandr"],
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "programmatic_ads", "identity_resolution"],
+    confidence: 0.92,
+    hostPatterns: [/\.adnxs\.com$/i, /^adnxs\.com$/i],
+    urlPatterns: [/\/(?:sync|getuid|prebid|ut)\b/i],
+    basisLabel: "xandr_appnexus_endpoint",
+  },
+  {
+    entity: "TripleLift, Inc.",
+    vendor: "TripleLift",
+    product: "TripleLift",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "programmatic_ads"],
+    confidence: 0.91,
+    hostPatterns: [/\.3lift\.com$/i],
+    urlPatterns: [/\/(?:sync|pixel|prebid|event)\b/i],
+    basisLabel: "triplelift_advertising_endpoint",
+  },
+  {
+    entity: "FreeWheel Media, Inc.",
+    vendor: "FreeWheel",
+    product: "FreeWheel",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "video_advertising"],
+    confidence: 0.91,
+    hostPatterns: [/\.fwmrm\.net$/i],
+    urlPatterns: [/\/(?:ad|dmp|sync|visitor)\b/i],
+    basisLabel: "freewheel_video_advertising_endpoint",
+  },
+  {
+    entity: "Teads S.A.S.",
+    vendor: "Teads",
+    product: "Teads Video Advertising",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "video_advertising", "targeted_advertising"],
+    confidence: 0.92,
+    hostPatterns: [/\.teads\.tv$/i, /^teads\.tv$/i],
+    urlPatterns: [/\/(?:sync|pixel|collect|impression|event)\b/i],
+    basisLabel: "teads_video_advertising_endpoint",
+  },
 ];
 
 export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput): VendorDisplayCategory {
@@ -1656,10 +1823,16 @@ export function resolveCanonicalVendorLabel(value: string | null | undefined): C
     }
   }
 
-  const productRules = rules.filter((rule) => rule.product.trim().replace(/\s+/g, " ").toLowerCase() === normalizedValue);
+  const matchesLabel = (rule: VendorRule, label: string) =>
+    [rule.product, rule.vendor, ...(rule.aliases ?? [])]
+      .some((candidate) => candidate.trim().replace(/\s+/g, " ").toLowerCase() === label);
+  const productRules = rules.filter((rule) =>
+    [rule.product, ...(rule.aliases ?? [])]
+      .some((candidate) => candidate.trim().replace(/\s+/g, " ").toLowerCase() === normalizedValue),
+  );
   const candidateRules = productRules.length > 0
     ? productRules
-    : rules.filter((rule) => rule.vendor.trim().replace(/\s+/g, " ").toLowerCase() === normalizedValue);
+    : rules.filter((rule) => matchesLabel(rule, normalizedValue));
   if (candidateRules.length === 0) {
     return null;
   }
