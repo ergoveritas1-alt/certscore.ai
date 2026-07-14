@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-13-wave5-web-evidence";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-13-wave6-audited-promotions";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -962,9 +962,33 @@ const rules: VendorRule[] = [
     purpose: "performance_monitoring",
     regulatoryRelevance: ["performance_monitoring"],
     confidence: 0.92,
-    hostPatterns: [/\.datadoghq\.com$/i, /\.browser-intake-datadoghq\.com$/i],
-    urlPatterns: [/\/api\/v2\/rum/i, /\/v1\/input/i],
+    hostPatterns: [/\.datadoghq\.com$/i, /\.browser-intake-datadoghq\.com$/i, /^www\.datadoghq-browser-agent\.com$/i],
+    urlPatterns: [/\/api\/v2\/rum/i, /\/v1\/input/i, /\/(?:[a-z0-9]+\/)?v\d+\/datadog-rum(?:-v\d+)?\.js\b/i, /\/datadog-rum(?:-[a-z0-9]+)?\.js\b/i],
     basisLabel: "datadog_rum_endpoint",
+  },
+  {
+    entity: "Parse.ly, Inc.",
+    vendor: "Parse.ly",
+    product: "Parse.ly Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["analytics", "audience_measurement", "third_party_runtime"],
+    confidence: 0.94,
+    hostPatterns: [/^cdn\.parsely\.com$/i],
+    urlPatterns: [/^https:\/\/cdn\.parsely\.com\/keys\/[^/]+\/p\.js\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "parsely_tracking_script",
+  },
+  {
+    entity: "mParticle, Inc.",
+    vendor: "mParticle",
+    product: "mParticle Web SDK",
+    purpose: "analytics",
+    regulatoryRelevance: ["analytics", "customer_data_platform", "third_party_runtime"],
+    confidence: 0.94,
+    hostPatterns: [/^jssdkcdns\.mparticle\.com$/i],
+    urlPatterns: [/^https:\/\/jssdkcdns\.mparticle\.com\/js\/v2(?:\/[^/]+)?\/mparticle\.js\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "mparticle_web_sdk",
   },
   {
     entity: "Functional Software, Inc.",
@@ -1093,8 +1117,8 @@ const rules: VendorRule[] = [
     purpose: "session_replay",
     regulatoryRelevance: ["consent", "behavioral_analytics", "session_replay"],
     confidence: 0.95,
-    hostPatterns: [/^www\.clarity\.ms$/i, /^scripts\.clarity\.ms$/i, /^n\.clarity\.ms$/i, /^f\.clarity\.ms$/i],
-    urlPatterns: [/^https:\/\/(?:www|scripts|n|f)\.clarity\.ms\/(?:tag|collect)\b/i],
+    hostPatterns: [/^www\.clarity\.ms$/i, /^scripts\.clarity\.ms$/i, /^n\.clarity\.ms$/i, /^f\.clarity\.ms$/i, /^c\.clarity\.ms$/i],
+    urlPatterns: [/^https:\/\/(?:www|scripts|n|f)\.clarity\.ms\/(?:tag|collect)\b/i, /^https:\/\/c\.clarity\.ms\/c\.gif\b/i],
     cookiePatterns: [/^_clck$/i, /^_clsk$/i],
     storageKeyPatterns: [/^_clck$/i, /^_clsk$/i],
     basisLabel: "clarity_script_endpoint_or_cookie",
@@ -1910,7 +1934,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["embedded_content", "media_delivery", "third_party_runtime"],
     confidence: 0.9,
     hostPatterns: [/^www\.youtube\.com$/i, /^www\.youtube-nocookie\.com$/i],
-    urlPatterns: [/\/embed\/[A-Za-z0-9_-]+/i, /\/iframe_api\b/i, /\/player_api\b/i],
+    urlPatterns: [/\/embed\/[A-Za-z0-9_-]+/i, /\/iframe_api\b/i, /\/player_api\b/i, /\/s\/(?:_|player)\//i, /\/generate_204\b/i],
     requireUrlPatternMatch: true,
     basisLabel: "youtube_embedded_player_iframe_runtime",
   },

@@ -92,6 +92,30 @@ test("does not create candidates from known, first-party, host-only, or lookalik
   assert.equal(queue.candidates[0]?.hostname, "not-example-vendor.net");
 });
 
+test("resolves the audited evidence-backed promotion batch with bounded paths", () => {
+  const observations = resolveVendorObservations([
+    request("https://cdn.parsely.com/keys/example.com/p.js", "cdn.parsely.com"),
+    request("https://jssdkcdns.mparticle.com/js/v2/api-key/mparticle.js", "jssdkcdns.mparticle.com"),
+    request("https://www.datadoghq-browser-agent.com/us1/v7/datadog-rum.js", "www.datadoghq-browser-agent.com"),
+    request("https://c.clarity.ms/c.gif", "c.clarity.ms"),
+    request("https://www.youtube.com/s/player/9fc68080/www-widgetapi.vflset/www-widgetapi.js", "www.youtube.com"),
+  ]);
+
+  assertResolved(observations, "Parse.ly", "Parse.ly Analytics", "analytics");
+  assertResolved(observations, "mParticle", "mParticle Web SDK", "analytics");
+  assertResolved(observations, "Datadog", "Datadog RUM", "performance_monitoring");
+  assertResolved(observations, "Microsoft", "Microsoft Clarity", "session_replay");
+  assertResolved(observations, "YouTube", "YouTube Embedded Player", "infrastructure");
+
+  const lookalikes = resolveVendorObservations([
+    request("https://cdn.parsely.example/keys/example.com/p.js", "cdn.parsely.example"),
+    request("https://jssdkcdns.mparticle.example/js/v2/key/mparticle.js", "jssdkcdns.mparticle.example"),
+    request("https://www.datadoghq-browser-agent.example/us1/v7/datadog-rum.js", "www.datadoghq-browser-agent.example"),
+    request("https://c.clarity.example/c.gif", "c.clarity.example"),
+  ]);
+  assert.equal(lookalikes.some((item) => ["Parse.ly", "mParticle", "Datadog", "Microsoft"].includes(item.vendor)), false);
+});
+
 test("resolves canonical product labels and apex vendor host labels conservatively", () => {
   assert.deepEqual(
     [
