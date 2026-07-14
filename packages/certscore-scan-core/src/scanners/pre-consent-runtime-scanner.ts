@@ -46,6 +46,7 @@ import {
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
+import { httpTransportFallbackUrl, isNavigationTransportFailure } from "../transport-fallback.js";
 
 const SOURCE_SCANNER = "pre_consent_runtime";
 const SCENARIO = "fresh_pre_consent";
@@ -165,6 +166,7 @@ export async function preConsentRuntimeScanner(
   const mixedContentConsoleMessages: string[] = [];
   const vendorResolverInputs: VendorResolverInput[] = [];
   const runtimeErrors: string[] = [];
+  const navigationNotes: string[] = [];
   const requestIds = new WeakMap<Request, string>();
   let visualCapture: VisualCaptureSummary = {
     status: "unavailable",
@@ -443,12 +445,34 @@ export async function preConsentRuntimeScanner(
   const scanPromise = (async (): Promise<PreConsentRuntimeScannerResult> => {
   try {
     const navigationStartedAtMs = Date.now();
-    const navigationResponse = await recordTiming(timingBreakdown, "page navigation", "Initial navigation until DOMContentLoaded.", () =>
-      page.goto(input.normalizedUrl, {
-        waitUntil: "domcontentloaded",
-        timeout: Math.min(input.internalBudgetMs, 15_000),
-      })
-    );
+    const navigationResponse = await recordTiming(timingBreakdown, "page navigation", "Initial navigation until DOMContentLoaded.", async () => {
+      try {
+        return await page.goto(input.normalizedUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: Math.min(input.internalBudgetMs, 15_000),
+        });
+      } catch (error) {
+        const currentPageUrl = page.url();
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (/timeout/i.test(errorMessage) && currentPageUrl !== "about:blank") {
+          navigationNotes.push(
+            "Initial navigation committed a document but did not reach DOMContentLoaded within the bounded wait; retained the current page for evidence capture.",
+          );
+          return null;
+        }
+        const fallbackUrl = httpTransportFallbackUrl(input.normalizedUrl);
+        if (!fallbackUrl || !isNavigationTransportFailure(error)) throw error;
+        navigationNotes.push(
+          `HTTPS entry navigation failed at the transport layer; retried the equivalent HTTP entry URL: ${fallbackUrl}`,
+        );
+        await page.goto("about:blank", { waitUntil: "load", timeout: 1_000 }).catch(() => undefined);
+        await page.waitForTimeout(50);
+        return page.goto(fallbackUrl, {
+          waitUntil: "domcontentloaded",
+          timeout: Math.max(1_000, Math.min(10_000, input.internalBudgetMs - (Date.now() - navigationStartedAtMs))),
+        });
+      }
+    });
     initialNavigationHttpStatus = navigationResponse?.status();
     const fastWait = input.waitMode === "fast";
     const networkIdleTimeoutMs = fastWait ? 1_500 : 5_000;
@@ -1286,6 +1310,12 @@ export async function preConsentRuntimeScanner(
           return fallbackTransportSecurityObservation();
         })();
 
+    if (navigationNotes.length > 0) {
+      visualCapture = {
+        ...visualCapture,
+        notes: unique([...visualCapture.notes, ...navigationNotes]),
+      };
+    }
     return {
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",

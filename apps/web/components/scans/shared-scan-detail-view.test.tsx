@@ -1,10 +1,23 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import test from "node:test";
 import {
   SCAN_NO_GO_REASON_CODES,
   SCAN_NO_GO_REASON_PRESENTATIONS
 } from "@website-signal-risk-scanner/shared";
+
+const require = createRequire(import.meta.url);
+const serverOnlyPath = require.resolve("server-only");
+(require.cache as Record<string, unknown>)[serverOnlyPath] = {
+  exports: {},
+  filename: serverOnlyPath,
+  id: serverOnlyPath,
+  isPreloading: false,
+  loaded: true,
+  path: serverOnlyPath,
+  paths: []
+};
 
 test("pre-consent inventory keeps purpose separate, removes requests, and places category last", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
@@ -1811,6 +1824,31 @@ test("deriveVisualAccessLimitationNotice does not treat screenshot upload failur
   });
 
   assert.equal(notice, null);
+});
+
+test("deriveVisualAccessLimitationNotice retains a corroborated transport no-go when the screenshot is missing", async () => {
+  const deriveVisualAccessLimitationNotice = await loadVisualAccessLimitationNotice();
+
+  const notice = deriveVisualAccessLimitationNotice({
+    scan_no_go_assessment: {
+      decision: "no_go",
+      scanNoGoConfidence: 0.92,
+      reasonCodes: ["navigation_transport_failure", "scan_no_go_corroborated"],
+      corroboratorCodes: ["pre_consent_navigation_failed", "no_visual_artifact_retained"],
+      status: "available"
+    },
+    visual_access_review: {
+      goNoGo: "NO_GO",
+      pageState: "missing_visual_artifact",
+      reasonCode: "navigation_transport_failure",
+      shortExplanation: "Navigation failed before a visual artifact could be retained.",
+      status: "missing_visual_artifact"
+    }
+  });
+
+  assert.equal(notice?.finding.id, "scan_quality_visual_no_go");
+  assert.equal(notice?.review.title, "The scanner could not open the site");
+  assert.match(notice?.review.reason ?? "", /navigation failed/i);
 });
 
 test("deriveVisualAccessLimitationNotice does not treat degraded but usable visual GO as site no-go", async () => {

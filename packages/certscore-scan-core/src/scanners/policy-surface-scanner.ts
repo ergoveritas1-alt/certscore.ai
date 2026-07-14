@@ -17,6 +17,7 @@ import { chromium, type Browser, type Page } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
+import { httpTransportFallbackUrl } from "../transport-fallback.js";
 
 const SOURCE_SCANNER = "policy_surface";
 const SCENARIO = "policy_surface_review";
@@ -276,12 +277,19 @@ export async function policySurfaceScanner(
         input.normalizedUrl,
         Math.min(POLICY_HOMEPAGE_FETCH_TIMEOUT_MS, remainingMs(input, moduleStartedAtMs)),
         input.signal,
+        { allowHttpTransportFallback: true },
       ),
     );
     recordPolicyFetchDiagnostic(policyFetchDiagnostics, {
       stage: "homepage",
       result: homepage,
     });
+    const homepageFinalUrl = [...(homepage.attempts ?? [])]
+      .reverse()
+      .find((attempt) => attempt.outcome === "fetched")?.finalUrl;
+    if (homepage.ok && homepageFinalUrl && homepageFinalUrl !== input.normalizedUrl) {
+      input = { ...input, normalizedUrl: homepageFinalUrl, url: homepageFinalUrl };
+    }
     if (!homepage.ok) {
       const fallbackCandidates = commonPathCandidatesFor(input.normalizedUrl, 0);
       const speculativeCommonPathNanoAbortController = new AbortController();
@@ -3888,16 +3896,32 @@ function policyDocumentFetchCacheKey(value: string): string {
   }
 }
 
-async function fetchText(url: string, timeoutMs: number, signal?: AbortSignal): Promise<FetchTextResult> {
+async function fetchText(
+  url: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+  options: { allowHttpTransportFallback?: boolean } = {},
+): Promise<FetchTextResult> {
   const startedAtMs = Date.now();
   const primary = await fetchTextOnce(url, timeoutMs, signal);
   if (primary.ok || primary.status !== undefined) {
     return primary;
   }
 
+  const attempts = [...(primary.attempts ?? [])];
+  const httpFallbackUrl = options.allowHttpTransportFallback ? httpTransportFallbackUrl(url) : null;
+  let httpFallbackResult: FetchTextResult | null = null;
+  if (httpFallbackUrl) {
+    httpFallbackResult = await fetchTextOnce(httpFallbackUrl, Math.max(500, Math.min(5_000, timeoutMs)), signal);
+    attempts.push(...(httpFallbackResult.attempts ?? []));
+    if (httpFallbackResult.ok) {
+      return { ...httpFallbackResult, attempts };
+    }
+  }
+
   const fallbackUrl = wwwFallbackUrlForPolicyFetch(url);
   if (!fallbackUrl) {
-    return primary;
+    return { ...(httpFallbackResult ?? primary), attempts };
   }
 
   const remainingTimeoutMs = Math.max(500, timeoutMs - (Date.now() - startedAtMs));
@@ -3905,7 +3929,7 @@ async function fetchText(url: string, timeoutMs: number, signal?: AbortSignal): 
   return {
     ...fallback,
     attempts: [
-      ...(primary.attempts ?? []),
+      ...attempts,
       ...(fallback.attempts ?? []),
     ],
   };

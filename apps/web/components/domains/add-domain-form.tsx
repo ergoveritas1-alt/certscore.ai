@@ -137,7 +137,7 @@ export function AddDomainForm({
             type="text"
             value={domain}
           />
-          <div className="absolute right-[9.75rem] top-1/2 -translate-y-1/2 scale-110">
+          <div className="absolute right-[8.75rem] top-1/2 -translate-y-1/2 scale-110">
             <ScanFromSelect
               allowRestrictedScanOptions={allowRestrictedScanOptions}
               freshRescanValue={freshRescan}
@@ -150,6 +150,18 @@ export function AddDomainForm({
               value={scanFrom}
               variant="icon"
             />
+            <svg
+              aria-hidden="true"
+              className="pointer-events-none absolute -bottom-1.5 left-1/2 h-2 w-2 -translate-x-1/2 text-slate-500"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              viewBox="0 0 12 8"
+            >
+              <path d="m2 2 4 4 4-4" />
+            </svg>
           </div>
           <Button
             aria-label="Scan now"

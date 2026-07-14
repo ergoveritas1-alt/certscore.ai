@@ -5,6 +5,7 @@ import { buildScanReportUnifiedFindings } from "../../components/scans/shared-sc
 import { getAnonymousScanById, getPublicScanById, getScanById } from "./get-scan-by-id";
 import { asAccessPostureClass, buildOpsInterruptionSummary } from "./ops-interruption-summary";
 import { OPS_SCAN_STATUS_FINDING_IDS } from "./ops-status-finding-ids";
+import { materializeLocalV2DagScanDetail } from "./local-v2-dag-report";
 
 export type OpsScanStatusFindingId = (typeof OPS_SCAN_STATUS_FINDING_IDS)[number];
 
@@ -269,6 +270,31 @@ function buildOpsStatusWithFindings(core: OpsScanStatusCore, scanRecord: OpsScan
   const reportPackets = buildScanReportUnifiedFindings(scanRecord);
   const executiveProjection = projectExecutiveFindingsFromUnifiedPackets(reportPackets);
   const findingCounts = buildEmptyFindingCounts();
+  const materializedSnapshot = scanRecord.snapshot as OpsSnapshotRow | null;
+  const effectiveCore: OpsScanStatusCore = materializedSnapshot
+    ? {
+        ...core,
+        accessPosture: {
+          ...core.accessPosture,
+          accessPostureClass: asAccessPostureClass(materializedSnapshot.access_posture_class),
+          pagesScanned: scanRecord.scan.pagesScanned,
+          stopReasonCode: materializedSnapshot.stop_reason_code ?? core.accessPosture.stopReasonCode,
+          stopReasonDetail: materializedSnapshot.stop_reason_detail ?? core.accessPosture.stopReasonDetail,
+          stopReasonLabel: materializedSnapshot.stop_reason_label ?? core.accessPosture.stopReasonLabel,
+        },
+        scan: { ...core.scan, pagesScanned: scanRecord.scan.pagesScanned },
+        snapshot: {
+          ...core.snapshot,
+          accessPostureClass: materializedSnapshot.access_posture_class ?? core.snapshot.accessPostureClass,
+          blockedFlag: materializedSnapshot.blocked_flag ?? core.snapshot.blockedFlag,
+          homepageFetchStatus: materializedSnapshot.homepage_fetch_status ?? core.snapshot.homepageFetchStatus,
+          scanOutcome: materializedSnapshot.scan_outcome ?? core.snapshot.scanOutcome,
+          stopReasonCode: materializedSnapshot.stop_reason_code ?? core.snapshot.stopReasonCode,
+          stopReasonDetail: materializedSnapshot.stop_reason_detail ?? core.snapshot.stopReasonDetail,
+          stopReasonLabel: materializedSnapshot.stop_reason_label ?? core.snapshot.stopReasonLabel,
+        },
+      }
+    : core;
 
   for (const packet of reportPackets) {
     if (
@@ -280,7 +306,7 @@ function buildOpsStatusWithFindings(core: OpsScanStatusCore, scanRecord: OpsScan
   }
 
   return {
-    ...core,
+    ...effectiveCore,
     findingCounts,
     reportReadiness: {
       findingsReady: scanRecord.signalEnrichmentWorkflow.findingsReady,
@@ -296,6 +322,11 @@ function buildOpsStatusWithFindings(core: OpsScanStatusCore, scanRecord: OpsScan
   };
 }
 
+async function materializeOpsScanRecord(scanRecord: OpsScanStatusScanRecord | null) {
+  if (!scanRecord || scanRecord.scan.status !== "completed") return scanRecord;
+  return materializeLocalV2DagScanDetail(scanRecord).catch(() => scanRecord);
+}
+
 export async function getAnonymousOpsScanStatus(input: { includeFindings?: boolean; scanId: string }) {
   const core = await loadOpsScanStatusCore({ organizationId: null, scanId: input.scanId });
 
@@ -307,7 +338,7 @@ export async function getAnonymousOpsScanStatus(input: { includeFindings?: boole
     return buildOpsStatusWithoutFindings(core);
   }
 
-  const scanRecord = await getAnonymousScanById(input.scanId);
+  const scanRecord = await materializeOpsScanRecord(await getAnonymousScanById(input.scanId));
   return buildOpsStatusWithFindings(core, scanRecord);
 }
 
@@ -326,7 +357,7 @@ export async function getPublicOpsScanStatus(input: { includeFindings?: boolean;
     return buildOpsStatusWithoutFindings(core);
   }
 
-  const scanRecord = await getPublicScanById(input.scanId);
+  const scanRecord = await materializeOpsScanRecord(await getPublicScanById(input.scanId));
   return buildOpsStatusWithFindings(core, scanRecord);
 }
 
@@ -349,11 +380,11 @@ export async function getOrganizationOpsScanStatus(input: {
     return buildOpsStatusWithoutFindings(core);
   }
 
-  const scanRecord = await getScanById({
+  const scanRecord = await materializeOpsScanRecord(await getScanById({
     organizationId: input.organizationId,
     scanId: input.scanId,
     viewerEmail: input.viewerEmail
-  });
+  }));
 
   return buildOpsStatusWithFindings(core, scanRecord);
 }

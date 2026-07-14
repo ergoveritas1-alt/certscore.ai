@@ -576,4 +576,8 @@ test("local web poller records Lambda result before marking scan completed", asy
     completionUpdateIndex < auxiliaryMirrorIndex,
     "auxiliary artifact mirroring must not block report-ready completion"
   );
+  assert.match(source, /readRetainedScanCompletionDiagnostics/);
+  assert.match(source, /coverage_level = 'limited_none'/);
+  assert.match(source, /scan_outcome = \$2/);
+  assert.match(source, /pages_scanned = case when \$2::int = 0 then 0/);
 });

@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
 import {
   LOCAL_V2_DAG_LAMBDA_RESULT_FAILED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_RESULT_RECEIVED_EVENT_TYPE,
@@ -40,6 +41,12 @@ type MirroredLambdaArtifact = {
   sha256: string;
   sizeBytes: number;
   sourceUri: string;
+};
+
+type RetainedScanCompletionDiagnostics = {
+  noGo: boolean;
+  pageState: string | null;
+  reasonCode: string | null;
 };
 
 export type LocalV2DagLambdaResultPollerEnv = {
@@ -89,6 +96,32 @@ export function getConfiguredLocalV2DagLambdaResultQueueUrls(env: LocalV2DagLamb
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+async function readRetainedScanCompletionDiagnostics(
+  artifactMirror: Awaited<ReturnType<typeof mirrorLocalV2DagLambdaArtifacts>>,
+): Promise<RetainedScanCompletionDiagnostics | null> {
+  const scanArtifact = artifactMirror?.mirroredArtifacts.find(
+    (artifact) => artifact.fileName === "CanonicalEvidenceBundle.json",
+  );
+  if (!scanArtifact) return null;
+  const bundle = asRecord(JSON.parse(await readFile(scanArtifact.localPath, "utf8")));
+  const assessment = asRecord(bundle.scanNoGoAssessment ?? bundle.scan_no_go_assessment);
+  const visualReview = asRecord(bundle.visualAccessReview ?? bundle.visual_access_review);
+  const reasonCodes = Array.isArray(assessment.reasonCodes ?? assessment.reason_codes)
+    ? (assessment.reasonCodes ?? assessment.reason_codes) as unknown[]
+    : [];
+  const reasonCode = reasonCodes.find(
+    (value) => typeof value === "string" && value !== "scan_no_go_corroborated",
+  );
+  const pageState = visualReview.pageState ?? visualReview.page_state;
+  return {
+    noGo:
+      (assessment.decision ?? assessment.scan_no_go_decision) === "no_go" &&
+      (visualReview.goNoGo ?? visualReview.go_no_go) === "NO_GO",
+    pageState: typeof pageState === "string" ? pageState : null,
+    reasonCode: typeof reasonCode === "string" ? reasonCode : null,
+  };
 }
 
 function messageBody(message: Message) {
@@ -397,6 +430,9 @@ export async function recordLocalV2DagLambdaResultEvent(
     s3Client: options.s3Client,
     workspaceRoot: options.workspaceRoot
   });
+  const retainedDiagnostics = artifactMirror
+    ? await readRetainedScanCompletionDiagnostics(artifactMirror).catch(() => null)
+    : null;
   const wc01ResultRecordedAt = new Date();
   const lambdaCompletedAtMs = Date.parse(parsedMessage.completedAt);
   const lambdaToWc01ResultRecordedMs = Number.isFinite(lambdaCompletedAtMs)
@@ -553,6 +589,40 @@ export async function recordLocalV2DagLambdaResultEvent(
       parsedMessage.error?.message ?? null
     ]
   );
+  if (parsedMessage.status === "completed" && retainedDiagnostics) {
+    const pagesScanned = retainedDiagnostics.noGo ? 0 : 1;
+    await query(
+      `update scans
+          set pages_scanned = case when $2::int = 0 then 0 else greatest(pages_scanned, $2::int) end
+        where id = $1`,
+      [parsedMessage.scanId, pagesScanned]
+    );
+    if (retainedDiagnostics.noGo) {
+      const presentation = resolveScanNoGoPresentation(
+        retainedDiagnostics.reasonCode,
+        retainedDiagnostics.pageState,
+      );
+      await query(
+        `update scan_snapshots
+            set access_posture_class = 'early_loss',
+                blocked_flag = true,
+                coverage_level = 'limited_none',
+                homepage_fetch_status = 'failed',
+                pages_scanned = 0,
+                scan_outcome = $2,
+                stop_reason_code = $2,
+                stop_reason_detail = $3,
+                stop_reason_label = $4
+          where scan_id = $1`,
+        [
+          parsedMessage.scanId,
+          retainedDiagnostics.reasonCode ?? "unknown_access_limitation",
+          presentation.explanation,
+          presentation.snapshotStopReasonLabel,
+        ]
+      );
+    }
+  }
   if (artifactMirror && options.mirrorAuxiliaryArtifacts !== false) {
     await mirrorLocalV2DagLambdaAuxiliaryArtifacts({
       mirror: artifactMirror,

@@ -22,6 +22,47 @@ export function ResetPasswordUpdateForm() {
 
   const invalidToken = token.length === 0 || callbackError === "INVALID_TOKEN";
 
+  if (invalidToken) {
+    return (
+      <div className="space-y-6">
+        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-50 text-amber-700">
+          <svg aria-hidden="true" className="h-6 w-6" fill="none" viewBox="0 0 24 24">
+            <path
+              d="M12 8v4l2.5 1.5M19.5 12a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1.8"
+            />
+          </svg>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-sky-700">Password reset</p>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-950">This reset link is no longer valid</h1>
+          <p className="text-sm leading-6 text-slate-600">
+            Reset links expire after 24 hours for your security. Request a new link to choose a new password.
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <Link
+            className="flex w-full items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            href="/reset-password"
+          >
+            Request a new reset link
+          </Link>
+          <Link
+            className="flex w-full items-center justify-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            href="/login"
+          >
+            Back to sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="space-y-2">
@@ -42,7 +83,6 @@ export function ResetPasswordUpdateForm() {
               placeholder="Create a new password"
               type={showPassword ? "text" : "password"}
               value={password}
-              disabled={invalidToken}
             />
             <button
               type="button"
@@ -54,21 +94,13 @@ export function ResetPasswordUpdateForm() {
           </div>
         </label>
 
-        {invalidToken ? (
-          <div className="space-y-2 text-sm text-red-600">
-            <p>This reset link is invalid or expired.</p>
-            <Link className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800" href="/reset-password">
-              Request a new reset link
-            </Link>
-          </div>
-        ) : null}
         {state.fieldErrors.password ? <p className="text-sm text-red-600">{state.fieldErrors.password}</p> : null}
         {state.fieldErrors.token ? <p className="text-sm text-red-600">{state.fieldErrors.token}</p> : null}
         {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
 
         <Button
           className="w-full"
-          disabled={isPending || invalidToken || password.length === 0}
+          disabled={isPending || password.length === 0}
           type="submit"
           variant="secondary"
         >

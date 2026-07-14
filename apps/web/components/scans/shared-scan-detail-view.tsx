@@ -3794,11 +3794,13 @@ export function deriveVisualAccessLimitationNotice(
   const status = getRecordString(visualAccessReview, "status");
   const pageState = getRecordString(visualAccessReview, "pageState") ?? getRecordString(visualAccessReview, "page_state");
   const reasonCode = getRecordString(visualAccessReview, "reasonCode") ?? getRecordString(visualAccessReview, "reason_code");
-  const visualArtifactMissing =
-    status === "missing_visual_artifact" ||
-    pageState === "missing_visual_artifact" ||
-    reasonCode === "visual_evidence_upload_failed";
-  if (visualArtifactMissing) {
+  const isolatedVisualUploadFailure =
+    reasonCode === "visual_evidence_upload_failed" &&
+    ![
+      ...getRecordStringArray(scanNoGoAssessment, "reasonCodes"),
+      ...getRecordStringArray(scanNoGoAssessment, "reason_codes")
+    ].some((code) => code !== "visual_evidence_upload_failed" && code !== "scan_no_go_corroborated");
+  if (isolatedVisualUploadFailure) {
     return null;
   }
   // A GO/degraded_but_useful visual review is retained scan-quality context, not a no-go.

@@ -24,13 +24,17 @@ const baseInput: RecentScanReuseInput = {
 
 function candidate(overrides: Partial<RecentScanReuseCandidate> = {}): RecentScanReuseCandidate {
   return {
+    accessPostureClass: "tolerant",
     completedAt: "2026-07-11T11:00:00.000Z",
+    coverageLevel: "full",
     hostname: "example.com",
     id: "scan-default",
     normalizedUrl: "https://example.com/",
     organizationId: null,
     pagesRequested: 4,
+    pagesScanned: 4,
     scanFrom: "eu_ie",
+    scanOutcome: "completed_successfully",
     scanType: "full",
     status: "completed",
     ...overrides
@@ -92,6 +96,13 @@ test("coverage must equal or exceed the new request", () => {
   assert.equal(eligibility({ minPagesRequested: 5 }, [candidate({ pagesRequested: 4 })]).eligible, false);
   assert.equal(eligibility({ minPagesRequested: 4 }, [candidate({ pagesRequested: 4 })]).eligible, true);
   assert.equal(eligibility({ minPagesRequested: 4 }, [candidate({ pagesRequested: 10 })]).eligible, true);
+});
+
+test("completed scans with no usable coverage or a no-go outcome are never reusable", () => {
+  assert.equal(eligibility({}, [candidate({ pagesScanned: 0 })]).eligible, false);
+  assert.equal(eligibility({}, [candidate({ coverageLevel: "limited_none" })]).eligible, false);
+  assert.equal(eligibility({}, [candidate({ accessPostureClass: "early_loss" })]).eligible, false);
+  assert.equal(eligibility({}, [candidate({ scanOutcome: "navigation_transport_failure" })]).eligible, false);
 });
 
 test("newest eligible scan wins when several candidates qualify", () => {

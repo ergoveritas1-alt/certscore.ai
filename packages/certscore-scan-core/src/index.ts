@@ -40,6 +40,7 @@ import { detectConsentUi, preConsentRuntimeScanner, type PreConsentRuntimeScanne
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
 import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
 import { throwIfAborted } from "./abort.js";
+import { httpTransportFallbackUrl, isNavigationTransportFailure } from "./transport-fallback.js";
 
 type ConsentFlowRuntimeScanner = typeof import("./scanners/consent-flow-runtime-scanner.js").consentFlowRuntimeScanner;
 type ConsentFlowRuntimeInput = Parameters<ConsentFlowRuntimeScanner>[0];
@@ -314,6 +315,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     const screenshotFallback = await capturePreConsentScreenshotOnlyFallback({
       artifactWriter,
       normalizedUrl,
+      navigationUrl: (preConsentResult.moduleRun.errors ?? []).some(isNavigationTransportFailure)
+        ? httpTransportFallbackUrl(normalizedUrl) ?? normalizedUrl
+        : normalizedUrl,
       scanStartedAtMs: startedAtMs,
       fallbackDeadlineMs: input.preConsentVisualFallbackDeadlineMs,
       screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
@@ -1775,6 +1779,7 @@ function shouldAttemptScreenshotOnlyFallback(
 export async function capturePreConsentScreenshotOnlyFallback(input: {
   artifactWriter: ArtifactWriter;
   fallbackDeadlineMs?: number;
+  navigationUrl?: string;
   normalizedUrl: string;
   scanStartedAtMs: number;
   screenshotTimeoutMs?: number;
@@ -1813,10 +1818,14 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
     const context = await browser.newContext(chromiumContextOptions());
     try {
       const page = await context.newPage();
-      await page.goto(input.normalizedUrl, {
-        waitUntil: "domcontentloaded",
+      await page.goto(input.navigationUrl ?? input.normalizedUrl, {
+        waitUntil: "commit",
         timeout: timeoutForStep(Math.max(2_000, Math.min(input.screenshotTimeoutMs ?? 5_000, 15_000))),
       });
+      const domContentLoadedTimeoutMs = optionalTimeoutForStep(1_500);
+      if (domContentLoadedTimeoutMs !== null) {
+        await page.waitForLoadState("domcontentloaded", { timeout: domContentLoadedTimeoutMs }).catch(() => undefined);
+      }
       const networkIdleTimeoutMs = optionalTimeoutForStep(1_000);
       if (networkIdleTimeoutMs !== null) {
         await page.waitForLoadState("networkidle", { timeout: networkIdleTimeoutMs }).catch(() => undefined);

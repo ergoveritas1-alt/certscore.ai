@@ -4,13 +4,17 @@ import { DEFAULT_SCAN_FROM, normalizeScanFrom, type ScanFrom } from "@website-si
 export const RECENT_SCAN_REUSE_WINDOW_HOURS = 24;
 
 export type RecentScanReuseCandidate = {
+  accessPostureClass: string | null;
   completedAt: string | null;
+  coverageLevel: string | null;
   hostname: string;
   id: string;
   normalizedUrl: string;
   organizationId: string | null;
   pagesRequested: number;
+  pagesScanned: number;
   scanFrom: string | null;
+  scanOutcome: string | null;
   scanType: string | null;
   status: string;
 };
@@ -52,10 +56,37 @@ export type RecentScanReuseDecision =
     };
 
 type ScanHistoryCandidate = {
+  accessPostureClass?: string | null;
   completedAt: string | null;
+  coverageLevel?: string | null;
   id?: string | null;
+  pagesScanned?: number | null;
+  scanOutcome?: string | null;
   status: string;
 };
+
+const NON_REUSABLE_SCAN_OUTCOMES = new Set([
+  "navigation_transport_failure",
+  "transport_failure",
+  "timeout_navigation",
+  "domain_inactive_or_unstable",
+  "unknown_access_limitation",
+  "verification_incomplete",
+]);
+
+function hasReusableCoverage(scan: {
+  accessPostureClass?: string | null;
+  coverageLevel?: string | null;
+  pagesScanned?: number | null;
+  scanOutcome?: string | null;
+}) {
+  return (
+    (scan.pagesScanned === undefined || scan.pagesScanned === null || scan.pagesScanned > 0) &&
+    scan.coverageLevel !== "limited_none" &&
+    scan.accessPostureClass !== "early_loss" &&
+    !NON_REUSABLE_SCAN_OUTCOMES.has(scan.scanOutcome ?? "")
+  );
+}
 
 function normalizeDomainForReuse(value: string) {
   return value.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "");
@@ -98,6 +129,7 @@ export function findRecentCompletedScanInHistory(scans: ScanHistoryCandidate[], 
           typeof scan.id === "string" &&
           scan.id.length > 0 &&
           scan.status === "completed" &&
+          hasReusableCoverage(scan) &&
           isScanWithinReuseWindow({ completedAt: scan.completedAt, now })
       )
       .sort((left, right) => new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime())[0] ?? null
@@ -127,6 +159,7 @@ export function evaluateRecentScanReuseCandidates(
         scopeAllowed &&
         targetMatches &&
         row.status === "completed" &&
+        hasReusableCoverage(row) &&
         (row.scanType ?? "full") === "full" &&
         isScanWithinReuseWindow({ completedAt: row.completedAt, now: input.now, windowHours: reuseWindowHours }) &&
         normalizeScanFrom(row.scanFrom) === effectiveScanFrom &&
@@ -167,13 +200,18 @@ async function loadRecentScanReuseCandidates(input: RecentScanReuseInput) {
             s.organization_id as "organizationId",
             s.completed_at as "completedAt",
             s.pages_requested as "pagesRequested",
+            s.pages_scanned as "pagesScanned",
             s.status,
             s.scan_type as "scanType",
             s.scan_config_json->>'scanFrom' as "scanFrom",
+            ss.access_posture_class as "accessPostureClass",
+            ss.coverage_level as "coverageLevel",
+            ss.scan_outcome as "scanOutcome",
             d.hostname,
             d.normalized_url as "normalizedUrl"
        from scans s
        join domains d on d.id = s.domain_id
+       left join scan_snapshots ss on ss.scan_id = s.id
       where (
           (s.organization_id is null and d.organization_id is null)
           or (
@@ -193,6 +231,17 @@ async function loadRecentScanReuseCandidates(input: RecentScanReuseInput) {
               else coalesce(s.scan_config_json->>'scanFrom', '${DEFAULT_SCAN_FROM}')
             end = $4
         and s.pages_requested >= $5
+        and s.pages_scanned > 0
+        and coalesce(ss.coverage_level, '') <> 'limited_none'
+        and coalesce(ss.access_posture_class, '') <> 'early_loss'
+        and coalesce(ss.scan_outcome, '') not in (
+          'navigation_transport_failure',
+          'transport_failure',
+          'timeout_navigation',
+          'domain_inactive_or_unstable',
+          'unknown_access_limitation',
+          'verification_incomplete'
+        )
         and (
           lower(regexp_replace(d.hostname, '^www\\.', '')) = lower(regexp_replace($6, '^www\\.', ''))
           or lower(regexp_replace(d.normalized_url, '^https?://www\\.', 'https://')) = lower(regexp_replace($7, '^https?://www\\.', 'https://'))
