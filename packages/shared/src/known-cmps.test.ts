@@ -83,6 +83,20 @@ test("detects Transcend and Airgap consent infrastructure", () => {
   assert.equal(getKnownCmpVendorName({ jsGlobals: ["window.airgap"] }), "Transcend");
 });
 
+test("detects Wave 10 CMP infrastructure through canonical CMP definitions", () => {
+  assert.equal(getKnownCmpVendorForHost("cookie-cdn.cookiepro.com"), "OneTrust");
+  assert.equal(getKnownCmpVendorForHost("cmp.inmobi.com"), "InMobi Choice");
+  assert.equal(getKnownCmpVendorForHost("cdn.ketchjs.com"), "Ketch");
+  assert.equal(
+    getKnownCmpVendorName({ urls: ["https://cmp.inmobi.com/choice/site/choice.js"] }),
+    "InMobi Choice",
+  );
+  assert.equal(
+    getKnownCmpVendorName({ urls: ["https://cdn.ketchjs.com/tcf/v2/stub.js"] }),
+    "Ketch",
+  );
+});
+
 test("classifies CMP infrastructure while preserving attribution signals", () => {
   const [detection] = detectKnownCmps({
     cookieNames: ["OptanonConsent"],

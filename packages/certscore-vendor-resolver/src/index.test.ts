@@ -254,6 +254,72 @@ test("rejects Wave 9 lookalikes and unrelated paths on vendor-controlled hosts",
   assert.equal(observations.some((item) => wave9Products.has(item.product ?? "")), false);
 });
 
+test("resolves the Wave 10 actionable production clusters with bounded product paths", () => {
+  const cases = [
+    ["https://transcend-cdn.com/cm/abc123/translations/en.json", "transcend-cdn.com", "Transcend", "Transcend Consent Management", "consent_management"],
+    ["https://cdn.confiant-integrations.net/gptprebidnative/client1/wrap.js", "cdn.confiant-integrations.net", "Confiant", "Confiant Ad Security", "security"],
+    ["https://activate.platform.californiatimes.com/caltimes/latimes/Bootstrap.js", "activate.platform.californiatimes.com", "Ensighten", "Ensighten Manage", "tag_management"],
+    ["https://maps.googleapis.com/maps/api/mapsjs/gen_204", "maps.googleapis.com", "Google", "Google Maps JavaScript API", "infrastructure"],
+    ["https://cdn.userway.org/widgetapp/2026-05-12-14-26-48/locales/en-US.json", "cdn.userway.org", "UserWay", "UserWay Accessibility Widget", "infrastructure"],
+    ["https://mc.yandex.com/sync_cookie_image_check", "mc.yandex.com", "Yandex", "Yandex Metrica", "analytics"],
+    ["https://mc.webvisor.org/metrika/tag.js", "mc.webvisor.org", "Yandex", "Yandex Metrica", "analytics"],
+    ["https://cdn.flowplayer.com/releases/native/3/stable/plugins/ga4.min.js", "cdn.flowplayer.com", "Flowplayer", "Flowplayer Native", "infrastructure"],
+    ["https://cdn-cookieyes.com/client_data/site_123/script.js", "cdn-cookieyes.com", "CookieYes", "CookieYes CMP", "consent_management"],
+    ["https://js.hubspot.com/web-interactives-embed.js", "js.hubspot.com", "HubSpot", "HubSpot Web Interactives", "analytics"],
+    ["https://no-cache.hubspot.com/cta/default/12345/abc_123", "no-cache.hubspot.com", "HubSpot", "HubSpot Calls to Action", "analytics"],
+    ["https://api.hubspot.com/livechat-public/v1/message", "api.hubspot.com", "HubSpot", "HubSpot Live Chat", "customer_support"],
+    ["https://track.hubspot.com/__ptq.gif", "track.hubspot.com", "HubSpot", "HubSpot Analytics", "analytics"],
+    ["https://fast.wistia.net/embed/medias/abc123.jsonp", "fast.wistia.net", "Wistia", "Wistia Embedded Player", "infrastructure"],
+    ["https://use.fontawesome.com/releases/v6.7.2/css/all.css", "use.fontawesome.com", "Font Awesome", "Font Awesome Kits CDN", "infrastructure"],
+    ["https://cmp.inmobi.com/choice/site123/example.com/choice.js", "cmp.inmobi.com", "InMobi", "InMobi Choice CMP", "consent_management"],
+    ["https://fundingchoicesmessages.google.com/el/pub123", "fundingchoicesmessages.google.com", "Google", "Google Funding Choices CMP", "consent_management"],
+    ["https://c.marsflag.com/search/app.css", "c.marsflag.com", "MarsFlag", "MarsFlag Site Search", "analytics"],
+    ["https://cdn.membrana.media/scripts/header.js", "cdn.membrana.media", "Membrana Media", "Membrana Media Monetization", "advertising"],
+    ["https://cdn.pdst.fm/ping.min.js", "cdn.pdst.fm", "Podscribe", "Podscribe Attribution", "analytics"],
+    ["https://collector-21641.us.tvsquared.com/tv2track.js", "collector-21641.us.tvsquared.com", "TVSquared", "TVSquared Attribution", "advertising"],
+    ["https://znbab-cemgsa.gov1.siteintercept.qualtrics.com/SIE/?Q_ZID=abc", "znbab-cemgsa.gov1.siteintercept.qualtrics.com", "Qualtrics", "Qualtrics Site Intercept", "analytics"],
+    ["https://browser.sentry-cdn.com/8.20.0/bundle.tracing.min.js", "browser.sentry-cdn.com", "Sentry", "Sentry Browser SDK", "performance_monitoring"],
+    ["https://www.queryly.com/js/queryly.v4.min.js", "www.queryly.com", "Queryly", "Queryly Site Search", "analytics"],
+    ["https://munchkin.marketo.net/154/munchkin.js", "munchkin.marketo.net", "Adobe", "Adobe Marketo Engage Munchkin", "analytics"],
+    ["https://try.abtasty.com/site123/main.885dc01482134b4f656c.js", "try.abtasty.com", "AB Tasty", "AB Tasty Experimentation", "analytics"],
+    ["https://c.amazon-adsystem.com/aax2/apstag.js", "c.amazon-adsystem.com", "Amazon", "Amazon Publisher Services", "advertising"],
+    ["https://counter.yadro.ru/hit_championat_com", "counter.yadro.ru", "LiveInternet", "LiveInternet Analytics Counter", "analytics"],
+    ["https://pixel.wp.com/g.gif", "pixel.wp.com", "WordPress.com", "Jetpack Stats", "analytics"],
+    ["https://cdn.intellimize.co/snippet/site_123.js", "cdn.intellimize.co", "Intellimize", "Intellimize Personalization", "analytics"],
+    ["https://cookie-cdn.cookiepro.com/scripttemplates/202604.1.0/otBannerSdk.js", "cookie-cdn.cookiepro.com", "OneTrust", "OneTrust CMP", "consent_management"],
+    ["https://tagan.adlightning.com/buzzfeed/op.js", "tagan.adlightning.com", "Ad Lightning", "Ad Lightning Ad Quality", "security"],
+    ["https://cdn.ketchjs.com/tcf/v2/stub.js", "cdn.ketchjs.com", "Ketch", "Ketch CMP", "consent_management"],
+  ] as const;
+
+  for (const [url, hostname, vendor, product, purpose] of cases) {
+    assertResolved(resolveVendorObservations([request(url, hostname)]), vendor, product, purpose);
+  }
+});
+
+test("rejects Wave 10 lookalikes, shared infrastructure, and unrelated vendor-host paths", () => {
+  const observations = resolveVendorObservations([
+    request("https://cdn.confiant-integrations.net/ordinary.js", "cdn.confiant-integrations.net"),
+    request("https://activate.platform.californiatimes.com/ordinary.js", "activate.platform.californiatimes.com"),
+    request("https://maps.googleapis.com/ordinary.js", "maps.googleapis.com"),
+    request("https://mc.yandex.com/ordinary.js", "mc.yandex.com"),
+    request("https://api.hubspot.com/crm/v3/objects", "api.hubspot.com"),
+    request("https://cmp.inmobi.com/ordinary.js", "cmp.inmobi.com"),
+    request("https://challenges.cloudflare.com/turnstile/v0/api.js", "challenges.cloudflare.com"),
+    request("https://cdn.membrana.media/image.jpg", "cdn.membrana.media"),
+    request("https://app.hubspot.com/content-tools/menu", "app.hubspot.com"),
+    request("https://53.fs1.hubspotusercontent-na1.net/hubfs/image.png", "53.fs1.hubspotusercontent-na1.net"),
+    request("https://cdn.confiant-integrations.example/client/gpt_and_prebid/config.js", "cdn.confiant-integrations.example"),
+    request("https://browser.sentry-cdn.example/8.20.0/bundle.min.js", "browser.sentry-cdn.example"),
+    request("https://cdn.ketchjs.com/assets/logo.svg", "cdn.ketchjs.com"),
+  ]);
+
+  const wave10Products = new Set([
+    "Confiant Ad Security", "Ensighten Manage", "Google Maps JavaScript API", "Yandex Metrica",
+    "HubSpot Live Chat", "InMobi Choice CMP", "Membrana Media Monetization", "Sentry Browser SDK", "Ketch CMP",
+  ]);
+  assert.equal(observations.some((item) => wave10Products.has(item.product ?? "")), false);
+});
+
 test("resolves canonical product labels and apex vendor host labels conservatively", () => {
   assert.deepEqual(
     [

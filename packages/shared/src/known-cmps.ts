@@ -61,7 +61,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     aliases: ["CookiePro", "Optanon", "OptanonConsent", "OptanonAlertBoxClosed", "cookielaw"],
     canonicalName: "OneTrust",
     cookieNames: ["OptanonConsent", "OptanonAlertBoxClosed"],
-    domains: ["onetrust.com", "onetrust.io", "cookielaw.org", "cdn.cookielaw.org", "geolocation.onetrust.com", "optanon.blob.core.windows.net", "cookies-data.onetrust.io"],
+    domains: ["onetrust.com", "onetrust.io", "cookielaw.org", "cdn.cookielaw.org", "cookiepro.com", "cookie-cdn.cookiepro.com", "geolocation.onetrust.com", "optanon.blob.core.windows.net", "cookies-data.onetrust.io"],
     domSelectors: ["#onetrust-banner-sdk", "#onetrust-consent-sdk", "#ot-sdk-btn", ".ot-sdk-container"],
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["OneTrust", "Optanon", "OptanonWrapper"],
@@ -256,6 +256,34 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     role: "consent management platform",
     standards: ["tcf", "google_consent_mode"],
     urlPatterns: [/cookieinformation/i]
+  },
+  {
+    aliases: ["InMobi Choice", "InMobi CMP", "Choice CMP"],
+    canonicalName: "InMobi Choice",
+    cookieNames: ["euconsent-v2"],
+    domains: ["cmp.inmobi.com"],
+    domSelectors: ["[id*='inmobi-cmp' i]", "[class*='inmobi-cmp' i]"],
+    evidenceTreatment: "cmp_infrastructure",
+    globalNames: ["__tcfapi"],
+    reopenControlHints: ["privacy choices", "consent choices"],
+    role: "consent management platform",
+    standards: ["tcf"],
+    storageKeys: ["euconsent-v2"],
+    urlPatterns: [/cmp\.inmobi\.com\/(?:choice|geoip|vendor-list|tcfv2)/i]
+  },
+  {
+    aliases: ["Ketch CMP", "Ketch Consent Management"],
+    canonicalName: "Ketch",
+    cookieNames: ["ketch_consent"],
+    domains: ["ketch.com", "ketchcdn.com", "cdn.ketchjs.com"],
+    domSelectors: ["#ketch-banner", "[class*='ketch-consent' i]"],
+    evidenceTreatment: "cmp_infrastructure",
+    globalNames: ["Ketch", "ketch"],
+    reopenControlHints: ["privacy choices", "privacy preferences", "ketch"],
+    role: "consent management platform",
+    standards: ["tcf", "gpp", "gpc"],
+    storageKeys: ["ketch_consent"],
+    urlPatterns: [/cdn\.ketchjs\.com\/(?:web\/v\d+\/ketch\.js|tcf\/v\d+\/stub\.js|ketch\.js)/i]
   },
   {
     aliases: ["Transcend Consent", "Transcend Consent Management", "Airgap"],
