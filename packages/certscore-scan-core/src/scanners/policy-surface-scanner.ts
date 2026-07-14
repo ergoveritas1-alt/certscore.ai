@@ -28,6 +28,7 @@ const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 4;
 const POLICY_RENDERED_FETCH_CONCURRENCY = 1;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
+const POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS = 10_000;
 export const POLICY_HOMEPAGE_FETCH_TIMEOUT_MS = 5_000;
 const MAX_EXCERPT_CHARS = 6_000;
 const MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS = 40_000;
@@ -2107,7 +2108,10 @@ async function extractRenderedCandidatesBeforeSoftDeadline(
 ): Promise<PolicySurfaceCandidate[]> {
   const discoveryPromise = extractRenderedCandidates(input, moduleStartedAtMs, browserRuntime);
   void discoveryPromise.catch(() => undefined);
-  const deadlineMs = Math.max(1, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
+  const remainingBudgetMs = Math.max(1, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
+  const deadlineMs = input.discoveryMode === "fast"
+    ? Math.min(POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS, remainingBudgetMs)
+    : remainingBudgetMs;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
   const deadlinePromise = new Promise<PolicySurfaceCandidate[]>((resolve) => {
     deadlineTimer = setTimeout(() => {
