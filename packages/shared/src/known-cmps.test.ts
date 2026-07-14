@@ -92,7 +92,7 @@ test("detects Wave 10 CMP infrastructure through canonical CMP definitions", () 
     "InMobi Choice",
   );
   assert.equal(
-    getKnownCmpVendorName({ urls: ["https://cdn.ketchjs.com/tcf/v2/stub.js"] }),
+    getKnownCmpVendorName({ urls: ["https://cdn.ketchjs.com/plugins/v1/tcf/stub.js"] }),
     "Ketch",
   );
 });

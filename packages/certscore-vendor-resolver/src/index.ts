@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-14-wave10-actionable-clusters";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-14-wave10-replay-corrected";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -2392,7 +2392,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["tag_management", "third_party_runtime"],
     confidence: 0.96,
     hostPatterns: [/^activate\.platform\.californiatimes\.com$/i],
-    urlPatterns: [/^https:\/\/activate\.platform\.californiatimes\.com\/(?:caltimes\/latimes\/Bootstrap\.js|code\/[A-Za-z0-9_-]+|serverComponent\.php)(?:\?|$)/i],
+    urlPatterns: [/^https:\/\/activate\.platform\.californiatimes\.com\/caltimes\/latimes\/(?:Bootstrap\.js|code\/[A-Za-z0-9_-]+|serverComponent\.php)(?:\?|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "ensighten_manage_california_times_cname",
   },
@@ -2429,7 +2429,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "analytics", "audience_measurement", "session_replay"],
     confidence: 0.96,
     hostPatterns: [/^mc\.yandex\.(?:com|ru)$/i, /^mc\.webvisor\.org$/i],
-    urlPatterns: [/^https:\/\/(?:mc\.yandex\.(?:com|ru)|mc\.webvisor\.org)\/(?:metrika|webvisor|watch\/\d+|\d+|sync_cookie_image_(?:check|decide|start|finish)|ytm-config)(?:[/?#]|$)/i],
+    urlPatterns: [/^https:\/\/(?:mc\.yandex\.(?:com|ru)|mc\.webvisor\.org)\/(?:metrika|webvisor|watch\/[A-Za-z0-9_-]+|[A-Za-z0-9_-]{4,}|sync_cookie_image_(?:check|decide|start|finish)|ytm-config)(?:[/?#]|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "yandex_metrica_webvisor_runtime",
   },
@@ -2477,7 +2477,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "lead_capture", "marketing_automation", "third_party_runtime"],
     confidence: 0.95,
     hostPatterns: [/^(?:no-cache\.hubspot\.com|cta-service-cms2\.hubspot\.com)$/i],
-    urlPatterns: [/^https:\/\/no-cache\.hubspot\.com\/cta\/default\/\d+\/[A-Za-z0-9_-]+(?:\.js)?(?:\?|$)/i, /^https:\/\/cta-service-cms2\.hubspot\.com\/(?:ctas\/v2|combinedConfigs)(?:[/?#]|$)/i],
+    urlPatterns: [/^https:\/\/no-cache\.hubspot\.com\/cta\/default\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+(?:\.js)?(?:[/?#]|$)/i, /^https:\/\/cta-service-cms2\.hubspot\.com\/(?:ctas\/v2|combinedConfigs)(?:[/?#]|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "hubspot_cta_runtime",
   },
@@ -2549,7 +2549,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent_management", "third_party_runtime"],
     confidence: 0.96,
     hostPatterns: [/^fundingchoicesmessages\.google\.com$/i],
-    urlPatterns: [/^https:\/\/fundingchoicesmessages\.google\.com\/(?:el|i)\/[A-Za-z0-9_-]+(?:\?|$)/i],
+    urlPatterns: [/^https:\/\/fundingchoicesmessages\.google\.com\/(?:el|i)\/[A-Za-z0-9_-]+(?:[/?#]|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "google_funding_choices_message_runtime",
   },
@@ -2744,7 +2744,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent_management", "tcf", "third_party_runtime"],
     confidence: 0.96,
     hostPatterns: [/^cdn\.ketchjs\.com$/i],
-    urlPatterns: [/^https:\/\/cdn\.ketchjs\.com\/(?:web\/v\d+\/ketch\.js|tcf\/v\d+\/stub\.js|ketch\.js)(?:\?|$)/i],
+    urlPatterns: [/^https:\/\/cdn\.ketchjs\.com\/(?:ketchtag\/stable\/v\d+(?:\.\d+)*\/ketch-sdk\.js|plugins\/v\d+\/tcf\/stub\.js|web\/v\d+\/ketch\.js|tcf\/v\d+\/stub\.js|ketch\.js)(?:\?|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "ketch_cmp_cdn_runtime",
   },

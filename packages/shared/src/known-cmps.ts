@@ -283,7 +283,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     role: "consent management platform",
     standards: ["tcf", "gpp", "gpc"],
     storageKeys: ["ketch_consent"],
-    urlPatterns: [/cdn\.ketchjs\.com\/(?:web\/v\d+\/ketch\.js|tcf\/v\d+\/stub\.js|ketch\.js)/i]
+    urlPatterns: [/cdn\.ketchjs\.com\/(?:ketchtag\/stable\/v\d+(?:\.\d+)*\/ketch-sdk\.js|plugins\/v\d+\/tcf\/stub\.js|web\/v\d+\/ketch\.js|tcf\/v\d+\/stub\.js|ketch\.js)/i]
   },
   {
     aliases: ["Transcend Consent", "Transcend Consent Management", "Airgap"],
