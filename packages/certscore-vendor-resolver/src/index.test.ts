@@ -1764,6 +1764,63 @@ test("does not turn generic static or low-confidence endpoints into vendor obser
   assert.equal(observations.length, 0);
 });
 
+test("resolves the 1600-scan deterministic residual batch", () => {
+  const observations = resolveVendorObservations([
+    request("https://challenges.cloudflare.com/turnstile/v0/b/1eec422858ff/api.js", "challenges.cloudflare.com"),
+    request("https://www.youtube.com/youtubei/v1/log_event?alt=json", "www.youtube.com"),
+    request("https://yastatic.net/partner-code-bundles/123456/5e626e9fda9bdbd6.js", "yastatic.net"),
+    request("https://btloader.com/tag?o=5708166709903360", "btloader.com"),
+    request("https://client.aps.amazon-adsystem.com/publisher.js", "client.aps.amazon-adsystem.com"),
+    request("https://geo.captcha-delivery.com/captcha/", "geo.captcha-delivery.com"),
+    request("https://kit.fontawesome.com/37926dae7e/v7/kit-upload.css", "kit.fontawesome.com"),
+    request("https://ka-p.fontawesome.com/releases/v6.7.2/webfonts/pro-fa-brands-400-0.woff2", "ka-p.fontawesome.com"),
+    request("https://s.adroll.com/j/CWX7J3OCSZHGVD5OVW7E4C/roundtrip.js", "s.adroll.com"),
+    request("https://js.monitor.azure.com/scripts/b/ai.3.min.js", "js.monitor.azure.com"),
+    request("https://cdn.gladly.com/assets/chat-sdk/apiBootstrap_5dfdda5e77ce983a.js", "cdn.gladly.com"),
+    request("https://sdk.mrf.io/statics/marfeel-sdk.js?id=fixture", "sdk.mrf.io"),
+    request("https://dap.digitalgov.gov/web-vitals/dist/web-vitals.attribution.iife.js", "dap.digitalgov.gov"),
+    request("https://cd.connatix.com/connatix.player.js", "cd.connatix.com"),
+  ]);
+
+  for (const [vendor, product, purpose] of [
+    ["Cloudflare", "Cloudflare Turnstile", "security"],
+    ["YouTube", "YouTube Embedded Player", "infrastructure"],
+    ["Yandex", "Yandex Advertising Network", "advertising"],
+    ["Blockthrough", "Blockthrough Ad Recovery", "advertising"],
+    ["Amazon", "Amazon Publisher Services", "advertising"],
+    ["DataDome", "DataDome Challenge", "security"],
+    ["Font Awesome", "Font Awesome Kits CDN", "infrastructure"],
+    ["AdRoll", "AdRoll Pixel", "advertising"],
+    ["Microsoft", "Azure Monitor Application Insights", "performance_monitoring"],
+    ["Gladly", "Gladly Chat", "customer_support"],
+    ["Marfeel", "Marfeel Analytics SDK", "analytics"],
+    ["GSA", "Digital Analytics Program", "analytics"],
+    ["Connatix", "Connatix Video Player", "advertising"],
+  ] as const) {
+    assertResolved(observations, vendor, product, purpose);
+  }
+});
+
+test("keeps the 1600-scan residual rules product and path bounded", () => {
+  const observations = resolveVendorObservations([
+    request("https://challenges.cloudflare.com/turnstile/v0/unrelated.js", "challenges.cloudflare.com"),
+    request("https://www.youtube.com/watch?v=fixture", "www.youtube.com"),
+    request("https://yastatic.net/common/site.js", "yastatic.net"),
+    request("https://btloader.com/", "btloader.com"),
+    request("https://client.aps.amazon-adsystem.com/logo.svg", "client.aps.amazon-adsystem.com"),
+    request("https://geo.captcha-delivery.com/assets/logo.svg", "geo.captcha-delivery.com"),
+    request("https://kit.fontawesome.com/ordinary.css", "kit.fontawesome.com"),
+    request("https://s.adroll.com/images/logo.svg", "s.adroll.com"),
+    request("https://js.monitor.azure.com/scripts/app.js", "js.monitor.azure.com"),
+    request("https://cdn.gladly.com/marketing/home.js", "cdn.gladly.com"),
+    request("https://sdk.mrf.io/images/logo.svg", "sdk.mrf.io"),
+    request("https://dap.digitalgov.gov/readme.txt", "dap.digitalgov.gov"),
+    request("https://cd.connatix.com/logo.svg", "cd.connatix.com"),
+  ]);
+
+  assert.equal(observations.length, 0);
+});
+
 function request(url: string, hostname: string) {
   return {
     type: "request" as const,
