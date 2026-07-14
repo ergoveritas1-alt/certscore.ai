@@ -28,6 +28,7 @@ const MAX_SECONDARY_CANDIDATES_TO_FETCH = 5;
 const POLICY_FETCH_CONCURRENCY = 4;
 const POLICY_RENDERED_FETCH_CONCURRENCY = 1;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
+const POLICY_CANDIDATE_PROCESSING_TIMEOUT_MS = 8_000;
 const POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS = 10_000;
 const MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS = 1_000;
 const MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS = 500_000;
@@ -950,7 +951,7 @@ async function fetchPolicyCandidateGroup(input: {
     () => mapWithConcurrency(
       toFetch.map((candidate, candidateIndex) => ({ candidate, candidateIndex })),
       POLICY_FETCH_CONCURRENCY,
-      ({ candidate, candidateIndex }) => processPolicyCandidate({
+      ({ candidate, candidateIndex }) => processPolicyCandidateBeforeDeadline({
         input: input.input,
         fetchCaches: input.fetchCaches,
         timingBreakdown: input.timingBreakdown,
@@ -967,6 +968,32 @@ async function fetchPolicyCandidateGroup(input: {
     observations: policyResults.map((result) => result.observation),
     secondaryCandidates: policyResults.flatMap((result) => result.secondaryCandidates),
   };
+}
+
+async function processPolicyCandidateBeforeDeadline(
+  input: ProcessPolicyCandidateInput,
+): Promise<ProcessPolicyCandidateResult> {
+  const processingPromise = processPolicyCandidate(input);
+  void processingPromise.catch(() => undefined);
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadlinePromise = new Promise<ProcessPolicyCandidateResult>((resolve) => {
+    deadlineTimer = setTimeout(() => {
+      resolve({
+        observation: observationFromCandidate(input.candidate, {
+          status: "skipped_budget",
+          confidence: input.candidate.assisted?.confidence ?? input.candidate.deterministicScore,
+        }),
+        artifactRefs: [],
+        secondaryCandidates: [],
+      });
+    }, POLICY_CANDIDATE_PROCESSING_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([processingPromise, deadlinePromise]);
+  } finally {
+    if (deadlineTimer) clearTimeout(deadlineTimer);
+  }
 }
 
 async function processPolicyCandidate({
