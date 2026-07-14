@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-13-wave2-teads";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-13-wave5-web-evidence";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -32,6 +32,47 @@ export interface VendorResolverInput {
   consentStateAtTime?: NormalizedVendorObservation["matchSources"][number]["consentStateAtTime"];
   matchSource?: VendorMatchSourceType;
 }
+
+/**
+ * A bounded, already-sanitized observation used to identify repeated endpoints
+ * that the canonical resolver does not yet recognize. This is discovery input,
+ * not a registry rule or vendor attribution.
+ */
+export type UnknownVendorCandidateInput = {
+  cookieNames?: string[];
+  domainId?: string;
+  hostname?: string;
+  scanId: string;
+  source: "request" | "response" | "script";
+  thirdParty: boolean;
+  url?: string;
+};
+
+export type UnknownVendorCandidate = {
+  candidateKey: string;
+  cookieNames: string[];
+  distinctPathCount: number;
+  distinctScanCount: number;
+  distinctSiteCount: number;
+  hostname: string;
+  observationCount: number;
+  pathTemplates: string[];
+  priorityScore: number;
+  recommendedAction: "deterministic_review" | "observe_more";
+  requiresOwnerResearch: true;
+  sampleEndpoints: string[];
+  sourceTypes: Array<"request" | "response" | "script">;
+};
+
+export type UnknownVendorCandidateQueue = {
+  excluded: {
+    invalidOrFirstParty: number;
+    knownCanonical: number;
+    missingConcretePath: number;
+  };
+  candidates: UnknownVendorCandidate[];
+  inputObservationCount: number;
+};
 
 export type EndpointGeographyResolution = {
   basis: string[];
@@ -1743,6 +1784,259 @@ const rules: VendorRule[] = [
     urlPatterns: [/\/(?:sync|pixel|collect|impression|event)\b/i],
     basisLabel: "teads_video_advertising_endpoint",
   },
+  {
+    entity: "OneSignal, Inc.",
+    vendor: "OneSignal",
+    product: "OneSignal Web Push",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "push_notifications", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^cdn\.onesignal\.com$/i, /^onesignal\.com$/i],
+    urlPatterns: [/\/sdks\/(?:web\/)?(?:v\d+\/)?OneSignal(?:SDK)?[^/]*\.js\b/i, /\/api\/v1\/(?:players|notifications|sync)\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "onesignal_web_push_runtime",
+  },
+  {
+    entity: "Zendesk, Inc.",
+    vendor: "Zendesk",
+    product: "Zendesk Web Widget",
+    purpose: "customer_support",
+    regulatoryRelevance: ["consent", "customer_support", "chat_widget", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^static\.zdassets\.com$/i, /^ekr\.zdassets\.com$/i],
+    urlPatterns: [/\/ekr\/snippet\.js\b/i, /\/web_widget\//i, /\/embeddable\//i],
+    requireUrlPatternMatch: true,
+    basisLabel: "zendesk_web_widget_runtime",
+  },
+  {
+    entity: "Nielsen Holdings plc",
+    vendor: "Nielsen",
+    product: "Nielsen Digital Audience Measurement",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "audience_measurement", "analytics", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/\.imrworldwide\.com$/i],
+    urlPatterns: [/\/cgi-bin\/(?:m|gn)\b/i, /\/ggcmb\d*\//i, /\/log\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "nielsen_imrworldwide_audience_measurement",
+  },
+  {
+    entity: "Chartbeat, Inc.",
+    vendor: "Chartbeat",
+    product: "Chartbeat Publisher Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "audience_measurement", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^static\.chartbeat\.com$/i, /^ping\.chartbeat\.net$/i, /\.chartbeat\.(?:com|net)$/i],
+    urlPatterns: [/\/chartbeat[^/]*\.js\b/i, /\/ping\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "chartbeat_publisher_analytics_runtime",
+  },
+  {
+    entity: "hCaptcha, Inc.",
+    vendor: "hCaptcha",
+    product: "hCaptcha",
+    purpose: "security",
+    regulatoryRelevance: ["security", "bot_detection", "fraud_prevention", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^(?:js|api|newassets|imgs)\.hcaptcha\.com$/i, /\.hcaptcha\.com$/i],
+    urlPatterns: [/\/1\/api\.js\b/i, /\/captcha\//i, /\/checksiteconfig\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "hcaptcha_security_runtime",
+  },
+  {
+    entity: "Matomo Cloud",
+    vendor: "Matomo",
+    product: "Matomo Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "audience_measurement", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/\.matomo\.cloud$/i],
+    urlPatterns: [/\/(?:matomo|piwik)\.(?:js|php)\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "matomo_cloud_analytics_runtime",
+  },
+  {
+    entity: "Cloudflare, Inc.",
+    vendor: "Cloudflare",
+    product: "Cloudflare Web Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "audience_measurement", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^static\.cloudflareinsights\.com$/i, /^cloudflareinsights\.com$/i],
+    urlPatterns: [/\/beacon(?:\.min)?\.js\b/i],
+    basisLabel: "cloudflare_web_analytics_beacon",
+  },
+  {
+    entity: "Cloudflare, Inc.",
+    vendor: "Cloudflare",
+    product: "Cloudflare Turnstile",
+    purpose: "security",
+    regulatoryRelevance: ["security", "bot_detection", "fraud_prevention", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^challenges\.cloudflare\.com$/i],
+    urlPatterns: [/\/turnstile\/v0\/api\.js\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "cloudflare_turnstile_runtime",
+  },
+  {
+    entity: "Vimeo, Inc.",
+    vendor: "Vimeo",
+    product: "Vimeo Embedded Player",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["embedded_content", "media_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^player\.vimeo\.com$/i],
+    urlPatterns: [/\/video\/\d+\b/i, /\/api\/player\.js\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "vimeo_embedded_player_runtime",
+  },
+  {
+    entity: "Qualified.com, Inc.",
+    vendor: "Qualified",
+    product: "Qualified Conversational Marketing",
+    purpose: "customer_support",
+    regulatoryRelevance: ["consent", "customer_support", "lead_generation", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^js\.qualified\.com$/i, /^app\.qualified\.com$/i],
+    urlPatterns: [/\/(?:qualified|widget|conversation|visitor)\b/i],
+    basisLabel: "qualified_conversational_marketing_runtime",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "YouTube",
+    product: "YouTube Embedded Player",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["embedded_content", "media_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^www\.youtube\.com$/i, /^www\.youtube-nocookie\.com$/i],
+    urlPatterns: [/\/embed\/[A-Za-z0-9_-]+/i, /\/iframe_api\b/i, /\/player_api\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "youtube_embedded_player_iframe_runtime",
+  },
+  {
+    entity: "Google LLC",
+    vendor: "Google",
+    product: "Google Funding Choices CMP",
+    purpose: "consent_management",
+    regulatoryRelevance: ["consent_management", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^fundingchoicesmessages\.google\.com$/i],
+    urlPatterns: [/\/i\/pub-\d+/i, /\/f\/AGSKWxI/i, /\/f\/AGSKWxU/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "google_funding_choices_cmp_runtime",
+  },
+  {
+    entity: "Salesforce, Inc.",
+    vendor: "Salesforce",
+    product: "Salesforce Account Engagement",
+    aliases: ["Pardot"],
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "lead_generation", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^pi\.pardot\.com$/i],
+    urlPatterns: [/\/pd\.js\b/i, /\/analytics\b/i],
+    requireUrlPatternMatch: true,
+    cookiePatterns: [/^visitor_id\d+$/i, /^pardot$/i, /^lpv\d+$/i],
+    basisLabel: "salesforce_account_engagement_pardot_runtime",
+  },
+  {
+    entity: "Awin AG",
+    vendor: "AWIN",
+    product: "AWIN Affiliate Tracking",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "affiliate_tracking", "conversion_tracking"],
+    confidence: 0.9,
+    hostPatterns: [/^www\.dwin1\.com$/i],
+    urlPatterns: [/\/\d+\.js\b/i],
+    requireUrlPatternMatch: true,
+    cookiePatterns: [/^aw\d+$/i, /^_aw_(?:m|j|sn)_/i],
+    basisLabel: "awin_mastertag_dwin1_runtime",
+  },
+  {
+    entity: "ShareThis, Inc.",
+    vendor: "ShareThis",
+    product: "ShareThis Widgets",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "social_sharing", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^platform-api\.sharethis\.com$/i],
+    urlPatterns: [/\/js\/sharethis\.js\b/i],
+    cookiePatterns: [/^__unam$/i],
+    basisLabel: "sharethis_widget_runtime",
+  },
+  {
+    entity: "Pendo.io, Inc.",
+    vendor: "Pendo",
+    product: "Pendo",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "product_analytics", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^cdn\.pendo\.io$/i],
+    urlPatterns: [/\/agent\/static\/[^/]+\/pendo\.js\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "pendo_web_sdk_runtime",
+  },
+  {
+    entity: "Plausible Analytics",
+    vendor: "Plausible",
+    product: "Plausible Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["analytics", "cookieless_analytics", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^plausible\.io$/i],
+    urlPatterns: [/\/js\/(?:script|plausible)[^/]*\.js\b/i, /\/api\/event\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "plausible_analytics_runtime",
+  },
+  {
+    entity: "Fonticons, Inc.",
+    vendor: "Font Awesome",
+    product: "Font Awesome Kits CDN",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "font_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^kit\.fontawesome\.com$/i],
+    urlPatterns: [/\/[a-f0-9]+\.js\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "font_awesome_kit_runtime",
+  },
+  {
+    entity: "Cloudinary, Inc.",
+    vendor: "Cloudinary",
+    product: "Cloudinary Media CDN",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["cdn", "media_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^res\.cloudinary\.com$/i],
+    urlPatterns: [/\/image\/(?:upload|fetch)\//i, /\/video\/upload\//i],
+    requireUrlPatternMatch: true,
+    basisLabel: "cloudinary_media_delivery_runtime",
+  },
+  {
+    entity: "LongTail Ad Solutions, Inc.",
+    vendor: "JW Player",
+    product: "JW Player",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["embedded_content", "media_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^cdn\.jwplayer\.com$/i],
+    urlPatterns: [/\/libraries\/[A-Za-z0-9]{8}\.js\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "jw_player_cloud_hosted_library",
+  },
+  {
+    entity: "Brightcove, Inc.",
+    vendor: "Brightcove",
+    product: "Brightcove Player",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["embedded_content", "media_delivery", "third_party_runtime"],
+    confidence: 0.9,
+    hostPatterns: [/^players\.brightcove\.net$/i],
+    urlPatterns: [/\/index(?:\.min)?\.js\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "brightcove_player_runtime",
+  },
 ];
 
 export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput): VendorDisplayCategory {
@@ -2130,6 +2424,173 @@ export function resolveVendorObservations(
   }
 
   return [...observations.values()];
+}
+
+/**
+ * Creates a review queue from repeated, unresolved third-party endpoints.
+ *
+ * This deliberately does not infer a vendor from a hostname, collapse hosts to
+ * a registrable domain, or emit a rule. A candidate is only a request for
+ * deterministic evidence collection and owner/product research.
+ */
+export function buildUnknownVendorCandidateQueue(
+  inputs: UnknownVendorCandidateInput[],
+): UnknownVendorCandidateQueue {
+  const excluded = {
+    invalidOrFirstParty: 0,
+    knownCanonical: 0,
+    missingConcretePath: 0,
+  };
+  const candidates = new Map<string, {
+    cookieNames: Set<string>;
+    hostname: string;
+    observationCount: number;
+    paths: Set<string>;
+    sampleEndpoints: Set<string>;
+    scanIds: Set<string>;
+    siteIds: Set<string>;
+    sourceTypes: Set<"request" | "response" | "script">;
+  }>();
+
+  for (const input of inputs) {
+    if (!input.thirdParty) {
+      excluded.invalidOrFirstParty += 1;
+      continue;
+    }
+    const hostname = normalizeUnknownCandidateHostname(input.hostname ?? hostnameFromUrl(input.url));
+    if (!hostname) {
+      excluded.invalidOrFirstParty += 1;
+      continue;
+    }
+    const pathTemplate = unknownCandidatePathTemplate(input.url, hostname);
+    if (!pathTemplate) {
+      excluded.missingConcretePath += 1;
+      continue;
+    }
+    if (resolveVendorObservations([{ type: input.source, hostname, url: input.url }]).length > 0) {
+      excluded.knownCanonical += 1;
+      continue;
+    }
+
+    const existing = candidates.get(hostname) ?? {
+      cookieNames: new Set<string>(),
+      hostname,
+      observationCount: 0,
+      paths: new Set<string>(),
+      sampleEndpoints: new Set<string>(),
+      scanIds: new Set<string>(),
+      siteIds: new Set<string>(),
+      sourceTypes: new Set<"request" | "response" | "script">(),
+    };
+    existing.observationCount += 1;
+    existing.paths.add(pathTemplate);
+    existing.sampleEndpoints.add(`https://${hostname}${pathTemplate}`);
+    existing.scanIds.add(input.scanId);
+    if (input.domainId) {
+      existing.siteIds.add(input.domainId);
+    }
+    existing.sourceTypes.add(input.source);
+    for (const cookieName of input.cookieNames ?? []) {
+      const normalizedCookie = cookieName.trim();
+      if (normalizedCookie && normalizedCookie.length <= 128) {
+        existing.cookieNames.add(normalizedCookie);
+      }
+    }
+    candidates.set(hostname, existing);
+  }
+
+  return {
+    inputObservationCount: inputs.length,
+    excluded,
+    candidates: [...candidates.values()]
+      .map((candidate) => {
+        const distinctPathCount = candidate.paths.size;
+        const distinctScanCount = candidate.scanIds.size;
+        const distinctSiteCount = candidate.siteIds.size;
+        const priorityScore =
+          distinctSiteCount * 5 +
+          distinctScanCount * 2 +
+          Math.min(candidate.observationCount, 50) +
+          Math.min(distinctPathCount, 10);
+        const recommendedAction: UnknownVendorCandidate["recommendedAction"] =
+          distinctSiteCount >= 3 && distinctScanCount >= 3 && distinctPathCount >= 1
+            ? "deterministic_review"
+            : "observe_more";
+        return {
+          candidateKey: `unknown-endpoint:${candidate.hostname}`,
+          hostname: candidate.hostname,
+          observationCount: candidate.observationCount,
+          distinctScanCount,
+          distinctSiteCount,
+          distinctPathCount,
+          pathTemplates: [...candidate.paths].sort().slice(0, 8),
+          sampleEndpoints: [...candidate.sampleEndpoints].sort().slice(0, 5),
+          cookieNames: [...candidate.cookieNames].sort().slice(0, 12),
+          sourceTypes: [...candidate.sourceTypes].sort(),
+          priorityScore,
+          recommendedAction,
+          requiresOwnerResearch: true as const,
+        };
+      })
+      .sort((left, right) =>
+        right.priorityScore - left.priorityScore ||
+        right.distinctSiteCount - left.distinctSiteCount ||
+        left.hostname.localeCompare(right.hostname),
+      ),
+  };
+}
+
+function normalizeUnknownCandidateHostname(value: string | undefined): string | null {
+  const normalized = normalizeHostname(value);
+  if (!normalized || normalized === "localhost" || normalized.includes(":")) {
+    return null;
+  }
+  if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
+function unknownCandidatePathTemplate(url: string | undefined, expectedHostname: string): string | null {
+  if (!url) {
+    return null;
+  }
+  try {
+    const parsed = new URL(url);
+    if (normalizeUnknownCandidateHostname(parsed.hostname) !== expectedHostname) {
+      return null;
+    }
+    const segments = parsed.pathname
+      .split("/")
+      .filter(Boolean)
+      .slice(0, 6)
+      .map(redactUnknownCandidatePathSegment);
+    return segments.length > 0 ? `/${segments.join("/")}` : "/";
+  } catch {
+    return null;
+  }
+}
+
+function redactUnknownCandidatePathSegment(segment: string): string {
+  const decoded = safeDecodeURIComponent(segment);
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(decoded) ||
+    /^[a-f0-9]{16,}$/i.test(decoded) ||
+    /^\d{3,}$/.test(decoded) ||
+    decoded.includes("@") ||
+    decoded.length > 32
+  ) {
+    return ":id";
+  }
+  return decoded.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 32) || ":value";
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function inputEvidenceRefs(input: VendorResolverInput, match: {

@@ -1,5 +1,10 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import {
+  buildUnknownVendorCandidateQueue,
+  CANONICAL_VENDOR_RESOLVER_VERSION,
+  resolveVendorObservations,
+} from "@certscore/vendor-resolver";
+import {
   deriveSignalEnrichmentWorkflowState,
   getPrimaryCategoryDescription,
   getPrimaryCategoryLabel,
@@ -20,6 +25,7 @@ import { repairFindingFamilyPacketEvents } from "../../web/server/scans/family-p
 type AuditInput = {
   candidateLimit?: number;
   sinceDays?: number;
+  scanLimit?: number;
   notes?: string;
   scans?: AuditScanInput[];
 };
@@ -204,6 +210,14 @@ type ObservedVendorAuditRow = {
   vendor_name: string;
 };
 
+type UnknownVendorRuntimeAuditRow = {
+  completed_at: string;
+  domain_id: string | null;
+  hybrid_runtime_evidence: unknown;
+  scan_id: string;
+  third_party_request_domains: string[] | null;
+};
+
 function decodeInput(): AuditInput {
   const encoded = process.env.OPS_PROD_DB_AUDIT_INPUT_BASE64?.trim();
   const inline = process.env.OPS_PROD_DB_AUDIT_INPUT_JSON?.trim();
@@ -220,6 +234,12 @@ function decodeInput(): AuditInput {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(scan.scanId)) {
       throw new Error(`Invalid scanId in audit input: ${scan.scanId}`);
     }
+  }
+  if (parsed.scanLimit !== undefined && (!Number.isInteger(parsed.scanLimit) || parsed.scanLimit < 1 || parsed.scanLimit > 1200)) {
+    throw new Error("scanLimit must be an integer from 1 to 1200.");
+  }
+  if (parsed.candidateLimit !== undefined && (!Number.isInteger(parsed.candidateLimit) || parsed.candidateLimit < 1 || parsed.candidateLimit > 500)) {
+    throw new Error("candidateLimit must be an integer from 1 to 500.");
   }
   return parsed;
 }
@@ -2300,6 +2320,155 @@ async function runVendorRegistryReconciliationAudit(input: AuditInput) {
   };
 }
 
+function normalizeAuditHostname(value: string | null | undefined) {
+  const normalized = value?.trim().replace(/\.$/, "").toLowerCase();
+  return normalized && /^[a-z0-9](?:[a-z0-9-]*\.)+[a-z0-9-]{2,}$/i.test(normalized) ? normalized : null;
+}
+
+function getAuditRequestUrls(row: Record<string, unknown>, fallbackHostname: string | null) {
+  const values = [
+    row.url,
+    row.requestUrl,
+    row.request_url,
+    row.urlSample,
+    row.url_sample,
+    ...getStringArray(row.urls),
+    ...getStringArray(row.requestUrls ?? row.request_urls),
+  ];
+  const pathSample = getString(row.pathSample ?? row.path_sample);
+  if (fallbackHostname && pathSample && pathSample.startsWith("/")) {
+    values.push(`https://${fallbackHostname}${pathSample}`);
+  }
+  return [...new Set(values
+    .map((value) => getString(value))
+    .filter((value): value is string => typeof value === "string" && /^https?:\/\//i.test(value))
+  )].slice(0, 10);
+}
+
+function getAuditRequestSource(row: Record<string, unknown>): "request" | "response" | "script" {
+  const hint = [row.type, row.resourceType, row.resource_type, row.initiatorType, row.initiator_type]
+    .map((value) => getString(value)?.toLowerCase())
+    .filter((value): value is string => Boolean(value))
+    .join(" ");
+  if (/script/.test(hint)) {
+    return "script";
+  }
+  if (/response/.test(hint)) {
+    return "response";
+  }
+  return "request";
+}
+
+function isAuditThirdPartyRequest(row: Record<string, unknown>, hostname: string, thirdPartyHosts: Set<string>) {
+  return row.thirdParty === true || row.third_party === true || thirdPartyHosts.has(hostname);
+}
+
+async function runUnknownVendorPrevalenceAudit(input: AuditInput) {
+  const scanLimit = input.scanLimit ?? 1200;
+  const candidateLimit = input.candidateLimit ?? 100;
+  const result = await query<UnknownVendorRuntimeAuditRow>(
+    `select s.id::text as scan_id,
+            s.domain_id::text as domain_id,
+            s.completed_at::text as completed_at,
+            ra.third_party_request_domains,
+            ra.hybrid_runtime_evidence
+       from scans s
+       join scan_runtime_artifacts ra on ra.scan_id = s.id
+      where s.status = 'completed'
+        and s.completed_at is not null
+      order by s.completed_at desc
+      limit $1`,
+    [scanLimit],
+    { readOnly: true },
+  );
+  await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
+
+  const candidateInputs: Parameters<typeof buildUnknownVendorCandidateQueue>[0] = [];
+  const observedHostsByScan = new Map<string, Set<string>>();
+  let requestObservationCount = 0;
+  let thirdPartyRequestObservationCount = 0;
+  let hostOnlyThirdPartyDomainCount = 0;
+
+  for (const runtime of result.rows) {
+    const hybrid = getObject(runtime.hybrid_runtime_evidence);
+    const rows = [
+      ...getObjectArray(hybrid.requestObservations),
+      ...getObjectArray(hybrid.request_observations),
+      ...getObjectArray(hybrid.preconsentState0RequestObservations),
+      ...getObjectArray(hybrid.preconsent_state0_request_observations),
+    ];
+    const thirdPartyHosts = new Set(
+      getStringArray(runtime.third_party_request_domains)
+        .map((value) => normalizeAuditHostname(value))
+        .filter((value): value is string => Boolean(value)),
+    );
+    const seenUrls = new Set<string>();
+    for (const row of rows) {
+      requestObservationCount += 1;
+      const fallbackHostname = normalizeAuditHostname(
+        getString(row.hostname) ?? getString(row.host) ?? getString(row.domain) ?? getString(row.requestHost ?? row.request_host),
+      );
+      const urls = getAuditRequestUrls(row, fallbackHostname);
+      for (const url of urls) {
+        const hostname = normalizeAuditHostname(getUrlHost(url));
+        if (!hostname || !isAuditThirdPartyRequest(row, hostname, thirdPartyHosts)) {
+          continue;
+        }
+        const dedupeKey = `${runtime.scan_id}|${url}`;
+        if (seenUrls.has(dedupeKey)) {
+          continue;
+        }
+        seenUrls.add(dedupeKey);
+        thirdPartyRequestObservationCount += 1;
+        const observedHosts = observedHostsByScan.get(runtime.scan_id) ?? new Set<string>();
+        observedHosts.add(hostname);
+        observedHostsByScan.set(runtime.scan_id, observedHosts);
+        candidateInputs.push({
+          scanId: runtime.scan_id,
+          domainId: runtime.domain_id ?? undefined,
+          hostname,
+          source: getAuditRequestSource(row),
+          thirdParty: true,
+          url,
+        });
+      }
+    }
+    const observedHosts = observedHostsByScan.get(runtime.scan_id) ?? new Set<string>();
+    hostOnlyThirdPartyDomainCount += [...thirdPartyHosts].filter((hostname) => !observedHosts.has(hostname)).length;
+  }
+
+  const queue = buildUnknownVendorCandidateQueue(candidateInputs);
+  return {
+    audit: "unknown-vendor-prevalence",
+    generatedAt: new Date().toISOString(),
+    notes: input.notes ?? null,
+    readScope: {
+      scanLimit,
+      scansRead: result.rows.length,
+      tables: ["scans", "scan_runtime_artifacts"],
+      mutations: false,
+    },
+    methodology: {
+      canonicalResolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
+      candidateRules: [
+        "third-party request or script observations only",
+        "known canonical endpoints excluded before ranking",
+        "exact-host clusters only; no parent-domain inference",
+        "URL queries, fragments, and dynamic path values are not emitted",
+        "candidates are discovery leads and cannot update the registry automatically",
+      ],
+    },
+    inputSummary: {
+      requestObservationCount,
+      thirdPartyRequestObservationCount,
+      hostOnlyThirdPartyDomainCount,
+      candidateInputCount: queue.inputObservationCount,
+      excluded: queue.excluded,
+    },
+    candidates: queue.candidates.slice(0, candidateLimit),
+  };
+}
+
 async function main() {
   const auditName = process.env.OPS_PROD_DB_AUDIT_NAME?.trim();
   if (!auditName) {
@@ -2330,6 +2499,8 @@ async function main() {
         ? await runScannerPhaseTimingAudit(input)
       : auditName === "vendor-registry-reconciliation"
         ? await runVendorRegistryReconciliationAudit(input)
+        : auditName === "unknown-vendor-prevalence"
+          ? await runUnknownVendorPrevalenceAudit(input)
         : null;
   if (!result) {
     throw new Error(`Unsupported prod DB audit: ${auditName}`);

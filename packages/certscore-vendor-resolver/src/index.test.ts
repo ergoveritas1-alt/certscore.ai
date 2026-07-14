@@ -1,11 +1,96 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildUnknownVendorCandidateQueue,
   resolveCanonicalVendorLabel,
   resolveEndpointGeography,
   resolveVendorDisplayCategory,
   resolveVendorObservations,
 } from "./index.js";
+
+test("builds a bounded review queue from repeated unresolved third-party endpoints", () => {
+  const queue = buildUnknownVendorCandidateQueue([
+    {
+      scanId: "scan-1",
+      domainId: "site-1",
+      source: "request",
+      thirdParty: true,
+      url: "https://cdn.example-vendor.net/sdk/123456789/session?email=person%40example.test",
+      cookieNames: ["vendor_session"],
+    },
+    {
+      scanId: "scan-2",
+      domainId: "site-2",
+      source: "script",
+      thirdParty: true,
+      url: "https://cdn.example-vendor.net/sdk/987654321/session?token=secret",
+      cookieNames: ["vendor_session", "vendor_campaign"],
+    },
+    {
+      scanId: "scan-3",
+      domainId: "site-3",
+      source: "request",
+      thirdParty: true,
+      url: "https://cdn.example-vendor.net/sdk/111222333/session#ignored",
+    },
+  ]);
+
+  assert.equal(queue.candidates.length, 1);
+  assert.deepEqual(queue.candidates[0], {
+    candidateKey: "unknown-endpoint:cdn.example-vendor.net",
+    hostname: "cdn.example-vendor.net",
+    observationCount: 3,
+    distinctScanCount: 3,
+    distinctSiteCount: 3,
+    distinctPathCount: 1,
+    pathTemplates: ["/sdk/:id/session"],
+    sampleEndpoints: ["https://cdn.example-vendor.net/sdk/:id/session"],
+    cookieNames: ["vendor_campaign", "vendor_session"],
+    sourceTypes: ["request", "script"],
+    priorityScore: 25,
+    recommendedAction: "deterministic_review",
+    requiresOwnerResearch: true,
+  });
+});
+
+test("does not create candidates from known, first-party, host-only, or lookalike observations", () => {
+  const queue = buildUnknownVendorCandidateQueue([
+    {
+      scanId: "scan-known",
+      domainId: "site-1",
+      source: "script",
+      thirdParty: true,
+      url: "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js",
+    },
+    {
+      scanId: "scan-first-party",
+      domainId: "site-2",
+      source: "request",
+      thirdParty: false,
+      url: "https://cdn.example-vendor.net/sdk.js",
+    },
+    {
+      scanId: "scan-host-only",
+      domainId: "site-3",
+      source: "request",
+      thirdParty: true,
+      hostname: "cdn.example-vendor.net",
+    },
+    {
+      scanId: "scan-lookalike",
+      domainId: "site-4",
+      source: "request",
+      thirdParty: true,
+      url: "https://not-example-vendor.net/sdk.js",
+    },
+  ]);
+
+  assert.equal(queue.excluded.knownCanonical, 1);
+  assert.equal(queue.excluded.invalidOrFirstParty, 1);
+  assert.equal(queue.excluded.missingConcretePath, 1);
+  assert.equal(queue.candidates.length, 1);
+  assert.equal(queue.candidates[0]?.hostname, "not-example-vendor.net");
+});
 
 test("resolves canonical product labels and apex vendor host labels conservatively", () => {
   assert.deepEqual(
@@ -139,6 +224,128 @@ test("does not classify unrelated lookalike hosts as second-wave vendors", () =>
     observations.some((item) => ["Microsoft", "Amazon", "Xandr", "TripleLift", "FreeWheel", "Teads"].includes(item.vendor)),
     false,
   );
+});
+
+test("resolves the first evidence-backed candidate promotion wave", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js", hostname: "cdn.onesignal.com" },
+    { type: "request", url: "https://static.zdassets.com/ekr/snippet.js", hostname: "static.zdassets.com" },
+    { type: "request", url: "https://cdn-gl.imrworldwide.com/cgi-bin/m", hostname: "cdn-gl.imrworldwide.com" },
+    { type: "request", url: "https://static.chartbeat.com/chartbeat.js", hostname: "static.chartbeat.com" },
+    { type: "request", url: "https://js.hcaptcha.com/1/api.js", hostname: "js.hcaptcha.com" },
+    { type: "request", url: "https://kubiobuilder.matomo.cloud/matomo.js", hostname: "kubiobuilder.matomo.cloud" },
+    { type: "request", url: "https://static.cloudflareinsights.com/beacon.min.js", hostname: "static.cloudflareinsights.com" },
+    { type: "request", url: "https://challenges.cloudflare.com/turnstile/v0/api.js", hostname: "challenges.cloudflare.com" },
+    { type: "request", url: "https://player.vimeo.com/video/123456789", hostname: "player.vimeo.com" },
+    { type: "request", url: "https://js.qualified.com/qualified/widget.js", hostname: "js.qualified.com" },
+  ]);
+
+  for (const [vendor, product, purpose] of [
+    ["OneSignal", "OneSignal Web Push", "advertising"],
+    ["Zendesk", "Zendesk Web Widget", "customer_support"],
+    ["Nielsen", "Nielsen Digital Audience Measurement", "analytics"],
+    ["Chartbeat", "Chartbeat Publisher Analytics", "analytics"],
+    ["hCaptcha", "hCaptcha", "security"],
+    ["Matomo", "Matomo Analytics", "analytics"],
+    ["Cloudflare", "Cloudflare Web Analytics", "analytics"],
+    ["Cloudflare", "Cloudflare Turnstile", "security"],
+    ["Vimeo", "Vimeo Embedded Player", "infrastructure"],
+    ["Qualified", "Qualified Conversational Marketing", "customer_support"],
+  ] as const) {
+    assertResolved(observations, vendor, product, purpose);
+  }
+});
+
+test("keeps candidate promotion rules bounded and product-specific", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://www.zendesk.com/hc/en-us", hostname: "www.zendesk.com" },
+    { type: "request", url: "https://publisher.example.test/ping", hostname: "publisher.example.test" },
+    { type: "request", url: "https://collector.example.test/log", hostname: "collector.example.test" },
+    { type: "request", url: "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b", hostname: "challenges.cloudflare.com" },
+    { type: "request", url: "https://player.vimeo.com/", hostname: "player.vimeo.com" },
+    { type: "request", url: "https://cdn.onesignal.com/ordinary.js", hostname: "cdn.onesignal.com" },
+  ]);
+
+  assert.equal(observations.some((item) => item.vendor === "Zendesk"), false);
+  assert.equal(observations.some((item) => item.vendor === "Chartbeat"), false);
+  assert.equal(observations.some((item) => item.vendor === "Nielsen"), false);
+  assert.equal(observations.some((item) => item.product === "Cloudflare Turnstile"), false);
+  assert.equal(observations.some((item) => item.vendor === "Vimeo"), false);
+  assert.equal(observations.some((item) => item.vendor === "OneSignal"), false);
+});
+
+test("resolves the web-evidence-supported second candidate promotion wave", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://www.youtube.com/embed/M7lc1UVf-VE", hostname: "www.youtube.com" },
+    { type: "request", url: "https://fundingchoicesmessages.google.com/i/pub-123456", hostname: "fundingchoicesmessages.google.com" },
+    { type: "request", url: "https://pi.pardot.com/pd.js", hostname: "pi.pardot.com" },
+    { type: "request", url: "https://www.dwin1.com/1001.js", hostname: "www.dwin1.com" },
+    { type: "request", url: "https://platform-api.sharethis.com/js/sharethis.js", hostname: "platform-api.sharethis.com" },
+  ]);
+
+  for (const [vendor, product, purpose] of [
+    ["YouTube", "YouTube Embedded Player", "infrastructure"],
+    ["Google", "Google Funding Choices CMP", "consent_management"],
+    ["Salesforce", "Salesforce Account Engagement", "analytics"],
+    ["AWIN", "AWIN Affiliate Tracking", "advertising"],
+    ["ShareThis", "ShareThis Widgets", "analytics"],
+  ] as const) {
+    assertResolved(observations, vendor, product, purpose);
+  }
+});
+
+test("keeps web-evidence-supported candidate rules narrow", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://www.youtube.com/watch?v=M7lc1UVf-VE", hostname: "www.youtube.com" },
+    { type: "request", url: "https://fundingchoicesmessages.google.com/unrelated", hostname: "fundingchoicesmessages.google.com" },
+    { type: "request", url: "https://example.pardot.com/pd.js", hostname: "example.pardot.com" },
+    { type: "request", url: "https://www.dwin1.com/not-a-mastertag.js", hostname: "www.dwin1.com" },
+    { type: "request", url: "https://sharethis.com/js/sharethis.js", hostname: "sharethis.com" },
+  ]);
+
+  assert.equal(observations.some((item) => item.product === "YouTube Embedded Player"), false);
+  assert.equal(observations.some((item) => item.product === "Google Funding Choices CMP"), false);
+  assert.equal(observations.some((item) => item.product === "Salesforce Account Engagement"), false);
+  assert.equal(observations.some((item) => item.product === "AWIN Affiliate Tracking"), false);
+  assert.equal(observations.some((item) => item.product === "ShareThis Widgets"), false);
+});
+
+test("resolves the media and product-analytics evidence wave", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://cdn.pendo.io/agent/static/abc123/pendo.js", hostname: "cdn.pendo.io" },
+    { type: "request", url: "https://plausible.io/js/script.js", hostname: "plausible.io" },
+    { type: "request", url: "https://kit.fontawesome.com/abc12345.js", hostname: "kit.fontawesome.com" },
+    { type: "request", url: "https://res.cloudinary.com/demo/image/upload/sample.jpg", hostname: "res.cloudinary.com" },
+    { type: "request", url: "https://cdn.jwplayer.com/libraries/ALJ3XQCI.js", hostname: "cdn.jwplayer.com" },
+    { type: "request", url: "https://players.brightcove.net/1507807800001/H15p1gTkg_default/index.min.js", hostname: "players.brightcove.net" },
+  ]);
+
+  for (const [vendor, product, purpose] of [
+    ["Pendo", "Pendo", "analytics"],
+    ["Plausible", "Plausible Analytics", "analytics"],
+    ["Font Awesome", "Font Awesome Kits CDN", "infrastructure"],
+    ["Cloudinary", "Cloudinary Media CDN", "infrastructure"],
+    ["JW Player", "JW Player", "infrastructure"],
+    ["Brightcove", "Brightcove Player", "infrastructure"],
+  ] as const) {
+    assertResolved(observations, vendor, product, purpose);
+  }
+
+  assert.equal(observations.find((item) => item.vendor === "Pendo")?.purpose, "analytics");
+  assert.equal(observations.find((item) => item.vendor === "Plausible")?.purpose, "analytics");
+});
+
+test("keeps media and analytics candidate rules bounded", () => {
+  const observations = resolveVendorObservations([
+    { type: "request", url: "https://cdn.pendo.io/agent/pendo.js", hostname: "cdn.pendo.io" },
+    { type: "request", url: "https://plausible.io/ordinary.js", hostname: "plausible.io" },
+    { type: "request", url: "https://use.fontawesome.com/releases/v6.0.0/js/all.js", hostname: "use.fontawesome.com" },
+    { type: "request", url: "https://res.cloudinary.com/demo/ordinary/file.jpg", hostname: "res.cloudinary.com" },
+    { type: "request", url: "https://cdn.jwplayer.com/libraries/short.js", hostname: "cdn.jwplayer.com" },
+    { type: "request", url: "https://players.brightcove.net/1507807800001/H15p1gTkg_default/player.js", hostname: "players.brightcove.net" },
+  ]);
+
+  assert.equal(observations.some((item) => ["Pendo", "Plausible", "Font Awesome", "Cloudinary", "JW Player", "Brightcove"].includes(item.vendor)), false);
 });
 
 test("resolves endpoint geography only from explicit host region tokens", () => {
