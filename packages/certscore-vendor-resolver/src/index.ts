@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-14-wave10-replay-corrected";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-14-wave10-final-replay";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -2392,7 +2392,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["tag_management", "third_party_runtime"],
     confidence: 0.96,
     hostPatterns: [/^activate\.platform\.californiatimes\.com$/i],
-    urlPatterns: [/^https:\/\/activate\.platform\.californiatimes\.com\/caltimes\/latimes\/(?:Bootstrap\.js|code\/[A-Za-z0-9_-]+|serverComponent\.php)(?:\?|$)/i],
+    urlPatterns: [/^https:\/\/activate\.platform\.californiatimes\.com\/caltimes\/latimes\/(?:Bootstrap\.js|code\/[a-f0-9]{32}\.js|serverComponent\.php)(?:\?|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "ensighten_manage_california_times_cname",
   },
@@ -2549,7 +2549,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent_management", "third_party_runtime"],
     confidence: 0.96,
     hostPatterns: [/^fundingchoicesmessages\.google\.com$/i],
-    urlPatterns: [/^https:\/\/fundingchoicesmessages\.google\.com\/(?:el|i)\/[A-Za-z0-9_-]+(?:[/?#]|$)/i],
+    urlPatterns: [/^https:\/\/fundingchoicesmessages\.google\.com\/(?:el|i)\/[A-Za-z0-9_-]+={0,2}(?:[/?#]|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "google_funding_choices_message_runtime",
   },

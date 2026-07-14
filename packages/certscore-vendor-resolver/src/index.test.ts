@@ -258,7 +258,7 @@ test("resolves the Wave 10 actionable production clusters with bounded product p
   const cases = [
     ["https://transcend-cdn.com/cm/abc123/translations/en.json", "transcend-cdn.com", "Transcend", "Transcend Consent Management", "consent_management"],
     ["https://cdn.confiant-integrations.net/gptprebidnative/client1/wrap.js", "cdn.confiant-integrations.net", "Confiant", "Confiant Ad Security", "security"],
-    ["https://activate.platform.californiatimes.com/caltimes/latimes/code/client_123", "activate.platform.californiatimes.com", "Ensighten", "Ensighten Manage", "tag_management"],
+    ["https://activate.platform.californiatimes.com/caltimes/latimes/code/a50375d7f0dad7a894d2ee32c92420bb.js", "activate.platform.californiatimes.com", "Ensighten", "Ensighten Manage", "tag_management"],
     ["https://maps.googleapis.com/maps/api/mapsjs/gen_204", "maps.googleapis.com", "Google", "Google Maps JavaScript API", "infrastructure"],
     ["https://cdn.userway.org/widgetapp/2026-05-12-14-26-48/locales/en-US.json", "cdn.userway.org", "UserWay", "UserWay Accessibility Widget", "infrastructure"],
     ["https://mc.yandex.com/counter_123", "mc.yandex.com", "Yandex", "Yandex Metrica", "analytics"],
@@ -272,7 +272,7 @@ test("resolves the Wave 10 actionable production clusters with bounded product p
     ["https://fast.wistia.net/embed/medias/abc123.jsonp", "fast.wistia.net", "Wistia", "Wistia Embedded Player", "infrastructure"],
     ["https://use.fontawesome.com/releases/v6.7.2/css/all.css", "use.fontawesome.com", "Font Awesome", "Font Awesome Kits CDN", "infrastructure"],
     ["https://cmp.inmobi.com/choice/site123/example.com/choice.js", "cmp.inmobi.com", "InMobi", "InMobi Choice CMP", "consent_management"],
-    ["https://fundingchoicesmessages.google.com/el/pub123/", "fundingchoicesmessages.google.com", "Google", "Google Funding Choices CMP", "consent_management"],
+    ["https://fundingchoicesmessages.google.com/el/AGSKWxUNdpheKsY5xs_vwECyUYKt4WQ9RcjaJOWJ-D7Wh3i9xdhOvtGJvUH7V5pyPU-9qhX8ydX8CsBbYIw6NrLo6KQBGdOqJqBafNC7jJqoGHLbprtog9XfvixkIeaTlZwmZvINeKYgtA==", "fundingchoicesmessages.google.com", "Google", "Google Funding Choices CMP", "consent_management"],
     ["https://c.marsflag.com/search/app.css", "c.marsflag.com", "MarsFlag", "MarsFlag Site Search", "analytics"],
     ["https://cdn.membrana.media/scripts/header.js", "cdn.membrana.media", "Membrana Media", "Membrana Media Monetization", "advertising"],
     ["https://cdn.pdst.fm/ping.min.js", "cdn.pdst.fm", "Podscribe", "Podscribe Attribution", "analytics"],
