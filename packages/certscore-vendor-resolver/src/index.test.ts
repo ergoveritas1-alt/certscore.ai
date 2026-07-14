@@ -98,6 +98,18 @@ test("resolves the audited evidence-backed promotion batch with bounded paths", 
     request("https://jssdkcdns.mparticle.com/js/v2/api-key/mparticle.js", "jssdkcdns.mparticle.com"),
     request("https://www.datadoghq-browser-agent.com/us1/v7/datadog-rum.js", "www.datadoghq-browser-agent.com"),
     request("https://vitals.vercel-insights.com/v1/vitals", "vitals.vercel-insights.com"),
+    request("https://cdn.speedcurve.com/js/lux.js", "cdn.speedcurve.com"),
+    request("https://fast.wistia.com/player.js", "fast.wistia.com"),
+    request("https://cdn.flowplayer.com/releases/native/3/stable/flowplayer.min.js", "cdn.flowplayer.com"),
+    request("https://siteimproveanalytics.com/js/siteanalyze_7340.js", "siteimproveanalytics.com"),
+    request("https://j.6sc.co/6si.min.js", "j.6sc.co"),
+    request("https://fast.fonts.net/cssapi/9b80e63b-ae4f-407f-90b5-08e4410e4341.css", "fast.fonts.net"),
+    request("https://cdn.userway.org/widget.js", "cdn.userway.org"),
+    request("https://stats.wp.com/w.js", "stats.wp.com"),
+    request("https://c.tvpixel.com/js/current/dpm_pixel_min.js", "c.tvpixel.com"),
+    request("https://experiments.parsely.com/vip-experiments.js", "experiments.parsely.com"),
+    request("https://b281aa56-da9f-401b-a938-f111b0a96b5a.edge.permutive.app/b281aa56-da9f-401b-a938-f111b0a96b5a-web.js", "b281aa56-da9f-401b-a938-f111b0a96b5a.edge.permutive.app"),
+    request("https://ka-p.fontawesome.com/releases/v6.7.2/css/pro.min.css", "ka-p.fontawesome.com"),
     request("https://c.clarity.ms/c.gif", "c.clarity.ms"),
     request("https://www.youtube.com/s/player/9fc68080/www-widgetapi.vflset/www-widgetapi.js", "www.youtube.com"),
   ]);
@@ -106,6 +118,17 @@ test("resolves the audited evidence-backed promotion batch with bounded paths", 
   assertResolved(observations, "mParticle", "mParticle Web SDK", "analytics");
   assertResolved(observations, "Datadog", "Datadog RUM", "performance_monitoring");
   assertResolved(observations, "Vercel", "Vercel Speed Insights", "performance_monitoring");
+  assertResolved(observations, "SpeedCurve", "SpeedCurve LUX RUM", "performance_monitoring");
+  assertResolved(observations, "Wistia", "Wistia Embedded Player", "infrastructure");
+  assertResolved(observations, "Flowplayer", "Flowplayer Native", "infrastructure");
+  assertResolved(observations, "Siteimprove", "Siteimprove Analytics", "analytics");
+  assertResolved(observations, "6sense", "6sense WebTag", "analytics");
+  assertResolved(observations, "Monotype", "Monotype Web Fonts", "infrastructure");
+  assertResolved(observations, "UserWay", "UserWay Accessibility Widget", "infrastructure");
+  assertResolved(observations, "WordPress.com", "Jetpack Stats", "analytics");
+  assertResolved(observations, "LiveRamp", "Data Plus Math / LiveRamp", "advertising");
+  assertResolved(observations, "Permutive", "Permutive", "advertising");
+  assertResolved(observations, "Font Awesome", "Font Awesome Kits CDN", "infrastructure");
   assertResolved(observations, "Microsoft", "Microsoft Clarity", "session_replay");
   assertResolved(observations, "YouTube", "YouTube Embedded Player", "infrastructure");
 
@@ -114,9 +137,43 @@ test("resolves the audited evidence-backed promotion batch with bounded paths", 
     request("https://jssdkcdns.mparticle.example/js/v2/key/mparticle.js", "jssdkcdns.mparticle.example"),
     request("https://www.datadoghq-browser-agent.example/us1/v7/datadog-rum.js", "www.datadoghq-browser-agent.example"),
     request("https://vitals.vercel-insights.example/v1/vitals", "vitals.vercel-insights.example"),
+    request("https://cdn.speedcurve.example/js/lux.js", "cdn.speedcurve.example"),
+    request("https://fast.wistia.example/player.js", "fast.wistia.example"),
+    request("https://cdn.flowplayer.example/releases/native/3/stable/flowplayer.min.js", "cdn.flowplayer.example"),
+    request("https://siteimproveanalytics.example/js/siteanalyze_7340.js", "siteimproveanalytics.example"),
+    request("https://j.6sc.example/6si.min.js", "j.6sc.example"),
+    request("https://fast.fonts.example/cssapi/9b80e63b-ae4f-407f-90b5-08e4410e4341.css", "fast.fonts.example"),
+    request("https://cdn.userway.example/widget.js", "cdn.userway.example"),
+    request("https://stats.wp.example/w.js", "stats.wp.example"),
+    request("https://c.tvpixel.example/js/current/dpm_pixel_min.js", "c.tvpixel.example"),
+    request("https://experiments.parsely.example/vip-experiments.js", "experiments.parsely.example"),
+    request("https://b281aa56-da9f-401b-a938-f111b0a96b5a.edge.permutive.example/b281aa56-da9f-401b-a938-f111b0a96b5a-web.js", "b281aa56-da9f-401b-a938-f111b0a96b5a.edge.permutive.example"),
+    request("https://ka-p.fontawesome.example/releases/v6.7.2/css/pro.min.css", "ka-p.fontawesome.example"),
     request("https://c.clarity.example/c.gif", "c.clarity.example"),
   ]);
-  assert.equal(lookalikes.some((item) => ["Parse.ly", "mParticle", "Datadog", "Microsoft", "Vercel"].includes(item.vendor)), false);
+  assert.equal(lookalikes.some((item) => ["Parse.ly", "mParticle", "Datadog", "Microsoft", "Vercel", "SpeedCurve", "Wistia", "Flowplayer", "Siteimprove", "6sense", "Monotype", "UserWay", "WordPress.com", "LiveRamp", "Permutive", "Font Awesome"].includes(item.vendor)), false);
+});
+
+test("keeps the Wave 8 batch path-specific on known vendor hosts", () => {
+  const observations = resolveVendorObservations([
+    request("https://cdn.speedcurve.com/ordinary.js", "cdn.speedcurve.com"),
+    request("https://fast.wistia.com/ordinary.js", "fast.wistia.com"),
+    request("https://cdn.flowplayer.com/ordinary.js", "cdn.flowplayer.com"),
+    request("https://siteimproveanalytics.com/js/ordinary.js", "siteimproveanalytics.com"),
+    request("https://j.6sc.co/ordinary.js", "j.6sc.co"),
+    request("https://fast.fonts.net/ordinary.css", "fast.fonts.net"),
+    request("https://cdn.userway.org/ordinary.js", "cdn.userway.org"),
+    request("https://stats.wp.com/ordinary.js", "stats.wp.com"),
+    request("https://c.tvpixel.com/ordinary.js", "c.tvpixel.com"),
+    request("https://experiments.parsely.com/ordinary.js", "experiments.parsely.com"),
+    request("https://b281aa56-da9f-401b-a938-f111b0a96b5a.edge.permutive.app/ordinary.js", "b281aa56-da9f-401b-a938-f111b0a96b5a.edge.permutive.app"),
+    request("https://ka-p.fontawesome.com/ordinary.css", "ka-p.fontawesome.com"),
+  ]);
+
+  assert.equal(
+    observations.some((item) => ["SpeedCurve", "Wistia", "Flowplayer", "Siteimprove", "6sense", "Monotype", "UserWay", "WordPress.com", "LiveRamp", "Parse.ly", "Permutive", "Font Awesome"].includes(item.vendor)),
+    false,
+  );
 });
 
 test("resolves canonical product labels and apex vendor host labels conservatively", () => {
