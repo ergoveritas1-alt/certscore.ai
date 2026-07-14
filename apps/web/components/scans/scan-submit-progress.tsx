@@ -247,7 +247,7 @@ function getScanProgressDisplay(input: {
       ? "The scan is still working through the site."
       : hasServerProgress
         ? ["Waiting for a scanner to start.", "Capturing page evidence and website signals.", "Processing the retained scan evidence.", "Preparing the report for review."][phaseIndex]
-        : `Step ${phaseIndex + 1} of ${SCAN_PROGRESS_STEPS.length} · Results in ~ 10 to 40s`;
+        : `Step ${phaseIndex + 1} of ${SCAN_PROGRESS_STEPS.length}`;
   const currentStep = isComplete ? SCAN_PROGRESS_STEPS.length - 1 : phaseIndex;
 
   return {
@@ -333,7 +333,6 @@ export function LocalV2DagScanProgressCard({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-600">Scan in progress</p>
         </div>
         <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
-          <ScanActivityIndicator className="text-sky-700" />
           Scanning...
         </span>
       </div>

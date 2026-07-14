@@ -13,13 +13,14 @@ export function ResetPasswordUpdateForm() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const token = searchParams?.get("token") ?? "";
+  const callbackError = searchParams?.get("error");
   const [state, formAction, isPending] = useActionState(confirmPasswordResetAction, initialPasswordResetConfirmState);
 
   useEffect(() => {
     passwordInputRef.current?.focus();
   }, []);
 
-  const invalidToken = token.length === 0;
+  const invalidToken = token.length === 0 || callbackError === "INVALID_TOKEN";
 
   return (
     <div className="space-y-6">
@@ -41,6 +42,7 @@ export function ResetPasswordUpdateForm() {
               placeholder="Create a new password"
               type={showPassword ? "text" : "password"}
               value={password}
+              disabled={invalidToken}
             />
             <button
               type="button"
@@ -52,7 +54,14 @@ export function ResetPasswordUpdateForm() {
           </div>
         </label>
 
-        {invalidToken ? <p className="text-sm text-red-600">This reset link is invalid or expired.</p> : null}
+        {invalidToken ? (
+          <div className="space-y-2 text-sm text-red-600">
+            <p>This reset link is invalid or expired.</p>
+            <Link className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-800" href="/reset-password">
+              Request a new reset link
+            </Link>
+          </div>
+        ) : null}
         {state.fieldErrors.password ? <p className="text-sm text-red-600">{state.fieldErrors.password}</p> : null}
         {state.fieldErrors.token ? <p className="text-sm text-red-600">{state.fieldErrors.token}</p> : null}
         {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}

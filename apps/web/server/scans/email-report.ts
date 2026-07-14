@@ -16,6 +16,10 @@ function normalizeScanId(value: string) {
   return /^[0-9a-f-]{32,36}$/i.test(scanId) ? scanId : "";
 }
 
+function formatEmailPlainTextDomain(value: string) {
+  return value.replace(/\./g, ".\u200B");
+}
+
 export async function sendReportEmailAction(
   _previousState: SendReportEmailActionState,
   formData: FormData
@@ -48,6 +52,7 @@ export async function sendReportEmailAction(
   }
 
   const reportUrl = new URL(`/scan/${scanId}`, gmailConfig.appUrl).toString();
+  const emailDomainLabel = formatEmailPlainTextDomain(domainLabel);
   const transporter = createGmailTransport(gmailConfig);
 
   try {
@@ -56,7 +61,7 @@ export async function sendReportEmailAction(
       to: recipientEmail,
       subject: `Your CertScore.ai report for ${domainLabel}`,
       text: [
-        `Here is the CertScore.ai report for ${domainLabel}:`,
+        `Here is the CertScore.ai report for ${emailDomainLabel}:`,
         "",
         reportUrl,
         "",

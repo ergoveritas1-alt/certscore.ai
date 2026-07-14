@@ -12,6 +12,8 @@ import { findBetterAuthUserById } from "../users/repository";
 import { BETTER_AUTH_COOKIE_PREFIX, BETTER_AUTH_SESSION_COOKIE_NAME } from "./constants";
 import { getBetterAuthBaseURLConfig, getBetterAuthEnv } from "./env";
 
+const PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS = 24 * 60 * 60;
+
 function getGoogleProviderConfig(env: ReturnType<typeof getBetterAuthEnv>) {
   if (!env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED || !env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
     return undefined;
@@ -97,6 +99,7 @@ function createAuth() {
       enabled: true,
       requireEmailVerification: false,
       revokeSessionsOnPasswordReset: true,
+      resetPasswordTokenExpiresIn: PASSWORD_RESET_TOKEN_EXPIRES_IN_SECONDS,
       sendResetPassword: async ({ user, url }) => {
         const gmailConfig = getGmailConfig();
 
