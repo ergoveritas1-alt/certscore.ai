@@ -16,6 +16,8 @@ export type IntegrationApiKeyRecord = {
   lastUsedAt: string | null;
   createdAt: string;
   revokedAt: string | null;
+  hourlyLimit: number;
+  dailyLimit: number;
   usage: IntegrationApiKeyUsageSummary;
 };
 
@@ -38,6 +40,8 @@ type IntegrationApiKeyRow = {
   last_used_at: string | null;
   created_at: string;
   revoked_at?: string | null;
+  hourly_limit?: number | string | null;
+  daily_limit?: number | string | null;
   hourly_count?: number | string | null;
   daily_count?: number | string | null;
 };
@@ -122,11 +126,13 @@ function mapRow(row: IntegrationApiKeyRow): IntegrationApiKeyRecord {
     lastUsedAt: row.last_used_at,
     createdAt: row.created_at,
     revokedAt: row.revoked_at ?? null,
+    hourlyLimit: Number(row.hourly_limit ?? INTEGRATION_API_KEY_HOURLY_LIMIT),
+    dailyLimit: Number(row.daily_limit ?? INTEGRATION_API_KEY_DAILY_LIMIT),
     usage: {
       hourlyCount: Number(row.hourly_count ?? 0),
-      hourlyLimit: INTEGRATION_API_KEY_HOURLY_LIMIT,
+      hourlyLimit: Number(row.hourly_limit ?? INTEGRATION_API_KEY_HOURLY_LIMIT),
       dailyCount: Number(row.daily_count ?? 0),
-      dailyLimit: INTEGRATION_API_KEY_DAILY_LIMIT
+      dailyLimit: Number(row.daily_limit ?? INTEGRATION_API_KEY_DAILY_LIMIT)
     }
   };
 }
@@ -296,6 +302,7 @@ export async function listIntegrationApiKeysForOrganization(organizationId: stri
   const result = await query<IntegrationApiKeyRow>(
     `select public_id, name, token_prefix, scopes, status, organization_id, owner_user_id,
             expires_at, last_used_at, created_at, null::timestamptz as revoked_at,
+            hourly_limit, daily_limit,
             (
               select count(*)::int
                 from pulse_requests pr
@@ -334,7 +341,7 @@ export async function revokeIntegrationApiKey(input: {
 }
 
 export async function checkIntegrationApiKeyUsageLimit(input: {
-  key: Pick<IntegrationApiKeyRecord, "organizationId" | "publicId">;
+  key: Pick<IntegrationApiKeyRecord, "organizationId" | "publicId" | "hourlyLimit" | "dailyLimit">;
 }) {
   const result = await queryOne<{
     key_hourly_count: number;
@@ -375,7 +382,11 @@ export async function checkIntegrationApiKeyUsageLimit(input: {
     organizationHourlyCount: Number(result?.organization_hourly_count ?? 0),
     organizationDailyCount: Number(result?.organization_daily_count ?? 0)
   };
-  return decideIntegrationApiKeyUsageLimit(usage);
+  return decideIntegrationApiKeyUsageLimit({
+    ...usage,
+    keyHourlyLimit: input.key.hourlyLimit,
+    keyDailyLimit: input.key.dailyLimit
+  });
 }
 
 export function decideIntegrationApiKeyUsageLimit(usage: {
@@ -383,11 +394,15 @@ export function decideIntegrationApiKeyUsageLimit(usage: {
   keyDailyCount: number;
   organizationHourlyCount: number;
   organizationDailyCount: number;
+  keyHourlyLimit?: number;
+  keyDailyLimit?: number;
 }) {
-  if (usage.keyHourlyCount >= INTEGRATION_API_KEY_HOURLY_LIMIT) {
+  const keyHourlyLimit = usage.keyHourlyLimit ?? INTEGRATION_API_KEY_HOURLY_LIMIT;
+  const keyDailyLimit = usage.keyDailyLimit ?? INTEGRATION_API_KEY_DAILY_LIMIT;
+  if (usage.keyHourlyCount >= keyHourlyLimit) {
     return { allowed: false as const, retryAfterSeconds: 3600, reason: "api_key_hourly_limit" as const, usage };
   }
-  if (usage.keyDailyCount >= INTEGRATION_API_KEY_DAILY_LIMIT) {
+  if (usage.keyDailyCount >= keyDailyLimit) {
     return { allowed: false as const, retryAfterSeconds: 86400, reason: "api_key_daily_limit" as const, usage };
   }
   if (usage.organizationHourlyCount >= INTEGRATION_ORGANIZATION_HOURLY_LIMIT) {
@@ -405,7 +420,8 @@ export async function validateIntegrationApiKey(token: string, requiredScopes: I
   }
   const row = await queryOne<IntegrationApiKeyRow>(
     `select public_id, name, token_prefix, scopes, status, organization_id, owner_user_id,
-            expires_at, last_used_at, created_at, 0::int as hourly_count, 0::int as daily_count
+            expires_at, last_used_at, created_at, null::timestamptz as revoked_at,
+            hourly_limit, daily_limit, 0::int as hourly_count, 0::int as daily_count
        from integration_api_keys
       where token_hash = $1
         and status = 'active'
@@ -450,6 +466,8 @@ function oauthKeyRecord(claims: {
     lastUsedAt: null,
     createdAt: new Date(claims.iat * 1000).toISOString(),
     revokedAt: null,
+    hourlyLimit: INTEGRATION_API_KEY_HOURLY_LIMIT,
+    dailyLimit: INTEGRATION_API_KEY_DAILY_LIMIT,
     usage: {
       hourlyCount: 0,
       hourlyLimit: INTEGRATION_API_KEY_HOURLY_LIMIT,
