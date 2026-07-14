@@ -1935,10 +1935,12 @@ async function extractRenderedCandidates(
       window.scrollTo(0, document.body.scrollHeight);
     }).catch(() => undefined);
     await page.waitForTimeout(Math.min(300, Math.max(150, remainingMs(input, moduleStartedAtMs))));
-    const visibleText = boundedFetchedText(
-      await page.locator("body").innerText({ timeout: 1_500 }).catch(() => ""),
-      MAX_RENDERED_POLICY_DISCOVERY_TEXT_CHARS,
-    );
+    const visibleText = await page.evaluate((maxChars) => {
+      const text = document.body?.innerText ?? "";
+      if (text.length <= maxChars) return text;
+      const headChars = Math.floor(maxChars * 0.65);
+      return `${text.slice(0, headChars)}\n\n[CertScore retained tail of oversized rendered text.]\n\n${text.slice(-(maxChars - headChars))}`;
+    }, MAX_RENDERED_POLICY_DISCOVERY_TEXT_CHARS).catch(() => "");
     const rawCandidates = await page.evaluate((maxCandidates) => {
       type RawCandidate = {
         href?: string;
@@ -2019,14 +2021,24 @@ async function extractRenderedCandidates(
       return output;
     }, MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS).catch(() => []);
 
-    const renderedHtml = boundedFetchedText(
-      await page.content().catch(() => ""),
-      MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS,
-    );
-    const renderedHtmlCandidates = renderedHtml
-      ? extractCandidates(input.normalizedUrl, renderedHtml, htmlToVisibleText(renderedHtml))
+    const renderedPolicyRegionHtml = await page.evaluate((maxChars) => {
+      const regionHtml = [
+        document.head?.outerHTML ?? "",
+        ...Array.from(document.querySelectorAll("header, nav, footer"), (element) => element.outerHTML),
+      ].join("\n");
+      if (regionHtml.length <= maxChars) return regionHtml;
+      const headChars = Math.floor(maxChars * 0.5);
+      return `${regionHtml.slice(0, headChars)}\n${regionHtml.slice(-(maxChars - headChars))}`;
+    }, MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS).catch(() => "");
+    const renderedHtmlCandidates = renderedPolicyRegionHtml
+      ? extractCandidates(
+        input.normalizedUrl,
+        renderedPolicyRegionHtml,
+        htmlToVisibleText(renderedPolicyRegionHtml),
+      )
       : [];
-    const fallbackRawCandidates = await page.locator("a[href], button, [role='button'], [role='link'], [aria-label], [title]")
+    const fallbackRawCandidates = rawCandidates.length === 0
+      ? await page.locator("a[href], button, [role='button'], [role='link'], [aria-label], [title]")
       .evaluateAll((elements, maxCandidates) => {
         const headCount = Math.ceil(maxCandidates / 2);
         const selectedElements = elements.length > maxCandidates
@@ -2061,7 +2073,8 @@ async function extractRenderedCandidates(
           };
         });
       }, MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS)
-      .catch(() => []);
+      .catch(() => [])
+      : [];
     const retainedRawCandidates = [
       ...rawCandidates,
       ...fallbackRawCandidates,
