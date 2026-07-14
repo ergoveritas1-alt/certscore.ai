@@ -126,6 +126,9 @@ test("policySurfaceScanner fast mode retains warmed static policy evidence after
 
     assert.equal(labels.includes("static policy fetch warmup"), true);
     assert.equal(labels.includes("rendered discovery"), true);
+    assert.equal(labels.some((label) => label.startsWith("policy prefetched text resolution")), true);
+    assert.equal(labels.some((label) => label.startsWith("policy text resolution")), false);
+    assert.equal(labels.some((label) => label.startsWith("policy url-stub follow")), false);
     assert.equal(privacy?.status, "fetched");
   }, {
     discoveryMode: "fast",

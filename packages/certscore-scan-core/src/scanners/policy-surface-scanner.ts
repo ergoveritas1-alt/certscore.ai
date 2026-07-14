@@ -1054,28 +1054,37 @@ async function processPolicyCandidate({
   let fetchedHtml = fetched.text;
   const secondaryCandidateHtmlInputs = [fetchedHtml];
   let title = titleFromHtml(fetchedHtml);
-  let visibleText = await recordPolicyTiming(
-    timingBreakdown,
-    `policy text resolution ${candidateIndex + 1}`,
-    `Resolve bounded direct, OneTrust, and canonical document text for ${candidate.deterministicSurfaceType}.`,
-    () => resolvePolicyVisibleText({
-      html: fetched.text,
-      baseUrl: candidate.normalizedUrl,
-      surfaceType: candidate.deterministicSurfaceType,
-      timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
-    }),
-  );
-  const urlOnlyStubResolution = await recordPolicyTiming(
-    timingBreakdown,
-    `policy url-stub follow ${candidateIndex + 1}`,
-    `Follow ${candidate.deterministicSurfaceType} candidate when fetched policy body only points to a canonical policy URL.`,
-    () => resolveUrlOnlyPolicyStub({
-      currentUrl: candidate.normalizedUrl,
-      visibleText,
-      surfaceType: candidate.deterministicSurfaceType,
-      timeoutMs: remainingPolicyFetchMs(input, moduleStartedAtMs),
-    }),
-  );
+  let visibleText = prefetchedAfterSoftBudget
+    ? await recordPolicyTiming(
+      timingBreakdown,
+      `policy prefetched text resolution ${candidateIndex + 1}`,
+      `Resolve deterministic text from the already-fetched ${candidate.deterministicSurfaceType} document without starting follow-up network work.`,
+      async () => bestPolicyDocumentText(fetched.text, htmlToVisibleText(fetched.text)),
+    )
+    : await recordPolicyTiming(
+      timingBreakdown,
+      `policy text resolution ${candidateIndex + 1}`,
+      `Resolve bounded direct, OneTrust, and canonical document text for ${candidate.deterministicSurfaceType}.`,
+      () => resolvePolicyVisibleText({
+        html: fetched.text,
+        baseUrl: candidate.normalizedUrl,
+        surfaceType: candidate.deterministicSurfaceType,
+        timeoutMs: Math.max(4_000, remainingPolicyFetchMs(input, moduleStartedAtMs)),
+      }),
+    );
+  const urlOnlyStubResolution = prefetchedAfterSoftBudget
+    ? undefined
+    : await recordPolicyTiming(
+      timingBreakdown,
+      `policy url-stub follow ${candidateIndex + 1}`,
+      `Follow ${candidate.deterministicSurfaceType} candidate when fetched policy body only points to a canonical policy URL.`,
+      () => resolveUrlOnlyPolicyStub({
+        currentUrl: candidate.normalizedUrl,
+        visibleText,
+        surfaceType: candidate.deterministicSurfaceType,
+        timeoutMs: remainingPolicyFetchMs(input, moduleStartedAtMs),
+      }),
+    );
   if (urlOnlyStubResolution) {
     effectiveCandidate = {
       ...candidate,
