@@ -1,6 +1,5 @@
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import {
-  buildUnknownVendorCandidateQueue,
   CANONICAL_VENDOR_RESOLVER_VERSION,
   resolveVendorObservations,
 } from "@certscore/vendor-resolver";
@@ -2363,6 +2362,124 @@ function isAuditThirdPartyRequest(row: Record<string, unknown>, hostname: string
   return row.thirdParty === true || row.third_party === true || thirdPartyHosts.has(hostname);
 }
 
+type UnknownVendorAuditCandidateInput = {
+  domainId?: string;
+  hostname: string;
+  scanId: string;
+  source: "request" | "response" | "script";
+  url: string;
+};
+
+function redactAuditCandidatePathSegment(segment: string) {
+  let decoded = segment;
+  try {
+    decoded = decodeURIComponent(segment);
+  } catch {
+    // Keep the original encoded segment and redact it below.
+  }
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(decoded) ||
+    /^[a-f0-9]{16,}$/i.test(decoded) ||
+    /^\d{3,}$/.test(decoded) ||
+    decoded.includes("@") ||
+    decoded.length > 32
+  ) {
+    return ":id";
+  }
+  return decoded.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 32) || ":value";
+}
+
+function auditCandidatePathTemplate(url: string, hostname: string) {
+  try {
+    const parsed = new URL(url);
+    if (normalizeAuditHostname(parsed.hostname) !== hostname) {
+      return null;
+    }
+    const segments = parsed.pathname
+      .split("/")
+      .filter(Boolean)
+      .slice(0, 6)
+      .map(redactAuditCandidatePathSegment);
+    return segments.length > 0 ? `/${segments.join("/")}` : "/";
+  } catch {
+    return null;
+  }
+}
+
+function buildUnknownVendorAuditQueue(inputs: UnknownVendorAuditCandidateInput[]) {
+  const excluded = { invalidOrFirstParty: 0, knownCanonical: 0, missingConcretePath: 0 };
+  const grouped = new Map<string, {
+    hostname: string;
+    observationCount: number;
+    paths: Set<string>;
+    scanIds: Set<string>;
+    siteIds: Set<string>;
+    sourceTypes: Set<"request" | "response" | "script">;
+  }>();
+
+  for (const input of inputs) {
+    const hostname = normalizeAuditHostname(input.hostname);
+    const pathTemplate = hostname ? auditCandidatePathTemplate(input.url, hostname) : null;
+    if (!hostname) {
+      excluded.invalidOrFirstParty += 1;
+      continue;
+    }
+    if (!pathTemplate) {
+      excluded.missingConcretePath += 1;
+      continue;
+    }
+    if (resolveVendorObservations([{ type: input.source, hostname, url: input.url }]).length > 0) {
+      excluded.knownCanonical += 1;
+      continue;
+    }
+    const candidate = grouped.get(hostname) ?? {
+      hostname,
+      observationCount: 0,
+      paths: new Set<string>(),
+      scanIds: new Set<string>(),
+      siteIds: new Set<string>(),
+      sourceTypes: new Set<"request" | "response" | "script">(),
+    };
+    candidate.observationCount += 1;
+    candidate.paths.add(pathTemplate);
+    candidate.scanIds.add(input.scanId);
+    if (input.domainId) {
+      candidate.siteIds.add(input.domainId);
+    }
+    candidate.sourceTypes.add(input.source);
+    grouped.set(hostname, candidate);
+  }
+
+  return {
+    inputObservationCount: inputs.length,
+    excluded,
+    candidates: [...grouped.values()]
+      .map((candidate) => {
+        const distinctPathCount = candidate.paths.size;
+        const distinctScanCount = candidate.scanIds.size;
+        const distinctSiteCount = candidate.siteIds.size;
+        const priorityScore = distinctSiteCount * 5 + distinctScanCount * 2 + Math.min(candidate.observationCount, 50) + Math.min(distinctPathCount, 10);
+        return {
+          candidateKey: `unknown-endpoint:${candidate.hostname}`,
+          hostname: candidate.hostname,
+          observationCount: candidate.observationCount,
+          distinctScanCount,
+          distinctSiteCount,
+          distinctPathCount,
+          pathTemplates: [...candidate.paths].sort().slice(0, 8),
+          sampleEndpoints: [...candidate.paths].sort().slice(0, 5).map((pathTemplate) => `https://${candidate.hostname}${pathTemplate}`),
+          sourceTypes: [...candidate.sourceTypes].sort(),
+          priorityScore,
+          recommendedAction: distinctSiteCount >= 3 && distinctScanCount >= 3 && distinctPathCount >= 1
+            ? "deterministic_review"
+            : "observe_more",
+          requiresOwnerResearch: true,
+        };
+      })
+      .sort((left, right) => right.priorityScore - left.priorityScore || right.distinctSiteCount - left.distinctSiteCount || left.hostname.localeCompare(right.hostname)),
+  };
+}
+
 async function runUnknownVendorPrevalenceAudit(input: AuditInput) {
   const scanLimit = input.scanLimit ?? 1200;
   const candidateLimit = input.candidateLimit ?? 100;
@@ -2383,7 +2500,7 @@ async function runUnknownVendorPrevalenceAudit(input: AuditInput) {
   );
   await queryOne<{ ok: number }>("select 1 as ok", [], { readOnly: true });
 
-  const candidateInputs: Parameters<typeof buildUnknownVendorCandidateQueue>[0] = [];
+  const candidateInputs: UnknownVendorAuditCandidateInput[] = [];
   const observedHostsByScan = new Map<string, Set<string>>();
   let requestObservationCount = 0;
   let thirdPartyRequestObservationCount = 0;
@@ -2428,7 +2545,6 @@ async function runUnknownVendorPrevalenceAudit(input: AuditInput) {
           domainId: runtime.domain_id ?? undefined,
           hostname,
           source: getAuditRequestSource(row),
-          thirdParty: true,
           url,
         });
       }
@@ -2437,7 +2553,7 @@ async function runUnknownVendorPrevalenceAudit(input: AuditInput) {
     hostOnlyThirdPartyDomainCount += [...thirdPartyHosts].filter((hostname) => !observedHosts.has(hostname)).length;
   }
 
-  const queue = buildUnknownVendorCandidateQueue(candidateInputs);
+  const queue = buildUnknownVendorAuditQueue(candidateInputs);
   return {
     audit: "unknown-vendor-prevalence",
     generatedAt: new Date().toISOString(),
