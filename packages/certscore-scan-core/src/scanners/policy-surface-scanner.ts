@@ -1635,9 +1635,11 @@ async function recordPolicyTiming<T>(
   run: () => Promise<T>,
 ): Promise<T> {
   const startedAtMs = Date.now();
+  console.info(`[v2-policy-timing] ${label} started`);
   try {
     return await run();
   } finally {
+    console.info(`[v2-policy-timing] ${label} completed in ${Date.now() - startedAtMs}ms`);
     timingBreakdown.push({
       label,
       detail,
