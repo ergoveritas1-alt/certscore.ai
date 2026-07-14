@@ -2066,6 +2066,95 @@ test("keeps consolidated Wave 14 rules bounded to exact product paths", () => {
   assert.equal(observations.length, 0);
 });
 
+test("resolves the Wave 15 publisher infrastructure batch without tracker promotion", () => {
+  const observations = resolveVendorObservations([
+    request("https://img.lb.wbmdstatic.com/webmd_v1_static_vue/release/client/js/app-core.4e84c920.js", "img.lb.wbmdstatic.com"),
+    request("https://ic-vt-nss.xhcdn.com/a/fixture/s_w_526_h_298__webp/media.jpg", "ic-vt-nss.xhcdn.com"),
+    request("https://i.forbesimg.com/simple-site/_next/static/chunks/1164-435664777582f83f.js", "i.forbesimg.com"),
+    request("https://s13emagst.akamaized.net/layout/ro/static-upload/badge.png", "s13emagst.akamaized.net"),
+    request("https://gw.alipayobjects.com/render/p/yuyan/release/framework.292e2c8b.js", "gw.alipayobjects.com"),
+    request("https://imgfp.hotp.jp/SYS/PC/images/img/bnr_birthday_90x90.png", "imgfp.hotp.jp"),
+    request("https://www.iheart.com/v16.9.0/39c99cb/bundles/321.widget.js", "www.iheart.com"),
+    request("https://static.jusbr.com/web/alabama/_next/static/chunks/app.js", "static.jusbr.com"),
+    request("https://cdn-frontend.faceit-cdn.net/web-next/_next/static/chunks/runtime.js", "cdn-frontend.faceit-cdn.net"),
+    request("https://www.f-cdn.com/assets/main/en/common.f31544e16f11599b.js", "www.f-cdn.com"),
+    request("https://assets.s-bol.com/_remix/ButtonIcon-4H9C87J_.js", "assets.s-bol.com"),
+    request("https://images.tagesschau.de/image/fixture/AAAB/16x9-small/news.webp", "images.tagesschau.de"),
+    request("https://wx.mlcdn.com.br/site/shared/services/cliente_ouro.png", "wx.mlcdn.com.br"),
+    request("https://s.mlcdn.com.br/banner/campanhas/hotlink-automotivo.png", "s.mlcdn.com.br"),
+    request("https://image.hurimg.com/i/hurriyet/90/383x217/example.jpg", "image.hurimg.com"),
+    request("https://static.emol.cl/emol50/css/estilo.min.css", "static.emol.cl"),
+    request("https://static.zara.net/stdstatic/8.21.0/js/v2/app.js", "static.zara.net"),
+    request("https://js.etimg.com/etnextweball/_next/static/chunks/app.js", "js.etimg.com"),
+    request("https://assets.asosservices.com/asos-ui/sdk/bag-sdk-9.0.0.min.js", "assets.asosservices.com"),
+    request("https://aw-s.tripcdn.com/NFES/mfe_hotelSearchV1/release/hotelSearchV1.js", "aw-s.tripcdn.com"),
+    request("https://c.travel-assets.com/lotus-home-ui/release/app.64bf7cea.js", "c.travel-assets.com"),
+    request("https://washu.edu/app/plugins/washu-cludo-functionality/build/scripts.js", "washu.edu"),
+    request("https://resources.faireconomy.media/js.min/resources/js/app/data_store.js", "resources.faireconomy.media"),
+    request("https://img.alicdn.com/imgextra/i2/fixture/image.jpg", "img.alicdn.com"),
+    request("https://g.lazcdn.com/g/lazada-search-fe/lzd-searchbox/0.4.26/index.js", "g.lazcdn.com"),
+  ]);
+
+  for (const [vendor, product] of [
+    ["WebMD", "WebMD Static Content CDN"],
+    ["xHamster", "xHamster Content CDN"],
+    ["Forbes", "Forbes Media Assets"],
+    ["eMAG", "eMAG Static Assets"],
+    ["Ant Group", "Alipay Web Assets"],
+    ["Hot Pepper", "Hot Pepper Media Assets"],
+    ["iHeartMedia", "iHeart Embedded Media"],
+    ["Jusbrasil", "Jusbrasil Static Assets"],
+    ["FACEIT", "FACEIT Web Assets"],
+    ["Freelancer", "Freelancer Web Assets"],
+    ["bol.com", "bol.com Web Assets"],
+    ["Tagesschau", "Tagesschau Image CDN"],
+    ["Magazine Luiza", "Magazine Luiza Media CDN"],
+    ["Hürriyet", "Hürriyet Image CDN"],
+    ["Emol", "Emol Static Assets"],
+    ["Zara", "Zara Static Assets"],
+    ["The Economic Times", "Economic Times Web Assets"],
+    ["ASOS", "ASOS Web Assets"],
+    ["Trip.com", "Trip.com Web Assets"],
+    ["Expedia", "Expedia Web Assets"],
+    ["Washington University in St. Louis", "Washington University Web Assets"],
+    ["Fair Economy Media", "Fair Economy Media Web Assets"],
+    ["Alibaba", "Alibaba and Lazada Hosted Assets"],
+  ] as const) {
+    assertResolved(observations, vendor, product, "infrastructure");
+  }
+});
+
+test("keeps Wave 15 publisher ownership rules bounded to retained asset paths", () => {
+  const observations = resolveVendorObservations([
+    request("https://img.lb.wbmdstatic.com/ordinary.js", "img.lb.wbmdstatic.com"),
+    request("https://ic-vt-nss.xhcdn.com/ordinary.js", "ic-vt-nss.xhcdn.com"),
+    request("https://i.forbesimg.com/ordinary.js", "i.forbesimg.com"),
+    request("https://s13emagst.akamaized.net/ordinary.js", "s13emagst.akamaized.net"),
+    request("https://gw.alipayobjects.com/ordinary.js", "gw.alipayobjects.com"),
+    request("https://imgfp.hotp.jp/ordinary.js", "imgfp.hotp.jp"),
+    request("https://www.iheart.com/ordinary.js", "www.iheart.com"),
+    request("https://static.jusbr.com/ordinary.js", "static.jusbr.com"),
+    request("https://cdn-frontend.faceit-cdn.net/ordinary.js", "cdn-frontend.faceit-cdn.net"),
+    request("https://www.f-cdn.com/ordinary.js", "www.f-cdn.com"),
+    request("https://assets.s-bol.com/ordinary.js", "assets.s-bol.com"),
+    request("https://images.tagesschau.de/ordinary.js", "images.tagesschau.de"),
+    request("https://wx.mlcdn.com.br/ordinary.js", "wx.mlcdn.com.br"),
+    request("https://image.hurimg.com/ordinary.js", "image.hurimg.com"),
+    request("https://static.emol.cl/ordinary.js", "static.emol.cl"),
+    request("https://static.zara.net/ordinary.js", "static.zara.net"),
+    request("https://js.etimg.com/ordinary.js", "js.etimg.com"),
+    request("https://assets.asosservices.com/ordinary.js", "assets.asosservices.com"),
+    request("https://aw-s.tripcdn.com/ordinary.js", "aw-s.tripcdn.com"),
+    request("https://c.travel-assets.com/ordinary.js", "c.travel-assets.com"),
+    request("https://washu.edu/ordinary.js", "washu.edu"),
+    request("https://resources.faireconomy.media/ordinary.js", "resources.faireconomy.media"),
+    request("https://img.alicdn.com/ordinary.js", "img.alicdn.com"),
+    request("https://g.lazcdn.com/ordinary.js", "g.lazcdn.com"),
+  ]);
+
+  assert.equal(observations.length, 0);
+});
+
 function request(url: string, hostname: string) {
   return {
     type: "request" as const,
