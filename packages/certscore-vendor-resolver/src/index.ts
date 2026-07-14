@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-14-wave14-consolidated-1600-scan-batch";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-14-wave14-mps-path-correction";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -3024,7 +3024,7 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "publisher_ad_server", "programmatic_ads", "third_party_runtime"],
     confidence: 0.96,
     hostPatterns: [/^app\.mps\.vsnt\.net$/i],
-    urlPatterns: [/^https:\/\/app\.mps\.vsnt\.net\/(?:fetch\/ext\/load-[A-Za-z0-9_-]+\.js|request\/page\/json\/params)(?:\?|$)/i],
+    urlPatterns: [/^https:\/\/app\.mps\.vsnt\.net\/(?:fetch\/ext\/load-[A-Za-z0-9_-]+\.js|request\/page\/json\/params\/?)(?:\?|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "versant_mps_publisher_runtime",
   },
