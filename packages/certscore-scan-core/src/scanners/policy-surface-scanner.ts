@@ -29,6 +29,9 @@ const POLICY_FETCH_CONCURRENCY = 4;
 const POLICY_RENDERED_FETCH_CONCURRENCY = 1;
 const POLICY_FETCH_TIMEOUT_MS = 5_000;
 const POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS = 10_000;
+const MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS = 1_000;
+const MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS = 500_000;
+const MAX_RENDERED_POLICY_DISCOVERY_TEXT_CHARS = 100_000;
 export const POLICY_HOMEPAGE_FETCH_TIMEOUT_MS = 5_000;
 const MAX_EXCERPT_CHARS = 6_000;
 const MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS = 40_000;
@@ -1932,8 +1935,11 @@ async function extractRenderedCandidates(
       window.scrollTo(0, document.body.scrollHeight);
     }).catch(() => undefined);
     await page.waitForTimeout(Math.min(300, Math.max(150, remainingMs(input, moduleStartedAtMs))));
-    const visibleText = await page.locator("body").innerText({ timeout: 1_500 }).catch(() => "");
-    const rawCandidates = await page.evaluate(() => {
+    const visibleText = boundedFetchedText(
+      await page.locator("body").innerText({ timeout: 1_500 }).catch(() => ""),
+      MAX_RENDERED_POLICY_DISCOVERY_TEXT_CHARS,
+    );
+    const rawCandidates = await page.evaluate((maxCandidates) => {
       type RawCandidate = {
         href?: string;
         text: string;
@@ -1976,10 +1982,17 @@ async function extractRenderedCandidates(
       }
 
       function collect(root: ParentNode, output: RawCandidate[]): void {
-        const elements = [
+        if (output.length >= maxCandidates) return;
+        const allElements = [
           ...root.querySelectorAll("a[href], button, [role='button'], [role='link'], [aria-label], [title]"),
         ];
+        const remaining = maxCandidates - output.length;
+        const headCount = Math.ceil(remaining / 2);
+        const elements = allElements.length > remaining
+          ? [...allElements.slice(0, headCount), ...allElements.slice(-(remaining - headCount))]
+          : allElements;
         for (const element of elements) {
+          if (output.length >= maxCandidates) break;
           const href = hrefFromElement(element);
           const text = normalizeText([
             element.textContent,
@@ -1997,21 +2010,29 @@ async function extractRenderedCandidates(
             clickable: element.matches("button, a, [role='button'], [role='link']"),
           });
           const shadowRoot = (element as HTMLElement).shadowRoot;
-          if (shadowRoot) collect(shadowRoot, output);
+          if (shadowRoot && output.length < maxCandidates) collect(shadowRoot, output);
         }
       }
 
       const output: RawCandidate[] = [];
       collect(document, output);
       return output;
-    }).catch(() => []);
+    }, MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS).catch(() => []);
 
-    const renderedHtml = await page.content().catch(() => "");
+    const renderedHtml = boundedFetchedText(
+      await page.content().catch(() => ""),
+      MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS,
+    );
     const renderedHtmlCandidates = renderedHtml
       ? extractCandidates(input.normalizedUrl, renderedHtml, htmlToVisibleText(renderedHtml))
       : [];
     const fallbackRawCandidates = await page.locator("a[href], button, [role='button'], [role='link'], [aria-label], [title]")
-      .evaluateAll((elements) => elements.map((element) => {
+      .evaluateAll((elements, maxCandidates) => {
+        const headCount = Math.ceil(maxCandidates / 2);
+        const selectedElements = elements.length > maxCandidates
+          ? [...elements.slice(0, headCount), ...elements.slice(-(maxCandidates - headCount))]
+          : elements;
+        return selectedElements.map((element) => {
           const normalizeText = (value: string | null | undefined): string =>
             (value ?? "").replace(/\s+/g, " ").trim();
           const href = element.getAttribute("href") ??
@@ -2038,7 +2059,8 @@ async function extractRenderedCandidates(
             domLocation,
             clickable: element.matches("button, a, [role='button'], [role='link']"),
           };
-        }))
+        });
+      }, MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS)
       .catch(() => []);
     const retainedRawCandidates = [
       ...rawCandidates,
