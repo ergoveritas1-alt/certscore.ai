@@ -80,6 +80,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends awscli procps &
 WORKDIR /app
 
 COPY --from=validation-worker-prod-deps /app/deploy/validation-worker/node_modules ./node_modules
+COPY --from=build /app/packages/certscore-vendor-resolver/dist ./node_modules/@certscore/vendor-resolver/dist
 RUN ./node_modules/.bin/playwright install --with-deps chromium
 
 FROM ${VALIDATION_WORKER_RUNTIME_BASE} AS runtime
