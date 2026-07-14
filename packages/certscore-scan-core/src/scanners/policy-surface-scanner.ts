@@ -974,6 +974,9 @@ async function processPolicyCandidate({
     };
   }
   const hasPrefetchedDirectDocument = fetchCaches.direct.has(candidate.normalizedUrl);
+  const prefetchedAfterSoftBudget =
+    Date.now() - moduleStartedAtMs > input.internalBudgetMs &&
+    hasPrefetchedDirectDocument;
   if (
     Date.now() - moduleStartedAtMs > input.internalBudgetMs &&
     !hasPrefetchedDirectDocument
@@ -1212,7 +1215,7 @@ async function processPolicyCandidate({
     artifactRef,
     ...(policySurfaceTextArtifactRef ? [policySurfaceTextArtifactRef] : []),
   ];
-  const topicAssist = textQuality.usable
+  const topicAssist = textQuality.usable && !prefetchedAfterSoftBudget
     ? await recordPolicyTiming(
         timingBreakdown,
         `Nano topic extraction ${candidateIndex + 1}`,

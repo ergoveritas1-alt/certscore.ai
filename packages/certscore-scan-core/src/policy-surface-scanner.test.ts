@@ -128,10 +128,14 @@ test("policySurfaceScanner fast mode retains warmed static policy evidence after
     assert.equal(privacy?.status, "fetched");
   }, {
     discoveryMode: "fast",
+    enableNanoPolicyAssist: true,
     internalBudgetMs: 1,
     nanoAssistProvider: {
       async classifyLinks() {
         throw new Error("Nano link ranking should not run in fast static coverage mode.");
+      },
+      async extractTopics() {
+        throw new Error("Nano topic extraction should not start after the soft policy budget.");
       },
     },
   });
