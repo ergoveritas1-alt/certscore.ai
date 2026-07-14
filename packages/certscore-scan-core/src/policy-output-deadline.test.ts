@@ -2,16 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { policySurfaceRequiredForUnboundedOutput } from "./index.js";
 
-test("planned-parallel production scans use the bounded policy output grace", () => {
+test("planned-parallel production scans retain complete policy output", () => {
   assert.equal(policySurfaceRequiredForUnboundedOutput({
     captureReplay: false,
     earlyConfirmedNoGo: false,
     plannedParallel: true,
     policySurfaceEnabled: true,
-  }), false);
+  }), true);
 });
 
-test("sequential and replay scans still retain the complete policy output", () => {
+test("sequential and replay scans retain the complete policy output", () => {
   assert.equal(policySurfaceRequiredForUnboundedOutput({
     captureReplay: false,
     earlyConfirmedNoGo: false,
@@ -24,4 +24,13 @@ test("sequential and replay scans still retain the complete policy output", () =
     plannedParallel: true,
     policySurfaceEnabled: true,
   }), true);
+});
+
+test("confirmed no-go scans do not wait for policy output", () => {
+  assert.equal(policySurfaceRequiredForUnboundedOutput({
+    captureReplay: false,
+    earlyConfirmedNoGo: true,
+    plannedParallel: true,
+    policySurfaceEnabled: true,
+  }), false);
 });

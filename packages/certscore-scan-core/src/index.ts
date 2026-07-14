@@ -1909,8 +1909,7 @@ export function policySurfaceRequiredForUnboundedOutput(input: {
   policySurfaceEnabled: boolean;
 }): boolean {
   return input.policySurfaceEnabled &&
-    !input.earlyConfirmedNoGo &&
-    (!input.plannedParallel || input.captureReplay);
+    !input.earlyConfirmedNoGo;
 }
 
 function policyPlanningStatus(
