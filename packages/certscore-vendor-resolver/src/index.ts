@@ -6,7 +6,7 @@ import type {
   VendorMatchSourceType,
 } from "@certscore/contracts";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-13-wave6-audited-promotions";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-07-13-wave7-vercel-speed-insights";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -965,6 +965,18 @@ const rules: VendorRule[] = [
     hostPatterns: [/\.datadoghq\.com$/i, /\.browser-intake-datadoghq\.com$/i, /^www\.datadoghq-browser-agent\.com$/i],
     urlPatterns: [/\/api\/v2\/rum/i, /\/v1\/input/i, /\/(?:[a-z0-9]+\/)?v\d+\/datadog-rum(?:-v\d+)?\.js\b/i, /\/datadog-rum(?:-[a-z0-9]+)?\.js\b/i],
     basisLabel: "datadog_rum_endpoint",
+  },
+  {
+    entity: "Vercel Inc.",
+    vendor: "Vercel",
+    product: "Vercel Speed Insights",
+    purpose: "performance_monitoring",
+    regulatoryRelevance: ["performance_monitoring", "web_vitals", "third_party_runtime"],
+    confidence: 0.96,
+    hostPatterns: [/^vitals\.vercel-insights\.com$/i],
+    urlPatterns: [/^https:\/\/vitals\.vercel-insights\.com\/v1\/vitals\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "vercel_speed_insights_vitals",
   },
   {
     entity: "Parse.ly, Inc.",
