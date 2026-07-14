@@ -973,7 +973,11 @@ async function processPolicyCandidate({
       secondaryCandidates: [],
     };
   }
-  if (Date.now() - moduleStartedAtMs > input.internalBudgetMs) {
+  const hasPrefetchedDirectDocument = fetchCaches.direct.has(candidate.normalizedUrl);
+  if (
+    Date.now() - moduleStartedAtMs > input.internalBudgetMs &&
+    !hasPrefetchedDirectDocument
+  ) {
     return {
       observation: observationFromCandidate(candidate, {
         status: "skipped_budget",
@@ -983,6 +987,11 @@ async function processPolicyCandidate({
       secondaryCandidates: [],
     };
   }
+
+  // Fast discovery warms deterministic static policy documents while the
+  // rendered lane searches for additional controls. Keep that already-bounded
+  // evidence when browser startup or rendered discovery consumes the soft
+  // module budget; no new direct network work is started in this case.
 
   let fetched = await recordPolicyTiming(
     timingBreakdown,

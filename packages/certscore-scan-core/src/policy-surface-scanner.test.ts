@@ -118,6 +118,25 @@ test("policySurfaceScanner fast mode keeps rendered discovery when static links 
   });
 });
 
+test("policySurfaceScanner fast mode retains warmed static policy evidence after rendered discovery consumes the soft budget", async () => {
+  await withPolicyScan("policy-footer-privacy", async ({ result }) => {
+    const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(labels.includes("static policy fetch warmup"), true);
+    assert.equal(labels.includes("rendered discovery"), true);
+    assert.equal(privacy?.status, "fetched");
+  }, {
+    discoveryMode: "fast",
+    internalBudgetMs: 1,
+    nanoAssistProvider: {
+      async classifyLinks() {
+        throw new Error("Nano link ranking should not run in fast static coverage mode.");
+      },
+    },
+  });
+});
+
 test("policySurfaceScanner fast mode skips rendered discovery when static core surfaces are present", async () => {
   await withPolicyScan("policy-static-core-surfaces", async ({ result, baseUrl }) => {
     const labels = result.moduleRun.timingBreakdown?.map((timing) => timing.label) ?? [];
