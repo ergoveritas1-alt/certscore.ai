@@ -234,8 +234,8 @@ function decodeInput(): AuditInput {
       throw new Error(`Invalid scanId in audit input: ${scan.scanId}`);
     }
   }
-  if (parsed.scanLimit !== undefined && (!Number.isInteger(parsed.scanLimit) || parsed.scanLimit < 1 || parsed.scanLimit > 1200)) {
-    throw new Error("scanLimit must be an integer from 1 to 1200.");
+  if (parsed.scanLimit !== undefined && (!Number.isInteger(parsed.scanLimit) || parsed.scanLimit < 1 || parsed.scanLimit > 2000)) {
+    throw new Error("scanLimit must be an integer from 1 to 2000.");
   }
   if (parsed.candidateLimit !== undefined && (!Number.isInteger(parsed.candidateLimit) || parsed.candidateLimit < 1 || parsed.candidateLimit > 500)) {
     throw new Error("candidateLimit must be an integer from 1 to 500.");
