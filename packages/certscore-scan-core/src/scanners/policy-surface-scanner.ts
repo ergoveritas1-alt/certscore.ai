@@ -297,12 +297,13 @@ export async function policySurfaceScanner(
       void speculativeCommonPathNanoRankingPromise.catch(() => undefined);
       let renderedCandidates: PolicySurfaceCandidate[];
       try {
-        renderedCandidates = await recordPolicyTiming(
+        const renderedDiscovery = await recordPolicyTiming(
           timingBreakdown,
           "homepage-failed rendered discovery",
           "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
           () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime),
         );
+        renderedCandidates = renderedDiscovery.candidates;
       } catch (error) {
         speculativeCommonPathNanoAbortController.abort();
         await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
@@ -483,20 +484,25 @@ export async function policySurfaceScanner(
     // failed Nano call cannot become an unhandled rejection while Chromium runs.
     void speculativeCommonPathNanoRankingPromise?.catch(() => undefined);
     let renderedCandidates: PolicySurfaceCandidate[];
+    let renderedDiscoveryDeadlineReached = false;
     try {
-      renderedCandidates = fastStaticCoverage
-        ? await recordPolicyTiming(
+      if (fastStaticCoverage) {
+        renderedCandidates = await recordPolicyTiming(
           timingBreakdown,
           "rendered discovery skipped",
           "Skipped rendered policy discovery because static planned-DAG candidates covered required surfaces.",
           async () => [] as PolicySurfaceCandidate[],
-        )
-        : await recordPolicyTiming(
+        );
+      } else {
+        const renderedDiscovery = await recordPolicyTiming(
           timingBreakdown,
           "rendered discovery",
           "Optional browser-rendered footer/header policy link discovery.",
           () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime),
         );
+        renderedCandidates = renderedDiscovery.candidates;
+        renderedDiscoveryDeadlineReached = renderedDiscovery.deadlineReached;
+      }
     } catch (error) {
       speculativeCommonPathNanoAbortController?.abort();
       await speculativeCommonPathNanoRankingPromise?.catch(() => undefined);
@@ -631,6 +637,7 @@ export async function policySurfaceScanner(
       rankedCandidates,
       labelPrefix: "policy",
       policySurfaceTextArtifactBudget,
+      prefetchedOnly: renderedDiscoveryDeadlineReached,
     });
     observations.push(...policyResults.observations);
     artifactRefs.push(...policyResults.artifactRefs);
@@ -652,6 +659,7 @@ export async function policySurfaceScanner(
         rankedCandidates: commonPathRankedCandidates,
         labelPrefix: "common-path policy",
         policySurfaceTextArtifactBudget,
+        prefetchedOnly: renderedDiscoveryDeadlineReached,
       });
       observations.push(...commonPathResults.observations);
       artifactRefs.push(...commonPathResults.artifactRefs);
@@ -875,6 +883,7 @@ interface ProcessPolicyCandidateInput {
   candidateIndex: number;
   policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
   fetchCaches: PolicyDocumentFetchCaches;
+  prefetchedOnly?: boolean;
 }
 
 interface ProcessPolicyCandidateResult {
@@ -928,6 +937,7 @@ async function fetchPolicyCandidateGroup(input: {
   rankedCandidates: PolicySurfaceCandidate[];
   labelPrefix: string;
   policySurfaceTextArtifactBudget: PolicySurfaceTextArtifactBudget;
+  prefetchedOnly?: boolean;
 }): Promise<{ observations: PolicySurfaceObservation[]; artifactRefs: ArtifactRef[]; secondaryCandidates: PolicySurfaceCandidate[] }> {
   const toFetch = input.rankedCandidates.slice(0, candidateGroupFetchLimit(input.rankedCandidates));
   const policyResults = await recordPolicyTiming(
@@ -945,6 +955,7 @@ async function fetchPolicyCandidateGroup(input: {
         candidate,
         candidateIndex,
         policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
+        prefetchedOnly: input.prefetchedOnly,
       }),
     ),
   );
@@ -963,6 +974,7 @@ async function processPolicyCandidate({
   candidateIndex,
   policySurfaceTextArtifactBudget,
   fetchCaches,
+  prefetchedOnly,
 }: ProcessPolicyCandidateInput): Promise<ProcessPolicyCandidateResult> {
   if (candidate.observationOnly) {
     return {
@@ -976,10 +988,10 @@ async function processPolicyCandidate({
   }
   const hasPrefetchedDirectDocument = fetchCaches.direct.has(candidate.normalizedUrl);
   const prefetchedAfterSoftBudget =
-    Date.now() - moduleStartedAtMs > input.internalBudgetMs &&
+    (Date.now() - moduleStartedAtMs > input.internalBudgetMs || prefetchedOnly === true) &&
     hasPrefetchedDirectDocument;
   if (
-    Date.now() - moduleStartedAtMs > input.internalBudgetMs &&
+    (Date.now() - moduleStartedAtMs > input.internalBudgetMs || prefetchedOnly === true) &&
     !hasPrefetchedDirectDocument
   ) {
     return {
@@ -2101,11 +2113,16 @@ async function extractRenderedCandidates(
   }
 }
 
+interface RenderedPolicyDiscoveryResult {
+  candidates: PolicySurfaceCandidate[];
+  deadlineReached: boolean;
+}
+
 async function extractRenderedCandidatesBeforeSoftDeadline(
   input: PolicySurfaceScannerInput,
   moduleStartedAtMs: number,
   browserRuntime: PolicyBrowserRuntime,
-): Promise<PolicySurfaceCandidate[]> {
+): Promise<RenderedPolicyDiscoveryResult> {
   const discoveryPromise = extractRenderedCandidates(input, moduleStartedAtMs, browserRuntime);
   void discoveryPromise.catch(() => undefined);
   const remainingBudgetMs = Math.max(1, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
@@ -2113,15 +2130,18 @@ async function extractRenderedCandidatesBeforeSoftDeadline(
     ? Math.min(POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS, remainingBudgetMs)
     : remainingBudgetMs;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-  const deadlinePromise = new Promise<PolicySurfaceCandidate[]>((resolve) => {
+  const deadlinePromise = new Promise<RenderedPolicyDiscoveryResult>((resolve) => {
     deadlineTimer = setTimeout(() => {
       void browserRuntime.close();
-      resolve([]);
+      resolve({ candidates: [], deadlineReached: true });
     }, deadlineMs);
   });
 
   try {
-    return await Promise.race([discoveryPromise, deadlinePromise]);
+    return await Promise.race([
+      discoveryPromise.then((candidates) => ({ candidates, deadlineReached: false })),
+      deadlinePromise,
+    ]);
   } finally {
     if (deadlineTimer) clearTimeout(deadlineTimer);
   }
