@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import type { Browser } from "playwright";
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
   gdprTransparencyTopicCandidatesFromRetainedPolicySections,
@@ -138,6 +139,35 @@ test("policySurfaceScanner fast mode retains warmed static policy evidence after
         throw new Error("Nano topic extraction should not start after the soft policy budget.");
       },
     },
+  });
+});
+
+test("policySurfaceScanner fast mode stops stalled rendered discovery at the soft budget and retains warmed policy evidence", async () => {
+  const stalledBrowser = {
+    async newContext() {
+      return {
+        async newPage() {
+          return {
+            async goto() {
+              await new Promise<never>(() => undefined);
+            },
+          };
+        },
+        async close() {},
+      };
+    },
+  } as unknown as Browser;
+
+  const startedAtMs = Date.now();
+  await withPolicyScan("policy-footer-privacy", async ({ result }) => {
+    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+
+    assert.equal(privacy?.status, "fetched");
+    assert.ok(Date.now() - startedAtMs < 4_000);
+  }, {
+    browser: stalledBrowser,
+    discoveryMode: "fast",
+    internalBudgetMs: 1_800,
   });
 });
 

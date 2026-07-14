@@ -300,7 +300,7 @@ export async function policySurfaceScanner(
           timingBreakdown,
           "homepage-failed rendered discovery",
           "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
-          () => extractRenderedCandidates(input, moduleStartedAtMs, policyBrowserRuntime),
+          () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime),
         );
       } catch (error) {
         speculativeCommonPathNanoAbortController.abort();
@@ -494,7 +494,7 @@ export async function policySurfaceScanner(
           timingBreakdown,
           "rendered discovery",
           "Optional browser-rendered footer/header policy link discovery.",
-          () => extractRenderedCandidates(input, moduleStartedAtMs, policyBrowserRuntime),
+          () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime),
         );
     } catch (error) {
       speculativeCommonPathNanoAbortController?.abort();
@@ -2088,6 +2088,29 @@ async function extractRenderedCandidates(
     return [];
   } finally {
     await context?.close().catch(() => undefined);
+  }
+}
+
+async function extractRenderedCandidatesBeforeSoftDeadline(
+  input: PolicySurfaceScannerInput,
+  moduleStartedAtMs: number,
+  browserRuntime: PolicyBrowserRuntime,
+): Promise<PolicySurfaceCandidate[]> {
+  const discoveryPromise = extractRenderedCandidates(input, moduleStartedAtMs, browserRuntime);
+  void discoveryPromise.catch(() => undefined);
+  const deadlineMs = Math.max(1, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  const deadlinePromise = new Promise<PolicySurfaceCandidate[]>((resolve) => {
+    deadlineTimer = setTimeout(() => {
+      void browserRuntime.close();
+      resolve([]);
+    }, deadlineMs);
+  });
+
+  try {
+    return await Promise.race([discoveryPromise, deadlinePromise]);
+  } finally {
+    if (deadlineTimer) clearTimeout(deadlineTimer);
   }
 }
 
