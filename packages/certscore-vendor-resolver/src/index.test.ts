@@ -320,6 +320,55 @@ test("rejects Wave 10 lookalikes, shared infrastructure, and unrelated vendor-ho
   assert.equal(observations.some((item) => wave10Products.has(item.product ?? "")), false);
 });
 
+test("resolves the Wave 11 residual production batch without collapsing product identities", () => {
+  const cases = [
+    ["https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/flow/ov1", "challenges.cloudflare.com", "Cloudflare", "Cloudflare Challenge Platform", "security"],
+    ["https://sdk.privacy-center.org/public_key/loader.js", "sdk.privacy-center.org", "Didomi", "Didomi CMP", "consent_management"],
+    ["https://sdk.privacy-center.org/sdk/abc123/modern/sdk.abc123.js", "sdk.privacy-center.org", "Didomi", "Didomi CMP", "consent_management"],
+    ["https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js", "ajax.googleapis.com", "Google", "Google Hosted Libraries", "infrastructure"],
+    ["https://code.jquery.com/jquery-3.7.1.min.js", "code.jquery.com", "jQuery", "jQuery CDN", "infrastructure"],
+    ["https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css", "code.jquery.com", "jQuery", "jQuery CDN", "infrastructure"],
+    ["https://c.bing.com/c.gif?ctsa=mr", "c.bing.com", "Microsoft", "Microsoft Identity Synchronization", "advertising"],
+    ["https://www.google.com/adsense/domains/caf.js", "www.google.com", "Google", "Google AdSense", "advertising"],
+    ["https://no-cache.hubspot.com/cta/default/portal.123/config.abc.js", "no-cache.hubspot.com", "HubSpot", "HubSpot Calls to Action", "analytics"],
+    ["https://js.hscollectedforms.net/collectedforms.js", "js.hscollectedforms.net", "HubSpot", "HubSpot Forms", "analytics"],
+    ["https://forms-na1.hsforms.com/embed/v3/counters.gif", "forms-na1.hsforms.com", "HubSpot", "HubSpot Forms", "analytics"],
+    ["https://try.abtasty.com/shared/commons.32b0810ba1fc402d09de.js", "try.abtasty.com", "AB Tasty", "AB Tasty Experimentation", "analytics"],
+  ] as const;
+
+  for (const [url, hostname, vendor, product, purpose] of cases) {
+    assertResolved(resolveVendorObservations([request(url, hostname)]), vendor, product, purpose);
+  }
+});
+
+test("rejects Wave 11 lookalikes and unrelated paths on the same service hosts", () => {
+  const observations = resolveVendorObservations([
+    request("https://challenges.cloudflare.com/ordinary.js", "challenges.cloudflare.com"),
+    request("https://sdk.privacy-center.org/logo.svg", "sdk.privacy-center.org"),
+    request("https://ajax.googleapis.com/ordinary.js", "ajax.googleapis.com"),
+    request("https://code.jquery.com/ordinary.js", "code.jquery.com"),
+    request("https://c.bing.com/search", "c.bing.com"),
+    request("https://www.google.com/adsense/help", "www.google.com"),
+    request("https://no-cache.hubspot.com/image.png", "no-cache.hubspot.com"),
+    request("https://js.hscollectedforms.net/ordinary.js", "js.hscollectedforms.net"),
+    request("https://forms-na1.hsforms.com/embed/v3/ordinary.gif", "forms-na1.hsforms.com"),
+    request("https://try.abtasty.com/shared/logo.svg", "try.abtasty.com"),
+  ]);
+
+  const wave11Products = new Set([
+    "Cloudflare Challenge Platform",
+    "Didomi CMP",
+    "Google Hosted Libraries",
+    "jQuery CDN",
+    "Microsoft Identity Synchronization",
+    "Google AdSense",
+    "HubSpot Calls to Action",
+    "HubSpot Forms",
+    "AB Tasty Experimentation",
+  ]);
+  assert.equal(observations.some((item) => wave11Products.has(item.product ?? "")), false);
+});
+
 test("resolves canonical product labels and apex vendor host labels conservatively", () => {
   assert.deepEqual(
     [
